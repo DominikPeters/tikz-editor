@@ -19,7 +19,7 @@ import {
   type MouseEvent as ReactMouseEvent
 } from "react";
 import { getSharedEditAnalysisView } from "../edit-analysis-manager";
-import { useEditorStore } from "../store/store";
+import { useEditorStore, useEditorStoreApi } from "../store/store";
 import { SidePanel } from "./SidePanel";
 import {
   actionAvailability,
@@ -53,6 +53,7 @@ type ObjectsAction = {
 };
 
 export function ObjectsPanel() {
+  const storeApi = useEditorStoreApi();
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
   const activeFigureId = useEditorStore((s) => s.activeFigureId);
   const activeHandleId = useEditorStore((s) => s.activeHandleId);
@@ -254,7 +255,7 @@ export function ObjectsPanel() {
           direction: movePlan.direction
         }
       });
-      currentIds = [...useEditorStore.getState().selectedElementIds];
+      currentIds = [...storeApi.getState().selectedElementIds];
     }
   };
 

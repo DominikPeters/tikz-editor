@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { useEditorStore } from "../../store/store";
+import { useEditorStoreApi } from "../../store/store";
 import { createNumberScrubState, updateNumberScrubState } from "./number-scrub";
 import type { FrozenInspectorView } from "./useInspectorModel";
 
@@ -45,6 +45,7 @@ export function useInspectorPreviewScrub(args: {
     setFrozenInspectorView
   } = args;
 
+  const storeApi = useEditorStoreApi();
   const hoverPreviewSessionRef = useRef<HoverPreviewSession | null>(null);
   const numberLabelScrubSessionRef = useRef<NumberLabelScrubSession | null>(null);
   const numberLabelScrubListenersAttachedRef = useRef(false);
@@ -57,7 +58,7 @@ export function useInspectorPreviewScrub(args: {
     if (ownerKey && current.ownerKey !== ownerKey) {
       return;
     }
-    const currentSource = useEditorStore.getState().source;
+    const currentSource = storeApi.getState().source;
     if (currentSource !== current.baseSource) {
       dispatch({
         type: "SET_SOURCE_TRANSIENT",
@@ -66,14 +67,14 @@ export function useInspectorPreviewScrub(args: {
     }
     hoverPreviewSessionRef.current = null;
     setFrozenInspectorView(null);
-  }, [dispatch, setFrozenInspectorView]);
+  }, [dispatch, setFrozenInspectorView, storeApi]);
 
   const ensureHoverPreviewSession = useCallback((ownerKey: string) => {
     const current = hoverPreviewSessionRef.current;
     if (!current) {
       hoverPreviewSessionRef.current = {
         ownerKey,
-        baseSource: useEditorStore.getState().source
+        baseSource: storeApi.getState().source
       };
       setFrozenInspectorView({
         selectedSourceIds: [...selectedSourceIds],
@@ -87,7 +88,7 @@ export function useInspectorPreviewScrub(args: {
     if (current.ownerKey === ownerKey) {
       return;
     }
-    const currentSource = useEditorStore.getState().source;
+    const currentSource = storeApi.getState().source;
     if (currentSource !== current.baseSource) {
       dispatch({
         type: "SET_SOURCE_TRANSIENT",
@@ -98,7 +99,7 @@ export function useInspectorPreviewScrub(args: {
       ownerKey,
       baseSource: current.baseSource
     };
-  }, [descriptor, dispatch, multiModel, multiPropertyProvenance, selectedSourceIds, setFrozenInspectorView, singlePropertyProvenance]);
+  }, [descriptor, dispatch, multiModel, multiPropertyProvenance, selectedSourceIds, setFrozenInspectorView, singlePropertyProvenance, storeApi]);
 
   const applyHoverPreview = useCallback((ownerKey: string, applyPreview: () => void) => {
     ensureHoverPreviewSession(ownerKey);
@@ -108,7 +109,7 @@ export function useInspectorPreviewScrub(args: {
   const commitAfterHoverPreview = useCallback((ownerKey: string, commit: () => void) => {
     const current = hoverPreviewSessionRef.current;
     if (current?.ownerKey === ownerKey) {
-      const currentSource = useEditorStore.getState().source;
+      const currentSource = storeApi.getState().source;
       if (currentSource !== current.baseSource) {
         dispatch({
           type: "SET_SOURCE_TRANSIENT",
@@ -119,7 +120,7 @@ export function useInspectorPreviewScrub(args: {
       setFrozenInspectorView(null);
     }
     commit();
-  }, [dispatch, setFrozenInspectorView]);
+  }, [dispatch, setFrozenInspectorView, storeApi]);
 
   const stopNumberLabelScrubRef = useRef<(commit: boolean, pointerId?: number) => void>(() => {});
 
@@ -183,7 +184,7 @@ export function useInspectorPreviewScrub(args: {
     removeNumberLabelScrubListeners();
 
     if (session.state.hasActivated) {
-      const currentSource = useEditorStore.getState().source;
+      const currentSource = storeApi.getState().source;
       if (currentSource !== session.baseSource) {
         dispatch({
           type: "SET_SOURCE_TRANSIENT",
@@ -196,7 +197,7 @@ export function useInspectorPreviewScrub(args: {
     }
 
     document.body.classList.remove("is-scrubbing");
-  }, [dispatch, removeNumberLabelScrubListeners]);
+  }, [dispatch, removeNumberLabelScrubListeners, storeApi]);
 
   useEffect(() => {
     stopNumberLabelScrubRef.current = stopNumberLabelScrub;
@@ -228,7 +229,7 @@ export function useInspectorPreviewScrub(args: {
 
     numberLabelScrubSessionRef.current = {
       pointerId: event.pointerId,
-      baseSource: useEditorStore.getState().source,
+      baseSource: storeApi.getState().source,
       state: createNumberScrubState({
         startX: event.clientX,
         startValue: binding.value,
@@ -240,7 +241,7 @@ export function useInspectorPreviewScrub(args: {
       onCommit: binding.onCommit
     };
     ensureNumberLabelScrubListeners();
-  }, [clearHoverPreviewSession, ensureNumberLabelScrubListeners, stopNumberLabelScrub]);
+  }, [clearHoverPreviewSession, ensureNumberLabelScrubListeners, stopNumberLabelScrub, storeApi]);
 
   useEffect(() => {
     clearHoverPreviewSession();

@@ -5,7 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setActiveEditorPlatform, getActiveEditorPlatform } from "../../packages/app/src/platform/current";
-import { useEditorStore } from "../../packages/app/src/store/store";
+import { EditorStoreProvider, defaultEditorStore } from "../../packages/app/src/store/store";
 
 vi.mock("../../packages/app/src/ui/assistant-image-attachments", () => ({
   normalizePastedImageForAssistant: vi.fn(async (file: File, index: number) => ({
@@ -62,10 +62,10 @@ describe("AssistantPanel image paste", () => {
       }
     });
 
-    const state = useEditorStore.getState();
+    const state = defaultEditorStore.getState();
     const docId = state.activeDocumentId;
     const doc = state.documents[docId]!;
-    useEditorStore.setState({
+    defaultEditorStore.setState({
       ...state,
       documents: {
         ...state.documents,
@@ -84,10 +84,7 @@ describe("AssistantPanel image paste", () => {
     root = createRoot(container);
     await act(async () => {
       root.render(
-        React.createElement(AssistantPanel, {
-          onSubmitPrompt: async () => undefined,
-          onInterruptTurn: async () => undefined
-        })
+        React.createElement(EditorStoreProvider, { store: defaultEditorStore }, React.createElement(AssistantPanel, { onSubmitPrompt: async () => undefined, onInterruptTurn: async () => undefined }))
       );
     });
   });
@@ -130,11 +127,11 @@ describe("AssistantPanel image paste", () => {
   });
 
   it("shows attached image thumbnails in user message history", async () => {
-    const state = useEditorStore.getState();
+    const state = defaultEditorStore.getState();
     const docId = state.activeDocumentId;
     const doc = state.documents[docId]!;
     await act(async () => {
-      useEditorStore.setState({
+      defaultEditorStore.setState({
         ...state,
         documents: {
           ...state.documents,
@@ -152,10 +149,7 @@ describe("AssistantPanel image paste", () => {
         }
       });
       root.render(
-        React.createElement(AssistantPanel, {
-          onSubmitPrompt: async () => undefined,
-          onInterruptTurn: async () => undefined
-        })
+        React.createElement(EditorStoreProvider, { store: defaultEditorStore }, React.createElement(AssistantPanel, { onSubmitPrompt: async () => undefined, onInterruptTurn: async () => undefined }))
       );
     });
 
@@ -197,11 +191,11 @@ describe("AssistantPanel image paste", () => {
   });
 
   it("renders fileChange items as edited code with diff stats and diff text", async () => {
-    const state = useEditorStore.getState();
+    const state = defaultEditorStore.getState();
     const docId = state.activeDocumentId;
     const doc = state.documents[docId]!;
     await act(async () => {
-      useEditorStore.setState({
+      defaultEditorStore.setState({
         ...state,
         documents: {
           ...state.documents,
@@ -220,10 +214,7 @@ describe("AssistantPanel image paste", () => {
         }
       });
       root.render(
-        React.createElement(AssistantPanel, {
-          onSubmitPrompt: async () => undefined,
-          onInterruptTurn: async () => undefined
-        })
+        React.createElement(EditorStoreProvider, { store: defaultEditorStore }, React.createElement(AssistantPanel, { onSubmitPrompt: async () => undefined, onInterruptTurn: async () => undefined }))
       );
     });
 
@@ -234,11 +225,11 @@ describe("AssistantPanel image paste", () => {
   });
 
   it("renames figure.tex read command execution to 'Read the code'", async () => {
-    const state = useEditorStore.getState();
+    const state = defaultEditorStore.getState();
     const docId = state.activeDocumentId;
     const doc = state.documents[docId]!;
     await act(async () => {
-      useEditorStore.setState({
+      defaultEditorStore.setState({
         ...state,
         documents: {
           ...state.documents,
@@ -254,10 +245,7 @@ describe("AssistantPanel image paste", () => {
         }
       });
       root.render(
-        React.createElement(AssistantPanel, {
-          onSubmitPrompt: async () => undefined,
-          onInterruptTurn: async () => undefined
-        })
+        React.createElement(EditorStoreProvider, { store: defaultEditorStore }, React.createElement(AssistantPanel, { onSubmitPrompt: async () => undefined, onInterruptTurn: async () => undefined }))
       );
     });
 

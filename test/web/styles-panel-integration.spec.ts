@@ -3,7 +3,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSettingsStore } from "../../packages/app/src/settings/useSettingsStore";
-import { useEditorStore } from "../../packages/app/src/store/store";
+import { defaultEditorStore } from "../../packages/app/src/store/store";
 import { renderTikzToSvg } from "../../packages/core/src/render";
 import {
   clickAndTypeRawValue,
@@ -83,7 +83,7 @@ describe("StylesPanel integration", () => {
 
       await commitEditableInput(flagInput!, "barflag");
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("barflag");
       expect(updatedSource).not.toContain("fooflag");
     } finally {
@@ -105,7 +105,7 @@ describe("StylesPanel integration", () => {
 
       await clickButton(deleteButton!);
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).not.toContain("draw=red");
       expect(updatedSource).toContain("line width=1pt");
     } finally {
@@ -130,7 +130,7 @@ describe("StylesPanel integration", () => {
         toggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("% draw=red,");
       expect(updatedSource).toContain("line width=1pt");
     } finally {
@@ -158,7 +158,7 @@ describe("StylesPanel integration", () => {
         toggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("draw=red");
       expect(updatedSource).not.toContain("% draw=red,");
       expect(updatedSource).toContain("line width=1pt");
@@ -183,7 +183,7 @@ describe("StylesPanel integration", () => {
         toggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("% draw=red,");
       expect(updatedSource).toContain("fill=blue");
     } finally {
@@ -209,7 +209,7 @@ describe("StylesPanel integration", () => {
         activeFillToggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("every node/.style={");
       expect(updatedSource).toContain("% fill=blue!10,");
       expect(updatedSource).toContain("every node/.style={\n  % fill=blue!10,\n}");
@@ -236,7 +236,7 @@ describe("StylesPanel integration", () => {
         activeFillToggle!.click();
       });
 
-      const toggledOffSource = useEditorStore.getState().source;
+      const toggledOffSource = defaultEditorStore.getState().source;
       expect(toggledOffSource).toContain("every node/.style={");
       expect(toggledOffSource).toContain("% fill=blue!10,");
       await act(async () => {
@@ -251,7 +251,7 @@ describe("StylesPanel integration", () => {
         disabledFillToggle!.click();
       });
 
-      const reenabledSource = useEditorStore.getState().source;
+      const reenabledSource = defaultEditorStore.getState().source;
       expect(reenabledSource).toContain("every node/.style={");
       expect(reenabledSource).toContain("fill=blue!10");
       expect(reenabledSource).not.toContain("% fill=blue!10,");
@@ -288,7 +288,7 @@ describe("StylesPanel integration", () => {
         activeFillToggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("every node/.style={\n    % fill=blue!10,\n}");
     } finally {
       await unmountStylesPanel(root, container);
@@ -321,7 +321,7 @@ describe("StylesPanel integration", () => {
       const orderAfterDisable = getToggleOrder(container);
       expect(orderAfterDisable).toEqual(orderBefore);
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("% rounded corners,");
       expect(updatedSource).toContain("draw=red");
       expect(updatedSource).toContain("line width=1pt");
@@ -345,7 +345,7 @@ describe("StylesPanel integration", () => {
         toggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("% draw,");
       expect(updatedSource).toContain("rounded corners");
       expect(updatedSource).toContain("line width=1pt");
@@ -369,7 +369,7 @@ describe("StylesPanel integration", () => {
         toggle!.click();
       });
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect(updatedSource).toContain("% rounded corners,");
       expect(updatedSource).toContain("draw,");
       expect(updatedSource).toContain("font=\\small");
@@ -395,7 +395,7 @@ describe("StylesPanel integration", () => {
         toggleBefore!.click();
       });
 
-      const toggledOffSource = useEditorStore.getState().source;
+      const toggledOffSource = defaultEditorStore.getState().source;
       expect(toggledOffSource).toContain("% draw=red,");
       await act(async () => {
         seedStylesPanelState(toggledOffSource, [textId]);
@@ -410,7 +410,7 @@ describe("StylesPanel integration", () => {
         disabledToggle!.click();
       });
 
-      const reenabledSource = useEditorStore.getState().source;
+      const reenabledSource = defaultEditorStore.getState().source;
       expect(reenabledSource).toContain("draw=red");
       expect(reenabledSource).not.toContain("% draw=red,");
     } finally {
@@ -432,7 +432,7 @@ describe("StylesPanel integration", () => {
       expect(valueButton).toBeDefined();
 
       await clickAndTypeRawValue(valueButton!, "bar", "baz");
-      const updated = useEditorStore.getState().source;
+      const updated = defaultEditorStore.getState().source;
       expect(updated).toContain("foo=baz");
     } finally {
       await unmountStylesPanel(root, container);
@@ -457,7 +457,7 @@ describe("StylesPanel integration", () => {
       expect(newPropInput).not.toBeNull();
       await commitEditableInput(newPropInput!, "line width");
 
-      const updated = useEditorStore.getState().source;
+      const updated = defaultEditorStore.getState().source;
       expect(updated).toContain("line width=");
     } finally {
       await unmountStylesPanel(root, container);
@@ -482,7 +482,7 @@ describe("StylesPanel integration", () => {
       expect(newPropInput).not.toBeNull();
       await commitEditableInput(newPropInput!, "foobarflag");
 
-      const updated = useEditorStore.getState().source;
+      const updated = defaultEditorStore.getState().source;
       expect(updated).toContain("foobarflag");
     } finally {
       await unmountStylesPanel(root, container);
@@ -512,7 +512,7 @@ describe("StylesPanel integration", () => {
       const barAfter = Array.from(container.querySelectorAll("button"))
         .find((entry) => entry.textContent?.trim() === "baz");
       expect(barAfter).toBeDefined();
-      expect(useEditorStore.getState().source).toContain("foo=baz");
+      expect(defaultEditorStore.getState().source).toContain("foo=baz");
     } finally {
       await unmountStylesPanel(root, container);
     }
@@ -534,7 +534,7 @@ describe("StylesPanel integration", () => {
 
       await commitEditableInput(flagInput!, "barflag");
 
-      const updatedSource = useEditorStore.getState().source;
+      const updatedSource = defaultEditorStore.getState().source;
       expect((updatedSource.match(/barflag/g) ?? []).length).toBe(2);
       expect(updatedSource).not.toContain("fooflag");
     } finally {

@@ -6,7 +6,7 @@ import {
   filterAppMenuDefinitionForTarget,
   type AppMenuPlatformTarget
 } from "../app-menu";
-import { useEditorStore } from "../store/store";
+import { useEditorStore, useEditorStoreApi } from "../store/store";
 import { computeSnapshot, makeEmptySnapshot, setMathJaxFont, type ComputeRequest, type ComputeResponse } from "../compute";
 import { applyEditAction } from "tikz-editor/edit/actions";
 import { getRepeatSelectionEligibility } from "tikz-editor/edit/actions/repeat";
@@ -164,6 +164,7 @@ type RepeatModalState = {
 };
 
 export function App() {
+  const storeApi = useEditorStoreApi();
   const {
     source,
     snapshot,
@@ -914,10 +915,10 @@ export function App() {
         dispatch({ type: "CODE_EDITED", source: nextSource });
       },
       getSource: () => {
-        return useEditorStore.getState().source;
+        return storeApi.getState().source;
       },
       getSourceRevision: () => {
-        return useEditorStore.getState().sourceRevision;
+        return storeApi.getState().sourceRevision;
       },
       getSnapshotSource: () => {
         return snapshotRef.current.source;
@@ -944,19 +945,19 @@ export function App() {
         dispatch({ type: "CLEAR_SELECTION" });
       },
       getSelectedSourceIds: () => {
-        return [...useEditorStore.getState().selectedElementIds];
+        return [...storeApi.getState().selectedElementIds];
       },
       getActiveFigureId: () => {
-        return useEditorStore.getState().activeFigureId;
+        return storeApi.getState().activeFigureId;
       },
       getFigureCount: () => {
-        return useEditorStore.getState().snapshot.figures.length;
+        return storeApi.getState().snapshot.figures.length;
       },
       getActiveCanvasDragKind: () => {
-        return useEditorStore.getState().activeCanvasDragKind;
+        return storeApi.getState().activeCanvasDragKind;
       },
       getCanvasTransform: () => {
-        const transform = useEditorStore.getState().canvasTransform;
+        const transform = storeApi.getState().canvasTransform;
         return {
           translateX: transform.translateX,
           translateY: transform.translateY,
@@ -989,7 +990,7 @@ export function App() {
     return () => {
       delete globalLike.__TIKZ_EDITOR_APP_TEST_API__;
     };
-  }, [commandRuntime, dispatch]);
+  }, [commandRuntime, dispatch, storeApi]);
 
   useEffect(() => {
     const unbind = getActiveEditorPlatform().files?.bindOpenRequest?.(async (opened) => {

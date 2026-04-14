@@ -17,7 +17,7 @@ import { buildStylesCascadeModel } from "tikz-editor/edit/styles-cascade";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
 import { useProjectNamedColorSwatches } from "../../project-named-colors";
-import { useEditorStore } from "../../store/store";
+import { useEditorStore, useEditorStoreApi } from "../../store/store";
 import { actionAvailability } from "../editor-commands";
 import {
   buildInspectorPropertyProvenanceMap,
@@ -166,12 +166,13 @@ export function useInspectorModel(args: {
   getInspectorDescriptor: (element: SceneElement, context: InspectorSnapshot) => InspectorDescriptor;
 }) {
   const { selectedIds, dispatch, getInspectorDescriptor } = args;
+  const storeApi = useEditorStoreApi();
   const [{ source, snapshot }, setSourceSnapshot] = useState(() => {
-    const s = useEditorStore.getState();
+    const s = storeApi.getState();
     return { source: s.source, snapshot: s.snapshot };
   });
   const [{ activeDocumentId, activeFigureId, sourceRevision }, setAnalysisInputs] = useState(() => {
-    const s = useEditorStore.getState();
+    const s = storeApi.getState();
     return {
       activeDocumentId: s.activeDocumentId,
       activeFigureId: s.activeFigureId,
@@ -180,7 +181,7 @@ export function useInspectorModel(args: {
   });
 
   useEffect(() => {
-    return useEditorStore.subscribe((s, prev) => {
+    return storeApi.subscribe((s, prev) => {
       const k = s.activeCanvasDragKind;
       if (k === "element" || k === "resize" || k === "rotate" || k === "handle") return;
       if (s.source !== prev.source || s.snapshot !== prev.snapshot) {
@@ -195,10 +196,10 @@ export function useInspectorModel(args: {
         setSourceSnapshot({ source: s.source, snapshot: s.snapshot });
       }
     });
-  }, []);
+  }, [storeApi]);
 
   useEffect(() => {
-    return useEditorStore.subscribe((s) => {
+    return storeApi.subscribe((s) => {
       const k = s.activeCanvasDragKind;
       if (k === "element" || k === "resize" || k === "rotate" || k === "handle") {
         return;
@@ -218,7 +219,7 @@ export function useInspectorModel(args: {
         };
       });
     });
-  }, []);
+  }, [storeApi]);
 
   const rawSelectedSourceIds = useMemo(() => [...selectedIds], [selectedIds]);
   const selectedSourceIds = rawSelectedSourceIds;

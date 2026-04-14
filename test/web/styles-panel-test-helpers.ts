@@ -4,7 +4,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { makeEmptySnapshot } from "../../packages/app/src/compute";
-import { useEditorStore } from "../../packages/app/src/store/store";
+import { EditorStoreProvider, defaultEditorStore } from "../../packages/app/src/store/store";
 import { makeInitialState } from "../../packages/app/src/store/reducer";
 import { StylesPanel } from "../../packages/app/src/ui/StylesPanel";
 import { renderTikzToSvg } from "../../packages/core/src/render";
@@ -26,12 +26,12 @@ export function seedStylesPanelState(source: string, selectedSourceIds: string[]
   };
 
   const base = makeInitialState();
-  const dispatch = useEditorStore.getState().dispatch;
+  const dispatch = defaultEditorStore.getState().dispatch;
   const activeDocumentId = base.activeDocumentId;
   const doc = base.documents[activeDocumentId]!;
   const selected = new Set(selectedSourceIds);
 
-  useEditorStore.setState({
+  defaultEditorStore.setState({
     ...base,
     source,
     sourceRevision: 1,
@@ -65,7 +65,13 @@ export async function mountStylesPanel(): Promise<{ container: HTMLDivElement; r
   document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(React.createElement(StylesPanel));
+    root.render(
+      React.createElement(
+        EditorStoreProvider,
+        { store: defaultEditorStore },
+        React.createElement(StylesPanel)
+      )
+    );
   });
   return { container, root };
 }

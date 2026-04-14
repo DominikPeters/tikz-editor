@@ -6,10 +6,13 @@ import { createDesktopPlatformAdapter } from "./platform/desktop-platform";
 async function bootstrap() {
   setActiveEditorPlatform(createDesktopPlatformAdapter());
   const { App } = await import("@tikz-editor/app/src/ui/App");
+  const { EditorStoreProvider, defaultEditorStore } = await import("@tikz-editor/app/src/store/store");
 
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <App />
+      <EditorStoreProvider store={defaultEditorStore}>
+        <App />
+      </EditorStoreProvider>
     </StrictMode>
   );
 }
