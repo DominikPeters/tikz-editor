@@ -109,6 +109,22 @@ export function clientToWorldPoint(
   return svgToWorldPoint(svgPoint, viewBox);
 }
 
+export function worldToClientPoint(
+  worldX: number,
+  worldY: number,
+  svgElement: SVGSVGElement | null,
+  viewBox: SvgViewBox
+): { clientX: number; clientY: number } | null {
+  if (!svgElement) return null;
+  const ctm = svgElement.getScreenCTM();
+  if (!ctm) return null;
+  const svgPt = svgElement.createSVGPoint();
+  svgPt.x = worldX;
+  svgPt.y = worldToSvgY(worldY, viewBox);
+  const transformed = svgPt.matrixTransform(ctm);
+  return { clientX: transformed.x, clientY: transformed.y };
+}
+
 export function clientToSvgPoint(
   clientX: number,
   clientY: number,

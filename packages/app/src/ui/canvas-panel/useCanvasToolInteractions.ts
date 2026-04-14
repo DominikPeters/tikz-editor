@@ -16,6 +16,7 @@ export type UseCanvasToolInteractionsArgs = {
 export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
   const {
     viewportRef,
+    resolveWorldFromViewportClient,
     toolMode,
     setTextEditingSession,
     startMarqueeSelection,
@@ -64,6 +65,360 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
     freehandDraft,
     parseOptions
   } = args;
+  const beginToolPointerDown = useCallback(
+    (input: {
+      pointerId: number;
+      world: Point;
+      ctrlOrMeta: boolean;
+      preventDefault: () => void;
+      stopPropagation?: () => void;
+    }) => {
+      const { pointerId, world, ctrlOrMeta, preventDefault, stopPropagation } = input;
+      if (toolMode === "addBucket") {
+        setToolCursorWorld(null);
+        setNodeAnchorOverlay(null);
+        setSnapLines([]);
+        setWarning("Cannot fill the tikzpicture background.");
+        preventDefault();
+        return;
+      }
+      const drawDragKind: DragState["kind"] =
+        toolMode === "addPath"
+          ? "tool-path-segment"
+          : toolMode === "addFreehand"
+            ? "tool-freehand"
+          : toolMode === "addBezier" && pendingBezier
+            ? "tool-bezier-bend"
+            : "tool-create";
+      if (snapshot.source !== source) {
+        setWarning("Wait for recompute to finish before starting a draw gesture.");
+        setSnapLines([]);
+        logSnapDebug({
+          phase: "tool-start",
+          note: "blocked: snapshot/source mismatch",
+          snapshotMatchesSource: false,
+          dragKind: drawDragKind,
+          rawPoint: world,
+          lines: []
+        });
+        return;
+      }
+      const shouldSnapToolStart = toolMode !== "addFreehand";
+      const toolSnapContext = shouldSnapToolStart && snapshot.scene
+        ? buildSnapContext({
+            sceneElements: snapshot.scene.elements,
+            selectedSourceIds: [],
+            guides: snapGuideInput,
+            settings: snapSettingsPatch,
+            zoom: canvasTransform.scale,
+            viewportWorld: viewportWorldBounds
+          })
+        : null;
+      const startSnapResult = toolSnapContext && shouldSnapToolStart
+        ? snapToolPointer({
+            context: toolSnapContext,
+            pointer: world,
+            kind: toolMode === "addPath" ? "line-end" : "node",
+            modifiers: { ctrlOrMeta }
+          })
+        : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
+      const snappedStart = startSnapResult.snappedPoint ?? world;
+      const lineToolStartAnchorSnap =
+        toolMode === "addLine" || toolMode === "addArrow" || toolMode === "addPath"
+          ? resolveEndpointAnchorSnap({
+              pointerWorld: world,
+              zoom: toolSnapContext?.zoom ?? canvasTransform.scale,
+              nodeAnchorTargets,
+              matrixCellAnchorHints
+            })
+          : null;
+      const startEndpointAnchor = lineToolStartAnchorSnap?.snappedAnchor ?? null;
+      const resolvedStart = startEndpointAnchor?.world ?? snappedStart;
+
+      setToolCursorWorld(resolvedStart);
+      preventDefault();
+
+      if (toolMode === "addFreehand") {
+        const nextFreehandDraft = createFreehandToolDraft(resolvedStart, canvasTransform.scale);
+        setPathDraft(null);
+        setPathSegmentDraft(null);
+        setToolDraft(null);
+        setBezierBendDraft(null);
+        setPendingBezier(null);
+        setSnapLines([]);
+        setNodeAnchorOverlay(null);
+        setFreehandDraft(nextFreehandDraft);
+        const nextFreehandDrag: Extract<DragState, { kind: "tool-freehand" }> = {
+          kind: "tool-freehand",
+          pointerId,
+          points: nextFreehandDraft.points,
+          minSampleDistanceWorld: nextFreehandDraft.minSampleDistanceWorld
+        };
+        setDragState(nextFreehandDrag);
+        logSnapDebug({
+          phase: "tool-freehand-start",
+          snapshotMatchesSource: true,
+          dragKind: "tool-freehand",
+          rawPoint: world,
+          snappedPoint: resolvedStart,
+          lines: []
+        });
+        return;
+      }
+
+      if (toolMode === "addPath") {
+        const activeDraft = pathDraftRef.current;
+        if (!activeDraft) {
+          // Check if click is near an endpoint of an existing open path
+          const endpointSnap = snapshot.editHandles.length > 0
+            ? resolvePathEndpointSnap({
+                pointerWorld: resolvedStart,
+                zoom: canvasTransform.scale,
+                editHandles: snapshot.editHandles,
+                source,
+                parseOptions
+              })
+            : null;
+          const appendTarget = endpointSnap
+            ? { elementId: endpointSnap.elementId, end: endpointSnap.end }
+            : undefined;
+          const draftStart = endpointSnap ? endpointSnap.world : resolvedStart;
+          setPathDraft(
+            createPathToolDraft(
+              draftStart,
+              appendTarget,
+              endpointSnap || !startEndpointAnchor
+                ? undefined
+                : {
+                    nodeName: startEndpointAnchor.nodeName,
+                    anchor: startEndpointAnchor.anchor
+                  }
+            )
+          );
+          setPathSegmentDraft(null);
+          setToolDraft(null);
+          setBezierBendDraft(null);
+          setSnapLines(startSnapResult.lines);
+          logSnapDebug({
+            phase: "tool-path-start",
+            snapshotMatchesSource: true,
+            dragKind: null,
+            context: toolSnapContext,
+            rawPoint: world,
+            snappedPoint: draftStart,
+            offset: startSnapResult.offset,
+            lines: startSnapResult.lines
+          });
+          return;
+        }
+
+        const closeRadiusWorld = pathToolCloseRadiusWorld(canvasTransform.scale);
+        if (pathToolShouldClose(activeDraft, resolvedStart, closeRadiusWorld)) {
+          finalizePathDraft(true);
+          return;
+        }
+
+        const segmentStart = pathToolCurrentPoint(activeDraft);
+        if (distanceSquared(segmentStart, resolvedStart) <= 1e-6) {
+          setSnapLines(startSnapResult.lines);
+          return;
+        }
+
+        const midpoint = {
+          x: (segmentStart.x + resolvedStart.x) / 2,
+          y: (segmentStart.y + resolvedStart.y) / 2
+        };
+        const nextPathSegmentDraft: Extract<DragState, { kind: "tool-path-segment" }> = {
+          kind: "tool-path-segment",
+          pointerId,
+          startWorld: segmentStart,
+          endWorld: resolvedStart,
+          endEndpointAnchor: startEndpointAnchor,
+          startPointerWorld: resolvedStart,
+          rawBendWorld: midpoint,
+          bendWorld: midpoint,
+          isBending: false,
+          snapContext: toolSnapContext
+        };
+        setNodeAnchorOverlay(null);
+        setToolDraft(null);
+        setBezierBendDraft(null);
+        setPathSegmentDraft(nextPathSegmentDraft);
+        setDragState(nextPathSegmentDraft);
+        setSnapLines([]);
+        logSnapDebug({
+          phase: "tool-path-segment-start",
+          snapshotMatchesSource: true,
+          dragKind: "tool-path-segment",
+          context: toolSnapContext,
+          rawPoint: world,
+          snappedPoint: resolvedStart,
+          offset: startSnapResult.offset,
+          lines: startSnapResult.lines
+        });
+        return;
+      }
+
+      if (toolMode === "addBezier" && pendingBezier) {
+        const bendSnap = toolSnapContext
+          ? snapToolPointer({
+              context: toolSnapContext,
+              pointer: world,
+              kind: "line-end",
+              modifiers: { ctrlOrMeta }
+            })
+          : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
+        const bendStart = bendSnap.snappedPoint ?? world;
+        setToolCursorWorld(bendStart);
+        setSnapLines([]);
+        const nextBendDraft: Extract<DragState, { kind: "tool-bezier-bend" }> = {
+          kind: "tool-bezier-bend",
+          pointerId,
+          startWorld: pendingBezier.startWorld,
+          endWorld: pendingBezier.endWorld,
+          rawCurrentWorld: bendStart,
+          currentWorld: bendStart,
+          snapContext: toolSnapContext
+        };
+        setDragState(nextBendDraft);
+        setBezierBendDraft(nextBendDraft);
+        logSnapDebug({
+          phase: "tool-bezier-bend-start",
+          snapshotMatchesSource: true,
+          dragKind: "tool-bezier-bend",
+          context: toolSnapContext,
+          rawPoint: world,
+          snappedPoint: bendStart,
+          offset: bendSnap.offset,
+          lines: bendSnap.lines
+        });
+        return;
+      }
+
+      if (toolMode === "addNode" || toolMode === "addMatrix") {
+        preventDefault();
+        stopPropagation?.();
+        const snapResult = toolSnapContext
+            ? snapToolPointer({
+                context: toolSnapContext,
+                pointer: world,
+                kind: "node",
+                modifiers: { ctrlOrMeta }
+              })
+            : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
+        const nodeAt = snapResult.snappedPoint ?? world;
+        setSnapLines(snapResult.lines);
+        logSnapDebug({
+          phase: "tool-add-node",
+          snapshotMatchesSource: true,
+          dragKind: null,
+          context: toolSnapContext,
+          rawPoint: world,
+          snappedPoint: nodeAt,
+          offset: snapResult.offset,
+          lines: snapResult.lines
+        });
+        if (toolMode !== "addMatrix") {
+          queueSelectionForAddedElement(nodeAt);
+        }
+        const ok = applyActionWithFeedback({
+          kind: "addElement",
+          template: toolMode === "addShape"
+            ? { kind: "node", shape: selectedAddShape, text: "" }
+            : toolMode === "addMatrix"
+              ? {
+                  kind: "matrix",
+                  rows: selectedAddMatrixRows,
+                  columns: selectedAddMatrixColumns,
+                  matrixKind: "nodes"
+                }
+              : { kind: "node" },
+          at: nodeAt
+        });
+        if (!ok.sourceChanged) {
+          pendingAddedSelectionRef.current = null;
+        }
+        if (ok.sourceChanged) {
+          suppressNextBackgroundClickRef.current = true;
+          dispatch({ type: "SET_TOOL_MODE", mode: "select" });
+          setToolDraft(null);
+          setToolCursorWorld(null);
+          setSnapLines([]);
+        }
+        return;
+      }
+
+      if (isToolCreateMode(toolMode)) {
+        setSnapLines([]);
+        const nextDraft: Extract<DragState, { kind: "tool-create" }> = {
+          kind: "tool-create",
+          pointerId,
+          toolMode,
+          startWorld: resolvedStart,
+          startEndpointAnchor,
+          rawCurrentWorld: resolvedStart,
+          currentWorld: resolvedStart,
+          activeEndpointAnchor: null,
+          snapContext: toolSnapContext
+        };
+        setNodeAnchorOverlay(
+          lineToolStartAnchorSnap && lineToolStartAnchorSnap.visibleAnchors.length > 0
+            ? lineToolStartAnchorSnap
+            : null
+        );
+        setBezierBendDraft(null);
+        setDragState(nextDraft);
+        setToolDraft(nextDraft);
+        logSnapDebug({
+          phase: "tool-start",
+          snapshotMatchesSource: true,
+          dragKind: "tool-create",
+          context: toolSnapContext,
+          rawPoint: world,
+          snappedPoint: resolvedStart,
+          lines: []
+        });
+      }
+    },
+    [
+      applyActionWithFeedback,
+      canvasTransform.scale,
+      dispatch,
+      finalizePathDraft,
+      logSnapDebug,
+      matrixCellAnchorHints,
+      nodeAnchorTargets,
+      parseOptions,
+      pathDraftRef,
+      pendingAddedSelectionRef,
+      pendingBezier,
+      queueSelectionForAddedElement,
+      selectedAddMatrixColumns,
+      selectedAddMatrixRows,
+      selectedAddShape,
+      setBezierBendDraft,
+      setDragState,
+      setFreehandDraft,
+      setNodeAnchorOverlay,
+      setPathDraft,
+      setPathSegmentDraft,
+      setPendingBezier,
+      setSnapLines,
+      setToolCursorWorld,
+      setToolDraft,
+      setWarning,
+      snapGuideInput,
+      snapSettingsPatch,
+      snapshot.editHandles,
+      snapshot.scene,
+      snapshot.source,
+      source,
+      suppressNextBackgroundClickRef,
+      toolMode,
+      viewportWorldBounds
+    ]
+  );
+
   const finalizePendingTouchViewportTap = useCallback(
     (pointerId: number) => {
       const pending = pendingTouchViewportRef.current;
@@ -119,7 +474,25 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
   const onViewportPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       viewportRef.current?.focus({ preventScroll: true });
-      if (toolMode !== "select" || event.button !== 0 || event.target !== event.currentTarget) {
+      if (event.button !== 0 || event.target !== event.currentTarget) {
+        return;
+      }
+      if (toolMode !== "select") {
+        if (toolMode === "magnify") {
+          return;
+        }
+        const world = resolveWorldFromViewportClient(event.clientX, event.clientY);
+        if (!world) {
+          return;
+        }
+        setTextEditingSession(null);
+        beginToolPointerDown({
+          pointerId: event.pointerId,
+          world,
+          ctrlOrMeta: event.ctrlKey || event.metaKey,
+          preventDefault: () => event.preventDefault(),
+          stopPropagation: () => event.stopPropagation()
+        });
         return;
       }
       setTextEditingSession(null);
@@ -128,7 +501,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         event.preventDefault();
       }
     },
-    [startMarqueeSelection, toolMode, setTextEditingSession, viewportRef]
+    [beginToolPointerDown, resolveWorldFromViewportClient, setTextEditingSession, startMarqueeSelection, toolMode, viewportRef]
   );
 
   const onBackgroundClick = useCallback(
@@ -198,311 +571,13 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         if (!world) {
           return;
         }
-        if (toolMode === "addBucket") {
-          setToolCursorWorld(null);
-          setNodeAnchorOverlay(null);
-          setSnapLines([]);
-          setWarning("Cannot fill the tikzpicture background.");
-          event.preventDefault();
-          return;
-        }
-        const drawDragKind: DragState["kind"] =
-          toolMode === "addPath"
-            ? "tool-path-segment"
-            : toolMode === "addFreehand"
-              ? "tool-freehand"
-            : toolMode === "addBezier" && pendingBezier
-              ? "tool-bezier-bend"
-              : "tool-create";
-        if (snapshot.source !== source) {
-          setWarning("Wait for recompute to finish before starting a draw gesture.");
-          setSnapLines([]);
-          logSnapDebug({
-            phase: "tool-start",
-            note: "blocked: snapshot/source mismatch",
-            snapshotMatchesSource: false,
-            dragKind: drawDragKind,
-            rawPoint: world,
-            lines: []
-          });
-          return;
-        }
-        const shouldSnapToolStart = toolMode !== "addFreehand";
-        const toolSnapContext = shouldSnapToolStart && snapshot.scene
-          ? buildSnapContext({
-              sceneElements: snapshot.scene.elements,
-              selectedSourceIds: [],
-              guides: snapGuideInput,
-              settings: snapSettingsPatch,
-              zoom: canvasTransform.scale,
-              viewportWorld: viewportWorldBounds
-            })
-          : null;
-        const startSnapResult = toolSnapContext && shouldSnapToolStart
-          ? snapToolPointer({
-              context: toolSnapContext,
-              pointer: world,
-              kind: toolMode === "addPath" ? "line-end" : "node",
-              modifiers: { ctrlOrMeta: event.ctrlKey || event.metaKey }
-            })
-          : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
-        const snappedStart = startSnapResult.snappedPoint ?? world;
-        const lineToolStartAnchorSnap =
-          toolMode === "addLine" || toolMode === "addArrow" || toolMode === "addPath"
-            ? resolveEndpointAnchorSnap({
-                pointerWorld: world,
-                zoom: toolSnapContext?.zoom ?? canvasTransform.scale,
-                nodeAnchorTargets,
-                matrixCellAnchorHints
-              })
-            : null;
-        const startEndpointAnchor = lineToolStartAnchorSnap?.snappedAnchor ?? null;
-        const resolvedStart = startEndpointAnchor?.world ?? snappedStart;
-
-        setToolCursorWorld(resolvedStart);
-        event.preventDefault();
-
-        if (toolMode === "addFreehand") {
-          const nextFreehandDraft = createFreehandToolDraft(resolvedStart, canvasTransform.scale);
-          setPathDraft(null);
-          setPathSegmentDraft(null);
-          setToolDraft(null);
-          setBezierBendDraft(null);
-          setPendingBezier(null);
-          setSnapLines([]);
-          setNodeAnchorOverlay(null);
-          setFreehandDraft(nextFreehandDraft);
-          const nextFreehandDrag: Extract<DragState, { kind: "tool-freehand" }> = {
-            kind: "tool-freehand",
-            pointerId: event.pointerId,
-            points: nextFreehandDraft.points,
-            minSampleDistanceWorld: nextFreehandDraft.minSampleDistanceWorld
-          };
-          setDragState(nextFreehandDrag);
-          logSnapDebug({
-            phase: "tool-freehand-start",
-            snapshotMatchesSource: true,
-            dragKind: "tool-freehand",
-            rawPoint: world,
-            snappedPoint: resolvedStart,
-            lines: []
-          });
-          return;
-        }
-
-        if (toolMode === "addPath") {
-          const activeDraft = pathDraftRef.current;
-          if (!activeDraft) {
-            // Check if click is near an endpoint of an existing open path
-            const endpointSnap = snapshot.editHandles.length > 0
-              ? resolvePathEndpointSnap({
-                  pointerWorld: resolvedStart,
-                  zoom: canvasTransform.scale,
-                  editHandles: snapshot.editHandles,
-                  source,
-                  parseOptions
-                })
-              : null;
-            const appendTarget = endpointSnap
-              ? { elementId: endpointSnap.elementId, end: endpointSnap.end }
-              : undefined;
-            const draftStart = endpointSnap ? endpointSnap.world : resolvedStart;
-            setPathDraft(
-              createPathToolDraft(
-                draftStart,
-                appendTarget,
-                endpointSnap || !startEndpointAnchor
-                  ? undefined
-                  : {
-                      nodeName: startEndpointAnchor.nodeName,
-                      anchor: startEndpointAnchor.anchor
-                    }
-              )
-            );
-            setPathSegmentDraft(null);
-            setToolDraft(null);
-            setBezierBendDraft(null);
-            setSnapLines(startSnapResult.lines);
-            logSnapDebug({
-              phase: "tool-path-start",
-              snapshotMatchesSource: true,
-              dragKind: null,
-              context: toolSnapContext,
-              rawPoint: world,
-              snappedPoint: draftStart,
-              offset: startSnapResult.offset,
-              lines: startSnapResult.lines
-            });
-            return;
-          }
-
-          const closeRadiusWorld = pathToolCloseRadiusWorld(canvasTransform.scale);
-          if (pathToolShouldClose(activeDraft, resolvedStart, closeRadiusWorld)) {
-            finalizePathDraft(true);
-            return;
-          }
-
-          const segmentStart = pathToolCurrentPoint(activeDraft);
-          if (distanceSquared(segmentStart, resolvedStart) <= 1e-6) {
-            setSnapLines(startSnapResult.lines);
-            return;
-          }
-
-          const midpoint = {
-            x: (segmentStart.x + resolvedStart.x) / 2,
-            y: (segmentStart.y + resolvedStart.y) / 2
-          };
-          const nextPathSegmentDraft: Extract<DragState, { kind: "tool-path-segment" }> = {
-            kind: "tool-path-segment",
-            pointerId: event.pointerId,
-            startWorld: segmentStart,
-            endWorld: resolvedStart,
-            endEndpointAnchor: startEndpointAnchor,
-            startPointerWorld: resolvedStart,
-            rawBendWorld: midpoint,
-            bendWorld: midpoint,
-            isBending: false,
-            snapContext: toolSnapContext
-          };
-          setNodeAnchorOverlay(null);
-          setToolDraft(null);
-          setBezierBendDraft(null);
-          setPathSegmentDraft(nextPathSegmentDraft);
-          setDragState(nextPathSegmentDraft);
-          setSnapLines([]);
-          logSnapDebug({
-            phase: "tool-path-segment-start",
-            snapshotMatchesSource: true,
-            dragKind: "tool-path-segment",
-            context: toolSnapContext,
-            rawPoint: world,
-            snappedPoint: resolvedStart,
-            offset: startSnapResult.offset,
-            lines: startSnapResult.lines
-          });
-          return;
-        }
-
-        if (toolMode === "addBezier" && pendingBezier) {
-          const bendSnap = toolSnapContext
-            ? snapToolPointer({
-                context: toolSnapContext,
-                pointer: world,
-                kind: "line-end",
-                modifiers: { ctrlOrMeta: event.ctrlKey || event.metaKey }
-              })
-            : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
-          const bendStart = bendSnap.snappedPoint ?? world;
-          setToolCursorWorld(bendStart);
-          setSnapLines([]);
-          const nextBendDraft: Extract<DragState, { kind: "tool-bezier-bend" }> = {
-            kind: "tool-bezier-bend",
-            pointerId: event.pointerId,
-            startWorld: pendingBezier.startWorld,
-            endWorld: pendingBezier.endWorld,
-            rawCurrentWorld: bendStart,
-            currentWorld: bendStart,
-            snapContext: toolSnapContext
-          };
-          setDragState(nextBendDraft);
-          setBezierBendDraft(nextBendDraft);
-          logSnapDebug({
-            phase: "tool-bezier-bend-start",
-            snapshotMatchesSource: true,
-            dragKind: "tool-bezier-bend",
-            context: toolSnapContext,
-            rawPoint: world,
-            snappedPoint: bendStart,
-            offset: bendSnap.offset,
-            lines: bendSnap.lines
-          });
-          return;
-        }
-
-        if (toolMode === "addNode" || toolMode === "addMatrix") {
-          event.preventDefault();
-          event.stopPropagation();
-          const snapResult = toolSnapContext
-              ? snapToolPointer({
-                  context: toolSnapContext,
-                  pointer: world,
-                  kind: "node",
-                  modifiers: { ctrlOrMeta: event.ctrlKey || event.metaKey }
-                })
-              : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
-          const nodeAt = snapResult.snappedPoint ?? world;
-          setSnapLines(snapResult.lines);
-          logSnapDebug({
-            phase: "tool-add-node",
-            snapshotMatchesSource: true,
-            dragKind: null,
-            context: toolSnapContext,
-            rawPoint: world,
-            snappedPoint: nodeAt,
-            offset: snapResult.offset,
-            lines: snapResult.lines
-          });
-          if (toolMode !== "addMatrix") {
-            queueSelectionForAddedElement(nodeAt);
-          }
-          const ok = applyActionWithFeedback({
-            kind: "addElement",
-            template: toolMode === "addShape"
-              ? { kind: "node", shape: selectedAddShape, text: "" }
-              : toolMode === "addMatrix"
-                ? {
-                    kind: "matrix",
-                    rows: selectedAddMatrixRows,
-                    columns: selectedAddMatrixColumns,
-                    matrixKind: "nodes"
-                  }
-                : { kind: "node" },
-            at: nodeAt
-          });
-          if (!ok.sourceChanged) {
-            pendingAddedSelectionRef.current = null;
-          }
-          if (ok.sourceChanged) {
-            suppressNextBackgroundClickRef.current = true;
-            dispatch({ type: "SET_TOOL_MODE", mode: "select" });
-            setToolDraft(null);
-            setToolCursorWorld(null);
-            setSnapLines([]);
-          }
-          return;
-        }
-
-        if (isToolCreateMode(toolMode)) {
-          setSnapLines([]);
-          const nextDraft: Extract<DragState, { kind: "tool-create" }> = {
-            kind: "tool-create",
-            pointerId: event.pointerId,
-            toolMode,
-            startWorld: resolvedStart,
-            startEndpointAnchor,
-            rawCurrentWorld: resolvedStart,
-            currentWorld: resolvedStart,
-            activeEndpointAnchor: null,
-            snapContext: toolSnapContext
-          };
-          setNodeAnchorOverlay(
-            lineToolStartAnchorSnap && lineToolStartAnchorSnap.visibleAnchors.length > 0
-              ? lineToolStartAnchorSnap
-              : null
-          );
-          setBezierBendDraft(null);
-          setDragState(nextDraft);
-          setToolDraft(nextDraft);
-          logSnapDebug({
-            phase: "tool-start",
-            snapshotMatchesSource: true,
-            dragKind: "tool-create",
-            context: toolSnapContext,
-            rawPoint: world,
-            snappedPoint: resolvedStart,
-            lines: []
-          });
-        }
+        beginToolPointerDown({
+          pointerId: event.pointerId,
+          world,
+          ctrlOrMeta: event.ctrlKey || event.metaKey,
+          preventDefault: () => event.preventDefault(),
+          stopPropagation: () => event.stopPropagation()
+        });
         return;
       }
 
@@ -548,45 +623,18 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
     },
     [
       applyActionWithFeedback,
+      beginToolPointerDown,
       canvasTransform,
       dispatch,
-      finalizePathDraft,
-      logSnapDebug,
-      queueSelectionForAddedElement,
       setDragState,
-      setNodeAnchorOverlay,
-      selectedAddShape,
-      selectedAddMatrixRows,
-      selectedAddMatrixColumns,
-      snapshot.scene,
-      snapshot.source,
-      source,
       svgResult,
       startMarqueeSelection,
-      nodeAnchorTargets,
-      matrixCellAnchorHints,
-      pendingBezier,
       toolMode,
-      snapGuideInput,
-      snapSettingsPatch,
-      viewportWorldBounds,
       interactionSvgRef,
-      pathDraftRef,
-      setBezierBendDraft,
-      setFreehandDraft,
       setMagnifierState,
       setDragCursorLock,
-      setPathDraft,
-      setPathSegmentDraft,
-      setPendingBezier,
-      setSnapLines,
       setTextEditingSession,
-      setToolCursorWorld,
-      setToolDraft,
-      setWarning,
       viewportRef,
-      pendingAddedSelectionRef,
-      suppressNextBackgroundClickRef,
       pendingTouchViewportRef
     ]
   );

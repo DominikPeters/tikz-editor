@@ -13,7 +13,8 @@
     "profile": "node --import tsx scripts/run-profiling.ts --all",
     "profile:analyze": "node ../../scripts/analyze-cpuprofile.mjs",
     "profile:compare": "node ../../scripts/analyze-cpuprofile.mjs compare",
-    "profile:compare-report": "node ../../scripts/analyze-cpuprofile.mjs compare-report"
+    "profile:compare-report": "node ../../scripts/analyze-cpuprofile.mjs compare-report",
+    "screenshots:demos": "node scripts/screenshot-demos.mjs"
   },
   "dependencies": {
     "@tikz-editor/app": "0.1.0",

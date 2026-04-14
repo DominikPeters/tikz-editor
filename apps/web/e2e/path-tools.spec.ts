@@ -830,6 +830,43 @@ test("multi-segment path tool finalizes on Enter", async ({ page }) => {
   await expect.poll(async () => readSource(page)).toContain("--");
 });
 
+test("path tool can start from viewport background outside active figure bounds", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (2,2);
+\end{tikzpicture}`);
+  await toolbarButton(page, "Path").click();
+
+  const viewport = canvasViewport(page);
+  const layer = interactionLayer(page);
+  const viewportBox = await viewport.boundingBox();
+  const layerBox = await layer.boundingBox();
+  if (!viewportBox || !layerBox) {
+    throw new Error("Canvas viewport or interaction bounds missing.");
+  }
+
+  const candidateStarts = [
+    { x: viewportBox.x + 12, y: viewportBox.y + 12 },
+    { x: viewportBox.x + viewportBox.width - 12, y: viewportBox.y + 12 },
+    { x: viewportBox.x + 12, y: viewportBox.y + viewportBox.height - 12 },
+    { x: viewportBox.x + viewportBox.width - 12, y: viewportBox.y + viewportBox.height - 12 }
+  ];
+  const start = candidateStarts.find(
+    (point) =>
+      point.x < layerBox.x || point.x > layerBox.x + layerBox.width || point.y < layerBox.y || point.y > layerBox.y + layerBox.height
+  );
+  if (!start) {
+    throw new Error("Could not find a viewport point outside active figure bounds.");
+  }
+
+  await page.mouse.click(start.x, start.y);
+  await page.mouse.click(start.x + 80, start.y + 40);
+  await page.keyboard.press("Enter");
+
+  await expect.poll(async () => readSource(page)).toContain("\\draw");
+  await expect.poll(async () => readSource(page)).toContain("--");
+});
+
 test("multi-segment path tool keeps named anchors when clicking anchor dots", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}

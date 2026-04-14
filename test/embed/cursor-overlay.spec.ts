@@ -31,7 +31,8 @@ describe("CursorOverlay", () => {
           x: 10,
           y: 20,
           visible: true,
-          pressed: false
+          pressed: false,
+          cursor: "pointer"
         })
       );
     });
@@ -52,7 +53,8 @@ describe("CursorOverlay", () => {
           x: 30,
           y: 40,
           visible: false,
-          pressed: true
+          pressed: true,
+          cursor: "pointer"
         })
       );
     });

@@ -57,6 +57,10 @@ export const EmbeddedEditor = memo(function EmbeddedEditor(props: EmbeddedEditor
   const { storeRef } = props;
   useEffect(() => {
     storeRef?.(store);
+    // Dev diagnostic: expose the embed store on window for quick inspection.
+    if (typeof window !== "undefined") {
+      (window as Window & { __embedStore?: EditorStoreApi }).__embedStore = store;
+    }
     return () => {
       storeRef?.(null);
     };

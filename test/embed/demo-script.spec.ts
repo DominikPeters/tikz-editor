@@ -14,11 +14,11 @@ describe("resolveCursorAt", () => {
   });
 
   it("clamps to the first keyframe when t is before the start", () => {
-    expect(resolveCursorAt(track, -50)).toEqual({ x: 0, y: 0, visible: true, pressed: false });
+    expect(resolveCursorAt(track, -50)).toEqual({ x: 0, y: 0, visible: true, pressed: false, cursor: "pointer" });
   });
 
   it("clamps to the last keyframe when t is past the end", () => {
-    expect(resolveCursorAt(track, 10_000)).toEqual({ x: 100, y: 50, visible: true, pressed: false });
+    expect(resolveCursorAt(track, 10_000)).toEqual({ x: 100, y: 50, visible: true, pressed: false, cursor: "pointer" });
   });
 
   it("returns exact keyframe position when t matches", () => {

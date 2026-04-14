@@ -3167,6 +3167,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     onInteractionPointerEnter
   } = useCanvasToolInteractions({
     viewportRef,
+    resolveWorldFromViewportClient,
     toolMode,
     setTextEditingSession,
     startMarqueeSelection,

@@ -150,6 +150,7 @@ dist
 /apps/web/e2e/traces
 /test-results
 /apps/web/profiling/traces
+/apps/web/demo-screenshots
 /.vscode
 /tikz-dev
 TODO.md
