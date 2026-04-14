@@ -682,7 +682,8 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
             const cross = tangent.x * offset.y - tangent.y * offset.x;
             let sideUpdate:
               | { kind: "auto-side"; side: "left" | "right" }
-              | { kind: "explicit-direction"; direction: string };
+              | { kind: "explicit-direction"; direction: string }
+              | undefined;
             let distanceUpdatePt: number | undefined;
             if (pathAttachedNodeDrag.regime.kind === "auto-side") {
               sideUpdate = {
@@ -694,7 +695,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
                       ? "left"
                       : "right"
               };
-            } else {
+            } else if (pathAttachedNodeDrag.regime.kind === "explicit-direction") {
               const resolvedDirection = resolveDraggedPathAttachedNodeDirection(
                 targetPoint,
                 desiredCenter,
@@ -707,9 +708,11 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               const directionUnit = resolvePathAttachedDirectionUnit(resolvedDirection);
               const desiredDirectionalOffset = offset.x * directionUnit.x + offset.y * directionUnit.y;
               distanceUpdatePt = Math.max(0, desiredDirectionalOffset - pathAttachedNodeDrag.initialDirectionalAnchorPt);
+            } else {
+              sideUpdate = undefined;
             }
             const placementKey =
-              `${formatNumber(snapped.snappedT)}:${sideUpdate.kind}:${sideUpdate.kind === "auto-side" ? sideUpdate.side : sideUpdate.direction}` +
+              `${formatNumber(snapped.snappedT)}:${sideUpdate == null ? "neutral" : sideUpdate.kind}:${sideUpdate == null ? "" : sideUpdate.kind === "auto-side" ? sideUpdate.side : sideUpdate.direction}` +
               (distanceUpdatePt == null ? "" : `:${formatNumber(distanceUpdatePt)}`);
             setSnapLines([]);
             maybeTriggerSnapFeedback(Boolean(snapped.preset));

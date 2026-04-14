@@ -192,6 +192,46 @@ test("inline edge nodes are selectable independently from their parent path", as
   await expect(disabledResizeHandles.first()).toHaveCSS("cursor", "not-allowed");
 });
 
+test("neutral path-attached node drag rewrites pos without introducing side regime", async ({ page }) => {
+  await gotoApp(page);
+  const initialSource = String.raw`\begin{tikzpicture}
+  \draw[->] (-0.2,-0.4) -- node[pos=0.4,fill=white] {ok} (2.8,-0.4);
+\end{tikzpicture}`;
+  await setSource(page, initialSource);
+
+  await waitForHitRegions(page, 2);
+  const textRegion = page.locator('[data-hit-region-interaction-mode="text"]').first();
+  await expect(textRegion).toBeVisible();
+  const targetId = await textRegion.getAttribute("data-hit-region-target-id");
+  if (!targetId) {
+    throw new Error("Missing text region target id.");
+  }
+  await clickHitRegionByTargetId(page, targetId);
+  const targetRegion = page.locator(
+    `[data-hit-region-target-id='${targetId}'][data-hit-region-interaction-mode='text']`
+  ).first();
+  const box = await targetRegion.boundingBox();
+  if (!box) {
+    throw new Error("Missing target text-region bounds.");
+  }
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 16, startY, { steps: 6 });
+  await page.waitForTimeout(40);
+  await page.mouse.move(startX + 220, startY, { steps: 20 });
+  await page.mouse.up();
+
+  await expect.poll(async () => readSource(page)).not.toEqual(initialSource);
+  const sourceAfter = await readSource(page);
+  expect(sourceAfter).toContain("fill=white");
+  expect(sourceAfter).not.toContain("pos=0.4");
+  expect(sourceAfter).not.toContain("above");
+  expect(sourceAfter).not.toContain("below");
+  expect(sourceAfter).not.toContain("auto");
+});
+
 test("path-attached directional distance drag is stable from off-center pickup", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}

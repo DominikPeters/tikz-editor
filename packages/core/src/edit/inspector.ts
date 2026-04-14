@@ -2316,10 +2316,22 @@ export function getInspectorDescriptor(
           return {
             positionPreset: snapped.preset ?? "custom",
             customPosition: element.pathAttachment.pos,
-            sideLabel: regime.kind === "auto-side" ? "Preferred side" : "Side",
-            sideValue: regime.kind === "auto-side" ? regime.side : regime.direction,
+            sideLabel:
+              regime.kind === "neutral"
+                ? null
+                : regime.kind === "auto-side"
+                  ? "Preferred side"
+                  : "Side",
+            sideValue:
+              regime.kind === "neutral"
+                ? null
+                : regime.kind === "auto-side"
+                  ? regime.side
+                  : regime.direction,
             sideOptions:
-              regime.kind === "auto-side"
+              regime.kind === "neutral"
+                ? []
+                : regime.kind === "auto-side"
                 ? [
                     { value: "left", label: "Left" },
                     { value: "right", label: "Right" }
@@ -2727,14 +2739,18 @@ export function getInspectorDescriptor(
           displayLabel: positionDisplayLabel,
           write: makeSetPropertyWriteTarget(inlineTarget, PATH_ATTACHED_NODE_POSITION_VALUE_KEY)
         },
-        {
-          kind: "enum",
-          id: "path-attached-node-side",
-          label: pathAttachedNodeInspectorState.sideLabel,
-          value: pathAttachedNodeInspectorState.sideValue,
-          options: pathAttachedNodeInspectorState.sideOptions,
-          write: makeSetPropertyWriteTarget(inlineTarget, PATH_ATTACHED_NODE_SIDE_KEY)
-        },
+        ...(pathAttachedNodeInspectorState.sideLabel && pathAttachedNodeInspectorState.sideValue
+          ? [
+              {
+                kind: "enum" as const,
+                id: "path-attached-node-side",
+                label: pathAttachedNodeInspectorState.sideLabel,
+                value: pathAttachedNodeInspectorState.sideValue,
+                options: pathAttachedNodeInspectorState.sideOptions,
+                write: makeSetPropertyWriteTarget(inlineTarget, PATH_ATTACHED_NODE_SIDE_KEY)
+              }
+            ]
+          : []),
         {
           kind: "boolean",
           id: "path-attached-node-sloped",

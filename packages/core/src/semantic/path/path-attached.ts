@@ -274,7 +274,7 @@ export function resolvePathAttachedNodeRegime(
     }
   }
   if (autoSide == null) {
-    return null;
+    return { kind: "neutral" };
   }
   return {
     kind: "auto-side",

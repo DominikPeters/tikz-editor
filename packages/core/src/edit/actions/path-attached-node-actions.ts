@@ -133,6 +133,9 @@ export function applyPathAttachedNodeInspectorAction(
     }
     applyPositionMutations(mutations, parsed);
   } else if (action.key === PATH_ATTACHED_NODE_SIDE_KEY) {
+    if (regime.kind === "neutral") {
+      return { kind: "unsupported", reason: "Path-attached neutral placement does not support side editing." };
+    }
     const sideValue = action.value.trim().toLowerCase();
     if (regime.kind === "auto-side") {
       if (sideValue !== "left" && sideValue !== "right") {

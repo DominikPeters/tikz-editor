@@ -251,6 +251,18 @@ describe("edit handles", () => {
     }
   });
 
+  it("emits drag metadata for path-attached neutral placement", () => {
+    const source = String.raw`\begin{tikzpicture}
+\draw (0,0) -- (2,0) node[pos=0.4,fill=white] {A};
+\end{tikzpicture}`;
+    const result = evaluate(source);
+
+    const handle = result.editHandles.find((candidate) => candidate.kind === "node-position" && candidate.pathAttachmentContext);
+    expect(handle).toBeDefined();
+    expect(handle?.pathAttachmentContext?.regime.kind).toBe("neutral");
+    expect(handle?.pathAttachmentContext?.pos).toBeCloseTo(0.4, 6);
+  });
+
   it("positioning: node with right=1cm of emits positioning handle", () => {
     const source = String.raw`\begin{tikzpicture}
 \node (A) at (0,0) {A};

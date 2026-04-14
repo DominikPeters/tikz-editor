@@ -109,6 +109,9 @@ export type SceneAdornment = {
 
 export type PathAttachedNodePlacementRegime =
   | {
+      kind: "neutral";
+    }
+  | {
       kind: "explicit-direction";
       direction: string;
       family: "cardinal-diagonal" | "base" | "mid";

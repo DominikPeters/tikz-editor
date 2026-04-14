@@ -3888,6 +3888,31 @@ describe("applyEditAction – adornment placement", () => {
 });
 
 describe("applyEditAction – path-attached nodes", () => {
+  it("rewrites neutral path-attached nodes by position only", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (2,0) node[pos=0.4,fill=white] {A};
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+
+    const result = applyEditAction(source, [], {
+      kind: "movePathAttachedNode",
+      nodeId: node.id,
+      hostPathSourceId: statement.id,
+      pos: 0.75,
+      preserveRegime: true
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("node[fill=white, near end] {A}");
+    expect(result.newSource).not.toContain("above");
+    expect(result.newSource).not.toContain("auto");
+  });
+
   it("writes explicit directional distance when dragged", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (2,0) node[above] {A};
