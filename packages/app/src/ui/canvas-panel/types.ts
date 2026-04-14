@@ -97,6 +97,9 @@ export type DragState =
         pointerOffsetFromCenter: Point;
         initialCenter: Point;
         initialAnchorPoint: Point;
+        initialAnchorOffset: Point;
+        initialDistancePt: number;
+        initialDirectionalAnchorPt: number;
         segment: NonNullable<EditHandle["pathAttachmentContext"]>["segment"];
         regime: NonNullable<EditHandle["pathAttachmentContext"]>["regime"];
         lastPreviewDelta?: Point;

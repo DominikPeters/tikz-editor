@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EditHandle, Point } from "../packages/core/src/semantic/types.js";
 import type { NodeTextEngine } from "../packages/core/src/text/types.js";
 import { identityMatrix } from "../packages/core/src/semantic/transform.js";
-import { applyEditAction } from "../packages/core/src/edit/actions.js";
+import { applyEditAction, PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "../packages/core/src/edit/actions.js";
 import { resolveDraggedPathAttachedNodeDirection } from "../packages/core/src/edit/actions/path-attached-node-actions.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
 import { TIKZPICTURE_GLOBAL_TARGET_ID } from "../packages/core/src/edit/property-target.js";
@@ -3888,6 +3888,57 @@ describe("applyEditAction – adornment placement", () => {
 });
 
 describe("applyEditAction – path-attached nodes", () => {
+  it("writes explicit directional distance when dragged", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (2,0) node[above] {A};
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+
+    const result = applyEditAction(source, [], {
+      kind: "movePathAttachedNode",
+      nodeId: node.id,
+      hostPathSourceId: statement.id,
+      pos: 0.5,
+      preserveRegime: true,
+      sideUpdate: { kind: "explicit-direction", direction: "above" },
+      distanceUpdatePt: 2
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("node[above=2pt] {A}");
+  });
+
+  it("drops explicit directional distance when dragged back near zero", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (2,0) node[above=0.04pt] {A};
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+
+    const result = applyEditAction(source, [], {
+      kind: "movePathAttachedNode",
+      nodeId: node.id,
+      hostPathSourceId: statement.id,
+      pos: 0.5,
+      preserveRegime: true,
+      sideUpdate: { kind: "explicit-direction", direction: "above" },
+      distanceUpdatePt: 0.01
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("node[above] {A}");
+    expect(result.newSource).not.toContain("above=");
+  });
+
   it("rewrites dragged path-attached nodes to named position presets", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (2,0) node[pos=0.24,above] {A};
@@ -3967,6 +4018,31 @@ describe("applyEditAction – path-attached nodes", () => {
     expect(result.newSource).toContain("node[auto, near end, swap] {A}");
     expect(result.newSource).not.toContain("above");
     expect(result.newSource).not.toContain("below");
+  });
+
+  it("ignores directional distance updates for auto regime", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (2,0) node[auto] {A};
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+
+    const result = applyEditAction(source, [], {
+      kind: "movePathAttachedNode",
+      nodeId: node.id,
+      hostPathSourceId: statement.id,
+      pos: 0.5,
+      preserveRegime: true,
+      sideUpdate: { kind: "auto-side", side: "left" },
+      distanceUpdatePt: 7
+    });
+
+    expect(result.kind).toBe("unsupported");
+    if (result.kind !== "unsupported") return;
+    expect(result.reason).toBe(PATH_ATTACHED_NODE_EDIT_NOOP_REASON);
   });
 
   it("supports inspector writes for path-attached side and sloped", () => {

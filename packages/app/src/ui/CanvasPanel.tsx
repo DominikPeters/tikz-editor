@@ -22,6 +22,7 @@ import { buildCanvasContextMenuDefinition, type CanvasContextMenuTarget } from "
 import { collectGeometryInvalidation } from "tikz-editor/semantic/index";
 import {
   ADORNMENT_EDIT_NOOP_REASON,
+  PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
   applyEditAction,
   type EditAction,
   type ResizeRole
@@ -2006,6 +2007,9 @@ export const CanvasPanel = memo(function CanvasPanel({
           return { sourceChanged: false };
         }
         if (action.kind === "moveAdornment" && result.reason === ADORNMENT_EDIT_NOOP_REASON) {
+          return { sourceChanged: false };
+        }
+        if (action.kind === "movePathAttachedNode" && result.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON) {
           return { sourceChanged: false };
         }
         setWarning(result.reason);

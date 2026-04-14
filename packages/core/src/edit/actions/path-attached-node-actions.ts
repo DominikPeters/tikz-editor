@@ -20,6 +20,9 @@ type EditActionResultLike =
   | { kind: "unsupported"; reason: string }
   | { kind: "error"; message: string };
 
+const PATH_ATTACHED_DISTANCE_EPSILON_PT = 0.05;
+export const PATH_ATTACHED_NODE_EDIT_NOOP_REASON = "Path-attached node edit would not change the source.";
+
 export type MovePathAttachedNodeAction = {
   kind: "movePathAttachedNode";
   nodeId: string;
@@ -34,6 +37,7 @@ export type MovePathAttachedNodeAction = {
     kind: "auto-side";
     side: "left" | "right";
   };
+  distanceUpdatePt?: number;
 };
 
 type PathAttachedNodeInspectorAction = {
@@ -84,10 +88,11 @@ export function applyMovePathAttachedNodeAction(
   const mutations = new Map<string, OptionMutation>();
   applyPositionMutations(mutations, normalizePathPosition(action.pos));
   applySideMutations(mutations, regime, action.sideUpdate);
+  applyDistanceMutations(mutations, regime, action);
 
   const rewritten = applyOptionMutationsToTarget(source, resolved.target, mutations);
   if (!rewritten) {
-    return { kind: "unsupported", reason: "Path-attached node drag would not change the source." };
+    return { kind: "unsupported", reason: PATH_ATTACHED_NODE_EDIT_NOOP_REASON };
   }
   return {
     kind: "success",
@@ -150,7 +155,7 @@ export function applyPathAttachedNodeInspectorAction(
 
   const rewritten = applyOptionMutationsToTarget(source, resolved.target, mutations);
   if (!rewritten) {
-    return { kind: "unsupported", reason: "Path-attached node edit would not change the source." };
+    return { kind: "unsupported", reason: PATH_ATTACHED_NODE_EDIT_NOOP_REASON };
   }
   return {
     kind: "success",
@@ -227,4 +232,27 @@ function applySideMutations(
       mutations.set("swap", { kind: "remove" });
     }
   }
+}
+
+function applyDistanceMutations(
+  mutations: Map<string, OptionMutation>,
+  regime: PathAttachedNodePlacementRegime,
+  action: MovePathAttachedNodeAction
+): void {
+  if (regime.kind !== "explicit-direction") {
+    return;
+  }
+  if (!Number.isFinite(action.distanceUpdatePt)) {
+    return;
+  }
+  const resolvedDistance = Math.max(0, action.distanceUpdatePt!);
+  const resolvedDirection =
+    action.sideUpdate?.kind === "explicit-direction"
+      ? action.sideUpdate.direction
+      : regime.direction;
+  if (resolvedDistance <= PATH_ATTACHED_DISTANCE_EPSILON_PT) {
+    mutations.set(resolvedDirection, { kind: "set", value: "" });
+    return;
+  }
+  mutations.set(resolvedDirection, { kind: "set", value: `${formatNumber(resolvedDistance)}pt` });
 }

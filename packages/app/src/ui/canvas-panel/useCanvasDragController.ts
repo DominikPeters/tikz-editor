@@ -4,6 +4,8 @@ import type { EditAction } from "tikz-editor/edit/actions";
 import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
 import { formatNumber } from "tikz-editor/edit/format";
 import { worldToLocal } from "tikz-editor/edit/coords";
+import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
+import { parseLength } from "tikz-editor/semantic/coords/parse-length";
 import { intersectRayWithPolygon } from "tikz-editor/semantic/nodes/shape-geometry";
 import {
   collectSelectionGeometryFromBounds,
@@ -18,6 +20,7 @@ import {
   closestPointOnPlacementSegment,
   pointAtPlacementSegment,
   resolveDraggedPathAttachedNodeDirection,
+  resolvePathAttachedDirectionUnit,
   resolvePathPositionPreset,
   tangentAtPlacementSegment
 } from "tikz-editor/semantic/path/path-attached";
@@ -596,6 +599,30 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
                 },
                 initialCenter: center,
                 initialAnchorPoint,
+                initialAnchorOffset: {
+                  x: center.x - initialAnchorPoint.x,
+                  y: center.y - initialAnchorPoint.y
+                },
+                initialDistancePt:
+                  handle.pathAttachmentContext.regime.kind === "explicit-direction"
+                    ? resolvePathAttachedDirectionalDistancePt(source, drag.elementIds[0]!, handle.pathAttachmentContext.regime.direction)
+                    : 0,
+                initialDirectionalAnchorPt:
+                  (() => {
+                    if (handle.pathAttachmentContext.regime.kind !== "explicit-direction") {
+                      return 0;
+                    }
+                    const initialDirectionUnit = resolvePathAttachedDirectionUnit(handle.pathAttachmentContext.regime.direction);
+                    const initialDirectionalOffset =
+                      (center.x - initialAnchorPoint.x) * initialDirectionUnit.x +
+                      (center.y - initialAnchorPoint.y) * initialDirectionUnit.y;
+                    const initialDistancePt = resolvePathAttachedDirectionalDistancePt(
+                      source,
+                      drag.elementIds[0]!,
+                      handle.pathAttachmentContext.regime.direction
+                    );
+                    return Math.max(0, initialDirectionalOffset - initialDistancePt);
+                  })(),
                 segment: handle.pathAttachmentContext.segment,
                 regime: handle.pathAttachmentContext.regime,
                 lastPreviewDelta: { x: 0, y: 0 }
@@ -611,26 +638,10 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
             const closest = closestPointOnPlacementSegment(pathAttachedNodeDrag.segment, desiredCenter);
             const snapped = resolvePathPositionPreset(closest.t, pathAttachedNodeDrag.segment);
             const targetPoint = pointAtPlacementSegment(pathAttachedNodeDrag.segment, snapped.snappedT);
-            const currentHandle = snapshotEditHandles.find(
-              (candidate) =>
-                candidate.sourceRef.sourceId === pathAttachedNodeDrag.nodeId &&
-                candidate.kind === "node-position" &&
-                candidate.pathAttachmentContext
-            );
             const currentCenter =
               resolvePrimarySourceCenter(snapshotScene?.elements ?? [], pathAttachedNodeDrag.nodeId) ??
               pathAttachedNodeDrag.initialCenter;
-            const currentAnchorPoint =
-              currentHandle?.pathAttachmentContext
-                ? pointAtPlacementSegment(
-                    currentHandle.pathAttachmentContext.segment,
-                    currentHandle.pathAttachmentContext.pos
-                  )
-                : pathAttachedNodeDrag.initialAnchorPoint;
-            const anchorOffset = {
-              x: currentCenter.x - currentAnchorPoint.x,
-              y: currentCenter.y - currentAnchorPoint.y
-            };
+            const anchorOffset = pathAttachedNodeDrag.initialAnchorOffset;
             const previewCenter = {
               x: targetPoint.x + anchorOffset.x,
               y: targetPoint.y + anchorOffset.y
@@ -669,26 +680,37 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               y: desiredCenter.y - targetPoint.y
             };
             const cross = tangent.x * offset.y - tangent.y * offset.x;
-            const sideUpdate =
-              pathAttachedNodeDrag.regime.kind === "auto-side"
-                ? {
-                    kind: "auto-side" as const,
-                    side:
-                      Math.abs(cross) <= 1e-6
-                        ? pathAttachedNodeDrag.regime.side
-                        : cross >= 0
-                          ? "left"
-                          : "right"
-                  }
-                : {
-                    kind: "explicit-direction" as const,
-                    direction: resolveDraggedPathAttachedNodeDirection(
-                      targetPoint,
-                      desiredCenter,
-                      pathAttachedNodeDrag.regime
-                    )
-                  };
-            const placementKey = `${formatNumber(snapped.snappedT)}:${sideUpdate.kind}:${sideUpdate.kind === "auto-side" ? sideUpdate.side : sideUpdate.direction}`;
+            let sideUpdate:
+              | { kind: "auto-side"; side: "left" | "right" }
+              | { kind: "explicit-direction"; direction: string };
+            let distanceUpdatePt: number | undefined;
+            if (pathAttachedNodeDrag.regime.kind === "auto-side") {
+              sideUpdate = {
+                kind: "auto-side",
+                side:
+                  Math.abs(cross) <= 1e-6
+                    ? pathAttachedNodeDrag.regime.side
+                    : cross >= 0
+                      ? "left"
+                      : "right"
+              };
+            } else {
+              const resolvedDirection = resolveDraggedPathAttachedNodeDirection(
+                targetPoint,
+                desiredCenter,
+                pathAttachedNodeDrag.regime
+              );
+              sideUpdate = {
+                kind: "explicit-direction",
+                direction: resolvedDirection
+              };
+              const directionUnit = resolvePathAttachedDirectionUnit(resolvedDirection);
+              const desiredDirectionalOffset = offset.x * directionUnit.x + offset.y * directionUnit.y;
+              distanceUpdatePt = Math.max(0, desiredDirectionalOffset - pathAttachedNodeDrag.initialDirectionalAnchorPt);
+            }
+            const placementKey =
+              `${formatNumber(snapped.snappedT)}:${sideUpdate.kind}:${sideUpdate.kind === "auto-side" ? sideUpdate.side : sideUpdate.direction}` +
+              (distanceUpdatePt == null ? "" : `:${formatNumber(distanceUpdatePt)}`);
             setSnapLines([]);
             maybeTriggerSnapFeedback(Boolean(snapped.preset));
             if (pathAttachedNodeDrag.lastAppliedPlacementKey === placementKey) {
@@ -701,7 +723,8 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
                 hostPathSourceId: pathAttachedNodeDrag.hostPathSourceId,
                 pos: snapped.snappedT,
                 preserveRegime: true,
-                sideUpdate
+                sideUpdate,
+                distanceUpdatePt
               },
               drag.historyMergeKey
             );
@@ -1739,6 +1762,30 @@ function resolvePrimarySourceCenter(
     x: (minX + maxX) / 2,
     y: (minY + maxY) / 2
   };
+}
+
+function resolvePathAttachedDirectionalDistancePt(source: string, nodeId: string, direction: string): number {
+  const resolved = resolvePropertyTarget(source, nodeId);
+  if (resolved.kind !== "found" || resolved.target.kind !== "node-item" || !resolved.target.options) {
+    return 0;
+  }
+  const normalizedDirection = normalizeDirectionKey(direction);
+  let distancePt: number | null = null;
+  for (const entry of resolved.target.options.entries) {
+    if (entry.kind !== "kv" || normalizeDirectionKey(entry.key) !== normalizedDirection) {
+      continue;
+    }
+    const parsed = parseLength(entry.valueRaw, "pt");
+    if (parsed == null || !Number.isFinite(parsed)) {
+      continue;
+    }
+    distancePt = Math.max(0, parsed);
+  }
+  return distancePt ?? 0;
+}
+
+function normalizeDirectionKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function elementBoundsInWorld(element: SceneElement): Bounds | null {

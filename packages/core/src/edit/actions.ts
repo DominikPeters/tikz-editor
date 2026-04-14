@@ -55,7 +55,10 @@ import {
   type PathPointKind
 } from "./path-editing.js";
 import { applyAdornmentSetProperty } from "./actions/adornment-set-property.js";
-import { applyMovePathAttachedNodeAction, type MovePathAttachedNodeAction } from "./actions/path-attached-node-actions.js";
+import {
+  applyMovePathAttachedNodeAction,
+  type MovePathAttachedNodeAction
+} from "./actions/path-attached-node-actions.js";
 import {
   applyAddNodeAdornmentAction,
   applyDuplicateAdornmentAction,
@@ -115,6 +118,7 @@ export type StyleLevel = "command" | "scope" | "named-style" | "preamble";
 export type { ElementTemplate } from "./element-templates.js";
 export type ReorderDirection = "sendToBack" | "sendBackward" | "bringForward" | "bringToFront";
 export { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
+export { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
 
 export type EditAction =
   | { kind: "moveElement"; elementId: string; delta: Point }

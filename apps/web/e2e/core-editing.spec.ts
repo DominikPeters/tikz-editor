@@ -41,6 +41,32 @@ function readScaleValue(source: string, axis: "x" | "y"): number | null {
   return match ? Number(match[1]) : null;
 }
 
+function readAboveDistancePt(source: string): number | null {
+  const nodeOptionsMatch = source.match(/node\[([^\]]*)\]\s*\{A\}/);
+  if (!nodeOptionsMatch) {
+    return null;
+  }
+  const options = nodeOptionsMatch[1] ?? "";
+  const valueMatch = options.match(/\babove\s*=\s*([-0-9.]+)pt\b/);
+  if (valueMatch) {
+    return Number(valueMatch[1]);
+  }
+  return /\babove\b/.test(options) ? 0 : null;
+}
+
+function readBelowDistancePt(source: string): number | null {
+  const nodeOptionsMatch = source.match(/node\[([^\]]*)\]\s*\{A\}/);
+  if (!nodeOptionsMatch) {
+    return null;
+  }
+  const options = nodeOptionsMatch[1] ?? "";
+  const valueMatch = options.match(/\bbelow\s*=\s*([-0-9.]+)pt\b/);
+  if (valueMatch) {
+    return Number(valueMatch[1]);
+  }
+  return /\bbelow\b/.test(options) ? 0 : null;
+}
+
 const THIS_DIR = fileURLToPath(new URL(".", import.meta.url));
 const POWERPOINT_GVML_SAMPLE_BASE64 = readFileSync(
   join(THIS_DIR, "../../../test/fixtures/powerpoint-gvml-clipboard.zip")
@@ -164,6 +190,68 @@ test("inline edge nodes are selectable independently from their parent path", as
   );
   await expect.poll(async () => disabledResizeHandles.count()).toBeGreaterThan(0);
   await expect(disabledResizeHandles.first()).toHaveCSS("cursor", "not-allowed");
+});
+
+test("path-attached directional distance drag is stable from off-center pickup", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\draw[->] (0,0) -- node[above=2pt] {A} (3,0);
+\end{tikzpicture}`);
+
+  await waitForHitRegions(page, 2);
+  const textRegion = page.locator('[data-hit-region-interaction-mode="text"]').first();
+  await expect(textRegion).toBeVisible();
+  const box = await textRegion.boundingBox();
+  if (!box) {
+    throw new Error("Missing text hit-region bounds for path-attached node.");
+  }
+
+  const startX = box.x + box.width * 0.2;
+  const startY = box.y + box.height * 0.25;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 8, startY, { steps: 2 });
+  await page.waitForTimeout(80);
+
+  const afterPickupDistance = readAboveDistancePt(await readSource(page));
+  expect(afterPickupDistance).not.toBeNull();
+  if (afterPickupDistance == null) {
+    throw new Error("Expected path-attached above placement after pickup drag.");
+  }
+  expect(Math.abs(afterPickupDistance - 2)).toBeLessThanOrEqual(0.75);
+
+  const holdX = startX + 44;
+  const holdY = startY - 16;
+  await page.mouse.move(holdX, holdY, { steps: 8 });
+  await page.waitForTimeout(120);
+
+  const observed = new Set<string>();
+  for (let index = 0; index < 8; index += 1) {
+    await page.mouse.move(holdX, holdY);
+    await page.waitForTimeout(50);
+    const distance = readAboveDistancePt(await readSource(page));
+    if (distance != null) {
+      observed.add(distance.toFixed(3));
+    }
+  }
+  await page.mouse.move(holdX, holdY + 120, { steps: 18 });
+  await expect.poll(async () => {
+    return readBelowDistancePt(await readSource(page));
+  }, {
+    timeout: 1500,
+    intervals: [100, 200, 300]
+  }).not.toBeNull();
+  const resolvedBelowDistance = readBelowDistancePt(await readSource(page));
+  expect(resolvedBelowDistance).not.toBeNull();
+  if (resolvedBelowDistance == null) {
+    throw new Error("Expected transition into below regime.");
+  }
+  expect(resolvedBelowDistance).toBeLessThanOrEqual(12);
+  await page.mouse.up();
+
+  expect(observed.size).toBeGreaterThan(0);
+  expect(observed.size).toBeLessThanOrEqual(1);
 });
 
 test("clearing source editor does not trigger maximum update depth crash", async ({ page }) => {

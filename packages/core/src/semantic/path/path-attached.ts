@@ -355,6 +355,18 @@ export function resolveDraggedPathAttachedNodeDirection(
   return "below left";
 }
 
+export function resolvePathAttachedDirectionUnit(direction: string): Point {
+  const signs = resolveDirectionSigns(direction);
+  const magnitude = Math.hypot(signs.xSign, signs.ySign);
+  if (magnitude <= 1e-6) {
+    return { x: 0, y: 0 };
+  }
+  return {
+    x: signs.xSign / magnitude,
+    y: signs.ySign / magnitude
+  };
+}
+
 function resolveExplicitPathDirection(
   options: OptionListAst | undefined
 ): Extract<ScenePathAttachment["regime"], { kind: "explicit-direction" }> | null {
@@ -364,6 +376,10 @@ function resolveExplicitPathDirection(
   let resolved: string | null = null;
   for (const entry of options.entries) {
     if (entry.kind === "flag" && EXPLICIT_DIRECTIONS.has(entry.key)) {
+      resolved = entry.key;
+      continue;
+    }
+    if (entry.kind === "kv" && EXPLICIT_DIRECTIONS.has(entry.key)) {
       resolved = entry.key;
     }
   }

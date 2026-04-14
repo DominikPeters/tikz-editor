@@ -237,6 +237,20 @@ describe("edit handles", () => {
     expect(text?.position.y ?? Number.NEGATIVE_INFINITY).toBeGreaterThan(0);
   });
 
+  it("emits drag metadata for path-attached directional kv syntax", () => {
+    const source = String.raw`\begin{tikzpicture}
+\draw (0,0) -- (2,0) node[above=2pt] {A};
+\end{tikzpicture}`;
+    const result = evaluate(source);
+
+    const handle = result.editHandles.find((candidate) => candidate.kind === "node-position" && candidate.pathAttachmentContext);
+    expect(handle).toBeDefined();
+    expect(handle?.pathAttachmentContext?.regime.kind).toBe("explicit-direction");
+    if (handle?.pathAttachmentContext?.regime.kind === "explicit-direction") {
+      expect(handle.pathAttachmentContext.regime.direction).toBe("above");
+    }
+  });
+
   it("positioning: node with right=1cm of emits positioning handle", () => {
     const source = String.raw`\begin{tikzpicture}
 \node (A) at (0,0) {A};
