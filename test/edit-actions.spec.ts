@@ -4103,6 +4103,81 @@ describe("applyEditAction – path-attached nodes", () => {
     expect(slopedResult.newSource).toContain("node[below, sloped] {A}");
   });
 
+  it("supports resizeElement rewrites for path-attached nodes", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[->] (0,0) -- node[above,draw] {A} (2,0);
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+
+    const result = applyEditAction(source, [], {
+      kind: "resizeElement",
+      elementId: node.id,
+      role: "bottom-right",
+      newWorld: { x: 60, y: 40 }
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toMatch(/node\[[^\]]*above[^\]]*draw/);
+    expect(result.newSource).toContain("minimum width=");
+  });
+
+  it("drops non-binding minimum width when shrinking a path-attached node at intrinsic floor", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[->] (-0.2,-0.4) -- node[fill=white, minimum width=16.92pt, pos=0.47] {ok} (2.8,-0.4);
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+    const evaluated = evaluateTikzFigure(parsed.figure, source);
+    const bounds = collectSourceWorldBounds(evaluated.scene.elements).get(node.id);
+    if (!bounds) throw new Error("Expected node bounds");
+    const center = {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2
+    };
+
+    const shrunk = applyEditAction(source, [], {
+      kind: "resizeElement",
+      elementId: node.id,
+      role: "right",
+      newWorld: center
+    });
+    expect(shrunk.kind).toBe("success");
+    if (shrunk.kind !== "success") return;
+    expect(shrunk.newSource).not.toContain("minimum width=");
+  });
+
+  it("writes rotate on path-attached node options without touching host path options", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[->] (0,0) -- node[above,draw] {A} (2,0);
+\end{tikzpicture}`;
+    const parsed = parseTikz(source);
+    const statement = parsed.figure.body[0];
+    if (!statement || statement.kind !== "Path") throw new Error("Expected path statement");
+    const node = statement.items.find((item) => item.kind === "Node");
+    if (!node || node.kind !== "Node") throw new Error("Expected node item");
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: node.id,
+      level: "command",
+      key: "rotate",
+      value: "15"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toMatch(/node\[[^\]]*rotate=15/);
+    expect(result.newSource).not.toMatch(/\\draw\[[^\]]*rotate=/);
+  });
+
   it("preserves the current explicit vertical side when drag jitter stays near-axis", () => {
     const direction = resolveDraggedPathAttachedNodeDirection(
       { x: 20, y: 0 },

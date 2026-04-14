@@ -227,6 +227,7 @@ export function applyResizeElementAction(
   }
 
   const preserveExplicitWidthFloor = targetHasOptionKey(resizeTarget, "minimum width");
+  const preservePathAttachedWidthFloor = isPathAttachedNodeTargetId(parsed.figure.body, resizeTarget.id);
   const preserveExplicitHeightFloor = targetHasOptionKey(resizeTarget, "minimum height");
 
   const resizeCandidates = buildNodeResizeMutationCandidates({
@@ -238,7 +239,7 @@ export function applyResizeElementAction(
     requestedHeight,
     intrinsicWidth,
     intrinsicHeight,
-    preserveExplicitWidthFloor,
+    preserveExplicitWidthFloor: preserveExplicitWidthFloor && !preservePathAttachedWidthFloor,
     preserveExplicitHeightFloor
   });
   const rewritten = chooseBestNodeResizeMutationCandidate({
@@ -1942,6 +1943,32 @@ function findPathStatementById(
     }
   }
   return null;
+}
+
+function findPathStatementContainingNodeId(
+  statements: readonly Statement[],
+  nodeId: string
+): Extract<Statement, { kind: "Path" }> | null {
+  for (const statement of statements) {
+    if (statement.kind === "Path") {
+      if (collectPathNodeIds(statement.items).includes(nodeId)) {
+        return statement;
+      }
+      continue;
+    }
+    if (statement.kind === "Scope") {
+      const nested = findPathStatementContainingNodeId(statement.body, nodeId);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function isPathAttachedNodeTargetId(statements: readonly Statement[], targetId: string): boolean {
+  const hostPath = findPathStatementContainingNodeId(statements, targetId);
+  return hostPath != null && hostPath.command !== "node";
 }
 
 function collectPathNodeIds(items: readonly PathItem[]): string[] {

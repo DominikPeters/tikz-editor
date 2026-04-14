@@ -166,7 +166,7 @@ test("clipped geometry only targets the visible clipped area on canvas", async (
   await expect.poll(async () => readSelectedSourceIds(page)).toEqual([]);
 });
 
-test("inline edge nodes are selectable independently from their parent path", async ({ page }) => {
+test("inline edge nodes are selectable independently and support resize/rotate handles", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
 \draw[->] (0,0) -- node[above,draw] {$f$} (2,0);
@@ -185,11 +185,35 @@ test("inline edge nodes are selectable independently from their parent path", as
   await clickHitRegionByTargetId(page, labelTargetId);
   await expect.poll(async () => readSelectedSourceIds(page)).toEqual([labelTargetId]);
 
-  const disabledResizeHandles = page.locator(
+  const resizeHandles = page.locator(
     `[data-handle-kind="resize-element"][data-source-id="${labelTargetId}"]`
   );
-  await expect.poll(async () => disabledResizeHandles.count()).toBeGreaterThan(0);
-  await expect(disabledResizeHandles.first()).toHaveCSS("cursor", "not-allowed");
+  await expect.poll(async () => resizeHandles.count()).toBeGreaterThan(0);
+  expect(await resizeHandles.first().evaluate((el) => getComputedStyle(el).cursor)).not.toBe("not-allowed");
+
+  const baselineSource = await readSource(page);
+  const bottomRightResizeHandle = page.locator(
+    `[data-handle-kind="resize-element"][data-source-id="${labelTargetId}"][data-resize-role="bottom-right"]`
+  ).first();
+  await expect(bottomRightResizeHandle).toBeVisible();
+  await dragLocatorBy(page, bottomRightResizeHandle, 120, 120);
+  await page.mouse.up();
+  await expect.poll(async () => readSource(page)).not.toEqual(baselineSource);
+  const resizedSource = await readSource(page);
+  expect(resizedSource).toMatch(/node\[[^\]]*above[^\]]*draw[^\]]*\]/);
+  expect(resizedSource).toContain("minimum width=");
+
+  const rotateHandle = page.locator(
+    `[data-handle-kind="rotate-element"][data-source-id="${labelTargetId}"]`
+  ).first();
+  await expect(rotateHandle).toBeVisible();
+  expect(await rotateHandle.evaluate((el) => getComputedStyle(el).cursor)).not.toBe("not-allowed");
+  await dragLocatorBy(page, rotateHandle, 30, -26);
+  await page.mouse.up();
+
+  const rotatedSource = await readSource(page);
+  expect(rotatedSource).toMatch(/node\[[^\]]*rotate=/);
+  expect(rotatedSource).not.toMatch(/\\draw\[[^\]]*rotate=/);
 });
 
 test("neutral path-attached node drag rewrites pos without introducing side regime", async ({ page }) => {
@@ -292,6 +316,49 @@ test("path-attached directional distance drag is stable from off-center pickup",
 
   expect(observed.size).toBeGreaterThan(0);
   expect(observed.size).toBeLessThanOrEqual(1);
+});
+
+test("path-attached resize removes non-binding minimum width when shrinking", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\draw[->] (-0.2,-0.4) -- node[fill=white, minimum width=16.92pt, pos=0.47] {ok} (2.8,-0.4);
+\end{tikzpicture}`);
+
+  await waitForHitRegions(page, 2);
+  const textRegion = page.locator('[data-hit-region-interaction-mode="text"]').first();
+  await expect(textRegion).toBeVisible();
+  const targetId = await textRegion.getAttribute("data-hit-region-target-id");
+  if (!targetId) {
+    throw new Error("Missing path-attached node target id.");
+  }
+  await clickHitRegionByTargetId(page, targetId);
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual([targetId]);
+
+  const bottomLeft = page.locator(
+    `[data-handle-kind="resize-element"][data-source-id="${targetId}"][data-resize-role="bottom-left"]`
+  ).first();
+  const bottomRight = page.locator(
+    `[data-handle-kind="resize-element"][data-source-id="${targetId}"][data-resize-role="bottom-right"]`
+  ).first();
+  await expect(bottomLeft).toBeVisible();
+  await expect(bottomRight).toBeVisible();
+
+  const leftBox = await bottomLeft.boundingBox();
+  const rightBox = await bottomRight.boundingBox();
+  if (!leftBox || !rightBox) {
+    throw new Error("Missing resize handle bounds for path-attached node.");
+  }
+
+  const startX = rightBox.x + rightBox.width / 2;
+  const startY = rightBox.y + rightBox.height / 2;
+  const endX = leftBox.x + leftBox.width / 2 + 1;
+  const endY = leftBox.y + leftBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(endX, endY, { steps: 10 });
+  await page.mouse.up();
+
+  await expect.poll(async () => readSource(page)).not.toContain("minimum width=");
 });
 
 test("clearing source editor does not trigger maximum update depth crash", async ({ page }) => {

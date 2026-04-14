@@ -718,7 +718,6 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       if (resizeFrame) {
         const resizeDisabled =
           fitNodeSourceIds.has(sourceId)
-          || pathAttachedNodeSourceIds.has(sourceId)
           || treeChildSourceIds.has(sourceId)
           || matrixSourceIds.has(sourceId)
           || matrixCellSourceIds.has(sourceId);
@@ -760,7 +759,6 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
 
       const resizeDisabled =
         fitNodeSourceIds.has(sourceId)
-        || pathAttachedNodeSourceIds.has(sourceId)
         || treeChildSourceIds.has(sourceId)
         || matrixSourceIds.has(sourceId)
         || matrixCellSourceIds.has(sourceId);
@@ -789,7 +787,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
           anchorX: rotateHandlePosition.anchorSvg.x,
           anchorY: rotateHandlePosition.anchorSvg.y,
           centerWorld: { ...rotateFrame.centerWorld },
-          cursor: pathAttachedNodeSourceIds.has(rotateHandleSourceId) ? "not-allowed" : "grab",
+          cursor: "grab",
           kind: "rotate-element",
           elementId: rotateHandleSourceId
         });
