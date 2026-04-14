@@ -50,6 +50,7 @@ function pointerEventInit(
   clientX: number,
   clientY: number,
   pointerId: number,
+  buttons: number,
   modifiers?: PointerModifiers
 ): PointerEventInit {
   return {
@@ -59,7 +60,7 @@ function pointerEventInit(
     pointerType: "mouse",
     isPrimary: true,
     button: 0,
-    buttons: 1,
+    buttons,
     bubbles: true,
     cancelable: true,
     composed: true,
@@ -76,13 +77,15 @@ function dispatchSyntheticPointer(
   worldY: number,
   container: Element | null | undefined,
   pointerId: number,
-  modifiers?: PointerModifiers
+  modifiers?: PointerModifiers,
+  pressed: boolean = kind === "pointerdown"
 ): boolean {
   const svg = findInteractionSvg(container);
   if (!svg) return false;
   const client = worldToClientPoint(worldX, worldY, svg, readViewBox(svg));
   if (!client) return false;
-  const init = pointerEventInit(client.clientX, client.clientY, pointerId, modifiers);
+  const buttons = kind === "pointerdown" ? 1 : kind === "pointermove" ? (pressed ? 1 : 0) : 0;
+  const init = pointerEventInit(client.clientX, client.clientY, pointerId, buttons, modifiers);
   // pointerdown should hit the real element under the cursor so select-mode
   // gestures can target scene elements (instead of always hitting background).
   // move/up go through the window because drag listeners are attached there.
@@ -90,7 +93,7 @@ function dispatchSyntheticPointer(
     const target = document.elementFromPoint(client.clientX, client.clientY) ?? svg;
     target.dispatchEvent(new PointerEvent("pointerdown", init));
   } else {
-    window.dispatchEvent(new PointerEvent(kind, { ...init, buttons: kind === "pointermove" ? 1 : 0 }));
+    window.dispatchEvent(new PointerEvent(kind, init));
   }
   return true;
 }
@@ -151,7 +154,9 @@ export function useDemoPlayer({ store, script, onCursor, viewportEl }: UseDemoPl
         case "pointerMove":
           local.pointer.lastX = event.x;
           local.pointer.lastY = event.y;
-          dispatchSyntheticPointer("pointermove", event.x, event.y, local.viewportEl, local.pointerId);
+          if (local.pointer.down) {
+            dispatchSyntheticPointer("pointermove", event.x, event.y, local.viewportEl, local.pointerId);
+          }
           return;
         case "pointerUp":
           if (local.pointer.down) {

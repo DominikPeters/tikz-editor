@@ -1,7 +1,10 @@
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { setActiveEditorPlatform } from "@tikz-editor/app/src/platform/current";
+import type { DemoScript } from "@tikz-editor/app/src/embed";
 import { createBrowserPlatformAdapter } from "./platform/browser-platform";
+
+type DemoScriptLike = DemoScript;
 
 async function bootstrap() {
   setActiveEditorPlatform(createBrowserPlatformAdapter());
@@ -13,14 +16,10 @@ async function bootstrap() {
   if (params.has("demos")) {
     await import("@tikz-editor/app/src/ui/DockLayout");
     const { DemoPlayer, ...demos } = await import("@tikz-editor/app/src/embed");
-    const demoIds = listDemoIds(demos);
-    const scripts = demoIds.map((id) => ({
-      id,
-      script: (demos as Record<string, unknown>)[demoScriptExportName(id)]
-    }));
+    const scripts = listDemoScripts(demos);
     root.render(
       <StrictMode>
-        <DemoGallery demos={scripts as Array<{ id: string; script: any }>} DemoPlayer={DemoPlayer} />
+        <DemoGallery demos={scripts} DemoPlayer={DemoPlayer} />
       </StrictMode>
     );
     return;
@@ -35,14 +34,14 @@ async function bootstrap() {
     await import("@tikz-editor/app/src/ui/DockLayout");
     const { DemoPlayer, ...demos } = await import("@tikz-editor/app/src/embed");
     const script = (demos as Record<string, unknown>)[demoScriptExportName(demoId)];
-    if (!script) {
+    if (!isDemoScript(script)) {
       root.render(<DemoNotFound demoId={demoId} available={listDemoIds(demos)} />);
       return;
     }
     root.render(
       <StrictMode>
         <div style={{ width: "100vw", height: "100vh", background: "#f5f5f5" }}>
-          <DemoPlayer script={script as any} />
+          <DemoPlayer script={script} />
         </div>
       </StrictMode>
     );
@@ -68,9 +67,31 @@ function demoScriptExportName(demoId: string): string {
 }
 
 function listDemoIds(demos: Record<string, unknown>): string[] {
+  return listDemoScripts(demos).map(({ id }) => id);
+}
+
+function listDemoScripts(demos: Record<string, unknown>): Array<{ id: string; script: DemoScriptLike }> {
   return Object.keys(demos)
     .filter((k) => k.endsWith("Demo"))
-    .map((k) => k.replace(/Demo$/, "").replace(/([A-Z0-9])/g, "-$1").toLowerCase().replace(/^-/, ""));
+    .map((name) => ({
+      id: name.replace(/Demo$/, "").replace(/([A-Z0-9])/g, "-$1").toLowerCase().replace(/^-/, ""),
+      script: demos[name]
+    }))
+    .filter((entry): entry is { id: string; script: DemoScriptLike } => isDemoScript(entry.script));
+}
+
+function isDemoScript(value: unknown): value is DemoScriptLike {
+  if (!value || typeof value !== "object") return false;
+  const script = value as Record<string, unknown>;
+  return (
+    typeof script.id === "string" &&
+    typeof script.duration === "number" &&
+    Number.isFinite(script.duration) &&
+    script.duration > 0 &&
+    typeof script.initialSource === "string" &&
+    Array.isArray(script.cursor) &&
+    Array.isArray(script.events)
+  );
 }
 
 // Wrapper that prevents the embedded canvas from capturing wheel events,
@@ -115,8 +136,8 @@ function DemoGallery({
   demos,
   DemoPlayer
 }: {
-  demos: Array<{ id: string; script: any }>;
-  DemoPlayer: React.ComponentType<{ script: any }>;
+  demos: Array<{ id: string; script: DemoScriptLike }>;
+  DemoPlayer: React.ComponentType<{ script: DemoScriptLike }>;
 }) {
   // Neutralize body-level styles that the main editor sets.
   // - overflow: hidden is set in index.html for the main app

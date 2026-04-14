@@ -44,7 +44,9 @@ const CURSOR_DEFS: Record<CursorStyle, CursorDef> = {
         strokeWidth: STROKE_WIDTH,
         strokeLinejoin: "round"
       }
-    ]
+    ],
+    offsetX: -3,
+    offsetY: -2
   },
 
   // 4-way move cursor (arrows pointing in all directions)
@@ -170,7 +172,7 @@ const CURSOR_DEFS: Record<CursorStyle, CursorDef> = {
   "nwse-resize": {
     paths: [
       {
-        d: `M3 3 L3 10 L5.5 7.5 L10 12 L7.5 14.5 L14.5 14.5 L14.5 7.5 L12 10 L7.5 5.5 L10 3 Z M21 21 L21 14 L18.5 16.5 L14 12 L16.5 9.5 L9.5 9.5 L9.5 16.5 L12 14 L16.5 18.5 L14 21 Z`,
+        d: `M4 4 L4 10 L6.5 7.5 L16.5 17.5 L14 20 L20 20 L20 14 L17.5 16.5 L7.5 6.5 L10 4 Z`,
         fill: FILL_COLOR,
         stroke: STROKE_COLOR,
         strokeWidth: 1,
@@ -185,7 +187,7 @@ const CURSOR_DEFS: Record<CursorStyle, CursorDef> = {
   "nesw-resize": {
     paths: [
       {
-        d: `M21 3 L14 3 L16.5 5.5 L12 10 L9.5 7.5 L9.5 14.5 L16.5 14.5 L14 12 L18.5 7.5 L21 10 Z M3 21 L10 21 L7.5 18.5 L12 14 L14.5 16.5 L14.5 9.5 L7.5 9.5 L10 12 L5.5 16.5 L3 14 Z`,
+        d: `M20 4 L20 10 L17.5 7.5 L7.5 17.5 L10 20 L4 20 L4 14 L6.5 16.5 L16.5 6.5 L14 4 Z`,
         fill: FILL_COLOR,
         stroke: STROKE_COLOR,
         strokeWidth: 1,

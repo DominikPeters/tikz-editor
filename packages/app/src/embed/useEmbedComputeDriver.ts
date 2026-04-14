@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { computeSnapshot, makeEmptySnapshot, type ComputeRequest, type ComputeResponse } from "../compute";
-import { createSingleFlightScheduler } from "../ui/compute-scheduler";
+import { createSingleFlightScheduler, type SingleFlightScheduler } from "../ui/compute-scheduler";
 import { computeTrigger } from "../ui/compute-trigger";
 import { useEditorStore } from "../store/store";
 
@@ -9,9 +9,6 @@ import { useEditorStore } from "../store/store";
 // rapid-fire demo edits don't race. No typing debounce or prewarm — demos
 // dispatch EditActions in bursts, not through a code editor.
 //
-// Kept in one effect so the scheduler and the initial schedule land together;
-// under StrictMode a split-effect version would dispose the scheduler that
-// received the first-render request.
 export function useEmbedComputeDriver(): void {
   const {
     source,
@@ -39,9 +36,9 @@ export function useEmbedComputeDriver(): void {
     }))
   );
 
+  const schedulerRef = useRef<SingleFlightScheduler<ComputeRequest, ComputeResponse> | null>(null);
+
   useEffect(() => {
-    const trigger = computeTrigger(activeCanvasDragKind, null);
-    const changedSourceIds = lastEditChangedSourceIds;
     const scheduler = createSingleFlightScheduler<ComputeRequest, ComputeResponse>({
       run: (request) => computeSnapshot(request),
       onStart: (request) => {
@@ -65,7 +62,23 @@ export function useEmbedComputeDriver(): void {
         });
       }
     });
+    schedulerRef.current = scheduler;
 
+    return () => {
+      scheduler.dispose();
+      if (schedulerRef.current === scheduler) {
+        schedulerRef.current = null;
+      }
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
+    const scheduler = schedulerRef.current;
+    if (!scheduler) {
+      return;
+    }
+    const trigger = computeTrigger(activeCanvasDragKind, null);
+    const changedSourceIds = lastEditChangedSourceIds;
     // Schedule when source changed, when we've never produced any SVG, or
     // when figure selection changed after a parse-only snapshot. That final
     // case happens on first load: compute returns figure ids with no active
@@ -83,12 +96,7 @@ export function useEmbedComputeDriver(): void {
         trigger
       });
     }
-
-    return () => {
-      scheduler.dispose();
-    };
   }, [
-    dispatch,
     source,
     snapshotSource,
     hasSvg,
