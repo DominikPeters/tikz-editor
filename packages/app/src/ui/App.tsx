@@ -20,6 +20,7 @@ import { installAppProfilingRecorder, readAppProfilingSnapshot, resetAppProfilin
 import { AppMenuBar } from "./AppMenuBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
+import { IpadEditorShell } from "./IpadEditorShell";
 import { StatusBar } from "./StatusBar";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { useEditorCommandRuntime } from "./editor-command-runtime";
@@ -275,6 +276,7 @@ export function App() {
   const userWorkspaces = useWorkspaceListStore((s) => s.userWorkspaces);
   const [isDragOver, setIsDragOver] = useState(false);
   const isDesktop = platform.id.startsWith("desktop");
+  const isIpad = platform.id.startsWith("ipad");
   const [equationModalState, setEquationModalState] = useState<
     | { mode: "insert" }
     | { mode: "edit"; target: EquationNodeTarget }
@@ -1501,7 +1503,11 @@ export function App() {
 
   useEffect(() => {
     getActiveEditorPlatform().window?.setDocumentState?.({
-      title: platform.id.startsWith("desktop") ? "TikZ Editor" : "TikZ Editor Web",
+      title: platform.id.startsWith("desktop")
+        ? "TikZ Editor"
+        : platform.id.startsWith("ipad")
+          ? "TikZ Editor for iPad"
+          : "TikZ Editor Web",
       dirty: snapshot.source !== source
     });
   }, [platform.id, snapshot.source, source]);
@@ -1903,6 +1909,17 @@ export function App() {
     dispatch({ type: "MARK_DOCUMENT_SAVED", fileRef: resolved.fileRef });
   }
 
+  const updateChip =
+    availableUpdate && !showUpdateModal && !updateDismissedForSession
+      ? {
+          version: availableUpdate.version,
+          onClick: () => {
+            setUpdateModalPhase({ status: "idle" });
+            setShowUpdateModal(true);
+          }
+        }
+      : null;
+
   return (
     <div
       className={css.app}
@@ -1911,39 +1928,40 @@ export function App() {
       onDragLeave={onAppDragLeave}
       onDrop={(e) => { void onAppDrop(e); }}
     >
-      {platform.menu?.usesNativeMenuBar ? null : (
-        <AppMenuBar
-          definition={menuDefinition}
-          bindings={commandRuntime.bindings}
-        />
-      )}
-      <Toolbar
-        updateChip={
-          availableUpdate && !showUpdateModal && !updateDismissedForSession
-            ? {
-                version: availableUpdate.version,
-                onClick: () => {
-                  setUpdateModalPhase({ status: "idle" });
-                  setShowUpdateModal(true);
-                }
-              }
-            : null
-        }
-      />
-      <TabStrip
-        onRequestCloseDocument={(documentId) => {
-          requestCloseIntent({ kind: "close-document", documentId });
-        }}
-      />
-      <div className={css.body}>
-        <DockLayout
+      {isIpad ? (
+        <IpadEditorShell
+          commandRuntime={commandRuntime}
           repeatPreviewModel={repeatPreviewModel}
-          onSubmitPrompt={handleAssistantPrompt}
-          onInterruptTurn={handleInterruptAssistantTurn}
-          onNewChat={handleAssistantNewChat}
+          onRequestCloseDocument={(documentId) => {
+            requestCloseIntent({ kind: "close-document", documentId });
+          }}
+          updateChip={updateChip}
         />
-      </div>
-      <StatusBar />
+      ) : (
+        <>
+          {platform.menu?.usesNativeMenuBar ? null : (
+            <AppMenuBar
+              definition={menuDefinition}
+              bindings={commandRuntime.bindings}
+            />
+          )}
+          <Toolbar updateChip={updateChip} />
+          <TabStrip
+            onRequestCloseDocument={(documentId) => {
+              requestCloseIntent({ kind: "close-document", documentId });
+            }}
+          />
+          <div className={css.body}>
+            <DockLayout
+              repeatPreviewModel={repeatPreviewModel}
+              onSubmitPrompt={handleAssistantPrompt}
+              onInterruptTurn={handleInterruptAssistantTurn}
+              onNewChat={handleAssistantNewChat}
+            />
+          </div>
+          <StatusBar />
+        </>
+      )}
       <Suspense fallback={null}>
         <DevPanel />
       </Suspense>

@@ -1,0 +1,586 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-app);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-header) 94%, var(--bg-pane));
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.commandCluster {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.documentCluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 160px;
+  flex: 1;
+}
+
+.documentTitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  width: min(180px, 20vw);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.documentName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dirtyDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-dark);
+  flex-shrink: 0;
+}
+
+.iconButton,
+.updateButton {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  cursor: default;
+}
+
+.iconButton:hover:not(:disabled),
+.updateButton:hover {
+  background: var(--btn-hover-bg);
+}
+
+.iconButton:active:not(:disabled),
+.iconButtonChecked {
+  background: var(--accent-btn-bg);
+  border-color: var(--accent-btn-border);
+}
+
+.iconButton:disabled {
+  color: var(--btn-disabled-text);
+}
+
+.iconButtonLabeled {
+  min-width: 62px;
+}
+
+.updateButton {
+  min-width: 64px;
+  color: var(--accent-dark);
+  border-color: var(--accent-btn-border);
+  background: var(--accent-btn-bg);
+}
+
+.toggleButton {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 78px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.toggleButtonActive {
+  color: var(--text);
+  background: var(--accent-btn-bg);
+  border-color: var(--accent-btn-border);
+}
+
+.toggleButton:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--btn-hover-bg);
+}
+
+.toggleButton:disabled {
+  color: var(--btn-disabled-text);
+}
+
+.tabsRow {
+  height: 31px;
+  min-height: 31px;
+  background: var(--bg-app);
+  flex-shrink: 0;
+}
+
+.tabsRow :global([data-testid="tab-strip"]) {
+  height: 31px;
+  min-height: 31px;
+  padding-top: 3px;
+}
+
+.tabsRow :global([data-testid="tab-strip"] [role="tab"]) {
+  height: 26px;
+}
+
+.tabsRow :global([data-testid="tab-strip"] button) {
+  min-height: 0;
+}
+
+.workspace {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.figureStrip {
+  height: 128px;
+  min-height: 128px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-pane);
+}
+
+.editorSurface {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editorSurfaceWithSource {
+  grid-template-columns: minmax(240px, 0.34fr) minmax(0, 1fr);
+}
+
+.editorSurfaceWithRight {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.34fr);
+}
+
+.editorSurfaceWithSource.editorSurfaceWithRight {
+  grid-template-columns: minmax(220px, 0.3fr) minmax(240px, 1fr) minmax(300px, 0.34fr);
+}
+
+.panelFrame {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-pane);
+}
+
+.canvasFrame {
+  position: relative;
+  overflow: visible;
+  background: var(--bg-canvas-panel);
+}
+
+.sourceFrame {
+  background: var(--bg-pane);
+}
+
+.toolPalette {
+  position: absolute;
+  z-index: 30;
+  top: 12px;
+  bottom: auto;
+  left: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  align-content: start;
+  gap: 4px;
+  width: 104px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-pane) 96%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.13);
+  overflow: visible;
+  overscroll-behavior: contain;
+}
+
+.toolPalette[data-layout="horizontal"] {
+  grid-auto-flow: column;
+  grid-auto-columns: 44px;
+  grid-template-columns: 32px;
+  grid-template-rows: 44px;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100% - 24px);
+}
+
+.toolPalette[data-dragging="true"] {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.toolPaletteHandle {
+  appearance: none;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: grab;
+}
+
+.toolPalette[data-layout="horizontal"] .toolPaletteHandle {
+  grid-column: auto;
+  grid-row: 1;
+  width: 32px;
+  height: 44px;
+}
+
+.toolPaletteHandle:hover,
+.toolPaletteHandle:active {
+  color: var(--text);
+  background: var(--btn-hover-bg);
+}
+
+.toolPalette[data-dragging="true"] .toolPaletteHandle {
+  cursor: grabbing;
+  color: var(--text);
+  background: var(--accent-btn-bg);
+  border-color: var(--accent-btn-border);
+}
+
+.toolButton {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.toolButtonWithPopup {
+  position: relative;
+}
+
+.toolButtonWithPopup::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.62;
+}
+
+.toolButton:hover,
+.toolButton:active,
+.toolButtonActive {
+  color: var(--text);
+  background: var(--accent-btn-bg);
+  border-color: var(--accent-btn-border);
+}
+
+.toolButtonSeparated {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.toolPalette[data-layout="horizontal"] .toolButtonSeparated {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.toolPopup {
+  position: absolute;
+  top: 32px;
+  left: calc(100% + 8px);
+  z-index: 36;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 152px));
+  max-height: min(64vh, 560px);
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-pane);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  overflow: auto;
+}
+
+.toolPopupLeft {
+  right: calc(100% + 8px);
+  left: auto;
+}
+
+.toolPopupBelow {
+  top: calc(100% + 8px);
+  right: auto;
+  left: 0;
+}
+
+.toolPopupAbove {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+}
+
+.matrixToolPopup {
+  max-width: min(392px, calc(100vw - 152px));
+}
+
+.matrixPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.matrixPickerRow {
+  display: flex;
+  gap: 5px;
+}
+
+.matrixPickerCell {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-pane) 82%, var(--bg-app));
+  color: var(--text);
+}
+
+.matrixPickerCell:hover,
+.matrixPickerCell:focus-visible {
+  outline: none;
+  border-color: var(--accent-btn-border);
+  background: color-mix(in srgb, var(--accent-btn-bg) 70%, var(--bg-pane));
+}
+
+.matrixPickerCellSelected {
+  border-color: var(--accent-btn-border);
+  background: var(--accent-btn-bg);
+}
+
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-pane);
+  overflow: hidden;
+}
+
+.rightPanelHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-header);
+}
+
+.rightPanelTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.panelTab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.panelTab span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.panelTab:hover:not(:disabled),
+.panelTabActive {
+  color: var(--text);
+  background: var(--accent-btn-bg);
+  border-color: var(--accent-btn-border);
+}
+
+.panelTab:disabled {
+  color: var(--btn-disabled-text);
+}
+
+.compactIconButton {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+}
+
+.compactIconButton:hover {
+  color: var(--text);
+  background: var(--btn-hover-bg);
+}
+
+.rightPanelBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.statusPill {
+  position: absolute;
+  z-index: 26;
+  left: 128px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 148px);
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-pane) 94%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+}
+
+.statusPill span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.shell :global(input),
+.shell :global(select),
+.shell :global(textarea) {
+  font-size: max(16px, 1em);
+}
+
+.shell :global(.cm-editor),
+.shell :global(.cm-scroller) {
+  min-height: 0;
+}
+
+@media (max-width: 980px) {
+  .documentCluster {
+    min-width: 136px;
+  }
+
+  .documentTitle {
+    width: min(120px, 14vw);
+  }
+
+  .stage {
+    padding-right: 10px;
+  }
+
+  .editorSurfaceWithSource {
+    grid-template-columns: minmax(190px, 0.38fr) minmax(0, 1fr);
+  }
+
+  .editorSurfaceWithRight {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.4fr);
+  }
+
+  .editorSurfaceWithSource.editorSurfaceWithRight {
+    grid-template-columns: minmax(170px, 0.3fr) minmax(180px, 1fr) minmax(230px, 0.38fr);
+  }
+}
+
+@media (max-height: 760px) {
+  .figureStrip {
+    height: 102px;
+    min-height: 102px;
+  }
+}

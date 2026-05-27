@@ -1,0 +1,464 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		22ADF21108D2EB097EF5B159 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1EE3DC9B8033721F5F963302 /* Security.framework */; };
+		8526BA4C19EBA6371B688FC9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6398DF1BFEA51D3E91304F9B /* Assets.xcassets */; };
+		87EE79F76F085149A928CC6C /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5470F72446A2377927C84D1F /* libapp.a */; };
+		8F5BE147962131FDBB637D99 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 08B693F93FA48E7F72D195CB /* LaunchScreen.storyboard */; };
+		9CCAD40EEAAD4A53AC57A4BA /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 84DD4E541E8417A14E5A883C /* main.mm */; };
+		9F98B5582333843B1A5DAE4C /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 05232DC7969F2E28073659EA /* assets */; };
+		B9356C69AC600160D4D3E22C /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BDDCC4293541D253D8443CE /* MetalKit.framework */; };
+		CE1F282B3148BEF6E8F4E9EC /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 89F2011CE7505374BD8616E5 /* WebKit.framework */; };
+		D04F8257FE87A6D65CE77E9D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0E1BCC0C1A9E294353D55543 /* PrivacyInfo.xcprivacy */; };
+		DE771A7FCD0D62CD0DD1AB54 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 86194CD4E5A4BFA3BD74535C /* Metal.framework */; };
+		EF53F1E6FF6573C5C8CE4E79 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 92A0265BED7D7969E6AC7FEE /* CoreGraphics.framework */; };
+		FC6F342F689DB534AC071AFC /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71F6D13DC6E188074CDA9E4F /* UIKit.framework */; };
+		FE2BE5EE34A64E0704873277 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6340A00F460DE0B2F3EB3E9F /* QuartzCore.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		05232DC7969F2E28073659EA /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		08B693F93FA48E7F72D195CB /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		0BDDCC4293541D253D8443CE /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		0E1BCC0C1A9E294353D55543 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1EE3DC9B8033721F5F963302 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		5470F72446A2377927C84D1F /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		5FD7C21F0817C7DD936629EF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6340A00F460DE0B2F3EB3E9F /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		6398DF1BFEA51D3E91304F9B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		71F6D13DC6E188074CDA9E4F /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		7DD4855A111DB9BE6B5FDFF1 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		84DD4E541E8417A14E5A883C /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		86194CD4E5A4BFA3BD74535C /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		89F2011CE7505374BD8616E5 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		92A0265BED7D7969E6AC7FEE /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		BAB3F64A7346E00F130B55D9 /* tikz-editor-ipad_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "tikz-editor-ipad_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C9704372ED37F8D2AF40BF86 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		CE1E6C988ABC3637A62DB220 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
+		FEE97236C7BA0BF95C867CA2 /* tikz-editor-ipad_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "tikz-editor-ipad_iOS.entitlements"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F460D65E24B0AFBCE7EACC0E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87EE79F76F085149A928CC6C /* libapp.a in Frameworks */,
+				EF53F1E6FF6573C5C8CE4E79 /* CoreGraphics.framework in Frameworks */,
+				DE771A7FCD0D62CD0DD1AB54 /* Metal.framework in Frameworks */,
+				B9356C69AC600160D4D3E22C /* MetalKit.framework in Frameworks */,
+				FE2BE5EE34A64E0704873277 /* QuartzCore.framework in Frameworks */,
+				22ADF21108D2EB097EF5B159 /* Security.framework in Frameworks */,
+				FC6F342F689DB534AC071AFC /* UIKit.framework in Frameworks */,
+				CE1F282B3148BEF6E8F4E9EC /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		08EBA3BB5781D17BB34CB88F /* bindings */ = {
+			isa = PBXGroup;
+			children = (
+				C9704372ED37F8D2AF40BF86 /* bindings.h */,
+			);
+			path = bindings;
+			sourceTree = "<group>";
+		};
+		21DBD0BDC5832EC27254444F /* tikz-editor-ipad_iOS */ = {
+			isa = PBXGroup;
+			children = (
+				5FD7C21F0817C7DD936629EF /* Info.plist */,
+				0E1BCC0C1A9E294353D55543 /* PrivacyInfo.xcprivacy */,
+				FEE97236C7BA0BF95C867CA2 /* tikz-editor-ipad_iOS.entitlements */,
+			);
+			path = "tikz-editor-ipad_iOS";
+			sourceTree = "<group>";
+		};
+		3524B31178CC69352CB0A527 /* Externals */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Externals;
+			sourceTree = "<group>";
+		};
+		6EAB6A63E36DCB9051B839A5 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				CE1E6C988ABC3637A62DB220 /* lib.rs */,
+				7DD4855A111DB9BE6B5FDFF1 /* main.rs */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
+		8B58FB1C438908E51BC78B89 = {
+			isa = PBXGroup;
+			children = (
+				05232DC7969F2E28073659EA /* assets */,
+				6398DF1BFEA51D3E91304F9B /* Assets.xcassets */,
+				08B693F93FA48E7F72D195CB /* LaunchScreen.storyboard */,
+				3524B31178CC69352CB0A527 /* Externals */,
+				AF5191D9EEAD324048B77BFD /* Sources */,
+				6EAB6A63E36DCB9051B839A5 /* src */,
+				21DBD0BDC5832EC27254444F /* tikz-editor-ipad_iOS */,
+				FFF1B88F29B9DA5FC973FD34 /* Frameworks */,
+				ABD5431F0A8FC470AB55C174 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		ABD5431F0A8FC470AB55C174 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BAB3F64A7346E00F130B55D9 /* tikz-editor-ipad_iOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AF5191D9EEAD324048B77BFD /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				CA0006467CA5B2DCE28A49C2 /* tikz-editor-ipad */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		CA0006467CA5B2DCE28A49C2 /* tikz-editor-ipad */ = {
+			isa = PBXGroup;
+			children = (
+				84DD4E541E8417A14E5A883C /* main.mm */,
+				08EBA3BB5781D17BB34CB88F /* bindings */,
+			);
+			path = "tikz-editor-ipad";
+			sourceTree = "<group>";
+		};
+		FFF1B88F29B9DA5FC973FD34 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				92A0265BED7D7969E6AC7FEE /* CoreGraphics.framework */,
+				5470F72446A2377927C84D1F /* libapp.a */,
+				86194CD4E5A4BFA3BD74535C /* Metal.framework */,
+				0BDDCC4293541D253D8443CE /* MetalKit.framework */,
+				6340A00F460DE0B2F3EB3E9F /* QuartzCore.framework */,
+				1EE3DC9B8033721F5F963302 /* Security.framework */,
+				71F6D13DC6E188074CDA9E4F /* UIKit.framework */,
+				89F2011CE7505374BD8616E5 /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		45C6DFCB4B3F01EA7BF77BEF /* tikz-editor-ipad_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 20D88B3664A8EB19A5ADE093 /* Build configuration list for PBXNativeTarget "tikz-editor-ipad_iOS" */;
+			buildPhases = (
+				A3AE5F61916E89D8D76050A2 /* Build Rust Code */,
+				CB1D82918584AE16E0C0F9D4 /* Sources */,
+				8BCFEBCD4B5C231083DD3AF3 /* Resources */,
+				F460D65E24B0AFBCE7EACC0E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "tikz-editor-ipad_iOS";
+			packageProductDependencies = (
+			);
+			productName = "tikz-editor-ipad_iOS";
+			productReference = BAB3F64A7346E00F130B55D9 /* tikz-editor-ipad_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		20919F7382601861BBE3DEC6 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 7F9811DDA0F6AA6176A4F002 /* Build configuration list for PBXProject "tikz-editor-ipad" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 8B58FB1C438908E51BC78B89;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = ABD5431F0A8FC470AB55C174 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				45C6DFCB4B3F01EA7BF77BEF /* tikz-editor-ipad_iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8BCFEBCD4B5C231083DD3AF3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8526BA4C19EBA6371B688FC9 /* Assets.xcassets in Resources */,
+				8F5BE147962131FDBB637D99 /* LaunchScreen.storyboard in Resources */,
+				D04F8257FE87A6D65CE77E9D /* PrivacyInfo.xcprivacy in Resources */,
+				9F98B5582333843B1A5DAE4C /* assets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A3AE5F61916E89D8D76050A2 /* Build Rust Code */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust Code";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a",
+				"$(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CB1D82918584AE16E0C0F9D4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9CCAD40EEAAD4A53AC57A4BA /* main.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		10E53240B96B5277C7D61D6B /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "tikz-editor-ipad_iOS/tikz-editor-ipad_iOS.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = "tikz-editor-ipad_iOS/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor.ipad;
+				PRODUCT_NAME = "TikZ Editor";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		96DB6E92309261A5597984D9 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "tikz-editor-ipad_iOS/tikz-editor-ipad_iOS.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = "tikz-editor-ipad_iOS/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor.ipad;
+				PRODUCT_NAME = "TikZ Editor";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		E2A9F839E7B45E353CA733DF /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = release;
+		};
+		FB8D3479D41C73453CDEB239 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		20D88B3664A8EB19A5ADE093 /* Build configuration list for PBXNativeTarget "tikz-editor-ipad_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10E53240B96B5277C7D61D6B /* debug */,
+				96DB6E92309261A5597984D9 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		7F9811DDA0F6AA6176A4F002 /* Build configuration list for PBXProject "tikz-editor-ipad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FB8D3479D41C73453CDEB239 /* debug */,
+				E2A9F839E7B45E353CA733DF /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 20919F7382601861BBE3DEC6 /* Project object */;
+}
