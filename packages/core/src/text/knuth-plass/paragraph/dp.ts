@@ -22,11 +22,13 @@ export interface DpOptions {
   rightskipWidth?: number;
   rightskipStretch?: number;
   rightskipShrink?: number;
+  emergencyStretch?: number;
   parfillskipWidth?: number;
   parfillskipStretch?: number;
   parfillskipShrink?: number;
   preventOverflow?: boolean;
   allowInfeasible?: boolean;
+  replaceEqualCostActiveState?: boolean;
 }
 
 interface Cursor {
@@ -92,12 +94,13 @@ interface ActiveChoice {
 }
 
 interface ActiveState {
+  id: number;
   key: string;
   cursor: Cursor;
   previousFitnessClass: FitnessClass | null;
   previousFlagged: boolean;
   cost: number;
-  previousStateKey: string | null;
+  previousStateId: number | null;
   incomingChoice: ActiveChoice | null;
 }
 
@@ -107,22 +110,60 @@ const MAX_RUNS_FOR_DP = 3000;
 const MAX_BREAKPOINTS_FOR_DP = 1200;
 const MAX_ESTIMATED_EDGES = 2_000_000;
 const MAX_DP_STATES = 20000;
+const INITIAL_FITNESS_CLASS: FitnessClass = 2; // TeX's root active node is decent_fit.
+const SP_PER_PT = 65536;
+const TEX_INF_BAD = 10000;
 
-function badnessFromRatio(ratio: number): number {
-  const abs = Math.abs(ratio);
-  if (!Number.isFinite(abs)) {
-    return 10000;
-  }
-
-  const badness = Math.floor(100 * abs * abs * abs + 0.5);
-  return Math.min(10000, badness);
+function toScaledPoint(value: number): number {
+  return Math.max(0, Math.round(Math.abs(value) * SP_PER_PT));
 }
 
-function fitnessClassForRatio(ratio: number): FitnessClass {
-  if (ratio > 1) return 0;
-  if (ratio > 0.5) return 1;
-  if (ratio >= -0.5) return 2;
-  return 3;
+function texBadness(delta: number, glue: number): number {
+  const t = toScaledPoint(delta);
+  const s = toScaledPoint(glue);
+  if (t === 0) {
+    return 0;
+  }
+  if (s <= 0) {
+    return TEX_INF_BAD;
+  }
+
+  let r: number;
+  if (t <= 7230584) {
+    r = Math.floor((t * 297) / s);
+  } else if (s >= 1663497) {
+    r = Math.floor(t / Math.floor(s / 297));
+  } else {
+    r = t;
+  }
+
+  if (r > 1290) {
+    return TEX_INF_BAD;
+  }
+  return Math.floor((r * r * r + 0o400000) / 0o1000000);
+}
+
+function badnessFromRatio(ratio: number): number {
+  if (!Number.isFinite(ratio)) {
+    return TEX_INF_BAD;
+  }
+  return texBadness(Math.abs(ratio), 1);
+}
+
+function fitnessClassForBadness(
+  badness: number,
+  adjustment: 'stretch' | 'shrink' | 'none'
+): FitnessClass {
+  if (adjustment === 'stretch') {
+    if (badness > 12) {
+      return badness > 99 ? 0 : 1;
+    }
+    return 2;
+  }
+  if (adjustment === 'shrink') {
+    return badness > 12 ? 3 : 2;
+  }
+  return 2;
 }
 
 function incompatibleFitness(a: FitnessClass, b: FitnessClass): boolean {
@@ -268,6 +309,9 @@ function textSliceWidth(
   end: number
 ): number {
   if (end <= start) return 0;
+  if (model.measurement.measureSlice) {
+    return model.measurement.measureSlice(run.text, start, end, run.wrapper);
+  }
   const endWidth = model.measurement.measurePrefix(run.text, end, run.wrapper);
   const startWidth = model.measurement.measurePrefix(run.text, start, run.wrapper);
   return endWidth - startWidth;
@@ -331,6 +375,7 @@ function generateCandidates(
             splitOffset: textPenalty.splitOffset,
             hyphenSource: textPenalty.hyphenSource,
             flagged: textPenalty.flagged,
+            width: textPenalty.width,
           },
           breakPenalty: textPenalty.penalty,
           flagged: textPenalty.flagged,
@@ -462,6 +507,7 @@ function scoreCandidate(
       | 'rightskipWidth'
       | 'rightskipStretch'
       | 'rightskipShrink'
+      | 'emergencyStretch'
       | 'parfillskipWidth'
       | 'parfillskipStretch'
       | 'parfillskipShrink'
@@ -482,6 +528,7 @@ function scoreCandidate(
     candidate.stretch +
     options.leftskipStretch +
     options.rightskipStretch +
+    options.emergencyStretch +
     (isLastLine ? options.parfillskipStretch : 0);
   const totalShrink =
     candidate.shrink +
@@ -494,8 +541,10 @@ function scoreCandidate(
   let badness = 0;
   let feasible = true;
   let constraintViolation = false;
+  let adjustment: 'stretch' | 'shrink' | 'none' = 'none';
 
   if (delta > 0) {
+    adjustment = 'stretch';
     if (!Number.isFinite(totalStretch)) {
       ratio = 0;
       badness = 0;
@@ -510,9 +559,10 @@ function scoreCandidate(
       }
     } else {
       ratio = delta / totalStretch;
-      badness = badnessFromRatio(ratio);
+      badness = texBadness(delta, totalStretch);
     }
   } else if (delta < 0) {
+    adjustment = 'shrink';
     if (!Number.isFinite(totalShrink) || totalShrink <= 0) {
       feasible = false;
       if (options.allowInfeasible) {
@@ -524,7 +574,7 @@ function scoreCandidate(
       }
     } else {
       ratio = delta / totalShrink;
-      badness = badnessFromRatio(ratio);
+      badness = texBadness(-delta, totalShrink);
     }
   }
 
@@ -578,7 +628,7 @@ function scoreCandidate(
     }
   }
 
-  const fitnessClass = fitnessClassForRatio(ratio);
+  const fitnessClass = fitnessClassForBadness(badness, adjustment);
   const linePenalty = options.linepenalty + badness;
   const penalty = isLastLine || isForcedBreak ? -10_000 : candidate.breakPenalty;
 
@@ -730,39 +780,47 @@ export function breakWithDp(
     rightskipWidth: options.rightskipWidth ?? 0,
     rightskipStretch: options.rightskipStretch ?? width,
     rightskipShrink: options.rightskipShrink ?? 0,
+    emergencyStretch: options.emergencyStretch ?? 0,
     parfillskipWidth: options.parfillskipWidth ?? 0,
     parfillskipStretch: options.parfillskipStretch ?? Number.POSITIVE_INFINITY,
     parfillskipShrink: options.parfillskipShrink ?? 0,
     preventOverflow: options.preventOverflow ?? false,
     allowInfeasible: options.allowInfeasible ?? false,
+    replaceEqualCostActiveState: options.replaceEqualCostActiveState ?? true,
   };
 
-  const states = new Map<string, ActiveState>();
-  const queue: string[] = [];
-  let stateCount = 1;
+  const bestStateIdByKey = new Map<string, number>();
+  const states = new Map<number, ActiveState>();
+  const queue: number[] = [];
+  let nextStateId = 1;
   const firstKey = cursorKey(firstCursor, null, false);
-  states.set(firstKey, {
+  states.set(0, {
+    id: 0,
     key: firstKey,
     cursor: firstCursor,
-    previousFitnessClass: null,
+    previousFitnessClass: INITIAL_FITNESS_CLASS,
     previousFlagged: false,
     cost: 0,
-    previousStateKey: null,
+    previousStateId: null,
     incomingChoice: null,
   });
-  queue.push(firstKey);
+  bestStateIdByKey.set(firstKey, 0);
+  queue.push(0);
   let bestFinal:
     | {
         cost: number;
-        fromStateKey: string;
+        fromStateId: number;
         choice: ActiveChoice;
       }
     | null = null;
 
   while (queue.length > 0) {
-    const stateKey = queue.shift()!;
-    const state = states.get(stateKey);
+    const stateId = queue.shift()!;
+    const state = states.get(stateId);
     if (!state) {
+      continue;
+    }
+    if (bestStateIdByKey.get(state.key) !== state.id) {
       continue;
     }
 
@@ -811,10 +869,14 @@ export function breakWithDp(
         if (state.previousFlagged) {
           totalCost += resolvedOptions.finalhyphendemerits;
         }
-        if (bestFinal === null || totalCost < bestFinal.cost) {
+        if (
+          bestFinal === null ||
+          totalCost < bestFinal.cost ||
+          (resolvedOptions.allowInfeasible && totalCost === bestFinal.cost)
+        ) {
           bestFinal = {
             cost: totalCost,
-            fromStateKey: stateKey,
+            fromStateId: state.id,
             choice,
           };
         }
@@ -823,33 +885,38 @@ export function breakWithDp(
 
       const nextCursor = normalizeCursor(model, candidate.nextCursor, forcedPenalties);
       const nextKey = cursorKey(nextCursor, score.fitnessClass, candidate.flagged);
-      const existing = states.get(nextKey);
-      if (existing && totalCost >= existing.cost) {
+      const existingId = bestStateIdByKey.get(nextKey);
+      const existing = existingId === undefined ? null : states.get(existingId) ?? null;
+      if (
+        existing &&
+        (totalCost > existing.cost ||
+          (totalCost === existing.cost && !resolvedOptions.replaceEqualCostActiveState))
+      ) {
         continue;
       }
 
+      const allocatedStateId = nextStateId++;
       const nextState: ActiveState = {
+        id: allocatedStateId,
         key: nextKey,
         cursor: nextCursor,
         previousFitnessClass: score.fitnessClass,
         previousFlagged: candidate.flagged,
         cost: totalCost,
-        previousStateKey: stateKey,
+        previousStateId: state.id,
         incomingChoice: choice,
       };
-      states.set(nextKey, nextState);
-      queue.push(nextKey);
-      if (!existing) {
-        stateCount += 1;
-        if (stateCount > MAX_DP_STATES) {
-          return {
-            lines: [],
-            errors: [`DP state limit exceeded (${MAX_DP_STATES}).`],
-            canProceed: false,
-            totalCost: Infinity,
-            mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
-          };
-        }
+      states.set(allocatedStateId, nextState);
+      bestStateIdByKey.set(nextKey, allocatedStateId);
+      queue.push(allocatedStateId);
+      if (states.size > MAX_DP_STATES) {
+        return {
+          lines: [],
+          errors: [`DP state limit exceeded (${MAX_DP_STATES}).`],
+          canProceed: false,
+          totalCost: Infinity,
+          mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
+        };
       }
     }
   }
@@ -868,10 +935,10 @@ export function breakWithDp(
   }
 
   const reversedChoices: ActiveChoice[] = [bestFinal.choice];
-  let stateKey: string | null = bestFinal.fromStateKey;
-  const seen = new Set<string>();
-  while (stateKey) {
-    if (seen.has(stateKey)) {
+  let stateId: number | null = bestFinal.fromStateId;
+  const seen = new Set<number>();
+  while (stateId !== null) {
+    if (seen.has(stateId)) {
       return {
         lines: [],
         errors: ['DP reconstruction loop detected.'],
@@ -880,12 +947,12 @@ export function breakWithDp(
         mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
       };
     }
-    seen.add(stateKey);
-    const state = states.get(stateKey);
+    seen.add(stateId);
+    const state = states.get(stateId);
     if (!state) {
       return {
         lines: [],
-        errors: [`DP reconstruction failed at state ${stateKey}.`],
+        errors: [`DP reconstruction failed at state ${stateId}.`],
         canProceed: false,
         totalCost: Infinity,
         mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
@@ -894,7 +961,7 @@ export function breakWithDp(
     if (state.incomingChoice) {
       reversedChoices.push(state.incomingChoice);
     }
-    stateKey = state.previousStateKey;
+    stateId = state.previousStateId;
   }
 
   const choices = reversedChoices.reverse();

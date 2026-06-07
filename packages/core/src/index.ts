@@ -14,6 +14,11 @@ export { emitSvg, emitSvgModel, serializeSvgModel, serializeSvgModelAsync, diffS
 export { renderTikzToSvg, renderTikzToSvgAsync } from "./render/index.js";
 export { capabilityMatrix, FEATURE_IDS } from "./capabilities/index.js";
 export { createMathJaxNodeTextEngine, setWorkerFontLoader } from "./text/mathjax-engine.js";
+export {
+  ComputerModernTexMetricProvider,
+  DEFAULT_COMPUTER_MODERN_TEXT_FONTS,
+  computerModernTexMetricProvider
+} from "./text/tex/index.js";
 export type { MathJaxFont } from "./text/mathjax-engine.js";
 export { collectSymbols, resolveDocHoverTarget } from "./completion/index.js";
 export {
@@ -90,6 +95,7 @@ export type {
 } from "./edit/action-availability.js";
 export type * from "./edit/snapping/types.js";
 export type * from "./text/types.js";
+export type * from "./text/tex/index.js";
 export type * from "./ast/types.js";
 export type * from "./diagnostics/types.js";
 export type * from "./semantic/index.js";

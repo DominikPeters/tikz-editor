@@ -145,6 +145,7 @@ export interface BreakDecision {
   hyphenSource?: 'automatic' | 'explicit';
   splitOffset?: number;
   flagged?: boolean;
+  width?: number;
 }
 
 export interface GreedyResult {

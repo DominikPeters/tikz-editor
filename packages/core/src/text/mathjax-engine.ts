@@ -6,12 +6,15 @@ import {
   TEX_INTERWORD_STRETCH_EM,
   getKnuthPlassReportsFromOutputJax,
   installKnuthPlassVisitor,
+  registerKnuthPlassReportsOnOutputJax,
   setKnuthPlassOptionsOnOutputJax,
   type KnuthPlassLayoutMode,
   type WrappedTextGap
 } from "./knuth-plass/index.js";
 import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
+import { computerModernTexMetricProvider, layoutSimpleTexParagraph } from "./tex/index.js";
+import type { ResolvedTexFont, TexShapedItem } from "./tex/index.js";
 import type {
   NodeTextEngine,
   NodeTextMeasureRequest,
@@ -266,6 +269,23 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment);
 
       let entry: CachedRenderEntry | null = cache.get(cacheKey) ?? null;
+      if (!entry) {
+        entry = buildSimpleTexTextCacheEntry({
+          runtime,
+          cacheKey,
+          sourceText: prepared.text,
+          textWidthPt: normalizedWidth,
+          font: prepared.font,
+          alignment,
+          requestedAlignment: request.alignment ?? null,
+          mode
+        });
+        if (entry) {
+          cache.set(cacheKey, entry);
+          validationCache.set(request.text, null);
+        }
+      }
+
       if (!entry) {
         try {
           entry = buildMeasuredCacheEntry({
@@ -942,6 +962,205 @@ function buildCacheEntryWithMetadata(
     paragraphId: resolvedParagraphId,
     renderSourceText
   };
+}
+
+function buildSimpleTexTextCacheEntry(params: {
+  runtime: MathJaxRuntime;
+  cacheKey: string;
+  sourceText: string;
+  textWidthPt: number | null;
+  font: TextFontOptions;
+  alignment: NodeTextParagraphAlignment | null;
+  requestedAlignment: NodeTextParagraphAlignment | null;
+  mode: "text" | "math";
+}): CachedRenderEntry | null {
+  if (!isSimpleTexTextEligible(params)) {
+    return null;
+  }
+  const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
+  const layout = layoutSimpleTexParagraph(params.sourceText, {
+    paragraphId,
+    width: params.textWidthPt,
+    alignment: params.alignment ?? "ragged-right",
+  });
+  if (!layout.supported || !layout.report) {
+    return null;
+  }
+  const outputJax = getRuntimeOutputJax(params.runtime);
+  registerKnuthPlassReportsOnOutputJax(outputJax, [layout.report]);
+
+  const lineHeightPt = DEFAULT_TEXT_FONT_SIZE * 1.2;
+  const firstLineAscent = Math.max(
+    DEFAULT_TEXT_FONT_SIZE * 0.7,
+    ...layout.report.lines.map((line) => Number(line.ascent) || 0)
+  );
+  const heightPt = Math.max(lineHeightPt, layout.report.lines.length * lineHeightPt);
+  const widthPt = params.textWidthPt;
+  const body = renderSimpleTexSvgBody(layout.report, {
+    lineHeightPt,
+    firstLineAscent,
+    requestedAlignment: params.requestedAlignment,
+  });
+
+  return {
+    payload: {
+      cacheKey: params.cacheKey,
+      viewBox: {
+        x: 0,
+        y: 0,
+        width: widthPt,
+        height: heightPt,
+      },
+      body,
+    },
+    baseWidthPt: widthPt,
+    baseHeightPt: heightPt,
+    baseLineYPt: heightPt / 2 - firstLineAscent,
+    midLineYPt: 0,
+    paragraphId,
+    renderSourceText: params.sourceText,
+  };
+}
+
+function isSimpleTexTextEligible(params: {
+  sourceText: string;
+  textWidthPt: number | null;
+  font: TextFontOptions;
+  alignment: NodeTextParagraphAlignment | null;
+  requestedAlignment?: NodeTextParagraphAlignment | null;
+  mode?: "text" | "math";
+}): params is typeof params & { textWidthPt: number } {
+  if (params.mode !== "text") {
+    return false;
+  }
+  if (params.requestedAlignment == null) {
+    return false;
+  }
+  if (params.textWidthPt == null || !(Number.isFinite(params.textWidthPt) && params.textWidthPt > 0)) {
+    return false;
+  }
+  if (
+    params.font.fontFamily !== "serif" ||
+    params.font.fontStyle !== "normal" ||
+    params.font.fontWeight !== "normal"
+  ) {
+    return false;
+  }
+  const wordCount = params.sourceText.trim().split(/\s+/).filter(Boolean).length;
+  if (wordCount === 0) {
+    return false;
+  }
+  return (
+    params.alignment == null ||
+    params.alignment === "ragged-right" ||
+    params.alignment === "justified"
+  );
+}
+
+function renderSimpleTexSvgBody(
+  report: ParagraphLayoutReport,
+  options: {
+    lineHeightPt: number;
+    firstLineAscent: number;
+    requestedAlignment: NodeTextParagraphAlignment | null;
+  }
+): string {
+  const font = computerModernTexMetricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const alignAttr = options.requestedAlignment == null
+    ? ""
+    : ` data-align="${escapeXmlAttribute(mathJaxAlignAttributeValue(options.requestedAlignment))}"`;
+  const pieces: string[] = [
+    `<g data-paragraph-id="${escapeXmlAttribute(report.paragraphId)}"${alignAttr} fill="currentColor">`,
+  ];
+  for (const line of report.lines) {
+    const lineTop = line.lineIndex * options.lineHeightPt;
+    const baseline = lineTop + options.firstLineAscent;
+    pieces.push(
+      `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}" transform="translate(0 ${formatPt(lineTop)})">`
+    );
+    pieces.push(
+      `<rect x="0" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`
+    );
+    for (const segment of line.segments) {
+      if (segment.kind !== "text" && segment.kind !== "space") {
+        continue;
+      }
+      const text = segment.text ?? "";
+      if (!text) {
+        continue;
+      }
+      pieces.push(renderTexGlyphRun(text, font, segment.x, baseline - lineTop));
+    }
+    pieces.push("</g>");
+  }
+  pieces.push("</g>");
+  return pieces.join("");
+}
+
+function renderTexGlyphRun(text: string, font: ResolvedTexFont, x: number, baseline: number): string {
+  const shaped = computerModernTexMetricProvider.shapeText(text, font);
+  const pieces: string[] = [];
+  let cursor = x;
+  for (const item of shaped.items) {
+    if (item.kind === "kern") {
+      cursor += item.width;
+      continue;
+    }
+    pieces.push(renderTexGlyphPath(item, font, cursor, baseline));
+    cursor += item.width;
+  }
+  return pieces.join("");
+}
+
+function renderTexGlyphPath(item: Extract<TexShapedItem, { kind: "glyph" }>, font: ResolvedTexFont, x: number, baseline: number): string {
+  if (item.code === 32) {
+    return "";
+  }
+  const d = font.data.glyphs?.[String(item.code)] ?? "";
+  if (!d) {
+    return "";
+  }
+  const scale = font.atPt / 10;
+  const scaleSuffix = Math.abs(scale - 1) > 1e-6 ? ` scale(${formatPt(scale)})` : "";
+  return `<path data-tex-font="${escapeXmlAttribute(font.id)}" data-tex-glyph="${item.code}" d="${escapeXmlAttribute(d)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})${scaleSuffix}" />`;
+}
+
+function mathJaxAlignAttributeValue(alignment: NodeTextParagraphAlignment): string {
+  switch (alignment) {
+    case "ragged-left":
+      return "right";
+    case "center":
+      return "center";
+    case "justified":
+      return "justify";
+    case "ragged-right":
+    default:
+      return "left";
+  }
+}
+
+function getRuntimeOutputJax(runtime: MathJaxRuntime): unknown {
+  return runtime.outputJax ?? runtime.startup?.output ?? runtime.startup?.document?.outputJax ?? getActiveMathJaxOutputJax();
+}
+
+function stableHashString(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function escapeXmlText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeXmlAttribute(value: string): string {
+  return escapeXmlText(value).replaceAll('"', "&quot;");
 }
 
 function buildMeasuredCacheEntry(params: {

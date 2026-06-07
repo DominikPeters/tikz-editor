@@ -380,6 +380,54 @@ describe("mathjax node text engine", () => {
     expect(report?.layoutMode).toBe("wrapped-explicit");
   });
 
+  it("routes simple wrapped serif text through the TeX paragraph path", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
+    const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
+
+    const measured = engine.measure({
+      text: "Alpha Beta",
+      textWidthPt: 32,
+      alignment: "ragged-right",
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+
+    expect(texCalls).toHaveLength(callsBeforeMeasure);
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+    const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
+    expect(report?.layoutMode).toBe("wrap");
+    expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
+    expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
+  });
+
+  it("falls back to MathJax for unsupported wrapped TeX syntax", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
+
+    const measured = engine.measure({
+      text: String.raw`Alpha $x$`,
+      textWidthPt: 32,
+      alignment: "ragged-right",
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+
+    expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
+    expect(measured?.paragraphId).not.toMatch(/^tex:/);
+  });
+
   it("normalizes legacy font switches and records wrapped text gap metadata", async () => {
     const { outputJax, texCalls } = installFakeBrowserMathJax();
 
@@ -399,10 +447,14 @@ describe("mathjax node text engine", () => {
     expect(measured?.width).toBeCloseTo(20);
     expect(outputJax.knuthPlassOptions?.alignment).toBe("center");
     expect(outputJax.knuthPlassOptions?.layoutMode).toBe("wrap");
-    expect(outputJax.knuthPlassOptions?.wrappedTextGaps).toContainEqual({
-      sourceStart: 7,
-      widthEm: 0.5
-    });
+    expect(outputJax.knuthPlassOptions?.wrappedTextGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceStart: 7,
+          widthEm: 0.5
+        })
+      ])
+    );
     expect(texCalls.at(-1)).toMatch(/\\parbox\[t\]\{35\.865504pt\}/);
     expect(texCalls.at(-1)).not.toContain(String.raw`\ttfamily`);
     expect(texCalls.at(-1)).not.toContain(String.raw`\bfseries`);
@@ -420,10 +472,14 @@ describe("mathjax node text engine", () => {
 
     expect(complex?.paragraphId).toBeTruthy();
     expect(outputJax.knuthPlassOptions?.layoutMode).toBe("wrapped-explicit");
-    expect(outputJax.knuthPlassOptions?.wrappedTextGaps).toContainEqual({
-      sourceStart: 7,
-      widthEm: 0.5
-    });
+    expect(outputJax.knuthPlassOptions?.wrappedTextGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceStart: 7,
+          widthEm: 0.5
+        })
+      ])
+    );
     expect(texCalls.at(-1)).toContain(String.raw`\texttt{`);
     expect(texCalls.at(-1)).toContain(String.raw`\%`);
     expect(texCalls.at(-1)).toContain(String.raw`$x y$`);

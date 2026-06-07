@@ -124,32 +124,46 @@ function addAutomaticHyphenPenaltiesForTextRun(
   hyphenator: Hyphenator,
   hyphenpenalty: number
 ): void {
-  const splits = hyphenator.hyphenate(run.text);
-  if (!splits.length) {
-    return;
-  }
-
   const hyphenWidth = measurement.measureText('-', run.wrapper);
+  const wordPattern = /[A-Za-z]+/g;
+  let match = wordPattern.exec(run.text);
 
-  for (const splitOffset of splits) {
-    if (splitOffset <= 0 || splitOffset >= run.text.length) {
-      continue;
+  while (match) {
+    const word = match[0];
+    const wordStart = match.index;
+    const splits = hyphenator.hyphenate(word);
+    for (const split of splits) {
+      const splitOffset = wordStart + split;
+      if (split <= 0 || split >= word.length || splitOffset <= 0 || splitOffset >= run.text.length) {
+        continue;
+      }
+
+      const penaltyWidth = measurement.measureHyphenatedPrefix
+        ? measurement.measureHyphenatedPrefix(
+            run.text,
+            wordStart,
+            splitOffset,
+            '-',
+            run.wrapper
+          )
+        : hyphenWidth;
+
+      items.push({
+        kind: 'penalty',
+        width: penaltyWidth,
+        penalty: hyphenpenalty,
+        flagged: true,
+        payload: {
+          runIndex: run.runIndex,
+          breakKind: 'hyphen',
+          sourceOffset: run.sourceStart + splitOffset,
+          visibleHyphen: true,
+          splitOffset,
+          hyphenSource: 'automatic',
+        },
+      });
     }
-
-    items.push({
-      kind: 'penalty',
-      width: hyphenWidth,
-      penalty: hyphenpenalty,
-      flagged: true,
-      payload: {
-        runIndex: run.runIndex,
-        breakKind: 'hyphen',
-        sourceOffset: run.sourceStart + splitOffset,
-        visibleHyphen: true,
-        splitOffset,
-        hyphenSource: 'automatic',
-      },
-    });
+    match = wordPattern.exec(run.text);
   }
 }
 

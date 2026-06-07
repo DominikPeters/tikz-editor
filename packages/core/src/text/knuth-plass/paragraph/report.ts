@@ -59,6 +59,7 @@ export interface BreakReport {
   lineLeading?: string;
   hyphenSource?: 'automatic' | 'explicit';
   splitOffset?: number;
+  width?: number;
 }
 
 export interface RunReport {
@@ -255,15 +256,17 @@ export function buildParagraphLayoutReport({
           ? measurement.measureText('-', hyphenRun.wrapper)
           : 0;
       if (hyphenWidth > 0) {
+        const insertedWidth = resolvedBreak.width ?? hyphenWidth;
+        const hyphenX = x + insertedWidth - hyphenWidth;
         segments.push({
           runIndex: resolvedBreak.runIndex,
           kind: 'text',
           text: '-',
-          x,
+          x: hyphenX,
           width: hyphenWidth,
-          caretStops: [x, x + hyphenWidth],
+          caretStops: [hyphenX, hyphenX + hyphenWidth],
         });
-        x += hyphenWidth;
+        x += insertedWidth;
       }
     }
 
@@ -294,6 +297,7 @@ export function buildParagraphLayoutReport({
             lineLeading: resolvedBreak.lineLeading,
             hyphenSource: resolvedBreak.hyphenSource,
             splitOffset: resolvedBreak.splitOffset,
+            width: resolvedBreak.width,
           }
         : null,
     };

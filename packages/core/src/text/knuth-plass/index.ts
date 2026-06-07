@@ -14,6 +14,7 @@ export {
 export {
   installKnuthPlassVisitor,
   getKnuthPlassReportsFromOutputJax,
+  registerKnuthPlassReportsOnOutputJax,
   setKnuthPlassOptionsOnOutputJax,
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,

@@ -757,6 +757,30 @@ World};
     expect(xs.some((x) => x > 0.5)).toBe(true);
   });
 
+  it("uses TeX-shaped paragraph reports for simple wrapped Computer Modern text", async () => {
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[draw,text width=32pt,align=left] at (0,0) {Alpha Beta};
+\end{tikzpicture}`);
+
+    const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    expect(text?.kind).toBe("Text");
+    const renderInfo = text?.textRenderInfo;
+    expect(renderInfo?.mode).toBe("mathjax");
+    if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo.paragraphId).toMatch(/^tex:/);
+      expect(renderInfo.layoutKind).toBe("wrapped");
+      const report = reportForParagraphId(renderInfo.paragraphId);
+      expect(report?.lines).toHaveLength(2);
+      expect(report?.lines[0]?.segments.map((segment) => segment.text).join("")).toBe("Alpha");
+      expect(report?.lines[1]?.segments.map((segment) => segment.text).join("")).toBe("Beta");
+    }
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-mjx-linebox="true"');
+    expect(result.svg.svg).toContain('data-tex-font="cmr10"');
+    expect(result.svg.svg).toContain("<path");
+    expect(result.svg.svg).not.toContain("<text");
+  });
+
   it("keeps align=left explicit multiline text without text width on the fixed-lines paragraph path", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
   \node[align=left] at (0,0) {a \\ variable};
@@ -972,7 +996,7 @@ World};
     expect(result.svg.svg).toContain('data-align="left"');
     // The source contains no hyphen, so a rendered hyphen glyph indicates
     // discretionary hyphenation was applied by the line breaker.
-    expect(result.svg.svg).toContain('data-c="2D"');
+    expect(result.svg.svg).toMatch(/data-c="2D"|data-tex-glyph="45"/);
   });
 
   it("uses wider sentence spacing than ordinary interword spacing in wrapped paragraphs", async () => {
@@ -1040,17 +1064,25 @@ World};
 
   it("preserves rendered interword mspace advances for wrapped align=left paragraphs", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
-  \node[align=left, text width=380pt] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
+  \node[align=left, text width=380pt,font=\itshape] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
 \end{tikzpicture}`);
 
-    const advances = renderedMspaceAdvances(result.svg.svg);
+    const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    const report = reportForParagraphId(
+      text?.textRenderInfo?.mode === "mathjax" ? text.textRenderInfo.paragraphId : null
+    );
+    const advances = report?.lines.flatMap((line) =>
+      line.segments
+        .filter((segment) => segment.kind === "space")
+        .map((segment) => Number(segment.width) || 0)
+    ) ?? [];
     expect(advances.length).toBeGreaterThan(100);
     expect(advances.every((advance) => advance > 0)).toBe(true);
   });
 
   it("keeps normal wrapped align=left lorem paragraphs on the canonical two-pass path", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
-  \node[align=left, text width=380pt] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
+  \node[align=left, text width=380pt,font=\itshape] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
 \end{tikzpicture}`);
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");

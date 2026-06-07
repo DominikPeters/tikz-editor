@@ -10,6 +10,19 @@ export interface MeasurementService {
   measureText(text: string, mtextWrapper: AnyWrapper | null | undefined): number;
   measureWord(word: string, mtextWrapper: AnyWrapper | null | undefined): number;
   measurePrefix(word: string, n: number, mtextWrapper: AnyWrapper | null | undefined): number;
+  measureSlice?(
+    word: string,
+    start: number,
+    end: number,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): number;
+  measureHyphenatedPrefix?(
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): number;
   measureMath(wrapper: AnyWrapper | null | undefined): number;
   precomputeWord(word: string, mtextWrapper: AnyWrapper | null | undefined): void;
   primeRuns(runs: ParagraphRun[]): void;
@@ -96,6 +109,19 @@ export function createMeasurementService(): MeasurementService {
     return widths[clamped] || 0;
   };
 
+  const measureHyphenatedPrefix = (
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): number => {
+    const clampedStart = Math.max(0, Math.min(start, word.length));
+    const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
+    const prefix = word.slice(clampedStart, clampedEnd);
+    return measureText(prefix + hyphen, mtextWrapper) - measureText(prefix, mtextWrapper);
+  };
+
   const measureMath = (wrapper: AnyWrapper | null | undefined): number => {
     if (!wrapper || typeof wrapper !== 'object') return 0;
 
@@ -147,6 +173,7 @@ export function createMeasurementService(): MeasurementService {
     measureText,
     measureWord,
     measurePrefix,
+    measureHyphenatedPrefix,
     measureMath,
     precomputeWord,
     primeRuns,

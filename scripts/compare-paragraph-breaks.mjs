@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
 
@@ -15,6 +24,7 @@ const DEFAULT_WIDTHS = [120, 160, 220, 280, 360];
 const DEFAULT_CASE_COUNT = 25;
 const DEFAULT_MIN_WORDS = 20;
 const DEFAULT_MAX_WORDS = 90;
+const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v5-cmr10";
 const DEFAULT_WORD_BANK_TEXT = `
 Lorem ipsum dolor sit amet consectetuer adipiscing elit Aenean commodo ligula eget dolor
 Aenean massa Cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus
@@ -58,6 +68,10 @@ Options:
   --min-words <n>        Fuzz minimum word count. Default: 20
   --max-words <n>        Fuzz maximum word count. Default: 90
   --word-bank <file>     Plain text file used to build the fuzz word bank.
+  --font-encoding <enc>  One of OT1, T1. Default: OT1.
+  --oracle-cache-dir <dir>
+                         Cache LuaLaTeX oracle JSON across runs. Default:
+                         <out-dir>/oracle-cache
   --out-dir <dir>        Artifact output root.
   --help                 Show this message.
 `.trim();
@@ -76,6 +90,8 @@ function parseArgs(argv) {
     minWords: DEFAULT_MIN_WORDS,
     maxWords: DEFAULT_MAX_WORDS,
     wordBankPath: null,
+    fontEncoding: "OT1",
+    oracleCacheDir: null,
     outDir: DEFAULT_OUT_DIR,
   };
 
@@ -138,6 +154,20 @@ function parseArgs(argv) {
     }
     if (arg === "--word-bank" && next != null) {
       options.wordBankPath = resolve(next);
+      i += 1;
+      continue;
+    }
+    if (arg === "--font-encoding" && next != null) {
+      const normalized = next.toUpperCase();
+      if (normalized !== "OT1" && normalized !== "T1") {
+        throw new Error(`Invalid font encoding: ${next}`);
+      }
+      options.fontEncoding = normalized;
+      i += 1;
+      continue;
+    }
+    if (arg === "--oracle-cache-dir" && next != null) {
+      options.oracleCacheDir = resolve(next);
       i += 1;
       continue;
     }
@@ -216,9 +246,10 @@ function escapePlainTextForTeX(text) {
     .replaceAll("\r", " ");
 }
 
-function buildTikzSnippet({ text, align, widthPt }) {
+function buildTikzSnippet({ text, align, widthPt, fontCommand = "" }) {
+  const fontOption = fontCommand ? `, font=${fontCommand}` : "";
   return String.raw`\begin{tikzpicture}
-  \node[align=${align}, text width=${widthPt}pt] at (0,0) {${escapePlainTextForTeX(text)}};
+  \node[align=${align}, text width=${widthPt}pt${fontOption}] at (0,0) {${escapePlainTextForTeX(text)}};
 \end{tikzpicture}`;
 }
 
@@ -284,6 +315,11 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
   local disc_id = node.id("disc")
   local penalty_id = node.id("penalty")
   local ligatures = {
+    [11] = "ff",
+    [12] = "fi",
+    [13] = "fl",
+    [14] = "ffi",
+    [15] = "ffl",
     [0xFB00] = "ff",
     [0xFB01] = "fi",
     [0xFB02] = "fl",
@@ -303,6 +339,15 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
     return quote .. value .. quote
   end
   local function glyph_text(n)
+    if n.components then
+      local parts = {}
+      for component in node.traverse(n.components) do
+        parts[#parts + 1] = glyph_text(component)
+      end
+      if #parts > 0 then
+        return table.concat(parts)
+      end
+    end
     local replacement = ligatures[n.char]
     if replacement then
       return replacement
@@ -331,8 +376,16 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
           parts[#parts + 1] = nested
         end
       elseif cur.id == disc_id then
-        -- Inactive discretionary nodes remain inside line boxes; selected
-        -- line-break hyphens are already materialized as glyphs.
+        -- Inactive discretionary nodes keep their visible content in the
+        -- replacement/no-break list. Selected line-break hyphens are already
+        -- materialized as glyphs in the line box.
+        local replacement = cur.replace or cur.no_break
+        if replacement then
+          local nested = line_text(replacement)
+          if #nested > 0 then
+            parts[#parts + 1] = nested
+          end
+        end
       end
       cur = cur.next
     end
@@ -478,14 +531,25 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
 `;
 }
 
-function buildLuaTeXOracleDocument({ text, align, widthPt }) {
-  const snippet = buildTikzSnippet({ text, align, widthPt });
+function buildLuaTeXOracleDocument({ text, align, widthPt, fontEncoding }) {
+  const forceComputerModern = fontEncoding === "OT1";
+  const snippet = buildTikzSnippet({
+    text,
+    align,
+    widthPt,
+    fontCommand: forceComputerModern ? String.raw`\tikzcomparecmr` : "",
+  });
+  const fontEncodingLine = fontEncoding === "T1" ? String.raw`\usepackage[T1]{fontenc}` : "";
+  const fontDefinitionLine = forceComputerModern
+    ? String.raw`\font\tikzcomparecmr=cmr10 at 10pt`
+    : "";
 
   return String.raw`\documentclass{standalone}
-\usepackage[T1]{fontenc}
+${fontEncodingLine}
 \usepackage{tikz}
 \begin{document}
 \makeatletter
+${fontDefinitionLine}
 \pretolerance=100
 \tolerance=200
 \hyphenpenalty=50
@@ -500,6 +564,51 @@ function buildLuaTeXOracleDocument({ text, align, widthPt }) {
 `;
 }
 
+function oracleCacheKey(caseSpec) {
+  const payload = {
+    version: ORACLE_CACHE_VERSION,
+    align: caseSpec.align,
+    widthPt: caseSpec.widthPt,
+    fontEncoding: caseSpec.fontEncoding,
+    text: caseSpec.text,
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function tryReadCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir) {
+  if (!oracleCacheDir) {
+    return null;
+  }
+  const key = oracleCacheKey(caseSpec);
+  const cachePath = join(oracleCacheDir, `${key}.json`);
+  if (!existsSync(cachePath)) {
+    return null;
+  }
+  const oracleJsonPath = join(caseDir, "oracle.json");
+  copyFileSync(cachePath, oracleJsonPath);
+  writeFileSync(
+    join(caseDir, "oracle-cache.json"),
+    JSON.stringify({ status: "hit", key, path: cachePath }, null, 2),
+    "utf8"
+  );
+  return JSON.parse(readFileSync(oracleJsonPath, "utf8"));
+}
+
+function writeCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir, oracleJsonPath) {
+  if (!oracleCacheDir) {
+    return;
+  }
+  mkdirSync(oracleCacheDir, { recursive: true });
+  const key = oracleCacheKey(caseSpec);
+  const cachePath = join(oracleCacheDir, `${key}.json`);
+  copyFileSync(oracleJsonPath, cachePath);
+  writeFileSync(
+    join(caseDir, "oracle-cache.json"),
+    JSON.stringify({ status: "miss", key, path: cachePath }, null, 2),
+    "utf8"
+  );
+}
+
 function runCommand(command, args, options = {}) {
   return spawnSync(command, args, {
     cwd: options.cwd,
@@ -508,7 +617,12 @@ function runCommand(command, args, options = {}) {
   });
 }
 
-function runLuaTeXOracle(caseSpec, caseDir) {
+function runLuaTeXOracle(caseSpec, caseDir, oracleCacheDir) {
+  const cached = tryReadCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir);
+  if (cached) {
+    return cached;
+  }
+
   if (!commandExists("lualatex")) {
     throw new Error("lualatex command not found.");
   }
@@ -544,6 +658,7 @@ function runLuaTeXOracle(caseSpec, caseDir) {
       throw new Error(`LuaTeX oracle did not produce ${basename(oracleJsonPath)}.`);
     }
     writeFileSync(oracleJsonPath, readFileSync(oracleJsonTempPath, "utf8"), "utf8");
+    writeCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir, oracleJsonPath);
     return JSON.parse(readFileSync(oracleJsonPath, "utf8"));
   } finally {
     rmSync(workDir, { recursive: true, force: true });
@@ -706,13 +821,13 @@ ${rows}
   writeFileSync(join(runDir, "index.html"), html, "utf8");
 }
 
-async function runCase(caseSpec, renderer, runDir, index) {
+async function runCase(caseSpec, renderer, runDir, index, oracleCacheDir) {
   const slug = `${String(index + 1).padStart(3, "0")}-${slugify(`${caseSpec.align}-${caseSpec.widthPt}-${caseSpec.text.slice(0, 48)}`)}`;
   const caseDir = join(runDir, slug);
   mkdirSync(caseDir, { recursive: true });
 
   try {
-    const oracle = runLuaTeXOracle(caseSpec, caseDir);
+    const oracle = runLuaTeXOracle(caseSpec, caseDir, oracleCacheDir);
     const ours = await runOurRenderer(caseSpec, caseDir, renderer);
     const comparison = compareParagraphLines(oracle, ours);
     const payload = {
@@ -800,6 +915,8 @@ async function main() {
   mkdirSync(options.outDir, { recursive: true });
   const runDir = join(options.outDir, timestampSlug());
   mkdirSync(runDir, { recursive: true });
+  const oracleCacheDir = options.oracleCacheDir ?? join(options.outDir, "oracle-cache");
+  mkdirSync(oracleCacheDir, { recursive: true });
 
   const renderer = await loadRendererModules();
   const cases = [];
@@ -819,9 +936,10 @@ async function main() {
         id: `fuzz-${index + 1}`,
         align: sampleOne(rng, options.alignments),
         widthPt: sampleOne(rng, options.widths),
+        fontEncoding: options.fontEncoding,
         text: buildRandomParagraph(rng, wordBank, options),
       };
-      const payload = await runCase(caseSpec, renderer, runDir, index);
+      const payload = await runCase(caseSpec, renderer, runDir, index, oracleCacheDir);
       cases.push(payload);
       if (payload.status === "ok") {
         const marker = payload.comparison.exactLineTextAgreement ? "match" : "mismatch";
@@ -845,9 +963,10 @@ async function main() {
       id: "single-case",
       align: options.align,
       widthPt: options.widthPt,
+      fontEncoding: options.fontEncoding,
       text,
     };
-    const payload = await runCase(caseSpec, renderer, runDir, 0);
+    const payload = await runCase(caseSpec, renderer, runDir, 0, oracleCacheDir);
     if (payload.status !== "ok") {
       throw new Error(payload.error);
     }
