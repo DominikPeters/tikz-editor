@@ -1,5 +1,6 @@
 import { englishDefaults } from '../languages/en.js';
 import type { ParagraphModel } from './items.js';
+import type { DiscretionaryMeasurement } from './measure.js';
 import type { BreakDecision, GreedyLine, TextRun } from './types.js';
 
 export interface DpResult {
@@ -28,12 +29,17 @@ export interface DpOptions {
   parfillskipShrink?: number;
   preventOverflow?: boolean;
   allowInfeasible?: boolean;
+  allowLastResortOverfull?: boolean;
   replaceEqualCostActiveState?: boolean;
 }
 
 interface Cursor {
   runIndex: number;
   textOffset: number;
+  pendingText?: string;
+  pendingSourceStart?: number;
+  pendingSourceEnd?: number;
+  pendingWidth?: number;
 }
 
 interface SpacePenalty {
@@ -59,6 +65,7 @@ interface TextPenalty {
   width: number;
   flagged: boolean;
   hyphenSource?: 'automatic' | 'explicit';
+  discretionary?: DiscretionaryMeasurement;
 }
 
 interface BreakCandidate {
@@ -85,6 +92,7 @@ interface CandidateScore {
   spaceDeltaPerGap: number;
   xOffset: number;
   constraintViolation: boolean;
+  artificial?: boolean;
 }
 
 interface ActiveChoice {
@@ -95,13 +103,30 @@ interface ActiveChoice {
 
 interface ActiveState {
   id: number;
-  key: string;
   cursor: Cursor;
+  lineNumber: number;
   previousFitnessClass: FitnessClass | null;
   previousFlagged: boolean;
   cost: number;
   previousStateId: number | null;
   incomingChoice: ActiveChoice | null;
+}
+
+interface Breakpoint {
+  key: string;
+  runIndex: number;
+  textOffset: number;
+  kind: 'space' | 'hyphen' | 'forced' | 'final';
+}
+
+interface BreakpointBest {
+  cost: number;
+  fromState: ActiveState;
+  choice: ActiveChoice;
+}
+
+interface ActiveLineClass {
+  states: ActiveState[];
 }
 
 type FitnessClass = 0 | 1 | 2 | 3; // very loose, loose, decent, tight
@@ -111,6 +136,7 @@ const MAX_BREAKPOINTS_FOR_DP = 1200;
 const MAX_ESTIMATED_EDGES = 2_000_000;
 const MAX_DP_STATES = 20000;
 const INITIAL_FITNESS_CLASS: FitnessClass = 2; // TeX's root active node is decent_fit.
+const FITNESS_CLASSES: readonly FitnessClass[] = [0, 1, 2, 3];
 const SP_PER_PT = 65536;
 const TEX_INF_BAD = 10000;
 
@@ -180,6 +206,14 @@ function normalizeCursor(
   forcedPenalties: Map<number, ForcedPenalty>
 ): Cursor {
   let { runIndex, textOffset } = cursor;
+  const pending = cursor.pendingText
+    ? {
+        pendingText: cursor.pendingText,
+        pendingSourceStart: cursor.pendingSourceStart,
+        pendingSourceEnd: cursor.pendingSourceEnd,
+        pendingWidth: cursor.pendingWidth,
+      }
+    : {};
 
   while (runIndex < model.runs.length) {
     const run = model.runs[runIndex];
@@ -198,13 +232,13 @@ function normalizeCursor(
         textOffset = 0;
         continue;
       }
-      return { runIndex, textOffset };
+      return { runIndex, textOffset, ...pending };
     }
 
-    return { runIndex, textOffset: 0 };
+    return { runIndex, textOffset: 0, ...pending };
   }
 
-  return { runIndex: model.runs.length, textOffset: 0 };
+  return { runIndex: model.runs.length, textOffset: 0, ...pending };
 }
 
 function collectSpacePenalties(model: ParagraphModel): Map<number, SpacePenalty> {
@@ -279,6 +313,7 @@ function collectTextPenalties(model: ParagraphModel): Map<number, TextPenalty[]>
       width: item.width,
       flagged: !!item.flagged,
       hyphenSource: item.payload.hyphenSource,
+      discretionary: item.payload.discretionary,
     });
     map.set(runIndex, list);
   }
@@ -346,6 +381,12 @@ function generateCandidates(
   let lastNonSpaceRun = -1;
   let stoppedAtForcedBoundary = false;
 
+  if (cursor.pendingText) {
+    naturalWidth = cursor.pendingWidth ?? model.measurement.measureText(cursor.pendingText, null);
+    naturalWidthWithoutTrailingSpaces = naturalWidth;
+    lastNonSpaceRun = cursor.runIndex;
+  }
+
   for (let runIndex = cursor.runIndex; runIndex < model.runs.length; runIndex++) {
     const run = model.runs[runIndex];
 
@@ -358,11 +399,21 @@ function generateCandidates(
           continue;
         }
 
-        const prefixWidth = textSliceWidth(model, run, offset, textPenalty.splitOffset);
+        const replaceStart = textPenalty.discretionary?.replaceStart ?? textPenalty.splitOffset;
+        if (replaceStart < offset) {
+          continue;
+        }
+        const prefixWidth = textSliceWidth(model, run, offset, replaceStart);
+        const preBreakWidth = textPenalty.discretionary?.preBreakWidth ?? textPenalty.width;
+        const discretionary = textPenalty.discretionary;
+        const nextTextOffset = discretionary?.postBreakText
+          ? discretionary.replaceEnd
+          : textPenalty.splitOffset;
+        const pendingText = discretionary?.postBreakText ?? undefined;
         candidates.push({
           endRun: runIndex,
           endTextOffset: textPenalty.splitOffset,
-          naturalWidth: naturalWidth + prefixWidth + textPenalty.width,
+          naturalWidth: naturalWidth + prefixWidth + preBreakWidth,
           spaceCount,
           spaceWidth,
           stretch,
@@ -376,12 +427,23 @@ function generateCandidates(
             hyphenSource: textPenalty.hyphenSource,
             flagged: textPenalty.flagged,
             width: textPenalty.width,
+            discretionary: textPenalty.discretionary,
           },
           breakPenalty: textPenalty.penalty,
           flagged: textPenalty.flagged,
           nextCursor: normalizeCursor(model, {
             runIndex,
-            textOffset: textPenalty.splitOffset,
+            textOffset: nextTextOffset,
+            pendingText,
+            pendingSourceStart: pendingText
+              ? run.sourceStart + textPenalty.splitOffset
+              : undefined,
+            pendingSourceEnd: pendingText
+              ? run.sourceStart + (discretionary?.replaceEnd ?? textPenalty.splitOffset)
+              : undefined,
+            pendingWidth: pendingText
+              ? model.measurement.measureText(pendingText, run.wrapper)
+              : undefined,
           }, forcedPenalties),
         });
       }
@@ -563,18 +625,19 @@ function scoreCandidate(
     }
   } else if (delta < 0) {
     adjustment = 'shrink';
-    if (!Number.isFinite(totalShrink) || totalShrink <= 0) {
+    const overflow = -delta;
+    if (!Number.isFinite(totalShrink) || totalShrink <= 0 || overflow > totalShrink) {
       feasible = false;
       if (options.allowInfeasible) {
         ratio = delta / Math.max(width, 1);
         badness = badnessFromRatio(ratio);
       } else {
         ratio = Number.NEGATIVE_INFINITY;
-        badness = 10_000;
+        badness = TEX_INF_BAD + 1;
       }
     } else {
       ratio = delta / totalShrink;
-      badness = texBadness(-delta, totalShrink);
+      badness = texBadness(overflow, totalShrink);
     }
   }
 
@@ -636,7 +699,7 @@ function scoreCandidate(
     return null;
   }
 
-  const base = linePenalty * linePenalty;
+  const base = Math.abs(linePenalty) >= 10_000 ? 100_000_000 : linePenalty * linePenalty;
   let demerits = base;
 
   if (penalty >= 0) {
@@ -676,14 +739,176 @@ function scoreCandidate(
   };
 }
 
-function cursorKey(
-  cursor: Cursor,
-  previousFitnessClass: FitnessClass | null,
-  previousFlagged: boolean
-): string {
-  return `${cursor.runIndex}:${cursor.textOffset}:${previousFitnessClass ?? -1}:${
-    previousFlagged ? 1 : 0
-  }`;
+function breakpointKeyForCandidate(candidate: BreakCandidate): string {
+  if (!candidate.break) {
+    return 'final';
+  }
+  if (candidate.break.kind === 'hyphen') {
+    return `hyphen:${candidate.break.runIndex}:${candidate.break.splitOffset ?? -1}`;
+  }
+  return `${candidate.break.kind}:${candidate.break.runIndex}`;
+}
+
+function collectBreakpoints(params: {
+  model: ParagraphModel;
+  forcedPenalties: Map<number, ForcedPenalty>;
+  spacePenalties: Map<number, SpacePenalty>;
+  textPenalties: Map<number, TextPenalty[]>;
+}): Breakpoint[] {
+  const breakpoints = new Map<string, Breakpoint>();
+  for (const runIndex of params.spacePenalties.keys()) {
+    const key = `space:${runIndex}`;
+    breakpoints.set(key, { key, runIndex, textOffset: 0, kind: 'space' });
+  }
+  for (const runIndex of params.forcedPenalties.keys()) {
+    const key = `forced:${runIndex}`;
+    breakpoints.set(key, { key, runIndex, textOffset: 0, kind: 'forced' });
+  }
+  for (const [runIndex, penalties] of params.textPenalties) {
+    for (const penalty of penalties) {
+      const key = `hyphen:${runIndex}:${penalty.splitOffset}`;
+      breakpoints.set(key, {
+        key,
+        runIndex,
+        textOffset: penalty.splitOffset,
+        kind: 'hyphen',
+      });
+    }
+  }
+  breakpoints.set('final', {
+    key: 'final',
+    runIndex: params.model.runs.length,
+    textOffset: 0,
+    kind: 'final',
+  });
+
+  return [...breakpoints.values()].sort((a, b) => {
+    if (a.runIndex !== b.runIndex) {
+      return a.runIndex - b.runIndex;
+    }
+    if (a.textOffset !== b.textOffset) {
+      return a.textOffset - b.textOffset;
+    }
+    return a.key.localeCompare(b.key);
+  });
+}
+
+function totalCostForTransition(
+  state: ActiveState,
+  candidate: BreakCandidate,
+  score: CandidateScore,
+  options: Required<
+    Pick<DpOptions, 'adjdemerits' | 'doublehyphendemerits' | 'finalhyphendemerits'>
+  >,
+  isLastLine: boolean
+): number {
+  if (score.artificial) {
+    return state.cost;
+  }
+  let totalCost = state.cost + score.demerits;
+  if (
+    state.previousFitnessClass !== null &&
+    incompatibleFitness(state.previousFitnessClass, score.fitnessClass)
+  ) {
+    totalCost += options.adjdemerits;
+  }
+  if (state.previousFlagged) {
+    if (isLastLine) {
+      totalCost += options.finalhyphendemerits;
+    } else if (candidate.flagged) {
+      totalCost += options.doublehyphendemerits;
+    }
+  }
+  return totalCost;
+}
+
+function candidateIsTooTightForFuture(
+  candidate: BreakCandidate,
+  width: number,
+  options: Required<
+    Pick<
+      DpOptions,
+      | 'leftskipWidth'
+      | 'leftskipShrink'
+      | 'rightskipWidth'
+      | 'rightskipShrink'
+      | 'parfillskipWidth'
+      | 'parfillskipShrink'
+      | 'preventOverflow'
+      | 'allowInfeasible'
+    >
+  >,
+  isLastLine: boolean
+): boolean {
+  if (options.allowInfeasible) {
+    return false;
+  }
+  const lineNaturalWidth =
+    candidate.naturalWidth +
+    options.leftskipWidth +
+    options.rightskipWidth +
+    (isLastLine ? options.parfillskipWidth : 0);
+  const totalShrink =
+    candidate.shrink +
+    options.leftskipShrink +
+    options.rightskipShrink +
+    (isLastLine ? options.parfillskipShrink : 0);
+  return lineNaturalWidth > width + totalShrink;
+}
+
+function artificialOverfullScore(
+  candidate: BreakCandidate,
+  width: number,
+  options: Required<
+    Pick<
+      DpOptions,
+      | 'leftskipWidth'
+      | 'leftskipStretch'
+      | 'leftskipShrink'
+      | 'rightskipWidth'
+      | 'rightskipStretch'
+      | 'rightskipShrink'
+      | 'parfillskipWidth'
+      | 'parfillskipStretch'
+      | 'parfillskipShrink'
+    >
+  >,
+  isLastLine: boolean
+): CandidateScore {
+  const lineNaturalWidth =
+    candidate.naturalWidth +
+    options.leftskipWidth +
+    options.rightskipWidth +
+    (isLastLine ? options.parfillskipWidth : 0);
+  const totalShrink =
+    candidate.shrink +
+    options.leftskipShrink +
+    options.rightskipShrink +
+    (isLastLine ? options.parfillskipShrink : 0);
+  const delta = width - lineNaturalWidth;
+  const ratio = totalShrink > 0 && Number.isFinite(totalShrink)
+    ? delta / totalShrink
+    : Number.NEGATIVE_INFINITY;
+  let xOffset = options.leftskipWidth;
+  if (ratio < 0 && Number.isFinite(options.leftskipShrink)) {
+    xOffset += ratio * options.leftskipShrink;
+  }
+
+  return {
+    badness: TEX_INF_BAD + 1,
+    fitnessClass: 3,
+    demerits: 0,
+    ratio,
+    delta,
+    lineNaturalWidth,
+    spaceDeltaPerGap:
+      candidate.spaceCount > 0 && Number.isFinite(ratio) && Number.isFinite(candidate.shrink)
+        ? (ratio * candidate.shrink) / candidate.spaceCount
+        : 0,
+    xOffset: Number.isFinite(xOffset) ? xOffset : 0,
+    constraintViolation: true,
+    artificial: true,
+  };
 }
 
 export function breakWithDp(
@@ -786,26 +1011,31 @@ export function breakWithDp(
     parfillskipShrink: options.parfillskipShrink ?? 0,
     preventOverflow: options.preventOverflow ?? false,
     allowInfeasible: options.allowInfeasible ?? false,
+    allowLastResortOverfull: options.allowLastResortOverfull ?? false,
     replaceEqualCostActiveState: options.replaceEqualCostActiveState ?? true,
   };
 
-  const bestStateIdByKey = new Map<string, number>();
+  const breakpoints = collectBreakpoints({
+    model,
+    forcedPenalties,
+    spacePenalties,
+    textPenalties,
+  });
   const states = new Map<number, ActiveState>();
-  const queue: number[] = [];
+  let activeStates: ActiveState[] = [];
   let nextStateId = 1;
-  const firstKey = cursorKey(firstCursor, null, false);
-  states.set(0, {
+  const rootState: ActiveState = {
     id: 0,
-    key: firstKey,
     cursor: firstCursor,
+    lineNumber: 1,
     previousFitnessClass: INITIAL_FITNESS_CLASS,
     previousFlagged: false,
     cost: 0,
     previousStateId: null,
     incomingChoice: null,
-  });
-  bestStateIdByKey.set(firstKey, 0);
-  queue.push(0);
+  };
+  states.set(0, rootState);
+  activeStates.push(rootState);
   let bestFinal:
     | {
         cost: number;
@@ -814,110 +1044,178 @@ export function breakWithDp(
       }
     | null = null;
 
-  while (queue.length > 0) {
-    const stateId = queue.shift()!;
-    const state = states.get(stateId);
-    if (!state) {
-      continue;
-    }
-    if (bestStateIdByKey.get(state.key) !== state.id) {
-      continue;
+  for (const breakpoint of breakpoints) {
+    if (activeStates.length === 0) {
+      break;
     }
 
-    const candidates = generateCandidates(
-      model,
-      state.cursor,
-      forcedPenalties,
-      spacePenalties,
-      glueMetrics,
-      textPenalties
-    );
+    const newStates: ActiveState[] = [];
+    const deactivatedStateIds = new Set<number>();
+    const lineClasses: ActiveLineClass[] = [
+      { states: activeStates },
+    ];
 
-    for (const candidate of candidates) {
-      const isLastLine = candidate.break === null;
-      const score = scoreCandidate(
-        candidate,
-        width,
-        resolvedOptions.tolerance,
-        resolvedOptions,
-        isLastLine
-      );
-      if (!score) {
+    for (const lineClass of lineClasses) {
+      const bestByFitness = new Map<FitnessClass, BreakpointBest>();
+      let minimumDemerits = Infinity;
+
+      for (let stateIndex = 0; stateIndex < lineClass.states.length; stateIndex++) {
+        const state = lineClass.states[stateIndex];
+        const candidate = generateCandidates(
+          model,
+          state.cursor,
+          forcedPenalties,
+          spacePenalties,
+          glueMetrics,
+          textPenalties
+        ).find((item) => breakpointKeyForCandidate(item) === breakpoint.key);
+        if (!candidate) {
+          continue;
+        }
+
+        const isLastLine = breakpoint.kind === 'final';
+        const score = scoreCandidate(
+          candidate,
+          width,
+          resolvedOptions.tolerance,
+          resolvedOptions,
+          isLastLine
+        );
+        if (!score) {
+          const tooTight = candidateIsTooTightForFuture(
+            candidate,
+            width,
+            resolvedOptions,
+            isLastLine
+          );
+          if (tooTight) {
+            deactivatedStateIds.add(state.id);
+          }
+          if (
+            resolvedOptions.allowLastResortOverfull &&
+            tooTight &&
+            !isLastLine &&
+            !Number.isFinite(minimumDemerits) &&
+            stateIndex === lineClass.states.length - 1 &&
+            lineClass.states
+              .slice(0, stateIndex)
+              .every((previousState) => deactivatedStateIds.has(previousState.id))
+          ) {
+            const artificialScore = artificialOverfullScore(
+              candidate,
+              width,
+              resolvedOptions,
+              isLastLine
+            );
+            const choice: ActiveChoice = {
+              candidate,
+              fitnessClass: artificialScore.fitnessClass,
+              score: artificialScore,
+            };
+            bestByFitness.set(artificialScore.fitnessClass, {
+              cost: state.cost,
+              fromState: state,
+              choice,
+            });
+            minimumDemerits = state.cost;
+          }
+          continue;
+        }
+
+        const choice: ActiveChoice = {
+          candidate,
+          fitnessClass: score.fitnessClass,
+          score,
+        };
+        const totalCost = totalCostForTransition(
+          state,
+          candidate,
+          score,
+          resolvedOptions,
+          isLastLine
+        );
+        if (isLastLine) {
+          if (
+            bestFinal === null ||
+            totalCost < bestFinal.cost ||
+            (totalCost === bestFinal.cost && resolvedOptions.replaceEqualCostActiveState)
+          ) {
+            bestFinal = {
+              cost: totalCost,
+              fromStateId: state.id,
+              choice,
+            };
+          }
+          continue;
+        }
+
+        const existing = bestByFitness.get(score.fitnessClass);
+        if (
+          !existing ||
+          totalCost < existing.cost ||
+          (totalCost === existing.cost && resolvedOptions.replaceEqualCostActiveState)
+        ) {
+          bestByFitness.set(score.fitnessClass, {
+            cost: totalCost,
+            fromState: state,
+            choice,
+          });
+        }
+        if (totalCost < minimumDemerits) {
+          minimumDemerits = totalCost;
+        }
+      }
+
+      if (breakpoint.kind === 'final' || !Number.isFinite(minimumDemerits)) {
         continue;
       }
 
-      let totalCost = state.cost + score.demerits;
-
-      if (
-        state.previousFitnessClass !== null &&
-        incompatibleFitness(state.previousFitnessClass, score.fitnessClass)
-      ) {
-        totalCost += resolvedOptions.adjdemerits;
-      }
-
-      if (state.previousFlagged && candidate.flagged) {
-        totalCost += resolvedOptions.doublehyphendemerits;
-      }
-
-      const choice: ActiveChoice = {
-        candidate,
-        fitnessClass: score.fitnessClass,
-        score,
-      };
-
-      if (isLastLine) {
-        if (state.previousFlagged) {
-          totalCost += resolvedOptions.finalhyphendemerits;
+      const activeThreshold = minimumDemerits + Math.abs(resolvedOptions.adjdemerits);
+      for (const fitnessClass of FITNESS_CLASSES) {
+        const best = bestByFitness.get(fitnessClass);
+        if (!best) {
+          continue;
         }
-        if (
-          bestFinal === null ||
-          totalCost < bestFinal.cost ||
-          (resolvedOptions.allowInfeasible && totalCost === bestFinal.cost)
-        ) {
-          bestFinal = {
-            cost: totalCost,
-            fromStateId: state.id,
-            choice,
+        if (best.cost > activeThreshold) {
+          continue;
+        }
+        const nextCursor = normalizeCursor(
+          model,
+          best.choice.candidate.nextCursor,
+          forcedPenalties
+        );
+        const allocatedStateId = nextStateId++;
+        const nextState: ActiveState = {
+          id: allocatedStateId,
+          cursor: nextCursor,
+          lineNumber: best.fromState.lineNumber + 1,
+          previousFitnessClass: fitnessClass,
+          previousFlagged: best.choice.candidate.flagged,
+          cost: best.cost,
+          previousStateId: best.fromState.id,
+          incomingChoice: best.choice,
+        };
+        states.set(allocatedStateId, nextState);
+        newStates.push(nextState);
+        if (states.size > MAX_DP_STATES) {
+          return {
+            lines: [],
+            errors: [`DP state limit exceeded (${MAX_DP_STATES}).`],
+            canProceed: false,
+            totalCost: Infinity,
+            mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
           };
         }
-        continue;
       }
+    }
 
-      const nextCursor = normalizeCursor(model, candidate.nextCursor, forcedPenalties);
-      const nextKey = cursorKey(nextCursor, score.fitnessClass, candidate.flagged);
-      const existingId = bestStateIdByKey.get(nextKey);
-      const existing = existingId === undefined ? null : states.get(existingId) ?? null;
-      if (
-        existing &&
-        (totalCost > existing.cost ||
-          (totalCost === existing.cost && !resolvedOptions.replaceEqualCostActiveState))
-      ) {
-        continue;
-      }
-
-      const allocatedStateId = nextStateId++;
-      const nextState: ActiveState = {
-        id: allocatedStateId,
-        key: nextKey,
-        cursor: nextCursor,
-        previousFitnessClass: score.fitnessClass,
-        previousFlagged: candidate.flagged,
-        cost: totalCost,
-        previousStateId: state.id,
-        incomingChoice: choice,
-      };
-      states.set(allocatedStateId, nextState);
-      bestStateIdByKey.set(nextKey, allocatedStateId);
-      queue.push(allocatedStateId);
-      if (states.size > MAX_DP_STATES) {
-        return {
-          lines: [],
-          errors: [`DP state limit exceeded (${MAX_DP_STATES}).`],
-          canProceed: false,
-          totalCost: Infinity,
-          mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
-        };
-      }
+    if (breakpoint.kind === 'forced') {
+      activeStates = newStates;
+    } else {
+      activeStates = [
+        ...activeStates.filter((state) => !deactivatedStateIds.has(state.id)),
+        ...newStates,
+      ];
     }
   }
 
@@ -977,6 +1275,9 @@ export function breakWithDp(
       lineIndex,
       startRun: normalizedCursor.runIndex,
       startTextOffset: normalizedCursor.textOffset,
+      startPendingText: normalizedCursor.pendingText,
+      startPendingSourceStart: normalizedCursor.pendingSourceStart,
+      startPendingSourceEnd: normalizedCursor.pendingSourceEnd,
       endRun: candidate.endRun,
       endTextOffset: candidate.endTextOffset,
       width: candidate.naturalWidth,

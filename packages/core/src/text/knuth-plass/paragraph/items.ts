@@ -1,6 +1,6 @@
 import { englishDefaults } from '../languages/en.js';
 import type { Hyphenator } from './hyphenate.js';
-import type { MeasurementService } from './measure.js';
+import type { DiscretionaryMeasurement, MeasurementService } from './measure.js';
 import type { BreakRef, ParagraphRun, TextRun } from './types.js';
 
 export interface BoxItem {
@@ -37,6 +37,7 @@ export interface PenaltyItem {
     visibleHyphen: boolean;
     splitOffset?: number;
     hyphenSource?: 'automatic' | 'explicit';
+    discretionary?: DiscretionaryMeasurement;
   };
 }
 
@@ -138,15 +139,23 @@ function addAutomaticHyphenPenaltiesForTextRun(
         continue;
       }
 
-      const penaltyWidth = measurement.measureHyphenatedPrefix
-        ? measurement.measureHyphenatedPrefix(
-            run.text,
-            wordStart,
-            splitOffset,
-            '-',
-            run.wrapper
-          )
-        : hyphenWidth;
+      const discretionary = measurement.measureDiscretionary?.(
+        run.text,
+        wordStart,
+        splitOffset,
+        '-',
+        run.wrapper
+      );
+      const penaltyWidth = discretionary?.insertedWidth
+        ?? (measurement.measureHyphenatedPrefix
+          ? measurement.measureHyphenatedPrefix(
+              run.text,
+              wordStart,
+              splitOffset,
+              '-',
+              run.wrapper
+            )
+          : hyphenWidth);
 
       items.push({
         kind: 'penalty',
@@ -160,6 +169,7 @@ function addAutomaticHyphenPenaltiesForTextRun(
           visibleHyphen: true,
           splitOffset,
           hyphenSource: 'automatic',
+          discretionary,
         },
       });
     }

@@ -443,7 +443,8 @@ describe("knuth-plass paragraph helpers", () => {
       width: 1,
       break: { kind: "forced", runIndex: 0 }
     });
-    expect(result.lines.some((line) => line.break?.kind === "hyphen" && line.break.splitOffset === 2)).toBe(true);
+    expect(result.lines.at(-1)?.break).toBeNull();
+    expect(result.lines.at(-1)?.lineNaturalWidth).toBeGreaterThan(3);
     expect(result.lines.every((line) => line.break?.kind !== "space" || line.break.runIndex !== 3)).toBe(true);
     expect(result.lines.some((line) => line.xOffset !== 0)).toBe(true);
   });
@@ -1200,7 +1201,7 @@ describe("knuth-plass paragraph helpers", () => {
       getOuterBBox: () => ({ L: 1, w: 5, R: 2 })
     };
     const hyphenator = {
-      hyphenate: (word: string) => word === "pre-fix" ? [0, 3, 99] : []
+      hyphenate: (word: string) => word === "pre" ? [0, 2, 99] : []
     };
     const runs: ParagraphRun[] = [
       { ...textRun(0, "pre-fix", 0), wrapper: textWrapper },

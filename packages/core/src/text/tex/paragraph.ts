@@ -15,7 +15,7 @@ import type {
 } from "../knuth-plass/paragraph/types.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import { roundTexPt, tfmToPt } from "./fonts/units.js";
-import type { ResolvedTexFont, ShapedTexTextRun } from "./fonts/types.js";
+import type { ResolvedTexFont, ShapedTexTextRun, TexGlyphBox } from "./fonts/types.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 
@@ -127,7 +127,7 @@ export function layoutSimpleTexParagraph(
       ...dpOptions,
       tolerance,
       emergencyStretch,
-      allowInfeasible: alignment !== "justified",
+      allowLastResortOverfull: true,
     });
 
   if (!pass2.canProceed || pass2.lines.length === 0) {
@@ -372,6 +372,65 @@ function createTexParagraphMeasurement(
       computerModernTexMetricProvider.shapeText(prefix + hyphen, font).width - prefixWidth
     );
   };
+  const measureTexDiscretionary = (
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    wrapper: AnyWrapper | null | undefined
+  ) => {
+    const clampedStart = Math.max(0, Math.min(start, word.length));
+    const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
+    const simpleInsertedWidth = measureTexHyphenatedPrefix(
+      word,
+      clampedStart,
+      clampedEnd,
+      hyphen
+    );
+    const shaped = shapedRunForWrapper(wrapper);
+    const absoluteEnd = (shaped?.sourceStart ?? 0) + clampedEnd;
+    const ligature = shaped?.items.find((item): item is TexGlyphBox =>
+      item.kind === "glyph" &&
+      item.components.length > 1 &&
+      item.sourceStart < absoluteEnd &&
+      item.sourceEnd > absoluteEnd
+    );
+
+    if (!shaped || !ligature) {
+      return {
+        preBreakText: hyphen,
+        postBreakText: "",
+        replaceText: "",
+        replaceStart: clampedEnd,
+        replaceEnd: clampedEnd,
+        preBreakWidth: simpleInsertedWidth,
+        sourcePrefixWidth: 0,
+        insertedWidth: simpleInsertedWidth,
+      };
+    }
+
+    const replaceStart = Math.max(0, ligature.sourceStart - shaped.sourceStart);
+    const replaceEnd = Math.min(word.length, ligature.sourceEnd - shaped.sourceStart);
+    const sourcePrefix = word.slice(replaceStart, clampedEnd);
+    const preBreakText = `${sourcePrefix}${hyphen}`;
+    const sourcePrefixWidth = measureTexSlice(word, replaceStart, clampedEnd);
+    const preBreakWidth = computerModernTexMetricProvider.shapeText(preBreakText, font).width;
+    const postBreakText = word.slice(clampedEnd, replaceEnd);
+    const postBreakWidth = computerModernTexMetricProvider.shapeText(postBreakText, font).width;
+    const replaceText = word.slice(replaceStart, replaceEnd);
+    const replaceWidth = computerModernTexMetricProvider.shapeText(replaceText, font).width;
+
+    return {
+      preBreakText,
+      postBreakText,
+      replaceText,
+      replaceStart,
+      replaceEnd,
+      preBreakWidth,
+      sourcePrefixWidth,
+      insertedWidth: roundTexPt(preBreakWidth + postBreakWidth - replaceWidth),
+    };
+  };
   return {
     measureText: (value) => value === " " ? spaceWidth : computerModernTexMetricProvider.shapeText(value, font).width,
     measureWord: (word, wrapper) => shapedRunForWrapper(wrapper)?.width ?? computerModernTexMetricProvider.shapeText(word, font).width,
@@ -387,6 +446,8 @@ function createTexParagraphMeasurement(
     measureSlice: (word, start, end) => measureTexSlice(word, start, end),
     measureHyphenatedPrefix: (word, start, end, hyphen) =>
       measureTexHyphenatedPrefix(word, start, end, hyphen),
+    measureDiscretionary: (word, start, end, hyphen, wrapper) =>
+      measureTexDiscretionary(word, start, end, hyphen, wrapper),
     precomputeWord: () => {},
     primeRuns: () => {},
     getStats: () => ({ textCacheEntries: 0, wordPrefixEntries: 0, mathCacheEntries: 0 }),
@@ -428,22 +489,18 @@ function texParagraphDpOptions(
   };
 }
 
-function texParagraphTolerance(alignment: TexParagraphAlignment): number {
+function texParagraphTolerance(_alignment: TexParagraphAlignment): number {
   // TikZ text-width nodes are built in a LaTeX minipage. LaTeX's
   // \@arrayparboxrestore applies \sloppy before TikZ installs the alignment
-  // action, and non-justified alignment actions do not reset \tolerance.
-  return alignment !== "justified"
-    ? LATEX_PARBOX_SLOPPY_TOLERANCE
-    : englishDefaults.tolerance;
+  // action. TikZ's justify action restores finite left/right skips but does
+  // not reset \tolerance, so the effective tolerance remains sloppy.
+  return LATEX_PARBOX_SLOPPY_TOLERANCE;
 }
 
 function texParagraphEmergencyStretch(
   options: TexParagraphLayoutOptions,
-  alignment: TexParagraphAlignment
+  _alignment: TexParagraphAlignment
 ): number {
-  if (alignment === "justified") {
-    return 0;
-  }
   const font = options.font ?? computerModernTexMetricProvider.resolveFont();
   return LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM * font.atPt;
 }
@@ -496,6 +553,23 @@ function buildTexLineReport(
 ): LineReport {
   const segments: LineReport["segments"] = [];
   let x = line.xOffset ?? 0;
+  if (line.startPendingText) {
+    const shaped = computerModernTexMetricProvider.shapeText(line.startPendingText, params.font);
+    segments.push({
+      runIndex: line.startRun,
+      kind: "text",
+      text: line.startPendingText,
+      startOffset: 0,
+      endOffset: line.startPendingText.length,
+      sourceStartRaw: line.startPendingSourceStart,
+      sourceEndRaw: line.startPendingSourceEnd,
+      sourceKind: "text",
+      x,
+      width: shaped.width,
+      caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
+    });
+    x = roundTexPt(x + shaped.width);
+  }
   for (let runIndex = line.startRun; runIndex <= line.endRun; runIndex++) {
     const run = params.runs[runIndex];
     if (!run) {
@@ -503,8 +577,12 @@ function buildTexLineReport(
     }
     if (run.kind === "text") {
       const startOffset = runIndex === line.startRun ? line.startTextOffset : 0;
+      const breakDiscretionary =
+        line.break?.kind === "hyphen" && line.break.runIndex === runIndex
+          ? line.break.discretionary
+          : undefined;
       const endOffset = runIndex === line.endRun && line.endTextOffset !== null
-        ? line.endTextOffset
+        ? breakDiscretionary?.replaceStart ?? line.endTextOffset
         : run.text.length;
       if (endOffset <= startOffset) {
         continue;
@@ -554,7 +632,30 @@ function buildTexLineReport(
     x = roundTexPt(x + width);
   }
 
-  if (line.break?.kind === "hyphen" && line.break.visibleHyphen) {
+  if (line.break?.kind === "hyphen" && line.break.discretionary) {
+    const discretionary = line.break.discretionary;
+    const splitOffset = line.break.splitOffset ?? discretionary.replaceStart;
+    const sourceStartRaw = line.break.sourceOffset -
+      Math.max(0, splitOffset - discretionary.replaceStart);
+    const shaped = computerModernTexMetricProvider.shapeText(
+      discretionary.preBreakText,
+      params.font
+    );
+    segments.push({
+      runIndex: line.break.runIndex,
+      kind: "text",
+      text: discretionary.preBreakText,
+      startOffset: discretionary.replaceStart,
+      endOffset: splitOffset,
+      sourceStartRaw,
+      sourceEndRaw: line.break.sourceOffset,
+      sourceKind: "text",
+      x,
+      width: shaped.width,
+      caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
+    });
+    x = roundTexPt(x + shaped.width);
+  } else if (line.break?.kind === "hyphen" && line.break.visibleHyphen) {
     const width = computerModernTexMetricProvider.shapeText("-", params.font).width;
     const insertedWidth = line.break.width ?? width;
     const hyphenX = roundTexPt(x + insertedWidth - width);

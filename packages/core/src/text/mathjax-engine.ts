@@ -278,6 +278,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
           font: prepared.font,
           alignment,
           requestedAlignment: request.alignment ?? null,
+          eligible: prepared.simpleTexEligible,
           mode
         });
         if (entry) {
@@ -972,6 +973,7 @@ function buildSimpleTexTextCacheEntry(params: {
   font: TextFontOptions;
   alignment: NodeTextParagraphAlignment | null;
   requestedAlignment: NodeTextParagraphAlignment | null;
+  eligible: boolean;
   mode: "text" | "math";
 }): CachedRenderEntry | null {
   if (!isSimpleTexTextEligible(params)) {
@@ -1028,8 +1030,12 @@ function isSimpleTexTextEligible(params: {
   font: TextFontOptions;
   alignment: NodeTextParagraphAlignment | null;
   requestedAlignment?: NodeTextParagraphAlignment | null;
+  eligible?: boolean;
   mode?: "text" | "math";
 }): params is typeof params & { textWidthPt: number } {
+  if (params.eligible === false) {
+    return false;
+  }
   if (params.mode !== "text") {
     return false;
   }
@@ -1053,6 +1059,8 @@ function isSimpleTexTextEligible(params: {
   return (
     params.alignment == null ||
     params.alignment === "ragged-right" ||
+    params.alignment === "ragged-left" ||
+    params.alignment === "center" ||
     params.alignment === "justified"
   );
 }
@@ -1966,12 +1974,14 @@ function buildWrappedTeX(
 function normalizeMathJaxTextInput(
   text: string,
   font: TextFontOptions
-): { text: string; font: TextFontOptions } {
+): { text: string; font: TextFontOptions; simpleTexEligible: boolean } {
   const resolvedFont: TextFontOptions = { ...font };
   let resolvedText = text;
+  let strippedFontSwitch = false;
 
   for (const rule of FONT_SWITCH_RULES) {
     resolvedText = resolvedText.replace(rule.pattern, () => {
+      strippedFontSwitch = true;
       rule.apply(resolvedFont);
       return "";
     });
@@ -1981,7 +1991,8 @@ function normalizeMathJaxTextInput(
 
   return {
     text: resolvedText,
-    font: resolvedFont
+    font: resolvedFont,
+    simpleTexEligible: !strippedFontSwitch
   };
 }
 

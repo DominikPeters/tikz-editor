@@ -388,23 +388,26 @@ describe("mathjax node text engine", () => {
     const engine = await createMathJaxNodeTextEngine();
     const callsBeforeMeasure = texCalls.length;
 
-    const measured = engine.measure({
-      text: "Alpha Beta",
-      textWidthPt: 32,
-      alignment: "ragged-right",
-      fontStyle: "normal",
-      fontWeight: "normal",
-      fontFamily: "serif",
-      fontSizePt: 10
-    });
+    for (const alignment of ["ragged-right", "ragged-left", "center"] as const) {
+      const measured = engine.measure({
+        text: "Alpha Beta",
+        textWidthPt: 32,
+        alignment,
+        fontStyle: "normal",
+        fontWeight: "normal",
+        fontFamily: "serif",
+        fontSizePt: 10
+      });
 
+      expect(measured?.paragraphId).toMatch(/^tex:/);
+      const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+      const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
+      expect(report?.layoutMode).toBe("wrap");
+      expect(report?.alignment).toBe(alignment);
+      expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
+      expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
+    }
     expect(texCalls).toHaveLength(callsBeforeMeasure);
-    expect(measured?.paragraphId).toMatch(/^tex:/);
-    const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
-    const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
-    expect(report?.layoutMode).toBe("wrap");
-    expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
-    expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
   });
 
   it("falls back to MathJax for unsupported wrapped TeX syntax", async () => {
@@ -786,7 +789,7 @@ describe("mathjax node text engine", () => {
       alignment: "ragged-left",
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "sans",
       fontSizePt: 10
     })?.paragraphId).toBe("existing-script");
     expect(outputJax.knuthPlassOptions).toMatchObject({
@@ -882,7 +885,7 @@ describe("mathjax node text engine", () => {
       alignment: "center",
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "sans",
       fontSizePt: 10
     })?.paragraphId).toBe("fallback-options");
     expect(KnuthPlassVisitor.getConfiguredOptions()).toMatchObject({

@@ -23,10 +23,28 @@ export interface MeasurementService {
     hyphen: string,
     mtextWrapper: AnyWrapper | null | undefined
   ): number;
+  measureDiscretionary?(
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): DiscretionaryMeasurement;
   measureMath(wrapper: AnyWrapper | null | undefined): number;
   precomputeWord(word: string, mtextWrapper: AnyWrapper | null | undefined): void;
   primeRuns(runs: ParagraphRun[]): void;
   getStats(): MeasurementStats;
+}
+
+export interface DiscretionaryMeasurement {
+  preBreakText: string;
+  postBreakText: string;
+  replaceText: string;
+  replaceStart: number;
+  replaceEnd: number;
+  preBreakWidth: number;
+  sourcePrefixWidth: number;
+  insertedWidth: number;
 }
 
 interface InternalStats {
@@ -122,6 +140,35 @@ export function createMeasurementService(): MeasurementService {
     return measureText(prefix + hyphen, mtextWrapper) - measureText(prefix, mtextWrapper);
   };
 
+  const measureDiscretionary = (
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): DiscretionaryMeasurement => {
+    const clampedStart = Math.max(0, Math.min(start, word.length));
+    const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
+    const sourcePrefix = word.slice(clampedStart, clampedEnd);
+    const insertedWidth = measureHyphenatedPrefix(
+      word,
+      clampedStart,
+      clampedEnd,
+      hyphen,
+      mtextWrapper
+    );
+    return {
+      preBreakText: hyphen,
+      postBreakText: '',
+      replaceText: '',
+      replaceStart: clampedEnd,
+      replaceEnd: clampedEnd,
+      preBreakWidth: insertedWidth,
+      sourcePrefixWidth: measureText(sourcePrefix, mtextWrapper),
+      insertedWidth,
+    };
+  };
+
   const measureMath = (wrapper: AnyWrapper | null | undefined): number => {
     if (!wrapper || typeof wrapper !== 'object') return 0;
 
@@ -174,6 +221,7 @@ export function createMeasurementService(): MeasurementService {
     measureWord,
     measurePrefix,
     measureHyphenatedPrefix,
+    measureDiscretionary,
     measureMath,
     precomputeWord,
     primeRuns,

@@ -332,6 +332,26 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("renders TeX discretionary pre- and post-break material inside ligatures", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph("snuffless", {
+      paragraphId: "tex:discretionary-ligature",
+      width: 24,
+      tolerance: 9999,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["snuff-", "less"]);
+    expect(result.report?.lines[0]?.segments.map((segment) => segment.text)).toEqual([
+      "snu",
+      "ff-",
+    ]);
+    expect(result.report?.lines[1]?.segments.map((segment) => segment.text)).toEqual([
+      "l",
+      "ess",
+    ]);
+  });
+
   it("wraps plain text with TeX-shaped Computer Modern word widths", () => {
     const font = computerModernTexMetricProvider.resolveFont();
     const alphaWidth = computerModernTexMetricProvider.shapeText("Alpha", font).width;

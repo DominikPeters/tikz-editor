@@ -123,6 +123,9 @@ export interface GreedyLine {
   lineIndex: number;
   startRun: number;
   startTextOffset: number;
+  startPendingText?: string;
+  startPendingSourceStart?: number;
+  startPendingSourceEnd?: number;
   endRun: number;
   endTextOffset: number | null;
   width: number;
@@ -136,6 +139,17 @@ export interface GreedyLine {
   break: BreakDecision | null;
 }
 
+export interface BreakDiscretionary {
+  preBreakText: string;
+  postBreakText: string;
+  replaceText: string;
+  replaceStart: number;
+  replaceEnd: number;
+  preBreakWidth: number;
+  sourcePrefixWidth: number;
+  insertedWidth: number;
+}
+
 export interface BreakDecision {
   kind: 'space' | 'hyphen' | 'forced';
   runIndex: number;
@@ -146,6 +160,7 @@ export interface BreakDecision {
   splitOffset?: number;
   flagged?: boolean;
   width?: number;
+  discretionary?: BreakDiscretionary;
 }
 
 export interface GreedyResult {
