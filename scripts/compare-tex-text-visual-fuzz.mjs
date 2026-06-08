@@ -17,6 +17,7 @@ const defaultScale = 8;
 const defaultThresholdRatio = 1.5;
 const defaultGlyphDxTolerance = 1.5;
 const defaultGlyphDyTolerance = 0.25;
+const defaultCaseMode = "broad";
 const defaultTextFontSize = 9.96264;
 const lineHeightPt = defaultTextFontSize * 1.2;
 const firstLineAscentPt = defaultTextFontSize * 0.7;
@@ -41,6 +42,14 @@ const words = [
   "future", "basic", "normal", "narrow", "wide", "faithful", "output",
 ];
 
+const ligatureWords = [
+  "office", "official", "officer", "offline", "offload", "coffee", "coffees",
+  "affinity", "affixed", "afflict", "efficient", "efficiency", "difficult",
+  "sufficient", "different", "difference", "final", "finally", "figure",
+  "file", "filter", "profile", "refine", "reflect", "flight", "flower",
+  "flexible", "shuffle", "raffle", "stiffly", "fulfill", "fulfilling",
+];
+
 function usage() {
   return `
 Usage:
@@ -52,6 +61,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
+  --case-mode <mode>      Case generator: broad or ligatures. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -70,6 +80,7 @@ function parseArgs(argv) {
     scale: defaultScale,
     outDir: defaultOutDir,
     cacheDir: defaultCacheDir,
+    caseMode: defaultCaseMode,
     cache: true,
     refreshCache: false,
     thresholdRatio: defaultThresholdRatio,
@@ -107,6 +118,11 @@ function parseArgs(argv) {
     }
     if (arg === "--cache-dir" && next != null) {
       options.cacheDir = resolve(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--case-mode" && next != null) {
+      options.caseMode = next;
       index += 1;
       continue;
     }
@@ -153,6 +169,9 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
+  }
+  if (!["broad", "ligatures"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad or ligatures.");
   }
   return options;
 }
@@ -208,6 +227,26 @@ function paragraph(random, sentenceCount) {
   return Array.from({ length: sentenceCount }, () => sentence(random, 5, 12)).join(" ");
 }
 
+function ligatureSentence(random, minWords, maxWords) {
+  const count = minWords + Math.floor(random() * (maxWords - minWords + 1));
+  const parts = [];
+  for (let index = 0; index < count; index += 1) {
+    let word = choice(random, ligatureWords);
+    if (index === 0) {
+      word = word[0].toUpperCase() + word.slice(1);
+    }
+    if (index > 1 && random() < 0.14) {
+      word += ",";
+    }
+    parts.push(word);
+  }
+  return `${parts.join(" ")}.`;
+}
+
+function ligatureParagraph(random, sentenceCount) {
+  return Array.from({ length: sentenceCount }, () => ligatureSentence(random, 6, 13)).join(" ");
+}
+
 function generateCase(index, random) {
   const alignment = alignments[index % alignments.length];
   const widths = [80, 100, 120, 150, 200, 240, 320];
@@ -237,6 +276,38 @@ function generateCase(index, random) {
     parindent,
     alignment,
   };
+}
+
+function generateLigatureCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [70, 85, 100, 120, 150, 180, 220, 260];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10]);
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = ligatureParagraph(random, 2 + Math.floor(random() * 2));
+  } else if (feature === 1) {
+    text = `${ligatureParagraph(random, 1)} \\par ${ligatureParagraph(random, 1 + Math.floor(random() * 2))}`;
+  } else if (feature === 2) {
+    text = `${ligatureSentence(random, 6, 10)} \\\\[${choice(random, [4, 7])}pt] ${ligatureParagraph(random, 1)}`;
+  } else {
+    text = `${ligatureParagraph(random, 1)} \\par \\noindent ${ligatureParagraph(random, 1)}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "ligature",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
+function generateCaseForMode(index, random, mode) {
+  return mode === "ligatures"
+    ? generateLigatureCase(index, random)
+    : generateCase(index, random);
 }
 
 function formatPt(value) {
@@ -928,7 +999,10 @@ async function main() {
   mkdirSync(runDir, { recursive: true });
 
   const random = mulberry32(options.seed);
-  const cases = Array.from({ length: options.cases }, (_, index) => generateCase(index, random));
+  const cases = Array.from(
+    { length: options.cases },
+    (_, index) => generateCaseForMode(index, random, options.caseMode)
+  );
   const rows = [];
   const errors = [];
   const texOracleCache = {

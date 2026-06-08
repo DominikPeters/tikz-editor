@@ -26,6 +26,12 @@ Run the larger current-regime matrix:
 npm run compare:tex-text-visual-fuzz:large
 ```
 
+Run the ligature-focused matrix:
+
+```sh
+npm run compare:tex-text-visual-fuzz:ligatures
+```
+
 Both commands use `artifacts/tex-text-svgtrace-cache` for TeX oracle artifacts. The first run for a new seed or matrix compiles TeX; later runs reuse cached `case.tex`, `case.pdf`, `tex-pdftocairo.svg`, and `tex-dvisvgm.svg`.
 
 ## Current Matrix
@@ -36,6 +42,7 @@ The large matrix currently covers 200 generated cases with:
 - Widths: 80, 100, 120, 150, 200, 240, 320 pt.
 - Paragraph features: plain text, multiple paragraphs, `\noindent`, `\\[<len>]`, mixed paragraph/forced breaks, and paragraph-prefix alignment declarations.
 - Paragraph-prefix declarations: `\raggedright`, `\centering`, `\raggedleft`.
+- Ligature-focused mode: words containing `ff`, `fi`, `fl`, `ffi`, and `ffl` across plain, multi-paragraph, forced-break, and `\noindent` cases.
 - Default Computer Modern OT1 text at the TeX default 10 pt text font.
 
 ## Pass Criteria
