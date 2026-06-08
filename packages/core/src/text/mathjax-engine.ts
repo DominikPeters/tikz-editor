@@ -1,4 +1,5 @@
 import { DEFAULT_TEXT_FONT_SIZE } from "../semantic/style/resolve.js";
+import { parseLength } from "../semantic/coords/parse-length.js";
 import {
   KnuthPlassVisitor,
   TEX_INTERWORD_SHRINK_EM,
@@ -984,6 +985,7 @@ function buildSimpleTexTextCacheEntry(params: {
     paragraphId,
     width: params.textWidthPt,
     alignment: params.alignment ?? "ragged-right",
+    tikzTextWidthNode: true,
   });
   if (!layout.supported || !layout.report) {
     return null;
@@ -996,11 +998,14 @@ function buildSimpleTexTextCacheEntry(params: {
     DEFAULT_TEXT_FONT_SIZE * 0.7,
     ...layout.report.lines.map((line) => Number(line.ascent) || 0)
   );
-  const heightPt = Math.max(lineHeightPt, layout.report.lines.length * lineHeightPt);
+  const lineTops = computeTexLineTops(layout.report, lineHeightPt);
+  const lastLineTop = lineTops.at(-1) ?? 0;
+  const heightPt = Math.max(lineHeightPt, lastLineTop + lineHeightPt);
   const widthPt = params.textWidthPt;
   const body = renderSimpleTexSvgBody(layout.report, {
     lineHeightPt,
     firstLineAscent,
+    lineTops,
     requestedAlignment: params.requestedAlignment,
   });
 
@@ -1070,6 +1075,7 @@ function renderSimpleTexSvgBody(
   options: {
     lineHeightPt: number;
     firstLineAscent: number;
+    lineTops?: readonly number[];
     requestedAlignment: NodeTextParagraphAlignment | null;
   }
 ): string {
@@ -1081,13 +1087,17 @@ function renderSimpleTexSvgBody(
     `<g data-paragraph-id="${escapeXmlAttribute(report.paragraphId)}"${alignAttr} fill="currentColor">`,
   ];
   for (const line of report.lines) {
-    const lineTop = line.lineIndex * options.lineHeightPt;
+    const lineTop = options.lineTops?.[line.lineIndex] ?? line.lineIndex * options.lineHeightPt;
+    const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
     const baseline = lineTop + options.firstLineAscent;
+    const lineLeadingAttr = line.break?.lineLeading
+      ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
+      : "";
     pieces.push(
-      `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}" transform="translate(0 ${formatPt(lineTop)})">`
+      `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineLeft)} ${formatPt(lineTop)})">`
     );
     pieces.push(
-      `<rect x="0" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`
+      `<rect x="${formatPt(-lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`
     );
     for (const segment of line.segments) {
       if (segment.kind !== "text" && segment.kind !== "space") {
@@ -1097,12 +1107,29 @@ function renderSimpleTexSvgBody(
       if (!text) {
         continue;
       }
-      pieces.push(renderTexGlyphRun(text, font, segment.x, baseline - lineTop));
+      pieces.push(renderTexGlyphRun(text, font, segment.x - lineLeft, baseline - lineTop));
     }
     pieces.push("</g>");
   }
   pieces.push("</g>");
   return pieces.join("");
+}
+
+function computeTexLineTops(report: ParagraphLayoutReport, lineHeightPt: number): number[] {
+  const tops: number[] = [];
+  let cursor = 0;
+  for (const line of report.lines) {
+    tops[line.lineIndex] = cursor;
+    cursor += lineHeightPt + texLineLeadingPt(line.break?.lineLeading);
+  }
+  return tops;
+}
+
+function texLineLeadingPt(lineLeading: string | undefined): number {
+  if (!lineLeading) {
+    return 0;
+  }
+  return parseLength(lineLeading, "pt") ?? 0;
 }
 
 function renderTexGlyphRun(text: string, font: ResolvedTexFont, x: number, baseline: number): string {

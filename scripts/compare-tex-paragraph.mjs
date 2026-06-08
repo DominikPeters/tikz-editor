@@ -12,28 +12,26 @@ if (!existsSync(distEntry)) {
 const { layoutSimpleTexParagraph } = await import(distEntry);
 
 const fixtures = [
-  { text: "Alpha Beta", width: 32 },
-  { text: "office AV To", width: 65 },
-  { text: "A simple Computer Modern paragraph uses TeX metrics", width: 105 },
+  { text: "Alpha Beta", width: 32, parindent: 0 },
+  { text: "office AV To", width: 65, parindent: 0 },
+  { text: "A simple Computer Modern paragraph uses TeX metrics", width: 105, parindent: 0 },
+  { text: "Alpha Beta Gamma", width: 44, parindent: 10 },
+  { text: "A simple Computer Modern paragraph uses TeX metrics", width: 105, parindent: 15 },
+  { text: "Alpha\nBeta Gamma", width: 150, parindent: 0 },
+  { text: "Alpha\n\nGamma", width: 150, parindent: 10 },
+  { text: String.raw`Alpha \\ Beta`, width: 150, parindent: 0, texSyntax: true },
+  { text: String.raw`Alpha \\[7pt] Beta`, width: 150, parindent: 0, texSyntax: true },
+  { text: String.raw`Alpha \par Gamma`, width: 150, parindent: 10, texSyntax: true },
+  { text: String.raw`\noindent Alpha \par Gamma \par \noindent Delta`, width: 150, parindent: 10, texSyntax: true },
 ];
 
-function texEscapeText(text) {
-  return text.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}");
+function texEscapeText(text, texSyntax = false) {
+  const escaped = text.replaceAll("{", "\\{").replaceAll("}", "\\}");
+  return texSyntax ? escaped : escaped.replaceAll("\\", "\\\\");
 }
 
-function luaTeXLines(text, width) {
-  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-para-"));
-  const texPath = join(tempDir, "paragraph.tex");
-  const texSource = String.raw`\font\test=cmr10 at 10pt
-\test\language=-1
-\hsize=${width}pt
-\pretolerance=100
-\tolerance=200
-\parindent=0pt
-\rightskip=0pt plus ${width}pt
-\setbox0=\vbox{${texEscapeText(text)}\par}
-\directlua{
-  local function collect(line)
+function lineCollectorLua() {
+  return String.raw`local function collect(line)
     local out = table.pack()
     for n in node.traverse(line.list) do
       local kind = node.type(n.id)
@@ -59,22 +57,66 @@ function luaTeXLines(text, width) {
   end
   for n in node.traverse(tex.box[0].list) do
     if node.type(n.id) == "hlist" then
-      texio.write_nl("term", "TIKZ_PARAGRAPH_LINE " .. collect(n))
+      texio.write_nl("term", "TIKZ_PARAGRAPH_LINE " .. collect(n) .. " TIKZ_PARAGRAPH_END")
     end
-  end
+  end`;
+}
+
+function plainTeXSource(text, width, parindent) {
+  return String.raw`\font\test=cmr10 at 10pt
+\test\language=-1
+\hsize=${width}pt
+\pretolerance=100
+\tolerance=200
+\parindent=${parindent}pt
+\rightskip=0pt plus ${width}pt
+\setbox0=\vbox{${texEscapeText(text)}\par}
+\directlua{
+  ${lineCollectorLua()}
 }
 \bye
 `;
+}
+
+function laTeXSource(text, width, parindent) {
+  return String.raw`\documentclass{article}
+\begin{document}
+\font\test=cmr10 at 10pt
+\test\language=-1
+\hsize=${width}pt
+\pretolerance=100
+\tolerance=200
+\parindent=${parindent}pt
+\rightskip=0pt plus ${width}pt
+\setbox0=\vbox{${texEscapeText(text, true)}\par}
+\directlua{
+  ${lineCollectorLua()}
+}
+\end{document}
+`;
+}
+
+function luaTeXLines(text, width, parindent, texSyntax = false) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-para-"));
+  const texPath = join(tempDir, "paragraph.tex");
+  const texSource = texSyntax
+    ? laTeXSource(text, width, parindent)
+    : plainTeXSource(text, width, parindent);
   writeFileSync(texPath, texSource);
   try {
-    const output = execFileSync("luatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
+    const engine = texSyntax ? "lualatex" : "luatex";
+    const output = execFileSync(engine, ["--interaction=nonstopmode", "--halt-on-error", texPath], {
       encoding: "utf8",
       cwd: tempDir,
     });
     return output
       .split(/\r?\n/)
       .filter((line) => line.startsWith("TIKZ_PARAGRAPH_LINE "))
-      .map((line) => line.slice("TIKZ_PARAGRAPH_LINE ".length).replace(/\s+\)+$/, "").trimEnd());
+      .map((line) => {
+        const marked = line.slice("TIKZ_PARAGRAPH_LINE ".length);
+        const end = marked.indexOf(" TIKZ_PARAGRAPH_END");
+        return (end >= 0 ? marked.slice(0, end) : marked).trimEnd();
+      });
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -94,10 +136,12 @@ for (const fixture of fixtures) {
   const actualResult = layoutSimpleTexParagraph(fixture.text, {
     paragraphId: "oracle",
     width: fixture.width,
+    parindent: fixture.parindent,
     tolerance: 200,
+    hyphenator: { hyphenate: () => [] },
   });
   const actual = actualResult.report ? reportLines(actualResult.report) : [];
-  const expected = luaTeXLines(fixture.text, fixture.width);
+  const expected = luaTeXLines(fixture.text, fixture.width, fixture.parindent, fixture.texSyntax);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     failures += 1;
     console.error(`FAIL ${JSON.stringify(fixture)}`);

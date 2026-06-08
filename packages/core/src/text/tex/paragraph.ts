@@ -5,8 +5,10 @@ import { breakWithDp, type DpOptions } from "../knuth-plass/paragraph/dp.js";
 import { runsToItems } from "../knuth-plass/paragraph/items.js";
 import type { MeasurementService } from "../knuth-plass/paragraph/measure.js";
 import type { LineReport, ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
+import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
 import type {
   AnyWrapper,
+  BreakDecision,
   BreakRef,
   GreedyLine,
   ParagraphRun,
@@ -18,6 +20,7 @@ import { roundTexPt, tfmToPt } from "./fonts/units.js";
 import type { ResolvedTexFont, ShapedTexTextRun, TexGlyphBox } from "./fonts/types.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
+type TexSpaceGlueProfile = "font" | "tikz-fixed";
 
 export interface TexParagraphLayoutOptions {
   readonly paragraphId?: string;
@@ -26,6 +29,8 @@ export interface TexParagraphLayoutOptions {
   readonly font?: ResolvedTexFont;
   readonly tolerance?: number;
   readonly pretolerance?: number;
+  readonly parindent?: number;
+  readonly tikzTextWidthNode?: boolean;
   readonly hyphenator?: Hyphenator | null;
 }
 
@@ -42,10 +47,48 @@ interface SimpleToken {
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
+  readonly lineLeading?: string;
 }
 
-const unsupportedPattern = /[\\$&{}_^~#%]/;
+interface SimpleParagraphBlock {
+  readonly text: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly noIndent: boolean;
+  readonly alignment?: TexParagraphAlignment;
+  readonly alignmentProfile?: "latex-declaration";
+}
+
+interface SimpleParagraphSegment {
+  readonly text: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly noIndent: boolean;
+  readonly forcedBreakAfter?: {
+    readonly sourceOffset: number;
+    readonly lineLeading?: string;
+  };
+}
+
+interface SimpleParagraphBlockScanResult {
+  readonly blocks: readonly SimpleParagraphBlock[];
+  readonly unsupportedCommand: boolean;
+}
+
+interface TexParagraphBreakResult {
+  readonly lines: readonly GreedyLine[];
+  readonly runs: readonly ParagraphRun[];
+  readonly runWidths: ReadonlyMap<number, number>;
+  readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
+  readonly errors: readonly string[];
+  readonly linebreakingMode: "feasible" | "overfull";
+}
+
+const unsupportedPattern = /[$&{}_^~#%]/;
 const whitespacePattern = /[ \n]+/;
+const paragraphBreakPattern = /^\n(?: *\n)+/;
+const lineLeadingOptionPattern =
+  /^\[\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)\s*\]/i;
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;
 const LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM = 3;
@@ -70,11 +113,10 @@ export function layoutSimpleTexParagraph(
 
   const font = options.font ?? computerModernTexMetricProvider.resolveFont();
   const paragraphId = options.paragraphId ?? "tex:paragraph";
-  const alignment = options.alignment ?? "ragged-right";
+  const defaultAlignment = options.alignment ?? "ragged-right";
   const shapedRuns = new Map<number, ShapedTexTextRun>();
-  const tokens = tokenizeSimpleTexParagraph(text);
-  const runs = tokensToRuns(tokens, font, shapedRuns, alignment);
-  if (!runs.some((run) => run.kind === "text")) {
+  const blocks = splitSimpleTexParagraphBlocks(text).blocks;
+  if (blocks.length === 0) {
     return {
       supported: false,
       report: null,
@@ -85,35 +127,192 @@ export function layoutSimpleTexParagraph(
   }
 
   const measurement = createTexParagraphMeasurement(font);
-  const pass1Model = runsToItems(runs, measurement, {
+  const reportAlignment = blocks[0]?.alignment ?? defaultAlignment;
+  const combinedRuns: ParagraphRun[] = [];
+  const combinedLines: GreedyLine[] = [];
+  const combinedRunWidths = new Map<number, number>();
+  const errors: string[] = [];
+  let linebreakingMode: "feasible" | "overfull" = "feasible";
+  let layoutMode: KnuthPlassLayoutMode = "wrap";
+  let runIndexOffset = 0;
+  let lineIndexOffset = 0;
+  let activeAlignment = defaultAlignment;
+  let activeAlignmentProfile: "latex-declaration" | undefined;
+  let activeSpaceGlueProfile = texInitialSpaceGlueProfile(defaultAlignment);
+
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+    const block = blocks[blockIndex];
+    const inheritedAlignment = activeAlignment;
+    const inheritedAlignmentProfile = activeAlignmentProfile;
+    const alignment = block.alignment ?? activeAlignment;
+    const alignmentProfile = block.alignment
+      ? block.alignmentProfile
+      : activeAlignmentProfile;
+    if (block.alignment) {
+      activeAlignment = block.alignment;
+      activeAlignmentProfile = block.alignmentProfile;
+      if (
+        block.alignmentProfile === "latex-declaration" &&
+        options.tikzTextWidthNode === true
+      ) {
+        activeSpaceGlueProfile = "tikz-fixed";
+      }
+    }
+    const segments = splitSimpleTexParagraphSegments(
+      block,
+      options,
+      alignment,
+      blockIndex
+    );
+    if (segments.some((segment) => segment.forcedBreakAfter)) {
+      layoutMode = "wrapped-explicit";
+    }
+
+    for (const segment of segments) {
+      const blockShapedRuns = new Map<number, ShapedTexTextRun>();
+      const tokens = tokenizeSimpleTexParagraph(segment.text, segment.sourceStart);
+      const runs = tokensToRuns(
+        tokens,
+        font,
+        blockShapedRuns,
+        activeSpaceGlueProfile
+      );
+      if (!runs.some((run) => run.kind === "text")) {
+        continue;
+      }
+
+      const broken = breakTexParagraphRuns({
+        runs,
+        shapedRuns: blockShapedRuns,
+        measurement,
+        options,
+        alignment,
+        alignmentProfile,
+        inheritedAlignment,
+        inheritedAlignmentProfile,
+        noIndent: segment.noIndent,
+      });
+      if (!broken) {
+        return {
+          supported: false,
+          report: null,
+          fallbackReason: "TeX paragraph breaker failed: no solution",
+          shapedRuns,
+          errors,
+        };
+      }
+
+      for (const run of broken.runs) {
+        combinedRuns.push(offsetRun(run, runIndexOffset));
+      }
+      for (const [runIndex, width] of broken.runWidths) {
+        combinedRunWidths.set(runIndex + runIndexOffset, width);
+      }
+      for (const [runIndex, shaped] of broken.shapedRuns) {
+        shapedRuns.set(runIndex + runIndexOffset, shaped);
+      }
+      for (const line of broken.lines) {
+        const forcedBreak =
+          segment.forcedBreakAfter && line.lineIndex === broken.lines.length - 1
+            ? createForcedBreakDecision(
+                line.endRun + runIndexOffset + 1,
+                segment.forcedBreakAfter
+              )
+            : undefined;
+        combinedLines.push(offsetLine(
+          line,
+          runIndexOffset,
+          lineIndexOffset,
+          forcedBreak
+        ));
+      }
+      errors.push(...broken.errors);
+      if (broken.linebreakingMode === "overfull") {
+        linebreakingMode = "overfull";
+      }
+      runIndexOffset += broken.runs.length;
+      lineIndexOffset += broken.lines.length;
+    }
+  }
+
+  if (combinedRuns.length === 0 || combinedLines.length === 0) {
+    return {
+      supported: false,
+      report: null,
+      fallbackReason: "Paragraph contains no text runs.",
+      shapedRuns,
+      errors,
+    };
+  }
+
+  return {
+    supported: true,
+    report: buildTexParagraphReport({
+      paragraphId,
+      width: options.width,
+      alignment: reportAlignment,
+      runs: combinedRuns,
+      lines: combinedLines,
+      shapedRuns,
+      runWidths: combinedRunWidths,
+      linebreakingMode,
+      layoutMode,
+      font,
+      errors,
+    }),
+    fallbackReason: null,
+    shapedRuns,
+    errors,
+  };
+}
+
+function breakTexParagraphRuns(params: {
+  readonly runs: ParagraphRun[];
+  readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
+  readonly measurement: MeasurementService;
+  readonly options: TexParagraphLayoutOptions;
+  readonly alignment: TexParagraphAlignment;
+  readonly alignmentProfile?: "latex-declaration";
+  readonly inheritedAlignment: TexParagraphAlignment;
+  readonly inheritedAlignmentProfile?: "latex-declaration";
+  readonly noIndent: boolean;
+}): TexParagraphBreakResult | null {
+  const pass1Model = runsToItems(params.runs, params.measurement, {
     enableAutomaticHyphenation: false,
     hyphenator: null,
   });
-  const dpOptions = texParagraphDpOptions(options, alignment);
-  const pass1 = breakWithDp(pass1Model, options.width, {
+  const dpOptions = texParagraphDpOptions(
+    params.options,
+    params.alignment,
+    params.noIndent,
+    params.alignmentProfile,
+    params.inheritedAlignment,
+    params.inheritedAlignmentProfile
+  );
+  const pass1 = breakWithDp(pass1Model, params.options.width, {
     ...dpOptions,
-    tolerance: options.pretolerance ?? englishDefaults.pretolerance,
+    tolerance: params.options.pretolerance ?? englishDefaults.pretolerance,
   });
-  const tolerance = options.tolerance ?? texParagraphTolerance(alignment);
+  const tolerance = params.options.tolerance ?? texParagraphTolerance(params.alignment);
   const pass2Model = pass1.canProceed && pass1.lines.length
     ? pass1Model
-    : runsToItems(runs, measurement, {
-      hyphenator: options.hyphenator ?? createEnglishHyphenator(),
+    : runsToItems(params.runs, params.measurement, {
+      hyphenator: params.options.hyphenator ?? createEnglishHyphenator(),
       enableAutomaticHyphenation: true,
       hyphenpenalty: englishDefaults.hyphenpenalty,
       exhyphenpenalty: englishDefaults.exhyphenpenalty,
     });
   const strictPass2 = pass1.canProceed && pass1.lines.length
     ? pass1
-    : breakWithDp(pass2Model, options.width, {
+    : breakWithDp(pass2Model, params.options.width, {
       ...dpOptions,
       tolerance,
     });
-  const emergencyStretch = texParagraphEmergencyStretch(options, alignment);
+  const emergencyStretch = texParagraphEmergencyStretch(params.options, params.alignment);
   const emergencyPass = strictPass2.canProceed && strictPass2.lines.length
     ? strictPass2
     : emergencyStretch > 0
-      ? breakWithDp(pass2Model, options.width, {
+      ? breakWithDp(pass2Model, params.options.width, {
         ...dpOptions,
         tolerance,
         emergencyStretch,
@@ -123,7 +322,7 @@ export function layoutSimpleTexParagraph(
     ? strictPass2
     : emergencyPass.canProceed && emergencyPass.lines.length
       ? emergencyPass
-    : breakWithDp(pass2Model, options.width, {
+    : breakWithDp(pass2Model, params.options.width, {
       ...dpOptions,
       tolerance,
       emergencyStretch,
@@ -131,32 +330,77 @@ export function layoutSimpleTexParagraph(
     });
 
   if (!pass2.canProceed || pass2.lines.length === 0) {
-    return {
-      supported: false,
-      report: null,
-      fallbackReason: `TeX paragraph breaker failed: ${[...pass1Model.errors, ...pass2Model.errors, ...pass1.errors, ...pass2.errors].join("; ") || "no solution"}`,
-      shapedRuns,
-      errors: [...pass1Model.errors, ...pass2Model.errors, ...pass1.errors, ...pass2.errors],
-    };
+    return null;
   }
 
   return {
-    supported: true,
-    report: buildTexParagraphReport({
-      paragraphId,
-      width: options.width,
-      alignment,
-      runs,
-      lines: pass2.lines,
-      shapedRuns,
-      runWidths: pass2Model.runWidths,
-      linebreakingMode: pass2.mode,
-      font,
-      errors: [...pass2Model.errors, ...pass2.errors],
-    }),
-    fallbackReason: null,
-    shapedRuns,
+    lines: pass2.lines,
+    runs: params.runs,
+    runWidths: pass2Model.runWidths,
+    shapedRuns: params.shapedRuns,
     errors: [...pass2Model.errors, ...pass2.errors],
+    linebreakingMode: pass2.mode,
+  };
+}
+
+function offsetRun(run: ParagraphRun, runIndexOffset: number): ParagraphRun {
+  if (run.kind === "text") {
+    return {
+      ...run,
+      runIndex: run.runIndex + runIndexOffset,
+      childIndex: run.childIndex + runIndexOffset,
+    };
+  }
+  if (run.kind === "space") {
+    return {
+      ...run,
+      runIndex: run.runIndex + runIndexOffset,
+    };
+  }
+  return {
+    ...run,
+    runIndex: run.runIndex + runIndexOffset,
+  };
+}
+
+function offsetLine(
+  line: GreedyLine,
+  runIndexOffset: number,
+  lineIndexOffset: number,
+  breakOverride?: BreakDecision
+): GreedyLine {
+  return {
+    ...line,
+    lineIndex: line.lineIndex + lineIndexOffset,
+    startRun: line.startRun + runIndexOffset,
+    endRun: line.endRun + runIndexOffset,
+    break: breakOverride ?? offsetBreakDecision(line.break, runIndexOffset),
+  };
+}
+
+function offsetBreakDecision(
+  breakDecision: BreakDecision | null,
+  runIndexOffset: number
+): BreakDecision | null {
+  return breakDecision
+    ? {
+        ...breakDecision,
+        runIndex: breakDecision.runIndex + runIndexOffset,
+      }
+    : null;
+}
+
+function createForcedBreakDecision(
+  runIndex: number,
+  forcedBreak: NonNullable<SimpleParagraphSegment["forcedBreakAfter"]>
+): BreakDecision {
+  return {
+    kind: "forced",
+    runIndex,
+    sourceOffset: forcedBreak.sourceOffset,
+    visibleHyphen: false,
+    flagged: false,
+    lineLeading: forcedBreak.lineLeading,
   };
 }
 
@@ -167,7 +411,25 @@ export function getSimpleTexFallbackReason(text: string, width: number): string 
   if (unsupportedPattern.test(text)) {
     return "Paragraph contains TeX syntax that is not supported by the simple text path.";
   }
+  if (splitSimpleTexParagraphBlocks(text).unsupportedCommand) {
+    return "Paragraph contains TeX syntax that is not supported by the simple text path.";
+  }
   for (let index = 0; index < text.length; index++) {
+    if (text[index] === "\\") {
+      const lineBreak = scanSimpleTexLineBreak(text, index);
+      const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
+      if (lineBreak) {
+        index = lineBreak.end - 1;
+        continue;
+      }
+      if (paragraphCommand) {
+        index = paragraphCommand.end - 1;
+        continue;
+      }
+      if (!lineBreak) {
+        return "Paragraph contains TeX syntax that is not supported by the simple text path.";
+      }
+    }
     const codePoint = text.codePointAt(index);
     if (codePoint === undefined) {
       continue;
@@ -179,32 +441,354 @@ export function getSimpleTexFallbackReason(text: string, width: number): string 
   return null;
 }
 
-function tokenizeSimpleTexParagraph(text: string): SimpleToken[] {
+function scanSimpleTexLineBreak(
+  text: string,
+  start: number
+): { end: number; lineLeading?: string } | null {
+  if (text[start] !== "\\" || text[start + 1] !== "\\") {
+    return null;
+  }
+
+  let end = start + 2;
+  const rest = text.slice(end);
+  if (rest.startsWith("[")) {
+    const match = rest.match(lineLeadingOptionPattern);
+    if (!match) {
+      return null;
+    }
+    const full = match[0] ?? "";
+    end += full.length;
+    return {
+      end,
+      lineLeading: full.slice(1, -1).trim(),
+    };
+  }
+  return { end };
+}
+
+function scanSimpleTexParagraphCommand(
+  text: string,
+  start: number
+): { kind: "par" | "noindent"; end: number } | { kind: "alignment"; alignment: TexParagraphAlignment; end: number } | null {
+  const parEnd = scanSimpleTexControlWord(text, start, "par");
+  if (parEnd !== null) {
+    return { kind: "par", end: parEnd };
+  }
+  const noIndentEnd = scanSimpleTexControlWord(text, start, "noindent");
+  if (noIndentEnd !== null) {
+    return { kind: "noindent", end: noIndentEnd };
+  }
+  return scanSimpleTexAlignmentCommand(text, start);
+}
+
+function scanSimpleTexAlignmentCommand(
+  text: string,
+  start: number
+): { kind: "alignment"; alignment: TexParagraphAlignment; end: number } | null {
+  const raggedRightEnd = scanSimpleTexControlWord(text, start, "raggedright");
+  if (raggedRightEnd !== null) {
+    return { kind: "alignment", alignment: "ragged-right", end: raggedRightEnd };
+  }
+  const raggedLeftEnd = scanSimpleTexControlWord(text, start, "raggedleft");
+  if (raggedLeftEnd !== null) {
+    return { kind: "alignment", alignment: "ragged-left", end: raggedLeftEnd };
+  }
+  const centeringEnd = scanSimpleTexControlWord(text, start, "centering");
+  if (centeringEnd !== null) {
+    return { kind: "alignment", alignment: "center", end: centeringEnd };
+  }
+  return null;
+}
+
+function scanSimpleTexControlWord(text: string, start: number, word: string): number | null {
+  if (text[start] !== "\\") {
+    return null;
+  }
+  const end = start + 1 + word.length;
+  if (text.slice(start + 1, end) !== word) {
+    return null;
+  }
+  const next = text[end] ?? "";
+  return next && /[A-Za-z]/.test(next) ? null : end;
+}
+
+function splitSimpleTexParagraphBlocks(text: string): SimpleParagraphBlockScanResult {
+  const blocks: SimpleParagraphBlock[] = [];
+  let unsupportedCommand = false;
+
+  const skipWhitespace = (start: number): number => {
+    let index = start;
+    while (index < text.length && (text[index] === " " || text[index] === "\n")) {
+      index += 1;
+    }
+    return index;
+  };
+
+  const consumeParagraphPrefix = (
+    start: number
+  ): {
+    start: number;
+    noIndent: boolean;
+    alignment?: TexParagraphAlignment;
+    alignmentProfile?: "latex-declaration";
+  } => {
+    let index = skipWhitespace(start);
+    let noIndent = false;
+    let alignment: TexParagraphAlignment | undefined;
+    let alignmentProfile: "latex-declaration" | undefined;
+    while (index < text.length) {
+      const command = scanSimpleTexParagraphCommand(text, index);
+      if (command?.kind === "noindent") {
+        noIndent = true;
+        index = skipWhitespace(command.end);
+        continue;
+      }
+      if (command?.kind === "alignment") {
+        noIndent = true;
+        alignment = command.alignment;
+        alignmentProfile = "latex-declaration";
+        index = skipWhitespace(command.end);
+        continue;
+      }
+      break;
+    }
+    return {
+      start: index,
+      noIndent,
+      alignment,
+      alignmentProfile,
+    };
+  };
+
+  const pushBlock = (
+    rawStart: number,
+    rawEnd: number,
+    noIndent: boolean,
+    alignment?: TexParagraphAlignment,
+    alignmentProfile?: "latex-declaration"
+  ) => {
+    let start = rawStart;
+    let end = rawEnd;
+    while (start < end && (text[start] === " " || text[start] === "\n")) {
+      start += 1;
+    }
+    while (end > start && (text[end - 1] === " " || text[end - 1] === "\n")) {
+      end -= 1;
+    }
+    if (start < end) {
+      blocks.push({
+        text: text.slice(start, end),
+        sourceStart: start,
+        sourceEnd: end,
+        noIndent,
+        alignment,
+        alignmentProfile,
+      });
+    }
+  };
+
+  let prefix = consumeParagraphPrefix(0);
+  let blockStart = prefix.start;
+  let currentNoIndent = prefix.noIndent;
+  let index = blockStart;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === "\\") {
+      const lineBreak = scanSimpleTexLineBreak(text, index);
+      if (lineBreak) {
+        index = lineBreak.end;
+        continue;
+      }
+      const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
+      if (paragraphCommand?.kind === "par") {
+        pushBlock(
+          blockStart,
+          index,
+          currentNoIndent,
+          prefix.alignment,
+          prefix.alignmentProfile
+        );
+        prefix = consumeParagraphPrefix(paragraphCommand.end);
+        blockStart = prefix.start;
+        currentNoIndent = prefix.noIndent;
+        index = blockStart;
+        continue;
+      }
+      unsupportedCommand = true;
+      break;
+    }
+
+    if (char === "\n") {
+      const match = paragraphBreakPattern.exec(text.slice(index));
+      if (match) {
+        pushBlock(
+          blockStart,
+          index,
+          currentNoIndent,
+          prefix.alignment,
+          prefix.alignmentProfile
+        );
+        prefix = consumeParagraphPrefix(index + match[0].length);
+        blockStart = prefix.start;
+        currentNoIndent = prefix.noIndent;
+        index = blockStart;
+        continue;
+      }
+    }
+
+    index += 1;
+  }
+  if (!unsupportedCommand) {
+    pushBlock(
+      blockStart,
+      text.length,
+      currentNoIndent,
+      prefix.alignment,
+      prefix.alignmentProfile
+    );
+  }
+  return { blocks, unsupportedCommand };
+}
+
+function splitSimpleTexParagraphSegments(
+  block: SimpleParagraphBlock,
+  options: TexParagraphLayoutOptions,
+  alignment: TexParagraphAlignment,
+  blockIndex: number
+): SimpleParagraphSegment[] {
+  const initialNoIndent = block.noIndent || (options.tikzTextWidthNode === true && blockIndex === 0);
+  if (alignment === "justified") {
+    return [{
+      text: block.text,
+      sourceStart: block.sourceStart,
+      sourceEnd: block.sourceEnd,
+      noIndent: initialNoIndent,
+    }];
+  }
+
+  const segments: SimpleParagraphSegment[] = [];
+  let segmentStart = 0;
+  let noIndent = initialNoIndent;
+  let index = 0;
+
+  const pushSegment = (
+    rawStart: number,
+    rawEnd: number,
+    segmentNoIndent: boolean,
+    forcedBreakAfter?: SimpleParagraphSegment["forcedBreakAfter"]
+  ) => {
+    let start = rawStart;
+    let end = rawEnd;
+    while (start < end && (block.text[start] === " " || block.text[start] === "\n")) {
+      start += 1;
+    }
+    while (end > start && (block.text[end - 1] === " " || block.text[end - 1] === "\n")) {
+      end -= 1;
+    }
+    if (start < end) {
+      segments.push({
+        text: block.text.slice(start, end),
+        sourceStart: block.sourceStart + start,
+        sourceEnd: block.sourceStart + end,
+        noIndent: segmentNoIndent,
+        forcedBreakAfter,
+      });
+    }
+  };
+
+  while (index < block.text.length) {
+    if (block.text[index] !== "\\") {
+      index += 1;
+      continue;
+    }
+    const lineBreak = scanSimpleTexLineBreak(block.text, index);
+    if (!lineBreak) {
+      index += 1;
+      continue;
+    }
+
+    pushSegment(segmentStart, index, noIndent, {
+      sourceOffset: block.sourceStart + index,
+      lineLeading: lineBreak.lineLeading,
+    });
+    index = lineBreak.end;
+    while (index < block.text.length && (block.text[index] === " " || block.text[index] === "\n")) {
+      index += 1;
+    }
+    segmentStart = index;
+    noIndent = noIndentAfterForcedBreak(options, alignment);
+  }
+
+  pushSegment(segmentStart, block.text.length, noIndent);
+  return segments;
+}
+
+function noIndentAfterForcedBreak(
+  options: TexParagraphLayoutOptions,
+  alignment: TexParagraphAlignment
+): boolean {
+  return !(
+    options.tikzTextWidthNode === true &&
+    alignment !== "justified" &&
+    Number.isFinite(options.parindent) &&
+    options.parindent !== undefined &&
+    options.parindent > 0
+  );
+}
+
+function tokenizeSimpleTexParagraph(text: string, sourceOffset: number): SimpleToken[] {
   const tokens: SimpleToken[] = [];
   let index = 0;
   while (index < text.length) {
     const char = text[index];
-    if (char === "\n") {
-      tokens.push({ kind: "forced-break", text: "\n", sourceStart: index, sourceEnd: index + 1 });
-      index += 1;
-      continue;
-    }
-    if (char === " ") {
-      const start = index;
-      while (index < text.length && text[index] === " ") {
+    if (char === "\\") {
+      const lineBreak = scanSimpleTexLineBreak(text, index);
+      if (!lineBreak) {
+        break;
+      }
+      while (tokens.at(-1)?.kind === "space") {
+        tokens.pop();
+      }
+      tokens.push({
+        kind: "forced-break",
+        text: text.slice(index, lineBreak.end),
+        sourceStart: sourceOffset + index,
+        sourceEnd: sourceOffset + lineBreak.end,
+        lineLeading: lineBreak.lineLeading,
+      });
+      index = lineBreak.end;
+      while (index < text.length && (text[index] === " " || text[index] === "\n")) {
         index += 1;
       }
-      tokens.push({ kind: "space", text: " ", sourceStart: start, sourceEnd: index });
+      continue;
+    }
+    if (char === " " || char === "\n") {
+      const start = index;
+      while (index < text.length && (text[index] === " " || text[index] === "\n")) {
+        index += 1;
+      }
+      tokens.push({
+        kind: "space",
+        text: " ",
+        sourceStart: sourceOffset + start,
+        sourceEnd: sourceOffset + index,
+      });
       continue;
     }
     const start = index;
     while (
       index < text.length &&
+      text[index] !== "\\" &&
       !whitespacePattern.test(text[index] ?? "")
     ) {
       index += 1;
     }
-    tokens.push({ kind: "text", text: text.slice(start, index), sourceStart: start, sourceEnd: index });
+    tokens.push({
+      kind: "text",
+      text: text.slice(start, index),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + index,
+    });
   }
   return tokens;
 }
@@ -213,7 +797,7 @@ function tokensToRuns(
   tokens: readonly SimpleToken[],
   font: ResolvedTexFont,
   shapedRuns: Map<number, ShapedTexTextRun>,
-  alignment: TexParagraphAlignment
+  spaceGlueProfile: TexSpaceGlueProfile
 ): ParagraphRun[] {
   const runs: ParagraphRun[] = [];
   let spaceFactor = 1000;
@@ -248,7 +832,7 @@ function tokensToRuns(
     const forced = token.kind === "forced-break";
     const glue = forced
       ? { width: 0, stretch: 0, shrink: 0 }
-      : texInterwordGlueForSpaceFactor(font, spaceFactor, alignment);
+      : texInterwordGlueForSpaceFactor(font, spaceFactor, spaceGlueProfile);
     runs.push({
       kind: "space",
       runIndex,
@@ -256,7 +840,7 @@ function tokensToRuns(
       sourceEnd: token.sourceEnd,
       text: " ",
       wrapper: syntheticWrapper,
-      breakRef: createSimpleBreakRef(forced),
+      breakRef: createSimpleBreakRef(forced, token.lineLeading),
       texGlue: glue,
     } satisfies SpaceRun);
   }
@@ -269,10 +853,10 @@ function tokensToRuns(
 function texInterwordGlueForSpaceFactor(
   font: ResolvedTexFont,
   spaceFactor: number,
-  alignment: TexParagraphAlignment
+  spaceGlueProfile: TexSpaceGlueProfile
 ): NonNullable<SpaceRun["texGlue"]> {
   const normalized = Number.isFinite(spaceFactor) && spaceFactor > 0 ? spaceFactor : 1000;
-  if (alignment !== "justified") {
+  if (spaceGlueProfile === "tikz-fixed") {
     return {
       width: roundTexPt((normalized >= 2000 ? 0.5 : 0.3333) * font.atPt),
       stretch: 0,
@@ -290,6 +874,12 @@ function texInterwordGlueForSpaceFactor(
     shrink: roundTexPt(baseShrink * 1000 / normalized),
     spaceFactor: normalized,
   };
+}
+
+function texInitialSpaceGlueProfile(
+  alignment: TexParagraphAlignment
+): TexSpaceGlueProfile {
+  return alignment === "justified" ? "font" : "tikz-fixed";
 }
 
 function updateSpaceFactorForText(current: number, text: string): number {
@@ -326,12 +916,13 @@ function defaultTexSfcode(char: string): number {
   return 1000;
 }
 
-function createSimpleBreakRef(forced: boolean): BreakRef {
+function createSimpleBreakRef(forced: boolean, lineLeading?: string): BreakRef {
   return {
     kind: "mspace",
     wrapper: syntheticWrapper,
     linebreak: forced ? "newline" : "auto",
     isForcedLineBreak: forced,
+    lineLeading,
   };
 }
 
@@ -460,15 +1051,24 @@ function shapedRunForWrapper(wrapper: AnyWrapper | null | undefined): ShapedTexT
 
 function texParagraphDpOptions(
   options: TexParagraphLayoutOptions,
-  alignment: TexParagraphAlignment
+  alignment: TexParagraphAlignment,
+  noIndent = false,
+  alignmentProfile?: "latex-declaration",
+  inheritedAlignment?: TexParagraphAlignment,
+  inheritedAlignmentProfile?: "latex-declaration"
 ): DpOptions {
   const latexRagged = alignment === "ragged-right" || alignment === "ragged-left";
+  const latexDeclaration = alignmentProfile === "latex-declaration";
   const skipStretch = 2 * (options.font?.atPt ?? computerModernTexMetricProvider.resolveFont().atPt);
+  const inheritedParfillStretch =
+    inheritedAlignment === undefined
+      ? Number.POSITIVE_INFINITY
+      : texParfillStretchForAlignment(inheritedAlignment, inheritedAlignmentProfile);
   return {
     linepenalty: englishDefaults.linepenalty,
     adjdemerits: englishDefaults.adjdemerits,
     doublehyphendemerits: englishDefaults.doublehyphendemerits,
-    finalhyphendemerits: latexRagged
+    finalhyphendemerits: latexDeclaration || latexRagged
       ? LATEX_RAGGED_FINAL_HYPHEN_DEMERITS
       : englishDefaults.finalhyphendemerits,
     leftskipWidth: 0,
@@ -479,14 +1079,51 @@ function texParagraphDpOptions(
     rightskipStretch:
       alignment === "ragged-right" || alignment === "center" ? skipStretch : 0,
     rightskipShrink: 0,
-    parfillskipWidth: 0,
-    parfillskipStretch:
-      alignment === "ragged-right" || alignment === "justified"
-        ? Number.POSITIVE_INFINITY
+    firstLineIndentWidth:
+      !noIndent && Number.isFinite(options.parindent) && options.parindent && options.parindent > 0
+        ? options.parindent
         : 0,
+    forcedBreakIndentWidth:
+      options.tikzTextWidthNode === true &&
+      alignment !== "justified" &&
+      Number.isFinite(options.parindent) &&
+      options.parindent &&
+      options.parindent > 0
+        ? options.parindent
+        : 0,
+    forcedBreakUsesParfill: true,
+    parfillskipWidth: 0,
+    parfillskipStretch: texParfillStretchForAlignment(
+      alignment,
+      alignmentProfile,
+      options.tikzTextWidthNode === true,
+      inheritedParfillStretch
+    ),
     parfillskipShrink: 0,
     preventOverflow: false,
   };
+}
+
+function texParfillStretchForAlignment(
+  alignment: TexParagraphAlignment,
+  alignmentProfile?: "latex-declaration",
+  tikzTextWidthNode = false,
+  inheritedParfillStretch = Number.POSITIVE_INFINITY
+): number {
+  if (alignmentProfile === "latex-declaration") {
+    if (alignment === "center" || alignment === "ragged-left") {
+      return 0;
+    }
+    if (alignment === "ragged-right") {
+      if (tikzTextWidthNode) {
+        return Number.POSITIVE_INFINITY;
+      }
+      return inheritedParfillStretch;
+    }
+  }
+  return alignment === "ragged-right" || alignment === "justified"
+    ? Number.POSITIVE_INFINITY
+    : 0;
 }
 
 function texParagraphTolerance(_alignment: TexParagraphAlignment): number {
@@ -514,6 +1151,7 @@ function buildTexParagraphReport(params: {
   shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   runWidths: ReadonlyMap<number, number>;
   linebreakingMode: "feasible" | "overfull";
+  layoutMode: KnuthPlassLayoutMode;
   font: ResolvedTexFont;
   errors: readonly string[];
 }): ParagraphLayoutReport {
@@ -530,7 +1168,7 @@ function buildTexParagraphReport(params: {
     paragraphId: params.paragraphId,
     width: params.width,
     alignment: params.alignment,
-    layoutMode: "wrap",
+    layoutMode: params.layoutMode,
     lines,
     runs: runReports,
     errors: [...params.errors],
@@ -611,12 +1249,17 @@ function buildTexLineReport(
     }
 
     let width = params.runWidths.get(run.runIndex) ?? 0;
-    if (
-      run.kind === "space" &&
-      (line.spaceCount ?? 0) > 0 &&
-      Number.isFinite(line.spaceDeltaPerGap ?? 0)
-    ) {
-      width = Math.max(0, width + (line.spaceDeltaPerGap ?? 0));
+    if (run.kind === "space" && (line.spaceCount ?? 0) > 0) {
+      const ratio = line.glueSetRatio ?? 0;
+      const stretch = run.texGlue?.stretch;
+      const shrink = run.texGlue?.shrink;
+      if (ratio > 0 && typeof stretch === "number" && Number.isFinite(stretch)) {
+        width = Math.max(0, width + ratio * stretch);
+      } else if (ratio < 0 && typeof shrink === "number" && Number.isFinite(shrink)) {
+        width = Math.max(0, width + ratio * shrink);
+      } else if (Number.isFinite(line.spaceDeltaPerGap ?? 0)) {
+        width = Math.max(0, width + (line.spaceDeltaPerGap ?? 0));
+      }
     }
     segments.push({
       runIndex: run.runIndex,

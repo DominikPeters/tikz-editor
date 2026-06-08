@@ -352,6 +352,292 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("treats single newlines as interword spaces in simple TeX paragraphs", () => {
+    const result = layoutSimpleTexParagraph("Alpha\nBeta Gamma", {
+      paragraphId: "tex:newline-space",
+      width: 150,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha Beta Gamma"]);
+  });
+
+  it("treats TeX double backslash commands as forced line breaks", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \\ Beta`, {
+      paragraphId: "tex:forced-break",
+      width: 150,
+      tolerance: 200,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
+    expect(result.report?.lines[0]?.break).toMatchObject({
+      kind: "forced",
+      lineLeading: undefined,
+    });
+  });
+
+  it("preserves optional leading on TeX double backslash line breaks", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \\[7pt] Beta`, {
+      paragraphId: "tex:forced-break-leading",
+      width: 150,
+      tolerance: 200,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
+    expect(result.report?.lines[0]?.break).toMatchObject({
+      kind: "forced",
+      lineLeading: "7pt",
+    });
+  });
+
+  it("models TikZ text-width node indentation around par and forced line breaks", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha Beta Gamma \par \noindent Delta \\[7pt] Epsilon`, {
+      paragraphId: "tex:tikz-node-indent",
+      width: 150,
+      parindent: 10,
+      tikzTextWidthNode: true,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha Beta Gamma", "Delta", "Epsilon"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(0, 6),
+      expect.closeTo(10, 6),
+    ]);
+  });
+
+  it("breaks before a forced line break when the pre-break segment would be overfull", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha Beta Gamma Delta \\ Epsilon`, {
+      paragraphId: "tex:forced-break-overfull-prefix",
+      width: 80,
+      tikzTextWidthNode: true,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha Beta", "Gamma Delta", "Epsilon"]);
+    expect(result.report?.lines[1]?.break).toMatchObject({ kind: "forced" });
+  });
+
+  it("uses TeX paragraph-final linebreaking before non-justified forced breaks", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(String.raw`Actual careful normal paragraph natural quoted epsilon pattern. \\[4pt] Kernel editor natural modern spacing metric basic faithful shape spacing compact future,. Classic screen paragraph metric, precise careful lattice paper,.`, {
+      paragraphId: "tex:forced-break-terminal-prefix",
+      width: 120,
+      parindent: 10,
+      tikzTextWidthNode: true,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Actual careful normal",
+      "paragraph natural quoted",
+      "epsilon pattern.",
+      "Kernel editor natural",
+      "modern spacing metric ba-",
+      "sic faithful shape spacing",
+      "compact future,. Classic",
+      "screen paragraph metric,",
+      "precise careful lattice pa-",
+      "per,.",
+    ]);
+    expect(result.report?.lines[2]?.break).toMatchObject({
+      kind: "forced",
+      lineLeading: "4pt",
+    });
+  });
+
+  it("does not indent the line after a forced break in justified TikZ text-width nodes", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha Beta \\[7pt] Gamma Delta`, {
+      paragraphId: "tex:justified-forced-break-indent",
+      width: 240,
+      alignment: "justified",
+      parindent: 15,
+      tikzTextWidthNode: true,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha Beta", "Gamma Delta"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(0, 6),
+    ]);
+  });
+
+  it("keeps justified forced breaks in one TeX paragraph for global demerits", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(String.raw`Model sample normal sentence anchor single pattern quoted output. \par \noindent Gamma beta position editor final faithful manual, hyphenation. \\[7pt] Quoted quoted canvas layout visible basic wide reader, sample chapter efficient.`, {
+      paragraphId: "tex:justified-forced-break-demerits",
+      width: 100,
+      alignment: "justified",
+      parindent: 10,
+      tikzTextWidthNode: true,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Model sample normal",
+      "sentence anchor single",
+      "pattern quoted output.",
+      "Gamma beta position",
+      "editor final faithful",
+      "manual, hyphenation.",
+      "Quoted quoted canvas",
+      "layout visible basic",
+      "wide reader, sample",
+      "chapter efficient.",
+    ]);
+    expect(result.report?.lines[5]?.break).toMatchObject({
+      kind: "forced",
+      lineLeading: "7pt",
+    });
+  });
+
+  it("distributes justified stretch according to each TeX space glue node", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Canvas position screen alignment rendering modern control language final. \par \noindent Precise quoted direct manual beta beta editor, paragraph normal output gamma. Editor paper screen table semantic layout.`, {
+      paragraphId: "tex:justified-spacefactor-glue",
+      width: 120,
+      alignment: "justified",
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    const sentenceSpaceLine = result.report?.lines.find((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("") === "gamma. Editor paper"
+    );
+    expect(sentenceSpaceLine).toBeDefined();
+    const spaces = sentenceSpaceLine?.segments.filter((segment) => segment.kind === "space") ?? [];
+    expect(spaces).toHaveLength(2);
+    expect(spaces[0]?.width).toBeGreaterThan((spaces[1]?.width ?? 0) * 2);
+    const lastSegment = sentenceSpaceLine?.segments.at(-1);
+    expect((lastSegment?.x ?? 0) + (lastSegment?.width ?? 0)).toBeCloseTo(120, 5);
+  });
+
+  it("starts a fresh TeX paragraph after a blank line", () => {
+    const result = layoutSimpleTexParagraph("Alpha\n\nGamma", {
+      paragraphId: "tex:blank-line",
+      width: 150,
+      parindent: 10,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Gamma"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(10, 6),
+      expect.closeTo(10, 6),
+    ]);
+  });
+
+  it("treats TeX par commands as paragraph boundaries", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \par Gamma`, {
+      paragraphId: "tex:par-command",
+      width: 150,
+      parindent: 10,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Gamma"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(10, 6),
+      expect.closeTo(10, 6),
+    ]);
+  });
+
+  it("suppresses paragraph indentation after TeX noindent commands", () => {
+    const result = layoutSimpleTexParagraph(String.raw`\noindent Alpha \par Gamma \par \noindent Delta`, {
+      paragraphId: "tex:noindent-command",
+      width: 150,
+      parindent: 10,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Gamma", "Delta"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(10, 6),
+      expect.closeTo(0, 6),
+    ]);
+  });
+
+  it("honors TeX paragraph alignment declarations at paragraph start", () => {
+    const centered = layoutSimpleTexParagraph(String.raw`\centering Alpha Beta`, {
+      paragraphId: "tex:centering",
+      width: 120,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+    const raggedLeft = layoutSimpleTexParagraph(String.raw`\raggedleft Alpha Beta`, {
+      paragraphId: "tex:raggedleft",
+      width: 120,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+    const raggedRight = layoutSimpleTexParagraph(String.raw`\raggedright Alpha Beta`, {
+      paragraphId: "tex:raggedright",
+      width: 120,
+      alignment: "center",
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(centered.supported).toBe(true);
+    expect(centered.report?.alignment).toBe("center");
+    expect(centered.report?.lines[0]?.xStart).toBeCloseTo(34.930645, 5);
+    expect(raggedLeft.supported).toBe(true);
+    expect(raggedLeft.report?.alignment).toBe("ragged-left");
+    expect(raggedLeft.report?.lines[0]?.xEnd).toBeCloseTo(120, 5);
+    expect(raggedRight.supported).toBe(true);
+    expect(raggedRight.report?.alignment).toBe("ragged-right");
+    expect(raggedRight.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
+  });
+
+  it("allows paragraph alignment declarations after TeX paragraph boundaries", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha Beta \par \centering Gamma Delta`, {
+      paragraphId: "tex:paragraph-centering",
+      width: 120,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha Beta", "Gamma Delta"]);
+    expect(result.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
+    expect(result.report?.lines[1]?.xStart).toBeGreaterThan(0);
+    expect(result.report?.lines[1]?.xEnd).toBeLessThan(120);
+  });
+
+  it("falls back when TeX noindent appears inside a paragraph", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \noindent Beta`, {
+      paragraphId: "tex:noindent-mid-paragraph",
+      width: 150,
+      parindent: 10,
+    });
+
+    expect(result.supported).toBe(false);
+    expect(result.fallbackReason).toContain("TeX syntax");
+  });
+
+  it("falls back when TeX alignment declarations appear inside a paragraph", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \centering Beta`, {
+      paragraphId: "tex:centering-mid-paragraph",
+      width: 150,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(false);
+    expect(result.fallbackReason).toContain("TeX syntax");
+  });
+
   it("wraps plain text with TeX-shaped Computer Modern word widths", () => {
     const font = computerModernTexMetricProvider.resolveFont();
     const alphaWidth = computerModernTexMetricProvider.shapeText("Alpha", font).width;

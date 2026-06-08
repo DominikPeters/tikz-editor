@@ -225,15 +225,20 @@ export function buildParagraphLayoutReport({
       }
 
       let segmentWidth = runWidths.get(run.runIndex) ?? 0;
-      if (
-        run.kind === 'space' &&
-        (line.spaceCount ?? 0) > 0 &&
-        Number.isFinite(line.spaceDeltaPerGap ?? 0)
-      ) {
-        segmentWidth = Math.max(
-          0,
-          segmentWidth + (line.spaceDeltaPerGap ?? 0)
-        );
+      if (run.kind === 'space' && (line.spaceCount ?? 0) > 0) {
+        const ratio = line.glueSetRatio ?? 0;
+        const stretch = run.texGlue?.stretch;
+        const shrink = run.texGlue?.shrink;
+        if (ratio > 0 && typeof stretch === 'number' && Number.isFinite(stretch)) {
+          segmentWidth = Math.max(0, segmentWidth + ratio * stretch);
+        } else if (ratio < 0 && typeof shrink === 'number' && Number.isFinite(shrink)) {
+          segmentWidth = Math.max(0, segmentWidth + ratio * shrink);
+        } else if (Number.isFinite(line.spaceDeltaPerGap ?? 0)) {
+          segmentWidth = Math.max(
+            0,
+            segmentWidth + (line.spaceDeltaPerGap ?? 0)
+          );
+        }
       }
       segments.push({
         runIndex: run.runIndex,

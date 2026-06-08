@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderTikzToSvg, renderTikzToSvgAsync } from "../packages/core/src/render/index.js";
 import { parseLength } from "../packages/core/src/semantic/coords/parse-length.js";
+import { DEFAULT_TEXT_FONT_SIZE } from "../packages/core/src/semantic/style/resolve.js";
 import type { SceneCircle, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
@@ -17,6 +18,17 @@ function readLineboxTranslateXs(svg: string): number[] {
     xs.push(transformMatch ? Number(transformMatch[1]) : 0);
   }
   return xs;
+}
+
+function readLineboxTranslateYs(svg: string): number[] {
+  const ys: number[] = [];
+  const lineboxPattern = /<g\b[^>]*data-mjx-linebox="true"[^>]*>/g;
+  for (const match of svg.matchAll(lineboxPattern)) {
+    const tag = match[0];
+    const transformMatch = tag.match(/transform="translate\(([-+0-9.]+)(?:\s*,\s*|\s+)([-+0-9.]+)\)"/);
+    ys.push(transformMatch ? Number(transformMatch[2]) : 0);
+  }
+  return ys;
 }
 
 function countLineboxes(svg: string): number {
@@ -779,6 +791,31 @@ World};
     expect(result.svg.svg).toContain('data-tex-font="cmr10"');
     expect(result.svg.svg).toContain("<path");
     expect(result.svg.svg).not.toContain("<text");
+  });
+
+  it("keeps explicit TeX line breaks on the TeX-shaped paragraph path", async () => {
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[draw,text width=150pt,align=left] at (0,0) {Alpha \\[7pt] Beta};
+\end{tikzpicture}`);
+
+    const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    const renderInfo = text?.textRenderInfo;
+    expect(renderInfo?.mode).toBe("mathjax");
+    if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo.paragraphId).toMatch(/^tex:/);
+      const report = reportForParagraphId(renderInfo.paragraphId);
+      expect(report?.lines).toHaveLength(2);
+      expect(report?.lines[0]?.break).toMatchObject({
+        kind: "forced",
+        lineLeading: "7pt",
+      });
+    }
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-lineleading="7pt"');
+    expect(readLineboxTranslateYs(result.svg.svg)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(DEFAULT_TEXT_FONT_SIZE * 1.2 + (parseLength("7pt", "pt") ?? 7), 6),
+    ]);
   });
 
   it("keeps align=left explicit multiline text without text width on the fixed-lines paragraph path", async () => {

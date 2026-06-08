@@ -449,6 +449,38 @@ describe("knuth-plass paragraph helpers", () => {
     expect(result.lines.some((line) => line.xOffset !== 0)).toBe(true);
   });
 
+  it("applies first-line paragraph indentation to DP scoring and placement", () => {
+    const runs = [
+      textRun(0, "Alpha", 0),
+      spaceRun(1, 5),
+      textRun(2, "Beta", 6),
+      spaceRun(3, 10),
+      textRun(4, "Gamma", 11)
+    ];
+    const paragraph = model(runs, [5, 1, 4, 1, 5], [
+      spacePenalty(1),
+      spacePenalty(3),
+      glue(1, 1, 0),
+      glue(3, 1, 0)
+    ]);
+
+    const withoutIndent = breakWithDp(paragraph, 11, {
+      tolerance: 10000,
+      rightskipStretch: 10,
+      parfillskipStretch: Number.POSITIVE_INFINITY
+    });
+    const withIndent = breakWithDp(paragraph, 11, {
+      tolerance: 10000,
+      firstLineIndentWidth: 3,
+      rightskipStretch: 10,
+      parfillskipStretch: Number.POSITIVE_INFINITY
+    });
+
+    expect(withoutIndent.lines[0]).toMatchObject({ endRun: 2, xOffset: 0 });
+    expect(withIndent.lines[0]).toMatchObject({ endRun: 0, xOffset: 3 });
+    expect(withIndent.lines[1]?.xOffset).toBe(0);
+  });
+
   it("reports DP early exits for invalid widths and pathological inputs", () => {
     expect(breakWithDp(model([spaceRun(0, 0)], [1], []), 5).errors[0]).toContain("no breakable content");
     expect(breakWithDp(model([textRun(0, "x", 0)], [1], []), 0).errors[0]).toContain("non-positive");
@@ -1263,7 +1295,7 @@ describe("knuth-plass paragraph helpers", () => {
 
   it("preloads and caches the English hyphenator", async () => {
     expect(new NoopHyphenator().hyphenate()).toEqual([]);
-    expect(createEnglishHyphenator().hyphenate("hyphenation")).toEqual([]);
+    expect(createEnglishHyphenator().hyphenate("hyphenation").length).toBeGreaterThan(0);
 
     const exceptionHyphenator = new EnglishHyphenator(
       { children: new Map(), values: null },
@@ -1277,7 +1309,6 @@ describe("knuth-plass paragraph helpers", () => {
     const defaultHyphenator = createEnglishHyphenator();
     const permissiveHyphenator = createEnglishHyphenator({ leftMin: 1, rightMin: 1 });
 
-    expect(defaultHyphenator.hyphenate("hyphenation").length).toBeGreaterThan(0);
     expect(defaultHyphenator.hyphenate("hyphenation")).toBe(defaultHyphenator.hyphenate("Hyphenation"));
     expect(defaultHyphenator.hyphenate("blandit")).toEqual([4]);
     expect(defaultHyphenator.hyphenate("nonasciié")).toEqual([]);

@@ -24,13 +24,15 @@ export interface DpOptions {
   rightskipStretch?: number;
   rightskipShrink?: number;
   emergencyStretch?: number;
+  firstLineIndentWidth?: number;
+  forcedBreakIndentWidth?: number;
+  forcedBreakUsesParfill?: boolean;
   parfillskipWidth?: number;
   parfillskipStretch?: number;
   parfillskipShrink?: number;
   preventOverflow?: boolean;
   allowInfeasible?: boolean;
   allowLastResortOverfull?: boolean;
-  replaceEqualCostActiveState?: boolean;
 }
 
 interface Cursor {
@@ -50,6 +52,7 @@ interface SpacePenalty {
 interface ForcedPenalty {
   penalty: number;
   sourceOffset: number;
+  lineLeading?: string;
 }
 
 interface GlueMetrics {
@@ -125,10 +128,6 @@ interface BreakpointBest {
   choice: ActiveChoice;
 }
 
-interface ActiveLineClass {
-  states: ActiveState[];
-}
-
 type FitnessClass = 0 | 1 | 2 | 3; // very loose, loose, decent, tight
 
 const MAX_RUNS_FOR_DP = 3000;
@@ -139,6 +138,7 @@ const INITIAL_FITNESS_CLASS: FitnessClass = 2; // TeX's root active node is dece
 const FITNESS_CLASSES: readonly FitnessClass[] = [0, 1, 2, 3];
 const SP_PER_PT = 65536;
 const TEX_INF_BAD = 10000;
+const DIMEN_EPSILON_PT = 2 / SP_PER_PT;
 
 function toScaledPoint(value: number): number {
   return Math.max(0, Math.round(Math.abs(value) * SP_PER_PT));
@@ -274,6 +274,10 @@ function collectForcedPenalties(model: ParagraphModel): Map<number, ForcedPenalt
     map.set(runIndex, {
       penalty: item.penalty,
       sourceOffset: item.payload.sourceOffset,
+      lineLeading:
+        item.payload.breakRef?.kind === 'mspace'
+          ? item.payload.breakRef.lineLeading
+          : undefined,
     });
   }
 
@@ -478,6 +482,7 @@ function generateCandidates(
             sourceOffset: forcedPenalty.sourceOffset,
             visibleHyphen: false,
             flagged: false,
+            lineLeading: forcedPenalty.lineLeading,
           },
           breakPenalty: forcedPenalty.penalty,
           flagged: false,
@@ -555,6 +560,17 @@ function generateCandidates(
   return candidates;
 }
 
+function lineIndentWidth(
+  options: Pick<DpOptions, 'firstLineIndentWidth' | 'forcedBreakIndentWidth'>,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean
+): number {
+  if (isFirstLine) {
+    return options.firstLineIndentWidth ?? 0;
+  }
+  return followsForcedBreak ? options.forcedBreakIndentWidth ?? 0 : 0;
+}
+
 function scoreCandidate(
   candidate: BreakCandidate,
   width: number,
@@ -570,6 +586,9 @@ function scoreCandidate(
       | 'rightskipStretch'
       | 'rightskipShrink'
       | 'emergencyStretch'
+      | 'firstLineIndentWidth'
+      | 'forcedBreakIndentWidth'
+      | 'forcedBreakUsesParfill'
       | 'parfillskipWidth'
       | 'parfillskipStretch'
       | 'parfillskipShrink'
@@ -577,28 +596,39 @@ function scoreCandidate(
       | 'allowInfeasible'
     >
   >,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean,
   isLastLine: boolean
 ): CandidateScore | null {
   const isForcedBreak = candidate.break?.kind === 'forced';
+  const usesParfill = isLastLine || (isForcedBreak && options.forcedBreakUsesParfill);
+  const indentWidth = lineIndentWidth(options, isFirstLine, followsForcedBreak);
   const lineNaturalWidth =
     candidate.naturalWidth +
     options.leftskipWidth +
     options.rightskipWidth +
-    (isLastLine ? options.parfillskipWidth : 0);
+    indentWidth +
+    (usesParfill ? options.parfillskipWidth : 0);
 
   const totalStretch =
     candidate.stretch +
     options.leftskipStretch +
     options.rightskipStretch +
     options.emergencyStretch +
-    (isLastLine ? options.parfillskipStretch : 0);
+    (usesParfill ? options.parfillskipStretch : 0);
+  const outputStretch =
+    candidate.stretch +
+    options.leftskipStretch +
+    options.rightskipStretch +
+    (usesParfill ? options.parfillskipStretch : 0);
   const totalShrink =
     candidate.shrink +
     options.leftskipShrink +
     options.rightskipShrink +
-    (isLastLine ? options.parfillskipShrink : 0);
+    (usesParfill ? options.parfillskipShrink : 0);
 
-  const delta = width - lineNaturalWidth;
+  const rawDelta = width - lineNaturalWidth;
+  const delta = Math.abs(rawDelta) <= DIMEN_EPSILON_PT ? 0 : rawDelta;
   let ratio = 0;
   let badness = 0;
   let feasible = true;
@@ -641,7 +671,9 @@ function scoreCandidate(
     }
   }
 
-  if (!feasible && !options.allowInfeasible) {
+  const forcedLooseBreak = isForcedBreak && delta >= 0;
+
+  if (!feasible && !options.allowInfeasible && !forcedLooseBreak) {
     return null;
   }
 
@@ -649,7 +681,7 @@ function scoreCandidate(
     return null;
   }
 
-  if (badness > tolerance && !options.allowInfeasible) {
+  if (badness > tolerance && !options.allowInfeasible && !forcedLooseBreak) {
     return null;
   }
 
@@ -699,6 +731,21 @@ function scoreCandidate(
     return null;
   }
 
+  const outputRatio =
+    delta > 0
+      ? !Number.isFinite(outputStretch)
+        ? 0
+        : outputStretch > 0
+          ? delta / outputStretch
+          : ratio
+      : delta < 0
+        ? !Number.isFinite(totalShrink)
+          ? 0
+          : totalShrink > 0
+            ? delta / totalShrink
+            : ratio
+        : 0;
+
   const base = Math.abs(linePenalty) >= 10_000 ? 100_000_000 : linePenalty * linePenalty;
   let demerits = base;
 
@@ -708,29 +755,39 @@ function scoreCandidate(
     demerits -= penalty * penalty;
   }
 
-  let xOffset = options.leftskipWidth;
-  if (ratio > 0 && Number.isFinite(options.leftskipStretch)) {
-    xOffset += ratio * options.leftskipStretch;
-  } else if (ratio < 0 && Number.isFinite(options.leftskipShrink)) {
-    xOffset += ratio * options.leftskipShrink;
+  let xOffset = options.leftskipWidth + indentWidth;
+  if (delta > 0 && !Number.isFinite(outputStretch)) {
+    const infiniteLeftskip = !Number.isFinite(options.leftskipStretch) ? 1 : 0;
+    const infiniteRightskip = !Number.isFinite(options.rightskipStretch) ? 1 : 0;
+    const infiniteParfill =
+      usesParfill && !Number.isFinite(options.parfillskipStretch) ? 1 : 0;
+    const infiniteStretch =
+      infiniteLeftskip + infiniteRightskip + infiniteParfill;
+    if (infiniteStretch > 0 && infiniteLeftskip > 0) {
+      xOffset += delta / infiniteStretch;
+    }
+  } else if (outputRatio > 0 && Number.isFinite(options.leftskipStretch)) {
+    xOffset += outputRatio * options.leftskipStretch;
+  } else if (outputRatio < 0 && Number.isFinite(options.leftskipShrink)) {
+    xOffset += outputRatio * options.leftskipShrink;
   }
 
   return {
     badness,
     fitnessClass,
     demerits,
-    ratio,
+    ratio: outputRatio,
     delta,
     lineNaturalWidth,
     spaceDeltaPerGap:
       candidate.spaceCount > 0
-        ? ratio > 0
+        ? outputRatio > 0
           ? Number.isFinite(candidate.stretch)
-            ? (ratio * candidate.stretch) / candidate.spaceCount
+            ? (outputRatio * candidate.stretch) / candidate.spaceCount
             : 0
-          : ratio < 0
+          : outputRatio < 0
             ? Number.isFinite(candidate.shrink)
-              ? (ratio * candidate.shrink) / candidate.spaceCount
+              ? (outputRatio * candidate.shrink) / candidate.spaceCount
               : 0
             : 0
         : 0,
@@ -832,28 +889,37 @@ function candidateIsTooTightForFuture(
       | 'leftskipShrink'
       | 'rightskipWidth'
       | 'rightskipShrink'
+      | 'firstLineIndentWidth'
+      | 'forcedBreakIndentWidth'
+      | 'forcedBreakUsesParfill'
       | 'parfillskipWidth'
       | 'parfillskipShrink'
       | 'preventOverflow'
       | 'allowInfeasible'
     >
   >,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean,
   isLastLine: boolean
 ): boolean {
   if (options.allowInfeasible) {
     return false;
   }
+  const isForcedBreak = candidate.break?.kind === 'forced';
+  const usesParfill = isLastLine || (isForcedBreak && options.forcedBreakUsesParfill);
+  const indentWidth = lineIndentWidth(options, isFirstLine, followsForcedBreak);
   const lineNaturalWidth =
     candidate.naturalWidth +
     options.leftskipWidth +
     options.rightskipWidth +
-    (isLastLine ? options.parfillskipWidth : 0);
+    indentWidth +
+    (usesParfill ? options.parfillskipWidth : 0);
   const totalShrink =
     candidate.shrink +
     options.leftskipShrink +
     options.rightskipShrink +
-    (isLastLine ? options.parfillskipShrink : 0);
-  return lineNaturalWidth > width + totalShrink;
+    (usesParfill ? options.parfillskipShrink : 0);
+  return lineNaturalWidth > width + totalShrink + DIMEN_EPSILON_PT;
 }
 
 function artificialOverfullScore(
@@ -868,28 +934,38 @@ function artificialOverfullScore(
       | 'rightskipWidth'
       | 'rightskipStretch'
       | 'rightskipShrink'
+      | 'firstLineIndentWidth'
+      | 'forcedBreakIndentWidth'
+      | 'forcedBreakUsesParfill'
       | 'parfillskipWidth'
       | 'parfillskipStretch'
       | 'parfillskipShrink'
     >
   >,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean,
   isLastLine: boolean
 ): CandidateScore {
+  const isForcedBreak = candidate.break?.kind === 'forced';
+  const usesParfill = isLastLine || (isForcedBreak && options.forcedBreakUsesParfill);
+  const indentWidth = lineIndentWidth(options, isFirstLine, followsForcedBreak);
   const lineNaturalWidth =
     candidate.naturalWidth +
     options.leftskipWidth +
     options.rightskipWidth +
-    (isLastLine ? options.parfillskipWidth : 0);
+    indentWidth +
+    (usesParfill ? options.parfillskipWidth : 0);
   const totalShrink =
     candidate.shrink +
     options.leftskipShrink +
     options.rightskipShrink +
-    (isLastLine ? options.parfillskipShrink : 0);
-  const delta = width - lineNaturalWidth;
+    (usesParfill ? options.parfillskipShrink : 0);
+  const rawDelta = width - lineNaturalWidth;
+  const delta = Math.abs(rawDelta) <= DIMEN_EPSILON_PT ? 0 : rawDelta;
   const ratio = totalShrink > 0 && Number.isFinite(totalShrink)
     ? delta / totalShrink
     : Number.NEGATIVE_INFINITY;
-  let xOffset = options.leftskipWidth;
+  let xOffset = options.leftskipWidth + indentWidth;
   if (ratio < 0 && Number.isFinite(options.leftskipShrink)) {
     xOffset += ratio * options.leftskipShrink;
   }
@@ -1006,13 +1082,15 @@ export function breakWithDp(
     rightskipStretch: options.rightskipStretch ?? width,
     rightskipShrink: options.rightskipShrink ?? 0,
     emergencyStretch: options.emergencyStretch ?? 0,
+    firstLineIndentWidth: options.firstLineIndentWidth ?? 0,
+    forcedBreakIndentWidth: options.forcedBreakIndentWidth ?? 0,
+    forcedBreakUsesParfill: options.forcedBreakUsesParfill ?? false,
     parfillskipWidth: options.parfillskipWidth ?? 0,
     parfillskipStretch: options.parfillskipStretch ?? Number.POSITIVE_INFINITY,
     parfillskipShrink: options.parfillskipShrink ?? 0,
     preventOverflow: options.preventOverflow ?? false,
     allowInfeasible: options.allowInfeasible ?? false,
     allowLastResortOverfull: options.allowLastResortOverfull ?? false,
-    replaceEqualCostActiveState: options.replaceEqualCostActiveState ?? true,
   };
 
   const breakpoints = collectBreakpoints({
@@ -1051,125 +1129,126 @@ export function breakWithDp(
 
     const newStates: ActiveState[] = [];
     const deactivatedStateIds = new Set<number>();
-    const lineClasses: ActiveLineClass[] = [
-      { states: activeStates },
-    ];
 
-    for (const lineClass of lineClasses) {
-      const bestByFitness = new Map<FitnessClass, BreakpointBest>();
-      let minimumDemerits = Infinity;
+    const bestByFitness = new Map<FitnessClass, BreakpointBest>();
+    let minimumDemerits = Infinity;
 
-      for (let stateIndex = 0; stateIndex < lineClass.states.length; stateIndex++) {
-        const state = lineClass.states[stateIndex];
-        const candidate = generateCandidates(
-          model,
-          state.cursor,
-          forcedPenalties,
-          spacePenalties,
-          glueMetrics,
-          textPenalties
-        ).find((item) => breakpointKeyForCandidate(item) === breakpoint.key);
-        if (!candidate) {
-          continue;
-        }
-
-        const isLastLine = breakpoint.kind === 'final';
-        const score = scoreCandidate(
-          candidate,
-          width,
-          resolvedOptions.tolerance,
-          resolvedOptions,
-          isLastLine
-        );
-        if (!score) {
-          const tooTight = candidateIsTooTightForFuture(
-            candidate,
-            width,
-            resolvedOptions,
-            isLastLine
-          );
-          if (tooTight) {
-            deactivatedStateIds.add(state.id);
-          }
-          if (
-            resolvedOptions.allowLastResortOverfull &&
-            tooTight &&
-            !isLastLine &&
-            !Number.isFinite(minimumDemerits) &&
-            stateIndex === lineClass.states.length - 1 &&
-            lineClass.states
-              .slice(0, stateIndex)
-              .every((previousState) => deactivatedStateIds.has(previousState.id))
-          ) {
-            const artificialScore = artificialOverfullScore(
-              candidate,
-              width,
-              resolvedOptions,
-              isLastLine
-            );
-            const choice: ActiveChoice = {
-              candidate,
-              fitnessClass: artificialScore.fitnessClass,
-              score: artificialScore,
-            };
-            bestByFitness.set(artificialScore.fitnessClass, {
-              cost: state.cost,
-              fromState: state,
-              choice,
-            });
-            minimumDemerits = state.cost;
-          }
-          continue;
-        }
-
-        const choice: ActiveChoice = {
-          candidate,
-          fitnessClass: score.fitnessClass,
-          score,
-        };
-        const totalCost = totalCostForTransition(
-          state,
-          candidate,
-          score,
-          resolvedOptions,
-          isLastLine
-        );
-        if (isLastLine) {
-          if (
-            bestFinal === null ||
-            totalCost < bestFinal.cost ||
-            (totalCost === bestFinal.cost && resolvedOptions.replaceEqualCostActiveState)
-          ) {
-            bestFinal = {
-              cost: totalCost,
-              fromStateId: state.id,
-              choice,
-            };
-          }
-          continue;
-        }
-
-        const existing = bestByFitness.get(score.fitnessClass);
-        if (
-          !existing ||
-          totalCost < existing.cost ||
-          (totalCost === existing.cost && resolvedOptions.replaceEqualCostActiveState)
-        ) {
-          bestByFitness.set(score.fitnessClass, {
-            cost: totalCost,
-            fromState: state,
-            choice,
-          });
-        }
-        if (totalCost < minimumDemerits) {
-          minimumDemerits = totalCost;
-        }
-      }
-
-      if (breakpoint.kind === 'final' || !Number.isFinite(minimumDemerits)) {
+    for (let stateIndex = 0; stateIndex < activeStates.length; stateIndex++) {
+      const state = activeStates[stateIndex];
+      const candidate = generateCandidates(
+        model,
+        state.cursor,
+        forcedPenalties,
+        spacePenalties,
+        glueMetrics,
+        textPenalties
+      ).find((item) => breakpointKeyForCandidate(item) === breakpoint.key);
+      if (!candidate) {
         continue;
       }
 
+      const isLastLine = breakpoint.kind === 'final';
+      const isFirstLine = state.lineNumber === 1;
+      const followsForcedBreak = state.incomingChoice?.candidate.break?.kind === 'forced';
+      const score = scoreCandidate(
+        candidate,
+        width,
+        resolvedOptions.tolerance,
+        resolvedOptions,
+        isFirstLine,
+        followsForcedBreak,
+        isLastLine
+      );
+      if (!score) {
+        const tooTight = candidateIsTooTightForFuture(
+          candidate,
+          width,
+          resolvedOptions,
+          isFirstLine,
+          followsForcedBreak,
+          isLastLine
+        );
+        if (tooTight) {
+          deactivatedStateIds.add(state.id);
+        }
+        if (
+          resolvedOptions.allowLastResortOverfull &&
+          tooTight &&
+          !isLastLine &&
+          !Number.isFinite(minimumDemerits) &&
+          stateIndex === activeStates.length - 1 &&
+          activeStates
+            .slice(0, stateIndex)
+            .every((previousState) => deactivatedStateIds.has(previousState.id))
+        ) {
+          const artificialScore = artificialOverfullScore(
+            candidate,
+            width,
+            resolvedOptions,
+            isFirstLine,
+            followsForcedBreak,
+            isLastLine
+          );
+          const choice: ActiveChoice = {
+            candidate,
+            fitnessClass: artificialScore.fitnessClass,
+            score: artificialScore,
+          };
+          bestByFitness.set(artificialScore.fitnessClass, {
+            cost: state.cost,
+            fromState: state,
+            choice,
+          });
+          minimumDemerits = state.cost;
+        }
+        continue;
+      }
+
+      const choice: ActiveChoice = {
+        candidate,
+        fitnessClass: score.fitnessClass,
+        score,
+      };
+      const totalCost = totalCostForTransition(
+        state,
+        candidate,
+        score,
+        resolvedOptions,
+        isLastLine
+      );
+      if (isLastLine) {
+        if (
+          bestFinal === null ||
+          totalCost < bestFinal.cost ||
+          totalCost === bestFinal.cost
+        ) {
+          bestFinal = {
+            cost: totalCost,
+            fromStateId: state.id,
+            choice,
+          };
+        }
+        continue;
+      }
+
+      const existing = bestByFitness.get(score.fitnessClass);
+      if (
+        !existing ||
+        totalCost < existing.cost ||
+        totalCost === existing.cost
+      ) {
+        bestByFitness.set(score.fitnessClass, {
+          cost: totalCost,
+          fromState: state,
+          choice,
+        });
+      }
+      if (totalCost < minimumDemerits) {
+        minimumDemerits = totalCost;
+      }
+    }
+
+    if (Number.isFinite(minimumDemerits)) {
       const activeThreshold = minimumDemerits + Math.abs(resolvedOptions.adjdemerits);
       for (const fitnessClass of FITNESS_CLASSES) {
         const best = bestByFitness.get(fitnessClass);

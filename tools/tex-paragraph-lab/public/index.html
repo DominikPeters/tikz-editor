@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TeX Paragraph Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="controls" aria-label="Input controls">
+        <div class="field field-text">
+          <label for="source">Input</label>
+          <textarea id="source" spellcheck="false">Alpha Beta Gamma \par \noindent Delta \\[7pt] Epsilon</textarea>
+        </div>
+
+        <div class="option-grid">
+          <label class="field">
+            <span>Width</span>
+            <input id="width" type="number" min="20" max="800" step="1" value="150" />
+          </label>
+          <label class="field">
+            <span>Parindent</span>
+            <input id="parindent" type="number" min="0" max="200" step="1" value="0" />
+          </label>
+          <label class="field">
+            <span>Alignment</span>
+            <select id="alignment">
+              <option value="ragged-right">left</option>
+              <option value="ragged-left">right</option>
+              <option value="center">center</option>
+              <option value="justified">justify</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panes" aria-label="Render comparison">
+        <article class="pane">
+          <header>
+            <h1>TeX-Derived Renderer</h1>
+            <span id="ours-status" class="status">idle</span>
+          </header>
+          <div id="ours-output" class="render-surface"></div>
+          <pre id="ours-lines" class="lines"></pre>
+        </article>
+
+        <article class="pane">
+          <header>
+            <h1>Actual TeX</h1>
+            <span id="tex-status" class="status">idle</span>
+          </header>
+          <div id="tex-output" class="render-surface"></div>
+          <pre id="tex-lines" class="lines"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
