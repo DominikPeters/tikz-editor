@@ -27,6 +27,7 @@ export interface LineSegmentReport {
   sourceStartRaw?: number;
   sourceEndRaw?: number;
   sourceKind?: 'text' | 'math';
+  fontId?: string;
   x: number;
   width: number;
   caretStops?: number[];

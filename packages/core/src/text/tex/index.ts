@@ -17,6 +17,12 @@ export {
   type SimpleTexAlignmentNode,
   type SimpleTexControlNode,
   type SimpleTexEnvironmentBoundaryNode,
+  type SimpleTexFontCommandName,
+  type SimpleTexFontCommandNode,
+  type SimpleTexFontDeclarationName,
+  type SimpleTexFontDeclarationNode,
+  type SimpleTexFontState,
+  type SimpleTexGroupNode,
   type SimpleTexInlineNode,
   type SimpleTexLineBreakNode,
   type SimpleTexNoIndentNode,
@@ -30,6 +36,9 @@ export {
   type SimpleTexToken,
   type SimpleTexUnsupportedCommandNode,
   type TexAlignmentProfile,
+  type TexFontFamily,
+  type TexFontSeries,
+  type TexFontShape,
   type TexSpaceGlueProfile,
 } from "./ir.js";
 export {

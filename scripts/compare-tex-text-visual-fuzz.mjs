@@ -61,7 +61,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, or quote. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, or style. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -170,8 +170,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures", "quote"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, or quote.");
+  if (!["broad", "ligatures", "quote", "style"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, quote, or style.");
   }
   return options;
 }
@@ -330,12 +330,71 @@ function generateQuoteCase(index, random) {
   };
 }
 
+function styledPhrase(random, minWords = 2, maxWords = 5) {
+  const count = minWords + Math.floor(random() * (maxWords - minWords + 1));
+  return Array.from({ length: count }, () => choice(random, words)).join(" ");
+}
+
+function styledSentence(random, index) {
+  const lead = sentence(random, 3, 6);
+  const tail = sentence(random, 4, 8);
+  const phraseA = styledPhrase(random);
+  const phraseB = styledPhrase(random);
+  const phraseC = styledPhrase(random, 1, 3);
+  switch (index % 6) {
+    case 0:
+      return `${lead} \\textit{${phraseA}} ${tail}`;
+    case 1:
+      return `${lead} \\textbf{${phraseA}} \\textrm{${phraseB}}.`;
+    case 2:
+      return `${lead} \\emph{${phraseA} \\emph{${phraseC}} ${phraseB}}.`;
+    case 3:
+      return `${lead} \\textbf{${phraseA} \\textit{${phraseB}}} ${tail}`;
+    case 4:
+      return `${lead} \\textit{${phraseA} \\textbf{${phraseB}}} \\textnormal{${phraseC}}.`;
+    default:
+      return `${lead} \\textbf{${phraseA} \\emph{${phraseB}} \\textnormal{${phraseC}}}.`;
+  }
+}
+
+function generateStyleCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [100, 120, 150, 200, 240, 320];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 5;
+  let text;
+  if (feature === 0) {
+    text = `${styledSentence(random, index)} ${styledSentence(random, index + 1)}`;
+  } else if (feature === 1) {
+    text = `${styledSentence(random, index)} \\par ${styledSentence(random, index + 1)}`;
+  } else if (feature === 2) {
+    text = `${styledSentence(random, index)} \\\\[${choice(random, [4, 7])}pt] ${styledSentence(random, index + 1)}`;
+  } else if (feature === 3) {
+    text = `\\begin{quote} ${styledSentence(random, index)} \\par ${styledSentence(random, index + 1)} \\end{quote}`;
+  } else {
+    const declaration = choice(random, ["\\raggedright", "\\centering", "\\raggedleft"]);
+    text = `${paragraph(random, 1)} \\par ${declaration} ${styledSentence(random, index)}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "style",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateCaseForMode(index, random, mode) {
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
   }
   if (mode === "quote") {
     return generateQuoteCase(index, random);
+  }
+  if (mode === "style") {
+    return generateStyleCase(index, random);
   }
   return generateCase(index, random);
 }
@@ -407,10 +466,16 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
       if (segment.kind !== "text") {
         continue;
       }
+      const segmentFont = segment.fontId
+        ? deps.computerModernTexMetricProvider.resolveFont({
+          fontId: segment.fontId,
+          atPt: defaultTextFontSize,
+        })
+        : font;
       pieces.push(
         renderGlyphRun(
           segment.text ?? "",
-          font,
+          segmentFont,
           segment.x - left,
           firstLineAscentPt,
           deps.computerModernTexMetricProvider
@@ -434,7 +499,13 @@ function buildOursTrace(layout, deps) {
         if (segment.kind !== "text") {
           continue;
         }
-        const shaped = deps.computerModernTexMetricProvider.shapeText(segment.text ?? "", font);
+        const segmentFont = segment.fontId
+          ? deps.computerModernTexMetricProvider.resolveFont({
+            fontId: segment.fontId,
+            atPt: defaultTextFontSize,
+          })
+          : font;
+        const shaped = deps.computerModernTexMetricProvider.shapeText(segment.text ?? "", segmentFont);
         let cursor = segment.x;
         for (const item of shaped.items) {
           if (item.kind === "kern") {
@@ -444,6 +515,7 @@ function buildOursTrace(layout, deps) {
           if (item.code !== 32) {
             glyphs.push({
               code: item.code,
+              fontId: segmentFont.id,
               x: Number(cursor.toFixed(6)),
               y: Number(baselineY.toFixed(6)),
               width: Number(item.width.toFixed(6)),
@@ -481,11 +553,11 @@ function texGlyphText(code) {
 
 function buildTexSvgTrace(svg, oursTrace) {
   const rowsByY = new Map();
-  const usePattern = /<use\b[^>]*\bx=['"]([^'"]+)['"][^>]*\by=['"]([^'"]+)['"][^>]*\bxlink:href=['"]#g0-(\d+)['"]/g;
+  const usePattern = /<use\b[^>]*\bx=['"]([^'"]+)['"][^>]*\by=['"]([^'"]+)['"][^>]*\bxlink:href=['"]#(g\d+)-(\d+)['"]/g;
   for (const match of svg.matchAll(usePattern)) {
     const x = Number(match[1]);
     const y = Number(match[2]);
-    const glyphId = `g0-${match[3]}`;
+    const glyphId = `${match[3]}-${match[4]}`;
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       continue;
     }
@@ -661,10 +733,11 @@ function buildTexDocument(caseData, pageWidth, pageHeight) {
 \usepackage[paperwidth=${formatPt(pageWidth)}pt,paperheight=${formatPt(pageHeight)}pt,margin=0pt]{geometry}
 \usepackage{tikz}
 \pagestyle{empty}
+\renewcommand{\rmdefault}{cmr}
 \begin{document}
-\font\test=cmr10 at 10pt\test
+\fontencoding{OT1}\fontfamily{cmr}\selectfont
 \noindent\begin{tikzpicture}[x=1pt,y=1pt]
-\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=${formatPt(caseData.parindent)}pt\test}] at (0,0) {${caseData.text}};
+\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\fontencoding{OT1}\fontfamily{cmr}\selectfont\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
 \end{tikzpicture}
 \end{document}
 `;
@@ -673,7 +746,7 @@ function buildTexDocument(caseData, pageWidth, pageHeight) {
 function texOracleCacheKey(caseData, pageWidth, pageHeight) {
   return createHash("sha256")
     .update(JSON.stringify({
-      version: 1,
+      version: 3,
       text: caseData.text,
       width: caseData.width,
       parindent: caseData.parindent,
@@ -686,7 +759,7 @@ function texOracleCacheKey(caseData, pageWidth, pageHeight) {
 }
 
 function runTexOracle(texPath, pdfPath, texPdfToCairoSvgPath, texDvisvgmSvgPath, caseDir) {
-  execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
+  execFileSync("pdflatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
     cwd: caseDir,
     env: {
       ...process.env,
@@ -764,8 +837,9 @@ function buildTexTraceDocument(caseData) {
 \usepackage{tikz}
 \pagestyle{empty}
 \makeatletter
+\renewcommand{\rmdefault}{cmr}
 \begin{document}
-\font\test=cmr10 at 10pt\test
+\fontencoding{OT1}\fontfamily{cmr}\selectfont
 \newbox\tracebox
 \setbox\tracebox=\vbox{%
 \hsize=${formatPt(caseData.width)}pt
@@ -773,7 +847,7 @@ function buildTexTraceDocument(caseData) {
 \tolerance=9999
 \emergencystretch=30pt
 \parindent=${formatPt(caseData.parindent)}pt
-\test
+\fontencoding{OT1}\fontfamily{cmr}\selectfont
 ${texTraceAlignmentSetup(caseData.alignment.label)}
 \noindent%
 ${caseData.text}\par
@@ -1020,7 +1094,7 @@ async function main() {
   if (!existsSync(distEntry) || !existsSync(parseLengthEntry)) {
     throw new Error("Missing core dist files. Run `npm run -w @tikz-editor/core build` first.");
   }
-  requireCommands(["lualatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
+  requireCommands(["pdflatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
 
   const deps = {
     ...(await import(distEntry)),

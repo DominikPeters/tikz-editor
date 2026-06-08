@@ -1,10 +1,15 @@
 import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
 import type { ResolvedTexFont } from "./fonts/types.js";
 import {
+  computerModernTexMetricProvider,
+  type DefaultComputerModernTextFont,
+} from "./fonts/computer-modern.js";
+import {
   simpleTexInlineNodesToTokens,
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphBlock,
   type SimpleTexParagraphSegment,
+  type SimpleTexFontState,
   type TexAlignmentProfile,
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
@@ -21,6 +26,7 @@ export interface TexLayoutTextItem {
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly font: ResolvedTexFont;
+  readonly italicCorrectionAfter: boolean;
   readonly spaceFactorBefore: number;
   readonly spaceFactorAfter: number;
 }
@@ -87,7 +93,10 @@ export function createSimpleTexLayoutDocumentIr(params: {
   readonly options: TexLayoutIrOptions;
 }): SimpleTexLayoutDocumentIr {
   const paragraphs: TexLayoutParagraphIr[] = [];
-  const reportAlignment = params.blocks[0]?.alignment ?? params.defaultAlignment;
+  const reportAlignment = texHonoredBlockAlignment(
+    params.blocks[0],
+    params.options
+  ) ?? params.defaultAlignment;
   let layoutMode: KnuthPlassLayoutMode = "wrap";
   let activeAlignment = params.defaultAlignment;
   let activeAlignmentProfile: TexAlignmentProfile | undefined;
@@ -98,16 +107,16 @@ export function createSimpleTexLayoutDocumentIr(params: {
     const block = params.blocks[blockIndex];
     const inheritedAlignment = activeAlignment;
     const inheritedAlignmentProfile = activeAlignmentProfile;
-    const alignment = block.alignment ?? activeAlignment;
-    const alignmentProfile = block.alignment
-      ? block.alignmentProfile
-      : activeAlignmentProfile;
+    const blockAlignment = texHonoredBlockAlignment(block, params.options);
+    const blockAlignmentProfile = blockAlignment ? block.alignmentProfile : undefined;
+    const alignment = blockAlignment ?? activeAlignment;
+    const alignmentProfile = blockAlignment ? blockAlignmentProfile : activeAlignmentProfile;
 
-    if (block.alignment) {
-      activeAlignment = block.alignment;
-      activeAlignmentProfile = block.alignmentProfile;
+    if (blockAlignment) {
+      activeAlignment = blockAlignment;
+      activeAlignmentProfile = blockAlignmentProfile;
       if (
-        block.alignmentProfile === "latex-declaration" &&
+        blockAlignmentProfile === "latex-declaration" &&
         params.options.tikzTextWidthNode === true
       ) {
         activeSpaceGlueProfile = "tikz-fixed";
@@ -157,7 +166,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
         forcedBreakAfter: segment.forcedBreakAfter,
         items: simpleTexSegmentToLayoutItems(
           segment,
-          params.font,
+          params.font.atPt,
           activeSpaceGlueProfile
         ),
       });
@@ -184,6 +193,22 @@ function texArticleQuoteVerticalSkipBefore(
     return 10;
   }
   return 0;
+}
+
+function texHonoredBlockAlignment(
+  block: SimpleTexParagraphBlock | undefined,
+  options: TexLayoutIrOptions
+): TexParagraphAlignment | undefined {
+  if (!block?.alignment) {
+    return undefined;
+  }
+  if (
+    options.tikzTextWidthNode === true &&
+    block.alignmentProfile === "latex-declaration"
+  ) {
+    return undefined;
+  }
+  return block.alignment;
 }
 
 function texQuoteParagraphAlignment(
@@ -221,7 +246,7 @@ function texArticleQuoteMarginWidth(quoteDepth: number, font: ResolvedTexFont): 
 
 function simpleTexSegmentToLayoutItems(
   segment: SimpleTexParagraphSegment,
-  font: ResolvedTexFont,
+  atPt: number,
   spaceGlueProfile: TexSpaceGlueProfile
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes);
@@ -229,12 +254,17 @@ function simpleTexSegmentToLayoutItems(
   let spaceFactor = 1000;
   let hasSeenText = false;
 
-  for (const token of tokens) {
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = tokens[tokenIndex];
     if (token.kind === "space" && !hasSeenText) {
       continue;
     }
 
     if (token.kind === "text") {
+      const font = resolveComputerModernFontForState(token.fontState, atPt);
+      const italicCorrectionAfter =
+        token.italicCorrectionAfter === true &&
+        !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]);
       const spaceFactorBefore = spaceFactor;
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
       items.push({
@@ -243,6 +273,7 @@ function simpleTexSegmentToLayoutItems(
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
+        italicCorrectionAfter,
         spaceFactorBefore,
         spaceFactorAfter: spaceFactor,
       });
@@ -251,6 +282,7 @@ function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "forced-break") {
+      const font = resolveComputerModernFontForState(token.fontState, atPt);
       items.push({
         kind: "forced-break",
         text: " ",
@@ -264,6 +296,7 @@ function simpleTexSegmentToLayoutItems(
       continue;
     }
 
+    const font = resolveComputerModernFontForState(token.fontState, atPt);
     items.push({
       kind: "space",
       text: " ",
@@ -279,6 +312,55 @@ function simpleTexSegmentToLayoutItems(
     items.pop();
   }
   return items;
+}
+
+function texItalicCorrectionSuppressedByNextToken(
+  token: ReturnType<typeof simpleTexInlineNodesToTokens>[number] | undefined
+): boolean {
+  return token?.kind === "text" && (token.text.startsWith(",") || token.text.startsWith("."));
+}
+
+function resolveComputerModernFontForState(
+  state: SimpleTexFontState,
+  atPt: number
+): ResolvedTexFont {
+  return computerModernTexMetricProvider.resolveFont({
+    fontId: computerModernFontIdForState(state),
+    atPt,
+  });
+}
+
+function computerModernFontIdForState(
+  state: SimpleTexFontState
+): DefaultComputerModernTextFont {
+  if (state.family === "sans") {
+    if (state.series === "bold") {
+      return "cmssbx10";
+    }
+    if (state.shape === "small-caps") {
+      return "cmcsc10";
+    }
+    if (state.shape === "italic") {
+      return "cmssi10";
+    }
+    return "cmss10";
+  }
+  if (state.series === "bold" && state.shape === "small-caps") {
+    return "cmbx10";
+  }
+  if (state.series === "bold" && state.shape === "italic") {
+    return "cmbxti10";
+  }
+  if (state.series === "bold") {
+    return "cmbx10";
+  }
+  if (state.shape === "small-caps") {
+    return "cmcsc10";
+  }
+  if (state.shape === "italic") {
+    return "cmti10";
+  }
+  return "cmr10";
 }
 
 function texInitialSpaceGlueProfile(

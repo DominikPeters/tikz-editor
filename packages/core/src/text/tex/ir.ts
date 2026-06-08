@@ -3,6 +3,38 @@ import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
 export type TexSpaceGlueProfile = "font" | "tikz-fixed";
+export type TexFontFamily = "roman" | "sans";
+export type TexFontSeries = "medium" | "bold";
+export type TexFontShape = "upright" | "italic" | "small-caps";
+export type SimpleTexFontCommandName =
+  | "textit"
+  | "textbf"
+  | "emph"
+  | "textrm"
+  | "textsf"
+  | "textsc"
+  | "textnormal";
+export type SimpleTexFontDeclarationName =
+  | "it"
+  | "bf"
+  | "rm"
+  | "sf"
+  | "sc"
+  | "em"
+  | "itshape"
+  | "bfseries"
+  | "mdseries"
+  | "rmfamily"
+  | "sffamily"
+  | "upshape"
+  | "scshape"
+  | "normalfont";
+
+export interface SimpleTexFontState {
+  readonly family: TexFontFamily;
+  readonly series: TexFontSeries;
+  readonly shape: TexFontShape;
+}
 
 interface SimpleTexSourceRange {
   readonly sourceStart: number;
@@ -23,6 +55,29 @@ export interface SimpleTexLineBreakNode extends SimpleTexSourceRange {
   readonly kind: "line-break";
   readonly text: string;
   readonly lineLeading?: string;
+}
+
+export interface SimpleTexFontCommandNode extends SimpleTexSourceRange {
+  readonly kind: "font-command";
+  readonly text: string;
+  readonly command: SimpleTexFontCommandName;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+}
+
+export interface SimpleTexFontDeclarationNode extends SimpleTexSourceRange {
+  readonly kind: "font-declaration";
+  readonly text: string;
+  readonly command: SimpleTexFontDeclarationName;
+}
+
+export interface SimpleTexGroupNode extends SimpleTexSourceRange {
+  readonly kind: "group";
+  readonly text: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
 }
 
 export interface SimpleTexParagraphBreakNode extends SimpleTexSourceRange {
@@ -58,7 +113,10 @@ export interface SimpleTexEnvironmentBoundaryNode extends SimpleTexSourceRange {
 export type SimpleTexInlineNode =
   | SimpleTexTextNode
   | SimpleTexSpaceNode
-  | SimpleTexLineBreakNode;
+  | SimpleTexLineBreakNode
+  | SimpleTexFontCommandNode
+  | SimpleTexFontDeclarationNode
+  | SimpleTexGroupNode;
 
 export type SimpleTexControlNode =
   | SimpleTexParagraphBreakNode
@@ -75,6 +133,8 @@ export interface SimpleTexToken {
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly lineLeading?: string;
+  readonly fontState: SimpleTexFontState;
+  readonly italicCorrectionAfter?: boolean;
 }
 
 export interface SimpleTexParagraphBlock {
@@ -122,6 +182,11 @@ const whitespacePattern = /[ \n]+/;
 const paragraphBreakPattern = /^\n(?: *\n)+/;
 const lineLeadingOptionPattern =
   /^\[\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)\s*\]/i;
+const defaultSimpleTexFontState: SimpleTexFontState = {
+  family: "roman",
+  series: "medium",
+  shape: "upright",
+};
 
 export function getSimpleTexFallbackReason(text: string, width: number): string | null {
   if (!Number.isFinite(width) || width <= 0) {
@@ -186,6 +251,8 @@ function scanSimpleTexIrNodes(
 
       const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
       const environmentBoundary = scanSimpleTexEnvironmentBoundary(text, index);
+      const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
+      const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (environmentBoundary) {
         nodes.push({
           kind: "environment-boundary",
@@ -232,6 +299,17 @@ function scanSimpleTexIrNodes(
         index = paragraphCommand.end;
         continue;
       }
+      if (fontCommand) {
+        nodes.push(fontCommand.node);
+        unsupportedCommand ||= fontCommand.unsupportedCommand;
+        index = fontCommand.end;
+        continue;
+      }
+      if (fontDeclaration) {
+        nodes.push(fontDeclaration.node);
+        index = skipSimpleTexControlWordSpaces(text, fontDeclaration.end);
+        continue;
+      }
 
       const end = scanUnsupportedControlSequenceEnd(text, index);
       nodes.push({
@@ -245,7 +323,26 @@ function scanSimpleTexIrNodes(
       continue;
     }
 
-    if (char === "{" || char === "}") {
+    if (char === "{") {
+      const group = scanSimpleTexGroup(text, index, sourceOffset);
+      if (group) {
+        nodes.push(group.node);
+        unsupportedCommand ||= group.unsupportedCommand;
+        index = group.end;
+        continue;
+      }
+      nodes.push({
+        kind: "unsupported-command",
+        text: char,
+        sourceStart,
+        sourceEnd: sourceStart + 1,
+      });
+      unsupportedCommand = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === "}") {
       nodes.push({
         kind: "unsupported-command",
         text: char,
@@ -291,6 +388,8 @@ function scanSimpleTexIrNodes(
     while (
       index < text.length &&
       text[index] !== "\\" &&
+      text[index] !== "{" &&
+      text[index] !== "}" &&
       !whitespacePattern.test(text[index] ?? "")
     ) {
       index += 1;
@@ -327,6 +426,193 @@ function scanSimpleTexEnvironmentBoundary(
     };
   }
   return null;
+}
+
+function scanSimpleTexFontCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexFontCommandNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const command = scanSimpleTexFontCommandName(text, start);
+  if (!command) {
+    return null;
+  }
+
+  let groupStart = command.end;
+  while (text[groupStart] === " " || text[groupStart] === "\n") {
+    groupStart += 1;
+  }
+  if (text[groupStart] !== "{") {
+    return null;
+  }
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
+  if (groupEnd === null) {
+    return null;
+  }
+
+  const contentStart = groupStart + 1;
+  const contentEnd = groupEnd - 1;
+  const childScan = scanSimpleTexIrNodes(
+    text.slice(contentStart, contentEnd),
+    sourceOffset + contentStart
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  return {
+    node: {
+      kind: "font-command",
+      text: text.slice(start, groupEnd),
+      command: command.name,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + contentEnd,
+      children: childrenAreInline
+        ? childScan.nodes.filter(isSimpleTexInlineNode)
+        : [],
+    },
+    end: groupEnd,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline,
+  };
+}
+
+function scanSimpleTexFontCommandName(
+  text: string,
+  start: number
+): { name: SimpleTexFontCommandName; end: number } | null {
+  for (const name of ["textnormal", "textit", "textbf", "textrm", "textsf", "textsc", "emph"] as const) {
+    const end = scanSimpleTexControlWord(text, start, name);
+    if (end !== null) {
+      return { name, end };
+    }
+  }
+  return null;
+}
+
+function scanSimpleTexFontDeclaration(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexFontDeclarationNode;
+  end: number;
+} | null {
+  const command = scanSimpleTexFontDeclarationName(text, start);
+  if (!command) {
+    return null;
+  }
+  return {
+    node: {
+      kind: "font-declaration",
+      text: text.slice(start, command.end),
+      command: command.name,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + command.end,
+    },
+    end: command.end,
+  };
+}
+
+function scanSimpleTexFontDeclarationName(
+  text: string,
+  start: number
+): { name: SimpleTexFontDeclarationName; end: number } | null {
+  for (const name of [
+    "normalfont",
+    "bfseries",
+    "mdseries",
+    "rmfamily",
+    "sffamily",
+    "itshape",
+    "upshape",
+    "scshape",
+    "it",
+    "bf",
+    "rm",
+    "sf",
+    "sc",
+    "em",
+  ] as const) {
+    const end = scanSimpleTexControlWord(text, start, name);
+    if (end !== null) {
+      return { name, end };
+    }
+  }
+  return null;
+}
+
+function scanSimpleTexGroup(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexGroupNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, start);
+  if (groupEnd === null) {
+    return null;
+  }
+
+  const contentStart = start + 1;
+  const contentEnd = groupEnd - 1;
+  const childScan = scanSimpleTexIrNodes(
+    text.slice(contentStart, contentEnd),
+    sourceOffset + contentStart
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  return {
+    node: {
+      kind: "group",
+      text: text.slice(start, groupEnd),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + contentEnd,
+      children: childrenAreInline
+        ? childScan.nodes.filter(isSimpleTexInlineNode)
+        : [],
+    },
+    end: groupEnd,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline,
+  };
+}
+
+function findBalancedSimpleTexGroupEnd(text: string, start: number): number | null {
+  if (text[start] !== "{") {
+    return null;
+  }
+  let depth = 0;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return null;
+}
+
+function skipSimpleTexControlWordSpaces(text: string, start: number): number {
+  let index = start;
+  while (text[index] === " " || text[index] === "\n") {
+    index += 1;
+  }
+  return index;
 }
 
 export function scanSimpleTexLineBreak(
@@ -409,7 +695,14 @@ function scanUnsupportedControlSequenceEnd(text: string, start: number): number 
 }
 
 function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode {
-  return node.kind === "text" || node.kind === "space" || node.kind === "line-break";
+  return (
+    node.kind === "text" ||
+    node.kind === "space" ||
+    node.kind === "line-break" ||
+    node.kind === "font-command" ||
+    node.kind === "font-declaration" ||
+    node.kind === "group"
+  );
 }
 
 function simpleTexInlineNodesForRange(
@@ -695,10 +988,12 @@ export function tokenizeSimpleTexParagraph(
 }
 
 export function simpleTexInlineNodesToTokens(
-  nodes: readonly SimpleTexInlineNode[]
+  nodes: readonly SimpleTexInlineNode[],
+  fontState: SimpleTexFontState = defaultSimpleTexFontState
 ): SimpleTexToken[] {
   const tokens: SimpleTexToken[] = [];
   let skipPostLineBreakSpace = false;
+  let activeFontState = fontState;
 
   for (const node of nodes) {
     if (node.kind === "line-break") {
@@ -711,8 +1006,48 @@ export function simpleTexInlineNodesToTokens(
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         lineLeading: node.lineLeading,
+        fontState: activeFontState,
       });
       skipPostLineBreakSpace = true;
+      continue;
+    }
+
+    if (node.kind === "font-command") {
+      let childTokens = simpleTexInlineNodesToTokens(
+        node.children,
+        simpleTexFontStateForCommand(activeFontState, node.command)
+      );
+      if (simpleTexFontStateHasItalicCorrection(childTokens[0]?.fontState)) {
+        childTokens = markLastTextTokenItalicCorrection(childTokens);
+      }
+      if (skipPostLineBreakSpace && childTokens[0]?.kind === "space") {
+        tokens.push(...childTokens.slice(1));
+      } else {
+        tokens.push(...childTokens);
+      }
+      skipPostLineBreakSpace = childTokens.at(-1)?.kind === "forced-break";
+      continue;
+    }
+
+    if (node.kind === "font-declaration") {
+      activeFontState = simpleTexFontStateForDeclaration(
+        activeFontState,
+        node.command
+      );
+      continue;
+    }
+
+    if (node.kind === "group") {
+      const childTokens = simpleTexInlineNodesToTokens(
+        node.children,
+        activeFontState
+      );
+      if (skipPostLineBreakSpace && childTokens[0]?.kind === "space") {
+        tokens.push(...childTokens.slice(1));
+      } else {
+        tokens.push(...childTokens);
+      }
+      skipPostLineBreakSpace = childTokens.at(-1)?.kind === "forced-break";
       continue;
     }
 
@@ -725,6 +1060,7 @@ export function simpleTexInlineNodesToTokens(
         text: " ",
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
       });
       continue;
     }
@@ -735,7 +1071,108 @@ export function simpleTexInlineNodesToTokens(
       text: node.text,
       sourceStart: node.sourceStart,
       sourceEnd: node.sourceEnd,
+      fontState: activeFontState,
     });
   }
   return tokens;
+}
+
+function simpleTexFontStateHasItalicCorrection(
+  state: SimpleTexFontState | undefined
+): boolean {
+  return state?.shape === "italic";
+}
+
+function markLastTextTokenItalicCorrection(
+  tokens: readonly SimpleTexToken[]
+): SimpleTexToken[] {
+  const next = [...tokens];
+  for (let index = next.length - 1; index >= 0; index -= 1) {
+    if (next[index]?.kind !== "text") {
+      continue;
+    }
+    next[index] = {
+      ...next[index],
+      italicCorrectionAfter: true,
+    };
+    break;
+  }
+  return next;
+}
+
+function simpleTexFontStateForCommand(
+  current: SimpleTexFontState,
+  command: SimpleTexFontCommandName
+): SimpleTexFontState {
+  if (command === "textit") {
+    return { ...current, shape: "italic" };
+  }
+  if (command === "textbf") {
+    return { ...current, series: "bold" };
+  }
+  if (command === "emph") {
+    return {
+      ...current,
+      shape: current.shape === "italic" ? "upright" : "italic",
+    };
+  }
+  if (command === "textnormal") {
+    return defaultSimpleTexFontState;
+  }
+  if (command === "textsf") {
+    return { ...current, family: "sans" };
+  }
+  if (command === "textsc") {
+    return { ...current, shape: "small-caps" };
+  }
+  return { ...current, family: "roman" };
+}
+
+function simpleTexFontStateForDeclaration(
+  current: SimpleTexFontState,
+  command: SimpleTexFontDeclarationName
+): SimpleTexFontState {
+  if (command === "it") {
+    return { ...defaultSimpleTexFontState, shape: "italic" };
+  }
+  if (command === "bf") {
+    return { ...defaultSimpleTexFontState, series: "bold" };
+  }
+  if (command === "rm") {
+    return defaultSimpleTexFontState;
+  }
+  if (command === "sf") {
+    return { ...defaultSimpleTexFontState, family: "sans" };
+  }
+  if (command === "sc") {
+    return { ...defaultSimpleTexFontState, shape: "small-caps" };
+  }
+  if (command === "em") {
+    return {
+      ...current,
+      shape: current.shape === "italic" ? "upright" : "italic",
+    };
+  }
+  if (command === "normalfont") {
+    return defaultSimpleTexFontState;
+  }
+  if (command === "itshape") {
+    return { ...current, shape: "italic" };
+  }
+  if (command === "upshape") {
+    return { ...current, shape: "upright" };
+  }
+  if (command === "scshape") {
+    return { ...current, shape: "small-caps" };
+  }
+  if (command === "bfseries") {
+    return { ...current, series: "bold" };
+  }
+  if (command === "mdseries") {
+    return { ...current, series: "medium" };
+  }
+  if (command === "sffamily") {
+    return { ...current, family: "sans" };
+  }
+  return { ...current, family: "roman" };
 }

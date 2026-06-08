@@ -6,8 +6,12 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmr10",
   "cmbx10",
   "cmti10",
+  "cmbxti10",
   "cmtt10",
   "cmss10",
+  "cmssi10",
+  "cmssbx10",
+  "cmcsc10",
 ] as const;
 
 export type DefaultComputerModernTextFont = typeof DEFAULT_COMPUTER_MODERN_TEXT_FONTS[number];

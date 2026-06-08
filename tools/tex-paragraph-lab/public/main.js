@@ -123,7 +123,13 @@ function renderReportSvg(report) {
       }
       const text = segment.text ?? "";
       if (text) {
-        pieces.push(renderGlyphRun(text, font, segment.x - lineLeft, baseline));
+        const segmentFont = segment.fontId
+          ? computerModernTexMetricProvider.resolveFont({
+            fontId: segment.fontId,
+            atPt: DEFAULT_TEXT_FONT_SIZE,
+          })
+          : font;
+        pieces.push(renderGlyphRun(text, segmentFont, segment.x - lineLeft, baseline));
       }
     }
     pieces.push("</g>");
@@ -157,6 +163,7 @@ function computeLineTops(report) {
   const tops = [];
   let cursor = 0;
   for (const line of report.lines) {
+    cursor += Math.max(0, line.verticalSkipBefore ?? 0);
     tops[line.lineIndex] = cursor;
     cursor += LINE_HEIGHT_PT + lineLeadingPt(line.break?.lineLeading);
   }

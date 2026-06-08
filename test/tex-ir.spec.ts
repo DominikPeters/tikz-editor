@@ -74,15 +74,77 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
-  it("reports unsupported control sequences without emitting a partial tail block", () => {
-    const ir = parseSimpleTexParagraphIr(String.raw`Alpha \emph{Beta} Gamma`);
+  it("records nested inline font commands in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \textbf{Beta \textit{Gamma}} \textsf{\textsc{Delta}}`
+    );
 
-    expect(ir.unsupportedCommand).toBe(true);
-    expect(ir.nodes).toContainEqual(expect.objectContaining({
-      kind: "unsupported-command",
-      text: String.raw`\emph`,
-    }));
-    expect(ir.blocks).toEqual([]);
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "font-command",
+      "space",
+      "font-command",
+    ]);
+    const command = ir.nodes[2];
+    expect(command).toMatchObject({
+      kind: "font-command",
+      command: "textbf",
+    });
+    if (command?.kind !== "font-command") {
+      throw new Error("expected font command node");
+    }
+    expect(command.children.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "font-command",
+    ]);
+    expect(command.children[2]).toMatchObject({
+      kind: "font-command",
+      command: "textit",
+    });
+    expect(ir.nodes[4]).toMatchObject({
+      kind: "font-command",
+      command: "textsf",
+    });
+  });
+
+  it("records scoped old-style font declarations in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha {\it Beta {\bf Gamma} Beta} {\sffamily Delta \scshape Epsilon}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "group",
+      "space",
+      "group",
+    ]);
+    const italicGroup = ir.nodes[2];
+    expect(italicGroup).toMatchObject({
+      kind: "group",
+    });
+    if (italicGroup?.kind !== "group") {
+      throw new Error("expected group node");
+    }
+    expect(italicGroup.children.map((node) => node.kind)).toEqual([
+      "font-declaration",
+      "text",
+      "space",
+      "group",
+      "space",
+      "text",
+    ]);
+    expect(italicGroup.children[0]).toMatchObject({
+      kind: "font-declaration",
+      command: "it",
+    });
+    expect(italicGroup.children[3]).toMatchObject({
+      kind: "group",
+    });
   });
 
   it("records quote environment boundaries and paragraph quote depth", () => {
@@ -120,6 +182,73 @@ describe("simple TeX paragraph IR", () => {
     const spaces = layout.paragraphs[0]?.items.filter((item) => item.kind === "space") ?? [];
     expect(spaces.map((space) => space.spaceFactor)).toEqual([3000, 1000]);
     expect(spaces.map((space) => space.spaceGlueProfile)).toEqual(["font", "font"]);
+  });
+
+  it("materializes nested inline font commands as Computer Modern font runs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A \textit{B \emph{C} \textbf{D}} \textnormal{\textbf{E}} \textrm{F} \textsf{G \textbf{H \textit{I}} \textsc{J}} \textsc{K \textsf{L} \textbf{M}} \textsf{\textbf{\textsc{N}}}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs).toHaveLength(1);
+    expect(layout.paragraphs[0]?.items
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "cmr10" },
+        { text: "B", font: "cmti10" },
+        { text: "C", font: "cmr10" },
+        { text: "D", font: "cmbxti10" },
+        { text: "E", font: "cmbx10" },
+        { text: "F", font: "cmr10" },
+        { text: "G", font: "cmss10" },
+        { text: "H", font: "cmssbx10" },
+        { text: "I", font: "cmssbx10" },
+        { text: "J", font: "cmcsc10" },
+        { text: "K", font: "cmcsc10" },
+        { text: "L", font: "cmcsc10" },
+        { text: "M", font: "cmbx10" },
+        { text: "N", font: "cmssbx10" },
+      ]);
+  });
+
+  it("materializes scoped font declarations as local Computer Modern font runs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A {\it B {\bf C} D} {\itshape E {\bfseries F}} {\sf G {\bf H} {\bfseries I} {\sc J}} {\scshape K {\sffamily L} {\bfseries M}} {\em N {\em O} P} Q`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs).toHaveLength(1);
+    expect(layout.paragraphs[0]?.items
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "cmr10" },
+        { text: "B", font: "cmti10" },
+        { text: "C", font: "cmbx10" },
+        { text: "D", font: "cmti10" },
+        { text: "E", font: "cmti10" },
+        { text: "F", font: "cmbxti10" },
+        { text: "G", font: "cmss10" },
+        { text: "H", font: "cmbx10" },
+        { text: "I", font: "cmssbx10" },
+        { text: "J", font: "cmcsc10" },
+        { text: "K", font: "cmcsc10" },
+        { text: "L", font: "cmcsc10" },
+        { text: "M", font: "cmbx10" },
+        { text: "N", font: "cmti10" },
+        { text: "O", font: "cmr10" },
+        { text: "P", font: "cmti10" },
+        { text: "Q", font: "cmr10" },
+      ]);
   });
 
   it("materializes LaTeX article quote margins in layout paragraph IR", () => {

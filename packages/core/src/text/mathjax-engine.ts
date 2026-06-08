@@ -16,6 +16,7 @@ import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import { computerModernTexMetricProvider, layoutSimpleTexParagraph } from "./tex/index.js";
 import type { ResolvedTexFont, TexShapedItem } from "./tex/index.js";
+import type { DefaultComputerModernTextFont } from "./tex/index.js";
 import type {
   NodeTextEngine,
   NodeTextMeasureRequest,
@@ -1107,7 +1108,13 @@ function renderSimpleTexSvgBody(
       if (!text) {
         continue;
       }
-      pieces.push(renderTexGlyphRun(text, font, segment.x - lineLeft, baseline - lineTop));
+      const segmentFont = segment.fontId
+        ? computerModernTexMetricProvider.resolveFont({
+          fontId: segment.fontId as DefaultComputerModernTextFont,
+          atPt: DEFAULT_TEXT_FONT_SIZE,
+        })
+        : font;
+      pieces.push(renderTexGlyphRun(text, segmentFont, segment.x - lineLeft, baseline - lineTop));
     }
     pieces.push("</g>");
   }

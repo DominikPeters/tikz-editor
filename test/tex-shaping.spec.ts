@@ -223,6 +223,8 @@ describe("Computer Modern OT1 text shaping", () => {
     const cmr10 = computerModernTexMetricProvider.resolveFont({ fontId: "cmr10" });
     const cmbx10 = computerModernTexMetricProvider.resolveFont({ fontId: "cmbx10" });
     const cmtt10 = computerModernTexMetricProvider.resolveFont({ fontId: "cmtt10" });
+    const cmss10 = computerModernTexMetricProvider.resolveFont({ fontId: "cmss10" });
+    const cmcsc10 = computerModernTexMetricProvider.resolveFont({ fontId: "cmcsc10" });
 
     expect(computerModernTexMetricProvider.shapeText("A", cmr10).width).toBeCloseTo(7.50002, 5);
     expect(computerModernTexMetricProvider.shapeText("A", cmbx10).width).toBeGreaterThan(7.50002);
@@ -230,6 +232,8 @@ describe("Computer Modern OT1 text shaping", () => {
       computerModernTexMetricProvider.shapeText("mmmm", cmtt10).width,
       6
     );
+    expect(computerModernTexMetricProvider.shapeText("Sans", cmss10).width).toBeGreaterThan(0);
+    expect(computerModernTexMetricProvider.shapeText("Small", cmcsc10).width).toBeGreaterThan(0);
   });
 
   it("applies TeX ligature programs and keeps raw source caret stops", () => {
@@ -715,6 +719,75 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("preserves nested inline font command fonts in line segments", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`A \textit{B \emph{C} \textbf{D}} \textnormal{\textbf{E}} \textrm{F} \textsf{G \textbf{H \textit{I}} \textsc{J}} \textsc{K \textsf{L} \textbf{M}} \textsf{\textbf{\textsc{N}}}`,
+      {
+        paragraphId: "tex:inline-fonts",
+        width: 500,
+        alignment: "justified",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["A B C D E F G H I J K L M N"]);
+    expect(result.report?.lines[0]?.segments
+      .filter((segment) => segment.kind === "text")
+      .map((segment) => ({ text: segment.text, fontId: segment.fontId }))).toEqual([
+        { text: "A", fontId: "cmr10" },
+        { text: "B", fontId: "cmti10" },
+        { text: "C", fontId: "cmr10" },
+        { text: "D", fontId: "cmbxti10" },
+        { text: "E", fontId: "cmbx10" },
+        { text: "F", fontId: "cmr10" },
+        { text: "G", fontId: "cmss10" },
+        { text: "H", fontId: "cmssbx10" },
+        { text: "I", fontId: "cmssbx10" },
+        { text: "J", fontId: "cmcsc10" },
+        { text: "K", fontId: "cmcsc10" },
+        { text: "L", fontId: "cmcsc10" },
+        { text: "M", fontId: "cmbx10" },
+        { text: "N", fontId: "cmssbx10" },
+      ]);
+  });
+
+  it("preserves scoped font declaration fonts in line segments", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`A {\it B {\bf C} D} {\itshape E {\bfseries F}} {\sf G {\bf H} {\bfseries I} {\sc J}} {\scshape K {\sffamily L} {\bfseries M}} {\em N {\em O} P} Q`,
+      {
+        paragraphId: "tex:inline-font-declarations",
+        width: 500,
+        alignment: "justified",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["A B C D E F G H I J K L M N O P Q"]);
+    expect(result.report?.lines[0]?.segments
+      .filter((segment) => segment.kind === "text")
+      .map((segment) => ({ text: segment.text, fontId: segment.fontId }))).toEqual([
+        { text: "A", fontId: "cmr10" },
+        { text: "B", fontId: "cmti10" },
+        { text: "C", fontId: "cmbx10" },
+        { text: "D", fontId: "cmti10" },
+        { text: "E", fontId: "cmti10" },
+        { text: "F", fontId: "cmbxti10" },
+        { text: "G", fontId: "cmss10" },
+        { text: "H", fontId: "cmbx10" },
+        { text: "I", fontId: "cmssbx10" },
+        { text: "J", fontId: "cmcsc10" },
+        { text: "K", fontId: "cmcsc10" },
+        { text: "L", fontId: "cmcsc10" },
+        { text: "M", fontId: "cmbx10" },
+        { text: "N", fontId: "cmti10" },
+        { text: "O", fontId: "cmr10" },
+        { text: "P", fontId: "cmti10" },
+        { text: "Q", fontId: "cmr10" },
+      ]);
+  });
+
   it("uses LaTeX quote-local paragraph skips under centered nodes", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`\begin{quote} Alpha Beta Gamma Delta Epsilon Zeta \end{quote}`,
@@ -777,6 +850,48 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
     expect(result.report?.lines[1]?.xStart).toBeGreaterThan(0);
     expect(result.report?.lines[1]?.xEnd).toBeLessThan(120);
+  });
+
+  it("keeps TikZ text-width alignment when LaTeX declarations appear after par", () => {
+    const centeredInRightNode = layoutSimpleTexParagraph(
+      String.raw`Alignment position baseline editor, beta. \par \centering Computer vector semantic visible wide manual, office beta, result basic final.`,
+      {
+        paragraphId: "tex:tikz-right-centering-declaration",
+        width: 240,
+        alignment: "ragged-left",
+        parindent: 10,
+        tikzTextWidthNode: true,
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+    const raggedRightInRightNode = layoutSimpleTexParagraph(
+      String.raw`Normal table figure vector quoted, lattice wide compact result. \par \raggedright Paper normal basic, reader, quoted sentence wide manual normal lattice. Classic computer classic single screen faithful actual nested,.`,
+      {
+        paragraphId: "tex:tikz-right-raggedright-declaration",
+        width: 240,
+        alignment: "ragged-left",
+        parindent: 15,
+        tikzTextWidthNode: true,
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(centeredInRightNode.supported).toBe(true);
+    expect(centeredInRightNode.report?.alignment).toBe("ragged-left");
+    expect(lineTexts(centeredInRightNode.report)).toEqual([
+      "Alignment position baseline editor, beta.",
+      "Computer vector semantic visible wide",
+      "manual, office beta, result basic final.",
+    ]);
+    expect(raggedRightInRightNode.supported).toBe(true);
+    expect(raggedRightInRightNode.report?.alignment).toBe("ragged-left");
+    expect(lineTexts(raggedRightInRightNode.report)).toEqual([
+      "Normal table figure vector quoted,",
+      "lattice wide compact result.",
+      "Paper normal basic, reader, quoted sentence",
+      "wide manual normal lattice. Classic computer",
+      "classic single screen faithful actual nested,.",
+    ]);
   });
 
   it("falls back when TeX noindent appears inside a paragraph", () => {

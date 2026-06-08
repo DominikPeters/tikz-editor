@@ -17,7 +17,12 @@ import type {
 } from "../knuth-plass/paragraph/types.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import { roundTexPt, tfmToPt } from "./fonts/units.js";
-import type { ResolvedTexFont, ShapedTexTextRun, TexGlyphBox } from "./fonts/types.js";
+import type {
+  ResolvedTexFont,
+  ShapedTexTextRun,
+  TexGlyphBox,
+  TexKern,
+} from "./fonts/types.js";
 import {
   getSimpleTexFallbackReason,
   parseSimpleTexParagraphIr,
@@ -366,9 +371,12 @@ function layoutItemsToRuns(
   for (const item of items) {
     const runIndex = runs.length;
     if (item.kind === "text") {
-      const shaped = computerModernTexMetricProvider.shapeText(item.text, item.font, {
-        sourceStart: item.sourceStart,
-      });
+      const shaped = withTrailingItalicCorrection(
+        computerModernTexMetricProvider.shapeText(item.text, item.font, {
+          sourceStart: item.sourceStart,
+        }),
+        item.italicCorrectionAfter
+      );
       const wrapper: AnyWrapper = {};
       shapedRunByWrapper.set(wrapper, shaped);
       shapedRuns.set(runIndex, shaped);
@@ -405,6 +413,54 @@ function layoutItemsToRuns(
     } satisfies SpaceRun);
   }
   return runs;
+}
+
+function withTrailingItalicCorrection(
+  shaped: ShapedTexTextRun,
+  enabled: boolean
+): ShapedTexTextRun {
+  if (!enabled) {
+    return shaped;
+  }
+  const lastGlyph = findLastTexGlyph(shaped.items);
+  const correction = lastGlyph?.italicCorrection ?? 0;
+  if (correction <= 0) {
+    return shaped;
+  }
+
+  const width = roundTexPt(shaped.width + correction);
+  const caretStops = [...shaped.caretStops];
+  caretStops[caretStops.length - 1] = width;
+  const sourceCaretStops = [...shaped.sourceCaretStops];
+  sourceCaretStops[sourceCaretStops.length - 1] = {
+    sourceOffset: shaped.sourceEnd,
+    x: width,
+  };
+  return {
+    ...shaped,
+    width,
+    items: [
+      ...shaped.items,
+      {
+        kind: "kern",
+        sourceStart: shaped.sourceEnd,
+        sourceEnd: shaped.sourceEnd,
+        width: correction,
+      } satisfies TexKern,
+    ],
+    caretStops,
+    sourceCaretStops,
+  };
+}
+
+function findLastTexGlyph(items: readonly ShapedTexTextRun["items"][number][]): TexGlyphBox | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.kind === "glyph") {
+      return item;
+    }
+  }
+  return null;
 }
 
 function texInterwordGlueForSpaceFactor(
@@ -448,20 +504,32 @@ function createTexParagraphMeasurement(
 ): MeasurementService {
   const spaceWidth = tfmToPt(font, font.data.fontdimen.space);
   const sliceWidthCache = new Map<string, number>();
-  const measureTexSlice = (word: string, start: number, end: number): number => {
+  const measureTexSlice = (
+    word: string,
+    start: number,
+    end: number,
+    wrapper?: AnyWrapper | null
+  ): number => {
+    const shaped = shapedRunForWrapper(wrapper);
     const clampedStart = Math.max(0, Math.min(start, word.length));
     const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
     if (clampedEnd <= clampedStart) {
       return 0;
     }
-    const key = `${clampedStart}:${clampedEnd}:${word}`;
+    if (shaped) {
+      const startX = shaped.caretStops[clampedStart] ?? 0;
+      const endX = shaped.caretStops[clampedEnd] ?? startX;
+      return roundTexPt(endX - startX);
+    }
+    const sliceFont = font;
+    const key = `${sliceFont.id}:${clampedStart}:${clampedEnd}:${word}`;
     const cached = sliceWidthCache.get(key);
     if (cached !== undefined) {
       return cached;
     }
     const width = computerModernTexMetricProvider.shapeText(
       word.slice(clampedStart, clampedEnd),
-      font
+      sliceFont
     ).width;
     sliceWidthCache.set(key, width);
     return width;
@@ -470,14 +538,16 @@ function createTexParagraphMeasurement(
     word: string,
     start: number,
     end: number,
-    hyphen: string
+    hyphen: string,
+    wrapper?: AnyWrapper | null
   ): number => {
-    const prefixWidth = measureTexSlice(word, start, end);
+    const sliceFont = shapedRunForWrapper(wrapper)?.font ?? font;
+    const prefixWidth = measureTexSlice(word, start, end, wrapper);
     const clampedStart = Math.max(0, Math.min(start, word.length));
     const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
     const prefix = word.slice(clampedStart, clampedEnd);
     return roundTexPt(
-      computerModernTexMetricProvider.shapeText(prefix + hyphen, font).width - prefixWidth
+      computerModernTexMetricProvider.shapeText(prefix + hyphen, sliceFont).width - prefixWidth
     );
   };
   const measureTexDiscretionary = (
@@ -489,13 +559,15 @@ function createTexParagraphMeasurement(
   ) => {
     const clampedStart = Math.max(0, Math.min(start, word.length));
     const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
+    const shaped = shapedRunForWrapper(wrapper);
+    const runFont = shaped?.font ?? font;
     const simpleInsertedWidth = measureTexHyphenatedPrefix(
       word,
       clampedStart,
       clampedEnd,
-      hyphen
+      hyphen,
+      wrapper
     );
-    const shaped = shapedRunForWrapper(wrapper);
     const absoluteEnd = (shaped?.sourceStart ?? 0) + clampedEnd;
     const ligature = shaped?.items.find((item): item is TexGlyphBox =>
       item.kind === "glyph" &&
@@ -521,12 +593,12 @@ function createTexParagraphMeasurement(
     const replaceEnd = Math.min(word.length, ligature.sourceEnd - shaped.sourceStart);
     const sourcePrefix = word.slice(replaceStart, clampedEnd);
     const preBreakText = `${sourcePrefix}${hyphen}`;
-    const sourcePrefixWidth = measureTexSlice(word, replaceStart, clampedEnd);
-    const preBreakWidth = computerModernTexMetricProvider.shapeText(preBreakText, font).width;
+    const sourcePrefixWidth = measureTexSlice(word, replaceStart, clampedEnd, wrapper);
+    const preBreakWidth = computerModernTexMetricProvider.shapeText(preBreakText, runFont).width;
     const postBreakText = word.slice(clampedEnd, replaceEnd);
-    const postBreakWidth = computerModernTexMetricProvider.shapeText(postBreakText, font).width;
+    const postBreakWidth = computerModernTexMetricProvider.shapeText(postBreakText, runFont).width;
     const replaceText = word.slice(replaceStart, replaceEnd);
-    const replaceWidth = computerModernTexMetricProvider.shapeText(replaceText, font).width;
+    const replaceWidth = computerModernTexMetricProvider.shapeText(replaceText, runFont).width;
 
     return {
       preBreakText,
@@ -551,9 +623,9 @@ function createTexParagraphMeasurement(
       const local = Math.max(0, Math.min(end, shaped.caretStops.length - 1));
       return shaped.caretStops[local] ?? 0;
     },
-    measureSlice: (word, start, end) => measureTexSlice(word, start, end),
-    measureHyphenatedPrefix: (word, start, end, hyphen) =>
-      measureTexHyphenatedPrefix(word, start, end, hyphen),
+    measureSlice: (word, start, end, wrapper) => measureTexSlice(word, start, end, wrapper),
+    measureHyphenatedPrefix: (word, start, end, hyphen, wrapper) =>
+      measureTexHyphenatedPrefix(word, start, end, hyphen, wrapper),
     measureDiscretionary: (word, start, end, hyphen, wrapper) =>
       measureTexDiscretionary(word, start, end, hyphen, wrapper),
     precomputeWord: () => {},
@@ -593,15 +665,15 @@ function texParagraphDpOptions(
       : englishDefaults.finalhyphendemerits,
     leftskipWidth: leftMarginWidth,
     leftskipStretch:
-      alignment === "ragged-left" || alignment === "center" ? skipStretch : 0,
+      texDeclarationLeftskipStretch(alignment, latexDeclaration, skipStretch),
     leftskipShrink: 0,
     rightskipWidth: rightMarginWidth,
-    rightskipStretch:
-      latexQuote && alignment === "ragged-right"
-        ? Number.POSITIVE_INFINITY
-        : alignment === "ragged-right" || alignment === "center"
-          ? skipStretch
-          : 0,
+    rightskipStretch: texDeclarationRightskipStretch(
+      alignment,
+      latexDeclaration,
+      latexQuote,
+      skipStretch
+    ),
     rightskipShrink: 0,
     firstLineIndentWidth:
       !noIndent && Number.isFinite(options.parindent) && options.parindent && options.parindent > 0
@@ -626,6 +698,32 @@ function texParagraphDpOptions(
     parfillskipShrink: 0,
     preventOverflow: false,
   };
+}
+
+function texDeclarationLeftskipStretch(
+  alignment: TexParagraphAlignment,
+  latexDeclaration: boolean,
+  fallbackStretch: number
+): number {
+  if (latexDeclaration && (alignment === "ragged-left" || alignment === "center")) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return alignment === "ragged-left" || alignment === "center" ? fallbackStretch : 0;
+}
+
+function texDeclarationRightskipStretch(
+  alignment: TexParagraphAlignment,
+  latexDeclaration: boolean,
+  latexQuote: boolean,
+  fallbackStretch: number
+): number {
+  if (
+    (latexDeclaration || latexQuote) &&
+    (alignment === "ragged-right" || alignment === "center")
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return alignment === "ragged-right" || alignment === "center" ? fallbackStretch : 0;
 }
 
 function texParfillStretchForAlignment(
@@ -718,7 +816,8 @@ function buildTexLineReport(
   const segments: LineReport["segments"] = [];
   let x = line.xOffset ?? 0;
   if (line.startPendingText) {
-    const shaped = computerModernTexMetricProvider.shapeText(line.startPendingText, params.font);
+    const runFont = params.shapedRuns.get(line.startRun)?.font ?? params.font;
+    const shaped = computerModernTexMetricProvider.shapeText(line.startPendingText, runFont);
     segments.push({
       runIndex: line.startRun,
       kind: "text",
@@ -728,6 +827,7 @@ function buildTexLineReport(
       sourceStartRaw: line.startPendingSourceStart,
       sourceEndRaw: line.startPendingSourceEnd,
       sourceKind: "text",
+      fontId: runFont.id,
       x,
       width: shaped.width,
       caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
@@ -766,6 +866,7 @@ function buildTexLineReport(
         sourceStartRaw: run.sourceStart + startOffset,
         sourceEndRaw: run.sourceStart + endOffset,
         sourceKind: "text",
+        fontId: shaped?.font.id,
         x,
         width,
         caretStops,
@@ -806,9 +907,10 @@ function buildTexLineReport(
     const splitOffset = line.break.splitOffset ?? discretionary.replaceStart;
     const sourceStartRaw = line.break.sourceOffset -
       Math.max(0, splitOffset - discretionary.replaceStart);
+    const runFont = params.shapedRuns.get(line.break.runIndex)?.font ?? params.font;
     const shaped = computerModernTexMetricProvider.shapeText(
       discretionary.preBreakText,
-      params.font
+      runFont
     );
     segments.push({
       runIndex: line.break.runIndex,
@@ -819,13 +921,15 @@ function buildTexLineReport(
       sourceStartRaw,
       sourceEndRaw: line.break.sourceOffset,
       sourceKind: "text",
+      fontId: runFont.id,
       x,
       width: shaped.width,
       caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
     });
     x = roundTexPt(x + shaped.width);
   } else if (line.break?.kind === "hyphen" && line.break.visibleHyphen) {
-    const width = computerModernTexMetricProvider.shapeText("-", params.font).width;
+    const runFont = params.shapedRuns.get(line.break.runIndex)?.font ?? params.font;
+    const width = computerModernTexMetricProvider.shapeText("-", runFont).width;
     const insertedWidth = line.break.width ?? width;
     const hyphenX = roundTexPt(x + insertedWidth - width);
     segments.push({
@@ -837,6 +941,7 @@ function buildTexLineReport(
       sourceStartRaw: line.break.sourceOffset,
       sourceEndRaw: line.break.sourceOffset,
       sourceKind: "text",
+      fontId: runFont.id,
       x: hyphenX,
       width,
       caretStops: [hyphenX, roundTexPt(hyphenX + width)],

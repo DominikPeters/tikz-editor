@@ -125,7 +125,7 @@ async function renderOracle(input) {
       TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
     };
     const latex = await execFileAsync(
-      "lualatex",
+      "pdflatex",
       ["--interaction=nonstopmode", "--halt-on-error", texPath],
       { cwd: tempDir, env, timeout: 8000, maxBuffer: 2_000_000 }
     );
@@ -134,12 +134,17 @@ async function renderOracle(input) {
       ["-svg", pdfPath, svgPath],
       { cwd: tempDir, timeout: 5000, maxBuffer: 1_000_000 }
     );
+    const pdfText = await execFileAsync(
+      "pdftotext",
+      ["-layout", "-nopgbrk", pdfPath, "-"],
+      { cwd: tempDir, timeout: 5000, maxBuffer: 1_000_000 }
+    );
 
     const svg = readFileSync(svgPath, "utf8");
     const result = {
       ok: true,
       svg,
-      lineTexts: extractOracleLines(latex.stdout),
+      lineTexts: extractPdfTextLines(pdfText.stdout),
       visualRows: extractSvgRows(svg),
       logTail: tail(latex.stdout, 4000),
     };
@@ -151,7 +156,7 @@ async function renderOracle(input) {
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
-      lineTexts: extractOracleLines(stdout),
+      lineTexts: extractPdfTextLines(stdout),
       logTail: tail(`${stdout}\n${stderr}`, 6000),
     };
   } finally {
@@ -177,54 +182,17 @@ function clampFinite(value, min, max, fallback) {
 
 function buildOracleDocument(options) {
   const tikzAlign = texTikzAlign(options.alignment);
-  const collectorSetup = texParagraphSetup(options, true);
-  const visualSetup = `text width=${formatPt(options.width)}pt, align=${tikzAlign}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\\parindent=${formatPt(options.parindent)}pt\\test}`;
+  const visualSetup = `text width=${formatPt(options.width)}pt, align=${tikzAlign}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\\fontencoding{OT1}\\fontfamily{cmr}\\selectfont\\parindent=${formatPt(options.parindent)}pt}`;
   return String.raw`\documentclass[tikz,border=2pt]{standalone}
+\renewcommand{\rmdefault}{cmr}
+\pagestyle{empty}
 \begin{document}
-\font\test=cmr10 at 10pt
-\test
-\setbox0=\vbox{%
-${collectorSetup}
-${options.text}\par
-}
-\directlua{
-  ${lineCollectorLua()}
-}
+\fontencoding{OT1}\fontfamily{cmr}\selectfont
 \begin{tikzpicture}
 \node[${visualSetup}] at (0,0) {${options.text}};
 \end{tikzpicture}
 \end{document}
 `;
-}
-
-function texParagraphSetup(options, includeFont) {
-  const lines = [
-    `\\hsize=${formatPt(options.width)}pt`,
-    `\\pretolerance=100`,
-    `\\tolerance=200`,
-    `\\parindent=${formatPt(options.parindent)}pt`,
-  ];
-  if (includeFont) {
-    lines.unshift("\\test");
-  }
-  if (options.alignment === "ragged-left") {
-    lines.push(`\\leftskip=0pt plus ${formatPt(options.width)}pt`);
-    lines.push("\\rightskip=0pt");
-    lines.push("\\parfillskip=0pt");
-  } else if (options.alignment === "center") {
-    lines.push("\\leftskip=0pt plus 2em");
-    lines.push("\\rightskip=0pt plus 2em");
-    lines.push("\\parfillskip=0pt");
-  } else if (options.alignment === "justified") {
-    lines.push("\\leftskip=0pt");
-    lines.push("\\rightskip=0pt");
-    lines.push("\\parfillskip=0pt plus 1fil");
-  } else {
-    lines.push("\\leftskip=0pt");
-    lines.push(`\\rightskip=0pt plus ${formatPt(options.width)}pt`);
-    lines.push("\\parfillskip=0pt plus 1fil");
-  }
-  return lines.join("\n");
 }
 
 function texTikzAlign(alignment) {
@@ -241,40 +209,11 @@ function texTikzAlign(alignment) {
   }
 }
 
-function lineCollectorLua() {
-  return String.raw`local function collect(line)
-    local out = table.pack()
-    for n in node.traverse(line.list) do
-      local kind = node.type(n.id)
-      if kind == "glyph" then
-        if n.char == 11 then table.insert(out, "ff")
-        elseif n.char == 12 then table.insert(out, "fi")
-        elseif n.char == 13 then table.insert(out, "fl")
-        elseif n.char == 14 then table.insert(out, "ffi")
-        elseif n.char == 15 then table.insert(out, "ffl")
-        else table.insert(out, utf8.char(n.char)) end
-      elseif kind == "glue" then
-        table.insert(out, " ")
-      end
-    end
-    return table.concat(out)
-  end
-  for n in node.traverse(tex.box[0].list) do
-    if node.type(n.id) == "hlist" then
-      texio.write_nl("term", "TIKZ_PARAGRAPH_LINE " .. collect(n) .. " TIKZ_PARAGRAPH_END")
-    end
-  end`;
-}
-
-function extractOracleLines(output) {
+function extractPdfTextLines(output) {
   return output
     .split(/\r?\n/)
-    .filter((line) => line.startsWith("TIKZ_PARAGRAPH_LINE "))
-    .map((line) => {
-      const marked = line.slice("TIKZ_PARAGRAPH_LINE ".length);
-      const end = marked.indexOf(" TIKZ_PARAGRAPH_END");
-      return (end >= 0 ? marked.slice(0, end) : marked).trimEnd();
-    });
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 function extractSvgRows(svg) {
