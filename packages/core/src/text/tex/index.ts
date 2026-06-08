@@ -12,6 +12,36 @@ export {
   type TexParagraphLayoutOptions,
   type TexParagraphLayoutResult,
 } from "./paragraph.js";
+export {
+  parseSimpleTexParagraphIr,
+  type SimpleTexAlignmentNode,
+  type SimpleTexControlNode,
+  type SimpleTexEnvironmentBoundaryNode,
+  type SimpleTexInlineNode,
+  type SimpleTexLineBreakNode,
+  type SimpleTexNoIndentNode,
+  type SimpleTexNode,
+  type SimpleTexParagraphBreakNode,
+  type SimpleTexParagraphBlock,
+  type SimpleTexParagraphIr,
+  type SimpleTexParagraphSegment,
+  type SimpleTexSpaceNode,
+  type SimpleTexTextNode,
+  type SimpleTexToken,
+  type SimpleTexUnsupportedCommandNode,
+  type TexAlignmentProfile,
+  type TexSpaceGlueProfile,
+} from "./ir.js";
+export {
+  createSimpleTexLayoutDocumentIr,
+  type SimpleTexLayoutDocumentIr,
+  type TexLayoutForcedBreakItem,
+  type TexLayoutInlineItem,
+  type TexLayoutIrOptions,
+  type TexLayoutParagraphIr,
+  type TexLayoutSpaceItem,
+  type TexLayoutTextItem,
+} from "./layout-ir.js";
 export type {
   GeneratedTexCharMetric,
   GeneratedTexFont,

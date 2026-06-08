@@ -31,6 +31,7 @@
     "compare:tex-text-visual-fuzz": "node scripts/compare-tex-text-visual-fuzz.mjs",
     "compare:tex-text-visual-fuzz:smoke": "node scripts/compare-tex-text-visual-fuzz.mjs --cases 40 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-smoke --cache-dir artifacts/tex-text-svgtrace-cache",
     "compare:tex-text-visual-fuzz:ligatures": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode ligatures --cases 32 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-ligatures --cache-dir artifacts/tex-text-svgtrace-cache",
+    "compare:tex-text-visual-fuzz:quote": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode quote --cases 32 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-quote --cache-dir artifacts/tex-text-svgtrace-cache-quote",
     "compare:tex-text-visual-fuzz:large": "node scripts/compare-tex-text-visual-fuzz.mjs --cases 200 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-large --cache-dir artifacts/tex-text-svgtrace-cache",
     "compare:arrows": "node scripts/compare-arrow-fixtures.mjs",
     "compare:pgf-docs": "node scripts/compare-pgf-docs-renderings.mjs",

@@ -96,6 +96,20 @@ function lineTexts(report: ParagraphLayoutReport | null | undefined): string[] {
   return report?.lines.map((line) => line.segments.map((segment) => segment.text ?? "").join("")) ?? [];
 }
 
+function firstLineSpaceWidths(
+  text: string,
+  options: Parameters<typeof layoutSimpleTexParagraph>[1]
+): number[] {
+  const result = layoutSimpleTexParagraph(text, {
+    hyphenator: { hyphenate: () => [] },
+    ...options,
+  });
+  expect(result.supported).toBe(true);
+  return result.report?.lines[0]?.segments
+    .filter((segment) => segment.kind === "space")
+    .map((segment) => segment.width) ?? [];
+}
+
 const texParagraphRegressionCases = [
   {
     id: "narrow-equal-cost-active-state",
@@ -521,6 +535,97 @@ describe("simple TeX paragraph layout", () => {
     expect((lastSegment?.x ?? 0) + (lastSegment?.width ?? 0)).toBeCloseTo(120, 5);
   });
 
+  it("uses TeX sentence spacefactor for justified final-line glue", () => {
+    const normalSpace = firstLineSpaceWidths("Alpha Beta", {
+      paragraphId: "tex:normal-spacefactor",
+      width: 300,
+      alignment: "justified",
+    })[0];
+    const [sentenceSpace, followingNormalSpace] = firstLineSpaceWidths("Alpha. Beta Gamma", {
+      paragraphId: "tex:sentence-spacefactor",
+      width: 300,
+      alignment: "justified",
+    });
+    const [questionSpace, exclamationSpace] = firstLineSpaceWidths("Alpha? Beta! Gamma", {
+      paragraphId: "tex:question-exclamation-spacefactor",
+      width: 300,
+      alignment: "justified",
+    });
+
+    expect(sentenceSpace).toBeGreaterThan(normalSpace ?? 0);
+    expect(questionSpace).toBeCloseTo(sentenceSpace ?? 0, 6);
+    expect(exclamationSpace).toBeCloseTo(sentenceSpace ?? 0, 6);
+    expect(followingNormalSpace).toBeCloseTo(normalSpace ?? 0, 6);
+  });
+
+  it("matches TeX spacefactor for uppercase abbreviations and closing punctuation", () => {
+    const normalSpace = firstLineSpaceWidths("Alpha Beta", {
+      paragraphId: "tex:normal-spacefactor-baseline",
+      width: 300,
+      alignment: "justified",
+    })[0];
+    const sentenceSpace = firstLineSpaceWidths("Alpha. Beta", {
+      paragraphId: "tex:sentence-spacefactor-baseline",
+      width: 300,
+      alignment: "justified",
+    })[0];
+    const [
+      uppercasePeriodSpace,
+      uppercaseWordSpace,
+      uppercaseAcronymPeriodSpace,
+      lowercaseWordSpace,
+      closingParenSpace,
+      followingNormalSpace,
+      closingQuoteSpace,
+    ] =
+      firstLineSpaceWidths(String.raw`A. B NASA. Rover Alpha.) Beta Alpha." Gamma`, {
+        paragraphId: "tex:uppercase-closing-spacefactor",
+        width: 500,
+        alignment: "justified",
+      });
+
+    expect(uppercasePeriodSpace).toBeCloseTo(normalSpace ?? 0, 6);
+    expect(uppercaseWordSpace).toBeCloseTo(normalSpace ?? 0, 6);
+    expect(uppercaseAcronymPeriodSpace).toBeCloseTo(normalSpace ?? 0, 6);
+    expect(lowercaseWordSpace).toBeCloseTo(normalSpace ?? 0, 6);
+    expect(closingParenSpace).toBeCloseTo(sentenceSpace ?? 0, 6);
+    expect(followingNormalSpace).toBeCloseTo(normalSpace ?? 0, 6);
+    expect(closingQuoteSpace).toBeCloseTo(sentenceSpace ?? 0, 6);
+  });
+
+  it("scales justified stretch for comma, semicolon, and colon spacefactors", () => {
+    const result = layoutSimpleTexParagraph(
+      "Alpha, Beta; Gamma: Delta Epsilon Zeta Eta Theta Iota Kappa.",
+      {
+        paragraphId: "tex:punctuation-spacefactor-stretch",
+        width: 130,
+        alignment: "justified",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)[0]).toBe("Alpha, Beta; Gamma: Delta");
+    const spaces = result.report?.lines[0]?.segments.filter((segment) => segment.kind === "space") ?? [];
+    expect(spaces).toHaveLength(3);
+    expect(spaces[1]?.width).toBeGreaterThan(spaces[0]?.width ?? 0);
+    expect(spaces[2]?.width).toBeGreaterThan(spaces[1]?.width ?? 0);
+  });
+
+  it("uses TikZ fixed sentence spacing for non-justified text-width node glue", () => {
+    const font = computerModernTexMetricProvider.resolveFont();
+    const [sentenceSpace, normalSpace] = firstLineSpaceWidths("Alpha. Beta Gamma", {
+      paragraphId: "tex:tikz-fixed-spacefactor",
+      width: 300,
+      alignment: "ragged-right",
+      tikzTextWidthNode: true,
+      font,
+    });
+
+    expect(sentenceSpace).toBeCloseTo(0.5 * font.atPt, 5);
+    expect(normalSpace).toBeCloseTo(0.3333 * font.atPt, 5);
+  });
+
   it("starts a fresh TeX paragraph after a blank line", () => {
     const result = layoutSimpleTexParagraph("Alpha\n\nGamma", {
       paragraphId: "tex:blank-line",
@@ -568,6 +673,64 @@ describe("simple TeX paragraph layout", () => {
       expect.closeTo(10, 6),
       expect.closeTo(0, 6),
     ]);
+  });
+
+  it("lays out LaTeX quote blocks with article-class list margins", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quote} Alpha Beta Gamma Delta Epsilon Zeta \end{quote}`,
+      {
+        paragraphId: "tex:quote-block",
+        width: 120,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines.length).toBeGreaterThan(1);
+    expect(result.report?.lines[0]?.verticalSkipBefore).toBe(10);
+    for (const line of result.report?.lines ?? []) {
+      expect(line.xStart).toBeCloseTo(25, 5);
+      expect(line.xEnd).toBeLessThanOrEqual(95.00001);
+    }
+  });
+
+  it("reports LaTeX quote list vertical skips across paragraph boundaries", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`,
+      {
+        paragraphId: "tex:quote-vertical-skips",
+        width: 150,
+        alignment: "justified",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines.map((line) => line.verticalSkipBefore ?? 0)).toEqual([
+      0,
+      10,
+      4,
+      10,
+    ]);
+  });
+
+  it("uses LaTeX quote-local paragraph skips under centered nodes", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quote} Alpha Beta Gamma Delta Epsilon Zeta \end{quote}`,
+      {
+        paragraphId: "tex:centered-quote-block",
+        width: 120,
+        alignment: "center",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines.length).toBeGreaterThan(1);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual(
+      Array.from({ length: result.report?.lines.length ?? 0 }, () => expect.closeTo(25, 5))
+    );
   });
 
   it("honors TeX paragraph alignment declarations at paragraph start", () => {

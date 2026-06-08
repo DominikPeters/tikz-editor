@@ -18,9 +18,20 @@ import type {
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import { roundTexPt, tfmToPt } from "./fonts/units.js";
 import type { ResolvedTexFont, ShapedTexTextRun, TexGlyphBox } from "./fonts/types.js";
+import {
+  getSimpleTexFallbackReason,
+  parseSimpleTexParagraphIr,
+  type TexAlignmentProfile,
+  type TexSpaceGlueProfile,
+} from "./ir.js";
+import {
+  createSimpleTexLayoutDocumentIr,
+  type TexLayoutInlineItem,
+  type TexLayoutParagraphIr,
+} from "./layout-ir.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
-type TexSpaceGlueProfile = "font" | "tikz-fixed";
+export { getSimpleTexFallbackReason } from "./ir.js";
 
 export interface TexParagraphLayoutOptions {
   readonly paragraphId?: string;
@@ -42,39 +53,6 @@ export interface TexParagraphLayoutResult {
   readonly errors: readonly string[];
 }
 
-interface SimpleToken {
-  readonly kind: "text" | "space" | "forced-break";
-  readonly text: string;
-  readonly sourceStart: number;
-  readonly sourceEnd: number;
-  readonly lineLeading?: string;
-}
-
-interface SimpleParagraphBlock {
-  readonly text: string;
-  readonly sourceStart: number;
-  readonly sourceEnd: number;
-  readonly noIndent: boolean;
-  readonly alignment?: TexParagraphAlignment;
-  readonly alignmentProfile?: "latex-declaration";
-}
-
-interface SimpleParagraphSegment {
-  readonly text: string;
-  readonly sourceStart: number;
-  readonly sourceEnd: number;
-  readonly noIndent: boolean;
-  readonly forcedBreakAfter?: {
-    readonly sourceOffset: number;
-    readonly lineLeading?: string;
-  };
-}
-
-interface SimpleParagraphBlockScanResult {
-  readonly blocks: readonly SimpleParagraphBlock[];
-  readonly unsupportedCommand: boolean;
-}
-
 interface TexParagraphBreakResult {
   readonly lines: readonly GreedyLine[];
   readonly runs: readonly ParagraphRun[];
@@ -84,11 +62,6 @@ interface TexParagraphBreakResult {
   readonly linebreakingMode: "feasible" | "overfull";
 }
 
-const unsupportedPattern = /[$&{}_^~#%]/;
-const whitespacePattern = /[ \n]+/;
-const paragraphBreakPattern = /^\n(?: *\n)+/;
-const lineLeadingOptionPattern =
-  /^\[\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)\s*\]/i;
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;
 const LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM = 3;
@@ -115,7 +88,7 @@ export function layoutSimpleTexParagraph(
   const paragraphId = options.paragraphId ?? "tex:paragraph";
   const defaultAlignment = options.alignment ?? "ragged-right";
   const shapedRuns = new Map<number, ShapedTexTextRun>();
-  const blocks = splitSimpleTexParagraphBlocks(text).blocks;
+  const blocks = parseSimpleTexParagraphIr(text).blocks;
   if (blocks.length === 0) {
     return {
       supported: false,
@@ -127,112 +100,88 @@ export function layoutSimpleTexParagraph(
   }
 
   const measurement = createTexParagraphMeasurement(font);
-  const reportAlignment = blocks[0]?.alignment ?? defaultAlignment;
+  const layoutIr = createSimpleTexLayoutDocumentIr({
+    blocks,
+    defaultAlignment,
+    font,
+    options,
+  });
   const combinedRuns: ParagraphRun[] = [];
   const combinedLines: GreedyLine[] = [];
   const combinedRunWidths = new Map<number, number>();
+  const combinedLineVerticalSkipsBefore = new Map<number, number>();
   const errors: string[] = [];
   let linebreakingMode: "feasible" | "overfull" = "feasible";
-  let layoutMode: KnuthPlassLayoutMode = "wrap";
   let runIndexOffset = 0;
   let lineIndexOffset = 0;
-  let activeAlignment = defaultAlignment;
-  let activeAlignmentProfile: "latex-declaration" | undefined;
-  let activeSpaceGlueProfile = texInitialSpaceGlueProfile(defaultAlignment);
 
-  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
-    const block = blocks[blockIndex];
-    const inheritedAlignment = activeAlignment;
-    const inheritedAlignmentProfile = activeAlignmentProfile;
-    const alignment = block.alignment ?? activeAlignment;
-    const alignmentProfile = block.alignment
-      ? block.alignmentProfile
-      : activeAlignmentProfile;
-    if (block.alignment) {
-      activeAlignment = block.alignment;
-      activeAlignmentProfile = block.alignmentProfile;
-      if (
-        block.alignmentProfile === "latex-declaration" &&
-        options.tikzTextWidthNode === true
-      ) {
-        activeSpaceGlueProfile = "tikz-fixed";
-      }
+  for (const paragraph of layoutIr.paragraphs) {
+    const blockShapedRuns = new Map<number, ShapedTexTextRun>();
+    const runs = layoutItemsToRuns(paragraph.items, blockShapedRuns);
+    if (!runs.some((run) => run.kind === "text")) {
+      continue;
     }
-    const segments = splitSimpleTexParagraphSegments(
-      block,
+
+    const broken = breakTexParagraphRuns({
+      runs,
+      shapedRuns: blockShapedRuns,
+      measurement,
       options,
-      alignment,
-      blockIndex
-    );
-    if (segments.some((segment) => segment.forcedBreakAfter)) {
-      layoutMode = "wrapped-explicit";
+      alignment: paragraph.alignment,
+      alignmentProfile: paragraph.alignmentProfile,
+      inheritedAlignment: paragraph.inheritedAlignment,
+      inheritedAlignmentProfile: paragraph.inheritedAlignmentProfile,
+      noIndent: paragraph.noIndent,
+      leftMarginWidth: paragraph.leftMarginWidth,
+      rightMarginWidth: paragraph.rightMarginWidth,
+    });
+    if (!broken) {
+      return {
+        supported: false,
+        report: null,
+        fallbackReason: "TeX paragraph breaker failed: no solution",
+        shapedRuns,
+        errors,
+      };
     }
 
-    for (const segment of segments) {
-      const blockShapedRuns = new Map<number, ShapedTexTextRun>();
-      const tokens = tokenizeSimpleTexParagraph(segment.text, segment.sourceStart);
-      const runs = tokensToRuns(
-        tokens,
-        font,
-        blockShapedRuns,
-        activeSpaceGlueProfile
-      );
-      if (!runs.some((run) => run.kind === "text")) {
-        continue;
-      }
-
-      const broken = breakTexParagraphRuns({
-        runs,
-        shapedRuns: blockShapedRuns,
-        measurement,
-        options,
-        alignment,
-        alignmentProfile,
-        inheritedAlignment,
-        inheritedAlignmentProfile,
-        noIndent: segment.noIndent,
-      });
-      if (!broken) {
-        return {
-          supported: false,
-          report: null,
-          fallbackReason: "TeX paragraph breaker failed: no solution",
-          shapedRuns,
-          errors,
-        };
-      }
-
-      for (const run of broken.runs) {
-        combinedRuns.push(offsetRun(run, runIndexOffset));
-      }
-      for (const [runIndex, width] of broken.runWidths) {
-        combinedRunWidths.set(runIndex + runIndexOffset, width);
-      }
-      for (const [runIndex, shaped] of broken.shapedRuns) {
-        shapedRuns.set(runIndex + runIndexOffset, shaped);
-      }
-      for (const line of broken.lines) {
-        const forcedBreak =
-          segment.forcedBreakAfter && line.lineIndex === broken.lines.length - 1
-            ? createForcedBreakDecision(
-                line.endRun + runIndexOffset + 1,
-                segment.forcedBreakAfter
-              )
-            : undefined;
-        combinedLines.push(offsetLine(
-          line,
-          runIndexOffset,
-          lineIndexOffset,
-          forcedBreak
-        ));
-      }
-      errors.push(...broken.errors);
-      if (broken.linebreakingMode === "overfull") {
-        linebreakingMode = "overfull";
-      }
-      runIndexOffset += broken.runs.length;
-      lineIndexOffset += broken.lines.length;
+    for (const run of broken.runs) {
+      combinedRuns.push(offsetRun(run, runIndexOffset));
     }
+    for (const [runIndex, width] of broken.runWidths) {
+      combinedRunWidths.set(runIndex + runIndexOffset, width);
+    }
+    for (const [runIndex, shaped] of broken.shapedRuns) {
+      shapedRuns.set(runIndex + runIndexOffset, shaped);
+    }
+    for (const line of broken.lines) {
+      const combinedLineIndex = line.lineIndex + lineIndexOffset;
+      const forcedBreak =
+        paragraph.forcedBreakAfter && line.lineIndex === broken.lines.length - 1
+          ? createForcedBreakDecision(
+              line.endRun + runIndexOffset + 1,
+              paragraph.forcedBreakAfter
+            )
+          : undefined;
+      if (line.lineIndex === 0 && paragraph.verticalSkipBefore > 0) {
+        combinedLineVerticalSkipsBefore.set(
+          combinedLineIndex,
+          paragraph.verticalSkipBefore
+        );
+      }
+      combinedLines.push(offsetLine(
+        line,
+        runIndexOffset,
+        lineIndexOffset,
+        forcedBreak
+      ));
+    }
+    errors.push(...broken.errors);
+    if (broken.linebreakingMode === "overfull") {
+      linebreakingMode = "overfull";
+    }
+    runIndexOffset += broken.runs.length;
+    lineIndexOffset += broken.lines.length;
   }
 
   if (combinedRuns.length === 0 || combinedLines.length === 0) {
@@ -250,13 +199,14 @@ export function layoutSimpleTexParagraph(
     report: buildTexParagraphReport({
       paragraphId,
       width: options.width,
-      alignment: reportAlignment,
+      alignment: layoutIr.reportAlignment,
       runs: combinedRuns,
       lines: combinedLines,
       shapedRuns,
       runWidths: combinedRunWidths,
+      lineVerticalSkipsBefore: combinedLineVerticalSkipsBefore,
       linebreakingMode,
-      layoutMode,
+      layoutMode: layoutIr.layoutMode,
       font,
       errors,
     }),
@@ -272,10 +222,12 @@ function breakTexParagraphRuns(params: {
   readonly measurement: MeasurementService;
   readonly options: TexParagraphLayoutOptions;
   readonly alignment: TexParagraphAlignment;
-  readonly alignmentProfile?: "latex-declaration";
+  readonly alignmentProfile?: TexAlignmentProfile;
   readonly inheritedAlignment: TexParagraphAlignment;
-  readonly inheritedAlignmentProfile?: "latex-declaration";
+  readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly noIndent: boolean;
+  readonly leftMarginWidth: number;
+  readonly rightMarginWidth: number;
 }): TexParagraphBreakResult | null {
   const pass1Model = runsToItems(params.runs, params.measurement, {
     enableAutomaticHyphenation: false,
@@ -287,7 +239,9 @@ function breakTexParagraphRuns(params: {
     params.noIndent,
     params.alignmentProfile,
     params.inheritedAlignment,
-    params.inheritedAlignmentProfile
+    params.inheritedAlignmentProfile,
+    params.leftMarginWidth,
+    params.rightMarginWidth
   );
   const pass1 = breakWithDp(pass1Model, params.options.width, {
     ...dpOptions,
@@ -392,7 +346,7 @@ function offsetBreakDecision(
 
 function createForcedBreakDecision(
   runIndex: number,
-  forcedBreak: NonNullable<SimpleParagraphSegment["forcedBreakAfter"]>
+  forcedBreak: NonNullable<TexLayoutParagraphIr["forcedBreakAfter"]>
 ): BreakDecision {
   return {
     kind: "forced",
@@ -404,412 +358,16 @@ function createForcedBreakDecision(
   };
 }
 
-export function getSimpleTexFallbackReason(text: string, width: number): string | null {
-  if (!Number.isFinite(width) || width <= 0) {
-    return "Paragraph width must be positive.";
-  }
-  if (unsupportedPattern.test(text)) {
-    return "Paragraph contains TeX syntax that is not supported by the simple text path.";
-  }
-  if (splitSimpleTexParagraphBlocks(text).unsupportedCommand) {
-    return "Paragraph contains TeX syntax that is not supported by the simple text path.";
-  }
-  for (let index = 0; index < text.length; index++) {
-    if (text[index] === "\\") {
-      const lineBreak = scanSimpleTexLineBreak(text, index);
-      const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
-      if (lineBreak) {
-        index = lineBreak.end - 1;
-        continue;
-      }
-      if (paragraphCommand) {
-        index = paragraphCommand.end - 1;
-        continue;
-      }
-      if (!lineBreak) {
-        return "Paragraph contains TeX syntax that is not supported by the simple text path.";
-      }
-    }
-    const codePoint = text.codePointAt(index);
-    if (codePoint === undefined) {
-      continue;
-    }
-    if (codePoint > 0x7e || (codePoint < 0x20 && codePoint !== 0x0a)) {
-      return `Paragraph contains unsupported OT1 character U+${codePoint.toString(16).toUpperCase()}.`;
-    }
-  }
-  return null;
-}
-
-function scanSimpleTexLineBreak(
-  text: string,
-  start: number
-): { end: number; lineLeading?: string } | null {
-  if (text[start] !== "\\" || text[start + 1] !== "\\") {
-    return null;
-  }
-
-  let end = start + 2;
-  const rest = text.slice(end);
-  if (rest.startsWith("[")) {
-    const match = rest.match(lineLeadingOptionPattern);
-    if (!match) {
-      return null;
-    }
-    const full = match[0] ?? "";
-    end += full.length;
-    return {
-      end,
-      lineLeading: full.slice(1, -1).trim(),
-    };
-  }
-  return { end };
-}
-
-function scanSimpleTexParagraphCommand(
-  text: string,
-  start: number
-): { kind: "par" | "noindent"; end: number } | { kind: "alignment"; alignment: TexParagraphAlignment; end: number } | null {
-  const parEnd = scanSimpleTexControlWord(text, start, "par");
-  if (parEnd !== null) {
-    return { kind: "par", end: parEnd };
-  }
-  const noIndentEnd = scanSimpleTexControlWord(text, start, "noindent");
-  if (noIndentEnd !== null) {
-    return { kind: "noindent", end: noIndentEnd };
-  }
-  return scanSimpleTexAlignmentCommand(text, start);
-}
-
-function scanSimpleTexAlignmentCommand(
-  text: string,
-  start: number
-): { kind: "alignment"; alignment: TexParagraphAlignment; end: number } | null {
-  const raggedRightEnd = scanSimpleTexControlWord(text, start, "raggedright");
-  if (raggedRightEnd !== null) {
-    return { kind: "alignment", alignment: "ragged-right", end: raggedRightEnd };
-  }
-  const raggedLeftEnd = scanSimpleTexControlWord(text, start, "raggedleft");
-  if (raggedLeftEnd !== null) {
-    return { kind: "alignment", alignment: "ragged-left", end: raggedLeftEnd };
-  }
-  const centeringEnd = scanSimpleTexControlWord(text, start, "centering");
-  if (centeringEnd !== null) {
-    return { kind: "alignment", alignment: "center", end: centeringEnd };
-  }
-  return null;
-}
-
-function scanSimpleTexControlWord(text: string, start: number, word: string): number | null {
-  if (text[start] !== "\\") {
-    return null;
-  }
-  const end = start + 1 + word.length;
-  if (text.slice(start + 1, end) !== word) {
-    return null;
-  }
-  const next = text[end] ?? "";
-  return next && /[A-Za-z]/.test(next) ? null : end;
-}
-
-function splitSimpleTexParagraphBlocks(text: string): SimpleParagraphBlockScanResult {
-  const blocks: SimpleParagraphBlock[] = [];
-  let unsupportedCommand = false;
-
-  const skipWhitespace = (start: number): number => {
-    let index = start;
-    while (index < text.length && (text[index] === " " || text[index] === "\n")) {
-      index += 1;
-    }
-    return index;
-  };
-
-  const consumeParagraphPrefix = (
-    start: number
-  ): {
-    start: number;
-    noIndent: boolean;
-    alignment?: TexParagraphAlignment;
-    alignmentProfile?: "latex-declaration";
-  } => {
-    let index = skipWhitespace(start);
-    let noIndent = false;
-    let alignment: TexParagraphAlignment | undefined;
-    let alignmentProfile: "latex-declaration" | undefined;
-    while (index < text.length) {
-      const command = scanSimpleTexParagraphCommand(text, index);
-      if (command?.kind === "noindent") {
-        noIndent = true;
-        index = skipWhitespace(command.end);
-        continue;
-      }
-      if (command?.kind === "alignment") {
-        noIndent = true;
-        alignment = command.alignment;
-        alignmentProfile = "latex-declaration";
-        index = skipWhitespace(command.end);
-        continue;
-      }
-      break;
-    }
-    return {
-      start: index,
-      noIndent,
-      alignment,
-      alignmentProfile,
-    };
-  };
-
-  const pushBlock = (
-    rawStart: number,
-    rawEnd: number,
-    noIndent: boolean,
-    alignment?: TexParagraphAlignment,
-    alignmentProfile?: "latex-declaration"
-  ) => {
-    let start = rawStart;
-    let end = rawEnd;
-    while (start < end && (text[start] === " " || text[start] === "\n")) {
-      start += 1;
-    }
-    while (end > start && (text[end - 1] === " " || text[end - 1] === "\n")) {
-      end -= 1;
-    }
-    if (start < end) {
-      blocks.push({
-        text: text.slice(start, end),
-        sourceStart: start,
-        sourceEnd: end,
-        noIndent,
-        alignment,
-        alignmentProfile,
-      });
-    }
-  };
-
-  let prefix = consumeParagraphPrefix(0);
-  let blockStart = prefix.start;
-  let currentNoIndent = prefix.noIndent;
-  let index = blockStart;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === "\\") {
-      const lineBreak = scanSimpleTexLineBreak(text, index);
-      if (lineBreak) {
-        index = lineBreak.end;
-        continue;
-      }
-      const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
-      if (paragraphCommand?.kind === "par") {
-        pushBlock(
-          blockStart,
-          index,
-          currentNoIndent,
-          prefix.alignment,
-          prefix.alignmentProfile
-        );
-        prefix = consumeParagraphPrefix(paragraphCommand.end);
-        blockStart = prefix.start;
-        currentNoIndent = prefix.noIndent;
-        index = blockStart;
-        continue;
-      }
-      unsupportedCommand = true;
-      break;
-    }
-
-    if (char === "\n") {
-      const match = paragraphBreakPattern.exec(text.slice(index));
-      if (match) {
-        pushBlock(
-          blockStart,
-          index,
-          currentNoIndent,
-          prefix.alignment,
-          prefix.alignmentProfile
-        );
-        prefix = consumeParagraphPrefix(index + match[0].length);
-        blockStart = prefix.start;
-        currentNoIndent = prefix.noIndent;
-        index = blockStart;
-        continue;
-      }
-    }
-
-    index += 1;
-  }
-  if (!unsupportedCommand) {
-    pushBlock(
-      blockStart,
-      text.length,
-      currentNoIndent,
-      prefix.alignment,
-      prefix.alignmentProfile
-    );
-  }
-  return { blocks, unsupportedCommand };
-}
-
-function splitSimpleTexParagraphSegments(
-  block: SimpleParagraphBlock,
-  options: TexParagraphLayoutOptions,
-  alignment: TexParagraphAlignment,
-  blockIndex: number
-): SimpleParagraphSegment[] {
-  const initialNoIndent = block.noIndent || (options.tikzTextWidthNode === true && blockIndex === 0);
-  if (alignment === "justified") {
-    return [{
-      text: block.text,
-      sourceStart: block.sourceStart,
-      sourceEnd: block.sourceEnd,
-      noIndent: initialNoIndent,
-    }];
-  }
-
-  const segments: SimpleParagraphSegment[] = [];
-  let segmentStart = 0;
-  let noIndent = initialNoIndent;
-  let index = 0;
-
-  const pushSegment = (
-    rawStart: number,
-    rawEnd: number,
-    segmentNoIndent: boolean,
-    forcedBreakAfter?: SimpleParagraphSegment["forcedBreakAfter"]
-  ) => {
-    let start = rawStart;
-    let end = rawEnd;
-    while (start < end && (block.text[start] === " " || block.text[start] === "\n")) {
-      start += 1;
-    }
-    while (end > start && (block.text[end - 1] === " " || block.text[end - 1] === "\n")) {
-      end -= 1;
-    }
-    if (start < end) {
-      segments.push({
-        text: block.text.slice(start, end),
-        sourceStart: block.sourceStart + start,
-        sourceEnd: block.sourceStart + end,
-        noIndent: segmentNoIndent,
-        forcedBreakAfter,
-      });
-    }
-  };
-
-  while (index < block.text.length) {
-    if (block.text[index] !== "\\") {
-      index += 1;
-      continue;
-    }
-    const lineBreak = scanSimpleTexLineBreak(block.text, index);
-    if (!lineBreak) {
-      index += 1;
-      continue;
-    }
-
-    pushSegment(segmentStart, index, noIndent, {
-      sourceOffset: block.sourceStart + index,
-      lineLeading: lineBreak.lineLeading,
-    });
-    index = lineBreak.end;
-    while (index < block.text.length && (block.text[index] === " " || block.text[index] === "\n")) {
-      index += 1;
-    }
-    segmentStart = index;
-    noIndent = noIndentAfterForcedBreak(options, alignment);
-  }
-
-  pushSegment(segmentStart, block.text.length, noIndent);
-  return segments;
-}
-
-function noIndentAfterForcedBreak(
-  options: TexParagraphLayoutOptions,
-  alignment: TexParagraphAlignment
-): boolean {
-  return !(
-    options.tikzTextWidthNode === true &&
-    alignment !== "justified" &&
-    Number.isFinite(options.parindent) &&
-    options.parindent !== undefined &&
-    options.parindent > 0
-  );
-}
-
-function tokenizeSimpleTexParagraph(text: string, sourceOffset: number): SimpleToken[] {
-  const tokens: SimpleToken[] = [];
-  let index = 0;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === "\\") {
-      const lineBreak = scanSimpleTexLineBreak(text, index);
-      if (!lineBreak) {
-        break;
-      }
-      while (tokens.at(-1)?.kind === "space") {
-        tokens.pop();
-      }
-      tokens.push({
-        kind: "forced-break",
-        text: text.slice(index, lineBreak.end),
-        sourceStart: sourceOffset + index,
-        sourceEnd: sourceOffset + lineBreak.end,
-        lineLeading: lineBreak.lineLeading,
-      });
-      index = lineBreak.end;
-      while (index < text.length && (text[index] === " " || text[index] === "\n")) {
-        index += 1;
-      }
-      continue;
-    }
-    if (char === " " || char === "\n") {
-      const start = index;
-      while (index < text.length && (text[index] === " " || text[index] === "\n")) {
-        index += 1;
-      }
-      tokens.push({
-        kind: "space",
-        text: " ",
-        sourceStart: sourceOffset + start,
-        sourceEnd: sourceOffset + index,
-      });
-      continue;
-    }
-    const start = index;
-    while (
-      index < text.length &&
-      text[index] !== "\\" &&
-      !whitespacePattern.test(text[index] ?? "")
-    ) {
-      index += 1;
-    }
-    tokens.push({
-      kind: "text",
-      text: text.slice(start, index),
-      sourceStart: sourceOffset + start,
-      sourceEnd: sourceOffset + index,
-    });
-  }
-  return tokens;
-}
-
-function tokensToRuns(
-  tokens: readonly SimpleToken[],
-  font: ResolvedTexFont,
-  shapedRuns: Map<number, ShapedTexTextRun>,
-  spaceGlueProfile: TexSpaceGlueProfile
+function layoutItemsToRuns(
+  items: readonly TexLayoutInlineItem[],
+  shapedRuns: Map<number, ShapedTexTextRun>
 ): ParagraphRun[] {
   const runs: ParagraphRun[] = [];
-  let spaceFactor = 1000;
-  let hasSeenText = false;
-  for (const token of tokens) {
-    if (token.kind === "space" && !hasSeenText) {
-      continue;
-    }
+  for (const item of items) {
     const runIndex = runs.length;
-    if (token.kind === "text") {
-      const shaped = computerModernTexMetricProvider.shapeText(token.text, font, {
-        sourceStart: token.sourceStart,
+    if (item.kind === "text") {
+      const shaped = computerModernTexMetricProvider.shapeText(item.text, item.font, {
+        sourceStart: item.sourceStart,
       });
       const wrapper: AnyWrapper = {};
       shapedRunByWrapper.set(wrapper, shaped);
@@ -817,35 +375,34 @@ function tokensToRuns(
       runs.push({
         kind: "text",
         runIndex,
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        text: token.text,
+        sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
+        text: item.text,
         wrapper,
         childIndex: runIndex,
         wordIndex: 0,
       } satisfies TextRun);
-      spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
-      hasSeenText = true;
       continue;
     }
 
-    const forced = token.kind === "forced-break";
+    const forced = item.kind === "forced-break";
     const glue = forced
       ? { width: 0, stretch: 0, shrink: 0 }
-      : texInterwordGlueForSpaceFactor(font, spaceFactor, spaceGlueProfile);
+      : texInterwordGlueForSpaceFactor(
+        item.font,
+        item.spaceFactor,
+        item.spaceGlueProfile
+      );
     runs.push({
       kind: "space",
       runIndex,
-      sourceStart: token.sourceStart,
-      sourceEnd: token.sourceEnd,
+      sourceStart: item.sourceStart,
+      sourceEnd: item.sourceEnd,
       text: " ",
       wrapper: syntheticWrapper,
-      breakRef: createSimpleBreakRef(forced, token.lineLeading),
+      breakRef: createSimpleBreakRef(forced, forced ? item.lineLeading : undefined),
       texGlue: glue,
     } satisfies SpaceRun);
-  }
-  while (runs.at(-1)?.kind === "space") {
-    runs.pop();
   }
   return runs;
 }
@@ -874,46 +431,6 @@ function texInterwordGlueForSpaceFactor(
     shrink: roundTexPt(baseShrink * 1000 / normalized),
     spaceFactor: normalized,
   };
-}
-
-function texInitialSpaceGlueProfile(
-  alignment: TexParagraphAlignment
-): TexSpaceGlueProfile {
-  return alignment === "justified" ? "font" : "tikz-fixed";
-}
-
-function updateSpaceFactorForText(current: number, text: string): number {
-  let spaceFactor = current;
-  for (const char of text) {
-    const sfcode = defaultTexSfcode(char);
-    if (sfcode === 0) {
-      continue;
-    }
-    spaceFactor = sfcode > 1000 && spaceFactor < 1000 ? 1000 : sfcode;
-  }
-  return spaceFactor;
-}
-
-function defaultTexSfcode(char: string): number {
-  if (char >= "A" && char <= "Z") {
-    return 999;
-  }
-  if (char === "." || char === "?" || char === "!") {
-    return 3000;
-  }
-  if (char === ":") {
-    return 2000;
-  }
-  if (char === ";") {
-    return 1500;
-  }
-  if (char === ",") {
-    return 1250;
-  }
-  if (char === ")" || char === "]" || char === "'" || char === '"') {
-    return 0;
-  }
-  return 1000;
 }
 
 function createSimpleBreakRef(forced: boolean, lineLeading?: string): BreakRef {
@@ -1053,12 +570,15 @@ function texParagraphDpOptions(
   options: TexParagraphLayoutOptions,
   alignment: TexParagraphAlignment,
   noIndent = false,
-  alignmentProfile?: "latex-declaration",
+  alignmentProfile?: TexAlignmentProfile,
   inheritedAlignment?: TexParagraphAlignment,
-  inheritedAlignmentProfile?: "latex-declaration"
+  inheritedAlignmentProfile?: TexAlignmentProfile,
+  leftMarginWidth = 0,
+  rightMarginWidth = 0
 ): DpOptions {
   const latexRagged = alignment === "ragged-right" || alignment === "ragged-left";
   const latexDeclaration = alignmentProfile === "latex-declaration";
+  const latexQuote = alignmentProfile === "latex-quote";
   const skipStretch = 2 * (options.font?.atPt ?? computerModernTexMetricProvider.resolveFont().atPt);
   const inheritedParfillStretch =
     inheritedAlignment === undefined
@@ -1071,13 +591,17 @@ function texParagraphDpOptions(
     finalhyphendemerits: latexDeclaration || latexRagged
       ? LATEX_RAGGED_FINAL_HYPHEN_DEMERITS
       : englishDefaults.finalhyphendemerits,
-    leftskipWidth: 0,
+    leftskipWidth: leftMarginWidth,
     leftskipStretch:
       alignment === "ragged-left" || alignment === "center" ? skipStretch : 0,
     leftskipShrink: 0,
-    rightskipWidth: 0,
+    rightskipWidth: rightMarginWidth,
     rightskipStretch:
-      alignment === "ragged-right" || alignment === "center" ? skipStretch : 0,
+      latexQuote && alignment === "ragged-right"
+        ? Number.POSITIVE_INFINITY
+        : alignment === "ragged-right" || alignment === "center"
+          ? skipStretch
+          : 0,
     rightskipShrink: 0,
     firstLineIndentWidth:
       !noIndent && Number.isFinite(options.parindent) && options.parindent && options.parindent > 0
@@ -1106,7 +630,7 @@ function texParagraphDpOptions(
 
 function texParfillStretchForAlignment(
   alignment: TexParagraphAlignment,
-  alignmentProfile?: "latex-declaration",
+  alignmentProfile?: TexAlignmentProfile,
   tikzTextWidthNode = false,
   inheritedParfillStretch = Number.POSITIVE_INFINITY
 ): number {
@@ -1150,6 +674,7 @@ function buildTexParagraphReport(params: {
   lines: readonly GreedyLine[];
   shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   runWidths: ReadonlyMap<number, number>;
+  lineVerticalSkipsBefore: ReadonlyMap<number, number>;
   linebreakingMode: "feasible" | "overfull";
   layoutMode: KnuthPlassLayoutMode;
   font: ResolvedTexFont;
@@ -1186,6 +711,7 @@ function buildTexLineReport(
     runs: readonly ParagraphRun[];
     shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
     runWidths: ReadonlyMap<number, number>;
+    lineVerticalSkipsBefore: ReadonlyMap<number, number>;
     font: ResolvedTexFont;
   }
 ): LineReport {
@@ -1336,6 +862,7 @@ function buildTexLineReport(
     descent,
     xStart,
     xEnd: x,
+    verticalSkipBefore: params.lineVerticalSkipsBefore.get(line.lineIndex),
     break: line.break,
     segments,
   };

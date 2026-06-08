@@ -61,7 +61,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad or ligatures. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, or quote. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -170,8 +170,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad or ligatures.");
+  if (!["broad", "ligatures", "quote"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, or quote.");
   }
   return options;
 }
@@ -304,10 +304,40 @@ function generateLigatureCase(index, random) {
   };
 }
 
+function generateQuoteCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [100, 120, 150, 200, 240, 320];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = `\\begin{quote} ${paragraph(random, 1 + Math.floor(random() * 2))} \\end{quote}`;
+  } else if (feature === 1) {
+    text = `${paragraph(random, 1)} \\par \\begin{quote} ${paragraph(random, 1 + Math.floor(random() * 2))} \\end{quote} \\par ${paragraph(random, 1)}`;
+  } else if (feature === 2) {
+    text = `\\begin{quote} ${sentence(random, 5, 9)} \\\\[${choice(random, [4, 7])}pt] ${paragraph(random, 1)} \\end{quote}`;
+  } else {
+    text = `${paragraph(random, 1)} \\par \\begin{quote} ${paragraph(random, 1)} \\par ${paragraph(random, 1)} \\end{quote}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "quote",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateCaseForMode(index, random, mode) {
-  return mode === "ligatures"
-    ? generateLigatureCase(index, random)
-    : generateCase(index, random);
+  if (mode === "ligatures") {
+    return generateLigatureCase(index, random);
+  }
+  if (mode === "quote") {
+    return generateQuoteCase(index, random);
+  }
+  return generateCase(index, random);
 }
 
 function formatPt(value) {
@@ -350,6 +380,7 @@ function computeLineTops(report, parseLength) {
   const tops = [];
   let cursor = 0;
   for (const line of report.lines) {
+    cursor += Math.max(0, line.verticalSkipBefore ?? 0);
     tops[line.lineIndex] = cursor;
     cursor += lineHeightPt + lineLeadingPt(line.break?.lineLeading, parseLength);
   }

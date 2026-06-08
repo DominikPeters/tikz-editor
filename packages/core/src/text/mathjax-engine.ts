@@ -1119,6 +1119,7 @@ function computeTexLineTops(report: ParagraphLayoutReport, lineHeightPt: number)
   const tops: number[] = [];
   let cursor = 0;
   for (const line of report.lines) {
+    cursor += Math.max(0, line.verticalSkipBefore ?? 0);
     tops[line.lineIndex] = cursor;
     cursor += lineHeightPt + texLineLeadingPt(line.break?.lineLeading);
   }
