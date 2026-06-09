@@ -613,6 +613,11 @@ function runCommand(command, args, options = {}) {
   return spawnSync(command, args, {
     cwd: options.cwd,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+      TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+    },
     maxBuffer: 20 * 1024 * 1024,
   });
 }

@@ -28,6 +28,7 @@ export interface LineSegmentReport {
   sourceEndRaw?: number;
   sourceKind?: 'text' | 'math';
   fontId?: string;
+  glyphCode?: number;
   x: number;
   width: number;
   caretStops?: number[];

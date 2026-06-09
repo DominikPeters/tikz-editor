@@ -31,7 +31,10 @@ import {
 } from "./ir.js";
 import {
   createSimpleTexLayoutDocumentIr,
+  type TexLayoutLabel,
+  texLayoutGlyphItemWidth,
   type TexLayoutInlineItem,
+  type TexLayoutLabelItem,
   type TexLayoutParagraphIr,
 } from "./layout-ir.js";
 
@@ -65,6 +68,11 @@ interface TexParagraphBreakResult {
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly errors: readonly string[];
   readonly linebreakingMode: "feasible" | "overfull";
+}
+
+interface TexLineLabel {
+  readonly label: TexLayoutLabel;
+  readonly lineRunIndex: number;
 }
 
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
@@ -115,6 +123,7 @@ export function layoutSimpleTexParagraph(
   const combinedLines: GreedyLine[] = [];
   const combinedRunWidths = new Map<number, number>();
   const combinedLineVerticalSkipsBefore = new Map<number, number>();
+  const combinedLineLabels = new Map<number, TexLineLabel>();
   const errors: string[] = [];
   let linebreakingMode: "feasible" | "overfull" = "feasible";
   let runIndexOffset = 0;
@@ -139,6 +148,8 @@ export function layoutSimpleTexParagraph(
       noIndent: paragraph.noIndent,
       leftMarginWidth: paragraph.leftMarginWidth,
       rightMarginWidth: paragraph.rightMarginWidth,
+      quoteContextActive: paragraph.quoteDepth > 0,
+      listContextActive: paragraph.listContext !== undefined,
     });
     if (!broken) {
       return {
@@ -173,6 +184,12 @@ export function layoutSimpleTexParagraph(
           combinedLineIndex,
           paragraph.verticalSkipBefore
         );
+      }
+      if (line.lineIndex === 0 && paragraph.label) {
+        combinedLineLabels.set(combinedLineIndex, {
+          label: paragraph.label,
+          lineRunIndex: line.startRun + runIndexOffset,
+        });
       }
       combinedLines.push(offsetLine(
         line,
@@ -210,6 +227,7 @@ export function layoutSimpleTexParagraph(
       shapedRuns,
       runWidths: combinedRunWidths,
       lineVerticalSkipsBefore: combinedLineVerticalSkipsBefore,
+      lineLabels: combinedLineLabels,
       linebreakingMode,
       layoutMode: layoutIr.layoutMode,
       font,
@@ -233,6 +251,8 @@ function breakTexParagraphRuns(params: {
   readonly noIndent: boolean;
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
+  readonly quoteContextActive: boolean;
+  readonly listContextActive: boolean;
 }): TexParagraphBreakResult | null {
   const pass1Model = runsToItems(params.runs, params.measurement, {
     enableAutomaticHyphenation: false,
@@ -246,7 +266,9 @@ function breakTexParagraphRuns(params: {
     params.inheritedAlignment,
     params.inheritedAlignmentProfile,
     params.leftMarginWidth,
-    params.rightMarginWidth
+    params.rightMarginWidth,
+    params.quoteContextActive,
+    params.listContextActive
   );
   const pass1 = breakWithDp(pass1Model, params.options.width, {
     ...dpOptions,
@@ -368,15 +390,27 @@ function layoutItemsToRuns(
   shapedRuns: Map<number, ShapedTexTextRun>
 ): ParagraphRun[] {
   const runs: ParagraphRun[] = [];
-  for (const item of items) {
+  let pendingItalicCorrection = 0;
+  for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+    const item = items[itemIndex];
     const runIndex = runs.length;
     if (item.kind === "text") {
+      const nextItem = items[itemIndex + 1];
+      const shapedBase = computerModernTexMetricProvider.shapeText(item.text, item.font, {
+        sourceStart: item.sourceStart,
+      });
+      const correction = item.italicCorrectionAfter
+        ? trailingItalicCorrectionWidth(shapedBase)
+        : 0;
+      const moveCorrectionToSpace =
+        correction > 0 &&
+        nextItem?.kind === "space";
       const shaped = withTrailingItalicCorrection(
-        computerModernTexMetricProvider.shapeText(item.text, item.font, {
-          sourceStart: item.sourceStart,
-        }),
-        item.italicCorrectionAfter
+        shapedBase,
+        correction,
+        !moveCorrectionToSpace
       );
+      pendingItalicCorrection = moveCorrectionToSpace ? correction : 0;
       const wrapper: AnyWrapper = {};
       shapedRunByWrapper.set(wrapper, shaped);
       shapedRuns.set(runIndex, shaped);
@@ -394,13 +428,17 @@ function layoutItemsToRuns(
     }
 
     const forced = item.kind === "forced-break";
-    const glue = forced
+    const baseGlue = forced
       ? { width: 0, stretch: 0, shrink: 0 }
       : texInterwordGlueForSpaceFactor(
         item.font,
         item.spaceFactor,
         item.spaceGlueProfile
       );
+    const glue = pendingItalicCorrection > 0 && !forced
+      ? { ...baseGlue, width: roundTexPt(baseGlue.width + pendingItalicCorrection) }
+      : baseGlue;
+    pendingItalicCorrection = 0;
     runs.push({
       kind: "space",
       runIndex,
@@ -417,14 +455,10 @@ function layoutItemsToRuns(
 
 function withTrailingItalicCorrection(
   shaped: ShapedTexTextRun,
+  correction: number,
   enabled: boolean
 ): ShapedTexTextRun {
-  if (!enabled) {
-    return shaped;
-  }
-  const lastGlyph = findLastTexGlyph(shaped.items);
-  const correction = lastGlyph?.italicCorrection ?? 0;
-  if (correction <= 0) {
+  if (!enabled || correction <= 0) {
     return shaped;
   }
 
@@ -451,6 +485,10 @@ function withTrailingItalicCorrection(
     caretStops,
     sourceCaretStops,
   };
+}
+
+function trailingItalicCorrectionWidth(shaped: ShapedTexTextRun): number {
+  return findLastTexGlyph(shaped.items)?.italicCorrection ?? 0;
 }
 
 function findLastTexGlyph(items: readonly ShapedTexTextRun["items"][number][]): TexGlyphBox | null {
@@ -646,9 +684,13 @@ function texParagraphDpOptions(
   inheritedAlignment?: TexParagraphAlignment,
   inheritedAlignmentProfile?: TexAlignmentProfile,
   leftMarginWidth = 0,
-  rightMarginWidth = 0
+  rightMarginWidth = 0,
+  quoteContextActive = false,
+  listContextActive = false
 ): DpOptions {
   const latexRagged = alignment === "ragged-right" || alignment === "ragged-left";
+  const inheritedLatexRagged =
+    inheritedAlignment === "ragged-right" || inheritedAlignment === "ragged-left";
   const latexDeclaration = alignmentProfile === "latex-declaration";
   const latexQuote = alignmentProfile === "latex-quote";
   const skipStretch = 2 * (options.font?.atPt ?? computerModernTexMetricProvider.resolveFont().atPt);
@@ -660,18 +702,26 @@ function texParagraphDpOptions(
     linepenalty: englishDefaults.linepenalty,
     adjdemerits: englishDefaults.adjdemerits,
     doublehyphendemerits: englishDefaults.doublehyphendemerits,
-    finalhyphendemerits: latexDeclaration || latexRagged
+    finalhyphendemerits: latexDeclaration || latexRagged || inheritedLatexRagged
       ? LATEX_RAGGED_FINAL_HYPHEN_DEMERITS
       : englishDefaults.finalhyphendemerits,
     leftskipWidth: leftMarginWidth,
     leftskipStretch:
-      texDeclarationLeftskipStretch(alignment, latexDeclaration, skipStretch),
+      texDeclarationLeftskipStretch(
+        alignment,
+        latexDeclaration,
+        quoteContextActive,
+        listContextActive,
+        skipStretch
+      ),
     leftskipShrink: 0,
     rightskipWidth: rightMarginWidth,
     rightskipStretch: texDeclarationRightskipStretch(
       alignment,
       latexDeclaration,
       latexQuote,
+      quoteContextActive,
+      listContextActive,
       skipStretch
     ),
     rightskipShrink: 0,
@@ -688,12 +738,15 @@ function texParagraphDpOptions(
         ? options.parindent
         : 0,
     forcedBreakUsesParfill: true,
+    forcedBreakTerminalDemerits: true,
     parfillskipWidth: 0,
     parfillskipStretch: texParfillStretchForAlignment(
       alignment,
       alignmentProfile,
       options.tikzTextWidthNode === true,
-      inheritedParfillStretch
+      inheritedParfillStretch,
+      quoteContextActive,
+      listContextActive
     ),
     parfillskipShrink: 0,
     preventOverflow: false,
@@ -703,8 +756,16 @@ function texParagraphDpOptions(
 function texDeclarationLeftskipStretch(
   alignment: TexParagraphAlignment,
   latexDeclaration: boolean,
+  quoteContextActive: boolean,
+  listContextActive: boolean,
   fallbackStretch: number
 ): number {
+  if (quoteContextActive && (alignment === "ragged-left" || alignment === "center")) {
+    return 0;
+  }
+  if (listContextActive && (alignment === "ragged-left" || alignment === "center")) {
+    return 0;
+  }
   if (latexDeclaration && (alignment === "ragged-left" || alignment === "center")) {
     return Number.POSITIVE_INFINITY;
   }
@@ -715,8 +776,19 @@ function texDeclarationRightskipStretch(
   alignment: TexParagraphAlignment,
   latexDeclaration: boolean,
   latexQuote: boolean,
+  quoteContextActive: boolean,
+  listContextActive: boolean,
   fallbackStretch: number
 ): number {
+  if (quoteContextActive) {
+    return alignment === "ragged-right" ? Number.POSITIVE_INFINITY : 0;
+  }
+  if (listContextActive && alignment === "ragged-right") {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (listContextActive && alignment === "center") {
+    return 0;
+  }
   if (
     (latexDeclaration || latexQuote) &&
     (alignment === "ragged-right" || alignment === "center")
@@ -730,8 +802,16 @@ function texParfillStretchForAlignment(
   alignment: TexParagraphAlignment,
   alignmentProfile?: TexAlignmentProfile,
   tikzTextWidthNode = false,
-  inheritedParfillStretch = Number.POSITIVE_INFINITY
+  inheritedParfillStretch = Number.POSITIVE_INFINITY,
+  quoteContextActive = false,
+  listContextActive = false
 ): number {
+  if (quoteContextActive) {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (listContextActive) {
+    return Number.POSITIVE_INFINITY;
+  }
   if (alignmentProfile === "latex-declaration") {
     if (alignment === "center" || alignment === "ragged-left") {
       return 0;
@@ -773,6 +853,7 @@ function buildTexParagraphReport(params: {
   shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   runWidths: ReadonlyMap<number, number>;
   lineVerticalSkipsBefore: ReadonlyMap<number, number>;
+  lineLabels: ReadonlyMap<number, TexLineLabel>;
   linebreakingMode: "feasible" | "overfull";
   layoutMode: KnuthPlassLayoutMode;
   font: ResolvedTexFont;
@@ -810,11 +891,16 @@ function buildTexLineReport(
     shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
     runWidths: ReadonlyMap<number, number>;
     lineVerticalSkipsBefore: ReadonlyMap<number, number>;
+    lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
   }
 ): LineReport {
   const segments: LineReport["segments"] = [];
   let x = line.xOffset ?? 0;
+  const label = params.lineLabels.get(line.lineIndex);
+  if (label) {
+    segments.push(...buildTexLineLabelSegments(label));
+  }
   if (line.startPendingText) {
     const runFont = params.shapedRuns.get(line.startRun)?.font ?? params.font;
     const shaped = computerModernTexMetricProvider.shapeText(line.startPendingText, runFont);
@@ -971,4 +1057,87 @@ function buildTexLineReport(
     break: line.break,
     segments,
   };
+}
+
+function buildTexLineLabelSegments(label: TexLineLabel): LineReport["segments"] {
+  const segments: LineReport["segments"] = [];
+  const width = texLayoutItemsNaturalWidth(label.label.items);
+  let x = roundTexPt(label.label.rightEdge - width);
+  for (const item of label.label.items) {
+    if (item.kind === "glyph") {
+      const glyphWidth = texLayoutGlyphItemWidth(item);
+      segments.push({
+        runIndex: label.lineRunIndex,
+        kind: "text",
+        text: item.text,
+        startOffset: 0,
+        endOffset: item.text.length,
+        fontId: item.font.id,
+        glyphCode: item.code,
+        x,
+        width: glyphWidth,
+        caretStops: [x, roundTexPt(x + glyphWidth)],
+      });
+      x = roundTexPt(x + glyphWidth);
+      continue;
+    }
+    if (item.kind === "forced-break") {
+      continue;
+    }
+    if (item.kind === "text") {
+      const shaped = computerModernTexMetricProvider.shapeText(item.text, item.font);
+      segments.push({
+        runIndex: label.lineRunIndex,
+        kind: "text",
+        text: item.text,
+        startOffset: 0,
+        endOffset: item.text.length,
+        fontId: item.font.id,
+        x,
+        width: shaped.width,
+        caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
+      });
+      x = roundTexPt(x + shaped.width);
+      continue;
+    }
+
+    const glue = texInterwordGlueForSpaceFactor(
+      item.font,
+      item.spaceFactor,
+      item.spaceGlueProfile
+    );
+    segments.push({
+      runIndex: label.lineRunIndex,
+      kind: "space",
+      text: " ",
+      x,
+      width: glue.width,
+      caretStops: [x, roundTexPt(x + glue.width)],
+    });
+    x = roundTexPt(x + glue.width);
+  }
+  return segments;
+}
+
+function texLayoutItemsNaturalWidth(items: readonly TexLayoutLabelItem[]): number {
+  let width = 0;
+  for (const item of items) {
+    if (item.kind === "glyph") {
+      width += texLayoutGlyphItemWidth(item);
+      continue;
+    }
+    if (item.kind === "forced-break") {
+      continue;
+    }
+    if (item.kind === "text") {
+      width += computerModernTexMetricProvider.shapeText(item.text, item.font).width;
+      continue;
+    }
+    width += texInterwordGlueForSpaceFactor(
+      item.font,
+      item.spaceFactor,
+      item.spaceGlueProfile
+    ).width;
+  }
+  return roundTexPt(width);
 }

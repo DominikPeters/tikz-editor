@@ -1,5 +1,6 @@
 import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
 import type { ResolvedTexFont } from "./fonts/types.js";
+import { roundTexPt, tfmToPt } from "./fonts/units.js";
 import {
   computerModernTexMetricProvider,
   type DefaultComputerModernTextFont,
@@ -10,6 +11,7 @@ import {
   type SimpleTexParagraphBlock,
   type SimpleTexParagraphSegment,
   type SimpleTexFontState,
+  type SimpleTexListContext,
   type TexAlignmentProfile,
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
@@ -57,6 +59,22 @@ export type TexLayoutInlineItem =
   | TexLayoutSpaceItem
   | TexLayoutForcedBreakItem;
 
+export interface TexLayoutGlyphItem {
+  readonly kind: "glyph";
+  readonly text: string;
+  readonly code: number;
+  readonly font: ResolvedTexFont;
+}
+
+export type TexLayoutLabelItem = TexLayoutInlineItem | TexLayoutGlyphItem;
+
+export interface TexLayoutLabel {
+  readonly items: readonly TexLayoutLabelItem[];
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly rightEdge: number;
+}
+
 export interface TexLayoutParagraphIr {
   readonly kind: "tex-layout-paragraph";
   readonly blockIndex: number;
@@ -75,6 +93,8 @@ export interface TexLayoutParagraphIr {
   readonly rightMarginWidth: number;
   readonly verticalSkipBefore: number;
   readonly quoteDepth: number;
+  readonly listContext?: SimpleTexListContext;
+  readonly label?: TexLayoutLabel;
   readonly forcedBreakAfter?: SimpleTexParagraphSegment["forcedBreakAfter"];
   readonly items: readonly TexLayoutInlineItem[];
 }
@@ -102,6 +122,8 @@ export function createSimpleTexLayoutDocumentIr(params: {
   let activeAlignmentProfile: TexAlignmentProfile | undefined;
   let activeSpaceGlueProfile = texInitialSpaceGlueProfile(params.defaultAlignment);
   let previousEmittedQuoteDepth = 0;
+  let previousEmittedListContext: SimpleTexListContext | undefined;
+  const quoteEntryHadPreviousParagraphByDepth = new Map<number, boolean>();
 
   for (let blockIndex = 0; blockIndex < params.blocks.length; blockIndex += 1) {
     const block = params.blocks[blockIndex];
@@ -142,9 +164,38 @@ export function createSimpleTexLayoutDocumentIr(params: {
     for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
       const segment = segments[segmentIndex];
       const quoteMarginWidth = texArticleQuoteMarginWidth(block.quoteDepth, params.font);
-      const verticalSkipBefore = segmentIndex === 0
-        ? texArticleQuoteVerticalSkipBefore(previousEmittedQuoteDepth, block.quoteDepth)
+      const listMarginWidth = texArticleListTotalMarginWidth(block.listContext, params.font);
+      const listLabelRightEdge = texArticleListLabelRightEdge(
+        block.listContext,
+        quoteMarginWidth,
+        params.font
+      );
+      const hasPreviousEmittedParagraph = paragraphs.length > 0;
+      const listVerticalSkipBefore = segmentIndex === 0
+        ? texArticleListVerticalSkipBefore(
+            previousEmittedListContext,
+            block.listContext,
+            hasPreviousEmittedParagraph
+          )
         : 0;
+      const quoteVerticalSkipBefore = segmentIndex === 0
+        ? texArticleQuoteVerticalSkipBefore(
+            previousEmittedQuoteDepth,
+            block.quoteDepth,
+            previousEmittedListContext !== undefined || block.listContext !== undefined,
+            quoteEntryHadPreviousParagraphByDepth.get(previousEmittedQuoteDepth) ?? true,
+            hasPreviousEmittedParagraph
+          )
+        : 0;
+      const verticalSkipBefore = quoteVerticalSkipBefore + listVerticalSkipBefore;
+      const label = segmentIndex === 0 && block.listContext?.showLabel === true
+        ? texLayoutLabelForListContext(
+            block.listContext,
+            params.font,
+            activeSpaceGlueProfile,
+            listLabelRightEdge
+          )
+        : undefined;
       paragraphs.push({
         kind: "tex-layout-paragraph",
         blockIndex,
@@ -159,10 +210,12 @@ export function createSimpleTexLayoutDocumentIr(params: {
         inheritedAlignmentProfile,
         noIndent: segment.noIndent,
         spaceGlueProfile: activeSpaceGlueProfile,
-        leftMarginWidth: quoteMarginWidth,
+        leftMarginWidth: quoteMarginWidth + listMarginWidth,
         rightMarginWidth: quoteMarginWidth,
         verticalSkipBefore,
         quoteDepth: block.quoteDepth,
+        listContext: block.listContext,
+        label,
         forcedBreakAfter: segment.forcedBreakAfter,
         items: simpleTexSegmentToLayoutItems(
           segment,
@@ -170,7 +223,25 @@ export function createSimpleTexLayoutDocumentIr(params: {
           activeSpaceGlueProfile
         ),
       });
+      if (segmentIndex === 0 && block.quoteDepth > previousEmittedQuoteDepth) {
+        for (
+          let depth = previousEmittedQuoteDepth + 1;
+          depth <= block.quoteDepth;
+          depth += 1
+        ) {
+          quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
+        }
+      } else if (segmentIndex === 0 && block.quoteDepth < previousEmittedQuoteDepth) {
+        for (
+          let depth = previousEmittedQuoteDepth;
+          depth > block.quoteDepth;
+          depth -= 1
+        ) {
+          quoteEntryHadPreviousParagraphByDepth.delete(depth);
+        }
+      }
       previousEmittedQuoteDepth = block.quoteDepth;
+      previousEmittedListContext = block.listContext;
     }
   }
 
@@ -184,15 +255,103 @@ export function createSimpleTexLayoutDocumentIr(params: {
 
 function texArticleQuoteVerticalSkipBefore(
   previousQuoteDepth: number,
-  quoteDepth: number
+  quoteDepth: number,
+  listTransitionActive = false,
+  exitingQuoteHadPreviousParagraph = true,
+  hasPreviousEmittedParagraph = true
 ): number {
+  if (listTransitionActive) {
+    return 0;
+  }
   if (previousQuoteDepth === quoteDepth) {
     return quoteDepth > 0 ? 4 : 0;
   }
-  if (previousQuoteDepth > 0 || quoteDepth > 0) {
-    return 10;
+  if (quoteDepth > previousQuoteDepth) {
+    return hasPreviousEmittedParagraph ? 10 : 13;
+  }
+  if (previousQuoteDepth > quoteDepth) {
+    return exitingQuoteHadPreviousParagraph ? 10 : 8;
   }
   return 0;
+}
+
+function texArticleListVerticalSkipBefore(
+  previous: SimpleTexListContext | undefined,
+  current: SimpleTexListContext | undefined,
+  hasPreviousEmittedParagraph: boolean
+): number {
+  if (!previous && !current) {
+    return 0;
+  }
+  if (!hasPreviousEmittedParagraph && current) {
+    return texArticleInitialListSkip();
+  }
+  if (!previous && current) {
+    return texArticleOutsideListBoundarySkip();
+  }
+  if (previous && !current) {
+    return texArticleOutsideListBoundarySkip();
+  }
+  if (!previous || !current) {
+    return 0;
+  }
+  if (current.depth > previous.depth) {
+    return texArticleNestedListBoundarySkip(current.depth);
+  }
+  if (current.depth < previous.depth) {
+    return texArticleNestedListBoundarySkip(previous.depth);
+  }
+  if (
+    current.kind === previous.kind &&
+    current.labelDepth === previous.labelDepth &&
+    current.itemIndex === previous.itemIndex
+  ) {
+    return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth);
+  }
+  return texArticleListItemBoundarySkip(current.depth);
+}
+
+function texArticleInitialListSkip(): number {
+  return 13;
+}
+
+function texArticleOutsideListBoundarySkip(): number {
+  return 10;
+}
+
+function texArticleNestedListBoundarySkip(depth: number): number {
+  switch (depth) {
+    case 1:
+      return 8;
+    case 2:
+      return 8;
+    case 3:
+      return 4;
+    default:
+      return 2;
+  }
+}
+
+function texArticleListItemBoundarySkip(depth: number): number {
+  switch (depth) {
+    case 1:
+      return 8;
+    case 2:
+      return 4;
+    default:
+      return 2;
+  }
+}
+
+function texArticleListParagraphSkip(depth: number): number {
+  switch (depth) {
+    case 1:
+      return 4;
+    case 2:
+      return 2;
+    default:
+      return 0;
+  }
 }
 
 function texHonoredBlockAlignment(
@@ -242,6 +401,210 @@ function texArticleQuoteMarginWidth(quoteDepth: number, font: ResolvedTexFont): 
     margin += articleLeftMarginEmByDepth[Math.min(index, articleLeftMarginEmByDepth.length - 1)] ?? 1;
   }
   return margin * font.atPt;
+}
+
+function texArticleListTotalMarginWidth(
+  listContext: SimpleTexListContext | undefined,
+  font: ResolvedTexFont
+): number {
+  return (listContext?.totalLeftMarginEm ?? 0) * font.atPt;
+}
+
+function texArticleListLabelRightEdge(
+  listContext: SimpleTexListContext | undefined,
+  quoteMarginWidth: number,
+  font: ResolvedTexFont
+): number {
+  if (!listContext) {
+    return quoteMarginWidth;
+  }
+  return quoteMarginWidth + texArticleListTotalMarginWidth(listContext, font) - 0.5 * font.atPt;
+}
+
+function texLayoutLabelForListContext(
+  listContext: SimpleTexListContext,
+  font: ResolvedTexFont,
+  spaceGlueProfile: TexSpaceGlueProfile,
+  rightEdge: number
+): TexLayoutLabel {
+  if (listContext.label) {
+    return {
+      items: simpleTexInlineNodesToLayoutItems(
+        listContext.label.nodes,
+        listContext.label.sourceStart,
+        listContext.label.sourceEnd,
+        font.atPt,
+        spaceGlueProfile
+      ),
+      sourceStart: listContext.label.sourceStart,
+      sourceEnd: listContext.label.sourceEnd,
+      rightEdge,
+    };
+  }
+
+  const glyphLabel = texDefaultItemizeGlyphLabel(listContext, font.atPt);
+  if (glyphLabel) {
+    return {
+      items: [glyphLabel],
+      sourceStart: 0,
+      sourceEnd: 0,
+      rightEdge,
+    };
+  }
+
+  const text = texDefaultEnumerateLabelText(listContext);
+  return {
+    items: [{
+      kind: "text",
+      text,
+      sourceStart: 0,
+      sourceEnd: 0,
+      font,
+      italicCorrectionAfter: false,
+      spaceFactorBefore: 1000,
+      spaceFactorAfter: 1000,
+    }],
+    sourceStart: 0,
+    sourceEnd: 0,
+    rightEdge,
+  };
+}
+
+function texDefaultItemizeGlyphLabel(
+  listContext: SimpleTexListContext,
+  atPt: number
+): TexLayoutGlyphItem | null {
+  if (listContext.kind !== "itemize") {
+    return null;
+  }
+  if (listContext.labelDepth === 2) {
+    return {
+      kind: "glyph",
+      text: "–",
+      code: 0x2013,
+      font: computerModernTexMetricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
+    };
+  }
+  if (listContext.labelDepth === 3) {
+    return {
+      kind: "glyph",
+      text: "*",
+      code: 42,
+      font: computerModernTexMetricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
+    };
+  }
+  if (listContext.labelDepth === 4) {
+    return {
+      kind: "glyph",
+      text: ".",
+      code: 183,
+      font: computerModernTexMetricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
+    };
+  }
+  return {
+    kind: "glyph",
+    text: "•",
+    code: 0x2022,
+    font: computerModernTexMetricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
+  };
+}
+
+function texDefaultEnumerateLabelText(listContext: SimpleTexListContext): string {
+  switch (listContext.labelDepth) {
+    case 2:
+      return `(${texLowerAlphaCounter(listContext.itemIndex)})`;
+    case 3:
+      return `${texLowerRomanCounter(listContext.itemIndex)}.`;
+    case 4:
+      return `${texUpperAlphaCounter(listContext.itemIndex)}.`;
+    default:
+      return `${listContext.itemIndex}.`;
+  }
+}
+
+function texLowerAlphaCounter(value: number): string {
+  const normalized = Math.max(1, Math.floor(value));
+  let remaining = normalized;
+  let result = "";
+  while (remaining > 0) {
+    remaining -= 1;
+    result = String.fromCharCode(97 + (remaining % 26)) + result;
+    remaining = Math.floor(remaining / 26);
+  }
+  return result;
+}
+
+function texUpperAlphaCounter(value: number): string {
+  return texLowerAlphaCounter(value).toUpperCase();
+}
+
+function texLowerRomanCounter(value: number): string {
+  const normalized = Math.max(1, Math.floor(value));
+  const entries: Array<[number, string]> = [
+    [1000, "m"],
+    [900, "cm"],
+    [500, "d"],
+    [400, "cd"],
+    [100, "c"],
+    [90, "xc"],
+    [50, "l"],
+    [40, "xl"],
+    [10, "x"],
+    [9, "ix"],
+    [5, "v"],
+    [4, "iv"],
+    [1, "i"],
+  ];
+  let remaining = normalized;
+  let result = "";
+  for (const [amount, symbol] of entries) {
+    while (remaining >= amount) {
+      result += symbol;
+      remaining -= amount;
+    }
+  }
+  return result;
+}
+
+function simpleTexInlineNodesToLayoutItems(
+  nodes: readonly SimpleTexParagraphSegment["nodes"][number][],
+  sourceStart: number,
+  sourceEnd: number,
+  atPt: number,
+  spaceGlueProfile: TexSpaceGlueProfile
+): TexLayoutInlineItem[] {
+  return simpleTexSegmentToLayoutItems(
+    {
+      text: "",
+      sourceStart,
+      sourceEnd,
+      nodes,
+      noIndent: true,
+    },
+    atPt,
+    spaceGlueProfile
+  );
+}
+
+export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): number {
+  return roundTexPt(tfmToPt(
+    item.font,
+    item.font.data.chars[String(item.code)]?.width
+  ));
+}
+
+export function texLayoutGlyphItemHeight(item: TexLayoutGlyphItem): number {
+  return roundTexPt(tfmToPt(
+    item.font,
+    item.font.data.chars[String(item.code)]?.height
+  ));
+}
+
+export function texLayoutGlyphItemDepth(item: TexLayoutGlyphItem): number {
+  return roundTexPt(tfmToPt(
+    item.font,
+    item.font.data.chars[String(item.code)]?.depth
+  ));
 }
 
 function simpleTexSegmentToLayoutItems(
@@ -333,6 +696,13 @@ function resolveComputerModernFontForState(
 function computerModernFontIdForState(
   state: SimpleTexFontState
 ): DefaultComputerModernTextFont {
+  if (
+    state.family === "normal" &&
+    state.series === "medium" &&
+    state.shape === "upright"
+  ) {
+    return "lmroman10-regular";
+  }
   if (state.family === "sans") {
     if (state.series === "bold") {
       return "cmssbx10";

@@ -27,6 +27,7 @@ export interface DpOptions {
   firstLineIndentWidth?: number;
   forcedBreakIndentWidth?: number;
   forcedBreakUsesParfill?: boolean;
+  forcedBreakTerminalDemerits?: boolean;
   parfillskipWidth?: number;
   parfillskipStretch?: number;
   parfillskipShrink?: number;
@@ -855,7 +856,13 @@ function totalCostForTransition(
   candidate: BreakCandidate,
   score: CandidateScore,
   options: Required<
-    Pick<DpOptions, 'adjdemerits' | 'doublehyphendemerits' | 'finalhyphendemerits'>
+    Pick<
+      DpOptions,
+      | 'adjdemerits'
+      | 'doublehyphendemerits'
+      | 'finalhyphendemerits'
+      | 'forcedBreakTerminalDemerits'
+    >
   >,
   isLastLine: boolean
 ): number {
@@ -870,7 +877,10 @@ function totalCostForTransition(
     totalCost += options.adjdemerits;
   }
   if (state.previousFlagged) {
-    if (isLastLine) {
+    if (
+      isLastLine ||
+      (options.forcedBreakTerminalDemerits && candidate.break?.kind === 'forced')
+    ) {
       totalCost += options.finalhyphendemerits;
     } else if (candidate.flagged) {
       totalCost += options.doublehyphendemerits;
@@ -1085,6 +1095,7 @@ export function breakWithDp(
     firstLineIndentWidth: options.firstLineIndentWidth ?? 0,
     forcedBreakIndentWidth: options.forcedBreakIndentWidth ?? 0,
     forcedBreakUsesParfill: options.forcedBreakUsesParfill ?? false,
+    forcedBreakTerminalDemerits: options.forcedBreakTerminalDemerits ?? false,
     parfillskipWidth: options.parfillskipWidth ?? 0,
     parfillskipStretch: options.parfillskipStretch ?? Number.POSITIVE_INFINITY,
     parfillskipShrink: options.parfillskipShrink ?? 0,
@@ -1174,7 +1185,6 @@ export function breakWithDp(
         if (
           resolvedOptions.allowLastResortOverfull &&
           tooTight &&
-          !isLastLine &&
           !Number.isFinite(minimumDemerits) &&
           stateIndex === activeStates.length - 1 &&
           activeStates
@@ -1194,6 +1204,14 @@ export function breakWithDp(
             fitnessClass: artificialScore.fitnessClass,
             score: artificialScore,
           };
+          if (isLastLine) {
+            bestFinal = {
+              cost: state.cost,
+              fromStateId: state.id,
+              choice,
+            };
+            continue;
+          }
           bestByFitness.set(artificialScore.fitnessClass, {
             cost: state.cost,
             fromState: state,

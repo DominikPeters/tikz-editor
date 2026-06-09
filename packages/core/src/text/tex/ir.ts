@@ -3,7 +3,7 @@ import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
 export type TexSpaceGlueProfile = "font" | "tikz-fixed";
-export type TexFontFamily = "roman" | "sans";
+export type TexFontFamily = "roman" | "sans" | "normal";
 export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "small-caps";
 export type SimpleTexFontCommandName =
@@ -29,6 +29,8 @@ export type SimpleTexFontDeclarationName =
   | "upshape"
   | "scshape"
   | "normalfont";
+export type SimpleTexEnvironmentName = "quote" | "itemize" | "enumerate";
+export type SimpleTexListKind = "itemize" | "enumerate";
 
 export interface SimpleTexFontState {
   readonly family: TexFontFamily;
@@ -107,7 +109,15 @@ export interface SimpleTexEnvironmentBoundaryNode extends SimpleTexSourceRange {
   readonly kind: "environment-boundary";
   readonly text: string;
   readonly boundary: "begin" | "end";
-  readonly name: "quote";
+  readonly name: SimpleTexEnvironmentName;
+}
+
+export interface SimpleTexItemNode extends SimpleTexSourceRange {
+  readonly kind: "item";
+  readonly text: string;
+  readonly labelNodes?: readonly SimpleTexInlineNode[];
+  readonly labelSourceStart?: number;
+  readonly labelSourceEnd?: number;
 }
 
 export type SimpleTexInlineNode =
@@ -123,6 +133,7 @@ export type SimpleTexControlNode =
   | SimpleTexNoIndentNode
   | SimpleTexAlignmentNode
   | SimpleTexEnvironmentBoundaryNode
+  | SimpleTexItemNode
   | SimpleTexUnsupportedCommandNode;
 
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
@@ -146,6 +157,23 @@ export interface SimpleTexParagraphBlock {
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly quoteDepth: number;
+  readonly listContext?: SimpleTexListContext;
+}
+
+export interface SimpleTexListContext {
+  readonly kind: SimpleTexListKind;
+  readonly depth: number;
+  readonly labelDepth: number;
+  readonly itemIndex: number;
+  readonly totalLeftMarginEm: number;
+  readonly showLabel: boolean;
+  readonly label?: SimpleTexListLabel;
+}
+
+export interface SimpleTexListLabel {
+  readonly nodes: readonly SimpleTexInlineNode[];
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
 }
 
 export interface SimpleTexParagraphSegment {
@@ -187,6 +215,13 @@ const defaultSimpleTexFontState: SimpleTexFontState = {
   series: "medium",
   shape: "upright",
 };
+
+const luaLatexNormalFontState: SimpleTexFontState = {
+  family: "normal",
+  series: "medium",
+  shape: "upright",
+};
+const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1];
 
 export function getSimpleTexFallbackReason(text: string, width: number): string | null {
   if (!Number.isFinite(width) || width <= 0) {
@@ -251,6 +286,7 @@ function scanSimpleTexIrNodes(
 
       const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
       const environmentBoundary = scanSimpleTexEnvironmentBoundary(text, index);
+      const itemCommand = scanSimpleTexItemCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (environmentBoundary) {
@@ -263,6 +299,12 @@ function scanSimpleTexIrNodes(
           sourceEnd: sourceOffset + environmentBoundary.end,
         });
         index = environmentBoundary.end;
+        continue;
+      }
+      if (itemCommand) {
+        nodes.push(itemCommand.node);
+        unsupportedCommand ||= itemCommand.unsupportedCommand;
+        index = itemCommand.end;
         continue;
       }
 
@@ -408,24 +450,82 @@ function scanSimpleTexIrNodes(
 function scanSimpleTexEnvironmentBoundary(
   text: string,
   start: number
-): { boundary: "begin" | "end"; name: "quote"; end: number } | null {
-  const beginPrefix = "\\begin{quote}";
-  if (text.startsWith(beginPrefix, start)) {
-    return {
-      boundary: "begin",
-      name: "quote",
-      end: start + beginPrefix.length,
-    };
-  }
-  const endPrefix = "\\end{quote}";
-  if (text.startsWith(endPrefix, start)) {
-    return {
-      boundary: "end",
-      name: "quote",
-      end: start + endPrefix.length,
-    };
+): { boundary: "begin" | "end"; name: SimpleTexEnvironmentName; end: number } | null {
+  for (const boundary of ["begin", "end"] as const) {
+    const prefix = `\\${boundary}{`;
+    if (!text.startsWith(prefix, start)) {
+      continue;
+    }
+    const nameStart = start + prefix.length;
+    const nameEnd = text.indexOf("}", nameStart);
+    if (nameEnd < 0) {
+      return null;
+    }
+    const name = text.slice(nameStart, nameEnd);
+    if (name === "quote" || name === "itemize" || name === "enumerate") {
+      return {
+        boundary,
+        name,
+        end: nameEnd + 1,
+      };
+    }
   }
   return null;
+}
+
+function scanSimpleTexItemCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexItemNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "item");
+  if (commandEnd === null) {
+    return null;
+  }
+
+  let end = skipSimpleTexControlWordSpaces(text, commandEnd);
+  let labelNodes: readonly SimpleTexInlineNode[] | undefined;
+  let labelSourceStart: number | undefined;
+  let labelSourceEnd: number | undefined;
+  let unsupportedCommand = false;
+  if (text[end] === "[") {
+    const labelEnd = findBalancedSimpleTexOptionalArgumentEnd(text, end);
+    if (labelEnd === null) {
+      return null;
+    }
+    const contentStart = end + 1;
+    const contentEnd = labelEnd - 1;
+    const labelScan = scanSimpleTexIrNodes(
+      text.slice(contentStart, contentEnd),
+      sourceOffset + contentStart
+    );
+    const labelIsInline = labelScan.nodes.every(isSimpleTexInlineNode);
+    labelNodes = labelIsInline
+      ? labelScan.nodes.filter(isSimpleTexInlineNode)
+      : [];
+    labelSourceStart = sourceOffset + contentStart;
+    labelSourceEnd = sourceOffset + contentEnd;
+    unsupportedCommand = labelScan.unsupportedCommand || !labelIsInline;
+    end = skipSimpleTexControlWordSpaces(text, labelEnd);
+  }
+
+  return {
+    node: {
+      kind: "item",
+      text: text.slice(start, end),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + end,
+      labelNodes,
+      labelSourceStart,
+      labelSourceEnd,
+    },
+    end,
+    unsupportedCommand,
+  };
 }
 
 function scanSimpleTexFontCommand(
@@ -607,6 +707,46 @@ function findBalancedSimpleTexGroupEnd(text: string, start: number): number | nu
   return null;
 }
 
+function findBalancedSimpleTexOptionalArgumentEnd(
+  text: string,
+  start: number
+): number | null {
+  if (text[start] !== "[") {
+    return null;
+  }
+  let bracketDepth = 0;
+  let groupDepth = 0;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      groupDepth += 1;
+      continue;
+    }
+    if (char === "}" && groupDepth > 0) {
+      groupDepth -= 1;
+      continue;
+    }
+    if (groupDepth > 0) {
+      continue;
+    }
+    if (char === "[") {
+      bracketDepth += 1;
+      continue;
+    }
+    if (char === "]") {
+      bracketDepth -= 1;
+      if (bracketDepth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return null;
+}
+
 function skipSimpleTexControlWordSpaces(text: string, start: number): number {
   let index = start;
   while (text[index] === " " || text[index] === "\n") {
@@ -729,6 +869,17 @@ function buildSimpleTexParagraphBlocksFromNodes(
 ): SimpleTexParagraphBlockScanResult {
   const blocks: SimpleTexParagraphBlock[] = [];
   let unsupportedCommand = false;
+  interface ActiveSimpleTexList {
+    readonly kind: SimpleTexListKind;
+    readonly depth: number;
+    readonly labelDepth: number;
+    itemIndex: number;
+    readonly totalLeftMarginEm: number;
+  }
+  const listStack: ActiveSimpleTexList[] = [];
+  const environmentStack: SimpleTexEnvironmentName[] = [];
+  let pendingListLabel: SimpleTexListLabel | undefined;
+  let pendingListShowLabel = false;
 
   const skipSpaceNodes = (start: number): number => {
     let index = start;
@@ -794,6 +945,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
       end -= 1;
     }
     if (start < end) {
+      const listContext = currentSimpleTexListContext();
+      if (listStack.length > 0 && !listContext) {
+        unsupportedCommand = true;
+        return;
+      }
       blocks.push({
         text: text.slice(start, end),
         sourceStart: start,
@@ -803,8 +959,42 @@ function buildSimpleTexParagraphBlocksFromNodes(
         alignment,
         alignmentProfile,
         quoteDepth,
+        listContext,
       });
+      pendingListLabel = undefined;
+      pendingListShowLabel = false;
     }
+  };
+
+  const currentSimpleTexListContext = (): SimpleTexListContext | undefined => {
+    const activeList = listStack.at(-1);
+    if (!activeList || activeList.itemIndex <= 0) {
+      return undefined;
+    }
+    return {
+      kind: activeList.kind,
+      depth: activeList.depth,
+      labelDepth: activeList.labelDepth,
+      itemIndex: activeList.itemIndex,
+      totalLeftMarginEm: activeList.totalLeftMarginEm,
+      showLabel: pendingListShowLabel,
+      label: pendingListLabel,
+    };
+  };
+
+  const beginList = (kind: SimpleTexListKind) => {
+    const depth = currentQuoteDepth + listStack.length + 1;
+    const labelDepth = listStack.filter((entry) => entry.kind === kind).length + 1;
+    const ownMargin = articleListLeftMarginEmByDepth[
+      Math.min(depth - 1, articleListLeftMarginEmByDepth.length - 1)
+    ] ?? 1;
+    listStack.push({
+      kind,
+      depth,
+      labelDepth,
+      itemIndex: 0,
+      totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
+    });
   };
 
   let prefix = consumeParagraphPrefix(0);
@@ -830,7 +1020,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       );
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent;
+      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
       index = prefix.start;
       continue;
     }
@@ -839,23 +1029,75 @@ function buildSimpleTexParagraphBlocksFromNodes(
       pushBlock(
         blockStart,
         node.sourceStart,
-        currentNoIndent || currentQuoteDepth > 0,
+        currentNoIndent || currentQuoteDepth > 0 || listStack.length > 0,
         currentQuoteDepth,
         prefix.alignment,
         prefix.alignmentProfile
       );
+      if (unsupportedCommand) {
+        break;
+      }
       if (node.boundary === "begin") {
-        currentQuoteDepth += 1;
+        environmentStack.push(node.name);
+        if (node.name === "quote") {
+          currentQuoteDepth += 1;
+        } else {
+          beginList(node.name);
+        }
       } else {
-        currentQuoteDepth -= 1;
-        if (currentQuoteDepth < 0) {
+        const openName = environmentStack.pop();
+        if (openName !== node.name) {
           unsupportedCommand = true;
           break;
+        }
+        if (node.name === "quote") {
+          currentQuoteDepth -= 1;
+          if (currentQuoteDepth < 0) {
+            unsupportedCommand = true;
+            break;
+          }
+        } else {
+          listStack.pop();
+          pendingListLabel = undefined;
+          pendingListShowLabel = false;
         }
       }
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0;
+      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      index = prefix.start;
+      continue;
+    }
+
+    if (node.kind === "item") {
+      pushBlock(
+        blockStart,
+        node.sourceStart,
+        currentNoIndent || currentQuoteDepth > 0 || listStack.length > 0,
+        currentQuoteDepth,
+        prefix.alignment,
+        prefix.alignmentProfile
+      );
+      if (unsupportedCommand) {
+        break;
+      }
+      const activeList = listStack.at(-1);
+      if (!activeList) {
+        unsupportedCommand = true;
+        break;
+      }
+      activeList.itemIndex += 1;
+      pendingListShowLabel = true;
+      pendingListLabel = node.labelNodes && node.labelSourceStart !== undefined && node.labelSourceEnd !== undefined
+        ? {
+            nodes: node.labelNodes,
+            sourceStart: node.labelSourceStart,
+            sourceEnd: node.labelSourceEnd,
+          }
+        : undefined;
+      prefix = consumeParagraphPrefix(index + 1);
+      blockStart = sourceStartForNodeIndex(prefix.start);
+      currentNoIndent = true;
       index = prefix.start;
       continue;
     }
@@ -868,7 +1110,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     index += 1;
   }
   if (!unsupportedCommand) {
-    if (currentQuoteDepth !== 0) {
+    if (currentQuoteDepth !== 0 || listStack.length !== 0 || environmentStack.length !== 0) {
       unsupportedCommand = true;
     }
   }
@@ -876,7 +1118,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     pushBlock(
       blockStart,
       text.length,
-      currentNoIndent || currentQuoteDepth > 0,
+      currentNoIndent || currentQuoteDepth > 0 || listStack.length > 0,
       currentQuoteDepth,
       prefix.alignment,
       prefix.alignmentProfile
@@ -995,7 +1237,8 @@ export function simpleTexInlineNodesToTokens(
   let skipPostLineBreakSpace = false;
   let activeFontState = fontState;
 
-  for (const node of nodes) {
+  for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
+    const node = nodes[nodeIndex];
     if (node.kind === "line-break") {
       while (tokens.at(-1)?.kind === "space") {
         tokens.pop();
@@ -1013,9 +1256,16 @@ export function simpleTexInlineNodesToTokens(
     }
 
     if (node.kind === "font-command") {
+      const childFontState = simpleTexFontStateForCommand(activeFontState, node.command);
+      if (
+        simpleTexFontStateHasItalicCorrection(activeFontState) &&
+        !simpleTexFontStateHasItalicCorrection(childFontState)
+      ) {
+        markPreviousTextTokenItalicCorrection(tokens);
+      }
       let childTokens = simpleTexInlineNodesToTokens(
         node.children,
-        simpleTexFontStateForCommand(activeFontState, node.command)
+        childFontState
       );
       if (simpleTexFontStateHasItalicCorrection(childTokens[0]?.fontState)) {
         childTokens = markLastTextTokenItalicCorrection(childTokens);
@@ -1100,6 +1350,19 @@ function markLastTextTokenItalicCorrection(
   return next;
 }
 
+function markPreviousTextTokenItalicCorrection(tokens: SimpleTexToken[]): void {
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    if (tokens[index]?.kind !== "text") {
+      continue;
+    }
+    tokens[index] = {
+      ...tokens[index],
+      italicCorrectionAfter: true,
+    };
+    break;
+  }
+}
+
 function simpleTexFontStateForCommand(
   current: SimpleTexFontState,
   command: SimpleTexFontCommandName
@@ -1117,7 +1380,7 @@ function simpleTexFontStateForCommand(
     };
   }
   if (command === "textnormal") {
-    return defaultSimpleTexFontState;
+    return luaLatexNormalFontState;
   }
   if (command === "textsf") {
     return { ...current, family: "sans" };
@@ -1154,7 +1417,7 @@ function simpleTexFontStateForDeclaration(
     };
   }
   if (command === "normalfont") {
-    return defaultSimpleTexFontState;
+    return luaLatexNormalFontState;
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };

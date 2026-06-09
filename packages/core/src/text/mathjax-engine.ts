@@ -1114,7 +1114,11 @@ function renderSimpleTexSvgBody(
           atPt: DEFAULT_TEXT_FONT_SIZE,
         })
         : font;
-      pieces.push(renderTexGlyphRun(text, segmentFont, segment.x - lineLeft, baseline - lineTop));
+      if (typeof segment.glyphCode === "number") {
+        pieces.push(renderTexGlyphCode(segment.glyphCode, segmentFont, segment.x - lineLeft, baseline - lineTop));
+      } else {
+        pieces.push(renderTexGlyphRun(text, segmentFont, segment.x - lineLeft, baseline - lineTop));
+      }
     }
     pieces.push("</g>");
   }
@@ -1153,6 +1157,21 @@ function renderTexGlyphRun(text: string, font: ResolvedTexFont, x: number, basel
     cursor += item.width;
   }
   return pieces.join("");
+}
+
+function renderTexGlyphCode(code: number, font: ResolvedTexFont, x: number, baseline: number): string {
+  return renderTexGlyphPath({
+    kind: "glyph",
+    fontId: font.id,
+    code,
+    sourceStart: 0,
+    sourceEnd: 0,
+    width: 0,
+    height: 0,
+    depth: 0,
+    italicCorrection: 0,
+    components: [code],
+  }, font, x, baseline);
 }
 
 function renderTexGlyphPath(item: Extract<TexShapedItem, { kind: "glyph" }>, font: ResolvedTexFont, x: number, baseline: number): string {

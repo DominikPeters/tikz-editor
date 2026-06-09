@@ -204,7 +204,7 @@ function labelSideBySide(visualRunDir, fontEncoding) {
     "center",
     "-pointsize",
     "36",
-    `label:TeX reference (pdfLaTeX, ${fontEncoding})`,
+    `label:TeX reference (LuaLaTeX/dvisvgm, ${fontEncoding})`,
     latexPath,
     "-append",
     latexLabeled,
@@ -245,6 +245,7 @@ async function main() {
     outDir: join(runDir, "visual"),
     name: "render",
     latexPreamble,
+    referenceMode: "dvisvgm-svg-png",
   });
   const labeledSideBySide = labelSideBySide(visual.runDir, normalizedOptions.fontEncoding);
 

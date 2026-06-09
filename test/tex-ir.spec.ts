@@ -169,6 +169,75 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("records LaTeX list item context and optional labels", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\begin{enumerate}\item Alpha \item[Custom] Beta \begin{itemize}\item Gamma\end{itemize}\end{enumerate}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "enumerate" }),
+        expect.objectContaining({ boundary: "begin", name: "itemize" }),
+        expect.objectContaining({ boundary: "end", name: "itemize" }),
+        expect.objectContaining({ boundary: "end", name: "enumerate" }),
+      ]);
+    expect(ir.nodes.filter((node) => node.kind === "item")).toHaveLength(3);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      noIndent: block.noIndent,
+      listContext: block.listContext && {
+        kind: block.listContext.kind,
+        depth: block.listContext.depth,
+        labelDepth: block.listContext.labelDepth,
+        itemIndex: block.listContext.itemIndex,
+        totalLeftMarginEm: block.listContext.totalLeftMarginEm,
+        showLabel: block.listContext.showLabel,
+        labelText: block.listContext.label?.nodes.map((node) => node.text).join(""),
+      },
+    }))).toEqual([
+      {
+        text: "Alpha",
+        noIndent: true,
+        listContext: {
+          kind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+          totalLeftMarginEm: 2.5,
+          showLabel: true,
+          labelText: undefined,
+        },
+      },
+      {
+        text: "Beta",
+        noIndent: true,
+        listContext: {
+          kind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 2,
+          totalLeftMarginEm: 2.5,
+          showLabel: true,
+          labelText: "Custom",
+        },
+      },
+      {
+        text: "Gamma",
+        noIndent: true,
+        listContext: {
+          kind: "itemize",
+          depth: 2,
+          labelDepth: 1,
+          itemIndex: 1,
+          totalLeftMarginEm: 4.7,
+          showLabel: true,
+          labelText: undefined,
+        },
+      },
+    ]);
+  });
+
   it("materializes spacefactor state in layout paragraph IR", () => {
     const parsed = parseSimpleTexParagraphIr("Alpha. Beta Gamma");
     const layout = createSimpleTexLayoutDocumentIr({
@@ -213,6 +282,23 @@ describe("simple TeX paragraph IR", () => {
         { text: "L", font: "cmcsc10" },
         { text: "M", font: "cmbx10" },
         { text: "N", font: "cmssbx10" },
+      ]);
+  });
+
+  it("maps LuaLaTeX textnormal regular text to Latin Modern Roman", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`A \textnormal{B}`);
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs[0]?.items
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "cmr10" },
+        { text: "B", font: "lmroman10-regular" },
       ]);
   });
 
@@ -269,8 +355,122 @@ describe("simple TeX paragraph IR", () => {
       alignmentProfile: "latex-quote",
       leftMarginWidth: 2.5 * font.atPt,
       rightMarginWidth: 2.5 * font.atPt,
-      verticalSkipBefore: 10,
+      verticalSkipBefore: 13,
     });
+  });
+
+  it("materializes LaTeX article list margins and labels in layout paragraph IR", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{enumerate}\item Alpha \item Beta \begin{enumerate}\item Gamma\end{enumerate}\end{enumerate}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: {},
+    });
+
+    expect(layout.paragraphs.map((paragraph) => ({
+      text: paragraph.text,
+      leftMarginWidth: paragraph.leftMarginWidth,
+      rightMarginWidth: paragraph.rightMarginWidth,
+      label: paragraph.label?.items
+        .filter((item) => item.kind === "text")
+        .map((item) => item.text)
+        .join(""),
+      labelRightEdge: paragraph.label?.rightEdge,
+    }))).toEqual([
+      {
+        text: "Alpha",
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 0,
+        label: "1.",
+        labelRightEdge: 2 * font.atPt,
+      },
+      {
+        text: "Beta",
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 0,
+        label: "2.",
+        labelRightEdge: 2 * font.atPt,
+      },
+      {
+        text: "Gamma",
+        leftMarginWidth: 4.7 * font.atPt,
+        rightMarginWidth: 0,
+        label: "(a)",
+        labelRightEdge: 4.2 * font.atPt,
+      },
+    ]);
+  });
+
+  it("materializes LaTeX article itemize labels as explicit TeX glyphs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item Alpha \begin{itemize}\item Beta \begin{itemize}\item Gamma \begin{itemize}\item Delta\end{itemize}\end{itemize}\end{itemize}\end{itemize}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs.map((paragraph) => paragraph.label?.items[0]))
+      .toMatchObject([
+        { kind: "glyph", text: "•", code: 0x2022, font: { id: "lmroman10-regular" } },
+        { kind: "glyph", text: "–", code: 0x2013, font: { id: "lmroman10-regular" } },
+        { kind: "glyph", text: "*", code: 42, font: { id: "tcrm1000" } },
+        { kind: "glyph", text: ".", code: 183, font: { id: "tcrm1000" } },
+      ]);
+  });
+
+  it("materializes natural LaTeX article list vertical spacing in layout paragraph IR", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Before \par \begin{itemize}\item Alpha \par More \item Beta \begin{itemize}\item Nested\end{itemize}\end{itemize} \par After`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs.map((paragraph) => ({
+      text: paragraph.text,
+      verticalSkipBefore: paragraph.verticalSkipBefore,
+    }))).toEqual([
+      { text: "Before", verticalSkipBefore: 0 },
+      { text: "Alpha", verticalSkipBefore: 10 },
+      { text: "More", verticalSkipBefore: 4 },
+      { text: "Beta", verticalSkipBefore: 8 },
+      { text: "Nested", verticalSkipBefore: 8 },
+      { text: "After", verticalSkipBefore: 10 },
+    ]);
+  });
+
+  it("materializes depth-aware LaTeX list transition spacing", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item A \begin{itemize}\item B \begin{itemize}\item C\item D\end{itemize}\item E\end{itemize}\item F\end{itemize}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs.map((paragraph) => ({
+      text: paragraph.text,
+      verticalSkipBefore: paragraph.verticalSkipBefore,
+    }))).toEqual([
+      { text: "A", verticalSkipBefore: 13 },
+      { text: "B", verticalSkipBefore: 8 },
+      { text: "C", verticalSkipBefore: 4 },
+      { text: "D", verticalSkipBefore: 2 },
+      { text: "E", verticalSkipBefore: 4 },
+      { text: "F", verticalSkipBefore: 8 },
+    ]);
   });
 
   it("materializes LaTeX quote list vertical skips in layout paragraph IR", () => {
@@ -293,6 +493,27 @@ describe("simple TeX paragraph IR", () => {
       { text: "Beta", quoteDepth: 1, verticalSkipBefore: 10 },
       { text: "Gamma", quoteDepth: 1, verticalSkipBefore: 4 },
       { text: "Delta", quoteDepth: 0, verticalSkipBefore: 10 },
+    ]);
+  });
+
+  it("does not double-count quote and nested list entry spacing", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote}\begin{itemize}\item Alpha\item Beta\end{itemize}\end{quote}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphs.map((paragraph) => ({
+      text: paragraph.text,
+      quoteDepth: paragraph.quoteDepth,
+      verticalSkipBefore: paragraph.verticalSkipBefore,
+    }))).toEqual([
+      { text: "Alpha", quoteDepth: 1, verticalSkipBefore: 13 },
+      { text: "Beta", quoteDepth: 1, verticalSkipBefore: 4 },
     ]);
   });
 

@@ -12,6 +12,8 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmssi10",
   "cmssbx10",
   "cmcsc10",
+  "lmroman10-regular",
+  "tcrm1000",
 ] as const;
 
 export type DefaultComputerModernTextFont = typeof DEFAULT_COMPUTER_MODERN_TEXT_FONTS[number];

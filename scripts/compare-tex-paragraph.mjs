@@ -108,6 +108,11 @@ function luaTeXLines(text, width, parindent, texSyntax = false) {
     const output = execFileSync(engine, ["--interaction=nonstopmode", "--halt-on-error", texPath], {
       encoding: "utf8",
       cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
     });
     return output
       .split(/\r?\n/)

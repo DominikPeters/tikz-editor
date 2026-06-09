@@ -692,7 +692,7 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(result.report?.lines.length).toBeGreaterThan(1);
-    expect(result.report?.lines[0]?.verticalSkipBefore).toBe(10);
+    expect(result.report?.lines[0]?.verticalSkipBefore).toBe(13);
     for (const line of result.report?.lines ?? []) {
       expect(line.xStart).toBeCloseTo(25, 5);
       expect(line.xEnd).toBeLessThanOrEqual(95.00001);
@@ -716,6 +716,183 @@ describe("simple TeX paragraph layout", () => {
       10,
       4,
       10,
+    ]);
+  });
+
+  it("renders enumerate labels in the article list margin", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{enumerate}\item Alpha Beta\item Gamma\end{enumerate}`,
+      {
+        paragraphId: "tex:enumerate-list",
+        width: 150,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["1.Alpha Beta", "2.Gamma"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(25, 6),
+      expect.closeTo(25, 6),
+    ]);
+    expect(result.report?.lines[0]?.segments[0]).toMatchObject({
+      kind: "text",
+      text: "1.",
+      fontId: "cmr10",
+    });
+    expect(result.report?.lines[0]?.segments[0]?.x ?? 0).toBeLessThan(20);
+    expect(result.report?.lines[0]?.segments[1]).toMatchObject({
+      kind: "text",
+      text: "Alpha",
+      x: expect.closeTo(25, 6),
+    });
+  });
+
+  it("renders custom item labels and nested list margins", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{enumerate}\item[Step] Alpha \begin{enumerate}\item Nested\end{enumerate}\end{enumerate}`,
+      {
+        paragraphId: "tex:nested-list",
+        width: 150,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["StepAlpha", "(a)Nested"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(25, 6),
+      expect.closeTo(47, 6),
+    ]);
+    expect(result.report?.lines[0]?.segments[0]).toMatchObject({
+      kind: "text",
+      text: "Step",
+      fontId: "cmr10",
+    });
+    expect(result.report?.lines[1]?.segments[0]).toMatchObject({
+      kind: "text",
+      text: "(a)",
+      fontId: "cmr10",
+    });
+  });
+
+  it("renders first-slice itemize labels in the article list margin", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{itemize}\item Alpha\item Beta\end{itemize}`,
+      {
+        paragraphId: "tex:itemize-list",
+        width: 150,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["•Alpha", "•Beta"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(25, 6),
+      expect.closeTo(25, 6),
+    ]);
+    expect(result.report?.lines[0]?.segments[0]).toMatchObject({
+      kind: "text",
+      text: "•",
+      fontId: "lmroman10-regular",
+      glyphCode: 0x2022,
+    });
+  });
+
+  it("renders nested itemize labels with LaTeX article font/code choices", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{itemize}\item Alpha \begin{itemize}\item Beta \begin{itemize}\item Gamma \begin{itemize}\item Delta\end{itemize}\end{itemize}\end{itemize}\end{itemize}`,
+      {
+        paragraphId: "tex:nested-itemize-list",
+        width: 180,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines.map((line) => line.segments[0]))
+      .toMatchObject([
+        { text: "•", fontId: "lmroman10-regular", glyphCode: 0x2022 },
+        { text: "–", fontId: "lmroman10-regular", glyphCode: 0x2013 },
+        { text: "*", fontId: "tcrm1000", glyphCode: 42 },
+        { text: ".", fontId: "tcrm1000", glyphCode: 183 },
+      ]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(25, 6),
+      expect.closeTo(47, 6),
+      expect.closeTo(65.7, 6),
+      expect.closeTo(82.7, 6),
+    ]);
+  });
+
+  it("reports natural LaTeX article list vertical spacing", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Before \par \begin{itemize}\item Alpha \par More \item Beta \begin{itemize}\item Nested\end{itemize}\end{itemize} \par After`,
+      {
+        paragraphId: "tex:list-vertical-spacing",
+        width: 180,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Before",
+      "•Alpha",
+      "More",
+      "•Beta",
+      "–Nested",
+      "After",
+    ]);
+    expect(result.report?.lines.map((line) => line.verticalSkipBefore ?? 0)).toEqual([
+      0,
+      10,
+      4,
+      8,
+      8,
+      10,
+    ]);
+  });
+
+  it("uses LaTeX list ragged-right stretch for item line breaking", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{itemize}\item Computer compact alignment, normal baseline paper output classic.\end{itemize}`,
+      {
+        paragraphId: "tex:list-ragged-breaks",
+        width: 180,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "•Computer compact alignment,",
+      "normal baseline paper output",
+      "classic.",
+    ]);
+  });
+
+  it("uses LaTeX list ragged-left skips for item line breaking", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{enumerate}\item Careful control paragraph language local, chapter.\end{enumerate}`,
+      {
+        paragraphId: "tex:list-ragged-left-breaks",
+        width: 120,
+        alignment: "ragged-left",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "1.Careful control para-",
+      "graph language local,",
+      "chapter.",
     ]);
   });
 

@@ -15,11 +15,11 @@ const generatedPath = resolve(
 
 function loadGeneratedFonts() {
   const source = readFileSync(generatedPath, "utf8");
-  const match = /export const COMPUTER_MODERN_OT1_FONTS = (?<json>[\s\S]+?) as const satisfies/.exec(source);
+  const match = /export const COMPUTER_MODERN_OT1_FONTS(?:\s*:[^=]+)?\s*=\s*(?<json>[\s\S]+?)\n};/.exec(source);
   if (!match?.groups?.json) {
     throw new Error(`Could not extract generated font table from ${generatedPath}`);
   }
-  return JSON.parse(match.groups.json);
+  return JSON.parse(`${match.groups.json}\n}`);
 }
 
 function ruleKey(left, right) {
@@ -95,6 +95,11 @@ function shapeWithLuaTeX(text) {
     const output = execFileSync("luatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
       encoding: "utf8",
       cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
     });
     return output
       .split(/\r?\n/)

@@ -19,6 +19,7 @@ const defaultGlyphDxTolerance = 1.5;
 const defaultGlyphDyTolerance = 0.25;
 const defaultCaseMode = "broad";
 const defaultTextFontSize = 9.96264;
+const texPointToSvgPoint = defaultTextFontSize / 10;
 const lineHeightPt = defaultTextFontSize * 1.2;
 const firstLineAscentPt = defaultTextFontSize * 0.7;
 
@@ -61,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, or style. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -170,8 +171,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures", "quote", "style"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, or style.");
+  if (!["broad", "ligatures", "quote", "style", "list", "mixed"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, quote, style, list, or mixed.");
   }
   return options;
 }
@@ -386,6 +387,133 @@ function generateStyleCase(index, random) {
   };
 }
 
+function listItemText(random, index) {
+  const feature = index % 6;
+  if (feature === 0) {
+    return sentence(random, 4, 8);
+  }
+  if (feature === 1) {
+    return `${styledPhrase(random, 2, 4)} \\textit{${styledPhrase(random, 1, 3)}}.`;
+  }
+  if (feature === 2) {
+    return `${sentence(random, 3, 6)} \\\\[${choice(random, [4, 7])}pt] ${sentence(random, 4, 7)}`;
+  }
+  if (feature === 3) {
+    return `${sentence(random, 3, 6)} \\par ${sentence(random, 3, 6)}`;
+  }
+  if (feature === 4) {
+    return `\\textbf{${styledPhrase(random, 2, 4)}} ${sentence(random, 3, 6)}`;
+  }
+  return `\\emph{${styledPhrase(random, 2, 4)}} ${sentence(random, 3, 6)}`;
+}
+
+function listEnvironment(kind, items) {
+  return `\\begin{${kind}}${items.map((item) => `\\item ${item}`).join(" ")}\\end{${kind}}`;
+}
+
+function itemWithOptionalLabel(label, text) {
+  return `\\item[${label}] ${text}`;
+}
+
+function generateListCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [120, 150, 180, 220, 260, 320];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 6;
+  let text;
+  if (feature === 0) {
+    text = listEnvironment("itemize", [
+      listItemText(random, index),
+      listItemText(random, index + 1),
+    ]);
+  } else if (feature === 1) {
+    text = listEnvironment("enumerate", [
+      listItemText(random, index),
+      listItemText(random, index + 1),
+      listItemText(random, index + 2),
+    ]);
+  } else if (feature === 2) {
+    text = listEnvironment("itemize", [
+      `${sentence(random, 3, 6)} ${listEnvironment("itemize", [
+        listItemText(random, index + 1),
+        listItemText(random, index + 2),
+      ])}`,
+      listItemText(random, index + 3),
+    ]);
+  } else if (feature === 3) {
+    text = listEnvironment("enumerate", [
+      `${sentence(random, 3, 6)} ${listEnvironment("enumerate", [
+        listItemText(random, index + 1),
+      ])}`,
+      listItemText(random, index + 2),
+    ]);
+  } else if (feature === 4) {
+    text = `Before ${sentence(random, 3, 6)} \\par ${listEnvironment("itemize", [
+      listItemText(random, index),
+      listItemText(random, index + 1),
+    ])} \\par After ${sentence(random, 3, 6)}`;
+  } else {
+    text = `\\begin{enumerate}\\item \\textit{${styledPhrase(random, 2, 4)}} ${listEnvironment("itemize", [
+      listItemText(random, index + 1),
+    ])} ${itemWithOptionalLabel("Step", listItemText(random, index + 2))}\\end{enumerate}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "list",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
+function generateMixedFeatureCase(index, random) {
+  const feature = index % 5;
+  if (feature === 0) {
+    const generated = generateListCase(index, random);
+    return {
+      ...generated,
+      feature: "mixed-list-quote",
+      text: `\\begin{quote} ${generated.text} \\end{quote}`,
+    };
+  }
+  if (feature === 1) {
+    const generated = generateStyleCase(index, random);
+    return {
+      ...generated,
+      feature: "mixed-style-list",
+      text: `${generated.text} \\par ${listEnvironment("itemize", [
+        listItemText(random, index),
+        `\\textbf{${styledPhrase(random, 2, 4)}} ${sentence(random, 3, 6)}`,
+      ])}`,
+    };
+  }
+  if (feature === 2) {
+    const generated = generateQuoteCase(index, random);
+    return {
+      ...generated,
+      feature: "mixed-quote-style",
+      text: `${generated.text} \\par ${styledSentence(random, index)}`,
+    };
+  }
+  if (feature === 3) {
+    const generated = generateLigatureCase(index, random);
+    return {
+      ...generated,
+      feature: "mixed-ligature-list",
+      text: `${generated.text} \\par ${listEnvironment("enumerate", [
+        ligatureSentence(random, 5, 8),
+        `\\textit{${styledPhrase(random, 2, 4)}} ${ligatureSentence(random, 4, 7)}`,
+      ])}`,
+    };
+  }
+  return {
+    ...generateCase(index, random),
+    feature: "mixed-basic",
+  };
+}
+
 function generateCaseForMode(index, random, mode) {
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
@@ -396,11 +524,21 @@ function generateCaseForMode(index, random, mode) {
   if (mode === "style") {
     return generateStyleCase(index, random);
   }
+  if (mode === "list") {
+    return generateListCase(index, random);
+  }
+  if (mode === "mixed") {
+    return generateMixedFeatureCase(index, random);
+  }
   return generateCase(index, random);
 }
 
 function formatPt(value) {
   return Number(value.toFixed(6)).toString();
+}
+
+function svgX(value) {
+  return value * texPointToSvgPoint;
 }
 
 function escapeXml(value) {
@@ -429,6 +567,14 @@ function renderGlyphRun(text, font, x, baseline, computerModernTexMetricProvider
     cursor += item.width;
   }
   return pieces.join("");
+}
+
+function renderGlyphCode(code, font, x, baseline) {
+  const path = font.data.glyphs?.[String(code)] ?? "";
+  if (!path || code === 32) {
+    return "";
+  }
+  return `<path d="${escapeXml(path)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})" />`;
 }
 
 function lineLeadingPt(lineLeading, parseLength) {
@@ -472,15 +618,24 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
           atPt: defaultTextFontSize,
         })
         : font;
-      pieces.push(
-        renderGlyphRun(
-          segment.text ?? "",
+      if (typeof segment.glyphCode === "number") {
+        pieces.push(renderGlyphCode(
+          segment.glyphCode,
           segmentFont,
           segment.x - left,
-          firstLineAscentPt,
-          deps.computerModernTexMetricProvider
-        )
-      );
+          firstLineAscentPt
+        ));
+      } else {
+        pieces.push(
+          renderGlyphRun(
+            segment.text ?? "",
+            segmentFont,
+            segment.x - left,
+            firstLineAscentPt,
+            deps.computerModernTexMetricProvider
+          )
+        );
+      }
     }
     pieces.push("</g>");
   }
@@ -505,8 +660,18 @@ function buildOursTrace(layout, deps) {
             atPt: defaultTextFontSize,
           })
           : font;
+        if (typeof segment.glyphCode === "number") {
+          glyphs.push({
+            code: traceGlyphTextCode(segment.text, segment.glyphCode),
+            fontId: segmentFont.id,
+            x: Number(svgX(segment.x).toFixed(6)),
+            y: Number(baselineY.toFixed(6)),
+            width: Number(svgX(segment.width).toFixed(6)),
+          });
+          continue;
+        }
         const shaped = deps.computerModernTexMetricProvider.shapeText(segment.text ?? "", segmentFont);
-        let cursor = segment.x;
+        let cursor = svgX(segment.x);
         for (const item of shaped.items) {
           if (item.kind === "kern") {
             cursor += item.width;
@@ -534,21 +699,63 @@ function buildOursTrace(layout, deps) {
   };
 }
 
+function traceGlyphTextCode(text, fallbackCode) {
+  if (text === "–") {
+    return 0x2013;
+  }
+  if (text === "•") {
+    return 0x2022;
+  }
+  return fallbackCode;
+}
+
 function texGlyphText(code) {
   switch (code) {
     case 11:
+    case 0xFB00:
       return "ff";
     case 12:
+    case 0xFB01:
       return "fi";
     case 13:
+    case 0xFB02:
       return "fl";
     case 14:
+    case 0xFB03:
       return "ffi";
     case 15:
+    case 0xFB04:
       return "ffl";
+    case 123:
+      return "-";
+    case 136:
+      return "•";
+    case 183:
+      return ".";
     default:
       return code >= 0 ? String.fromCodePoint(code) : "?";
   }
+}
+
+function normalizeTexGlyphCode(code) {
+  switch (code) {
+    case 0xFB00:
+      return 11;
+    case 0xFB01:
+      return 12;
+    case 0xFB02:
+      return 13;
+    case 0xFB03:
+      return 14;
+    case 0xFB04:
+      return 15;
+    default:
+      return code;
+  }
+}
+
+function texTracePt(value) {
+  return Number((Number(value) * texPointToSvgPoint).toFixed(6));
 }
 
 function buildTexSvgTrace(svg, oursTrace) {
@@ -642,8 +849,8 @@ function parseTexGlyphTrace(tsv) {
       const lineIndex = Number(parts[1]) - 1;
       lines[lineIndex] = {
         text: parseEscapedTraceText(parts[5] ?? ""),
-        width: Number(parts[2]),
-        baselineY: Number(parts[3]),
+        width: texTracePt(parts[2]),
+        baselineY: texTracePt(parts[3]),
         badness: Number(parts[4]),
         glyphs: [],
       };
@@ -654,14 +861,16 @@ function parseTexGlyphTrace(tsv) {
         continue;
       }
       line.glyphs.push({
-        code: Number(parts[2]),
-        x: Number(parts[3]),
-        y: Number(parts[4]),
-        width: Number(parts[5]),
+        code: normalizeTexGlyphCode(Number(parts[2])),
+        x: texTracePt(parts[3]),
+        y: texTracePt(parts[4]),
+        width: texTracePt(parts[5]),
+        fontId: parts[6] ? Number(parts[6]) : undefined,
+        fontName: parts[7] ? parseEscapedTraceText(parts[7]) : undefined,
       });
     }
   }
-  return { lines: lines.filter(Boolean) };
+  return { lines: lines.filter((line) => line && line.glyphs.length > 0) };
 }
 
 function runTexGlyphTrace(caseData, caseDir) {
@@ -694,6 +903,8 @@ function compareGlyphTraces(oursTrace, texTrace) {
   let comparedGlyphs = 0;
 
   const lineCount = Math.min(oursTrace.lines.length, texTrace.lines.length);
+  const oursBaselineOrigin = oursTrace.lines[0]?.glyphs[0]?.y ?? oursTrace.lines[0]?.baselineY ?? 0;
+  const texBaselineOrigin = texTrace.lines[0]?.glyphs[0]?.y ?? texTrace.lines[0]?.baselineY ?? 0;
   for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
     const oursLine = oursTrace.lines[lineIndex];
     const texLine = texTrace.lines[lineIndex];
@@ -706,13 +917,15 @@ function compareGlyphTraces(oursTrace, texTrace) {
     for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex += 1) {
       const oursGlyph = oursLine.glyphs[glyphIndex];
       const texGlyph = texLine.glyphs[glyphIndex];
-      if (oursGlyph.code !== texGlyph.code) {
+      if (normalizeTexGlyphCode(oursGlyph.code) !== normalizeTexGlyphCode(texGlyph.code)) {
         glyphCodeMatch = false;
       }
       const oursRelativeX = oursGlyph.x - oursOriginX;
       const texRelativeX = texGlyph.x - texOriginX;
       maxGlyphDx = Math.max(maxGlyphDx, Math.abs(oursRelativeX - texRelativeX));
-      maxGlyphDy = Math.max(maxGlyphDy, Math.abs(oursGlyph.y - texGlyph.y));
+      const oursRelativeY = oursGlyph.y - oursBaselineOrigin;
+      const texRelativeY = texGlyph.y - texBaselineOrigin;
+      maxGlyphDy = Math.max(maxGlyphDy, Math.abs(oursRelativeY - texRelativeY));
       comparedGlyphs += 1;
     }
   }
@@ -746,7 +959,7 @@ function buildTexDocument(caseData, pageWidth, pageHeight) {
 function texOracleCacheKey(caseData, pageWidth, pageHeight) {
   return createHash("sha256")
     .update(JSON.stringify({
-      version: 3,
+      version: 4,
       text: caseData.text,
       width: caseData.width,
       parindent: caseData.parindent,
@@ -759,7 +972,7 @@ function texOracleCacheKey(caseData, pageWidth, pageHeight) {
 }
 
 function runTexOracle(texPath, pdfPath, texPdfToCairoSvgPath, texDvisvgmSvgPath, caseDir) {
-  execFileSync("pdflatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
+  execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
     cwd: caseDir,
     env: {
       ...process.env,
@@ -838,37 +1051,21 @@ function buildTexTraceDocument(caseData) {
 \pagestyle{empty}
 \makeatletter
 \renewcommand{\rmdefault}{cmr}
+\newbox\tracebox
+\let\trace@orig@fig@continue\tikz@fig@continue
+\def\tikz@fig@continue{%
+  \global\setbox\tracebox=\copy\pgfnodeparttextbox%
+  \trace@orig@fig@continue%
+}
+\makeatother
 \begin{document}
 \fontencoding{OT1}\fontfamily{cmr}\selectfont
-\newbox\tracebox
-\setbox\tracebox=\vbox{%
-\hsize=${formatPt(caseData.width)}pt
-\pretolerance=100
-\tolerance=9999
-\emergencystretch=30pt
-\parindent=${formatPt(caseData.parindent)}pt
-\fontencoding{OT1}\fontfamily{cmr}\selectfont
-${texTraceAlignmentSetup(caseData.alignment.label)}
-\noindent%
-${caseData.text}\par
-}
+\noindent\begin{tikzpicture}[x=1pt,y=1pt]
+\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\fontencoding{OT1}\fontfamily{cmr}\selectfont\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
+\end{tikzpicture}
 \directlua{dofile("trace.lua")}
 \end{document}
 `;
-}
-
-function texTraceAlignmentSetup(alignment) {
-  switch (alignment) {
-    case "right":
-      return String.raw`\pgfutil@raggedleft\leftskip0pt plus2em \spaceskip.3333em \xspaceskip.5em\relax`;
-    case "center":
-      return String.raw`\leftskip0pt plus2em \rightskip0pt plus2em \spaceskip.3333em \xspaceskip.5em \parfillskip=0pt \hbadness10000\relax`;
-    case "justify":
-      return String.raw`\leftskip0pt\rightskip0pt\relax`;
-    case "left":
-    default:
-      return String.raw`\pgfutil@raggedright\rightskip0pt plus2em \spaceskip.3333em \xspaceskip.5em\relax`;
-  }
 }
 
 function texTraceLuaSource() {
@@ -891,6 +1088,11 @@ local function escape_text(value)
     if char == "\n" then return "\\n" end
     return "\\\\"
   end)
+end
+local function glyph_font_name(font_id)
+  local font_data = font.getfont(font_id)
+  if not font_data then return "" end
+  return font_data.name or font_data.fullname or font_data.psname or font_data.filename or ""
 end
 local function glue_width(node_value, parent)
   local width = node_value.width or 0
@@ -921,7 +1123,12 @@ local function disc_is_line_end(disc)
   return true
 end
 local append_node_list
-local append_hlist
+
+local function append_hlist(parts, glyphs, hlist, cursor, baseline)
+  append_node_list(parts, glyphs, hlist.list, hlist, cursor, baseline)
+  return cursor + (hlist.width or 0)
+end
+
 function append_node_list(parts, glyphs, list, parent, cursor, baseline)
   local x = cursor
   if not list then return x end
@@ -929,7 +1136,14 @@ function append_node_list(parts, glyphs, list, parent, cursor, baseline)
     local kind = node.type(child.id)
     if kind == "glyph" then
       table.insert(parts, glyph_text(child.char))
-      table.insert(glyphs, { char = child.char, x = x, y = baseline, width = child.width or 0 })
+      table.insert(glyphs, {
+        char = child.char,
+        x = x,
+        y = baseline,
+        width = child.width or 0,
+        font_id = child.font or 0,
+        font_name = glyph_font_name(child.font),
+      })
       x = x + (child.width or 0)
     elseif kind == "glue" then
       if #parts > 0 then table.insert(parts, " ") end
@@ -944,37 +1158,69 @@ function append_node_list(parts, glyphs, list, parent, cursor, baseline)
       end
     elseif kind == "hlist" then
       x = append_hlist(parts, glyphs, child, x, baseline)
+    elseif kind == "vlist" then
+      -- Nested vertical lists are handled by the line collector.
     end
   end
   return x
 end
-function append_hlist(parts, glyphs, hlist, cursor, baseline)
-  append_node_list(parts, glyphs, hlist.list, hlist, cursor, baseline)
-  return cursor + (hlist.width or 0)
-end
-local function collect_line(line, baseline)
-  local glyphs = {}
-  local parts = {}
-  append_node_list(parts, glyphs, line.list, line, 0, baseline)
-  return table.concat(parts):gsub("%s+$", ""), glyphs
-end
-local line_index = 0
-local y = 0
-for child in node.traverse(tex.box.tracebox.list) do
-  local kind = node.type(child.id)
-  if kind == "hlist" then
-    line_index = line_index + 1
-    local baseline = y + (child.height or 0)
-    local text, glyphs = collect_line(child, baseline)
-    out:write(string.format("LINE\t%d\t%.6f\t%.6f\t%d\t%s\n", line_index, pt(child.width), pt(baseline), child.badness or -1, escape_text(text)))
-    for _, glyph in ipairs(glyphs) do
-      out:write(string.format("GLYPH\t%d\t%d\t%.6f\t%.6f\t%.6f\n", line_index, glyph.char, pt(glyph.x), pt(glyph.y), pt(glyph.width)))
+
+local function find_lines(list, y, lines)
+  if not list then return y end
+  for child in node.traverse(list) do
+    local kind = node.type(child.id)
+    if kind == "hlist" then
+      local has_nested_vlist = false
+      if child.list then
+        for grandchild in node.traverse(child.list) do
+          if node.type(grandchild.id) == "vlist" then
+            has_nested_vlist = true
+            y = find_lines(grandchild.list, y, lines)
+          end
+        end
+      end
+      if not has_nested_vlist then
+        local baseline = y + (child.height or 0)
+        local parts = {}
+        local glyphs = {}
+        append_node_list(parts, glyphs, child.list, child, 0, baseline)
+        if #glyphs > 0 then
+          table.insert(lines, {
+            width = child.width or 0,
+            baseline = baseline,
+            badness = child.badness or -1,
+            text = table.concat(parts):gsub("%s+$", ""),
+            glyphs = glyphs,
+          })
+        end
+        y = y + (child.height or 0) + (child.depth or 0)
+      end
+    elseif kind == "vlist" then
+      y = find_lines(child.list, y, lines)
+    elseif kind == "glue" then
+      y = y + (child.width or 0)
+    elseif kind == "kern" then
+      y = y + (child.kern or 0)
     end
-    y = y + (child.height or 0) + (child.depth or 0)
-  elseif kind == "glue" then
-    y = y + (child.width or 0)
-  elseif kind == "kern" then
-    y = y + (child.kern or 0)
+  end
+  return y
+end
+
+local lines = {}
+find_lines(tex.box.tracebox.list, 0, lines)
+for line_index, line in ipairs(lines) do
+  out:write(string.format("LINE\t%d\t%.6f\t%.6f\t%d\t%s\n", line_index, pt(line.width), pt(line.baseline), line.badness, escape_text(line.text)))
+  for _, glyph in ipairs(line.glyphs) do
+    out:write(string.format(
+      "GLYPH\t%d\t%d\t%.6f\t%.6f\t%.6f\t%d\t%s\n",
+      line_index,
+      glyph.char,
+      pt(glyph.x),
+      pt(glyph.y),
+      pt(glyph.width),
+      glyph.font_id,
+      escape_text(glyph.font_name)
+    ))
   end
 end
 out:close()
@@ -1094,7 +1340,7 @@ async function main() {
   if (!existsSync(distEntry) || !existsSync(parseLengthEntry)) {
     throw new Error("Missing core dist files. Run `npm run -w @tikz-editor/core build` first.");
   }
-  requireCommands(["pdflatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
+  requireCommands(["lualatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
 
   const deps = {
     ...(await import(distEntry)),
@@ -1119,6 +1365,10 @@ async function main() {
   for (const caseData of cases) {
     const caseDir = join(runDir, caseData.id);
     mkdirSync(caseDir, { recursive: true });
+    writeFileSync(join(caseDir, "case-data.json"), JSON.stringify({
+      ...caseData,
+      alignment: caseData.alignment.label,
+    }, null, 2), "utf8");
     const layout = deps.layoutSimpleTexParagraph(caseData.text, {
       paragraphId: caseData.id,
       width: caseData.width,
@@ -1181,10 +1431,14 @@ async function main() {
       rasterize(oursSvgPath, oursPngPath, widthPx, heightPx);
       rasterize(texPdfToCairoSvgPath, texPdfToCairoPngPath, widthPx, heightPx);
       rasterize(texDvisvgmSvgPath, texDvisvgmPngPath, widthPx, heightPx);
-      const texTrace = buildTexSvgTrace(readFileSync(texDvisvgmSvgPath, "utf8"), oursTrace);
+      const texNodeTrace = runTexGlyphTrace(caseData, caseDir);
+      const texSvgTrace = buildTexSvgTrace(readFileSync(texDvisvgmSvgPath, "utf8"), oursTrace);
+      const texTrace = texSvgTrace.lines.length > 0 ? texSvgTrace : texNodeTrace;
       const traceComparison = compareGlyphTraces(oursTrace, texTrace);
       writeFileSync(join(caseDir, "ours-glyph-trace.json"), JSON.stringify(oursTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "tex-glyph-trace.json"), JSON.stringify(texTrace, null, 2), "utf8");
+      writeFileSync(join(caseDir, "tex-node-glyph-trace.json"), JSON.stringify(texNodeTrace, null, 2), "utf8");
+      writeFileSync(join(caseDir, "tex-svg-glyph-trace.json"), JSON.stringify(texSvgTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "trace-comparison.json"), JSON.stringify(traceComparison, null, 2), "utf8");
 
       const texNoiseAe = compareMetric("AE", texPdfToCairoPngPath, texDvisvgmPngPath);

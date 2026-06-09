@@ -129,7 +129,11 @@ function renderReportSvg(report) {
             atPt: DEFAULT_TEXT_FONT_SIZE,
           })
           : font;
-        pieces.push(renderGlyphRun(text, segmentFont, segment.x - lineLeft, baseline));
+        if (typeof segment.glyphCode === "number") {
+          pieces.push(renderGlyphCode(segment.glyphCode, segmentFont, segment.x - lineLeft, baseline));
+        } else {
+          pieces.push(renderGlyphRun(text, segmentFont, segment.x - lineLeft, baseline));
+        }
       }
     }
     pieces.push("</g>");
@@ -157,6 +161,16 @@ function renderGlyphRun(text, font, x, baseline) {
     cursor += item.width;
   }
   return pieces.join("");
+}
+
+function renderGlyphCode(code, font, x, baseline) {
+  const d = font.data.glyphs?.[String(code)] ?? "";
+  if (!d || code === 32) {
+    return "";
+  }
+  const scale = font.atPt / 10;
+  const scaleSuffix = Math.abs(scale - 1) > 1e-6 ? ` scale(${formatPt(scale)})` : "";
+  return `<path data-tex-glyph="${code}" d="${escapeAttribute(d)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})${scaleSuffix}" />`;
 }
 
 function computeLineTops(report) {

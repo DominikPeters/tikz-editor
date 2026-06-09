@@ -125,7 +125,7 @@ async function renderOracle(input) {
       TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
     };
     const latex = await execFileAsync(
-      "pdflatex",
+      "lualatex",
       ["--interaction=nonstopmode", "--halt-on-error", texPath],
       { cwd: tempDir, env, timeout: 8000, maxBuffer: 2_000_000 }
     );
@@ -143,6 +143,7 @@ async function renderOracle(input) {
     const svg = readFileSync(svgPath, "utf8");
     const result = {
       ok: true,
+      compiler: "lualatex",
       svg,
       lineTexts: extractPdfTextLines(pdfText.stdout),
       visualRows: extractSvgRows(svg),
