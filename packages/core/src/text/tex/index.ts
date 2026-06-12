@@ -6,6 +6,7 @@ export {
   type ResolveComputerModernFontOptions,
 } from "./fonts/computer-modern.js";
 export {
+  analyzeSimpleTexParagraph,
   getSimpleTexFallbackReason,
   layoutSimpleTexParagraph,
   type TexParagraphAlignment,
@@ -56,11 +57,13 @@ export type {
   GeneratedTexFont,
   GeneratedTexFontTable,
   GeneratedTexLigKern,
+  ResolveTexFontOptions,
   ResolvedTexFont,
   ShapeTexTextOptions,
   ShapedTexTextRun,
   TexCaretStop,
   TexGlyphBox,
   TexKern,
+  TexMetricProvider,
   TexShapedItem,
 } from "./fonts/types.js";

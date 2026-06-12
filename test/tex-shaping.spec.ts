@@ -267,6 +267,36 @@ describe("Computer Modern OT1 text shaping", () => {
     );
   });
 
+  it("uses the injected metric provider throughout paragraph layout", () => {
+    const calls: string[] = [];
+    const metricProvider = {
+      resolveFont: (options?: Parameters<typeof computerModernTexMetricProvider.resolveFont>[0]) => {
+        calls.push(`resolve:${options?.fontId ?? "default"}`);
+        return computerModernTexMetricProvider.resolveFont(options);
+      },
+      shapeText: (
+        text: string,
+        font = computerModernTexMetricProvider.resolveFont(),
+        options?: Parameters<typeof computerModernTexMetricProvider.shapeText>[2]
+      ) => {
+        calls.push(`shape:${text}`);
+        return computerModernTexMetricProvider.shapeText(text, font, options);
+      },
+    };
+
+    const result = layoutSimpleTexParagraph("Alpha Beta", {
+      paragraphId: "tex:provider-seam",
+      width: 80,
+      metricProvider,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(calls.some((call) => call === "resolve:default")).toBe(true);
+    expect(calls.some((call) => call === "shape:Alpha")).toBe(true);
+    expect(calls.some((call) => call === "shape:Beta")).toBe(true);
+  });
+
   it("feeds shaped caret stops into the existing editor hit-map path", async () => {
     const text = "office";
     const shaped = computerModernTexMetricProvider.shapeText(text);
@@ -312,6 +342,8 @@ describe("Computer Modern OT1 text shaping", () => {
 });
 
 describe("simple TeX paragraph layout", () => {
+  // These expected line arrays are cached LuaTeX oracle regressions. Refresh
+  // them with `npm run compare:tex-paragraph` before changing the expectations.
   it.each(texParagraphRegressionCases)("matches cached LuaTeX paragraph oracle for $id", async ({ text, width, lines }) => {
     await preloadEnglishHyphenator();
     const result = layoutSimpleTexParagraph(text, {
@@ -1125,6 +1157,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(false);
     expect(result.report).toBeNull();
     expect(result.fallbackReason).toContain("TeX syntax");
+    expect(result.errors).toEqual([result.fallbackReason]);
   });
 
   it("keeps current editor hit testing usable for TeX paragraph reports", async () => {

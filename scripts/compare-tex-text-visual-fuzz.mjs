@@ -790,7 +790,11 @@ function buildTexSvgTrace(svg, oursTrace) {
     }
   }
   for (const glyph of texGlyphs) {
-    glyph.code = glyphIdToCode.get(glyph.glyphId) ?? -1;
+    const code = glyphIdToCode.get(glyph.glyphId);
+    if (code === undefined) {
+      throw new Error(`Could not map TeX SVG glyph id ${glyph.glyphId} to an expected glyph code.`);
+    }
+    glyph.code = code;
   }
 
   const firstTexY = rows[0]?.sourceY ?? 0;
@@ -1455,7 +1459,7 @@ async function main() {
         traceComparison.maxGlyphDx > options.glyphDxTolerance ||
         traceComparison.maxGlyphDy > options.glyphDyTolerance;
       const visualFlagged = ratio !== null && ratio > options.thresholdRatio;
-      const flagged = traceFlagged;
+      const flagged = traceFlagged || visualFlagged;
       if (flagged || visualFlagged) {
         execFileSync("magick", [
           texPdfToCairoPngPath,

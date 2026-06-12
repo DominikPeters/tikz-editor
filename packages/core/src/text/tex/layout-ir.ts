@@ -1,5 +1,5 @@
 import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
-import type { ResolvedTexFont } from "./fonts/types.js";
+import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import { roundTexPt, tfmToPt } from "./fonts/units.js";
 import {
   computerModernTexMetricProvider,
@@ -7,6 +7,7 @@ import {
 } from "./fonts/computer-modern.js";
 import {
   simpleTexInlineNodesToTokens,
+  articleListLeftMarginEmByDepth,
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphBlock,
   type SimpleTexParagraphSegment,
@@ -16,6 +17,21 @@ import {
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
 } from "./ir.js";
+
+const articleQuoteSpacingEm = {
+  topsep: 1,
+  partopsep: 0.3,
+  parsep: 0.4,
+  compactExitTopsep: 0.8,
+} as const;
+
+const articleListSpacingEm = {
+  topsep: 1,
+  partopsep: 0.3,
+  nestedTopsepByDepth: [0.8, 0.8, 0.4, 0.2],
+  itemsepByDepth: [0.8, 0.4, 0.2],
+  parsepByDepth: [0.4, 0.2, 0],
+} as const;
 
 export interface TexLayoutIrOptions {
   readonly parindent?: number;
@@ -110,8 +126,10 @@ export function createSimpleTexLayoutDocumentIr(params: {
   readonly blocks: readonly SimpleTexParagraphBlock[];
   readonly defaultAlignment: TexParagraphAlignment;
   readonly font: ResolvedTexFont;
+  readonly metricProvider?: TexMetricProvider;
   readonly options: TexLayoutIrOptions;
 }): SimpleTexLayoutDocumentIr {
+  const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const paragraphs: TexLayoutParagraphIr[] = [];
   const reportAlignment = texHonoredBlockAlignment(
     params.blocks[0],
@@ -175,7 +193,8 @@ export function createSimpleTexLayoutDocumentIr(params: {
         ? texArticleListVerticalSkipBefore(
             previousEmittedListContext,
             block.listContext,
-            hasPreviousEmittedParagraph
+            hasPreviousEmittedParagraph,
+            params.font
           )
         : 0;
       const quoteVerticalSkipBefore = segmentIndex === 0
@@ -184,7 +203,8 @@ export function createSimpleTexLayoutDocumentIr(params: {
             block.quoteDepth,
             previousEmittedListContext !== undefined || block.listContext !== undefined,
             quoteEntryHadPreviousParagraphByDepth.get(previousEmittedQuoteDepth) ?? true,
-            hasPreviousEmittedParagraph
+            hasPreviousEmittedParagraph,
+            params.font
           )
         : 0;
       const verticalSkipBefore = quoteVerticalSkipBefore + listVerticalSkipBefore;
@@ -192,6 +212,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
         ? texLayoutLabelForListContext(
             block.listContext,
             params.font,
+            metricProvider,
             activeSpaceGlueProfile,
             listLabelRightEdge
           )
@@ -220,6 +241,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
         items: simpleTexSegmentToLayoutItems(
           segment,
           params.font.atPt,
+          metricProvider,
           activeSpaceGlueProfile
         ),
       });
@@ -258,19 +280,29 @@ function texArticleQuoteVerticalSkipBefore(
   quoteDepth: number,
   listTransitionActive = false,
   exitingQuoteHadPreviousParagraph = true,
-  hasPreviousEmittedParagraph = true
+  hasPreviousEmittedParagraph = true,
+  font: ResolvedTexFont
 ): number {
   if (listTransitionActive) {
     return 0;
   }
   if (previousQuoteDepth === quoteDepth) {
-    return quoteDepth > 0 ? 4 : 0;
+    return quoteDepth > 0 ? texEmSkip(articleQuoteSpacingEm.parsep, font) : 0;
   }
   if (quoteDepth > previousQuoteDepth) {
-    return hasPreviousEmittedParagraph ? 10 : 13;
+    return texEmSkip(
+      articleQuoteSpacingEm.topsep +
+        (hasPreviousEmittedParagraph ? 0 : articleQuoteSpacingEm.partopsep),
+      font
+    );
   }
   if (previousQuoteDepth > quoteDepth) {
-    return exitingQuoteHadPreviousParagraph ? 10 : 8;
+    return texEmSkip(
+      exitingQuoteHadPreviousParagraph
+        ? articleQuoteSpacingEm.topsep
+        : articleQuoteSpacingEm.compactExitTopsep,
+      font
+    );
   }
   return 0;
 }
@@ -278,80 +310,69 @@ function texArticleQuoteVerticalSkipBefore(
 function texArticleListVerticalSkipBefore(
   previous: SimpleTexListContext | undefined,
   current: SimpleTexListContext | undefined,
-  hasPreviousEmittedParagraph: boolean
+  hasPreviousEmittedParagraph: boolean,
+  font: ResolvedTexFont
 ): number {
   if (!previous && !current) {
     return 0;
   }
   if (!hasPreviousEmittedParagraph && current) {
-    return texArticleInitialListSkip();
+    return texArticleInitialListSkip(font);
   }
   if (!previous && current) {
-    return texArticleOutsideListBoundarySkip();
+    return texArticleOutsideListBoundarySkip(font);
   }
   if (previous && !current) {
-    return texArticleOutsideListBoundarySkip();
+    return texArticleOutsideListBoundarySkip(font);
   }
   if (!previous || !current) {
     return 0;
   }
   if (current.depth > previous.depth) {
-    return texArticleNestedListBoundarySkip(current.depth);
+    return texArticleNestedListBoundarySkip(current.depth, font);
   }
   if (current.depth < previous.depth) {
-    return texArticleNestedListBoundarySkip(previous.depth);
+    return texArticleNestedListBoundarySkip(previous.depth, font);
   }
   if (
     current.kind === previous.kind &&
     current.labelDepth === previous.labelDepth &&
     current.itemIndex === previous.itemIndex
   ) {
-    return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth);
+    return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth, font);
   }
-  return texArticleListItemBoundarySkip(current.depth);
+  return texArticleListItemBoundarySkip(current.depth, font);
 }
 
-function texArticleInitialListSkip(): number {
-  return 13;
+function texArticleInitialListSkip(font: ResolvedTexFont): number {
+  return texEmSkip(articleListSpacingEm.topsep + articleListSpacingEm.partopsep, font);
 }
 
-function texArticleOutsideListBoundarySkip(): number {
-  return 10;
+function texArticleOutsideListBoundarySkip(font: ResolvedTexFont): number {
+  return texEmSkip(articleListSpacingEm.topsep, font);
 }
 
-function texArticleNestedListBoundarySkip(depth: number): number {
-  switch (depth) {
-    case 1:
-      return 8;
-    case 2:
-      return 8;
-    case 3:
-      return 4;
-    default:
-      return 2;
-  }
+function texArticleNestedListBoundarySkip(depth: number, font: ResolvedTexFont): number {
+  return texEmSkip(
+    texDepthIndexedEm(articleListSpacingEm.nestedTopsepByDepth, depth),
+    font
+  );
 }
 
-function texArticleListItemBoundarySkip(depth: number): number {
-  switch (depth) {
-    case 1:
-      return 8;
-    case 2:
-      return 4;
-    default:
-      return 2;
-  }
+function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): number {
+  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth), font);
 }
 
-function texArticleListParagraphSkip(depth: number): number {
-  switch (depth) {
-    case 1:
-      return 4;
-    case 2:
-      return 2;
-    default:
-      return 0;
-  }
+function texArticleListParagraphSkip(depth: number, font: ResolvedTexFont): number {
+  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth), font);
+}
+
+function texDepthIndexedEm(values: readonly number[], depth: number): number {
+  return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
+}
+
+function texEmSkip(value: number, font: ResolvedTexFont): number {
+  return roundTexPt(value * font.atPt);
 }
 
 function texHonoredBlockAlignment(
@@ -395,10 +416,9 @@ function texArticleQuoteMarginWidth(quoteDepth: number, font: ResolvedTexFont): 
   if (!(quoteDepth > 0)) {
     return 0;
   }
-  const articleLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1];
   let margin = 0;
   for (let index = 0; index < quoteDepth; index += 1) {
-    margin += articleLeftMarginEmByDepth[Math.min(index, articleLeftMarginEmByDepth.length - 1)] ?? 1;
+    margin += articleListLeftMarginEmByDepth[Math.min(index, articleListLeftMarginEmByDepth.length - 1)] ?? 1;
   }
   return margin * font.atPt;
 }
@@ -424,6 +444,7 @@ function texArticleListLabelRightEdge(
 function texLayoutLabelForListContext(
   listContext: SimpleTexListContext,
   font: ResolvedTexFont,
+  metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   rightEdge: number
 ): TexLayoutLabel {
@@ -434,6 +455,7 @@ function texLayoutLabelForListContext(
         listContext.label.sourceStart,
         listContext.label.sourceEnd,
         font.atPt,
+        metricProvider,
         spaceGlueProfile
       ),
       sourceStart: listContext.label.sourceStart,
@@ -442,7 +464,7 @@ function texLayoutLabelForListContext(
     };
   }
 
-  const glyphLabel = texDefaultItemizeGlyphLabel(listContext, font.atPt);
+  const glyphLabel = texDefaultItemizeGlyphLabel(listContext, font.atPt, metricProvider);
   if (glyphLabel) {
     return {
       items: [glyphLabel],
@@ -472,7 +494,8 @@ function texLayoutLabelForListContext(
 
 function texDefaultItemizeGlyphLabel(
   listContext: SimpleTexListContext,
-  atPt: number
+  atPt: number,
+  metricProvider: TexMetricProvider
 ): TexLayoutGlyphItem | null {
   if (listContext.kind !== "itemize") {
     return null;
@@ -482,7 +505,7 @@ function texDefaultItemizeGlyphLabel(
       kind: "glyph",
       text: "–",
       code: 0x2013,
-      font: computerModernTexMetricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
+      font: metricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
     };
   }
   if (listContext.labelDepth === 3) {
@@ -490,7 +513,7 @@ function texDefaultItemizeGlyphLabel(
       kind: "glyph",
       text: "*",
       code: 42,
-      font: computerModernTexMetricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
+      font: metricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
     };
   }
   if (listContext.labelDepth === 4) {
@@ -498,14 +521,14 @@ function texDefaultItemizeGlyphLabel(
       kind: "glyph",
       text: ".",
       code: 183,
-      font: computerModernTexMetricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
+      font: metricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
     };
   }
   return {
     kind: "glyph",
     text: "•",
     code: 0x2022,
-    font: computerModernTexMetricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
+    font: metricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
   };
 }
 
@@ -571,6 +594,7 @@ function simpleTexInlineNodesToLayoutItems(
   sourceStart: number,
   sourceEnd: number,
   atPt: number,
+  metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile
 ): TexLayoutInlineItem[] {
   return simpleTexSegmentToLayoutItems(
@@ -582,6 +606,7 @@ function simpleTexInlineNodesToLayoutItems(
       noIndent: true,
     },
     atPt,
+    metricProvider,
     spaceGlueProfile
   );
 }
@@ -610,6 +635,7 @@ export function texLayoutGlyphItemDepth(item: TexLayoutGlyphItem): number {
 function simpleTexSegmentToLayoutItems(
   segment: SimpleTexParagraphSegment,
   atPt: number,
+  metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes);
@@ -624,7 +650,7 @@ function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "text") {
-      const font = resolveComputerModernFontForState(token.fontState, atPt);
+      const font = resolveComputerModernFontForState(token.fontState, atPt, metricProvider);
       const italicCorrectionAfter =
         token.italicCorrectionAfter === true &&
         !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]);
@@ -645,7 +671,7 @@ function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "forced-break") {
-      const font = resolveComputerModernFontForState(token.fontState, atPt);
+      const font = resolveComputerModernFontForState(token.fontState, atPt, metricProvider);
       items.push({
         kind: "forced-break",
         text: " ",
@@ -659,7 +685,7 @@ function simpleTexSegmentToLayoutItems(
       continue;
     }
 
-    const font = resolveComputerModernFontForState(token.fontState, atPt);
+    const font = resolveComputerModernFontForState(token.fontState, atPt, metricProvider);
     items.push({
       kind: "space",
       text: " ",
@@ -685,9 +711,10 @@ function texItalicCorrectionSuppressedByNextToken(
 
 function resolveComputerModernFontForState(
   state: SimpleTexFontState,
-  atPt: number
+  atPt: number,
+  metricProvider: TexMetricProvider
 ): ResolvedTexFont {
-  return computerModernTexMetricProvider.resolveFont({
+  return metricProvider.resolveFont({
     fontId: computerModernFontIdForState(state),
     atPt,
   });

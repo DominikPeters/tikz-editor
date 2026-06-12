@@ -70,3 +70,17 @@ export interface ShapedTexTextRun {
 export interface ShapeTexTextOptions {
   readonly sourceStart?: number;
 }
+
+export interface ResolveTexFontOptions {
+  readonly fontId?: string;
+  readonly atPt?: number;
+}
+
+export interface TexMetricProvider {
+  resolveFont(options?: ResolveTexFontOptions): ResolvedTexFont;
+  shapeText(
+    text: string,
+    font?: ResolvedTexFont,
+    options?: ShapeTexTextOptions
+  ): ShapedTexTextRun;
+}

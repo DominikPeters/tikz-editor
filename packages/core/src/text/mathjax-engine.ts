@@ -15,8 +15,7 @@ import {
 import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import { computerModernTexMetricProvider, layoutSimpleTexParagraph } from "./tex/index.js";
-import type { ResolvedTexFont, TexShapedItem } from "./tex/index.js";
-import type { DefaultComputerModernTextFont } from "./tex/index.js";
+import type { ResolvedTexFont, TexMetricProvider, TexShapedItem } from "./tex/index.js";
 import type {
   NodeTextEngine,
   NodeTextMeasureRequest,
@@ -89,6 +88,8 @@ const MIDLINE_FROM_BASELINE_RATIO = 0.215;
 const MATHJAX_PARAGRAPH_PT_PER_WIDTH_UNIT = 10;
 const MATHJAX_PARAGRAPH_WIDTH_UNIT_STEP = 0.001;
 const SINGLE_LINE_WIDTH_EPSILON_PT = 1e-4;
+const LATEX_NORMAL_BASELINESKIP_EM = 1.2;
+const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
 const BROWSER_STARTUP_COMPONENT_URL = "https://cdn.jsdelivr.net/npm/mathjax@4/startup.js";
 const BROWSER_STARTUP_COMPONENT_ID = "tikz-editor-mathjax-startup";
 const SCRIPT_LOADED_MARKER = "__tikzMathJaxLoaded";
@@ -981,11 +982,13 @@ function buildSimpleTexTextCacheEntry(params: {
   if (!isSimpleTexTextEligible(params)) {
     return null;
   }
+  const metricProvider = computerModernTexMetricProvider;
   const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
   const layout = layoutSimpleTexParagraph(params.sourceText, {
     paragraphId,
     width: params.textWidthPt,
     alignment: params.alignment ?? "ragged-right",
+    metricProvider,
     tikzTextWidthNode: true,
   });
   if (!layout.supported || !layout.report) {
@@ -994,9 +997,11 @@ function buildSimpleTexTextCacheEntry(params: {
   const outputJax = getRuntimeOutputJax(params.runtime);
   registerKnuthPlassReportsOnOutputJax(outputJax, [layout.report]);
 
-  const lineHeightPt = DEFAULT_TEXT_FONT_SIZE * 1.2;
+  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const baselineMetrics = texNormalBaselineMetrics(renderFont);
+  const lineHeightPt = baselineMetrics.baselineskip;
   const firstLineAscent = Math.max(
-    DEFAULT_TEXT_FONT_SIZE * 0.7,
+    baselineMetrics.strutHeight,
     ...layout.report.lines.map((line) => Number(line.ascent) || 0)
   );
   const lineTops = computeTexLineTops(layout.report, lineHeightPt);
@@ -1007,6 +1012,7 @@ function buildSimpleTexTextCacheEntry(params: {
     lineHeightPt,
     firstLineAscent,
     lineTops,
+    metricProvider,
     requestedAlignment: params.requestedAlignment,
   });
 
@@ -1077,10 +1083,11 @@ function renderSimpleTexSvgBody(
     lineHeightPt: number;
     firstLineAscent: number;
     lineTops?: readonly number[];
+    metricProvider: TexMetricProvider;
     requestedAlignment: NodeTextParagraphAlignment | null;
   }
 ): string {
-  const font = computerModernTexMetricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const font = options.metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const alignAttr = options.requestedAlignment == null
     ? ""
     : ` data-align="${escapeXmlAttribute(mathJaxAlignAttributeValue(options.requestedAlignment))}"`;
@@ -1109,15 +1116,21 @@ function renderSimpleTexSvgBody(
         continue;
       }
       const segmentFont = segment.fontId
-        ? computerModernTexMetricProvider.resolveFont({
-          fontId: segment.fontId as DefaultComputerModernTextFont,
+        ? options.metricProvider.resolveFont({
+          fontId: segment.fontId,
           atPt: DEFAULT_TEXT_FONT_SIZE,
         })
         : font;
       if (typeof segment.glyphCode === "number") {
         pieces.push(renderTexGlyphCode(segment.glyphCode, segmentFont, segment.x - lineLeft, baseline - lineTop));
       } else {
-        pieces.push(renderTexGlyphRun(text, segmentFont, segment.x - lineLeft, baseline - lineTop));
+        pieces.push(renderTexGlyphRun(
+          text,
+          segmentFont,
+          segment.x - lineLeft,
+          baseline - lineTop,
+          options.metricProvider
+        ));
       }
     }
     pieces.push("</g>");
@@ -1144,8 +1157,24 @@ function texLineLeadingPt(lineLeading: string | undefined): number {
   return parseLength(lineLeading, "pt") ?? 0;
 }
 
-function renderTexGlyphRun(text: string, font: ResolvedTexFont, x: number, baseline: number): string {
-  const shaped = computerModernTexMetricProvider.shapeText(text, font);
+function texNormalBaselineMetrics(font: ResolvedTexFont): {
+  readonly baselineskip: number;
+  readonly strutHeight: number;
+} {
+  return {
+    baselineskip: font.atPt * LATEX_NORMAL_BASELINESKIP_EM,
+    strutHeight: font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
+  };
+}
+
+function renderTexGlyphRun(
+  text: string,
+  font: ResolvedTexFont,
+  x: number,
+  baseline: number,
+  metricProvider: TexMetricProvider
+): string {
+  const shaped = metricProvider.shapeText(text, font);
   const pieces: string[] = [];
   let cursor = x;
   for (const item of shaped.items) {

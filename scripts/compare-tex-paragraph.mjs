@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { escapeTexText, runTexOracleDocument } from "./lib/tex-oracle.mjs";
 
 const distEntry = resolve(process.cwd(), "packages/core/dist/text/tex/index.js");
 if (!existsSync(distEntry)) {
@@ -11,6 +11,8 @@ if (!existsSync(distEntry)) {
 
 const { layoutSimpleTexParagraph } = await import(distEntry);
 
+// Oracle/regeneration helper for TeX paragraph layout fixtures in
+// test/tex-shaping.spec.ts. Run via `npm run compare:tex-paragraph`.
 const fixtures = [
   { text: "Alpha Beta", width: 32, parindent: 0 },
   { text: "office AV To", width: 65, parindent: 0 },
@@ -26,8 +28,7 @@ const fixtures = [
 ];
 
 function texEscapeText(text, texSyntax = false) {
-  const escaped = text.replaceAll("{", "\\{").replaceAll("}", "\\}");
-  return texSyntax ? escaped : escaped.replaceAll("\\", "\\\\");
+  return escapeTexText(text, { preserveCommands: texSyntax });
 }
 
 function lineCollectorLua() {
@@ -97,34 +98,23 @@ function laTeXSource(text, width, parindent) {
 }
 
 function luaTeXLines(text, width, parindent, texSyntax = false) {
-  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-para-"));
-  const texPath = join(tempDir, "paragraph.tex");
   const texSource = texSyntax
     ? laTeXSource(text, width, parindent)
     : plainTeXSource(text, width, parindent);
-  writeFileSync(texPath, texSource);
-  try {
-    const engine = texSyntax ? "lualatex" : "luatex";
-    const output = execFileSync(engine, ["--interaction=nonstopmode", "--halt-on-error", texPath], {
-      encoding: "utf8",
-      cwd: tempDir,
-      env: {
-        ...process.env,
-        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
-        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
-      },
+  const output = runTexOracleDocument({
+    engine: texSyntax ? "lualatex" : "luatex",
+    source: texSource,
+    filename: "paragraph.tex",
+    tempPrefix: "tikz-tex-para-",
+  });
+  return output
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("TIKZ_PARAGRAPH_LINE "))
+    .map((line) => {
+      const marked = line.slice("TIKZ_PARAGRAPH_LINE ".length);
+      const end = marked.indexOf(" TIKZ_PARAGRAPH_END");
+      return (end >= 0 ? marked.slice(0, end) : marked).trimEnd();
     });
-    return output
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("TIKZ_PARAGRAPH_LINE "))
-      .map((line) => {
-        const marked = line.slice("TIKZ_PARAGRAPH_LINE ".length);
-        const end = marked.indexOf(" TIKZ_PARAGRAPH_END");
-        return (end >= 0 ? marked.slice(0, end) : marked).trimEnd();
-      });
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
 }
 
 function reportLines(report) {

@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  analyzeSimpleTexParagraph,
   computerModernTexMetricProvider,
   createSimpleTexLayoutDocumentIr,
   parseSimpleTexParagraphIr,
 } from "../packages/core/src/text/tex/index.js";
 
 describe("simple TeX paragraph IR", () => {
+  it("analyzes fallback eligibility and IR in one pass", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \textit{Beta}`, 120);
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.blocks).toHaveLength(1);
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+
+    const unsupported = analyzeSimpleTexParagraph(String.raw`Alpha $x$`, 120);
+    expect(unsupported.ir).toBeNull();
+    expect(unsupported.fallbackReason).toContain("TeX syntax");
+  });
+
   it("splits paragraphs while preserving source-level text commands", () => {
     const ir = parseSimpleTexParagraphIr(
       String.raw`Alpha Beta \par \noindent Gamma \\[7pt] Delta`

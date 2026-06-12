@@ -200,6 +200,11 @@ export interface SimpleTexParagraphIr {
   readonly unsupportedCommand: boolean;
 }
 
+export interface SimpleTexParagraphAnalysis {
+  readonly ir: SimpleTexParagraphIr | null;
+  readonly fallbackReason: string | null;
+}
+
 interface SimpleTexIrOptions {
   readonly parindent?: number;
   readonly tikzTextWidthNode?: boolean;
@@ -221,19 +226,34 @@ const luaLatexNormalFontState: SimpleTexFontState = {
   series: "medium",
   shape: "upright",
 };
-const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1];
+export const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1] as const;
 
 export function getSimpleTexFallbackReason(text: string, width: number): string | null {
+  return analyzeSimpleTexParagraph(text, width).fallbackReason;
+}
+
+export function analyzeSimpleTexParagraph(
+  text: string,
+  width: number
+): SimpleTexParagraphAnalysis {
   if (!Number.isFinite(width) || width <= 0) {
-    return "Paragraph width must be positive.";
+    return {
+      ir: null,
+      fallbackReason: "Paragraph width must be positive.",
+    };
   }
   if (unsupportedDirectCharPattern.test(text)) {
-    return "Paragraph contains TeX syntax that is not supported by the simple text path.";
+    return {
+      ir: null,
+      fallbackReason: "Paragraph contains TeX syntax that is not supported by the simple text path.",
+    };
   }
-  const nodeScan = scanSimpleTexIrNodes(text);
-  const blockScan = buildSimpleTexParagraphBlocksFromNodes(text, nodeScan.nodes);
-  if (nodeScan.unsupportedCommand || blockScan.unsupportedCommand) {
-    return "Paragraph contains TeX syntax that is not supported by the simple text path.";
+  const ir = buildSimpleTexParagraphIr(text);
+  if (ir.unsupportedCommand) {
+    return {
+      ir,
+      fallbackReason: "Paragraph contains TeX syntax that is not supported by the simple text path.",
+    };
   }
   for (let index = 0; index < text.length; index++) {
     const codePoint = text.codePointAt(index);
@@ -241,13 +261,20 @@ export function getSimpleTexFallbackReason(text: string, width: number): string 
       continue;
     }
     if (codePoint > 0x7e || (codePoint < 0x20 && codePoint !== 0x0a)) {
-      return `Paragraph contains unsupported OT1 character U+${codePoint.toString(16).toUpperCase()}.`;
+      return {
+        ir,
+        fallbackReason: `Paragraph contains unsupported OT1 character U+${codePoint.toString(16).toUpperCase()}.`,
+      };
     }
   }
-  return null;
+  return { ir, fallbackReason: null };
 }
 
 export function parseSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
+  return buildSimpleTexParagraphIr(text);
+}
+
+function buildSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
   const nodeScan = scanSimpleTexIrNodes(text);
   const blockScan = buildSimpleTexParagraphBlocksFromNodes(text, nodeScan.nodes);
   return {
@@ -857,12 +884,6 @@ function simpleTexInlineNodesForRange(
   );
 }
 
-export function splitSimpleTexParagraphBlocks(
-  text: string
-): SimpleTexParagraphBlockScanResult {
-  return buildSimpleTexParagraphBlocksFromNodes(text, scanSimpleTexIrNodes(text).nodes);
-}
-
 function buildSimpleTexParagraphBlocksFromNodes(
   text: string,
   sourceNodes: readonly SimpleTexNode[]
@@ -1220,15 +1241,6 @@ function noIndentAfterForcedBreak(
   );
 }
 
-export function tokenizeSimpleTexParagraph(
-  text: string,
-  sourceOffset: number
-): SimpleTexToken[] {
-  return simpleTexInlineNodesToTokens(
-    scanSimpleTexIrNodes(text, sourceOffset).nodes.filter(isSimpleTexInlineNode)
-  );
-}
-
 export function simpleTexInlineNodesToTokens(
   nodes: readonly SimpleTexInlineNode[],
   fontState: SimpleTexFontState = defaultSimpleTexFontState
@@ -1261,14 +1273,14 @@ export function simpleTexInlineNodesToTokens(
         simpleTexFontStateHasItalicCorrection(activeFontState) &&
         !simpleTexFontStateHasItalicCorrection(childFontState)
       ) {
-        markPreviousTextTokenItalicCorrection(tokens);
+        markLastTextTokenItalicCorrection(tokens);
       }
-      let childTokens = simpleTexInlineNodesToTokens(
+      const childTokens = simpleTexInlineNodesToTokens(
         node.children,
         childFontState
       );
       if (simpleTexFontStateHasItalicCorrection(childTokens[0]?.fontState)) {
-        childTokens = markLastTextTokenItalicCorrection(childTokens);
+        markLastTextTokenItalicCorrection(childTokens);
       }
       if (skipPostLineBreakSpace && childTokens[0]?.kind === "space") {
         tokens.push(...childTokens.slice(1));
@@ -1333,30 +1345,14 @@ function simpleTexFontStateHasItalicCorrection(
   return state?.shape === "italic";
 }
 
-function markLastTextTokenItalicCorrection(
-  tokens: readonly SimpleTexToken[]
-): SimpleTexToken[] {
-  const next = [...tokens];
-  for (let index = next.length - 1; index >= 0; index -= 1) {
-    if (next[index]?.kind !== "text") {
-      continue;
-    }
-    next[index] = {
-      ...next[index],
-      italicCorrectionAfter: true,
-    };
-    break;
-  }
-  return next;
-}
-
-function markPreviousTextTokenItalicCorrection(tokens: SimpleTexToken[]): void {
+function markLastTextTokenItalicCorrection(tokens: SimpleTexToken[]): void {
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
-    if (tokens[index]?.kind !== "text") {
+    const token = tokens[index];
+    if (token?.kind !== "text") {
       continue;
     }
     tokens[index] = {
-      ...tokens[index],
+      ...token,
       italicCorrectionAfter: true,
     };
     break;

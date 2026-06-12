@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { escapeTexText, runTexOracleDocument } from "./lib/tex-oracle.mjs";
 
 const fontId = "cmr10";
+// Oracle/regeneration helper for generated TFM ligature/kern tables. Run via
+// `npm run compare:tex-shaping`.
 const fixtures = process.argv.slice(2).length > 0
   ? process.argv.slice(2)
   : ["office", "fluff", "AV", "To", "--", "---", "``", "''"];
@@ -69,12 +71,10 @@ function shapeWithGeneratedFont(text, font) {
 }
 
 function texEscapeHboxText(text) {
-  return text.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}");
+  return escapeTexText(text);
 }
 
 function shapeWithLuaTeX(text) {
-  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-shape-"));
-  const texPath = join(tempDir, "shape.tex");
   const texSource = String.raw`\font\test=${fontId} at 10pt
 \test\language=-1
 \setbox0=\hbox{${texEscapeHboxText(text)}}
@@ -90,30 +90,22 @@ function shapeWithLuaTeX(text) {
 }
 \bye
 `;
-  writeFileSync(texPath, texSource);
-  try {
-    const output = execFileSync("luatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
-      encoding: "utf8",
-      cwd: tempDir,
-      env: {
-        ...process.env,
-        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
-        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
-      },
+  const output = runTexOracleDocument({
+    engine: "luatex",
+    source: texSource,
+    filename: "shape.tex",
+    tempPrefix: "tikz-tex-shape-",
+  });
+  return output
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("TIKZ_SHAPE "))
+    .map((line) => {
+      const parts = line.split(/\s+/);
+      if (parts[1] === "glyph") {
+        return { kind: "glyph", code: Number(parts[2]), width: Number(parts[3]) };
+      }
+      return { kind: "kern", width: Number(parts[2]) };
     });
-    return output
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("TIKZ_SHAPE "))
-      .map((line) => {
-        const parts = line.split(/\s+/);
-        if (parts[1] === "glyph") {
-          return { kind: "glyph", code: Number(parts[2]), width: Number(parts[3]) };
-        }
-        return { kind: "kern", width: Number(parts[2]) };
-      });
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
 }
 
 function compareNodes(text, actual, expected) {
