@@ -863,12 +863,13 @@ function texTracePt(value) {
   return Number((Number(value) * texPointToSvgPoint).toFixed(6));
 }
 
-function buildTexSvgTrace(svg, oursTrace) {
+function buildTexSvgTrace(svg, texNodeTrace, oursTrace) {
+  const svgScale = dvisvgmCoordinateScale(svg);
   const rowsByY = new Map();
   const usePattern = /<use\b[^>]*\bx=['"]([^'"]+)['"][^>]*\by=['"]([^'"]+)['"][^>]*\bxlink:href=['"]#(g\d+)-(\d+)['"]/g;
   for (const match of svg.matchAll(usePattern)) {
-    const x = Number(match[1]);
-    const y = Number(match[2]);
+    const x = Number(match[1]) * svgScale;
+    const y = Number(match[2]) * svgScale;
     const glyphId = `${match[3]}-${match[4]}`;
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       continue;
@@ -883,43 +884,47 @@ function buildTexSvgTrace(svg, oursTrace) {
   for (const row of rows) {
     row.glyphs.sort((left, right) => left.x - right.x);
   }
-  const texGlyphs = rows.flatMap((row) => row.glyphs);
-  const oursGlyphs = oursTrace.lines.flatMap((line) => line.glyphs);
-  const glyphIdToCode = new Map();
-  const pairCount = Math.min(texGlyphs.length, oursGlyphs.length);
-  for (let index = 0; index < pairCount; index += 1) {
-    const texGlyph = texGlyphs[index];
-    const oursGlyph = oursGlyphs[index];
-    if (!glyphIdToCode.has(texGlyph.glyphId)) {
-      glyphIdToCode.set(texGlyph.glyphId, oursGlyph.code);
-    }
-  }
-  for (const glyph of texGlyphs) {
-    const code = glyphIdToCode.get(glyph.glyphId);
-    if (code === undefined) {
-      throw new Error(`Could not map TeX SVG glyph id ${glyph.glyphId} to an expected glyph code.`);
-    }
-    glyph.code = code;
-  }
 
   const firstTexY = rows[0]?.sourceY ?? 0;
   const firstOursY = oursTrace.lines[0]?.glyphs[0]?.y ?? 0;
   return {
-    lines: rows.map((row) => {
+    lines: rows.map((row, lineIndex) => {
       const normalizedY = row.sourceY - firstTexY + firstOursY;
+      const nodeLine = texNodeTrace.lines[lineIndex];
       return {
-        text: row.glyphs.map((glyph) => texGlyphText(glyph.code)).join(""),
+        text: nodeLine?.text ?? row.glyphs.map((glyph) => texGlyphText(glyph.code)).join(""),
         width: row.glyphs.length > 0
           ? row.glyphs.at(-1).x - row.glyphs[0].x
           : 0,
         baselineY: normalizedY,
-        glyphs: row.glyphs.map((glyph) => ({
+        glyphs: row.glyphs.map((glyph, glyphIndex) => ({
           ...glyph,
+          code: nodeLine?.glyphs[glyphIndex]?.code ?? glyph.code,
+          width: nodeLine?.glyphs[glyphIndex]?.width ?? glyph.width,
+          fontId: nodeLine?.glyphs[glyphIndex]?.fontId,
+          fontName: nodeLine?.glyphs[glyphIndex]?.fontName,
           y: normalizedY,
         })),
       };
     }),
   };
+}
+
+function dvisvgmCoordinateScale(svg) {
+  const match = svg.match(/<g\b[^>]*\btransform=['"]matrix\(([^'")\s]+)\s+0\s+0\s+([^'")\s]+)\s+/);
+  if (!match) {
+    return 1;
+  }
+  const scaleX = Number(match[1]);
+  const scaleY = Number(match[2]);
+  if (
+    Number.isFinite(scaleX) &&
+    Number.isFinite(scaleY) &&
+    Math.abs(scaleX - scaleY) < 0.000001
+  ) {
+    return scaleX;
+  }
+  return 1;
 }
 
 function parseEscapedTraceText(value) {
@@ -1002,16 +1007,24 @@ function runTexGlyphTrace(caseData, caseDir) {
 }
 
 function compareGlyphTraces(oursTrace, texTrace) {
-  const lineGlyphText = (line) => line.glyphs.map((glyph) => texGlyphText(glyph.code)).join("");
+  const lineGlyphText = (line) => line.text
+    ? line.text.replace(/\s+/g, "")
+    : line.glyphs.map((glyph) => texGlyphText(glyph.code)).join("");
   const oursLines = oursTrace.lines.map(lineGlyphText);
   const texLines = texTrace.lines.map(lineGlyphText);
   const lineTextMatch = JSON.stringify(oursLines) === JSON.stringify(texLines);
   let glyphCodeMatch = oursTrace.lines.length === texTrace.lines.length;
+  let fontMatch = oursTrace.lines.length === texTrace.lines.length;
   let maxGlyphDx = 0;
+  let maxRelativeGlyphDx = 0;
   let maxGlyphDy = 0;
+  let maxLineLeftDx = 0;
+  let maxLineRightDx = 0;
   let comparedGlyphs = 0;
 
   const lineCount = Math.min(oursTrace.lines.length, texTrace.lines.length);
+  const oursXOrigin = firstGlyph(oursTrace)?.x ?? 0;
+  const texXOrigin = firstGlyph(texTrace)?.x ?? 0;
   const oursBaselineOrigin = oursTrace.lines[0]?.glyphs[0]?.y ?? oursTrace.lines[0]?.baselineY ?? 0;
   const texBaselineOrigin = texTrace.lines[0]?.glyphs[0]?.y ?? texTrace.lines[0]?.baselineY ?? 0;
   for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
@@ -1019,6 +1032,15 @@ function compareGlyphTraces(oursTrace, texTrace) {
     const texLine = texTrace.lines[lineIndex];
     const oursOriginX = oursLine.glyphs[0]?.x ?? 0;
     const texOriginX = texLine.glyphs[0]?.x ?? 0;
+    const oursRelativeLineLeft = oursOriginX - oursXOrigin;
+    const texRelativeLineLeft = texOriginX - texXOrigin;
+    maxLineLeftDx = Math.max(maxLineLeftDx, Math.abs(oursRelativeLineLeft - texRelativeLineLeft));
+    maxLineRightDx = Math.max(
+      maxLineRightDx,
+      Math.abs(
+        (lineEndX(oursLine) - oursXOrigin) - (lineEndX(texLine) - texXOrigin)
+      )
+    );
     if (oursLine.glyphs.length !== texLine.glyphs.length) {
       glyphCodeMatch = false;
     }
@@ -1029,9 +1051,15 @@ function compareGlyphTraces(oursTrace, texTrace) {
       if (normalizeTexGlyphCode(oursGlyph.code) !== normalizeTexGlyphCode(texGlyph.code)) {
         glyphCodeMatch = false;
       }
+      if (!texGlyphFontMatches(oursGlyph, texGlyph)) {
+        fontMatch = false;
+      }
+      const oursBlockX = oursGlyph.x - oursXOrigin;
+      const texBlockX = texGlyph.x - texXOrigin;
+      maxGlyphDx = Math.max(maxGlyphDx, Math.abs(oursBlockX - texBlockX));
       const oursRelativeX = oursGlyph.x - oursOriginX;
       const texRelativeX = texGlyph.x - texOriginX;
-      maxGlyphDx = Math.max(maxGlyphDx, Math.abs(oursRelativeX - texRelativeX));
+      maxRelativeGlyphDx = Math.max(maxRelativeGlyphDx, Math.abs(oursRelativeX - texRelativeX));
       const oursRelativeY = oursGlyph.y - oursBaselineOrigin;
       const texRelativeY = texGlyph.y - texBaselineOrigin;
       maxGlyphDy = Math.max(maxGlyphDy, Math.abs(oursRelativeY - texRelativeY));
@@ -1042,12 +1070,77 @@ function compareGlyphTraces(oursTrace, texTrace) {
   return {
     lineTextMatch,
     glyphCodeMatch,
+    fontMatch,
     maxGlyphDx: Number(maxGlyphDx.toFixed(6)),
+    maxRelativeGlyphDx: Number(maxRelativeGlyphDx.toFixed(6)),
     maxGlyphDy: Number(maxGlyphDy.toFixed(6)),
+    maxLineLeftDx: Number(maxLineLeftDx.toFixed(6)),
+    maxLineRightDx: Number(maxLineRightDx.toFixed(6)),
     comparedGlyphs,
     oursLines,
     texLines,
   };
+}
+
+function texGlyphFontMatches(oursGlyph, texGlyph) {
+  const texFontId = texFontNameToMetricFontId(texGlyph.fontName);
+  if (!texFontId || !oursGlyph.fontId) {
+    return true;
+  }
+  return oursGlyph.fontId === texFontId;
+}
+
+function texFontNameToMetricFontId(fontName) {
+  if (!fontName) {
+    return undefined;
+  }
+  const normalized = fontName.toLowerCase();
+  if (normalized === "cmr10") {
+    return "cmr10";
+  }
+  if (normalized === "cmbx10") {
+    return "cmbx10";
+  }
+  if (normalized === "cmti10") {
+    return "cmti10";
+  }
+  if (normalized === "cmbxti10") {
+    return "cmbxti10";
+  }
+  if (normalized === "cmtt10") {
+    return "cmtt10";
+  }
+  if (normalized === "cmss10") {
+    return "cmss10";
+  }
+  if (normalized === "cmssi10") {
+    return "cmssi10";
+  }
+  if (normalized === "cmssbx10") {
+    return "cmssbx10";
+  }
+  if (normalized === "cmcsc10") {
+    return "cmcsc10";
+  }
+  if (normalized === "tcrm1000") {
+    return "tcrm1000";
+  }
+  return undefined;
+}
+
+function firstGlyph(trace) {
+  for (const line of trace.lines) {
+    const glyph = line.glyphs[0];
+    if (glyph) {
+      return glyph;
+    }
+  }
+  return null;
+}
+
+function lineEndX(line) {
+  const lastGlyph = line.glyphs.at(-1);
+  return lastGlyph ? lastGlyph.x + (lastGlyph.width ?? 0) : 0;
 }
 
 function buildTexDocument(caseData, pageWidth, pageHeight) {
@@ -1401,8 +1494,12 @@ function writeCsv(rows, path) {
     "oursRmseNorm",
     "lineTextMatch",
     "glyphCodeMatch",
+    "fontMatch",
     "maxGlyphDx",
+    "maxRelativeGlyphDx",
     "maxGlyphDy",
+    "maxLineLeftDx",
+    "maxLineRightDx",
     "texOracleCache",
     "traceFlagged",
     "visualFlagged",
@@ -1541,7 +1638,7 @@ async function main() {
       rasterize(texPdfToCairoSvgPath, texPdfToCairoPngPath, widthPx, heightPx);
       rasterize(texDvisvgmSvgPath, texDvisvgmPngPath, widthPx, heightPx);
       const texNodeTrace = runTexGlyphTrace(caseData, caseDir);
-      const texSvgTrace = buildTexSvgTrace(readFileSync(texDvisvgmSvgPath, "utf8"), oursTrace);
+      const texSvgTrace = buildTexSvgTrace(readFileSync(texDvisvgmSvgPath, "utf8"), texNodeTrace, oursTrace);
       const texTrace = texSvgTrace.lines.length > 0 ? texSvgTrace : texNodeTrace;
       const traceComparison = compareGlyphTraces(oursTrace, texTrace);
       writeFileSync(join(caseDir, "ours-glyph-trace.json"), JSON.stringify(oursTrace, null, 2), "utf8");
@@ -1561,8 +1658,11 @@ async function main() {
       const traceFlagged =
         !traceComparison.lineTextMatch ||
         !traceComparison.glyphCodeMatch ||
+        !traceComparison.fontMatch ||
         traceComparison.maxGlyphDx > options.glyphDxTolerance ||
-        traceComparison.maxGlyphDy > options.glyphDyTolerance;
+        traceComparison.maxGlyphDy > options.glyphDyTolerance ||
+        traceComparison.maxLineLeftDx > options.glyphDxTolerance ||
+        traceComparison.maxLineRightDx > options.glyphDxTolerance;
       const visualFlagged = ratio !== null && ratio > options.thresholdRatio;
       const flagged = traceFlagged || visualFlagged;
       if (flagged || visualFlagged) {
@@ -1594,8 +1694,12 @@ async function main() {
         oursRmseNorm: oursRmse.normalized,
         lineTextMatch: traceComparison.lineTextMatch,
         glyphCodeMatch: traceComparison.glyphCodeMatch,
+        fontMatch: traceComparison.fontMatch,
         maxGlyphDx: traceComparison.maxGlyphDx,
+        maxRelativeGlyphDx: traceComparison.maxRelativeGlyphDx,
         maxGlyphDy: traceComparison.maxGlyphDy,
+        maxLineLeftDx: traceComparison.maxLineLeftDx,
+        maxLineRightDx: traceComparison.maxLineRightDx,
         texOracleCache: oracle.status,
         traceFlagged,
         visualFlagged,
@@ -1607,6 +1711,7 @@ async function main() {
         `lines=${row.oursLines}/${row.texRows} AE=${row.oursAeNorm?.toFixed(4)} ` +
         `noise=${row.texNoiseAeNorm?.toFixed(4)} ratio=${row.ratio?.toFixed(2)} ` +
         `text=${row.lineTextMatch ? "ok" : "diff"} glyphs=${row.glyphCodeMatch ? "ok" : "diff"} ` +
+        `fonts=${row.fontMatch ? "ok" : "diff"} ` +
         `cache=${row.texOracleCache}`
       );
     } catch (error) {

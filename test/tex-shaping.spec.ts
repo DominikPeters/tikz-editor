@@ -1855,6 +1855,38 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("resets TikZ text-width declaration alignment for following list items", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Rendering anchor beta office wide sample precise alpha classic nested sample,. \par \raggedleft Kernel manual editor classic local. \textbf{anchor double pattern model screen} \textrm{rendering chapter chapter}. \par \begin{itemize}\item office direct normal \textit{rendering epsilon figure}. \item \textbf{final rendering modern} Anchor spacing vector result pattern position.\end{itemize}`,
+      {
+        paragraphId: "tex:tikz-declaration-list-reset",
+        width: 120,
+        alignment: "justified",
+        parindent: 15,
+        tikzTextWidthNode: true,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Rendering anchor beta of-",
+      "fice wide sample precise al-",
+      "pha classic nested sample,.",
+      "Kernel manual editor",
+      "classic local. anchor",
+      "double pattern model",
+      "screen rendering chapter",
+      "chapter.",
+      "•office direct normal",
+      "rendering epsilon fig-",
+      "ure.",
+      "•final rendering",
+      "modern Anchor",
+      "spacing vector result",
+      "pattern position.",
+    ]);
+  });
+
   it("falls back when TeX noindent appears inside a paragraph", () => {
     const result = layoutSimpleTexParagraph(String.raw`Alpha \noindent Beta`, {
       paragraphId: "tex:noindent-mid-paragraph",

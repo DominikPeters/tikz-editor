@@ -23,6 +23,7 @@ import {
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
   planSimpleTexParagraphVerticalSkips,
+  type TexVListItem,
   type TexVListDocument,
 } from "./vlist/index.js";
 
@@ -137,6 +138,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
   let activeAlignmentProfile: TexAlignmentProfile | undefined;
   let activeSpaceGlueProfile = texInitialSpaceGlueProfile(params.defaultAlignment);
   const verticalSkips = planSimpleTexParagraphVerticalSkips(vlist.items, params.font);
+  const finalParagraphBlockIndex = finalVListParagraphBlockIndex(vlist.items);
 
   for (const item of vlist.items) {
     if (item.kind !== "paragraph") {
@@ -144,9 +146,13 @@ export function createSimpleTexLayoutDocumentIr(params: {
     }
     const blockIndex = item.blockIndex;
     const block = item.block;
-    const inheritedAlignment = activeAlignment;
-    const inheritedAlignmentProfile = activeAlignmentProfile;
-    const blockAlignment = texHonoredBlockAlignment(block, params.options);
+    const inheritedAlignment = block.listContext ? params.defaultAlignment : activeAlignment;
+    const inheritedAlignmentProfile = block.listContext ? undefined : activeAlignmentProfile;
+    const blockAlignment = texHonoredBlockAlignment(
+      block,
+      params.options,
+      blockIndex === finalParagraphBlockIndex
+    );
     const blockAlignmentProfile = blockAlignment ? block.alignmentProfile : undefined;
     const alignment = blockAlignment ?? activeAlignment;
     const alignmentProfile = blockAlignment ? blockAlignmentProfile : activeAlignmentProfile;
@@ -168,6 +174,9 @@ export function createSimpleTexLayoutDocumentIr(params: {
       alignment,
       alignmentProfile
     );
+    const paragraphSpaceGlueProfile = block.listContext
+      ? texInitialSpaceGlueProfile(params.defaultAlignment)
+      : activeSpaceGlueProfile;
     const segments = splitSimpleTexParagraphSegments(
       block,
       params.options,
@@ -192,7 +201,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
             block.listContext,
             params.font,
             metricProvider,
-            activeSpaceGlueProfile,
+            paragraphSpaceGlueProfile,
             listLabelRightEdge
           )
         : undefined;
@@ -209,7 +218,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
         inheritedAlignment,
         inheritedAlignmentProfile,
         noIndent: segment.noIndent,
-        spaceGlueProfile: activeSpaceGlueProfile,
+        spaceGlueProfile: paragraphSpaceGlueProfile,
         leftMarginWidth: quoteMarginWidth + listMarginWidth,
         rightMarginWidth: quoteMarginWidth,
         quoteDepth: block.quoteDepth,
@@ -220,7 +229,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
           segment,
           params.font.atPt,
           metricProvider,
-          activeSpaceGlueProfile
+          paragraphSpaceGlueProfile
         ),
       });
     }
@@ -237,18 +246,32 @@ export function createSimpleTexLayoutDocumentIr(params: {
 
 function texHonoredBlockAlignment(
   block: SimpleTexParagraphBlock | undefined,
-  options: TexLayoutIrOptions
+  options: TexLayoutIrOptions,
+  finalParagraphInNode = false
 ): TexParagraphAlignment | undefined {
   if (!block?.alignment) {
     return undefined;
   }
   if (
     options.tikzTextWidthNode === true &&
-    block.alignmentProfile === "latex-declaration"
+    block.alignmentProfile === "latex-declaration" &&
+    finalParagraphInNode
   ) {
     return undefined;
   }
   return block.alignment;
+}
+
+function finalVListParagraphBlockIndex(
+  items: readonly TexVListItem[]
+): number | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.kind === "paragraph") {
+      return item.blockIndex;
+    }
+  }
+  return undefined;
 }
 
 function texQuoteParagraphAlignment(
