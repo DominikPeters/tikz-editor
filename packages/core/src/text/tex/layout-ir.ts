@@ -9,6 +9,7 @@ import {
   simpleTexInlineNodesToTokens,
   articleListLeftMarginEmByDepth,
   splitSimpleTexParagraphSegments,
+  type SimpleTexBlockItem,
   type SimpleTexParagraphBlock,
   type SimpleTexParagraphSegment,
   type SimpleTexFontState,
@@ -17,21 +18,13 @@ import {
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
 } from "./ir.js";
-
-const articleQuoteSpacingEm = {
-  topsep: 1,
-  partopsep: 0.3,
-  parsep: 0.4,
-  compactExitTopsep: 0.8,
-} as const;
-
-const articleListSpacingEm = {
-  topsep: 1,
-  partopsep: 0.3,
-  nestedTopsepByDepth: [0.8, 0.8, 0.4, 0.2],
-  itemsepByDepth: [0.8, 0.4, 0.2],
-  parsepByDepth: [0.4, 0.2, 0],
-} as const;
+import {
+  addParagraphVerticalGlueToVList,
+  lowerSimpleTexBlockItemsToVList,
+  lowerSimpleTexBlocksToVList,
+  planSimpleTexParagraphVerticalSkips,
+  type TexVListDocument,
+} from "./vlist/index.js";
 
 export interface TexLayoutIrOptions {
   readonly parindent?: number;
@@ -107,7 +100,6 @@ export interface TexLayoutParagraphIr {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
-  readonly verticalSkipBefore: number;
   readonly quoteDepth: number;
   readonly listContext?: SimpleTexListContext;
   readonly label?: TexLayoutLabel;
@@ -117,6 +109,7 @@ export interface TexLayoutParagraphIr {
 
 export interface SimpleTexLayoutDocumentIr {
   readonly kind: "simple-tex-layout-document";
+  readonly vlist: TexVListDocument;
   readonly reportAlignment: TexParagraphAlignment;
   readonly layoutMode: KnuthPlassLayoutMode;
   readonly paragraphs: readonly TexLayoutParagraphIr[];
@@ -124,6 +117,7 @@ export interface SimpleTexLayoutDocumentIr {
 
 export function createSimpleTexLayoutDocumentIr(params: {
   readonly blocks: readonly SimpleTexParagraphBlock[];
+  readonly items?: readonly SimpleTexBlockItem[];
   readonly defaultAlignment: TexParagraphAlignment;
   readonly font: ResolvedTexFont;
   readonly metricProvider?: TexMetricProvider;
@@ -131,6 +125,9 @@ export function createSimpleTexLayoutDocumentIr(params: {
 }): SimpleTexLayoutDocumentIr {
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const paragraphs: TexLayoutParagraphIr[] = [];
+  const vlist = params.items
+    ? lowerSimpleTexBlockItemsToVList(params.items)
+    : lowerSimpleTexBlocksToVList(params.blocks);
   const reportAlignment = texHonoredBlockAlignment(
     params.blocks[0],
     params.options
@@ -139,12 +136,14 @@ export function createSimpleTexLayoutDocumentIr(params: {
   let activeAlignment = params.defaultAlignment;
   let activeAlignmentProfile: TexAlignmentProfile | undefined;
   let activeSpaceGlueProfile = texInitialSpaceGlueProfile(params.defaultAlignment);
-  let previousEmittedQuoteDepth = 0;
-  let previousEmittedListContext: SimpleTexListContext | undefined;
-  const quoteEntryHadPreviousParagraphByDepth = new Map<number, boolean>();
+  const verticalSkips = planSimpleTexParagraphVerticalSkips(vlist.items, params.font);
 
-  for (let blockIndex = 0; blockIndex < params.blocks.length; blockIndex += 1) {
-    const block = params.blocks[blockIndex];
+  for (const item of vlist.items) {
+    if (item.kind !== "paragraph") {
+      continue;
+    }
+    const blockIndex = item.blockIndex;
+    const block = item.block;
     const inheritedAlignment = activeAlignment;
     const inheritedAlignmentProfile = activeAlignmentProfile;
     const blockAlignment = texHonoredBlockAlignment(block, params.options);
@@ -188,26 +187,6 @@ export function createSimpleTexLayoutDocumentIr(params: {
         quoteMarginWidth,
         params.font
       );
-      const hasPreviousEmittedParagraph = paragraphs.length > 0;
-      const listVerticalSkipBefore = segmentIndex === 0
-        ? texArticleListVerticalSkipBefore(
-            previousEmittedListContext,
-            block.listContext,
-            hasPreviousEmittedParagraph,
-            params.font
-          )
-        : 0;
-      const quoteVerticalSkipBefore = segmentIndex === 0
-        ? texArticleQuoteVerticalSkipBefore(
-            previousEmittedQuoteDepth,
-            block.quoteDepth,
-            previousEmittedListContext !== undefined || block.listContext !== undefined,
-            quoteEntryHadPreviousParagraphByDepth.get(previousEmittedQuoteDepth) ?? true,
-            hasPreviousEmittedParagraph,
-            params.font
-          )
-        : 0;
-      const verticalSkipBefore = quoteVerticalSkipBefore + listVerticalSkipBefore;
       const label = segmentIndex === 0 && block.listContext?.showLabel === true
         ? texLayoutLabelForListContext(
             block.listContext,
@@ -233,7 +212,6 @@ export function createSimpleTexLayoutDocumentIr(params: {
         spaceGlueProfile: activeSpaceGlueProfile,
         leftMarginWidth: quoteMarginWidth + listMarginWidth,
         rightMarginWidth: quoteMarginWidth,
-        verticalSkipBefore,
         quoteDepth: block.quoteDepth,
         listContext: block.listContext,
         label,
@@ -245,134 +223,16 @@ export function createSimpleTexLayoutDocumentIr(params: {
           activeSpaceGlueProfile
         ),
       });
-      if (segmentIndex === 0 && block.quoteDepth > previousEmittedQuoteDepth) {
-        for (
-          let depth = previousEmittedQuoteDepth + 1;
-          depth <= block.quoteDepth;
-          depth += 1
-        ) {
-          quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
-        }
-      } else if (segmentIndex === 0 && block.quoteDepth < previousEmittedQuoteDepth) {
-        for (
-          let depth = previousEmittedQuoteDepth;
-          depth > block.quoteDepth;
-          depth -= 1
-        ) {
-          quoteEntryHadPreviousParagraphByDepth.delete(depth);
-        }
-      }
-      previousEmittedQuoteDepth = block.quoteDepth;
-      previousEmittedListContext = block.listContext;
     }
   }
 
   return {
     kind: "simple-tex-layout-document",
+    vlist: addParagraphVerticalGlueToVList(vlist, verticalSkips),
     reportAlignment,
     layoutMode,
     paragraphs,
   };
-}
-
-function texArticleQuoteVerticalSkipBefore(
-  previousQuoteDepth: number,
-  quoteDepth: number,
-  listTransitionActive = false,
-  exitingQuoteHadPreviousParagraph = true,
-  hasPreviousEmittedParagraph = true,
-  font: ResolvedTexFont
-): number {
-  if (listTransitionActive) {
-    return 0;
-  }
-  if (previousQuoteDepth === quoteDepth) {
-    return quoteDepth > 0 ? texEmSkip(articleQuoteSpacingEm.parsep, font) : 0;
-  }
-  if (quoteDepth > previousQuoteDepth) {
-    return texEmSkip(
-      articleQuoteSpacingEm.topsep +
-        (hasPreviousEmittedParagraph ? 0 : articleQuoteSpacingEm.partopsep),
-      font
-    );
-  }
-  if (previousQuoteDepth > quoteDepth) {
-    return texEmSkip(
-      exitingQuoteHadPreviousParagraph
-        ? articleQuoteSpacingEm.topsep
-        : articleQuoteSpacingEm.compactExitTopsep,
-      font
-    );
-  }
-  return 0;
-}
-
-function texArticleListVerticalSkipBefore(
-  previous: SimpleTexListContext | undefined,
-  current: SimpleTexListContext | undefined,
-  hasPreviousEmittedParagraph: boolean,
-  font: ResolvedTexFont
-): number {
-  if (!previous && !current) {
-    return 0;
-  }
-  if (!hasPreviousEmittedParagraph && current) {
-    return texArticleInitialListSkip(font);
-  }
-  if (!previous && current) {
-    return texArticleOutsideListBoundarySkip(font);
-  }
-  if (previous && !current) {
-    return texArticleOutsideListBoundarySkip(font);
-  }
-  if (!previous || !current) {
-    return 0;
-  }
-  if (current.depth > previous.depth) {
-    return texArticleNestedListBoundarySkip(current.depth, font);
-  }
-  if (current.depth < previous.depth) {
-    return texArticleNestedListBoundarySkip(previous.depth, font);
-  }
-  if (
-    current.kind === previous.kind &&
-    current.labelDepth === previous.labelDepth &&
-    current.itemIndex === previous.itemIndex
-  ) {
-    return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth, font);
-  }
-  return texArticleListItemBoundarySkip(current.depth, font);
-}
-
-function texArticleInitialListSkip(font: ResolvedTexFont): number {
-  return texEmSkip(articleListSpacingEm.topsep + articleListSpacingEm.partopsep, font);
-}
-
-function texArticleOutsideListBoundarySkip(font: ResolvedTexFont): number {
-  return texEmSkip(articleListSpacingEm.topsep, font);
-}
-
-function texArticleNestedListBoundarySkip(depth: number, font: ResolvedTexFont): number {
-  return texEmSkip(
-    texDepthIndexedEm(articleListSpacingEm.nestedTopsepByDepth, depth),
-    font
-  );
-}
-
-function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): number {
-  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth), font);
-}
-
-function texArticleListParagraphSkip(depth: number, font: ResolvedTexFont): number {
-  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth), font);
-}
-
-function texDepthIndexedEm(values: readonly number[], depth: number): number {
-  return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
-}
-
-function texEmSkip(value: number, font: ResolvedTexFont): number {
-  return roundTexPt(value * font.atPt);
 }
 
 function texHonoredBlockAlignment(

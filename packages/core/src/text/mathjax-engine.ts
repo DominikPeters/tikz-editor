@@ -1,5 +1,4 @@
 import { DEFAULT_TEXT_FONT_SIZE } from "../semantic/style/resolve.js";
-import { parseLength } from "../semantic/coords/parse-length.js";
 import {
   KnuthPlassVisitor,
   TEX_INTERWORD_SHRINK_EM,
@@ -15,7 +14,14 @@ import {
 import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import { computerModernTexMetricProvider, layoutSimpleTexParagraph } from "./tex/index.js";
-import type { ResolvedTexFont, TexMetricProvider, TexShapedItem } from "./tex/index.js";
+import type {
+  PositionedTexVListItem,
+  ResolvedTexFont,
+  TexMetricProvider,
+  TexShapedItem,
+  TexVBoxRole,
+  TexVListLayout,
+} from "./tex/index.js";
 import type {
   NodeTextEngine,
   NodeTextMeasureRequest,
@@ -991,7 +997,7 @@ function buildSimpleTexTextCacheEntry(params: {
     metricProvider,
     tikzTextWidthNode: true,
   });
-  if (!layout.supported || !layout.report) {
+  if (!layout.supported || !layout.report || !layout.vlistLayout) {
     return null;
   }
   const outputJax = getRuntimeOutputJax(params.runtime);
@@ -1000,18 +1006,20 @@ function buildSimpleTexTextCacheEntry(params: {
   const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
-  const firstLineAscent = Math.max(
-    baselineMetrics.strutHeight,
-    ...layout.report.lines.map((line) => Number(line.ascent) || 0)
+  const firstLineTop = layout.vlistLayout.lineTops[layout.report.lines[0]?.lineIndex ?? 0] ?? 0;
+  const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
+    ? layout.vlistLayout.baseline.y - firstLineTop
+    : baselineMetrics.strutHeight;
+  const heightPt = Math.max(
+    lineHeightPt,
+    layout.vlistLayout.metrics.height + layout.vlistLayout.metrics.depth
   );
-  const lineTops = computeTexLineTops(layout.report, lineHeightPt);
-  const lastLineTop = lineTops.at(-1) ?? 0;
-  const heightPt = Math.max(lineHeightPt, lastLineTop + lineHeightPt);
   const widthPt = params.textWidthPt;
   const body = renderSimpleTexSvgBody(layout.report, {
     lineHeightPt,
     firstLineAscent,
-    lineTops,
+    lineTops: layout.vlistLayout.lineTops,
+    vlistLayout: layout.vlistLayout,
     metricProvider,
     requestedAlignment: params.requestedAlignment,
   });
@@ -1083,78 +1091,344 @@ function renderSimpleTexSvgBody(
     lineHeightPt: number;
     firstLineAscent: number;
     lineTops?: readonly number[];
+    vlistLayout?: TexVListLayout;
     metricProvider: TexMetricProvider;
     requestedAlignment: NodeTextParagraphAlignment | null;
   }
 ): string {
-  const font = options.metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const alignAttr = options.requestedAlignment == null
     ? ""
     : ` data-align="${escapeXmlAttribute(mathJaxAlignAttributeValue(options.requestedAlignment))}"`;
   const pieces: string[] = [
     `<g data-paragraph-id="${escapeXmlAttribute(report.paragraphId)}"${alignAttr} fill="currentColor">`,
   ];
-  for (const line of report.lines) {
-    const lineTop = options.lineTops?.[line.lineIndex] ?? line.lineIndex * options.lineHeightPt;
-    const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
-    const baseline = lineTop + options.firstLineAscent;
-    const lineLeadingAttr = line.break?.lineLeading
-      ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
-      : "";
-    pieces.push(
-      `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineLeft)} ${formatPt(lineTop)})">`
-    );
-    pieces.push(
-      `<rect x="${formatPt(-lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`
-    );
-    for (const segment of line.segments) {
-      if (segment.kind !== "text" && segment.kind !== "space") {
-        continue;
-      }
-      const text = segment.text ?? "";
-      if (!text) {
-        continue;
-      }
-      const segmentFont = segment.fontId
-        ? options.metricProvider.resolveFont({
-          fontId: segment.fontId,
-          atPt: DEFAULT_TEXT_FONT_SIZE,
-        })
-        : font;
-      if (typeof segment.glyphCode === "number") {
-        pieces.push(renderTexGlyphCode(segment.glyphCode, segmentFont, segment.x - lineLeft, baseline - lineTop));
-      } else {
-        pieces.push(renderTexGlyphRun(
-          text,
-          segmentFont,
-          segment.x - lineLeft,
-          baseline - lineTop,
-          options.metricProvider
-        ));
-      }
-    }
+  if (options.vlistLayout) {
+    pieces.push(renderTexVListSvgContent(report, {
+      ...options,
+      vlistLayout: options.vlistLayout,
+    }));
     pieces.push("</g>");
+    return pieces.join("");
+  }
+  const renderedLines = new Set<number>();
+  for (const line of report.lines) {
+    pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
   }
   pieces.push("</g>");
   return pieces.join("");
 }
 
-function computeTexLineTops(report: ParagraphLayoutReport, lineHeightPt: number): number[] {
-  const tops: number[] = [];
-  let cursor = 0;
-  for (const line of report.lines) {
-    cursor += Math.max(0, line.verticalSkipBefore ?? 0);
-    tops[line.lineIndex] = cursor;
-    cursor += lineHeightPt + texLineLeadingPt(line.break?.lineLeading);
+function renderTexVListSvgContent(
+  report: ParagraphLayoutReport,
+  options: {
+    lineHeightPt: number;
+    firstLineAscent: number;
+    lineTops?: readonly number[];
+    vlistLayout: TexVListLayout;
+    metricProvider: TexMetricProvider;
   }
-  return tops;
+): string {
+  const renderedLines = new Set<number>();
+  const pieces = renderTexVListItemsSvgContent(
+    options.vlistLayout.items,
+    report,
+    options,
+    renderedLines
+  );
+  for (const line of report.lines) {
+    if (!renderedLines.has(line.lineIndex)) {
+      pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
+    }
+  }
+  return pieces.join("");
 }
 
-function texLineLeadingPt(lineLeading: string | undefined): number {
-  if (!lineLeading) {
-    return 0;
+function renderTexVListItemsSvgContent(
+  items: readonly PositionedTexVListItem[],
+  report: ParagraphLayoutReport,
+  options: {
+    lineHeightPt: number;
+    firstLineAscent: number;
+    lineTops?: readonly number[];
+    metricProvider: TexMetricProvider;
+  },
+  renderedLines: Set<number>
+): string[] {
+  const pieces: string[] = [];
+  for (const item of items) {
+    if (item.item.kind === "paragraph") {
+      for (const line of report.lines) {
+        if (
+          !renderedLines.has(line.lineIndex) &&
+          texReportLineOverlapsSourceSpan(line, item.item.sourceSpan)
+        ) {
+          pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
+        }
+      }
+      continue;
+    }
+    if (item.item.kind === "placeholder") {
+      pieces.push(renderTexPlaceholderSvgMetadata(item, report.width));
+      continue;
+    }
+    if (item.item.kind === "rule") {
+      pieces.push(renderTexRuleSvgContent(item));
+      continue;
+    }
+    if (item.item.kind === "hbox") {
+      pieces.push(renderTexVListLeafBoxSvgMetadata(item));
+      continue;
+    }
+    if (item.item.kind === "vbox") {
+      pieces.push(renderTexVBoxSvgMetadata(item, report.width));
+      if (item.children?.length) {
+        pieces.push(...renderTexVListItemsSvgContent(
+          item.children,
+          report,
+          options,
+          renderedLines
+        ));
+      }
+    }
   }
-  return parseLength(lineLeading, "pt") ?? 0;
+  return pieces;
+}
+
+function renderTexReportLineSvg(
+  report: ParagraphLayoutReport,
+  line: ParagraphLayoutReport["lines"][number],
+  options: {
+    lineHeightPt: number;
+    firstLineAscent: number;
+    lineTops?: readonly number[];
+    metricProvider: TexMetricProvider;
+  },
+  renderedLines: Set<number>
+): string {
+  renderedLines.add(line.lineIndex);
+  const font = options.metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const lineTop = options.lineTops?.[line.lineIndex] ?? line.lineIndex * options.lineHeightPt;
+  const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
+  const baseline = lineTop + options.firstLineAscent;
+  const lineLeadingAttr = line.break?.lineLeading
+    ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
+    : "";
+  const pieces = [
+    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineLeft)} ${formatPt(lineTop)})">`,
+    `<rect x="${formatPt(-lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`,
+  ];
+  for (const segment of line.segments) {
+    if (segment.kind !== "text" && segment.kind !== "space") {
+      continue;
+    }
+    const text = segment.text ?? "";
+    if (!text) {
+      continue;
+    }
+    const segmentFont = segment.fontId
+      ? options.metricProvider.resolveFont({
+        fontId: segment.fontId,
+        atPt: DEFAULT_TEXT_FONT_SIZE,
+      })
+      : font;
+    if (typeof segment.glyphCode === "number") {
+      pieces.push(renderTexGlyphCode(
+        segment.glyphCode,
+        segmentFont,
+        segment.x - lineLeft,
+        baseline - lineTop
+      ));
+    } else {
+      pieces.push(renderTexGlyphRun(
+        text,
+        segmentFont,
+        segment.x - lineLeft,
+        baseline - lineTop,
+        options.metricProvider
+      ));
+    }
+  }
+  pieces.push("</g>");
+  return pieces.join("");
+}
+
+export function renderSimpleTexParagraphDebugSvgBody(params: {
+  readonly text: string;
+  readonly width: number;
+  readonly alignment?: NodeTextParagraphAlignment | null;
+}): string | null {
+  const metricProvider = computerModernTexMetricProvider;
+  const layout = layoutSimpleTexParagraph(params.text, {
+    paragraphId: "tex:debug-placeholder",
+    width: params.width,
+    alignment: params.alignment ?? "ragged-right",
+    metricProvider,
+    tikzTextWidthNode: true,
+    fallbackPolicy: "placeholder",
+  });
+  if (!layout.supported || !layout.report || !layout.vlistLayout) {
+    return null;
+  }
+
+  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const baselineMetrics = texNormalBaselineMetrics(renderFont);
+  const firstLineTop = layout.vlistLayout.lineTops[layout.report.lines[0]?.lineIndex ?? 0] ?? 0;
+  const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
+    ? layout.vlistLayout.baseline.y - firstLineTop
+    : baselineMetrics.strutHeight;
+  return renderSimpleTexSvgBody(layout.report, {
+    lineHeightPt: baselineMetrics.baselineskip,
+    firstLineAscent,
+    lineTops: layout.vlistLayout.lineTops,
+    vlistLayout: layout.vlistLayout,
+    metricProvider,
+    requestedAlignment: params.alignment ?? null,
+  });
+}
+
+export function renderTexVListSvgMetadata(
+  items: readonly PositionedTexVListItem[],
+  width: number
+): string {
+  const pieces: string[] = [];
+  for (const item of items) {
+    if (item.item.kind === "placeholder") {
+      pieces.push(renderTexPlaceholderSvgMetadata(item, width));
+      continue;
+    }
+    if (item.item.kind === "hbox" || item.item.kind === "rule") {
+      pieces.push(renderTexVListLeafBoxSvgMetadata(item));
+      continue;
+    }
+    if (item.item.kind !== "vbox") {
+      continue;
+    }
+    pieces.push(renderTexVBoxSvgMetadata(item, width, false));
+    if (item.children?.length) {
+      pieces.push(renderTexVListSvgMetadata(
+        item.children.map((child) => ({
+          ...child,
+          y: child.y - item.y,
+          x: child.x - item.x,
+        })),
+        width
+      ));
+    }
+    pieces.push("</g>");
+  }
+  return pieces.join("");
+}
+
+function renderTexVBoxSvgMetadata(
+  item: PositionedTexVListItem,
+  width: number,
+  close = true
+): string {
+  if (item.item.kind !== "vbox") {
+    return "";
+  }
+  const roleAttrs = texVBoxRoleAttrs(item.item.role);
+  const sourceAttrs = item.item.sourceSpan
+    ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
+    : "";
+  const pieces = [
+    `<g data-tex-vbox="true"${roleAttrs}${sourceAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(Math.max(width, item.metrics.width))}" height="${formatPt(item.metrics.height + item.metrics.depth)}" fill="none" />`,
+  ];
+  if (close) {
+    pieces.push("</g>");
+  }
+  return pieces.join("");
+}
+
+function renderTexPlaceholderSvgMetadata(
+  item: PositionedTexVListItem,
+  width: number
+): string {
+  if (item.item.kind !== "placeholder") {
+    return "";
+  }
+  const boxHeight = item.metrics.height + item.metrics.depth;
+  return [
+    `<g data-tex-vlist-item="placeholder" data-tex-placeholder="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" data-tex-placeholder-reason="${escapeXmlAttribute(item.item.reason)}" transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(Math.max(width, item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
+    `</g>`,
+  ].join("");
+}
+
+function renderTexVListLeafBoxSvgMetadata(item: PositionedTexVListItem): string {
+  if (item.item.kind !== "hbox" && item.item.kind !== "rule") {
+    return "";
+  }
+  const sourceAttrs = item.item.sourceSpan
+    ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
+    : "";
+  const boxHeight = item.metrics.height + item.metrics.depth;
+  return [
+    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
+    `</g>`,
+  ].join("");
+}
+
+function renderTexRuleSvgContent(item: PositionedTexVListItem): string {
+  if (item.item.kind !== "rule") {
+    return "";
+  }
+  const sourceAttrs = item.item.sourceSpan
+    ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
+    : "";
+  const boxHeight = item.metrics.height + item.metrics.depth;
+  return [
+    `<g data-tex-vlist-item="rule"${sourceAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
+    `</g>`,
+  ].join("");
+}
+
+function texVBoxRoleAttrs(role: TexVBoxRole | undefined): string {
+  if (!role) {
+    return "";
+  }
+  if (role.kind === "quote") {
+    return ` data-tex-vbox-role="quote" data-tex-vbox-depth="${role.depth}"`;
+  }
+  return [
+    ` data-tex-vbox-role="list"`,
+    ` data-tex-list-kind="${escapeXmlAttribute(role.listKind)}"`,
+    ` data-tex-vbox-depth="${role.depth}"`,
+    ` data-tex-list-label-depth="${role.labelDepth}"`,
+    ` data-tex-list-left-margin-em="${role.totalLeftMarginEm}"`,
+  ].join("");
+}
+
+function texReportLineOverlapsSourceSpan(
+  line: ParagraphLayoutReport["lines"][number],
+  span: { readonly start: number; readonly end: number }
+): boolean {
+  const lineSpan = texReportLineSourceSpan(line);
+  if (!lineSpan) {
+    return false;
+  }
+  return lineSpan.start < span.end && lineSpan.end > span.start;
+}
+
+function texReportLineSourceSpan(
+  line: ParagraphLayoutReport["lines"][number]
+): { readonly start: number; readonly end: number } | null {
+  let start = Number.POSITIVE_INFINITY;
+  let end = Number.NEGATIVE_INFINITY;
+  for (const segment of line.segments) {
+    if (typeof segment.sourceStartRaw !== "number" || typeof segment.sourceEndRaw !== "number") {
+      continue;
+    }
+    start = Math.min(start, segment.sourceStartRaw);
+    end = Math.max(end, segment.sourceEndRaw);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return null;
+  }
+  return { start, end };
 }
 
 function texNormalBaselineMetrics(font: ResolvedTexFont): {

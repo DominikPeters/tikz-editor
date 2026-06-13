@@ -39,6 +39,11 @@ import {
   type TexLayoutLabelItem,
   type TexLayoutParagraphIr,
 } from "./layout-ir.js";
+import {
+  groupSimpleTexVListScopes,
+  layoutTexVListFromParagraphReport,
+  type TexVListLayout,
+} from "./vlist/index.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export { analyzeSimpleTexParagraph, getSimpleTexFallbackReason } from "./ir.js";
@@ -53,12 +58,14 @@ export interface TexParagraphLayoutOptions {
   readonly pretolerance?: number;
   readonly parindent?: number;
   readonly tikzTextWidthNode?: boolean;
+  readonly fallbackPolicy?: "whole-node" | "placeholder";
   readonly hyphenator?: Hyphenator | null;
 }
 
 export interface TexParagraphLayoutResult {
   readonly supported: boolean;
   readonly report: ParagraphLayoutReport | null;
+  readonly vlistLayout?: TexVListLayout;
   readonly fallbackReason: string | null;
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly errors: readonly string[];
@@ -94,6 +101,8 @@ interface TexParagraphDpOptionParams {
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;
 const LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM = 3;
+const LATEX_NORMAL_BASELINESKIP_EM = 1.2;
+const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
 
 // Boundary adapter for the legacy Knuth-Plass run model: text runs carry a
 // wrapper identity, while the TeX path owns the shaped run data directly.
@@ -106,7 +115,11 @@ export function layoutSimpleTexParagraph(
 ): TexParagraphLayoutResult {
   const analysis = analyzeSimpleTexParagraph(text, options.width);
   const fallbackReason = analysis.fallbackReason;
-  if (fallbackReason) {
+  const usePlaceholderFallback =
+    fallbackReason !== null &&
+    options.fallbackPolicy === "placeholder" &&
+    analysis.ir?.partialFallbackSupported === true;
+  if (fallbackReason && !usePlaceholderFallback) {
     return {
       supported: false,
       report: null,
@@ -137,6 +150,7 @@ export function layoutSimpleTexParagraph(
   const measurement = createTexParagraphMeasurement(font, metricProvider);
   const layoutIr = createSimpleTexLayoutDocumentIr({
     blocks,
+    items: analysis.ir?.items,
     defaultAlignment,
     font,
     metricProvider,
@@ -145,9 +159,10 @@ export function layoutSimpleTexParagraph(
   const combinedRuns: ParagraphRun[] = [];
   const combinedLines: GreedyLine[] = [];
   const combinedRunWidths = new Map<number, number>();
-  const combinedLineVerticalSkipsBefore = new Map<number, number>();
   const combinedLineLabels = new Map<number, TexLineLabel>();
-  const errors: string[] = [];
+  const errors: string[] = usePlaceholderFallback && fallbackReason
+    ? [fallbackReason]
+    : [];
   let linebreakingMode: "feasible" | "overfull" = "feasible";
   let runIndexOffset = 0;
   let lineIndexOffset = 0;
@@ -202,12 +217,6 @@ export function layoutSimpleTexParagraph(
               paragraph.forcedBreakAfter
             )
           : undefined;
-      if (line.lineIndex === 0 && paragraph.verticalSkipBefore > 0) {
-        combinedLineVerticalSkipsBefore.set(
-          combinedLineIndex,
-          paragraph.verticalSkipBefore
-        );
-      }
       if (line.lineIndex === 0 && paragraph.label) {
         combinedLineLabels.set(combinedLineIndex, {
           label: paragraph.label,
@@ -240,24 +249,39 @@ export function layoutSimpleTexParagraph(
     };
   }
 
+  const report = buildTexParagraphReport({
+    paragraphId,
+    width: options.width,
+    alignment: layoutIr.reportAlignment,
+    runs: combinedRuns,
+    lines: combinedLines,
+    shapedRuns,
+    runWidths: combinedRunWidths,
+    lineLabels: combinedLineLabels,
+    linebreakingMode,
+    layoutMode: layoutIr.layoutMode,
+    font,
+    metricProvider,
+    errors,
+  });
+  const firstLineAscent = Math.max(
+    font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
+    ...report.lines.map((line) => Number(line.ascent) || 0)
+  );
+  const vlistLayout = layoutTexVListFromParagraphReport(
+    groupSimpleTexVListScopes(layoutIr.vlist),
+    report,
+    {
+      width: options.width,
+      lineHeight: font.atPt * LATEX_NORMAL_BASELINESKIP_EM,
+      firstLineAscent,
+    }
+  );
+
   return {
     supported: true,
-    report: buildTexParagraphReport({
-      paragraphId,
-      width: options.width,
-      alignment: layoutIr.reportAlignment,
-      runs: combinedRuns,
-      lines: combinedLines,
-      shapedRuns,
-      runWidths: combinedRunWidths,
-      lineVerticalSkipsBefore: combinedLineVerticalSkipsBefore,
-      lineLabels: combinedLineLabels,
-      linebreakingMode,
-      layoutMode: layoutIr.layoutMode,
-      font,
-      metricProvider,
-      errors,
-    }),
+    report,
+    vlistLayout,
     fallbackReason: null,
     shapedRuns,
     errors,
@@ -784,12 +808,17 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     ),
     rightskipShrink: 0,
     firstLineIndentWidth:
-      !noIndent && Number.isFinite(options.parindent) && options.parindent && options.parindent > 0
+      !noIndent &&
+      !listContextActive &&
+      Number.isFinite(options.parindent) &&
+      options.parindent &&
+      options.parindent > 0
         ? options.parindent
         : 0,
     forcedBreakIndentWidth:
       options.tikzTextWidthNode === true &&
       alignment !== "justified" &&
+      !listContextActive &&
       Number.isFinite(options.parindent) &&
       options.parindent &&
       options.parindent > 0
@@ -907,7 +936,6 @@ function buildTexParagraphReport(params: {
   lines: readonly GreedyLine[];
   shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   runWidths: ReadonlyMap<number, number>;
-  lineVerticalSkipsBefore: ReadonlyMap<number, number>;
   lineLabels: ReadonlyMap<number, TexLineLabel>;
   linebreakingMode: "feasible" | "overfull";
   layoutMode: KnuthPlassLayoutMode;
@@ -947,7 +975,6 @@ function buildTexLineReport(
     shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
     metricProvider: TexMetricProvider;
     runWidths: ReadonlyMap<number, number>;
-    lineVerticalSkipsBefore: ReadonlyMap<number, number>;
     lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
   }
@@ -1131,7 +1158,6 @@ function buildTexLineReport(
     descent: roundTexPt(descent),
     xStart,
     xEnd: x,
-    verticalSkipBefore: params.lineVerticalSkipsBefore.get(line.lineIndex),
     break: line.break,
     segments,
   };

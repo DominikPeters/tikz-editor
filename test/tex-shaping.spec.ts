@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { ParagraphLayoutReport } from "../packages/core/src/text/knuth-plass/paragraph/report.js";
 import {
   getKnuthPlassCaretFromPoint,
+  getKnuthPlassPlaceholderGeometry,
   getKnuthPlassPointFromOffset,
   getKnuthPlassSelectionRects,
+  getKnuthPlassVListBoxGeometry,
+  getKnuthPlassVListItemGeometry,
 } from "../packages/core/src/text/knuth-plass/editor/hitmap.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
   computerModernTexMetricProvider,
+  createSimpleTexLayoutDocumentIr,
+  groupSimpleTexVListScopes,
+  layoutTexVListFromParagraphReport,
   layoutSimpleTexParagraph,
+  parseSimpleTexParagraphIr,
 } from "../packages/core/src/text/tex/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
 
@@ -33,6 +40,23 @@ function makeLineElement(
         },
       },
     },
+  };
+}
+
+function makeVListBoxElement(
+  bounds: { left: number; top: number; right: number; bottom: number },
+  attributes: Record<string, string>
+): any {
+  return {
+    getAttribute: (name: string) => attributes[name] ?? null,
+    getBoundingClientRect: () => ({
+      left: bounds.left,
+      top: bounds.top,
+      right: bounds.right,
+      bottom: bounds.bottom,
+      width: bounds.right - bounds.left,
+      height: bounds.bottom - bounds.top,
+    }),
   };
 }
 
@@ -724,14 +748,14 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(result.report?.lines.length).toBeGreaterThan(1);
-    expect(result.report?.lines[0]?.verticalSkipBefore).toBe(13);
+    expect(result.vlistLayout?.lineTops[0]).toBe(13);
     for (const line of result.report?.lines ?? []) {
       expect(line.xStart).toBeCloseTo(25, 5);
       expect(line.xEnd).toBeLessThanOrEqual(95.00001);
     }
   });
 
-  it("reports LaTeX quote list vertical skips across paragraph boundaries", () => {
+  it("positions LaTeX quote list vertical skips across paragraph boundaries", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`,
       {
@@ -743,11 +767,710 @@ describe("simple TeX paragraph layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.report?.lines.map((line) => line.verticalSkipBefore ?? 0)).toEqual([
+    expect(result.vlistLayout?.lineTops).toEqual([
       0,
-      10,
-      4,
-      10,
+      22,
+      38,
+      60,
+    ]);
+  });
+
+  it("exposes vlist layout metrics for quote/list vertical skips", () => {
+    const source = String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`;
+    const result = layoutSimpleTexParagraph(
+      source,
+      {
+        paragraphId: "tex:vlist-quote-vertical-skips",
+        width: 150,
+        alignment: "justified",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.baseline).toEqual({ kind: "explicit", y: 8.5 });
+    expect(result.vlistLayout?.metrics).toEqual({
+      width: 150,
+      height: 8.5,
+      depth: 63.5,
+    });
+    expect(result.vlistLayout?.lineTops).toEqual([0, 22, 38, 60]);
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      role: item.item.kind === "vbox" ? item.item.role : undefined,
+      y: item.y,
+      height: item.metrics.height,
+    }))).toEqual([
+      { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(6.94, 2) },
+      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 12, height: expect.closeTo(16.83, 2) },
+      { kind: "glue", role: undefined, y: 50, height: 10 },
+      { kind: "paragraph", role: undefined, y: 60, height: expect.closeTo(6.94, 2) },
+    ]);
+    expect(result.vlistLayout?.reports).toEqual([result.report]);
+
+    const parsed = parseSimpleTexParagraphIr(source);
+    const layoutIr = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+    expect(result.report).not.toBeNull();
+    expect(result.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      result.report,
+      {
+        width: 150,
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    ).lineTops).toEqual([0, 22, 38, 60]);
+    const groupedLayout = result.report &&
+      layoutTexVListFromParagraphReport(
+        groupSimpleTexVListScopes(layoutIr.vlist),
+        result.report,
+        {
+          width: 150,
+          lineHeight: 12,
+          firstLineAscent: 8.5,
+        }
+      );
+    expect(groupedLayout && {
+      metrics: groupedLayout.metrics,
+      lineTops: groupedLayout.lineTops,
+      items: groupedLayout.items.map((item) => ({
+        kind: item.item.kind,
+        role: item.item.kind === "vbox" ? item.item.role : undefined,
+        y: item.y,
+      })),
+    }).toEqual({
+      metrics: result.vlistLayout?.metrics,
+      lineTops: [0, 22, 38, 60],
+      items: result.vlistLayout?.items.map((item) => ({
+        kind: item.item.kind,
+        role: item.item.kind === "vbox" ? item.item.role : undefined,
+        y: item.y,
+      })),
+    });
+  });
+
+  it("positions vlist paragraph items across TeX forced-break leading", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \\[7pt] Beta \par Gamma`, {
+      paragraphId: "tex:vlist-forced-break-leading",
+      width: 150,
+      alignment: "ragged-right",
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 19, 31]);
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, depth: expect.closeTo(24.06, 2) },
+      { kind: "paragraph", y: 31, depth: expect.closeTo(5.17, 2) },
+    ]);
+  });
+
+  it("positions explicit vertical glue commands in the TeX vlist layout", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \smallskip Beta \par \vspace{7pt} Gamma`,
+      {
+        paragraphId: "tex:vlist-explicit-vertical-glue",
+        width: 150,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 15, 34]);
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.item.kind === "glue" ? item.metrics.height : undefined,
+      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      stretch: item.item.kind === "glue" ? item.item.stretch : undefined,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, height: undefined, text: "Alpha", stretch: undefined },
+      { kind: "glue", y: 12, height: 3, text: undefined, stretch: 1 },
+      { kind: "paragraph", y: 15, height: undefined, text: "Beta", stretch: undefined },
+      { kind: "glue", y: 27, height: 7, text: undefined, stretch: undefined },
+      { kind: "paragraph", y: 34, height: undefined, text: "Gamma", stretch: undefined },
+    ]);
+  });
+
+  it("positions explicit TeX hrule commands in the vlist layout", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \hrule width 24pt height 2pt depth 1pt Beta`,
+      {
+        paragraphId: "tex:vlist-explicit-rule",
+        width: 150,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 11.8889]);
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      width: item.item.kind === "rule" ? item.metrics.width : undefined,
+      height: item.item.kind === "rule" ? item.metrics.height : undefined,
+      depth: item.item.kind === "rule" ? item.metrics.depth : undefined,
+      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, width: undefined, height: undefined, depth: undefined, text: "Alpha" },
+      { kind: "rule", y: 8.8889, width: 24, height: 2, depth: 1, text: undefined },
+      { kind: "paragraph", y: 11.8889, width: undefined, height: undefined, depth: undefined, text: "Beta" },
+    ]);
+  });
+
+  it("honors negative explicit vertical glue in the TeX vlist layout", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \vspace{-4pt} Beta \par \vskip -2pt Gamma`,
+      {
+        paragraphId: "tex:vlist-negative-explicit-vertical-glue",
+        width: 150,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 8, 18]);
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.item.kind === "glue" ? item.metrics.height : undefined,
+      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      size: item.item.kind === "glue" ? item.item.size : undefined,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, height: undefined, text: "Alpha", size: undefined },
+      { kind: "glue", y: 12, height: 0, text: undefined, size: -4 },
+      { kind: "paragraph", y: 8, height: undefined, text: "Beta", size: undefined },
+      { kind: "glue", y: 20, height: 0, text: undefined, size: -2 },
+      { kind: "paragraph", y: 18, height: undefined, text: "Gamma", size: undefined },
+    ]);
+  });
+
+  it("includes trailing vertical items in root vlist metrics", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \vspace{7pt}`,
+      {
+        paragraphId: "tex:vlist-trailing-vertical-glue",
+        width: 150,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0]);
+    expect(result.vlistLayout?.metrics).toEqual({
+      width: 150,
+      height: 8.5,
+      depth: 10.5,
+    });
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.item.kind === "glue" ? item.metrics.height : undefined,
+      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, height: undefined, text: "Alpha" },
+      { kind: "glue", y: 12, height: 7, text: undefined },
+    ]);
+  });
+
+  it("sets vfill glue before lower-order finite stretch when a vlist target height is explicit", () => {
+    const source = String.raw`Alpha \par \smallskip \vfill Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:vlist-vfill-natural",
+      width: 150,
+      alignment: "ragged-right",
+    });
+    const parsed = parseSimpleTexParagraphIr(source);
+    const layoutIr = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 15]);
+
+    const constrained = result.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      result.report,
+      {
+        width: 150,
+        height: 60,
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
+
+    expect(constrained && {
+      lineTops: constrained.lineTops,
+      metrics: constrained.metrics,
+      items: constrained.items.map((item) => ({
+        kind: item.item.kind,
+        y: item.y,
+        height: item.item.kind === "glue" ? item.metrics.height : undefined,
+        stretchOrder: item.item.kind === "glue" ? item.item.stretchOrder : undefined,
+        size: item.item.kind === "glue" ? item.item.size : undefined,
+        text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      })),
+    }).toEqual({
+      lineTops: [0, 48],
+      metrics: { width: 150, height: 8.5, depth: 51.5 },
+      items: [
+        { kind: "paragraph", y: 0, height: undefined, stretchOrder: undefined, size: undefined, text: "Alpha" },
+        { kind: "glue", y: 12, height: 3, stretchOrder: "normal", size: 3, text: undefined },
+        { kind: "glue", y: 15, height: 33, stretchOrder: "fill", size: 0, text: undefined },
+        { kind: "paragraph", y: 48, height: undefined, stretchOrder: undefined, size: undefined, text: "Beta" },
+      ],
+    });
+  });
+
+  it("sets finite vertical stretch and shrink under explicit vlist heights", () => {
+    const source = String.raw`Alpha \par \vskip 6pt plus 2pt minus 3pt Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:vlist-finite-glue-set",
+      width: 150,
+      alignment: "ragged-right",
+    });
+    const parsed = parseSimpleTexParagraphIr(source);
+    const layoutIr = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 18]);
+
+    const stretched = result.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      result.report,
+      {
+        width: 150,
+        height: 32,
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
+    const shrunk = result.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      result.report,
+      {
+        width: 150,
+        height: 27,
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
+
+    expect(stretched?.lineTops).toEqual([0, 20]);
+    expect(stretched?.items.map((item) =>
+      item.item.kind === "glue" ? item.metrics.height : null
+    )).toEqual([null, 8, null]);
+    expect(stretched?.metrics).toEqual({ width: 150, height: 8.5, depth: 23.5 });
+
+    expect(shrunk?.lineTops).toEqual([0, 15]);
+    expect(shrunk?.items.map((item) =>
+      item.item.kind === "glue" ? item.metrics.height : null
+    )).toEqual([null, 3, null]);
+    expect(shrunk?.metrics).toEqual({ width: 150, height: 8.5, depth: 18.5 });
+  });
+
+  it("aligns a shorter vlist inside an explicit root height", () => {
+    const source = String.raw`Alpha \par Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:vlist-root-align",
+      width: 150,
+      alignment: "ragged-right",
+    });
+    const parsed = parseSimpleTexParagraphIr(source);
+    const layoutIr = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 12]);
+
+    const center = result.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      result.report,
+      {
+        width: 150,
+        height: 50,
+        verticalAlign: "center",
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
+    const bottom = result.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      result.report,
+      {
+        width: 150,
+        height: 50,
+        verticalAlign: "bottom",
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
+
+    expect(center && {
+      baseline: center.baseline,
+      lineTops: center.lineTops,
+      metrics: center.metrics,
+      itemY: center.items.map((item) => item.y),
+    }).toEqual({
+      baseline: { kind: "explicit", y: 21.5 },
+      lineTops: [13, 25],
+      metrics: { width: 150, height: 21.5, depth: 28.5 },
+      itemY: [13, 25],
+    });
+    expect(bottom && {
+      baseline: bottom.baseline,
+      lineTops: bottom.lineTops,
+      metrics: bottom.metrics,
+      itemY: bottom.items.map((item) => item.y),
+    }).toEqual({
+      baseline: { kind: "explicit", y: 34.5 },
+      lineTops: [26, 38],
+      metrics: { width: 150, height: 34.5, depth: 15.5 },
+      itemY: [26, 38],
+    });
+  });
+
+  it("positions placeholder vlist items between supported paragraphs", () => {
+    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+    const placeholderStart = source.indexOf(String.raw`\includegraphics`);
+    const placeholderEnd = source.indexOf(String.raw` \par Beta`);
+    const supportedSource =
+      source.slice(0, placeholderStart) +
+      " ".repeat(placeholderEnd - placeholderStart) +
+      source.slice(placeholderEnd);
+    const parsed = parseSimpleTexParagraphIr(source);
+    const layoutIr = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+    const supported = layoutSimpleTexParagraph(supportedSource, {
+      paragraphId: "tex:vlist-placeholder-reference",
+      width: 150,
+      alignment: "ragged-right",
+    });
+
+    expect(parsed.unsupportedCommand).toBe(true);
+    expect(supported.supported).toBe(true);
+    const vlistLayout = supported.report && layoutTexVListFromParagraphReport(
+      layoutIr.vlist,
+      supported.report,
+      {
+        width: 150,
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
+
+    expect(vlistLayout && {
+      lineTops: vlistLayout.lineTops,
+      metrics: vlistLayout.metrics,
+      items: vlistLayout.items.map((item) => ({
+        kind: item.item.kind,
+        y: item.y,
+        metrics: item.metrics,
+        text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+        reason: item.item.kind === "placeholder" ? item.item.reason : undefined,
+        sourceSpan: item.item.sourceSpan,
+      })),
+    }).toEqual({
+      lineTops: [0, 24],
+      metrics: { width: 150, height: 8.5, depth: 27.5 },
+      items: [
+        {
+          kind: "paragraph",
+          y: 0,
+          metrics: expect.objectContaining({ height: expect.closeTo(6.94, 2) }),
+          text: "Alpha",
+          reason: undefined,
+          sourceSpan: { start: 0, end: 5 },
+        },
+        {
+          kind: "placeholder",
+          y: 12,
+          metrics: { width: 0, height: 8.5, depth: 3.5 },
+          text: undefined,
+          reason: "Unsupported TeX command in vertical mode.",
+          sourceSpan: { start: placeholderStart, end: placeholderEnd },
+        },
+        {
+          kind: "paragraph",
+          y: 24,
+          metrics: expect.objectContaining({ height: expect.closeTo(6.83, 2) }),
+          text: "Beta",
+          reason: undefined,
+          sourceSpan: { start: source.indexOf("Beta"), end: source.length },
+        },
+      ],
+    });
+  });
+
+  it("keeps whole-node fallback by default but supports opt-in placeholder fallback", () => {
+    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+    const defaultResult = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:vlist-placeholder-default-fallback",
+      width: 150,
+      alignment: "ragged-right",
+    });
+    const partialResult = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:vlist-placeholder-opt-in",
+      width: 150,
+      alignment: "ragged-right",
+      fallbackPolicy: "placeholder",
+    });
+
+    expect(defaultResult.supported).toBe(false);
+    expect(defaultResult.report).toBeNull();
+    expect(defaultResult.fallbackReason).toContain("TeX syntax");
+
+    expect(partialResult.supported).toBe(true);
+    expect(partialResult.fallbackReason).toBeNull();
+    expect(partialResult.report?.errors).toEqual([
+      "Paragraph contains TeX syntax that is not supported by the simple text path.",
+    ]);
+    expect(lineTexts(partialResult.report)).toEqual(["Alpha", "Beta"]);
+    expect(partialResult.vlistLayout?.lineTops).toEqual([0, 24]);
+    expect(partialResult.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      sourceSpan: item.item.sourceSpan,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, text: "Alpha", sourceSpan: { start: 0, end: 5 } },
+      {
+        kind: "placeholder",
+        y: 12,
+        text: undefined,
+        sourceSpan: {
+          start: source.indexOf(String.raw`\includegraphics`),
+          end: source.indexOf(String.raw` \par Beta`),
+        },
+      },
+      {
+        kind: "paragraph",
+        y: 24,
+        text: "Beta",
+        sourceSpan: { start: source.indexOf("Beta"), end: source.length },
+      },
+    ]);
+  });
+
+  it("keeps explicit vertical glue inside quote vbox metadata", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quote}\smallskip Alpha\end{quote}`,
+      {
+        paragraphId: "tex:vlist-quote-explicit-glue",
+        width: 150,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    const quote = result.vlistLayout?.items[0];
+    expect(quote?.item).toMatchObject({
+      kind: "vbox",
+      role: { kind: "quote", depth: 1 },
+    });
+    expect(quote?.children?.map((item) => ({
+      kind: item.item.kind,
+      size: item.item.kind === "glue" ? item.item.size : undefined,
+      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+    }))).toEqual([
+      { kind: "glue", size: 3, text: undefined },
+      { kind: "glue", size: 13, text: undefined },
+      { kind: "paragraph", size: undefined, text: "Alpha" },
+    ]);
+  });
+
+  it("reads TeX vlist box geometry from rendered SVG metadata", () => {
+    const boxes = [
+      makeVListBoxElement(
+        { left: 100, top: 40, right: 20, bottom: 10 },
+        {
+          "data-tex-vbox-role": "quote",
+          "data-tex-vbox-depth": "1",
+          "data-source-start": "7",
+          "data-source-end": "42",
+        }
+      ),
+      makeVListBoxElement(
+        { left: 10, top: 20, right: 70, bottom: 90 },
+        {
+          "data-tex-vbox-role": "list",
+          "data-tex-list-kind": "enumerate",
+          "data-tex-vbox-depth": "2",
+          "data-tex-list-label-depth": "1",
+          "data-tex-list-left-margin-em": "2.2",
+          "data-source-start": "12",
+          "data-source-end": "39",
+        }
+      ),
+    ];
+
+    expect(getKnuthPlassVListBoxGeometry({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === '[data-tex-vbox="true"]' ? boxes : [],
+      } as any,
+    })).toEqual([
+      {
+        role: "quote",
+        depth: 1,
+        listKind: null,
+        listLabelDepth: null,
+        listLeftMarginEm: null,
+        sourceStart: 7,
+        sourceEnd: 42,
+        clientLeft: 20,
+        clientRight: 100,
+        clientTop: 10,
+        clientBottom: 40,
+      },
+      {
+        role: "list",
+        depth: 2,
+        listKind: "enumerate",
+        listLabelDepth: 1,
+        listLeftMarginEm: 2.2,
+        sourceStart: 12,
+        sourceEnd: 39,
+        clientLeft: 10,
+        clientRight: 70,
+        clientTop: 20,
+        clientBottom: 90,
+      },
+    ]);
+  });
+
+  it("reads TeX placeholder geometry from rendered SVG metadata", () => {
+    const placeholders = [
+      makeVListBoxElement(
+        { left: 120, top: 44, right: 40, bottom: 12 },
+        {
+          "data-tex-placeholder-reason": "Unsupported TeX command in vertical mode.",
+          "data-source-start": "11",
+          "data-source-end": "48",
+        }
+      ),
+      makeVListBoxElement(
+        { left: 5, top: 5, right: 5, bottom: 20 },
+        {
+          "data-tex-placeholder-reason": "empty",
+          "data-source-start": "1",
+          "data-source-end": "2",
+        }
+      ),
+    ];
+
+    expect(getKnuthPlassPlaceholderGeometry({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === '[data-tex-placeholder="true"]' ? placeholders : [],
+      } as any,
+    })).toEqual([
+      {
+        reason: "Unsupported TeX command in vertical mode.",
+        sourceStart: 11,
+        sourceEnd: 48,
+        clientLeft: 40,
+        clientRight: 120,
+        clientTop: 12,
+        clientBottom: 44,
+      },
+    ]);
+  });
+
+  it("reads generic TeX vlist item geometry from rendered SVG metadata", () => {
+    const items = [
+      makeVListBoxElement(
+        { left: 20, top: 15, right: 80, bottom: 30 },
+        {
+          "data-tex-vlist-item": "hbox",
+          "data-source-start": "4",
+          "data-source-end": "13",
+        }
+      ),
+      makeVListBoxElement(
+        { left: 12, top: 34, right: 22, bottom: 39 },
+        {
+          "data-tex-vlist-item": "rule",
+        }
+      ),
+      makeVListBoxElement(
+        { left: 40, top: 44, right: 120, bottom: 76 },
+        {
+          "data-tex-vlist-item": "placeholder",
+          "data-tex-placeholder-reason": "Unsupported TeX command in vertical mode.",
+          "data-source-start": "11",
+          "data-source-end": "48",
+        }
+      ),
+    ];
+
+    expect(getKnuthPlassVListItemGeometry({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === "[data-tex-vlist-item]" ? items : [],
+      } as any,
+    })).toEqual([
+      {
+        kind: "hbox",
+        sourceStart: 4,
+        sourceEnd: 13,
+        placeholderReason: null,
+        clientLeft: 20,
+        clientRight: 80,
+        clientTop: 15,
+        clientBottom: 30,
+      },
+      {
+        kind: "rule",
+        sourceStart: null,
+        sourceEnd: null,
+        placeholderReason: null,
+        clientLeft: 12,
+        clientRight: 22,
+        clientTop: 34,
+        clientBottom: 39,
+      },
+      {
+        kind: "placeholder",
+        sourceStart: 11,
+        sourceEnd: 48,
+        placeholderReason: "Unsupported TeX command in vertical mode.",
+        clientLeft: 40,
+        clientRight: 120,
+        clientTop: 44,
+        clientBottom: 76,
+      },
     ]);
   });
 
@@ -862,7 +1585,7 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
-  it("reports natural LaTeX article list vertical spacing", () => {
+  it("positions natural LaTeX article list vertical spacing", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`Before \par \begin{itemize}\item Alpha \par More \item Beta \begin{itemize}\item Nested\end{itemize}\end{itemize} \par After`,
       {
@@ -882,14 +1605,43 @@ describe("simple TeX paragraph layout", () => {
       "–Nested",
       "After",
     ]);
-    expect(result.report?.lines.map((line) => line.verticalSkipBefore ?? 0)).toEqual([
+    expect(result.vlistLayout?.lineTops).toEqual([
       0,
-      10,
-      4,
-      8,
-      8,
-      10,
+      22,
+      38,
+      58,
+      78,
+      100,
     ]);
+  });
+
+  it("does not add TikZ forced-break paragraph indent inside list item bodies", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{enumerate}\item option precise model \textit{shape}. \item Language double double. \\[4pt] Result reader metric computer baseline language. \item Visible precise gamma shape epsilon. \par Control gamma sentence screen.\end{enumerate}`,
+      {
+        paragraphId: "tex:list-forced-break-indent",
+        width: 220,
+        alignment: "ragged-left",
+        parindent: 15,
+        tikzTextWidthNode: true,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "1.option precise model shape.",
+      "2.Language double double.",
+      "Result reader metric computer baseline lan-",
+      "guage.",
+      "3.Visible precise gamma shape epsilon.",
+      "Control gamma sentence screen.",
+    ]);
+    expect(result.report?.lines[1]?.break).toMatchObject({
+      kind: "forced",
+      lineLeading: "4pt",
+    });
+    expect(result.report?.lines[2]?.xStart).toBeCloseTo(25, 6);
   });
 
   it("uses LaTeX list ragged-right stretch for item line breaking", () => {

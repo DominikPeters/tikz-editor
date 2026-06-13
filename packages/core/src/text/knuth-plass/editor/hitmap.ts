@@ -39,6 +39,7 @@ type SvgOwnerLike = {
   viewBox?: { baseVal?: { width?: number } };
 };
 type Element = {
+  getAttribute?(name: string): string | null;
   getBoundingClientRect?(): ClientRectLike;
   getScreenCTM?(): ScreenMatrixLike | null;
   ownerSVGElement?: SvgOwnerLike | null;
@@ -116,6 +117,53 @@ export interface LineRangeFromPointResult extends ResultBase {
   lineIndex: number | null;
   lineStartOffset: number | null;
   lineEndOffset: number | null;
+}
+
+export interface VListBoxGeometry {
+  role: 'quote' | 'list' | null;
+  depth: number | null;
+  listKind: string | null;
+  listLabelDepth: number | null;
+  listLeftMarginEm: number | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface VListBoxGeometryParams {
+  containerElement: Element;
+}
+
+export interface VListItemGeometry {
+  kind: 'hbox' | 'rule' | 'placeholder' | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  placeholderReason: string | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface VListItemGeometryParams {
+  containerElement: Element;
+}
+
+export interface PlaceholderGeometry {
+  reason: string | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface PlaceholderGeometryParams {
+  containerElement: Element;
 }
 
 export interface SelectionRect {
@@ -205,6 +253,13 @@ interface ContainerGeometrySnapshot {
   matrixD: number;
   matrixE: number;
   matrixF: number;
+}
+
+interface NormalizedClientRect {
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
 }
 
 const EPSILON = 1e-6;
@@ -371,6 +426,138 @@ function collectLineGeometryElements(
   }
 
   return null;
+}
+
+export function getKnuthPlassVListBoxGeometry(
+  params: VListBoxGeometryParams | null | undefined
+): VListBoxGeometry[] {
+  const containerElement = params?.containerElement;
+  if (!containerElement || typeof containerElement !== 'object') {
+    return [];
+  }
+  const elements =
+    typeof containerElement.querySelectorAll === 'function'
+      ? Array.from(containerElement.querySelectorAll('[data-tex-vbox="true"]'))
+      : [];
+  const boxes: VListBoxGeometry[] = [];
+  for (const element of elements) {
+    const bounds = normalizedClientRect(element);
+    if (!bounds) {
+      continue;
+    }
+    boxes.push({
+      role: texVListBoxRole(element.getAttribute?.('data-tex-vbox-role') ?? null),
+      depth: finiteAttributeNumber(element, 'data-tex-vbox-depth'),
+      listKind: element.getAttribute?.('data-tex-list-kind') ?? null,
+      listLabelDepth: finiteAttributeNumber(element, 'data-tex-list-label-depth'),
+      listLeftMarginEm: finiteAttributeNumber(element, 'data-tex-list-left-margin-em'),
+      sourceStart: finiteAttributeNumber(element, 'data-source-start'),
+      sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
+      ...bounds,
+    });
+  }
+  return boxes;
+}
+
+export function getKnuthPlassVListItemGeometry(
+  params: VListItemGeometryParams | null | undefined
+): VListItemGeometry[] {
+  const containerElement = params?.containerElement;
+  if (!containerElement || typeof containerElement !== 'object') {
+    return [];
+  }
+  const elements =
+    typeof containerElement.querySelectorAll === 'function'
+      ? Array.from(containerElement.querySelectorAll('[data-tex-vlist-item]'))
+      : [];
+  const items: VListItemGeometry[] = [];
+  for (const element of elements) {
+    const bounds = normalizedClientRect(element);
+    if (!bounds) {
+      continue;
+    }
+    items.push({
+      kind: texVListItemKind(element.getAttribute?.('data-tex-vlist-item') ?? null),
+      sourceStart: finiteAttributeNumber(element, 'data-source-start'),
+      sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
+      placeholderReason: element.getAttribute?.('data-tex-placeholder-reason') ?? null,
+      ...bounds,
+    });
+  }
+  return items;
+}
+
+export function getKnuthPlassPlaceholderGeometry(
+  params: PlaceholderGeometryParams | null | undefined
+): PlaceholderGeometry[] {
+  const containerElement = params?.containerElement;
+  if (!containerElement || typeof containerElement !== 'object') {
+    return [];
+  }
+  const elements =
+    typeof containerElement.querySelectorAll === 'function'
+      ? Array.from(containerElement.querySelectorAll('[data-tex-placeholder="true"]'))
+      : [];
+  const placeholders: PlaceholderGeometry[] = [];
+  for (const element of elements) {
+    const bounds = normalizedClientRect(element);
+    if (!bounds) {
+      continue;
+    }
+    placeholders.push({
+      reason: element.getAttribute?.('data-tex-placeholder-reason') ?? null,
+      sourceStart: finiteAttributeNumber(element, 'data-source-start'),
+      sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
+      ...bounds,
+    });
+  }
+  return placeholders;
+}
+
+function texVListBoxRole(value: string | null): VListBoxGeometry['role'] {
+  return value === 'quote' || value === 'list' ? value : null;
+}
+
+function texVListItemKind(value: string | null): VListItemGeometry['kind'] {
+  return value === 'hbox' || value === 'rule' || value === 'placeholder'
+    ? value
+    : null;
+}
+
+function normalizedClientRect(element: Element): NormalizedClientRect | null {
+  const rect = element.getBoundingClientRect?.();
+  if (!rect) {
+    return null;
+  }
+  const left = Number(rect.left);
+  const right = Number(rect.right);
+  const top = Number(rect.top);
+  const bottom = Number(rect.bottom);
+  if (
+    !Number.isFinite(left) ||
+    !Number.isFinite(right) ||
+    !Number.isFinite(top) ||
+    !Number.isFinite(bottom) ||
+    Math.abs(right - left) <= EPSILON ||
+    Math.abs(bottom - top) <= EPSILON
+  ) {
+    return null;
+  }
+  return {
+    clientLeft: Math.min(left, right),
+    clientRight: Math.max(left, right),
+    clientTop: Math.min(top, bottom),
+    clientBottom: Math.max(top, bottom),
+  };
+}
+
+function finiteAttributeNumber(element: Element, name: string): number | null {
+  const raw = element.getAttribute?.(name);
+  if (raw == null || raw === '') {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }
 
 function readLineGeometry(

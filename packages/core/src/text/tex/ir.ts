@@ -1,4 +1,5 @@
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
+import { parseLength } from "../../semantic/coords/parse-length.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
@@ -31,6 +32,13 @@ export type SimpleTexFontDeclarationName =
   | "normalfont";
 export type SimpleTexEnvironmentName = "quote" | "itemize" | "enumerate";
 export type SimpleTexListKind = "itemize" | "enumerate";
+export type SimpleTexVerticalGlueCommandName =
+  | "vspace"
+  | "vskip"
+  | "smallskip"
+  | "medskip"
+  | "bigskip"
+  | "vfill";
 
 export interface SimpleTexFontState {
   readonly family: TexFontFamily;
@@ -120,6 +128,25 @@ export interface SimpleTexItemNode extends SimpleTexSourceRange {
   readonly labelSourceEnd?: number;
 }
 
+export interface SimpleTexVerticalGlueNode extends SimpleTexSourceRange {
+  readonly kind: "vertical-glue";
+  readonly text: string;
+  readonly command: SimpleTexVerticalGlueCommandName;
+  readonly size: number;
+  readonly stretch?: number;
+  readonly shrink?: number;
+  readonly stretchOrder?: "normal" | "fil" | "fill" | "filll";
+  readonly shrinkOrder?: "normal" | "fil" | "fill" | "filll";
+}
+
+export interface SimpleTexVerticalRuleNode extends SimpleTexSourceRange {
+  readonly kind: "vertical-rule";
+  readonly text: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}
+
 export type SimpleTexInlineNode =
   | SimpleTexTextNode
   | SimpleTexSpaceNode
@@ -134,6 +161,8 @@ export type SimpleTexControlNode =
   | SimpleTexAlignmentNode
   | SimpleTexEnvironmentBoundaryNode
   | SimpleTexItemNode
+  | SimpleTexVerticalGlueNode
+  | SimpleTexVerticalRuleNode
   | SimpleTexUnsupportedCommandNode;
 
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
@@ -159,6 +188,56 @@ export interface SimpleTexParagraphBlock {
   readonly quoteDepth: number;
   readonly listContext?: SimpleTexListContext;
 }
+
+export interface SimpleTexParagraphBlockItem {
+  readonly kind: "paragraph";
+  readonly blockIndex: number;
+  readonly block: SimpleTexParagraphBlock;
+}
+
+export interface SimpleTexVerticalGlueBlockItem extends SimpleTexSourceRange {
+  readonly kind: "vertical-glue";
+  readonly text: string;
+  readonly command: SimpleTexVerticalGlueCommandName;
+  readonly size: number;
+  readonly stretch?: number;
+  readonly shrink?: number;
+  readonly stretchOrder?: "normal" | "fil" | "fill" | "filll";
+  readonly shrinkOrder?: "normal" | "fil" | "fill" | "filll";
+  readonly quoteDepth: number;
+  readonly listScope?: SimpleTexListScope;
+}
+
+export interface SimpleTexVerticalRuleBlockItem extends SimpleTexSourceRange {
+  readonly kind: "vertical-rule";
+  readonly text: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly quoteDepth: number;
+  readonly listScope?: SimpleTexListScope;
+}
+
+export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
+  readonly kind: "placeholder";
+  readonly text: string;
+  readonly reason: string;
+  readonly quoteDepth: number;
+  readonly listScope?: SimpleTexListScope;
+}
+
+export interface SimpleTexListScope {
+  readonly kind: SimpleTexListKind;
+  readonly depth: number;
+  readonly labelDepth: number;
+  readonly totalLeftMarginEm: number;
+}
+
+export type SimpleTexBlockItem =
+  | SimpleTexParagraphBlockItem
+  | SimpleTexVerticalGlueBlockItem
+  | SimpleTexVerticalRuleBlockItem
+  | SimpleTexPlaceholderBlockItem;
 
 export interface SimpleTexListContext {
   readonly kind: SimpleTexListKind;
@@ -190,6 +269,8 @@ export interface SimpleTexParagraphSegment {
 
 export interface SimpleTexParagraphBlockScanResult {
   readonly blocks: readonly SimpleTexParagraphBlock[];
+  readonly items: readonly SimpleTexBlockItem[];
+  readonly partialFallbackSupported: boolean;
   readonly unsupportedCommand: boolean;
 }
 
@@ -197,6 +278,8 @@ export interface SimpleTexParagraphIr {
   readonly kind: "simple-tex-paragraph";
   readonly nodes: readonly SimpleTexNode[];
   readonly blocks: readonly SimpleTexParagraphBlock[];
+  readonly items: readonly SimpleTexBlockItem[];
+  readonly partialFallbackSupported: boolean;
   readonly unsupportedCommand: boolean;
 }
 
@@ -215,6 +298,12 @@ const whitespacePattern = /[ \n]+/;
 const paragraphBreakPattern = /^\n(?: *\n)+/;
 const lineLeadingOptionPattern =
   /^\[\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)\s*\]/i;
+const texLengthPattern =
+  String.raw`[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)`;
+const vskipGluePattern = new RegExp(
+  String.raw`^\\vskip\s*(${texLengthPattern})(?:\s+plus\s+(${texLengthPattern}))?(?:\s+minus\s+(${texLengthPattern}))?`,
+  "i"
+);
 const defaultSimpleTexFontState: SimpleTexFontState = {
   family: "roman",
   series: "medium",
@@ -281,6 +370,10 @@ function buildSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
     kind: "simple-tex-paragraph",
     nodes: nodeScan.nodes,
     blocks: blockScan.blocks,
+    items: blockScan.items,
+    partialFallbackSupported:
+      blockScan.partialFallbackSupported &&
+      blockScan.items.some((item) => item.kind === "placeholder"),
     unsupportedCommand: nodeScan.unsupportedCommand || blockScan.unsupportedCommand,
   };
 }
@@ -314,6 +407,8 @@ function scanSimpleTexIrNodes(
       const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
       const environmentBoundary = scanSimpleTexEnvironmentBoundary(text, index);
       const itemCommand = scanSimpleTexItemCommand(text, index, sourceOffset);
+      const verticalGlue = scanSimpleTexVerticalGlueCommand(text, index, sourceOffset);
+      const verticalRule = scanSimpleTexVerticalRuleCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (environmentBoundary) {
@@ -332,6 +427,18 @@ function scanSimpleTexIrNodes(
         nodes.push(itemCommand.node);
         unsupportedCommand ||= itemCommand.unsupportedCommand;
         index = itemCommand.end;
+        continue;
+      }
+      if (verticalGlue) {
+        nodes.push(verticalGlue.node);
+        unsupportedCommand ||= verticalGlue.unsupportedCommand;
+        index = verticalGlue.end;
+        continue;
+      }
+      if (verticalRule) {
+        nodes.push(verticalRule.node);
+        unsupportedCommand ||= verticalRule.unsupportedCommand;
+        index = verticalRule.end;
         continue;
       }
 
@@ -472,6 +579,198 @@ function scanSimpleTexIrNodes(
   }
 
   return { nodes, unsupportedCommand };
+}
+
+function scanSimpleTexVerticalGlueCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexVerticalGlueNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  for (const preset of [
+    { command: "smallskip", size: 3, stretch: 1, shrink: 1 },
+    { command: "medskip", size: 6, stretch: 2, shrink: 2 },
+    { command: "bigskip", size: 12, stretch: 4, shrink: 4 },
+  ] as const) {
+    const end = scanSimpleTexControlWord(text, start, preset.command);
+    if (end === null) {
+      continue;
+    }
+    return {
+      node: {
+        kind: "vertical-glue",
+        text: text.slice(start, end),
+        command: preset.command,
+        sourceStart: sourceOffset + start,
+        sourceEnd: sourceOffset + end,
+        size: preset.size,
+        stretch: preset.stretch,
+        shrink: preset.shrink,
+        stretchOrder: "normal",
+        shrinkOrder: "normal",
+      },
+      end,
+      unsupportedCommand: false,
+    };
+  }
+
+  const vfillEnd = scanSimpleTexControlWord(text, start, "vfill");
+  if (vfillEnd !== null) {
+    return {
+      node: {
+        kind: "vertical-glue",
+        text: text.slice(start, vfillEnd),
+        command: "vfill",
+        sourceStart: sourceOffset + start,
+        sourceEnd: sourceOffset + vfillEnd,
+        size: 0,
+        stretch: 1,
+        stretchOrder: "fill",
+      },
+      end: vfillEnd,
+      unsupportedCommand: false,
+    };
+  }
+
+  const vspaceEnd = scanSimpleTexControlWord(text, start, "vspace");
+  if (vspaceEnd !== null) {
+    let argumentStart = vspaceEnd;
+    if (text[argumentStart] === "*") {
+      argumentStart += 1;
+    }
+    while (text[argumentStart] === " " || text[argumentStart] === "\n") {
+      argumentStart += 1;
+    }
+    if (text[argumentStart] !== "{") {
+      return null;
+    }
+    const argumentEnd = findBalancedSimpleTexGroupEnd(text, argumentStart);
+    if (argumentEnd === null) {
+      return null;
+    }
+    const rawLength = text.slice(argumentStart + 1, argumentEnd - 1);
+    const parsed = parseLength(rawLength, "pt");
+    return {
+      node: {
+        kind: "vertical-glue",
+        text: text.slice(start, argumentEnd),
+        command: "vspace",
+        sourceStart: sourceOffset + start,
+        sourceEnd: sourceOffset + argumentEnd,
+        size: parsed ?? 0,
+        stretchOrder: "normal",
+        shrinkOrder: "normal",
+      },
+      end: argumentEnd,
+      unsupportedCommand: parsed === null,
+    };
+  }
+
+  const vskipMatch = vskipGluePattern.exec(text.slice(start));
+  if (vskipMatch) {
+    const full = vskipMatch[0] ?? "";
+    const size = parseLength(vskipMatch[1] ?? "", "pt");
+    const stretch = vskipMatch[2] ? parseLength(vskipMatch[2], "pt") : undefined;
+    const shrink = vskipMatch[3] ? parseLength(vskipMatch[3], "pt") : undefined;
+    return {
+      node: {
+        kind: "vertical-glue",
+        text: text.slice(start, start + full.length),
+        command: "vskip",
+        sourceStart: sourceOffset + start,
+        sourceEnd: sourceOffset + start + full.length,
+        size: size ?? 0,
+        stretch: stretch ?? undefined,
+        shrink: shrink ?? undefined,
+        stretchOrder: stretch !== undefined ? "normal" : undefined,
+        shrinkOrder: shrink !== undefined ? "normal" : undefined,
+      },
+      end: start + full.length,
+      unsupportedCommand:
+        size === null ||
+        (vskipMatch[2] !== undefined && stretch === null) ||
+        (vskipMatch[3] !== undefined && shrink === null),
+    };
+  }
+
+  return null;
+}
+
+function scanSimpleTexVerticalRuleCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexVerticalRuleNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const hruleEnd = scanSimpleTexControlWord(text, start, "hrule");
+  if (hruleEnd === null) {
+    return null;
+  }
+
+  let cursor = skipSimpleTexControlWordSpaces(text, hruleEnd);
+  const dimensions: {
+    width?: number | null;
+    height?: number | null;
+    depth?: number | null;
+  } = {};
+  let parsedAnyDimension = false;
+  while (cursor < text.length) {
+    const keywordMatch = /^(width|height|depth)(?=[^A-Za-z]|$)/i.exec(text.slice(cursor));
+    if (!keywordMatch) {
+      break;
+    }
+    const keyword = keywordMatch[1]?.toLowerCase() as "width" | "height" | "depth";
+    cursor += keyword.length;
+    cursor = skipSimpleTexControlWordSpaces(text, cursor);
+    const lengthMatch = new RegExp(`^(${texLengthPattern})`, "i").exec(text.slice(cursor));
+    if (!lengthMatch) {
+      return {
+        node: {
+          kind: "vertical-rule",
+          text: text.slice(start, cursor),
+          sourceStart: sourceOffset + start,
+          sourceEnd: sourceOffset + cursor,
+          width: 0,
+          height: 0,
+          depth: 0,
+        },
+        end: cursor,
+        unsupportedCommand: true,
+      };
+    }
+    const rawLength = lengthMatch[1] ?? "";
+    dimensions[keyword] = parseLength(rawLength, "pt");
+    cursor += rawLength.length;
+    cursor = skipSimpleTexControlWordSpaces(text, cursor);
+    parsedAnyDimension = true;
+  }
+
+  const supported =
+    parsedAnyDimension &&
+    typeof dimensions.width === "number" &&
+    typeof dimensions.height === "number" &&
+    dimensions.width !== null &&
+    dimensions.height !== null &&
+    dimensions.depth !== null;
+  return {
+    node: {
+      kind: "vertical-rule",
+      text: text.slice(start, cursor),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + cursor,
+      width: dimensions.width ?? 0,
+      height: dimensions.height ?? 0,
+      depth: dimensions.depth ?? 0,
+    },
+    end: cursor,
+    unsupportedCommand: !supported,
+  };
 }
 
 function scanSimpleTexEnvironmentBoundary(
@@ -858,7 +1157,40 @@ function scanUnsupportedControlSequenceEnd(text: string, start: number): number 
   while (index < text.length && /[A-Za-z]/.test(text[index] ?? "")) {
     index += 1;
   }
-  return index > start + 1 ? index : Math.min(text.length, start + 2);
+  if (index === start + 1) {
+    return Math.min(text.length, start + 2);
+  }
+  return scanUnsupportedControlSequenceArgumentsEnd(text, index);
+}
+
+function scanUnsupportedControlSequenceArgumentsEnd(text: string, start: number): number {
+  let end = start;
+  let index = start;
+  while (index < text.length) {
+    while (text[index] === " " || text[index] === "\n") {
+      index += 1;
+    }
+    if (text[index] === "{") {
+      const groupEnd = findBalancedSimpleTexGroupEnd(text, index);
+      if (groupEnd === null) {
+        break;
+      }
+      end = groupEnd;
+      index = groupEnd;
+      continue;
+    }
+    if (text[index] === "[") {
+      const optionEnd = findBalancedSimpleTexOptionalArgumentEnd(text, index);
+      if (optionEnd === null) {
+        break;
+      }
+      end = optionEnd;
+      index = optionEnd;
+      continue;
+    }
+    break;
+  }
+  return end;
 }
 
 function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode {
@@ -889,7 +1221,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
   sourceNodes: readonly SimpleTexNode[]
 ): SimpleTexParagraphBlockScanResult {
   const blocks: SimpleTexParagraphBlock[] = [];
+  const items: SimpleTexBlockItem[] = [];
   let unsupportedCommand = false;
+  let abortScan = false;
   interface ActiveSimpleTexList {
     readonly kind: SimpleTexListKind;
     readonly depth: number;
@@ -949,6 +1283,19 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const sourceStartForNodeIndex = (index: number): number =>
     sourceNodes[index]?.sourceStart ?? text.length;
 
+  const currentSimpleTexListScope = (): SimpleTexListScope | undefined => {
+    const activeList = listStack.at(-1);
+    if (!activeList) {
+      return undefined;
+    }
+    return {
+      kind: activeList.kind,
+      depth: activeList.depth,
+      labelDepth: activeList.labelDepth,
+      totalLeftMarginEm: activeList.totalLeftMarginEm,
+    };
+  };
+
   const pushBlock = (
     rawStart: number,
     rawEnd: number,
@@ -969,9 +1316,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const listContext = currentSimpleTexListContext();
       if (listStack.length > 0 && !listContext) {
         unsupportedCommand = true;
+        abortScan = true;
         return;
       }
-      blocks.push({
+      const block: SimpleTexParagraphBlock = {
         text: text.slice(start, end),
         sourceStart: start,
         sourceEnd: end,
@@ -981,6 +1329,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
         alignmentProfile,
         quoteDepth,
         listContext,
+      };
+      blocks.push(block);
+      items.push({
+        kind: "paragraph",
+        blockIndex: blocks.length - 1,
+        block,
       });
       pendingListLabel = undefined;
       pendingListShowLabel = false;
@@ -1025,9 +1379,33 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let index = prefix.start;
   while (index < sourceNodes.length) {
     const node = sourceNodes[index];
-    if (!node || node.kind === "unsupported-command") {
+    if (!node) {
       unsupportedCommand = true;
+      abortScan = true;
       break;
+    }
+
+    if (node.kind === "unsupported-command") {
+      if (hasNonSpaceSourceText(text, blockStart, node.sourceStart)) {
+        unsupportedCommand = true;
+        abortScan = true;
+        break;
+      }
+      items.push({
+        kind: "placeholder",
+        text: node.text,
+        reason: "Unsupported TeX command in vertical mode.",
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        quoteDepth: currentQuoteDepth,
+        listScope: currentSimpleTexListScope(),
+      });
+      unsupportedCommand = true;
+      prefix = consumeParagraphPrefix(index + 1);
+      blockStart = sourceStartForNodeIndex(prefix.start);
+      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      index = prefix.start;
+      continue;
     }
 
     if (node.kind === "paragraph-break") {
@@ -1055,7 +1433,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignment,
         prefix.alignmentProfile
       );
-      if (unsupportedCommand) {
+      if (abortScan) {
         break;
       }
       if (node.boundary === "begin") {
@@ -1069,12 +1447,14 @@ function buildSimpleTexParagraphBlocksFromNodes(
         const openName = environmentStack.pop();
         if (openName !== node.name) {
           unsupportedCommand = true;
+          abortScan = true;
           break;
         }
         if (node.name === "quote") {
           currentQuoteDepth -= 1;
           if (currentQuoteDepth < 0) {
             unsupportedCommand = true;
+            abortScan = true;
             break;
           }
         } else {
@@ -1099,12 +1479,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignment,
         prefix.alignmentProfile
       );
-      if (unsupportedCommand) {
+      if (abortScan) {
         break;
       }
       const activeList = listStack.at(-1);
       if (!activeList) {
         unsupportedCommand = true;
+        abortScan = true;
         break;
       }
       activeList.itemIndex += 1;
@@ -1123,19 +1504,72 @@ function buildSimpleTexParagraphBlocksFromNodes(
       continue;
     }
 
+    if (node.kind === "vertical-glue") {
+      if (hasNonSpaceSourceText(text, blockStart, node.sourceStart)) {
+        unsupportedCommand = true;
+        abortScan = true;
+        break;
+      }
+      items.push({
+        kind: "vertical-glue",
+        text: node.text,
+        command: node.command,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        size: node.size,
+        stretch: node.stretch,
+        shrink: node.shrink,
+        stretchOrder: node.stretchOrder,
+        shrinkOrder: node.shrinkOrder,
+        quoteDepth: currentQuoteDepth,
+        listScope: currentSimpleTexListScope(),
+      });
+      prefix = consumeParagraphPrefix(index + 1);
+      blockStart = sourceStartForNodeIndex(prefix.start);
+      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      index = prefix.start;
+      continue;
+    }
+
+    if (node.kind === "vertical-rule") {
+      if (hasNonSpaceSourceText(text, blockStart, node.sourceStart)) {
+        unsupportedCommand = true;
+        abortScan = true;
+        break;
+      }
+      items.push({
+        kind: "vertical-rule",
+        text: node.text,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        width: node.width,
+        height: node.height,
+        depth: node.depth,
+        quoteDepth: currentQuoteDepth,
+        listScope: currentSimpleTexListScope(),
+      });
+      prefix = consumeParagraphPrefix(index + 1);
+      blockStart = sourceStartForNodeIndex(prefix.start);
+      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      index = prefix.start;
+      continue;
+    }
+
     if (node.kind === "noindent" || node.kind === "alignment") {
       unsupportedCommand = true;
+      abortScan = true;
       break;
     }
 
     index += 1;
   }
-  if (!unsupportedCommand) {
+  if (!abortScan) {
     if (currentQuoteDepth !== 0 || listStack.length !== 0 || environmentStack.length !== 0) {
       unsupportedCommand = true;
+      abortScan = true;
     }
   }
-  if (!unsupportedCommand) {
+  if (!abortScan) {
     pushBlock(
       blockStart,
       text.length,
@@ -1145,7 +1579,22 @@ function buildSimpleTexParagraphBlocksFromNodes(
       prefix.alignmentProfile
     );
   }
-  return { blocks, unsupportedCommand };
+  return {
+    blocks,
+    items,
+    partialFallbackSupported: unsupportedCommand && !abortScan,
+    unsupportedCommand,
+  };
+}
+
+function hasNonSpaceSourceText(text: string, start: number, end: number): boolean {
+  for (let index = start; index < end; index += 1) {
+    const char = text[index];
+    if (char !== " " && char !== "\n") {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function splitSimpleTexParagraphSegments(

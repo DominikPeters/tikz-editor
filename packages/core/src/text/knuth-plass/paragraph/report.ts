@@ -49,7 +49,6 @@ export interface LineReport {
   descent: number;
   xStart: number;
   xEnd: number;
-  verticalSkipBefore?: number;
   break: BreakReport | null;
   segments: LineSegmentReport[];
 }

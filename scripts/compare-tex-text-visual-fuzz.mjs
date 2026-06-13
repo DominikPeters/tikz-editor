@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, vertical-glue, rule, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -171,8 +171,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures", "quote", "style", "list", "mixed"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, style, list, or mixed.");
+  if (!["broad", "ligatures", "quote", "style", "list", "vertical-glue", "rule", "mixed"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, quote, style, list, vertical-glue, rule, or mixed.");
   }
   return options;
 }
@@ -468,8 +468,76 @@ function generateListCase(index, random) {
   };
 }
 
+function generateVerticalGlueCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [120, 150, 180, 220, 260, 320];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 7;
+  let text;
+  if (feature === 0) {
+    text = `${paragraph(random, 1)} \\par \\smallskip ${paragraph(random, 1)}`;
+  } else if (feature === 1) {
+    text = `${paragraph(random, 1)} \\par \\medskip \\noindent ${paragraph(random, 1)}`;
+  } else if (feature === 2) {
+    text = `${paragraph(random, 1)} \\par \\bigskip ${paragraph(random, 1)}`;
+  } else if (feature === 3) {
+    text = `${paragraph(random, 1)} \\par \\vspace{${choice(random, [-4, -2, 3, 5, 7, 10])}pt} ${paragraph(random, 1)}`;
+  } else if (feature === 4) {
+    text = `${paragraph(random, 1)} \\par \\vskip ${choice(random, [-3, -1, 3, 5, 7])}pt plus ${choice(random, [1, 2])}pt minus 1pt ${paragraph(random, 1)}`;
+  } else if (feature === 5) {
+    text = `\\begin{quote}\\smallskip ${paragraph(random, 1)} \\par \\vspace{${choice(random, [-2, 3, 6])}pt} ${paragraph(random, 1)}\\end{quote}`;
+  } else {
+    text = `${paragraph(random, 1)} \\par ${listEnvironment("itemize", [
+      `\\smallskip ${listItemText(random, index)}`,
+      `\\vspace{${choice(random, [-2, 3, 5])}pt} ${listItemText(random, index + 1)}`,
+    ])} \\par ${paragraph(random, 1)}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "vertical-glue",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
+function generateRuleCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [120, 150, 180, 220, 260, 320];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10, 15]);
+  const ruleWidth = choice(random, [18, 24, 36, 48, 72]);
+  const ruleHeight = choice(random, [0.4, 1, 2, 3]);
+  const ruleDepth = choice(random, [0, 0.5, 1]);
+  const rule = `\\hrule width ${ruleWidth}pt height ${ruleHeight}pt depth ${ruleDepth}pt`;
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = `${paragraph(random, 1)} \\par ${rule} ${paragraph(random, 1)}`;
+  } else if (feature === 1) {
+    text = `${paragraph(random, 1)} \\par \\smallskip ${rule} \\smallskip ${paragraph(random, 1)}`;
+  } else if (feature === 2) {
+    text = `\\begin{quote} ${paragraph(random, 1)} \\par ${rule} ${paragraph(random, 1)} \\end{quote}`;
+  } else {
+    text = `${paragraph(random, 1)} \\par ${listEnvironment("itemize", [
+      `${rule} ${listItemText(random, index)}`,
+      listItemText(random, index + 1),
+    ])}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "rule",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateMixedFeatureCase(index, random) {
-  const feature = index % 5;
+  const feature = index % 6;
   if (feature === 0) {
     const generated = generateListCase(index, random);
     return {
@@ -508,6 +576,13 @@ function generateMixedFeatureCase(index, random) {
       ])}`,
     };
   }
+  if (feature === 4) {
+    const generated = generateVerticalGlueCase(index, random);
+    return {
+      ...generated,
+      feature: "mixed-vertical-glue",
+    };
+  }
   return {
     ...generateCase(index, random),
     feature: "mixed-basic",
@@ -526,6 +601,12 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "list") {
     return generateListCase(index, random);
+  }
+  if (mode === "vertical-glue") {
+    return generateVerticalGlueCase(index, random);
+  }
+  if (mode === "rule") {
+    return generateRuleCase(index, random);
   }
   if (mode === "mixed") {
     return generateMixedFeatureCase(index, random);
@@ -577,19 +658,42 @@ function renderGlyphCode(code, font, x, baseline) {
   return `<path d="${escapeXml(path)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})" />`;
 }
 
+function renderVListRules(items) {
+  const pieces = [];
+  for (const item of items ?? []) {
+    if (item.item?.kind === "rule") {
+      const width = item.metrics.width * texPointToSvgPoint;
+      const height = (item.metrics.height + item.metrics.depth) * texPointToSvgPoint;
+      pieces.push(
+        `<rect x="${formatPt(item.x * texPointToSvgPoint)}" y="${formatPt(item.y * texPointToSvgPoint)}" width="${formatPt(width)}" height="${formatPt(height)}" fill="black" />`
+      );
+      continue;
+    }
+    if (item.children?.length) {
+      pieces.push(...renderVListRules(item.children));
+    }
+  }
+  return pieces;
+}
+
 function lineLeadingPt(lineLeading, parseLength) {
   return lineLeading ? parseLength(lineLeading, "pt") ?? 0 : 0;
 }
 
-function computeLineTops(report, parseLength) {
+function computeReportLineTops(report, parseLength) {
   const tops = [];
   let cursor = 0;
   for (const line of report.lines) {
-    cursor += Math.max(0, line.verticalSkipBefore ?? 0);
+    cursor += Math.max(0, line.verticalSkipBefore ?? 0) * texPointToSvgPoint;
     tops[line.lineIndex] = cursor;
-    cursor += lineHeightPt + lineLeadingPt(line.break?.lineLeading, parseLength);
+    cursor += lineHeightPt + lineLeadingPt(line.break?.lineLeading, parseLength) * texPointToSvgPoint;
   }
   return tops;
+}
+
+function computeLineTops(layout, parseLength) {
+  return layout.vlistLayout?.lineTops.map((top) => top * texPointToSvgPoint) ??
+    computeReportLineTops(layout.report, parseLength);
 }
 
 function reportLineText(line) {
@@ -598,12 +702,13 @@ function reportLineText(line) {
 
 function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
   const font = deps.computerModernTexMetricProvider.resolveFont({ atPt: defaultTextFontSize });
-  const lineTops = computeLineTops(layout.report, deps.parseLength);
+  const lineTops = computeLineTops(layout, deps.parseLength);
   const pieces = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${formatPt(pageWidth)}pt" height="${formatPt(pageHeight)}pt" viewBox="0 0 ${formatPt(pageWidth)} ${formatPt(pageHeight)}">`,
     `<rect x="0" y="0" width="${formatPt(pageWidth)}" height="${formatPt(pageHeight)}" fill="white" />`,
     `<g fill="black">`,
   ];
+  pieces.push(...renderVListRules(layout.vlistLayout?.items));
   for (const line of layout.report.lines) {
     const top = lineTops[line.lineIndex] ?? 0;
     const left = Number.isFinite(line.xStart) ? line.xStart : 0;
@@ -645,7 +750,7 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
 
 function buildOursTrace(layout, deps) {
   const font = deps.computerModernTexMetricProvider.resolveFont({ atPt: defaultTextFontSize });
-  const lineTops = computeLineTops(layout.report, deps.parseLength);
+  const lineTops = computeLineTops(layout, deps.parseLength);
   return {
     lines: layout.report.lines.map((line) => {
       const baselineY = (lineTops[line.lineIndex] ?? 0) + firstLineAscentPt;
@@ -1386,7 +1491,7 @@ async function main() {
     }
     const oursTrace = buildOursTrace(layout, deps);
 
-    const lineTops = computeLineTops(layout.report, deps.parseLength);
+    const lineTops = computeLineTops(layout, deps.parseLength);
     const pageWidth = Math.max(360, caseData.width + 20);
     const pageHeight = Math.max(180, (lineTops.at(-1) ?? 0) + lineHeightPt + 20);
     const widthPx = Math.ceil(pageWidth * options.scale);

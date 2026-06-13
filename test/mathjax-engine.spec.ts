@@ -407,6 +407,21 @@ describe("mathjax node text engine", () => {
       expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
       expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
     }
+    const grouped = engine.measure({
+      text: String.raw`\begin{quote}\begin{enumerate}\item Alpha\item Beta\end{enumerate}\end{quote}`,
+      textWidthPt: 120,
+      alignment: "justified",
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+    const groupedBody = engine.renderFromCache(grouped?.cacheKey ?? "")?.body ?? "";
+    expect(groupedBody).toContain('data-tex-vbox="true"');
+    expect(groupedBody).toContain('data-tex-vbox-role="quote"');
+    expect(groupedBody).toContain('data-tex-vbox-role="list"');
+    expect(groupedBody).toContain('data-tex-list-kind="enumerate"');
+    expect(groupedBody).toContain('data-mjx-linebox="true"');
     expect(texCalls).toHaveLength(callsBeforeMeasure);
   });
 
@@ -429,6 +444,131 @@ describe("mathjax node text engine", () => {
 
     expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
     expect(measured?.paragraphId).not.toMatch(/^tex:/);
+  });
+
+  it("exposes placeholder fallback SVG metadata through the debug renderer", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const {
+      createMathJaxNodeTextEngine,
+      renderSimpleTexParagraphDebugSvgBody,
+    } = await import("../packages/core/src/text/mathjax-engine.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
+    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+
+    const measured = engine.measure({
+      text: source,
+      textWidthPt: 150,
+      alignment: "ragged-right",
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+
+    expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
+    expect(measured?.paragraphId).not.toMatch(/^tex:/);
+
+    const debugBody = renderSimpleTexParagraphDebugSvgBody({
+      text: source,
+      width: 150,
+      alignment: "ragged-right",
+    }) ?? "";
+    expect(debugBody).toContain('data-tex-placeholder="true"');
+    expect(debugBody).toContain('data-source-start="11"');
+    expect(debugBody).toContain('data-source-end="48"');
+    expect(debugBody).toContain("Unsupported TeX command in vertical mode.");
+    expect(debugBody).toContain('data-mjx-linebox="true"');
+    expect(debugBody).toContain('data-line-index="0"');
+    expect(debugBody).toContain('data-line-index="1"');
+    expect(debugBody).toContain('data-tex-glyph="65"');
+    expect(debugBody).toContain('data-tex-glyph="66"');
+    expect(debugBody.match(/data-mjx-linebox="true"/g)).toHaveLength(2);
+    expect(debugBody.indexOf('data-line-index="0"')).toBeLessThan(
+      debugBody.indexOf('data-tex-placeholder="true"')
+    );
+    expect(debugBody.indexOf('data-tex-placeholder="true"')).toBeLessThan(
+      debugBody.indexOf('data-line-index="1"')
+    );
+  });
+
+  it("renders generic vlist metadata for measured hbox and rule items", async () => {
+    const { renderTexVListSvgMetadata } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderTexVListSvgMetadata([
+      {
+        item: {
+          kind: "hbox",
+          sourceSpan: { start: 2, end: 9 },
+          box: {
+            metrics: { width: 24, height: 6, depth: 2 },
+            renderItems: [],
+          },
+        },
+        x: 3,
+        y: 5,
+        metrics: { width: 24, height: 6, depth: 2 },
+      },
+      {
+        item: {
+          kind: "rule",
+          width: 12,
+          height: 4,
+          depth: 1,
+        },
+        x: 0,
+        y: 14,
+        metrics: { width: 12, height: 4, depth: 1 },
+      },
+      {
+        item: {
+          kind: "placeholder",
+          sourceSpan: { start: 20, end: 34 },
+          reason: "Unsupported TeX command in vertical mode.",
+          estimated: { width: 0, height: 8.5, depth: 3.5 },
+        },
+        x: 0,
+        y: 20,
+        metrics: { width: 0, height: 8.5, depth: 3.5 },
+      },
+    ], 80);
+
+    expect(body).toContain('data-tex-vlist-item="hbox"');
+    expect(body).toContain('data-source-start="2"');
+    expect(body).toContain('data-source-end="9"');
+    expect(body).toContain('transform="translate(3 5)"');
+    expect(body).toContain('width="24" height="8"');
+    expect(body).toContain('data-tex-vlist-item="rule"');
+    expect(body).toContain('transform="translate(0 14)"');
+    expect(body).toContain('width="12" height="5"');
+    expect(body).toContain('data-tex-vlist-item="placeholder"');
+    expect(body).toContain('data-tex-placeholder="true"');
+    expect(body).toContain('width="80" height="12"');
+  });
+
+  it("renders explicit TeX hrule commands as visible vlist rule items", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`Alpha \par \hrule width 24pt height 2pt depth 1pt Beta`,
+      width: 150,
+      alignment: "ragged-right",
+    }) ?? "";
+
+    expect(body).toContain('data-tex-vlist-item="rule"');
+    expect(body).toContain('transform="translate(0 8.8889)"');
+    expect(body).toContain('width="24" height="3" fill="currentColor"');
+    expect(body.indexOf('data-line-index="0"')).toBeLessThan(
+      body.indexOf('data-tex-vlist-item="rule"')
+    );
+    expect(body.indexOf('data-tex-vlist-item="rule"')).toBeLessThan(
+      body.indexOf('data-line-index="1"')
+    );
   });
 
   it("normalizes legacy font switches and records wrapped text gap metadata", async () => {

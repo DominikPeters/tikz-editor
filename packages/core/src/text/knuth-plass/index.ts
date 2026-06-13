@@ -18,8 +18,11 @@ export {
   setKnuthPlassOptionsOnOutputJax,
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
+  getKnuthPlassPlaceholderGeometry,
   getKnuthPlassPointFromOffset,
   getKnuthPlassSelectionRects,
+  getKnuthPlassVListBoxGeometry,
+  getKnuthPlassVListItemGeometry,
   clearKnuthPlassCaretMappingCache,
   type KnuthPlassConfig,
   type KnuthPlassLayoutMode,
@@ -33,7 +36,13 @@ export {
   type CaretHitResult,
   type LineRangeFromPointResult,
   type CaretPointResult,
+  type PlaceholderGeometry,
+  type PlaceholderGeometryParams,
   type SelectionRectsResult,
+  type VListBoxGeometry,
+  type VListBoxGeometryParams,
+  type VListItemGeometry,
+  type VListItemGeometryParams,
 } from './install.js';
 
 export type {
