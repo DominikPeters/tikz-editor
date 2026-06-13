@@ -67,7 +67,7 @@ Options:
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
   --glyph-dx-tolerance <pt>
-                          Max glyph x delta for structural pass. Checks absolute, block-normalized, and line-edge deltas. Default: ${defaultGlyphDxTolerance}.
+                          Max glyph x delta for structural pass. Checks absolute, block-normalized, line-edge, and line-internal deltas. Default: ${defaultGlyphDxTolerance}.
   --glyph-dy-tolerance <pt>
                           Max glyph baseline y delta for structural pass. Default: ${defaultGlyphDyTolerance}.
   --help                  Show this message.
@@ -1017,7 +1017,7 @@ function compareGlyphTraces(oursTrace, texTrace) {
   let fontMatch = oursTrace.lines.length === texTrace.lines.length;
   let maxAbsoluteGlyphDx = 0;
   let maxGlyphDx = 0;
-  let maxRelativeGlyphDx = 0;
+  let maxLineInternalGlyphDx = 0;
   let maxGlyphDy = 0;
   let maxAbsoluteLineLeftDx = 0;
   let maxAbsoluteLineRightDx = 0;
@@ -1068,7 +1068,7 @@ function compareGlyphTraces(oursTrace, texTrace) {
       maxGlyphDx = Math.max(maxGlyphDx, Math.abs(oursBlockX - texBlockX));
       const oursRelativeX = oursGlyph.x - oursOriginX;
       const texRelativeX = texGlyph.x - texOriginX;
-      maxRelativeGlyphDx = Math.max(maxRelativeGlyphDx, Math.abs(oursRelativeX - texRelativeX));
+      maxLineInternalGlyphDx = Math.max(maxLineInternalGlyphDx, Math.abs(oursRelativeX - texRelativeX));
       const oursRelativeY = oursGlyph.y - oursBaselineOrigin;
       const texRelativeY = texGlyph.y - texBaselineOrigin;
       maxGlyphDy = Math.max(maxGlyphDy, Math.abs(oursRelativeY - texRelativeY));
@@ -1082,7 +1082,7 @@ function compareGlyphTraces(oursTrace, texTrace) {
     fontMatch,
     maxAbsoluteGlyphDx: Number(maxAbsoluteGlyphDx.toFixed(6)),
     maxGlyphDx: Number(maxGlyphDx.toFixed(6)),
-    maxRelativeGlyphDx: Number(maxRelativeGlyphDx.toFixed(6)),
+    maxLineInternalGlyphDx: Number(maxLineInternalGlyphDx.toFixed(6)),
     maxGlyphDy: Number(maxGlyphDy.toFixed(6)),
     maxAbsoluteLineLeftDx: Number(maxAbsoluteLineLeftDx.toFixed(6)),
     maxAbsoluteLineRightDx: Number(maxAbsoluteLineRightDx.toFixed(6)),
@@ -1509,7 +1509,7 @@ function writeCsv(rows, path) {
     "fontMatch",
     "maxAbsoluteGlyphDx",
     "maxGlyphDx",
-    "maxRelativeGlyphDx",
+    "maxLineInternalGlyphDx",
     "maxGlyphDy",
     "maxAbsoluteLineLeftDx",
     "maxAbsoluteLineRightDx",
@@ -1676,7 +1676,7 @@ async function main() {
         !traceComparison.fontMatch ||
         traceComparison.maxAbsoluteGlyphDx > options.glyphDxTolerance ||
         traceComparison.maxGlyphDx > options.glyphDxTolerance ||
-        traceComparison.maxRelativeGlyphDx > options.glyphDxTolerance ||
+        traceComparison.maxLineInternalGlyphDx > options.glyphDxTolerance ||
         traceComparison.maxGlyphDy > options.glyphDyTolerance ||
         traceComparison.maxAbsoluteLineLeftDx > options.glyphDxTolerance ||
         traceComparison.maxAbsoluteLineRightDx > options.glyphDxTolerance ||
@@ -1716,7 +1716,7 @@ async function main() {
         fontMatch: traceComparison.fontMatch,
         maxAbsoluteGlyphDx: traceComparison.maxAbsoluteGlyphDx,
         maxGlyphDx: traceComparison.maxGlyphDx,
-        maxRelativeGlyphDx: traceComparison.maxRelativeGlyphDx,
+        maxLineInternalGlyphDx: traceComparison.maxLineInternalGlyphDx,
         maxGlyphDy: traceComparison.maxGlyphDy,
         maxAbsoluteLineLeftDx: traceComparison.maxAbsoluteLineLeftDx,
         maxAbsoluteLineRightDx: traceComparison.maxAbsoluteLineRightDx,
@@ -1735,7 +1735,7 @@ async function main() {
         `text=${row.lineTextMatch ? "ok" : "diff"} glyphs=${row.glyphCodeMatch ? "ok" : "diff"} ` +
         `fonts=${row.fontMatch ? "ok" : "diff"} ` +
         `dxAbs=${row.maxAbsoluteGlyphDx.toFixed(3)} dxBlock=${row.maxGlyphDx.toFixed(3)} ` +
-        `dxLine=${row.maxRelativeGlyphDx.toFixed(3)} ` +
+        `dxLineInternal=${row.maxLineInternalGlyphDx.toFixed(3)} ` +
         `cache=${row.texOracleCache}`
       );
     } catch (error) {

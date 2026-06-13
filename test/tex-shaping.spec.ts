@@ -16,6 +16,7 @@ import {
   layoutTexVListFromParagraphReport,
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
+  registerTexVListLayoutsOnOutputJax,
 } from "../packages/core/src/text/tex/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
 
@@ -1396,6 +1397,90 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("reads TeX vlist box geometry from registered positioned layouts", () => {
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:registered-vbox",
+      layout: {
+        metrics: { width: 100, height: 20, depth: 10 },
+        baseline: { kind: "explicit", y: 8 },
+        lineTops: [],
+        reports: [],
+        errors: [],
+        items: [
+          {
+            item: {
+              kind: "vbox",
+              role: { kind: "quote", depth: 1 },
+              sourceSpan: { start: 7, end: 42 },
+              items: [],
+            },
+            x: 3,
+            y: 5,
+            metrics: { width: 40, height: 8, depth: 4 },
+            children: [
+              {
+                item: {
+                  kind: "vbox",
+                  role: {
+                    kind: "list",
+                    listKind: "enumerate",
+                    depth: 2,
+                    labelDepth: 1,
+                    totalLeftMarginEm: 2.2,
+                  },
+                  sourceSpan: { start: 12, end: 39 },
+                  items: [],
+                },
+                x: 11,
+                y: 17,
+                metrics: { width: 20, height: 6, depth: 2 },
+              },
+            ],
+          },
+        ],
+      },
+    }]);
+
+    expect(getKnuthPlassVListBoxGeometry({
+      outputJax,
+      paragraphId: "tex:registered-vbox",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist geometry should not query DOM metadata");
+        },
+      } as any,
+    })).toEqual([
+      {
+        role: "quote",
+        depth: 1,
+        listKind: null,
+        listLabelDepth: null,
+        listLeftMarginEm: null,
+        sourceStart: 7,
+        sourceEnd: 42,
+        clientLeft: 16,
+        clientRight: 96,
+        clientTop: 35,
+        clientBottom: 71,
+      },
+      {
+        role: "list",
+        depth: 2,
+        listKind: "enumerate",
+        listLabelDepth: 1,
+        listLeftMarginEm: 2.2,
+        sourceStart: 12,
+        sourceEnd: 39,
+        clientLeft: 32,
+        clientRight: 72,
+        clientTop: 71,
+        clientBottom: 95,
+      },
+    ]);
+  });
+
   it("reads TeX placeholder geometry from rendered SVG metadata", () => {
     const placeholders = [
       makeVListBoxElement(
@@ -1430,6 +1515,65 @@ describe("simple TeX paragraph layout", () => {
         clientRight: 120,
         clientTop: 12,
         clientBottom: 44,
+      },
+    ]);
+  });
+
+  it("reads TeX placeholder geometry from registered positioned layouts", () => {
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:registered-placeholder",
+      layout: {
+        metrics: { width: 100, height: 20, depth: 10 },
+        baseline: { kind: "explicit", y: 8 },
+        lineTops: [],
+        reports: [],
+        errors: [],
+        items: [
+          {
+            item: {
+              kind: "vbox",
+              items: [],
+            },
+            x: 0,
+            y: 0,
+            metrics: { width: 30, height: 10, depth: 5 },
+            children: [
+              {
+                item: {
+                  kind: "placeholder",
+                  sourceSpan: { start: 11, end: 48 },
+                  reason: "Unsupported TeX command in vertical mode.",
+                  estimated: { width: 12, height: 4, depth: 2 },
+                },
+                x: 18,
+                y: 21,
+                metrics: { width: 12, height: 4, depth: 2 },
+              },
+            ],
+          },
+        ],
+      },
+    }]);
+
+    expect(getKnuthPlassPlaceholderGeometry({
+      outputJax,
+      paragraphId: "tex:registered-placeholder",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered placeholder geometry should not query DOM metadata");
+        },
+      } as any,
+    })).toEqual([
+      {
+        reason: "Unsupported TeX command in vertical mode.",
+        sourceStart: 11,
+        sourceEnd: 48,
+        clientLeft: 46,
+        clientRight: 70,
+        clientTop: 83,
+        clientBottom: 101,
       },
     ]);
   });
@@ -1496,6 +1640,130 @@ describe("simple TeX paragraph layout", () => {
         clientRight: 120,
         clientTop: 44,
         clientBottom: 76,
+      },
+    ]);
+  });
+
+  it("reads generic TeX vlist item geometry from registered positioned layouts", () => {
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:registered-items",
+      layout: {
+        metrics: { width: 100, height: 20, depth: 10 },
+        baseline: { kind: "explicit", y: 8 },
+        lineTops: [],
+        reports: [],
+        errors: [],
+        items: [
+          {
+            item: {
+              kind: "hbox",
+              sourceSpan: { start: 4, end: 13 },
+              box: {
+                metrics: { width: 12, height: 3, depth: 1 },
+                renderItems: [],
+              },
+            },
+            x: 2,
+            y: 3,
+            metrics: { width: 12, height: 3, depth: 1 },
+          },
+          {
+            item: {
+              kind: "vbox",
+              items: [],
+            },
+            x: 0,
+            y: 0,
+            metrics: { width: 30, height: 10, depth: 5 },
+            children: [
+              {
+                item: {
+                  kind: "rule",
+                  width: 7,
+                  height: 2,
+                  depth: 1,
+                },
+                x: 10,
+                y: 12,
+                metrics: { width: 7, height: 2, depth: 1 },
+              },
+              {
+                item: {
+                  kind: "penalty",
+                  sourceSpan: { start: 20, end: 31 },
+                  penalty: -50,
+                },
+                x: 14,
+                y: 16,
+                metrics: { width: 0, height: 0, depth: 0 },
+              },
+              {
+                item: {
+                  kind: "placeholder",
+                  sourceSpan: { start: 40, end: 52 },
+                  reason: "Unsupported TeX command in vertical mode.",
+                  estimated: { width: 9, height: 4, depth: 2 },
+                },
+                x: 18,
+                y: 21,
+                metrics: { width: 9, height: 4, depth: 2 },
+              },
+            ],
+          },
+        ],
+      },
+    }]);
+
+    expect(getKnuthPlassVListItemGeometry({
+      outputJax,
+      paragraphId: "tex:registered-items",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist item geometry should not query DOM metadata");
+        },
+      } as any,
+    })).toEqual([
+      {
+        kind: "hbox",
+        sourceStart: 4,
+        sourceEnd: 13,
+        placeholderReason: null,
+        clientLeft: 14,
+        clientRight: 38,
+        clientTop: 29,
+        clientBottom: 41,
+      },
+      {
+        kind: "rule",
+        sourceStart: null,
+        sourceEnd: null,
+        placeholderReason: null,
+        clientLeft: 30,
+        clientRight: 44,
+        clientTop: 56,
+        clientBottom: 65,
+      },
+      {
+        kind: "penalty",
+        sourceStart: 20,
+        sourceEnd: 31,
+        placeholderReason: null,
+        clientLeft: 38,
+        clientRight: 38,
+        clientTop: 68,
+        clientBottom: 68,
+      },
+      {
+        kind: "placeholder",
+        sourceStart: 40,
+        sourceEnd: 52,
+        placeholderReason: "Unsupported TeX command in vertical mode.",
+        clientLeft: 46,
+        clientRight: 64,
+        clientTop: 83,
+        clientBottom: 101,
       },
     ]);
   });

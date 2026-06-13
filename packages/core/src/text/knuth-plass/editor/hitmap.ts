@@ -16,6 +16,9 @@ import {
 } from './mathPrefix.js';
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
+import { getTexVListLayoutFromOutputJax } from '../../tex/vlist/registry.js';
+import type { PositionedTexVListItem, TexVBoxRole } from '../../tex/vlist/types.js';
+import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
 
 // The core package builds without the DOM lib; keep the editor hit-testing
 // helpers structurally typed so they remain importable in Node-only builds.
@@ -45,11 +48,6 @@ type Element = {
   ownerSVGElement?: SvgOwnerLike | null;
   querySelector?(selector: string): Element | null;
   querySelectorAll?(selector: string): ArrayLike<Element>;
-};
-type OutputJaxLike = {
-  linebreaks?: {
-    getReports?(): ParagraphLayoutReport[];
-  };
 };
 type LineDirectionUnit = Readonly<{ x: number; y: number }>;
 
@@ -135,10 +133,12 @@ export interface VListBoxGeometry {
 
 export interface VListBoxGeometryParams {
   containerElement: Element;
+  outputJax?: unknown;
+  paragraphId?: string | null;
 }
 
 export interface VListItemGeometry {
-  kind: 'hbox' | 'rule' | 'placeholder' | null;
+  kind: 'hbox' | 'rule' | 'penalty' | 'placeholder' | null;
   sourceStart: number | null;
   sourceEnd: number | null;
   placeholderReason: string | null;
@@ -150,6 +150,8 @@ export interface VListItemGeometry {
 
 export interface VListItemGeometryParams {
   containerElement: Element;
+  outputJax?: unknown;
+  paragraphId?: string | null;
 }
 
 export interface PlaceholderGeometry {
@@ -164,6 +166,8 @@ export interface PlaceholderGeometry {
 
 export interface PlaceholderGeometryParams {
   containerElement: Element;
+  outputJax?: unknown;
+  paragraphId?: string | null;
 }
 
 export interface SelectionRect {
@@ -377,16 +381,7 @@ function errorResult<T extends ResultBase>(
 }
 
 function readReportsFromOutputJax(outputJax: unknown): ParagraphLayoutReport[] {
-  if (!outputJax || typeof outputJax !== 'object') {
-    return [];
-  }
-
-  const target = outputJax as OutputJaxLike;
-  const fromVisitor = target.linebreaks?.getReports?.();
-  if (Array.isArray(fromVisitor)) {
-    return fromVisitor;
-  }
-  return [];
+  return getKnuthPlassReportsFromOutputJax(outputJax);
 }
 
 function findReportByParagraphId(
@@ -435,6 +430,10 @@ export function getKnuthPlassVListBoxGeometry(
   if (!containerElement || typeof containerElement !== 'object') {
     return [];
   }
+  const registered = registeredVListBoxGeometry(params);
+  if (registered.length > 0) {
+    return registered;
+  }
   const elements =
     typeof containerElement.querySelectorAll === 'function'
       ? Array.from(containerElement.querySelectorAll('[data-tex-vbox="true"]'))
@@ -466,6 +465,10 @@ export function getKnuthPlassVListItemGeometry(
   if (!containerElement || typeof containerElement !== 'object') {
     return [];
   }
+  const registered = registeredVListItemGeometry(params);
+  if (registered.length > 0) {
+    return registered;
+  }
   const elements =
     typeof containerElement.querySelectorAll === 'function'
       ? Array.from(containerElement.querySelectorAll('[data-tex-vlist-item]'))
@@ -494,6 +497,10 @@ export function getKnuthPlassPlaceholderGeometry(
   if (!containerElement || typeof containerElement !== 'object') {
     return [];
   }
+  const registered = registeredPlaceholderGeometry(params);
+  if (registered.length > 0) {
+    return registered;
+  }
   const elements =
     typeof containerElement.querySelectorAll === 'function'
       ? Array.from(containerElement.querySelectorAll('[data-tex-placeholder="true"]'))
@@ -514,14 +521,180 @@ export function getKnuthPlassPlaceholderGeometry(
   return placeholders;
 }
 
+function registeredPlaceholderGeometry(
+  params: PlaceholderGeometryParams | null | undefined
+): PlaceholderGeometry[] {
+  const layout = getTexVListLayoutFromOutputJax(params?.outputJax, params?.paragraphId);
+  const matrix = params?.containerElement.getScreenCTM?.();
+  if (!layout || !matrix) {
+    return [];
+  }
+  const placeholders: PlaceholderGeometry[] = [];
+  for (const item of flattenPositionedTexVListItems(layout.items)) {
+    if (item.item.kind !== 'placeholder') {
+      continue;
+    }
+    const bounds = clientRectForPositionedTexVListItem(item, matrix);
+    if (!bounds) {
+      continue;
+    }
+    placeholders.push({
+      reason: item.item.reason,
+      sourceStart: item.item.sourceSpan.start,
+      sourceEnd: item.item.sourceSpan.end,
+      ...bounds,
+    });
+  }
+  return placeholders;
+}
+
 function texVListBoxRole(value: string | null): VListBoxGeometry['role'] {
   return value === 'quote' || value === 'list' ? value : null;
 }
 
 function texVListItemKind(value: string | null): VListItemGeometry['kind'] {
-  return value === 'hbox' || value === 'rule' || value === 'placeholder'
+  return value === 'hbox' || value === 'rule' || value === 'penalty' || value === 'placeholder'
     ? value
     : null;
+}
+
+function registeredVListBoxGeometry(
+  params: VListBoxGeometryParams | null | undefined
+): VListBoxGeometry[] {
+  const layout = getTexVListLayoutFromOutputJax(params?.outputJax, params?.paragraphId);
+  const matrix = params?.containerElement.getScreenCTM?.();
+  if (!layout || !matrix) {
+    return [];
+  }
+  const boxes: VListBoxGeometry[] = [];
+  for (const item of flattenPositionedTexVListItems(layout.items)) {
+    if (item.item.kind !== 'vbox') {
+      continue;
+    }
+    const bounds = clientRectForPositionedTexVListItem(item, matrix);
+    if (!bounds) {
+      continue;
+    }
+    const role = item.item.role;
+    boxes.push({
+      role: vlistRoleKind(role),
+      depth: role?.depth ?? null,
+      listKind: role?.kind === 'list' ? role.listKind : null,
+      listLabelDepth: role?.kind === 'list' ? role.labelDepth : null,
+      listLeftMarginEm: role?.kind === 'list' ? role.totalLeftMarginEm : null,
+      sourceStart: item.item.sourceSpan?.start ?? null,
+      sourceEnd: item.item.sourceSpan?.end ?? null,
+      ...bounds,
+    });
+  }
+  return boxes;
+}
+
+function registeredVListItemGeometry(
+  params: VListItemGeometryParams | null | undefined
+): VListItemGeometry[] {
+  const layout = getTexVListLayoutFromOutputJax(params?.outputJax, params?.paragraphId);
+  const matrix = params?.containerElement.getScreenCTM?.();
+  if (!layout || !matrix) {
+    return [];
+  }
+  const items: VListItemGeometry[] = [];
+  for (const item of flattenPositionedTexVListItems(layout.items)) {
+    if (
+      item.item.kind !== 'hbox' &&
+      item.item.kind !== 'rule' &&
+      item.item.kind !== 'penalty' &&
+      item.item.kind !== 'placeholder'
+    ) {
+      continue;
+    }
+    const bounds = clientRectForPositionedTexVListItem(item, matrix);
+    if (!bounds) {
+      continue;
+    }
+    items.push({
+      kind: item.item.kind,
+      sourceStart: item.item.sourceSpan?.start ?? null,
+      sourceEnd: item.item.sourceSpan?.end ?? null,
+      placeholderReason: item.item.kind === 'placeholder' ? item.item.reason : null,
+      ...bounds,
+    });
+  }
+  return items;
+}
+
+function flattenPositionedTexVListItems(
+  items: readonly PositionedTexVListItem[]
+): PositionedTexVListItem[] {
+  const flattened: PositionedTexVListItem[] = [];
+  for (const item of items) {
+    flattened.push(item);
+    if (item.children?.length) {
+      flattened.push(...flattenPositionedTexVListItems(item.children));
+    }
+  }
+  return flattened;
+}
+
+function vlistRoleKind(role: TexVBoxRole | undefined): VListBoxGeometry['role'] {
+  if (role?.kind === 'quote' || role?.kind === 'list') {
+    return role.kind;
+  }
+  return null;
+}
+
+function clientRectForPositionedTexVListItem(
+  item: PositionedTexVListItem,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  const width = Number(item.metrics.width);
+  const height = Number(item.metrics.height) + Number(item.metrics.depth);
+  if (
+    !Number.isFinite(item.x) ||
+    !Number.isFinite(item.y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return null;
+  }
+  return clientRectForLocalBox(item.x, item.y, width, height, matrix);
+}
+
+function clientRectForLocalBox(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  const points = [
+    transformLocalPoint(matrix, x, y),
+    transformLocalPoint(matrix, x + width, y),
+    transformLocalPoint(matrix, x, y + height),
+    transformLocalPoint(matrix, x + width, y + height),
+  ];
+  if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    return null;
+  }
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    clientLeft: Math.min(...xs),
+    clientRight: Math.max(...xs),
+    clientTop: Math.min(...ys),
+    clientBottom: Math.max(...ys),
+  };
+}
+
+function transformLocalPoint(
+  matrix: ScreenMatrixLike,
+  x: number,
+  y: number
+): { readonly x: number; readonly y: number } {
+  return {
+    x: matrix.a * x + matrix.c * y + matrix.e,
+    y: matrix.b * x + matrix.d * y + matrix.f,
+  };
 }
 
 function normalizedClientRect(element: Element): NormalizedClientRect | null {

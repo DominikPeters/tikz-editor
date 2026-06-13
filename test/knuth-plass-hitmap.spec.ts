@@ -11,6 +11,7 @@ import {
 import {
   getKnuthPlassReportsFromOutputJax,
   installKnuthPlassVisitor,
+  registerKnuthPlassReportsOnOutputJax,
   setKnuthPlassOptionsOnOutputJax
 } from "../packages/core/src/text/knuth-plass/install.js";
 import { KnuthPlassVisitor } from "../packages/core/src/text/knuth-plass/KnuthPlassVisitor.js";
@@ -1088,6 +1089,37 @@ describe("knuth-plass hitmap line ranges", () => {
         endOffset: 1
       })
     ).resolves.toMatchObject({ ok: false, error: { code: "invalid-params" } });
+  });
+
+  it("uses supplemental output jax reports for caret hit testing", async () => {
+    const report = makeSingleLineReport();
+    const outputJax = {};
+    registerKnuthPlassReportsOnOutputJax(outputJax, [report]);
+    const containerElement = {
+      getBoundingClientRect: () => ({
+        left: 0,
+        top: 0,
+        right: 11,
+        bottom: 10,
+        width: 11,
+        height: 10
+      }),
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      querySelectorAll: () => [makeLineElement({ left: 0, top: 0, right: 11, bottom: 10 }, report.width)]
+    };
+
+    await expect(
+      getKnuthPlassCaretFromPoint(outputJax, {
+        paragraphId: report.paragraphId,
+        sourceText: "Hello World",
+        containerElement,
+        clientPoint: clientPoint(px(4.6), px(2))
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      paragraphId: report.paragraphId,
+      lineIndex: 0
+    });
   });
 
   it("reports missing paragraphs and geometry build failures through each exported mapper", async () => {

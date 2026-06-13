@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_TEXT_FONT_SIZE } from "../packages/core/src/semantic/style/resolve.js";
+import { clientPoint, px } from "../packages/core/src/coords/index.js";
 
 const RETRY_MESSAGE =
   "MathJax retry -- an asynchronous action is required; try using one of the promise-based functions and await its resolution.";
@@ -133,6 +134,30 @@ describe("mathjax node text engine", () => {
     };
 
     return { outputJax, texCalls };
+  }
+
+  function makeLineElement(
+    bounds: { left: number; top: number; right: number; bottom: number },
+    viewBoxWidth: number
+  ): any {
+    return {
+      getBoundingClientRect: () => ({
+        left: bounds.left,
+        top: bounds.top,
+        right: bounds.right,
+        bottom: bounds.bottom,
+        width: bounds.right - bounds.left,
+        height: bounds.bottom - bounds.top
+      }),
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      ownerSVGElement: {
+        viewBox: {
+          baseVal: {
+            width: viewBoxWidth
+          }
+        }
+      }
+    };
   }
 
   it("treats MathJax async retry as transient during validation", async () => {
@@ -387,6 +412,7 @@ describe("mathjax node text engine", () => {
 
     const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
     const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const { getKnuthPlassCaretFromPoint } = await import("../packages/core/src/text/knuth-plass/editor/hitmap.js");
     const { getTexVListLayoutFromOutputJax } = await import("../packages/core/src/text/tex/index.js");
     const engine = await createMathJaxNodeTextEngine();
     const callsBeforeMeasure = texCalls.length;
@@ -412,6 +438,43 @@ describe("mathjax node text engine", () => {
       expect(vlistLayout?.reports).toContain(report);
       expect(vlistLayout?.items.some((item) => item.item.kind === "paragraph")).toBe(true);
       expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
+      if (alignment === "ragged-right") {
+        const reportWidth = report?.width ?? 0;
+        const lineGeometry = report?.lines.map((line, index) =>
+          makeLineElement(
+            {
+              left: 0,
+              top: index * 12,
+              right: reportWidth,
+              bottom: index * 12 + 12
+            },
+            reportWidth
+          )
+        ) ?? [];
+        await expect(
+          getKnuthPlassCaretFromPoint(getActiveMathJaxOutputJax(), {
+            paragraphId: measured?.paragraphId ?? "",
+            sourceText: "Alpha Beta",
+            containerElement: {
+              getBoundingClientRect: () => ({
+                left: 0,
+                top: 0,
+                right: reportWidth,
+                bottom: 12,
+                width: reportWidth,
+                height: 12
+              }),
+              getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+              querySelectorAll: () => lineGeometry
+            },
+            clientPoint: clientPoint(px(4), px(4))
+          })
+        ).resolves.toMatchObject({
+          ok: true,
+          paragraphId: measured?.paragraphId,
+          lineIndex: 0
+        });
+      }
     }
     const grouped = engine.measure({
       text: String.raw`\begin{quote}\begin{enumerate}\item Alpha\item Beta\end{enumerate}\end{quote}`,
