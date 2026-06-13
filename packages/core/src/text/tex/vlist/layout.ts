@@ -135,6 +135,15 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
   if (item.kind === "hbox") {
     return { metrics: item.box.metrics };
   }
+  if (item.kind === "penalty") {
+    return {
+      metrics: {
+        width: 0,
+        height: 0,
+        depth: 0,
+      },
+    };
+  }
   if (item.kind === "rule") {
     return {
       metrics: {

@@ -892,7 +892,7 @@ describe("simple TeX paragraph layout", () => {
       kind: item.item.kind,
       y: item.y,
       height: item.item.kind === "glue" ? item.metrics.height : undefined,
-      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
       stretch: item.item.kind === "glue" ? item.item.stretch : undefined,
     }))).toEqual([
       { kind: "paragraph", y: 0, height: undefined, text: "Alpha", stretch: undefined },
@@ -921,11 +921,37 @@ describe("simple TeX paragraph layout", () => {
       width: item.item.kind === "rule" ? item.metrics.width : undefined,
       height: item.item.kind === "rule" ? item.metrics.height : undefined,
       depth: item.item.kind === "rule" ? item.metrics.depth : undefined,
-      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
     }))).toEqual([
       { kind: "paragraph", y: 0, width: undefined, height: undefined, depth: undefined, text: "Alpha" },
       { kind: "rule", y: 8.8889, width: 24, height: 2, depth: 1, text: undefined },
       { kind: "paragraph", y: 11.8889, width: undefined, height: undefined, depth: undefined, text: "Beta" },
+    ]);
+  });
+
+  it("positions explicit TeX penalty commands as zero-height vlist items", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \penalty -50 Beta`,
+      {
+        paragraphId: "tex:vlist-explicit-penalty",
+        width: 150,
+        alignment: "ragged-right",
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.lineTops).toEqual([0, 12]);
+    expect(result.vlistLayout?.items.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.item.kind === "penalty" ? item.metrics.height : undefined,
+      depth: item.item.kind === "penalty" ? item.metrics.depth : undefined,
+      penalty: item.item.kind === "penalty" ? item.item.penalty : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, height: undefined, depth: undefined, penalty: undefined, text: "Alpha" },
+      { kind: "penalty", y: 12, height: 0, depth: 0, penalty: -50, text: undefined },
+      { kind: "paragraph", y: 12, height: undefined, depth: undefined, penalty: undefined, text: "Beta" },
     ]);
   });
 
@@ -945,7 +971,7 @@ describe("simple TeX paragraph layout", () => {
       kind: item.item.kind,
       y: item.y,
       height: item.item.kind === "glue" ? item.metrics.height : undefined,
-      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
       size: item.item.kind === "glue" ? item.item.size : undefined,
     }))).toEqual([
       { kind: "paragraph", y: 0, height: undefined, text: "Alpha", size: undefined },
@@ -977,7 +1003,7 @@ describe("simple TeX paragraph layout", () => {
       kind: item.item.kind,
       y: item.y,
       height: item.item.kind === "glue" ? item.metrics.height : undefined,
-      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
     }))).toEqual([
       { kind: "paragraph", y: 0, height: undefined, text: "Alpha" },
       { kind: "glue", y: 12, height: 7, text: undefined },
@@ -1023,7 +1049,7 @@ describe("simple TeX paragraph layout", () => {
         height: item.item.kind === "glue" ? item.metrics.height : undefined,
         stretchOrder: item.item.kind === "glue" ? item.item.stretchOrder : undefined,
         size: item.item.kind === "glue" ? item.item.size : undefined,
-        text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+        text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
       })),
     }).toEqual({
       lineTops: [0, 48],
@@ -1197,7 +1223,7 @@ describe("simple TeX paragraph layout", () => {
         kind: item.item.kind,
         y: item.y,
         metrics: item.metrics,
-        text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+        text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
         reason: item.item.kind === "placeholder" ? item.item.reason : undefined,
         sourceSpan: item.item.sourceSpan,
       })),
@@ -1261,7 +1287,7 @@ describe("simple TeX paragraph layout", () => {
     expect(partialResult.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
-      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
       sourceSpan: item.item.sourceSpan,
     }))).toEqual([
       { kind: "paragraph", y: 0, text: "Alpha", sourceSpan: { start: 0, end: 5 } },
@@ -1302,7 +1328,7 @@ describe("simple TeX paragraph layout", () => {
     expect(quote?.children?.map((item) => ({
       kind: item.item.kind,
       size: item.item.kind === "glue" ? item.item.size : undefined,
-      text: item.item.kind === "paragraph" ? item.item.block.text : undefined,
+      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
     }))).toEqual([
       { kind: "glue", size: 3, text: undefined },
       { kind: "glue", size: 13, text: undefined },

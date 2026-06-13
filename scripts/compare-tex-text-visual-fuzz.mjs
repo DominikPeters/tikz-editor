@@ -67,7 +67,7 @@ Options:
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
   --glyph-dx-tolerance <pt>
-                          Max line-normalized glyph x delta for structural pass. Default: ${defaultGlyphDxTolerance}.
+                          Max glyph x delta for structural pass. Checks absolute, block-normalized, and line-edge deltas. Default: ${defaultGlyphDxTolerance}.
   --glyph-dy-tolerance <pt>
                           Max glyph baseline y delta for structural pass. Default: ${defaultGlyphDyTolerance}.
   --help                  Show this message.
@@ -1015,9 +1015,12 @@ function compareGlyphTraces(oursTrace, texTrace) {
   const lineTextMatch = JSON.stringify(oursLines) === JSON.stringify(texLines);
   let glyphCodeMatch = oursTrace.lines.length === texTrace.lines.length;
   let fontMatch = oursTrace.lines.length === texTrace.lines.length;
+  let maxAbsoluteGlyphDx = 0;
   let maxGlyphDx = 0;
   let maxRelativeGlyphDx = 0;
   let maxGlyphDy = 0;
+  let maxAbsoluteLineLeftDx = 0;
+  let maxAbsoluteLineRightDx = 0;
   let maxLineLeftDx = 0;
   let maxLineRightDx = 0;
   let comparedGlyphs = 0;
@@ -1032,6 +1035,11 @@ function compareGlyphTraces(oursTrace, texTrace) {
     const texLine = texTrace.lines[lineIndex];
     const oursOriginX = oursLine.glyphs[0]?.x ?? 0;
     const texOriginX = texLine.glyphs[0]?.x ?? 0;
+    maxAbsoluteLineLeftDx = Math.max(maxAbsoluteLineLeftDx, Math.abs(oursOriginX - texOriginX));
+    maxAbsoluteLineRightDx = Math.max(
+      maxAbsoluteLineRightDx,
+      Math.abs(lineEndX(oursLine) - lineEndX(texLine))
+    );
     const oursRelativeLineLeft = oursOriginX - oursXOrigin;
     const texRelativeLineLeft = texOriginX - texXOrigin;
     maxLineLeftDx = Math.max(maxLineLeftDx, Math.abs(oursRelativeLineLeft - texRelativeLineLeft));
@@ -1054,6 +1062,7 @@ function compareGlyphTraces(oursTrace, texTrace) {
       if (!texGlyphFontMatches(oursGlyph, texGlyph)) {
         fontMatch = false;
       }
+      maxAbsoluteGlyphDx = Math.max(maxAbsoluteGlyphDx, Math.abs(oursGlyph.x - texGlyph.x));
       const oursBlockX = oursGlyph.x - oursXOrigin;
       const texBlockX = texGlyph.x - texXOrigin;
       maxGlyphDx = Math.max(maxGlyphDx, Math.abs(oursBlockX - texBlockX));
@@ -1071,9 +1080,12 @@ function compareGlyphTraces(oursTrace, texTrace) {
     lineTextMatch,
     glyphCodeMatch,
     fontMatch,
+    maxAbsoluteGlyphDx: Number(maxAbsoluteGlyphDx.toFixed(6)),
     maxGlyphDx: Number(maxGlyphDx.toFixed(6)),
     maxRelativeGlyphDx: Number(maxRelativeGlyphDx.toFixed(6)),
     maxGlyphDy: Number(maxGlyphDy.toFixed(6)),
+    maxAbsoluteLineLeftDx: Number(maxAbsoluteLineLeftDx.toFixed(6)),
+    maxAbsoluteLineRightDx: Number(maxAbsoluteLineRightDx.toFixed(6)),
     maxLineLeftDx: Number(maxLineLeftDx.toFixed(6)),
     maxLineRightDx: Number(maxLineRightDx.toFixed(6)),
     comparedGlyphs,
@@ -1495,9 +1507,12 @@ function writeCsv(rows, path) {
     "lineTextMatch",
     "glyphCodeMatch",
     "fontMatch",
+    "maxAbsoluteGlyphDx",
     "maxGlyphDx",
     "maxRelativeGlyphDx",
     "maxGlyphDy",
+    "maxAbsoluteLineLeftDx",
+    "maxAbsoluteLineRightDx",
     "maxLineLeftDx",
     "maxLineRightDx",
     "texOracleCache",
@@ -1659,8 +1674,12 @@ async function main() {
         !traceComparison.lineTextMatch ||
         !traceComparison.glyphCodeMatch ||
         !traceComparison.fontMatch ||
+        traceComparison.maxAbsoluteGlyphDx > options.glyphDxTolerance ||
         traceComparison.maxGlyphDx > options.glyphDxTolerance ||
+        traceComparison.maxRelativeGlyphDx > options.glyphDxTolerance ||
         traceComparison.maxGlyphDy > options.glyphDyTolerance ||
+        traceComparison.maxAbsoluteLineLeftDx > options.glyphDxTolerance ||
+        traceComparison.maxAbsoluteLineRightDx > options.glyphDxTolerance ||
         traceComparison.maxLineLeftDx > options.glyphDxTolerance ||
         traceComparison.maxLineRightDx > options.glyphDxTolerance;
       const visualFlagged = ratio !== null && ratio > options.thresholdRatio;
@@ -1695,9 +1714,12 @@ async function main() {
         lineTextMatch: traceComparison.lineTextMatch,
         glyphCodeMatch: traceComparison.glyphCodeMatch,
         fontMatch: traceComparison.fontMatch,
+        maxAbsoluteGlyphDx: traceComparison.maxAbsoluteGlyphDx,
         maxGlyphDx: traceComparison.maxGlyphDx,
         maxRelativeGlyphDx: traceComparison.maxRelativeGlyphDx,
         maxGlyphDy: traceComparison.maxGlyphDy,
+        maxAbsoluteLineLeftDx: traceComparison.maxAbsoluteLineLeftDx,
+        maxAbsoluteLineRightDx: traceComparison.maxAbsoluteLineRightDx,
         maxLineLeftDx: traceComparison.maxLineLeftDx,
         maxLineRightDx: traceComparison.maxLineRightDx,
         texOracleCache: oracle.status,
@@ -1712,6 +1734,8 @@ async function main() {
         `noise=${row.texNoiseAeNorm?.toFixed(4)} ratio=${row.ratio?.toFixed(2)} ` +
         `text=${row.lineTextMatch ? "ok" : "diff"} glyphs=${row.glyphCodeMatch ? "ok" : "diff"} ` +
         `fonts=${row.fontMatch ? "ok" : "diff"} ` +
+        `dxAbs=${row.maxAbsoluteGlyphDx.toFixed(3)} dxBlock=${row.maxGlyphDx.toFixed(3)} ` +
+        `dxLine=${row.maxRelativeGlyphDx.toFixed(3)} ` +
         `cache=${row.texOracleCache}`
       );
     } catch (error) {

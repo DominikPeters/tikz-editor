@@ -147,6 +147,12 @@ export interface SimpleTexVerticalRuleNode extends SimpleTexSourceRange {
   readonly depth: number;
 }
 
+export interface SimpleTexPenaltyNode extends SimpleTexSourceRange {
+  readonly kind: "penalty";
+  readonly text: string;
+  readonly penalty: number;
+}
+
 export type SimpleTexInlineNode =
   | SimpleTexTextNode
   | SimpleTexSpaceNode
@@ -163,6 +169,7 @@ export type SimpleTexControlNode =
   | SimpleTexItemNode
   | SimpleTexVerticalGlueNode
   | SimpleTexVerticalRuleNode
+  | SimpleTexPenaltyNode
   | SimpleTexUnsupportedCommandNode;
 
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
@@ -218,6 +225,14 @@ export interface SimpleTexVerticalRuleBlockItem extends SimpleTexSourceRange {
   readonly listScope?: SimpleTexListScope;
 }
 
+export interface SimpleTexPenaltyBlockItem extends SimpleTexSourceRange {
+  readonly kind: "penalty";
+  readonly text: string;
+  readonly penalty: number;
+  readonly quoteDepth: number;
+  readonly listScope?: SimpleTexListScope;
+}
+
 export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
   readonly kind: "placeholder";
   readonly text: string;
@@ -237,6 +252,7 @@ export type SimpleTexBlockItem =
   | SimpleTexParagraphBlockItem
   | SimpleTexVerticalGlueBlockItem
   | SimpleTexVerticalRuleBlockItem
+  | SimpleTexPenaltyBlockItem
   | SimpleTexPlaceholderBlockItem;
 
 export interface SimpleTexListContext {
@@ -265,6 +281,17 @@ export interface SimpleTexParagraphSegment {
     readonly sourceOffset: number;
     readonly lineLeading?: string;
   };
+}
+
+export interface SimpleTexSegmentInput {
+  readonly text: string;
+  readonly sourceSpan: {
+    readonly start: number;
+    readonly end: number;
+  };
+  readonly nodes: readonly SimpleTexInlineNode[];
+  readonly noIndent: boolean;
+  readonly quoteDepth: number;
 }
 
 export interface SimpleTexParagraphBlockScanResult {
@@ -409,6 +436,7 @@ function scanSimpleTexIrNodes(
       const itemCommand = scanSimpleTexItemCommand(text, index, sourceOffset);
       const verticalGlue = scanSimpleTexVerticalGlueCommand(text, index, sourceOffset);
       const verticalRule = scanSimpleTexVerticalRuleCommand(text, index, sourceOffset);
+      const penalty = scanSimpleTexPenaltyCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (environmentBoundary) {
@@ -439,6 +467,12 @@ function scanSimpleTexIrNodes(
         nodes.push(verticalRule.node);
         unsupportedCommand ||= verticalRule.unsupportedCommand;
         index = verticalRule.end;
+        continue;
+      }
+      if (penalty) {
+        nodes.push(penalty.node);
+        unsupportedCommand ||= penalty.unsupportedCommand;
+        index = penalty.end;
         continue;
       }
 
@@ -770,6 +804,51 @@ function scanSimpleTexVerticalRuleCommand(
     },
     end: cursor,
     unsupportedCommand: !supported,
+  };
+}
+
+function scanSimpleTexPenaltyCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexPenaltyNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "penalty");
+  if (commandEnd === null) {
+    return null;
+  }
+
+  const valueStart = skipSimpleTexControlWordSpaces(text, commandEnd);
+  const valueMatch = /^[+-]?\d+/.exec(text.slice(valueStart));
+  if (!valueMatch) {
+    return {
+      node: {
+        kind: "penalty",
+        text: text.slice(start, valueStart),
+        sourceStart: sourceOffset + start,
+        sourceEnd: sourceOffset + valueStart,
+        penalty: 0,
+      },
+      end: valueStart,
+      unsupportedCommand: true,
+    };
+  }
+
+  const rawValue = valueMatch[0] ?? "";
+  const end = valueStart + rawValue.length;
+  return {
+    node: {
+      kind: "penalty",
+      text: text.slice(start, end),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + end,
+      penalty: Number.parseInt(rawValue, 10),
+    },
+    end,
+    unsupportedCommand: false,
   };
 }
 
@@ -1555,6 +1634,28 @@ function buildSimpleTexParagraphBlocksFromNodes(
       continue;
     }
 
+    if (node.kind === "penalty") {
+      if (hasNonSpaceSourceText(text, blockStart, node.sourceStart)) {
+        unsupportedCommand = true;
+        abortScan = true;
+        break;
+      }
+      items.push({
+        kind: "penalty",
+        text: node.text,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        penalty: node.penalty,
+        quoteDepth: currentQuoteDepth,
+        listScope: currentSimpleTexListScope(),
+      });
+      prefix = consumeParagraphPrefix(index + 1);
+      blockStart = sourceStartForNodeIndex(prefix.start);
+      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      index = prefix.start;
+      continue;
+    }
+
     if (node.kind === "noindent" || node.kind === "alignment") {
       unsupportedCommand = true;
       abortScan = true;
@@ -1598,7 +1699,7 @@ function hasNonSpaceSourceText(text: string, start: number, end: number): boolea
 }
 
 export function splitSimpleTexParagraphSegments(
-  block: SimpleTexParagraphBlock,
+  block: SimpleTexSegmentInput,
   options: SimpleTexIrOptions,
   alignment: TexParagraphAlignment,
   blockIndex: number
@@ -1607,15 +1708,15 @@ export function splitSimpleTexParagraphSegments(
   if (alignment === "justified") {
     return [{
       text: block.text,
-      sourceStart: block.sourceStart,
-      sourceEnd: block.sourceEnd,
+      sourceStart: block.sourceSpan.start,
+      sourceEnd: block.sourceSpan.end,
       nodes: block.nodes,
       noIndent: initialNoIndent,
     }];
   }
 
   const segments: SimpleTexParagraphSegment[] = [];
-  let segmentStart = block.sourceStart;
+  let segmentStart = block.sourceSpan.start;
   let nodeStart = 0;
   let noIndent = initialNoIndent;
 
@@ -1636,7 +1737,7 @@ export function splitSimpleTexParagraphSegments(
     }
     if (start < end) {
       segments.push({
-        text: block.text.slice(start - block.sourceStart, end - block.sourceStart),
+        text: block.text.slice(start - block.sourceSpan.start, end - block.sourceSpan.start),
         sourceStart: start,
         sourceEnd: end,
         nodes: rawNodes.filter((node) =>
@@ -1663,18 +1764,18 @@ export function splitSimpleTexParagraphSegments(
     while (block.nodes[index]?.kind === "space") {
       index += 1;
     }
-    segmentStart = block.nodes[index]?.sourceStart ?? block.sourceEnd;
+    segmentStart = block.nodes[index]?.sourceStart ?? block.sourceSpan.end;
     nodeStart = index;
     noIndent = block.quoteDepth > 0 || noIndentAfterForcedBreak(options, alignment);
     index -= 1;
   }
 
-  pushSegment(segmentStart, block.sourceEnd, block.nodes.slice(nodeStart), noIndent);
+  pushSegment(segmentStart, block.sourceSpan.end, block.nodes.slice(nodeStart), noIndent);
   return segments;
 }
 
-function textCharAtSource(block: SimpleTexParagraphBlock, sourceOffset: number): string {
-  return block.text[sourceOffset - block.sourceStart] ?? "";
+function textCharAtSource(block: SimpleTexSegmentInput, sourceOffset: number): string {
+  return block.text[sourceOffset - block.sourceSpan.start] ?? "";
 }
 
 function noIndentAfterForcedBreak(

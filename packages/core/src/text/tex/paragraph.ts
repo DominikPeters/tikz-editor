@@ -40,7 +40,6 @@ import {
   type TexLayoutParagraphIr,
 } from "./layout-ir.js";
 import {
-  groupSimpleTexVListScopes,
   layoutTexVListFromParagraphReport,
   type TexVListLayout,
 } from "./vlist/index.js";
@@ -269,7 +268,7 @@ export function layoutSimpleTexParagraph(
     ...report.lines.map((line) => Number(line.ascent) || 0)
   );
   const vlistLayout = layoutTexVListFromParagraphReport(
-    groupSimpleTexVListScopes(layoutIr.vlist),
+    layoutIr.vlist,
     report,
     {
       width: options.width,

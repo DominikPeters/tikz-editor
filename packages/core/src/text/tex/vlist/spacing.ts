@@ -34,48 +34,50 @@ export function planSimpleTexParagraphVerticalSkips(
       continue;
     }
 
-    const block = item.block;
+    const paragraph = item.paragraph;
     const hasPreviousEmittedParagraph = emittedParagraphCount > 0;
     const listVerticalSkipBefore = texArticleListVerticalSkipBefore(
       previousEmittedListContext,
-      block.listContext,
+      paragraph.listContext,
       hasPreviousEmittedParagraph,
       font
     );
     const quoteVerticalSkipBefore = texArticleQuoteVerticalSkipBefore(
       previousEmittedQuoteDepth,
-      block.quoteDepth,
-      previousEmittedListContext !== undefined || block.listContext !== undefined,
+      paragraph.quoteDepth,
+      previousEmittedListContext !== undefined || paragraph.listContext !== undefined,
       quoteEntryHadPreviousParagraphByDepth.get(previousEmittedQuoteDepth) ?? true,
       hasPreviousEmittedParagraph,
       font
     );
 
     skips.push({
-      blockIndex: item.blockIndex,
+      blockIndex: paragraph.blockIndex,
       segmentIndex: 0,
+      quoteSize: quoteVerticalSkipBefore,
+      listSize: listVerticalSkipBefore,
       size: quoteVerticalSkipBefore + listVerticalSkipBefore,
     });
 
-    if (block.quoteDepth > previousEmittedQuoteDepth) {
+    if (paragraph.quoteDepth > previousEmittedQuoteDepth) {
       for (
         let depth = previousEmittedQuoteDepth + 1;
-        depth <= block.quoteDepth;
+        depth <= paragraph.quoteDepth;
         depth += 1
       ) {
         quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
       }
-    } else if (block.quoteDepth < previousEmittedQuoteDepth) {
+    } else if (paragraph.quoteDepth < previousEmittedQuoteDepth) {
       for (
         let depth = previousEmittedQuoteDepth;
-        depth > block.quoteDepth;
+        depth > paragraph.quoteDepth;
         depth -= 1
       ) {
         quoteEntryHadPreviousParagraphByDepth.delete(depth);
       }
     }
-    previousEmittedQuoteDepth = block.quoteDepth;
-    previousEmittedListContext = block.listContext;
+    previousEmittedQuoteDepth = paragraph.quoteDepth;
+    previousEmittedListContext = paragraph.listContext;
     emittedParagraphCount += 1;
   }
 

@@ -19,10 +19,9 @@ import {
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import {
-  addParagraphVerticalGlueToVList,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
-  planSimpleTexParagraphVerticalSkips,
+  prepareSimpleTexVList,
   type TexVListItem,
   type TexVListDocument,
 } from "./vlist/index.js";
@@ -126,9 +125,12 @@ export function createSimpleTexLayoutDocumentIr(params: {
 }): SimpleTexLayoutDocumentIr {
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const paragraphs: TexLayoutParagraphIr[] = [];
-  const vlist = params.items
+  const baseVList = params.items
     ? lowerSimpleTexBlockItemsToVList(params.items)
     : lowerSimpleTexBlocksToVList(params.blocks);
+  const preparedVList = prepareSimpleTexVList(baseVList, params.font);
+  const materializedVList = preparedVList.materialized;
+  const normalizedVList = preparedVList.normalized;
   const reportAlignment = texHonoredBlockAlignment(
     params.blocks[0],
     params.options
@@ -137,23 +139,22 @@ export function createSimpleTexLayoutDocumentIr(params: {
   let activeAlignment = params.defaultAlignment;
   let activeAlignmentProfile: TexAlignmentProfile | undefined;
   let activeSpaceGlueProfile = texInitialSpaceGlueProfile(params.defaultAlignment);
-  const verticalSkips = planSimpleTexParagraphVerticalSkips(vlist.items, params.font);
-  const finalParagraphBlockIndex = finalVListParagraphBlockIndex(vlist.items);
+  const finalParagraphBlockIndex = finalVListParagraphBlockIndex(materializedVList.items);
 
-  for (const item of vlist.items) {
+  for (const item of materializedVList.items) {
     if (item.kind !== "paragraph") {
       continue;
     }
-    const blockIndex = item.blockIndex;
-    const block = item.block;
-    const inheritedAlignment = block.listContext ? params.defaultAlignment : activeAlignment;
-    const inheritedAlignmentProfile = block.listContext ? undefined : activeAlignmentProfile;
+    const paragraph = item.paragraph;
+    const blockIndex = paragraph.blockIndex;
+    const inheritedAlignment = paragraph.listContext ? params.defaultAlignment : activeAlignment;
+    const inheritedAlignmentProfile = paragraph.listContext ? undefined : activeAlignmentProfile;
     const blockAlignment = texHonoredBlockAlignment(
-      block,
+      paragraph,
       params.options,
       blockIndex === finalParagraphBlockIndex
     );
-    const blockAlignmentProfile = blockAlignment ? block.alignmentProfile : undefined;
+    const blockAlignmentProfile = blockAlignment ? paragraph.alignmentProfile : undefined;
     const alignment = blockAlignment ?? activeAlignment;
     const alignmentProfile = blockAlignment ? blockAlignmentProfile : activeAlignmentProfile;
 
@@ -168,17 +169,17 @@ export function createSimpleTexLayoutDocumentIr(params: {
       }
     }
 
-    const effectiveAlignment = texQuoteParagraphAlignment(block.quoteDepth, alignment);
+    const effectiveAlignment = texQuoteParagraphAlignment(paragraph.quoteDepth, alignment);
     const effectiveAlignmentProfile = texQuoteParagraphAlignmentProfile(
-      block.quoteDepth,
+      paragraph.quoteDepth,
       alignment,
       alignmentProfile
     );
-    const paragraphSpaceGlueProfile = block.listContext
+    const paragraphSpaceGlueProfile = paragraph.listContext
       ? texInitialSpaceGlueProfile(params.defaultAlignment)
       : activeSpaceGlueProfile;
     const segments = splitSimpleTexParagraphSegments(
-      block,
+      paragraph,
       params.options,
       effectiveAlignment,
       blockIndex
@@ -189,16 +190,16 @@ export function createSimpleTexLayoutDocumentIr(params: {
 
     for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
       const segment = segments[segmentIndex];
-      const quoteMarginWidth = texArticleQuoteMarginWidth(block.quoteDepth, params.font);
-      const listMarginWidth = texArticleListTotalMarginWidth(block.listContext, params.font);
+      const quoteMarginWidth = texArticleQuoteMarginWidth(paragraph.quoteDepth, params.font);
+      const listMarginWidth = texArticleListTotalMarginWidth(paragraph.listContext, params.font);
       const listLabelRightEdge = texArticleListLabelRightEdge(
-        block.listContext,
+        paragraph.listContext,
         quoteMarginWidth,
         params.font
       );
-      const label = segmentIndex === 0 && block.listContext?.showLabel === true
+      const label = segmentIndex === 0 && paragraph.listContext?.showLabel === true
         ? texLayoutLabelForListContext(
-            block.listContext,
+            paragraph.listContext,
             params.font,
             metricProvider,
             paragraphSpaceGlueProfile,
@@ -221,8 +222,8 @@ export function createSimpleTexLayoutDocumentIr(params: {
         spaceGlueProfile: paragraphSpaceGlueProfile,
         leftMarginWidth: quoteMarginWidth + listMarginWidth,
         rightMarginWidth: quoteMarginWidth,
-        quoteDepth: block.quoteDepth,
-        listContext: block.listContext,
+        quoteDepth: paragraph.quoteDepth,
+        listContext: paragraph.listContext,
         label,
         forcedBreakAfter: segment.forcedBreakAfter,
         items: simpleTexSegmentToLayoutItems(
@@ -237,7 +238,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
 
   return {
     kind: "simple-tex-layout-document",
-    vlist: addParagraphVerticalGlueToVList(vlist, verticalSkips),
+    vlist: normalizedVList,
     reportAlignment,
     layoutMode,
     paragraphs,
@@ -245,7 +246,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
 }
 
 function texHonoredBlockAlignment(
-  block: SimpleTexParagraphBlock | undefined,
+  block: Pick<SimpleTexParagraphBlock, "alignment" | "alignmentProfile"> | undefined,
   options: TexLayoutIrOptions,
   finalParagraphInNode = false
 ): TexParagraphAlignment | undefined {
@@ -268,7 +269,7 @@ function finalVListParagraphBlockIndex(
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item.kind === "paragraph") {
-      return item.blockIndex;
+      return item.paragraph.blockIndex;
     }
   }
   return undefined;

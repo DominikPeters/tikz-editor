@@ -175,7 +175,7 @@ function linesForParagraphItem(
   item: TexParagraphItem,
   lines: readonly LineReport[]
 ): readonly LineReport[] {
-  return lines.filter((line) => lineOverlapsSourceSpan(line, item.sourceSpan));
+  return lines.filter((line) => lineOverlapsSourceSpan(line, item.paragraph.sourceSpan));
 }
 
 function lineOverlapsSourceSpan(line: LineReport, span: TexSourceSpan): boolean {

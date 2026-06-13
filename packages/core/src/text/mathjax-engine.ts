@@ -13,7 +13,11 @@ import {
 } from "./knuth-plass/index.js";
 import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
-import { computerModernTexMetricProvider, layoutSimpleTexParagraph } from "./tex/index.js";
+import {
+  computerModernTexMetricProvider,
+  layoutSimpleTexParagraph,
+  registerTexVListLayoutsOnOutputJax,
+} from "./tex/index.js";
 import type {
   PositionedTexVListItem,
   ResolvedTexFont,
@@ -989,11 +993,13 @@ function buildSimpleTexTextCacheEntry(params: {
     return null;
   }
   const metricProvider = computerModernTexMetricProvider;
+  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
   const layout = layoutSimpleTexParagraph(params.sourceText, {
     paragraphId,
     width: params.textWidthPt,
     alignment: params.alignment ?? "ragged-right",
+    font: renderFont,
     metricProvider,
     tikzTextWidthNode: true,
   });
@@ -1002,8 +1008,11 @@ function buildSimpleTexTextCacheEntry(params: {
   }
   const outputJax = getRuntimeOutputJax(params.runtime);
   registerKnuthPlassReportsOnOutputJax(outputJax, [layout.report]);
+  registerTexVListLayoutsOnOutputJax(outputJax, [{
+    paragraphId,
+    layout: layout.vlistLayout,
+  }]);
 
-  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
   const firstLineTop = layout.vlistLayout.lineTops[layout.report.lines[0]?.lineIndex ?? 0] ?? 0;
@@ -1175,7 +1184,7 @@ function renderTexVListItemsSvgContent(
       pieces.push(renderTexRuleSvgContent(item));
       continue;
     }
-    if (item.item.kind === "hbox") {
+    if (item.item.kind === "hbox" || item.item.kind === "penalty") {
       pieces.push(renderTexVListLeafBoxSvgMetadata(item));
       continue;
     }
@@ -1258,10 +1267,12 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
   readonly alignment?: NodeTextParagraphAlignment | null;
 }): string | null {
   const metricProvider = computerModernTexMetricProvider;
+  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const layout = layoutSimpleTexParagraph(params.text, {
     paragraphId: "tex:debug-placeholder",
     width: params.width,
     alignment: params.alignment ?? "ragged-right",
+    font: renderFont,
     metricProvider,
     tikzTextWidthNode: true,
     fallbackPolicy: "placeholder",
@@ -1270,7 +1281,6 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
     return null;
   }
 
-  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const firstLineTop = layout.vlistLayout.lineTops[layout.report.lines[0]?.lineIndex ?? 0] ?? 0;
   const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
@@ -1296,7 +1306,7 @@ export function renderTexVListSvgMetadata(
       pieces.push(renderTexPlaceholderSvgMetadata(item, width));
       continue;
     }
-    if (item.item.kind === "hbox" || item.item.kind === "rule") {
+    if (item.item.kind === "hbox" || item.item.kind === "penalty" || item.item.kind === "rule") {
       pieces.push(renderTexVListLeafBoxSvgMetadata(item));
       continue;
     }
@@ -1357,15 +1367,18 @@ function renderTexPlaceholderSvgMetadata(
 }
 
 function renderTexVListLeafBoxSvgMetadata(item: PositionedTexVListItem): string {
-  if (item.item.kind !== "hbox" && item.item.kind !== "rule") {
+  if (item.item.kind !== "hbox" && item.item.kind !== "penalty" && item.item.kind !== "rule") {
     return "";
   }
   const sourceAttrs = item.item.sourceSpan
     ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
     : "";
+  const penaltyAttrs = item.item.kind === "penalty"
+    ? ` data-tex-penalty="${item.item.penalty}"`
+    : "";
   const boxHeight = item.metrics.height + item.metrics.depth;
   return [
-    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
     `</g>`,
   ].join("");

@@ -5,12 +5,18 @@ import {
   computerModernTexMetricProvider,
   computeTexVListNaturalTotalHeight,
   createSimpleTexLayoutDocumentIr,
+  getTexVListLayoutFromOutputJax,
+  getTexVListLayoutsFromOutputJax,
   groupSimpleTexVListScopes,
   layoutTexVListItems,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
+  materializeParagraphVerticalGlueInVList,
+  normalizeSimpleTexVList,
   planSimpleTexParagraphVerticalSkips,
+  prepareSimpleTexVList,
   parseSimpleTexParagraphIr,
+  registerTexVListLayoutsOnOutputJax,
   texVListGlueSetForTargetHeight,
   type TexVListItemMeasurer,
   type TexVListItem,
@@ -92,6 +98,11 @@ describe("simple TeX paragraph IR", () => {
     expect(vlist.items[0]).toMatchObject({
       kind: "paragraph",
       blockIndex: 0,
+      paragraph: {
+        blockIndex: 0,
+        text: "Alpha Beta",
+        noIndent: false,
+      },
       sourceSpan: {
         start: parsed.blocks[0]?.sourceStart,
         end: parsed.blocks[0]?.sourceEnd,
@@ -100,12 +111,17 @@ describe("simple TeX paragraph IR", () => {
     expect(vlist.items[1]).toMatchObject({
       kind: "paragraph",
       blockIndex: 1,
+      paragraph: {
+        blockIndex: 1,
+        text: String.raw`Gamma \\[7pt] Delta`,
+        noIndent: true,
+      },
       sourceSpan: {
         start: parsed.blocks[1]?.sourceStart,
         end: parsed.blocks[1]?.sourceEnd,
       },
     });
-    expect(vlist.items[1]?.kind === "paragraph" ? vlist.items[1].block.noIndent : false).toBe(true);
+    expect(vlist.items[1]?.kind === "paragraph" ? vlist.items[1].paragraph.noIndent : false).toBe(true);
   });
 
   it("preserves quote/list metadata when lowering simple TeX blocks to vlist", () => {
@@ -118,10 +134,10 @@ describe("simple TeX paragraph IR", () => {
     expect(vlist.items.map((item) =>
       item.kind === "paragraph"
         ? {
-            text: item.block.text,
-            quoteDepth: item.block.quoteDepth,
-            listKind: item.block.listContext?.kind,
-            itemIndex: item.block.listContext?.itemIndex,
+            text: item.paragraph.text,
+            quoteDepth: item.paragraph.quoteDepth,
+            listKind: item.paragraph.listContext?.kind,
+            itemIndex: item.paragraph.listContext?.itemIndex,
           }
         : null
     )).toEqual([
@@ -225,21 +241,40 @@ describe("simple TeX paragraph IR", () => {
       item.kind === "paragraph"
         ? {
             kind: item.kind,
-            text: item.block.text,
+            text: item.paragraph.text,
           }
         : {
             kind: item.kind,
             size: item.kind === "glue" ? item.size : undefined,
+            origin: item.kind === "glue" ? item.origin : undefined,
             stretch: item.kind === "glue" ? item.stretch : undefined,
             shrink: item.kind === "glue" ? item.shrink : undefined,
           }
     )).toEqual([
       { kind: "paragraph", text: "Alpha" },
-      { kind: "glue", size: 3, stretch: 1, shrink: 1 },
+      {
+        kind: "glue",
+        size: 3,
+        origin: { kind: "explicit-command", command: "smallskip" },
+        stretch: 1,
+        shrink: 1,
+      },
       { kind: "paragraph", text: "Beta" },
-      { kind: "glue", size: 7, stretch: undefined, shrink: undefined },
+      {
+        kind: "glue",
+        size: 7,
+        origin: { kind: "explicit-command", command: "vspace" },
+        stretch: undefined,
+        shrink: undefined,
+      },
       { kind: "paragraph", text: "Gamma" },
-      { kind: "glue", size: -2, stretch: undefined, shrink: undefined },
+      {
+        kind: "glue",
+        size: -2,
+        origin: { kind: "explicit-command", command: "vskip" },
+        stretch: undefined,
+        shrink: undefined,
+      },
       { kind: "paragraph", text: "Delta" },
     ]);
   });
@@ -280,7 +315,7 @@ describe("simple TeX paragraph IR", () => {
     const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
     expect(vlist.items.map((item) =>
       item.kind === "paragraph"
-        ? { kind: item.kind, text: item.block.text }
+        ? { kind: item.kind, text: item.paragraph.text }
         : item.kind === "rule"
           ? {
               kind: item.kind,
@@ -298,6 +333,57 @@ describe("simple TeX paragraph IR", () => {
         height: 2,
         depth: 1,
         sourceSpan: { start: ruleStart, end: ruleEnd },
+      },
+      { kind: "paragraph", text: "Beta" },
+    ]);
+  });
+
+  it("lowers explicit TeX penalty commands into vlist penalties", () => {
+    const source = String.raw`Alpha \par \penalty -50 Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const penaltyStart = source.indexOf(String.raw`\penalty`);
+    const penaltyEnd = source.indexOf(" Beta");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.block.text }
+        : item.kind === "penalty"
+          ? {
+              kind: item.kind,
+              penalty: item.penalty,
+              sourceStart: item.sourceStart,
+              sourceEnd: item.sourceEnd,
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "penalty",
+        penalty: -50,
+        sourceStart: penaltyStart,
+        sourceEnd: penaltyEnd,
+      },
+      { kind: "paragraph", text: "Beta" },
+    ]);
+
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
+    expect(vlist.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
+        : item.kind === "penalty"
+          ? {
+              kind: item.kind,
+              penalty: item.penalty,
+              sourceSpan: item.sourceSpan,
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "penalty",
+        penalty: -50,
+        sourceSpan: { start: penaltyStart, end: penaltyEnd },
       },
       { kind: "paragraph", text: "Beta" },
     ]);
@@ -352,7 +438,7 @@ describe("simple TeX paragraph IR", () => {
         : item.kind === "paragraph"
           ? {
               kind: item.kind,
-              text: item.block.text,
+              text: item.paragraph.text,
             }
         : {
             kind: item.kind,
@@ -389,7 +475,7 @@ describe("simple TeX paragraph IR", () => {
       item.kind === "placeholder"
         ? { kind: item.kind, reason: item.reason }
         : item.kind === "paragraph"
-          ? { kind: item.kind, text: item.block.text }
+          ? { kind: item.kind, text: item.paragraph.text }
         : { kind: item.kind }
     )).toEqual([
       { kind: "placeholder", reason: "Unsupported TeX command in vertical mode." },
@@ -402,10 +488,10 @@ describe("simple TeX paragraph IR", () => {
     const vlist = addParagraphVerticalGlueToVList(
       lowerSimpleTexBlocksToVList(parsed.blocks),
       [
-        { blockIndex: 0, segmentIndex: 0, size: 0 },
-        { blockIndex: 1, segmentIndex: 0, size: 10 },
-        { blockIndex: 1, segmentIndex: 1, size: 99 },
-        { blockIndex: 2, segmentIndex: 0, size: 4 },
+        { blockIndex: 0, segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
+        { blockIndex: 1, segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+        { blockIndex: 1, segmentIndex: 1, quoteSize: 99, listSize: 0, size: 99 },
+        { blockIndex: 2, segmentIndex: 0, quoteSize: 0, listSize: 4, size: 4 },
       ]
     );
 
@@ -413,17 +499,36 @@ describe("simple TeX paragraph IR", () => {
       item.kind === "paragraph"
         ? {
             kind: item.kind,
-            text: item.block.text,
+            text: item.paragraph.text,
           }
         : {
             kind: item.kind,
             size: item.kind === "glue" ? item.size : undefined,
+            origin: item.kind === "glue" ? item.origin : undefined,
           }
     )).toEqual([
       { kind: "paragraph", text: "Alpha" },
-      { kind: "glue", size: 10 },
+      {
+        kind: "glue",
+        size: 10,
+        origin: {
+          kind: "paragraph-boundary",
+          beforeBlockIndex: 1,
+          quoteSize: 10,
+          listSize: 0,
+        },
+      },
       { kind: "paragraph", text: "Beta" },
-      { kind: "glue", size: 4 },
+      {
+        kind: "glue",
+        size: 4,
+        origin: {
+          kind: "paragraph-boundary",
+          beforeBlockIndex: 2,
+          quoteSize: 0,
+          listSize: 4,
+        },
+      },
       { kind: "paragraph", text: "Gamma" },
     ]);
   });
@@ -439,10 +544,10 @@ describe("simple TeX paragraph IR", () => {
     );
 
     expect(skips).toEqual([
-      { blockIndex: 0, segmentIndex: 0, size: 0 },
-      { blockIndex: 1, segmentIndex: 0, size: 10 },
-      { blockIndex: 2, segmentIndex: 0, size: 4 },
-      { blockIndex: 3, segmentIndex: 0, size: 10 },
+      { blockIndex: 0, segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
+      { blockIndex: 1, segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+      { blockIndex: 2, segmentIndex: 0, quoteSize: 4, listSize: 0, size: 4 },
+      { blockIndex: 3, segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
     ]);
   });
 
@@ -492,7 +597,7 @@ describe("simple TeX paragraph IR", () => {
     }
     expect(listBox.items.map((item) =>
       item.kind === "paragraph"
-        ? { kind: item.kind, text: item.block.text }
+        ? { kind: item.kind, text: item.paragraph.text }
         : { kind: item.kind, size: item.kind === "glue" ? item.size : undefined }
     )).toEqual([
       { kind: "glue", size: 13 },
@@ -568,6 +673,39 @@ describe("simple TeX paragraph IR", () => {
         metrics: { width: 10, height: 2, depth: 1 },
       },
     ]);
+  });
+
+  it("registers positioned vlist layouts by paragraph id on an output jax", () => {
+    const outputJax = {};
+    const layout = {
+      metrics: { width: 42, height: 7, depth: 3 },
+      baseline: { kind: "explicit", y: 7 } as const,
+      items: [],
+      lineTops: [0],
+      reports: [],
+      errors: [],
+    };
+    const replacement = {
+      ...layout,
+      metrics: { width: 24, height: 5, depth: 2 },
+      lineTops: [3],
+    };
+
+    expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([]);
+    registerTexVListLayoutsOnOutputJax(outputJax, [
+      { paragraphId: "tex:a", layout },
+      { paragraphId: "", layout },
+    ]);
+    registerTexVListLayoutsOnOutputJax(outputJax, [
+      { paragraphId: "tex:a", layout: replacement },
+    ]);
+
+    expect(getTexVListLayoutFromOutputJax(outputJax, "tex:a")).toBe(replacement);
+    expect(getTexVListLayoutFromOutputJax(outputJax, "tex:missing")).toBeNull();
+    expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([
+      { paragraphId: "tex:a", layout: replacement },
+    ]);
+    expect(getTexVListLayoutsFromOutputJax(null)).toEqual([]);
   });
 
   it("keeps parent vlist glue setting out of nested vboxes", () => {
@@ -1234,24 +1372,111 @@ describe("simple TeX paragraph IR", () => {
       options: {},
     });
 
-    expect(layout.vlist.items.map((item) =>
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:4",
+      "paragraph:Gamma",
+      "glue:10",
+      "paragraph:Delta",
+    ]);
+  });
+
+  it("materializes paragraph boundary glue through the vlist transform", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
+    );
+    const baseVList = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const vlist = materializeParagraphVerticalGlueInVList(
+      baseVList,
+      computerModernTexMetricProvider.resolveFont()
+    );
+
+    expect(vlist.items.map((item) =>
       item.kind === "paragraph"
         ? {
             kind: item.kind,
-            text: item.block.text,
+            text: item.paragraph.text,
           }
-        : {
-            kind: item.kind,
-            size: item.kind === "glue" ? item.size : undefined,
-          }
+        : item.kind === "glue"
+          ? {
+              kind: item.kind,
+              size: item.size,
+              origin: item.origin,
+            }
+          : { kind: item.kind }
     )).toEqual([
       { kind: "paragraph", text: "Alpha" },
-      { kind: "glue", size: 10 },
+      {
+        kind: "glue",
+        size: 10,
+        origin: {
+          kind: "paragraph-boundary",
+          beforeBlockIndex: 1,
+          quoteSize: 10,
+          listSize: 0,
+        },
+      },
       { kind: "paragraph", text: "Beta" },
-      { kind: "glue", size: 4 },
+      {
+        kind: "glue",
+        size: 10,
+        origin: {
+          kind: "paragraph-boundary",
+          beforeBlockIndex: 2,
+          quoteSize: 0,
+          listSize: 10,
+        },
+      },
       { kind: "paragraph", text: "Gamma" },
-      { kind: "glue", size: 10 },
-      { kind: "paragraph", text: "Delta" },
+    ]);
+  });
+
+  it("normalizes simple TeX vlists by materializing boundary glue and grouping scopes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
+    );
+    const baseVList = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const prepared = prepareSimpleTexVList(baseVList, font);
+    const normalized = normalizeSimpleTexVList(baseVList, font);
+
+    expect(flattenVListLeaves(prepared.materialized.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:10",
+      "paragraph:Gamma",
+    ]);
+    expect(prepared.normalized).toEqual(normalized);
+    expect(normalized).toEqual(
+      prepareSimpleTexVList(baseVList, font).normalized
+    );
+
+    expect(normalized.items.map((item) => ({
+      kind: item.kind,
+      role: item.kind === "vbox" ? item.role : undefined,
+    }))).toEqual([
+      { kind: "paragraph", role: undefined },
+      { kind: "vbox", role: { kind: "quote", depth: 1 } },
+    ]);
+    const quote = normalized.items[1];
+    expect(quote?.kind === "vbox" ? quote.items.map((item) => ({
+      kind: item.kind,
+      role: item.kind === "vbox" ? item.role : undefined,
+      size: item.kind === "glue" ? item.size : undefined,
+    })) : null).toEqual([
+      { kind: "glue", role: undefined, size: 10 },
+      { kind: "paragraph", role: undefined, size: undefined },
+      { kind: "vbox", role: { kind: "list", listKind: "itemize", depth: 2, labelDepth: 1, totalLeftMarginEm: 2.2 }, size: undefined },
+    ]);
+    expect(flattenVListLeaves(normalized.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:10",
+      "paragraph:Gamma",
     ]);
   });
 
@@ -1353,7 +1578,7 @@ function flattenVListLeaves(items: readonly TexVListItem[]): readonly string[] {
       continue;
     }
     if (item.kind === "paragraph") {
-      leaves.push(`paragraph:${item.block.text}`);
+      leaves.push(`paragraph:${item.paragraph.text}`);
       continue;
     }
     if (item.kind === "glue") {

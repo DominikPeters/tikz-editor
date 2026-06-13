@@ -1,5 +1,12 @@
 import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
-import type { SimpleTexListKind, SimpleTexParagraphBlock } from "../ir.js";
+import type {
+  SimpleTexListKind,
+  SimpleTexListContext,
+  SimpleTexSegmentInput,
+  SimpleTexVerticalGlueCommandName,
+  TexAlignmentProfile,
+  TexParagraphAlignment,
+} from "../ir.js";
 
 export interface TexSourceSpan {
   readonly start: number;
@@ -21,6 +28,18 @@ export type TexVBoxBaseline =
 export type TexGlueOrder = "normal" | "fil" | "fill" | "filll";
 export type TexDimenExpr = number | string;
 
+export type TexGlueOrigin =
+  | {
+      readonly kind: "explicit-command";
+      readonly command: SimpleTexVerticalGlueCommandName;
+    }
+  | {
+      readonly kind: "paragraph-boundary";
+      readonly beforeBlockIndex: number;
+      readonly quoteSize: number;
+      readonly listSize: number;
+    };
+
 export interface TexLineBox {
   readonly sourceSpan?: TexSourceSpan;
   readonly metrics: TexBoxMetrics;
@@ -41,11 +60,18 @@ export interface TexHorizontalLayout {
   readonly hitMap?: TexHitMap;
 }
 
+export interface TexParagraphInput extends SimpleTexSegmentInput {
+  readonly blockIndex: number;
+  readonly alignment?: TexParagraphAlignment;
+  readonly alignmentProfile?: TexAlignmentProfile;
+  readonly listContext?: SimpleTexListContext;
+}
+
 export interface TexParagraphItem {
   readonly kind: "paragraph";
   readonly sourceSpan: TexSourceSpan;
   readonly blockIndex: number;
-  readonly block: SimpleTexParagraphBlock;
+  readonly paragraph: TexParagraphInput;
 }
 
 export interface TexHBoxItem {
@@ -78,6 +104,7 @@ export interface TexGlueItem {
   readonly kind: "glue";
   readonly sourceSpan?: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];
+  readonly origin?: TexGlueOrigin;
   readonly size: number;
   readonly stretch?: number;
   readonly shrink?: number;
@@ -88,6 +115,7 @@ export interface TexGlueItem {
 export interface TexPenaltyItem {
   readonly kind: "penalty";
   readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
   readonly penalty: number;
 }
 

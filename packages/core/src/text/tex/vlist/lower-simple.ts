@@ -1,12 +1,18 @@
 import type {
   SimpleTexBlockItem,
   SimpleTexParagraphBlock,
+  SimpleTexPenaltyBlockItem,
   SimpleTexPlaceholderBlockItem,
   SimpleTexVerticalGlueBlockItem,
   SimpleTexVerticalRuleBlockItem,
 } from "../ir.js";
+import type { ResolvedTexFont } from "../fonts/types.js";
+import { planSimpleTexParagraphVerticalSkips } from "./spacing.js";
+import { groupSimpleTexVListScopes } from "./scopes.js";
 import type {
   TexGlueItem,
+  TexParagraphInput,
+  TexPenaltyItem,
   TexPlaceholderItem,
   TexRuleItem,
   TexSourceSpan,
@@ -19,6 +25,13 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly blockIndex: number;
   readonly segmentIndex: number;
   readonly size: number;
+  readonly quoteSize: number;
+  readonly listSize: number;
+}
+
+export interface PreparedSimpleTexVList {
+  readonly materialized: TexVListDocument;
+  readonly normalized: TexVListDocument;
 }
 
 export function lowerSimpleTexBlocksToVList(
@@ -41,6 +54,9 @@ export function lowerSimpleTexBlockItemsToVList(
     if (item.kind === "vertical-rule") {
       return ruleItemFromSimpleTexVerticalRule(item);
     }
+    if (item.kind === "penalty") {
+      return penaltyItemFromSimpleTexPenalty(item);
+    }
     if (item.kind === "placeholder") {
       return placeholderItemFromSimpleTexPlaceholder(item);
     }
@@ -48,7 +64,7 @@ export function lowerSimpleTexBlockItemsToVList(
       kind: "paragraph",
       sourceSpan: sourceSpanFromBlock(item.block),
       blockIndex: item.blockIndex,
-      block: item.block,
+      paragraph: paragraphInputFromSimpleTexBlock(item.block, item.blockIndex),
     };
   });
   return {
@@ -62,22 +78,28 @@ export function addParagraphVerticalGlueToVList(
   vlist: TexVListDocument,
   skips: readonly SimpleTexParagraphVerticalSkip[]
 ): TexVListDocument {
-  const verticalSkipByBlock = new Map<number, number>();
+  const verticalSkipByBlock = new Map<number, SimpleTexParagraphVerticalSkip>();
   for (const skip of skips) {
     if (skip.segmentIndex === 0 && skip.size > 0) {
-      verticalSkipByBlock.set(skip.blockIndex, skip.size);
+      verticalSkipByBlock.set(skip.blockIndex, skip);
     }
   }
 
   const items: TexVListItem[] = [];
   for (const item of vlist.items) {
     if (item.kind === "paragraph") {
-      const size = verticalSkipByBlock.get(item.blockIndex) ?? 0;
-      if (size > 0) {
+      const skip = verticalSkipByBlock.get(item.paragraph.blockIndex);
+      if (skip && skip.size > 0) {
         items.push({
           kind: "glue",
           sourceSpan: item.sourceSpan,
-          size,
+          origin: {
+            kind: "paragraph-boundary",
+            beforeBlockIndex: item.paragraph.blockIndex,
+            quoteSize: skip.quoteSize,
+            listSize: skip.listSize,
+          },
+          size: skip.size,
           stretchOrder: "normal",
           shrinkOrder: "normal",
         });
@@ -89,6 +111,34 @@ export function addParagraphVerticalGlueToVList(
   return {
     ...vlist,
     items,
+  };
+}
+
+export function materializeParagraphVerticalGlueInVList(
+  vlist: TexVListDocument,
+  font: ResolvedTexFont
+): TexVListDocument {
+  return addParagraphVerticalGlueToVList(
+    vlist,
+    planSimpleTexParagraphVerticalSkips(vlist.items, font)
+  );
+}
+
+export function normalizeSimpleTexVList(
+  vlist: TexVListDocument,
+  font: ResolvedTexFont
+): TexVListDocument {
+  return prepareSimpleTexVList(vlist, font).normalized;
+}
+
+export function prepareSimpleTexVList(
+  vlist: TexVListDocument,
+  font: ResolvedTexFont
+): PreparedSimpleTexVList {
+  const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
+  return {
+    materialized,
+    normalized: groupSimpleTexVListScopes(materialized),
   };
 }
 
@@ -118,6 +168,10 @@ function glueItemFromSimpleTexVerticalGlue(item: SimpleTexVerticalGlueBlockItem)
       start: item.sourceStart,
       end: item.sourceEnd,
     },
+    origin: {
+      kind: "explicit-command",
+      command: item.command,
+    },
     scopePath: scopePathForVerticalBlockItem(item),
     size: item.size,
     stretch: item.stretch,
@@ -141,8 +195,24 @@ function ruleItemFromSimpleTexVerticalRule(item: SimpleTexVerticalRuleBlockItem)
   };
 }
 
+function penaltyItemFromSimpleTexPenalty(item: SimpleTexPenaltyBlockItem): TexPenaltyItem {
+  return {
+    kind: "penalty",
+    sourceSpan: {
+      start: item.sourceStart,
+      end: item.sourceEnd,
+    },
+    scopePath: scopePathForVerticalBlockItem(item),
+    penalty: item.penalty,
+  };
+}
+
 function scopePathForVerticalBlockItem(
-  item: SimpleTexVerticalGlueBlockItem | SimpleTexVerticalRuleBlockItem | SimpleTexPlaceholderBlockItem
+  item:
+    | SimpleTexVerticalGlueBlockItem
+    | SimpleTexVerticalRuleBlockItem
+    | SimpleTexPenaltyBlockItem
+    | SimpleTexPlaceholderBlockItem
 ): readonly TexVBoxRole[] | undefined {
   const path: TexVBoxRole[] = [];
   for (let depth = 1; depth <= item.quoteDepth; depth += 1) {
@@ -164,6 +234,23 @@ function sourceSpanFromBlock(block: SimpleTexParagraphBlock): TexSourceSpan {
   return {
     start: block.sourceStart,
     end: block.sourceEnd,
+  };
+}
+
+function paragraphInputFromSimpleTexBlock(
+  block: SimpleTexParagraphBlock,
+  blockIndex: number
+): TexParagraphInput {
+  return {
+    blockIndex,
+    text: block.text,
+    sourceSpan: sourceSpanFromBlock(block),
+    nodes: block.nodes,
+    noIndent: block.noIndent,
+    alignment: block.alignment,
+    alignmentProfile: block.alignmentProfile,
+    quoteDepth: block.quoteDepth,
+    listContext: block.listContext,
   };
 }
 

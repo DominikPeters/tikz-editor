@@ -2,6 +2,10 @@ export {
   addParagraphVerticalGlueToVList,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
+  materializeParagraphVerticalGlueInVList,
+  normalizeSimpleTexVList,
+  prepareSimpleTexVList,
+  type PreparedSimpleTexVList,
   type SimpleTexParagraphVerticalSkip,
 } from "./lower-simple.js";
 export {
@@ -24,17 +28,25 @@ export {
 } from "./layout.js";
 export { groupSimpleTexVListScopes } from "./scopes.js";
 export { planSimpleTexParagraphVerticalSkips } from "./spacing.js";
+export {
+  getTexVListLayoutFromOutputJax,
+  getTexVListLayoutsFromOutputJax,
+  registerTexVListLayoutsOnOutputJax,
+  type RegisteredTexVListLayout,
+} from "./registry.js";
 export type {
   PositionedTexVListItem,
   TexBoxMetrics,
   TexDimenExpr,
   TexGlueItem,
+  TexGlueOrigin,
   TexGlueOrder,
   TexHBoxItem,
   TexHitMap,
   TexHorizontalLayout,
   TexLayoutReport,
   TexLineBox,
+  TexParagraphInput,
   TexPenaltyItem,
   TexPlaceholderItem,
   TexRenderItem,

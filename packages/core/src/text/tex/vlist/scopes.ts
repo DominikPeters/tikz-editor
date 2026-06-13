@@ -1,5 +1,5 @@
-import type { SimpleTexParagraphBlock } from "../ir.js";
 import type {
+  TexParagraphInput,
   TexSourceSpan,
   TexVBoxItem,
   TexVBoxRole,
@@ -55,10 +55,10 @@ function scopePathForItem(
   nextItem: TexVListItem | undefined
 ): readonly { readonly key: string; readonly role: TexVBoxRole }[] {
   if (item.kind === "paragraph") {
-    return scopePathForBlock(item.block);
+    return scopePathForParagraph(item.paragraph);
   }
   if (
-    (item.kind === "glue" || item.kind === "rule" || item.kind === "placeholder") &&
+    (item.kind === "glue" || item.kind === "penalty" || item.kind === "rule" || item.kind === "placeholder") &&
     item.scopePath
   ) {
     return item.scopePath.map((role) => ({
@@ -67,7 +67,7 @@ function scopePathForItem(
     }));
   }
   if (item.kind === "glue" && nextItem?.kind === "paragraph") {
-    return scopePathForBlock(nextItem.block);
+    return scopePathForParagraph(nextItem.paragraph);
   }
   return [];
 }
@@ -85,17 +85,17 @@ function keyForScopeRole(role: TexVBoxRole): string {
   ].join(":");
 }
 
-function scopePathForBlock(
-  block: SimpleTexParagraphBlock
+function scopePathForParagraph(
+  paragraph: TexParagraphInput
 ): readonly { readonly key: string; readonly role: TexVBoxRole }[] {
   const scopes: Array<{ readonly key: string; readonly role: TexVBoxRole }> = [];
-  for (let depth = 1; depth <= block.quoteDepth; depth += 1) {
+  for (let depth = 1; depth <= paragraph.quoteDepth; depth += 1) {
     scopes.push({
       key: `quote:${depth}`,
       role: { kind: "quote", depth },
     });
   }
-  const listContext = block.listContext;
+  const listContext = paragraph.listContext;
   if (listContext) {
     scopes.push({
       key: [

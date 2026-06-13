@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_TEXT_FONT_SIZE } from "../packages/core/src/semantic/style/resolve.js";
+
 const RETRY_MESSAGE =
   "MathJax retry -- an asynchronous action is required; try using one of the promise-based functions and await its resolution.";
 
@@ -385,6 +387,7 @@ describe("mathjax node text engine", () => {
 
     const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
     const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const { getTexVListLayoutFromOutputJax } = await import("../packages/core/src/text/tex/index.js");
     const engine = await createMathJaxNodeTextEngine();
     const callsBeforeMeasure = texCalls.length;
 
@@ -402,9 +405,12 @@ describe("mathjax node text engine", () => {
       expect(measured?.paragraphId).toMatch(/^tex:/);
       const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
       const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
+      const vlistLayout = getTexVListLayoutFromOutputJax(getActiveMathJaxOutputJax(), measured?.paragraphId);
       expect(report?.layoutMode).toBe("wrap");
       expect(report?.alignment).toBe(alignment);
       expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
+      expect(vlistLayout?.reports).toContain(report);
+      expect(vlistLayout?.items.some((item) => item.item.kind === "paragraph")).toBe(true);
       expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
     }
     const grouped = engine.measure({
@@ -524,6 +530,16 @@ describe("mathjax node text engine", () => {
       },
       {
         item: {
+          kind: "penalty",
+          sourceSpan: { start: 15, end: 26 },
+          penalty: -50,
+        },
+        x: 0,
+        y: 19,
+        metrics: { width: 0, height: 0, depth: 0 },
+      },
+      {
+        item: {
           kind: "placeholder",
           sourceSpan: { start: 20, end: 34 },
           reason: "Unsupported TeX command in vertical mode.",
@@ -543,6 +559,10 @@ describe("mathjax node text engine", () => {
     expect(body).toContain('data-tex-vlist-item="rule"');
     expect(body).toContain('transform="translate(0 14)"');
     expect(body).toContain('width="12" height="5"');
+    expect(body).toContain('data-tex-vlist-item="penalty"');
+    expect(body).toContain('data-tex-penalty="-50"');
+    expect(body).toContain('data-source-start="15"');
+    expect(body).toContain('data-source-end="26"');
     expect(body).toContain('data-tex-vlist-item="placeholder"');
     expect(body).toContain('data-tex-placeholder="true"');
     expect(body).toContain('width="80" height="12"');
@@ -561,7 +581,9 @@ describe("mathjax node text engine", () => {
     }) ?? "";
 
     expect(body).toContain('data-tex-vlist-item="rule"');
-    expect(body).toContain('transform="translate(0 8.8889)"');
+    const ruleTransform = body.match(/data-tex-vlist-item="rule"[^>]*transform="translate\(0 ([^)]+)\)"/);
+    expect(ruleTransform).not.toBeNull();
+    expect(Number(ruleTransform?.[1])).toBeCloseTo(8.8889 * DEFAULT_TEXT_FONT_SIZE / 10, 4);
     expect(body).toContain('width="24" height="3" fill="currentColor"');
     expect(body.indexOf('data-line-index="0"')).toBeLessThan(
       body.indexOf('data-tex-vlist-item="rule"')
