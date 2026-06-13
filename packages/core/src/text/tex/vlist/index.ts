@@ -9,8 +9,10 @@ export {
   type SimpleTexParagraphVerticalSkip,
 } from "./lower-simple.js";
 export {
-  computeTexVListLineTops,
+  layoutTexVListFromMeasuredParagraphs,
   layoutTexVListFromParagraphReport,
+  measureTexVListParagraphBoxesFromReport,
+  type TexVListMeasuredParagraphLayoutOptions,
   type TexVListParagraphReportLayoutOptions,
 } from "./report.js";
 export {
@@ -59,4 +61,9 @@ export type {
   TexVListItem,
   TexVListLayout,
   TexVListLayoutOptions,
+  TexVListLinePlacement,
+  TexVListParagraphBoxMeasurement,
+  TexVListParagraphLineAssignment,
+  TexVListParagraphLineOffset,
+  TexVListParagraphPlacement,
 } from "./types.js";

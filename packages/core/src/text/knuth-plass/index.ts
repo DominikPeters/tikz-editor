@@ -23,6 +23,7 @@ export {
   getKnuthPlassSelectionRects,
   getKnuthPlassVListBoxGeometry,
   getKnuthPlassVListItemGeometry,
+  getKnuthPlassVListParagraphGeometry,
   clearKnuthPlassCaretMappingCache,
   type KnuthPlassConfig,
   type KnuthPlassLayoutMode,
@@ -43,6 +44,8 @@ export {
   type VListBoxGeometryParams,
   type VListItemGeometry,
   type VListItemGeometryParams,
+  type VListParagraphGeometry,
+  type VListParagraphGeometryParams,
 } from './install.js';
 
 export type {

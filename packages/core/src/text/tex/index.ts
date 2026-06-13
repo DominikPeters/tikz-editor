@@ -62,16 +62,17 @@ export {
 } from "./layout-ir.js";
 export {
   addParagraphVerticalGlueToVList,
-  computeTexVListLineTops,
   computeTexVListNaturalTotalHeight,
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,
   groupSimpleTexVListScopes,
   layoutTexVListItems,
+  layoutTexVListFromMeasuredParagraphs,
   layoutTexVListFromParagraphReport,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
   materializeParagraphVerticalGlueInVList,
+  measureTexVListParagraphBoxesFromReport,
   measuredBoxMetricsForVListItem,
   metricsForRootBox,
   normalizeSimpleTexVList,
@@ -88,6 +89,7 @@ export {
   type SimpleTexParagraphVerticalSkip,
   type TexVListGlueSet,
   type TexVListItemMeasurer,
+  type TexVListMeasuredParagraphLayoutOptions,
   type TexVListParagraphReportLayoutOptions,
   type PositionedTexVListItem,
   type TexBoxMetrics,
@@ -112,6 +114,11 @@ export {
   type TexVListItem,
   type TexVListLayout,
   type TexVListLayoutOptions,
+  type TexVListLinePlacement,
+  type TexVListParagraphBoxMeasurement,
+  type TexVListParagraphLineAssignment,
+  type TexVListParagraphLineOffset,
+  type TexVListParagraphPlacement,
 } from "./vlist/index.js";
 export type {
   GeneratedTexCharMetric,

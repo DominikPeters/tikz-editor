@@ -28,6 +28,7 @@ import {
 } from "../packages/core/src/text/knuth-plass/editor/mathPrefix.js";
 import { parseSourceSpans } from "../packages/core/src/text/knuth-plass/editor/sourceParser.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
+import { registerTexVListLayoutsOnOutputJax } from "../packages/core/src/text/tex/index.js";
 
 function makeLineElement(
   bounds: { left: number; top: number; right: number; bottom: number },
@@ -1324,6 +1325,73 @@ describe("knuth-plass hitmap line ranges", () => {
 
     clearKnuthPlassCaretMappingCache(outputJax);
     expect(__getKnuthPlassCaretMappingCacheSize(outputJax)).toBe(0);
+  });
+
+  it("uses registered TeX vlist line placements for caret geometry without linebox DOM", async () => {
+    const report = makeTwoLineReport();
+    const outputJax = {
+      linebreaks: {
+        getReports: () => [report]
+      }
+    };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: report.paragraphId,
+      layout: {
+        metrics: { width: report.width, height: 8, depth: 16 },
+        baseline: { kind: "explicit", y: 8 },
+        items: [],
+        paragraphPlacements: [
+          {
+            blockIndex: 0,
+            sourceSpan: { start: 0, end: 17 },
+            lineIndices: [0, 1],
+            y: 0,
+            metrics: { width: report.width, height: 8, depth: 16 }
+          }
+        ],
+        linePlacements: [
+          { lineIndex: 0, y: 0, height: 10 },
+          { lineIndex: 1, y: 12, height: 10 }
+        ],
+        reports: [report],
+        errors: []
+      }
+    }]);
+    const containerElement = {
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 17, bottom: 22, width: 17, height: 22 }),
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: report.width } },
+      querySelectorAll: () => {
+        throw new Error("registered line placements should avoid rendered linebox queries");
+      }
+    };
+
+    clearKnuthPlassCaretMappingCache(outputJax);
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: report.paragraphId,
+      sourceText: "Hello World Again",
+      containerElement,
+      offset: 12
+    });
+    const hit = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: report.paragraphId,
+      sourceText: "Hello World Again",
+      containerElement,
+      clientPoint: clientPoint(px(2), px(16))
+    });
+
+    expect(point).toMatchObject({
+      ok: true,
+      lineIndex: 1,
+      lineLocalX: 1,
+      clientPoint: { x: 1, y: 17 }
+    });
+    expect(hit).toMatchObject({
+      ok: true,
+      lineIndex: 1,
+      offset: 13,
+      kind: "text"
+    });
   });
 
   it("uses the paragraph root as single-line fallback geometry", async () => {

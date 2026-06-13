@@ -1015,7 +1015,10 @@ function buildSimpleTexTextCacheEntry(params: {
 
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
-  const firstLineTop = layout.vlistLayout.lineTops[layout.report.lines[0]?.lineIndex ?? 0] ?? 0;
+  const firstLineTop = texVListPlacedLineTop(
+    layout.vlistLayout,
+    layout.report.lines[0]?.lineIndex ?? 0
+  );
   const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
     ? layout.vlistLayout.baseline.y - firstLineTop
     : baselineMetrics.strutHeight;
@@ -1027,7 +1030,6 @@ function buildSimpleTexTextCacheEntry(params: {
   const body = renderSimpleTexSvgBody(layout.report, {
     lineHeightPt,
     firstLineAscent,
-    lineTops: layout.vlistLayout.lineTops,
     vlistLayout: layout.vlistLayout,
     metricProvider,
     requestedAlignment: params.requestedAlignment,
@@ -1099,7 +1101,6 @@ function renderSimpleTexSvgBody(
   options: {
     lineHeightPt: number;
     firstLineAscent: number;
-    lineTops?: readonly number[];
     vlistLayout?: TexVListLayout;
     metricProvider: TexMetricProvider;
     requestedAlignment: NodeTextParagraphAlignment | null;
@@ -1132,45 +1133,77 @@ function renderTexVListSvgContent(
   options: {
     lineHeightPt: number;
     firstLineAscent: number;
-    lineTops?: readonly number[];
     vlistLayout: TexVListLayout;
     metricProvider: TexMetricProvider;
   }
 ): string {
   const renderedLines = new Set<number>();
+  const lineByIndex = new Map(report.lines.map((line) => [line.lineIndex, line]));
+  const linePlacementByIndex = new Map(
+    options.vlistLayout.linePlacements.map((placement) => [placement.lineIndex, placement])
+  );
+  const paragraphLineIndicesByBlock = new Map(
+    options.vlistLayout.paragraphPlacements.map((placement) => [
+      placement.blockIndex,
+      placement.lineIndices,
+    ])
+  );
+  const renderOptions = {
+    ...options,
+    lineByIndex,
+    linePlacementByIndex,
+    paragraphLineIndicesByBlock,
+  };
   const pieces = renderTexVListItemsSvgContent(
     options.vlistLayout.items,
     report,
-    options,
+    renderOptions,
     renderedLines
   );
   for (const line of report.lines) {
     if (!renderedLines.has(line.lineIndex)) {
-      pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
+      throw new Error(
+        `TeX vlist layout for paragraph '${report.paragraphId}' did not place line ${line.lineIndex}.`
+      );
     }
   }
   return pieces.join("");
 }
 
+type TexVListRenderOptions = {
+  lineHeightPt: number;
+  firstLineAscent: number;
+  metricProvider: TexMetricProvider;
+  linePlacementByIndex: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
+  lineByIndex: ReadonlyMap<number, ParagraphLayoutReport["lines"][number]>;
+  paragraphLineIndicesByBlock: ReadonlyMap<number, readonly number[]>;
+};
+
 function renderTexVListItemsSvgContent(
   items: readonly PositionedTexVListItem[],
   report: ParagraphLayoutReport,
-  options: {
-    lineHeightPt: number;
-    firstLineAscent: number;
-    lineTops?: readonly number[];
-    metricProvider: TexMetricProvider;
-  },
+  options: TexVListRenderOptions,
   renderedLines: Set<number>
 ): string[] {
   const pieces: string[] = [];
   for (const item of items) {
     if (item.item.kind === "paragraph") {
-      for (const line of report.lines) {
-        if (
-          !renderedLines.has(line.lineIndex) &&
-          texReportLineOverlapsSourceSpan(line, item.item.sourceSpan)
-        ) {
+      const assignedLineIndices = options.paragraphLineIndicesByBlock.get(
+        item.item.paragraph.blockIndex
+      );
+      if (!assignedLineIndices) {
+        throw new Error(
+          `TeX vlist layout for paragraph '${report.paragraphId}' is missing placement for block ${item.item.paragraph.blockIndex}.`
+        );
+      }
+      for (const lineIndex of assignedLineIndices) {
+        const line = options.lineByIndex.get(lineIndex);
+        if (!line) {
+          throw new Error(
+            `TeX vlist layout for paragraph '${report.paragraphId}' references missing line ${lineIndex}.`
+          );
+        }
+        if (!renderedLines.has(line.lineIndex)) {
           pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
         }
       }
@@ -1209,14 +1242,14 @@ function renderTexReportLineSvg(
   options: {
     lineHeightPt: number;
     firstLineAscent: number;
-    lineTops?: readonly number[];
+    linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
     metricProvider: TexMetricProvider;
   },
   renderedLines: Set<number>
 ): string {
   renderedLines.add(line.lineIndex);
   const font = options.metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
-  const lineTop = options.lineTops?.[line.lineIndex] ?? line.lineIndex * options.lineHeightPt;
+  const lineTop = texReportLineTop(report.paragraphId, line.lineIndex, options);
   const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
   const baseline = lineTop + options.firstLineAscent;
   const lineLeadingAttr = line.break?.lineLeading
@@ -1261,6 +1294,34 @@ function renderTexReportLineSvg(
   return pieces.join("");
 }
 
+function texReportLineTop(
+  paragraphId: string,
+  lineIndex: number,
+  options: {
+    readonly lineHeightPt?: number;
+    readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
+  }
+): number {
+  if (options.linePlacementByIndex) {
+    const placement = options.linePlacementByIndex.get(lineIndex);
+    if (!placement) {
+      throw new Error(
+        `TeX vlist layout for paragraph '${paragraphId}' is missing line placement ${lineIndex}.`
+      );
+    }
+    return placement.y;
+  }
+  return lineIndex * (options.lineHeightPt ?? 0);
+}
+
+function texVListPlacedLineTop(layout: TexVListLayout, lineIndex: number): number {
+  const placement = layout.linePlacements.find((entry) => entry.lineIndex === lineIndex);
+  if (!placement) {
+    throw new Error(`TeX vlist layout is missing line placement ${lineIndex}.`);
+  }
+  return placement.y;
+}
+
 export function renderSimpleTexParagraphDebugSvgBody(params: {
   readonly text: string;
   readonly width: number;
@@ -1282,14 +1343,16 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
   }
 
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
-  const firstLineTop = layout.vlistLayout.lineTops[layout.report.lines[0]?.lineIndex ?? 0] ?? 0;
+  const firstLineTop = texVListPlacedLineTop(
+    layout.vlistLayout,
+    layout.report.lines[0]?.lineIndex ?? 0
+  );
   const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
     ? layout.vlistLayout.baseline.y - firstLineTop
     : baselineMetrics.strutHeight;
   return renderSimpleTexSvgBody(layout.report, {
     lineHeightPt: baselineMetrics.baselineskip,
     firstLineAscent,
-    lineTops: layout.vlistLayout.lineTops,
     vlistLayout: layout.vlistLayout,
     metricProvider,
     requestedAlignment: params.alignment ?? null,
@@ -1413,35 +1476,6 @@ function texVBoxRoleAttrs(role: TexVBoxRole | undefined): string {
     ` data-tex-list-label-depth="${role.labelDepth}"`,
     ` data-tex-list-left-margin-em="${role.totalLeftMarginEm}"`,
   ].join("");
-}
-
-function texReportLineOverlapsSourceSpan(
-  line: ParagraphLayoutReport["lines"][number],
-  span: { readonly start: number; readonly end: number }
-): boolean {
-  const lineSpan = texReportLineSourceSpan(line);
-  if (!lineSpan) {
-    return false;
-  }
-  return lineSpan.start < span.end && lineSpan.end > span.start;
-}
-
-function texReportLineSourceSpan(
-  line: ParagraphLayoutReport["lines"][number]
-): { readonly start: number; readonly end: number } | null {
-  let start = Number.POSITIVE_INFINITY;
-  let end = Number.NEGATIVE_INFINITY;
-  for (const segment of line.segments) {
-    if (typeof segment.sourceStartRaw !== "number" || typeof segment.sourceEndRaw !== "number") {
-      continue;
-    }
-    start = Math.min(start, segment.sourceStartRaw);
-    end = Math.max(end, segment.sourceEndRaw);
-  }
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return null;
-  }
-  return { start, end };
 }
 
 function texNormalBaselineMetrics(font: ResolvedTexFont): {

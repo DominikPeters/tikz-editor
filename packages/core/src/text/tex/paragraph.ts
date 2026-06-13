@@ -40,7 +40,9 @@ import {
   type TexLayoutParagraphIr,
 } from "./layout-ir.js";
 import {
-  layoutTexVListFromParagraphReport,
+  layoutTexVListFromMeasuredParagraphs,
+  measureTexVListParagraphBoxesFromReport,
+  type TexVListParagraphLineAssignment,
   type TexVListLayout,
 } from "./vlist/index.js";
 
@@ -88,6 +90,7 @@ interface TexParagraphDpOptionParams {
   readonly options: TexParagraphLayoutOptions;
   readonly alignment: TexParagraphAlignment;
   readonly noIndent: boolean;
+  readonly firstLineIndentWidth?: number;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly inheritedAlignment?: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
@@ -159,6 +162,7 @@ export function layoutSimpleTexParagraph(
   const combinedLines: GreedyLine[] = [];
   const combinedRunWidths = new Map<number, number>();
   const combinedLineLabels = new Map<number, TexLineLabel>();
+  const lineIndicesByBlock = new Map<number, number[]>();
   const errors: string[] = usePlaceholderFallback && fallbackReason
     ? [fallbackReason]
     : [];
@@ -183,6 +187,7 @@ export function layoutSimpleTexParagraph(
       inheritedAlignment: paragraph.inheritedAlignment,
       inheritedAlignmentProfile: paragraph.inheritedAlignmentProfile,
       noIndent: paragraph.noIndent,
+      firstLineIndentWidth: paragraph.firstLineIndentWidth,
       leftMarginWidth: paragraph.leftMarginWidth,
       rightMarginWidth: paragraph.rightMarginWidth,
       quoteContextActive: paragraph.quoteDepth > 0,
@@ -209,6 +214,9 @@ export function layoutSimpleTexParagraph(
     }
     for (const line of broken.lines) {
       const combinedLineIndex = line.lineIndex + lineIndexOffset;
+      const blockLineIndices = lineIndicesByBlock.get(paragraph.blockIndex) ?? [];
+      blockLineIndices.push(combinedLineIndex);
+      lineIndicesByBlock.set(paragraph.blockIndex, blockLineIndices);
       const forcedBreak =
         paragraph.forcedBreakAfter && line.lineIndex === broken.lines.length - 1
           ? createForcedBreakDecision(
@@ -267,15 +275,22 @@ export function layoutSimpleTexParagraph(
     font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
     ...report.lines.map((line) => Number(line.ascent) || 0)
   );
-  const vlistLayout = layoutTexVListFromParagraphReport(
-    layoutIr.vlist,
+  const lineHeight = font.atPt * LATEX_NORMAL_BASELINESKIP_EM;
+  const paragraphLineAssignments = texVListParagraphLineAssignments(lineIndicesByBlock);
+  const paragraphMeasurements = measureTexVListParagraphBoxesFromReport(
     report,
-    {
-      width: options.width,
-      lineHeight: font.atPt * LATEX_NORMAL_BASELINESKIP_EM,
-      firstLineAscent,
-    }
+    lineHeight,
+    paragraphLineAssignments
   );
+  const vlistLayout = layoutTexVListFromMeasuredParagraphs(layoutIr.vlist, {
+    width: options.width,
+    lineHeight,
+    firstLineIndex: report.lines[0]?.lineIndex,
+    firstLineAscent,
+    paragraphMeasurements,
+    reports: [report],
+    errors: report.errors,
+  });
 
   return {
     supported: true,
@@ -285,6 +300,15 @@ export function layoutSimpleTexParagraph(
     shapedRuns,
     errors,
   };
+}
+
+function texVListParagraphLineAssignments(
+  lineIndicesByBlock: ReadonlyMap<number, readonly number[]>
+): readonly TexVListParagraphLineAssignment[] {
+  return Array.from(lineIndicesByBlock, ([blockIndex, lineIndices]) => ({
+    blockIndex,
+    lineIndices: [...lineIndices],
+  }));
 }
 
 function breakTexParagraphRuns(params: {
@@ -297,6 +321,7 @@ function breakTexParagraphRuns(params: {
   readonly inheritedAlignment: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly noIndent: boolean;
+  readonly firstLineIndentWidth?: number;
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
   readonly quoteContextActive: boolean;
@@ -315,6 +340,7 @@ function breakTexParagraphRuns(params: {
     inheritedAlignmentProfile: params.inheritedAlignmentProfile,
     leftMarginWidth: params.leftMarginWidth,
     rightMarginWidth: params.rightMarginWidth,
+    firstLineIndentWidth: params.firstLineIndentWidth,
     quoteContextActive: params.quoteContextActive,
     listContextActive: params.listContextActive,
   });
@@ -757,6 +783,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     options,
     alignment,
     noIndent,
+    firstLineIndentWidth,
     alignmentProfile,
     inheritedAlignment,
     inheritedAlignmentProfile,
@@ -807,13 +834,15 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     ),
     rightskipShrink: 0,
     firstLineIndentWidth:
-      !noIndent &&
-      !listContextActive &&
-      Number.isFinite(options.parindent) &&
-      options.parindent &&
-      options.parindent > 0
-        ? options.parindent
-        : 0,
+      Number.isFinite(firstLineIndentWidth)
+        ? firstLineIndentWidth
+        : !noIndent &&
+            !listContextActive &&
+            Number.isFinite(options.parindent) &&
+            options.parindent &&
+            options.parindent > 0
+          ? options.parindent
+          : 0,
     forcedBreakIndentWidth:
       options.tikzTextWidthNode === true &&
       alignment !== "justified" &&

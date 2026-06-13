@@ -81,6 +81,7 @@ function keyForScopeRole(role: TexVBoxRole): string {
     role.listKind,
     role.depth,
     role.labelDepth,
+    role.ownLeftMarginEm,
     role.totalLeftMarginEm,
   ].join(":");
 }
@@ -103,6 +104,7 @@ function scopePathForParagraph(
         listContext.kind,
         listContext.depth,
         listContext.labelDepth,
+        listContext.ownLeftMarginEm,
         listContext.totalLeftMarginEm,
       ].join(":"),
       role: {
@@ -110,6 +112,7 @@ function scopePathForParagraph(
         listKind: listContext.kind,
         depth: listContext.depth,
         labelDepth: listContext.labelDepth,
+        ownLeftMarginEm: listContext.ownLeftMarginEm,
         totalLeftMarginEm: listContext.totalLeftMarginEm,
       },
     });

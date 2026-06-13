@@ -224,6 +224,7 @@ function scopePathForVerticalBlockItem(
       listKind: item.listScope.kind,
       depth: item.listScope.depth,
       labelDepth: item.listScope.labelDepth,
+      ownLeftMarginEm: item.listScope.ownLeftMarginEm,
       totalLeftMarginEm: item.listScope.totalLeftMarginEm,
     });
   }

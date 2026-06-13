@@ -13,6 +13,7 @@ import {
   getKnuthPlassSelectionRects,
   getKnuthPlassVListBoxGeometry,
   getKnuthPlassVListItemGeometry,
+  getKnuthPlassVListParagraphGeometry,
   type CaretFromPointParams,
   type CaretHitResult,
   type LineRangeFromPointResult,
@@ -26,6 +27,8 @@ import {
   type VListBoxGeometryParams,
   type VListItemGeometry,
   type VListItemGeometryParams,
+  type VListParagraphGeometry,
+  type VListParagraphGeometryParams,
 } from './editor/hitmap.js';
 
 export type OutputJaxName = 'svg' | 'chtml';
@@ -122,6 +125,7 @@ export {
   getKnuthPlassSelectionRects,
   getKnuthPlassVListBoxGeometry,
   getKnuthPlassVListItemGeometry,
+  getKnuthPlassVListParagraphGeometry,
   clearKnuthPlassCaretMappingCache,
   type CaretFromPointParams,
   type PointFromOffsetParams,
@@ -136,4 +140,6 @@ export {
   type VListBoxGeometryParams,
   type VListItemGeometry,
   type VListItemGeometryParams,
+  type VListParagraphGeometry,
+  type VListParagraphGeometryParams,
 };

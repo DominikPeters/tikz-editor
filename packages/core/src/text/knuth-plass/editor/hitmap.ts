@@ -45,6 +45,7 @@ type Element = {
   getAttribute?(name: string): string | null;
   getBoundingClientRect?(): ClientRectLike;
   getScreenCTM?(): ScreenMatrixLike | null;
+  viewBox?: SvgOwnerLike['viewBox'];
   ownerSVGElement?: SvgOwnerLike | null;
   querySelector?(selector: string): Element | null;
   querySelectorAll?(selector: string): ArrayLike<Element>;
@@ -149,6 +150,23 @@ export interface VListItemGeometry {
 }
 
 export interface VListItemGeometryParams {
+  containerElement: Element;
+  outputJax?: unknown;
+  paragraphId?: string | null;
+}
+
+export interface VListParagraphGeometry {
+  blockIndex: number;
+  lineIndices: readonly number[];
+  sourceStart: number;
+  sourceEnd: number;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface VListParagraphGeometryParams {
   containerElement: Element;
   outputJax?: unknown;
   paragraphId?: string | null;
@@ -490,6 +508,41 @@ export function getKnuthPlassVListItemGeometry(
   return items;
 }
 
+export function getKnuthPlassVListParagraphGeometry(
+  params: VListParagraphGeometryParams | null | undefined
+): VListParagraphGeometry[] {
+  const containerElement = params?.containerElement;
+  if (!containerElement || typeof containerElement !== 'object') {
+    return [];
+  }
+  const layout = getTexVListLayoutFromOutputJax(params.outputJax, params.paragraphId);
+  const matrix = containerElement.getScreenCTM?.();
+  if (!layout || !matrix) {
+    return [];
+  }
+  const paragraphs: VListParagraphGeometry[] = [];
+  for (const placement of layout.paragraphPlacements) {
+    const bounds = clientRectForLocalBox(
+      0,
+      placement.y,
+      placement.metrics.width,
+      placement.metrics.height + placement.metrics.depth,
+      matrix
+    );
+    if (!bounds) {
+      continue;
+    }
+    paragraphs.push({
+      blockIndex: placement.blockIndex,
+      lineIndices: placement.lineIndices,
+      sourceStart: placement.sourceSpan.start,
+      sourceEnd: placement.sourceSpan.end,
+      ...bounds,
+    });
+  }
+  return paragraphs;
+}
+
 export function getKnuthPlassPlaceholderGeometry(
   params: PlaceholderGeometryParams | null | undefined
 ): PlaceholderGeometry[] {
@@ -735,9 +788,14 @@ function finiteAttributeNumber(element: Element, name: string): number | null {
 
 function readLineGeometry(
   containerElement: Element,
-  report: ParagraphLayoutReport
+  report: ParagraphLayoutReport,
+  outputJax?: unknown
 ): LineGeometry[] {
   const sortedLines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
+  const registered = registeredLineGeometry(containerElement, report, outputJax, sortedLines);
+  if (registered) {
+    return registered;
+  }
   const geometryElements = collectLineGeometryElements(containerElement, sortedLines.length);
   if (!geometryElements) {
     throw new Error(
@@ -828,6 +886,131 @@ function readLineGeometry(
       inverseScreenMatrix,
     };
   });
+}
+
+function registeredLineGeometry(
+  containerElement: Element,
+  report: ParagraphLayoutReport,
+  outputJax: unknown,
+  sortedLines: readonly ParagraphLayoutReport['lines'][number][]
+): LineGeometry[] | null {
+  const layout = getTexVListLayoutFromOutputJax(outputJax, report.paragraphId);
+  const rootMatrix = containerElement.getScreenCTM?.();
+  const viewBoxWidth = Number(
+    containerElement.viewBox?.baseVal?.width ??
+      containerElement.ownerSVGElement?.viewBox?.baseVal?.width
+  );
+  if (!layout || !rootMatrix || !Number.isFinite(viewBoxWidth) || viewBoxWidth <= EPSILON) {
+    return null;
+  }
+  const linePlacementByIndex = new Map(
+    layout.linePlacements.map((placement) => [placement.lineIndex, placement])
+  );
+  if (sortedLines.some((line) => !linePlacementByIndex.has(line.lineIndex))) {
+    return null;
+  }
+  const reportWidth = Number(report.width);
+  if (!Number.isFinite(reportWidth) || reportWidth <= EPSILON) {
+    throw new Error(`Invalid report width for paragraph '${report.paragraphId}'.`);
+  }
+  const baseMatrix = normalizedScreenMatrix(rootMatrix, `paragraph '${report.paragraphId}'`);
+  const reportToSvgScaleX = viewBoxWidth / reportWidth;
+  return sortedLines.map((line) => {
+    const placement = linePlacementByIndex.get(line.lineIndex);
+    if (!placement) {
+      throw new Error(`Missing registered line placement for line ${line.lineIndex}.`);
+    }
+    const lineStart = Number(line.xStart);
+    const lineEnd = Number(line.xEnd);
+    if (!Number.isFinite(lineStart) || !Number.isFinite(lineEnd) || lineEnd < lineStart - EPSILON) {
+      throw new Error(`Line ${line.lineIndex} is missing valid xStart/xEnd metadata.`);
+    }
+    const lineHeight = Number(placement.height);
+    const lineTop = Number(placement.y);
+    if (!Number.isFinite(lineTop) || !Number.isFinite(lineHeight) || lineHeight <= EPSILON) {
+      throw new Error(`Invalid registered line placement for line ${line.lineIndex}.`);
+    }
+    const lineMatrix = translatedScreenMatrix(baseMatrix, lineStart, lineTop);
+    const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, line.lineIndex);
+    const bounds = clientRectForLocalBox(
+      0,
+      0,
+      report.width,
+      lineHeight,
+      lineMatrix
+    );
+    if (!bounds) {
+      throw new Error(`Invalid registered client rect for line ${line.lineIndex}.`);
+    }
+    return {
+      lineIndex: line.lineIndex,
+      clientLeft: bounds.clientLeft,
+      clientRight: bounds.clientRight,
+      clientTop: bounds.clientTop,
+      clientBottom: bounds.clientBottom,
+      clientCenterY: (bounds.clientTop + bounds.clientBottom) / 2,
+      reportToSvgScaleX,
+      screenMatrix: lineMatrix,
+      inverseScreenMatrix,
+    };
+  });
+}
+
+function normalizedScreenMatrix(
+  matrix: ScreenMatrixLike,
+  context: string
+): ScreenMatrixLike {
+  if (
+    !Number.isFinite(Number(matrix.a)) ||
+    !Number.isFinite(Number(matrix.b)) ||
+    !Number.isFinite(Number(matrix.c)) ||
+    !Number.isFinite(Number(matrix.d)) ||
+    !Number.isFinite(Number(matrix.e)) ||
+    !Number.isFinite(Number(matrix.f))
+  ) {
+    throw new Error(`Unable to read screen transform for ${context}.`);
+  }
+  return {
+    a: Number(matrix.a),
+    b: Number(matrix.b),
+    c: Number(matrix.c),
+    d: Number(matrix.d),
+    e: Number(matrix.e),
+    f: Number(matrix.f),
+  };
+}
+
+function translatedScreenMatrix(
+  matrix: ScreenMatrixLike,
+  x: number,
+  y: number
+): ScreenMatrixLike {
+  return {
+    a: matrix.a,
+    b: matrix.b,
+    c: matrix.c,
+    d: matrix.d,
+    e: matrix.a * x + matrix.c * y + matrix.e,
+    f: matrix.b * x + matrix.d * y + matrix.f,
+  };
+}
+
+function inverseScreenMatrixForLine(
+  screenMatrix: ScreenMatrixLike,
+  lineIndex: number
+): ScreenMatrixLike {
+  const determinant = screenMatrix.a * screenMatrix.d - screenMatrix.b * screenMatrix.c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) <= EPSILON) {
+    throw new Error(`Non-invertible screen transform for line ${lineIndex}.`);
+  }
+  return {
+    a: screenMatrix.d / determinant,
+    b: -screenMatrix.b / determinant,
+    c: -screenMatrix.c / determinant,
+    d: screenMatrix.a / determinant,
+    e: (screenMatrix.c * screenMatrix.f - screenMatrix.d * screenMatrix.e) / determinant,
+    f: (screenMatrix.b * screenMatrix.e - screenMatrix.a * screenMatrix.f) / determinant,
+  };
 }
 
 function lineLocalClientPoint(
@@ -1536,7 +1719,7 @@ async function buildParagraphHitMap(
     throw new Error(aligned.error);
   }
 
-  const lineGeometry = readLineGeometry(containerElement, report);
+  const lineGeometry = readLineGeometry(containerElement, report, outputJax);
   const geometryByLineIndex = new Map(lineGeometry.map((entry) => [entry.lineIndex, entry]));
   const stopsByLine = await buildStopsByLine(outputJax, aligned.aligned);
   const visibleHyphenBreakOffsetByLine = buildVisibleHyphenBreakOffsetByLine(report, aligned.aligned);

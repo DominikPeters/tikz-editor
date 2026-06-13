@@ -87,6 +87,7 @@ export type TexVBoxRole =
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
       readonly labelDepth: number;
+      readonly ownLeftMarginEm: number;
       readonly totalLeftMarginEm: number;
     };
 
@@ -167,7 +168,8 @@ export interface TexVListLayout {
   readonly metrics: TexBoxMetrics;
   readonly baseline: TexVBoxBaseline;
   readonly items: readonly PositionedTexVListItem[];
-  readonly lineTops: readonly number[];
+  readonly paragraphPlacements: readonly TexVListParagraphPlacement[];
+  readonly linePlacements: readonly TexVListLinePlacement[];
   readonly reports: readonly (TexLayoutReport | ParagraphLayoutReport)[];
   readonly errors: readonly string[];
 }
@@ -176,4 +178,38 @@ export interface TexVListLayoutOptions {
   readonly width: number;
   readonly height?: number;
   readonly verticalAlign?: "top" | "center" | "bottom";
+}
+
+export interface TexVListParagraphLineAssignment {
+  readonly blockIndex: number;
+  readonly lineIndices: readonly number[];
+}
+
+export interface TexVListParagraphLineOffset {
+  readonly lineIndex: number;
+  readonly y: number;
+}
+
+export interface TexVListParagraphBoxMeasurement {
+  readonly blockIndex: number;
+  readonly lineIndices: readonly number[];
+  readonly lineOffsets: readonly TexVListParagraphLineOffset[];
+  readonly standardMetrics: TexBoxMetrics;
+  readonly ruleLeadingMetrics: TexBoxMetrics;
+  readonly standardAdvance: number;
+  readonly ruleLeadingAdvance: number;
+}
+
+export interface TexVListParagraphPlacement {
+  readonly blockIndex: number;
+  readonly sourceSpan: TexSourceSpan;
+  readonly lineIndices: readonly number[];
+  readonly y: number;
+  readonly metrics: TexBoxMetrics;
+}
+
+export interface TexVListLinePlacement {
+  readonly lineIndex: number;
+  readonly y: number;
+  readonly height: number;
 }

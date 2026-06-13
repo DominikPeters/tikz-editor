@@ -9,6 +9,8 @@ import {
   getTexVListLayoutsFromOutputJax,
   groupSimpleTexVListScopes,
   layoutTexVListItems,
+  layoutTexVListFromMeasuredParagraphs,
+  layoutTexVListFromParagraphReport,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
   materializeParagraphVerticalGlueInVList,
@@ -585,6 +587,7 @@ describe("simple TeX paragraph IR", () => {
         listKind: "enumerate",
         depth: 2,
         labelDepth: 1,
+        ownLeftMarginEm: 2.2,
         totalLeftMarginEm: 2.2,
       },
       sourceSpan: {
@@ -675,20 +678,292 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("lays out paragraph vlist items from explicit measured boxes", () => {
+    const parsed = parseSimpleTexParagraphIr("Alpha");
+    const paragraph = lowerSimpleTexBlocksToVList(parsed.blocks).items[0];
+    if (!paragraph || paragraph.kind !== "paragraph") {
+      throw new Error("expected paragraph vlist item");
+    }
+    const document = {
+      kind: "vlist",
+      items: [
+        paragraph,
+        {
+          kind: "glue",
+          size: 4,
+          stretch: 2,
+          stretchOrder: "normal",
+        },
+        {
+          ...paragraph,
+          blockIndex: 1,
+          paragraph: {
+            ...paragraph.paragraph,
+            blockIndex: 1,
+          },
+        },
+      ],
+    } satisfies {
+      readonly kind: "vlist";
+      readonly items: readonly TexVListItem[];
+    };
+
+    const layout = layoutTexVListFromMeasuredParagraphs(document, {
+      width: 100,
+      height: 32,
+      lineHeight: 12,
+      firstLineIndex: 0,
+      firstLineAscent: 7,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          lineIndices: [0],
+          lineOffsets: [{ lineIndex: 0, y: 0 }],
+          standardMetrics: { width: 80, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 80, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+        {
+          blockIndex: 1,
+          lineIndices: [1],
+          lineOffsets: [{ lineIndex: 1, y: 0 }],
+          standardMetrics: { width: 90, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 90, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+      ],
+    });
+
+    expect(layout.linePlacements).toEqual([
+      { lineIndex: 0, y: 0, height: 12 },
+      { lineIndex: 1, y: 20, height: 12 },
+    ]);
+    expect(layout.paragraphPlacements.map((placement) => ({
+      blockIndex: placement.blockIndex,
+      lineIndices: placement.lineIndices,
+      y: placement.y,
+      metrics: placement.metrics,
+    }))).toEqual([
+      {
+        blockIndex: 0,
+        lineIndices: [0],
+        y: 0,
+        metrics: { width: 80, height: 7, depth: 5 },
+      },
+      {
+        blockIndex: 1,
+        lineIndices: [1],
+        y: 20,
+        metrics: { width: 90, height: 7, depth: 5 },
+      },
+    ]);
+    expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 25 });
+
+    expect(() => layoutTexVListFromMeasuredParagraphs(document, {
+      width: 100,
+      lineHeight: 12,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          lineIndices: [0],
+          lineOffsets: [{ lineIndex: 1, y: 0 }],
+          standardMetrics: { width: 80, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 80, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+        {
+          blockIndex: 1,
+          lineIndices: [1],
+          lineOffsets: [{ lineIndex: 1, y: 0 }],
+          standardMetrics: { width: 90, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 90, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+      ],
+    })).toThrow("missing line offset 0");
+    expect(() => layoutTexVListFromMeasuredParagraphs(document, {
+      width: 100,
+      lineHeight: 12,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          lineIndices: [0],
+          lineOffsets: [
+            { lineIndex: 0, y: 0 },
+            { lineIndex: 0, y: 2 },
+          ],
+          standardMetrics: { width: 80, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 80, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+        {
+          blockIndex: 1,
+          lineIndices: [1],
+          lineOffsets: [{ lineIndex: 1, y: 0 }],
+          standardMetrics: { width: 90, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 90, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+      ],
+    })).toThrow("duplicate line offset 0");
+  });
+
+  it("uses explicit paragraph line assignments when laying out report-backed vlist items", () => {
+    const document = {
+      kind: "vlist",
+      items: [
+        {
+          kind: "paragraph",
+          sourceSpan: { start: 0, end: 5 },
+          blockIndex: 0,
+          paragraph: {
+            blockIndex: 0,
+            text: "Alpha",
+            sourceSpan: { start: 0, end: 5 },
+            nodes: [],
+            noIndent: false,
+            quoteDepth: 0,
+          },
+        },
+        {
+          kind: "paragraph",
+          sourceSpan: { start: 0, end: 5 },
+          blockIndex: 1,
+          paragraph: {
+            blockIndex: 1,
+            text: "Beta",
+            sourceSpan: { start: 0, end: 5 },
+            nodes: [],
+            noIndent: false,
+            quoteDepth: 0,
+          },
+        },
+      ],
+    } satisfies {
+      readonly kind: "vlist";
+      readonly items: readonly TexVListItem[];
+    };
+    const report = {
+      paragraphId: "tex:assigned-vlist-lines",
+      width: 100,
+      alignment: "ragged-right",
+      layoutMode: "wrap",
+      lines: [0, 1].map((lineIndex) => ({
+        lineIndex,
+        startRun: lineIndex,
+        endRun: lineIndex,
+        width: 20,
+        targetWidth: 100,
+        naturalWidth: 20,
+        glueSetRatio: 0,
+        badness: 0,
+        spaceCount: 0,
+        spaceDeltaPerGap: 0,
+        ascent: 7,
+        descent: 3,
+        xStart: 0,
+        xEnd: 20,
+        break: null,
+        segments: [{
+          runIndex: lineIndex,
+          kind: "text",
+          text: lineIndex === 0 ? "Alpha" : "Beta",
+          sourceStartRaw: 0,
+          sourceEndRaw: 5,
+          x: 0,
+          width: 20,
+        }],
+      })),
+      runs: [],
+      errors: [],
+      internalMode: "canonical",
+      internalDegradeReason: null,
+      externalFallbackUsed: false,
+      linebreakingMode: "feasible",
+    } as const;
+
+    const layout = layoutTexVListFromParagraphReport(document, report, {
+      width: 100,
+      lineHeight: 12,
+      firstLineAscent: 7,
+      paragraphLineAssignments: [
+        { blockIndex: 0, lineIndices: [0] },
+        { blockIndex: 1, lineIndices: [1] },
+      ],
+    });
+
+    expect(layout.linePlacements.map((placement) => placement.y)).toEqual([0, 12]);
+    expect(layout.paragraphPlacements.map((placement) => ({
+      blockIndex: placement.blockIndex,
+      lineIndices: placement.lineIndices,
+      y: placement.y,
+      metrics: placement.metrics,
+      sourceSpan: placement.sourceSpan,
+    }))).toEqual([
+      {
+        blockIndex: 0,
+        lineIndices: [0],
+        y: 0,
+        metrics: { width: 100, height: 7, depth: 5 },
+        sourceSpan: { start: 0, end: 5 },
+      },
+      {
+        blockIndex: 1,
+        lineIndices: [1],
+        y: 12,
+        metrics: { width: 100, height: 7, depth: 5 },
+        sourceSpan: { start: 0, end: 5 },
+      },
+    ]);
+    expect(layout.items.map((item) => ({
+      blockIndex: item.item.kind === "paragraph" ? item.item.blockIndex : null,
+      y: item.y,
+      height: item.metrics.height,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { blockIndex: 0, y: 0, height: 7, depth: 5 },
+      { blockIndex: 1, y: 12, height: 7, depth: 5 },
+    ]);
+
+    expect(() => layoutTexVListFromParagraphReport(document, report, {
+      width: 100,
+      lineHeight: 12,
+      firstLineAscent: 7,
+      paragraphLineAssignments: [
+        { blockIndex: 0, lineIndices: [0] },
+      ],
+    })).toThrow("missing paragraph measurement for block 1");
+    expect(() => layoutTexVListFromParagraphReport(document, report, {
+      width: 100,
+      lineHeight: 12,
+      firstLineAscent: 7,
+      paragraphLineAssignments: [
+        { blockIndex: 0, lineIndices: [0] },
+        { blockIndex: 1, lineIndices: [99] },
+      ],
+    })).toThrow("references missing line 99");
+  });
+
   it("registers positioned vlist layouts by paragraph id on an output jax", () => {
     const outputJax = {};
     const layout = {
       metrics: { width: 42, height: 7, depth: 3 },
       baseline: { kind: "explicit", y: 7 } as const,
       items: [],
-      lineTops: [0],
+      paragraphPlacements: [],
+      linePlacements: [],
       reports: [],
       errors: [],
     };
     const replacement = {
       ...layout,
       metrics: { width: 24, height: 5, depth: 2 },
-      lineTops: [3],
     };
 
     expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([]);
@@ -1257,6 +1532,58 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("materializes LaTeX article description labels as in-flow hanging labels", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{description}\item[Term] Alpha \item Plain\end{description}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: {},
+    });
+
+    expect(layout.paragraphs.map((paragraph) => ({
+      text: paragraph.text,
+      listKind: paragraph.listContext?.kind,
+      ownLeftMarginEm: paragraph.listContext?.ownLeftMarginEm,
+      totalLeftMarginEm: paragraph.listContext?.totalLeftMarginEm,
+      leftMarginWidth: paragraph.leftMarginWidth,
+      firstLineIndentWidth: paragraph.firstLineIndentWidth,
+      marginLabel: paragraph.label,
+      textItems: paragraph.items
+        .filter((item) => item.kind === "text")
+        .map((item) => ({ text: item.text, font: item.font.id })),
+    }))).toEqual([
+      {
+        text: "Alpha",
+        listKind: "description",
+        ownLeftMarginEm: 2.5,
+        totalLeftMarginEm: 2.5,
+        leftMarginWidth: 2.5 * font.atPt,
+        firstLineIndentWidth: -2 * font.atPt,
+        marginLabel: undefined,
+        textItems: [
+          { text: "Term", font: "cmbx10" },
+          { text: "Alpha", font: "cmr10" },
+        ],
+      },
+      {
+        text: "Plain",
+        listKind: "description",
+        ownLeftMarginEm: 2.5,
+        totalLeftMarginEm: 2.5,
+        leftMarginWidth: 2.5 * font.atPt,
+        firstLineIndentWidth: -2.5 * font.atPt,
+        marginLabel: undefined,
+        textItems: [
+          { text: "Plain", font: "cmr10" },
+        ],
+      },
+    ]);
+  });
+
   it("materializes LaTeX article itemize labels as explicit TeX glyphs", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\begin{itemize}\item Alpha \begin{itemize}\item Beta \begin{itemize}\item Gamma \begin{itemize}\item Delta\end{itemize}\end{itemize}\end{itemize}\end{itemize}`
@@ -1469,7 +1796,7 @@ describe("simple TeX paragraph IR", () => {
     })) : null).toEqual([
       { kind: "glue", role: undefined, size: 10 },
       { kind: "paragraph", role: undefined, size: undefined },
-      { kind: "vbox", role: { kind: "list", listKind: "itemize", depth: 2, labelDepth: 1, totalLeftMarginEm: 2.2 }, size: undefined },
+      { kind: "vbox", role: { kind: "list", listKind: "itemize", depth: 2, labelDepth: 1, ownLeftMarginEm: 2.2, totalLeftMarginEm: 2.2 }, size: undefined },
     ]);
     expect(flattenVListLeaves(normalized.items)).toEqual([
       "paragraph:Alpha",

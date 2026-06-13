@@ -30,8 +30,8 @@ export type SimpleTexFontDeclarationName =
   | "upshape"
   | "scshape"
   | "normalfont";
-export type SimpleTexEnvironmentName = "quote" | "itemize" | "enumerate";
-export type SimpleTexListKind = "itemize" | "enumerate";
+export type SimpleTexEnvironmentName = "quote" | "itemize" | "enumerate" | "description";
+export type SimpleTexListKind = "itemize" | "enumerate" | "description";
 export type SimpleTexVerticalGlueCommandName =
   | "vspace"
   | "vskip"
@@ -245,6 +245,7 @@ export interface SimpleTexListScope {
   readonly kind: SimpleTexListKind;
   readonly depth: number;
   readonly labelDepth: number;
+  readonly ownLeftMarginEm: number;
   readonly totalLeftMarginEm: number;
 }
 
@@ -260,6 +261,7 @@ export interface SimpleTexListContext {
   readonly depth: number;
   readonly labelDepth: number;
   readonly itemIndex: number;
+  readonly ownLeftMarginEm: number;
   readonly totalLeftMarginEm: number;
   readonly showLabel: boolean;
   readonly label?: SimpleTexListLabel;
@@ -867,7 +869,7 @@ function scanSimpleTexEnvironmentBoundary(
       return null;
     }
     const name = text.slice(nameStart, nameEnd);
-    if (name === "quote" || name === "itemize" || name === "enumerate") {
+    if (name === "quote" || name === "itemize" || name === "enumerate" || name === "description") {
       return {
         boundary,
         name,
@@ -1308,6 +1310,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly depth: number;
     readonly labelDepth: number;
     itemIndex: number;
+    readonly ownLeftMarginEm: number;
     readonly totalLeftMarginEm: number;
   }
   const listStack: ActiveSimpleTexList[] = [];
@@ -1371,6 +1374,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       kind: activeList.kind,
       depth: activeList.depth,
       labelDepth: activeList.labelDepth,
+      ownLeftMarginEm: activeList.ownLeftMarginEm,
       totalLeftMarginEm: activeList.totalLeftMarginEm,
     };
   };
@@ -1430,6 +1434,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       depth: activeList.depth,
       labelDepth: activeList.labelDepth,
       itemIndex: activeList.itemIndex,
+      ownLeftMarginEm: activeList.ownLeftMarginEm,
       totalLeftMarginEm: activeList.totalLeftMarginEm,
       showLabel: pendingListShowLabel,
       label: pendingListLabel,
@@ -1447,6 +1452,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       depth,
       labelDepth,
       itemIndex: 0,
+      ownLeftMarginEm: ownMargin,
       totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
     });
   };

@@ -97,6 +97,7 @@ export interface TexLayoutParagraphIr {
   readonly inheritedAlignment: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly noIndent: boolean;
+  readonly firstLineIndentWidth?: number;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
@@ -114,6 +115,8 @@ export interface SimpleTexLayoutDocumentIr {
   readonly layoutMode: KnuthPlassLayoutMode;
   readonly paragraphs: readonly TexLayoutParagraphIr[];
 }
+
+const DESCRIPTION_LABEL_SEP_EM = 0.5;
 
 export function createSimpleTexLayoutDocumentIr(params: {
   readonly blocks: readonly SimpleTexParagraphBlock[];
@@ -197,7 +200,23 @@ export function createSimpleTexLayoutDocumentIr(params: {
         quoteMarginWidth,
         params.font
       );
-      const label = segmentIndex === 0 && paragraph.listContext?.showLabel === true
+      const descriptionLabelItems =
+        segmentIndex === 0 && paragraph.listContext?.showLabel === true
+          ? texDescriptionLabelItemsForListContext(
+              paragraph.listContext,
+              params.font,
+              metricProvider,
+              paragraphSpaceGlueProfile
+          )
+          : [];
+      const firstLineIndentWidth = texArticleDescriptionFirstLineIndentWidth(
+        paragraph.listContext,
+        params.font,
+        descriptionLabelItems.length > 0
+      );
+      const label = segmentIndex === 0 &&
+        paragraph.listContext?.showLabel === true &&
+        paragraph.listContext.kind !== "description"
         ? texLayoutLabelForListContext(
             paragraph.listContext,
             params.font,
@@ -219,6 +238,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
         inheritedAlignment,
         inheritedAlignmentProfile,
         noIndent: segment.noIndent,
+        firstLineIndentWidth,
         spaceGlueProfile: paragraphSpaceGlueProfile,
         leftMarginWidth: quoteMarginWidth + listMarginWidth,
         rightMarginWidth: quoteMarginWidth,
@@ -226,12 +246,15 @@ export function createSimpleTexLayoutDocumentIr(params: {
         listContext: paragraph.listContext,
         label,
         forcedBreakAfter: segment.forcedBreakAfter,
-        items: simpleTexSegmentToLayoutItems(
-          segment,
-          params.font.atPt,
-          metricProvider,
-          paragraphSpaceGlueProfile
-        ),
+        items: [
+          ...descriptionLabelItems,
+          ...simpleTexSegmentToLayoutItems(
+            segment,
+            params.font.atPt,
+            metricProvider,
+            paragraphSpaceGlueProfile
+          ),
+        ],
       });
     }
   }
@@ -323,6 +346,43 @@ function texArticleListLabelRightEdge(
     return quoteMarginWidth;
   }
   return quoteMarginWidth + texArticleListTotalMarginWidth(listContext, font) - 0.5 * font.atPt;
+}
+
+function texArticleDescriptionFirstLineIndentWidth(
+  listContext: SimpleTexListContext | undefined,
+  font: ResolvedTexFont,
+  hasDescriptionLabel: boolean
+): number | undefined {
+  return listContext?.kind === "description"
+    ? roundTexPt(
+        -listContext.ownLeftMarginEm * font.atPt +
+        (hasDescriptionLabel ? DESCRIPTION_LABEL_SEP_EM * font.atPt : 0)
+      )
+    : undefined;
+}
+
+function texDescriptionLabelItemsForListContext(
+  listContext: SimpleTexListContext,
+  font: ResolvedTexFont,
+  metricProvider: TexMetricProvider,
+  spaceGlueProfile: TexSpaceGlueProfile
+): TexLayoutInlineItem[] {
+  if (listContext.kind !== "description" || !listContext.label) {
+    return [];
+  }
+  return simpleTexInlineNodesToLayoutItems(
+    listContext.label.nodes,
+    listContext.label.sourceStart,
+    listContext.label.sourceEnd,
+    font.atPt,
+    metricProvider,
+    spaceGlueProfile,
+    {
+      family: "roman",
+      series: "bold",
+      shape: "upright",
+    }
+  );
 }
 
 function texLayoutLabelForListContext(
@@ -417,6 +477,9 @@ function texDefaultItemizeGlyphLabel(
 }
 
 function texDefaultEnumerateLabelText(listContext: SimpleTexListContext): string {
+  if (listContext.kind === "description") {
+    return "";
+  }
   switch (listContext.labelDepth) {
     case 2:
       return `(${texLowerAlphaCounter(listContext.itemIndex)})`;
@@ -479,7 +542,8 @@ function simpleTexInlineNodesToLayoutItems(
   sourceEnd: number,
   atPt: number,
   metricProvider: TexMetricProvider,
-  spaceGlueProfile: TexSpaceGlueProfile
+  spaceGlueProfile: TexSpaceGlueProfile,
+  initialFontState?: SimpleTexFontState
 ): TexLayoutInlineItem[] {
   return simpleTexSegmentToLayoutItems(
     {
@@ -491,7 +555,8 @@ function simpleTexInlineNodesToLayoutItems(
     },
     atPt,
     metricProvider,
-    spaceGlueProfile
+    spaceGlueProfile,
+    initialFontState
   );
 }
 
@@ -520,9 +585,10 @@ function simpleTexSegmentToLayoutItems(
   segment: SimpleTexParagraphSegment,
   atPt: number,
   metricProvider: TexMetricProvider,
-  spaceGlueProfile: TexSpaceGlueProfile
+  spaceGlueProfile: TexSpaceGlueProfile,
+  initialFontState?: SimpleTexFontState
 ): TexLayoutInlineItem[] {
-  const tokens = simpleTexInlineNodesToTokens(segment.nodes);
+  const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
   let spaceFactor = 1000;
   let hasSeenText = false;
