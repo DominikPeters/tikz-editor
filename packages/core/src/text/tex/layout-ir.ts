@@ -7,7 +7,6 @@ import {
 } from "./fonts/computer-modern.js";
 import {
   simpleTexInlineNodesToTokens,
-  articleListLeftMarginEmByDepth,
   splitSimpleTexParagraphSegments,
   type SimpleTexBlockItem,
   type SimpleTexParagraphBlock,
@@ -22,7 +21,9 @@ import {
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
   prepareSimpleTexVList,
-  type TexVListItem,
+  texVListParagraphEntries,
+  type TexParagraphItem,
+  type TexVBoxItem,
   type TexVListDocument,
 } from "./vlist/index.js";
 
@@ -116,8 +117,6 @@ export interface SimpleTexLayoutDocumentIr {
   readonly paragraphs: readonly TexLayoutParagraphIr[];
 }
 
-const DESCRIPTION_LABEL_SEP_EM = 0.5;
-
 export function createSimpleTexLayoutDocumentIr(params: {
   readonly blocks: readonly SimpleTexParagraphBlock[];
   readonly items?: readonly SimpleTexBlockItem[];
@@ -132,8 +131,9 @@ export function createSimpleTexLayoutDocumentIr(params: {
     ? lowerSimpleTexBlockItemsToVList(params.items)
     : lowerSimpleTexBlocksToVList(params.blocks);
   const preparedVList = prepareSimpleTexVList(baseVList, params.font);
-  const materializedVList = preparedVList.materialized;
   const normalizedVList = preparedVList.normalized;
+  const paragraphEntries = texVListParagraphEntries(normalizedVList.items);
+  const paragraphItems = paragraphEntries.map((entry) => entry.item);
   const reportAlignment = texHonoredBlockAlignment(
     params.blocks[0],
     params.options
@@ -142,16 +142,15 @@ export function createSimpleTexLayoutDocumentIr(params: {
   let activeAlignment = params.defaultAlignment;
   let activeAlignmentProfile: TexAlignmentProfile | undefined;
   let activeSpaceGlueProfile = texInitialSpaceGlueProfile(params.defaultAlignment);
-  const finalParagraphBlockIndex = finalVListParagraphBlockIndex(materializedVList.items);
+  const finalParagraphBlockIndex = finalVListParagraphBlockIndex(paragraphItems);
 
-  for (const item of materializedVList.items) {
-    if (item.kind !== "paragraph") {
-      continue;
-    }
+  for (const entry of paragraphEntries) {
+    const item = entry.item;
     const paragraph = item.paragraph;
+    const scopePolicy = texParagraphScopePolicy(entry.ancestors);
     const blockIndex = paragraph.blockIndex;
-    const inheritedAlignment = paragraph.listContext ? params.defaultAlignment : activeAlignment;
-    const inheritedAlignmentProfile = paragraph.listContext ? undefined : activeAlignmentProfile;
+    const inheritedAlignment = scopePolicy.resetInheritedAlignment ? params.defaultAlignment : activeAlignment;
+    const inheritedAlignmentProfile = scopePolicy.resetInheritedAlignment ? undefined : activeAlignmentProfile;
     const blockAlignment = texHonoredBlockAlignment(
       paragraph,
       params.options,
@@ -172,13 +171,13 @@ export function createSimpleTexLayoutDocumentIr(params: {
       }
     }
 
-    const effectiveAlignment = texQuoteParagraphAlignment(paragraph.quoteDepth, alignment);
-    const effectiveAlignmentProfile = texQuoteParagraphAlignmentProfile(
-      paragraph.quoteDepth,
+    const effectiveAlignment = texScopeParagraphAlignment(scopePolicy, alignment);
+    const effectiveAlignmentProfile = texScopeParagraphAlignmentProfile(
+      scopePolicy,
       alignment,
       alignmentProfile
     );
-    const paragraphSpaceGlueProfile = paragraph.listContext
+    const paragraphSpaceGlueProfile = scopePolicy.resetSpaceGlueProfile
       ? texInitialSpaceGlueProfile(params.defaultAlignment)
       : activeSpaceGlueProfile;
     const segments = splitSimpleTexParagraphSegments(
@@ -193,13 +192,8 @@ export function createSimpleTexLayoutDocumentIr(params: {
 
     for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
       const segment = segments[segmentIndex];
-      const quoteMarginWidth = texArticleQuoteMarginWidth(paragraph.quoteDepth, params.font);
-      const listMarginWidth = texArticleListTotalMarginWidth(paragraph.listContext, params.font);
-      const listLabelRightEdge = texArticleListLabelRightEdge(
-        paragraph.listContext,
-        quoteMarginWidth,
-        params.font
-      );
+      const scopeLayout = texParagraphScopeLayout(entry.ancestors);
+      const listLabelRightEdge = scopeLayout.listLabelRightEdge;
       const descriptionLabelItems =
         segmentIndex === 0 && paragraph.listContext?.showLabel === true
           ? texDescriptionLabelItemsForListContext(
@@ -211,7 +205,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
           : [];
       const firstLineIndentWidth = texArticleDescriptionFirstLineIndentWidth(
         paragraph.listContext,
-        params.font,
+        scopeLayout,
         descriptionLabelItems.length > 0
       );
       const label = segmentIndex === 0 &&
@@ -240,8 +234,8 @@ export function createSimpleTexLayoutDocumentIr(params: {
         noIndent: segment.noIndent,
         firstLineIndentWidth,
         spaceGlueProfile: paragraphSpaceGlueProfile,
-        leftMarginWidth: quoteMarginWidth + listMarginWidth,
-        rightMarginWidth: quoteMarginWidth,
+        leftMarginWidth: scopeLayout.leftMarginWidth,
+        rightMarginWidth: scopeLayout.rightMarginWidth,
         quoteDepth: paragraph.quoteDepth,
         listContext: paragraph.listContext,
         label,
@@ -287,76 +281,120 @@ function texHonoredBlockAlignment(
 }
 
 function finalVListParagraphBlockIndex(
-  items: readonly TexVListItem[]
+  items: readonly TexParagraphItem[]
 ): number | undefined {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (item.kind === "paragraph") {
-      return item.paragraph.blockIndex;
-    }
+  return items.at(-1)?.paragraph.blockIndex;
+}
+
+function texScopeParagraphAlignment(
+  policy: TexParagraphScopePolicy,
+  alignment: TexParagraphAlignment
+): TexParagraphAlignment {
+  if (!policy.fallbackAlignment) {
+    return alignment;
+  }
+  if (policy.preserveRaggedRight && alignment === "ragged-right") {
+    return "ragged-right";
+  }
+  return policy.fallbackAlignment;
+}
+
+function texScopeParagraphAlignmentProfile(
+  policy: TexParagraphScopePolicy,
+  alignment: TexParagraphAlignment,
+  alignmentProfile: TexAlignmentProfile | undefined
+): TexAlignmentProfile | undefined {
+  if (!policy.fallbackAlignment) {
+    return alignmentProfile;
+  }
+  if (policy.preserveRaggedRight && alignment === "ragged-right") {
+    return policy.raggedRightProfile;
   }
   return undefined;
 }
 
-function texQuoteParagraphAlignment(
-  quoteDepth: number,
-  alignment: TexParagraphAlignment
-): TexParagraphAlignment {
-  if (quoteDepth === 0) {
-    return alignment;
-  }
-  return alignment === "ragged-right" ? "ragged-right" : "justified";
+interface TexParagraphScopePolicy {
+  readonly fallbackAlignment?: TexParagraphAlignment;
+  readonly preserveRaggedRight?: boolean;
+  readonly raggedRightProfile?: TexAlignmentProfile;
+  readonly resetInheritedAlignment: boolean;
+  readonly resetSpaceGlueProfile: boolean;
 }
 
-function texQuoteParagraphAlignmentProfile(
-  quoteDepth: number,
-  alignment: TexParagraphAlignment,
-  alignmentProfile: TexAlignmentProfile | undefined
-): TexAlignmentProfile | undefined {
-  if (quoteDepth === 0) {
-    return alignmentProfile;
+function texParagraphScopePolicy(ancestors: readonly TexVBoxItem[]): TexParagraphScopePolicy {
+  const policy: {
+    fallbackAlignment?: TexParagraphAlignment;
+    preserveRaggedRight?: boolean;
+    raggedRightProfile?: TexAlignmentProfile;
+    resetInheritedAlignment: boolean;
+    resetSpaceGlueProfile: boolean;
+  } = {
+    resetInheritedAlignment: false,
+    resetSpaceGlueProfile: false,
+  };
+  for (const ancestor of ancestors) {
+    const paragraphPolicy = ancestor.layout?.paragraphPolicy;
+    if (!paragraphPolicy) {
+      continue;
+    }
+    if (paragraphPolicy.fallbackAlignment) {
+      policy.fallbackAlignment = paragraphPolicy.fallbackAlignment;
+    }
+    if (paragraphPolicy.preserveRaggedRight !== undefined) {
+      policy.preserveRaggedRight = paragraphPolicy.preserveRaggedRight;
+    }
+    if (paragraphPolicy.raggedRightProfile !== undefined) {
+      policy.raggedRightProfile = paragraphPolicy.raggedRightProfile;
+    }
+    policy.resetInheritedAlignment ||= paragraphPolicy.resetInheritedAlignment === true;
+    policy.resetSpaceGlueProfile ||= paragraphPolicy.resetSpaceGlueProfile === true;
   }
-  return alignment === "ragged-right" ? "latex-quote" : undefined;
+  return policy;
 }
 
-function texArticleQuoteMarginWidth(quoteDepth: number, font: ResolvedTexFont): number {
-  if (!(quoteDepth > 0)) {
-    return 0;
+function texParagraphScopeLayout(ancestors: readonly TexVBoxItem[]): {
+  readonly leftMarginWidth: number;
+  readonly rightMarginWidth: number;
+  readonly listLabelRightEdge: number;
+  readonly listOwnLeftMarginWidth: number;
+  readonly descriptionLabelSepWidth: number;
+} {
+  let leftMarginWidth = 0;
+  let rightMarginWidth = 0;
+  let listLabelRightEdge = 0;
+  let listOwnLeftMarginWidth = 0;
+  let descriptionLabelSepWidth = 0;
+  for (const ancestor of ancestors) {
+    if (!ancestor.layout) {
+      continue;
+    }
+    const leftBefore = leftMarginWidth;
+    leftMarginWidth += ancestor.layout.leftMarginWidth;
+    rightMarginWidth += ancestor.layout.rightMarginWidth;
+    if (ancestor.layout.list) {
+      listLabelRightEdge = leftBefore + ancestor.layout.list.labelRightEdge;
+      listOwnLeftMarginWidth = ancestor.layout.list.ownLeftMarginWidth;
+      descriptionLabelSepWidth = ancestor.layout.list.descriptionLabelSepWidth;
+    }
   }
-  let margin = 0;
-  for (let index = 0; index < quoteDepth; index += 1) {
-    margin += articleListLeftMarginEmByDepth[Math.min(index, articleListLeftMarginEmByDepth.length - 1)] ?? 1;
-  }
-  return margin * font.atPt;
-}
-
-function texArticleListTotalMarginWidth(
-  listContext: SimpleTexListContext | undefined,
-  font: ResolvedTexFont
-): number {
-  return (listContext?.totalLeftMarginEm ?? 0) * font.atPt;
-}
-
-function texArticleListLabelRightEdge(
-  listContext: SimpleTexListContext | undefined,
-  quoteMarginWidth: number,
-  font: ResolvedTexFont
-): number {
-  if (!listContext) {
-    return quoteMarginWidth;
-  }
-  return quoteMarginWidth + texArticleListTotalMarginWidth(listContext, font) - 0.5 * font.atPt;
+  return {
+    leftMarginWidth,
+    rightMarginWidth,
+    listLabelRightEdge,
+    listOwnLeftMarginWidth,
+    descriptionLabelSepWidth,
+  };
 }
 
 function texArticleDescriptionFirstLineIndentWidth(
   listContext: SimpleTexListContext | undefined,
-  font: ResolvedTexFont,
+  scopeLayout: ReturnType<typeof texParagraphScopeLayout>,
   hasDescriptionLabel: boolean
 ): number | undefined {
   return listContext?.kind === "description"
     ? roundTexPt(
-        -listContext.ownLeftMarginEm * font.atPt +
-        (hasDescriptionLabel ? DESCRIPTION_LABEL_SEP_EM * font.atPt : 0)
+        -scopeLayout.listOwnLeftMarginWidth +
+        (hasDescriptionLabel ? scopeLayout.descriptionLabelSepWidth : 0)
       )
     : undefined;
 }

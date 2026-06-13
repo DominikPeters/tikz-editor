@@ -17,7 +17,7 @@ import {
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
 import { getTexVListLayoutFromOutputJax } from '../../tex/vlist/registry.js';
-import type { PositionedTexVListItem, TexVBoxRole } from '../../tex/vlist/types.js';
+import type { TexVBoxRole, TexVListBoxReportItem } from '../../tex/vlist/types.js';
 import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
 
 // The core package builds without the DOM lib; keep the editor hit-testing
@@ -119,11 +119,17 @@ export interface LineRangeFromPointResult extends ResultBase {
 }
 
 export interface VListBoxGeometry {
-  role: 'quote' | 'list' | null;
+  role: 'quote' | 'list' | 'list-item' | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
   depth: number | null;
   listKind: string | null;
   listLabelDepth: number | null;
   listLeftMarginEm: number | null;
+  listItemIndex: number | null;
   sourceStart: number | null;
   sourceEnd: number | null;
   clientLeft: number;
@@ -140,6 +146,11 @@ export interface VListBoxGeometryParams {
 
 export interface VListItemGeometry {
   kind: 'hbox' | 'rule' | 'penalty' | 'placeholder' | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
   sourceStart: number | null;
   sourceEnd: number | null;
   placeholderReason: string | null;
@@ -157,6 +168,11 @@ export interface VListItemGeometryParams {
 
 export interface VListParagraphGeometry {
   blockIndex: number;
+  vlistPath: readonly number[];
+  localLeft: number;
+  localRight: number;
+  localTop: number;
+  localBottom: number;
   lineIndices: readonly number[];
   sourceStart: number;
   sourceEnd: number;
@@ -174,6 +190,11 @@ export interface VListParagraphGeometryParams {
 
 export interface PlaceholderGeometry {
   reason: string | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
   sourceStart: number | null;
   sourceEnd: number | null;
   clientLeft: number;
@@ -464,10 +485,13 @@ export function getKnuthPlassVListBoxGeometry(
     }
     boxes.push({
       role: texVListBoxRole(element.getAttribute?.('data-tex-vbox-role') ?? null),
+      vlistPath: texVListPath(element.getAttribute?.('data-tex-vlist-path') ?? null),
+      ...texVListLocalBoundsFromAttributes(element),
       depth: finiteAttributeNumber(element, 'data-tex-vbox-depth'),
       listKind: element.getAttribute?.('data-tex-list-kind') ?? null,
       listLabelDepth: finiteAttributeNumber(element, 'data-tex-list-label-depth'),
       listLeftMarginEm: finiteAttributeNumber(element, 'data-tex-list-left-margin-em'),
+      listItemIndex: finiteAttributeNumber(element, 'data-tex-list-item-index'),
       sourceStart: finiteAttributeNumber(element, 'data-source-start'),
       sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
       ...bounds,
@@ -499,6 +523,8 @@ export function getKnuthPlassVListItemGeometry(
     }
     items.push({
       kind: texVListItemKind(element.getAttribute?.('data-tex-vlist-item') ?? null),
+      vlistPath: texVListPath(element.getAttribute?.('data-tex-vlist-path') ?? null),
+      ...texVListLocalBoundsFromAttributes(element),
       sourceStart: finiteAttributeNumber(element, 'data-source-start'),
       sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
       placeholderReason: element.getAttribute?.('data-tex-placeholder-reason') ?? null,
@@ -534,6 +560,11 @@ export function getKnuthPlassVListParagraphGeometry(
     }
     paragraphs.push({
       blockIndex: placement.blockIndex,
+      vlistPath: placement.vlistPath ?? [],
+      localLeft: 0,
+      localRight: placement.metrics.width,
+      localTop: placement.y,
+      localBottom: placement.y + placement.metrics.height + placement.metrics.depth,
       lineIndices: placement.lineIndices,
       sourceStart: placement.sourceSpan.start,
       sourceEnd: placement.sourceSpan.end,
@@ -566,6 +597,8 @@ export function getKnuthPlassPlaceholderGeometry(
     }
     placeholders.push({
       reason: element.getAttribute?.('data-tex-placeholder-reason') ?? null,
+      vlistPath: texVListPath(element.getAttribute?.('data-tex-vlist-path') ?? null),
+      ...texVListLocalBoundsFromAttributes(element),
       sourceStart: finiteAttributeNumber(element, 'data-source-start'),
       sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
       ...bounds,
@@ -583,18 +616,20 @@ function registeredPlaceholderGeometry(
     return [];
   }
   const placeholders: PlaceholderGeometry[] = [];
-  for (const item of flattenPositionedTexVListItems(layout.items)) {
-    if (item.item.kind !== 'placeholder') {
+  for (const item of layout.boxReport.items) {
+    if (item.itemKind !== 'placeholder') {
       continue;
     }
-    const bounds = clientRectForPositionedTexVListItem(item, matrix);
+    const bounds = clientRectForVListBoxReportItem(item, matrix);
     if (!bounds) {
       continue;
     }
     placeholders.push({
-      reason: item.item.reason,
-      sourceStart: item.item.sourceSpan.start,
-      sourceEnd: item.item.sourceSpan.end,
+      reason: item.placeholderReason ?? null,
+      vlistPath: item.path,
+      ...texVListLocalBoundsForBoxReportItem(item),
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
       ...bounds,
     });
   }
@@ -620,23 +655,26 @@ function registeredVListBoxGeometry(
     return [];
   }
   const boxes: VListBoxGeometry[] = [];
-  for (const item of flattenPositionedTexVListItems(layout.items)) {
-    if (item.item.kind !== 'vbox') {
+  for (const item of layout.boxReport.items) {
+    if (item.itemKind !== 'vbox') {
       continue;
     }
-    const bounds = clientRectForPositionedTexVListItem(item, matrix);
+    const bounds = clientRectForVListBoxReportItem(item, matrix);
     if (!bounds) {
       continue;
     }
-    const role = item.item.role;
+    const role = item.role;
     boxes.push({
       role: vlistRoleKind(role),
+      vlistPath: item.path,
+      ...texVListLocalBoundsForBoxReportItem(item),
       depth: role?.depth ?? null,
-      listKind: role?.kind === 'list' ? role.listKind : null,
-      listLabelDepth: role?.kind === 'list' ? role.labelDepth : null,
+      listKind: role?.kind === 'list' || role?.kind === 'list-item' ? role.listKind : null,
+      listLabelDepth: role?.kind === 'list' || role?.kind === 'list-item' ? role.labelDepth : null,
       listLeftMarginEm: role?.kind === 'list' ? role.totalLeftMarginEm : null,
-      sourceStart: item.item.sourceSpan?.start ?? null,
-      sourceEnd: item.item.sourceSpan?.end ?? null,
+      listItemIndex: role?.kind === 'list-item' ? role.itemIndex : null,
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
       ...bounds,
     });
   }
@@ -652,65 +690,52 @@ function registeredVListItemGeometry(
     return [];
   }
   const items: VListItemGeometry[] = [];
-  for (const item of flattenPositionedTexVListItems(layout.items)) {
+  for (const item of layout.boxReport.items) {
     if (
-      item.item.kind !== 'hbox' &&
-      item.item.kind !== 'rule' &&
-      item.item.kind !== 'penalty' &&
-      item.item.kind !== 'placeholder'
+      item.itemKind !== 'hbox' &&
+      item.itemKind !== 'rule' &&
+      item.itemKind !== 'penalty' &&
+      item.itemKind !== 'placeholder'
     ) {
       continue;
     }
-    const bounds = clientRectForPositionedTexVListItem(item, matrix);
+    const bounds = clientRectForVListBoxReportItem(item, matrix);
     if (!bounds) {
       continue;
     }
     items.push({
-      kind: item.item.kind,
-      sourceStart: item.item.sourceSpan?.start ?? null,
-      sourceEnd: item.item.sourceSpan?.end ?? null,
-      placeholderReason: item.item.kind === 'placeholder' ? item.item.reason : null,
+      kind: item.itemKind,
+      vlistPath: item.path,
+      ...texVListLocalBoundsForBoxReportItem(item),
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
+      placeholderReason: item.itemKind === 'placeholder' ? item.placeholderReason ?? null : null,
       ...bounds,
     });
   }
   return items;
 }
 
-function flattenPositionedTexVListItems(
-  items: readonly PositionedTexVListItem[]
-): PositionedTexVListItem[] {
-  const flattened: PositionedTexVListItem[] = [];
-  for (const item of items) {
-    flattened.push(item);
-    if (item.children?.length) {
-      flattened.push(...flattenPositionedTexVListItems(item.children));
-    }
-  }
-  return flattened;
-}
-
 function vlistRoleKind(role: TexVBoxRole | undefined): VListBoxGeometry['role'] {
-  if (role?.kind === 'quote' || role?.kind === 'list') {
+  if (role?.kind === 'quote' || role?.kind === 'list' || role?.kind === 'list-item') {
     return role.kind;
   }
   return null;
 }
 
-function clientRectForPositionedTexVListItem(
-  item: PositionedTexVListItem,
+function clientRectForVListBoxReportItem(
+  item: TexVListBoxReportItem,
   matrix: ScreenMatrixLike
 ): NormalizedClientRect | null {
-  const width = Number(item.metrics.width);
-  const height = Number(item.metrics.height) + Number(item.metrics.depth);
   if (
     !Number.isFinite(item.x) ||
     !Number.isFinite(item.y) ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height)
+    !Number.isFinite(item.width) ||
+    !Number.isFinite(item.totalHeight)
   ) {
     return null;
   }
-  return clientRectForLocalBox(item.x, item.y, width, height, matrix);
+  return clientRectForLocalBox(item.x, item.y, item.width, item.totalHeight, matrix);
 }
 
 function clientRectForLocalBox(
@@ -784,6 +809,64 @@ function finiteAttributeNumber(element: Element, name: string): number | null {
   }
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
+}
+
+function texVListPath(raw: string | null): readonly number[] {
+  if (!raw) {
+    return [];
+  }
+  const path: number[] = [];
+  for (const part of raw.split('.')) {
+    if (part === '') {
+      return [];
+    }
+    const value = Number(part);
+    if (!Number.isInteger(value) || value < 0) {
+      return [];
+    }
+    path.push(value);
+  }
+  return path;
+}
+
+function texVListLocalBoundsFromAttributes(element: Element): {
+  readonly localLeft: number | null;
+  readonly localRight: number | null;
+  readonly localTop: number | null;
+  readonly localBottom: number | null;
+} {
+  const x = finiteAttributeNumber(element, 'data-tex-local-x');
+  const y = finiteAttributeNumber(element, 'data-tex-local-y');
+  const width = finiteAttributeNumber(element, 'data-tex-local-width');
+  const height = finiteAttributeNumber(element, 'data-tex-local-height');
+  if (x === null || y === null || width === null || height === null) {
+    return {
+      localLeft: null,
+      localRight: null,
+      localTop: null,
+      localBottom: null,
+    };
+  }
+  return {
+    localLeft: x,
+    localRight: x + width,
+    localTop: y,
+    localBottom: y + height,
+  };
+}
+
+function texVListLocalBoundsForBoxReportItem(item: TexVListBoxReportItem): {
+  readonly localLeft: number;
+  readonly localRight: number;
+  readonly localTop: number;
+  readonly localBottom: number;
+} {
+  return {
+    localLeft: item.x,
+    localRight: item.x + item.width,
+    localTop: item.y,
+    localBottom: item.y + item.totalHeight,
+  };
 }
 
 function readLineGeometry(

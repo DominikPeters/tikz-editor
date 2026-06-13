@@ -138,7 +138,7 @@ export function prepareSimpleTexVList(
   const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
   return {
     materialized,
-    normalized: groupSimpleTexVListScopes(materialized),
+    normalized: groupSimpleTexVListScopes(materialized, font),
   };
 }
 
@@ -227,6 +227,15 @@ function scopePathForVerticalBlockItem(
       ownLeftMarginEm: item.listScope.ownLeftMarginEm,
       totalLeftMarginEm: item.listScope.totalLeftMarginEm,
     });
+    if (item.listScope.itemIndex > 0) {
+      path.push({
+        kind: "list-item",
+        listKind: item.listScope.kind,
+        depth: item.listScope.depth,
+        labelDepth: item.listScope.labelDepth,
+        itemIndex: item.listScope.itemIndex,
+      });
+    }
   }
   return path.length > 0 ? path : undefined;
 }

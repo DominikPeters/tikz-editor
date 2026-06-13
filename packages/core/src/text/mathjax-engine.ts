@@ -1404,9 +1404,13 @@ function renderTexVBoxSvgMetadata(
   const sourceAttrs = item.item.sourceSpan
     ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
     : "";
+  const pathAttrs = texVListPathAttrs(item);
+  const boxWidth = Math.max(width, item.metrics.width);
+  const boxHeight = item.metrics.height + item.metrics.depth;
+  const boundsAttrs = texVListLocalBoundsAttrs(item, boxWidth, boxHeight);
   const pieces = [
-    `<g data-tex-vbox="true"${roleAttrs}${sourceAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(Math.max(width, item.metrics.width))}" height="${formatPt(item.metrics.height + item.metrics.depth)}" fill="none" />`,
+    `<g data-tex-vbox="true"${roleAttrs}${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
   ];
   if (close) {
     pieces.push("</g>");
@@ -1422,9 +1426,12 @@ function renderTexPlaceholderSvgMetadata(
     return "";
   }
   const boxHeight = item.metrics.height + item.metrics.depth;
+  const pathAttrs = texVListPathAttrs(item);
+  const boxWidth = Math.max(width, item.metrics.width);
+  const boundsAttrs = texVListLocalBoundsAttrs(item, boxWidth, boxHeight);
   return [
-    `<g data-tex-vlist-item="placeholder" data-tex-placeholder="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" data-tex-placeholder-reason="${escapeXmlAttribute(item.item.reason)}" transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(Math.max(width, item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
+    `<g data-tex-vlist-item="placeholder" data-tex-placeholder="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" data-tex-placeholder-reason="${escapeXmlAttribute(item.item.reason)}"${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
     `</g>`,
   ].join("");
 }
@@ -1439,9 +1446,11 @@ function renderTexVListLeafBoxSvgMetadata(item: PositionedTexVListItem): string 
   const penaltyAttrs = item.item.kind === "penalty"
     ? ` data-tex-penalty="${item.item.penalty}"`
     : "";
+  const pathAttrs = texVListPathAttrs(item);
   const boxHeight = item.metrics.height + item.metrics.depth;
+  const boundsAttrs = texVListLocalBoundsAttrs(item, item.metrics.width, boxHeight);
   return [
-    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
     `</g>`,
   ].join("");
@@ -1454,11 +1463,32 @@ function renderTexRuleSvgContent(item: PositionedTexVListItem): string {
   const sourceAttrs = item.item.sourceSpan
     ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
     : "";
+  const pathAttrs = texVListPathAttrs(item);
   const boxHeight = item.metrics.height + item.metrics.depth;
+  const boundsAttrs = texVListLocalBoundsAttrs(item, item.metrics.width, boxHeight);
   return [
-    `<g data-tex-vlist-item="rule"${sourceAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vlist-item="rule"${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
     `</g>`,
+  ].join("");
+}
+
+function texVListPathAttrs(item: PositionedTexVListItem): string {
+  return item.path
+    ? ` data-tex-vlist-path="${item.path.join(".")}"`
+    : "";
+}
+
+function texVListLocalBoundsAttrs(
+  item: PositionedTexVListItem,
+  width: number,
+  height: number
+): string {
+  return [
+    ` data-tex-local-x="${formatPt(item.x)}"`,
+    ` data-tex-local-y="${formatPt(item.y)}"`,
+    ` data-tex-local-width="${formatPt(width)}"`,
+    ` data-tex-local-height="${formatPt(height)}"`,
   ].join("");
 }
 
@@ -1468,6 +1498,15 @@ function texVBoxRoleAttrs(role: TexVBoxRole | undefined): string {
   }
   if (role.kind === "quote") {
     return ` data-tex-vbox-role="quote" data-tex-vbox-depth="${role.depth}"`;
+  }
+  if (role.kind === "list-item") {
+    return [
+      ` data-tex-vbox-role="list-item"`,
+      ` data-tex-list-kind="${escapeXmlAttribute(role.listKind)}"`,
+      ` data-tex-vbox-depth="${role.depth}"`,
+      ` data-tex-list-label-depth="${role.labelDepth}"`,
+      ` data-tex-list-item-index="${role.itemIndex}"`,
+    ].join("");
   }
   return [
     ` data-tex-vbox-role="list"`,

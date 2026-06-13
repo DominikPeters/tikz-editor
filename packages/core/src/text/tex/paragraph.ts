@@ -41,9 +41,9 @@ import {
   type TexLayoutParagraphIr,
 } from "./layout-ir.js";
 import {
-  layoutTexVListFromMeasuredParagraphs,
-  type TexVListParagraphBoxMeasurement,
-  type TexVListParagraphLineAssignment,
+  layoutTexVListFromHorizontalParagraphs,
+  type TexHorizontalLayout,
+  type TexLineBox,
   type TexVListLayout,
 } from "./vlist/index.js";
 
@@ -93,20 +93,12 @@ interface TexHorizontalParagraphBlockLines {
 }
 
 interface TexHorizontalParagraphBlockLayout extends TexHorizontalParagraphBlockLines {
-  readonly measurement: TexVListParagraphBoxMeasurement;
-}
-
-interface TexHorizontalLineMeasurement {
-  readonly lineIndex: number;
-  readonly targetWidth: number;
-  readonly ascent: number;
-  readonly descent: number;
-  readonly lineLeading?: string;
+  readonly horizontal: TexHorizontalLayout;
 }
 
 interface TexParagraphReportBuildResult {
   readonly report: ParagraphLayoutReport;
-  readonly lineMeasurements: readonly TexHorizontalLineMeasurement[];
+  readonly lineBoxes: readonly TexLineBox[];
 }
 
 interface TexHorizontalParagraphLayout {
@@ -313,12 +305,12 @@ export function layoutSimpleTexParagraph(
     font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
     ...horizontalLayout.report.lines.map((line) => Number(line.ascent) || 0)
   );
-  const vlistLayout = layoutTexVListFromMeasuredParagraphs(layoutIr.vlist, {
+  const vlistLayout = layoutTexVListFromHorizontalParagraphs(layoutIr.vlist, {
     width: options.width,
     lineHeight,
     firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
     firstLineAscent,
-    paragraphMeasurements: horizontalLayout.blocks.map((block) => block.measurement),
+    paragraphLayouts: horizontalLayout.blocks,
     reports: [horizontalLayout.report],
     errors: horizontalLayout.report.errors,
   });
@@ -338,99 +330,58 @@ function createMeasuredHorizontalParagraphLayout(
   blocks: readonly TexHorizontalParagraphBlockLines[],
   lineHeight: number
 ): TexHorizontalParagraphLayout {
-  const measurements = measureTexVListParagraphBoxesFromLineMeasurements(
-    builtReport.lineMeasurements,
-    lineHeight,
-    texVListParagraphLineAssignments(blocks)
-  );
-  const measurementByBlock = new Map(
-    measurements.map((measurement) => [measurement.blockIndex, measurement])
-  );
+  const lineBoxByIndex = new Map(builtReport.lineBoxes.map((line) => [line.lineIndex, line]));
   return {
     report: builtReport.report,
     blocks: blocks.map((block) => {
-      const measurement = measurementByBlock.get(block.blockIndex);
-      if (!measurement) {
-        throw new Error(`Missing measured horizontal paragraph block ${block.blockIndex}.`);
-      }
-      if (!sameLineIndices(block.lineIndices, measurement.lineIndices)) {
-        throw new Error(`Measured horizontal paragraph block ${block.blockIndex} line ownership changed.`);
-      }
+      const horizontal = texHorizontalLayoutForParagraphBlock(
+        block,
+        lineBoxByIndex,
+        lineHeight
+      );
       return {
         ...block,
-        measurement,
+        horizontal,
       };
     }),
   };
 }
 
-function measureTexVListParagraphBoxesFromLineMeasurements(
-  lineMeasurements: readonly TexHorizontalLineMeasurement[],
-  lineHeight: number,
-  paragraphLineAssignments: readonly TexVListParagraphLineAssignment[]
-): readonly TexVListParagraphBoxMeasurement[] {
-  const lineByIndex = new Map(lineMeasurements.map((line) => [line.lineIndex, line]));
-  return paragraphLineAssignments.map((assignment) => {
-    const lines = assignment.lineIndices.map((lineIndex) => {
-      const line = lineByIndex.get(lineIndex);
-      if (!line) {
-        throw new Error(`TeX paragraph measurement references missing line ${lineIndex}.`);
-      }
-      return line;
+function texHorizontalLayoutForParagraphBlock(
+  block: TexHorizontalParagraphBlockLines,
+  lineBoxByIndex: ReadonlyMap<number, TexLineBox>,
+  lineHeight: number
+): TexHorizontalLayout {
+  let lineCursor = 0;
+  const lines: TexLineBox[] = [];
+  for (const lineIndex of block.lineIndices) {
+    const line = lineBoxByIndex.get(lineIndex);
+    if (!line) {
+      throw new Error(`TeX horizontal paragraph block ${block.blockIndex} references missing line ${lineIndex}.`);
+    }
+    lines.push({
+      ...line,
+      y: roundTexPt(lineCursor),
     });
-    if (lines.length === 0) {
-      return {
-        blockIndex: assignment.blockIndex,
-        lineIndices: [],
-        lineOffsets: [],
-        standardMetrics: { width: 0, height: 0, depth: 0 },
-        ruleLeadingMetrics: { width: 0, height: 0, depth: 0 },
-        standardAdvance: 0,
-        ruleLeadingAdvance: 0,
-      };
-    }
-
-    let lineCursor = 0;
-    let lastLineTop = 0;
-    const lineOffsets: TexVListParagraphBoxMeasurement["lineOffsets"][number][] = [];
-    for (const line of lines) {
-      lastLineTop = lineCursor;
-      lineOffsets.push({
-        lineIndex: line.lineIndex,
-        y: roundTexPt(lineCursor),
-      });
-      lineCursor = roundTexPt(
-        lineCursor + lineHeight + texLineLeadingPt(line.lineLeading)
-      );
-    }
-
-    const firstLine = lines[0];
-    const lastLine = lines.at(-1);
-    const baselineY = firstLine?.ascent ?? 0;
-    const standardBottom = lineCursor;
-    const ruleLeadingBottom = roundTexPt(
-      lastLineTop + baselineY + (lastLine?.descent ?? 0)
+    lineCursor = roundTexPt(
+      lineCursor + lineHeight + texLineLeadingPt(line.lineLeading)
     );
-    const width = Math.max(0, ...lines.map((line) => line.targetWidth));
-    return {
-      blockIndex: assignment.blockIndex,
-      lineIndices: lines.map((line) => line.lineIndex),
-      lineOffsets,
-      standardMetrics: texParagraphBoxMetrics(width, baselineY, standardBottom),
-      ruleLeadingMetrics: texParagraphBoxMetrics(width, baselineY, ruleLeadingBottom),
-      standardAdvance: standardBottom,
-      ruleLeadingAdvance: ruleLeadingBottom,
-    };
-  });
+  }
+  return {
+    metrics: texHorizontalParagraphMetricsFromLineBoxes(lines, lineCursor),
+    lines,
+    renderItems: [],
+  };
 }
 
-function texParagraphBoxMetrics(
-  width: number,
-  baselineY: number,
+function texHorizontalParagraphMetricsFromLineBoxes(
+  lines: readonly TexLineBox[],
   bottom: number
-): TexVListParagraphBoxMeasurement["standardMetrics"] {
+): TexHorizontalLayout["metrics"] {
+  const firstLine = lines[0];
+  const baselineY = firstLine?.metrics.height ?? 0;
   return {
-    width,
+    width: Math.max(0, ...lines.map((line) => line.targetWidth)),
     height: roundTexPt(Math.max(0, baselineY)),
     depth: roundTexPt(Math.max(0, bottom - baselineY)),
   };
@@ -441,13 +392,6 @@ function texLineLeadingPt(lineLeading: string | undefined): number {
     return 0;
   }
   return parseLength(lineLeading, "pt") ?? 0;
-}
-
-function sameLineIndices(
-  left: readonly number[],
-  right: readonly number[]
-): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function appendHorizontalParagraphBlockLines(
@@ -471,15 +415,6 @@ function appendHorizontalParagraphBlockLines(
     blockIndex,
     lineIndices: [...existing.lineIndices, ...lineIndices],
   };
-}
-
-function texVListParagraphLineAssignments(
-  blocks: readonly TexHorizontalParagraphBlockLines[]
-): readonly TexVListParagraphLineAssignment[] {
-  return blocks.map((block) => ({
-    blockIndex: block.blockIndex,
-    lineIndices: [...block.lineIndices],
-  }));
 }
 
 function breakTexParagraphRuns(params: {
@@ -1165,7 +1100,7 @@ function buildTexParagraphReport(params: {
       externalFallbackUsed: false,
       linebreakingMode: params.linebreakingMode,
     },
-    lineMeasurements: builtLines.map((line) => line.measurement),
+    lineBoxes: builtLines.map((line) => line.lineBox),
   };
 }
 
@@ -1180,7 +1115,7 @@ function buildTexLineReport(
     lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
   }
-): { readonly report: LineReport; readonly measurement: TexHorizontalLineMeasurement } {
+): { readonly report: LineReport; readonly lineBox: TexLineBox } {
   const segments: LineReport["segments"] = [];
   let x = line.xOffset ?? 0;
   let ascent = 0;
@@ -1365,11 +1300,15 @@ function buildTexLineReport(
   };
   return {
     report,
-    measurement: {
+    lineBox: {
       lineIndex: report.lineIndex,
+      y: 0,
       targetWidth: report.targetWidth,
-      ascent: report.ascent,
-      descent: report.descent,
+      metrics: {
+        width: report.targetWidth,
+        height: report.ascent,
+        depth: report.descent,
+      },
       lineLeading: report.break?.lineLeading,
     },
   };

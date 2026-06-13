@@ -8,7 +8,11 @@ import type {
   TexBoxMetrics,
   PositionedTexVListItem,
   TexLayoutReport,
+  TexSourceSpan,
+  TexVListBoxLayoutReport,
+  TexVListBoxReportItem,
   TexVListParagraphBoxMeasurement,
+  TexVListParagraphHorizontalLayout,
   TexVListParagraphLineAssignment,
   TexVListDocument,
   TexVListItem,
@@ -27,6 +31,7 @@ import {
   texVListRootVerticalOffset,
   type TexVListItemMeasurer,
 } from "./layout.js";
+import { flattenPositionedTexVListItems } from "./traversal.js";
 
 export interface TexVListParagraphReportLayoutOptions extends TexVListLayoutOptions {
   readonly lineHeight: number;
@@ -39,6 +44,15 @@ export interface TexVListMeasuredParagraphLayoutOptions extends TexVListLayoutOp
   readonly firstLineIndex?: number;
   readonly firstLineAscent?: number;
   readonly paragraphMeasurements: readonly TexVListParagraphBoxMeasurement[];
+  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport)[];
+  readonly errors?: readonly string[];
+}
+
+export interface TexVListHorizontalParagraphLayoutOptions extends TexVListLayoutOptions {
+  readonly lineHeight: number;
+  readonly firstLineIndex?: number;
+  readonly firstLineAscent?: number;
+  readonly paragraphLayouts: readonly TexVListParagraphHorizontalLayout[];
   readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport)[];
   readonly errors?: readonly string[];
 }
@@ -62,6 +76,18 @@ export function layoutTexVListFromParagraphReport(
   });
   assertAllReportLinesPlaced(report.lines, layout.linePlacements);
   return layout;
+}
+
+export function layoutTexVListFromHorizontalParagraphs(
+  document: TexVListDocument,
+  options: TexVListHorizontalParagraphLayoutOptions
+): TexVListLayout {
+  return layoutTexVListFromMeasuredParagraphs(document, {
+    ...options,
+    paragraphMeasurements: options.paragraphLayouts.map(
+      texVListParagraphMeasurementFromHorizontalLayout
+    ),
+  });
 }
 
 export function layoutTexVListFromMeasuredParagraphs(
@@ -109,10 +135,12 @@ export function layoutTexVListFromMeasuredParagraphs(
     options.firstLineAscent ?? 0
   );
   const metrics = metricsForRootBox(options.width, totalHeight, shiftedBaselineY);
+  const baseline = shiftedBaselineY === null ? { kind: "none" } as const : { kind: "explicit", y: shiftedBaselineY } as const;
   return {
     metrics,
-    baseline: shiftedBaselineY === null ? { kind: "none" } : { kind: "explicit", y: shiftedBaselineY },
+    baseline,
     items: shiftedItems,
+    boxReport: texVListBoxLayoutReport(shiftedItems, metrics, baseline),
     paragraphPlacements: texVListParagraphPlacements(
       shiftedItems,
       paragraphMeasurements
@@ -121,6 +149,57 @@ export function layoutTexVListFromMeasuredParagraphs(
     reports: options.reports ?? [],
     errors: [...options.errors ?? []],
   };
+}
+
+export function texVListBoxLayoutReport(
+  items: readonly PositionedTexVListItem[],
+  metrics: TexBoxMetrics,
+  baseline: TexVListBoxLayoutReport["baseline"]
+): TexVListBoxLayoutReport {
+  return {
+    kind: "tex-vlist-boxes",
+    metrics,
+    baseline,
+    items: flattenPositionedTexVListItems(items).map(texVListBoxReportItem),
+  };
+}
+
+function texVListBoxReportItem(
+  item: PositionedTexVListItem
+): TexVListBoxReportItem {
+  const sourceSpan = texVListItemSourceSpan(item);
+  const report: TexVListBoxReportItem = {
+    itemKind: item.item.kind,
+    path: item.path ?? [],
+    ...(sourceSpan ? { sourceSpan } : {}),
+    x: item.x,
+    y: item.y,
+    width: item.metrics.width,
+    height: item.metrics.height,
+    depth: item.metrics.depth,
+    totalHeight: roundTexPt(item.metrics.height + item.metrics.depth),
+    ...(item.item.kind === "paragraph" ? { blockIndex: item.item.blockIndex } : {}),
+    ...(item.item.kind === "vbox" && item.item.role ? { role: item.item.role } : {}),
+    ...(item.item.kind === "glue" ? {
+      glue: {
+        size: item.item.size,
+        ...(item.item.stretch !== undefined ? { stretch: item.item.stretch } : {}),
+        ...(item.item.shrink !== undefined ? { shrink: item.item.shrink } : {}),
+        ...(item.item.stretchOrder !== undefined ? { stretchOrder: item.item.stretchOrder } : {}),
+        ...(item.item.shrinkOrder !== undefined ? { shrinkOrder: item.item.shrinkOrder } : {}),
+        ...(item.item.origin !== undefined ? { origin: item.item.origin } : {}),
+      },
+    } : {}),
+    ...(item.item.kind === "penalty" ? { penalty: item.item.penalty } : {}),
+    ...(item.item.kind === "placeholder" ? { placeholderReason: item.item.reason } : {}),
+  };
+  return report;
+}
+
+function texVListItemSourceSpan(
+  item: PositionedTexVListItem
+): TexSourceSpan | undefined {
+  return "sourceSpan" in item.item ? item.item.sourceSpan : undefined;
 }
 
 function texVListLinePlacements(
@@ -221,6 +300,7 @@ function texVListParagraphPlacements(
     }
     placements.push({
       blockIndex: item.item.paragraph.blockIndex,
+      vlistPath: item.path,
       sourceSpan: item.item.sourceSpan,
       lineIndices: measurement.lineIndices,
       y: item.y,
@@ -230,17 +310,45 @@ function texVListParagraphPlacements(
   return placements;
 }
 
-function flattenPositionedTexVListItems(
-  items: readonly PositionedTexVListItem[]
-): PositionedTexVListItem[] {
-  const flattened: PositionedTexVListItem[] = [];
-  for (const item of items) {
-    flattened.push(item);
-    if (item.children?.length) {
-      flattened.push(...flattenPositionedTexVListItems(item.children));
-    }
+function texVListParagraphMeasurementFromHorizontalLayout(
+  paragraph: TexVListParagraphHorizontalLayout
+): TexVListParagraphBoxMeasurement {
+  const lines = paragraph.horizontal.lines ?? [];
+  const lineIndices = lines.map((line) => line.lineIndex);
+  if (!sameLineIndices(paragraph.lineIndices, lineIndices)) {
+    throw new Error(`Measured horizontal paragraph block ${paragraph.blockIndex} line ownership changed.`);
   }
-  return flattened;
+  const standardBottom = roundTexPt(
+    paragraph.horizontal.metrics.height + paragraph.horizontal.metrics.depth
+  );
+  const firstLine = lines[0];
+  const lastLine = lines.at(-1);
+  const ruleLeadingBottom = lastLine
+    ? roundTexPt(lastLine.y + (firstLine?.metrics.height ?? 0) + lastLine.metrics.depth)
+    : 0;
+  return {
+    blockIndex: paragraph.blockIndex,
+    lineIndices,
+    lineOffsets: lines.map((line) => ({
+      lineIndex: line.lineIndex,
+      y: line.y,
+    })),
+    standardMetrics: paragraph.horizontal.metrics,
+    ruleLeadingMetrics: paragraphBoxMetrics(
+      paragraph.horizontal.metrics.width,
+      paragraph.horizontal.metrics.height,
+      ruleLeadingBottom
+    ),
+    standardAdvance: standardBottom,
+    ruleLeadingAdvance: ruleLeadingBottom,
+  };
+}
+
+function sameLineIndices(
+  left: readonly number[],
+  right: readonly number[]
+): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function createMeasuredParagraphVListMeasurer(

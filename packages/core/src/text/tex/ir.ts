@@ -245,6 +245,7 @@ export interface SimpleTexListScope {
   readonly kind: SimpleTexListKind;
   readonly depth: number;
   readonly labelDepth: number;
+  readonly itemIndex: number;
   readonly ownLeftMarginEm: number;
   readonly totalLeftMarginEm: number;
 }
@@ -1374,6 +1375,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       kind: activeList.kind,
       depth: activeList.depth,
       labelDepth: activeList.labelDepth,
+      itemIndex: activeList.itemIndex,
       ownLeftMarginEm: activeList.ownLeftMarginEm,
       totalLeftMarginEm: activeList.totalLeftMarginEm,
     };

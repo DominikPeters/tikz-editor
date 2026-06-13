@@ -5,6 +5,8 @@ import {
   computerModernTexMetricProvider,
   computeTexVListNaturalTotalHeight,
   createSimpleTexLayoutDocumentIr,
+  findPositionedTexVListItemByPath,
+  flattenPositionedTexVListItems,
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,
   groupSimpleTexVListScopes,
@@ -20,6 +22,7 @@ import {
   parseSimpleTexParagraphIr,
   registerTexVListLayoutsOnOutputJax,
   texVListGlueSetForTargetHeight,
+  texVListParagraphItems,
   type TexVListItemMeasurer,
   type TexVListItem,
 } from "../packages/core/src/text/tex/index.js";
@@ -460,7 +463,10 @@ describe("simple TeX paragraph IR", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\begin{quote}\includegraphics{plot.pdf} \par Alpha\end{quote}`
     );
-    const grouped = groupSimpleTexVListScopes(lowerSimpleTexBlockItemsToVList(parsed.items));
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlockItemsToVList(parsed.items),
+      computerModernTexMetricProvider.resolveFont()
+    );
 
     expect(parsed.unsupportedCommand).toBe(true);
     expect(parsed.partialFallbackSupported).toBe(true);
@@ -563,7 +569,10 @@ describe("simple TeX paragraph IR", () => {
       font: computerModernTexMetricProvider.resolveFont(),
       options: {},
     });
-    const grouped = groupSimpleTexVListScopes(layout.vlist);
+    const grouped = groupSimpleTexVListScopes(
+      layout.vlist,
+      computerModernTexMetricProvider.resolveFont()
+    );
 
     expect(grouped.items).toHaveLength(1);
     const quoteBox = grouped.items[0];
@@ -599,14 +608,46 @@ describe("simple TeX paragraph IR", () => {
       throw new Error("expected list vbox");
     }
     expect(listBox.items.map((item) =>
-      item.kind === "paragraph"
-        ? { kind: item.kind, text: item.paragraph.text }
-        : { kind: item.kind, size: item.kind === "glue" ? item.size : undefined }
+      item.kind === "vbox"
+        ? {
+            kind: item.kind,
+            role: item.role,
+            children: item.items.map((child) =>
+              child.kind === "paragraph"
+                ? { kind: child.kind, text: child.paragraph.text }
+                : { kind: child.kind, size: child.kind === "glue" ? child.size : undefined }
+            ),
+          }
+        : { kind: item.kind }
     )).toEqual([
-      { kind: "glue", size: 13 },
-      { kind: "paragraph", text: "Alpha" },
-      { kind: "glue", size: 4 },
-      { kind: "paragraph", text: "Beta" },
+      {
+        kind: "vbox",
+        role: {
+          kind: "list-item",
+          listKind: "enumerate",
+          depth: 2,
+          labelDepth: 1,
+          itemIndex: 1,
+        },
+        children: [
+          { kind: "glue", size: 13 },
+          { kind: "paragraph", text: "Alpha" },
+        ],
+      },
+      {
+        kind: "vbox",
+        role: {
+          kind: "list-item",
+          listKind: "enumerate",
+          depth: 2,
+          labelDepth: 1,
+          itemIndex: 2,
+        },
+        children: [
+          { kind: "glue", size: 4 },
+          { kind: "paragraph", text: "Beta" },
+        ],
+      },
     ]);
     expect(flattenVListLeaves(grouped.items)).toEqual(flattenVListLeaves(layout.vlist.items));
   });
@@ -760,6 +801,52 @@ describe("simple TeX paragraph IR", () => {
       },
     ]);
     expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 25 });
+    expect(layout.boxReport).toEqual({
+      kind: "tex-vlist-boxes",
+      metrics: { width: 100, height: 7, depth: 25 },
+      baseline: { kind: "explicit", y: 7 },
+      items: [
+        {
+          itemKind: "paragraph",
+          path: [0],
+          sourceSpan: { start: 0, end: 5 },
+          x: 0,
+          y: 0,
+          width: 80,
+          height: 7,
+          depth: 5,
+          totalHeight: 12,
+          blockIndex: 0,
+        },
+        {
+          itemKind: "glue",
+          path: [1],
+          x: 0,
+          y: 12,
+          width: 0,
+          height: 8,
+          depth: 0,
+          totalHeight: 8,
+          glue: {
+            size: 4,
+            stretch: 2,
+            stretchOrder: "normal",
+          },
+        },
+        {
+          itemKind: "paragraph",
+          path: [2],
+          sourceSpan: { start: 0, end: 5 },
+          x: 0,
+          y: 20,
+          width: 90,
+          height: 7,
+          depth: 5,
+          totalHeight: 12,
+          blockIndex: 1,
+        },
+      ],
+    });
 
     expect(() => layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
@@ -1032,13 +1119,26 @@ describe("simple TeX paragraph IR", () => {
     ]);
     expect(nested?.children?.map((item) => ({
       kind: item.item.kind,
+      path: item.path,
       y: item.y,
       height: item.metrics.height,
       depth: item.metrics.depth,
     }))).toEqual([
-      { kind: "glue", y: 12, height: 3, depth: 0 },
-      { kind: "rule", y: 15, height: 2, depth: 1 },
+      { kind: "glue", path: [1, 0], y: 12, height: 3, depth: 0 },
+      { kind: "rule", path: [1, 1], y: 15, height: 2, depth: 1 },
     ]);
+    expect(flattenPositionedTexVListItems(laidOut.positioned).map((item) => ({
+      kind: item.item.kind,
+      path: item.path,
+    }))).toEqual([
+      { kind: "glue", path: [0] },
+      { kind: "vbox", path: [1] },
+      { kind: "glue", path: [1, 0] },
+      { kind: "rule", path: [1, 1] },
+    ]);
+    expect(findPositionedTexVListItemByPath(laidOut.positioned, [1, 1])?.item.kind).toBe("rule");
+    expect(findPositionedTexVListItemByPath(laidOut.positioned, [])).toBeNull();
+    expect(findPositionedTexVListItemByPath(laidOut.positioned, [1, 9])).toBeNull();
   });
 
   it("sets local glue inside explicit-height vboxes", () => {
@@ -1784,19 +1884,50 @@ describe("simple TeX paragraph IR", () => {
     expect(normalized.items.map((item) => ({
       kind: item.kind,
       role: item.kind === "vbox" ? item.role : undefined,
+      layout: item.kind === "vbox" ? item.layout : undefined,
     }))).toEqual([
-      { kind: "paragraph", role: undefined },
-      { kind: "vbox", role: { kind: "quote", depth: 1 } },
+      { kind: "paragraph", role: undefined, layout: undefined },
+      {
+        kind: "vbox",
+        role: { kind: "quote", depth: 1 },
+        layout: {
+          leftMarginWidth: 25,
+          rightMarginWidth: 25,
+          paragraphPolicy: {
+            fallbackAlignment: "justified",
+            preserveRaggedRight: true,
+            raggedRightProfile: "latex-quote",
+          },
+        },
+      },
     ]);
     const quote = normalized.items[1];
     expect(quote?.kind === "vbox" ? quote.items.map((item) => ({
       kind: item.kind,
       role: item.kind === "vbox" ? item.role : undefined,
+      layout: item.kind === "vbox" ? item.layout : undefined,
       size: item.kind === "glue" ? item.size : undefined,
     })) : null).toEqual([
-      { kind: "glue", role: undefined, size: 10 },
-      { kind: "paragraph", role: undefined, size: undefined },
-      { kind: "vbox", role: { kind: "list", listKind: "itemize", depth: 2, labelDepth: 1, ownLeftMarginEm: 2.2, totalLeftMarginEm: 2.2 }, size: undefined },
+      { kind: "glue", role: undefined, layout: undefined, size: 10 },
+      { kind: "paragraph", role: undefined, layout: undefined, size: undefined },
+      {
+        kind: "vbox",
+        role: { kind: "list", listKind: "itemize", depth: 2, labelDepth: 1, ownLeftMarginEm: 2.2, totalLeftMarginEm: 2.2 },
+        layout: {
+          leftMarginWidth: 22,
+          rightMarginWidth: 0,
+          list: {
+            ownLeftMarginWidth: 22,
+            labelRightEdge: 17,
+            descriptionLabelSepWidth: 5,
+          },
+          paragraphPolicy: {
+            resetInheritedAlignment: true,
+            resetSpaceGlueProfile: true,
+          },
+        },
+        size: undefined,
+      },
     ]);
     expect(flattenVListLeaves(normalized.items)).toEqual([
       "paragraph:Alpha",
@@ -1805,6 +1936,28 @@ describe("simple TeX paragraph IR", () => {
       "glue:10",
       "paragraph:Gamma",
     ]);
+    expect(texVListParagraphItems(normalized.items).map((item) => item.paragraph.text)).toEqual([
+      "Alpha",
+      "Beta",
+      "Gamma",
+    ]);
+  });
+
+  it("derives layout paragraph IR from normalized vlist paragraph order", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.vlist.items.map((item) => item.kind)).toEqual(["paragraph", "vbox"]);
+    expect(layout.paragraphs.map((paragraph) => paragraph.text)).toEqual(
+      texVListParagraphItems(layout.vlist.items).map((item) => item.paragraph.text)
+    );
   });
 
   it("does not double-count quote and nested list entry spacing", () => {

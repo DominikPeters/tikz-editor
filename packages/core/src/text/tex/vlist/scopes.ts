@@ -1,6 +1,9 @@
+import { articleListLeftMarginEmByDepth } from "../ir.js";
+import type { ResolvedTexFont } from "../fonts/types.js";
 import type {
   TexParagraphInput,
   TexSourceSpan,
+  TexVBoxLayout,
   TexVBoxItem,
   TexVBoxRole,
   TexVListDocument,
@@ -11,10 +14,14 @@ interface ScopeFrame {
   readonly key: string;
   readonly role: TexVBoxRole;
   readonly items: TexVListItem[];
+  readonly layout: TexVBoxLayout;
   sourceSpan?: TexSourceSpan;
 }
 
-export function groupSimpleTexVListScopes(vlist: TexVListDocument): TexVListDocument {
+export function groupSimpleTexVListScopes(
+  vlist: TexVListDocument,
+  font: ResolvedTexFont
+): TexVListDocument {
   const rootItems: TexVListItem[] = [];
   const stack: ScopeFrame[] = [];
 
@@ -36,6 +43,7 @@ export function groupSimpleTexVListScopes(vlist: TexVListDocument): TexVListDocu
         key: scope.key,
         role: scope.role,
         items: [],
+        layout: texVBoxLayoutForScopeRole(scope.role, font),
       };
       appendItem(stack, rootItems, mutableFrameToVBox(frame));
       stack.push(frame);
@@ -48,6 +56,53 @@ export function groupSimpleTexVListScopes(vlist: TexVListDocument): TexVListDocu
     ...vlist,
     items: rootItems,
   };
+}
+
+function texVBoxLayoutForScopeRole(
+  role: TexVBoxRole,
+  font: ResolvedTexFont
+): TexVBoxLayout {
+  if (role.kind === "quote") {
+    const ownMarginWidth = texArticleQuoteOwnMarginWidth(role.depth, font);
+    return {
+      leftMarginWidth: ownMarginWidth,
+      rightMarginWidth: ownMarginWidth,
+      paragraphPolicy: {
+        fallbackAlignment: "justified",
+        preserveRaggedRight: true,
+        raggedRightProfile: "latex-quote",
+      },
+    };
+  }
+
+  if (role.kind === "list-item") {
+    return {
+      leftMarginWidth: 0,
+      rightMarginWidth: 0,
+    };
+  }
+
+  const leftMarginWidth = role.totalLeftMarginEm * font.atPt;
+  return {
+    leftMarginWidth,
+    rightMarginWidth: 0,
+    list: {
+      ownLeftMarginWidth: role.ownLeftMarginEm * font.atPt,
+      labelRightEdge: role.totalLeftMarginEm * font.atPt - 0.5 * font.atPt,
+      descriptionLabelSepWidth: 0.5 * font.atPt,
+    },
+    paragraphPolicy: {
+      resetInheritedAlignment: true,
+      resetSpaceGlueProfile: true,
+    },
+  };
+}
+
+function texArticleQuoteOwnMarginWidth(depth: number, font: ResolvedTexFont): number {
+  const em = articleListLeftMarginEmByDepth[
+    Math.max(0, Math.min(depth - 1, articleListLeftMarginEmByDepth.length - 1))
+  ] ?? 1;
+  return em * font.atPt;
 }
 
 function scopePathForItem(
@@ -75,6 +130,15 @@ function scopePathForItem(
 function keyForScopeRole(role: TexVBoxRole): string {
   if (role.kind === "quote") {
     return `quote:${role.depth}`;
+  }
+  if (role.kind === "list-item") {
+    return [
+      "list-item",
+      role.listKind,
+      role.depth,
+      role.labelDepth,
+      role.itemIndex,
+    ].join(":");
   }
   return [
     "list",
@@ -114,6 +178,22 @@ function scopePathForParagraph(
         labelDepth: listContext.labelDepth,
         ownLeftMarginEm: listContext.ownLeftMarginEm,
         totalLeftMarginEm: listContext.totalLeftMarginEm,
+      },
+    });
+    scopes.push({
+      key: [
+        "list-item",
+        listContext.kind,
+        listContext.depth,
+        listContext.labelDepth,
+        listContext.itemIndex,
+      ].join(":"),
+      role: {
+        kind: "list-item",
+        listKind: listContext.kind,
+        depth: listContext.depth,
+        labelDepth: listContext.labelDepth,
+        itemIndex: listContext.itemIndex,
       },
     });
   }
@@ -156,6 +236,7 @@ function mutableFrameToVBox(frame: ScopeFrame): TexVBoxItem {
       return frame.sourceSpan;
     },
     role: frame.role,
+    layout: frame.layout,
     items: frame.items,
   };
 }

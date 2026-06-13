@@ -41,8 +41,12 @@ export type TexGlueOrigin =
     };
 
 export interface TexLineBox {
+  readonly lineIndex: number;
   readonly sourceSpan?: TexSourceSpan;
+  readonly y: number;
+  readonly targetWidth: number;
   readonly metrics: TexBoxMetrics;
+  readonly lineLeading?: string;
 }
 
 export interface TexRenderItem {
@@ -58,6 +62,12 @@ export interface TexHorizontalLayout {
   readonly lines?: readonly TexLineBox[];
   readonly renderItems: readonly TexRenderItem[];
   readonly hitMap?: TexHitMap;
+}
+
+export interface TexVListParagraphHorizontalLayout {
+  readonly blockIndex: number;
+  readonly lineIndices: readonly number[];
+  readonly horizontal: TexHorizontalLayout;
 }
 
 export interface TexParagraphInput extends SimpleTexSegmentInput {
@@ -89,12 +99,41 @@ export type TexVBoxRole =
       readonly labelDepth: number;
       readonly ownLeftMarginEm: number;
       readonly totalLeftMarginEm: number;
+    }
+  | {
+      readonly kind: "list-item";
+      readonly listKind: SimpleTexListKind;
+      readonly depth: number;
+      readonly labelDepth: number;
+      readonly itemIndex: number;
     };
+
+export interface TexVBoxLayout {
+  readonly leftMarginWidth: number;
+  readonly rightMarginWidth: number;
+  readonly list?: TexVBoxListLayout;
+  readonly paragraphPolicy?: TexVBoxParagraphPolicy;
+}
+
+export interface TexVBoxListLayout {
+  readonly ownLeftMarginWidth: number;
+  readonly labelRightEdge: number;
+  readonly descriptionLabelSepWidth: number;
+}
+
+export interface TexVBoxParagraphPolicy {
+  readonly fallbackAlignment?: TexParagraphAlignment;
+  readonly preserveRaggedRight?: boolean;
+  readonly raggedRightProfile?: TexAlignmentProfile;
+  readonly resetInheritedAlignment?: boolean;
+  readonly resetSpaceGlueProfile?: boolean;
+}
 
 export interface TexVBoxItem {
   readonly kind: "vbox";
   readonly sourceSpan?: TexSourceSpan;
   readonly role?: TexVBoxRole;
+  readonly layout?: TexVBoxLayout;
   readonly width?: TexDimenExpr;
   readonly height?: TexDimenExpr;
   readonly items: readonly TexVListItem[];
@@ -154,20 +193,51 @@ export interface TexVListDocument {
 
 export interface PositionedTexVListItem {
   readonly item: TexVListItem;
+  readonly path?: readonly number[];
   readonly x: number;
   readonly y: number;
   readonly metrics: TexBoxMetrics;
   readonly children?: readonly PositionedTexVListItem[];
 }
 
-export interface TexLayoutReport {
-  readonly kind: string;
+export interface TexVListBoxReportItem {
+  readonly itemKind: TexVListItem["kind"];
+  readonly path: readonly number[];
+  readonly sourceSpan?: TexSourceSpan;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly totalHeight: number;
+  readonly blockIndex?: number;
+  readonly role?: TexVBoxRole;
+  readonly glue?: {
+    readonly size: number;
+    readonly stretch?: number;
+    readonly shrink?: number;
+    readonly stretchOrder?: TexGlueOrder;
+    readonly shrinkOrder?: TexGlueOrder;
+    readonly origin?: TexGlueOrigin;
+  };
+  readonly penalty?: number;
+  readonly placeholderReason?: string;
 }
+
+export interface TexVListBoxLayoutReport {
+  readonly kind: "tex-vlist-boxes";
+  readonly metrics: TexBoxMetrics;
+  readonly baseline: TexVBoxBaseline;
+  readonly items: readonly TexVListBoxReportItem[];
+}
+
+export type TexLayoutReport = TexVListBoxLayoutReport;
 
 export interface TexVListLayout {
   readonly metrics: TexBoxMetrics;
   readonly baseline: TexVBoxBaseline;
   readonly items: readonly PositionedTexVListItem[];
+  readonly boxReport: TexVListBoxLayoutReport;
   readonly paragraphPlacements: readonly TexVListParagraphPlacement[];
   readonly linePlacements: readonly TexVListLinePlacement[];
   readonly reports: readonly (TexLayoutReport | ParagraphLayoutReport)[];
@@ -202,6 +272,7 @@ export interface TexVListParagraphBoxMeasurement {
 
 export interface TexVListParagraphPlacement {
   readonly blockIndex: number;
+  readonly vlistPath?: readonly number[];
   readonly sourceSpan: TexSourceSpan;
   readonly lineIndices: readonly number[];
   readonly y: number;

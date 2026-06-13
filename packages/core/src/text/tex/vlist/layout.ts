@@ -39,7 +39,8 @@ export function layoutTexVListItems(
   items: readonly TexVListItem[],
   measureItem: TexVListItemMeasurer,
   glueSet: TexVListGlueSet | null,
-  startCursor: number
+  startCursor: number,
+  pathPrefix: readonly number[] = []
 ): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: number } {
   const positioned: PositionedTexVListItem[] = [];
   let cursor = startCursor;
@@ -48,10 +49,12 @@ export function layoutTexVListItems(
     if (!item) {
       continue;
     }
+    const path = [...pathPrefix, index];
     if (item.kind === "glue") {
       const size = texVListAdjustedGlueSize(item, glueSet);
       positioned.push({
         item,
+        path,
         x: 0,
         y: cursor,
         metrics: {
@@ -70,6 +73,7 @@ export function layoutTexVListItems(
       const advance = measured.advance ?? measured.metrics.height + measured.metrics.depth;
       positioned.push({
         item,
+        path,
         x: 0,
         y,
         metrics: measured.metrics,
@@ -80,9 +84,10 @@ export function layoutTexVListItems(
 
     if (item.kind === "vbox") {
       const top = cursor;
-      const nested = layoutTexVBoxItem(item, measureItem, top);
+      const nested = layoutTexVBoxItem(item, measureItem, top, path);
       positioned.push({
         item,
+        path,
         x: 0,
         y: top,
         metrics: nested.metrics,
@@ -97,13 +102,14 @@ export function layoutTexVListItems(
 function layoutTexVBoxItem(
   item: TexVBoxItem,
   measureItem: TexVListItemMeasurer,
-  top: number
+  top: number,
+  path: readonly number[]
 ): {
   readonly children: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
   readonly cursor: number;
 } {
-  const natural = layoutTexVListItems(item.items, measureItem, null, top);
+  const natural = layoutTexVListItems(item.items, measureItem, null, top, path);
   const naturalHeight = roundTexPt(natural.cursor - top);
   const targetHeight = finiteTexDimen(item.height);
   const glueSet = texVListGlueSetForTargetHeight(
@@ -112,7 +118,7 @@ function layoutTexVBoxItem(
     targetHeight
   );
   const laidOut = glueSet
-    ? layoutTexVListItems(item.items, measureItem, glueSet, top)
+    ? layoutTexVListItems(item.items, measureItem, glueSet, top, path)
     : natural;
   const laidOutHeight = roundTexPt(laidOut.cursor - top);
   const advance = targetHeight ?? laidOutHeight;

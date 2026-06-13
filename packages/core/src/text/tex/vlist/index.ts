@@ -9,9 +9,12 @@ export {
   type SimpleTexParagraphVerticalSkip,
 } from "./lower-simple.js";
 export {
+  layoutTexVListFromHorizontalParagraphs,
   layoutTexVListFromMeasuredParagraphs,
   layoutTexVListFromParagraphReport,
   measureTexVListParagraphBoxesFromReport,
+  texVListBoxLayoutReport,
+  type TexVListHorizontalParagraphLayoutOptions,
   type TexVListMeasuredParagraphLayoutOptions,
   type TexVListParagraphReportLayoutOptions,
 } from "./report.js";
@@ -31,6 +34,13 @@ export {
 export { groupSimpleTexVListScopes } from "./scopes.js";
 export { planSimpleTexParagraphVerticalSkips } from "./spacing.js";
 export {
+  findPositionedTexVListItemByPath,
+  flattenPositionedTexVListItems,
+  texVListParagraphEntries,
+  texVListParagraphItems,
+  type TexVListParagraphEntry,
+} from "./traversal.js";
+export {
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,
   registerTexVListLayoutsOnOutputJax,
@@ -48,6 +58,7 @@ export type {
   TexHorizontalLayout,
   TexLayoutReport,
   TexLineBox,
+  TexParagraphItem,
   TexParagraphInput,
   TexPenaltyItem,
   TexPlaceholderItem,
@@ -55,7 +66,11 @@ export type {
   TexRuleItem,
   TexSourceSpan,
   TexVBoxBaseline,
+  TexVListBoxLayoutReport,
+  TexVListBoxReportItem,
   TexVBoxItem,
+  TexVBoxLayout,
+  TexVBoxListLayout,
   TexVBoxRole,
   TexVListDocument,
   TexVListItem,
@@ -63,6 +78,7 @@ export type {
   TexVListLayoutOptions,
   TexVListLinePlacement,
   TexVListParagraphBoxMeasurement,
+  TexVListParagraphHorizontalLayout,
   TexVListParagraphLineAssignment,
   TexVListParagraphLineOffset,
   TexVListParagraphPlacement,

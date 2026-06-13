@@ -18,6 +18,10 @@ import {
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
   registerTexVListLayoutsOnOutputJax,
+  texVListBoxLayoutReport,
+  type PositionedTexVListItem,
+  type TexBoxMetrics,
+  type TexVBoxBaseline,
 } from "../packages/core/src/text/tex/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
 
@@ -31,6 +35,17 @@ function paragraphLineAssignmentsFromLayout(layout: {
     blockIndex: placement.blockIndex,
     lineIndices: [...placement.lineIndices],
   })) ?? [];
+}
+
+function registeredLayoutWithBoxReport<T extends {
+  readonly items: readonly PositionedTexVListItem[];
+  readonly metrics: TexBoxMetrics;
+  readonly baseline: TexVBoxBaseline;
+}>(layout: T): T & { readonly boxReport: ReturnType<typeof texVListBoxLayoutReport> } {
+  return {
+    ...layout,
+    boxReport: texVListBoxLayoutReport(layout.items, layout.metrics, layout.baseline),
+  };
 }
 
 function makeLineElement(
@@ -852,7 +867,10 @@ describe("simple TeX paragraph layout", () => {
     ).linePlacements.map((placement) => placement.y)).toEqual([0, 22, 38, 60]);
     const groupedLayout = result.report &&
       layoutTexVListFromParagraphReport(
-        groupSimpleTexVListScopes(layoutIr.vlist),
+        groupSimpleTexVListScopes(
+          layoutIr.vlist,
+          computerModernTexMetricProvider.resolveFont()
+        ),
         result.report,
         {
           width: 150,
@@ -1374,6 +1392,11 @@ describe("simple TeX paragraph layout", () => {
         { left: 100, top: 40, right: 20, bottom: 10 },
         {
           "data-tex-vbox-role": "quote",
+          "data-tex-vlist-path": "0",
+          "data-tex-local-x": "3",
+          "data-tex-local-y": "5",
+          "data-tex-local-width": "40",
+          "data-tex-local-height": "12",
           "data-tex-vbox-depth": "1",
           "data-source-start": "7",
           "data-source-end": "42",
@@ -1383,6 +1406,11 @@ describe("simple TeX paragraph layout", () => {
         { left: 10, top: 20, right: 70, bottom: 90 },
         {
           "data-tex-vbox-role": "list",
+          "data-tex-vlist-path": "0.2",
+          "data-tex-local-x": "11",
+          "data-tex-local-y": "17",
+          "data-tex-local-width": "20",
+          "data-tex-local-height": "8",
           "data-tex-list-kind": "enumerate",
           "data-tex-vbox-depth": "2",
           "data-tex-list-label-depth": "1",
@@ -1401,10 +1429,16 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         role: "quote",
+        vlistPath: [0],
+        localLeft: 3,
+        localRight: 43,
+        localTop: 5,
+        localBottom: 17,
         depth: 1,
         listKind: null,
         listLabelDepth: null,
         listLeftMarginEm: null,
+        listItemIndex: null,
         sourceStart: 7,
         sourceEnd: 42,
         clientLeft: 20,
@@ -1414,10 +1448,16 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         role: "list",
+        vlistPath: [0, 2],
+        localLeft: 11,
+        localRight: 31,
+        localTop: 17,
+        localBottom: 25,
         depth: 2,
         listKind: "enumerate",
         listLabelDepth: 1,
         listLeftMarginEm: 2.2,
+        listItemIndex: null,
         sourceStart: 12,
         sourceEnd: 39,
         clientLeft: 10,
@@ -1432,7 +1472,7 @@ describe("simple TeX paragraph layout", () => {
     const outputJax = {};
     registerTexVListLayoutsOnOutputJax(outputJax, [{
       paragraphId: "tex:registered-vbox",
-      layout: {
+      layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
         baseline: { kind: "explicit", y: 8 },
         paragraphPlacements: [],
@@ -1447,6 +1487,7 @@ describe("simple TeX paragraph layout", () => {
               sourceSpan: { start: 7, end: 42 },
               items: [],
             },
+            path: [0],
             x: 3,
             y: 5,
             metrics: { width: 40, height: 8, depth: 4 },
@@ -1465,14 +1506,35 @@ describe("simple TeX paragraph layout", () => {
                   sourceSpan: { start: 12, end: 39 },
                   items: [],
                 },
+                path: [0, 0],
                 x: 11,
                 y: 17,
                 metrics: { width: 20, height: 6, depth: 2 },
+                children: [
+                  {
+                    item: {
+                      kind: "vbox",
+                      role: {
+                        kind: "list-item",
+                        listKind: "enumerate",
+                        depth: 2,
+                        labelDepth: 1,
+                        itemIndex: 1,
+                      },
+                      sourceSpan: { start: 20, end: 30 },
+                      items: [],
+                    },
+                    path: [0, 0, 0],
+                    x: 13,
+                    y: 19,
+                    metrics: { width: 16, height: 3, depth: 2 },
+                  },
+                ],
               },
             ],
           },
         ],
-      },
+      }),
     }]);
 
     expect(getKnuthPlassVListBoxGeometry({
@@ -1487,10 +1549,16 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         role: "quote",
+        vlistPath: [0],
+        localLeft: 3,
+        localRight: 43,
+        localTop: 5,
+        localBottom: 17,
         depth: 1,
         listKind: null,
         listLabelDepth: null,
         listLeftMarginEm: null,
+        listItemIndex: null,
         sourceStart: 7,
         sourceEnd: 42,
         clientLeft: 16,
@@ -1500,16 +1568,41 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         role: "list",
+        vlistPath: [0, 0],
+        localLeft: 11,
+        localRight: 31,
+        localTop: 17,
+        localBottom: 25,
         depth: 2,
         listKind: "enumerate",
         listLabelDepth: 1,
         listLeftMarginEm: 2.2,
+        listItemIndex: null,
         sourceStart: 12,
         sourceEnd: 39,
         clientLeft: 32,
         clientRight: 72,
         clientTop: 71,
         clientBottom: 95,
+      },
+      {
+        role: "list-item",
+        vlistPath: [0, 0, 0],
+        localLeft: 13,
+        localRight: 29,
+        localTop: 19,
+        localBottom: 24,
+        depth: 2,
+        listKind: "enumerate",
+        listLabelDepth: 1,
+        listLeftMarginEm: null,
+        listItemIndex: 1,
+        sourceStart: 20,
+        sourceEnd: 30,
+        clientLeft: 36,
+        clientRight: 68,
+        clientTop: 77,
+        clientBottom: 92,
       },
     ]);
   });
@@ -1524,6 +1617,7 @@ describe("simple TeX paragraph layout", () => {
         paragraphPlacements: [
           {
             blockIndex: 0,
+            vlistPath: [0],
             sourceSpan: { start: 0, end: 5 },
             lineIndices: [0],
             y: 3,
@@ -1531,6 +1625,7 @@ describe("simple TeX paragraph layout", () => {
           },
           {
             blockIndex: 1,
+            vlistPath: [1],
             sourceSpan: { start: 7, end: 16 },
             lineIndices: [1, 2],
             y: 19,
@@ -1560,6 +1655,11 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         blockIndex: 0,
+        vlistPath: [0],
+        localLeft: 0,
+        localRight: 80,
+        localTop: 3,
+        localBottom: 15,
         lineIndices: [0],
         sourceStart: 0,
         sourceEnd: 5,
@@ -1570,6 +1670,11 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         blockIndex: 1,
+        vlistPath: [1],
+        localLeft: 0,
+        localRight: 90,
+        localTop: 19,
+        localBottom: 43,
         lineIndices: [1, 2],
         sourceStart: 7,
         sourceEnd: 16,
@@ -1587,6 +1692,11 @@ describe("simple TeX paragraph layout", () => {
         { left: 120, top: 44, right: 40, bottom: 12 },
         {
           "data-tex-placeholder-reason": "Unsupported TeX command in vertical mode.",
+          "data-tex-vlist-path": "1",
+          "data-tex-local-x": "18",
+          "data-tex-local-y": "21",
+          "data-tex-local-width": "12",
+          "data-tex-local-height": "6",
           "data-source-start": "11",
           "data-source-end": "48",
         }
@@ -1609,6 +1719,11 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         reason: "Unsupported TeX command in vertical mode.",
+        vlistPath: [1],
+        localLeft: 18,
+        localRight: 30,
+        localTop: 21,
+        localBottom: 27,
         sourceStart: 11,
         sourceEnd: 48,
         clientLeft: 40,
@@ -1623,7 +1738,7 @@ describe("simple TeX paragraph layout", () => {
     const outputJax = {};
     registerTexVListLayoutsOnOutputJax(outputJax, [{
       paragraphId: "tex:registered-placeholder",
-      layout: {
+      layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
         baseline: { kind: "explicit", y: 8 },
         paragraphPlacements: [],
@@ -1636,6 +1751,7 @@ describe("simple TeX paragraph layout", () => {
               kind: "vbox",
               items: [],
             },
+            path: [0],
             x: 0,
             y: 0,
             metrics: { width: 30, height: 10, depth: 5 },
@@ -1647,6 +1763,7 @@ describe("simple TeX paragraph layout", () => {
                   reason: "Unsupported TeX command in vertical mode.",
                   estimated: { width: 12, height: 4, depth: 2 },
                 },
+                path: [0, 0],
                 x: 18,
                 y: 21,
                 metrics: { width: 12, height: 4, depth: 2 },
@@ -1654,7 +1771,7 @@ describe("simple TeX paragraph layout", () => {
             ],
           },
         ],
-      },
+      }),
     }]);
 
     expect(getKnuthPlassPlaceholderGeometry({
@@ -1669,6 +1786,11 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         reason: "Unsupported TeX command in vertical mode.",
+        vlistPath: [0, 0],
+        localLeft: 18,
+        localRight: 30,
+        localTop: 21,
+        localBottom: 27,
         sourceStart: 11,
         sourceEnd: 48,
         clientLeft: 46,
@@ -1685,6 +1807,11 @@ describe("simple TeX paragraph layout", () => {
         { left: 20, top: 15, right: 80, bottom: 30 },
         {
           "data-tex-vlist-item": "hbox",
+          "data-tex-vlist-path": "0",
+          "data-tex-local-x": "2",
+          "data-tex-local-y": "3",
+          "data-tex-local-width": "12",
+          "data-tex-local-height": "4",
           "data-source-start": "4",
           "data-source-end": "13",
         }
@@ -1693,12 +1820,22 @@ describe("simple TeX paragraph layout", () => {
         { left: 12, top: 34, right: 22, bottom: 39 },
         {
           "data-tex-vlist-item": "rule",
+          "data-tex-vlist-path": "1",
+          "data-tex-local-x": "10",
+          "data-tex-local-y": "12",
+          "data-tex-local-width": "7",
+          "data-tex-local-height": "3",
         }
       ),
       makeVListBoxElement(
         { left: 40, top: 44, right: 120, bottom: 76 },
         {
           "data-tex-vlist-item": "placeholder",
+          "data-tex-vlist-path": "2",
+          "data-tex-local-x": "18",
+          "data-tex-local-y": "21",
+          "data-tex-local-width": "9",
+          "data-tex-local-height": "6",
           "data-tex-placeholder-reason": "Unsupported TeX command in vertical mode.",
           "data-source-start": "11",
           "data-source-end": "48",
@@ -1714,6 +1851,11 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         kind: "hbox",
+        vlistPath: [0],
+        localLeft: 2,
+        localRight: 14,
+        localTop: 3,
+        localBottom: 7,
         sourceStart: 4,
         sourceEnd: 13,
         placeholderReason: null,
@@ -1724,6 +1866,11 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         kind: "rule",
+        vlistPath: [1],
+        localLeft: 10,
+        localRight: 17,
+        localTop: 12,
+        localBottom: 15,
         sourceStart: null,
         sourceEnd: null,
         placeholderReason: null,
@@ -1734,6 +1881,11 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         kind: "placeholder",
+        vlistPath: [2],
+        localLeft: 18,
+        localRight: 27,
+        localTop: 21,
+        localBottom: 27,
         sourceStart: 11,
         sourceEnd: 48,
         placeholderReason: "Unsupported TeX command in vertical mode.",
@@ -1749,7 +1901,7 @@ describe("simple TeX paragraph layout", () => {
     const outputJax = {};
     registerTexVListLayoutsOnOutputJax(outputJax, [{
       paragraphId: "tex:registered-items",
-      layout: {
+      layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
         baseline: { kind: "explicit", y: 8 },
         paragraphPlacements: [],
@@ -1766,6 +1918,7 @@ describe("simple TeX paragraph layout", () => {
                 renderItems: [],
               },
             },
+            path: [0],
             x: 2,
             y: 3,
             metrics: { width: 12, height: 3, depth: 1 },
@@ -1775,6 +1928,7 @@ describe("simple TeX paragraph layout", () => {
               kind: "vbox",
               items: [],
             },
+            path: [1],
             x: 0,
             y: 0,
             metrics: { width: 30, height: 10, depth: 5 },
@@ -1786,6 +1940,7 @@ describe("simple TeX paragraph layout", () => {
                   height: 2,
                   depth: 1,
                 },
+                path: [1, 0],
                 x: 10,
                 y: 12,
                 metrics: { width: 7, height: 2, depth: 1 },
@@ -1796,6 +1951,7 @@ describe("simple TeX paragraph layout", () => {
                   sourceSpan: { start: 20, end: 31 },
                   penalty: -50,
                 },
+                path: [1, 1],
                 x: 14,
                 y: 16,
                 metrics: { width: 0, height: 0, depth: 0 },
@@ -1807,6 +1963,7 @@ describe("simple TeX paragraph layout", () => {
                   reason: "Unsupported TeX command in vertical mode.",
                   estimated: { width: 9, height: 4, depth: 2 },
                 },
+                path: [1, 2],
                 x: 18,
                 y: 21,
                 metrics: { width: 9, height: 4, depth: 2 },
@@ -1814,7 +1971,7 @@ describe("simple TeX paragraph layout", () => {
             ],
           },
         ],
-      },
+      }),
     }]);
 
     expect(getKnuthPlassVListItemGeometry({
@@ -1829,6 +1986,11 @@ describe("simple TeX paragraph layout", () => {
     })).toEqual([
       {
         kind: "hbox",
+        vlistPath: [0],
+        localLeft: 2,
+        localRight: 14,
+        localTop: 3,
+        localBottom: 7,
         sourceStart: 4,
         sourceEnd: 13,
         placeholderReason: null,
@@ -1839,6 +2001,11 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         kind: "rule",
+        vlistPath: [1, 0],
+        localLeft: 10,
+        localRight: 17,
+        localTop: 12,
+        localBottom: 15,
         sourceStart: null,
         sourceEnd: null,
         placeholderReason: null,
@@ -1849,6 +2016,11 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         kind: "penalty",
+        vlistPath: [1, 1],
+        localLeft: 14,
+        localRight: 14,
+        localTop: 16,
+        localBottom: 16,
         sourceStart: 20,
         sourceEnd: 31,
         placeholderReason: null,
@@ -1859,6 +2031,11 @@ describe("simple TeX paragraph layout", () => {
       },
       {
         kind: "placeholder",
+        vlistPath: [1, 2],
+        localLeft: 18,
+        localRight: 27,
+        localTop: 21,
+        localBottom: 27,
         sourceStart: 40,
         sourceEnd: 52,
         placeholderReason: "Unsupported TeX command in vertical mode.",
@@ -1898,6 +2075,64 @@ describe("simple TeX paragraph layout", () => {
       text: "Alpha",
       x: expect.closeTo(25, 6),
     });
+  });
+
+  it("represents multi-paragraph list item bodies as nested vboxes", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{enumerate}\item Alpha \par Beta\item Gamma\end{enumerate}`,
+      {
+        paragraphId: "tex:vlist-list-item-boxes",
+        width: 150,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.boxReport.items
+      .filter((item) => item.role?.kind === "list-item")
+      .map((item) => ({
+        path: item.path,
+        role: item.role,
+        sourceSpan: item.sourceSpan,
+      }))).toEqual([
+      {
+        path: [0, 0],
+        role: {
+          kind: "list-item",
+          listKind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+        },
+        sourceSpan: {
+          start: expect.any(Number),
+          end: expect.any(Number),
+        },
+      },
+      {
+        path: [0, 1],
+        role: {
+          kind: "list-item",
+          listKind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 2,
+        },
+        sourceSpan: {
+          start: expect.any(Number),
+          end: expect.any(Number),
+        },
+      },
+    ]);
+    expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
+      blockIndex: placement.blockIndex,
+      vlistPath: placement.vlistPath,
+    }))).toEqual([
+      { blockIndex: 0, vlistPath: [0, 0, 1] },
+      { blockIndex: 1, vlistPath: [0, 0, 3] },
+      { blockIndex: 2, vlistPath: [0, 1, 1] },
+    ]);
   });
 
   it("renders custom item labels and nested list margins", () => {
