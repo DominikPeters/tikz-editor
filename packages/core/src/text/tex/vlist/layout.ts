@@ -4,6 +4,7 @@ import type {
   TexBoxMetrics,
   TexGlueItem,
   TexGlueOrder,
+  TexVBoxItem,
   TexVListItem,
   TexVListLayoutOptions,
 } from "./types.js";
@@ -79,19 +80,52 @@ export function layoutTexVListItems(
 
     if (item.kind === "vbox") {
       const top = cursor;
-      const nested = layoutTexVListItems(item.items, measureItem, glueSet, top);
-      const metrics = metricsForVBox(nested.positioned, top, nested.cursor);
+      const nested = layoutTexVBoxItem(item, measureItem, top);
       positioned.push({
         item,
         x: 0,
         y: top,
-        metrics,
-        children: nested.positioned,
+        metrics: nested.metrics,
+        children: nested.children,
       });
       cursor = nested.cursor;
     }
   }
   return { positioned, cursor };
+}
+
+function layoutTexVBoxItem(
+  item: TexVBoxItem,
+  measureItem: TexVListItemMeasurer,
+  top: number
+): {
+  readonly children: readonly PositionedTexVListItem[];
+  readonly metrics: TexBoxMetrics;
+  readonly cursor: number;
+} {
+  const natural = layoutTexVListItems(item.items, measureItem, null, top);
+  const naturalHeight = roundTexPt(natural.cursor - top);
+  const targetHeight = finiteTexDimen(item.height);
+  const glueSet = texVListGlueSetForTargetHeight(
+    item.items,
+    naturalHeight,
+    targetHeight
+  );
+  const laidOut = glueSet
+    ? layoutTexVListItems(item.items, measureItem, glueSet, top)
+    : natural;
+  const laidOutHeight = roundTexPt(laidOut.cursor - top);
+  const advance = targetHeight ?? laidOutHeight;
+  const childOffset = targetHeight === undefined
+    ? 0
+    : texVListRootVerticalOffset(laidOutHeight, targetHeight, item.alignment);
+  const children = offsetPositionedTexVListItems(laidOut.positioned, childOffset);
+  const cursor = roundTexPt(top + advance);
+  return {
+    children,
+    metrics: metricsForVBox(children, top, cursor),
+    cursor,
+  };
 }
 
 export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexVListItem | null {
@@ -218,10 +252,6 @@ function texVListGlueItems(items: readonly TexVListItem[]): TexGlueItem[] {
   for (const item of items) {
     if (item.kind === "glue") {
       glues.push(item);
-      continue;
-    }
-    if (item.kind === "vbox") {
-      glues.push(...texVListGlueItems(item.items));
     }
   }
   return glues;
@@ -259,6 +289,12 @@ function texGlueOrderRank(order: TexGlueOrder): number {
     return 1;
   }
   return 0;
+}
+
+function finiteTexDimen(value: number | string | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function metricsForVBox(

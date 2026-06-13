@@ -69,6 +69,7 @@ export interface TexVBoxItem {
   readonly sourceSpan?: TexSourceSpan;
   readonly role?: TexVBoxRole;
   readonly width?: TexDimenExpr;
+  readonly height?: TexDimenExpr;
   readonly items: readonly TexVListItem[];
   readonly alignment?: "top" | "center" | "bottom";
 }

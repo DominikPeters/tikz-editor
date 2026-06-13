@@ -11,6 +11,7 @@ import {
   lowerSimpleTexBlocksToVList,
   planSimpleTexParagraphVerticalSkips,
   parseSimpleTexParagraphIr,
+  texVListGlueSetForTargetHeight,
   type TexVListItemMeasurer,
   type TexVListItem,
 } from "../packages/core/src/text/tex/index.js";
@@ -566,6 +567,155 @@ describe("simple TeX paragraph IR", () => {
         y: 25,
         metrics: { width: 10, height: 2, depth: 1 },
       },
+    ]);
+  });
+
+  it("keeps parent vlist glue setting out of nested vboxes", () => {
+    const items: readonly TexVListItem[] = [
+      {
+        kind: "glue",
+        size: 2,
+        stretch: 4,
+        stretchOrder: "normal",
+      },
+      {
+        kind: "vbox",
+        items: [
+          {
+            kind: "glue",
+            size: 3,
+            stretch: 100,
+            stretchOrder: "normal",
+          },
+          {
+            kind: "rule",
+            width: 10,
+            height: 2,
+            depth: 1,
+          },
+        ],
+      },
+    ];
+
+    const naturalHeight = computeTexVListNaturalTotalHeight(items, () => null);
+    const glueSet = texVListGlueSetForTargetHeight(items, naturalHeight, 18);
+    const laidOut = layoutTexVListItems(items, () => null, glueSet, 0);
+    const nested = laidOut.positioned[1];
+
+    expect(glueSet).toEqual({
+      sign: "stretch",
+      order: "normal",
+      ratio: 2.5,
+    });
+    expect(laidOut.cursor).toBe(18);
+    expect(laidOut.positioned.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.metrics.height,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { kind: "glue", y: 0, height: 12, depth: 0 },
+      { kind: "vbox", y: 12, height: 5, depth: 1 },
+    ]);
+    expect(nested?.children?.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.metrics.height,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { kind: "glue", y: 12, height: 3, depth: 0 },
+      { kind: "rule", y: 15, height: 2, depth: 1 },
+    ]);
+  });
+
+  it("sets local glue inside explicit-height vboxes", () => {
+    const items: readonly TexVListItem[] = [
+      {
+        kind: "vbox",
+        height: 20,
+        items: [
+          {
+            kind: "rule",
+            width: 10,
+            height: 2,
+            depth: 1,
+          },
+          {
+            kind: "glue",
+            size: 3,
+            stretch: 5,
+            stretchOrder: "normal",
+          },
+          {
+            kind: "rule",
+            width: 8,
+            height: 1,
+            depth: 0,
+          },
+        ],
+      },
+      {
+        kind: "glue",
+        size: 1,
+        stretch: 99,
+        stretchOrder: "normal",
+      },
+    ];
+
+    const laidOut = layoutTexVListItems(items, () => null, null, 0);
+    const nested = laidOut.positioned[0];
+
+    expect(laidOut.cursor).toBe(21);
+    expect(nested?.metrics).toEqual({
+      width: 10,
+      height: 2,
+      depth: 18,
+    });
+    expect(nested?.children?.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.metrics.height,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { kind: "rule", y: 0, height: 2, depth: 1 },
+      { kind: "glue", y: 3, height: 16, depth: 0 },
+      { kind: "rule", y: 19, height: 1, depth: 0 },
+    ]);
+  });
+
+  it("aligns natural children inside explicit-height vboxes without stretch glue", () => {
+    const items: readonly TexVListItem[] = [
+      {
+        kind: "vbox",
+        height: 10,
+        alignment: "bottom",
+        items: [
+          {
+            kind: "rule",
+            width: 10,
+            height: 2,
+            depth: 1,
+          },
+        ],
+      },
+    ];
+
+    const laidOut = layoutTexVListItems(items, () => null, null, 0);
+    const nested = laidOut.positioned[0];
+
+    expect(laidOut.cursor).toBe(10);
+    expect(nested?.metrics).toEqual({
+      width: 10,
+      height: 9,
+      depth: 1,
+    });
+    expect(nested?.children?.map((item) => ({
+      kind: item.item.kind,
+      y: item.y,
+      height: item.metrics.height,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { kind: "rule", y: 7, height: 2, depth: 1 },
     ]);
   });
 
