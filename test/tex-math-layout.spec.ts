@@ -259,6 +259,46 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out simple radicals with TeX-style radical glyph shifts and overbar rule", () => {
+    const result = layout(String.raw`\sqrt{x}`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(14.04864, 6);
+    expect(result.hlist?.height).toBeCloseTo(8.002754, 6);
+    expect(result.hlist?.depth).toBeCloseTo(2.397236, 6);
+    expect(result.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "rule", "hlist"]);
+    expect(result.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmsy10",
+      code: 112,
+      x: 0,
+      y: expect.closeTo(-7.202774, 6),
+      width: expect.closeTo(8.33336, 6),
+    });
+    expect(result.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "radical-rule",
+      x: expect.closeTo(8.33336, 6),
+      y: expect.closeTo(-7.602764, 6),
+      width: expect.closeTo(5.71528, 6),
+      height: expect.closeTo(0.39999, 6),
+    });
+    expect(result.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      x: expect.closeTo(8.33336, 6),
+      y: 0,
+    });
+  });
+
+  it("keeps taller radicals unsupported until extensible delimiter selection is implemented", () => {
+    const result = layout(String.raw`\sqrt{\frac{1}{2}}`);
+
+    expect(result.supported).toBe(false);
+    expect(result.hlist).toBeNull();
+    expect(result.errors[0]?.message).toMatch(/Only simple glyph math atoms/);
+  });
+
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
     const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
@@ -277,8 +317,14 @@ describe("TeX math hlist layout", () => {
   });
 
   it("reports unsupported constructs instead of producing approximate layout", () => {
-    for (const source of [String.raw`\sqrt{x}`]) {
-      const result = layout(source);
+    for (const source of [String.raw`\unknown{x}`]) {
+      const parsed = parseTexMath(source);
+      expect(parsed.diagnostics).toMatchObject([
+        {
+          code: "unsupported-command",
+        },
+      ]);
+      const result = layoutTexMathList(parsed.list);
       expect(result.supported).toBe(false);
       expect(result.hlist).toBeNull();
       expect(result.errors[0]?.message).toMatch(/Unsupported TeX math item|Only simple glyph math atoms/);

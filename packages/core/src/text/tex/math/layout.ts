@@ -65,7 +65,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule";
+  readonly role: "fraction-rule" | "radical-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -327,6 +327,9 @@ function layoutNucleus(
   if (nucleus.kind === "fraction") {
     return layoutFractionNucleus(nucleus, fontProfile, style, baseAtPt);
   }
+  if (nucleus.kind === "radical") {
+    return layoutRadicalNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   return null;
 }
 
@@ -403,6 +406,102 @@ function layoutFractionNucleus(
 }
 
 function layoutFractionList(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList | null {
+  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt });
+  return result.supported ? result.hlist : null;
+}
+
+function layoutRadicalNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "radical" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, baseAtPt);
+  if (!radicand) {
+    return null;
+  }
+
+  const radicalFont = fontProfile.resolveMathFont({
+    family: "symbols",
+    style,
+    baseAtPt,
+  });
+  const radicalCode = 112;
+  const radicalMetric = requiredCharMetric(radicalFont, radicalCode);
+  const radicalWidth = roundTexPt(tfmToPt(radicalFont, radicalMetric.width));
+  const radicalHeight = roundTexPt(tfmToPt(radicalFont, radicalMetric.height));
+  const radicalDepth = roundTexPt(tfmToPt(radicalFont, radicalMetric.depth));
+  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
+  let clearance = radicalInitialClearance(fontProfile, style, baseAtPt, thickness);
+  const targetHeight = radicand.height + radicand.depth + clearance + thickness;
+  if (radicalHeight + radicalDepth < targetHeight) {
+    return null;
+  }
+
+  const delta = radicalDepth - (radicand.height + radicand.depth + clearance);
+  if (delta > 0) {
+    clearance += delta / 2;
+  }
+  const radicalY = roundTexPt(-(radicand.height + clearance));
+  const ruleY = roundTexPt(radicalY - thickness);
+  const radicalGlyph = {
+    kind: "glyph",
+    fontId: radicalFont.id,
+    atPt: radicalFont.atPt,
+    family: "symbols",
+    code: radicalCode,
+    text: "\\sqrt",
+    x: 0,
+    y: radicalY,
+    width: radicalWidth,
+    height: radicalHeight,
+    depth: radicalDepth,
+    italicCorrection: roundTexPt(tfmToPt(radicalFont, radicalMetric.italicCorrection)),
+    sourceSpan: nucleus.sourceSpan,
+  } satisfies TexMathGlyphLayoutItem;
+  const rule = {
+    kind: "rule",
+    role: "radical-rule",
+    x: radicalWidth,
+    y: ruleY,
+    width: radicand.width,
+    height: roundTexPt(thickness),
+    sourceSpan: nucleus.sourceSpan,
+  } satisfies TexMathRuleLayoutItem;
+  const radicandChild = childHList(
+    "nucleus",
+    radicalWidth,
+    0,
+    radicand,
+    nucleus.radicand.sourceSpan
+  );
+  const height = Math.max(
+    radicand.height,
+    -radicalGlyph.y + radicalGlyph.height,
+    -rule.y + rule.height
+  );
+  const depth = Math.max(
+    radicand.depth,
+    radicalGlyph.y + radicalGlyph.depth
+  );
+
+  return {
+    items: [radicalGlyph, rule, radicandChild],
+    width: roundTexPt(radicalWidth + radicand.width),
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutRadicandList(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
@@ -717,6 +816,18 @@ function mathXHeight(
     baseAtPt,
   });
   return tfmToPt(symbols, symbols.data.fontdimen.xheight);
+}
+
+function radicalInitialClearance(
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  defaultRuleThickness: number
+): number {
+  if (style === "display") {
+    return defaultRuleThickness + Math.abs(mathXHeight(fontProfile, style, baseAtPt)) / 4;
+  }
+  return defaultRuleThickness + Math.abs(defaultRuleThickness) / 4;
 }
 
 function supStyle(style: TexMathStyle): TexMathStyle {

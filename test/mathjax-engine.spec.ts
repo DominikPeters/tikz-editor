@@ -549,7 +549,7 @@ describe("mathjax node text engine", () => {
     const callsBeforeMeasure = texCalls.length;
 
     const measured = engine.measure({
-      text: String.raw`Alpha $\sqrt{x}$ beta`,
+      text: String.raw`Alpha $\sqrt{\frac{1}{2}}$ beta`,
       textWidthPt: 64,
       alignment: "ragged-right",
       fontStyle: "normal",
@@ -559,7 +559,7 @@ describe("mathjax node text engine", () => {
     });
 
     expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
-    expect(texCalls).not.toContain(String.raw`\textstyle{\sqrt{x}}`);
+    expect(texCalls).not.toContain(String.raw`\textstyle{\sqrt{\frac{1}{2}}}`);
     expect(measured?.paragraphId).not.toMatch(/^tex:/);
     const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
     const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);

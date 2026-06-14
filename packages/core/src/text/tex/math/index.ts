@@ -40,6 +40,7 @@ export {
 export {
   layoutTexMathList,
   resolveMathGlyph,
+  type TexMathChildHListLayoutItem,
   type TexMathGlueLayoutItem,
   type TexMathGlyphLayoutItem,
   type TexMathHList,
@@ -48,6 +49,7 @@ export {
   type TexMathLayoutError,
   type TexMathLayoutOptions,
   type TexMathLayoutResult,
+  type TexMathRuleLayoutItem,
   type ResolvedMathGlyph,
 } from "./layout.js";
 export {
