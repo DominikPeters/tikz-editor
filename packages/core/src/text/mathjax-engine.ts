@@ -15,6 +15,7 @@ import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import {
   computerModernTexMetricProvider,
+  createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
   luaLatexDefaultTextFontProfile,
 } from "./tex/index.js";
@@ -1015,6 +1016,9 @@ function buildSimpleTexTextCacheEntry(params: {
       metricProvider,
       textFontProfile: luaLatexDefaultTextFontProfile,
       tikzTextWidthNode: true,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider({
+        baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
+      }),
     });
   } catch {
     return null;
@@ -1396,6 +1400,9 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
     textFontProfile: luaLatexDefaultTextFontProfile,
     tikzTextWidthNode: true,
     fallbackPolicy: "placeholder",
+    mathBoxProvider: createTexDerivedInlineMathBoxProvider({
+      baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
+    }),
   });
   if (!layout.supported || !layout.report || !layout.vlistLayout) {
     return null;
