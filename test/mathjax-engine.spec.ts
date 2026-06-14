@@ -486,10 +486,20 @@ describe("mathjax node text engine", () => {
       fontSizePt: 10
     });
     const groupedBody = engine.renderFromCache(grouped?.cacheKey ?? "")?.body ?? "";
-    expect(groupedBody).toContain('data-tex-vbox="true"');
-    expect(groupedBody).toContain('data-tex-vbox-role="quote"');
-    expect(groupedBody).toContain('data-tex-vbox-role="list"');
-    expect(groupedBody).toContain('data-tex-list-kind="enumerate"');
+    const groupedVList = getTexVListLayoutFromOutputJax(getActiveMathJaxOutputJax(), grouped?.paragraphId);
+    const groupedItems = [...(groupedVList?.items ?? [])];
+    for (let index = 0; index < groupedItems.length; index++) {
+      groupedItems.push(...(groupedItems[index].children ?? []));
+    }
+    expect(groupedItems.some((item) =>
+      item.item.kind === "vbox" && item.item.role?.kind === "quote"
+    )).toBe(true);
+    expect(groupedItems.some((item) =>
+      item.item.kind === "vbox" &&
+      item.item.role?.kind === "list" &&
+      item.item.role.listKind === "enumerate"
+    )).toBe(true);
+    expect(groupedBody).not.toContain('data-tex-vbox="true"');
     expect(groupedBody).toContain('data-mjx-linebox="true"');
     expect(texCalls).toHaveLength(callsBeforeMeasure);
   });
@@ -515,7 +525,7 @@ describe("mathjax node text engine", () => {
     expect(measured?.paragraphId).not.toMatch(/^tex:/);
   });
 
-  it("exposes placeholder fallback SVG metadata through the debug renderer", async () => {
+  it("renders placeholder fallback structure through the debug renderer", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
     const {
@@ -544,25 +554,18 @@ describe("mathjax node text engine", () => {
       width: 150,
       alignment: "ragged-right",
     }) ?? "";
-    expect(debugBody).toContain('data-tex-placeholder="true"');
-    expect(debugBody).toContain('data-source-start="11"');
-    expect(debugBody).toContain('data-source-end="48"');
-    expect(debugBody).toContain("Unsupported TeX command in vertical mode.");
+    expect(debugBody).not.toContain('data-tex-vlist-item="placeholder"');
+    expect(debugBody).not.toContain("Unsupported TeX command in vertical mode.");
     expect(debugBody).toContain('data-mjx-linebox="true"');
     expect(debugBody).toContain('data-line-index="0"');
     expect(debugBody).toContain('data-line-index="1"');
     expect(debugBody).toContain('data-tex-glyph="65"');
     expect(debugBody).toContain('data-tex-glyph="66"');
     expect(debugBody.match(/data-mjx-linebox="true"/g)).toHaveLength(2);
-    expect(debugBody.indexOf('data-line-index="0"')).toBeLessThan(
-      debugBody.indexOf('data-tex-placeholder="true"')
-    );
-    expect(debugBody.indexOf('data-tex-placeholder="true"')).toBeLessThan(
-      debugBody.indexOf('data-line-index="1"')
-    );
+    expect(debugBody).toContain('width="150" height="12" fill="none"');
   });
 
-  it("renders generic vlist metadata for measured hbox and rule items", async () => {
+  it("renders generic vlist structure for measured hbox and rule items", async () => {
     const { renderTexVListSvgMetadata } = await import(
       "../packages/core/src/text/mathjax-engine.js"
     );
@@ -571,11 +574,22 @@ describe("mathjax node text engine", () => {
         item: {
           kind: "hbox",
           sourceSpan: { start: 2, end: 9 },
+          role: {
+            kind: "list-label",
+            labelKind: "default",
+            placement: "margin",
+            listKind: "enumerate",
+            depth: 1,
+            labelDepth: 1,
+            itemIndex: 2,
+            blockIndex: 7,
+          },
           box: {
             metrics: { width: 24, height: 6, depth: 2 },
             renderItems: [],
           },
         },
+        path: [0],
         x: 3,
         y: 5,
         metrics: { width: 24, height: 6, depth: 2 },
@@ -587,6 +601,7 @@ describe("mathjax node text engine", () => {
           height: 4,
           depth: 1,
         },
+        path: [1],
         x: 0,
         y: 14,
         metrics: { width: 12, height: 4, depth: 1 },
@@ -597,6 +612,7 @@ describe("mathjax node text engine", () => {
           sourceSpan: { start: 15, end: 26 },
           penalty: -50,
         },
+        path: [2],
         x: 0,
         y: 19,
         metrics: { width: 0, height: 0, depth: 0 },
@@ -608,30 +624,24 @@ describe("mathjax node text engine", () => {
           reason: "Unsupported TeX command in vertical mode.",
           estimated: { width: 0, height: 8.5, depth: 3.5 },
         },
+        path: [3],
         x: 0,
         y: 20,
         metrics: { width: 0, height: 8.5, depth: 3.5 },
       },
     ], 80);
 
-    expect(body).toContain('data-tex-vlist-item="hbox"');
-    expect(body).toContain('data-source-start="2"');
-    expect(body).toContain('data-source-end="9"');
+    expect(body).not.toContain("data-tex-vlist-item");
+    expect(body).not.toContain("data-source-start");
     expect(body).toContain('transform="translate(3 5)"');
     expect(body).toContain('width="24" height="8"');
-    expect(body).toContain('data-tex-vlist-item="rule"');
     expect(body).toContain('transform="translate(0 14)"');
     expect(body).toContain('width="12" height="5"');
-    expect(body).toContain('data-tex-vlist-item="penalty"');
-    expect(body).toContain('data-tex-penalty="-50"');
-    expect(body).toContain('data-source-start="15"');
-    expect(body).toContain('data-source-end="26"');
-    expect(body).toContain('data-tex-vlist-item="placeholder"');
-    expect(body).toContain('data-tex-placeholder="true"');
+    expect(body).toContain('transform="translate(0 19)"');
     expect(body).toContain('width="80" height="12"');
   });
 
-  it("renders nested vlist metadata with relative child transforms", async () => {
+  it("renders nested vlist structure with relative child transforms", async () => {
     const { renderTexVListSvgMetadata } = await import(
       "../packages/core/src/text/mathjax-engine.js"
     );
@@ -663,14 +673,12 @@ describe("mathjax node text engine", () => {
       },
     ], 80);
 
-    expect(body).toContain('data-tex-vbox="true"');
+    expect(body).not.toContain('data-tex-vbox="true"');
+    expect(body).not.toContain('data-tex-vlist-item="hbox"');
     expect(body).toContain('transform="translate(10 20)"');
-    expect(body).toContain('data-tex-vlist-item="hbox"');
     expect(body).toContain('transform="translate(5 12)"');
-    expect(body).toContain('data-tex-local-x="15"');
-    expect(body).toContain('data-tex-local-y="32"');
-    expect(body.indexOf('data-tex-vbox="true"')).toBeLessThan(
-      body.indexOf('data-tex-vlist-item="hbox"')
+    expect(body.indexOf('transform="translate(10 20)"')).toBeLessThan(
+      body.indexOf('transform="translate(5 12)"')
     );
   });
 
@@ -686,15 +694,14 @@ describe("mathjax node text engine", () => {
       alignment: "ragged-right",
     }) ?? "";
 
-    expect(body).toContain('data-tex-vlist-item="rule"');
-    const ruleTransform = body.match(/data-tex-vlist-item="rule"[^>]*transform="translate\(0 ([^)]+)\)"/);
+    const ruleTransform = body.match(/<g transform="translate\(0 ([^)]+)\)" pointer-events="none"><rect x="0" y="0" width="24" height="3" fill="currentColor"/);
     expect(ruleTransform).not.toBeNull();
     expect(Number(ruleTransform?.[1])).toBeCloseTo(8.8889 * DEFAULT_TEXT_FONT_SIZE / 10, 4);
     expect(body).toContain('width="24" height="3" fill="currentColor"');
     expect(body.indexOf('data-line-index="0"')).toBeLessThan(
-      body.indexOf('data-tex-vlist-item="rule"')
+      body.indexOf('width="24" height="3" fill="currentColor"')
     );
-    expect(body.indexOf('data-tex-vlist-item="rule"')).toBeLessThan(
+    expect(body.indexOf('width="24" height="3" fill="currentColor"')).toBeLessThan(
       body.indexOf('data-line-index="1"')
     );
   });
@@ -735,11 +742,11 @@ describe("mathjax node text engine", () => {
       alignment: "ragged-right",
     }) ?? "";
 
-    expect(body).toContain('data-tex-vlist-item="hbox"');
+    expect(body).not.toContain('data-tex-vlist-item="hbox"');
     expect(body).toContain('data-tex-glyph="49"');
     expect(body).toContain('data-tex-glyph="46"');
     expect(body).toContain('data-line-index="0"');
-    expect(body.indexOf('data-tex-vlist-item="hbox"')).toBeLessThan(
+    expect(body.indexOf('data-tex-glyph="49"')).toBeLessThan(
       body.indexOf('data-line-index="0"')
     );
   });
@@ -757,7 +764,7 @@ describe("mathjax node text engine", () => {
     }) ?? "";
     const innerLine = body.match(/data-line-index="1"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)"/);
 
-    expect(body).toContain('data-tex-vbox-role="list"');
+    expect(body).not.toContain('data-tex-vbox-role="list"');
     expect(innerLine).not.toBeNull();
     expect(Number(innerLine?.[1])).toBeGreaterThanOrEqual(0);
     expect(Number(innerLine?.[1])).toBeLessThan(47);

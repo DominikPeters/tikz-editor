@@ -38,6 +38,7 @@ export interface TexListItemParagraphAttachments {
 }
 
 export function texListItemParagraphAttachments(params: {
+  readonly blockIndex: number;
   readonly segmentIndex: number;
   readonly listContext?: SimpleTexListContext;
   readonly listItemLayout?: TexVBoxListItemLayout;
@@ -51,14 +52,14 @@ export function texListItemParagraphAttachments(params: {
     : undefined;
   const inlineLabelItems =
     params.listContext && listItemLabel?.placement === "inline"
-      ? texInlineLabelItemsForListContext(
-          params.listContext,
-          listItemLabel,
-          params.font,
-          params.metricProvider,
-          params.spaceGlueProfile,
-          params.inlineNodesToItems
-      )
+      ? markTexInlineLabelItems(texInlineLabelItemsForListContext(
+        params.listContext,
+        listItemLabel,
+        params.font,
+        params.metricProvider,
+        params.spaceGlueProfile,
+        params.inlineNodesToItems
+      ))
       : [];
   const firstLineIndentWidth = texArticleDescriptionFirstLineIndentWidth(
     params.listContext,
@@ -75,19 +76,20 @@ export function texListItemParagraphAttachments(params: {
         params.inlineNodesToItems
       )
     : undefined;
+  const marginLabelHBox = marginLabel && listItemLabel && params.listContext
+    ? texMarginListLabelHBoxFromLayoutLabel(
+        marginLabel,
+        params.listContext,
+        params.blockIndex,
+        listItemLabel,
+        params.metricProvider
+      )
+    : undefined;
   return {
     inlineLabelItems,
     firstLineIndentWidth,
     ...(marginLabel ? { marginLabel } : {}),
-    ...(marginLabel && listItemLabel
-      ? {
-          marginLabelHBox: texMarginListLabelHBoxFromLayoutLabel(
-            marginLabel,
-            listItemLabel,
-            params.metricProvider
-          ),
-        }
-      : {}),
+    ...(marginLabelHBox ? { marginLabelHBox } : {}),
   };
 }
 
@@ -137,6 +139,15 @@ function texInlineLabelItemsForListContext(
     spaceGlueProfile,
     labelBox.fontState
   );
+}
+
+function markTexInlineLabelItems(
+  items: readonly TexLayoutInlineItem[]
+): readonly TexLayoutInlineItem[] {
+  return items.map((item) => ({
+    ...item,
+    role: "list-label" as const,
+  }));
 }
 
 function texLayoutLabelForListContext(
@@ -204,6 +215,8 @@ function texLayoutLabelForListContext(
 
 function texMarginListLabelHBoxFromLayoutLabel(
   label: TexLayoutLabel,
+  listContext: SimpleTexListContext,
+  blockIndex: number,
   labelBox: TexVBoxListItemLabelBox,
   metricProvider: TexMetricProvider
 ): TexHBoxItem {
@@ -222,6 +235,11 @@ function texMarginListLabelHBoxFromLayoutLabel(
       kind: "list-label",
       labelKind: labelBox.kind,
       placement: labelBox.placement,
+      listKind: listContext.kind,
+      depth: listContext.depth,
+      labelDepth: listContext.labelDepth,
+      itemIndex: listContext.itemIndex,
+      blockIndex,
     },
     x: roundTexPt(label.rightEdge - box.metrics.width),
     advance: 0,

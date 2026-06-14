@@ -28,7 +28,6 @@ import {
 import type {
   PositionedTexVListItem,
   TexRenderItem,
-  TexVBoxRole,
   TexVListLayout,
 } from "./tex/vlist/index.js";
 import type {
@@ -1147,9 +1146,9 @@ function renderTexVListSvgContent(
   const linePlacementByIndex = new Map(
     options.vlistLayout.linePlacements.map((placement) => [placement.lineIndex, placement])
   );
-  const paragraphLineIndicesByBlock = new Map(
+  const paragraphLineIndicesByPath = new Map(
     options.vlistLayout.paragraphPlacements.map((placement) => [
-      placement.blockIndex,
+      texVListPathKey(placement.vlistPath),
       placement.lineIndices,
     ])
   );
@@ -1157,7 +1156,7 @@ function renderTexVListSvgContent(
     ...options,
     lineByIndex,
     linePlacementByIndex,
-    paragraphLineIndicesByBlock,
+    paragraphLineIndicesByPath,
     originX: 0,
     originY: 0,
   };
@@ -1183,7 +1182,7 @@ type TexVListRenderOptions = {
   metricProvider: TexMetricProvider;
   linePlacementByIndex: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   lineByIndex: ReadonlyMap<number, ParagraphLayoutReport["lines"][number]>;
-  paragraphLineIndicesByBlock: ReadonlyMap<number, readonly number[]>;
+  paragraphLineIndicesByPath: ReadonlyMap<string, readonly number[]>;
   originX: number;
   originY: number;
 };
@@ -1197,12 +1196,11 @@ function renderTexVListItemsSvgContent(
   const pieces: string[] = [];
   for (const item of items) {
     if (item.item.kind === "paragraph") {
-      const assignedLineIndices = options.paragraphLineIndicesByBlock.get(
-        item.item.paragraph.blockIndex
-      );
+      const pathKey = texVListPathKey(item.path);
+      const assignedLineIndices = options.paragraphLineIndicesByPath.get(pathKey);
       if (!assignedLineIndices) {
         throw new Error(
-          `TeX vlist layout for paragraph '${report.paragraphId}' is missing placement for block ${item.item.paragraph.blockIndex}.`
+          `TeX vlist layout for paragraph '${report.paragraphId}' is missing placement for path ${pathKey}.`
         );
       }
       for (const lineIndex of assignedLineIndices) {
@@ -1254,6 +1252,10 @@ function renderTexVListItemsSvgContent(
     }
   }
   return pieces;
+}
+
+function texVListPathKey(path: readonly number[]): string {
+  return path.join(".");
 }
 
 function renderTexReportLineSvg(
@@ -1436,16 +1438,10 @@ function renderTexVBoxSvgMetadata(
   if (item.item.kind !== "vbox") {
     return "";
   }
-  const roleAttrs = texVBoxRoleAttrs(item.item.role);
-  const sourceAttrs = item.item.sourceSpan
-    ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
-    : "";
-  const pathAttrs = texVListPathAttrs(item);
   const boxWidth = Math.max(width, item.metrics.width);
   const boxHeight = item.metrics.height + item.metrics.depth;
-  const boundsAttrs = texVListLocalBoundsAttrs(item, boxWidth, boxHeight);
   const pieces = [
-    `<g data-tex-vbox="true"${roleAttrs}${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (options.originX ?? 0))} ${formatPt(item.y - (options.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(item.x - (options.originX ?? 0))} ${formatPt(item.y - (options.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
   ];
   if (options.close ?? true) {
@@ -1463,11 +1459,9 @@ function renderTexPlaceholderSvgMetadata(
     return "";
   }
   const boxHeight = item.metrics.height + item.metrics.depth;
-  const pathAttrs = texVListPathAttrs(item);
   const boxWidth = Math.max(width, item.metrics.width);
-  const boundsAttrs = texVListLocalBoundsAttrs(item, boxWidth, boxHeight);
   return [
-    `<g data-tex-vlist-item="placeholder" data-tex-placeholder="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" data-tex-placeholder-reason="${escapeXmlAttribute(item.item.reason)}"${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
     `</g>`,
   ].join("");
@@ -1481,17 +1475,9 @@ function renderTexVListLeafBoxSvgMetadata(
   if (item.item.kind !== "hbox" && item.item.kind !== "penalty" && item.item.kind !== "rule") {
     return "";
   }
-  const sourceAttrs = item.item.sourceSpan
-    ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
-    : "";
-  const penaltyAttrs = item.item.kind === "penalty"
-    ? ` data-tex-penalty="${item.item.penalty}"`
-    : "";
-  const pathAttrs = texVListPathAttrs(item);
   const boxHeight = item.metrics.height + item.metrics.depth;
-  const boundsAttrs = texVListLocalBoundsAttrs(item, item.metrics.width, boxHeight);
   return [
-    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
     ...(item.item.kind === "hbox" && metricProvider
       ? item.item.box.renderItems.map((renderItem) =>
@@ -1529,60 +1515,11 @@ function renderTexRuleSvgContent(
   if (item.item.kind !== "rule") {
     return "";
   }
-  const sourceAttrs = item.item.sourceSpan
-    ? ` data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}"`
-    : "";
-  const pathAttrs = texVListPathAttrs(item);
   const boxHeight = item.metrics.height + item.metrics.depth;
-  const boundsAttrs = texVListLocalBoundsAttrs(item, item.metrics.width, boxHeight);
   return [
-    `<g data-tex-vlist-item="rule"${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
     `</g>`,
-  ].join("");
-}
-
-function texVListPathAttrs(item: PositionedTexVListItem): string {
-  return item.path
-    ? ` data-tex-vlist-path="${item.path.join(".")}"`
-    : "";
-}
-
-function texVListLocalBoundsAttrs(
-  item: PositionedTexVListItem,
-  width: number,
-  height: number
-): string {
-  return [
-    ` data-tex-local-x="${formatPt(item.x)}"`,
-    ` data-tex-local-y="${formatPt(item.y)}"`,
-    ` data-tex-local-width="${formatPt(width)}"`,
-    ` data-tex-local-height="${formatPt(height)}"`,
-  ].join("");
-}
-
-function texVBoxRoleAttrs(role: TexVBoxRole | undefined): string {
-  if (!role) {
-    return "";
-  }
-  if (role.kind === "quote") {
-    return ` data-tex-vbox-role="quote" data-tex-vbox-depth="${role.depth}"`;
-  }
-  if (role.kind === "list-item") {
-    return [
-      ` data-tex-vbox-role="list-item"`,
-      ` data-tex-list-kind="${escapeXmlAttribute(role.listKind)}"`,
-      ` data-tex-vbox-depth="${role.depth}"`,
-      ` data-tex-list-label-depth="${role.labelDepth}"`,
-      ` data-tex-list-item-index="${role.itemIndex}"`,
-    ].join("");
-  }
-  return [
-    ` data-tex-vbox-role="list"`,
-    ` data-tex-list-kind="${escapeXmlAttribute(role.listKind)}"`,
-    ` data-tex-vbox-depth="${role.depth}"`,
-    ` data-tex-list-label-depth="${role.labelDepth}"`,
-    ` data-tex-list-left-margin-em="${role.totalLeftMarginEm}"`,
   ].join("");
 }
 

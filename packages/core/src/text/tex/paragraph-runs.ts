@@ -83,6 +83,7 @@ function layoutItemsToRuns(
       runs.push({
         kind: "text",
         runIndex,
+        role: item.role,
         sourceStart: item.sourceStart,
         sourceEnd: item.sourceEnd,
         text: item.text,
@@ -108,6 +109,7 @@ function layoutItemsToRuns(
     runs.push({
       kind: "space",
       runIndex,
+      role: item.role,
       sourceStart: item.sourceStart,
       sourceEnd: item.sourceEnd,
       text: " ",

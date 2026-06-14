@@ -1,30 +1,44 @@
-import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
-import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
-import { simpleTexInlineNodesToLayoutItems } from "./layout-inline-items.js";
+import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
+import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
+import { simpleTexInlineNodesToLayoutItems } from "../layout-inline-items.js";
 import type {
   TexLayoutInlineItem,
   TexLayoutLabel,
-} from "./layout-inline-items.js";
-import type { TexLayoutIrOptions } from "./layout-options.js";
+} from "../layout-inline-items.js";
+import type { TexLayoutIrOptions } from "../layout-options.js";
 import {
   TexParagraphLayoutState,
-} from "./layout-state.js";
+} from "../layout-state.js";
+import type {
+  TexParagraphBreakScopePolicy,
+  TexParagraphRightskipStretchMode,
+} from "../paragraph-break.js";
 import {
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphSegment,
   type TexAlignmentProfile,
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
-} from "./ir.js";
+} from "../ir.js";
+import { attachTexHBoxesBeforeVListParagraphs } from "./attachments.js";
+import type {
+  TexHBoxBeforeParagraphAttachment,
+  TexVListPathRemap,
+} from "./attachments.js";
 import {
-  attachTexHBoxesBeforeVListParagraphs,
   texListItemParagraphAttachments,
+} from "./list-attachments.js";
+import {
   texParagraphScopeContext,
+} from "./paragraph-scope.js";
+import { texVListPathKey } from "./paths.js";
+import {
   texVListParagraphEntries,
-  type TexHBoxItem,
-  type TexParagraphItem,
-  type TexVListDocument,
-} from "./vlist/index.js";
+} from "./traversal.js";
+import type {
+  TexParagraphItem,
+  TexVListDocument,
+} from "./types.js";
 
 export interface TexLayoutParagraphPreparation {
   readonly vlist: TexVListDocument;
@@ -34,6 +48,7 @@ export interface TexLayoutParagraphPreparation {
 
 export interface TexLayoutParagraphPlan {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly segmentIndex: number;
   readonly segment: SimpleTexParagraphSegment;
   readonly alignment: TexParagraphAlignment;
@@ -50,10 +65,7 @@ export interface TexLayoutParagraphBreakContext {
   readonly blockIndex: number;
   readonly segmentIndex: number;
   readonly firstLineIndentWidth?: number;
-  readonly leftMarginWidth: number;
-  readonly rightMarginWidth: number;
-  readonly quoteContextActive: boolean;
-  readonly listContextActive: boolean;
+  readonly scopePolicy: TexParagraphBreakScopePolicy;
 }
 
 export interface TexLayoutParagraphLineLabel {
@@ -76,7 +88,7 @@ export function prepareTexLayoutParagraphsFromVList(
   const paragraphPlans: TexLayoutParagraphPlan[] = [];
   const paragraphEntries = texVListParagraphEntries(params.vlist.items);
   const paragraphItems = paragraphEntries.map((entry) => entry.item);
-  const marginLabelHBoxesByBlockIndex = new Map<number, TexHBoxItem>();
+  const marginLabelHBoxAttachments: TexHBoxBeforeParagraphAttachment[] = [];
   const paragraphState = new TexParagraphLayoutState(
     params.defaultAlignment,
     params.options
@@ -106,6 +118,7 @@ export function prepareTexLayoutParagraphsFromVList(
     for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
       const segment = segments[segmentIndex];
       const listAttachments = texListItemParagraphAttachments({
+        blockIndex,
         segmentIndex,
         listContext: paragraph.listContext,
         listItemLayout: scopeContext.listItemLayout,
@@ -115,13 +128,14 @@ export function prepareTexLayoutParagraphsFromVList(
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
       });
       if (listAttachments.marginLabelHBox) {
-        marginLabelHBoxesByBlockIndex.set(
-          blockIndex,
-          listAttachments.marginLabelHBox
-        );
+        marginLabelHBoxAttachments.push({
+          vlistPath: entry.path,
+          hbox: listAttachments.marginLabelHBox,
+        });
       }
       paragraphPlans.push({
         blockIndex,
+        vlistPath: entry.path,
         segmentIndex,
         segment,
         alignment: paragraphStateResult.alignment,
@@ -134,10 +148,7 @@ export function prepareTexLayoutParagraphsFromVList(
           blockIndex,
           segmentIndex,
           firstLineIndentWidth: listAttachments.firstLineIndentWidth,
-          leftMarginWidth: scopeContext.layout.leftMarginWidth,
-          rightMarginWidth: scopeContext.layout.rightMarginWidth,
-          quoteContextActive: scopeContext.quoteContextActive,
-          listContextActive: scopeContext.listContextActive,
+          scopePolicy: texParagraphBreakScopePolicy(scopeContext),
         },
         ...(listAttachments.marginLabel
           ? {
@@ -152,13 +163,69 @@ export function prepareTexLayoutParagraphsFromVList(
     }
   }
 
+  const attachmentResult = attachTexHBoxesBeforeVListParagraphs(
+    params.vlist,
+    marginLabelHBoxAttachments
+  );
+
   return {
-    vlist: attachTexHBoxesBeforeVListParagraphs(
-      params.vlist,
-      marginLabelHBoxesByBlockIndex
-    ),
+    vlist: attachmentResult.vlist,
     layoutMode,
-    paragraphPlans,
+    paragraphPlans: remapParagraphPlanPaths(
+      paragraphPlans,
+      attachmentResult.paragraphPathRemaps
+    ),
+  };
+}
+
+function remapParagraphPlanPaths(
+  plans: readonly TexLayoutParagraphPlan[],
+  paragraphPathRemaps: readonly TexVListPathRemap[]
+): readonly TexLayoutParagraphPlan[] {
+  const pathRemapByOriginalPath = new Map<string, readonly number[]>();
+  for (const remap of paragraphPathRemaps) {
+    const key = texVListPathKey(remap.from);
+    if (pathRemapByOriginalPath.has(key)) {
+      throw new Error(
+        `TeX paragraph preparation found duplicate paragraph path ${key}.`
+      );
+    }
+    pathRemapByOriginalPath.set(key, remap.to);
+  }
+  return plans.map((plan) => {
+    const key = texVListPathKey(plan.vlistPath);
+    const vlistPath = pathRemapByOriginalPath.get(key);
+    if (!vlistPath) {
+      throw new Error(
+        `TeX paragraph preparation lost paragraph path ${key}.`
+      );
+    }
+    return {
+      ...plan,
+      vlistPath,
+    };
+  });
+}
+
+function texParagraphBreakScopePolicy(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>
+): TexParagraphBreakScopePolicy {
+  const inList = scopeContext.listContextActive;
+  const inQuote = scopeContext.quoteContextActive;
+  const rightskipStretchMode: TexParagraphRightskipStretchMode = inQuote
+    ? "ragged-right-infinite-otherwise-zero"
+    : inList
+      ? "ragged-right-infinite-center-zero"
+      : "default";
+
+  return {
+    leftMarginWidth: scopeContext.layout.leftMarginWidth,
+    rightMarginWidth: scopeContext.layout.rightMarginWidth,
+    allowParagraphIndent: !inList,
+    allowForcedBreakIndent: !inList,
+    forceParfillStretch: inQuote || inList,
+    suppressRaggedLeftCenterLeftskipStretch: inQuote || inList,
+    rightskipStretchMode,
   };
 }
 

@@ -10,6 +10,7 @@ import {
 import {
   addParagraphVerticalGlueToVList,
   attachTexHBoxesBeforeVListParagraphs,
+  breakSimpleTexLayoutDocumentParagraphs,
   computeTexVListNaturalTotalHeight,
   findPositionedTexVListItemByPath,
   flattenPositionedTexVListItems,
@@ -26,9 +27,12 @@ import {
   materializeParagraphVerticalGlueInVList,
   normalizeSimpleTexVList,
   planSimpleTexParagraphVerticalSkips,
+  prepareTexLayoutParagraphsFromVList,
+  prepareSimpleTexLayoutDocument,
   prepareSimpleTexVList,
   registerTexVListLayoutsOnOutputJax,
   texListItemParagraphAttachments,
+  texVListBoxLayoutReport,
   texParagraphScopeContext,
   texVListGlueSetForTargetHeight,
   texVListParagraphItems,
@@ -106,7 +110,7 @@ describe("TeX vlist lowering", () => {
 
   it("lowers explicit vertical glue commands into vlist glue", () => {
     const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \smallskip Beta \par \vspace{7pt} Gamma \par \vskip -2pt Delta`
+      String.raw`Alpha \par \smallskip Beta \par \medskip Gamma \par \bigskip Delta \par \vspace{7pt} Epsilon \par \vskip -2pt Zeta`
     );
     const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
 
@@ -135,12 +139,28 @@ describe("TeX vlist lowering", () => {
       { kind: "paragraph", text: "Beta" },
       {
         kind: "glue",
+        size: 6,
+        origin: { kind: "explicit-command", command: "medskip" },
+        stretch: 2,
+        shrink: 2,
+      },
+      { kind: "paragraph", text: "Gamma" },
+      {
+        kind: "glue",
+        size: 12,
+        origin: { kind: "explicit-command", command: "bigskip" },
+        stretch: 4,
+        shrink: 4,
+      },
+      { kind: "paragraph", text: "Delta" },
+      {
+        kind: "glue",
         size: 7,
         origin: { kind: "explicit-command", command: "vspace" },
         stretch: undefined,
         shrink: undefined,
       },
-      { kind: "paragraph", text: "Gamma" },
+      { kind: "paragraph", text: "Epsilon" },
       {
         kind: "glue",
         size: -2,
@@ -148,7 +168,7 @@ describe("TeX vlist lowering", () => {
         stretch: undefined,
         shrink: undefined,
       },
-      { kind: "paragraph", text: "Delta" },
+      { kind: "paragraph", text: "Zeta" },
     ]);
   });
 
@@ -274,6 +294,113 @@ describe("TeX vlist lowering", () => {
     )).toEqual([
       { kind: "placeholder", reason: "Unsupported TeX command in vertical mode." },
       { kind: "paragraph", text: "Alpha" },
+    ]);
+  });
+
+  it("groups explicit vertical primitives into quote vboxes", () => {
+    const source = String.raw`\begin{quote}Alpha \par \vspace{7pt} Beta \par \hrule width 24pt height 2pt depth 1pt Gamma\end{quote}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlockItemsToVList(parsed.items),
+      computerModernTexMetricProvider.resolveFont()
+    );
+
+    expect(grouped.items).toHaveLength(1);
+    const quote = grouped.items[0];
+    expect(quote).toMatchObject({
+      kind: "vbox",
+      role: { kind: "quote", depth: 1 },
+    });
+    if (quote?.kind !== "vbox") {
+      throw new Error("expected quote vbox");
+    }
+    expect(quote.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
+        : item.kind === "glue"
+          ? {
+              kind: item.kind,
+              size: item.size,
+              command: item.origin?.kind === "explicit-command" ? item.origin.command : null,
+              scopeKinds: item.scopePath?.map((role) => role.kind),
+            }
+          : item.kind === "rule"
+            ? {
+                kind: item.kind,
+                width: item.width,
+                height: item.height,
+                depth: item.depth,
+                scopeKinds: item.scopePath?.map((role) => role.kind),
+              }
+            : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "glue",
+        size: 7,
+        command: "vspace",
+        scopeKinds: ["quote"],
+      },
+      { kind: "paragraph", text: "Beta" },
+      {
+        kind: "rule",
+        width: 24,
+        height: 2,
+        depth: 1,
+        scopeKinds: ["quote"],
+      },
+      { kind: "paragraph", text: "Gamma" },
+    ]);
+  });
+
+  it("groups explicit vertical primitives into the owning list-item vbox", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item Alpha \par \vspace{7pt} More\item Beta\end{itemize}`
+    );
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlockItemsToVList(parsed.items),
+      computerModernTexMetricProvider.resolveFont()
+    );
+    const list = grouped.items[0];
+    if (list?.kind !== "vbox" || list.role?.kind !== "list") {
+      throw new Error("expected list vbox");
+    }
+    const firstItem = list.items[0];
+    const secondItem = list.items[1];
+    if (
+      firstItem?.kind !== "vbox" ||
+      firstItem.role?.kind !== "list-item" ||
+      secondItem?.kind !== "vbox" ||
+      secondItem.role?.kind !== "list-item"
+    ) {
+      throw new Error("expected list-item vboxes");
+    }
+
+    expect(firstItem.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
+        : item.kind === "glue"
+          ? {
+              kind: item.kind,
+              size: item.size,
+              command: item.origin?.kind === "explicit-command" ? item.origin.command : null,
+              scopeKinds: item.scopePath?.map((role) => role.kind),
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "glue",
+        size: 7,
+        command: "vspace",
+        scopeKinds: ["list", "list-item"],
+      },
+      { kind: "paragraph", text: "More" },
+    ]);
+    expect(secondItem.items.map((item) =>
+      item.kind === "paragraph" ? { kind: item.kind, text: item.paragraph.text } : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Beta" },
     ]);
   });
 });
@@ -557,12 +684,13 @@ describe("TeX vlist scopes", () => {
     }
 
     const attachments = texListItemParagraphAttachments({
+      blockIndex: paragraph.blockIndex,
       segmentIndex: 0,
       listContext: paragraph.paragraph.listContext,
       listItemLayout: listItemBox.layout?.listItem,
       font,
       metricProvider: computerModernTexMetricProvider,
-      spaceGlueProfile: "tex",
+      spaceGlueProfile: "font",
       inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
     });
 
@@ -577,6 +705,11 @@ describe("TeX vlist scopes", () => {
         kind: "list-label",
         labelKind: "default",
         placement: "margin",
+        listKind: "enumerate",
+        depth: 1,
+        labelDepth: 1,
+        itemIndex: 1,
+        blockIndex: 0,
       },
       x: expect.any(Number),
       advance: 0,
@@ -589,6 +722,151 @@ describe("TeX vlist scopes", () => {
         },
       },
     });
+  });
+
+  it("prepares scoped paragraph plans through the vlist API", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{enumerate}\item Alpha\end{enumerate}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const prepared = prepareSimpleTexVList(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+
+    const preparation = prepareTexLayoutParagraphsFromVList({
+      vlist: prepared.normalized,
+      defaultAlignment: "ragged-right",
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    });
+
+    expect(preparation.layoutMode).toBe("wrap");
+    expect(preparation.paragraphPlans).toHaveLength(1);
+    expect(preparation.paragraphPlans[0]).toMatchObject({
+      blockIndex: 0,
+      vlistPath: [0, 0, 2],
+      segmentIndex: 0,
+      segment: { text: "Alpha" },
+      breakContext: {
+        scopePolicy: {
+          leftMarginWidth: 25,
+          rightMarginWidth: 0,
+          allowParagraphIndent: false,
+          allowForcedBreakIndent: false,
+          forceParfillStretch: true,
+          suppressRaggedLeftCenterLeftskipStretch: true,
+          rightskipStretchMode: "ragged-right-infinite-center-zero",
+        },
+      },
+      lineLabel: {
+        blockIndex: 0,
+        segmentIndex: 0,
+      },
+    });
+    expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
+      "glue:13",
+      "hbox",
+      "paragraph:Alpha",
+    ]);
+  });
+
+  it("breaks scoped paragraph plans through the vlist API", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote}Alpha Beta\end{quote}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const prepared = prepareSimpleTexVList(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+    const preparation = prepareTexLayoutParagraphsFromVList({
+      vlist: prepared.normalized,
+      defaultAlignment: "ragged-right",
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    });
+
+    const result = breakSimpleTexLayoutDocumentParagraphs({
+      layoutIr: preparation,
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: { width: 90 },
+    });
+
+    expect(result.status).toBe("broken");
+    if (result.status !== "broken") {
+      return;
+    }
+    expect(result.entries).toHaveLength(1);
+    expect(preparation.paragraphPlans[0]?.breakContext).toMatchObject({
+      scopePolicy: {
+        leftMarginWidth: 25,
+        rightMarginWidth: 25,
+        allowParagraphIndent: true,
+        allowForcedBreakIndent: true,
+        forceParfillStretch: true,
+        suppressRaggedLeftCenterLeftskipStretch: true,
+        rightskipStretchMode: "ragged-right-infinite-otherwise-zero",
+      },
+    });
+    expect(result.entries[0]?.paragraph).toEqual({
+      blockIndex: 0,
+      vlistPath: [0, 1],
+      forcedBreakAfter: undefined,
+    });
+    expect(result.entries[0]?.broken.lines[0]).toMatchObject({
+      lineIndex: 0,
+      targetWidth: 90,
+      xOffset: 25,
+    });
+  });
+
+  it("prepares simple TeX documents through the vlist API", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{itemize}\item Beta\end{itemize}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+
+    const preparation = prepareSimpleTexLayoutDocument({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "ragged-right",
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    });
+
+    expect(preparation.kind).toBe("simple-tex-layout-document-preparation");
+    expect(preparation.rawVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "paragraph",
+    ]);
+    expect(preparation.materializedVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "glue",
+      "paragraph",
+    ]);
+    expect(preparation.normalizedVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "vbox",
+    ]);
+    expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "hbox",
+      "paragraph:Beta",
+    ]);
+    expect(preparation.paragraphPreparation.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
+      hasLabel: plan.lineLabel != null,
+    }))).toEqual([
+      { text: "Alpha", leftMarginWidth: 0, hasLabel: false },
+      { text: "Beta", leftMarginWidth: 25, hasLabel: true },
+    ]);
   });
 
   it("attaches hboxes before matching paragraph items inside nested vlists", () => {
@@ -606,6 +884,11 @@ describe("TeX vlist scopes", () => {
         kind: "list-label",
         labelKind: "default",
         placement: "margin",
+        listKind: "enumerate",
+        depth: 1,
+        labelDepth: 1,
+        itemIndex: 1,
+        blockIndex: 1,
       },
       box: {
         metrics: { width: 5, height: 7, depth: 2 },
@@ -615,29 +898,33 @@ describe("TeX vlist scopes", () => {
 
     const attached = attachTexHBoxesBeforeVListParagraphs(
       prepared.normalized,
-      new Map([[1, label]])
+      [{ vlistPath: [0, 3], hbox: label }]
     );
 
-    expect(flattenVListLeaves(attached.items)).toEqual([
-      "glue:13",
+    expect(flattenVListLeaves(attached.vlist.items)).toEqual([
+      "glue:10",
       "paragraph:Alpha",
       "glue:4",
       "hbox",
       "paragraph:Beta",
     ]);
+    expect(attached.paragraphPathRemaps).toEqual([
+      { from: [0, 1], to: [0, 1] },
+      { from: [0, 3], to: [0, 4] },
+    ]);
   });
 });
 
 describe("TeX vlist spacing", () => {
-  it("inserts explicit vlist glue before paragraph items from paragraph skip facts", () => {
+  it("inserts named vlist glue before paragraph items from paragraph skip facts", () => {
     const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta \par Gamma`);
     const vlist = addParagraphVerticalGlueToVList(
       lowerSimpleTexBlocksToVList(parsed.blocks),
       [
-        { blockIndex: 0, segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
-        { blockIndex: 1, segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
-        { blockIndex: 1, segmentIndex: 1, quoteSize: 99, listSize: 0, size: 99 },
-        { blockIndex: 2, segmentIndex: 0, quoteSize: 0, listSize: 4, size: 4 },
+        { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
+        { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+        { blockIndex: 1, vlistPath: [1], segmentIndex: 1, quoteSize: 99, listSize: 0, size: 99 },
+        { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 0, listSize: 4, size: 4 },
       ]
     );
 
@@ -658,10 +945,8 @@ describe("TeX vlist spacing", () => {
         kind: "glue",
         size: 10,
         origin: {
-          kind: "paragraph-boundary",
+          kind: "quote-boundary",
           beforeBlockIndex: 1,
-          quoteSize: 10,
-          listSize: 0,
         },
       },
       { kind: "paragraph", text: "Beta" },
@@ -669,10 +954,8 @@ describe("TeX vlist spacing", () => {
         kind: "glue",
         size: 4,
         origin: {
-          kind: "paragraph-boundary",
+          kind: "list-boundary",
           beforeBlockIndex: 2,
-          quoteSize: 0,
-          listSize: 4,
         },
       },
       { kind: "paragraph", text: "Gamma" },
@@ -690,10 +973,10 @@ describe("TeX vlist spacing", () => {
     );
 
     expect(skips).toEqual([
-      { blockIndex: 0, segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
-      { blockIndex: 1, segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
-      { blockIndex: 2, segmentIndex: 0, quoteSize: 4, listSize: 0, size: 4 },
-      { blockIndex: 3, segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+      { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
+      { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+      { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 4, listSize: 0, size: 4 },
+      { blockIndex: 3, vlistPath: [3], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
     ]);
   });
 
@@ -710,6 +993,7 @@ describe("TeX vlist spacing", () => {
       paragraphMeasurements: [
         {
           blockIndex: 0,
+          vlistPath: [0],
           lineIndices: [0],
           lineOffsets: [{ lineIndex: 0, y: 0 }],
           standardMetrics: { width: 30, height: 7, depth: 5 },
@@ -719,6 +1003,7 @@ describe("TeX vlist spacing", () => {
         },
         {
           blockIndex: 1,
+          vlistPath: [2],
           lineIndices: [1],
           lineOffsets: [{ lineIndex: 1, y: 0 }],
           standardMetrics: { width: 25, height: 7, depth: 5 },
@@ -767,7 +1052,7 @@ describe("TeX vlist spacing", () => {
     expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 33 });
   });
 
-  it("materializes paragraph boundary glue through the vlist transform", () => {
+  it("materializes named paragraph boundary glue through the vlist transform", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
     );
@@ -788,6 +1073,7 @@ describe("TeX vlist spacing", () => {
               kind: item.kind,
               size: item.size,
               origin: item.origin,
+              scopeKinds: item.scopePath?.map((role) => role.kind),
             }
           : { kind: item.kind }
     )).toEqual([
@@ -796,22 +1082,20 @@ describe("TeX vlist spacing", () => {
         kind: "glue",
         size: 10,
         origin: {
-          kind: "paragraph-boundary",
+          kind: "quote-boundary",
           beforeBlockIndex: 1,
-          quoteSize: 10,
-          listSize: 0,
         },
+        scopeKinds: ["quote"],
       },
       { kind: "paragraph", text: "Beta" },
       {
         kind: "glue",
         size: 10,
         origin: {
-          kind: "paragraph-boundary",
+          kind: "list-boundary",
           beforeBlockIndex: 2,
-          quoteSize: 0,
-          listSize: 10,
         },
+        scopeKinds: ["quote", "list", "list-item"],
       },
       { kind: "paragraph", text: "Gamma" },
     ]);
@@ -861,6 +1145,47 @@ describe("TeX vlist spacing", () => {
       "glue:4",
       "paragraph:Gamma",
       "glue:10",
+      "paragraph:Delta",
+    ]);
+  });
+
+  it("plans paragraph boundary glue from grouped vbox roles", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma \par More\item Delta\end{itemize}\end{quote}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+    const scrubbed = {
+      ...grouped,
+      items: stripParagraphScopeMetadata(grouped.items),
+    };
+
+    expect(planSimpleTexParagraphVerticalSkips(scrubbed.items, font).map((skip) => ({
+      blockIndex: skip.blockIndex,
+      vlistPath: skip.vlistPath,
+      quoteSize: skip.quoteSize,
+      listSize: skip.listSize,
+      size: skip.size,
+    }))).toEqual([
+      { blockIndex: 0, vlistPath: [0], quoteSize: 0, listSize: 0, size: 0 },
+      { blockIndex: 1, vlistPath: [1, 0], quoteSize: 10, listSize: 0, size: 10 },
+      { blockIndex: 2, vlistPath: [1, 1, 0, 0], quoteSize: 0, listSize: 10, size: 10 },
+      { blockIndex: 3, vlistPath: [1, 1, 0, 1], quoteSize: 0, listSize: 2, size: 2 },
+      { blockIndex: 4, vlistPath: [1, 1, 1, 0], quoteSize: 0, listSize: 4, size: 4 },
+    ]);
+
+    expect(flattenVListLeaves(materializeParagraphVerticalGlueInVList(scrubbed, font).items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:10",
+      "paragraph:Gamma",
+      "glue:2",
+      "paragraph:More",
+      "glue:4",
       "paragraph:Delta",
     ]);
   });
@@ -1017,6 +1342,46 @@ describe("TeX vlist layout", () => {
     ]);
   });
 
+  it("preserves source spans in positioned vlist box reports", () => {
+    const source = String.raw`Alpha \par \smallskip Beta \par \hrule width 24pt height 2pt depth 1pt \includegraphics{plot.pdf}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
+    const measureItem: TexVListItemMeasurer = (item, cursor) =>
+      item.kind === "paragraph"
+        ? {
+            y: cursor,
+            advance: 12,
+            metrics: {
+              width: 40,
+              height: 7,
+              depth: 5,
+            },
+          }
+        : null;
+    const laidOut = layoutTexVListItems(vlist.items, measureItem, null, 0);
+    const boxReport = texVListBoxLayoutReport(
+      laidOut.positioned,
+      { width: 100, height: 7, depth: laidOut.cursor - 7 },
+      { kind: "explicit", y: 7 }
+    );
+
+    expect(boxReport.items.map((item) => ({
+      kind: item.itemKind,
+      source: item.sourceSpan
+        ? source.slice(item.sourceSpan.start, item.sourceSpan.end).trim()
+        : null,
+    }))).toEqual([
+      { kind: "paragraph", source: "Alpha" },
+      { kind: "glue", source: String.raw`\smallskip` },
+      { kind: "paragraph", source: "Beta" },
+      {
+        kind: "rule",
+        source: String.raw`\hrule width 24pt height 2pt depth 1pt`,
+      },
+      { kind: "placeholder", source: String.raw`\includegraphics{plot.pdf}` },
+    ]);
+  });
+
   it("carries nested vbox margins into positioned box geometry", () => {
     const parsed = parseSimpleTexParagraphIr("Alpha");
     const paragraph = lowerSimpleTexBlocksToVList(parsed.blocks).items[0];
@@ -1048,6 +1413,7 @@ describe("TeX vlist layout", () => {
       paragraphMeasurements: [
         {
           blockIndex: 0,
+          vlistPath: [0, 0],
           lineIndices: [0],
           lineOffsets: [{ lineIndex: 0, y: 0 }],
           standardMetrics: { width: 20, height: 7, depth: 5 },
@@ -1083,12 +1449,32 @@ describe("TeX vlist layout", () => {
     expect(layout.boxReport.items.map((item) => ({
       itemKind: item.itemKind,
       path: item.path,
+      children: item.children,
       x: item.x,
       width: item.width,
       blockIndex: item.blockIndex,
     }))).toEqual([
-      { itemKind: "vbox", path: [0], x: 0, width: 28, blockIndex: undefined },
-      { itemKind: "paragraph", path: [0, 0], x: 5, width: 20, blockIndex: 0 },
+      { itemKind: "vbox", path: [0], children: undefined, x: 0, width: 28, blockIndex: undefined },
+      { itemKind: "paragraph", path: [0, 0], children: undefined, x: 5, width: 20, blockIndex: 0 },
+    ]);
+    expect(layout.boxReport.tree.map((item) => ({
+      itemKind: item.itemKind,
+      path: item.path,
+      children: item.children?.map((child) => ({
+        itemKind: child.itemKind,
+        path: child.path,
+        x: child.x,
+        width: child.width,
+        blockIndex: child.blockIndex,
+      })),
+    }))).toEqual([
+      {
+        itemKind: "vbox",
+        path: [0],
+        children: [
+          { itemKind: "paragraph", path: [0, 0], x: 5, width: 20, blockIndex: 0 },
+        ],
+      },
     ]);
   });
 
@@ -1131,6 +1517,7 @@ describe("TeX vlist layout", () => {
       paragraphMeasurements: [
         {
           blockIndex: 0,
+          vlistPath: [0],
           lineIndices: [0],
           lineOffsets: [{ lineIndex: 0, y: 0 }],
           standardMetrics: { width: 80, height: 7, depth: 5 },
@@ -1140,6 +1527,7 @@ describe("TeX vlist layout", () => {
         },
         {
           blockIndex: 1,
+          vlistPath: [2],
           lineIndices: [1],
           lineOffsets: [{ lineIndex: 1, y: 0 }],
           standardMetrics: { width: 90, height: 7, depth: 5 },
@@ -1178,6 +1566,47 @@ describe("TeX vlist layout", () => {
       kind: "tex-vlist-boxes",
       metrics: { width: 100, height: 7, depth: 25 },
       baseline: { kind: "explicit", y: 7 },
+      tree: [
+        {
+          itemKind: "paragraph",
+          path: [0],
+          sourceSpan: { start: 0, end: 5 },
+          x: 0,
+          y: 0,
+          width: 80,
+          height: 7,
+          depth: 5,
+          totalHeight: 12,
+          blockIndex: 0,
+        },
+        {
+          itemKind: "glue",
+          path: [1],
+          x: 0,
+          y: 12,
+          width: 0,
+          height: 8,
+          depth: 0,
+          totalHeight: 8,
+          glue: {
+            size: 4,
+            stretch: 2,
+            stretchOrder: "normal",
+          },
+        },
+        {
+          itemKind: "paragraph",
+          path: [2],
+          sourceSpan: { start: 0, end: 5 },
+          x: 0,
+          y: 20,
+          width: 90,
+          height: 7,
+          depth: 5,
+          totalHeight: 12,
+          blockIndex: 1,
+        },
+      ],
       items: [
         {
           itemKind: "paragraph",
@@ -1227,6 +1656,7 @@ describe("TeX vlist layout", () => {
       paragraphMeasurements: [
         {
           blockIndex: 0,
+          vlistPath: [0],
           lineIndices: [0],
           lineOffsets: [{ lineIndex: 1, y: 0 }],
           standardMetrics: { width: 80, height: 7, depth: 5 },
@@ -1236,6 +1666,7 @@ describe("TeX vlist layout", () => {
         },
         {
           blockIndex: 1,
+          vlistPath: [2],
           lineIndices: [1],
           lineOffsets: [{ lineIndex: 1, y: 0 }],
           standardMetrics: { width: 90, height: 7, depth: 5 },
@@ -1251,6 +1682,7 @@ describe("TeX vlist layout", () => {
       paragraphMeasurements: [
         {
           blockIndex: 0,
+          vlistPath: [0],
           lineIndices: [0],
           lineOffsets: [
             { lineIndex: 0, y: 0 },
@@ -1263,6 +1695,7 @@ describe("TeX vlist layout", () => {
         },
         {
           blockIndex: 1,
+          vlistPath: [2],
           lineIndices: [1],
           lineOffsets: [{ lineIndex: 1, y: 0 }],
           standardMetrics: { width: 90, height: 7, depth: 5 },
@@ -1400,6 +1833,47 @@ describe("TeX vlist layout", () => {
     ]);
   });
 
+  it("reports local baselines for nested explicit-height vboxes", () => {
+    const items: readonly TexVListItem[] = [
+      {
+        kind: "vbox",
+        height: 10,
+        alignment: "bottom",
+        items: [
+          {
+            kind: "rule",
+            width: 10,
+            height: 2,
+            depth: 1,
+          },
+        ],
+      },
+    ];
+
+    const laidOut = layoutTexVListItems(items, () => null, null, 0);
+    const vbox = laidOut.positioned[0];
+    if (!vbox) {
+      throw new Error("expected positioned vbox");
+    }
+    const boxReport = texVListBoxLayoutReport(
+      laidOut.positioned,
+      { width: 10, height: 9, depth: 1 },
+      { kind: "explicit", y: 9 }
+    );
+
+    expect(vbox.baseline).toEqual({ kind: "explicit", y: 9 });
+    expect(boxReport.tree[0]).toMatchObject({
+      itemKind: "vbox",
+      baseline: { kind: "explicit", y: 9 },
+      height: 9,
+      depth: 1,
+    });
+    expect(boxReport.items[0]).toMatchObject({
+      itemKind: "vbox",
+      baseline: { kind: "explicit", y: 9 },
+    });
+  });
+
   it("aligns natural children inside explicit-height vboxes without stretch glue", () => {
     const items: readonly TexVListItem[] = [
       {
@@ -1484,8 +1958,8 @@ describe("TeX vlist report assembly", () => {
       firstLineAscent: 7,
       paragraphMeasurements: [
         paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
-        paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }),
-        paragraphMeasurement(2, [2], { width: 100, height: 7, depth: 5 }),
+        paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }, [1, 1]),
+        paragraphMeasurement(2, [2], { width: 100, height: 7, depth: 5 }, [3]),
       ],
     });
 
@@ -1511,8 +1985,13 @@ describe("TeX vlist report assembly", () => {
   it("validates measured vlist paragraphs against paragraph items", () => {
     const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta`);
     const document = lowerSimpleTexBlocksToVList(parsed.blocks);
-    const measurement = (blockIndex: number, lineIndex = blockIndex) => ({
+    const measurement = (
+      blockIndex: number,
+      lineIndex = blockIndex,
+      vlistPath: readonly number[] = [blockIndex]
+    ) => ({
       blockIndex,
+      vlistPath,
       lineIndices: [lineIndex],
       lineOffsets: [{ lineIndex, y: 0 }],
       standardMetrics: { width: 80, height: 7, depth: 5 },
@@ -1527,17 +2006,17 @@ describe("TeX vlist report assembly", () => {
     ])).not.toThrow();
     expect(() => validateTexVListParagraphMeasurements(document, [
       measurement(0),
-    ])).toThrow("missing paragraph block 1");
+    ])).toThrow("missing paragraph path 1");
     expect(() => validateTexVListParagraphMeasurements(document, [
       measurement(0),
       measurement(0, 1),
       measurement(1, 2),
-    ])).toThrow("duplicate block 0");
+    ])).toThrow("duplicate path 0");
     expect(() => validateTexVListParagraphMeasurements(document, [
       measurement(0),
       measurement(1),
       measurement(99),
-    ])).toThrow("missing paragraph block 99");
+    ])).toThrow("missing paragraph path 99");
   });
 
   it("uses measured paragraph line ownership when laying out vlist items", () => {
@@ -1626,7 +2105,7 @@ describe("TeX vlist report assembly", () => {
       paragraphMeasurements: [
         paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
       ],
-    })).toThrow("missing paragraph block 1");
+    })).toThrow("missing paragraph path 1");
     expect(() => layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
       lineHeight: 12,
@@ -1641,35 +2120,78 @@ describe("TeX vlist report assembly", () => {
         },
       ],
     })).toThrow("stray line offset 99");
+
+    const firstParagraph = document.items[0];
+    if (!firstParagraph || firstParagraph.kind !== "paragraph") {
+      throw new Error("expected paragraph vlist item");
+    }
+    const mismatchedDocument = {
+      kind: "vlist",
+      items: [
+        {
+          ...firstParagraph,
+          paragraph: {
+            ...firstParagraph.paragraph,
+            blockIndex: 99,
+          },
+        },
+      ],
+    } satisfies {
+      readonly kind: "vlist";
+      readonly items: readonly TexVListItem[];
+    };
+    expect(() => layoutTexVListFromMeasuredParagraphs(mismatchedDocument, {
+      width: 100,
+      lineHeight: 12,
+      paragraphMeasurements: [
+        paragraphMeasurement(99, [0], { width: 100, height: 7, depth: 5 }, [0]),
+      ],
+    })).toThrow("measurement path 0 block identity mismatch");
   });
 
-  it("keeps combined paragraph line ownership independent of vlist assignments", () => {
+  it("merges combined paragraph line ownership by vlist path", () => {
+    const broken = {
+      runs: [],
+      lines: [{
+        lineIndex: 0,
+        startRun: 0,
+        startTextOffset: 0,
+        endRun: 0,
+        endTextOffset: 0,
+        width: 0,
+        break: null,
+      }],
+      runWidths: new Map(),
+      shapedRuns: new Map(),
+      errors: [],
+      linebreakingMode: "feasible" as const,
+    };
     const combined = combineTexBrokenLayoutParagraphs({
       entries: [0, 1].map(() => ({
-        paragraph: { blockIndex: 0 },
-        broken: {
-          runs: [],
-          lines: [{
-            lineIndex: 0,
-            startRun: 0,
-            startTextOffset: 0,
-            endRun: 0,
-            endTextOffset: 0,
-            width: 0,
-            break: null,
-          }],
-          runWidths: new Map(),
-          shapedRuns: new Map(),
-          errors: [],
-          linebreakingMode: "feasible",
-        },
+        paragraph: { blockIndex: 0, vlistPath: [0] },
+        broken,
       })),
     });
 
     expect(combined.paragraphLineSpans).toEqual([
-      { blockIndex: 0, lineIndices: [0, 1] },
+      { blockIndex: 0, vlistPath: [0], lineIndices: [0, 1] },
     ]);
     expect("paragraphLineAssignments" in combined).toBe(false);
+    expect(combineTexBrokenLayoutParagraphs({
+      entries: [
+        { paragraph: { blockIndex: 0, vlistPath: [0] }, broken },
+        { paragraph: { blockIndex: 0, vlistPath: [1] }, broken },
+      ],
+    }).paragraphLineSpans).toEqual([
+      { blockIndex: 0, vlistPath: [0], lineIndices: [0] },
+      { blockIndex: 0, vlistPath: [1], lineIndices: [1] },
+    ]);
+    expect(() => combineTexBrokenLayoutParagraphs({
+      entries: [
+        { paragraph: { blockIndex: 0, vlistPath: [0] }, broken },
+        { paragraph: { blockIndex: 1, vlistPath: [0] }, broken },
+      ],
+    })).toThrow("line span block mismatch");
   });
 
   it("combines broken paragraph entries for vlist report assembly", () => {
@@ -1688,18 +2210,8 @@ describe("TeX vlist report assembly", () => {
       metricProvider,
       entries: [{
         paragraph: {
-          kind: "tex-layout-paragraph",
           blockIndex: 0,
-          segmentIndex: 0,
-          text: "Alpha",
-          sourceStart: 0,
-          sourceEnd: 5,
-          font,
-          alignment: "ragged-right",
-          inheritedAlignment: "ragged-right",
-          noIndent: false,
-          spaceGlueProfile: "font",
-          items: [],
+          vlistPath: [0],
         },
         broken: {
           runs: [{
@@ -1814,7 +2326,7 @@ describe("TeX vlist report assembly", () => {
         runWidths: new Map([[0, shaped.width]]),
         lineLabels: new Map(),
         paragraphLineSpans: [
-          { blockIndex: 0, lineIndices: [0] },
+          { blockIndex: 0, vlistPath: [0], lineIndices: [0] },
         ],
         errors: [],
         linebreakingMode: "feasible",
@@ -1853,10 +2365,13 @@ describe("TeX vlist report assembly", () => {
 describe("TeX vlist layout registry", () => {
   it("registers positioned vlist layouts by paragraph id on an output jax", () => {
     const outputJax = {};
+    const items = [] as const;
+    const baseline = { kind: "explicit", y: 7 } as const;
     const layout = {
       metrics: { width: 42, height: 7, depth: 3 },
-      baseline: { kind: "explicit", y: 7 } as const,
-      items: [],
+      baseline,
+      items,
+      boxReport: texVListBoxLayoutReport(items, { width: 42, height: 7, depth: 3 }, baseline),
       paragraphPlacements: [],
       linePlacements: [],
       reports: [],
@@ -1865,6 +2380,7 @@ describe("TeX vlist layout registry", () => {
     const replacement = {
       ...layout,
       metrics: { width: 24, height: 5, depth: 2 },
+      boxReport: texVListBoxLayoutReport(items, { width: 24, height: 5, depth: 2 }, baseline),
     };
 
     expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([]);
@@ -1917,14 +2433,38 @@ function collectVListBoxes(items: readonly TexVListItem[]): readonly Extract<Tex
   return boxes;
 }
 
+function stripParagraphScopeMetadata(items: readonly TexVListItem[]): readonly TexVListItem[] {
+  return items.map((item) => {
+    if (item.kind === "vbox") {
+      return {
+        ...item,
+        items: stripParagraphScopeMetadata(item.items),
+      };
+    }
+    if (item.kind === "paragraph") {
+      return {
+        ...item,
+        paragraph: {
+          ...item.paragraph,
+          quoteDepth: 0,
+          listContext: undefined,
+        },
+      };
+    }
+    return item;
+  });
+}
+
 function paragraphMeasurement(
   blockIndex: number,
   lineIndices: readonly number[],
-  metrics: TexVListParagraphBoxMeasurement["standardMetrics"]
+  metrics: TexVListParagraphBoxMeasurement["standardMetrics"],
+  vlistPath: readonly number[] = [blockIndex]
 ): TexVListParagraphBoxMeasurement {
   const advance = metrics.height + metrics.depth;
   return {
     blockIndex,
+    vlistPath,
     lineIndices,
     lineOffsets: lineIndices.map((lineIndex, index) => ({
       lineIndex,
@@ -1942,10 +2482,12 @@ function horizontalParagraphLayout(
   lineIndices: readonly number[],
   width: number,
   height: number,
-  depth: number
+  depth: number,
+  vlistPath: readonly number[] = [blockIndex]
 ) {
   return {
     blockIndex,
+    vlistPath,
     lineIndices,
     horizontal: {
       metrics: {

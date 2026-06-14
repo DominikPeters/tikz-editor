@@ -2,15 +2,15 @@ import type {
   ShapedTexTextRun,
   ResolvedTexFont,
   TexMetricProvider,
-} from "./fonts/types.js";
-import type { SimpleTexLayoutDocumentIr } from "./layout-ir.js";
-import { texLayoutItemsForParagraphPlan } from "./layout-paragraph-items.js";
-import { breakTexParagraphRuns, type TexParagraphBreakOptions } from "./paragraph-break.js";
-import { createTexParagraphRunAdapter } from "./paragraph-runs.js";
+} from "../fonts/types.js";
+import { breakTexParagraphRuns, type TexParagraphBreakOptions } from "../paragraph-break.js";
+import { createTexParagraphRunAdapter } from "../paragraph-runs.js";
 import {
   combineTexBrokenLayoutParagraphs,
   type TexBrokenLayoutParagraph,
-} from "./vlist/index.js";
+} from "./combined-paragraph-breaks.js";
+import { texLayoutItemsForParagraphPlan } from "./paragraph-items.js";
+import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
 
 export type TexLayoutParagraphBreakEntriesResult =
   | {
@@ -25,7 +25,7 @@ export type TexLayoutParagraphBreakEntriesResult =
     };
 
 export function breakSimpleTexLayoutDocumentParagraphs(params: {
-  readonly layoutIr: Pick<SimpleTexLayoutDocumentIr, "paragraphPlans">;
+  readonly layoutIr: { readonly paragraphPlans: readonly TexLayoutParagraphPlan[] };
   readonly font: ResolvedTexFont;
   readonly metricProvider: TexMetricProvider;
   readonly options: TexParagraphBreakOptions;
@@ -81,10 +81,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       inheritedAlignmentProfile: plan.inheritedAlignmentProfile,
       noIndent: plan.segment.noIndent,
       firstLineIndentWidth: breakContext.firstLineIndentWidth,
-      leftMarginWidth: breakContext.leftMarginWidth,
-      rightMarginWidth: breakContext.rightMarginWidth,
-      quoteContextActive: breakContext.quoteContextActive,
-      listContextActive: breakContext.listContextActive,
+      scopePolicy: breakContext.scopePolicy,
     });
     if (!broken) {
       return {
@@ -100,6 +97,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
     brokenEntries.push({
       paragraph: {
         blockIndex: plan.blockIndex,
+        vlistPath: plan.vlistPath,
         forcedBreakAfter: plan.segment.forcedBreakAfter,
       },
       broken,

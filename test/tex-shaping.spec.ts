@@ -5,9 +5,15 @@ import {
   getKnuthPlassPlaceholderGeometry,
   getKnuthPlassPointFromOffset,
   getKnuthPlassSelectionRects,
+  getKnuthPlassVListBoxFromPoint,
   getKnuthPlassVListBoxGeometry,
+  getKnuthPlassVListGeometrySnapshot,
+  getKnuthPlassVListItemFromPoint,
   getKnuthPlassVListItemGeometry,
+  getKnuthPlassVListLabelFromPoint,
+  getKnuthPlassVListLabelGeometry,
   getKnuthPlassVListParagraphGeometry,
+  getKnuthPlassVListTreeHitFromSnapshot,
 } from "../packages/core/src/text/knuth-plass/editor/hitmap.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
@@ -52,6 +58,7 @@ function relayoutFromExistingVListLayout(
       const advance = placement.metrics.height + placement.metrics.depth;
       return {
         blockIndex: placement.blockIndex,
+        vlistPath: placement.vlistPath,
         lineIndices: placement.lineIndices,
         lineOffsets: placement.lineIndices.map((lineIndex) => ({
           lineIndex,
@@ -816,7 +823,7 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(result.report?.lines.length).toBeGreaterThan(1);
-    expect(result.vlistLayout?.linePlacements[0]?.y).toBe(13);
+    expect(result.vlistLayout?.linePlacements[0]?.y).toBe(10);
     for (const line of result.report?.lines ?? []) {
       expect(line.xStart).toBeCloseTo(25, 5);
       expect(line.xEnd).toBeLessThanOrEqual(95.00001);
@@ -1393,12 +1400,12 @@ describe("simple TeX paragraph layout", () => {
       text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
     }))).toEqual([
       { kind: "glue", size: 3, text: undefined },
-      { kind: "glue", size: 13, text: undefined },
+      { kind: "glue", size: 10, text: undefined },
       { kind: "paragraph", size: undefined, text: "Alpha" },
     ]);
   });
 
-  it("reads TeX vlist box geometry from rendered SVG metadata", () => {
+  it("does not infer TeX vlist box geometry from rendered SVG metadata without a registered layout", () => {
     const boxes = [
       makeVListBoxElement(
         { left: 100, top: 40, right: 20, bottom: 10 },
@@ -1410,6 +1417,10 @@ describe("simple TeX paragraph layout", () => {
           "data-tex-local-width": "40",
           "data-tex-local-height": "12",
           "data-tex-vbox-depth": "1",
+          "data-tex-list-kind": "enumerate",
+          "data-tex-list-label-depth": "9",
+          "data-tex-list-left-margin-em": "99",
+          "data-tex-list-item-index": "99",
           "data-source-start": "7",
           "data-source-end": "42",
         }
@@ -1431,6 +1442,23 @@ describe("simple TeX paragraph layout", () => {
           "data-source-end": "39",
         }
       ),
+      makeVListBoxElement(
+        { left: 30, top: 24, right: 50, bottom: 34 },
+        {
+          "data-tex-vbox-role": "list-item",
+          "data-tex-vlist-path": "0.2.0",
+          "data-tex-local-x": "13",
+          "data-tex-local-y": "19",
+          "data-tex-local-width": "16",
+          "data-tex-local-height": "5",
+          "data-tex-list-kind": "enumerate",
+          "data-tex-vbox-depth": "2",
+          "data-tex-list-label-depth": "1",
+          "data-tex-list-item-index": "1",
+          "data-source-start": "20",
+          "data-source-end": "30",
+        }
+      ),
     ];
 
     expect(getKnuthPlassVListBoxGeometry({
@@ -1438,46 +1466,21 @@ describe("simple TeX paragraph layout", () => {
         querySelectorAll: (selector: string) =>
           selector === '[data-tex-vbox="true"]' ? boxes : [],
       } as any,
-    })).toEqual([
-      {
-        role: "quote",
-        vlistPath: [0],
-        localLeft: 3,
-        localRight: 43,
-        localTop: 5,
-        localBottom: 17,
-        depth: 1,
-        listKind: null,
-        listLabelDepth: null,
-        listLeftMarginEm: null,
-        listItemIndex: null,
-        sourceStart: 7,
-        sourceEnd: 42,
-        clientLeft: 20,
-        clientRight: 100,
-        clientTop: 10,
-        clientBottom: 40,
-      },
-      {
-        role: "list",
-        vlistPath: [0, 2],
-        localLeft: 11,
-        localRight: 31,
-        localTop: 17,
-        localBottom: 25,
-        depth: 2,
-        listKind: "enumerate",
-        listLabelDepth: 1,
-        listLeftMarginEm: 2.2,
-        listItemIndex: null,
-        sourceStart: 12,
-        sourceEnd: 39,
-        clientLeft: 10,
-        clientRight: 70,
-        clientTop: 20,
-        clientBottom: 90,
-      },
-    ]);
+    })).toEqual([]);
+    expect(getKnuthPlassVListBoxFromPoint({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === '[data-tex-vbox="true"]' ? boxes : [],
+      } as any,
+      clientPoint: clientPoint(px(40), px(30)),
+    })).toBeNull();
+    expect(getKnuthPlassVListBoxFromPoint({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === '[data-tex-vbox="true"]' ? boxes : [],
+      } as any,
+      clientPoint: clientPoint(px(5), px(5)),
+    })).toBeNull();
   });
 
   it("reads TeX vlist box geometry from registered positioned layouts", () => {
@@ -1617,13 +1620,37 @@ describe("simple TeX paragraph layout", () => {
         clientBottom: 92,
       },
     ]);
+    expect(getKnuthPlassVListBoxFromPoint({
+      outputJax,
+      paragraphId: "tex:registered-vbox",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist box hit-testing should not query DOM metadata");
+        },
+      } as any,
+      clientPoint: clientPoint(px(40), px(80)),
+    })).toEqual(expect.objectContaining({
+      role: "list-item",
+      vlistPath: [0, 0, 0],
+      sourceStart: 20,
+      sourceEnd: 30,
+    }));
+    expect(getKnuthPlassVListBoxFromPoint({
+      outputJax,
+      paragraphId: "tex:registered-vbox",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+      } as any,
+      clientPoint: clientPoint(px(4), px(4)),
+    })).toBeNull();
   });
 
   it("reads TeX paragraph placement geometry from registered vlist layouts", () => {
     const outputJax = {};
     registerTexVListLayoutsOnOutputJax(outputJax, [{
       paragraphId: "tex:registered-paragraph-placements",
-      layout: {
+      layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
         baseline: { kind: "explicit", y: 8 },
         paragraphPlacements: [
@@ -1654,7 +1681,7 @@ describe("simple TeX paragraph layout", () => {
         reports: [],
         errors: [],
         items: [],
-      },
+      }),
     }]);
 
     expect(getKnuthPlassVListParagraphGeometry({
@@ -1700,11 +1727,12 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
-  it("reads TeX placeholder geometry from rendered SVG metadata", () => {
+  it("does not infer TeX placeholder geometry from rendered SVG metadata without a registered layout", () => {
     const placeholders = [
       makeVListBoxElement(
         { left: 120, top: 44, right: 40, bottom: 12 },
         {
+          "data-tex-vlist-item": "placeholder",
           "data-tex-placeholder-reason": "Unsupported TeX command in vertical mode.",
           "data-tex-vlist-path": "1",
           "data-tex-local-x": "18",
@@ -1718,6 +1746,7 @@ describe("simple TeX paragraph layout", () => {
       makeVListBoxElement(
         { left: 5, top: 5, right: 5, bottom: 20 },
         {
+          "data-tex-vlist-item": "placeholder",
           "data-tex-placeholder-reason": "empty",
           "data-source-start": "1",
           "data-source-end": "2",
@@ -1728,24 +1757,9 @@ describe("simple TeX paragraph layout", () => {
     expect(getKnuthPlassPlaceholderGeometry({
       containerElement: {
         querySelectorAll: (selector: string) =>
-          selector === '[data-tex-placeholder="true"]' ? placeholders : [],
+          selector === "[data-tex-vlist-item]" ? placeholders : [],
       } as any,
-    })).toEqual([
-      {
-        reason: "Unsupported TeX command in vertical mode.",
-        vlistPath: [1],
-        localLeft: 18,
-        localRight: 30,
-        localTop: 21,
-        localBottom: 27,
-        sourceStart: 11,
-        sourceEnd: 48,
-        clientLeft: 40,
-        clientRight: 120,
-        clientTop: 12,
-        clientBottom: 44,
-      },
-    ]);
+    })).toEqual([]);
   });
 
   it("reads TeX placeholder geometry from registered positioned layouts", () => {
@@ -1815,7 +1829,7 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
-  it("reads generic TeX vlist item geometry from rendered SVG metadata", () => {
+  it("does not infer generic TeX vlist item geometry from rendered SVG metadata without a registered layout", () => {
     const items = [
       makeVListBoxElement(
         { left: 20, top: 15, right: 80, bottom: 30 },
@@ -1826,6 +1840,14 @@ describe("simple TeX paragraph layout", () => {
           "data-tex-local-y": "3",
           "data-tex-local-width": "12",
           "data-tex-local-height": "4",
+          "data-tex-hbox-role": "list-label",
+          "data-tex-list-label-kind": "custom",
+          "data-tex-list-label-placement": "margin",
+          "data-tex-list-kind": "enumerate",
+          "data-tex-vbox-depth": "2",
+          "data-tex-list-label-depth": "1",
+          "data-tex-list-item-index": "3",
+          "data-tex-list-label-block-index": "8",
           "data-source-start": "4",
           "data-source-end": "13",
         }
@@ -1862,53 +1884,110 @@ describe("simple TeX paragraph layout", () => {
         querySelectorAll: (selector: string) =>
           selector === "[data-tex-vlist-item]" ? items : [],
       } as any,
-    })).toEqual([
-      {
-        kind: "hbox",
-        vlistPath: [0],
-        localLeft: 2,
-        localRight: 14,
-        localTop: 3,
-        localBottom: 7,
-        sourceStart: 4,
-        sourceEnd: 13,
-        placeholderReason: null,
-        clientLeft: 20,
-        clientRight: 80,
-        clientTop: 15,
-        clientBottom: 30,
-      },
-      {
-        kind: "rule",
-        vlistPath: [1],
-        localLeft: 10,
-        localRight: 17,
-        localTop: 12,
-        localBottom: 15,
-        sourceStart: null,
-        sourceEnd: null,
-        placeholderReason: null,
-        clientLeft: 12,
-        clientRight: 22,
-        clientTop: 34,
-        clientBottom: 39,
-      },
-      {
-        kind: "placeholder",
-        vlistPath: [2],
-        localLeft: 18,
-        localRight: 27,
-        localTop: 21,
-        localBottom: 27,
-        sourceStart: 11,
-        sourceEnd: 48,
-        placeholderReason: "Unsupported TeX command in vertical mode.",
-        clientLeft: 40,
-        clientRight: 120,
-        clientTop: 44,
-        clientBottom: 76,
-      },
-    ]);
+    })).toEqual([]);
+    expect(getKnuthPlassVListLabelGeometry({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === "[data-tex-vlist-item]" ? items : [],
+      } as any,
+    })).toEqual([]);
+    expect(getKnuthPlassVListItemFromPoint({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === "[data-tex-vlist-item]" ? items : [],
+      } as any,
+      clientPoint: clientPoint(px(16), px(36)),
+    })).toBeNull();
+    expect(getKnuthPlassVListItemFromPoint({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === "[data-tex-vlist-item]" ? items : [],
+      } as any,
+      clientPoint: clientPoint(px(5), px(5)),
+    })).toBeNull();
+    expect(getKnuthPlassVListLabelFromPoint({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === "[data-tex-vlist-item]" ? items : [],
+      } as any,
+      clientPoint: clientPoint(px(40), px(20)),
+    })).toBeNull();
+    expect(getKnuthPlassVListLabelFromPoint({
+      containerElement: {
+        querySelectorAll: (selector: string) =>
+          selector === "[data-tex-vlist-item]" ? items : [],
+      } as any,
+      clientPoint: clientPoint(px(39), px(42)),
+    })).toBeNull();
+  });
+
+  it("does not build a TeX vlist geometry snapshot from rendered SVG metadata without a registered layout", () => {
+    const boxes = [
+      makeVListBoxElement(
+        { left: 10, top: 20, right: 80, bottom: 60 },
+        {
+          "data-tex-vbox-role": "list",
+          "data-tex-vlist-path": "0",
+          "data-tex-local-x": "4",
+          "data-tex-local-y": "5",
+          "data-tex-local-width": "20",
+          "data-tex-local-height": "12",
+          "data-tex-list-kind": "itemize",
+          "data-tex-vbox-depth": "1",
+          "data-tex-list-label-depth": "0",
+          "data-tex-list-left-margin-em": "2.5",
+        }
+      ),
+    ];
+    const items = [
+      makeVListBoxElement(
+        { left: 12, top: 24, right: 32, bottom: 36 },
+        {
+          "data-tex-vlist-item": "hbox",
+          "data-tex-vlist-path": "0.0",
+          "data-tex-hbox-role": "list-label",
+          "data-tex-list-label-kind": "default",
+          "data-tex-list-label-placement": "margin",
+          "data-tex-list-kind": "itemize",
+          "data-tex-vbox-depth": "1",
+          "data-tex-list-label-depth": "0",
+          "data-tex-list-item-index": "0",
+          "data-tex-list-label-block-index": "3",
+        }
+      ),
+      makeVListBoxElement(
+        { left: 40, top: 44, right: 120, bottom: 76 },
+        {
+          "data-tex-vlist-item": "placeholder",
+          "data-tex-vlist-path": "0.1",
+          "data-tex-placeholder-reason": "Unsupported TeX command in vertical mode.",
+          "data-source-start": "11",
+          "data-source-end": "48",
+        }
+      ),
+    ];
+
+    const snapshot = getKnuthPlassVListGeometrySnapshot({
+      containerElement: {
+        querySelectorAll: (selector: string) => {
+          if (selector === '[data-tex-vbox="true"]') {
+            return boxes;
+          }
+          if (selector === "[data-tex-vlist-item]") {
+            return items;
+          }
+          return [];
+        },
+      } as any,
+    });
+
+    expect(snapshot.source).toBe("empty");
+    expect(snapshot.boxes).toEqual([]);
+    expect(snapshot.items).toEqual([]);
+    expect(snapshot.labels).toEqual([]);
+    expect(snapshot.placeholders).toEqual([]);
+    expect(snapshot.paragraphs).toEqual([]);
+    expect(snapshot.tree).toEqual([]);
   });
 
   it("reads generic TeX vlist item geometry from registered positioned layouts", () => {
@@ -1927,6 +2006,16 @@ describe("simple TeX paragraph layout", () => {
             item: {
               kind: "hbox",
               sourceSpan: { start: 4, end: 13 },
+              role: {
+                kind: "list-label",
+                labelKind: "default",
+                placement: "margin",
+                listKind: "enumerate",
+                depth: 1,
+                labelDepth: 1,
+                itemIndex: 2,
+                blockIndex: 0,
+              },
               box: {
                 metrics: { width: 12, height: 3, depth: 1 },
                 renderItems: [],
@@ -2008,6 +2097,14 @@ describe("simple TeX paragraph layout", () => {
         sourceStart: 4,
         sourceEnd: 13,
         placeholderReason: null,
+        hboxRole: "list-label",
+        listLabelKind: "default",
+        listLabelPlacement: "margin",
+        listKind: "enumerate",
+        listDepth: 1,
+        listLabelDepth: 1,
+        listItemIndex: 2,
+        listLabelBlockIndex: 0,
         clientLeft: 14,
         clientRight: 38,
         clientTop: 29,
@@ -2023,6 +2120,14 @@ describe("simple TeX paragraph layout", () => {
         sourceStart: null,
         sourceEnd: null,
         placeholderReason: null,
+        hboxRole: null,
+        listLabelKind: null,
+        listLabelPlacement: null,
+        listKind: null,
+        listDepth: null,
+        listLabelDepth: null,
+        listItemIndex: null,
+        listLabelBlockIndex: null,
         clientLeft: 30,
         clientRight: 44,
         clientTop: 56,
@@ -2038,6 +2143,14 @@ describe("simple TeX paragraph layout", () => {
         sourceStart: 20,
         sourceEnd: 31,
         placeholderReason: null,
+        hboxRole: null,
+        listLabelKind: null,
+        listLabelPlacement: null,
+        listKind: null,
+        listDepth: null,
+        listLabelDepth: null,
+        listItemIndex: null,
+        listLabelBlockIndex: null,
         clientLeft: 38,
         clientRight: 38,
         clientTop: 68,
@@ -2053,12 +2166,411 @@ describe("simple TeX paragraph layout", () => {
         sourceStart: 40,
         sourceEnd: 52,
         placeholderReason: "Unsupported TeX command in vertical mode.",
+        hboxRole: null,
+        listLabelKind: null,
+        listLabelPlacement: null,
+        listKind: null,
+        listDepth: null,
+        listLabelDepth: null,
+        listItemIndex: null,
+        listLabelBlockIndex: null,
         clientLeft: 46,
         clientRight: 64,
         clientTop: 83,
         clientBottom: 101,
       },
     ]);
+    expect(getKnuthPlassVListLabelGeometry({
+      outputJax,
+      paragraphId: "tex:registered-items",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist label geometry should not query DOM metadata");
+        },
+      } as any,
+    })).toEqual([
+      expect.objectContaining({
+        kind: "hbox",
+        hboxRole: "list-label",
+        vlistPath: [0],
+        listLabelKind: "default",
+        listLabelPlacement: "margin",
+        listKind: "enumerate",
+        listDepth: 1,
+        listLabelDepth: 1,
+        listItemIndex: 2,
+        listLabelBlockIndex: 0,
+      }),
+    ]);
+    expect(getKnuthPlassVListItemFromPoint({
+      outputJax,
+      paragraphId: "tex:registered-items",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist item hit-testing should not query DOM metadata");
+        },
+      } as any,
+      clientPoint: clientPoint(px(50), px(90)),
+    })).toEqual(expect.objectContaining({
+      kind: "placeholder",
+      vlistPath: [1, 2],
+      sourceStart: 40,
+      sourceEnd: 52,
+      placeholderReason: "Unsupported TeX command in vertical mode.",
+    }));
+  });
+
+  it("uses vlist tree depth for registered item hit-testing when bounds tie", () => {
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:registered-item-depth-hit",
+      layout: registeredLayoutWithBoxReport({
+        metrics: { width: 100, height: 20, depth: 10 },
+        baseline: { kind: "explicit", y: 8 },
+        paragraphPlacements: [],
+        linePlacements: [],
+        reports: [],
+        errors: [],
+        items: [
+          {
+            item: {
+              kind: "placeholder",
+              sourceSpan: { start: 10, end: 90 },
+              reason: "Outer fallback.",
+              estimated: { width: 20, height: 8, depth: 2 },
+            },
+            path: [0],
+            x: 4,
+            y: 5,
+            metrics: { width: 20, height: 8, depth: 2 },
+            children: [
+              {
+                item: {
+                  kind: "rule",
+                  sourceSpan: { start: 30, end: 40 },
+                  width: 20,
+                  height: 8,
+                  depth: 2,
+                },
+                path: [0, 0],
+                x: 4,
+                y: 5,
+                metrics: { width: 20, height: 8, depth: 2 },
+              },
+            ],
+          },
+        ],
+      }),
+    }]);
+
+    expect(getKnuthPlassVListItemFromPoint({
+      outputJax,
+      paragraphId: "tex:registered-item-depth-hit",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist item depth hit-testing should not query DOM metadata");
+        },
+      } as any,
+      clientPoint: clientPoint(px(20), px(40)),
+    })).toEqual(expect.objectContaining({
+      kind: "rule",
+      vlistPath: [0, 0],
+      sourceStart: 30,
+      sourceEnd: 40,
+    }));
+  });
+
+  it("hits registered TeX vlist labels and resolves their paragraph owner", () => {
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:registered-label-hit",
+      layout: registeredLayoutWithBoxReport({
+        metrics: { width: 100, height: 20, depth: 10 },
+        baseline: { kind: "explicit", y: 8 },
+        paragraphPlacements: [{
+          blockIndex: 2,
+          vlistPath: [1],
+          sourceSpan: { start: 14, end: 30 },
+          lineIndices: [0],
+          x: 25,
+          y: 3,
+          metrics: { width: 60, height: 7, depth: 3 },
+        }],
+        linePlacements: [],
+        reports: [],
+        errors: [],
+        items: [
+          {
+            item: {
+              kind: "hbox",
+              role: {
+                kind: "list-label",
+                labelKind: "default",
+                placement: "margin",
+                listKind: "enumerate",
+                depth: 1,
+                labelDepth: 1,
+                itemIndex: 3,
+                blockIndex: 2,
+              },
+              box: {
+                metrics: { width: 12, height: 3, depth: 1 },
+                renderItems: [],
+              },
+            },
+            path: [0],
+            x: 2,
+            y: 3,
+            metrics: { width: 12, height: 3, depth: 1 },
+          },
+        ],
+      }),
+    }]);
+
+    const containerElement = {
+      getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+      querySelectorAll: () => {
+        throw new Error("registered vlist label hit-testing should not query DOM metadata");
+      },
+    } as any;
+
+    expect(getKnuthPlassVListLabelFromPoint({
+      outputJax,
+      paragraphId: "tex:registered-label-hit",
+      containerElement,
+      clientPoint: clientPoint(px(20), px(34)),
+    })).toEqual({
+      label: expect.objectContaining({
+        kind: "hbox",
+        hboxRole: "list-label",
+        listLabelBlockIndex: 2,
+        sourceStart: null,
+        sourceEnd: null,
+      }),
+      paragraph: expect.objectContaining({
+        blockIndex: 2,
+        sourceStart: 14,
+        sourceEnd: 30,
+      }),
+    });
+    expect(getKnuthPlassVListLabelFromPoint({
+      outputJax,
+      paragraphId: "tex:registered-label-hit",
+      containerElement,
+      clientPoint: clientPoint(px(44), px(34)),
+    })).toBeNull();
+  });
+
+  it("builds a coherent TeX vlist geometry snapshot from registered positioned layouts", () => {
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:registered-snapshot",
+      layout: registeredLayoutWithBoxReport({
+        metrics: { width: 100, height: 20, depth: 10 },
+        baseline: { kind: "explicit", y: 8 },
+        paragraphPlacements: [{
+          blockIndex: 2,
+          vlistPath: [0, 2],
+          sourceSpan: { start: 14, end: 30 },
+          lineIndices: [0],
+          x: 25,
+          y: 3,
+          metrics: { width: 60, height: 7, depth: 3 },
+        }],
+        linePlacements: [],
+        reports: [],
+        errors: [],
+        items: [
+          {
+            item: {
+              kind: "vbox",
+              role: {
+                kind: "list",
+                listKind: "enumerate",
+                depth: 1,
+                labelDepth: 1,
+                ownLeftMarginEm: 2,
+                totalLeftMarginEm: 2,
+              },
+              items: [],
+            },
+            path: [0],
+            x: 0,
+            y: 0,
+            metrics: { width: 30, height: 10, depth: 5 },
+            children: [
+              {
+                item: {
+                  kind: "hbox",
+                  role: {
+                    kind: "list-label",
+                    labelKind: "default",
+                    placement: "margin",
+                    listKind: "enumerate",
+                    depth: 1,
+                    labelDepth: 1,
+                    itemIndex: 2,
+                    blockIndex: 2,
+                  },
+                  box: {
+                    metrics: { width: 12, height: 3, depth: 1 },
+                    renderItems: [],
+                  },
+                },
+                path: [0, 0],
+                x: 2,
+                y: 3,
+                metrics: { width: 12, height: 3, depth: 1 },
+              },
+              {
+                item: {
+                  kind: "placeholder",
+                  sourceSpan: { start: 40, end: 52 },
+                  reason: "Unsupported TeX command in vertical mode.",
+                  estimated: { width: 9, height: 4, depth: 2 },
+                },
+                path: [0, 1],
+                x: 18,
+                y: 21,
+                metrics: { width: 9, height: 4, depth: 2 },
+              },
+              {
+                item: {
+                  kind: "paragraph",
+                  sourceSpan: { start: 14, end: 30 },
+                  blockIndex: 2,
+                  paragraph: {
+                    blockIndex: 2,
+                    text: "Paragraph body",
+                    sourceSpan: { start: 14, end: 30 },
+                    nodes: [],
+                    noIndent: false,
+                    quoteDepth: 0,
+                  },
+                },
+                path: [0, 2],
+                x: 25,
+                y: 3,
+                metrics: { width: 60, height: 7, depth: 3 },
+              },
+            ],
+          },
+        ],
+      }),
+    }]);
+
+    const snapshot = getKnuthPlassVListGeometrySnapshot({
+      outputJax,
+      paragraphId: "tex:registered-snapshot",
+      containerElement: {
+        getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
+        querySelectorAll: () => {
+          throw new Error("registered vlist snapshot should not query DOM metadata");
+        },
+      } as any,
+    });
+
+    expect(snapshot.source).toBe("registered");
+    expect(snapshot.boxes).toEqual([
+      expect.objectContaining({
+        role: "list",
+        vlistPath: [0],
+        listKind: "enumerate",
+      }),
+    ]);
+    expect(snapshot.items).toHaveLength(2);
+    expect(snapshot.labels).toEqual([
+      expect.objectContaining({
+        hboxRole: "list-label",
+        listLabelBlockIndex: 2,
+      }),
+    ]);
+    expect(snapshot.paragraphs).toEqual([
+      expect.objectContaining({
+        blockIndex: 2,
+        vlistPath: [0, 2],
+        sourceStart: 14,
+        sourceEnd: 30,
+      }),
+    ]);
+    expect(snapshot.placeholders).toEqual([
+      expect.objectContaining({
+        reason: "Unsupported TeX command in vertical mode.",
+        vlistPath: [0, 1],
+        sourceStart: 40,
+        sourceEnd: 52,
+      }),
+    ]);
+    expect(snapshot.tree).toEqual([
+      expect.objectContaining({
+        itemKind: "vbox",
+        vlistPath: [0],
+        box: expect.objectContaining({
+          role: "list",
+          listKind: "enumerate",
+        }),
+        item: null,
+        paragraph: null,
+        children: [
+          expect.objectContaining({
+            itemKind: "hbox",
+            vlistPath: [0, 0],
+            item: expect.objectContaining({
+              hboxRole: "list-label",
+              listLabelBlockIndex: 2,
+            }),
+            paragraph: null,
+          }),
+          expect.objectContaining({
+            itemKind: "placeholder",
+            vlistPath: [0, 1],
+            item: expect.objectContaining({
+              placeholderReason: "Unsupported TeX command in vertical mode.",
+            }),
+            paragraph: null,
+          }),
+          expect.objectContaining({
+            itemKind: "paragraph",
+            vlistPath: [0, 2],
+            item: null,
+            paragraph: expect.objectContaining({
+              blockIndex: 2,
+              sourceStart: 14,
+              sourceEnd: 30,
+            }),
+          }),
+        ],
+      }),
+    ]);
+    expect(getKnuthPlassVListTreeHitFromSnapshot({
+      snapshot,
+      clientPoint: clientPoint(px(20), px(34)),
+    })).toEqual(expect.objectContaining({
+      path: [
+        expect.objectContaining({ itemKind: "vbox", vlistPath: [0] }),
+        expect.objectContaining({ itemKind: "hbox", vlistPath: [0, 0] }),
+      ],
+      box: expect.objectContaining({
+        role: "list",
+        vlistPath: [0],
+      }),
+      item: expect.objectContaining({
+        hboxRole: "list-label",
+        vlistPath: [0, 0],
+      }),
+      label: expect.objectContaining({
+        hboxRole: "list-label",
+        listLabelBlockIndex: 2,
+      }),
+      labelParagraph: expect.objectContaining({
+        blockIndex: 2,
+        sourceStart: 14,
+        sourceEnd: 30,
+      }),
+    }));
   });
 
   it("renders enumerate labels in the article list margin", () => {
@@ -2172,6 +2684,11 @@ describe("simple TeX paragraph layout", () => {
           kind: "list-label",
           labelKind: "default",
           placement: "margin",
+          listKind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+          blockIndex: 0,
         },
         width: expect.any(Number),
         totalHeight: expect.any(Number),
@@ -2182,12 +2699,17 @@ describe("simple TeX paragraph layout", () => {
           kind: "list-label",
           labelKind: "default",
           placement: "margin",
+          listKind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 2,
+          blockIndex: 2,
         },
         width: expect.any(Number),
         totalHeight: expect.any(Number),
       },
     ]);
-    const listBox = result.vlistLayout?.boxReport.items.find((item) =>
+    const listBox = result.vlistLayout?.boxReport.tree.find((item) =>
       item.role?.kind === "list"
     );
     expect(listBox?.children?.map((item) => ({
@@ -2221,8 +2743,9 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("renders custom item labels and nested list margins", () => {
+    const source = String.raw`\begin{enumerate}\item[Step] Alpha \begin{enumerate}\item Nested\end{enumerate}\end{enumerate}`;
     const result = layoutSimpleTexParagraph(
-      String.raw`\begin{enumerate}\item[Step] Alpha \begin{enumerate}\item Nested\end{enumerate}\end{enumerate}`,
+      source,
       {
         paragraphId: "tex:nested-list",
         width: 150,
@@ -2247,6 +2770,45 @@ describe("simple TeX paragraph layout", () => {
       text: "(a)",
       fontId: "cmr10",
     });
+    expect(result.vlistLayout?.boxReport.items
+      .filter((item) => item.itemKind === "hbox")
+      .map((item) => ({
+        path: item.path,
+        hboxRole: item.hboxRole,
+        sourceSpan: item.sourceSpan,
+      }))).toEqual([
+      {
+        path: [0, 0, 1],
+        hboxRole: {
+          kind: "list-label",
+          labelKind: "custom",
+          placement: "margin",
+          listKind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+          blockIndex: 0,
+        },
+        sourceSpan: {
+          start: source.indexOf("Step"),
+          end: source.indexOf("Step") + "Step".length,
+        },
+      },
+      {
+        path: [1, 0, 1],
+        hboxRole: {
+          kind: "list-label",
+          labelKind: "default",
+          placement: "margin",
+          listKind: "enumerate",
+          depth: 2,
+          labelDepth: 2,
+          itemIndex: 1,
+          blockIndex: 1,
+        },
+        sourceSpan: undefined,
+      },
+    ]);
   });
 
   it("renders description labels as bold in-flow labels with hanging continuation", () => {
@@ -2268,6 +2830,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines.at(-1)?.xStart).toEqual(expect.closeTo(0, 6));
     expect(result.report?.lines[0]?.segments[0]).toMatchObject({
       kind: "text",
+      role: "list-label",
       text: "Term",
       fontId: "cmbx10",
       x: expect.closeTo(5, 6),

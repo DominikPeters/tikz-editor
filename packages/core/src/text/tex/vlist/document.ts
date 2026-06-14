@@ -1,36 +1,30 @@
-import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
-import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
+import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
 import {
   computerModernTexMetricProvider,
-} from "./fonts/computer-modern.js";
-import {
-  prepareTexLayoutParagraphsFromVList,
-  type TexLayoutParagraphPlan,
-  type TexLayoutParagraphPreparation,
-} from "./layout-paragraph-preparation.js";
-import type { TexLayoutIrOptions } from "./layout-options.js";
-import {
-  texInitialReportAlignment,
-} from "./layout-state.js";
+} from "../fonts/computer-modern.js";
+import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
 import type {
   SimpleTexBlockItem,
   SimpleTexParagraphBlock,
   TexParagraphAlignment,
-} from "./ir.js";
+} from "../ir.js";
+import type { TexLayoutIrOptions } from "../layout-options.js";
+import {
+  texInitialReportAlignment,
+} from "../layout-state.js";
 import {
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
+} from "./lower-simple.js";
+import {
+  prepareTexLayoutParagraphsFromVList,
+  type TexLayoutParagraphPlan,
+  type TexLayoutParagraphPreparation,
+} from "./paragraph-plans.js";
+import {
   prepareSimpleTexVList,
-  type TexVListDocument,
-} from "./vlist/index.js";
-
-export type {
-  TexLayoutParagraphBreakContext,
-  TexLayoutParagraphLineLabel,
-} from "./layout-paragraph-preparation.js";
-export type {
-  TexLayoutParagraphPlan,
-} from "./layout-paragraph-preparation.js";
+} from "./prepare-simple.js";
+import type { TexVListDocument } from "./types.js";
 
 export interface SimpleTexLayoutDocumentPreparation {
   readonly kind: "simple-tex-layout-document-preparation";
@@ -53,14 +47,18 @@ export interface SimpleTexLayoutDocumentIr {
   readonly paragraphPlans: readonly TexLayoutParagraphPlan[];
 }
 
-export function prepareSimpleTexLayoutDocument(params: {
+export interface SimpleTexLayoutDocumentPreparationParams {
   readonly blocks: readonly SimpleTexParagraphBlock[];
   readonly items?: readonly SimpleTexBlockItem[];
   readonly defaultAlignment: TexParagraphAlignment;
   readonly font: ResolvedTexFont;
   readonly metricProvider?: TexMetricProvider;
   readonly options: TexLayoutIrOptions;
-}): SimpleTexLayoutDocumentPreparation {
+}
+
+export function prepareSimpleTexLayoutDocument(
+  params: SimpleTexLayoutDocumentPreparationParams
+): SimpleTexLayoutDocumentPreparation {
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const baseVList = params.items
     ? lowerSimpleTexBlockItemsToVList(params.items)
@@ -88,14 +86,9 @@ export function prepareSimpleTexLayoutDocument(params: {
   };
 }
 
-export function createSimpleTexLayoutDocumentIr(params: {
-  readonly blocks: readonly SimpleTexParagraphBlock[];
-  readonly items?: readonly SimpleTexBlockItem[];
-  readonly defaultAlignment: TexParagraphAlignment;
-  readonly font: ResolvedTexFont;
-  readonly metricProvider?: TexMetricProvider;
-  readonly options: TexLayoutIrOptions;
-}): SimpleTexLayoutDocumentIr {
+export function createSimpleTexLayoutDocumentIr(
+  params: SimpleTexLayoutDocumentPreparationParams
+): SimpleTexLayoutDocumentIr {
   const preparation = prepareSimpleTexLayoutDocument(params);
   return createSimpleTexLayoutDocumentIrFromPreparation(preparation);
 }

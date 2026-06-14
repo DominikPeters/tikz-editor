@@ -20,6 +20,31 @@ const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;
 const LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM = 3;
 
+export type TexParagraphRightskipStretchMode =
+  | "default"
+  | "ragged-right-infinite-otherwise-zero"
+  | "ragged-right-infinite-center-zero";
+
+export interface TexParagraphBreakScopePolicy {
+  readonly leftMarginWidth: number;
+  readonly rightMarginWidth: number;
+  readonly allowParagraphIndent: boolean;
+  readonly allowForcedBreakIndent: boolean;
+  readonly forceParfillStretch: boolean;
+  readonly suppressRaggedLeftCenterLeftskipStretch: boolean;
+  readonly rightskipStretchMode: TexParagraphRightskipStretchMode;
+}
+
+export const DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY: TexParagraphBreakScopePolicy = {
+  leftMarginWidth: 0,
+  rightMarginWidth: 0,
+  allowParagraphIndent: true,
+  allowForcedBreakIndent: true,
+  forceParfillStretch: false,
+  suppressRaggedLeftCenterLeftskipStretch: false,
+  rightskipStretchMode: "default",
+};
+
 export interface TexParagraphBreakOptions {
   readonly width: number;
   readonly font?: ResolvedTexFont;
@@ -42,10 +67,7 @@ export function breakTexParagraphRuns(params: {
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly noIndent: boolean;
   readonly firstLineIndentWidth?: number;
-  readonly leftMarginWidth: number;
-  readonly rightMarginWidth: number;
-  readonly quoteContextActive: boolean;
-  readonly listContextActive: boolean;
+  readonly scopePolicy: TexParagraphBreakScopePolicy;
 }): TexParagraphBreakResult | null {
   const pass1Model = runsToItems(params.runs, params.measurement, {
     enableAutomaticHyphenation: false,
@@ -58,11 +80,8 @@ export function breakTexParagraphRuns(params: {
     alignmentProfile: params.alignmentProfile,
     inheritedAlignment: params.inheritedAlignment,
     inheritedAlignmentProfile: params.inheritedAlignmentProfile,
-    leftMarginWidth: params.leftMarginWidth,
-    rightMarginWidth: params.rightMarginWidth,
+    scopePolicy: params.scopePolicy,
     firstLineIndentWidth: params.firstLineIndentWidth,
-    quoteContextActive: params.quoteContextActive,
-    listContextActive: params.listContextActive,
   });
   const pass1 = breakWithDp(pass1Model, params.options.width, {
     ...dpOptions,
@@ -129,10 +148,7 @@ interface TexParagraphDpOptionParams {
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly inheritedAlignment?: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
-  readonly leftMarginWidth: number;
-  readonly rightMarginWidth: number;
-  readonly quoteContextActive: boolean;
-  readonly listContextActive: boolean;
+  readonly scopePolicy: TexParagraphBreakScopePolicy;
 }
 
 function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
@@ -144,10 +160,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     alignmentProfile,
     inheritedAlignment,
     inheritedAlignmentProfile,
-    leftMarginWidth,
-    rightMarginWidth,
-    quoteContextActive,
-    listContextActive,
+    scopePolicy,
   } = params;
   const latexRagged = alignment === "ragged-right" || alignment === "ragged-left";
   const inheritedLatexRagged =
@@ -170,23 +183,21 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     finalhyphendemerits: latexDeclaration || latexRagged || inheritedLatexRagged
       ? LATEX_RAGGED_FINAL_HYPHEN_DEMERITS
       : englishDefaults.finalhyphendemerits,
-    leftskipWidth: leftMarginWidth,
+    leftskipWidth: scopePolicy.leftMarginWidth,
     leftskipStretch:
       texDeclarationLeftskipStretch(
         alignment,
         latexDeclaration,
-        quoteContextActive,
-        listContextActive,
+        scopePolicy,
         skipStretch
       ),
     leftskipShrink: 0,
-    rightskipWidth: rightMarginWidth,
+    rightskipWidth: scopePolicy.rightMarginWidth,
     rightskipStretch: texDeclarationRightskipStretch(
       alignment,
       latexDeclaration,
       latexQuote,
-      quoteContextActive,
-      listContextActive,
+      scopePolicy,
       skipStretch
     ),
     rightskipShrink: 0,
@@ -194,7 +205,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       Number.isFinite(firstLineIndentWidth)
         ? firstLineIndentWidth
         : !noIndent &&
-            !listContextActive &&
+            scopePolicy.allowParagraphIndent &&
             Number.isFinite(options.parindent) &&
             options.parindent &&
             options.parindent > 0
@@ -203,7 +214,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     forcedBreakIndentWidth:
       options.tikzTextWidthNode === true &&
       alignment !== "justified" &&
-      !listContextActive &&
+      scopePolicy.allowForcedBreakIndent &&
       Number.isFinite(options.parindent) &&
       options.parindent &&
       options.parindent > 0
@@ -217,8 +228,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       alignmentProfile,
       options.tikzTextWidthNode === true,
       inheritedParfillStretch,
-      quoteContextActive,
-      listContextActive
+      scopePolicy
     ),
     parfillskipShrink: 0,
     preventOverflow: false,
@@ -228,14 +238,13 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
 function texDeclarationLeftskipStretch(
   alignment: TexParagraphAlignment,
   latexDeclaration: boolean,
-  quoteContextActive: boolean,
-  listContextActive: boolean,
+  scopePolicy: TexParagraphBreakScopePolicy,
   fallbackStretch: number
 ): number {
-  if (quoteContextActive && (alignment === "ragged-left" || alignment === "center")) {
-    return 0;
-  }
-  if (listContextActive && (alignment === "ragged-left" || alignment === "center")) {
+  if (
+    scopePolicy.suppressRaggedLeftCenterLeftskipStretch &&
+    (alignment === "ragged-left" || alignment === "center")
+  ) {
     return 0;
   }
   if (latexDeclaration && (alignment === "ragged-left" || alignment === "center")) {
@@ -248,18 +257,19 @@ function texDeclarationRightskipStretch(
   alignment: TexParagraphAlignment,
   latexDeclaration: boolean,
   latexQuote: boolean,
-  quoteContextActive: boolean,
-  listContextActive: boolean,
+  scopePolicy: TexParagraphBreakScopePolicy,
   fallbackStretch: number
 ): number {
-  if (quoteContextActive) {
+  if (scopePolicy.rightskipStretchMode === "ragged-right-infinite-otherwise-zero") {
     return alignment === "ragged-right" ? Number.POSITIVE_INFINITY : 0;
   }
-  if (listContextActive && alignment === "ragged-right") {
-    return Number.POSITIVE_INFINITY;
-  }
-  if (listContextActive && alignment === "center") {
-    return 0;
+  if (scopePolicy.rightskipStretchMode === "ragged-right-infinite-center-zero") {
+    if (alignment === "ragged-right") {
+      return Number.POSITIVE_INFINITY;
+    }
+    if (alignment === "center") {
+      return 0;
+    }
   }
   if (
     (latexDeclaration || latexQuote) &&
@@ -275,13 +285,9 @@ function texParfillStretchForAlignment(
   alignmentProfile?: TexAlignmentProfile,
   tikzTextWidthNode = false,
   inheritedParfillStretch = Number.POSITIVE_INFINITY,
-  quoteContextActive = false,
-  listContextActive = false
+  scopePolicy: TexParagraphBreakScopePolicy = DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY
 ): number {
-  if (quoteContextActive) {
-    return Number.POSITIVE_INFINITY;
-  }
-  if (listContextActive) {
+  if (scopePolicy.forceParfillStretch) {
     return Number.POSITIVE_INFINITY;
   }
   if (alignmentProfile === "latex-declaration") {

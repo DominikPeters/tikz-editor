@@ -56,23 +56,33 @@ export {
   prepareSimpleTexLayoutDocument,
   type SimpleTexLayoutDocumentIr,
   type SimpleTexLayoutDocumentPreparation,
-} from "./layout-ir.js";
+  type SimpleTexLayoutDocumentPreparationParams,
+} from "./vlist/document.js";
 export {
   type TexLayoutParagraphBreakContext,
   type TexLayoutParagraphLineLabel,
-} from "./layout-paragraph-preparation.js";
+} from "./vlist/paragraph-plans.js";
 export {
   prepareTexLayoutParagraphsFromVList,
   type TexLayoutParagraphPreparation,
   type TexLayoutParagraphPreparationParams,
   type TexLayoutParagraphPlan,
-} from "./layout-paragraph-preparation.js";
+} from "./vlist/paragraph-plans.js";
 export {
   type TexLayoutIrOptions,
 } from "./layout-options.js";
 export {
+  DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY,
+  type TexParagraphBreakScopePolicy,
+  type TexParagraphRightskipStretchMode,
+} from "./paragraph-break.js";
+export {
   texLayoutItemsForParagraphPlan,
-} from "./layout-paragraph-items.js";
+} from "./vlist/paragraph-items.js";
+export {
+  breakSimpleTexLayoutDocumentParagraphs,
+  type TexLayoutParagraphBreakEntriesResult,
+} from "./vlist/paragraph-breaker.js";
 export {
   type TexLayoutForcedBreakItem,
   type TexLayoutInlineItem,

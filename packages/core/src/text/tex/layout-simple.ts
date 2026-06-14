@@ -8,12 +8,10 @@ import type {
 } from "./fonts/types.js";
 import { analyzeSimpleTexParagraph, type TexParagraphAlignment } from "./ir.js";
 import {
+  breakSimpleTexLayoutDocumentParagraphs,
   createSimpleTexLayoutDocumentIrFromPreparation,
-  prepareSimpleTexLayoutDocument,
-} from "./layout-ir.js";
-import { breakSimpleTexLayoutDocumentParagraphs } from "./layout-paragraph-breaker.js";
-import {
   layoutTexVListFromBrokenParagraphs,
+  prepareSimpleTexLayoutDocument,
   type TexVListLayout,
 } from "./vlist/index.js";
 

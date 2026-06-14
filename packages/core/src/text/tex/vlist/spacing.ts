@@ -1,11 +1,18 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { SimpleTexListContext } from "../ir.js";
-import type { TexVListDocument, TexVListItem } from "./types.js";
+import { texVListPathKey } from "./paths.js";
+import { texVBoxRolePathForParagraph } from "./scope-roles.js";
+import type {
+  TexGlueItem,
+  TexParagraphItem,
+  TexVBoxRole,
+  TexVListDocument,
+  TexVListItem,
+} from "./types.js";
 
 const articleQuoteSpacingEm = {
   topsep: 1,
-  partopsep: 0.3,
   parsep: 0.4,
   compactExitTopsep: 0.8,
 } as const;
@@ -20,6 +27,7 @@ const articleListSpacingEm = {
 
 export interface SimpleTexParagraphVerticalSkip {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly segmentIndex: number;
   readonly size: number;
   readonly quoteSize: number;
@@ -38,9 +46,12 @@ export function planSimpleTexParagraphVerticalSkips(
       previousEmittedQuoteDepth: 0,
       previousEmittedListContext: undefined,
       quoteEntryHadPreviousParagraphByDepth: new Map(),
+      emittedListItemKeys: new Set(),
       emittedParagraphCount: 0,
     },
-    skips
+    skips,
+    [],
+    []
   );
 
   return skips;
@@ -50,6 +61,7 @@ interface SimpleTexParagraphVerticalSkipState {
   previousEmittedQuoteDepth: number;
   previousEmittedListContext: SimpleTexListContext | undefined;
   readonly quoteEntryHadPreviousParagraphByDepth: Map<number, boolean>;
+  readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
 }
 
@@ -57,15 +69,24 @@ function planSimpleTexParagraphVerticalSkipsInto(
   items: readonly TexVListItem[],
   font: ResolvedTexFont,
   state: SimpleTexParagraphVerticalSkipState,
-  skips: SimpleTexParagraphVerticalSkip[]
+  skips: SimpleTexParagraphVerticalSkip[],
+  ancestors: readonly TexVBoxRole[],
+  pathPrefix: readonly number[]
 ): void {
-  for (const item of items) {
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item) {
+      continue;
+    }
+    const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
       planSimpleTexParagraphVerticalSkipsInto(
         item.items,
         font,
         state,
-        skips
+        skips,
+        item.role ? [...ancestors, item.role] : ancestors,
+        path
       );
       continue;
     }
@@ -74,65 +95,127 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }
 
     const paragraph = item.paragraph;
+    const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
     const hasPreviousEmittedParagraph = state.emittedParagraphCount > 0;
     const listVerticalSkipBefore = texArticleListVerticalSkipBefore(
       state.previousEmittedListContext,
-      paragraph.listContext,
+      scope.listContext,
       hasPreviousEmittedParagraph,
       font
     );
     const quoteVerticalSkipBefore = texArticleQuoteVerticalSkipBefore(
       state.previousEmittedQuoteDepth,
-      paragraph.quoteDepth,
-      state.previousEmittedListContext !== undefined || paragraph.listContext !== undefined,
+      scope.quoteDepth,
+      state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
       state.quoteEntryHadPreviousParagraphByDepth.get(state.previousEmittedQuoteDepth) ?? true,
-      hasPreviousEmittedParagraph,
       font
     );
 
     skips.push({
       blockIndex: paragraph.blockIndex,
+      vlistPath: path,
       segmentIndex: 0,
       quoteSize: quoteVerticalSkipBefore,
       listSize: listVerticalSkipBefore,
       size: quoteVerticalSkipBefore + listVerticalSkipBefore,
     });
 
-    if (paragraph.quoteDepth > state.previousEmittedQuoteDepth) {
+    if (scope.quoteDepth > state.previousEmittedQuoteDepth) {
       for (
         let depth = state.previousEmittedQuoteDepth + 1;
-        depth <= paragraph.quoteDepth;
+        depth <= scope.quoteDepth;
         depth += 1
       ) {
         state.quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
       }
-    } else if (paragraph.quoteDepth < state.previousEmittedQuoteDepth) {
+    } else if (scope.quoteDepth < state.previousEmittedQuoteDepth) {
       for (
         let depth = state.previousEmittedQuoteDepth;
-        depth > paragraph.quoteDepth;
+        depth > scope.quoteDepth;
         depth -= 1
       ) {
         state.quoteEntryHadPreviousParagraphByDepth.delete(depth);
       }
     }
-    state.previousEmittedQuoteDepth = paragraph.quoteDepth;
-    state.previousEmittedListContext = paragraph.listContext;
+    state.previousEmittedQuoteDepth = scope.quoteDepth;
+    state.previousEmittedListContext = scope.listContext;
+    if (scope.listItemKey) {
+      state.emittedListItemKeys.add(scope.listItemKey);
+    }
     state.emittedParagraphCount += 1;
   }
+}
+
+function paragraphScopeFromVListAncestors(
+  item: TexParagraphItem,
+  ancestors: readonly TexVBoxRole[],
+  state: SimpleTexParagraphVerticalSkipState
+): {
+  readonly quoteDepth: number;
+  readonly listContext: SimpleTexListContext | undefined;
+  readonly listItemKey?: string;
+} {
+  const quoteDepthFromAncestors = ancestors.filter((role) => role.kind === "quote").length;
+  const listRole = lastVListAncestorRole(ancestors, "list");
+  const listItemRole = lastVListAncestorRole(ancestors, "list-item");
+  if (listRole && listItemRole) {
+    const listItemKey = texListItemScopeKey(listItemRole);
+    return {
+      quoteDepth: quoteDepthFromAncestors,
+      listItemKey,
+      listContext: {
+        kind: listRole.listKind,
+        depth: listRole.depth,
+        labelDepth: listRole.labelDepth,
+        itemIndex: listItemRole.itemIndex,
+        ownLeftMarginEm: listRole.ownLeftMarginEm,
+        totalLeftMarginEm: listRole.totalLeftMarginEm,
+        showLabel: item.paragraph.listContext?.showLabel ??
+          !state.emittedListItemKeys.has(listItemKey),
+        label: item.paragraph.listContext?.label,
+      },
+    };
+  }
+  return {
+    quoteDepth: quoteDepthFromAncestors > 0 ? quoteDepthFromAncestors : item.paragraph.quoteDepth,
+    listContext: item.paragraph.listContext,
+  };
+}
+
+function texListItemScopeKey(role: Extract<TexVBoxRole, { kind: "list-item" }>): string {
+  return [
+    role.listKind,
+    role.depth,
+    role.labelDepth,
+    role.itemIndex,
+  ].join(":");
+}
+
+function lastVListAncestorRole<K extends TexVBoxRole["kind"]>(
+  ancestors: readonly TexVBoxRole[],
+  kind: K
+): Extract<TexVBoxRole, { kind: K }> | undefined {
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const role = ancestors[index];
+    if (role?.kind === kind) {
+      return role as Extract<TexVBoxRole, { kind: K }>;
+    }
+  }
+  return undefined;
 }
 
 export function addParagraphVerticalGlueToVList(
   vlist: TexVListDocument,
   skips: readonly SimpleTexParagraphVerticalSkip[]
 ): TexVListDocument {
-  const verticalSkipByBlock = new Map<number, SimpleTexParagraphVerticalSkip>();
+  const verticalSkipByPath = new Map<string, SimpleTexParagraphVerticalSkip>();
   for (const skip of skips) {
     if (skip.segmentIndex === 0 && skip.size > 0) {
-      verticalSkipByBlock.set(skip.blockIndex, skip);
+      verticalSkipByPath.set(texVListPathKey(skip.vlistPath), skip);
     }
   }
 
-  const items = addParagraphVerticalGlueToItems(vlist.items, verticalSkipByBlock);
+  const items = addParagraphVerticalGlueToItems(vlist.items, verticalSkipByPath, []);
 
   return {
     ...vlist,
@@ -142,38 +225,69 @@ export function addParagraphVerticalGlueToVList(
 
 function addParagraphVerticalGlueToItems(
   sourceItems: readonly TexVListItem[],
-  verticalSkipByBlock: ReadonlyMap<number, SimpleTexParagraphVerticalSkip>
+  verticalSkipByPath: ReadonlyMap<string, SimpleTexParagraphVerticalSkip>,
+  pathPrefix: readonly number[]
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
-  for (const item of sourceItems) {
+  for (let index = 0; index < sourceItems.length; index += 1) {
+    const item = sourceItems[index];
+    if (!item) {
+      continue;
+    }
+    const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
       items.push({
         ...item,
-        items: addParagraphVerticalGlueToItems(item.items, verticalSkipByBlock),
+        items: addParagraphVerticalGlueToItems(item.items, verticalSkipByPath, path),
       });
       continue;
     }
     if (item.kind === "paragraph") {
-      const skip = verticalSkipByBlock.get(item.paragraph.blockIndex);
-      if (skip && skip.size > 0) {
-        items.push({
-          kind: "glue",
-          sourceSpan: item.sourceSpan,
-          origin: {
-            kind: "paragraph-boundary",
-            beforeBlockIndex: item.paragraph.blockIndex,
-            quoteSize: skip.quoteSize,
-            listSize: skip.listSize,
-          },
-          size: skip.size,
-          stretchOrder: "normal",
-          shrinkOrder: "normal",
-        });
+      const skip = verticalSkipByPath.get(texVListPathKey(path));
+      if (skip) {
+        items.push(...paragraphBoundaryGlueItems(item, skip));
       }
     }
     items.push(item);
   }
   return items;
+}
+
+function paragraphBoundaryGlueItems(
+  item: TexParagraphItem,
+  skip: SimpleTexParagraphVerticalSkip
+): TexGlueItem[] {
+  const scopePath = texVBoxRolePathForParagraph(item.paragraph);
+  const shared = {
+    sourceSpan: item.sourceSpan,
+    ...(scopePath.length > 0 ? { scopePath } : {}),
+    stretchOrder: "normal" as const,
+    shrinkOrder: "normal" as const,
+  };
+  const glues: TexGlueItem[] = [];
+  if (skip.quoteSize > 0) {
+    glues.push({
+      kind: "glue",
+      ...shared,
+      origin: {
+        kind: "quote-boundary",
+        beforeBlockIndex: item.paragraph.blockIndex,
+      },
+      size: skip.quoteSize,
+    });
+  }
+  if (skip.listSize > 0) {
+    glues.push({
+      kind: "glue",
+      ...shared,
+      origin: {
+        kind: "list-boundary",
+        beforeBlockIndex: item.paragraph.blockIndex,
+      },
+      size: skip.listSize,
+    });
+  }
+  return glues;
 }
 
 export function materializeParagraphVerticalGlueInVList(
@@ -191,7 +305,6 @@ function texArticleQuoteVerticalSkipBefore(
   quoteDepth: number,
   listTransitionActive = false,
   exitingQuoteHadPreviousParagraph = true,
-  hasPreviousEmittedParagraph = true,
   font: ResolvedTexFont
 ): number {
   if (listTransitionActive) {
@@ -201,11 +314,7 @@ function texArticleQuoteVerticalSkipBefore(
     return quoteDepth > 0 ? texEmSkip(articleQuoteSpacingEm.parsep, font) : 0;
   }
   if (quoteDepth > previousQuoteDepth) {
-    return texEmSkip(
-      articleQuoteSpacingEm.topsep +
-        (hasPreviousEmittedParagraph ? 0 : articleQuoteSpacingEm.partopsep),
-      font
-    );
+    return texEmSkip(articleQuoteSpacingEm.topsep, font);
   }
   if (previousQuoteDepth > quoteDepth) {
     return texEmSkip(

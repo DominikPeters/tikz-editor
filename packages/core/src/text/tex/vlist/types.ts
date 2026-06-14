@@ -35,10 +35,12 @@ export type TexGlueOrigin =
       readonly command: SimpleTexVerticalGlueCommandName;
     }
   | {
-      readonly kind: "paragraph-boundary";
+      readonly kind: "quote-boundary";
       readonly beforeBlockIndex: number;
-      readonly quoteSize: number;
-      readonly listSize: number;
+    }
+  | {
+      readonly kind: "list-boundary";
+      readonly beforeBlockIndex: number;
     };
 
 export interface TexLineBox {
@@ -82,6 +84,7 @@ export interface TexHorizontalLayout {
 
 export interface TexVListParagraphHorizontalLayout {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
   readonly horizontal: TexHorizontalLayout;
 }
@@ -104,6 +107,11 @@ export type TexHBoxRole = {
   readonly kind: "list-label";
   readonly labelKind: TexVBoxListItemLabelKind;
   readonly placement: TexVBoxListItemLabelPlacement;
+  readonly listKind: SimpleTexListKind;
+  readonly depth: number;
+  readonly labelDepth: number;
+  readonly itemIndex: number;
+  readonly blockIndex: number;
 };
 
 export interface TexHBoxItem {
@@ -252,10 +260,11 @@ export interface TexVListDocument {
 
 export interface PositionedTexVListItem {
   readonly item: TexVListItem;
-  readonly path?: readonly number[];
+  readonly path: readonly number[];
   readonly x: number;
   readonly y: number;
   readonly metrics: TexBoxMetrics;
+  readonly baseline?: TexVBoxBaseline;
   readonly children?: readonly PositionedTexVListItem[];
 }
 
@@ -271,6 +280,7 @@ export interface TexVListBoxReportItem {
   readonly depth: number;
   readonly totalHeight: number;
   readonly blockIndex?: number;
+  readonly baseline?: TexVBoxBaseline;
   readonly role?: TexVBoxRole;
   readonly hboxRole?: TexHBoxRole;
   readonly listItem?: TexVBoxListItemLayout;
@@ -290,6 +300,7 @@ export interface TexVListBoxLayoutReport {
   readonly kind: "tex-vlist-boxes";
   readonly metrics: TexBoxMetrics;
   readonly baseline: TexVBoxBaseline;
+  readonly tree: readonly TexVListBoxReportItem[];
   readonly items: readonly TexVListBoxReportItem[];
 }
 
@@ -314,6 +325,7 @@ export interface TexVListLayoutOptions {
 
 export interface TexVListParagraphLineAssignment {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
 }
 
@@ -324,6 +336,7 @@ export interface TexVListParagraphLineOffset {
 
 export interface TexVListParagraphBoxMeasurement {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
   readonly lineOffsets: readonly TexVListParagraphLineOffset[];
   readonly standardMetrics: TexBoxMetrics;
@@ -334,7 +347,7 @@ export interface TexVListParagraphBoxMeasurement {
 
 export interface TexVListParagraphPlacement {
   readonly blockIndex: number;
-  readonly vlistPath?: readonly number[];
+  readonly vlistPath: readonly number[];
   readonly sourceSpan: TexSourceSpan;
   readonly lineIndices: readonly number[];
   readonly x: number;

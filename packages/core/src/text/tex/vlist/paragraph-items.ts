@@ -1,9 +1,9 @@
-import type { TexMetricProvider } from "./fonts/types.js";
+import type { TexMetricProvider } from "../fonts/types.js";
 import {
   simpleTexSegmentToLayoutItems,
   type TexLayoutInlineItem,
-} from "./layout-inline-items.js";
-import type { TexLayoutParagraphPlan } from "./layout-paragraph-preparation.js";
+} from "../layout-inline-items.js";
+import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
 
 export function texLayoutItemsForParagraphPlan(
   plan: TexLayoutParagraphPlan,

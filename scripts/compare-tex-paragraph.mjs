@@ -25,14 +25,37 @@ const fixtures = [
   { text: String.raw`Alpha \\[7pt] Beta`, width: 150, parindent: 0, texSyntax: true },
   { text: String.raw`Alpha \par Gamma`, width: 150, parindent: 10, texSyntax: true },
   { text: String.raw`\noindent Alpha \par Gamma \par \noindent Delta`, width: 150, parindent: 10, texSyntax: true },
+  { text: String.raw`Alpha \par \smallskip Beta \par \vspace{7pt} Gamma`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`Alpha \par \medskip Beta \par \bigskip Gamma`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`Alpha \par \vspace{-4pt} Beta \par \vskip -2pt Gamma`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`Alpha \par \vskip 6pt plus 2pt minus 3pt Beta`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{quote} Alpha \par \smallskip Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{quote} Alpha \par \vspace{7pt} Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{quote} Alpha \par \vskip -2pt Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{quote} Alpha \par \hrule width 24pt height 2pt depth 1pt Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{itemize}\item Alpha\item Beta\end{itemize}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`Before \par \begin{itemize}\item Alpha\item Beta\end{itemize} \par After`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{itemize}\item Alpha \par \vspace{7pt} More\item Beta\end{itemize}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{itemize}\item Alpha \par \hrule width 24pt height 2pt depth 1pt More\item Beta\end{itemize}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{enumerate}\item Alpha \begin{enumerate}\item Nested\end{enumerate}\item Beta\end{enumerate}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{description}\item[Term] Alpha\item Plain\end{description}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{itemize}\item Alpha \par More\item Beta\end{itemize}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{description}\item[Term] Alpha \par More\item[Next] Beta\end{description}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
 ];
 
 function texEscapeText(text, texSyntax = false) {
-  return escapeTexText(text, { preserveCommands: texSyntax });
+  return texSyntax ? text : escapeTexText(text);
 }
 
 function lineCollectorLua() {
-  return String.raw`local function collect(line)
+  return String.raw`local function scaled_pt(value)
+    if value == nil then
+      return 0
+    end
+    return value / 65536
+  end
+
+  local function collect(line)
     local out = table.pack()
     for n in node.traverse(line.list) do
       local kind = node.type(n.id)
@@ -56,9 +79,37 @@ function lineCollectorLua() {
     end
     return table.concat(out)
   end
+
+  local function glue_width(n)
+    if not (n.width == nil) then
+      return n.width
+    end
+    if not (n.spec == nil) and not (n.spec.width == nil) then
+      return n.spec.width
+    end
+    return 0
+  end
+
+  local y = 0
   for n in node.traverse(tex.box[0].list) do
-    if node.type(n.id) == "hlist" then
-      texio.write_nl("term", "TIKZ_PARAGRAPH_LINE " .. collect(n) .. " TIKZ_PARAGRAPH_END")
+    local kind = node.type(n.id)
+    if kind == "hlist" then
+      local baseline = y + scaled_pt(n.height)
+      texio.write_nl(
+        "term",
+        "TIKZ_PARAGRAPH_LINE " ..
+          baseline ..
+          " " ..
+          collect(n) ..
+          " TIKZ_PARAGRAPH_END"
+      )
+      y = y + scaled_pt(n.height) + scaled_pt(n.depth)
+    elseif kind == "glue" then
+      y = y + scaled_pt(glue_width(n))
+    elseif kind == "kern" then
+      y = y + scaled_pt(n.kern)
+    elseif kind == "rule" then
+      y = y + scaled_pt(n.height) + scaled_pt(n.depth)
     end
   end`;
 }
@@ -113,16 +164,143 @@ function luaTeXLines(text, width, parindent, texSyntax = false) {
     .map((line) => {
       const marked = line.slice("TIKZ_PARAGRAPH_LINE ".length);
       const end = marked.indexOf(" TIKZ_PARAGRAPH_END");
-      return (end >= 0 ? marked.slice(0, end) : marked).trimEnd();
+      const payload = end >= 0 ? marked.slice(0, end) : marked;
+      const spaceIndex = payload.indexOf(" ");
+      if (spaceIndex < 0) {
+        throw new Error(`Malformed oracle line payload: ${payload}`);
+      }
+      return {
+        y: Number(payload.slice(0, spaceIndex)),
+        text: payload.slice(spaceIndex + 1).trimEnd(),
+      };
     });
 }
 
-function reportLines(report) {
-  return report.lines.map((line) =>
-    line.segments
+function reportLines(report, layout) {
+  const placementByLineIndex = new Map(
+    (layout?.linePlacements ?? []).map((placement) => [placement.lineIndex, placement])
+  );
+  const firstLineTop = layout?.linePlacements[0]?.y ?? 0;
+  const defaultAscent = layout?.baseline?.kind === "explicit"
+    ? layout.baseline.y - firstLineTop
+    : (report.lines[0]?.ascent ?? 0);
+  return report.lines.map((line, index) => ({
+    y: (placementByLineIndex.get(line.lineIndex ?? index)?.y ?? line.y ?? 0) +
+      (lineStartsAfterVListRule(layout, line.lineIndex)
+        || lineEndsBeforeVListRule(layout, line.lineIndex)
+        || lineHasPriorVListRule(layout, line.lineIndex)
+        ? (line.ascent ?? defaultAscent)
+        : defaultAscent),
+    text: line.segments
+      // The Lua oracle collector reads paragraph body hlists; list labels live
+      // in nested label boxes, so compare body text here and validate labels in
+      // dedicated SVG/vlist tests.
+      .filter((segment) => segment.role !== "list-label")
       .map((segment) => segment.text ?? "")
       .join("")
-      .trimEnd()
+      .trimEnd(),
+  }));
+}
+
+function lineStartsAfterVListRule(layout, lineIndex) {
+  const paragraph = layout?.paragraphPlacements?.find((placement) =>
+    placement.lineIndices?.[0] === lineIndex
+  );
+  if (!paragraph?.vlistPath?.length) {
+    return false;
+  }
+  const siblingIndex = paragraph.vlistPath.at(-1);
+  if (typeof siblingIndex !== "number" || siblingIndex <= 0) {
+    return false;
+  }
+  const parentPath = paragraph.vlistPath.slice(0, -1);
+  for (let index = siblingIndex - 1; index >= 0; index -= 1) {
+    const previousPath = [...parentPath, index];
+    const previous = layout?.boxReport?.items?.find((item) =>
+      samePath(item.path, previousPath)
+    );
+    if (!previous || previous.itemKind === "glue" || previous.itemKind === "penalty") {
+      continue;
+    }
+    return previous.itemKind === "rule";
+  }
+  return false;
+}
+
+function lineEndsBeforeVListRule(layout, lineIndex) {
+  const paragraph = layout?.paragraphPlacements?.find((placement) =>
+    placement.lineIndices?.at(-1) === lineIndex
+  );
+  if (!paragraph?.vlistPath?.length) {
+    return false;
+  }
+  const siblingIndex = paragraph.vlistPath.at(-1);
+  if (typeof siblingIndex !== "number") {
+    return false;
+  }
+  const parentPath = paragraph.vlistPath.slice(0, -1);
+  for (let index = siblingIndex + 1; ; index += 1) {
+    const nextPath = [...parentPath, index];
+    const next = layout?.boxReport?.items?.find((item) =>
+      samePath(item.path, nextPath)
+    );
+    if (!next) {
+      return false;
+    }
+    if (next.itemKind === "glue" || next.itemKind === "penalty") {
+      continue;
+    }
+    return next.itemKind === "rule";
+  }
+}
+
+function lineHasPriorVListRule(layout, lineIndex) {
+  const paragraph = layout?.paragraphPlacements?.find((placement) =>
+    placement.lineIndices?.includes(lineIndex)
+  );
+  if (!paragraph?.vlistPath?.length) {
+    return false;
+  }
+  const items = layout?.boxReport?.items ?? [];
+  const paragraphIndex = items.findIndex((item) =>
+    samePath(item.path, paragraph.vlistPath)
+  );
+  if (paragraphIndex < 0) {
+    return false;
+  }
+  return items.slice(0, paragraphIndex).some((item) => item.itemKind === "rule");
+}
+
+function samePath(left, right) {
+  return Array.isArray(left) &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index]);
+}
+
+function lineTexts(lines) {
+  return lines.map((line) => line.text);
+}
+
+function lineYs(lines) {
+  return lines.map((line) => Number(line.y.toFixed(4)));
+}
+
+function lineBaselineDeltas(lines) {
+  const first = lines[0]?.y ?? 0;
+  return lines.map((line) => Number((line.y - first).toFixed(4)));
+}
+
+function lineBaselineDeltasClose(actual, expected, epsilon = 0.02) {
+  if (actual.length !== expected.length) {
+    return false;
+  }
+  const actualFirst = actual[0]?.y ?? 0;
+  const expectedFirst = expected[0]?.y ?? 0;
+  return actual.every((line, index) =>
+    Math.abs(
+      (line.y - actualFirst) -
+        ((expected[index]?.y ?? Number.NaN) - expectedFirst)
+    ) <= epsilon
   );
 }
 
@@ -135,16 +313,29 @@ for (const fixture of fixtures) {
     tolerance: 200,
     hyphenator: { hyphenate: () => [] },
   });
-  const actual = actualResult.report ? reportLines(actualResult.report) : [];
+  const actual = actualResult.report
+    ? reportLines(actualResult.report, actualResult.vlistLayout)
+    : [];
   const expected = luaTeXLines(fixture.text, fixture.width, fixture.parindent, fixture.texSyntax);
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  const textMatches = JSON.stringify(lineTexts(actual)) === JSON.stringify(lineTexts(expected));
+  const yMatches = fixture.compareY === true ? lineBaselineDeltasClose(actual, expected) : true;
+  if (!textMatches || !yMatches) {
     failures += 1;
     console.error(`FAIL ${JSON.stringify(fixture)}`);
-    console.error(`  ours: ${JSON.stringify(actual)}`);
-    console.error(`  tex:  ${JSON.stringify(expected)}`);
+    console.error(`  ours text: ${JSON.stringify(lineTexts(actual))}`);
+    console.error(`  tex text:  ${JSON.stringify(lineTexts(expected))}`);
+    if (fixture.compareY === true) {
+      console.error(`  ours baseline y: ${JSON.stringify(lineYs(actual))}`);
+      console.error(`  tex baseline y:  ${JSON.stringify(lineYs(expected))}`);
+      console.error(`  ours deltas:     ${JSON.stringify(lineBaselineDeltas(actual))}`);
+      console.error(`  tex deltas:      ${JSON.stringify(lineBaselineDeltas(expected))}`);
+    }
     continue;
   }
-  console.log(`ok ${JSON.stringify(fixture.text)} ${actual.length} lines`);
+  const suffix = fixture.compareY === true
+    ? ` baselineDeltas=${JSON.stringify(lineBaselineDeltas(actual))}`
+    : "";
+  console.log(`ok ${JSON.stringify(fixture.text)} ${actual.length} lines${suffix}`);
 }
 
 if (failures > 0) {

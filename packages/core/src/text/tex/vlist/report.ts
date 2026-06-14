@@ -82,6 +82,7 @@ export interface TexVListCombinedParagraphReportInput {
   }>;
   readonly paragraphLineSpans: readonly {
     readonly blockIndex: number;
+    readonly vlistPath: readonly number[];
     readonly lineIndices: readonly number[];
   }[];
   readonly errors: readonly string[];
@@ -209,6 +210,7 @@ function texVListParagraphLineAssignmentsFromSpans(
 ): readonly TexVListParagraphLineAssignment[] {
   return spans.map((span) => ({
     blockIndex: span.blockIndex,
+    vlistPath: [...span.vlistPath],
     lineIndices: [...span.lineIndices],
   }));
 }

@@ -2,17 +2,19 @@ import { parseLength } from "../../../semantic/coords/parse-length.js";
 import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { TexVListItemMeasurer } from "./layout.js";
+import { texVListPathKey } from "./paths.js";
 import type {
   TexBoxMetrics,
   TexHorizontalLayout,
   TexLineBox,
+  TexParagraphItem,
   TexVListDocument,
   TexVListItem,
   TexVListParagraphBoxMeasurement,
   TexVListParagraphHorizontalLayout,
   TexVListParagraphLineAssignment,
 } from "./types.js";
-import { texVListParagraphItems } from "./traversal.js";
+import { texVListParagraphEntries } from "./traversal.js";
 
 export interface TexVListParagraphHorizontalLayouts {
   readonly report: ParagraphLayoutReport;
@@ -30,6 +32,7 @@ export function createTexVListParagraphHorizontalLayoutsFromLineBoxes(params: {
     report: params.report,
     paragraphLayouts: params.paragraphLineAssignments.map((assignment) => ({
       blockIndex: assignment.blockIndex,
+      vlistPath: assignment.vlistPath,
       lineIndices: assignment.lineIndices,
       horizontal: texHorizontalLayoutForParagraphAssignment(
         assignment,
@@ -44,26 +47,33 @@ export function validateTexVListParagraphMeasurements(
   document: TexVListDocument,
   measurements: readonly TexVListParagraphBoxMeasurement[]
 ): void {
-  const paragraphBlocks = texVListParagraphBlockSet(document);
-  const measuredBlocks = new Set<number>();
+  const paragraphs = texVListParagraphIdentityMap(document);
+  const measuredKeys = new Set<string>();
   for (const measurement of measurements) {
-    if (measuredBlocks.has(measurement.blockIndex)) {
+    const key = texVListPathKey(measurement.vlistPath);
+    if (measuredKeys.has(key)) {
       throw new Error(
-        `TeX vlist paragraph measurements contain duplicate block ${measurement.blockIndex}.`
+        `TeX vlist paragraph measurements contain duplicate path ${key}.`
       );
     }
-    if (!paragraphBlocks.has(measurement.blockIndex)) {
+    const paragraph = paragraphs.get(key);
+    if (!paragraph) {
       throw new Error(
-        `TeX vlist paragraph measurement references missing paragraph block ${measurement.blockIndex}.`
+        `TeX vlist paragraph measurement references missing paragraph path ${key}.`
       );
     }
-    measuredBlocks.add(measurement.blockIndex);
+    if (paragraph.blockIndex !== measurement.blockIndex) {
+      throw new Error(
+        `TeX vlist paragraph measurement path ${key} block identity mismatch: item ${paragraph.blockIndex}, measurement ${measurement.blockIndex}.`
+      );
+    }
+    measuredKeys.add(key);
   }
 
-  for (const blockIndex of paragraphBlocks) {
-    if (!measuredBlocks.has(blockIndex)) {
+  for (const key of paragraphs.keys()) {
+    if (!measuredKeys.has(key)) {
       throw new Error(
-        `TeX vlist paragraph measurements are missing paragraph block ${blockIndex}.`
+        `TeX vlist paragraph measurements are missing paragraph path ${key}.`
       );
     }
   }
@@ -87,6 +97,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
     : 0;
   return {
     blockIndex: paragraph.blockIndex,
+    vlistPath: paragraph.vlistPath,
     lineIndices,
     lineOffsets: lines.map((line) => ({
       lineIndex: line.lineIndex,
@@ -105,15 +116,16 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
 
 export function texVListParagraphMeasurementMap(
   measurements: readonly TexVListParagraphBoxMeasurement[]
-): ReadonlyMap<number, TexVListParagraphBoxMeasurement> {
-  const byBlock = new Map<number, TexVListParagraphBoxMeasurement>();
+): ReadonlyMap<string, TexVListParagraphBoxMeasurement> {
+  const byPath = new Map<string, TexVListParagraphBoxMeasurement>();
   for (const measurement of measurements) {
-    if (byBlock.has(measurement.blockIndex)) {
+    const key = texVListPathKey(measurement.vlistPath);
+    if (byPath.has(key)) {
       throw new Error(
-        `TeX vlist layout received duplicate paragraph measurement for block ${measurement.blockIndex}.`
+        `TeX vlist layout received duplicate paragraph measurement for path ${key}.`
       );
     }
-    byBlock.set(measurement.blockIndex, measurement);
+    byPath.set(key, measurement);
     const lineIndices = new Set(measurement.lineIndices);
     for (const lineIndex of measurement.lineIndices) {
       if (!measurement.lineOffsets.some((line) => line.lineIndex === lineIndex)) {
@@ -137,20 +149,26 @@ export function texVListParagraphMeasurementMap(
       seenLineOffsets.add(line.lineIndex);
     }
   }
-  return byBlock;
+  return byPath;
 }
 
 export function createMeasuredParagraphVListMeasurer(
-  paragraphMeasurements: ReadonlyMap<number, TexVListParagraphBoxMeasurement>
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
 ): TexVListItemMeasurer {
-  return (item, cursor, index, items) => {
+  return (item, cursor, index, items, path) => {
     if (item.kind !== "paragraph") {
       return null;
     }
-    const measurement = paragraphMeasurements.get(item.paragraph.blockIndex);
+    const key = texVListPathKey(path);
+    const measurement = paragraphMeasurements.get(key);
     if (!measurement) {
       throw new Error(
-        `TeX vlist layout is missing paragraph measurement for block ${item.paragraph.blockIndex}.`
+        `TeX vlist layout is missing paragraph measurement for path ${key}.`
+      );
+    }
+    if (measurement.blockIndex !== item.paragraph.blockIndex) {
+      throw new Error(
+        `TeX vlist paragraph measurement path ${key} block identity mismatch: item ${item.paragraph.blockIndex}, measurement ${measurement.blockIndex}.`
       );
     }
     if (measurement.lineIndices.length === 0) {
@@ -247,18 +265,14 @@ function sameLineIndices(
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function texVListParagraphBlockSet(document: TexVListDocument): ReadonlySet<number> {
-  const paragraphBlocks = new Set<number>();
-  for (const paragraph of texVListParagraphItems(document.items)) {
-    const blockIndex = paragraph.paragraph.blockIndex;
-    if (paragraphBlocks.has(blockIndex)) {
-      throw new Error(
-        `TeX vlist document contains duplicate paragraph block ${blockIndex}.`
-      );
-    }
-    paragraphBlocks.add(blockIndex);
+function texVListParagraphIdentityMap(
+  document: TexVListDocument
+): ReadonlyMap<string, TexParagraphItem> {
+  const paragraphs = new Map<string, TexParagraphItem>();
+  for (const entry of texVListParagraphEntries(document.items)) {
+    paragraphs.set(texVListPathKey(entry.path), entry.item);
   }
-  return paragraphBlocks;
+  return paragraphs;
 }
 
 function texLineLeadingPt(lineLeading: string | undefined): number {

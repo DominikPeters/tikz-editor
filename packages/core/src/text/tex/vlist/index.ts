@@ -42,6 +42,9 @@ export {
 } from "./list-attachments.js";
 export {
   attachTexHBoxesBeforeVListParagraphs,
+  type TexHBoxBeforeParagraphAttachment,
+  type TexHBoxBeforeParagraphAttachmentResult,
+  type TexVListPathRemap,
 } from "./attachments.js";
 export {
   validateTexVListParagraphMeasurements,
@@ -81,6 +84,34 @@ export {
   type TexParagraphScopeLayout,
   type TexParagraphScopePolicy,
 } from "./paragraph-scope.js";
+export {
+  prepareTexLayoutParagraphsFromVList,
+  type TexLayoutParagraphBreakContext,
+  type TexLayoutParagraphLineLabel,
+  type TexLayoutParagraphPlan,
+  type TexLayoutParagraphPreparation,
+  type TexLayoutParagraphPreparationParams,
+} from "./paragraph-plans.js";
+export {
+  texLayoutItemsForParagraphPlan,
+} from "./paragraph-items.js";
+export {
+  breakSimpleTexLayoutDocumentParagraphs,
+  type TexLayoutParagraphBreakEntriesResult,
+} from "./paragraph-breaker.js";
+export {
+  DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY,
+  type TexParagraphBreakScopePolicy,
+  type TexParagraphRightskipStretchMode,
+} from "../paragraph-break.js";
+export {
+  createSimpleTexLayoutDocumentIr,
+  createSimpleTexLayoutDocumentIrFromPreparation,
+  prepareSimpleTexLayoutDocument,
+  type SimpleTexLayoutDocumentIr,
+  type SimpleTexLayoutDocumentPreparation,
+  type SimpleTexLayoutDocumentPreparationParams,
+} from "./document.js";
 export {
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,

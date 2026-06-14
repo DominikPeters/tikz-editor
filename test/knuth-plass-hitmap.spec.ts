@@ -28,7 +28,7 @@ import {
 } from "../packages/core/src/text/knuth-plass/editor/mathPrefix.js";
 import { parseSourceSpans } from "../packages/core/src/text/knuth-plass/editor/sourceParser.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
-import { registerTexVListLayoutsOnOutputJax } from "../packages/core/src/text/tex/vlist/index.js";
+import { registerTexVListLayoutsOnOutputJax, texVListBoxLayoutReport } from "../packages/core/src/text/tex/vlist/index.js";
 
 function makeLineElement(
   bounds: { left: number; top: number; right: number; bottom: number },
@@ -1348,9 +1348,15 @@ describe("knuth-plass hitmap line ranges", () => {
         metrics: { width: report.width, height: 8, depth: 16 },
         baseline: { kind: "explicit", y: 8 },
         items: [],
+        boxReport: texVListBoxLayoutReport(
+          [],
+          { width: report.width, height: 8, depth: 16 },
+          { kind: "explicit", y: 8 }
+        ),
         paragraphPlacements: [
           {
             blockIndex: 0,
+            vlistPath: [0],
             sourceSpan: { start: 0, end: 17 },
             lineIndices: [0, 1],
             x: 0,

@@ -78,7 +78,7 @@ describe("simple TeX paragraph IR", () => {
 
   it("parses vertical glue commands as non-paragraph block items", () => {
     const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \smallskip \noindent Beta \par \vspace{7pt} Gamma \par \vskip 5pt plus 2pt minus 1pt Delta \par \vfill Epsilon \par \vspace*{-4pt} Zeta`
+      String.raw`Alpha \par \smallskip \noindent Beta \par \medskip Gamma \par \bigskip Delta \par \vspace{7pt} Epsilon \par \vskip 5pt plus 2pt minus 1pt Zeta \par \vfill Eta \par \vspace*{-4pt} Theta`
     );
 
     expect(parsed.unsupportedCommand).toBe(false);
@@ -89,6 +89,8 @@ describe("simple TeX paragraph IR", () => {
       "Delta",
       "Epsilon",
       "Zeta",
+      "Eta",
+      "Theta",
     ]);
     expect(parsed.items.map((item) =>
       item.kind === "vertical-glue"
@@ -102,7 +104,7 @@ describe("simple TeX paragraph IR", () => {
           }
         : {
             kind: item.kind,
-            text: item.block.text,
+            text: item.kind === "paragraph" ? item.block.text : undefined,
           }
     )).toEqual([
       { kind: "paragraph", text: "Alpha" },
@@ -117,13 +119,31 @@ describe("simple TeX paragraph IR", () => {
       { kind: "paragraph", text: "Beta" },
       {
         kind: "vertical-glue",
+        command: "medskip",
+        size: 6,
+        stretch: 2,
+        shrink: 2,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Gamma" },
+      {
+        kind: "vertical-glue",
+        command: "bigskip",
+        size: 12,
+        stretch: 4,
+        shrink: 4,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Delta" },
+      {
+        kind: "vertical-glue",
         command: "vspace",
         size: 7,
         stretch: undefined,
         shrink: undefined,
         stretchOrder: "normal",
       },
-      { kind: "paragraph", text: "Gamma" },
+      { kind: "paragraph", text: "Epsilon" },
       {
         kind: "vertical-glue",
         command: "vskip",
@@ -132,7 +152,7 @@ describe("simple TeX paragraph IR", () => {
         shrink: 1,
         stretchOrder: "normal",
       },
-      { kind: "paragraph", text: "Delta" },
+      { kind: "paragraph", text: "Zeta" },
       {
         kind: "vertical-glue",
         command: "vfill",
@@ -141,7 +161,7 @@ describe("simple TeX paragraph IR", () => {
         shrink: undefined,
         stretchOrder: "fill",
       },
-      { kind: "paragraph", text: "Epsilon" },
+      { kind: "paragraph", text: "Eta" },
       {
         kind: "vertical-glue",
         command: "vspace",
@@ -150,7 +170,7 @@ describe("simple TeX paragraph IR", () => {
         shrink: undefined,
         stretchOrder: "normal",
       },
-      { kind: "paragraph", text: "Zeta" },
+      { kind: "paragraph", text: "Theta" },
     ]);
   });
 
@@ -631,13 +651,18 @@ describe("simple TeX paragraph IR", () => {
       alignmentProfile: "latex-quote",
     });
     expect(layout.paragraphPlans[0]?.breakContext).toMatchObject({
-      quoteContextActive: true,
-      listContextActive: false,
-      leftMarginWidth: 2.5 * font.atPt,
-      rightMarginWidth: 2.5 * font.atPt,
+      scopePolicy: {
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 2.5 * font.atPt,
+        allowParagraphIndent: true,
+        allowForcedBreakIndent: true,
+        forceParfillStretch: true,
+        suppressRaggedLeftCenterLeftskipStretch: true,
+        rightskipStretchMode: "ragged-right-infinite-otherwise-zero",
+      },
     });
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
-      "glue:13",
+      "glue:10",
       "paragraph:Alpha Beta",
     ]);
   });
@@ -660,8 +685,8 @@ describe("simple TeX paragraph IR", () => {
       const label = lineLabel?.label;
       return {
         text: plan.segment.text,
-        leftMarginWidth: breakContext?.leftMarginWidth,
-        rightMarginWidth: breakContext?.rightMarginWidth,
+        leftMarginWidth: breakContext?.scopePolicy.leftMarginWidth,
+        rightMarginWidth: breakContext?.scopePolicy.rightMarginWidth,
         label: label?.items
           .filter((item) => item.kind === "text")
           .map((item) => item.text)
@@ -715,8 +740,8 @@ describe("simple TeX paragraph IR", () => {
       const breakContext = plan.breakContext;
       return {
         text: plan.segment.text,
-        listContextActive: breakContext?.listContextActive,
-        leftMarginWidth: breakContext?.leftMarginWidth,
+        allowParagraphIndent: breakContext?.scopePolicy.allowParagraphIndent,
+        leftMarginWidth: breakContext?.scopePolicy.leftMarginWidth,
         firstLineIndentWidth: breakContext?.firstLineIndentWidth,
         textItems: texLayoutItemsForParagraphPlan(plan, {
           atPt: font.atPt,
@@ -728,7 +753,7 @@ describe("simple TeX paragraph IR", () => {
     })).toEqual([
       {
         text: "Alpha",
-        listContextActive: true,
+        allowParagraphIndent: false,
         leftMarginWidth: 2.5 * font.atPt,
         firstLineIndentWidth: -2 * font.atPt,
         textItems: [
@@ -738,7 +763,7 @@ describe("simple TeX paragraph IR", () => {
       },
       {
         text: "Plain",
-        listContextActive: true,
+        allowParagraphIndent: false,
         leftMarginWidth: 2.5 * font.atPt,
         firstLineIndentWidth: -2.5 * font.atPt,
         textItems: [
@@ -857,12 +882,12 @@ describe("simple TeX paragraph IR", () => {
 
     expect(layout.paragraphPlans.map((plan) => ({
       text: plan.segment.text,
-      quoteContextActive: plan.breakContext.quoteContextActive,
+      quoteRightskipMode: plan.breakContext.scopePolicy.rightskipStretchMode,
     }))).toEqual([
-      { text: "Alpha", quoteContextActive: false },
-      { text: "Beta", quoteContextActive: true },
-      { text: "Gamma", quoteContextActive: true },
-      { text: "Delta", quoteContextActive: false },
+      { text: "Alpha", quoteRightskipMode: "default" },
+      { text: "Beta", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+      { text: "Gamma", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+      { text: "Delta", quoteRightskipMode: "default" },
     ]);
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "paragraph:Alpha",
@@ -954,7 +979,7 @@ describe("simple TeX paragraph IR", () => {
     expect(preparation.paragraphPreparation.paragraphPlans.map((plan) => ({
       blockIndex: plan.blockIndex,
       text: plan.segment.text,
-      leftMarginWidth: plan.breakContext.leftMarginWidth,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
     }))).toEqual([
       { blockIndex: 0, text: "Alpha", leftMarginWidth: 0 },
       { blockIndex: 1, text: "Beta", leftMarginWidth: 25 },
@@ -1014,10 +1039,15 @@ describe("simple TeX paragraph IR", () => {
       breakContext: {
         blockIndex: 0,
         segmentIndex: 0,
-        leftMarginWidth: 25,
-        rightMarginWidth: 0,
-        quoteContextActive: false,
-        listContextActive: true,
+        scopePolicy: {
+          leftMarginWidth: 25,
+          rightMarginWidth: 0,
+          allowParagraphIndent: false,
+          allowForcedBreakIndent: false,
+          forceParfillStretch: true,
+          suppressRaggedLeftCenterLeftskipStretch: true,
+          rightskipStretchMode: "ragged-right-infinite-center-zero",
+        },
       },
       lineLabel: {
         blockIndex: 0,
@@ -1042,10 +1072,10 @@ describe("simple TeX paragraph IR", () => {
 
     expect(layout.paragraphPlans.map((plan) => ({
       text: plan.segment.text,
-      quoteContextActive: plan.breakContext.quoteContextActive,
+      quoteRightskipMode: plan.breakContext.scopePolicy.rightskipStretchMode,
     }))).toEqual([
-      { text: "Alpha", quoteContextActive: true },
-      { text: "Beta", quoteContextActive: true },
+      { text: "Alpha", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+      { text: "Beta", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
     ]);
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "glue:13",
@@ -1074,7 +1104,10 @@ describe("simple TeX paragraph IR", () => {
         alignmentProfile: undefined,
       });
       expect(layout.paragraphPlans[0]?.breakContext).toMatchObject({
-        quoteContextActive: true,
+        scopePolicy: {
+          forceParfillStretch: true,
+          rightskipStretchMode: "ragged-right-infinite-otherwise-zero",
+        },
       });
     }
   });

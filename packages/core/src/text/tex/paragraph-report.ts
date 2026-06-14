@@ -103,6 +103,7 @@ function buildTexLineReport(
     segments.push({
       runIndex: line.startRun,
       kind: "text",
+      role: params.runs[line.startRun]?.role,
       text: line.startPendingText,
       startOffset: 0,
       endOffset: line.startPendingText.length,
@@ -153,6 +154,7 @@ function buildTexLineReport(
       segments.push({
         runIndex: run.runIndex,
         kind: "text",
+        role: run.role,
         text: run.text.slice(startOffset, endOffset),
         startOffset,
         endOffset,
@@ -182,6 +184,7 @@ function buildTexLineReport(
     segments.push({
       runIndex: run.runIndex,
       kind: "space",
+      role: run.role,
       text: " ",
       sourceStartRaw: run.sourceStart,
       sourceEndRaw: run.sourceEnd,
@@ -209,6 +212,7 @@ function buildTexLineReport(
     segments.push({
       runIndex: line.break.runIndex,
       kind: "text",
+      role: params.runs[line.break.runIndex]?.role,
       text: discretionary.preBreakText,
       startOffset: discretionary.replaceStart,
       endOffset: splitOffset,
@@ -232,6 +236,7 @@ function buildTexLineReport(
     segments.push({
       runIndex: line.break.runIndex,
       kind: "text",
+      role: params.runs[line.break.runIndex]?.role,
       text: "-",
       startOffset: line.break.splitOffset ?? 0,
       endOffset: line.break.splitOffset ?? 0,

@@ -7,6 +7,7 @@ import type {
 
 export interface TexVListParagraphEntry {
   readonly item: TexParagraphItem;
+  readonly path: readonly number[];
   readonly ancestors: readonly TexVBoxItem[];
 }
 
@@ -20,22 +21,33 @@ export function texVListParagraphEntries(
   items: readonly TexVListItem[]
 ): readonly TexVListParagraphEntry[] {
   const entries: TexVListParagraphEntry[] = [];
-  collectTexVListParagraphEntries(items, [], entries);
+  collectTexVListParagraphEntries(items, [], [], entries);
   return entries;
 }
 
 function collectTexVListParagraphEntries(
   items: readonly TexVListItem[],
   ancestors: readonly TexVBoxItem[],
+  pathPrefix: readonly number[] = [],
   entries: TexVListParagraphEntry[]
 ): void {
-  for (const item of items) {
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item) {
+      continue;
+    }
+    const path = [...pathPrefix, index];
     if (item.kind === "paragraph") {
-      entries.push({ item, ancestors });
+      entries.push({ item, path, ancestors });
       continue;
     }
     if (item.kind === "vbox") {
-      collectTexVListParagraphEntries(item.items, [...ancestors, item], entries);
+      collectTexVListParagraphEntries(
+        item.items,
+        [...ancestors, item],
+        path,
+        entries
+      );
     }
   }
 }

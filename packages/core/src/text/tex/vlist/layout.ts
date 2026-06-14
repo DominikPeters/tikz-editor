@@ -5,6 +5,7 @@ import type {
   TexGlueItem,
   TexGlueOrder,
   TexVBoxItem,
+  TexVBoxBaseline,
   TexVListItem,
   TexVListLayoutOptions,
 } from "./types.js";
@@ -26,7 +27,8 @@ export type TexVListItemMeasurer = (
   item: TexVListItem,
   cursor: number,
   index: number,
-  items: readonly TexVListItem[]
+  items: readonly TexVListItem[],
+  path: readonly number[]
 ) => MeasuredTexVListItem | null;
 
 export function computeTexVListNaturalTotalHeight(
@@ -69,7 +71,7 @@ export function layoutTexVListItems(
       continue;
     }
 
-    const measured = measureItem(item, cursor, index, items) ?? measuredBoxMetricsForVListItem(item);
+    const measured = measureItem(item, cursor, index, items, path) ?? measuredBoxMetricsForVListItem(item);
     if (measured) {
       const y = measured.y ?? cursor;
       const advance = measured.advance ?? measured.metrics.height + measured.metrics.depth;
@@ -93,6 +95,7 @@ export function layoutTexVListItems(
         x: xOffset,
         y: top,
         metrics: nested.metrics,
+        baseline: nested.baseline,
         children: nested.children,
       });
       cursor = nested.cursor;
@@ -110,6 +113,7 @@ function layoutTexVBoxItem(
 ): {
   readonly children: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
+  readonly baseline: TexVBoxBaseline;
   readonly cursor: number;
 } {
   const leftMarginWidth = item.layout?.leftMarginWidth ?? 0;
@@ -147,9 +151,13 @@ function layoutTexVBoxItem(
     : texVListRootVerticalOffset(laidOutHeight, targetHeight, item.alignment);
   const children = offsetPositionedTexVListItems(laidOut.positioned, childOffset);
   const cursor = roundTexPt(top + advance);
+  const baselineY = baselineYForVBox(children, top);
   return {
     children,
     metrics: metricsForVBox(children, top, cursor, xOffset, leftMarginWidth, rightMarginWidth),
+    baseline: baselineY === null
+      ? { kind: "none" }
+      : { kind: "explicit", y: roundTexPt(baselineY - top) },
     cursor,
   };
 }
@@ -344,13 +352,7 @@ function metricsForVBox(
   leftMarginWidth = 0,
   rightMarginWidth = 0
 ): TexBoxMetrics {
-  const firstBox = positioned.find((item) =>
-    item.item.kind !== "glue" &&
-    (item.item.kind !== "hbox" || item.item.affectsVBoxBaseline !== false)
-  );
-  const baselineY = firstBox
-    ? firstBox.y + firstBox.metrics.height
-    : top;
+  const baselineY = baselineYForVBox(positioned, top) ?? top;
   const contentRight = Math.max(
     leftMarginWidth,
     ...positioned.map((item) => item.x - xOffset + item.metrics.width)
@@ -361,6 +363,26 @@ function metricsForVBox(
     height: roundTexPt(Math.max(0, baselineY - top)),
     depth: roundTexPt(Math.max(0, bottom - baselineY)),
   };
+}
+
+function baselineYForVBox(
+  positioned: readonly PositionedTexVListItem[],
+  top: number
+): number | null {
+  const firstBox = positioned.find((item) =>
+    item.item.kind !== "glue" &&
+    (item.item.kind !== "hbox" || item.item.affectsVBoxBaseline !== false)
+  );
+  if (!firstBox) {
+    return null;
+  }
+  if (firstBox.baseline?.kind === "explicit") {
+    return roundTexPt(firstBox.y + firstBox.baseline.y);
+  }
+  if (firstBox.baseline?.kind === "none") {
+    return top;
+  }
+  return roundTexPt(firstBox.y + firstBox.metrics.height);
 }
 
 export function texVListBaselineY(

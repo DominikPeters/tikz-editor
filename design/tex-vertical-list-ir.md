@@ -290,11 +290,14 @@ Recommended package structure:
 ```text
 packages/core/src/text/tex/
   ir.ts                    # existing simple TeX frontend, eventually renamed
-  layout-ir.ts             # current block-to-paragraph layout pass
   paragraph.ts             # paragraph shaping/breaking/reporting
   vlist/
     types.ts               # TexVListItem, TexBoxMetrics, source spans
     lower-simple.ts        # current simple text blocks -> vlist
+    document.ts            # simple TeX document preparation and layout IR
+    paragraph-plans.ts     # vlist paragraph extraction and scoped plans
+    paragraph-items.ts     # paragraph plans -> horizontal breaker items
+    paragraph-breaker.ts   # paragraph-plan breaking orchestration
     layout.ts              # vlist layout algorithm
     report.ts              # vlist -> ParagraphLayoutReport assembly
 ```
@@ -374,9 +377,9 @@ consume without forking layout fundamentals.
 - **`\vfill` stretch order:** represent exact stretch orders (`fil`, `fill`,
   `filll`) from the start. The type cost is tiny, and collapsing them would
   create avoidable migration work.
-- **File naming:** do not rename `layout-ir.ts` during V0. Introduce
-  `vlist/` alongside it; rename only after behavior is stable and ownership is
-  obvious.
+- **File naming:** keep ownership in `vlist/` once behavior is stable. The
+  earlier top-level `layout-*` transition modules should not remain as empty
+  compatibility façades once internal imports have moved to vlist-owned APIs.
 - **Display math metrics:** treat display math as a future measured box
   provider. When added, it should expose width/height/depth from the same
   rendered artifact used for hit testing, not a separate estimate.

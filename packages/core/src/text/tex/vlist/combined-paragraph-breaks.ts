@@ -6,6 +6,7 @@ import type {
 import type { ShapedTexTextRun } from "../fonts/types.js";
 import type { SimpleTexParagraphSegment } from "../ir.js";
 import type { TexLayoutLabel } from "../layout-inline-items.js";
+import { texVListPathKey } from "./paths.js";
 
 export interface TexParagraphBreakResult {
   readonly lines: readonly GreedyLine[];
@@ -18,6 +19,7 @@ export interface TexParagraphBreakResult {
 
 export interface TexBrokenLayoutParagraphOwner {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly forcedBreakAfter?: SimpleTexParagraphSegment["forcedBreakAfter"];
 }
 
@@ -34,6 +36,7 @@ export interface TexLineLabel {
 
 export interface TexCombinedParagraphLineSpan {
   readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
 }
 
@@ -102,6 +105,7 @@ export function combineTexBrokenLayoutParagraphs(params: {
     appendCombinedParagraphLineSpan(
       paragraphLineSpans,
       paragraph.blockIndex,
+      paragraph.vlistPath,
       blockLineIndices
     );
     errors.push(...broken.errors);
@@ -127,22 +131,33 @@ export function combineTexBrokenLayoutParagraphs(params: {
 function appendCombinedParagraphLineSpan(
   spans: TexCombinedParagraphLineSpan[],
   blockIndex: number,
+  vlistPath: readonly number[],
   lineIndices: readonly number[]
 ): void {
-  const existingIndex = spans.findIndex((span) => span.blockIndex === blockIndex);
+  const pathKey = texVListPathKey(vlistPath);
+  const existingIndex = spans.findIndex(
+    (span) => texVListPathKey(span.vlistPath) === pathKey
+  );
   if (existingIndex < 0) {
     spans.push({
       blockIndex,
+      vlistPath: [...vlistPath],
       lineIndices: [...lineIndices],
     });
     return;
   }
   const existing = spans[existingIndex];
   if (!existing) {
-    throw new Error(`Missing TeX combined paragraph line span for block ${blockIndex}.`);
+    throw new Error(`Missing TeX combined paragraph line span for path ${pathKey}.`);
+  }
+  if (existing.blockIndex !== blockIndex) {
+    throw new Error(
+      `TeX combined paragraph line span block mismatch for path ${pathKey}.`
+    );
   }
   spans[existingIndex] = {
     blockIndex,
+    vlistPath: [...existing.vlistPath],
     lineIndices: [...existing.lineIndices, ...lineIndices],
   };
 }

@@ -17,7 +17,7 @@ import {
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
 import { getTexVListLayoutFromOutputJax } from '../../tex/vlist/registry.js';
-import type { TexVBoxRole, TexVListBoxReportItem } from '../../tex/vlist/types.js';
+import type { TexVBoxRole, TexVListBoxReportItem, TexVListLayout } from '../../tex/vlist/types.js';
 import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
 
 // The core package builds without the DOM lib; keep the editor hit-testing
@@ -42,7 +42,6 @@ type SvgOwnerLike = {
   viewBox?: { baseVal?: { width?: number } };
 };
 type Element = {
-  getAttribute?(name: string): string | null;
   getBoundingClientRect?(): ClientRectLike;
   getScreenCTM?(): ScreenMatrixLike | null;
   viewBox?: SvgOwnerLike['viewBox'];
@@ -144,8 +143,46 @@ export interface VListBoxGeometryParams {
   paragraphId?: string | null;
 }
 
+export type VListGeometrySnapshotSource = 'registered' | 'empty';
+
+export interface VListGeometryTreeNode {
+  itemKind: TexVListBoxReportItem['itemKind'] | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+  blockIndex: number | null;
+  box: VListBoxGeometry | null;
+  item: VListItemGeometry | null;
+  paragraph: VListParagraphGeometry | null;
+  children: readonly VListGeometryTreeNode[];
+}
+
+export interface VListGeometrySnapshot {
+  source: VListGeometrySnapshotSource;
+  tree: readonly VListGeometryTreeNode[];
+  boxes: readonly VListBoxGeometry[];
+  items: readonly VListItemGeometry[];
+  labels: readonly VListLabelGeometry[];
+  paragraphs: readonly VListParagraphGeometry[];
+  placeholders: readonly PlaceholderGeometry[];
+}
+
+export type VListGeometrySnapshotParams = VListBoxGeometryParams;
+
+export interface VListBoxHitParams extends VListBoxGeometryParams {
+  clientPoint: ClientPoint;
+}
+
 export interface VListItemGeometry {
-  kind: 'hbox' | 'rule' | 'penalty' | 'placeholder' | null;
+  kind: 'glue' | 'hbox' | 'rule' | 'penalty' | 'placeholder' | null;
   vlistPath: readonly number[];
   localLeft: number | null;
   localRight: number | null;
@@ -154,6 +191,14 @@ export interface VListItemGeometry {
   sourceStart: number | null;
   sourceEnd: number | null;
   placeholderReason: string | null;
+  hboxRole: 'list-label' | null;
+  listLabelKind: string | null;
+  listLabelPlacement: string | null;
+  listKind: string | null;
+  listDepth: number | null;
+  listLabelDepth: number | null;
+  listItemIndex: number | null;
+  listLabelBlockIndex: number | null;
   clientLeft: number;
   clientRight: number;
   clientTop: number;
@@ -164,6 +209,66 @@ export interface VListItemGeometryParams {
   containerElement: Element;
   outputJax?: unknown;
   paragraphId?: string | null;
+}
+
+export interface VListItemHitParams extends VListItemGeometryParams {
+  clientPoint: ClientPoint;
+}
+
+export interface VListLabelGeometry extends VListItemGeometry {
+  kind: 'hbox';
+  hboxRole: 'list-label';
+  listLabelKind: string;
+  listLabelPlacement: string;
+  listKind: string;
+  listDepth: number;
+  listLabelDepth: number;
+  listItemIndex: number;
+  listLabelBlockIndex: number;
+}
+
+export type VListLabelGeometryParams = VListItemGeometryParams;
+
+export interface VListLabelHitParams extends VListLabelGeometryParams {
+  clientPoint: ClientPoint;
+}
+
+export interface VListLabelHitResult {
+  label: VListLabelGeometry;
+  paragraph: VListParagraphGeometry | null;
+}
+
+export type VListSourceHit = {
+  readonly offset: number;
+  readonly selectionRange?: {
+    readonly start: number;
+    readonly end: number;
+  };
+};
+
+export interface VListSourceHitParams {
+  readonly labelHit?: VListLabelHitResult | null;
+  readonly itemHit?: VListItemGeometry | null;
+}
+
+export interface VListSourceHitFromSnapshotParams {
+  readonly snapshot?: VListGeometrySnapshot | null;
+  readonly clientPoint: ClientPoint;
+}
+
+export interface VListTreeHitParams {
+  snapshot?: VListGeometrySnapshot | null;
+  clientPoint: ClientPoint;
+}
+
+export interface VListTreeHitResult {
+  path: readonly VListGeometryTreeNode[];
+  node: VListGeometryTreeNode;
+  box: VListBoxGeometry | null;
+  item: VListItemGeometry | null;
+  label: VListLabelGeometry | null;
+  paragraph: VListParagraphGeometry | null;
+  labelParagraph: VListParagraphGeometry | null;
 }
 
 export interface VListParagraphGeometry {
@@ -465,87 +570,328 @@ function collectLineGeometryElements(
 export function getKnuthPlassVListBoxGeometry(
   params: VListBoxGeometryParams | null | undefined
 ): VListBoxGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).boxes];
+}
+
+export function getKnuthPlassVListBoxFromPoint(
+  params: VListBoxHitParams | null | undefined
+): VListBoxGeometry | null {
+  const point = params?.clientPoint;
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  return getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot: getKnuthPlassVListGeometrySnapshot(params),
+    clientPoint: point,
+  })?.box ?? null;
+}
+
+export function getKnuthPlassVListItemGeometry(
+  params: VListItemGeometryParams | null | undefined
+): VListItemGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).items];
+}
+
+export function getKnuthPlassVListGeometrySnapshot(
+  params: VListGeometrySnapshotParams | null | undefined
+): VListGeometrySnapshot {
   const containerElement = params?.containerElement;
   if (!containerElement || typeof containerElement !== 'object') {
-    return [];
+    return emptyVListGeometrySnapshot();
   }
-  const registered = registeredVListBoxGeometry(params);
-  if (registered.length > 0) {
-    return registered;
+
+  const layout = getTexVListLayoutFromOutputJax(params.outputJax, params.paragraphId);
+  const matrix = containerElement.getScreenCTM?.();
+  if (layout && matrix) {
+    const boxes = registeredVListBoxGeometry(layout, matrix);
+    const items = registeredVListItemGeometry(layout, matrix);
+    const paragraphs = registeredVListParagraphGeometry(layout, matrix);
+    return vlistGeometrySnapshot({
+      source: 'registered',
+      boxes,
+      items,
+      paragraphs,
+      tree: registeredVListGeometryTree(layout, matrix, boxes, items, paragraphs),
+    });
   }
-  const elements =
-    typeof containerElement.querySelectorAll === 'function'
-      ? Array.from(containerElement.querySelectorAll('[data-tex-vbox="true"]'))
-      : [];
+
+  return emptyVListGeometrySnapshot();
+}
+
+function vlistGeometrySnapshot(params: {
+  source: VListGeometrySnapshotSource;
+  boxes: readonly VListBoxGeometry[];
+  items: readonly VListItemGeometry[];
+  paragraphs: readonly VListParagraphGeometry[];
+  tree: readonly VListGeometryTreeNode[];
+}): VListGeometrySnapshot {
+  const labels = params.items.filter(isVListLabelGeometry);
+  return {
+    source: params.source,
+    tree: params.tree,
+    boxes: params.boxes,
+    items: params.items,
+    labels,
+    paragraphs: params.paragraphs,
+    placeholders: placeholdersFromVListItems(params.items),
+  };
+}
+
+function emptyVListGeometrySnapshot(): VListGeometrySnapshot {
+  return {
+    source: 'empty',
+    tree: [],
+    boxes: [],
+    items: [],
+    labels: [],
+    paragraphs: [],
+    placeholders: [],
+  };
+}
+
+export function getKnuthPlassVListItemFromPoint(
+  params: VListItemHitParams | null | undefined
+): VListItemGeometry | null {
+  const point = params?.clientPoint;
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  return getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot: getKnuthPlassVListGeometrySnapshot(params),
+    clientPoint: point,
+  })?.item ?? null;
+}
+
+export function getKnuthPlassVListLabelGeometry(
+  params: VListLabelGeometryParams | null | undefined
+): VListLabelGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).labels];
+}
+
+export function getKnuthPlassVListLabelFromPoint(
+  params: VListLabelHitParams | null | undefined
+): VListLabelHitResult | null {
+  const point = params?.clientPoint;
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  const snapshot = getKnuthPlassVListGeometrySnapshot(params);
+  const hit = getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot,
+    clientPoint: point,
+  });
+  const label = hit?.label ?? null;
+  if (!label) {
+    return null;
+  }
+  return {
+    label,
+    paragraph: hit?.labelParagraph ?? null,
+  };
+}
+
+export function getKnuthPlassVListSourceHit(
+  params: VListSourceHitParams | null | undefined
+): VListSourceHit | null {
+  const labelStart = params?.labelHit
+    ? sourceBackedStart(params.labelHit.label.sourceStart, params.labelHit.label.sourceEnd)
+    : null;
+  if (labelStart != null) {
+    return { offset: labelStart };
+  }
+
+  if (params?.labelHit?.paragraph) {
+    return { offset: params.labelHit.paragraph.sourceStart };
+  }
+
+  const item = params?.itemHit;
+  if (!item || item.kind === 'hbox') {
+    return null;
+  }
+  const itemStart = sourceBackedStart(item.sourceStart, item.sourceEnd);
+  if (itemStart == null || item.sourceEnd == null) {
+    return null;
+  }
+  return {
+    offset: itemStart,
+    selectionRange: {
+      start: itemStart,
+      end: item.sourceEnd,
+    },
+  };
+}
+
+export function getKnuthPlassVListSourceHitFromSnapshot(
+  params: VListSourceHitFromSnapshotParams | null | undefined
+): VListSourceHit | null {
+  const snapshot = params?.snapshot;
+  const point = params?.clientPoint;
+  if (!snapshot || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  const hit = getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot,
+    clientPoint: point,
+  });
+  if (!hit) {
+    return null;
+  }
+  return getKnuthPlassVListSourceHit({
+    labelHit: hit.label
+      ? {
+          label: hit.label,
+          paragraph: hit.labelParagraph,
+        }
+      : null,
+    itemHit: hit.item,
+  });
+}
+
+export function getKnuthPlassVListTreeHitFromSnapshot(
+  params: VListTreeHitParams | null | undefined
+): VListTreeHitResult | null {
+  const snapshot = params?.snapshot;
+  const point = params?.clientPoint;
+  if (!snapshot || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  const path = deepestVListGeometryTreePathFromPoint(snapshot.tree, point);
+  const node = path.at(-1);
+  if (!node) {
+    return null;
+  }
+  const label = nearestVListLabelGeometryForPath(path);
+  return {
+    path,
+    node,
+    box: nearestVListBoxGeometryForPath(path),
+    item: nearestVListItemGeometryForPath(path),
+    label,
+    paragraph: nearestVListParagraphGeometryForPath(path),
+    labelParagraph: label
+      ? (
+          nearestVListParagraphGeometryForPath(path, label.listLabelBlockIndex) ??
+          snapshot.paragraphs.find((paragraph) => paragraph.blockIndex === label.listLabelBlockIndex) ??
+          null
+        )
+      : null,
+  };
+}
+
+export function getKnuthPlassVListParagraphGeometry(
+  params: VListParagraphGeometryParams | null | undefined
+): VListParagraphGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).paragraphs];
+}
+
+export function getKnuthPlassPlaceholderGeometry(
+  params: PlaceholderGeometryParams | null | undefined
+): PlaceholderGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).placeholders];
+}
+
+function placeholdersFromVListItems(items: readonly VListItemGeometry[]): PlaceholderGeometry[] {
+  return items
+    .filter((item) => item.kind === 'placeholder')
+    .map((item) => ({
+      reason: item.placeholderReason,
+      vlistPath: item.vlistPath,
+      localLeft: item.localLeft,
+      localRight: item.localRight,
+      localTop: item.localTop,
+      localBottom: item.localBottom,
+      sourceStart: item.sourceStart,
+      sourceEnd: item.sourceEnd,
+      clientLeft: item.clientLeft,
+      clientRight: item.clientRight,
+      clientTop: item.clientTop,
+      clientBottom: item.clientBottom,
+    }));
+}
+
+function texVListBoxRoleGeometryFromReportRole(
+  role: TexVBoxRole | undefined
+): Pick<VListBoxGeometry, 'depth' | 'listKind' | 'listLabelDepth' | 'listLeftMarginEm' | 'listItemIndex'> {
+  return {
+    depth: role?.depth ?? null,
+    listKind: role?.kind === 'list' || role?.kind === 'list-item' ? role.listKind : null,
+    listLabelDepth: role?.kind === 'list' || role?.kind === 'list-item' ? role.labelDepth : null,
+    listLeftMarginEm: role?.kind === 'list' ? role.totalLeftMarginEm : null,
+    listItemIndex: role?.kind === 'list-item' ? role.itemIndex : null,
+  };
+}
+
+function registeredVListBoxGeometry(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike
+): VListBoxGeometry[] {
   const boxes: VListBoxGeometry[] = [];
-  for (const element of elements) {
-    const bounds = normalizedClientRect(element);
+  for (const item of layout.boxReport.items) {
+    if (item.itemKind !== 'vbox') {
+      continue;
+    }
+    const bounds = clientRectForVListBoxReportItem(item, matrix);
     if (!bounds) {
       continue;
     }
+    const role = item.role;
     boxes.push({
-      role: texVListBoxRole(element.getAttribute?.('data-tex-vbox-role') ?? null),
-      vlistPath: texVListPath(element.getAttribute?.('data-tex-vlist-path') ?? null),
-      ...texVListLocalBoundsFromAttributes(element),
-      depth: finiteAttributeNumber(element, 'data-tex-vbox-depth'),
-      listKind: element.getAttribute?.('data-tex-list-kind') ?? null,
-      listLabelDepth: finiteAttributeNumber(element, 'data-tex-list-label-depth'),
-      listLeftMarginEm: finiteAttributeNumber(element, 'data-tex-list-left-margin-em'),
-      listItemIndex: finiteAttributeNumber(element, 'data-tex-list-item-index'),
-      sourceStart: finiteAttributeNumber(element, 'data-source-start'),
-      sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
+      role: vlistRoleKind(role),
+      vlistPath: item.path,
+      ...texVListLocalBoundsForBoxReportItem(item),
+      ...texVListBoxRoleGeometryFromReportRole(role),
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
       ...bounds,
     });
   }
   return boxes;
 }
 
-export function getKnuthPlassVListItemGeometry(
-  params: VListItemGeometryParams | null | undefined
+function registeredVListItemGeometry(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike
 ): VListItemGeometry[] {
-  const containerElement = params?.containerElement;
-  if (!containerElement || typeof containerElement !== 'object') {
-    return [];
-  }
-  const registered = registeredVListItemGeometry(params);
-  if (registered.length > 0) {
-    return registered;
-  }
-  const elements =
-    typeof containerElement.querySelectorAll === 'function'
-      ? Array.from(containerElement.querySelectorAll('[data-tex-vlist-item]'))
-      : [];
   const items: VListItemGeometry[] = [];
-  for (const element of elements) {
-    const bounds = normalizedClientRect(element);
+  for (const item of layout.boxReport.items) {
+    if (
+      item.itemKind !== 'glue' &&
+      item.itemKind !== 'hbox' &&
+      item.itemKind !== 'rule' &&
+      item.itemKind !== 'penalty' &&
+      item.itemKind !== 'placeholder'
+    ) {
+      continue;
+    }
+    if (
+      item.itemKind === 'glue' &&
+      item.glue?.origin?.kind !== 'explicit-command'
+    ) {
+      continue;
+    }
+    const localBounds = texVListLocalBoundsForItemGeometry(item, layout);
+    const bounds = clientRectForLocalBounds(localBounds, matrix);
     if (!bounds) {
       continue;
     }
     items.push({
-      kind: texVListItemKind(element.getAttribute?.('data-tex-vlist-item') ?? null),
-      vlistPath: texVListPath(element.getAttribute?.('data-tex-vlist-path') ?? null),
-      ...texVListLocalBoundsFromAttributes(element),
-      sourceStart: finiteAttributeNumber(element, 'data-source-start'),
-      sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
-      placeholderReason: element.getAttribute?.('data-tex-placeholder-reason') ?? null,
+      kind: item.itemKind,
+      vlistPath: item.path,
+      ...localBounds,
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
+      placeholderReason: item.itemKind === 'placeholder' ? item.placeholderReason ?? null : null,
+      ...texVListHboxRoleGeometryFromReportItem(item),
       ...bounds,
     });
   }
   return items;
 }
 
-export function getKnuthPlassVListParagraphGeometry(
-  params: VListParagraphGeometryParams | null | undefined
+function registeredVListParagraphGeometry(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike
 ): VListParagraphGeometry[] {
-  const containerElement = params?.containerElement;
-  if (!containerElement || typeof containerElement !== 'object') {
-    return [];
-  }
-  const layout = getTexVListLayoutFromOutputJax(params.outputJax, params.paragraphId);
-  const matrix = containerElement.getScreenCTM?.();
-  if (!layout || !matrix) {
-    return [];
-  }
   const paragraphs: VListParagraphGeometry[] = [];
   for (const placement of layout.paragraphPlacements) {
     const localLeft = Number(placement.x);
@@ -564,7 +910,7 @@ export function getKnuthPlassVListParagraphGeometry(
     }
     paragraphs.push({
       blockIndex: placement.blockIndex,
-      vlistPath: placement.vlistPath ?? [],
+      vlistPath: placement.vlistPath,
       localLeft,
       localRight: localLeft + placement.metrics.width,
       localTop: placement.y,
@@ -578,146 +924,239 @@ export function getKnuthPlassVListParagraphGeometry(
   return paragraphs;
 }
 
-export function getKnuthPlassPlaceholderGeometry(
-  params: PlaceholderGeometryParams | null | undefined
-): PlaceholderGeometry[] {
-  const containerElement = params?.containerElement;
-  if (!containerElement || typeof containerElement !== 'object') {
+function registeredVListGeometryTree(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike,
+  boxes: readonly VListBoxGeometry[],
+  items: readonly VListItemGeometry[],
+  paragraphs: readonly VListParagraphGeometry[]
+): VListGeometryTreeNode[] {
+  const boxesByPath = geometryByPath(boxes);
+  const itemsByPath = geometryByPath(items);
+  const paragraphsByPath = geometryByPath(paragraphs);
+  return layout.boxReport.tree.flatMap((item) =>
+    registeredVListGeometryTreeNode(item, matrix, boxesByPath, itemsByPath, paragraphsByPath)
+  );
+}
+
+function registeredVListGeometryTreeNode(
+  item: TexVListBoxReportItem,
+  matrix: ScreenMatrixLike,
+  boxesByPath: ReadonlyMap<string, VListBoxGeometry>,
+  itemsByPath: ReadonlyMap<string, VListItemGeometry>,
+  paragraphsByPath: ReadonlyMap<string, VListParagraphGeometry>
+): readonly VListGeometryTreeNode[] {
+  const itemGeometry = itemsByPath.get(vlistPathKey(item.path)) ?? null;
+  const bounds = itemGeometry
+    ? clientBoundsFromGeometry(itemGeometry)
+    : clientRectForVListBoxReportItem(item, matrix);
+  if (!bounds) {
     return [];
   }
-  const registered = registeredPlaceholderGeometry(params);
-  if (registered.length > 0) {
-    return registered;
-  }
-  const elements =
-    typeof containerElement.querySelectorAll === 'function'
-      ? Array.from(containerElement.querySelectorAll('[data-tex-placeholder="true"]'))
-      : [];
-  const placeholders: PlaceholderGeometry[] = [];
-  for (const element of elements) {
-    const bounds = normalizedClientRect(element);
-    if (!bounds) {
-      continue;
-    }
-    placeholders.push({
-      reason: element.getAttribute?.('data-tex-placeholder-reason') ?? null,
-      vlistPath: texVListPath(element.getAttribute?.('data-tex-vlist-path') ?? null),
-      ...texVListLocalBoundsFromAttributes(element),
-      sourceStart: finiteAttributeNumber(element, 'data-source-start'),
-      sourceEnd: finiteAttributeNumber(element, 'data-source-end'),
-      ...bounds,
-    });
-  }
-  return placeholders;
+  const box = boxesByPath.get(vlistPathKey(item.path)) ?? null;
+  const paragraph = paragraphsByPath.get(vlistPathKey(item.path)) ?? null;
+  return [{
+    itemKind: item.itemKind,
+    vlistPath: item.path,
+    ...texVListLocalBoundsForBoxReportItem(item),
+    sourceStart: item.sourceSpan?.start ?? null,
+    sourceEnd: item.sourceSpan?.end ?? null,
+    ...bounds,
+    blockIndex: item.blockIndex ?? null,
+    box,
+    item: itemGeometry,
+    paragraph,
+    children: (item.children ?? []).flatMap((child) =>
+      registeredVListGeometryTreeNode(child, matrix, boxesByPath, itemsByPath, paragraphsByPath)
+    ),
+  }];
 }
 
-function registeredPlaceholderGeometry(
-  params: PlaceholderGeometryParams | null | undefined
-): PlaceholderGeometry[] {
-  const layout = getTexVListLayoutFromOutputJax(params?.outputJax, params?.paragraphId);
-  const matrix = params?.containerElement.getScreenCTM?.();
-  if (!layout || !matrix) {
-    return [];
-  }
-  const placeholders: PlaceholderGeometry[] = [];
-  for (const item of layout.boxReport.items) {
-    if (item.itemKind !== 'placeholder') {
-      continue;
-    }
-    const bounds = clientRectForVListBoxReportItem(item, matrix);
-    if (!bounds) {
-      continue;
-    }
-    placeholders.push({
-      reason: item.placeholderReason ?? null,
-      vlistPath: item.path,
-      ...texVListLocalBoundsForBoxReportItem(item),
-      sourceStart: item.sourceSpan?.start ?? null,
-      sourceEnd: item.sourceSpan?.end ?? null,
-      ...bounds,
-    });
-  }
-  return placeholders;
+function clientBoundsFromGeometry(
+  geometry: Pick<VListItemGeometry, 'clientLeft' | 'clientRight' | 'clientTop' | 'clientBottom'>
+): NormalizedClientRect {
+  return {
+    clientLeft: geometry.clientLeft,
+    clientRight: geometry.clientRight,
+    clientTop: geometry.clientTop,
+    clientBottom: geometry.clientBottom,
+  };
 }
 
-function texVListBoxRole(value: string | null): VListBoxGeometry['role'] {
-  return value === 'quote' || value === 'list' ? value : null;
+function geometryByPath<T extends { readonly vlistPath: readonly number[] }>(
+  geometry: readonly T[]
+): ReadonlyMap<string, T> {
+  return new Map(geometry.map((item) => [vlistPathKey(item.vlistPath), item]));
 }
 
-function texVListItemKind(value: string | null): VListItemGeometry['kind'] {
-  return value === 'hbox' || value === 'rule' || value === 'penalty' || value === 'placeholder'
-    ? value
+function vlistPathKey(path: readonly number[]): string {
+  return path.join('.');
+}
+
+function deepestVListGeometryTreePathFromPoint(
+  nodes: readonly VListGeometryTreeNode[],
+  point: ClientPoint
+): readonly VListGeometryTreeNode[] {
+  const candidates: readonly VListGeometryTreeNode[][] = nodes.flatMap((node) => {
+    const childPath = deepestVListGeometryTreePathFromPoint(node.children, point);
+    if (childPath.length > 0) {
+      return [[node, ...childPath]];
+    }
+    return pointInsideClientBounds(node, point) ? [[node]] : [];
+  });
+  return [...candidates].sort(compareVListGeometryTreePathHitPriority)[0] ?? [];
+}
+
+function compareVListGeometryTreePathHitPriority(
+  left: readonly VListGeometryTreeNode[],
+  right: readonly VListGeometryTreeNode[]
+): number {
+  if (left.length !== right.length) {
+    return right.length - left.length;
+  }
+  const leftLeaf = left.at(-1);
+  const rightLeaf = right.at(-1);
+  if (!leftLeaf || !rightLeaf) {
+    return right.length - left.length;
+  }
+  return clientBoundsArea(leftLeaf) - clientBoundsArea(rightLeaf);
+}
+
+function nearestVListBoxGeometryForPath(
+  path: readonly VListGeometryTreeNode[]
+): VListBoxGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const box = path[index]?.box;
+    if (box) {
+      return box;
+    }
+  }
+  return null;
+}
+
+function nearestVListItemGeometryForPath(
+  path: readonly VListGeometryTreeNode[]
+): VListItemGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const item = path[index]?.item;
+    if (item) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function nearestVListLabelGeometryForPath(
+  path: readonly VListGeometryTreeNode[]
+): VListLabelGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const item = path[index]?.item;
+    if (item && isVListLabelGeometry(item)) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function nearestVListParagraphGeometryForPath(
+  path: readonly VListGeometryTreeNode[],
+  blockIndex?: number
+): VListParagraphGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const paragraph = path[index]?.paragraph;
+    if (paragraph && (blockIndex === undefined || paragraph.blockIndex === blockIndex)) {
+      return paragraph;
+    }
+  }
+  return null;
+}
+
+function isVListLabelGeometry(item: VListItemGeometry): item is VListLabelGeometry {
+  return (
+    item.kind === 'hbox' &&
+    item.hboxRole === 'list-label' &&
+    item.listLabelKind !== null &&
+    item.listLabelPlacement !== null &&
+    item.listKind !== null &&
+    item.listDepth !== null &&
+    item.listLabelDepth !== null &&
+    item.listItemIndex !== null &&
+    item.listLabelBlockIndex !== null
+  );
+}
+
+function sourceBackedStart(sourceStart: number | null, sourceEnd: number | null): number | null {
+  return sourceStart != null && sourceEnd != null && sourceEnd > sourceStart
+    ? sourceStart
     : null;
 }
 
-function registeredVListBoxGeometry(
-  params: VListBoxGeometryParams | null | undefined
-): VListBoxGeometry[] {
-  const layout = getTexVListLayoutFromOutputJax(params?.outputJax, params?.paragraphId);
-  const matrix = params?.containerElement.getScreenCTM?.();
-  if (!layout || !matrix) {
-    return [];
-  }
-  const boxes: VListBoxGeometry[] = [];
-  for (const item of layout.boxReport.items) {
-    if (item.itemKind !== 'vbox') {
-      continue;
-    }
-    const bounds = clientRectForVListBoxReportItem(item, matrix);
-    if (!bounds) {
-      continue;
-    }
-    const role = item.role;
-    boxes.push({
-      role: vlistRoleKind(role),
-      vlistPath: item.path,
-      ...texVListLocalBoundsForBoxReportItem(item),
-      depth: role?.depth ?? null,
-      listKind: role?.kind === 'list' || role?.kind === 'list-item' ? role.listKind : null,
-      listLabelDepth: role?.kind === 'list' || role?.kind === 'list-item' ? role.labelDepth : null,
-      listLeftMarginEm: role?.kind === 'list' ? role.totalLeftMarginEm : null,
-      listItemIndex: role?.kind === 'list-item' ? role.itemIndex : null,
-      sourceStart: item.sourceSpan?.start ?? null,
-      sourceEnd: item.sourceSpan?.end ?? null,
-      ...bounds,
-    });
-  }
-  return boxes;
+function pointInsideClientBounds(
+  item: Pick<VListItemGeometry, 'clientLeft' | 'clientRight' | 'clientTop' | 'clientBottom'>,
+  point: ClientPoint
+): boolean {
+  return (
+    point.x >= item.clientLeft - EPSILON &&
+    point.x <= item.clientRight + EPSILON &&
+    point.y >= item.clientTop - EPSILON &&
+    point.y <= item.clientBottom + EPSILON
+  );
 }
 
-function registeredVListItemGeometry(
-  params: VListItemGeometryParams | null | undefined
-): VListItemGeometry[] {
-  const layout = getTexVListLayoutFromOutputJax(params?.outputJax, params?.paragraphId);
-  const matrix = params?.containerElement.getScreenCTM?.();
-  if (!layout || !matrix) {
-    return [];
+function clientBoundsArea(
+  item: Pick<VListItemGeometry, 'clientLeft' | 'clientRight' | 'clientTop' | 'clientBottom'>
+): number {
+  return Math.max(0, item.clientRight - item.clientLeft) * Math.max(0, item.clientBottom - item.clientTop);
+}
+
+function texVListHboxRoleGeometryFromReportItem(item: TexVListBoxReportItem): Pick<
+  VListItemGeometry,
+  | 'hboxRole'
+  | 'listLabelKind'
+  | 'listLabelPlacement'
+  | 'listKind'
+  | 'listDepth'
+  | 'listLabelDepth'
+  | 'listItemIndex'
+  | 'listLabelBlockIndex'
+> {
+  const role = item.hboxRole;
+  if (!role) {
+    return emptyVListHboxRoleGeometry();
   }
-  const items: VListItemGeometry[] = [];
-  for (const item of layout.boxReport.items) {
-    if (
-      item.itemKind !== 'hbox' &&
-      item.itemKind !== 'rule' &&
-      item.itemKind !== 'penalty' &&
-      item.itemKind !== 'placeholder'
-    ) {
-      continue;
-    }
-    const bounds = clientRectForVListBoxReportItem(item, matrix);
-    if (!bounds) {
-      continue;
-    }
-    items.push({
-      kind: item.itemKind,
-      vlistPath: item.path,
-      ...texVListLocalBoundsForBoxReportItem(item),
-      sourceStart: item.sourceSpan?.start ?? null,
-      sourceEnd: item.sourceSpan?.end ?? null,
-      placeholderReason: item.itemKind === 'placeholder' ? item.placeholderReason ?? null : null,
-      ...bounds,
-    });
-  }
-  return items;
+  return {
+    hboxRole: 'list-label',
+    listLabelKind: role.labelKind,
+    listLabelPlacement: role.placement,
+    listKind: role.listKind,
+    listDepth: role.depth,
+    listLabelDepth: role.labelDepth,
+    listItemIndex: role.itemIndex,
+    listLabelBlockIndex: role.blockIndex,
+  };
+}
+
+function emptyVListHboxRoleGeometry(): Pick<
+  VListItemGeometry,
+  | 'hboxRole'
+  | 'listLabelKind'
+  | 'listLabelPlacement'
+  | 'listKind'
+  | 'listDepth'
+  | 'listLabelDepth'
+  | 'listItemIndex'
+  | 'listLabelBlockIndex'
+> {
+  return {
+    hboxRole: null,
+    listLabelKind: null,
+    listLabelPlacement: null,
+    listKind: null,
+    listDepth: null,
+    listLabelDepth: null,
+    listItemIndex: null,
+    listLabelBlockIndex: null,
+  };
 }
 
 function vlistRoleKind(role: TexVBoxRole | undefined): VListBoxGeometry['role'] {
@@ -768,6 +1207,24 @@ function clientRectForLocalBox(
   };
 }
 
+function clientRectForLocalBounds(
+  bounds: {
+    readonly localLeft: number;
+    readonly localRight: number;
+    readonly localTop: number;
+    readonly localBottom: number;
+  },
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  return clientRectForLocalBox(
+    bounds.localLeft,
+    bounds.localTop,
+    bounds.localRight - bounds.localLeft,
+    bounds.localBottom - bounds.localTop,
+    matrix
+  );
+}
+
 function transformLocalPoint(
   matrix: ScreenMatrixLike,
   x: number,
@@ -776,86 +1233,6 @@ function transformLocalPoint(
   return {
     x: matrix.a * x + matrix.c * y + matrix.e,
     y: matrix.b * x + matrix.d * y + matrix.f,
-  };
-}
-
-function normalizedClientRect(element: Element): NormalizedClientRect | null {
-  const rect = element.getBoundingClientRect?.();
-  if (!rect) {
-    return null;
-  }
-  const left = Number(rect.left);
-  const right = Number(rect.right);
-  const top = Number(rect.top);
-  const bottom = Number(rect.bottom);
-  if (
-    !Number.isFinite(left) ||
-    !Number.isFinite(right) ||
-    !Number.isFinite(top) ||
-    !Number.isFinite(bottom) ||
-    Math.abs(right - left) <= EPSILON ||
-    Math.abs(bottom - top) <= EPSILON
-  ) {
-    return null;
-  }
-  return {
-    clientLeft: Math.min(left, right),
-    clientRight: Math.max(left, right),
-    clientTop: Math.min(top, bottom),
-    clientBottom: Math.max(top, bottom),
-  };
-}
-
-function finiteAttributeNumber(element: Element, name: string): number | null {
-  const raw = element.getAttribute?.(name);
-  if (raw == null || raw === '') {
-    return null;
-  }
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
-function texVListPath(raw: string | null): readonly number[] {
-  if (!raw) {
-    return [];
-  }
-  const path: number[] = [];
-  for (const part of raw.split('.')) {
-    if (part === '') {
-      return [];
-    }
-    const value = Number(part);
-    if (!Number.isInteger(value) || value < 0) {
-      return [];
-    }
-    path.push(value);
-  }
-  return path;
-}
-
-function texVListLocalBoundsFromAttributes(element: Element): {
-  readonly localLeft: number | null;
-  readonly localRight: number | null;
-  readonly localTop: number | null;
-  readonly localBottom: number | null;
-} {
-  const x = finiteAttributeNumber(element, 'data-tex-local-x');
-  const y = finiteAttributeNumber(element, 'data-tex-local-y');
-  const width = finiteAttributeNumber(element, 'data-tex-local-width');
-  const height = finiteAttributeNumber(element, 'data-tex-local-height');
-  if (x === null || y === null || width === null || height === null) {
-    return {
-      localLeft: null,
-      localRight: null,
-      localTop: null,
-      localBottom: null,
-    };
-  }
-  return {
-    localLeft: x,
-    localRight: x + width,
-    localTop: y,
-    localBottom: y + height,
   };
 }
 
@@ -870,6 +1247,26 @@ function texVListLocalBoundsForBoxReportItem(item: TexVListBoxReportItem): {
     localRight: item.x + item.width,
     localTop: item.y,
     localBottom: item.y + item.totalHeight,
+  };
+}
+
+function texVListLocalBoundsForItemGeometry(
+  item: TexVListBoxReportItem,
+  layout: TexVListLayout
+): {
+  readonly localLeft: number;
+  readonly localRight: number;
+  readonly localTop: number;
+  readonly localBottom: number;
+} {
+  const bounds = texVListLocalBoundsForBoxReportItem(item);
+  if (item.itemKind !== 'glue' || item.totalHeight <= EPSILON) {
+    return bounds;
+  }
+  const hitWidth = Math.max(item.width, layout.metrics.width);
+  return {
+    ...bounds,
+    localRight: bounds.localLeft + hitWidth,
   };
 }
 

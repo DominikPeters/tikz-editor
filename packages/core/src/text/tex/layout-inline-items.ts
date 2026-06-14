@@ -10,6 +10,7 @@ import {
 
 export interface TexLayoutTextItem {
   readonly kind: "text";
+  readonly role?: "list-label";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -21,6 +22,7 @@ export interface TexLayoutTextItem {
 
 export interface TexLayoutSpaceItem {
   readonly kind: "space";
+  readonly role?: "list-label";
   readonly text: " ";
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -31,6 +33,7 @@ export interface TexLayoutSpaceItem {
 
 export interface TexLayoutForcedBreakItem {
   readonly kind: "forced-break";
+  readonly role?: "list-label";
   readonly text: " ";
   readonly sourceStart: number;
   readonly sourceEnd: number;

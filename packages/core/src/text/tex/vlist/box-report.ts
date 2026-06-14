@@ -6,30 +6,39 @@ import type {
   TexVListBoxLayoutReport,
   TexVListBoxReportItem,
 } from "./types.js";
-import { flattenPositionedTexVListItems } from "./traversal.js";
 
 export function texVListBoxLayoutReport(
   items: readonly PositionedTexVListItem[],
   metrics: TexBoxMetrics,
   baseline: TexVListBoxLayoutReport["baseline"]
 ): TexVListBoxLayoutReport {
+  const tree = items.map(texVListBoxReportTreeItem);
   return {
     kind: "tex-vlist-boxes",
     metrics,
     baseline,
-    items: flattenPositionedTexVListItems(items).map(texVListBoxReportItem),
+    tree,
+    items: flattenTexVListBoxReportItems(tree),
   };
+}
+
+function texVListBoxReportTreeItem(
+  item: PositionedTexVListItem
+): TexVListBoxReportItem {
+  const report = texVListBoxReportItem(item);
+  const children = item.children?.map(texVListBoxReportTreeItem) ?? [];
+  return children.length > 0
+    ? { ...report, children }
+    : report;
 }
 
 function texVListBoxReportItem(
   item: PositionedTexVListItem
-): TexVListBoxReportItem {
+): Omit<TexVListBoxReportItem, "children"> {
   const sourceSpan = texVListItemSourceSpan(item);
-  const children = item.children?.map(texVListBoxReportItem) ?? [];
   const report: TexVListBoxReportItem = {
     itemKind: item.item.kind,
     path: item.path ?? [],
-    ...(children.length > 0 ? { children } : {}),
     ...(sourceSpan ? { sourceSpan } : {}),
     x: item.x,
     y: item.y,
@@ -38,6 +47,7 @@ function texVListBoxReportItem(
     depth: item.metrics.depth,
     totalHeight: roundTexPt(item.metrics.height + item.metrics.depth),
     ...(item.item.kind === "paragraph" ? { blockIndex: item.item.blockIndex } : {}),
+    ...(item.item.kind === "vbox" && item.baseline ? { baseline: item.baseline } : {}),
     ...(item.item.kind === "hbox" && item.item.role ? { hboxRole: item.item.role } : {}),
     ...(item.item.kind === "vbox" && item.item.role ? { role: item.item.role } : {}),
     ...(item.item.kind === "vbox" && item.item.layout?.listItem
@@ -57,6 +67,20 @@ function texVListBoxReportItem(
     ...(item.item.kind === "placeholder" ? { placeholderReason: item.item.reason } : {}),
   };
   return report;
+}
+
+function flattenTexVListBoxReportItems(
+  items: readonly TexVListBoxReportItem[]
+): readonly TexVListBoxReportItem[] {
+  const flat: TexVListBoxReportItem[] = [];
+  for (const item of items) {
+    const { children: _children, ...flatItem } = item;
+    flat.push(flatItem);
+    if (item.children?.length) {
+      flat.push(...flattenTexVListBoxReportItems(item.children));
+    }
+  }
+  return flat;
 }
 
 function texVListItemSourceSpan(

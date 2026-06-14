@@ -36,7 +36,10 @@ import type { SvgRenderModel } from "tikz-editor/svg";
 import type { SvgDiffHints, SvgViewBox } from "tikz-editor/svg/index";
 import {
 getKnuthPlassCaretFromPoint,
-getKnuthPlassLineRangeFromPoint
+getKnuthPlassLineRangeFromPoint,
+getKnuthPlassVListGeometrySnapshot,
+getKnuthPlassVListSourceHitFromSnapshot,
+type VListSourceHit
 } from "tikz-editor/text/knuth-plass";
 import { createMathJaxNodeTextEngine,getActiveMathJaxOutputJax } from "tikz-editor/text/mathjax-engine";
 import type { NodeTextEngine,NodeTextLayoutKind } from "tikz-editor/text/types";
@@ -433,6 +436,29 @@ function resolveTextSelectionRangeForDrag(
     start: Math.min(anchorRange.start, focusRange.start),
     end: Math.max(anchorRange.end, focusRange.end)
   };
+}
+
+function normalizeTextLineRange(range: TextLineRange, textLength: number): TextLineRange {
+  const start = clamp(range.start, 0, textLength);
+  const end = clamp(range.end, 0, textLength);
+  return {
+    start: Math.min(start, end),
+    end: Math.max(start, end)
+  };
+}
+
+function textLineRangeFromVListSourceHit(
+  hit: VListSourceHit | null,
+  mapRenderOffsetToSource: (offset: number) => number,
+  textLength: number
+): TextLineRange | null {
+  if (!hit?.selectionRange) {
+    return null;
+  }
+  return normalizeTextLineRange({
+    start: mapRenderOffsetToSource(hit.selectionRange.start),
+    end: mapRenderOffsetToSource(hit.selectionRange.end)
+  }, textLength);
 }
 
 let fallbackTextMeasureContext: CanvasRenderingContext2D | null | undefined;
@@ -1813,6 +1839,29 @@ export const CanvasPanel = memo(function CanvasPanel({
     return null;
   }, []);
 
+  const resolveTexVListSourceHitFromClient = useCallback(
+    (
+      target: EditableTextTarget,
+      clientPoint: ClientPoint,
+      outputJax: unknown,
+      containerElement: SVGSVGElement
+    ): VListSourceHit | null => {
+      if (!target.paragraphId || !(target.usesMathJax && target.layoutKind !== "single-line")) {
+        return null;
+      }
+      const snapshot = getKnuthPlassVListGeometrySnapshot({
+        outputJax,
+        paragraphId: target.paragraphId,
+        containerElement
+      });
+      return getKnuthPlassVListSourceHitFromSnapshot({
+        snapshot,
+        clientPoint
+      });
+    },
+    []
+  );
+
   const resolveTextOffsetFromClient = useCallback(
     async (target: EditableTextTarget, clientPoint: ClientPoint): Promise<number | null> => {
       if (target.isForeachTemplateEdit) {
@@ -1839,6 +1888,11 @@ export const CanvasPanel = memo(function CanvasPanel({
           canvasTransform
         );
       }
+      const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
+      const vlistHit = resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement);
+      if (vlistHit) {
+        return clamp(offsetMap.renderToSource(vlistHit.offset), 0, target.text.length);
+      }
       const result = await getKnuthPlassCaretFromPoint(outputJax, {
         paragraphId: target.paragraphId,
         sourceText: target.renderSourceText,
@@ -1848,11 +1902,11 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!result.ok || result.offset == null) {
         return null;
       }
-      const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
       return clamp(offsetMap.renderToSource(result.offset), 0, target.text.length);
     },
     [
       canvasTransform,
+      resolveTexVListSourceHitFromClient,
       resolveRenderedMathTextElement,
       svgResult,
       viewportRef
@@ -1868,6 +1922,15 @@ export const CanvasPanel = memo(function CanvasPanel({
       const containerElement = resolveRenderedMathTextElement(target);
       const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
       if (target.paragraphId && outputJax && containerElement) {
+        const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
+        const vlistLineRange = textLineRangeFromVListSourceHit(
+          resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement),
+          (offset) => offsetMap.renderToSource(offset),
+          target.text.length
+        );
+        if (vlistLineRange) {
+          return vlistLineRange;
+        }
         const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
           paragraphId: target.paragraphId,
           sourceText: target.renderSourceText,
@@ -1875,13 +1938,10 @@ export const CanvasPanel = memo(function CanvasPanel({
           clientPoint
         });
         if (result.ok && result.lineStartOffset != null && result.lineEndOffset != null) {
-          const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-          const start = clamp(offsetMap.renderToSource(result.lineStartOffset), 0, target.text.length);
-          const end = clamp(offsetMap.renderToSource(result.lineEndOffset), 0, target.text.length);
-          return {
-            start: Math.min(start, end),
-            end: Math.max(start, end)
-          };
+          return normalizeTextLineRange({
+            start: offsetMap.renderToSource(result.lineStartOffset),
+            end: offsetMap.renderToSource(result.lineEndOffset)
+          }, target.text.length);
         }
       }
       if (requiresParagraphGeometry) {
@@ -1905,6 +1965,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       canvasTransform,
       interactionSvgRef,
       resolveRenderedMathTextElement,
+      resolveTexVListSourceHitFromClient,
       svgResult,
       viewportRef
     ]
@@ -1992,7 +2053,22 @@ export const CanvasPanel = memo(function CanvasPanel({
         mode,
         anchorLineRange: provisionalLineRange
       };
-      const offsetPromise = resolveTextOffsetFromClient(target, clientPoint);
+      const outputJax = getActiveMathJaxOutputJax();
+      const containerElement = outputJax ? resolveRenderedMathTextElement(target) : null;
+      const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
+      const vlistSourceHit = outputJax && containerElement
+        ? resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement)
+        : null;
+      const vlistSourceSelection = vlistSourceHit?.selectionRange
+        ? textLineRangeFromVListSourceHit(
+            vlistSourceHit,
+            (offset) => offsetMap.renderToSource(offset),
+            target.text.length
+          )
+        : null;
+      const offsetPromise = vlistSourceHit
+        ? Promise.resolve(clamp(offsetMap.renderToSource(vlistSourceHit.offset), 0, target.text.length))
+        : resolveTextOffsetFromClient(target, clientPoint);
       const lineRangePromise = mode === "line"
         ? resolveTextLineRangeFromClient(target, clientPoint)
         : Promise.resolve<TextLineRange | null>(null);
@@ -2008,12 +2084,17 @@ export const CanvasPanel = memo(function CanvasPanel({
                 : provisionalLineRange
             )
           : null;
-        const selection = resolveTextSelectionRangeForMode(
-          target.text,
-          mode,
-          resolvedOffset,
-          resolvedLineRange
-        );
+        const selection = (mode === "char" || mode === "line") && vlistSourceSelection
+          ? {
+              start: Math.min(vlistSourceSelection.start, vlistSourceSelection.end),
+              end: Math.max(vlistSourceSelection.start, vlistSourceSelection.end)
+            }
+          : resolveTextSelectionRangeForMode(
+              target.text,
+              mode,
+              resolvedOffset,
+              resolvedLineRange
+            );
         dispatchCanvasTextEditAction({
           type: "pointer_resolved",
           requestRevision,
@@ -2049,8 +2130,10 @@ export const CanvasPanel = memo(function CanvasPanel({
       canvasTextEditState.inputRevision,
       dispatchCanvasTextEditAction,
       interactionSvgRef,
+      resolveRenderedMathTextElement,
       resolveTextLineRangeFromClient,
       resolveTextOffsetFromClient,
+      resolveTexVListSourceHitFromClient,
       source,
       startTextEditingSession,
       svgResult,

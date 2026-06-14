@@ -9,7 +9,7 @@ import {
   texScopeParagraphAlignment,
   texScopeParagraphAlignmentProfile,
   type TexParagraphScopePolicy,
-} from "./vlist/index.js";
+} from "./vlist/paragraph-scope.js";
 
 export interface TexParagraphLayoutStateResult {
   readonly inheritedAlignment: TexParagraphAlignment;

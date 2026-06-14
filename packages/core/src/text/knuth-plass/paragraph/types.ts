@@ -80,6 +80,7 @@ export type BreakRef =
 
 interface BaseRun {
   runIndex: number;
+  role?: 'list-label';
   sourceStart: number;
   sourceEnd: number;
 }
