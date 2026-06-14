@@ -1,25 +1,26 @@
-import { parseLength } from "../../../semantic/coords/parse-length.js";
-import { roundTexPt } from "../fonts/units.js";
+import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
+import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
 import type {
-  LineReport,
-  ParagraphLayoutReport,
-} from "../../knuth-plass/paragraph/report.js";
+  GreedyLine,
+  ParagraphRun,
+} from "../../knuth-plass/paragraph/types.js";
 import type {
-  TexBoxMetrics,
-  PositionedTexVListItem,
+  ResolvedTexFont,
+  ShapedTexTextRun,
+  TexMetricProvider,
+} from "../fonts/types.js";
+import type { TexParagraphAlignment } from "../ir.js";
+import type { TexLayoutLabel } from "../layout-inline-items.js";
+import { buildTexParagraphReport } from "../paragraph-report.js";
+import type {
   TexLayoutReport,
-  TexSourceSpan,
-  TexVListBoxLayoutReport,
-  TexVListBoxReportItem,
+  TexLineBox,
   TexVListParagraphBoxMeasurement,
   TexVListParagraphHorizontalLayout,
   TexVListParagraphLineAssignment,
   TexVListDocument,
-  TexVListItem,
   TexVListLayout,
   TexVListLayoutOptions,
-  TexVListParagraphPlacement,
-  TexVListLinePlacement,
 } from "./types.js";
 import {
   computeTexVListNaturalTotalHeight,
@@ -29,13 +30,38 @@ import {
   texVListBaselineY,
   texVListGlueSetForTargetHeight,
   texVListRootVerticalOffset,
-  type TexVListItemMeasurer,
 } from "./layout.js";
-import { flattenPositionedTexVListItems } from "./traversal.js";
+import { prepareSimpleTexVList } from "./prepare-simple.js";
+import {
+  createMeasuredParagraphVListMeasurer,
+  createTexVListHorizontalParagraphReportLayout,
+  measureTexVListParagraphBoxesFromReport,
+  texVListParagraphMeasurementFromHorizontalLayout,
+  texVListParagraphMeasurementMap,
+  validateTexVListParagraphLineAssignments,
+  validateTexVListParagraphMeasurements,
+} from "./paragraph-measurement.js";
+import { texVListBoxLayoutReport } from "./box-report.js";
+import {
+  assertAllReportLinesPlaced,
+  texVListLinePlacements,
+  texVListParagraphPlacements,
+} from "./placements.js";
 
 export interface TexVListParagraphReportLayoutOptions extends TexVListLayoutOptions {
   readonly lineHeight: number;
   readonly firstLineAscent?: number;
+  readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
+}
+
+export interface SimpleTexVListParagraphReportLayoutOptions extends TexVListParagraphReportLayoutOptions {
+  readonly font: ResolvedTexFont;
+}
+
+export interface SimpleTexVListHorizontalParagraphReportLayoutOptions extends TexVListLayoutOptions {
+  readonly font: ResolvedTexFont;
+  readonly report: ParagraphLayoutReport;
+  readonly lineBoxes: readonly TexLineBox[];
   readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
 }
 
@@ -57,11 +83,128 @@ export interface TexVListHorizontalParagraphLayoutOptions extends TexVListLayout
   readonly errors?: readonly string[];
 }
 
+export interface TexVListParagraphReportLayoutResult {
+  readonly report: ParagraphLayoutReport;
+  readonly layout: TexVListLayout;
+}
+
+export interface TexVListCombinedParagraphReportInput {
+  readonly runs: readonly ParagraphRun[];
+  readonly lines: readonly GreedyLine[];
+  readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
+  readonly runWidths: ReadonlyMap<number, number>;
+  readonly lineLabels: ReadonlyMap<number, {
+    readonly label: TexLayoutLabel;
+    readonly lineRunIndex: number;
+  }>;
+  readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
+  readonly errors: readonly string[];
+  readonly linebreakingMode: "feasible" | "overfull";
+}
+
+export interface TexVListCombinedParagraphReportLayoutOptions extends TexVListLayoutOptions {
+  readonly paragraphId: string;
+  readonly alignment: TexParagraphAlignment;
+  readonly layoutMode: KnuthPlassLayoutMode;
+  readonly font: ResolvedTexFont;
+  readonly metricProvider: TexMetricProvider;
+  readonly combined: TexVListCombinedParagraphReportInput;
+}
+
+const LATEX_NORMAL_BASELINESKIP_EM = 1.2;
+const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
+
+export function layoutTexVListFromCombinedParagraphReport(
+  document: TexVListDocument,
+  options: TexVListCombinedParagraphReportLayoutOptions
+): TexVListParagraphReportLayoutResult {
+  const builtReport = buildTexParagraphReport({
+    paragraphId: options.paragraphId,
+    width: options.width,
+    alignment: options.alignment,
+    runs: options.combined.runs,
+    lines: options.combined.lines,
+    shapedRuns: options.combined.shapedRuns,
+    runWidths: options.combined.runWidths,
+    lineLabels: options.combined.lineLabels,
+    linebreakingMode: options.combined.linebreakingMode,
+    layoutMode: options.layoutMode,
+    font: options.font,
+    metricProvider: options.metricProvider,
+    errors: options.combined.errors,
+  });
+  return layoutTexVListFromHorizontalParagraphReport(document, {
+    width: options.width,
+    height: options.height,
+    verticalAlign: options.verticalAlign,
+    font: options.font,
+    report: builtReport.report,
+    lineBoxes: builtReport.lineBoxes,
+    paragraphLineAssignments: options.combined.paragraphLineAssignments,
+  });
+}
+
+export function layoutTexVListFromHorizontalParagraphReport(
+  document: TexVListDocument,
+  options: TexVListLayoutOptions & {
+    readonly font: ResolvedTexFont;
+    readonly report: ParagraphLayoutReport;
+    readonly lineBoxes: readonly TexLineBox[];
+    readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
+  }
+): TexVListParagraphReportLayoutResult {
+  validateTexVListParagraphLineAssignments(
+    document,
+    options.paragraphLineAssignments
+  );
+  const lineHeight = texLatexNormalParagraphLineHeight(options.font);
+  const firstLineAscent = texLatexNormalFirstLineAscent(
+    options.report,
+    options.font
+  );
+  const horizontalLayout = createTexVListHorizontalParagraphReportLayout({
+    report: options.report,
+    lineBoxes: options.lineBoxes,
+    paragraphLineAssignments: options.paragraphLineAssignments,
+    lineHeight,
+  });
+  const layout = layoutTexVListFromHorizontalParagraphs(document, {
+    width: options.width,
+    height: options.height,
+    verticalAlign: options.verticalAlign,
+    lineHeight,
+    firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
+    firstLineAscent,
+    paragraphLayouts: horizontalLayout.paragraphLayouts,
+    reports: [horizontalLayout.report],
+    errors: horizontalLayout.report.errors,
+  });
+  assertAllReportLinesPlaced(horizontalLayout.report.lines, layout.linePlacements);
+  return {
+    report: horizontalLayout.report,
+    layout,
+  };
+}
+
+export function layoutSimpleTexVListFromHorizontalParagraphReport(
+  document: TexVListDocument,
+  options: SimpleTexVListHorizontalParagraphReportLayoutOptions
+): TexVListParagraphReportLayoutResult {
+  return layoutTexVListFromHorizontalParagraphReport(
+    prepareSimpleTexVList(document, options.font).normalized,
+    options
+  );
+}
+
 export function layoutTexVListFromParagraphReport(
   document: TexVListDocument,
   report: ParagraphLayoutReport,
   options: TexVListParagraphReportLayoutOptions
 ): TexVListLayout {
+  validateTexVListParagraphLineAssignments(
+    document,
+    options.paragraphLineAssignments
+  );
   const paragraphMeasurements = measureTexVListParagraphBoxesFromReport(
     report,
     options.lineHeight,
@@ -76,6 +219,32 @@ export function layoutTexVListFromParagraphReport(
   });
   assertAllReportLinesPlaced(report.lines, layout.linePlacements);
   return layout;
+}
+
+export function layoutSimpleTexVListFromParagraphReport(
+  document: TexVListDocument,
+  report: ParagraphLayoutReport,
+  options: SimpleTexVListParagraphReportLayoutOptions
+): TexVListLayout {
+  return layoutTexVListFromParagraphReport(
+    prepareSimpleTexVList(document, options.font).normalized,
+    report,
+    options
+  );
+}
+
+function texLatexNormalParagraphLineHeight(font: ResolvedTexFont): number {
+  return font.atPt * LATEX_NORMAL_BASELINESKIP_EM;
+}
+
+function texLatexNormalFirstLineAscent(
+  report: ParagraphLayoutReport,
+  font: ResolvedTexFont
+): number {
+  return Math.max(
+    font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
+    ...report.lines.map((line) => Number(line.ascent) || 0)
+  );
 }
 
 export function layoutTexVListFromHorizontalParagraphs(
@@ -94,7 +263,8 @@ export function layoutTexVListFromMeasuredParagraphs(
   document: TexVListDocument,
   options: TexVListMeasuredParagraphLayoutOptions
 ): TexVListLayout {
-  const paragraphMeasurements = paragraphMeasurementMap(options.paragraphMeasurements);
+  validateTexVListParagraphMeasurements(document, options.paragraphMeasurements);
+  const paragraphMeasurements = texVListParagraphMeasurementMap(options.paragraphMeasurements);
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);
   const naturalTotalHeight = computeTexVListNaturalTotalHeight(
     document.items,
@@ -149,361 +319,4 @@ export function layoutTexVListFromMeasuredParagraphs(
     reports: options.reports ?? [],
     errors: [...options.errors ?? []],
   };
-}
-
-export function texVListBoxLayoutReport(
-  items: readonly PositionedTexVListItem[],
-  metrics: TexBoxMetrics,
-  baseline: TexVListBoxLayoutReport["baseline"]
-): TexVListBoxLayoutReport {
-  return {
-    kind: "tex-vlist-boxes",
-    metrics,
-    baseline,
-    items: flattenPositionedTexVListItems(items).map(texVListBoxReportItem),
-  };
-}
-
-function texVListBoxReportItem(
-  item: PositionedTexVListItem
-): TexVListBoxReportItem {
-  const sourceSpan = texVListItemSourceSpan(item);
-  const report: TexVListBoxReportItem = {
-    itemKind: item.item.kind,
-    path: item.path ?? [],
-    ...(sourceSpan ? { sourceSpan } : {}),
-    x: item.x,
-    y: item.y,
-    width: item.metrics.width,
-    height: item.metrics.height,
-    depth: item.metrics.depth,
-    totalHeight: roundTexPt(item.metrics.height + item.metrics.depth),
-    ...(item.item.kind === "paragraph" ? { blockIndex: item.item.blockIndex } : {}),
-    ...(item.item.kind === "hbox" && item.item.role ? { hboxRole: item.item.role } : {}),
-    ...(item.item.kind === "vbox" && item.item.role ? { role: item.item.role } : {}),
-    ...(item.item.kind === "vbox" && item.item.layout?.listItem
-      ? { listItem: item.item.layout.listItem }
-      : {}),
-    ...(item.item.kind === "glue" ? {
-      glue: {
-        size: item.item.size,
-        ...(item.item.stretch !== undefined ? { stretch: item.item.stretch } : {}),
-        ...(item.item.shrink !== undefined ? { shrink: item.item.shrink } : {}),
-        ...(item.item.stretchOrder !== undefined ? { stretchOrder: item.item.stretchOrder } : {}),
-        ...(item.item.shrinkOrder !== undefined ? { shrinkOrder: item.item.shrinkOrder } : {}),
-        ...(item.item.origin !== undefined ? { origin: item.item.origin } : {}),
-      },
-    } : {}),
-    ...(item.item.kind === "penalty" ? { penalty: item.item.penalty } : {}),
-    ...(item.item.kind === "placeholder" ? { placeholderReason: item.item.reason } : {}),
-  };
-  return report;
-}
-
-function texVListItemSourceSpan(
-  item: PositionedTexVListItem
-): TexSourceSpan | undefined {
-  return "sourceSpan" in item.item ? item.item.sourceSpan : undefined;
-}
-
-function texVListLinePlacements(
-  items: readonly PositionedTexVListItem[],
-  paragraphMeasurements: ReadonlyMap<number, TexVListParagraphBoxMeasurement>,
-  lineHeight: number
-): readonly TexVListLinePlacement[] {
-  const lineYByIndex = new Map<number, number>();
-  for (const item of flattenPositionedTexVListItems(items)) {
-    if (item.item.kind !== "paragraph") {
-      continue;
-    }
-    const measurement = paragraphMeasurements.get(item.item.paragraph.blockIndex);
-    if (!measurement) {
-      throw new Error(
-        `TeX vlist layout is missing paragraph measurement for block ${item.item.paragraph.blockIndex}.`
-      );
-    }
-    for (const line of measurement.lineOffsets) {
-      if (lineYByIndex.has(line.lineIndex)) {
-        throw new Error(`TeX vlist layout placed line ${line.lineIndex} more than once.`);
-      }
-      lineYByIndex.set(line.lineIndex, roundTexPt(item.y + line.y));
-    }
-  }
-  return Array.from(lineYByIndex.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([lineIndex, y]) => ({
-      lineIndex,
-      y,
-      height: lineHeight,
-    }));
-}
-
-function paragraphMeasurementMap(
-  measurements: readonly TexVListParagraphBoxMeasurement[]
-): ReadonlyMap<number, TexVListParagraphBoxMeasurement> {
-  const byBlock = new Map<number, TexVListParagraphBoxMeasurement>();
-  for (const measurement of measurements) {
-    if (byBlock.has(measurement.blockIndex)) {
-      throw new Error(
-        `TeX vlist layout received duplicate paragraph measurement for block ${measurement.blockIndex}.`
-      );
-    }
-    byBlock.set(measurement.blockIndex, measurement);
-    const lineIndices = new Set(measurement.lineIndices);
-    for (const lineIndex of measurement.lineIndices) {
-      if (!measurement.lineOffsets.some((line) => line.lineIndex === lineIndex)) {
-        throw new Error(
-          `TeX vlist paragraph measurement for block ${measurement.blockIndex} is missing line offset ${lineIndex}.`
-        );
-      }
-    }
-    const seenLineOffsets = new Set<number>();
-    for (const line of measurement.lineOffsets) {
-      if (!lineIndices.has(line.lineIndex)) {
-        throw new Error(
-          `TeX vlist paragraph measurement for block ${measurement.blockIndex} has stray line offset ${line.lineIndex}.`
-        );
-      }
-      if (seenLineOffsets.has(line.lineIndex)) {
-        throw new Error(
-          `TeX vlist paragraph measurement for block ${measurement.blockIndex} has duplicate line offset ${line.lineIndex}.`
-        );
-      }
-      seenLineOffsets.add(line.lineIndex);
-    }
-  }
-  return byBlock;
-}
-
-function assertAllReportLinesPlaced(
-  lines: readonly LineReport[],
-  linePlacements: readonly TexVListLinePlacement[]
-): void {
-  const placedLineIndices = new Set(linePlacements.map((placement) => placement.lineIndex));
-  for (const line of lines) {
-    if (!placedLineIndices.has(line.lineIndex)) {
-      throw new Error(`TeX vlist layout did not place line ${line.lineIndex}.`);
-    }
-  }
-}
-
-function texVListParagraphPlacements(
-  items: readonly PositionedTexVListItem[],
-  paragraphMeasurements: ReadonlyMap<number, TexVListParagraphBoxMeasurement>
-): readonly TexVListParagraphPlacement[] {
-  const placements: TexVListParagraphPlacement[] = [];
-  for (const item of flattenPositionedTexVListItems(items)) {
-    if (item.item.kind !== "paragraph") {
-      continue;
-    }
-    const measurement = paragraphMeasurements.get(item.item.paragraph.blockIndex);
-    if (!measurement) {
-      throw new Error(
-        `TeX vlist layout is missing paragraph measurement for block ${item.item.paragraph.blockIndex}.`
-      );
-    }
-    placements.push({
-      blockIndex: item.item.paragraph.blockIndex,
-      vlistPath: item.path,
-      sourceSpan: item.item.sourceSpan,
-      lineIndices: measurement.lineIndices,
-      y: item.y,
-      metrics: item.metrics,
-    });
-  }
-  return placements;
-}
-
-function texVListParagraphMeasurementFromHorizontalLayout(
-  paragraph: TexVListParagraphHorizontalLayout
-): TexVListParagraphBoxMeasurement {
-  const lines = paragraph.horizontal.lines ?? [];
-  const lineIndices = lines.map((line) => line.lineIndex);
-  if (!sameLineIndices(paragraph.lineIndices, lineIndices)) {
-    throw new Error(`Measured horizontal paragraph block ${paragraph.blockIndex} line ownership changed.`);
-  }
-  const standardBottom = roundTexPt(
-    paragraph.horizontal.metrics.height + paragraph.horizontal.metrics.depth
-  );
-  const firstLine = lines[0];
-  const lastLine = lines.at(-1);
-  const ruleLeadingBottom = lastLine
-    ? roundTexPt(lastLine.y + (firstLine?.metrics.height ?? 0) + lastLine.metrics.depth)
-    : 0;
-  return {
-    blockIndex: paragraph.blockIndex,
-    lineIndices,
-    lineOffsets: lines.map((line) => ({
-      lineIndex: line.lineIndex,
-      y: line.y,
-    })),
-    standardMetrics: paragraph.horizontal.metrics,
-    ruleLeadingMetrics: paragraphBoxMetrics(
-      paragraph.horizontal.metrics.width,
-      paragraph.horizontal.metrics.height,
-      ruleLeadingBottom
-    ),
-    standardAdvance: standardBottom,
-    ruleLeadingAdvance: ruleLeadingBottom,
-  };
-}
-
-function sameLineIndices(
-  left: readonly number[],
-  right: readonly number[]
-): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function createMeasuredParagraphVListMeasurer(
-  paragraphMeasurements: ReadonlyMap<number, TexVListParagraphBoxMeasurement>
-): TexVListItemMeasurer {
-  return (item, cursor, index, items) => {
-    if (item.kind !== "paragraph") {
-      return null;
-    }
-    const measurement = paragraphMeasurements.get(item.paragraph.blockIndex);
-    if (!measurement) {
-      throw new Error(
-        `TeX vlist report adapter is missing paragraph measurement for block ${item.paragraph.blockIndex}.`
-      );
-    }
-    if (measurement.lineIndices.length === 0) {
-      return null;
-    }
-    const useRuleLeadingBottom = shouldUseActualParagraphBottomBeforeNextItem(items, index);
-    return {
-      y: cursor,
-      advance: useRuleLeadingBottom ? measurement.ruleLeadingAdvance : measurement.standardAdvance,
-      metrics: useRuleLeadingBottom ? measurement.ruleLeadingMetrics : measurement.standardMetrics,
-    };
-  };
-}
-
-export function measureTexVListParagraphBoxesFromReport(
-  report: ParagraphLayoutReport,
-  lineHeight: number,
-  paragraphLineAssignments: readonly TexVListParagraphLineAssignment[]
-): readonly TexVListParagraphBoxMeasurement[] {
-  const assignedLinesByBlock = paragraphLineAssignmentMap(
-    paragraphLineAssignments,
-    report.lines
-  );
-  const measurements = new Map<number, TexVListParagraphBoxMeasurement>();
-  for (const [blockIndex, matchingLines] of assignedLinesByBlock) {
-    if (matchingLines.length === 0) {
-      measurements.set(blockIndex, {
-        blockIndex,
-        lineIndices: [],
-        lineOffsets: [],
-        standardMetrics: { width: 0, height: 0, depth: 0 },
-        ruleLeadingMetrics: { width: 0, height: 0, depth: 0 },
-        standardAdvance: 0,
-        ruleLeadingAdvance: 0,
-      });
-      continue;
-    }
-
-    let lineCursor = 0;
-    let lastLineTop = 0;
-    const lineOffsets: TexVListParagraphBoxMeasurement["lineOffsets"][number][] = [];
-    for (const line of matchingLines) {
-      lastLineTop = lineCursor;
-      lineOffsets.push({
-        lineIndex: line.lineIndex,
-        y: roundTexPt(lineCursor),
-      });
-      lineCursor = roundTexPt(
-        lineCursor + lineHeight + texLineLeadingPt(line.break?.lineLeading)
-      );
-    }
-
-    const firstLine = matchingLines[0];
-    const baselineY = roundTexPt(texLineAscent(firstLine));
-    const lastLine = matchingLines.at(-1);
-    const baselineAscent = texLineAscent(firstLine);
-    const standardBottom = lineCursor;
-    const ruleLeadingBottom = roundTexPt(lastLineTop + baselineAscent + texLineDescent(lastLine));
-    const width = Math.max(0, ...matchingLines.map((line) => line.targetWidth));
-    measurements.set(blockIndex, {
-      blockIndex,
-      lineIndices: matchingLines.map((line) => line.lineIndex),
-      lineOffsets,
-      standardMetrics: paragraphBoxMetrics(width, baselineY, standardBottom),
-      ruleLeadingMetrics: paragraphBoxMetrics(width, baselineY, ruleLeadingBottom),
-      standardAdvance: standardBottom,
-      ruleLeadingAdvance: ruleLeadingBottom,
-    });
-  }
-  return Array.from(measurements.values());
-}
-
-function paragraphBoxMetrics(
-  width: number,
-  baselineY: number,
-  bottom: number
-): TexBoxMetrics {
-  return {
-    width,
-    height: roundTexPt(Math.max(0, baselineY)),
-    depth: roundTexPt(Math.max(0, bottom - baselineY)),
-  };
-}
-
-function paragraphLineAssignmentMap(
-  assignments: readonly TexVListParagraphLineAssignment[],
-  lines: readonly LineReport[]
-): ReadonlyMap<number, readonly LineReport[]> {
-  const assigned = new Map<number, LineReport[]>();
-  const lineByIndex = new Map(lines.map((line) => [line.lineIndex, line]));
-  for (const assignment of assignments) {
-    const blockLines: LineReport[] = [];
-    for (const lineIndex of assignment.lineIndices) {
-      const line = lineByIndex.get(lineIndex);
-      if (!line) {
-        throw new Error(`TeX vlist paragraph assignment references missing line ${lineIndex}.`);
-      }
-      blockLines.push(line);
-    }
-    assigned.set(assignment.blockIndex, blockLines);
-  }
-  return assigned;
-}
-
-function shouldUseActualParagraphBottomBeforeNextItem(
-  items: readonly TexVListItem[],
-  index: number
-): boolean {
-  return isRuleLeadingVerticalSequence(items.slice(index + 1));
-}
-
-function isRuleLeadingVerticalSequence(items: readonly TexVListItem[]): boolean {
-  for (const item of items) {
-    if (item.kind === "rule") {
-      return true;
-    }
-    if (item.kind === "glue" || item.kind === "penalty") {
-      continue;
-    }
-    if (item.kind === "vbox") {
-      return isRuleLeadingVerticalSequence(item.items);
-    }
-    return false;
-  }
-  return false;
-}
-
-function texLineAscent(line: LineReport | undefined): number {
-  return roundTexPt(Math.max(0, line?.ascent ?? 0));
-}
-
-function texLineDescent(line: LineReport | undefined): number {
-  return roundTexPt(Math.max(0, line?.descent ?? 0));
-}
-
-function texLineLeadingPt(lineLeading: string | undefined): number {
-  if (!lineLeading) {
-    return 0;
-  }
-  return parseLength(lineLeading, "pt") ?? 0;
 }

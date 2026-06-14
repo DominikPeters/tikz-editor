@@ -1,23 +1,41 @@
 export {
-  addParagraphVerticalGlueToVList,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
-  materializeParagraphVerticalGlueInVList,
+} from "./lower-simple.js";
+export {
   normalizeSimpleTexVList,
   prepareSimpleTexVList,
   type PreparedSimpleTexVList,
-  type SimpleTexParagraphVerticalSkip,
-} from "./lower-simple.js";
+} from "./prepare-simple.js";
 export {
+  layoutSimpleTexVListFromHorizontalParagraphReport,
+  layoutSimpleTexVListFromParagraphReport,
+  layoutTexVListFromCombinedParagraphReport,
   layoutTexVListFromHorizontalParagraphs,
+  layoutTexVListFromHorizontalParagraphReport,
   layoutTexVListFromMeasuredParagraphs,
   layoutTexVListFromParagraphReport,
-  measureTexVListParagraphBoxesFromReport,
-  texVListBoxLayoutReport,
+  type SimpleTexVListHorizontalParagraphReportLayoutOptions,
+  type SimpleTexVListParagraphReportLayoutOptions,
+  type TexVListCombinedParagraphReportInput,
+  type TexVListCombinedParagraphReportLayoutOptions,
   type TexVListHorizontalParagraphLayoutOptions,
   type TexVListMeasuredParagraphLayoutOptions,
+  type TexVListParagraphReportLayoutResult,
   type TexVListParagraphReportLayoutOptions,
 } from "./report.js";
+export {
+  texVListBoxLayoutReport,
+} from "./box-report.js";
+export {
+  attachTexHBoxesBeforeVListParagraphs,
+} from "./attachments.js";
+export {
+  appendTexVListParagraphLineAssignment,
+  measureTexVListParagraphBoxesFromReport,
+  validateTexVListParagraphLineAssignments,
+  validateTexVListParagraphMeasurements,
+} from "./paragraph-measurement.js";
 export {
   computeTexVListNaturalTotalHeight,
   layoutTexVListItems,
@@ -32,7 +50,12 @@ export {
   type TexVListItemMeasurer,
 } from "./layout.js";
 export { groupSimpleTexVListScopes } from "./scopes.js";
-export { planSimpleTexParagraphVerticalSkips } from "./spacing.js";
+export {
+  addParagraphVerticalGlueToVList,
+  materializeParagraphVerticalGlueInVList,
+  planSimpleTexParagraphVerticalSkips,
+  type SimpleTexParagraphVerticalSkip,
+} from "./spacing.js";
 export {
   findPositionedTexVListItemByPath,
   flattenPositionedTexVListItems,

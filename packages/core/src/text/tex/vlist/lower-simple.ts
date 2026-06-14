@@ -6,9 +6,6 @@ import type {
   SimpleTexVerticalGlueBlockItem,
   SimpleTexVerticalRuleBlockItem,
 } from "../ir.js";
-import type { ResolvedTexFont } from "../fonts/types.js";
-import { planSimpleTexParagraphVerticalSkips } from "./spacing.js";
-import { groupSimpleTexVListScopes } from "./scopes.js";
 import { texVBoxRolePathForScope } from "./scope-roles.js";
 import type {
   TexGlueItem,
@@ -21,19 +18,6 @@ import type {
   TexVListDocument,
   TexVListItem,
 } from "./types.js";
-
-export interface SimpleTexParagraphVerticalSkip {
-  readonly blockIndex: number;
-  readonly segmentIndex: number;
-  readonly size: number;
-  readonly quoteSize: number;
-  readonly listSize: number;
-}
-
-export interface PreparedSimpleTexVList {
-  readonly materialized: TexVListDocument;
-  readonly normalized: TexVListDocument;
-}
 
 export function lowerSimpleTexBlocksToVList(
   blocks: readonly SimpleTexParagraphBlock[]
@@ -72,74 +56,6 @@ export function lowerSimpleTexBlockItemsToVList(
     kind: "vlist",
     sourceSpan: sourceSpanForVListItems(items),
     items,
-  };
-}
-
-export function addParagraphVerticalGlueToVList(
-  vlist: TexVListDocument,
-  skips: readonly SimpleTexParagraphVerticalSkip[]
-): TexVListDocument {
-  const verticalSkipByBlock = new Map<number, SimpleTexParagraphVerticalSkip>();
-  for (const skip of skips) {
-    if (skip.segmentIndex === 0 && skip.size > 0) {
-      verticalSkipByBlock.set(skip.blockIndex, skip);
-    }
-  }
-
-  const items: TexVListItem[] = [];
-  for (const item of vlist.items) {
-    if (item.kind === "paragraph") {
-      const skip = verticalSkipByBlock.get(item.paragraph.blockIndex);
-      if (skip && skip.size > 0) {
-        items.push({
-          kind: "glue",
-          sourceSpan: item.sourceSpan,
-          origin: {
-            kind: "paragraph-boundary",
-            beforeBlockIndex: item.paragraph.blockIndex,
-            quoteSize: skip.quoteSize,
-            listSize: skip.listSize,
-          },
-          size: skip.size,
-          stretchOrder: "normal",
-          shrinkOrder: "normal",
-        });
-      }
-    }
-    items.push(item);
-  }
-
-  return {
-    ...vlist,
-    items,
-  };
-}
-
-export function materializeParagraphVerticalGlueInVList(
-  vlist: TexVListDocument,
-  font: ResolvedTexFont
-): TexVListDocument {
-  return addParagraphVerticalGlueToVList(
-    vlist,
-    planSimpleTexParagraphVerticalSkips(vlist.items, font)
-  );
-}
-
-export function normalizeSimpleTexVList(
-  vlist: TexVListDocument,
-  font: ResolvedTexFont
-): TexVListDocument {
-  return prepareSimpleTexVList(vlist, font).normalized;
-}
-
-export function prepareSimpleTexVList(
-  vlist: TexVListDocument,
-  font: ResolvedTexFont
-): PreparedSimpleTexVList {
-  const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
-  return {
-    materialized,
-    normalized: groupSimpleTexVListScopes(materialized, font),
   };
 }
 

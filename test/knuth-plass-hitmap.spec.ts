@@ -1329,6 +1329,14 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("uses registered TeX vlist line placements for caret geometry without linebox DOM", async () => {
     const report = makeTwoLineReport();
+    const shiftedLine = report.lines[1];
+    const shiftedSegment = shiftedLine?.segments[0];
+    if (shiftedLine && shiftedSegment?.kind === "text") {
+      shiftedLine.xStart = 5;
+      shiftedLine.xEnd = 11;
+      shiftedSegment.x = 5;
+      shiftedSegment.caretStops = Array.from({ length: 7 }, (_, index) => 5 + index);
+    }
     const outputJax = {
       linebreaks: {
         getReports: () => [report]
@@ -1345,13 +1353,14 @@ describe("knuth-plass hitmap line ranges", () => {
             blockIndex: 0,
             sourceSpan: { start: 0, end: 17 },
             lineIndices: [0, 1],
+            x: 0,
             y: 0,
             metrics: { width: report.width, height: 8, depth: 16 }
           }
         ],
         linePlacements: [
-          { lineIndex: 0, y: 0, height: 10 },
-          { lineIndex: 1, y: 12, height: 10 }
+          { lineIndex: 0, x: 0, y: 0, height: 10 },
+          { lineIndex: 1, x: 5, y: 12, height: 10 }
         ],
         reports: [report],
         errors: []
@@ -1377,14 +1386,14 @@ describe("knuth-plass hitmap line ranges", () => {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
-      clientPoint: clientPoint(px(2), px(16))
+      clientPoint: clientPoint(px(7), px(16))
     });
 
     expect(point).toMatchObject({
       ok: true,
       lineIndex: 1,
-      lineLocalX: 1,
-      clientPoint: { x: 1, y: 17 }
+      lineLocalX: 6,
+      clientPoint: { x: 6, y: 17 }
     });
     expect(hit).toMatchObject({
       ok: true,

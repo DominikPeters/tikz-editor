@@ -41,7 +41,8 @@ export function layoutTexVListItems(
   measureItem: TexVListItemMeasurer,
   glueSet: TexVListGlueSet | null,
   startCursor: number,
-  pathPrefix: readonly number[] = []
+  pathPrefix: readonly number[] = [],
+  xOffset = 0
 ): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: number } {
   const positioned: PositionedTexVListItem[] = [];
   let cursor = startCursor;
@@ -56,7 +57,7 @@ export function layoutTexVListItems(
       positioned.push({
         item,
         path,
-        x: 0,
+        x: xOffset,
         y: cursor,
         metrics: {
           width: 0,
@@ -75,7 +76,7 @@ export function layoutTexVListItems(
       positioned.push({
         item,
         path,
-        x: measured.x ?? 0,
+        x: roundTexPt(xOffset + (measured.x ?? 0)),
         y,
         metrics: measured.metrics,
       });
@@ -85,11 +86,11 @@ export function layoutTexVListItems(
 
     if (item.kind === "vbox") {
       const top = cursor;
-      const nested = layoutTexVBoxItem(item, measureItem, top, path);
+      const nested = layoutTexVBoxItem(item, measureItem, top, path, xOffset);
       positioned.push({
         item,
         path,
-        x: 0,
+        x: xOffset,
         y: top,
         metrics: nested.metrics,
         children: nested.children,
@@ -104,13 +105,24 @@ function layoutTexVBoxItem(
   item: TexVBoxItem,
   measureItem: TexVListItemMeasurer,
   top: number,
-  path: readonly number[]
+  path: readonly number[],
+  xOffset: number
 ): {
   readonly children: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
   readonly cursor: number;
 } {
-  const natural = layoutTexVListItems(item.items, measureItem, null, top, path);
+  const leftMarginWidth = item.layout?.leftMarginWidth ?? 0;
+  const rightMarginWidth = item.layout?.rightMarginWidth ?? 0;
+  const childXOffset = roundTexPt(xOffset + leftMarginWidth);
+  const natural = layoutTexVListItems(
+    item.items,
+    measureItem,
+    null,
+    top,
+    path,
+    childXOffset
+  );
   const naturalHeight = roundTexPt(natural.cursor - top);
   const targetHeight = finiteTexDimen(item.height);
   const glueSet = texVListGlueSetForTargetHeight(
@@ -119,7 +131,14 @@ function layoutTexVBoxItem(
     targetHeight
   );
   const laidOut = glueSet
-    ? layoutTexVListItems(item.items, measureItem, glueSet, top, path)
+    ? layoutTexVListItems(
+        item.items,
+        measureItem,
+        glueSet,
+        top,
+        path,
+        childXOffset
+      )
     : natural;
   const laidOutHeight = roundTexPt(laidOut.cursor - top);
   const advance = targetHeight ?? laidOutHeight;
@@ -130,7 +149,7 @@ function layoutTexVBoxItem(
   const cursor = roundTexPt(top + advance);
   return {
     children,
-    metrics: metricsForVBox(children, top, cursor),
+    metrics: metricsForVBox(children, top, cursor, xOffset, leftMarginWidth, rightMarginWidth),
     cursor,
   };
 }
@@ -320,7 +339,10 @@ function finiteTexDimen(value: number | string | undefined): number | undefined 
 function metricsForVBox(
   positioned: readonly PositionedTexVListItem[],
   top: number,
-  bottom: number
+  bottom: number,
+  xOffset = 0,
+  leftMarginWidth = 0,
+  rightMarginWidth = 0
 ): TexBoxMetrics {
   const firstBox = positioned.find((item) =>
     item.item.kind !== "glue" &&
@@ -329,7 +351,11 @@ function metricsForVBox(
   const baselineY = firstBox
     ? firstBox.y + firstBox.metrics.height
     : top;
-  const width = Math.max(0, ...positioned.map((item) => item.metrics.width));
+  const contentRight = Math.max(
+    leftMarginWidth,
+    ...positioned.map((item) => item.x - xOffset + item.metrics.width)
+  );
+  const width = roundTexPt(contentRight + rightMarginWidth);
   return {
     width,
     height: roundTexPt(Math.max(0, baselineY - top)),

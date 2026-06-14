@@ -1,8 +1,7 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { SimpleTexListContext } from "../ir.js";
-import type { TexVListItem } from "./types.js";
-import type { SimpleTexParagraphVerticalSkip } from "./lower-simple.js";
+import type { TexVListDocument, TexVListItem } from "./types.js";
 
 const articleQuoteSpacingEm = {
   topsep: 1,
@@ -19,34 +18,74 @@ const articleListSpacingEm = {
   parsepByDepth: [0.4, 0.2, 0],
 } as const;
 
+export interface SimpleTexParagraphVerticalSkip {
+  readonly blockIndex: number;
+  readonly segmentIndex: number;
+  readonly size: number;
+  readonly quoteSize: number;
+  readonly listSize: number;
+}
+
 export function planSimpleTexParagraphVerticalSkips(
   items: readonly TexVListItem[],
   font: ResolvedTexFont
 ): readonly SimpleTexParagraphVerticalSkip[] {
   const skips: SimpleTexParagraphVerticalSkip[] = [];
-  let previousEmittedQuoteDepth = 0;
-  let previousEmittedListContext: SimpleTexListContext | undefined;
-  const quoteEntryHadPreviousParagraphByDepth = new Map<number, boolean>();
-  let emittedParagraphCount = 0;
+  planSimpleTexParagraphVerticalSkipsInto(
+    items,
+    font,
+    {
+      previousEmittedQuoteDepth: 0,
+      previousEmittedListContext: undefined,
+      quoteEntryHadPreviousParagraphByDepth: new Map(),
+      emittedParagraphCount: 0,
+    },
+    skips
+  );
 
+  return skips;
+}
+
+interface SimpleTexParagraphVerticalSkipState {
+  previousEmittedQuoteDepth: number;
+  previousEmittedListContext: SimpleTexListContext | undefined;
+  readonly quoteEntryHadPreviousParagraphByDepth: Map<number, boolean>;
+  emittedParagraphCount: number;
+}
+
+function planSimpleTexParagraphVerticalSkipsInto(
+  items: readonly TexVListItem[],
+  font: ResolvedTexFont,
+  state: SimpleTexParagraphVerticalSkipState,
+  skips: SimpleTexParagraphVerticalSkip[]
+): void {
   for (const item of items) {
+    if (item.kind === "vbox") {
+      planSimpleTexParagraphVerticalSkipsInto(
+        item.items,
+        font,
+        state,
+        skips
+      );
+      continue;
+    }
     if (item.kind !== "paragraph") {
       continue;
     }
 
     const paragraph = item.paragraph;
-    const hasPreviousEmittedParagraph = emittedParagraphCount > 0;
+    const hasPreviousEmittedParagraph = state.emittedParagraphCount > 0;
     const listVerticalSkipBefore = texArticleListVerticalSkipBefore(
-      previousEmittedListContext,
+      state.previousEmittedListContext,
       paragraph.listContext,
       hasPreviousEmittedParagraph,
       font
     );
     const quoteVerticalSkipBefore = texArticleQuoteVerticalSkipBefore(
-      previousEmittedQuoteDepth,
+      state.previousEmittedQuoteDepth,
       paragraph.quoteDepth,
-      previousEmittedListContext !== undefined || paragraph.listContext !== undefined,
-      quoteEntryHadPreviousParagraphByDepth.get(previousEmittedQuoteDepth) ?? true,
+      state.previousEmittedListContext !== undefined || paragraph.listContext !== undefined,
+      state.quoteEntryHadPreviousParagraphByDepth.get(state.previousEmittedQuoteDepth) ?? true,
       hasPreviousEmittedParagraph,
       font
     );
@@ -59,29 +98,92 @@ export function planSimpleTexParagraphVerticalSkips(
       size: quoteVerticalSkipBefore + listVerticalSkipBefore,
     });
 
-    if (paragraph.quoteDepth > previousEmittedQuoteDepth) {
+    if (paragraph.quoteDepth > state.previousEmittedQuoteDepth) {
       for (
-        let depth = previousEmittedQuoteDepth + 1;
+        let depth = state.previousEmittedQuoteDepth + 1;
         depth <= paragraph.quoteDepth;
         depth += 1
       ) {
-        quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
+        state.quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
       }
-    } else if (paragraph.quoteDepth < previousEmittedQuoteDepth) {
+    } else if (paragraph.quoteDepth < state.previousEmittedQuoteDepth) {
       for (
-        let depth = previousEmittedQuoteDepth;
+        let depth = state.previousEmittedQuoteDepth;
         depth > paragraph.quoteDepth;
         depth -= 1
       ) {
-        quoteEntryHadPreviousParagraphByDepth.delete(depth);
+        state.quoteEntryHadPreviousParagraphByDepth.delete(depth);
       }
     }
-    previousEmittedQuoteDepth = paragraph.quoteDepth;
-    previousEmittedListContext = paragraph.listContext;
-    emittedParagraphCount += 1;
+    state.previousEmittedQuoteDepth = paragraph.quoteDepth;
+    state.previousEmittedListContext = paragraph.listContext;
+    state.emittedParagraphCount += 1;
+  }
+}
+
+export function addParagraphVerticalGlueToVList(
+  vlist: TexVListDocument,
+  skips: readonly SimpleTexParagraphVerticalSkip[]
+): TexVListDocument {
+  const verticalSkipByBlock = new Map<number, SimpleTexParagraphVerticalSkip>();
+  for (const skip of skips) {
+    if (skip.segmentIndex === 0 && skip.size > 0) {
+      verticalSkipByBlock.set(skip.blockIndex, skip);
+    }
   }
 
-  return skips;
+  const items = addParagraphVerticalGlueToItems(vlist.items, verticalSkipByBlock);
+
+  return {
+    ...vlist,
+    items,
+  };
+}
+
+function addParagraphVerticalGlueToItems(
+  sourceItems: readonly TexVListItem[],
+  verticalSkipByBlock: ReadonlyMap<number, SimpleTexParagraphVerticalSkip>
+): readonly TexVListItem[] {
+  const items: TexVListItem[] = [];
+  for (const item of sourceItems) {
+    if (item.kind === "vbox") {
+      items.push({
+        ...item,
+        items: addParagraphVerticalGlueToItems(item.items, verticalSkipByBlock),
+      });
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      const skip = verticalSkipByBlock.get(item.paragraph.blockIndex);
+      if (skip && skip.size > 0) {
+        items.push({
+          kind: "glue",
+          sourceSpan: item.sourceSpan,
+          origin: {
+            kind: "paragraph-boundary",
+            beforeBlockIndex: item.paragraph.blockIndex,
+            quoteSize: skip.quoteSize,
+            listSize: skip.listSize,
+          },
+          size: skip.size,
+          stretchOrder: "normal",
+          shrinkOrder: "normal",
+        });
+      }
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+export function materializeParagraphVerticalGlueInVList(
+  vlist: TexVListDocument,
+  font: ResolvedTexFont
+): TexVListDocument {
+  return addParagraphVerticalGlueToVList(
+    vlist,
+    planSimpleTexParagraphVerticalSkips(vlist.items, font)
+  );
 }
 
 function texArticleQuoteVerticalSkipBefore(

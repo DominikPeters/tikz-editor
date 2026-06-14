@@ -692,8 +692,14 @@ function computeReportLineTops(report, parseLength) {
 }
 
 function computeLineTops(layout, parseLength) {
-  return layout.vlistLayout?.lineTops.map((top) => top * texPointToSvgPoint) ??
-    computeReportLineTops(layout.report, parseLength);
+  if (layout.vlistLayout?.linePlacements?.length) {
+    const tops = [];
+    for (const placement of layout.vlistLayout.linePlacements) {
+      tops[placement.lineIndex] = placement.y * texPointToSvgPoint;
+    }
+    return tops;
+  }
+  return computeReportLineTops(layout.report, parseLength);
 }
 
 function reportLineText(line) {
@@ -1007,9 +1013,9 @@ function runTexGlyphTrace(caseData, caseDir) {
 }
 
 function compareGlyphTraces(oursTrace, texTrace) {
-  const lineGlyphText = (line) => line.text
-    ? line.text.replace(/\s+/g, "")
-    : line.glyphs.map((glyph) => texGlyphText(glyph.code)).join("");
+  const lineGlyphText = (line) => line.glyphs.length > 0
+    ? line.glyphs.map((glyph) => texGlyphText(normalizeTexGlyphCode(glyph.code))).join("")
+    : (line.text ?? "").replace(/\s+/g, "");
   const oursLines = oursTrace.lines.map(lineGlyphText);
   const texLines = texTrace.lines.map(lineGlyphText);
   const lineTextMatch = JSON.stringify(oursLines) === JSON.stringify(texLines);

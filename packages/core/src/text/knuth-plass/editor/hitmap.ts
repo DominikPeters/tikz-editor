@@ -548,8 +548,12 @@ export function getKnuthPlassVListParagraphGeometry(
   }
   const paragraphs: VListParagraphGeometry[] = [];
   for (const placement of layout.paragraphPlacements) {
+    const localLeft = Number(placement.x);
+    if (!Number.isFinite(localLeft)) {
+      continue;
+    }
     const bounds = clientRectForLocalBox(
-      0,
+      localLeft,
       placement.y,
       placement.metrics.width,
       placement.metrics.height + placement.metrics.depth,
@@ -561,8 +565,8 @@ export function getKnuthPlassVListParagraphGeometry(
     paragraphs.push({
       blockIndex: placement.blockIndex,
       vlistPath: placement.vlistPath ?? [],
-      localLeft: 0,
-      localRight: placement.metrics.width,
+      localLeft,
+      localRight: localLeft + placement.metrics.width,
       localTop: placement.y,
       localBottom: placement.y + placement.metrics.height + placement.metrics.depth,
       lineIndices: placement.lineIndices,
@@ -1010,13 +1014,17 @@ function registeredLineGeometry(
     }
     const lineHeight = Number(placement.height);
     const lineTop = Number(placement.y);
-    if (!Number.isFinite(lineTop) || !Number.isFinite(lineHeight) || lineHeight <= EPSILON) {
+    if (
+      !Number.isFinite(lineTop) ||
+      !Number.isFinite(lineHeight) ||
+      lineHeight <= EPSILON
+    ) {
       throw new Error(`Invalid registered line placement for line ${line.lineIndex}.`);
     }
     const lineMatrix = translatedScreenMatrix(baseMatrix, lineStart, lineTop);
     const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, line.lineIndex);
     const bounds = clientRectForLocalBox(
-      0,
+      -lineStart,
       0,
       report.width,
       lineHeight,

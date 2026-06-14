@@ -336,12 +336,14 @@ export interface TexVListParagraphPlacement {
   readonly vlistPath?: readonly number[];
   readonly sourceSpan: TexSourceSpan;
   readonly lineIndices: readonly number[];
+  readonly x: number;
   readonly y: number;
   readonly metrics: TexBoxMetrics;
 }
 
 export interface TexVListLinePlacement {
   readonly lineIndex: number;
+  readonly x: number;
   readonly y: number;
   readonly height: number;
 }

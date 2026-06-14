@@ -2,15 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   addParagraphVerticalGlueToVList,
   analyzeSimpleTexParagraph,
+  appendTexVListParagraphLineAssignment,
+  attachTexHBoxesBeforeVListParagraphs,
   computerModernTexMetricProvider,
   computeTexVListNaturalTotalHeight,
   createSimpleTexLayoutDocumentIr,
+  createSimpleTexLayoutDocumentIrFromPreparation,
   findPositionedTexVListItemByPath,
   flattenPositionedTexVListItems,
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,
   groupSimpleTexVListScopes,
+  layoutSimpleTexVListFromHorizontalParagraphReport,
+  layoutSimpleTexVListFromParagraphReport,
   layoutTexVListItems,
+  layoutTexVListFromCombinedParagraphReport,
   layoutTexVListFromMeasuredParagraphs,
   layoutTexVListFromParagraphReport,
   lowerSimpleTexBlockItemsToVList,
@@ -18,11 +24,15 @@ import {
   materializeParagraphVerticalGlueInVList,
   normalizeSimpleTexVList,
   planSimpleTexParagraphVerticalSkips,
+  prepareSimpleTexLayoutDocument,
+  prepareTexLayoutParagraphsFromVList,
   prepareSimpleTexVList,
   parseSimpleTexParagraphIr,
   registerTexVListLayoutsOnOutputJax,
   texVListGlueSetForTargetHeight,
   texVListParagraphItems,
+  validateTexVListParagraphLineAssignments,
+  validateTexVListParagraphMeasurements,
   type TexVListItemMeasurer,
   type TexVListItem,
 } from "../packages/core/src/text/tex/index.js";
@@ -840,6 +850,81 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("carries nested vbox margins into positioned box geometry", () => {
+    const parsed = parseSimpleTexParagraphIr("Alpha");
+    const paragraph = lowerSimpleTexBlocksToVList(parsed.blocks).items[0];
+    if (!paragraph || paragraph.kind !== "paragraph") {
+      throw new Error("expected paragraph vlist item");
+    }
+    const document = {
+      kind: "vlist",
+      items: [
+        {
+          kind: "vbox",
+          layout: {
+            leftMarginWidth: 5,
+            rightMarginWidth: 3,
+          },
+          items: [paragraph],
+        },
+      ],
+    } satisfies {
+      readonly kind: "vlist";
+      readonly items: readonly TexVListItem[];
+    };
+
+    const layout = layoutTexVListFromMeasuredParagraphs(document, {
+      width: 100,
+      lineHeight: 12,
+      firstLineIndex: 0,
+      firstLineAscent: 7,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          lineIndices: [0],
+          lineOffsets: [{ lineIndex: 0, y: 0 }],
+          standardMetrics: { width: 20, height: 7, depth: 5 },
+          ruleLeadingMetrics: { width: 20, height: 7, depth: 3 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 10,
+        },
+      ],
+    });
+
+    expect(flattenPositionedTexVListItems(layout.items).map((item) => ({
+      kind: item.item.kind,
+      path: item.path,
+      x: item.x,
+      y: item.y,
+      metrics: item.metrics,
+    }))).toEqual([
+      {
+        kind: "vbox",
+        path: [0],
+        x: 0,
+        y: 0,
+        metrics: { width: 28, height: 7, depth: 5 },
+      },
+      {
+        kind: "paragraph",
+        path: [0, 0],
+        x: 5,
+        y: 0,
+        metrics: { width: 20, height: 7, depth: 5 },
+      },
+    ]);
+    expect(layout.boxReport.items.map((item) => ({
+      itemKind: item.itemKind,
+      path: item.path,
+      x: item.x,
+      width: item.width,
+      blockIndex: item.blockIndex,
+    }))).toEqual([
+      { itemKind: "vbox", path: [0], x: 0, width: 28, blockIndex: undefined },
+      { itemKind: "paragraph", path: [0, 0], x: 5, width: 20, blockIndex: 0 },
+    ]);
+  });
+
   it("lays out paragraph vlist items from explicit measured boxes", () => {
     const parsed = parseSimpleTexParagraphIr("Alpha");
     const paragraph = lowerSimpleTexBlocksToVList(parsed.blocks).items[0];
@@ -899,8 +984,8 @@ describe("simple TeX paragraph IR", () => {
     });
 
     expect(layout.linePlacements).toEqual([
-      { lineIndex: 0, y: 0, height: 12 },
-      { lineIndex: 1, y: 20, height: 12 },
+      { lineIndex: 0, x: 0, y: 0, height: 12 },
+      { lineIndex: 1, x: 0, y: 20, height: 12 },
     ]);
     expect(layout.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
@@ -1020,6 +1105,38 @@ describe("simple TeX paragraph IR", () => {
         },
       ],
     })).toThrow("duplicate line offset 0");
+  });
+
+  it("validates measured vlist paragraphs against paragraph items", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta`);
+    const document = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const measurement = (blockIndex: number, lineIndex = blockIndex) => ({
+      blockIndex,
+      lineIndices: [lineIndex],
+      lineOffsets: [{ lineIndex, y: 0 }],
+      standardMetrics: { width: 80, height: 7, depth: 5 },
+      ruleLeadingMetrics: { width: 80, height: 7, depth: 3 },
+      standardAdvance: 12,
+      ruleLeadingAdvance: 10,
+    });
+
+    expect(() => validateTexVListParagraphMeasurements(document, [
+      measurement(0),
+      measurement(1),
+    ])).not.toThrow();
+    expect(() => validateTexVListParagraphMeasurements(document, [
+      measurement(0),
+    ])).toThrow("missing paragraph block 1");
+    expect(() => validateTexVListParagraphMeasurements(document, [
+      measurement(0),
+      measurement(0, 1),
+      measurement(1, 2),
+    ])).toThrow("duplicate block 0");
+    expect(() => validateTexVListParagraphMeasurements(document, [
+      measurement(0),
+      measurement(1),
+      measurement(99),
+    ])).toThrow("missing paragraph block 99");
   });
 
   it("uses explicit paragraph line assignments when laying out report-backed vlist items", () => {
@@ -1146,7 +1263,7 @@ describe("simple TeX paragraph IR", () => {
       paragraphLineAssignments: [
         { blockIndex: 0, lineIndices: [0] },
       ],
-    })).toThrow("missing paragraph measurement for block 1");
+    })).toThrow("missing paragraph block 1");
     expect(() => layoutTexVListFromParagraphReport(document, report, {
       width: 100,
       lineHeight: 12,
@@ -1156,6 +1273,272 @@ describe("simple TeX paragraph IR", () => {
         { blockIndex: 1, lineIndices: [99] },
       ],
     })).toThrow("references missing line 99");
+  });
+
+  it("validates vlist paragraph line assignments against paragraph items", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta`);
+    const document = lowerSimpleTexBlocksToVList(parsed.blocks);
+
+    expect(() => validateTexVListParagraphLineAssignments(document, [
+      { blockIndex: 0, lineIndices: [0] },
+      { blockIndex: 1, lineIndices: [1] },
+    ])).not.toThrow();
+    expect(() => validateTexVListParagraphLineAssignments(document, [
+      { blockIndex: 0, lineIndices: [0] },
+    ])).toThrow("missing paragraph block 1");
+    expect(() => validateTexVListParagraphLineAssignments(document, [
+      { blockIndex: 0, lineIndices: [0] },
+      { blockIndex: 0, lineIndices: [1] },
+      { blockIndex: 1, lineIndices: [2] },
+    ])).toThrow("duplicate block 0");
+    expect(() => validateTexVListParagraphLineAssignments(document, [
+      { blockIndex: 0, lineIndices: [0] },
+      { blockIndex: 1, lineIndices: [1] },
+      { blockIndex: 99, lineIndices: [2] },
+    ])).toThrow("missing paragraph block 99");
+  });
+
+  it("builds paragraph reports through the vlist combined report adapter", () => {
+    const parsed = parseSimpleTexParagraphIr("Alpha");
+    const document = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const metricProvider = computerModernTexMetricProvider;
+    const font = metricProvider.resolveFont();
+    const shaped = metricProvider.shapeText("Alpha", font);
+
+    const reportLayout = layoutTexVListFromCombinedParagraphReport(document, {
+      paragraphId: "tex:vlist-combined-adapter",
+      width: 100,
+      alignment: "ragged-right",
+      layoutMode: "wrap",
+      font,
+      metricProvider,
+      combined: {
+        runs: [{
+          kind: "text",
+          runIndex: 0,
+          sourceStart: 0,
+          sourceEnd: 5,
+          text: "Alpha",
+          wrapper: {},
+          childIndex: 0,
+          wordIndex: 0,
+        }],
+        lines: [{
+          lineIndex: 0,
+          startRun: 0,
+          startTextOffset: 0,
+          endRun: 0,
+          endTextOffset: 5,
+          width: shaped.width,
+          targetWidth: 100,
+          lineNaturalWidth: shaped.width,
+          break: null,
+        }],
+        shapedRuns: new Map([[0, shaped]]),
+        runWidths: new Map([[0, shaped.width]]),
+        lineLabels: new Map(),
+        paragraphLineAssignments: [
+          { blockIndex: 0, lineIndices: [0] },
+        ],
+        errors: [],
+        linebreakingMode: "feasible",
+      },
+    });
+
+    expect(reportLayout.report).toMatchObject({
+      paragraphId: "tex:vlist-combined-adapter",
+      width: 100,
+      lines: [{
+        lineIndex: 0,
+        targetWidth: 100,
+        segments: [{
+          kind: "text",
+          text: "Alpha",
+          sourceStartRaw: 0,
+          sourceEndRaw: 5,
+        }],
+      }],
+    });
+    expect(reportLayout.layout.paragraphPlacements).toEqual([expect.objectContaining({
+      blockIndex: 0,
+      lineIndices: [0],
+      x: 0,
+      y: 0,
+    })]);
+    expect(reportLayout.layout.linePlacements).toEqual([expect.objectContaining({
+      lineIndex: 0,
+      x: 0,
+      y: 0,
+    })]);
+    expect(reportLayout.layout.reports).toEqual([reportLayout.report]);
+  });
+
+  it("derives simple horizontal report line metrics from the vlist font", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta`);
+    const rawVList = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const font = computerModernTexMetricProvider.resolveFont({
+      fontId: "cmr10",
+      atPt: 20,
+    });
+    const report = {
+      paragraphId: "tex:simple-horizontal-vlist-font-metrics",
+      width: 100,
+      alignment: "ragged-right",
+      layoutMode: "wrap",
+      lines: [0, 1].map((lineIndex) => ({
+        lineIndex,
+        startRun: lineIndex,
+        endRun: lineIndex,
+        width: 20,
+        targetWidth: 100,
+        naturalWidth: 20,
+        glueSetRatio: 0,
+        badness: 0,
+        spaceCount: 0,
+        spaceDeltaPerGap: 0,
+        ascent: 7,
+        descent: 3,
+        xStart: 0,
+        xEnd: 20,
+        break: null,
+        segments: [{
+          runIndex: lineIndex,
+          kind: "text",
+          text: lineIndex === 0 ? "Alpha" : "Beta",
+          sourceStartRaw: 0,
+          sourceEndRaw: 5,
+          x: 0,
+          width: 20,
+        }],
+      })),
+      runs: [],
+      errors: [],
+      internalMode: "canonical",
+      internalDegradeReason: null,
+      externalFallbackUsed: false,
+      linebreakingMode: "feasible",
+    } as const;
+    const lineBoxes = report.lines.map((line) => ({
+      lineIndex: line.lineIndex,
+      y: 0,
+      targetWidth: line.targetWidth,
+      metrics: {
+        width: line.targetWidth,
+        height: line.ascent,
+        depth: line.descent,
+      },
+    }));
+
+    const layout = layoutSimpleTexVListFromHorizontalParagraphReport(rawVList, {
+      width: 100,
+      font,
+      report,
+      lineBoxes,
+      paragraphLineAssignments: [
+        { blockIndex: 0, lineIndices: [0] },
+        { blockIndex: 1, lineIndices: [1] },
+      ],
+    });
+
+    expect(layout.layout.baseline).toEqual({ kind: "explicit", y: 17 });
+    expect(layout.layout.linePlacements).toEqual([
+      { lineIndex: 0, x: 0, y: 0, height: 24 },
+      { lineIndex: 1, x: 0, y: 24, height: 24 },
+    ]);
+    expect(layout.layout.metrics).toEqual({
+      width: 100,
+      height: 17,
+      depth: 31,
+    });
+  });
+
+  it("appends vlist paragraph line assignments by block index", () => {
+    const assignments = [
+      { blockIndex: 0, lineIndices: [0] },
+    ];
+
+    appendTexVListParagraphLineAssignment(assignments, 1, [1]);
+    appendTexVListParagraphLineAssignment(assignments, 0, [2, 3]);
+
+    expect(assignments).toEqual([
+      { blockIndex: 0, lineIndices: [0, 2, 3] },
+      { blockIndex: 1, lineIndices: [1] },
+    ]);
+  });
+
+  it("prepares raw simple TeX vlists before report-backed layout", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \end{quote} \par Delta`
+    );
+    const rawVList = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const report = {
+      paragraphId: "tex:raw-simple-vlist-report",
+      width: 100,
+      alignment: "ragged-right",
+      layoutMode: "wrap",
+      lines: [0, 1, 2].map((lineIndex) => ({
+        lineIndex,
+        startRun: lineIndex,
+        endRun: lineIndex,
+        width: 20,
+        targetWidth: 100,
+        naturalWidth: 20,
+        glueSetRatio: 0,
+        badness: 0,
+        spaceCount: 0,
+        spaceDeltaPerGap: 0,
+        ascent: 7,
+        descent: 3,
+        xStart: 0,
+        xEnd: 20,
+        break: null,
+        segments: [{
+          runIndex: lineIndex,
+          kind: "text",
+          text: ["Alpha", "Beta", "Delta"][lineIndex],
+          sourceStartRaw: 0,
+          sourceEndRaw: 5,
+          x: 0,
+          width: 20,
+        }],
+      })),
+      runs: [],
+      errors: [],
+      internalMode: "canonical",
+      internalDegradeReason: null,
+      externalFallbackUsed: false,
+      linebreakingMode: "feasible",
+    } as const;
+
+    const layout = layoutSimpleTexVListFromParagraphReport(rawVList, report, {
+      width: 100,
+      font: computerModernTexMetricProvider.resolveFont(),
+      lineHeight: 12,
+      firstLineAscent: 7,
+      paragraphLineAssignments: [
+        { blockIndex: 0, lineIndices: [0] },
+        { blockIndex: 1, lineIndices: [1] },
+        { blockIndex: 2, lineIndices: [2] },
+      ],
+    });
+
+    expect(layout.linePlacements.map((placement) => placement.y)).toEqual([
+      0,
+      22,
+      44,
+    ]);
+    expect(layout.items.map((item) => item.item.kind)).toEqual([
+      "paragraph",
+      "vbox",
+      "glue",
+      "paragraph",
+    ]);
+    expect(layout.items[1]?.item.kind === "vbox" ? layout.items[1].item.role : null)
+      .toEqual({ kind: "quote", depth: 1 });
+    expect(layout.items[1]?.children?.map((item) => item.item.kind)).toEqual([
+      "glue",
+      "paragraph",
+    ]);
   });
 
   it("registers positioned vlist layouts by paragraph id on an output jax", () => {
@@ -2003,6 +2386,54 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("materializes paragraph boundary glue inside pre-grouped vboxes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+
+    const skips = planSimpleTexParagraphVerticalSkips(grouped.items, font);
+    const materialized = materializeParagraphVerticalGlueInVList(grouped, font);
+    const quote = materialized.items[1];
+
+    expect(skips.map((skip) => ({
+      blockIndex: skip.blockIndex,
+      size: skip.size,
+      quoteSize: skip.quoteSize,
+      listSize: skip.listSize,
+    }))).toEqual([
+      { blockIndex: 0, size: 0, quoteSize: 0, listSize: 0 },
+      { blockIndex: 1, size: 10, quoteSize: 10, listSize: 0 },
+      { blockIndex: 2, size: 4, quoteSize: 4, listSize: 0 },
+      { blockIndex: 3, size: 10, quoteSize: 10, listSize: 0 },
+    ]);
+    expect(materialized.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "vbox",
+      "glue",
+      "paragraph",
+    ]);
+    expect(quote?.kind === "vbox" ? flattenVListLeaves(quote.items) : null).toEqual([
+      "glue:10",
+      "paragraph:Beta",
+      "glue:4",
+      "paragraph:Gamma",
+    ]);
+    expect(flattenVListLeaves(materialized.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:4",
+      "paragraph:Gamma",
+      "glue:10",
+      "paragraph:Delta",
+    ]);
+  });
+
   it("normalizes simple TeX vlists by materializing boundary glue and grouping scopes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
@@ -2097,10 +2528,144 @@ describe("simple TeX paragraph IR", () => {
       options: {},
     });
 
+    expect(layout.rawVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "paragraph",
+      "paragraph",
+    ]);
     expect(layout.vlist.items.map((item) => item.kind)).toEqual(["paragraph", "vbox"]);
     expect(layout.paragraphs.map((paragraph) => paragraph.text)).toEqual(
       texVListParagraphItems(layout.vlist.items).map((item) => item.paragraph.text)
     );
+  });
+
+  it("prepares simple TeX layout documents as one vlist object with segment plans", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{itemize}\item Beta\end{itemize}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+
+    const preparation = prepareSimpleTexLayoutDocument({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: {},
+    });
+
+    expect(preparation.rawVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "paragraph",
+    ]);
+    expect(preparation.materializedVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "glue",
+      "paragraph",
+    ]);
+    expect(preparation.normalizedVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "vbox",
+    ]);
+    expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "hbox",
+      "paragraph:Beta",
+    ]);
+    expect(preparation.paragraphPreparation.segmentPlans.map((plan) => ({
+      blockIndex: plan.blockIndex,
+      text: plan.segment.text,
+    }))).toEqual([
+      { blockIndex: 0, text: "Alpha" },
+      { blockIndex: 1, text: "Beta" },
+    ]);
+  });
+
+  it("builds equivalent layout document IR from an existing preparation object", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{center} Beta \end{center}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const params = {
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right" as const,
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    };
+    const preparation = prepareSimpleTexLayoutDocument(params);
+
+    const direct = createSimpleTexLayoutDocumentIr(params);
+    const fromPreparation = createSimpleTexLayoutDocumentIrFromPreparation(
+      preparation,
+      { font, metricProvider: computerModernTexMetricProvider }
+    );
+
+    expect(preparation.reportAlignment).toBe(direct.reportAlignment);
+    expect(fromPreparation).toEqual(direct);
+  });
+
+  it("attaches hboxes before matching paragraph items inside nested vlists", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote} Alpha \par Beta \end{quote}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const prepared = prepareSimpleTexVList(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+    const label = {
+      kind: "hbox",
+      role: {
+        kind: "list-label",
+        labelKind: "default",
+        placement: "margin",
+      },
+      box: {
+        metrics: { width: 5, height: 7, depth: 2 },
+        renderItems: [],
+      },
+    } as const;
+
+    const attached = attachTexHBoxesBeforeVListParagraphs(
+      prepared.normalized,
+      new Map([[1, label]])
+    );
+
+    expect(flattenVListLeaves(attached.items)).toEqual([
+      "glue:13",
+      "paragraph:Alpha",
+      "glue:4",
+      "hbox",
+      "paragraph:Beta",
+    ]);
+  });
+
+  it("prepares paragraph segment plans and attaches list label hboxes before IR projection", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`\begin{itemize}\item Alpha\end{itemize}`);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const prepared = prepareSimpleTexVList(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+
+    const preparation = prepareTexLayoutParagraphsFromVList({
+      vlist: prepared.normalized,
+      defaultAlignment: "ragged-right",
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    });
+    const leaves = flattenVListLeaves(preparation.vlist.items);
+
+    expect(preparation.segmentPlans).toHaveLength(1);
+    expect(preparation.segmentPlans[0]).toMatchObject({
+      blockIndex: 0,
+      segmentIndex: 0,
+      segment: { text: "Alpha" },
+    });
+    expect(preparation.segmentPlans[0]?.listAttachments.marginLabel).toBeDefined();
+    expect(leaves.indexOf("hbox")).toBeGreaterThanOrEqual(0);
+    expect(leaves.indexOf("hbox")).toBeLessThan(leaves.indexOf("paragraph:Alpha"));
   });
 
   it("does not double-count quote and nested list entry spacing", () => {

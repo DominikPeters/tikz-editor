@@ -1620,6 +1620,7 @@ describe("simple TeX paragraph layout", () => {
             vlistPath: [0],
             sourceSpan: { start: 0, end: 5 },
             lineIndices: [0],
+            x: 0,
             y: 3,
             metrics: { width: 80, height: 7, depth: 5 },
           },
@@ -1628,14 +1629,15 @@ describe("simple TeX paragraph layout", () => {
             vlistPath: [1],
             sourceSpan: { start: 7, end: 16 },
             lineIndices: [1, 2],
+            x: 6,
             y: 19,
             metrics: { width: 90, height: 8, depth: 16 },
           },
         ],
         linePlacements: [
-          { lineIndex: 0, y: 3, height: 12 },
-          { lineIndex: 1, y: 19, height: 12 },
-          { lineIndex: 2, y: 31, height: 12 },
+          { lineIndex: 0, x: 0, y: 3, height: 12 },
+          { lineIndex: 1, x: 6, y: 19, height: 12 },
+          { lineIndex: 2, x: 6, y: 31, height: 12 },
         ],
         reports: [],
         errors: [],
@@ -1671,15 +1673,15 @@ describe("simple TeX paragraph layout", () => {
       {
         blockIndex: 1,
         vlistPath: [1],
-        localLeft: 0,
-        localRight: 90,
+        localLeft: 6,
+        localRight: 96,
         localTop: 19,
         localBottom: 43,
         lineIndices: [1, 2],
         sourceStart: 7,
         sourceEnd: 16,
-        clientLeft: 10,
-        clientRight: 190,
+        clientLeft: 22,
+        clientRight: 202,
         clientTop: 77,
         clientBottom: 149,
       },
@@ -2694,5 +2696,77 @@ describe("simple TeX paragraph layout", () => {
       6
     );
     expect(secondLinePoint).toMatchObject({ ok: true, offset: sourceText.length, kind: "text", lineIndex: 1 });
+  });
+
+  it("uses registered vlist geometry for nested quote/list text editing", async () => {
+    const sourceText = String.raw`\begin{quote}\begin{itemize}\item Alpha\end{itemize}\end{quote}`;
+    const hitmapSourceText = "Alpha";
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:nested-vlist-hitmap",
+      width: 160,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+    const report = result.report;
+    const vlistLayout = result.vlistLayout;
+    expect(report).not.toBeNull();
+    expect(vlistLayout).not.toBeNull();
+    expect(vlistLayout?.paragraphPlacements[0]).toMatchObject({
+      blockIndex: 0,
+      x: 47,
+      y: 13,
+      vlistPath: [0, 0, 0, 2],
+    });
+    expect(vlistLayout?.linePlacements[0]).toMatchObject({
+      lineIndex: 0,
+      x: 47,
+      y: 13,
+    });
+    expect(report?.lines[0]).toMatchObject({
+      lineIndex: 0,
+      xStart: 47,
+    });
+
+    const outputJax = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:nested-vlist-hitmap",
+      layout: vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: report?.width ?? 1 } },
+      querySelectorAll: () => {
+        throw new Error("registered nested vlist geometry should avoid rendered linebox queries");
+      },
+    };
+    const alphaOffset = 2;
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:nested-vlist-hitmap",
+      sourceText: hitmapSourceText,
+      containerElement,
+      offset: alphaOffset,
+    });
+    expect(point).toMatchObject({
+      ok: true,
+      offset: alphaOffset,
+      lineIndex: 0,
+      kind: "text",
+    });
+    expect(point.lineLocalX).toBeGreaterThan(47);
+    expect(point.clientPoint?.x).toBeCloseTo(point.lineLocalX ?? 0, 6);
+    expect(point.clientPoint?.y).toBeCloseTo(19, 6);
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:nested-vlist-hitmap",
+      sourceText: hitmapSourceText,
+      containerElement,
+      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+    });
+    expect(caret).toMatchObject({
+      ok: true,
+      lineIndex: 0,
+      offset: alphaOffset,
+      kind: "text",
+    });
   });
 });
