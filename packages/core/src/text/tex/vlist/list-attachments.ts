@@ -10,7 +10,9 @@ import type {
   TexLayoutGlyphItem,
   TexLayoutInlineItem,
   TexLayoutLabel,
+  TexLayoutMathItem,
   TexLayoutSpaceItem,
+  TexMathBoxProvider,
 } from "../layout-inline-items.js";
 import type {
   TexBoxMetrics,
@@ -27,6 +29,7 @@ export type TexInlineNodesToLayoutItems = (
   atPt: number,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
+  mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState
 ) => TexLayoutInlineItem[];
 
@@ -137,6 +140,7 @@ function texInlineLabelItemsForListContext(
     font.atPt,
     metricProvider,
     spaceGlueProfile,
+    undefined,
     labelBox.fontState
   );
 }
@@ -303,6 +307,12 @@ function texLayoutLabelHBoxContent(
       }
       continue;
     }
+    if (item.kind === "math") {
+      width += item.box.width;
+      height = Math.max(height, item.box.height);
+      depth = Math.max(depth, item.box.depth);
+      continue;
+    }
     width += texLayoutSpaceItemWidth(item);
   }
   const baseline = roundTexPt(height);
@@ -329,6 +339,10 @@ function texLayoutSpaceItemWidth(item: TexLayoutSpaceItem): number {
   const baseSpace = tfmToPt(item.font, item.font.data.fontdimen.space);
   const extraSpace = tfmToPt(item.font, item.font.data.fontdimen.extraspace ?? 0);
   return roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0));
+}
+
+export function texLayoutMathItemWidth(item: TexLayoutMathItem): number {
+  return roundTexPt(item.box.width);
 }
 
 export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): number {

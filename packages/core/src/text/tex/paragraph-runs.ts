@@ -2,6 +2,7 @@ import type { MeasurementService } from "../knuth-plass/paragraph/measure.js";
 import type {
   AnyWrapper,
   BreakRef,
+  MathRun,
   ParagraphRun,
   SpaceRun,
   TextRun,
@@ -91,6 +92,36 @@ function layoutItemsToRuns(
         childIndex: runIndex,
         wordIndex: 0,
       } satisfies TextRun);
+      continue;
+    }
+
+    if (item.kind === "math") {
+      pendingItalicCorrection = 0;
+      const wrapper: AnyWrapper = {
+        getBBox: () => ({
+          L: 0,
+          R: 0,
+          w: item.box.width,
+          h: item.box.height,
+          d: item.box.depth,
+        }),
+        getOuterBBox: () => ({
+          L: 0,
+          R: 0,
+          w: item.box.width,
+          h: item.box.height,
+          d: item.box.depth,
+        }),
+        texMathBox: item.box,
+      };
+      runs.push({
+        kind: "math",
+        runIndex,
+        role: item.role,
+        sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
+        wrapper,
+      } satisfies MathRun);
       continue;
     }
 
@@ -304,7 +335,19 @@ function createTexParagraphMeasurement(
   return {
     measureText: (value) => value === " " ? spaceWidth : metricProvider.shapeText(value, font).width,
     measureWord: (word, wrapper) => shapedRunForWrapper(wrapper)?.width ?? metricProvider.shapeText(word, font).width,
-    measureMath: () => 0,
+    measureMath: (wrapper) => {
+      const bbox =
+        wrapper && typeof wrapper === "object" && typeof wrapper.getOuterBBox === "function"
+          ? wrapper.getOuterBBox()
+          : wrapper && typeof wrapper === "object" && typeof wrapper.getBBox === "function"
+            ? wrapper.getBBox()
+            : null;
+      return roundTexPt(
+        (Number(bbox?.L) || 0) +
+        (Number(bbox?.w) || 0) +
+        (Number(bbox?.R) || 0)
+      );
+    },
     measurePrefix: (word, end, wrapper) => {
       assertTexSliceRange(word, 0, end, "measurePrefix");
       const shaped = shapedRunForWrapper(wrapper);

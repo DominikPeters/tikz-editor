@@ -19,6 +19,7 @@ import {
 } from "./tex/index.js";
 import type {
   ResolvedTexFont,
+  TexMathBoxProvider,
   TexMetricProvider,
   TexShapedItem,
 } from "./tex/index.js";
@@ -999,14 +1000,20 @@ function buildSimpleTexTextCacheEntry(params: {
   const metricProvider = computerModernTexMetricProvider;
   const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
   const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
-  const layout = layoutSimpleTexParagraph(params.sourceText, {
-    paragraphId,
-    width: params.textWidthPt,
-    alignment: params.alignment ?? "ragged-right",
-    font: renderFont,
-    metricProvider,
-    tikzTextWidthNode: true,
-  });
+  let layout: ReturnType<typeof layoutSimpleTexParagraph>;
+  try {
+    layout = layoutSimpleTexParagraph(params.sourceText, {
+      paragraphId,
+      width: params.textWidthPt,
+      alignment: params.alignment ?? "ragged-right",
+      font: renderFont,
+      metricProvider,
+      tikzTextWidthNode: true,
+      mathBoxProvider: createMathJaxInlineMathBoxProvider(params.runtime),
+    });
+  } catch {
+    return null;
+  }
   if (!layout.supported || !layout.report || !layout.vlistLayout) {
     return null;
   }
@@ -1098,6 +1105,40 @@ function isSimpleTexTextEligible(params: {
     params.alignment === "center" ||
     params.alignment === "justified"
   );
+}
+
+function createMathJaxInlineMathBoxProvider(runtime: MathJaxRuntime): TexMathBoxProvider {
+  const cache = new Map<string, ReturnType<TexMathBoxProvider["getInlineMathBox"]>>();
+  return {
+    getInlineMathBox: (params) => {
+      const key = `${params.delimiter}:${params.content}`;
+      if (cache.has(key)) {
+        return cache.get(key) ?? null;
+      }
+      const node = runtime.tex2svg(params.content, { display: false });
+      const extracted = extractSvgPayload(node, runtime.startup?.adaptor ?? null);
+      const viewBox = parseViewBox(extracted?.viewBoxRaw ?? null);
+      if (!extracted || !viewBox) {
+        cache.set(key, null);
+        return null;
+      }
+      const scale = DEFAULT_TEXT_FONT_SIZE / 1000;
+      const ascent = Math.max(0, -viewBox.y) * scale;
+      const descent = Math.max(0, viewBox.height + viewBox.y) * scale;
+      const box = {
+        source: params.source,
+        content: params.content,
+        sourceStart: params.sourceStart,
+        sourceEnd: params.sourceEnd,
+        width: viewBox.width * scale,
+        height: ascent,
+        depth: descent,
+        svgBody: extracted.body,
+      };
+      cache.set(key, box);
+      return box;
+    },
+  };
 }
 
 function renderSimpleTexSvgBody(
@@ -1288,6 +1329,16 @@ function renderTexReportLineSvg(
     if (options.skipListLabelSegments && segment.role === "list-label") {
       continue;
     }
+    if (segment.kind === "math") {
+      if (segment.mathSvgBody) {
+        pieces.push(renderTexInlineMathSvg(
+          segment.mathSvgBody,
+          segment.x - lineLeft,
+          baseline - lineTop
+        ));
+      }
+      continue;
+    }
     if (segment.kind !== "text" && segment.kind !== "space") {
       continue;
     }
@@ -1320,6 +1371,10 @@ function renderTexReportLineSvg(
   }
   pieces.push("</g>");
   return pieces.join("");
+}
+
+function renderTexInlineMathSvg(body: string, x: number, baseline: number): string {
+  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(DEFAULT_TEXT_FONT_SIZE / 1000)})">${body}</g>`;
 }
 
 function texReportLineTop(

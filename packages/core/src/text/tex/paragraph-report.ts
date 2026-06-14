@@ -19,6 +19,7 @@ import {
   texLayoutGlyphItemDepth,
   texLayoutGlyphItemHeight,
   texLayoutGlyphItemWidth,
+  texLayoutMathItemWidth,
 } from "./vlist/list-attachments.js";
 import type { TexLineLabel } from "./vlist/index.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
@@ -170,6 +171,27 @@ function buildTexLineReport(
       continue;
     }
 
+    if (run.kind === "math") {
+      const width = params.runWidths.get(run.runIndex) ?? 0;
+      const box = texMathBoxFromWrapper(run.wrapper);
+      ascent = Math.max(ascent, box?.height ?? 0);
+      descent = Math.max(descent, box?.depth ?? 0);
+      segments.push({
+        runIndex: run.runIndex,
+        kind: "math",
+        role: run.role,
+        sourceStartRaw: run.sourceStart,
+        sourceEndRaw: run.sourceEnd,
+        sourceKind: "math",
+        x,
+        width,
+        caretStops: [x, roundTexPt(x + width)],
+        mathSvgBody: box?.svgBody,
+      });
+      x = roundTexPt(x + width);
+      continue;
+    }
+
     let width = params.runWidths.get(run.runIndex) ?? 0;
     if (run.kind === "space" && (line.spaceCount ?? 0) > 0) {
       const ratio = line.glueSetRatio ?? 0;
@@ -286,6 +308,28 @@ function buildTexLineReport(
   };
 }
 
+function texMathBoxFromWrapper(
+  wrapper: ParagraphRun["wrapper"]
+): { readonly height: number; readonly depth: number; readonly svgBody?: string } | null {
+  if (!wrapper || typeof wrapper !== "object") {
+    return null;
+  }
+  const box = wrapper.texMathBox;
+  if (!box || typeof box !== "object") {
+    return null;
+  }
+  const typedBox = box as {
+    readonly height?: unknown;
+    readonly depth?: unknown;
+    readonly svgBody?: unknown;
+  };
+  return {
+    height: Number(typedBox.height) || 0,
+    depth: Number(typedBox.depth) || 0,
+    svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
+  };
+}
+
 function buildTexLineLabelSegments(
   label: TexLineLabel,
   metricProvider: TexMetricProvider
@@ -341,6 +385,25 @@ function buildTexLineLabelSegments(
         caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
       });
       x = roundTexPt(x + shaped.width);
+      continue;
+    }
+    if (item.kind === "math") {
+      const mathWidth = texLayoutMathItemWidth(item);
+      ascent = Math.max(ascent, item.box.height);
+      descent = Math.max(descent, item.box.depth);
+      segments.push({
+        runIndex: label.lineRunIndex,
+        kind: "math",
+        role: "list-label",
+        sourceStartRaw: item.sourceStart,
+        sourceEndRaw: item.sourceEnd,
+        sourceKind: "math",
+        x,
+        width: mathWidth,
+        caretStops: [x, roundTexPt(x + mathWidth)],
+        mathSvgBody: item.box.svgBody,
+      });
+      x = roundTexPt(x + mathWidth);
       continue;
     }
 
@@ -414,6 +477,10 @@ function texLayoutItemsNaturalWidth(
     }
     if (item.kind === "text") {
       width += metricProvider.shapeText(item.text, item.font).width;
+      continue;
+    }
+    if (item.kind === "math") {
+      width += texLayoutMathItemWidth(item);
       continue;
     }
     width += texInterwordGlueForSpaceFactor(

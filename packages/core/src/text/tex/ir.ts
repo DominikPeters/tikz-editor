@@ -67,6 +67,15 @@ export interface SimpleTexLineBreakNode extends SimpleTexSourceRange {
   readonly lineLeading?: string;
 }
 
+export interface SimpleTexMathNode extends SimpleTexSourceRange {
+  readonly kind: "math";
+  readonly text: string;
+  readonly delimiter: "dollar" | "paren";
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+}
+
 export interface SimpleTexFontCommandNode extends SimpleTexSourceRange {
   readonly kind: "font-command";
   readonly text: string;
@@ -157,6 +166,7 @@ export type SimpleTexInlineNode =
   | SimpleTexTextNode
   | SimpleTexSpaceNode
   | SimpleTexLineBreakNode
+  | SimpleTexMathNode
   | SimpleTexFontCommandNode
   | SimpleTexFontDeclarationNode
   | SimpleTexGroupNode;
@@ -175,10 +185,14 @@ export type SimpleTexControlNode =
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break";
+  readonly kind: "text" | "space" | "forced-break" | "math";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
+  readonly delimiter?: "dollar" | "paren";
+  readonly content?: string;
+  readonly contentStart?: number;
+  readonly contentEnd?: number;
   readonly lineLeading?: string;
   readonly fontState: SimpleTexFontState;
   readonly italicCorrectionAfter?: boolean;
@@ -323,7 +337,7 @@ interface SimpleTexIrOptions {
   readonly tikzTextWidthNode?: boolean;
 }
 
-const unsupportedDirectCharPattern = /[$&_^~#%]/;
+const unsupportedDirectTextCharPattern = /[&_^~#%]/;
 const whitespacePattern = /[ \n]+/;
 const paragraphBreakPattern = /^\n(?: *\n)+/;
 const lineLeadingOptionPattern =
@@ -361,14 +375,8 @@ export function analyzeSimpleTexParagraph(
       fallbackReason: "Paragraph width must be positive.",
     };
   }
-  if (unsupportedDirectCharPattern.test(text)) {
-    return {
-      ir: null,
-      fallbackReason: "Paragraph contains TeX syntax that is not supported by the simple text path.",
-    };
-  }
   const ir = buildSimpleTexParagraphIr(text);
-  if (ir.unsupportedCommand) {
+  if (ir.unsupportedCommand || simpleTexIrHasUnsupportedDirectTextChar(ir.nodes)) {
     return {
       ir,
       fallbackReason: "Paragraph contains TeX syntax that is not supported by the simple text path.",
@@ -387,6 +395,28 @@ export function analyzeSimpleTexParagraph(
     }
   }
   return { ir, fallbackReason: null };
+}
+
+function simpleTexIrHasUnsupportedDirectTextChar(nodes: readonly SimpleTexNode[]): boolean {
+  for (const node of nodes) {
+    if (node.kind === "text" && unsupportedDirectTextCharPattern.test(node.text)) {
+      return true;
+    }
+    if (
+      (node.kind === "font-command" || node.kind === "group") &&
+      simpleTexIrHasUnsupportedDirectTextChar(node.children)
+    ) {
+      return true;
+    }
+    if (
+      node.kind === "item" &&
+      node.labelNodes &&
+      simpleTexIrHasUnsupportedDirectTextChar(node.labelNodes)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function parseSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
@@ -419,6 +449,22 @@ function scanSimpleTexIrNodes(
   while (index < text.length) {
     const sourceStart = sourceOffset + index;
     const char = text[index];
+
+    const math = scanSimpleTexMath(text, index);
+    if (math) {
+      nodes.push({
+        kind: "math",
+        text: text.slice(index, math.end),
+        delimiter: math.delimiter,
+        content: text.slice(math.contentStart, math.contentEnd),
+        contentStart: sourceOffset + math.contentStart,
+        contentEnd: sourceOffset + math.contentEnd,
+        sourceStart,
+        sourceEnd: sourceOffset + math.end,
+      });
+      index = math.end;
+      continue;
+    }
 
     if (char === "\\") {
       const lineBreak = scanSimpleTexLineBreak(text, index);
@@ -567,6 +613,18 @@ function scanSimpleTexIrNodes(
       continue;
     }
 
+    if (char === "$") {
+      nodes.push({
+        kind: "unsupported-command",
+        text: char,
+        sourceStart,
+        sourceEnd: sourceStart + 1,
+      });
+      unsupportedCommand = true;
+      index += 1;
+      continue;
+    }
+
     if (char === "\n") {
       const match = paragraphBreakPattern.exec(text.slice(index));
       if (match) {
@@ -603,6 +661,7 @@ function scanSimpleTexIrNodes(
       text[index] !== "\\" &&
       text[index] !== "{" &&
       text[index] !== "}" &&
+      text[index] !== "$" &&
       !whitespacePattern.test(text[index] ?? "")
     ) {
       index += 1;
@@ -616,6 +675,65 @@ function scanSimpleTexIrNodes(
   }
 
   return { nodes, unsupportedCommand };
+}
+
+function scanSimpleTexMath(
+  text: string,
+  start: number
+): {
+  readonly delimiter: "dollar" | "paren";
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly end: number;
+} | null {
+  if (text[start] === "$" && !isEscapedSimpleTexChar(text, start)) {
+    let index = start + 1;
+    while (index < text.length) {
+      if (text[index] === "$" && !isEscapedSimpleTexChar(text, index)) {
+        return {
+          delimiter: "dollar",
+          contentStart: start + 1,
+          contentEnd: index,
+          end: index + 1,
+        };
+      }
+      index += 1;
+    }
+    return null;
+  }
+
+  if (
+    text[start] === "\\" &&
+    text[start + 1] === "(" &&
+    !isEscapedSimpleTexChar(text, start)
+  ) {
+    let index = start + 2;
+    while (index < text.length) {
+      if (
+        text[index] === "\\" &&
+        text[index + 1] === ")" &&
+        !isEscapedSimpleTexChar(text, index)
+      ) {
+        return {
+          delimiter: "paren",
+          contentStart: start + 2,
+          contentEnd: index,
+          end: index + 2,
+        };
+      }
+      index += 1;
+    }
+  }
+
+  return null;
+}
+
+function isEscapedSimpleTexChar(text: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function scanSimpleTexVerticalGlueCommand(
@@ -1280,6 +1398,7 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "text" ||
     node.kind === "space" ||
     node.kind === "line-break" ||
+    node.kind === "math" ||
     node.kind === "font-command" ||
     node.kind === "font-declaration" ||
     node.kind === "group"
@@ -1846,6 +1965,22 @@ export function simpleTexInlineNodesToTokens(
         tokens.push(...childTokens);
       }
       skipPostLineBreakSpace = childTokens.at(-1)?.kind === "forced-break";
+      continue;
+    }
+
+    if (node.kind === "math") {
+      tokens.push({
+        kind: "math",
+        text: node.text,
+        delimiter: node.delimiter,
+        content: node.content,
+        contentStart: node.contentStart,
+        contentEnd: node.contentEnd,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+      });
+      skipPostLineBreakSpace = false;
       continue;
     }
 

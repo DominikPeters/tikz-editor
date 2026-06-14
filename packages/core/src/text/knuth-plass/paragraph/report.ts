@@ -30,6 +30,7 @@ export interface LineSegmentReport {
   role?: 'list-label';
   fontId?: string;
   glyphCode?: number;
+  mathSvgBody?: string;
   x: number;
   width: number;
   caretStops?: number[];

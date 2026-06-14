@@ -43,10 +43,47 @@ export interface TexLayoutForcedBreakItem {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
 }
 
+export interface TexMathBox {
+  readonly source: string;
+  readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly svgBody?: string;
+}
+
+export interface TexMathBoxProvider {
+  readonly getInlineMathBox: (params: {
+    readonly source: string;
+    readonly content: string;
+    readonly delimiter: "dollar" | "paren";
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  }) => TexMathBox | null;
+}
+
+export interface TexLayoutMathItem {
+  readonly kind: "math";
+  readonly role?: "list-label";
+  readonly text: string;
+  readonly content: string;
+  readonly delimiter: "dollar" | "paren";
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly box: TexMathBox;
+}
+
 export type TexLayoutInlineItem =
   | TexLayoutTextItem
   | TexLayoutSpaceItem
-  | TexLayoutForcedBreakItem;
+  | TexLayoutForcedBreakItem
+  | TexLayoutMathItem;
 
 export interface TexLayoutGlyphItem {
   readonly kind: "glyph";
@@ -71,6 +108,7 @@ export function simpleTexInlineNodesToLayoutItems(
   atPt: number,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
+  mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState
 ): TexLayoutInlineItem[] {
   return simpleTexSegmentToLayoutItems(
@@ -84,6 +122,7 @@ export function simpleTexInlineNodesToLayoutItems(
     atPt,
     metricProvider,
     spaceGlueProfile,
+    mathBoxProvider,
     initialFontState
   );
 }
@@ -93,6 +132,7 @@ export function simpleTexSegmentToLayoutItems(
   atPt: number,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
+  mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
@@ -124,6 +164,35 @@ export function simpleTexSegmentToLayoutItems(
         spaceFactorAfter: spaceFactor,
       });
       hasSeenText = true;
+      continue;
+    }
+
+    if (token.kind === "math") {
+      const box = mathBoxProvider?.getInlineMathBox({
+        source: token.text,
+        content: token.content ?? "",
+        delimiter: token.delimiter ?? "dollar",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+      }) ?? null;
+      if (!box) {
+        throw new Error(`Missing TeX inline math box for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "math",
+        text: token.text,
+        content: token.content ?? "",
+        delimiter: token.delimiter ?? "dollar",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
       continue;
     }
 

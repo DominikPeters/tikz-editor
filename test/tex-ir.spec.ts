@@ -24,9 +24,9 @@ describe("simple TeX paragraph IR", () => {
     expect(analysis.ir?.blocks).toHaveLength(1);
     expect(analysis.ir?.unsupportedCommand).toBe(false);
 
-    const unsupported = analyzeSimpleTexParagraph(String.raw`Alpha $x$`, 120);
-    expect(unsupported.ir).toBeNull();
-    expect(unsupported.fallbackReason).toContain("TeX syntax");
+    const inlineMath = analyzeSimpleTexParagraph(String.raw`Alpha $x$`, 120);
+    expect(inlineMath.ir?.unsupportedCommand).toBe(false);
+    expect(inlineMath.fallbackReason).toBeNull();
   });
 
   it("splits paragraphs while preserving source-level text commands", () => {
@@ -386,6 +386,43 @@ describe("simple TeX paragraph IR", () => {
     expect(ir.nodes[4]).toMatchObject({
       kind: "font-command",
       command: "textsf",
+    });
+  });
+
+  it("records inline math delimiters and source spans in source IR", () => {
+    const source = String.raw`Alpha $x^2_y$ and \(z+1\).`;
+    const ir = parseSimpleTexParagraphIr(source);
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "math",
+      "space",
+      "text",
+      "space",
+      "math",
+      "text",
+    ]);
+    expect(ir.nodes[2]).toMatchObject({
+      kind: "math",
+      delimiter: "dollar",
+      text: "$x^2_y$",
+      content: "x^2_y",
+      sourceStart: source.indexOf("$x^2_y$"),
+      sourceEnd: source.indexOf("$x^2_y$") + "$x^2_y$".length,
+      contentStart: source.indexOf("x^2_y"),
+      contentEnd: source.indexOf("x^2_y") + "x^2_y".length,
+    });
+    expect(ir.nodes[6]).toMatchObject({
+      kind: "math",
+      delimiter: "paren",
+      text: String.raw`\(z+1\)`,
+      content: "z+1",
+      sourceStart: source.indexOf(String.raw`\(z+1\)`),
+      sourceEnd: source.indexOf(String.raw`\(z+1\)`) + String.raw`\(z+1\)`.length,
+      contentStart: source.indexOf("z+1"),
+      contentEnd: source.indexOf("z+1") + "z+1".length,
     });
   });
 

@@ -64,9 +64,10 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       texLayoutItemsForParagraphPlan(plan, {
         atPt: params.font.atPt,
         metricProvider: params.metricProvider,
+        mathBoxProvider: params.options.mathBoxProvider,
       })
     );
-    if (!runs.some((run) => run.kind === "text")) {
+    if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {
       continue;
     }
 

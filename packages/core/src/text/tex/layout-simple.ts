@@ -6,7 +6,12 @@ import type {
   ShapedTexTextRun,
   TexMetricProvider,
 } from "./fonts/types.js";
-import { analyzeSimpleTexParagraph, type TexParagraphAlignment } from "./ir.js";
+import {
+  analyzeSimpleTexParagraph,
+  type SimpleTexNode,
+  type TexParagraphAlignment,
+} from "./ir.js";
+import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import {
   breakSimpleTexLayoutDocumentParagraphs,
   createSimpleTexLayoutDocumentIrFromPreparation,
@@ -27,6 +32,7 @@ export interface TexParagraphLayoutOptions {
   readonly tikzTextWidthNode?: boolean;
   readonly fallbackPolicy?: "whole-node" | "placeholder";
   readonly hyphenator?: Hyphenator | null;
+  readonly mathBoxProvider?: TexMathBoxProvider;
 }
 
 export interface TexParagraphLayoutResult {
@@ -64,6 +70,16 @@ export function layoutSimpleTexParagraph(
   const paragraphId = options.paragraphId ?? "tex:paragraph";
   const defaultAlignment = options.alignment ?? "ragged-right";
   const blocks = analysis.ir?.blocks ?? [];
+  if (analysis.ir && simpleTexNodesContainInlineMath(analysis.ir.nodes) && !options.mathBoxProvider) {
+    const reason = "Paragraph contains inline math but no TeX math box provider is available.";
+    return {
+      supported: false,
+      report: null,
+      fallbackReason: reason,
+      shapedRuns: new Map(),
+      errors: [reason],
+    };
+  }
   if (blocks.length === 0) {
     const reason = "Paragraph contains no text runs.";
     return {
@@ -88,13 +104,27 @@ export function layoutSimpleTexParagraph(
     ? [fallbackReason]
     : [];
 
-  const paragraphBreaks = breakSimpleTexLayoutDocumentParagraphs({
-    layoutIr,
-    font,
-    metricProvider,
-    options: layoutOptions,
-    initialErrors: errors,
-  });
+  let paragraphBreaks: ReturnType<typeof breakSimpleTexLayoutDocumentParagraphs>;
+  try {
+    paragraphBreaks = breakSimpleTexLayoutDocumentParagraphs({
+      layoutIr,
+      font,
+      metricProvider,
+      options: layoutOptions,
+      initialErrors: errors,
+    });
+  } catch (error) {
+    const reason = error instanceof Error && error.message
+      ? error.message
+      : "TeX paragraph layout failed.";
+    return {
+      supported: false,
+      report: null,
+      fallbackReason: reason,
+      shapedRuns: new Map(),
+      errors: [reason],
+    };
+  }
   if (paragraphBreaks.status === "failed") {
     return {
       supported: false,
@@ -134,4 +164,26 @@ export function layoutSimpleTexParagraph(
     shapedRuns: reportAssembly.combined.shapedRuns,
     errors: reportAssembly.combined.errors,
   };
+}
+
+function simpleTexNodesContainInlineMath(nodes: readonly SimpleTexNode[]): boolean {
+  for (const node of nodes) {
+    if (node.kind === "math") {
+      return true;
+    }
+    if (
+      (node.kind === "font-command" || node.kind === "group") &&
+      simpleTexNodesContainInlineMath(node.children)
+    ) {
+      return true;
+    }
+    if (
+      node.kind === "item" &&
+      node.labelNodes &&
+      simpleTexNodesContainInlineMath(node.labelNodes)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }

@@ -1,6 +1,7 @@
 import type { TexMetricProvider } from "../fonts/types.js";
 import {
   simpleTexSegmentToLayoutItems,
+  type TexMathBoxProvider,
   type TexLayoutInlineItem,
 } from "../layout-inline-items.js";
 import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
@@ -10,6 +11,7 @@ export function texLayoutItemsForParagraphPlan(
   params: {
     readonly atPt: number;
     readonly metricProvider: TexMetricProvider;
+    readonly mathBoxProvider?: TexMathBoxProvider;
   }
 ): readonly TexLayoutInlineItem[] {
   return [
@@ -18,7 +20,8 @@ export function texLayoutItemsForParagraphPlan(
       plan.segment,
       params.atPt,
       params.metricProvider,
-      plan.spaceGlueProfile
+      plan.spaceGlueProfile,
+      params.mathBoxProvider
     ),
   ];
 }

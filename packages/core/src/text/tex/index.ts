@@ -27,6 +27,7 @@ export {
   type SimpleTexGroupNode,
   type SimpleTexInlineNode,
   type SimpleTexLineBreakNode,
+  type SimpleTexMathNode,
   type SimpleTexNoIndentNode,
   type SimpleTexNode,
   type SimpleTexParagraphBreakNode,
@@ -86,6 +87,9 @@ export {
 export {
   type TexLayoutForcedBreakItem,
   type TexLayoutInlineItem,
+  type TexLayoutMathItem,
+  type TexMathBox,
+  type TexMathBoxProvider,
   type TexLayoutSpaceItem,
   type TexLayoutTextItem,
 } from "./layout-inline-items.js";

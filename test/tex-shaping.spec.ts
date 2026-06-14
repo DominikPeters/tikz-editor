@@ -21,6 +21,7 @@ import {
   createSimpleTexLayoutDocumentIr,
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
+  type TexMathBoxProvider,
 } from "../packages/core/src/text/tex/index.js";
 import {
   groupSimpleTexVListScopes,
@@ -222,6 +223,37 @@ function makeDeterministicRandom(seed: number): () => number {
 
 function pickFuzzItem<T>(items: readonly T[], random: () => number): T {
   return items[Math.floor(random() * items.length) % items.length]!;
+}
+
+function makeFakeInlineMathBoxProvider(
+  widthForContent: (content: string) => number = (content) => 8 + content.length * 4
+): TexMathBoxProvider {
+  return {
+    getInlineMathBox: (params) => ({
+      source: params.source,
+      content: params.content,
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      width: widthForContent(params.content),
+      height: 7,
+      depth: 2,
+      svgBody: `<g data-fake-inline-math="${params.content}"></g>`,
+    }),
+  };
+}
+
+function makeFakeInlineMathTex2Svg(unitWidth = 1): (tex: string) => {
+  readonly querySelector: () => { readonly getAttribute: (name: string) => string | null };
+} {
+  return (tex: string) => {
+    const content = /\\textstyle\{([\s\S]*)\}/.exec(tex)?.[1] ?? tex;
+    const width = Math.max(0, content.length * unitWidth);
+    return {
+      querySelector: () => ({
+        getAttribute: (name: string) => (name === "viewBox" ? `0 0 ${width} 1` : null),
+      }),
+    };
+  };
 }
 
 type TexHitMapFuzzCase = {
@@ -3555,7 +3587,105 @@ describe("simple TeX paragraph layout", () => {
     );
   });
 
-  it("reports whole-node fallback for unsupported TeX syntax", () => {
+  it("lays out inline math as an atomic TeX run when a math box provider is available", () => {
+    const sourceText = String.raw`Alpha $x^2$ beta \(y+1\).`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: makeFakeInlineMathBoxProvider((content) => content === "x^2" ? 23 : 19),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.runs.map((run) => run.kind)).toEqual([
+      "text",
+      "space",
+      "math",
+      "space",
+      "text",
+      "space",
+      "math",
+      "text",
+    ]);
+    const mathSegments = result.report?.lines.flatMap((line) => line.segments)
+      .filter((segment) => segment.kind === "math") ?? [];
+    expect(mathSegments).toHaveLength(2);
+    expect(mathSegments[0]).toMatchObject({
+      sourceStartRaw: sourceText.indexOf("$x^2$"),
+      sourceEndRaw: sourceText.indexOf("$x^2$") + "$x^2$".length,
+      sourceKind: "math",
+      width: 23,
+      mathSvgBody: `<g data-fake-inline-math="x^2"></g>`,
+    });
+    expect(mathSegments[1]).toMatchObject({
+      sourceStartRaw: sourceText.indexOf(String.raw`\(y+1\)`),
+      sourceEndRaw: sourceText.indexOf(String.raw`\(y+1\)`) + String.raw`\(y+1\)`.length,
+      sourceKind: "math",
+      width: 19,
+      mathSvgBody: `<g data-fake-inline-math="y+1"></g>`,
+    });
+    expect(result.report?.lines[0]?.ascent).toBeGreaterThanOrEqual(7);
+    expect(result.report?.lines[0]?.descent).toBeGreaterThanOrEqual(2);
+  });
+
+  it("maps editor caret positions inside TeX-derived inline math source spans", async () => {
+    const sourceText = String.raw`Alpha $xyz$ beta`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-hitmap",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: makeFakeInlineMathBoxProvider(() => 30),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+    const mathSegment = report?.lines[0]?.segments.find((segment) => segment.kind === "math");
+    expect(mathSegment).toBeTruthy();
+
+    const outputJax = {
+      tex2svg: makeFakeInlineMathTex2Svg(1),
+      linebreaks: { getReports: () => report ? [report] : [] },
+    };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report?.width ?? 160, bottom: 10 }, report?.width ?? 160),
+      ],
+    };
+    const offsetInsideMath = sourceText.indexOf("xyz") + 2;
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:inline-math-hitmap",
+      sourceText,
+      containerElement,
+      offset: offsetInsideMath,
+    });
+    expect(point.error?.message ?? null).toBeNull();
+    expect(point).toMatchObject({
+      ok: true,
+      offset: offsetInsideMath,
+      kind: "math",
+    });
+    expect(point.lineLocalX).toBeCloseTo(
+      (mathSegment?.x ?? 0) + (2 / 3) * (mathSegment?.width ?? 0),
+      6
+    );
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:inline-math-hitmap",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+    });
+    expect(caret.error?.message ?? null).toBeNull();
+    expect(caret).toMatchObject({
+      ok: true,
+      offset: offsetInsideMath,
+      kind: "math",
+    });
+  });
+
+  it("reports whole-node fallback for inline math without a math box provider", () => {
     const result = layoutSimpleTexParagraph(String.raw`Alpha $x$`, {
       paragraphId: "tex:fallback",
       width: 100,
@@ -3563,7 +3693,20 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(false);
     expect(result.report).toBeNull();
-    expect(result.fallbackReason).toContain("TeX syntax");
+    expect(result.fallbackReason).toContain("inline math");
+    expect(result.errors).toEqual([result.fallbackReason]);
+  });
+
+  it("reports whole-node fallback when the inline math box provider cannot measure a formula", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha $x$`, {
+      paragraphId: "tex:math-provider-fallback",
+      width: 100,
+      mathBoxProvider: { getInlineMathBox: () => null },
+    });
+
+    expect(result.supported).toBe(false);
+    expect(result.report).toBeNull();
+    expect(result.fallbackReason).toContain("Missing TeX inline math box");
     expect(result.errors).toEqual([result.fallbackReason]);
   });
 

@@ -14,6 +14,7 @@ import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
 } from "./ir.js";
+import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import type { TexParagraphBreakResult } from "./vlist/index.js";
 
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
@@ -54,6 +55,7 @@ export interface TexParagraphBreakOptions {
   readonly parindent?: number;
   readonly tikzTextWidthNode?: boolean;
   readonly hyphenator?: Hyphenator | null;
+  readonly mathBoxProvider?: TexMathBoxProvider;
 }
 
 export function breakTexParagraphRuns(params: {

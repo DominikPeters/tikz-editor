@@ -504,6 +504,36 @@ describe("mathjax node text engine", () => {
     expect(texCalls).toHaveLength(callsBeforeMeasure);
   });
 
+  it("routes simple wrapped serif text with inline math through the TeX paragraph path", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
+    const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const engine = await createMathJaxNodeTextEngine();
+
+    const measured = engine.measure({
+      text: String.raw`Alpha $x^2$ beta`,
+      textWidthPt: 64,
+      alignment: "ragged-right",
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    expect(texCalls).toContain("x^2");
+    const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+    const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
+    expect(report?.runs.some((run) => run.kind === "math")).toBe(true);
+    expect(report?.lines.flatMap((line) => line.segments).some((segment) =>
+      segment.kind === "math" && segment.sourceKind === "math" && segment.mathSvgBody?.includes("data-paragraph-id")
+    )).toBe(true);
+    const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
+    expect(body).toContain('data-tex-inline-math="true"');
+    expect(body).toContain('data-mjx-linebox="true"');
+  });
+
   it("falls back to MathJax for unsupported wrapped TeX syntax", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
@@ -512,7 +542,7 @@ describe("mathjax node text engine", () => {
     const callsBeforeMeasure = texCalls.length;
 
     const measured = engine.measure({
-      text: String.raw`Alpha $x$`,
+      text: String.raw`Alpha \frac{1}{2}`,
       textWidthPt: 32,
       alignment: "ragged-right",
       fontStyle: "normal",
