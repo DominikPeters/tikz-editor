@@ -189,6 +189,46 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out grouped list nuclei and scripts on grouped nuclei", () => {
+    const group = layout("{x+y}");
+    expect(group.supported).toBe(true);
+    expect(group.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "nucleus",
+        x: 0,
+        y: 0,
+      },
+    ]);
+    expect(group.hlist?.width).toBeCloseTo(23.199158, 6);
+
+    const scriptedGroup = layout("{x+y}^2");
+    expect(scriptedGroup.supported).toBe(true);
+    expect(scriptedGroup.hlist?.items.map((item) => item.kind)).toEqual(["hlist", "hlist"]);
+    expect(scriptedGroup.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(23.199158, 6),
+      y: expect.closeTo(-3.62892, 5),
+    });
+    expect(scriptedGroup.hlist?.width).toBeCloseTo(27.685287, 6);
+  });
+
+  it("lays out nested scripts through recursive script lists", () => {
+    const result = layout("x^{y_i}");
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(13.438737, 6);
+    const superscript = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(superscript).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(5.71528, 5),
+      y: expect.closeTo(-3.62892, 5),
+    });
+    expect(superscript?.items.map((item) => item.kind)).toEqual(["glyph", "hlist"]);
+  });
+
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
     const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
@@ -207,7 +247,7 @@ describe("TeX math hlist layout", () => {
   });
 
   it("reports unsupported constructs instead of producing approximate layout", () => {
-    for (const source of [String.raw`\frac{1}{2}`, "{x}"]) {
+    for (const source of [String.raw`\frac{1}{2}`, String.raw`\sqrt{x}`]) {
       const result = layout(source);
       expect(result.supported).toBe(false);
       expect(result.hlist).toBeNull();

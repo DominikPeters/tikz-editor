@@ -54,13 +54,13 @@ describe("TeX math parser", () => {
     });
   });
 
-  it("parses grouped lists as inner atoms", () => {
+  it("parses grouped lists as ordinary atoms", () => {
     const result = parseTexMath("{x+y}^2");
     const atom = atomAt(result, 0);
 
     expect(result.diagnostics).toEqual([]);
     expect(atom).toMatchObject({
-      atomClass: "inner",
+      atomClass: "ord",
       sourceSpan: { start: 0, end: 7 },
       nucleus: { kind: "list", sourceSpan: { start: 0, end: 5 } },
       superscript: { sourceSpan: { start: 5, end: 7 } },

@@ -237,7 +237,7 @@ class TexMathParser {
     const sourceSpan = spanUnion(open.sourceSpan, close?.sourceSpan ?? list.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
-      atomClass: "inner",
+      atomClass: "ord",
       nucleus: {
         kind: "list",
         list,

@@ -12,6 +12,7 @@ import type {
   TexMathAtom,
   TexMathGlyphNucleus,
   TexMathList,
+  TexMathNucleus,
   TexMathSourceSpan,
   TexMathStyle,
 } from "./ir.js";
@@ -63,7 +64,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathChildHListLayoutItem {
   readonly kind: "hlist";
-  readonly role: "superscript" | "subscript";
+  readonly role: "nucleus" | "superscript" | "subscript";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -116,6 +117,16 @@ export interface ResolvedMathGlyph {
 
 const TEX_SCRIPT_SPACE_PT = 0.5;
 
+interface TexMathAtomLayout {
+  readonly items: readonly TexMathHListItem[];
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly italicCorrection: number;
+  readonly isCharacterNucleus: boolean;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export function layoutTexMathList(
   list: TexMathList,
   options: TexMathLayoutOptions = {}
@@ -156,7 +167,7 @@ export function layoutTexMathList(
       continue;
     }
 
-    const atomLayout = layoutGlyphAtom(item, fontProfile, style, baseAtPt);
+    const atomLayout = layoutAtom(item, fontProfile, style, baseAtPt);
     if (!atomLayout) {
       errors.push({
         message: "Only simple glyph math atoms are supported by the initial math hlist layout.",
@@ -195,59 +206,38 @@ export function layoutTexMathList(
   };
 }
 
-function layoutGlyphAtom(
+function layoutAtom(
   atom: TexMathAtom,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: number
-): { readonly items: readonly TexMathHListItem[]; readonly width: number; readonly height: number; readonly depth: number } | null {
-  if (atom.nucleus.kind !== "glyph") {
+): TexMathAtomLayout | null {
+  const nucleus = layoutNucleus(atom.nucleus, fontProfile, style, baseAtPt);
+  if (!nucleus) {
     return null;
   }
-  const glyph = resolveMathGlyph(atom.nucleus, fontProfile, style, baseAtPt);
-  if (!glyph) {
-    return null;
-  }
-  const metric = requiredCharMetric(glyph.font, glyph.code);
-  const width = roundTexPt(tfmToPt(glyph.font, metric.width));
-  const glyphHeight = roundTexPt(tfmToPt(glyph.font, metric.height));
-  const glyphDepth = roundTexPt(tfmToPt(glyph.font, metric.depth));
-  const italicCorrection = roundTexPt(tfmToPt(glyph.font, metric.italicCorrection));
-  const glyphItem = {
-    kind: "glyph",
-    fontId: glyph.font.id,
-    atPt: glyph.font.atPt,
-    family: glyph.family,
-    code: glyph.code,
-    text: glyph.text,
-    x: 0,
-    y: 0,
-    width,
-    height: glyphHeight,
-    depth: glyphDepth,
-    italicCorrection,
-    sourceSpan: glyph.sourceSpan,
-  } satisfies TexMathGlyphLayoutItem;
 
   if (!atom.subscript && !atom.superscript) {
-    return appendTrailingItalicCorrection([glyphItem], width, glyphHeight, glyphDepth, italicCorrection, glyph.sourceSpan);
+    return nucleus.isCharacterNucleus
+      ? appendTrailingItalicCorrection(nucleus, nucleus.italicCorrection, nucleus.sourceSpan)
+      : nucleus;
   }
 
-  const items: TexMathHListItem[] = [glyphItem];
-  let scriptStartX = width;
-  let atomWidth = width;
-  let height = glyphHeight;
-  let depth = glyphDepth;
-  const delta = atom.subscript ? italicCorrection : 0;
-  if (!atom.subscript && italicCorrection !== 0) {
+  const items: TexMathHListItem[] = [...nucleus.items];
+  let scriptStartX = nucleus.width;
+  let atomWidth = nucleus.width;
+  let height = nucleus.height;
+  let depth = nucleus.depth;
+  const delta = atom.subscript && nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0;
+  if (!atom.subscript && nucleus.isCharacterNucleus && nucleus.italicCorrection !== 0) {
     items.push({
       kind: "kern",
-      x: width,
-      width: italicCorrection,
+      x: nucleus.width,
+      width: nucleus.italicCorrection,
       reason: "italic-correction",
-      sourceSpan: glyph.sourceSpan,
+      sourceSpan: nucleus.sourceSpan,
     });
-    scriptStartX = roundTexPt(scriptStartX + italicCorrection);
+    scriptStartX = roundTexPt(scriptStartX + nucleus.italicCorrection);
     atomWidth = scriptStartX;
   }
 
@@ -261,24 +251,25 @@ function layoutGlyphAtom(
     return null;
   }
 
+  const baseShifts = initialScriptShifts(nucleus, style, fontProfile, baseAtPt);
   if (sup && !sub) {
-    const shiftUp = superscriptShiftUp(sup, style, fontProfile, baseAtPt);
-    const child = childHList("superscript", scriptStartX, -shiftUp, sup, atom.superscript?.sourceSpan ?? glyph.sourceSpan);
+    const shiftUp = superscriptShiftUp(sup, baseShifts.shiftUp, style, fontProfile, baseAtPt);
+    const child = childHList("superscript", scriptStartX, -shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(child);
     atomWidth = roundTexPt(scriptStartX + child.width);
     height = Math.max(height, -child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sub && !sup) {
-    const shiftDown = subscriptShiftDown(sub, false, style, fontProfile, baseAtPt);
-    const child = childHList("subscript", scriptStartX, shiftDown, sub, atom.subscript?.sourceSpan ?? glyph.sourceSpan);
+    const shiftDown = subscriptShiftDown(sub, baseShifts.shiftDown, false, style, fontProfile, baseAtPt);
+    const child = childHList("subscript", scriptStartX, shiftDown, sub, atom.subscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(child);
     atomWidth = roundTexPt(scriptStartX + child.width);
     height = Math.max(height, -child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sup && sub) {
-    const shifts = combinedScriptShifts(sup, sub, style, fontProfile, baseAtPt);
-    const supChild = childHList("superscript", roundTexPt(scriptStartX + delta), -shifts.shiftUp, sup, atom.superscript?.sourceSpan ?? glyph.sourceSpan);
-    const subChild = childHList("subscript", scriptStartX, shifts.shiftDown, sub, atom.subscript?.sourceSpan ?? glyph.sourceSpan);
+    const shifts = combinedScriptShifts(sup, sub, baseShifts, style, fontProfile, baseAtPt);
+    const supChild = childHList("superscript", roundTexPt(scriptStartX + delta), -shifts.shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
+    const subChild = childHList("subscript", scriptStartX, shifts.shiftDown, sub, atom.subscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(supChild, subChild);
     atomWidth = roundTexPt(scriptStartX + Math.max(delta + sup.width, sub.width));
     height = Math.max(height, -supChild.y + supChild.height, -subChild.y + subChild.height);
@@ -290,6 +281,77 @@ function layoutGlyphAtom(
     width: atomWidth,
     height: roundTexPt(height),
     depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: nucleus.italicCorrection,
+    isCharacterNucleus: nucleus.isCharacterNucleus,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutNucleus(
+  nucleus: TexMathNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  if (nucleus.kind === "glyph") {
+    return layoutGlyphNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
+  if (nucleus.kind === "list") {
+    const result = layoutTexMathList(nucleus.list, { fontProfile, style, baseAtPt });
+    if (!result.supported) {
+      return null;
+    }
+    const child = childHList("nucleus", 0, 0, result.hlist, nucleus.sourceSpan);
+    return {
+      items: [child],
+      width: child.width,
+      height: child.height,
+      depth: child.depth,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+  return null;
+}
+
+function layoutGlyphNucleus(
+  nucleus: TexMathGlyphNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const glyph = resolveMathGlyph(nucleus, fontProfile, style, baseAtPt);
+  if (!glyph) {
+    return null;
+  }
+  const metric = requiredCharMetric(glyph.font, glyph.code);
+  const width = roundTexPt(tfmToPt(glyph.font, metric.width));
+  const glyphHeight = roundTexPt(tfmToPt(glyph.font, metric.height));
+  const glyphDepth = roundTexPt(tfmToPt(glyph.font, metric.depth));
+  const italicCorrection = roundTexPt(tfmToPt(glyph.font, metric.italicCorrection));
+  return {
+    items: [{
+      kind: "glyph",
+      fontId: glyph.font.id,
+      atPt: glyph.font.atPt,
+      family: glyph.family,
+      code: glyph.code,
+      text: glyph.text,
+      x: 0,
+      y: 0,
+      width,
+      height: glyphHeight,
+      depth: glyphDepth,
+      italicCorrection,
+      sourceSpan: glyph.sourceSpan,
+    }],
+    width,
+    height: glyphHeight,
+    depth: glyphDepth,
+    italicCorrection,
+    isCharacterNucleus: true,
+    sourceSpan: glyph.sourceSpan,
   };
 }
 
@@ -402,30 +464,26 @@ function childHList(
 }
 
 function appendTrailingItalicCorrection(
-  items: readonly TexMathHListItem[],
-  width: number,
-  height: number,
-  depth: number,
+  layout: TexMathAtomLayout,
   italicCorrection: number,
   sourceSpan: TexMathSourceSpan
-): { readonly items: readonly TexMathHListItem[]; readonly width: number; readonly height: number; readonly depth: number } {
+): TexMathAtomLayout {
   if (italicCorrection === 0) {
-    return { items, width, height, depth };
+    return layout;
   }
   return {
+    ...layout,
     items: [
-      ...items,
+      ...layout.items,
       {
         kind: "kern",
-        x: width,
+        x: layout.width,
         width: italicCorrection,
         reason: "italic-correction",
         sourceSpan,
       } satisfies TexMathKernLayoutItem,
     ],
-    width: roundTexPt(width + italicCorrection),
-    height,
-    depth,
+    width: roundTexPt(layout.width + italicCorrection),
   };
 }
 
@@ -438,23 +496,25 @@ function offsetMathLayoutItem(item: TexMathHListItem, x: number): TexMathHListIt
 
 function superscriptShiftUp(
   sup: TexMathHList,
+  initialShiftUp: number,
   style: TexMathStyle,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): number {
-  let shiftUp = mathParameterToPt(fontProfile, "sup2", style, baseAtPt);
+  let shiftUp = Math.max(initialShiftUp, superscriptMinimumShift(fontProfile, style, baseAtPt));
   shiftUp = Math.max(shiftUp, sup.depth + mathXHeight(fontProfile, style, baseAtPt) / 4);
   return roundTexPt(shiftUp);
 }
 
 function subscriptShiftDown(
   sub: TexMathHList,
+  initialShiftDown: number,
   hasSuperscript: boolean,
   style: TexMathStyle,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): number {
-  let shiftDown = mathParameterToPt(fontProfile, hasSuperscript ? "sub2" : "sub1", style, baseAtPt);
+  let shiftDown = Math.max(initialShiftDown, mathParameterToPt(fontProfile, hasSuperscript ? "sub2" : "sub1", style, baseAtPt));
   shiftDown = Math.max(shiftDown, sub.height - (mathXHeight(fontProfile, style, baseAtPt) * 4) / 5);
   return roundTexPt(shiftDown);
 }
@@ -462,12 +522,13 @@ function subscriptShiftDown(
 function combinedScriptShifts(
   sup: TexMathHList,
   sub: TexMathHList,
+  initialShifts: { readonly shiftUp: number; readonly shiftDown: number },
   style: TexMathStyle,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): { readonly shiftUp: number; readonly shiftDown: number } {
-  let shiftUp = superscriptShiftUp(sup, style, fontProfile, baseAtPt);
-  let shiftDown = subscriptShiftDown(sub, true, style, fontProfile, baseAtPt);
+  let shiftUp = superscriptShiftUp(sup, initialShifts.shiftUp, style, fontProfile, baseAtPt);
+  let shiftDown = subscriptShiftDown(sub, initialShifts.shiftDown, true, style, fontProfile, baseAtPt);
   const defaultRuleThickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
   const clearance = 4 * defaultRuleThickness - ((shiftUp - sup.depth) - (sub.height - shiftDown));
   if (clearance > 0) {
@@ -484,9 +545,35 @@ function combinedScriptShifts(
   };
 }
 
+function initialScriptShifts(
+  nucleus: TexMathAtomLayout,
+  style: TexMathStyle,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): { readonly shiftUp: number; readonly shiftDown: number } {
+  if (nucleus.isCharacterNucleus) {
+    return { shiftUp: 0, shiftDown: 0 };
+  }
+  return {
+    shiftUp: roundTexPt(Math.max(0, nucleus.height - mathParameterToPt(fontProfile, "supDrop", scriptSizeStyle(style), baseAtPt))),
+    shiftDown: roundTexPt(Math.max(0, nucleus.depth + mathParameterToPt(fontProfile, "subDrop", scriptSizeStyle(style), baseAtPt))),
+  };
+}
+
+function superscriptMinimumShift(
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  if (style === "display") {
+    return mathParameterToPt(fontProfile, "sup1", style, baseAtPt);
+  }
+  return mathParameterToPt(fontProfile, "sup2", style, baseAtPt);
+}
+
 function mathParameterToPt(
   fontProfile: TexMathFontProfile,
-  name: "sup2" | "sub1" | "sub2",
+  name: "sup1" | "sup2" | "sub1" | "sub2" | "supDrop" | "subDrop",
   style: TexMathStyle,
   baseAtPt: number
 ): number {
@@ -495,7 +582,7 @@ function mathParameterToPt(
     style,
     baseAtPt,
   });
-  return tfmToPt(symbols, fontProfile.parameters[name]);
+  return tfmToPt(symbols, requiredFontdimen(symbols, mathParameterFontdimenName(name)));
 }
 
 function mathExtensionParameterToPt(
@@ -530,6 +617,28 @@ function supStyle(style: TexMathStyle): TexMathStyle {
 
 function subStyle(style: TexMathStyle): TexMathStyle {
   return style === "text" || style === "display" ? "script" : "scriptscript";
+}
+
+function scriptSizeStyle(style: TexMathStyle): TexMathStyle {
+  return style === "script" || style === "scriptscript" ? "scriptscript" : "script";
+}
+
+function mathParameterFontdimenName(name: "sup1" | "sup2" | "sub1" | "sub2" | "supDrop" | "subDrop"): string {
+  if (name === "supDrop") {
+    return "supdrop";
+  }
+  if (name === "subDrop") {
+    return "subdrop";
+  }
+  return name;
+}
+
+function requiredFontdimen(font: ResolvedTexFont, name: string): number {
+  const value = font.data.fontdimen[name];
+  if (value === undefined) {
+    throw new Error(`Font '${font.id}' is missing required math fontdimen '${name}'.`);
+  }
+  return value;
 }
 
 function requiredCharMetric(

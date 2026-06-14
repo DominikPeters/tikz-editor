@@ -60,7 +60,7 @@ describe("TeX math atom classes and spacing", () => {
     ]);
   });
 
-  it("applies TeX spacing table around relations, punctuation, and inner atoms", () => {
+  it("applies TeX spacing table around relations, punctuation, and explicit inner atoms", () => {
     expect(spacedItems("a=b").filter((item) => item.kind === "resolved-glue")).toEqual([
       expect.objectContaining({ mu: 5, leftClass: "ord", rightClass: "rel" }),
       expect.objectContaining({ mu: 5, leftClass: "rel", rightClass: "ord" }),
@@ -68,7 +68,8 @@ describe("TeX math atom classes and spacing", () => {
     expect(spacedItems("a,b").filter((item) => item.kind === "resolved-glue")).toEqual([
       expect.objectContaining({ mu: 3, leftClass: "punct", rightClass: "ord" }),
     ]);
-    expect(spacedItems("a{b}").filter((item) => item.kind === "resolved-glue")).toEqual([
+    expect(spacedItems("a{b}").filter((item) => item.kind === "resolved-glue")).toEqual([]);
+    expect(spacedItems(String.raw`a\mathinner{b}`).filter((item) => item.kind === "resolved-glue")).toEqual([
       expect.objectContaining({ mu: 3, leftClass: "ord", rightClass: "inner" }),
     ]);
   });

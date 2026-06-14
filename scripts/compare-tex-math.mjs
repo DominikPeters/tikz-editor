@@ -13,7 +13,24 @@ import { texOracleEnv } from "./lib/tex-oracle.mjs";
 const args = readArgs();
 const formulas = args.formulas.length > 0
   ? args.formulas
-  : ["a+1", "x-y", "xy", "a=b", "(z)", "x^2", "x_i", "x_i^2", "y^2", "y_i", "y_i^2"];
+  : [
+      "a+1",
+      "x-y",
+      "xy",
+      "a=b",
+      "(z)",
+      "a{b}",
+      "a\\mathinner{b}",
+      "x^2",
+      "x_i",
+      "x_i^2",
+      "y^2",
+      "y_i",
+      "y_i^2",
+      "{x+y}",
+      "{x+y}^2",
+      "x^{y_i}",
+    ];
 const tolerance = args.tolerance;
 const results = formulas.map((formula) => compareFormula(formula, tolerance));
 const failed = results.filter((result) => !result.ok);

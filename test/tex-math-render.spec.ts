@@ -55,6 +55,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(571.528 -362.892) scale(70)"');
   });
 
+  it("renders grouped list nuclei recursively", () => {
+    const parsed = parseTexMath("{x+y}^2");
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="43"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+    expect(body).toContain('data-tex-font="cmr7" data-tex-glyph="50"');
+    expect(body).toContain('transform="translate(2319.9158 -362.892) scale(70)"');
+  });
+
   it("creates inline math boxes for supported formulas without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
