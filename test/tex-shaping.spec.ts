@@ -209,6 +209,133 @@ function firstLineSpaceWidths(
     .map((segment) => segment.width) ?? [];
 }
 
+function makeDeterministicRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickFuzzItem<T>(items: readonly T[], random: () => number): T {
+  return items[Math.floor(random() * items.length) % items.length]!;
+}
+
+type TexHitMapFuzzCase = {
+  readonly id: string;
+  readonly source: string;
+  readonly width: number;
+  readonly offsets: readonly number[];
+};
+
+function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
+  const random = makeDeterministicRandom(0x54584d00 + index);
+  const words = [
+    "Alpha",
+    "beta",
+    "canvas",
+    "delta",
+    "editor",
+    "focus",
+    "gamma",
+    "layout",
+    "metric",
+    "stable",
+    "test",
+    "vector",
+  ];
+  const commands = ["textsf", "textbf", "textit", "textsc"] as const;
+  const declarations = ["it", "bf", "sf", "sc"] as const;
+  const offsets: number[] = [];
+  let source = "";
+
+  const appendSeparator = () => {
+    if (source.length > 0 && !/[\s{]$/.test(source)) {
+      source += " ";
+    }
+  };
+  const appendTrackedWord = (word: string) => {
+    const start = source.length;
+    source += word;
+    if (word.length > 1) {
+      offsets.push(start + 1);
+    }
+    if (word.length > 3) {
+      offsets.push(start + Math.floor(word.length / 2));
+      offsets.push(start + word.length - 1);
+    }
+  };
+  const appendPlainWord = () => {
+    appendSeparator();
+    appendTrackedWord(pickFuzzItem(words, random));
+  };
+  const appendCommand = () => {
+    appendSeparator();
+    const command = pickFuzzItem(commands, random);
+    source += `\\${command}{`;
+    appendTrackedWord(pickFuzzItem(words, random));
+    if (random() < 0.55) {
+      source += " ";
+      appendTrackedWord(pickFuzzItem(words, random));
+    }
+    source += "}";
+  };
+  const appendNestedCommand = () => {
+    appendSeparator();
+    const outer = pickFuzzItem(commands, random);
+    const inner = pickFuzzItem(commands, random);
+    source += `\\${outer}{`;
+    appendTrackedWord(pickFuzzItem(words, random));
+    source += ` \\${inner}{`;
+    appendTrackedWord(pickFuzzItem(words, random));
+    source += "}}";
+  };
+  const appendDeclarationGroup = () => {
+    appendSeparator();
+    const declaration = pickFuzzItem(declarations, random);
+    source += `{\\${declaration} `;
+    appendTrackedWord(pickFuzzItem(words, random));
+    if (random() < 0.45) {
+      source += " ";
+      appendTrackedWord(pickFuzzItem(words, random));
+    }
+    source += "}";
+  };
+  const appendForcedBreak = () => {
+    appendSeparator();
+    source += random() < 0.5 ? String.raw`\\` : String.raw`\\[7pt]`;
+    source += " ";
+  };
+
+  const tokenCount = 5 + Math.floor(random() * 4);
+  const breakAt = 1 + Math.floor(random() * (tokenCount - 2));
+  for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
+    if (tokenIndex === breakAt || (tokenIndex > 1 && tokenIndex < tokenCount - 1 && random() < 0.12)) {
+      appendForcedBreak();
+    }
+    const variant = random();
+    if (variant < 0.3) {
+      appendPlainWord();
+    } else if (variant < 0.62) {
+      appendCommand();
+    } else if (variant < 0.84) {
+      appendNestedCommand();
+    } else {
+      appendDeclarationGroup();
+    }
+  }
+
+  return {
+    id: `tex-hitmap-fuzz-${index}`,
+    source,
+    width: pickFuzzItem([70, 90, 120, 150], random),
+    offsets: [...new Set(offsets)].sort((left, right) => left - right),
+  };
+}
+
 const texParagraphRegressionCases = [
   {
     id: "narrow-equal-cost-active-state",
@@ -437,6 +564,193 @@ describe("Computer Modern OT1 text shaping", () => {
       shaped.caretStops[4] - shaped.caretStops[1],
       6
     );
+  });
+
+  it("maps editor caret hits inside inline font command arguments to argument source offsets", async () => {
+    const sourceText = String.raw`Hi this is a \textsf{test}.`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:styled-hit-test",
+      width: 120,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(result.supported).toBe(true);
+    const report = result.report;
+    expect(report).toBeTruthy();
+    const segment = report?.lines
+      .flatMap((line) => line.segments)
+      .find((entry) => entry.kind === "text" && entry.text === "test");
+    expect(segment?.sourceStartRaw).toBe(sourceText.indexOf("test"));
+    expect(segment?.sourceEndRaw).toBe(sourceText.indexOf("test") + "test".length);
+
+    const caretStops = segment?.caretStops ?? [];
+    const betweenEAndS = caretStops[2];
+    expect(Number.isFinite(betweenEAndS)).toBe(true);
+
+    const outputJax = { linebreaks: { getReports: () => report ? [report] : [] } };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report?.width ?? 120, bottom: 10 }, report?.width ?? 120),
+      ],
+    };
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:styled-hit-test",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(betweenEAndS ?? 0), px(2)),
+    });
+
+    expect(caret).toMatchObject({
+      ok: true,
+      offset: sourceText.indexOf("test") + 2,
+      kind: "text",
+    });
+  });
+
+  it("keeps editor hit testing usable after a TeX forced line break with styled text", async () => {
+    const sourceText = String.raw`Hi this is a \textsf{test}. \\ And another.`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:styled-forced-break-hitmap",
+      width: 120,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(result.supported).toBe(true);
+    const report = result.report;
+    const vlistLayout = result.vlistLayout;
+    expect(report).toBeTruthy();
+    expect(vlistLayout).toBeTruthy();
+    expect(report?.lines).toHaveLength(2);
+    expect(report?.lines[0]?.break).toMatchObject({
+      kind: "forced",
+      sourceOffset: sourceText.indexOf(String.raw`\\`),
+    });
+
+    const outputJax = { linebreaks: { getReports: () => report ? [report] : [] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:styled-forced-break-hitmap",
+      layout: vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: report?.width ?? 120 } },
+      querySelectorAll: () => {
+        throw new Error("registered vlist geometry should avoid rendered linebox queries");
+      },
+    };
+
+    const anotherOffset = sourceText.indexOf("another") + 3;
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:styled-forced-break-hitmap",
+      sourceText,
+      containerElement,
+      offset: anotherOffset,
+    });
+    expect(point.error?.message ?? null).toBeNull();
+    expect(point).toMatchObject({
+      ok: true,
+      offset: anotherOffset,
+      lineIndex: 1,
+      kind: "text",
+    });
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:styled-forced-break-hitmap",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+    });
+    expect(caret).toMatchObject({
+      ok: true,
+      offset: anotherOffset,
+      lineIndex: 1,
+      kind: "text",
+    });
+
+    const selection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:styled-forced-break-hitmap",
+      sourceText,
+      containerElement,
+      startOffset: sourceText.indexOf("test"),
+      endOffset: sourceText.indexOf("another") + "another".length,
+    });
+    expect(selection.ok).toBe(true);
+    expect(selection.rects).toHaveLength(2);
+  });
+
+  it("fuzzes TeX-derived editor hit maps for styled text and forced breaks", async () => {
+    const cases = Array.from({ length: 40 }, (_, index) => buildTexHitMapFuzzCase(index));
+    for (const testCase of cases) {
+      const result = layoutSimpleTexParagraph(testCase.source, {
+        paragraphId: testCase.id,
+        width: testCase.width,
+        parindent: 0,
+        hyphenator: { hyphenate: () => [] },
+      });
+      expect(result.supported, testCase.source).toBe(true);
+      expect(result.report, testCase.source).toBeTruthy();
+      expect(result.vlistLayout, testCase.source).toBeTruthy();
+      expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
+
+      const report = result.report!;
+      const outputJax = { linebreaks: { getReports: () => [report] } };
+      registerTexVListLayoutsOnOutputJax(outputJax, [{
+        paragraphId: testCase.id,
+        layout: result.vlistLayout!,
+      }]);
+      const containerElement = {
+        getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+        viewBox: { baseVal: { width: report.width } },
+        querySelectorAll: () => {
+          throw new Error("registered vlist geometry should avoid rendered linebox queries");
+        },
+      };
+
+      const sampledOffsets = testCase.offsets.filter((_, index) => index % 3 === 0).slice(0, 8);
+      for (const offset of sampledOffsets) {
+        const point = await getKnuthPlassPointFromOffset(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          offset,
+        });
+        expect(point.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset}`).toBeNull();
+        expect(point, `${testCase.id}: ${testCase.source} @ ${offset}`).toMatchObject({
+          ok: true,
+          offset,
+          kind: "text",
+        });
+
+        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+        });
+        expect(caret.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset}`).toBeNull();
+        expect(caret, `${testCase.id}: ${testCase.source} @ ${offset}`).toMatchObject({
+          ok: true,
+          offset,
+          kind: "text",
+        });
+      }
+
+      const rangeStart = testCase.offsets[0]!;
+      const rangeEnd = testCase.offsets[testCase.offsets.length - 1]!;
+      if (rangeEnd > rangeStart) {
+        const selection = await getKnuthPlassSelectionRects(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          startOffset: rangeStart,
+          endOffset: rangeEnd,
+        });
+        expect(selection.error?.message ?? null, `${testCase.id}: ${testCase.source}`).toBeNull();
+        expect(selection.ok, `${testCase.id}: ${testCase.source}`).toBe(true);
+        expect(selection.rects.length, `${testCase.id}: ${testCase.source}`).toBeGreaterThan(0);
+      }
+    }
   });
 });
 

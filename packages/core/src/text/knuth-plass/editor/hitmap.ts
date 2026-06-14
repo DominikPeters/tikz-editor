@@ -1607,6 +1607,28 @@ function annotateSegmentSource(
   writable.sourceKind = sourceKind;
 }
 
+function explicitSegmentSourceRange(
+  segment: LineSegmentReport,
+  sourceText: string
+): { rawStart: number; rawEnd: number; sourceKind: 'text' | 'math' } | null {
+  const rawStart = Number(segment.sourceStartRaw);
+  const rawEnd = Number(segment.sourceEndRaw);
+  if (
+    !Number.isFinite(rawStart) ||
+    !Number.isFinite(rawEnd) ||
+    rawStart < 0 ||
+    rawEnd < rawStart ||
+    rawEnd > sourceText.length
+  ) {
+    return null;
+  }
+  return {
+    rawStart,
+    rawEnd,
+    sourceKind: segment.sourceKind === 'math' ? 'math' : 'text',
+  };
+}
+
 function buildRunRawRanges(
   report: ParagraphLayoutReport,
   spans: SourceSpan[],
@@ -1882,13 +1904,11 @@ function alignSegmentsToSource(
     }
   }
 
-  const runRaw = buildRunRawRanges(report, parsed.spans, sourceText);
-  if (runRaw.error) {
-    return {
-      aligned: [],
-      error: runRaw.error,
-    };
-  }
+  let fallbackRunRaw: ReturnType<typeof buildRunRawRanges> | null = null;
+  const getFallbackRunRaw = () => {
+    fallbackRunRaw ??= buildRunRawRanges(report, parsed.spans, sourceText);
+    return fallbackRunRaw;
+  };
 
   const aligned: AlignedSegment[] = [];
   const sortedLines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
@@ -1897,6 +1917,37 @@ function alignSegmentsToSource(
     const line = sortedLines[lineCursor];
     for (let segmentIndex = 0; segmentIndex < line.segments.length; segmentIndex++) {
       const segment = line.segments[segmentIndex];
+      const explicitRange = explicitSegmentSourceRange(segment, sourceText);
+      if (explicitRange) {
+        annotateSegmentSource(segment, explicitRange.rawStart, explicitRange.rawEnd, explicitRange.sourceKind);
+        const mathSpan = explicitRange.sourceKind === 'math'
+          ? mathSpanByRange.get(`${explicitRange.rawStart}:${explicitRange.rawEnd}`)
+          : undefined;
+        if (explicitRange.sourceKind === 'math' && !mathSpan) {
+          return {
+            aligned: [],
+            error: `Failed to align math segment ${explicitRange.rawStart}:${explicitRange.rawEnd} to parsed source span.`,
+          };
+        }
+        aligned.push({
+          lineIndex: line.lineIndex,
+          line,
+          segment,
+          rawStart: explicitRange.rawStart,
+          rawEnd: explicitRange.rawEnd,
+          sourceKind: explicitRange.sourceKind,
+          mathSpan,
+        });
+        continue;
+      }
+
+      const runRaw = getFallbackRunRaw();
+      if (runRaw.error) {
+        return {
+          aligned: [],
+          error: runRaw.error,
+        };
+      }
       const runRange = runRaw.runRawByIndex.get(segment.runIndex);
       if (!runRange) {
         return {
