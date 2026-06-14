@@ -612,6 +612,7 @@ describe("simple TeX paragraph IR", () => {
         ? {
             kind: item.kind,
             role: item.role,
+            layout: item.layout,
             children: item.items.map((child) =>
               child.kind === "paragraph"
                 ? { kind: child.kind, text: child.paragraph.text }
@@ -629,8 +630,22 @@ describe("simple TeX paragraph IR", () => {
           labelDepth: 1,
           itemIndex: 1,
         },
+        layout: {
+          leftMarginWidth: 0,
+          rightMarginWidth: 0,
+          listItem: {
+            itemIndex: 1,
+            label: {
+              kind: "default",
+              placement: "margin",
+              content: { kind: "text", text: "1." },
+              rightEdge: 42,
+            },
+          },
+        },
         children: [
           { kind: "glue", size: 13 },
+          { kind: "hbox", size: undefined },
           { kind: "paragraph", text: "Alpha" },
         ],
       },
@@ -643,13 +658,119 @@ describe("simple TeX paragraph IR", () => {
           labelDepth: 1,
           itemIndex: 2,
         },
+        layout: {
+          leftMarginWidth: 0,
+          rightMarginWidth: 0,
+          listItem: {
+            itemIndex: 2,
+            label: {
+              kind: "default",
+              placement: "margin",
+              content: { kind: "text", text: "2." },
+              rightEdge: 42,
+            },
+          },
+        },
         children: [
           { kind: "glue", size: 4 },
+          { kind: "hbox", size: undefined },
           { kind: "paragraph", text: "Beta" },
         ],
       },
     ]);
     expect(flattenVListLeaves(grouped.items)).toEqual(flattenVListLeaves(layout.vlist.items));
+  });
+
+  it("records list item label source metadata on list-item vboxes", () => {
+    const source = String.raw`\begin{enumerate}\item[Step] Alpha\end{enumerate}\begin{description}\item[Term] Beta\end{description}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+    const grouped = groupSimpleTexVListScopes(
+      layout.vlist,
+      computerModernTexMetricProvider.resolveFont()
+    );
+
+    const listItemLayouts = collectVListBoxes(grouped.items)
+      .filter((item) => item.role?.kind === "list-item")
+      .map((item) => ({
+        role: item.role,
+        listItem: item.layout?.listItem,
+      }));
+
+    expect(listItemLayouts).toEqual([
+      {
+        role: {
+          kind: "list-item",
+          listKind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+        },
+        listItem: {
+          itemIndex: 1,
+          label: {
+            kind: "custom",
+            placement: "margin",
+            content: { kind: "source" },
+            rightEdge: 20,
+            sourceSpan: {
+              start: source.indexOf("Step"),
+              end: source.indexOf("Step") + "Step".length,
+            },
+          },
+        },
+      },
+      {
+        role: {
+          kind: "list-item",
+          listKind: "description",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+        },
+        listItem: {
+          itemIndex: 1,
+          label: {
+            kind: "description",
+            placement: "inline",
+            content: { kind: "source" },
+            fontState: {
+              family: "roman",
+              series: "bold",
+              shape: "upright",
+            },
+            rightEdge: 20,
+            sourceSpan: {
+              start: source.indexOf("Term"),
+              end: source.indexOf("Term") + "Term".length,
+            },
+          },
+          description: {
+            labelFirstLineIndentWidth: -20,
+            bodyFirstLineIndentWidth: -25,
+          },
+        },
+      },
+    ]);
+    expect(collectVListBoxes(layout.vlist.items)
+      .filter((item) => item.role?.kind === "list-item" && item.role.listKind === "description")
+      .map((item) => ({
+        labelKind: item.layout?.listItem?.label?.kind,
+        descriptionLabelFirstLineIndentWidth: item.layout?.listItem?.description?.labelFirstLineIndentWidth,
+        descriptionBodyFirstLineIndentWidth: item.layout?.listItem?.description?.bodyFirstLineIndentWidth,
+      }))
+    ).toEqual([
+      {
+        labelKind: "description",
+        descriptionLabelFirstLineIndentWidth: -20,
+        descriptionBodyFirstLineIndentWidth: -25,
+      },
+    ]);
   });
 
   it("lays out generic vlist items using caller-provided measurements", () => {
@@ -1630,6 +1751,10 @@ describe("simple TeX paragraph IR", () => {
         labelRightEdge: 4.2 * font.atPt,
       },
     ]);
+    expect(collectVListBoxes(layout.vlist.items)
+      .filter((item) => item.role?.kind === "list-item")
+      .map((item) => item.layout?.listItem?.label?.rightEdge)
+    ).toEqual(layout.paragraphs.map((paragraph) => paragraph.label?.rightEdge));
   });
 
   it("materializes LaTeX article description labels as in-flow hanging labels", () => {
@@ -1702,6 +1827,15 @@ describe("simple TeX paragraph IR", () => {
         { kind: "glyph", text: "*", code: 42, font: { id: "tcrm1000" } },
         { kind: "glyph", text: ".", code: 183, font: { id: "tcrm1000" } },
       ]);
+    expect(collectVListBoxes(layout.vlist.items)
+      .filter((item) => item.role?.kind === "list-item")
+      .map((item) => item.layout?.listItem?.label?.content)
+    ).toEqual([
+      { kind: "glyph", text: "•", code: 0x2022, fontId: "lmroman10-regular" },
+      { kind: "glyph", text: "–", code: 0x2013, fontId: "lmroman10-regular" },
+      { kind: "glyph", text: "*", code: 42, fontId: "tcrm1000" },
+      { kind: "glyph", text: ".", code: 183, fontId: "tcrm1000" },
+    ]);
   });
 
   it("materializes natural LaTeX article list vertical spacing as vlist glue", () => {
@@ -1718,12 +1852,15 @@ describe("simple TeX paragraph IR", () => {
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "paragraph:Before",
       "glue:10",
+      "hbox",
       "paragraph:Alpha",
       "glue:4",
       "paragraph:More",
       "glue:8",
+      "hbox",
       "paragraph:Beta",
       "glue:8",
+      "hbox",
       "paragraph:Nested",
       "glue:10",
       "paragraph:After",
@@ -1743,16 +1880,22 @@ describe("simple TeX paragraph IR", () => {
 
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "glue:13",
+      "hbox",
       "paragraph:A",
       "glue:8",
+      "hbox",
       "paragraph:B",
       "glue:4",
+      "hbox",
       "paragraph:C",
       "glue:2",
+      "hbox",
       "paragraph:D",
       "glue:4",
+      "hbox",
       "paragraph:E",
       "glue:8",
+      "hbox",
       "paragraph:F",
     ]);
   });
@@ -1980,8 +2123,10 @@ describe("simple TeX paragraph IR", () => {
     ]);
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "glue:13",
+      "hbox",
       "paragraph:Alpha",
       "glue:4",
+      "hbox",
       "paragraph:Beta",
     ]);
   });
@@ -2068,4 +2213,16 @@ function flattenVListLeaves(items: readonly TexVListItem[]): readonly string[] {
     leaves.push(item.kind);
   }
   return leaves;
+}
+
+function collectVListBoxes(items: readonly TexVListItem[]): readonly Extract<TexVListItem, { kind: "vbox" }>[] {
+  const boxes: Array<Extract<TexVListItem, { kind: "vbox" }>> = [];
+  for (const item of items) {
+    if (item.kind !== "vbox") {
+      continue;
+    }
+    boxes.push(item);
+    boxes.push(...collectVListBoxes(item.items));
+  }
+  return boxes;
 }

@@ -656,6 +656,27 @@ describe("mathjax node text engine", () => {
     );
   });
 
+  it("renders TeX list margin labels from vlist hbox items", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`\begin{enumerate}\item Alpha\end{enumerate}`,
+      width: 150,
+      alignment: "ragged-right",
+    }) ?? "";
+
+    expect(body).toContain('data-tex-vlist-item="hbox"');
+    expect(body).toContain('data-tex-glyph="49"');
+    expect(body).toContain('data-tex-glyph="46"');
+    expect(body).toContain('data-line-index="0"');
+    expect(body.indexOf('data-tex-vlist-item="hbox"')).toBeLessThan(
+      body.indexOf('data-line-index="0"')
+    );
+  });
+
   it("normalizes legacy font switches and records wrapped text gap metadata", async () => {
     const { outputJax, texCalls } = installFakeBrowserMathJax();
 

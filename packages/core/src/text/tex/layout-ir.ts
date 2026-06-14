@@ -22,9 +22,15 @@ import {
   lowerSimpleTexBlocksToVList,
   prepareSimpleTexVList,
   texVListParagraphEntries,
+  type TexBoxMetrics,
+  type TexHBoxItem,
   type TexParagraphItem,
+  type TexRenderItem,
+  type TexVBoxListItemLabelBox,
+  type TexVBoxListItemLayout,
   type TexVBoxItem,
   type TexVListDocument,
+  type TexVListItem,
 } from "./vlist/index.js";
 
 export interface TexLayoutIrOptions {
@@ -134,6 +140,7 @@ export function createSimpleTexLayoutDocumentIr(params: {
   const normalizedVList = preparedVList.normalized;
   const paragraphEntries = texVListParagraphEntries(normalizedVList.items);
   const paragraphItems = paragraphEntries.map((entry) => entry.item);
+  const marginLabelHBoxesByBlockIndex = new Map<number, TexHBoxItem>();
   const reportAlignment = texHonoredBlockAlignment(
     params.blocks[0],
     params.options
@@ -193,32 +200,41 @@ export function createSimpleTexLayoutDocumentIr(params: {
     for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
       const segment = segments[segmentIndex];
       const scopeLayout = texParagraphScopeLayout(entry.ancestors);
-      const listLabelRightEdge = scopeLayout.listLabelRightEdge;
+      const listItemLayout = texParagraphListItemLayout(entry.ancestors);
+      const listContext = paragraph.listContext;
+      const listItemLabel = segmentIndex === 0 && listContext?.showLabel === true
+        ? listItemLayout?.label
+        : undefined;
       const descriptionLabelItems =
-        segmentIndex === 0 && paragraph.listContext?.showLabel === true
-          ? texDescriptionLabelItemsForListContext(
-              paragraph.listContext,
+        listContext && listItemLabel?.placement === "inline"
+          ? texInlineLabelItemsForListContext(
+              listContext,
+              listItemLabel,
               params.font,
               metricProvider,
               paragraphSpaceGlueProfile
           )
           : [];
       const firstLineIndentWidth = texArticleDescriptionFirstLineIndentWidth(
-        paragraph.listContext,
-        scopeLayout,
+        listContext,
+        listItemLayout,
         descriptionLabelItems.length > 0
       );
-      const label = segmentIndex === 0 &&
-        paragraph.listContext?.showLabel === true &&
-        paragraph.listContext.kind !== "description"
+      const label = listContext && listItemLabel?.placement === "margin"
         ? texLayoutLabelForListContext(
-            paragraph.listContext,
+            listContext,
             params.font,
             metricProvider,
             paragraphSpaceGlueProfile,
-            listLabelRightEdge
+            listItemLabel
           )
         : undefined;
+      if (label && listItemLabel) {
+        marginLabelHBoxesByBlockIndex.set(
+          blockIndex,
+          texMarginListLabelHBoxFromLayoutLabel(label, listItemLabel, metricProvider)
+        );
+      }
       paragraphs.push({
         kind: "tex-layout-paragraph",
         blockIndex,
@@ -255,11 +271,46 @@ export function createSimpleTexLayoutDocumentIr(params: {
 
   return {
     kind: "simple-tex-layout-document",
-    vlist: normalizedVList,
+    vlist: attachMarginListLabelHBoxesToVList(
+      normalizedVList,
+      marginLabelHBoxesByBlockIndex
+    ),
     reportAlignment,
     layoutMode,
     paragraphs,
   };
+}
+
+function attachMarginListLabelHBoxesToVList(
+  document: TexVListDocument,
+  labelsByBlockIndex: ReadonlyMap<number, TexHBoxItem>
+): TexVListDocument {
+  if (labelsByBlockIndex.size === 0) {
+    return document;
+  }
+  return {
+    ...document,
+    items: attachMarginListLabelHBoxesToItems(document.items, labelsByBlockIndex),
+  };
+}
+
+function attachMarginListLabelHBoxesToItems(
+  items: readonly TexVListItem[],
+  labelsByBlockIndex: ReadonlyMap<number, TexHBoxItem>
+): readonly TexVListItem[] {
+  return items.flatMap((item): readonly TexVListItem[] => {
+    if (item.kind === "vbox") {
+      return [{
+        ...item,
+        items: attachMarginListLabelHBoxesToItems(item.items, labelsByBlockIndex),
+      }];
+    }
+    if (item.kind === "paragraph") {
+      const label = labelsByBlockIndex.get(item.blockIndex);
+      return label ? [label, item] : [item];
+    }
+    return [item];
+  });
 }
 
 function texHonoredBlockAlignment(
@@ -355,57 +406,62 @@ function texParagraphScopePolicy(ancestors: readonly TexVBoxItem[]): TexParagrap
 function texParagraphScopeLayout(ancestors: readonly TexVBoxItem[]): {
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
-  readonly listLabelRightEdge: number;
-  readonly listOwnLeftMarginWidth: number;
-  readonly descriptionLabelSepWidth: number;
 } {
   let leftMarginWidth = 0;
   let rightMarginWidth = 0;
-  let listLabelRightEdge = 0;
-  let listOwnLeftMarginWidth = 0;
-  let descriptionLabelSepWidth = 0;
   for (const ancestor of ancestors) {
     if (!ancestor.layout) {
       continue;
     }
-    const leftBefore = leftMarginWidth;
     leftMarginWidth += ancestor.layout.leftMarginWidth;
     rightMarginWidth += ancestor.layout.rightMarginWidth;
-    if (ancestor.layout.list) {
-      listLabelRightEdge = leftBefore + ancestor.layout.list.labelRightEdge;
-      listOwnLeftMarginWidth = ancestor.layout.list.ownLeftMarginWidth;
-      descriptionLabelSepWidth = ancestor.layout.list.descriptionLabelSepWidth;
-    }
   }
   return {
     leftMarginWidth,
     rightMarginWidth,
-    listLabelRightEdge,
-    listOwnLeftMarginWidth,
-    descriptionLabelSepWidth,
   };
+}
+
+function texParagraphListItemLayout(
+  ancestors: readonly TexVBoxItem[]
+): TexVBoxListItemLayout | undefined {
+  return ancestors.at(-1)?.layout?.listItem;
+}
+
+function requiredTexListItemLabelRightEdge(
+  labelBox: TexVBoxListItemLabelBox
+): number {
+  if (labelBox.rightEdge === undefined) {
+    throw new Error("TeX list-item vbox label attachment is missing rightEdge.");
+  }
+  return labelBox.rightEdge;
 }
 
 function texArticleDescriptionFirstLineIndentWidth(
   listContext: SimpleTexListContext | undefined,
-  scopeLayout: ReturnType<typeof texParagraphScopeLayout>,
+  listItemLayout: TexVBoxListItemLayout | undefined,
   hasDescriptionLabel: boolean
 ): number | undefined {
-  return listContext?.kind === "description"
-    ? roundTexPt(
-        -scopeLayout.listOwnLeftMarginWidth +
-        (hasDescriptionLabel ? scopeLayout.descriptionLabelSepWidth : 0)
-      )
-    : undefined;
+  if (listContext?.kind !== "description") {
+    return undefined;
+  }
+  const indent = hasDescriptionLabel
+    ? listItemLayout?.description?.labelFirstLineIndentWidth
+    : listItemLayout?.description?.bodyFirstLineIndentWidth;
+  if (indent === undefined) {
+    throw new Error("TeX list-item vbox description metadata is missing first-line indentation.");
+  }
+  return indent;
 }
 
-function texDescriptionLabelItemsForListContext(
+function texInlineLabelItemsForListContext(
   listContext: SimpleTexListContext,
+  labelBox: TexVBoxListItemLabelBox,
   font: ResolvedTexFont,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile
 ): TexLayoutInlineItem[] {
-  if (listContext.kind !== "description" || !listContext.label) {
+  if (labelBox.content.kind !== "source" || !listContext.label) {
     return [];
   }
   return simpleTexInlineNodesToLayoutItems(
@@ -415,11 +471,7 @@ function texDescriptionLabelItemsForListContext(
     font.atPt,
     metricProvider,
     spaceGlueProfile,
-    {
-      family: "roman",
-      series: "bold",
-      shape: "upright",
-    }
+    labelBox.fontState
   );
 }
 
@@ -428,9 +480,14 @@ function texLayoutLabelForListContext(
   font: ResolvedTexFont,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
-  rightEdge: number
+  labelBox: TexVBoxListItemLabelBox
 ): TexLayoutLabel {
-  if (listContext.label) {
+  const rightEdge = requiredTexListItemLabelRightEdge(labelBox);
+  const labelContent = labelBox.content;
+  if (labelContent.kind === "source") {
+    if (!listContext.label) {
+      throw new Error("TeX list-item vbox source label metadata is missing source label content.");
+    }
     return {
       items: simpleTexInlineNodesToLayoutItems(
         listContext.label.nodes,
@@ -446,21 +503,27 @@ function texLayoutLabelForListContext(
     };
   }
 
-  const glyphLabel = texDefaultItemizeGlyphLabel(listContext, font.atPt, metricProvider);
-  if (glyphLabel) {
+  if (labelContent.kind === "glyph") {
     return {
-      items: [glyphLabel],
+      items: [{
+        kind: "glyph",
+        text: labelContent.text,
+        code: labelContent.code,
+        font: metricProvider.resolveFont({
+          fontId: labelContent.fontId,
+          atPt: font.atPt,
+        }),
+      }],
       sourceStart: 0,
       sourceEnd: 0,
       rightEdge,
     };
   }
 
-  const text = texDefaultEnumerateLabelText(listContext);
   return {
     items: [{
       kind: "text",
-      text,
+      text: labelContent.text,
       sourceStart: 0,
       sourceEnd: 0,
       font,
@@ -474,104 +537,115 @@ function texLayoutLabelForListContext(
   };
 }
 
-function texDefaultItemizeGlyphLabel(
-  listContext: SimpleTexListContext,
-  atPt: number,
+function texMarginListLabelHBoxFromLayoutLabel(
+  label: TexLayoutLabel,
+  labelBox: TexVBoxListItemLabelBox,
   metricProvider: TexMetricProvider
-): TexLayoutGlyphItem | null {
-  if (listContext.kind !== "itemize") {
-    return null;
-  }
-  if (listContext.labelDepth === 2) {
-    return {
-      kind: "glyph",
-      text: "–",
-      code: 0x2013,
-      font: metricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
-    };
-  }
-  if (listContext.labelDepth === 3) {
-    return {
-      kind: "glyph",
-      text: "*",
-      code: 42,
-      font: metricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
-    };
-  }
-  if (listContext.labelDepth === 4) {
-    return {
-      kind: "glyph",
-      text: ".",
-      code: 183,
-      font: metricProvider.resolveFont({ fontId: "tcrm1000", atPt }),
-    };
-  }
+): TexHBoxItem {
+  const box = texLayoutLabelHBoxContent(label, metricProvider);
   return {
-    kind: "glyph",
-    text: "•",
-    code: 0x2022,
-    font: metricProvider.resolveFont({ fontId: "lmroman10-regular", atPt }),
+    kind: "hbox",
+    ...(label.sourceStart !== 0 || label.sourceEnd !== 0
+      ? {
+          sourceSpan: {
+            start: label.sourceStart,
+            end: label.sourceEnd,
+          },
+        }
+      : {}),
+    role: {
+      kind: "list-label",
+      labelKind: labelBox.kind,
+      placement: labelBox.placement,
+    },
+    x: roundTexPt(label.rightEdge - box.metrics.width),
+    advance: 0,
+    affectsVBoxBaseline: false,
+    box: {
+      metrics: box.metrics,
+      renderItems: box.renderItems,
+    },
   };
 }
 
-function texDefaultEnumerateLabelText(listContext: SimpleTexListContext): string {
-  if (listContext.kind === "description") {
-    return "";
-  }
-  switch (listContext.labelDepth) {
-    case 2:
-      return `(${texLowerAlphaCounter(listContext.itemIndex)})`;
-    case 3:
-      return `${texLowerRomanCounter(listContext.itemIndex)}.`;
-    case 4:
-      return `${texUpperAlphaCounter(listContext.itemIndex)}.`;
-    default:
-      return `${listContext.itemIndex}.`;
-  }
-}
-
-function texLowerAlphaCounter(value: number): string {
-  const normalized = Math.max(1, Math.floor(value));
-  let remaining = normalized;
-  let result = "";
-  while (remaining > 0) {
-    remaining -= 1;
-    result = String.fromCharCode(97 + (remaining % 26)) + result;
-    remaining = Math.floor(remaining / 26);
-  }
-  return result;
-}
-
-function texUpperAlphaCounter(value: number): string {
-  return texLowerAlphaCounter(value).toUpperCase();
-}
-
-function texLowerRomanCounter(value: number): string {
-  const normalized = Math.max(1, Math.floor(value));
-  const entries: Array<[number, string]> = [
-    [1000, "m"],
-    [900, "cm"],
-    [500, "d"],
-    [400, "cd"],
-    [100, "c"],
-    [90, "xc"],
-    [50, "l"],
-    [40, "xl"],
-    [10, "x"],
-    [9, "ix"],
-    [5, "v"],
-    [4, "iv"],
-    [1, "i"],
-  ];
-  let remaining = normalized;
-  let result = "";
-  for (const [amount, symbol] of entries) {
-    while (remaining >= amount) {
-      result += symbol;
-      remaining -= amount;
+function texLayoutLabelHBoxContent(
+  label: TexLayoutLabel,
+  metricProvider: TexMetricProvider
+): {
+  readonly metrics: TexBoxMetrics;
+  readonly renderItems: readonly TexRenderItem[];
+} {
+  let width = 0;
+  let height = 0;
+  let depth = 0;
+  const pendingItems: Array<
+    | Omit<Extract<TexRenderItem, { kind: "tex-glyph-run" }>, "baseline">
+    | Omit<Extract<TexRenderItem, { kind: "tex-glyph" }>, "baseline">
+  > = [];
+  for (const item of label.items) {
+    if (item.kind === "glyph") {
+      const glyphWidth = texLayoutGlyphItemWidth(item);
+      pendingItems.push({
+        kind: "tex-glyph",
+        text: item.text,
+        code: item.code,
+        fontId: item.font.id,
+        atPt: item.font.atPt,
+        x: roundTexPt(width),
+      });
+      width += glyphWidth;
+      height = Math.max(height, texLayoutGlyphItemHeight(item));
+      depth = Math.max(depth, texLayoutGlyphItemDepth(item));
+      continue;
     }
+    if (item.kind === "forced-break") {
+      continue;
+    }
+    if (item.kind === "text") {
+      const shaped = metricProvider.shapeText(item.text, item.font);
+      pendingItems.push({
+        kind: "tex-glyph-run",
+        text: item.text,
+        fontId: item.font.id,
+        atPt: item.font.atPt,
+        x: roundTexPt(width),
+      });
+      width += shaped.width;
+      for (const shapedItem of shaped.items) {
+        if (shapedItem.kind !== "glyph") {
+          continue;
+        }
+        height = Math.max(height, shapedItem.height);
+        depth = Math.max(depth, shapedItem.depth);
+      }
+      continue;
+    }
+    width += texLayoutSpaceItemWidth(item);
   }
-  return result;
+  const baseline = roundTexPt(height);
+  return {
+    metrics: {
+      width: roundTexPt(width),
+      height: baseline,
+      depth: roundTexPt(depth),
+    },
+    renderItems: pendingItems.map((item) => ({
+      ...item,
+      baseline,
+    })),
+  };
+}
+
+function texLayoutSpaceItemWidth(item: TexLayoutSpaceItem): number {
+  const normalized = Number.isFinite(item.spaceFactor) && item.spaceFactor > 0
+    ? item.spaceFactor
+    : 1000;
+  if (item.spaceGlueProfile === "tikz-fixed") {
+    return roundTexPt((normalized >= 2000 ? 0.5 : 0.3333) * item.font.atPt);
+  }
+  const baseSpace = tfmToPt(item.font, item.font.data.fontdimen.space);
+  const extraSpace = tfmToPt(item.font, item.font.data.fontdimen.extraspace ?? 0);
+  return roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0));
 }
 
 function simpleTexInlineNodesToLayoutItems(

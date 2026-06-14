@@ -1335,6 +1335,7 @@ function buildTexLineLabelSegments(
       segments.push({
         runIndex: label.lineRunIndex,
         kind: "text",
+        role: "list-label",
         text: item.text,
         startOffset: 0,
         endOffset: item.text.length,
@@ -1358,6 +1359,7 @@ function buildTexLineLabelSegments(
       segments.push({
         runIndex: label.lineRunIndex,
         kind: "text",
+        role: "list-label",
         text: item.text,
         startOffset: 0,
         endOffset: item.text.length,
@@ -1378,6 +1380,7 @@ function buildTexLineLabelSegments(
     segments.push({
       runIndex: label.lineRunIndex,
       kind: "space",
+      role: "list-label",
       text: " ",
       x,
       width: glue.width,

@@ -17,6 +17,7 @@ export interface TexVListGlueSet {
 
 export interface MeasuredTexVListItem {
   readonly metrics: TexBoxMetrics;
+  readonly x?: number;
   readonly y?: number;
   readonly advance?: number;
 }
@@ -74,7 +75,7 @@ export function layoutTexVListItems(
       positioned.push({
         item,
         path,
-        x: 0,
+        x: measured.x ?? 0,
         y,
         metrics: measured.metrics,
       });
@@ -139,7 +140,11 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
     return { metrics: item.estimated };
   }
   if (item.kind === "hbox") {
-    return { metrics: item.box.metrics };
+    return {
+      x: item.x,
+      metrics: item.box.metrics,
+      advance: item.advance,
+    };
   }
   if (item.kind === "penalty") {
     return {
@@ -317,7 +322,10 @@ function metricsForVBox(
   top: number,
   bottom: number
 ): TexBoxMetrics {
-  const firstBox = positioned.find((item) => item.item.kind !== "glue");
+  const firstBox = positioned.find((item) =>
+    item.item.kind !== "glue" &&
+    (item.item.kind !== "hbox" || item.item.affectsVBoxBaseline !== false)
+  );
   const baselineY = firstBox
     ? firstBox.y + firstBox.metrics.height
     : top;

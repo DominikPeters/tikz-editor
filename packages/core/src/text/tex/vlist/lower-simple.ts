@@ -9,6 +9,7 @@ import type {
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { planSimpleTexParagraphVerticalSkips } from "./spacing.js";
 import { groupSimpleTexVListScopes } from "./scopes.js";
+import { texVBoxRolePathForScope } from "./scope-roles.js";
 import type {
   TexGlueItem,
   TexParagraphInput,
@@ -214,29 +215,7 @@ function scopePathForVerticalBlockItem(
     | SimpleTexPenaltyBlockItem
     | SimpleTexPlaceholderBlockItem
 ): readonly TexVBoxRole[] | undefined {
-  const path: TexVBoxRole[] = [];
-  for (let depth = 1; depth <= item.quoteDepth; depth += 1) {
-    path.push({ kind: "quote", depth });
-  }
-  if (item.listScope) {
-    path.push({
-      kind: "list",
-      listKind: item.listScope.kind,
-      depth: item.listScope.depth,
-      labelDepth: item.listScope.labelDepth,
-      ownLeftMarginEm: item.listScope.ownLeftMarginEm,
-      totalLeftMarginEm: item.listScope.totalLeftMarginEm,
-    });
-    if (item.listScope.itemIndex > 0) {
-      path.push({
-        kind: "list-item",
-        listKind: item.listScope.kind,
-        depth: item.listScope.depth,
-        labelDepth: item.listScope.labelDepth,
-        itemIndex: item.listScope.itemIndex,
-      });
-    }
-  }
+  const path = texVBoxRolePathForScope(item);
   return path.length > 0 ? path : undefined;
 }
 

@@ -2094,6 +2094,7 @@ describe("simple TeX paragraph layout", () => {
       .map((item) => ({
         path: item.path,
         role: item.role,
+        listItem: item.listItem,
         sourceSpan: item.sourceSpan,
       }))).toEqual([
       {
@@ -2104,6 +2105,15 @@ describe("simple TeX paragraph layout", () => {
           depth: 1,
           labelDepth: 1,
           itemIndex: 1,
+        },
+        listItem: {
+          itemIndex: 1,
+          label: {
+            kind: "default",
+            placement: "margin",
+            content: { kind: "text", text: "1." },
+            rightEdge: 20,
+          },
         },
         sourceSpan: {
           start: expect.any(Number),
@@ -2119,19 +2129,57 @@ describe("simple TeX paragraph layout", () => {
           labelDepth: 1,
           itemIndex: 2,
         },
+        listItem: {
+          itemIndex: 2,
+          label: {
+            kind: "default",
+            placement: "margin",
+            content: { kind: "text", text: "2." },
+            rightEdge: 20,
+          },
+        },
         sourceSpan: {
           start: expect.any(Number),
           end: expect.any(Number),
         },
       },
     ]);
+    expect(result.vlistLayout?.boxReport.items
+      .filter((item) => item.itemKind === "hbox")
+      .map((item) => ({
+        path: item.path,
+        hboxRole: item.hboxRole,
+        width: item.width,
+        totalHeight: item.totalHeight,
+      }))).toEqual([
+      {
+        path: [0, 0, 1],
+        hboxRole: {
+          kind: "list-label",
+          labelKind: "default",
+          placement: "margin",
+        },
+        width: expect.any(Number),
+        totalHeight: expect.any(Number),
+      },
+      {
+        path: [0, 1, 1],
+        hboxRole: {
+          kind: "list-label",
+          labelKind: "default",
+          placement: "margin",
+        },
+        width: expect.any(Number),
+        totalHeight: expect.any(Number),
+      },
+    ]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
       vlistPath: placement.vlistPath,
     }))).toEqual([
-      { blockIndex: 0, vlistPath: [0, 0, 1] },
-      { blockIndex: 1, vlistPath: [0, 0, 3] },
-      { blockIndex: 2, vlistPath: [0, 1, 1] },
+      { blockIndex: 0, vlistPath: [0, 0, 2] },
+      { blockIndex: 1, vlistPath: [0, 0, 4] },
+      { blockIndex: 2, vlistPath: [0, 1, 2] },
     ]);
   });
 

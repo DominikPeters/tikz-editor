@@ -1,7 +1,12 @@
-import { articleListLeftMarginEmByDepth } from "../ir.js";
 import type { ResolvedTexFont } from "../fonts/types.js";
+import { texListItemLayoutForParagraph } from "./list-labels.js";
+import {
+  texVBoxLayoutForScopeRole,
+  texVBoxScopeForRole,
+  texVBoxScopePathForParagraph,
+  type TexVBoxScope,
+} from "./scope-roles.js";
 import type {
-  TexParagraphInput,
   TexSourceSpan,
   TexVBoxLayout,
   TexVBoxItem,
@@ -14,7 +19,7 @@ interface ScopeFrame {
   readonly key: string;
   readonly role: TexVBoxRole;
   readonly items: TexVListItem[];
-  readonly layout: TexVBoxLayout;
+  layout: TexVBoxLayout;
   sourceSpan?: TexSourceSpan;
 }
 
@@ -58,146 +63,23 @@ export function groupSimpleTexVListScopes(
   };
 }
 
-function texVBoxLayoutForScopeRole(
-  role: TexVBoxRole,
-  font: ResolvedTexFont
-): TexVBoxLayout {
-  if (role.kind === "quote") {
-    const ownMarginWidth = texArticleQuoteOwnMarginWidth(role.depth, font);
-    return {
-      leftMarginWidth: ownMarginWidth,
-      rightMarginWidth: ownMarginWidth,
-      paragraphPolicy: {
-        fallbackAlignment: "justified",
-        preserveRaggedRight: true,
-        raggedRightProfile: "latex-quote",
-      },
-    };
-  }
-
-  if (role.kind === "list-item") {
-    return {
-      leftMarginWidth: 0,
-      rightMarginWidth: 0,
-    };
-  }
-
-  const leftMarginWidth = role.totalLeftMarginEm * font.atPt;
-  return {
-    leftMarginWidth,
-    rightMarginWidth: 0,
-    list: {
-      ownLeftMarginWidth: role.ownLeftMarginEm * font.atPt,
-      labelRightEdge: role.totalLeftMarginEm * font.atPt - 0.5 * font.atPt,
-      descriptionLabelSepWidth: 0.5 * font.atPt,
-    },
-    paragraphPolicy: {
-      resetInheritedAlignment: true,
-      resetSpaceGlueProfile: true,
-    },
-  };
-}
-
-function texArticleQuoteOwnMarginWidth(depth: number, font: ResolvedTexFont): number {
-  const em = articleListLeftMarginEmByDepth[
-    Math.max(0, Math.min(depth - 1, articleListLeftMarginEmByDepth.length - 1))
-  ] ?? 1;
-  return em * font.atPt;
-}
-
 function scopePathForItem(
   item: TexVListItem,
   nextItem: TexVListItem | undefined
-): readonly { readonly key: string; readonly role: TexVBoxRole }[] {
+): readonly TexVBoxScope[] {
   if (item.kind === "paragraph") {
-    return scopePathForParagraph(item.paragraph);
+    return texVBoxScopePathForParagraph(item.paragraph);
   }
   if (
     (item.kind === "glue" || item.kind === "penalty" || item.kind === "rule" || item.kind === "placeholder") &&
     item.scopePath
   ) {
-    return item.scopePath.map((role) => ({
-      key: keyForScopeRole(role),
-      role,
-    }));
+    return item.scopePath.map(texVBoxScopeForRole);
   }
   if (item.kind === "glue" && nextItem?.kind === "paragraph") {
-    return scopePathForParagraph(nextItem.paragraph);
+    return texVBoxScopePathForParagraph(nextItem.paragraph);
   }
   return [];
-}
-
-function keyForScopeRole(role: TexVBoxRole): string {
-  if (role.kind === "quote") {
-    return `quote:${role.depth}`;
-  }
-  if (role.kind === "list-item") {
-    return [
-      "list-item",
-      role.listKind,
-      role.depth,
-      role.labelDepth,
-      role.itemIndex,
-    ].join(":");
-  }
-  return [
-    "list",
-    role.listKind,
-    role.depth,
-    role.labelDepth,
-    role.ownLeftMarginEm,
-    role.totalLeftMarginEm,
-  ].join(":");
-}
-
-function scopePathForParagraph(
-  paragraph: TexParagraphInput
-): readonly { readonly key: string; readonly role: TexVBoxRole }[] {
-  const scopes: Array<{ readonly key: string; readonly role: TexVBoxRole }> = [];
-  for (let depth = 1; depth <= paragraph.quoteDepth; depth += 1) {
-    scopes.push({
-      key: `quote:${depth}`,
-      role: { kind: "quote", depth },
-    });
-  }
-  const listContext = paragraph.listContext;
-  if (listContext) {
-    scopes.push({
-      key: [
-        "list",
-        listContext.kind,
-        listContext.depth,
-        listContext.labelDepth,
-        listContext.ownLeftMarginEm,
-        listContext.totalLeftMarginEm,
-      ].join(":"),
-      role: {
-        kind: "list",
-        listKind: listContext.kind,
-        depth: listContext.depth,
-        labelDepth: listContext.labelDepth,
-        ownLeftMarginEm: listContext.ownLeftMarginEm,
-        totalLeftMarginEm: listContext.totalLeftMarginEm,
-      },
-    });
-    scopes.push({
-      key: [
-        "list-item",
-        listContext.kind,
-        listContext.depth,
-        listContext.labelDepth,
-        listContext.itemIndex,
-      ].join(":"),
-      role: {
-        kind: "list-item",
-        listKind: listContext.kind,
-        depth: listContext.depth,
-        labelDepth: listContext.labelDepth,
-        itemIndex: listContext.itemIndex,
-      },
-    });
-  }
-  return scopes;
 }
 
 function commonScopePrefixLength(
@@ -224,9 +106,31 @@ function appendItem(
     for (const frame of stack) {
       frame.sourceSpan = mergeSourceSpans(frame.sourceSpan, item.sourceSpan);
     }
+    enrichListItemFrameFromParagraph(stack, item);
     return;
   }
   rootItems.push(item);
+}
+
+function enrichListItemFrameFromParagraph(
+  stack: readonly ScopeFrame[],
+  item: TexVListItem
+): void {
+  if (item.kind !== "paragraph" || item.paragraph.listContext?.showLabel !== true) {
+    return;
+  }
+  const listItemFrame = stack.at(-1);
+  if (listItemFrame?.role.kind !== "list-item") {
+    return;
+  }
+  const listItem = texListItemLayoutForParagraph(stack, item.paragraph);
+  if (!listItem) {
+    return;
+  }
+  listItemFrame.layout = {
+    ...listItemFrame.layout,
+    listItem,
+  };
 }
 
 function mutableFrameToVBox(frame: ScopeFrame): TexVBoxItem {
@@ -236,7 +140,9 @@ function mutableFrameToVBox(frame: ScopeFrame): TexVBoxItem {
       return frame.sourceSpan;
     },
     role: frame.role,
-    layout: frame.layout,
+    get layout() {
+      return frame.layout;
+    },
     items: frame.items,
   };
 }

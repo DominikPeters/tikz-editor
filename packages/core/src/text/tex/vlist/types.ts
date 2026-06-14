@@ -2,6 +2,7 @@ import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.j
 import type {
   SimpleTexListKind,
   SimpleTexListContext,
+  SimpleTexFontState,
   SimpleTexSegmentInput,
   SimpleTexVerticalGlueCommandName,
   TexAlignmentProfile,
@@ -49,9 +50,24 @@ export interface TexLineBox {
   readonly lineLeading?: string;
 }
 
-export interface TexRenderItem {
-  readonly kind: string;
-}
+export type TexRenderItem =
+  | {
+      readonly kind: "tex-glyph-run";
+      readonly text: string;
+      readonly fontId: string;
+      readonly atPt: number;
+      readonly x: number;
+      readonly baseline: number;
+    }
+  | {
+      readonly kind: "tex-glyph";
+      readonly text: string;
+      readonly code: number;
+      readonly fontId: string;
+      readonly atPt: number;
+      readonly x: number;
+      readonly baseline: number;
+    };
 
 export interface TexHitMap {
   readonly kind: string;
@@ -84,9 +100,19 @@ export interface TexParagraphItem {
   readonly paragraph: TexParagraphInput;
 }
 
+export type TexHBoxRole = {
+  readonly kind: "list-label";
+  readonly labelKind: TexVBoxListItemLabelKind;
+  readonly placement: TexVBoxListItemLabelPlacement;
+};
+
 export interface TexHBoxItem {
   readonly kind: "hbox";
   readonly sourceSpan?: TexSourceSpan;
+  readonly role?: TexHBoxRole;
+  readonly x?: number;
+  readonly advance?: number;
+  readonly affectsVBoxBaseline?: boolean;
   readonly box: TexHorizontalLayout;
 }
 
@@ -112,6 +138,7 @@ export interface TexVBoxLayout {
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
   readonly list?: TexVBoxListLayout;
+  readonly listItem?: TexVBoxListItemLayout;
   readonly paragraphPolicy?: TexVBoxParagraphPolicy;
 }
 
@@ -119,6 +146,38 @@ export interface TexVBoxListLayout {
   readonly ownLeftMarginWidth: number;
   readonly labelRightEdge: number;
   readonly descriptionLabelSepWidth: number;
+}
+
+export type TexVBoxListItemLabelKind = "default" | "custom" | "description";
+export type TexVBoxListItemLabelPlacement = "margin" | "inline";
+export type TexVBoxListItemLabelContent =
+  | { readonly kind: "source" }
+  | { readonly kind: "text"; readonly text: string }
+  | {
+      readonly kind: "glyph";
+      readonly text: string;
+      readonly code: number;
+      readonly fontId: string;
+    };
+
+export interface TexVBoxListItemLabelBox {
+  readonly kind: TexVBoxListItemLabelKind;
+  readonly placement: TexVBoxListItemLabelPlacement;
+  readonly content: TexVBoxListItemLabelContent;
+  readonly fontState?: SimpleTexFontState;
+  readonly rightEdge?: number;
+  readonly sourceSpan?: TexSourceSpan;
+}
+
+export interface TexVBoxListItemDescriptionLayout {
+  readonly labelFirstLineIndentWidth: number;
+  readonly bodyFirstLineIndentWidth: number;
+}
+
+export interface TexVBoxListItemLayout {
+  readonly itemIndex: number;
+  readonly label?: TexVBoxListItemLabelBox;
+  readonly description?: TexVBoxListItemDescriptionLayout;
 }
 
 export interface TexVBoxParagraphPolicy {
@@ -212,6 +271,8 @@ export interface TexVListBoxReportItem {
   readonly totalHeight: number;
   readonly blockIndex?: number;
   readonly role?: TexVBoxRole;
+  readonly hboxRole?: TexHBoxRole;
+  readonly listItem?: TexVBoxListItemLayout;
   readonly glue?: {
     readonly size: number;
     readonly stretch?: number;

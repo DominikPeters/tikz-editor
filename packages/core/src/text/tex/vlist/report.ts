@@ -179,7 +179,11 @@ function texVListBoxReportItem(
     depth: item.metrics.depth,
     totalHeight: roundTexPt(item.metrics.height + item.metrics.depth),
     ...(item.item.kind === "paragraph" ? { blockIndex: item.item.blockIndex } : {}),
+    ...(item.item.kind === "hbox" && item.item.role ? { hboxRole: item.item.role } : {}),
     ...(item.item.kind === "vbox" && item.item.role ? { role: item.item.role } : {}),
+    ...(item.item.kind === "vbox" && item.item.layout?.listItem
+      ? { listItem: item.item.layout.listItem }
+      : {}),
     ...(item.item.kind === "glue" ? {
       glue: {
         size: item.item.size,

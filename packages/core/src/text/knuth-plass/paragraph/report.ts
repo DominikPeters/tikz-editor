@@ -27,6 +27,7 @@ export interface LineSegmentReport {
   sourceStartRaw?: number;
   sourceEndRaw?: number;
   sourceKind?: 'text' | 'math';
+  role?: 'list-label';
   fontId?: string;
   glyphCode?: number;
   x: number;

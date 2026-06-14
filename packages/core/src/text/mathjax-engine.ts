@@ -22,6 +22,7 @@ import type {
   PositionedTexVListItem,
   ResolvedTexFont,
   TexMetricProvider,
+  TexRenderItem,
   TexShapedItem,
   TexVBoxRole,
   TexVListLayout,
@@ -1204,7 +1205,10 @@ function renderTexVListItemsSvgContent(
           );
         }
         if (!renderedLines.has(line.lineIndex)) {
-          pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
+          pieces.push(renderTexReportLineSvg(report, line, {
+            ...options,
+            skipListLabelSegments: true,
+          }, renderedLines));
         }
       }
       continue;
@@ -1218,7 +1222,7 @@ function renderTexVListItemsSvgContent(
       continue;
     }
     if (item.item.kind === "hbox" || item.item.kind === "penalty") {
-      pieces.push(renderTexVListLeafBoxSvgMetadata(item));
+      pieces.push(renderTexVListLeafBoxSvgMetadata(item, options.metricProvider));
       continue;
     }
     if (item.item.kind === "vbox") {
@@ -1244,6 +1248,7 @@ function renderTexReportLineSvg(
     firstLineAscent: number;
     linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
     metricProvider: TexMetricProvider;
+    skipListLabelSegments?: boolean;
   },
   renderedLines: Set<number>
 ): string {
@@ -1260,6 +1265,9 @@ function renderTexReportLineSvg(
     `<rect x="${formatPt(-lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
+    if (options.skipListLabelSegments && segment.role === "list-label") {
+      continue;
+    }
     if (segment.kind !== "text" && segment.kind !== "space") {
       continue;
     }
@@ -1436,7 +1444,10 @@ function renderTexPlaceholderSvgMetadata(
   ].join("");
 }
 
-function renderTexVListLeafBoxSvgMetadata(item: PositionedTexVListItem): string {
+function renderTexVListLeafBoxSvgMetadata(
+  item: PositionedTexVListItem,
+  metricProvider?: TexMetricProvider
+): string {
   if (item.item.kind !== "hbox" && item.item.kind !== "penalty" && item.item.kind !== "rule") {
     return "";
   }
@@ -1452,8 +1463,33 @@ function renderTexVListLeafBoxSvgMetadata(item: PositionedTexVListItem): string 
   return [
     `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
+    ...(item.item.kind === "hbox" && metricProvider
+      ? item.item.box.renderItems.map((renderItem) =>
+          renderTexHBoxRenderItemSvg(renderItem, metricProvider)
+        )
+      : []),
     `</g>`,
   ].join("");
+}
+
+function renderTexHBoxRenderItemSvg(
+  item: TexRenderItem,
+  metricProvider: TexMetricProvider
+): string {
+  const font = metricProvider.resolveFont({
+    fontId: item.fontId,
+    atPt: item.atPt,
+  });
+  if (item.kind === "tex-glyph") {
+    return renderTexGlyphCode(item.code, font, item.x, item.baseline);
+  }
+  return renderTexGlyphRun(
+    item.text,
+    font,
+    item.x,
+    item.baseline,
+    metricProvider
+  );
 }
 
 function renderTexRuleSvgContent(item: PositionedTexVListItem): string {
