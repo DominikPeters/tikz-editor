@@ -71,6 +71,7 @@ export {
   type TexLayoutParagraphBreakContext,
   type TexLayoutParagraphLineLabel,
 } from "./vlist/paragraph-plans.js";
+export * from "./math/index.js";
 export {
   prepareTexLayoutParagraphsFromVList,
   type TexLayoutParagraphPreparation,

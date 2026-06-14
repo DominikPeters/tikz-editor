@@ -20,7 +20,6 @@ import {
 } from "./tex/index.js";
 import type {
   ResolvedTexFont,
-  TexMathBoxProvider,
   TexMetricProvider,
   TexShapedItem,
 } from "./tex/index.js";
@@ -1016,7 +1015,6 @@ function buildSimpleTexTextCacheEntry(params: {
       metricProvider,
       textFontProfile: luaLatexDefaultTextFontProfile,
       tikzTextWidthNode: true,
-      mathBoxProvider: createMathJaxInlineMathBoxProvider(params.runtime),
     });
   } catch {
     return null;
@@ -1112,44 +1110,6 @@ function isSimpleTexTextEligible(params: {
     params.alignment === "center" ||
     params.alignment === "justified"
   );
-}
-
-function createMathJaxInlineMathBoxProvider(runtime: MathJaxRuntime): TexMathBoxProvider {
-  const cache = new Map<string, ReturnType<TexMathBoxProvider["getInlineMathBox"]>>();
-  return {
-    getInlineMathBox: (params) => {
-      const key = `${params.delimiter}:${params.content}`;
-      if (cache.has(key)) {
-        return cache.get(key) ?? null;
-      }
-      const node = runtime.tex2svg(mathJaxInlineMathSource(params.content), { display: false });
-      const extracted = extractSvgPayload(node, runtime.startup?.adaptor ?? null);
-      const viewBox = parseViewBox(extracted?.viewBoxRaw ?? null);
-      if (!extracted || !viewBox) {
-        cache.set(key, null);
-        return null;
-      }
-      const scale = TEX_TEXT_BASE_FONT_SIZE / 1000;
-      const ascent = Math.max(0, -viewBox.y) * scale;
-      const descent = Math.max(0, viewBox.height + viewBox.y) * scale;
-      const box = {
-        source: params.source,
-        content: params.content,
-        sourceStart: params.sourceStart,
-        sourceEnd: params.sourceEnd,
-        width: viewBox.width * scale,
-        height: ascent,
-        depth: descent,
-        svgBody: extracted.body,
-      };
-      cache.set(key, box);
-      return box;
-    },
-  };
-}
-
-function mathJaxInlineMathSource(content: string): string {
-  return `\\textstyle{${content}}`;
 }
 
 function renderSimpleTexSvgBody(

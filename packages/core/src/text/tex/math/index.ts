@@ -1,0 +1,28 @@
+export type {
+  TexMathAtom,
+  TexMathAtomClass,
+  TexMathDiagnostic,
+  TexMathDiagnosticCode,
+  TexMathDiagnosticSeverity,
+  TexMathFractionNucleus,
+  TexMathGlyphNucleus,
+  TexMathGlue,
+  TexMathItem,
+  TexMathList,
+  TexMathListNucleus,
+  TexMathNucleus,
+  TexMathParseResult,
+  TexMathRadicalNucleus,
+  TexMathScript,
+  TexMathSourceSpan,
+  TexMathSpacingCommand,
+  TexMathToken,
+  TexMathTokenKind,
+  TexMathUnsupportedItem,
+  TexMathUnsupportedNucleus,
+} from "./ir.js";
+export {
+  parseTexMath,
+  tokenizeTexMath,
+  type ParseTexMathOptions,
+} from "./parser.js";

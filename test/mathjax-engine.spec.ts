@@ -503,12 +503,13 @@ describe("mathjax node text engine", () => {
     expect(texCalls).toHaveLength(callsBeforeMeasure);
   });
 
-  it("routes simple wrapped serif text with inline math through the TeX paragraph path", async () => {
+  it("does not route inline math through the TeX paragraph path before TeX math rendering exists", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
     const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
     const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
     const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
 
     const measured = engine.measure({
       text: String.raw`Alpha $x^2$ beta`,
@@ -520,17 +521,17 @@ describe("mathjax node text engine", () => {
       fontSizePt: 10
     });
 
-    expect(measured?.paragraphId).toMatch(/^tex:/);
-    expect(texCalls).toContain(String.raw`\textstyle{x^2}`);
+    expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
+    expect(texCalls).not.toContain(String.raw`\textstyle{x^2}`);
+    expect(measured?.paragraphId).not.toMatch(/^tex:/);
     const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
     const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
-    expect(report?.runs.some((run) => run.kind === "math")).toBe(true);
+    expect(report?.runs.some((run) => run.kind === "math")).not.toBe(true);
     expect(report?.lines.flatMap((line) => line.segments).some((segment) =>
       segment.kind === "math" && segment.sourceKind === "math" && segment.mathSvgBody?.includes("data-paragraph-id")
-    )).toBe(true);
+    )).not.toBe(true);
     const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
-    expect(body).toContain('data-tex-inline-math="true"');
-    expect(body).toContain('data-mjx-linebox="true"');
+    expect(body).not.toContain('data-tex-inline-math="true"');
   });
 
   it("falls back to MathJax for unsupported wrapped TeX syntax", async () => {

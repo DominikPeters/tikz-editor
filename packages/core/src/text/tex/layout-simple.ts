@@ -12,6 +12,7 @@ import type {
 } from "./fonts/types.js";
 import {
   analyzeSimpleTexParagraph,
+  type SimpleTexMathNode,
   type SimpleTexNode,
   type TexParagraphAlignment,
 } from "./ir.js";
@@ -81,8 +82,9 @@ export function layoutSimpleTexParagraph(
   const paragraphId = options.paragraphId ?? "tex:paragraph";
   const defaultAlignment = options.alignment ?? "ragged-right";
   const blocks = analysis.ir?.blocks ?? [];
-  if (analysis.ir && simpleTexNodesContainInlineMath(analysis.ir.nodes) && !options.mathBoxProvider) {
-    const reason = "Paragraph contains inline math but no TeX math box provider is available.";
+  const unsupportedInlineMath = analysis.ir ? findFirstInlineMathNode(analysis.ir.nodes) : null;
+  if (unsupportedInlineMath && !options.mathBoxProvider) {
+    const reason = `TeX math rendering is not implemented for inline math at source range ${unsupportedInlineMath.sourceStart}-${unsupportedInlineMath.sourceEnd}.`;
     return {
       supported: false,
       report: null,
@@ -177,24 +179,23 @@ export function layoutSimpleTexParagraph(
   };
 }
 
-function simpleTexNodesContainInlineMath(nodes: readonly SimpleTexNode[]): boolean {
+function findFirstInlineMathNode(nodes: readonly SimpleTexNode[]): SimpleTexMathNode | null {
   for (const node of nodes) {
     if (node.kind === "math") {
-      return true;
+      return node;
     }
-    if (
-      (node.kind === "font-command" || node.kind === "group") &&
-      simpleTexNodesContainInlineMath(node.children)
-    ) {
-      return true;
+    if (node.kind === "font-command" || node.kind === "group") {
+      const childMath = findFirstInlineMathNode(node.children);
+      if (childMath) {
+        return childMath;
+      }
     }
-    if (
-      node.kind === "item" &&
-      node.labelNodes &&
-      simpleTexNodesContainInlineMath(node.labelNodes)
-    ) {
-      return true;
+    if (node.kind === "item" && node.labelNodes) {
+      const labelMath = findFirstInlineMathNode(node.labelNodes);
+      if (labelMath) {
+        return labelMath;
+      }
     }
   }
-  return false;
+  return null;
 }
