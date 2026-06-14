@@ -13,16 +13,18 @@ import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
   computerModernTexMetricProvider,
   createSimpleTexLayoutDocumentIr,
-  groupSimpleTexVListScopes,
-  layoutTexVListFromParagraphReport,
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
+} from "../packages/core/src/text/tex/index.js";
+import {
+  groupSimpleTexVListScopes,
+  layoutTexVListFromParagraphReport,
   registerTexVListLayoutsOnOutputJax,
   texVListBoxLayoutReport,
   type PositionedTexVListItem,
   type TexBoxMetrics,
   type TexVBoxBaseline,
-} from "../packages/core/src/text/tex/index.js";
+} from "../packages/core/src/text/tex/vlist/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
 
 function paragraphLineAssignmentsFromLayout(layout: {
@@ -2174,6 +2176,29 @@ describe("simple TeX paragraph layout", () => {
         width: expect.any(Number),
         totalHeight: expect.any(Number),
       },
+    ]);
+    const listBox = result.vlistLayout?.boxReport.items.find((item) =>
+      item.role?.kind === "list"
+    );
+    expect(listBox?.children?.map((item) => ({
+      itemKind: item.itemKind,
+      path: item.path,
+      role: item.role?.kind,
+    }))).toEqual([
+      { itemKind: "vbox", path: [0, 0], role: "list-item" },
+      { itemKind: "vbox", path: [0, 1], role: "list-item" },
+    ]);
+    expect(listBox?.children?.[0]?.children?.map((item) => ({
+      itemKind: item.itemKind,
+      path: item.path,
+      blockIndex: item.blockIndex,
+      hboxRole: item.hboxRole?.kind,
+    }))).toEqual([
+      { itemKind: "glue", path: [0, 0, 0], blockIndex: undefined, hboxRole: undefined },
+      { itemKind: "hbox", path: [0, 0, 1], blockIndex: undefined, hboxRole: "list-label" },
+      { itemKind: "paragraph", path: [0, 0, 2], blockIndex: 0, hboxRole: undefined },
+      { itemKind: "glue", path: [0, 0, 3], blockIndex: undefined, hboxRole: undefined },
+      { itemKind: "paragraph", path: [0, 0, 4], blockIndex: 1, hboxRole: undefined },
     ]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,

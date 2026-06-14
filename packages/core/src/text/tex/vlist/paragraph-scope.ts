@@ -1,11 +1,11 @@
 import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
-} from "./ir.js";
+} from "../ir.js";
 import type {
   TexVBoxItem,
   TexVBoxListItemLayout,
-} from "./vlist/index.js";
+} from "./types.js";
 
 export interface TexParagraphScopePolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
@@ -23,6 +23,8 @@ export interface TexParagraphScopeLayout {
 export interface TexParagraphScopeContext {
   readonly policy: TexParagraphScopePolicy;
   readonly layout: TexParagraphScopeLayout;
+  readonly quoteContextActive: boolean;
+  readonly listContextActive: boolean;
   readonly listItemLayout?: TexVBoxListItemLayout;
 }
 
@@ -32,6 +34,10 @@ export function texParagraphScopeContext(
   return {
     policy: texParagraphScopePolicy(ancestors),
     layout: texParagraphScopeLayout(ancestors),
+    quoteContextActive: ancestors.some((ancestor) => ancestor.role?.kind === "quote"),
+    listContextActive: ancestors.some((ancestor) =>
+      ancestor.role?.kind === "list" || ancestor.role?.kind === "list-item"
+    ),
     listItemLayout: ancestors.at(-1)?.layout?.listItem,
   };
 }

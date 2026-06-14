@@ -1,4 +1,13 @@
 export {
+  combineTexBrokenLayoutParagraphs,
+  type TexBrokenLayoutParagraph,
+  type TexBrokenLayoutParagraphOwner,
+  type TexCombinedParagraphBreaks,
+  type TexCombinedParagraphLineSpan,
+  type TexLineLabel,
+  type TexParagraphBreakResult,
+} from "./combined-paragraph-breaks.js";
+export {
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
 } from "./lower-simple.js";
@@ -10,6 +19,7 @@ export {
 export {
   layoutSimpleTexVListFromHorizontalParagraphReport,
   layoutSimpleTexVListFromParagraphReport,
+  layoutTexVListFromBrokenParagraphs,
   layoutTexVListFromCombinedParagraphReport,
   layoutTexVListFromHorizontalParagraphs,
   layoutTexVListFromHorizontalParagraphReport,
@@ -19,6 +29,8 @@ export {
   type SimpleTexVListParagraphReportLayoutOptions,
   type TexVListCombinedParagraphReportInput,
   type TexVListCombinedParagraphReportLayoutOptions,
+  type TexVListBrokenParagraphReportLayoutOptions,
+  type TexVListBrokenParagraphReportLayoutResult,
   type TexVListHorizontalParagraphLayoutOptions,
   type TexVListMeasuredParagraphLayoutOptions,
   type TexVListParagraphReportLayoutResult,
@@ -27,6 +39,14 @@ export {
 export {
   texVListBoxLayoutReport,
 } from "./box-report.js";
+export {
+  texListItemParagraphAttachments,
+  texLayoutGlyphItemDepth,
+  texLayoutGlyphItemHeight,
+  texLayoutGlyphItemWidth,
+  type TexInlineNodesToLayoutItems,
+  type TexListItemParagraphAttachments,
+} from "./list-attachments.js";
 export {
   attachTexHBoxesBeforeVListParagraphs,
 } from "./attachments.js";
@@ -63,6 +83,14 @@ export {
   texVListParagraphItems,
   type TexVListParagraphEntry,
 } from "./traversal.js";
+export {
+  texParagraphScopeContext,
+  texScopeParagraphAlignment,
+  texScopeParagraphAlignmentProfile,
+  type TexParagraphScopeContext,
+  type TexParagraphScopeLayout,
+  type TexParagraphScopePolicy,
+} from "./paragraph-scope.js";
 export {
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,

@@ -16,17 +16,21 @@ import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import {
   computerModernTexMetricProvider,
   layoutSimpleTexParagraph,
-  registerTexVListLayoutsOnOutputJax,
 } from "./tex/index.js";
 import type {
-  PositionedTexVListItem,
   ResolvedTexFont,
   TexMetricProvider,
-  TexRenderItem,
   TexShapedItem,
+} from "./tex/index.js";
+import {
+  registerTexVListLayoutsOnOutputJax,
+} from "./tex/vlist/index.js";
+import type {
+  PositionedTexVListItem,
+  TexRenderItem,
   TexVBoxRole,
   TexVListLayout,
-} from "./tex/index.js";
+} from "./tex/vlist/index.js";
 import type {
   NodeTextEngine,
   NodeTextMeasureRequest,
@@ -1154,6 +1158,8 @@ function renderTexVListSvgContent(
     lineByIndex,
     linePlacementByIndex,
     paragraphLineIndicesByBlock,
+    originX: 0,
+    originY: 0,
   };
   const pieces = renderTexVListItemsSvgContent(
     options.vlistLayout.items,
@@ -1178,6 +1184,8 @@ type TexVListRenderOptions = {
   linePlacementByIndex: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   lineByIndex: ReadonlyMap<number, ParagraphLayoutReport["lines"][number]>;
   paragraphLineIndicesByBlock: ReadonlyMap<number, readonly number[]>;
+  originX: number;
+  originY: number;
 };
 
 function renderTexVListItemsSvgContent(
@@ -1214,27 +1222,35 @@ function renderTexVListItemsSvgContent(
       continue;
     }
     if (item.item.kind === "placeholder") {
-      pieces.push(renderTexPlaceholderSvgMetadata(item, report.width));
+      pieces.push(renderTexPlaceholderSvgMetadata(item, report.width, options));
       continue;
     }
     if (item.item.kind === "rule") {
-      pieces.push(renderTexRuleSvgContent(item));
+      pieces.push(renderTexRuleSvgContent(item, options));
       continue;
     }
     if (item.item.kind === "hbox" || item.item.kind === "penalty") {
-      pieces.push(renderTexVListLeafBoxSvgMetadata(item, options.metricProvider));
+      pieces.push(renderTexVListLeafBoxSvgMetadata(item, options.metricProvider, options));
       continue;
     }
     if (item.item.kind === "vbox") {
-      pieces.push(renderTexVBoxSvgMetadata(item, report.width));
+      pieces.push(renderTexVBoxSvgMetadata(item, report.width, {
+        ...options,
+        close: false,
+      }));
       if (item.children?.length) {
         pieces.push(...renderTexVListItemsSvgContent(
           item.children,
           report,
-          options,
+          {
+            ...options,
+            originX: item.x,
+            originY: item.y,
+          },
           renderedLines
         ));
       }
+      pieces.push("</g>");
     }
   }
   return pieces;
@@ -1249,6 +1265,8 @@ function renderTexReportLineSvg(
     linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
     metricProvider: TexMetricProvider;
     skipListLabelSegments?: boolean;
+    originX?: number;
+    originY?: number;
   },
   renderedLines: Set<number>
 ): string {
@@ -1261,7 +1279,7 @@ function renderTexReportLineSvg(
     ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
     : "";
   const pieces = [
-    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineLeft)} ${formatPt(lineTop)})">`,
+    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineLeft - (options.originX ?? 0))} ${formatPt(lineTop - (options.originY ?? 0))})">`,
     `<rect x="${formatPt(-lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
@@ -1371,28 +1389,38 @@ export function renderTexVListSvgMetadata(
   items: readonly PositionedTexVListItem[],
   width: number
 ): string {
+  return renderTexVListSvgMetadataItems(items, width, { originX: 0, originY: 0 });
+}
+
+type TexVListSvgOrigin = {
+  readonly originX?: number;
+  readonly originY?: number;
+};
+
+function renderTexVListSvgMetadataItems(
+  items: readonly PositionedTexVListItem[],
+  width: number,
+  origin: TexVListSvgOrigin
+): string {
   const pieces: string[] = [];
   for (const item of items) {
     if (item.item.kind === "placeholder") {
-      pieces.push(renderTexPlaceholderSvgMetadata(item, width));
+      pieces.push(renderTexPlaceholderSvgMetadata(item, width, origin));
       continue;
     }
     if (item.item.kind === "hbox" || item.item.kind === "penalty" || item.item.kind === "rule") {
-      pieces.push(renderTexVListLeafBoxSvgMetadata(item));
+      pieces.push(renderTexVListLeafBoxSvgMetadata(item, undefined, origin));
       continue;
     }
     if (item.item.kind !== "vbox") {
       continue;
     }
-    pieces.push(renderTexVBoxSvgMetadata(item, width, false));
+    pieces.push(renderTexVBoxSvgMetadata(item, width, { ...origin, close: false }));
     if (item.children?.length) {
-      pieces.push(renderTexVListSvgMetadata(
-        item.children.map((child) => ({
-          ...child,
-          y: child.y - item.y,
-          x: child.x - item.x,
-        })),
-        width
+      pieces.push(renderTexVListSvgMetadataItems(
+        item.children,
+        width,
+        { originX: item.x, originY: item.y }
       ));
     }
     pieces.push("</g>");
@@ -1403,7 +1431,7 @@ export function renderTexVListSvgMetadata(
 function renderTexVBoxSvgMetadata(
   item: PositionedTexVListItem,
   width: number,
-  close = true
+  options: TexVListSvgOrigin & { readonly close?: boolean } = {}
 ): string {
   if (item.item.kind !== "vbox") {
     return "";
@@ -1417,10 +1445,10 @@ function renderTexVBoxSvgMetadata(
   const boxHeight = item.metrics.height + item.metrics.depth;
   const boundsAttrs = texVListLocalBoundsAttrs(item, boxWidth, boxHeight);
   const pieces = [
-    `<g data-tex-vbox="true"${roleAttrs}${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vbox="true"${roleAttrs}${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (options.originX ?? 0))} ${formatPt(item.y - (options.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
   ];
-  if (close) {
+  if (options.close ?? true) {
     pieces.push("</g>");
   }
   return pieces.join("");
@@ -1428,7 +1456,8 @@ function renderTexVBoxSvgMetadata(
 
 function renderTexPlaceholderSvgMetadata(
   item: PositionedTexVListItem,
-  width: number
+  width: number,
+  origin: TexVListSvgOrigin = {}
 ): string {
   if (item.item.kind !== "placeholder") {
     return "";
@@ -1438,7 +1467,7 @@ function renderTexPlaceholderSvgMetadata(
   const boxWidth = Math.max(width, item.metrics.width);
   const boundsAttrs = texVListLocalBoundsAttrs(item, boxWidth, boxHeight);
   return [
-    `<g data-tex-vlist-item="placeholder" data-tex-placeholder="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" data-tex-placeholder-reason="${escapeXmlAttribute(item.item.reason)}"${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vlist-item="placeholder" data-tex-placeholder="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" data-tex-placeholder-reason="${escapeXmlAttribute(item.item.reason)}"${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
     `</g>`,
   ].join("");
@@ -1446,7 +1475,8 @@ function renderTexPlaceholderSvgMetadata(
 
 function renderTexVListLeafBoxSvgMetadata(
   item: PositionedTexVListItem,
-  metricProvider?: TexMetricProvider
+  metricProvider?: TexMetricProvider,
+  origin: TexVListSvgOrigin = {}
 ): string {
   if (item.item.kind !== "hbox" && item.item.kind !== "penalty" && item.item.kind !== "rule") {
     return "";
@@ -1461,7 +1491,7 @@ function renderTexVListLeafBoxSvgMetadata(
   const boxHeight = item.metrics.height + item.metrics.depth;
   const boundsAttrs = texVListLocalBoundsAttrs(item, item.metrics.width, boxHeight);
   return [
-    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vlist-item="${item.item.kind}"${sourceAttrs}${penaltyAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
     ...(item.item.kind === "hbox" && metricProvider
       ? item.item.box.renderItems.map((renderItem) =>
@@ -1492,7 +1522,10 @@ function renderTexHBoxRenderItemSvg(
   );
 }
 
-function renderTexRuleSvgContent(item: PositionedTexVListItem): string {
+function renderTexRuleSvgContent(
+  item: PositionedTexVListItem,
+  origin: TexVListSvgOrigin = {}
+): string {
   if (item.item.kind !== "rule") {
     return "";
   }
@@ -1503,7 +1536,7 @@ function renderTexRuleSvgContent(item: PositionedTexVListItem): string {
   const boxHeight = item.metrics.height + item.metrics.depth;
   const boundsAttrs = texVListLocalBoundsAttrs(item, item.metrics.width, boxHeight);
   return [
-    `<g data-tex-vlist-item="rule"${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x)} ${formatPt(item.y)})" pointer-events="none">`,
+    `<g data-tex-vlist-item="rule"${sourceAttrs}${pathAttrs}${boundsAttrs} transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
     `</g>`,
   ].join("");

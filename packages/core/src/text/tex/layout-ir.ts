@@ -4,11 +4,10 @@ import {
   computerModernTexMetricProvider,
 } from "./fonts/computer-modern.js";
 import {
-  buildTexLayoutParagraphsFromPreparation,
   prepareTexLayoutParagraphsFromVList,
-  type TexLayoutParagraphIr,
+  type TexLayoutParagraphPlan,
   type TexLayoutParagraphPreparation,
-} from "./layout-paragraphs.js";
+} from "./layout-paragraph-preparation.js";
 import type { TexLayoutIrOptions } from "./layout-options.js";
 import {
   texInitialReportAlignment,
@@ -25,7 +24,13 @@ import {
   type TexVListDocument,
 } from "./vlist/index.js";
 
-export type { TexLayoutParagraphIr } from "./layout-paragraphs.js";
+export type {
+  TexLayoutParagraphBreakContext,
+  TexLayoutParagraphLineLabel,
+} from "./layout-paragraph-preparation.js";
+export type {
+  TexLayoutParagraphPlan,
+} from "./layout-paragraph-preparation.js";
 
 export interface SimpleTexLayoutDocumentPreparation {
   readonly kind: "simple-tex-layout-document-preparation";
@@ -45,7 +50,7 @@ export interface SimpleTexLayoutDocumentIr {
   readonly vlist: TexVListDocument;
   readonly reportAlignment: TexParagraphAlignment;
   readonly layoutMode: KnuthPlassLayoutMode;
-  readonly paragraphs: readonly TexLayoutParagraphIr[];
+  readonly paragraphPlans: readonly TexLayoutParagraphPlan[];
 }
 
 export function prepareSimpleTexLayoutDocument(params: {
@@ -91,34 +96,21 @@ export function createSimpleTexLayoutDocumentIr(params: {
   readonly metricProvider?: TexMetricProvider;
   readonly options: TexLayoutIrOptions;
 }): SimpleTexLayoutDocumentIr {
-  const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const preparation = prepareSimpleTexLayoutDocument(params);
-  return createSimpleTexLayoutDocumentIrFromPreparation(
-    preparation,
-    { font: params.font, metricProvider }
-  );
+  return createSimpleTexLayoutDocumentIrFromPreparation(preparation);
 }
 
 export function createSimpleTexLayoutDocumentIrFromPreparation(
-  preparation: SimpleTexLayoutDocumentPreparation,
-  params: {
-    readonly font: ResolvedTexFont;
-    readonly metricProvider: TexMetricProvider;
-  }
+  preparation: SimpleTexLayoutDocumentPreparation
 ): SimpleTexLayoutDocumentIr {
-  const paragraphBuild = buildTexLayoutParagraphsFromPreparation(
-    preparation.paragraphPreparation,
-    params
-  );
-
   return {
     kind: "simple-tex-layout-document",
     rawVList: preparation.rawVList,
     materializedVList: preparation.materializedVList,
     normalizedVList: preparation.normalizedVList,
-    vlist: paragraphBuild.vlist,
+    vlist: preparation.paragraphPreparation.vlist,
     reportAlignment: preparation.reportAlignment,
-    layoutMode: paragraphBuild.layoutMode,
-    paragraphs: paragraphBuild.paragraphs,
+    layoutMode: preparation.paragraphPreparation.layoutMode,
+    paragraphPlans: preparation.paragraphPreparation.paragraphPlans,
   };
 }

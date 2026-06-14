@@ -12,6 +12,10 @@ import type {
 import type { TexParagraphAlignment } from "../ir.js";
 import type { TexLayoutLabel } from "../layout-inline-items.js";
 import { buildTexParagraphReport } from "../paragraph-report.js";
+import {
+  combineTexBrokenLayoutParagraphs,
+  type TexBrokenLayoutParagraph,
+} from "./combined-paragraph-breaks.js";
 import type {
   TexLayoutReport,
   TexLineBox,
@@ -97,7 +101,10 @@ export interface TexVListCombinedParagraphReportInput {
     readonly label: TexLayoutLabel;
     readonly lineRunIndex: number;
   }>;
-  readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
+  readonly paragraphLineSpans: readonly {
+    readonly blockIndex: number;
+    readonly lineIndices: readonly number[];
+  }[];
   readonly errors: readonly string[];
   readonly linebreakingMode: "feasible" | "overfull";
 }
@@ -111,13 +118,71 @@ export interface TexVListCombinedParagraphReportLayoutOptions extends TexVListLa
   readonly combined: TexVListCombinedParagraphReportInput;
 }
 
+export interface TexVListBrokenParagraphReportLayoutOptions extends TexVListLayoutOptions {
+  readonly paragraphId: string;
+  readonly alignment: TexParagraphAlignment;
+  readonly layoutMode: KnuthPlassLayoutMode;
+  readonly font: ResolvedTexFont;
+  readonly metricProvider: TexMetricProvider;
+  readonly entries: readonly TexBrokenLayoutParagraph[];
+  readonly initialErrors?: readonly string[];
+}
+
+export interface TexVListBrokenParagraphReportLaidOutResult extends TexVListParagraphReportLayoutResult {
+  readonly status: "laid-out";
+  readonly combined: TexVListCombinedParagraphReportInput;
+}
+
+export interface TexVListBrokenParagraphReportEmptyResult {
+  readonly status: "empty";
+  readonly combined: TexVListCombinedParagraphReportInput;
+}
+
+export type TexVListBrokenParagraphReportLayoutResult =
+  | TexVListBrokenParagraphReportLaidOutResult
+  | TexVListBrokenParagraphReportEmptyResult;
+
 const LATEX_NORMAL_BASELINESKIP_EM = 1.2;
 const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
+
+export function layoutTexVListFromBrokenParagraphs(
+  document: TexVListDocument,
+  options: TexVListBrokenParagraphReportLayoutOptions
+): TexVListBrokenParagraphReportLayoutResult {
+  const combined = combineTexBrokenLayoutParagraphs({
+    entries: options.entries,
+    initialErrors: options.initialErrors,
+  });
+  if (combined.runs.length === 0 || combined.lines.length === 0) {
+    return {
+      status: "empty",
+      combined,
+    };
+  }
+  return {
+    status: "laid-out",
+    ...layoutTexVListFromCombinedParagraphReport(document, {
+      width: options.width,
+      height: options.height,
+      verticalAlign: options.verticalAlign,
+      paragraphId: options.paragraphId,
+      alignment: options.alignment,
+      layoutMode: options.layoutMode,
+      font: options.font,
+      metricProvider: options.metricProvider,
+      combined,
+    }),
+    combined,
+  };
+}
 
 export function layoutTexVListFromCombinedParagraphReport(
   document: TexVListDocument,
   options: TexVListCombinedParagraphReportLayoutOptions
 ): TexVListParagraphReportLayoutResult {
+  const paragraphLineAssignments = texVListParagraphLineAssignmentsFromSpans(
+    options.combined.paragraphLineSpans
+  );
   const builtReport = buildTexParagraphReport({
     paragraphId: options.paragraphId,
     width: options.width,
@@ -140,8 +205,17 @@ export function layoutTexVListFromCombinedParagraphReport(
     font: options.font,
     report: builtReport.report,
     lineBoxes: builtReport.lineBoxes,
-    paragraphLineAssignments: options.combined.paragraphLineAssignments,
+    paragraphLineAssignments,
   });
+}
+
+function texVListParagraphLineAssignmentsFromSpans(
+  spans: TexVListCombinedParagraphReportInput["paragraphLineSpans"]
+): readonly TexVListParagraphLineAssignment[] {
+  return spans.map((span) => ({
+    blockIndex: span.blockIndex,
+    lineIndices: [...span.lineIndices],
+  }));
 }
 
 export function layoutTexVListFromHorizontalParagraphReport(

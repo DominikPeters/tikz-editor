@@ -14,7 +14,7 @@ import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
 } from "./ir.js";
-import type { TexParagraphBreakResult } from "./layout-report-aggregate.js";
+import type { TexParagraphBreakResult } from "./vlist/index.js";
 
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;

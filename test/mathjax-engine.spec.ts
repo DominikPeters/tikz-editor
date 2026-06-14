@@ -413,7 +413,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
     const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
     const { getKnuthPlassCaretFromPoint } = await import("../packages/core/src/text/knuth-plass/editor/hitmap.js");
-    const { getTexVListLayoutFromOutputJax } = await import("../packages/core/src/text/tex/index.js");
+    const { getTexVListLayoutFromOutputJax } = await import("../packages/core/src/text/tex/vlist/index.js");
     const engine = await createMathJaxNodeTextEngine();
     const callsBeforeMeasure = texCalls.length;
 
@@ -631,6 +631,49 @@ describe("mathjax node text engine", () => {
     expect(body).toContain('width="80" height="12"');
   });
 
+  it("renders nested vlist metadata with relative child transforms", async () => {
+    const { renderTexVListSvgMetadata } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderTexVListSvgMetadata([
+      {
+        item: {
+          kind: "vbox",
+          items: [],
+        },
+        path: [0],
+        x: 10,
+        y: 20,
+        metrics: { width: 40, height: 7, depth: 13 },
+        children: [
+          {
+            item: {
+              kind: "hbox",
+              box: {
+                metrics: { width: 12, height: 4, depth: 2 },
+                renderItems: [],
+              },
+            },
+            path: [0, 0],
+            x: 15,
+            y: 32,
+            metrics: { width: 12, height: 4, depth: 2 },
+          },
+        ],
+      },
+    ], 80);
+
+    expect(body).toContain('data-tex-vbox="true"');
+    expect(body).toContain('transform="translate(10 20)"');
+    expect(body).toContain('data-tex-vlist-item="hbox"');
+    expect(body).toContain('transform="translate(5 12)"');
+    expect(body).toContain('data-tex-local-x="15"');
+    expect(body).toContain('data-tex-local-y="32"');
+    expect(body.indexOf('data-tex-vbox="true"')).toBeLessThan(
+      body.indexOf('data-tex-vlist-item="hbox"')
+    );
+  });
+
   it("renders explicit TeX hrule commands as visible vlist rule items", async () => {
     installFakeBrowserMathJax();
 
@@ -656,6 +699,30 @@ describe("mathjax node text engine", () => {
     );
   });
 
+  it("renders explicit TeX line leading through vlist line placements", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`Alpha \\[7pt] Beta`,
+      width: 150,
+      alignment: "ragged-right",
+    }) ?? "";
+
+    const firstLine = body.match(/data-line-index="0"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)"/);
+    const secondLine = body.match(/data-line-index="1"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)"/);
+
+    expect(body).toContain('data-lineleading="7pt"');
+    expect(firstLine).not.toBeNull();
+    expect(secondLine).not.toBeNull();
+    expect(Number(firstLine?.[2])).toBeCloseTo(0, 4);
+    expect(Number(secondLine?.[2])).toBeGreaterThan(18.9);
+    expect(Number(secondLine?.[2])).toBeLessThan(19);
+    expect(Number(secondLine?.[2])).not.toBeCloseTo(12, 4);
+  });
+
   it("renders TeX list margin labels from vlist hbox items", async () => {
     installFakeBrowserMathJax();
 
@@ -675,6 +742,25 @@ describe("mathjax node text engine", () => {
     expect(body.indexOf('data-tex-vlist-item="hbox"')).toBeLessThan(
       body.indexOf('data-line-index="0"')
     );
+  });
+
+  it("renders nested list lineboxes relative to their vbox groups", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`\begin{enumerate}\item Alpha \begin{enumerate}\item Nested\end{enumerate}\end{enumerate}`,
+      width: 150,
+      alignment: "ragged-right",
+    }) ?? "";
+    const innerLine = body.match(/data-line-index="1"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)"/);
+
+    expect(body).toContain('data-tex-vbox-role="list"');
+    expect(innerLine).not.toBeNull();
+    expect(Number(innerLine?.[1])).toBeGreaterThanOrEqual(0);
+    expect(Number(innerLine?.[1])).toBeLessThan(47);
   });
 
   it("normalizes legacy font switches and records wrapped text gap metadata", async () => {

@@ -1,26 +1,25 @@
 import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import { simpleTexInlineNodesToLayoutItems } from "./layout-inline-items.js";
-import {
-  texListItemParagraphAttachments,
-  type TexListItemParagraphAttachments,
-} from "./layout-list-attachments.js";
+import type {
+  TexLayoutInlineItem,
+  TexLayoutLabel,
+} from "./layout-inline-items.js";
 import type { TexLayoutIrOptions } from "./layout-options.js";
 import {
-  texParagraphScopeContext,
-  type TexParagraphScopeContext,
-} from "./layout-scope.js";
-import {
   TexParagraphLayoutState,
-  type TexParagraphLayoutStateResult,
 } from "./layout-state.js";
 import {
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphSegment,
+  type TexAlignmentProfile,
   type TexParagraphAlignment,
+  type TexSpaceGlueProfile,
 } from "./ir.js";
 import {
   attachTexHBoxesBeforeVListParagraphs,
+  texListItemParagraphAttachments,
+  texParagraphScopeContext,
   texVListParagraphEntries,
   type TexHBoxItem,
   type TexParagraphItem,
@@ -30,17 +29,37 @@ import {
 export interface TexLayoutParagraphPreparation {
   readonly vlist: TexVListDocument;
   readonly layoutMode: KnuthPlassLayoutMode;
-  readonly segmentPlans: readonly TexLayoutParagraphSegmentPlan[];
+  readonly paragraphPlans: readonly TexLayoutParagraphPlan[];
 }
 
-export interface TexLayoutParagraphSegmentPlan {
+export interface TexLayoutParagraphPlan {
   readonly blockIndex: number;
   readonly segmentIndex: number;
-  readonly paragraph: TexParagraphItem["paragraph"];
   readonly segment: SimpleTexParagraphSegment;
-  readonly paragraphState: TexParagraphLayoutStateResult;
-  readonly scopeContext: TexParagraphScopeContext;
-  readonly listAttachments: TexListItemParagraphAttachments;
+  readonly alignment: TexParagraphAlignment;
+  readonly alignmentProfile?: TexAlignmentProfile;
+  readonly inheritedAlignment: TexParagraphAlignment;
+  readonly inheritedAlignmentProfile?: TexAlignmentProfile;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
+  readonly breakContext: TexLayoutParagraphBreakContext;
+  readonly lineLabel?: TexLayoutParagraphLineLabel;
+}
+
+export interface TexLayoutParagraphBreakContext {
+  readonly blockIndex: number;
+  readonly segmentIndex: number;
+  readonly firstLineIndentWidth?: number;
+  readonly leftMarginWidth: number;
+  readonly rightMarginWidth: number;
+  readonly quoteContextActive: boolean;
+  readonly listContextActive: boolean;
+}
+
+export interface TexLayoutParagraphLineLabel {
+  readonly blockIndex: number;
+  readonly segmentIndex: number;
+  readonly label: TexLayoutLabel;
 }
 
 export interface TexLayoutParagraphPreparationParams {
@@ -54,7 +73,7 @@ export interface TexLayoutParagraphPreparationParams {
 export function prepareTexLayoutParagraphsFromVList(
   params: TexLayoutParagraphPreparationParams
 ): TexLayoutParagraphPreparation {
-  const segmentPlans: TexLayoutParagraphSegmentPlan[] = [];
+  const paragraphPlans: TexLayoutParagraphPlan[] = [];
   const paragraphEntries = texVListParagraphEntries(params.vlist.items);
   const paragraphItems = paragraphEntries.map((entry) => entry.item);
   const marginLabelHBoxesByBlockIndex = new Map<number, TexHBoxItem>();
@@ -101,14 +120,34 @@ export function prepareTexLayoutParagraphsFromVList(
           listAttachments.marginLabelHBox
         );
       }
-      segmentPlans.push({
+      paragraphPlans.push({
         blockIndex,
         segmentIndex,
-        paragraph,
         segment,
-        paragraphState: paragraphStateResult,
-        scopeContext,
-        listAttachments,
+        alignment: paragraphStateResult.alignment,
+        alignmentProfile: paragraphStateResult.alignmentProfile,
+        inheritedAlignment: paragraphStateResult.inheritedAlignment,
+        inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile,
+        spaceGlueProfile: paragraphStateResult.spaceGlueProfile,
+        inlinePrefixItems: listAttachments.inlineLabelItems,
+        breakContext: {
+          blockIndex,
+          segmentIndex,
+          firstLineIndentWidth: listAttachments.firstLineIndentWidth,
+          leftMarginWidth: scopeContext.layout.leftMarginWidth,
+          rightMarginWidth: scopeContext.layout.rightMarginWidth,
+          quoteContextActive: scopeContext.quoteContextActive,
+          listContextActive: scopeContext.listContextActive,
+        },
+        ...(listAttachments.marginLabel
+          ? {
+              lineLabel: {
+                blockIndex,
+                segmentIndex,
+                label: listAttachments.marginLabel,
+              },
+            }
+          : {}),
       });
     }
   }
@@ -119,7 +158,7 @@ export function prepareTexLayoutParagraphsFromVList(
       marginLabelHBoxesByBlockIndex
     ),
     layoutMode,
-    segmentPlans,
+    paragraphPlans,
   };
 }
 

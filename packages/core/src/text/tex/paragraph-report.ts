@@ -19,8 +19,8 @@ import {
   texLayoutGlyphItemDepth,
   texLayoutGlyphItemHeight,
   texLayoutGlyphItemWidth,
-} from "./layout-list-attachments.js";
-import type { TexLineLabel } from "./layout-report-aggregate.js";
+} from "./vlist/list-attachments.js";
+import type { TexLineLabel } from "./vlist/index.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 import type { TexLineBox } from "./vlist/index.js";
 

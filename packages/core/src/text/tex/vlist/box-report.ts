@@ -25,9 +25,11 @@ function texVListBoxReportItem(
   item: PositionedTexVListItem
 ): TexVListBoxReportItem {
   const sourceSpan = texVListItemSourceSpan(item);
+  const children = item.children?.map(texVListBoxReportItem) ?? [];
   const report: TexVListBoxReportItem = {
     itemKind: item.item.kind,
     path: item.path ?? [],
+    ...(children.length > 0 ? { children } : {}),
     ...(sourceSpan ? { sourceSpan } : {}),
     x: item.x,
     y: item.y,

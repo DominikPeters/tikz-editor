@@ -2,10 +2,10 @@ import type {
   BreakDecision,
   GreedyLine,
   ParagraphRun,
-} from "../knuth-plass/paragraph/types.js";
-import type { ShapedTexTextRun } from "./fonts/types.js";
-import type { TexLayoutLabel } from "./layout-inline-items.js";
-import type { TexLayoutParagraphIr } from "./layout-paragraphs.js";
+} from "../../knuth-plass/paragraph/types.js";
+import type { ShapedTexTextRun } from "../fonts/types.js";
+import type { SimpleTexParagraphSegment } from "../ir.js";
+import type { TexLayoutLabel } from "../layout-inline-items.js";
 
 export interface TexParagraphBreakResult {
   readonly lines: readonly GreedyLine[];
@@ -16,9 +16,15 @@ export interface TexParagraphBreakResult {
   readonly linebreakingMode: "feasible" | "overfull";
 }
 
+export interface TexBrokenLayoutParagraphOwner {
+  readonly blockIndex: number;
+  readonly forcedBreakAfter?: SimpleTexParagraphSegment["forcedBreakAfter"];
+}
+
 export interface TexBrokenLayoutParagraph {
-  readonly paragraph: TexLayoutParagraphIr;
+  readonly paragraph: TexBrokenLayoutParagraphOwner;
   readonly broken: TexParagraphBreakResult;
+  readonly label?: TexLayoutLabel;
 }
 
 export interface TexLineLabel {
@@ -80,9 +86,9 @@ export function combineTexBrokenLayoutParagraphs(params: {
               paragraph.forcedBreakAfter
             )
           : undefined;
-      if (line.lineIndex === 0 && paragraph.label) {
+      if (line.lineIndex === 0 && entry.label) {
         combinedLineLabels.set(combinedLineIndex, {
-          label: paragraph.label,
+          label: entry.label,
           lineRunIndex: line.startRun + runIndexOffset,
         });
       }
@@ -93,8 +99,8 @@ export function combineTexBrokenLayoutParagraphs(params: {
         forcedBreak
       ));
     }
-    appendTexVListParagraphLineAssignment(
-      paragraphLineAssignments,
+    appendCombinedParagraphLineSpan(
+      paragraphLineSpans,
       paragraph.blockIndex,
       blockLineIndices
     );
@@ -112,9 +118,32 @@ export function combineTexBrokenLayoutParagraphs(params: {
     runWidths: combinedRunWidths,
     shapedRuns: combinedShapedRuns,
     lineLabels: combinedLineLabels,
-    paragraphLineAssignments,
+    paragraphLineSpans,
     errors,
     linebreakingMode,
+  };
+}
+
+function appendCombinedParagraphLineSpan(
+  spans: TexCombinedParagraphLineSpan[],
+  blockIndex: number,
+  lineIndices: readonly number[]
+): void {
+  const existingIndex = spans.findIndex((span) => span.blockIndex === blockIndex);
+  if (existingIndex < 0) {
+    spans.push({
+      blockIndex,
+      lineIndices: [...lineIndices],
+    });
+    return;
+  }
+  const existing = spans[existingIndex];
+  if (!existing) {
+    throw new Error(`Missing TeX combined paragraph line span for block ${blockIndex}.`);
+  }
+  spans[existingIndex] = {
+    blockIndex,
+    lineIndices: [...existing.lineIndices, ...lineIndices],
   };
 }
 
@@ -161,7 +190,7 @@ function offsetBreakDecision(
 
 function createForcedBreakDecision(
   runIndex: number,
-  forcedBreak: NonNullable<TexLayoutParagraphIr["forcedBreakAfter"]>
+  forcedBreak: NonNullable<TexBrokenLayoutParagraphOwner["forcedBreakAfter"]>
 ): BreakDecision {
   return {
     kind: "forced",

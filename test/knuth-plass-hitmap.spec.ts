@@ -28,7 +28,7 @@ import {
 } from "../packages/core/src/text/knuth-plass/editor/mathPrefix.js";
 import { parseSourceSpans } from "../packages/core/src/text/knuth-plass/editor/sourceParser.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
-import { registerTexVListLayoutsOnOutputJax } from "../packages/core/src/text/tex/index.js";
+import { registerTexVListLayoutsOnOutputJax } from "../packages/core/src/text/tex/vlist/index.js";
 
 function makeLineElement(
   bounds: { left: number; top: number; right: number; bottom: number },

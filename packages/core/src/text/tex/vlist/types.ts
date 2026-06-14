@@ -262,6 +262,7 @@ export interface PositionedTexVListItem {
 export interface TexVListBoxReportItem {
   readonly itemKind: TexVListItem["kind"];
   readonly path: readonly number[];
+  readonly children?: readonly TexVListBoxReportItem[];
   readonly sourceSpan?: TexSourceSpan;
   readonly x: number;
   readonly y: number;

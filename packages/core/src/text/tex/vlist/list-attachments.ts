@@ -1,24 +1,24 @@
-import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
-import { roundTexPt, tfmToPt } from "./fonts/units.js";
+import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
+import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import type {
   SimpleTexFontState,
   SimpleTexInlineNode,
   SimpleTexListContext,
   TexSpaceGlueProfile,
-} from "./ir.js";
+} from "../ir.js";
 import type {
   TexLayoutGlyphItem,
   TexLayoutInlineItem,
   TexLayoutLabel,
   TexLayoutSpaceItem,
-} from "./layout-inline-items.js";
+} from "../layout-inline-items.js";
 import type {
   TexBoxMetrics,
   TexHBoxItem,
   TexRenderItem,
   TexVBoxListItemLabelBox,
   TexVBoxListItemLayout,
-} from "./vlist/index.js";
+} from "./types.js";
 
 export type TexInlineNodesToLayoutItems = (
   nodes: readonly SimpleTexInlineNode[],

@@ -11,14 +11,9 @@ import {
   createSimpleTexLayoutDocumentIrFromPreparation,
   prepareSimpleTexLayoutDocument,
 } from "./layout-ir.js";
+import { breakSimpleTexLayoutDocumentParagraphs } from "./layout-paragraph-breaker.js";
 import {
-  combineTexBrokenLayoutParagraphs,
-  type TexBrokenLayoutParagraph,
-} from "./layout-report-aggregate.js";
-import { breakTexParagraphRuns } from "./paragraph-break.js";
-import { createTexParagraphRunAdapter } from "./paragraph-runs.js";
-import {
-  layoutTexVListFromCombinedParagraphReport,
+  layoutTexVListFromBrokenParagraphs,
   type TexVListLayout,
 } from "./vlist/index.js";
 
@@ -82,7 +77,6 @@ export function layoutSimpleTexParagraph(
     };
   }
 
-  const runAdapter = createTexParagraphRunAdapter(font, metricProvider);
   const layoutPreparation = prepareSimpleTexLayoutDocument({
     blocks,
     items: analysis.ir?.items,
@@ -91,83 +85,55 @@ export function layoutSimpleTexParagraph(
     metricProvider,
     options: layoutOptions,
   });
-  const layoutIr = createSimpleTexLayoutDocumentIrFromPreparation(
-    layoutPreparation,
-    { font, metricProvider }
-  );
-  const brokenEntries: TexBrokenLayoutParagraph[] = [];
+  const layoutIr = createSimpleTexLayoutDocumentIrFromPreparation(layoutPreparation);
   const errors: string[] = usePlaceholderFallback && fallbackReason
     ? [fallbackReason]
     : [];
 
-  for (const paragraph of layoutIr.paragraphs) {
-    const { runs, shapedRuns: blockShapedRuns } = runAdapter.layoutItemsToRuns(paragraph.items);
-    if (!runs.some((run) => run.kind === "text")) {
-      continue;
-    }
-
-    const broken = breakTexParagraphRuns({
-      runs,
-      shapedRuns: blockShapedRuns,
-      measurement: runAdapter.measurement,
-      options: layoutOptions,
-      alignment: paragraph.alignment,
-      alignmentProfile: paragraph.alignmentProfile,
-      inheritedAlignment: paragraph.inheritedAlignment,
-      inheritedAlignmentProfile: paragraph.inheritedAlignmentProfile,
-      noIndent: paragraph.noIndent,
-      firstLineIndentWidth: paragraph.firstLineIndentWidth,
-      leftMarginWidth: paragraph.leftMarginWidth,
-      rightMarginWidth: paragraph.rightMarginWidth,
-      quoteContextActive: paragraph.quoteDepth > 0,
-      listContextActive: paragraph.listContext !== undefined,
-    });
-    if (!broken) {
-      return {
-        supported: false,
-        report: null,
-        fallbackReason: "TeX paragraph breaker failed: no solution",
-        shapedRuns: combineTexBrokenLayoutParagraphs({
-          entries: brokenEntries,
-          initialErrors: errors,
-        }).shapedRuns,
-        errors,
-      };
-    }
-    brokenEntries.push({ paragraph, broken });
-  }
-
-  const combined = combineTexBrokenLayoutParagraphs({
-    entries: brokenEntries,
+  const paragraphBreaks = breakSimpleTexLayoutDocumentParagraphs({
+    layoutIr,
+    font,
+    metricProvider,
+    options: layoutOptions,
     initialErrors: errors,
   });
-  if (combined.runs.length === 0 || combined.lines.length === 0) {
-    const reason = "Paragraph contains no text runs.";
+  if (paragraphBreaks.status === "failed") {
     return {
       supported: false,
       report: null,
-      fallbackReason: reason,
-      shapedRuns: combined.shapedRuns,
-      errors: [...combined.errors, reason],
+      fallbackReason: paragraphBreaks.fallbackReason,
+      shapedRuns: paragraphBreaks.shapedRuns,
+      errors: paragraphBreaks.errors,
     };
   }
 
-  const reportLayout = layoutTexVListFromCombinedParagraphReport(layoutPreparation.vlist, {
+  const reportLayout = layoutTexVListFromBrokenParagraphs(layoutIr.vlist, {
     paragraphId,
     width: options.width,
     alignment: layoutIr.reportAlignment,
     layoutMode: layoutIr.layoutMode,
     font,
     metricProvider,
-    combined,
+    entries: paragraphBreaks.entries,
+    initialErrors: errors,
   });
+  if (reportLayout.status === "empty") {
+    const reason = "Paragraph contains no text runs.";
+    return {
+      supported: false,
+      report: null,
+      fallbackReason: reason,
+      shapedRuns: reportLayout.combined.shapedRuns,
+      errors: [...reportLayout.combined.errors, reason],
+    };
+  }
 
   return {
     supported: true,
     report: reportLayout.report,
     vlistLayout: reportLayout.layout,
     fallbackReason: null,
-    shapedRuns: combined.shapedRuns,
-    errors: combined.errors,
+    shapedRuns: reportLayout.combined.shapedRuns,
+    errors: reportLayout.combined.errors,
   };
 }
