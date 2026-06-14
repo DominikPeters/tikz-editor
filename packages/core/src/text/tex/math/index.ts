@@ -51,6 +51,14 @@ export {
   type ResolvedMathGlyph,
 } from "./layout.js";
 export {
+  renderTexMathHListSvgBody,
+  type TexMathSvgRenderOptions,
+} from "./render-svg.js";
+export {
+  createTexDerivedInlineMathBoxProvider,
+  type TexDerivedInlineMathBoxProviderOptions,
+} from "./inline-provider.js";
+export {
   defaultTexMathFontProfile,
   luaLatexDefaultMathFontId,
   luaLatexDefaultMathFontProfile,

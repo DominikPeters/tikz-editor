@@ -28,6 +28,7 @@ export type TexMathHListItem =
 export interface TexMathGlyphLayoutItem {
   readonly kind: "glyph";
   readonly fontId: string;
+  readonly atPt: number;
   readonly family: TexMathFontFamily;
   readonly code: number;
   readonly text: string;
@@ -156,6 +157,7 @@ export function layoutTexMathList(
     items.push({
       kind: "glyph",
       fontId: glyph.font.id,
+      atPt: glyph.font.atPt,
       family: glyph.family,
       code: glyph.code,
       text: glyph.text,
