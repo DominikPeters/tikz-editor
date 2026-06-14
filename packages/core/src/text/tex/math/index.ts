@@ -38,6 +38,19 @@ export {
   type TexMathSpacedList,
 } from "./spacing.js";
 export {
+  layoutTexMathList,
+  resolveMathGlyph,
+  type TexMathGlueLayoutItem,
+  type TexMathGlyphLayoutItem,
+  type TexMathHList,
+  type TexMathHListItem,
+  type TexMathKernLayoutItem,
+  type TexMathLayoutError,
+  type TexMathLayoutOptions,
+  type TexMathLayoutResult,
+  type ResolvedMathGlyph,
+} from "./layout.js";
+export {
   defaultTexMathFontProfile,
   luaLatexDefaultMathFontId,
   luaLatexDefaultMathFontProfile,
