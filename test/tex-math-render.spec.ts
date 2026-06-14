@@ -71,6 +71,24 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(2319.9158 -362.892) scale(70)"');
   });
 
+  it("renders simple fractions with glyphs and a TeX rule", () => {
+    const parsed = parseTexMath(String.raw`\frac{1}{2}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmr7" data-tex-glyph="49"');
+    expect(body).toContain('data-tex-font="cmr7" data-tex-glyph="50"');
+    expect(body).toContain('data-tex-rule="fraction-rule"');
+    expect(body).toContain('x="120"');
+    expect(body).toContain('y="-269.9995"');
+    expect(body).toContain('width="398.6129"');
+    expect(body).toContain('height="39.999"');
+  });
+
   it("creates inline math boxes for supported formulas without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
@@ -125,13 +143,13 @@ describe("TeX math SVG rendering", () => {
   it("returns null for unsupported formulas instead of approximate SVG", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
-      source: String.raw`$\frac{1}{2}$`,
-      content: String.raw`\frac{1}{2}`,
+      source: String.raw`$\sqrt{x}$`,
+      content: String.raw`\sqrt{x}`,
       delimiter: "dollar",
       sourceStart: 0,
-      sourceEnd: 13,
+      sourceEnd: 10,
       contentStart: 1,
-      contentEnd: 12,
+      contentEnd: 9,
     });
 
     expect(box).toBeNull();

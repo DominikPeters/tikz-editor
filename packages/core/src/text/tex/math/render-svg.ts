@@ -7,6 +7,7 @@ import type {
   TexMathGlyphLayoutItem,
   TexMathHList,
   TexMathHListItem,
+  TexMathRuleLayoutItem,
 } from "./layout.js";
 
 const SVG_UNIT_SCALE = 100;
@@ -45,6 +46,10 @@ function renderMathHListItems(
       ));
       continue;
     }
+    if (item.kind === "rule") {
+      pieces.push(renderMathRule(item, originX, originY));
+      continue;
+    }
     if (item.kind !== "glyph") {
       continue;
     }
@@ -58,6 +63,22 @@ function renderMathHListItems(
     }
   }
   return pieces;
+}
+
+function renderMathRule(
+  item: TexMathRuleLayoutItem,
+  originX: number,
+  originY: number
+): string {
+  return [
+    `<rect data-tex-rule="${escapeXmlAttribute(item.role)}"`,
+    ` data-source-start="${item.sourceSpan.start}"`,
+    ` data-source-end="${item.sourceSpan.end}"`,
+    ` x="${formatSvgNumber((originX + item.x) * SVG_UNIT_SCALE)}"`,
+    ` y="${formatSvgNumber((originY + item.y) * SVG_UNIT_SCALE)}"`,
+    ` width="${formatSvgNumber(item.width * SVG_UNIT_SCALE)}"`,
+    ` height="${formatSvgNumber(item.height * SVG_UNIT_SCALE)}" />`,
+  ].join("");
 }
 
 function renderMathGlyphPath(

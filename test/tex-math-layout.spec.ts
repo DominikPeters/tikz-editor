@@ -229,6 +229,36 @@ describe("TeX math hlist layout", () => {
     expect(superscript?.items.map((item) => item.kind)).toEqual(["glyph", "hlist"]);
   });
 
+  it("lays out simple fractions as TeX-style vertical nuclei with a rule", () => {
+    const result = layout(String.raw`\frac{1}{2}`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(6.386129, 6);
+    expect(result.hlist?.height).toBeCloseTo(8.448428, 6);
+    expect(result.hlist?.depth).toBeCloseTo(3.44841, 6);
+    expect(result.hlist?.items.map((item) => item.kind)).toEqual(["hlist", "rule", "hlist"]);
+    expect(result.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      x: expect.closeTo(1.2, 6),
+      y: expect.closeTo(-3.93732, 5),
+    });
+    expect(result.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "fraction-rule",
+      x: expect.closeTo(1.2, 6),
+      y: expect.closeTo(-2.699995, 6),
+      width: expect.closeTo(3.986129, 6),
+      height: expect.closeTo(0.39999, 6),
+    });
+    expect(result.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      x: expect.closeTo(1.2, 6),
+      y: expect.closeTo(3.44841, 5),
+    });
+  });
+
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
     const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
@@ -247,7 +277,7 @@ describe("TeX math hlist layout", () => {
   });
 
   it("reports unsupported constructs instead of producing approximate layout", () => {
-    for (const source of [String.raw`\frac{1}{2}`, String.raw`\sqrt{x}`]) {
+    for (const source of [String.raw`\sqrt{x}`]) {
       const result = layout(source);
       expect(result.supported).toBe(false);
       expect(result.hlist).toBeNull();

@@ -21,6 +21,9 @@ const formulas = args.formulas.length > 0
       "(z)",
       "a{b}",
       "a\\mathinner{b}",
+      "\\frac{1}{2}",
+      "\\frac{x+y}{2}",
+      "x_\\frac{1}{2}",
       "x^2",
       "x_i",
       "x_i^2",
@@ -73,6 +76,11 @@ function compareFormula(formula, tolerance) {
       compareNumber(mismatches, `kern ${index} x`, left.x, right.x, tolerance);
       compareNumber(mismatches, `kern ${index} y`, left.y, right.y, tolerance);
       compareNumber(mismatches, `kern ${index} width`, left.width, right.width, tolerance);
+    } else if (left.kind === "rule" && right.kind === "rule") {
+      compareNumber(mismatches, `rule ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `rule ${index} y`, left.y, right.y, tolerance);
+      compareNumber(mismatches, `rule ${index} width`, left.width, right.width, tolerance);
+      compareNumber(mismatches, `rule ${index} height`, left.height, right.height, tolerance);
     }
   }
   compareNumber(mismatches, "total width", ours.width, tex.width, tolerance);
@@ -118,6 +126,16 @@ function flattenOurItems(items, originX, originY) {
         x: round(originX + item.x),
         y: round(originY + item.y),
         width: item.width,
+      });
+      continue;
+    }
+    if (item.kind === "rule") {
+      traceItems.push({
+        kind: "rule",
+        x: round(originX + item.x),
+        y: round(originY + item.y),
+        width: item.width,
+        height: item.height,
       });
       continue;
     }
@@ -187,6 +205,17 @@ function texTrace(formula) {
         });
         continue;
       }
+      const rule = /^TIKZ_MATH_TRACE rule x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) width=(?<width>[-.\d]+) height=(?<height>[-.\d]+)/.exec(line);
+      if (rule?.groups) {
+        items.push({
+          kind: "rule",
+          x: round(Number(rule.groups.x)),
+          y: round(Number(rule.groups.y)),
+          width: round(Number(rule.groups.width)),
+          height: round(Number(rule.groups.height)),
+        });
+        continue;
+      }
       const total = /^TIKZ_MATH_TRACE width=(?<width>[-.\d]+)/.exec(line);
       if (total?.groups) {
         width = round(Number(total.groups.width));
@@ -212,6 +241,7 @@ function traceLuaSource() {
   return String.raw`local glyph_id=node.id('glyph')
 local glue_id=node.id('glue')
 local kern_id=node.id('kern')
+local rule_id=node.id('rule')
 local hlist_id=node.id('hlist')
 local vlist_id=node.id('vlist')
 local whatsit_id=node.id('whatsit')
@@ -227,14 +257,32 @@ end
 local function node_depth(n)
   return sp(n.depth or 0)
 end
-local function glue_width(n)
+local function glue_order(n, stretch)
+  if stretch then
+    return n.stretch_order or (n.spec and n.spec.stretch_order) or 0
+  end
+  return n.shrink_order or (n.spec and n.spec.shrink_order) or 0
+end
+local function glue_natural_width(n)
   return sp(n.width or (n.spec and n.spec.width) or 0)
+end
+local function glue_width(n, box)
+  local w = n.width or (n.spec and n.spec.width) or 0
+  if box and (box.glue_sign or 0) ~= 0 then
+    local target_order = box.glue_order or 0
+    if box.glue_sign == 1 and glue_order(n, true) == target_order then
+      w = w + ((n.stretch or (n.spec and n.spec.stretch) or 0) * (box.glue_set or 0))
+    elseif box.glue_sign == 2 and glue_order(n, false) == target_order then
+      w = w - ((n.shrink or (n.spec and n.spec.shrink) or 0) * (box.glue_set or 0))
+    end
+  end
+  return sp(w)
 end
 local function kern_width(n)
   return sp(n.kern or n.width or 0)
 end
 
-local function walk_hlist(list, origin_x, baseline_y)
+local function walk_hlist(list, origin_x, baseline_y, box)
   local x = origin_x
   for n in node.traverse(list) do
     if n.id==glyph_id then
@@ -242,18 +290,23 @@ local function walk_hlist(list, origin_x, baseline_y)
       texio.write_nl(string.format('TIKZ_MATH_TRACE glyph x=%.6f y=%.6f font=%s char=%d width=%.6f', x, baseline_y, tostring(f and f.name), n.char, node_width(n)))
       x=x+node_width(n)
     elseif n.id==glue_id then
-      local w=glue_width(n)
-      texio.write_nl(string.format('TIKZ_MATH_TRACE glue x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
+      local w=glue_width(n, box)
+      if glue_natural_width(n) ~= 0 then
+        texio.write_nl(string.format('TIKZ_MATH_TRACE glue x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
+      end
       x=x+w
     elseif n.id==kern_id then
       local w=kern_width(n)
       texio.write_nl(string.format('TIKZ_MATH_TRACE kern x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
       x=x+w
+    elseif n.id==rule_id then
+      texio.write_nl(string.format('TIKZ_MATH_TRACE rule x=%.6f y=%.6f width=%.6f height=%.6f', x, baseline_y-node_height(n), node_width(n), node_height(n)+node_depth(n)))
+      x=x+node_width(n)
     elseif n.id==hlist_id then
-      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0))
+      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0), n)
       x=x+node_width(n)
     elseif n.id==vlist_id then
-      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n))
+      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n), node_width(n))
       x=x+node_width(n)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
@@ -262,27 +315,32 @@ local function walk_hlist(list, origin_x, baseline_y)
   return x
 end
 
-function walk_vlist(list, origin_x, baseline_y, height)
+function walk_vlist(list, origin_x, baseline_y, height, width)
   local y = baseline_y - height
   for n in node.traverse(list) do
     if n.id==kern_id then
       y=y+kern_width(n)
     elseif n.id==glue_id then
-      y=y+glue_width(n)
+      y=y+glue_width(n, nil)
     elseif n.id==hlist_id then
       local child_baseline = y + node_height(n)
-      walk_hlist(n.list, origin_x + sp(n.shift or 0), child_baseline)
+      walk_hlist(n.list, origin_x + sp(n.shift or 0), child_baseline, n)
       y=y+node_height(n)+node_depth(n)
     elseif n.id==vlist_id then
       local child_baseline = y + node_height(n)
-      walk_vlist(n.list, origin_x + sp(n.shift or 0), child_baseline, node_height(n))
+      walk_vlist(n.list, origin_x + sp(n.shift or 0), child_baseline, node_height(n), node_width(n))
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id==rule_id then
+      local rule_width = node_width(n)
+      if rule_width < 0 then rule_width = width end
+      texio.write_nl(string.format('TIKZ_MATH_TRACE rule x=%.6f y=%.6f width=%.6f height=%.6f', origin_x, y, rule_width, node_height(n)+node_depth(n)))
       y=y+node_height(n)+node_depth(n)
     else
       y=y+node_height(n)+node_depth(n)
     end
   end
 end
-local width = walk_hlist(tex.box.m.list, 0, 0)
+local width = walk_hlist(tex.box.m.list, 0, 0, tex.box.m)
 texio.write_nl(string.format('TIKZ_MATH_TRACE width=%.6f', width))
 `;
 }

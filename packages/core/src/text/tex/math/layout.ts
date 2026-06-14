@@ -25,6 +25,7 @@ export type TexMathHListItem =
   | TexMathGlyphLayoutItem
   | TexMathGlueLayoutItem
   | TexMathKernLayoutItem
+  | TexMathRuleLayoutItem
   | TexMathChildHListLayoutItem;
 
 export interface TexMathGlyphLayoutItem {
@@ -59,6 +60,16 @@ export interface TexMathKernLayoutItem {
   readonly x: number;
   readonly width: number;
   readonly reason: "italic-correction";
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathRuleLayoutItem {
+  readonly kind: "rule";
+  readonly role: "fraction-rule";
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -116,6 +127,7 @@ export interface ResolvedMathGlyph {
 }
 
 const TEX_SCRIPT_SPACE_PT = 0.5;
+const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
 
 interface TexMathAtomLayout {
   readonly items: readonly TexMathHListItem[];
@@ -312,7 +324,92 @@ function layoutNucleus(
       sourceSpan: nucleus.sourceSpan,
     };
   }
+  if (nucleus.kind === "fraction") {
+    return layoutFractionNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   return null;
+}
+
+function layoutFractionNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "fraction" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const numerator = layoutFractionList(nucleus.numerator, fontProfile, numeratorStyle(style), baseAtPt);
+  const denominator = layoutFractionList(nucleus.denominator, fontProfile, denominatorStyle(style), baseAtPt);
+  if (!numerator || !denominator) {
+    return null;
+  }
+
+  const fractionWidth = roundTexPt(Math.max(numerator.width, denominator.width));
+  const width = roundTexPt(fractionWidth + 2 * TEX_NULL_DELIMITER_SPACE_PT);
+  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  let shiftUp: number;
+  let shiftDown: number;
+  if (style === "display") {
+    shiftUp = mathParameterToPt(fontProfile, "num1", style, baseAtPt);
+    shiftDown = mathParameterToPt(fontProfile, "denom1", style, baseAtPt);
+  } else {
+    shiftUp = mathParameterToPt(fontProfile, "num2", style, baseAtPt);
+    shiftDown = mathParameterToPt(fontProfile, "denom2", style, baseAtPt);
+  }
+
+  const halfThickness = thickness / 2;
+  const clearance = style === "display" ? 3 * thickness : thickness;
+  const delta1 = clearance - ((shiftUp - numerator.depth) - (axis + halfThickness));
+  const delta2 = clearance - ((axis - halfThickness) - (denominator.height - shiftDown));
+  if (delta1 > 0) {
+    shiftUp += delta1;
+  }
+  if (delta2 > 0) {
+    shiftDown += delta2;
+  }
+
+  const numeratorChild = childHList(
+    "nucleus",
+    TEX_NULL_DELIMITER_SPACE_PT + (fractionWidth - numerator.width) / 2,
+    -shiftUp,
+    numerator,
+    numerator.sourceSpan
+  );
+  const denominatorChild = childHList(
+    "nucleus",
+    TEX_NULL_DELIMITER_SPACE_PT + (fractionWidth - denominator.width) / 2,
+    shiftDown,
+    denominator,
+    denominator.sourceSpan
+  );
+  const rule = {
+    kind: "rule",
+    role: "fraction-rule",
+    x: TEX_NULL_DELIMITER_SPACE_PT,
+    y: roundTexPt(-(axis + halfThickness)),
+    width: fractionWidth,
+    height: roundTexPt(thickness),
+    sourceSpan: nucleus.sourceSpan,
+  } satisfies TexMathRuleLayoutItem;
+
+  return {
+    items: [numeratorChild, rule, denominatorChild],
+    width,
+    height: roundTexPt(shiftUp + numerator.height),
+    depth: roundTexPt(denominator.depth + shiftDown),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutFractionList(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList | null {
+  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt });
+  return result.supported ? result.hlist : null;
 }
 
 function layoutGlyphNucleus(
@@ -573,7 +670,18 @@ function superscriptMinimumShift(
 
 function mathParameterToPt(
   fontProfile: TexMathFontProfile,
-  name: "sup1" | "sup2" | "sub1" | "sub2" | "supDrop" | "subDrop",
+  name:
+    | "axisHeight"
+    | "num1"
+    | "num2"
+    | "denom1"
+    | "denom2"
+    | "sup1"
+    | "sup2"
+    | "sub1"
+    | "sub2"
+    | "supDrop"
+    | "subDrop",
   style: TexMathStyle,
   baseAtPt: number
 ): number {
@@ -619,11 +727,35 @@ function subStyle(style: TexMathStyle): TexMathStyle {
   return style === "text" || style === "display" ? "script" : "scriptscript";
 }
 
+function numeratorStyle(style: TexMathStyle): TexMathStyle {
+  return style === "display" ? "text" : supStyle(style);
+}
+
+function denominatorStyle(style: TexMathStyle): TexMathStyle {
+  return style === "display" ? "text" : subStyle(style);
+}
+
 function scriptSizeStyle(style: TexMathStyle): TexMathStyle {
   return style === "script" || style === "scriptscript" ? "scriptscript" : "script";
 }
 
-function mathParameterFontdimenName(name: "sup1" | "sup2" | "sub1" | "sub2" | "supDrop" | "subDrop"): string {
+function mathParameterFontdimenName(
+  name:
+    | "axisHeight"
+    | "num1"
+    | "num2"
+    | "denom1"
+    | "denom2"
+    | "sup1"
+    | "sup2"
+    | "sub1"
+    | "sub2"
+    | "supDrop"
+    | "subDrop"
+): string {
+  if (name === "axisHeight") {
+    return "axisheight";
+  }
   if (name === "supDrop") {
     return "supdrop";
   }
