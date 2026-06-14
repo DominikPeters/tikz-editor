@@ -188,6 +188,10 @@ class TexMathParser {
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
       }
+      const classCommand = atomClassCommandName(token.text);
+      if (classCommand) {
+        return this.parseClassCommand(classCommand, allowScripts);
+      }
       this.advance();
       this.addDiagnostic(
         "warning",
@@ -275,6 +279,25 @@ class TexMathParser {
       nucleus: {
         kind: "radical",
         radicand: radicand?.list ?? emptyList(command.sourceSpan.end),
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseClassCommand(
+    atomClass: TexMathAtomClass,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const content = this.parseRequiredGroup(command.sourceSpan, `${command.text} content`);
+    const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass,
+      nucleus: {
+        kind: "list",
+        list: content?.list ?? emptyList(command.sourceSpan.end),
         sourceSpan,
       },
       sourceSpan,
@@ -474,6 +497,29 @@ function atomClassForCharacter(char: string): TexMathAtomClass {
     return "bin";
   }
   return "ord";
+}
+
+function atomClassCommandName(command: string): TexMathAtomClass | null {
+  switch (commandName(command)) {
+    case "mathord":
+      return "ord";
+    case "mathop":
+      return "op";
+    case "mathbin":
+      return "bin";
+    case "mathrel":
+      return "rel";
+    case "mathopen":
+      return "open";
+    case "mathclose":
+      return "close";
+    case "mathpunct":
+      return "punct";
+    case "mathinner":
+      return "inner";
+    default:
+      return null;
+  }
 }
 
 function spanUnion(a: TexMathSourceSpan, b: TexMathSourceSpan): TexMathSourceSpan {

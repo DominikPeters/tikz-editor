@@ -28,6 +28,16 @@ export {
   type ParseTexMathOptions,
 } from "./parser.js";
 export {
+  normalizeTexMathAtomClasses,
+  resolveExplicitMathGlue,
+  spaceTexMathList,
+  texMathSpacingBetween,
+  type TexMathGlueSource,
+  type TexMathResolvedGlue,
+  type TexMathSpacedItem,
+  type TexMathSpacedList,
+} from "./spacing.js";
+export {
   defaultTexMathFontProfile,
   luaLatexDefaultMathFontId,
   luaLatexDefaultMathFontProfile,
