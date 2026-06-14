@@ -3612,6 +3612,7 @@ describe("simple TeX paragraph layout", () => {
       .filter((segment) => segment.kind === "math") ?? [];
     expect(mathSegments).toHaveLength(2);
     expect(mathSegments[0]).toMatchObject({
+      text: "x^2",
       sourceStartRaw: sourceText.indexOf("$x^2$"),
       sourceEndRaw: sourceText.indexOf("$x^2$") + "$x^2$".length,
       sourceKind: "math",
@@ -3619,6 +3620,7 @@ describe("simple TeX paragraph layout", () => {
       mathSvgBody: `<g data-fake-inline-math="x^2"></g>`,
     });
     expect(mathSegments[1]).toMatchObject({
+      text: "y+1",
       sourceStartRaw: sourceText.indexOf(String.raw`\(y+1\)`),
       sourceEndRaw: sourceText.indexOf(String.raw`\(y+1\)`) + String.raw`\(y+1\)`.length,
       sourceKind: "math",

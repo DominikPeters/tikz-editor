@@ -180,6 +180,7 @@ function buildTexLineReport(
         runIndex: run.runIndex,
         kind: "math",
         role: run.role,
+        text: box?.content ?? "",
         sourceStartRaw: run.sourceStart,
         sourceEndRaw: run.sourceEnd,
         sourceKind: "math",
@@ -310,7 +311,12 @@ function buildTexLineReport(
 
 function texMathBoxFromWrapper(
   wrapper: ParagraphRun["wrapper"]
-): { readonly height: number; readonly depth: number; readonly svgBody?: string } | null {
+): {
+  readonly content: string;
+  readonly height: number;
+  readonly depth: number;
+  readonly svgBody?: string;
+} | null {
   if (!wrapper || typeof wrapper !== "object") {
     return null;
   }
@@ -319,11 +325,13 @@ function texMathBoxFromWrapper(
     return null;
   }
   const typedBox = box as {
+    readonly content?: unknown;
     readonly height?: unknown;
     readonly depth?: unknown;
     readonly svgBody?: unknown;
   };
   return {
+    content: typeof typedBox.content === "string" ? typedBox.content : "",
     height: Number(typedBox.height) || 0,
     depth: Number(typedBox.depth) || 0,
     svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
@@ -395,6 +403,7 @@ function buildTexLineLabelSegments(
         runIndex: label.lineRunIndex,
         kind: "math",
         role: "list-label",
+        text: item.content,
         sourceStartRaw: item.sourceStart,
         sourceEndRaw: item.sourceEnd,
         sourceKind: "math",

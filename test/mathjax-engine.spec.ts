@@ -522,7 +522,7 @@ describe("mathjax node text engine", () => {
     });
 
     expect(measured?.paragraphId).toMatch(/^tex:/);
-    expect(texCalls).toContain("x^2");
+    expect(texCalls).toContain(String.raw`\textstyle{x^2}`);
     const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
     const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
     expect(report?.runs.some((run) => run.kind === "math")).toBe(true);

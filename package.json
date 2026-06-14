@@ -28,6 +28,7 @@
     "compare:renderers": "node scripts/compare-tikz-renderers.mjs",
     "compare:paragraph-breaks": "node scripts/compare-paragraph-breaks.mjs",
     "compare:paragraph-matrix": "node scripts/compare-paragraph-breaks.mjs --fuzz 400 --seed 20260609 --alignments left,right,center,justify --widths 60,80,100,120,160,200,240,320 --min-words 20 --max-words 90 --out-dir artifacts/paragraph-matrix-compare --oracle-cache-dir artifacts/paragraph-oracle-cache",
+    "compare:paragraph-math-matrix": "node scripts/compare-paragraph-breaks.mjs --fuzz 120 --inline-math-fuzz --seed 20260614 --alignments left,justify --widths 120,160,200,240,320 --min-words 18 --max-words 70 --out-dir artifacts/paragraph-math-matrix-compare --oracle-cache-dir artifacts/paragraph-math-oracle-cache",
     "compare:tex-text-visual-fuzz": "node scripts/compare-tex-text-visual-fuzz.mjs",
     "compare:tex-paragraph": "node scripts/compare-tex-paragraph.mjs",
     "compare:tex-shaping": "node scripts/compare-tex-shaping.mjs",

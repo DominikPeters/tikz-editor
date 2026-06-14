@@ -1115,7 +1115,7 @@ function createMathJaxInlineMathBoxProvider(runtime: MathJaxRuntime): TexMathBox
       if (cache.has(key)) {
         return cache.get(key) ?? null;
       }
-      const node = runtime.tex2svg(params.content, { display: false });
+      const node = runtime.tex2svg(mathJaxInlineMathSource(params.content), { display: false });
       const extracted = extractSvgPayload(node, runtime.startup?.adaptor ?? null);
       const viewBox = parseViewBox(extracted?.viewBoxRaw ?? null);
       if (!extracted || !viewBox) {
@@ -1139,6 +1139,10 @@ function createMathJaxInlineMathBoxProvider(runtime: MathJaxRuntime): TexMathBox
       return box;
     },
   };
+}
+
+function mathJaxInlineMathSource(content: string): string {
+  return `\\textstyle{${content}}`;
 }
 
 function renderSimpleTexSvgBody(

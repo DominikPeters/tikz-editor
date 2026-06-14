@@ -24,7 +24,7 @@ const DEFAULT_WIDTHS = [120, 160, 220, 280, 360];
 const DEFAULT_CASE_COUNT = 25;
 const DEFAULT_MIN_WORDS = 20;
 const DEFAULT_MAX_WORDS = 90;
-const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v5-cmr10";
+const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v6-cmr10-inline-math";
 const DEFAULT_WORD_BANK_TEXT = `
 Lorem ipsum dolor sit amet consectetuer adipiscing elit Aenean commodo ligula eget dolor
 Aenean massa Cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus
@@ -39,6 +39,16 @@ condimentum rhoncus sem quam semper libero sit amet adipiscing sem neque sed ips
 blandit vel luctus pulvinar hendrerit id lorem Maecenas nec odio et ante tincidunt tempus Donec vitae
 sapien ut libero venenatis faucibus Nullam quis ante
 `;
+const DEFAULT_INLINE_MATH_FRAGMENTS = [
+  "$x$",
+  "$y$",
+  "$z$",
+  "$a+b$",
+  "$m-n$",
+  "$uv$",
+  String.raw`\(p+q\)`,
+  String.raw`\(r-s\)`,
+];
 
 const LIGATURE_NORMALIZATION = new Map([
   ["\uFB00", "ff"],
@@ -48,6 +58,10 @@ const LIGATURE_NORMALIZATION = new Map([
   ["\uFB04", "ffl"],
   ["\uFB05", "ft"],
   ["\uFB06", "st"],
+]);
+const SIMPLE_MATH_OPERATOR_NORMALIZATION = new Map([
+  ["+", " + "],
+  ["-", " - "],
 ]);
 
 function usage() {
@@ -59,6 +73,7 @@ Usage:
 Options:
   --text <text>          Plain paragraph text to compare.
   --input <file>         Read plain paragraph text from a file.
+  --text-is-tex          Treat --text/--input content as TeX node content instead of escaping it.
   --align <mode>         One of left, right, center, justify. Default: left.
   --width <pt>           Text width in pt. Default: 380.
   --fuzz <count>         Run randomized comparisons instead of a single case.
@@ -67,6 +82,7 @@ Options:
   --widths <csv>         Fuzz widths in pt. Default: 120,160,220,280,360
   --min-words <n>        Fuzz minimum word count. Default: 20
   --max-words <n>        Fuzz maximum word count. Default: 90
+  --inline-math-fuzz     Include simple inline math fragments in randomized paragraphs.
   --word-bank <file>     Plain text file used to build the fuzz word bank.
   --font-encoding <enc>  One of OT1, T1. Default: OT1.
   --oracle-cache-dir <dir>
@@ -89,6 +105,8 @@ function parseArgs(argv) {
     widths: [...DEFAULT_WIDTHS],
     minWords: DEFAULT_MIN_WORDS,
     maxWords: DEFAULT_MAX_WORDS,
+    inlineMathFuzz: false,
+    textIsTex: false,
     wordBankPath: null,
     fontEncoding: "OT1",
     oracleCacheDir: null,
@@ -110,6 +128,10 @@ function parseArgs(argv) {
     if (arg === "--input" && next != null) {
       options.inputPath = resolve(next);
       i += 1;
+      continue;
+    }
+    if (arg === "--text-is-tex") {
+      options.textIsTex = true;
       continue;
     }
     if (arg === "--align" && next != null) {
@@ -150,6 +172,10 @@ function parseArgs(argv) {
     if (arg === "--max-words" && next != null) {
       options.maxWords = Number(next);
       i += 1;
+      continue;
+    }
+    if (arg === "--inline-math-fuzz") {
+      options.inlineMathFuzz = true;
       continue;
     }
     if (arg === "--word-bank" && next != null) {
@@ -246,10 +272,18 @@ function escapePlainTextForTeX(text) {
     .replaceAll("\r", " ");
 }
 
-function buildTikzSnippet({ text, align, widthPt, fontCommand = "" }) {
+function normalizeTexNodeContent(text) {
+  return text
+    .replaceAll("\r\n", " ")
+    .replaceAll("\n", " ")
+    .replaceAll("\r", " ");
+}
+
+function buildTikzSnippet({ text, align, widthPt, fontCommand = "", textIsTex = false }) {
   const fontOption = fontCommand ? `, font=${fontCommand}` : "";
+  const nodeText = textIsTex ? normalizeTexNodeContent(text) : escapePlainTextForTeX(text);
   return String.raw`\begin{tikzpicture}
-  \node[align=${align}, text width=${widthPt}pt${fontOption}] at (0,0) {${escapePlainTextForTeX(text)}};
+  \node[align=${align}, text width=${widthPt}pt${fontOption}] at (0,0) {${nodeText}};
 \end{tikzpicture}`;
 }
 
@@ -272,6 +306,16 @@ function buildRandomParagraph(rng, wordBank, options) {
   let capitalizeNext = true;
 
   for (let index = 0; index < count; index += 1) {
+    if (
+      options.inlineMathFuzz &&
+      index > 0 &&
+      index < count - 1 &&
+      rng() < 0.18
+    ) {
+      pieces.push(sampleOne(rng, DEFAULT_INLINE_MATH_FRAGMENTS));
+      continue;
+    }
+
     let word = sampleOne(rng, wordBank);
     if (capitalizeNext) {
       word = titleCaseWord(word);
@@ -327,12 +371,16 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
     [0xFB04] = "ffl",
     [0xFB05] = "ft",
     [0xFB06] = "st",
+    [0] = "-",
   }
   local function json_escape(value)
     local backslash = string.char(92)
     local quote = string.char(34)
     value = value:gsub(backslash, backslash .. backslash)
     value = value:gsub(quote, backslash .. quote)
+    value = value:gsub("[%z\1-\31]", function(char)
+      return string.format(backslash .. "u%04x", string.byte(char))
+    end)
     value = value:gsub(string.char(10), backslash .. "n")
     value = value:gsub(string.char(13), backslash .. "r")
     value = value:gsub(string.char(9), backslash .. "t")
@@ -531,13 +579,14 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
 `;
 }
 
-function buildLuaTeXOracleDocument({ text, align, widthPt, fontEncoding }) {
+function buildLuaTeXOracleDocument({ text, align, widthPt, fontEncoding, textIsTex }) {
   const forceComputerModern = fontEncoding === "OT1";
   const snippet = buildTikzSnippet({
     text,
     align,
     widthPt,
     fontCommand: forceComputerModern ? String.raw`\tikzcomparecmr` : "",
+    textIsTex: textIsTex === true,
   });
   const fontEncodingLine = fontEncoding === "T1" ? String.raw`\usepackage[T1]{fontenc}` : "";
   const fontDefinitionLine = forceComputerModern
@@ -570,6 +619,7 @@ function oracleCacheKey(caseSpec) {
     align: caseSpec.align,
     widthPt: caseSpec.widthPt,
     fontEncoding: caseSpec.fontEncoding,
+    textIsTex: caseSpec.textIsTex === true,
     text: caseSpec.text,
   };
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
@@ -688,9 +738,23 @@ async function loadRendererModules() {
 
 function normalizeLineTextFromSegments(segments) {
   const text = segments
-    .map((segment) => (segment.kind === "text" || segment.kind === "space" ? segment.text ?? "" : ""))
+    .map((segment) =>
+      segment.kind === "math"
+        ? normalizeSimpleMathLineText(segment.text ?? "")
+        : segment.kind === "text" || segment.kind === "space"
+        ? segment.text ?? ""
+        : ""
+    )
     .join("");
   return normalizeVisibleText(text);
+}
+
+function normalizeSimpleMathLineText(text) {
+  let normalized = text;
+  for (const [operator, replacement] of SIMPLE_MATH_OPERATOR_NORMALIZATION) {
+    normalized = normalized.split(operator).join(replacement);
+  }
+  return normalized.replace(/[ \t]+/g, " ").trim();
 }
 
 async function runOurRenderer(caseSpec, caseDir, renderer) {
@@ -841,6 +905,7 @@ async function runCase(caseSpec, renderer, runDir, index, oracleCacheDir) {
       slug,
       align: caseSpec.align,
       widthPt: caseSpec.widthPt,
+      textIsTex: caseSpec.textIsTex === true,
       text: caseSpec.text,
       oracle,
       ours,
@@ -897,6 +962,7 @@ function summarizeCases(cases, seed) {
   return {
     seed,
     cases: cases.length,
+    inlineMathCases: cases.filter((entry) => entry.textIsTex === true && /(?:\$|\\\()/u.test(entry.text)).length,
     comparableCases: comparableCases.length,
     errorCases: cases.length - comparableCases.length,
     exactLineTextAgreementRate: exactLineMatches / totalComparable,
@@ -942,6 +1008,7 @@ async function main() {
         align: sampleOne(rng, options.alignments),
         widthPt: sampleOne(rng, options.widths),
         fontEncoding: options.fontEncoding,
+        textIsTex: options.inlineMathFuzz,
         text: buildRandomParagraph(rng, wordBank, options),
       };
       const payload = await runCase(caseSpec, renderer, runDir, index, oracleCacheDir);
@@ -969,6 +1036,7 @@ async function main() {
       align: options.align,
       widthPt: options.widthPt,
       fontEncoding: options.fontEncoding,
+      textIsTex: options.textIsTex,
       text,
     };
     const payload = await runCase(caseSpec, renderer, runDir, 0, oracleCacheDir);
