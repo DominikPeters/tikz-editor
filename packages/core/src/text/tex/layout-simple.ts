@@ -107,7 +107,7 @@ export function layoutSimpleTexParagraph(
     };
   }
 
-  const reportLayout = layoutTexVListFromBrokenParagraphs(layoutIr.vlist, {
+  const reportAssembly = layoutTexVListFromBrokenParagraphs(layoutIr.vlist, {
     paragraphId,
     width: options.width,
     alignment: layoutIr.reportAlignment,
@@ -117,23 +117,23 @@ export function layoutSimpleTexParagraph(
     entries: paragraphBreaks.entries,
     initialErrors: errors,
   });
-  if (reportLayout.status === "empty") {
+  if (reportAssembly.status === "empty") {
     const reason = "Paragraph contains no text runs.";
     return {
       supported: false,
       report: null,
       fallbackReason: reason,
-      shapedRuns: reportLayout.combined.shapedRuns,
-      errors: [...reportLayout.combined.errors, reason],
+      shapedRuns: reportAssembly.combined.shapedRuns,
+      errors: [...reportAssembly.combined.errors, reason],
     };
   }
 
   return {
     supported: true,
-    report: reportLayout.report,
-    vlistLayout: reportLayout.layout,
+    report: reportAssembly.report,
+    vlistLayout: reportAssembly.layout,
     fallbackReason: null,
-    shapedRuns: reportLayout.combined.shapedRuns,
-    errors: reportLayout.combined.errors,
+    shapedRuns: reportAssembly.combined.shapedRuns,
+    errors: reportAssembly.combined.errors,
   };
 }

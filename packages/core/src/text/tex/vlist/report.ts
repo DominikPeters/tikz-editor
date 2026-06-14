@@ -18,7 +18,6 @@ import {
 } from "./combined-paragraph-breaks.js";
 import type {
   TexLayoutReport,
-  TexLineBox,
   TexVListParagraphBoxMeasurement,
   TexVListParagraphHorizontalLayout,
   TexVListParagraphLineAssignment,
@@ -35,14 +34,11 @@ import {
   texVListGlueSetForTargetHeight,
   texVListRootVerticalOffset,
 } from "./layout.js";
-import { prepareSimpleTexVList } from "./prepare-simple.js";
 import {
   createMeasuredParagraphVListMeasurer,
-  createTexVListHorizontalParagraphReportLayout,
-  measureTexVListParagraphBoxesFromReport,
+  createTexVListParagraphHorizontalLayoutsFromLineBoxes,
   texVListParagraphMeasurementFromHorizontalLayout,
   texVListParagraphMeasurementMap,
-  validateTexVListParagraphLineAssignments,
   validateTexVListParagraphMeasurements,
 } from "./paragraph-measurement.js";
 import { texVListBoxLayoutReport } from "./box-report.js";
@@ -51,23 +47,6 @@ import {
   texVListLinePlacements,
   texVListParagraphPlacements,
 } from "./placements.js";
-
-export interface TexVListParagraphReportLayoutOptions extends TexVListLayoutOptions {
-  readonly lineHeight: number;
-  readonly firstLineAscent?: number;
-  readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
-}
-
-export interface SimpleTexVListParagraphReportLayoutOptions extends TexVListParagraphReportLayoutOptions {
-  readonly font: ResolvedTexFont;
-}
-
-export interface SimpleTexVListHorizontalParagraphReportLayoutOptions extends TexVListLayoutOptions {
-  readonly font: ResolvedTexFont;
-  readonly report: ParagraphLayoutReport;
-  readonly lineBoxes: readonly TexLineBox[];
-  readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
-}
 
 export interface TexVListMeasuredParagraphLayoutOptions extends TexVListLayoutOptions {
   readonly lineHeight: number;
@@ -87,7 +66,7 @@ export interface TexVListHorizontalParagraphLayoutOptions extends TexVListLayout
   readonly errors?: readonly string[];
 }
 
-export interface TexVListParagraphReportLayoutResult {
+export interface TexVListParagraphReportAssemblyResult {
   readonly report: ParagraphLayoutReport;
   readonly layout: TexVListLayout;
 }
@@ -109,7 +88,7 @@ export interface TexVListCombinedParagraphReportInput {
   readonly linebreakingMode: "feasible" | "overfull";
 }
 
-export interface TexVListCombinedParagraphReportLayoutOptions extends TexVListLayoutOptions {
+export interface TexVListCombinedParagraphReportAssemblyOptions extends TexVListLayoutOptions {
   readonly paragraphId: string;
   readonly alignment: TexParagraphAlignment;
   readonly layoutMode: KnuthPlassLayoutMode;
@@ -118,7 +97,7 @@ export interface TexVListCombinedParagraphReportLayoutOptions extends TexVListLa
   readonly combined: TexVListCombinedParagraphReportInput;
 }
 
-export interface TexVListBrokenParagraphReportLayoutOptions extends TexVListLayoutOptions {
+export interface TexVListBrokenParagraphReportAssemblyOptions extends TexVListLayoutOptions {
   readonly paragraphId: string;
   readonly alignment: TexParagraphAlignment;
   readonly layoutMode: KnuthPlassLayoutMode;
@@ -128,7 +107,7 @@ export interface TexVListBrokenParagraphReportLayoutOptions extends TexVListLayo
   readonly initialErrors?: readonly string[];
 }
 
-export interface TexVListBrokenParagraphReportLaidOutResult extends TexVListParagraphReportLayoutResult {
+export interface TexVListBrokenParagraphReportLaidOutResult extends TexVListParagraphReportAssemblyResult {
   readonly status: "laid-out";
   readonly combined: TexVListCombinedParagraphReportInput;
 }
@@ -138,7 +117,7 @@ export interface TexVListBrokenParagraphReportEmptyResult {
   readonly combined: TexVListCombinedParagraphReportInput;
 }
 
-export type TexVListBrokenParagraphReportLayoutResult =
+export type TexVListBrokenParagraphReportAssemblyResult =
   | TexVListBrokenParagraphReportLaidOutResult
   | TexVListBrokenParagraphReportEmptyResult;
 
@@ -147,8 +126,8 @@ const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
 
 export function layoutTexVListFromBrokenParagraphs(
   document: TexVListDocument,
-  options: TexVListBrokenParagraphReportLayoutOptions
-): TexVListBrokenParagraphReportLayoutResult {
+  options: TexVListBrokenParagraphReportAssemblyOptions
+): TexVListBrokenParagraphReportAssemblyResult {
   const combined = combineTexBrokenLayoutParagraphs({
     entries: options.entries,
     initialErrors: options.initialErrors,
@@ -178,8 +157,8 @@ export function layoutTexVListFromBrokenParagraphs(
 
 export function layoutTexVListFromCombinedParagraphReport(
   document: TexVListDocument,
-  options: TexVListCombinedParagraphReportLayoutOptions
-): TexVListParagraphReportLayoutResult {
+  options: TexVListCombinedParagraphReportAssemblyOptions
+): TexVListParagraphReportAssemblyResult {
   const paragraphLineAssignments = texVListParagraphLineAssignmentsFromSpans(
     options.combined.paragraphLineSpans
   );
@@ -198,57 +177,22 @@ export function layoutTexVListFromCombinedParagraphReport(
     metricProvider: options.metricProvider,
     errors: options.combined.errors,
   });
-  return layoutTexVListFromHorizontalParagraphReport(document, {
-    width: options.width,
-    height: options.height,
-    verticalAlign: options.verticalAlign,
-    font: options.font,
+  const horizontalLayout = createTexVListParagraphHorizontalLayoutsFromLineBoxes({
     report: builtReport.report,
     lineBoxes: builtReport.lineBoxes,
     paragraphLineAssignments,
-  });
-}
-
-function texVListParagraphLineAssignmentsFromSpans(
-  spans: TexVListCombinedParagraphReportInput["paragraphLineSpans"]
-): readonly TexVListParagraphLineAssignment[] {
-  return spans.map((span) => ({
-    blockIndex: span.blockIndex,
-    lineIndices: [...span.lineIndices],
-  }));
-}
-
-export function layoutTexVListFromHorizontalParagraphReport(
-  document: TexVListDocument,
-  options: TexVListLayoutOptions & {
-    readonly font: ResolvedTexFont;
-    readonly report: ParagraphLayoutReport;
-    readonly lineBoxes: readonly TexLineBox[];
-    readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
-  }
-): TexVListParagraphReportLayoutResult {
-  validateTexVListParagraphLineAssignments(
-    document,
-    options.paragraphLineAssignments
-  );
-  const lineHeight = texLatexNormalParagraphLineHeight(options.font);
-  const firstLineAscent = texLatexNormalFirstLineAscent(
-    options.report,
-    options.font
-  );
-  const horizontalLayout = createTexVListHorizontalParagraphReportLayout({
-    report: options.report,
-    lineBoxes: options.lineBoxes,
-    paragraphLineAssignments: options.paragraphLineAssignments,
-    lineHeight,
+    lineHeight: texLatexNormalParagraphLineHeight(options.font),
   });
   const layout = layoutTexVListFromHorizontalParagraphs(document, {
     width: options.width,
     height: options.height,
     verticalAlign: options.verticalAlign,
-    lineHeight,
+    lineHeight: texLatexNormalParagraphLineHeight(options.font),
     firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
-    firstLineAscent,
+    firstLineAscent: texLatexNormalFirstLineAscent(
+      builtReport.report,
+      options.font
+    ),
     paragraphLayouts: horizontalLayout.paragraphLayouts,
     reports: [horizontalLayout.report],
     errors: horizontalLayout.report.errors,
@@ -260,51 +204,13 @@ export function layoutTexVListFromHorizontalParagraphReport(
   };
 }
 
-export function layoutSimpleTexVListFromHorizontalParagraphReport(
-  document: TexVListDocument,
-  options: SimpleTexVListHorizontalParagraphReportLayoutOptions
-): TexVListParagraphReportLayoutResult {
-  return layoutTexVListFromHorizontalParagraphReport(
-    prepareSimpleTexVList(document, options.font).normalized,
-    options
-  );
-}
-
-export function layoutTexVListFromParagraphReport(
-  document: TexVListDocument,
-  report: ParagraphLayoutReport,
-  options: TexVListParagraphReportLayoutOptions
-): TexVListLayout {
-  validateTexVListParagraphLineAssignments(
-    document,
-    options.paragraphLineAssignments
-  );
-  const paragraphMeasurements = measureTexVListParagraphBoxesFromReport(
-    report,
-    options.lineHeight,
-    options.paragraphLineAssignments
-  );
-  const layout = layoutTexVListFromMeasuredParagraphs(document, {
-    ...options,
-    firstLineIndex: report.lines[0]?.lineIndex,
-    paragraphMeasurements,
-    reports: report.lines.length > 0 ? [report] : [],
-    errors: report.errors,
-  });
-  assertAllReportLinesPlaced(report.lines, layout.linePlacements);
-  return layout;
-}
-
-export function layoutSimpleTexVListFromParagraphReport(
-  document: TexVListDocument,
-  report: ParagraphLayoutReport,
-  options: SimpleTexVListParagraphReportLayoutOptions
-): TexVListLayout {
-  return layoutTexVListFromParagraphReport(
-    prepareSimpleTexVList(document, options.font).normalized,
-    report,
-    options
-  );
+function texVListParagraphLineAssignmentsFromSpans(
+  spans: TexVListCombinedParagraphReportInput["paragraphLineSpans"]
+): readonly TexVListParagraphLineAssignment[] {
+  return spans.map((span) => ({
+    blockIndex: span.blockIndex,
+    lineIndices: [...span.lineIndices],
+  }));
 }
 
 function texLatexNormalParagraphLineHeight(font: ResolvedTexFont): number {

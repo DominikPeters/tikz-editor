@@ -18,25 +18,62 @@ import {
 } from "../packages/core/src/text/tex/index.js";
 import {
   groupSimpleTexVListScopes,
-  layoutTexVListFromParagraphReport,
+  layoutTexVListFromMeasuredParagraphs,
   registerTexVListLayoutsOnOutputJax,
   texVListBoxLayoutReport,
   type PositionedTexVListItem,
   type TexBoxMetrics,
+  type TexVListDocument,
+  type TexVListLayout,
+  type TexVListParagraphBoxMeasurement,
   type TexVBoxBaseline,
 } from "../packages/core/src/text/tex/vlist/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
 
-function paragraphLineAssignmentsFromLayout(layout: {
-  readonly paragraphPlacements: readonly {
-    readonly blockIndex: number;
-    readonly lineIndices: readonly number[];
-  }[];
-} | null | undefined): readonly { readonly blockIndex: number; readonly lineIndices: readonly number[] }[] {
-  return layout?.paragraphPlacements.map((placement) => ({
-    blockIndex: placement.blockIndex,
-    lineIndices: [...placement.lineIndices],
-  })) ?? [];
+function relayoutFromExistingVListLayout(
+  document: TexVListDocument,
+  layout: TexVListLayout | null | undefined,
+  options: {
+    readonly width: number;
+    readonly height?: number;
+    readonly verticalAlign?: "top" | "center" | "bottom";
+    readonly lineHeight: number;
+    readonly firstLineAscent: number;
+  }
+): TexVListLayout | null {
+  if (!layout) {
+    return null;
+  }
+  const linePlacementsByIndex = new Map(
+    layout.linePlacements.map((placement) => [placement.lineIndex, placement])
+  );
+  const paragraphMeasurements: TexVListParagraphBoxMeasurement[] =
+    layout.paragraphPlacements.map((placement) => {
+      const advance = placement.metrics.height + placement.metrics.depth;
+      return {
+        blockIndex: placement.blockIndex,
+        lineIndices: placement.lineIndices,
+        lineOffsets: placement.lineIndices.map((lineIndex) => ({
+          lineIndex,
+          y: (linePlacementsByIndex.get(lineIndex)?.y ?? placement.y) - placement.y,
+        })),
+        standardMetrics: placement.metrics,
+        ruleLeadingMetrics: placement.metrics,
+        standardAdvance: advance,
+        ruleLeadingAdvance: advance,
+      };
+    });
+  return layoutTexVListFromMeasuredParagraphs(document, {
+    width: options.width,
+    height: options.height,
+    verticalAlign: options.verticalAlign,
+    lineHeight: options.lineHeight,
+    firstLineIndex: layout.linePlacements[0]?.lineIndex,
+    firstLineAscent: options.firstLineAscent,
+    paragraphMeasurements,
+    reports: layout.reports,
+    errors: layout.errors,
+  });
 }
 
 function registeredLayoutWithBoxReport<T extends {
@@ -857,30 +894,27 @@ describe("simple TeX paragraph layout", () => {
       options: {},
     });
     expect(result.report).not.toBeNull();
-    expect(result.report && layoutTexVListFromParagraphReport(
+    expect(relayoutFromExistingVListLayout(
       layoutIr.vlist,
-      result.report,
+      result.vlistLayout,
       {
         width: 150,
         lineHeight: 12,
         firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
       }
-    ).linePlacements.map((placement) => placement.y)).toEqual([0, 22, 38, 60]);
-    const groupedLayout = result.report &&
-      layoutTexVListFromParagraphReport(
-        groupSimpleTexVListScopes(
-          layoutIr.vlist,
-          computerModernTexMetricProvider.resolveFont()
-        ),
-        result.report,
-        {
-          width: 150,
-          lineHeight: 12,
-          firstLineAscent: 8.5,
-          paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
-        }
-      );
+    )?.linePlacements.map((placement) => placement.y)).toEqual([0, 22, 38, 60]);
+    const groupedLayout = relayoutFromExistingVListLayout(
+      groupSimpleTexVListScopes(
+        layoutIr.vlist,
+        computerModernTexMetricProvider.resolveFont()
+      ),
+      result.vlistLayout,
+      {
+        width: 150,
+        lineHeight: 12,
+        firstLineAscent: 8.5,
+      }
+    );
     expect(groupedLayout && {
       metrics: groupedLayout.metrics,
       linePlacementYs: groupedLayout.linePlacements.map((placement) => placement.y),
@@ -1075,15 +1109,14 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 15]);
 
-    const constrained = result.report && layoutTexVListFromParagraphReport(
+    const constrained = relayoutFromExistingVListLayout(
       layoutIr.vlist,
-      result.report,
+      result.vlistLayout,
       {
         width: 150,
         height: 60,
         lineHeight: 12,
         firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
       }
     );
 
@@ -1129,26 +1162,24 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 18]);
 
-    const stretched = result.report && layoutTexVListFromParagraphReport(
+    const stretched = relayoutFromExistingVListLayout(
       layoutIr.vlist,
-      result.report,
+      result.vlistLayout,
       {
         width: 150,
         height: 32,
         lineHeight: 12,
         firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
       }
     );
-    const shrunk = result.report && layoutTexVListFromParagraphReport(
+    const shrunk = relayoutFromExistingVListLayout(
       layoutIr.vlist,
-      result.report,
+      result.vlistLayout,
       {
         width: 150,
         height: 27,
         lineHeight: 12,
         firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
       }
     );
 
@@ -1184,28 +1215,26 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 12]);
 
-    const center = result.report && layoutTexVListFromParagraphReport(
+    const center = relayoutFromExistingVListLayout(
       layoutIr.vlist,
-      result.report,
+      result.vlistLayout,
       {
         width: 150,
         height: 50,
         verticalAlign: "center",
         lineHeight: 12,
         firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
       }
     );
-    const bottom = result.report && layoutTexVListFromParagraphReport(
+    const bottom = relayoutFromExistingVListLayout(
       layoutIr.vlist,
-      result.report,
+      result.vlistLayout,
       {
         width: 150,
         height: 50,
         verticalAlign: "bottom",
         lineHeight: 12,
         firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(result.vlistLayout),
       }
     );
 
@@ -1237,36 +1266,17 @@ describe("simple TeX paragraph layout", () => {
     const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
     const placeholderStart = source.indexOf(String.raw`\includegraphics`);
     const placeholderEnd = source.indexOf(String.raw` \par Beta`);
-    const supportedSource =
-      source.slice(0, placeholderStart) +
-      " ".repeat(placeholderEnd - placeholderStart) +
-      source.slice(placeholderEnd);
     const parsed = parseSimpleTexParagraphIr(source);
-    const layoutIr = createSimpleTexLayoutDocumentIr({
-      blocks: parsed.blocks,
-      items: parsed.items,
-      defaultAlignment: "ragged-right",
-      font: computerModernTexMetricProvider.resolveFont(),
-      options: {},
-    });
-    const supported = layoutSimpleTexParagraph(supportedSource, {
+    const supported = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:vlist-placeholder-reference",
       width: 150,
       alignment: "ragged-right",
+      fallbackPolicy: "placeholder",
     });
 
     expect(parsed.unsupportedCommand).toBe(true);
     expect(supported.supported).toBe(true);
-    const vlistLayout = supported.report && layoutTexVListFromParagraphReport(
-      layoutIr.vlist,
-      supported.report,
-      {
-        width: 150,
-        lineHeight: 12,
-        firstLineAscent: 8.5,
-        paragraphLineAssignments: paragraphLineAssignmentsFromLayout(supported.vlistLayout),
-      }
-    );
+    const vlistLayout = supported.vlistLayout;
 
     expect(vlistLayout && {
       linePlacementYs: vlistLayout.linePlacements.map((placement) => placement.y),

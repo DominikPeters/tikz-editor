@@ -17,24 +17,17 @@ export {
   type PreparedSimpleTexVList,
 } from "./prepare-simple.js";
 export {
-  layoutSimpleTexVListFromHorizontalParagraphReport,
-  layoutSimpleTexVListFromParagraphReport,
   layoutTexVListFromBrokenParagraphs,
   layoutTexVListFromCombinedParagraphReport,
   layoutTexVListFromHorizontalParagraphs,
-  layoutTexVListFromHorizontalParagraphReport,
   layoutTexVListFromMeasuredParagraphs,
-  layoutTexVListFromParagraphReport,
-  type SimpleTexVListHorizontalParagraphReportLayoutOptions,
-  type SimpleTexVListParagraphReportLayoutOptions,
   type TexVListCombinedParagraphReportInput,
-  type TexVListCombinedParagraphReportLayoutOptions,
-  type TexVListBrokenParagraphReportLayoutOptions,
-  type TexVListBrokenParagraphReportLayoutResult,
+  type TexVListCombinedParagraphReportAssemblyOptions,
+  type TexVListBrokenParagraphReportAssemblyOptions,
+  type TexVListBrokenParagraphReportAssemblyResult,
   type TexVListHorizontalParagraphLayoutOptions,
   type TexVListMeasuredParagraphLayoutOptions,
-  type TexVListParagraphReportLayoutResult,
-  type TexVListParagraphReportLayoutOptions,
+  type TexVListParagraphReportAssemblyResult,
 } from "./report.js";
 export {
   texVListBoxLayoutReport,
@@ -51,9 +44,6 @@ export {
   attachTexHBoxesBeforeVListParagraphs,
 } from "./attachments.js";
 export {
-  appendTexVListParagraphLineAssignment,
-  measureTexVListParagraphBoxesFromReport,
-  validateTexVListParagraphLineAssignments,
   validateTexVListParagraphMeasurements,
 } from "./paragraph-measurement.js";
 export {

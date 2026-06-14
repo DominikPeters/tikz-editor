@@ -15,14 +15,12 @@ import {
   flattenPositionedTexVListItems,
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,
+  groupSimpleTexVListScopes,
   layoutTexVListItems,
   layoutTexVListFromBrokenParagraphs,
-  layoutSimpleTexVListFromHorizontalParagraphReport,
-  layoutSimpleTexVListFromParagraphReport,
   layoutTexVListFromCombinedParagraphReport,
+  layoutTexVListFromHorizontalParagraphs,
   layoutTexVListFromMeasuredParagraphs,
-  layoutTexVListFromParagraphReport,
-  groupSimpleTexVListScopes,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
   materializeParagraphVerticalGlueInVList,
@@ -34,10 +32,9 @@ import {
   texParagraphScopeContext,
   texVListGlueSetForTargetHeight,
   texVListParagraphItems,
-  appendTexVListParagraphLineAssignment,
   combineTexBrokenLayoutParagraphs,
-  validateTexVListParagraphLineAssignments,
   validateTexVListParagraphMeasurements,
+  type TexVListParagraphBoxMeasurement,
   type TexVListItemMeasurer,
   type TexVListItem,
 } from "../packages/core/src/text/tex/vlist/index.js";
@@ -1440,153 +1437,55 @@ describe("TeX vlist layout", () => {
   });
 });
 
-describe("TeX vlist report adapters", () => {
-  it("derives simple horizontal report line metrics from the vlist font", () => {
+describe("TeX vlist report assembly", () => {
+  it("derives simple horizontal line metrics from the vlist font", () => {
     const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta`);
     const rawVList = lowerSimpleTexBlocksToVList(parsed.blocks);
     const font = computerModernTexMetricProvider.resolveFont({
       fontId: "cmr10",
       atPt: 20,
     });
-    const report = {
-      paragraphId: "tex:simple-horizontal-vlist-font-metrics",
+    const document = prepareSimpleTexVList(rawVList, font).normalized;
+    const layout = layoutTexVListFromHorizontalParagraphs(document, {
       width: 100,
-      alignment: "ragged-right",
-      layoutMode: "wrap",
-      lines: [0, 1].map((lineIndex) => ({
-        lineIndex,
-        startRun: lineIndex,
-        endRun: lineIndex,
-        width: 20,
-        targetWidth: 100,
-        naturalWidth: 20,
-        glueSetRatio: 0,
-        badness: 0,
-        spaceCount: 0,
-        spaceDeltaPerGap: 0,
-        ascent: 7,
-        descent: 3,
-        xStart: 0,
-        xEnd: 20,
-        break: null,
-        segments: [{
-          runIndex: lineIndex,
-          kind: "text",
-          text: lineIndex === 0 ? "Alpha" : "Beta",
-          sourceStartRaw: 0,
-          sourceEndRaw: 5,
-          x: 0,
-          width: 20,
-        }],
-      })),
-      runs: [],
-      errors: [],
-      internalMode: "canonical",
-      internalDegradeReason: null,
-      externalFallbackUsed: false,
-      linebreakingMode: "feasible",
-    } as const;
-    const lineBoxes = report.lines.map((line) => ({
-      lineIndex: line.lineIndex,
-      y: 0,
-      targetWidth: line.targetWidth,
-      metrics: {
-        width: line.targetWidth,
-        height: line.ascent,
-        depth: line.descent,
-      },
-    }));
-
-    const layout = layoutSimpleTexVListFromHorizontalParagraphReport(rawVList, {
-      width: 100,
-      font,
-      report,
-      lineBoxes,
-      paragraphLineAssignments: [
-        { blockIndex: 0, lineIndices: [0] },
-        { blockIndex: 1, lineIndices: [1] },
+      lineHeight: 24,
+      firstLineIndex: 0,
+      firstLineAscent: 17,
+      paragraphLayouts: [
+        horizontalParagraphLayout(0, [0], 100, 7, 17),
+        horizontalParagraphLayout(1, [1], 100, 7, 17),
       ],
     });
 
-    expect(layout.layout.baseline).toEqual({ kind: "explicit", y: 17 });
-    expect(layout.layout.linePlacements).toEqual([
+    expect(layout.baseline).toEqual({ kind: "explicit", y: 17 });
+    expect(layout.linePlacements).toEqual([
       { lineIndex: 0, x: 0, y: 0, height: 24 },
       { lineIndex: 1, x: 0, y: 24, height: 24 },
     ]);
-    expect(layout.layout.metrics).toEqual({
+    expect(layout.metrics).toEqual({
       width: 100,
       height: 17,
       depth: 31,
     });
   });
 
-  it("appends vlist paragraph line assignments by block index", () => {
-    const assignments = [
-      { blockIndex: 0, lineIndices: [0] },
-    ];
-
-    appendTexVListParagraphLineAssignment(assignments, 1, [1]);
-    appendTexVListParagraphLineAssignment(assignments, 0, [2, 3]);
-
-    expect(assignments).toEqual([
-      { blockIndex: 0, lineIndices: [0, 2, 3] },
-      { blockIndex: 1, lineIndices: [1] },
-    ]);
-  });
-
-  it("prepares raw simple TeX vlists before report-backed layout", () => {
+  it("prepares raw simple TeX vlists before measured layout", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Alpha \par \begin{quote} Beta \end{quote} \par Delta`
     );
     const rawVList = lowerSimpleTexBlocksToVList(parsed.blocks);
-    const report = {
-      paragraphId: "tex:raw-simple-vlist-report",
-      width: 100,
-      alignment: "ragged-right",
-      layoutMode: "wrap",
-      lines: [0, 1, 2].map((lineIndex) => ({
-        lineIndex,
-        startRun: lineIndex,
-        endRun: lineIndex,
-        width: 20,
-        targetWidth: 100,
-        naturalWidth: 20,
-        glueSetRatio: 0,
-        badness: 0,
-        spaceCount: 0,
-        spaceDeltaPerGap: 0,
-        ascent: 7,
-        descent: 3,
-        xStart: 0,
-        xEnd: 20,
-        break: null,
-        segments: [{
-          runIndex: lineIndex,
-          kind: "text",
-          text: ["Alpha", "Beta", "Delta"][lineIndex],
-          sourceStartRaw: 0,
-          sourceEndRaw: 5,
-          x: 0,
-          width: 20,
-        }],
-      })),
-      runs: [],
-      errors: [],
-      internalMode: "canonical",
-      internalDegradeReason: null,
-      externalFallbackUsed: false,
-      linebreakingMode: "feasible",
-    } as const;
+    const font = computerModernTexMetricProvider.resolveFont();
+    const document = prepareSimpleTexVList(rawVList, font).normalized;
 
-    const layout = layoutSimpleTexVListFromParagraphReport(rawVList, report, {
+    const layout = layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
-      font: computerModernTexMetricProvider.resolveFont(),
       lineHeight: 12,
+      firstLineIndex: 0,
       firstLineAscent: 7,
-      paragraphLineAssignments: [
-        { blockIndex: 0, lineIndices: [0] },
-        { blockIndex: 1, lineIndices: [1] },
-        { blockIndex: 2, lineIndices: [2] },
+      paragraphMeasurements: [
+        paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
+        paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }),
+        paragraphMeasurement(2, [2], { width: 100, height: 7, depth: 5 }),
       ],
     });
 
@@ -1641,7 +1540,7 @@ describe("TeX vlist report adapters", () => {
     ])).toThrow("missing paragraph block 99");
   });
 
-  it("uses explicit paragraph line assignments when laying out report-backed vlist items", () => {
+  it("uses measured paragraph line ownership when laying out vlist items", () => {
     const document = {
       kind: "vlist",
       items: [
@@ -1676,52 +1575,15 @@ describe("TeX vlist report adapters", () => {
       readonly kind: "vlist";
       readonly items: readonly TexVListItem[];
     };
-    const report = {
-      paragraphId: "tex:assigned-vlist-lines",
-      width: 100,
-      alignment: "ragged-right",
-      layoutMode: "wrap",
-      lines: [0, 1].map((lineIndex) => ({
-        lineIndex,
-        startRun: lineIndex,
-        endRun: lineIndex,
-        width: 20,
-        targetWidth: 100,
-        naturalWidth: 20,
-        glueSetRatio: 0,
-        badness: 0,
-        spaceCount: 0,
-        spaceDeltaPerGap: 0,
-        ascent: 7,
-        descent: 3,
-        xStart: 0,
-        xEnd: 20,
-        break: null,
-        segments: [{
-          runIndex: lineIndex,
-          kind: "text",
-          text: lineIndex === 0 ? "Alpha" : "Beta",
-          sourceStartRaw: 0,
-          sourceEndRaw: 5,
-          x: 0,
-          width: 20,
-        }],
-      })),
-      runs: [],
-      errors: [],
-      internalMode: "canonical",
-      internalDegradeReason: null,
-      externalFallbackUsed: false,
-      linebreakingMode: "feasible",
-    } as const;
 
-    const layout = layoutTexVListFromParagraphReport(document, report, {
+    const layout = layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
       lineHeight: 12,
+      firstLineIndex: 0,
       firstLineAscent: 7,
-      paragraphLineAssignments: [
-        { blockIndex: 0, lineIndices: [0] },
-        { blockIndex: 1, lineIndices: [1] },
+      paragraphMeasurements: [
+        paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
+        paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }),
       ],
     });
 
@@ -1758,46 +1620,27 @@ describe("TeX vlist report adapters", () => {
       { blockIndex: 1, y: 12, height: 7, depth: 5 },
     ]);
 
-    expect(() => layoutTexVListFromParagraphReport(document, report, {
+    expect(() => layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
       lineHeight: 12,
-      firstLineAscent: 7,
-      paragraphLineAssignments: [
-        { blockIndex: 0, lineIndices: [0] },
+      paragraphMeasurements: [
+        paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
       ],
     })).toThrow("missing paragraph block 1");
-    expect(() => layoutTexVListFromParagraphReport(document, report, {
+    expect(() => layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
       lineHeight: 12,
-      firstLineAscent: 7,
-      paragraphLineAssignments: [
-        { blockIndex: 0, lineIndices: [0] },
-        { blockIndex: 1, lineIndices: [99] },
+      paragraphMeasurements: [
+        paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
+        {
+          ...paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }),
+          lineOffsets: [
+            { lineIndex: 1, y: 0 },
+            { lineIndex: 99, y: 0 },
+          ],
+        },
       ],
-    })).toThrow("references missing line 99");
-  });
-
-  it("validates vlist paragraph line assignments against paragraph items", () => {
-    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta`);
-    const document = lowerSimpleTexBlocksToVList(parsed.blocks);
-
-    expect(() => validateTexVListParagraphLineAssignments(document, [
-      { blockIndex: 0, lineIndices: [0] },
-      { blockIndex: 1, lineIndices: [1] },
-    ])).not.toThrow();
-    expect(() => validateTexVListParagraphLineAssignments(document, [
-      { blockIndex: 0, lineIndices: [0] },
-    ])).toThrow("missing paragraph block 1");
-    expect(() => validateTexVListParagraphLineAssignments(document, [
-      { blockIndex: 0, lineIndices: [0] },
-      { blockIndex: 0, lineIndices: [1] },
-      { blockIndex: 1, lineIndices: [2] },
-    ])).toThrow("duplicate block 0");
-    expect(() => validateTexVListParagraphLineAssignments(document, [
-      { blockIndex: 0, lineIndices: [0] },
-      { blockIndex: 1, lineIndices: [1] },
-      { blockIndex: 99, lineIndices: [2] },
-    ])).toThrow("missing paragraph block 99");
+    })).toThrow("stray line offset 99");
   });
 
   it("keeps combined paragraph line ownership independent of vlist assignments", () => {
@@ -1829,15 +1672,15 @@ describe("TeX vlist report adapters", () => {
     expect("paragraphLineAssignments" in combined).toBe(false);
   });
 
-  it("combines broken paragraph entries inside the vlist report adapter", () => {
+  it("combines broken paragraph entries for vlist report assembly", () => {
     const parsed = parseSimpleTexParagraphIr("Alpha");
     const document = lowerSimpleTexBlocksToVList(parsed.blocks);
     const metricProvider = computerModernTexMetricProvider;
     const font = metricProvider.resolveFont();
     const shaped = metricProvider.shapeText("Alpha", font);
 
-    const reportLayout = layoutTexVListFromBrokenParagraphs(document, {
-      paragraphId: "tex:vlist-broken-adapter",
+    const reportAssembly = layoutTexVListFromBrokenParagraphs(document, {
+      paragraphId: "tex:vlist-broken-report",
       width: 100,
       alignment: "ragged-right",
       layoutMode: "wrap",
@@ -1882,26 +1725,26 @@ describe("TeX vlist report adapters", () => {
           }],
           shapedRuns: new Map([[0, shaped]]),
           runWidths: new Map([[0, shaped.width]]),
-          errors: ["adapter warning"],
+          errors: ["paragraph warning"],
           linebreakingMode: "feasible",
         },
       }],
       initialErrors: ["initial warning"],
     });
 
-    if (reportLayout.status !== "laid-out") {
-      throw new Error("expected broken paragraph adapter to produce a layout");
+    if (reportAssembly.status !== "laid-out") {
+      throw new Error("expected broken paragraph report assembly to produce a layout");
     }
-    expect(reportLayout.combined.errors).toEqual([
+    expect(reportAssembly.combined.errors).toEqual([
       "initial warning",
-      "adapter warning",
+      "paragraph warning",
     ]);
-    expect(reportLayout.report).toMatchObject({
-      paragraphId: "tex:vlist-broken-adapter",
+    expect(reportAssembly.report).toMatchObject({
+      paragraphId: "tex:vlist-broken-report",
       lines: [{ lineIndex: 0 }],
-      errors: ["initial warning", "adapter warning"],
+      errors: ["initial warning", "paragraph warning"],
     });
-    expect(reportLayout.layout.reports).toEqual([reportLayout.report]);
+    expect(reportAssembly.layout.reports).toEqual([reportAssembly.report]);
   });
 
   it("returns an explicit empty result for broken paragraph entries without lines", () => {
@@ -1910,8 +1753,8 @@ describe("TeX vlist report adapters", () => {
     const metricProvider = computerModernTexMetricProvider;
     const font = metricProvider.resolveFont();
 
-    const reportLayout = layoutTexVListFromBrokenParagraphs(document, {
-      paragraphId: "tex:vlist-empty-broken-adapter",
+    const reportAssembly = layoutTexVListFromBrokenParagraphs(document, {
+      paragraphId: "tex:vlist-empty-broken-report",
       width: 100,
       alignment: "ragged-right",
       layoutMode: "wrap",
@@ -1921,7 +1764,7 @@ describe("TeX vlist report adapters", () => {
       initialErrors: ["no text"],
     });
 
-    expect(reportLayout).toMatchObject({
+    expect(reportAssembly).toMatchObject({
       status: "empty",
       combined: {
         runs: [],
@@ -1931,15 +1774,15 @@ describe("TeX vlist report adapters", () => {
     });
   });
 
-  it("builds paragraph reports through the vlist combined report adapter", () => {
+  it("builds paragraph reports through vlist combined report assembly", () => {
     const parsed = parseSimpleTexParagraphIr("Alpha");
     const document = lowerSimpleTexBlocksToVList(parsed.blocks);
     const metricProvider = computerModernTexMetricProvider;
     const font = metricProvider.resolveFont();
     const shaped = metricProvider.shapeText("Alpha", font);
 
-    const reportLayout = layoutTexVListFromCombinedParagraphReport(document, {
-      paragraphId: "tex:vlist-combined-adapter",
+    const reportAssembly = layoutTexVListFromCombinedParagraphReport(document, {
+      paragraphId: "tex:vlist-combined-report",
       width: 100,
       alignment: "ragged-right",
       layoutMode: "wrap",
@@ -1978,8 +1821,8 @@ describe("TeX vlist report adapters", () => {
       },
     });
 
-    expect(reportLayout.report).toMatchObject({
-      paragraphId: "tex:vlist-combined-adapter",
+    expect(reportAssembly.report).toMatchObject({
+      paragraphId: "tex:vlist-combined-report",
       width: 100,
       lines: [{
         lineIndex: 0,
@@ -1992,18 +1835,18 @@ describe("TeX vlist report adapters", () => {
         }],
       }],
     });
-    expect(reportLayout.layout.paragraphPlacements).toEqual([expect.objectContaining({
+    expect(reportAssembly.layout.paragraphPlacements).toEqual([expect.objectContaining({
       blockIndex: 0,
       lineIndices: [0],
       x: 0,
       y: 0,
     })]);
-    expect(reportLayout.layout.linePlacements).toEqual([expect.objectContaining({
+    expect(reportAssembly.layout.linePlacements).toEqual([expect.objectContaining({
       lineIndex: 0,
       x: 0,
       y: 0,
     })]);
-    expect(reportLayout.layout.reports).toEqual([reportLayout.report]);
+    expect(reportAssembly.layout.reports).toEqual([reportAssembly.report]);
   });
 });
 
@@ -2072,4 +1915,55 @@ function collectVListBoxes(items: readonly TexVListItem[]): readonly Extract<Tex
     boxes.push(...collectVListBoxes(item.items));
   }
   return boxes;
+}
+
+function paragraphMeasurement(
+  blockIndex: number,
+  lineIndices: readonly number[],
+  metrics: TexVListParagraphBoxMeasurement["standardMetrics"]
+): TexVListParagraphBoxMeasurement {
+  const advance = metrics.height + metrics.depth;
+  return {
+    blockIndex,
+    lineIndices,
+    lineOffsets: lineIndices.map((lineIndex, index) => ({
+      lineIndex,
+      y: index * advance,
+    })),
+    standardMetrics: metrics,
+    ruleLeadingMetrics: metrics,
+    standardAdvance: advance,
+    ruleLeadingAdvance: advance,
+  };
+}
+
+function horizontalParagraphLayout(
+  blockIndex: number,
+  lineIndices: readonly number[],
+  width: number,
+  height: number,
+  depth: number
+) {
+  return {
+    blockIndex,
+    lineIndices,
+    horizontal: {
+      metrics: {
+        width,
+        height,
+        depth,
+      },
+      lines: lineIndices.map((lineIndex, index) => ({
+        lineIndex,
+        y: index * (height + depth),
+        targetWidth: width,
+        metrics: {
+          width,
+          height,
+          depth,
+        },
+      })),
+      renderItems: [],
+    },
+  };
 }
