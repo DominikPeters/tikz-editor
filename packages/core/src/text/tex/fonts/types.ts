@@ -8,6 +8,20 @@ export interface GeneratedTexCharMetric {
   readonly height?: number;
   readonly depth?: number;
   readonly italicCorrection?: number;
+  readonly nextLarger?: number;
+  readonly varchar?: GeneratedTexExtensibleRecipe;
+}
+
+export interface GeneratedTexExtensibleRecipe {
+  readonly top?: number;
+  readonly mid?: number;
+  readonly bot?: number;
+  readonly rep?: number;
+}
+
+export interface GeneratedTexFontSourceMetadata {
+  readonly kind: "tfm" | "opentype";
+  readonly name: string;
 }
 
 export interface GeneratedTexFont {
@@ -15,6 +29,7 @@ export interface GeneratedTexFont {
   readonly codingScheme: string;
   readonly checksum: string;
   readonly designSize: number;
+  readonly source: GeneratedTexFontSourceMetadata;
   readonly fontdimen: Readonly<Record<string, number>>;
   readonly chars: Readonly<Record<string, GeneratedTexCharMetric>>;
   readonly ligKerns: readonly GeneratedTexLigKern[];

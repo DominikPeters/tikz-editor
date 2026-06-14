@@ -16,6 +16,7 @@ export type {
   TexMathScript,
   TexMathSourceSpan,
   TexMathSpacingCommand,
+  TexMathStyle,
   TexMathToken,
   TexMathTokenKind,
   TexMathUnsupportedItem,
@@ -26,3 +27,13 @@ export {
   tokenizeTexMath,
   type ParseTexMathOptions,
 } from "./parser.js";
+export {
+  defaultTexMathFontProfile,
+  luaLatexDefaultMathFontId,
+  luaLatexDefaultMathFontProfile,
+  type TexMathFontFamily,
+  type TexMathFontManifestEntry,
+  type TexMathFontProfile,
+  type TexMathFontRequest,
+  type TexMathParameters,
+} from "./font-profile.js";

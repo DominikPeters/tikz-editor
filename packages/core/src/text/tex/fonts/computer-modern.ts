@@ -33,6 +33,21 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
 
 export type DefaultComputerModernTextFont = typeof DEFAULT_COMPUTER_MODERN_TEXT_FONTS[number];
 
+export const DEFAULT_COMPUTER_MODERN_MATH_FONTS = [
+  "cmr10",
+  "cmr7",
+  "cmr5",
+  "cmmi10",
+  "cmmi7",
+  "cmmi5",
+  "cmsy10",
+  "cmsy7",
+  "cmsy5",
+  "cmex10",
+] as const;
+
+export type DefaultComputerModernMathFont = typeof DEFAULT_COMPUTER_MODERN_MATH_FONTS[number];
+
 export type ResolveComputerModernFontOptions = ResolveTexFontOptions;
 
 export class ComputerModernTexMetricProvider implements TexMetricProvider {

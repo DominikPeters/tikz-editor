@@ -5,6 +5,12 @@ export interface TexMathSourceSpan {
 
 export type TexMathDiagnosticSeverity = "warning" | "error";
 
+export type TexMathStyle =
+  | "display"
+  | "text"
+  | "script"
+  | "scriptscript";
+
 export type TexMathDiagnosticCode =
   | "duplicate-script"
   | "empty-script"

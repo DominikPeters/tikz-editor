@@ -1,7 +1,9 @@
 export {
   ComputerModernTexMetricProvider,
+  DEFAULT_COMPUTER_MODERN_MATH_FONTS,
   DEFAULT_COMPUTER_MODERN_TEXT_FONTS,
   computerModernTexMetricProvider,
+  type DefaultComputerModernMathFont,
   type DefaultComputerModernTextFont,
   type ResolveComputerModernFontOptions,
 } from "./fonts/computer-modern.js";

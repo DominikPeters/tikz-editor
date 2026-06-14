@@ -6,6 +6,8 @@ import { basename, dirname, join, resolve } from "node:path";
 
 const DEFAULT_FONTS = [
   "cmr10",
+  "cmr7",
+  "cmr5",
   "cmbx10",
   "cmti10",
   "cmbxti10",
@@ -15,6 +17,13 @@ const DEFAULT_FONTS = [
   "cmssbx10",
   "cmcsc10",
   "tcrm1000",
+  "cmmi10",
+  "cmmi7",
+  "cmmi5",
+  "cmsy10",
+  "cmsy7",
+  "cmsy5",
+  "cmex10",
 ];
 const DEFAULT_OTF_GLYPHS = [
   {
@@ -134,10 +143,13 @@ const outputPath = resolve(
 
 const atomPattern = /^(?<kind>[CODH])\s+(?<value>.+)$/;
 const charStartPattern = /^\s*\(CHARACTER\s+(?<atom>.+)$/;
-const metricPattern = /^\s*\((?<kind>CHARWD|CHARHT|CHARDP|CHARIC)\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
-const fontdimenPattern = /^\s*\((?<name>[A-Z]+)\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
-const labelPattern = /^\s*\(LABEL\s+(?<atom>.+)\)/;
 const plAtomSource = String.raw`(?:C\s+.|O\s+[0-7]+|D\s+\d+|H\s+[0-9A-Fa-f]+)`;
+const metricPattern = /^\s*\((?<kind>CHARWD|CHARHT|CHARDP|CHARIC)\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
+const nextLargerPattern = new RegExp(String.raw`^\s*\(NEXTLARGER\s+(?<atom>${plAtomSource})\)`);
+const varcharStartPattern = /^\s*\(VARCHAR\b/;
+const varcharPartPattern = new RegExp(String.raw`^\s*\((?<part>TOP|MID|BOT|REP)\s+(?<atom>${plAtomSource})\)`);
+const fontdimenPattern = /^\s*\((?<name>[A-Z0-9]+)\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
+const labelPattern = /^\s*\(LABEL\s+(?<atom>.+)\)/;
 const ligPattern = new RegExp(
   String.raw`^\s*\(LIG\s+(?<right>${plAtomSource})\s+(?<out>${plAtomSource})\)`
 );
@@ -184,6 +196,10 @@ function parsePl(pl) {
     codingScheme: "",
     checksum: "",
     designSize: 10,
+    source: {
+      kind: "tfm",
+      name: "",
+    },
     fontdimen: {},
     chars: {},
     ligKerns: [],
@@ -249,6 +265,20 @@ function parsePl(pl) {
         currentChar[key] = roundMetric(Number(metric.groups.value));
         continue;
       }
+      const nextLarger = nextLargerPattern.exec(line);
+      if (nextLarger?.groups) {
+        currentChar.nextLarger = parseAtom(nextLarger.groups.atom);
+        continue;
+      }
+      if (varcharStartPattern.test(line)) {
+        currentChar.varchar = {};
+        continue;
+      }
+      const varcharPart = varcharPartPattern.exec(line);
+      if (varcharPart?.groups && currentChar.varchar) {
+        currentChar.varchar[varcharPart.groups.part.toLowerCase()] = parseAtom(varcharPart.groups.atom);
+        continue;
+      }
       if (line.trim() === ")") {
         currentChar = null;
         continue;
@@ -297,6 +327,10 @@ function generate(fontNames) {
     }
     const pl = execFileSync("tftopl", [tfmPath], { encoding: "utf8" });
     const font = parsePl(pl);
+    font.source = {
+      kind: "tfm",
+      name: fontName,
+    };
     font.glyphs = extractSvgGlyphPaths(fontName, Object.keys(font.chars).map(Number));
     fonts[fontName] = font;
   }
@@ -558,6 +592,10 @@ function generateOtfGlyphFont(font) {
     codingScheme: "Unicode OpenType",
     checksum: "",
     designSize: 10,
+    source: {
+      kind: "opentype",
+      name: font.fileName,
+    },
     fontdimen: extractOtfFontDimen(fontPath),
     chars,
     ligKerns,
