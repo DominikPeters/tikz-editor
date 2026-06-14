@@ -6,6 +6,7 @@ import {
 import type {
   TexMathGlyphLayoutItem,
   TexMathHList,
+  TexMathHListItem,
 } from "./layout.js";
 
 const SVG_UNIT_SCALE = 100;
@@ -22,7 +23,28 @@ export function renderTexMathHListSvgBody(
   const pieces = [
     `<g data-tex-math-hlist="true" data-tex-math-style="${escapeXmlAttribute(hlist.style)}" data-source-start="${hlist.sourceSpan.start}" data-source-end="${hlist.sourceSpan.end}">`,
   ];
-  for (const item of hlist.items) {
+  pieces.push(...renderMathHListItems(hlist.items, fontProfile, 0, 0));
+  pieces.push("</g>");
+  return pieces.join("");
+}
+
+function renderMathHListItems(
+  items: readonly TexMathHListItem[],
+  fontProfile: TexMathFontProfile,
+  originX: number,
+  originY: number
+): string[] {
+  const pieces: string[] = [];
+  for (const item of items) {
+    if (item.kind === "hlist") {
+      pieces.push(...renderMathHListItems(
+        item.items,
+        fontProfile,
+        originX + item.x,
+        originY + item.y
+      ));
+      continue;
+    }
     if (item.kind !== "glyph") {
       continue;
     }
@@ -30,18 +52,19 @@ export function renderTexMathHListSvgBody(
       fontId: item.fontId,
       atPt: item.atPt,
     });
-    const path = renderMathGlyphPath(item, font);
+    const path = renderMathGlyphPath(item, font, originX, originY);
     if (path) {
       pieces.push(path);
     }
   }
-  pieces.push("</g>");
-  return pieces.join("");
+  return pieces;
 }
 
 function renderMathGlyphPath(
   item: TexMathGlyphLayoutItem,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  originX: number,
+  originY: number
 ): string {
   const d = font.data.glyphs?.[String(item.code)] ?? "";
   if (!d) {
@@ -54,7 +77,7 @@ function renderMathGlyphPath(
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
     ` d="${escapeXmlAttribute(d)}"`,
-    ` transform="translate(${formatSvgNumber(item.x * SVG_UNIT_SCALE)} 0) scale(${formatSvgNumber(scale)})" />`,
+    ` transform="translate(${formatSvgNumber((originX + item.x) * SVG_UNIT_SCALE)} ${formatSvgNumber((originY + item.y) * SVG_UNIT_SCALE)}) scale(${formatSvgNumber(scale)})" />`,
   ].join("");
 }
 

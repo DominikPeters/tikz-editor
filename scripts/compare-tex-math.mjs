@@ -13,7 +13,7 @@ import { texOracleEnv } from "./lib/tex-oracle.mjs";
 const args = readArgs();
 const formulas = args.formulas.length > 0
   ? args.formulas
-  : ["a+1", "x-y", "xy", "a=b", "(z)"];
+  : ["a+1", "x-y", "xy", "a=b", "(z)", "x^2", "x_i", "x_i^2", "y^2", "y_i", "y_i^2"];
 const tolerance = args.tolerance;
 const results = formulas.map((formula) => compareFormula(formula, tolerance));
 const failed = results.filter((result) => !result.ok);
@@ -46,12 +46,15 @@ function compareFormula(formula, tolerance) {
         mismatches.push(`glyph ${index} differs: ours=${left.fontId}/${left.code} tex=${right.fontId}/${right.code}`);
       }
       compareNumber(mismatches, `glyph ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `glyph ${index} y`, left.y, right.y, tolerance);
       compareNumber(mismatches, `glyph ${index} width`, left.width, right.width, tolerance);
     } else if (left.kind === "glue" && right.kind === "glue") {
       compareNumber(mismatches, `glue ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `glue ${index} y`, left.y, right.y, tolerance);
       compareNumber(mismatches, `glue ${index} width`, left.width, right.width, tolerance);
     } else if (left.kind === "kern" && right.kind === "kern") {
       compareNumber(mismatches, `kern ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `kern ${index} y`, left.y, right.y, tolerance);
       compareNumber(mismatches, `kern ${index} width`, left.width, right.width, tolerance);
     }
   }
@@ -78,31 +81,46 @@ function ourTrace(formula) {
   }
   return {
     supported: true,
-    items: result.hlist.items.map((item) => {
-      if (item.kind === "glyph") {
-        return {
-          kind: "glyph",
-          fontId: item.fontId,
-          code: item.code,
-          x: item.x,
-          width: item.width,
-        };
-      }
-      if (item.kind === "glue") {
-        return {
-          kind: "glue",
-          x: item.x,
-          width: item.width,
-        };
-      }
-      return {
-        kind: "kern",
-        x: item.x,
-        width: item.width,
-      };
-    }),
+    items: flattenOurItems(result.hlist.items, 0, 0),
     width: result.hlist.width,
   };
+}
+
+function flattenOurItems(items, originX, originY) {
+  const traceItems = [];
+  for (const item of items) {
+    if (item.kind === "hlist") {
+      traceItems.push(...flattenOurItems(item.items, originX + item.x, originY + item.y));
+      continue;
+    }
+    if (item.kind === "glyph") {
+      traceItems.push({
+        kind: "glyph",
+        fontId: item.fontId,
+        code: item.code,
+        x: round(originX + item.x),
+        y: round(originY + item.y),
+        width: item.width,
+      });
+      continue;
+    }
+    if (item.kind === "glue") {
+      traceItems.push({
+        kind: "glue",
+        x: round(originX + item.x),
+        y: round(originY),
+        width: item.width,
+      });
+      continue;
+    }
+    traceItems.push({
+      kind: "kern",
+      x: round(originX + item.x),
+      y: round(originY),
+      width: item.width,
+    });
+  }
+  return traceItems;
 }
 
 function texTrace(formula) {
@@ -120,31 +138,34 @@ function texTrace(formula) {
     const items = [];
     let width = 0;
     for (const line of log.split(/\r?\n/)) {
-      const glyph = /^TIKZ_MATH_TRACE glyph x=(?<x>[-.\d]+) font=(?<font>\S+) char=(?<char>\d+) width=(?<width>[-.\d]+)/.exec(line);
+      const glyph = /^TIKZ_MATH_TRACE glyph x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) font=(?<font>\S+) char=(?<char>\d+) width=(?<width>[-.\d]+)/.exec(line);
       if (glyph?.groups) {
         items.push({
           kind: "glyph",
           x: round(Number(glyph.groups.x)),
+          y: round(Number(glyph.groups.y)),
           fontId: glyph.groups.font,
           code: Number(glyph.groups.char),
           width: round(Number(glyph.groups.width)),
         });
         continue;
       }
-      const glue = /^TIKZ_MATH_TRACE glue x=(?<x>[-.\d]+) width=(?<width>[-.\d]+)/.exec(line);
+      const glue = /^TIKZ_MATH_TRACE glue x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) width=(?<width>[-.\d]+)/.exec(line);
       if (glue?.groups) {
         items.push({
           kind: "glue",
           x: round(Number(glue.groups.x)),
+          y: round(Number(glue.groups.y)),
           width: round(Number(glue.groups.width)),
         });
         continue;
       }
-      const kern = /^TIKZ_MATH_TRACE kern x=(?<x>[-.\d]+) width=(?<width>[-.\d]+)/.exec(line);
+      const kern = /^TIKZ_MATH_TRACE kern x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) width=(?<width>[-.\d]+)/.exec(line);
       if (kern?.groups) {
         items.push({
           kind: "kern",
           x: round(Number(kern.groups.x)),
+          y: round(Number(kern.groups.y)),
           width: round(Number(kern.groups.width)),
         });
         continue;
@@ -174,24 +195,78 @@ function traceLuaSource() {
   return String.raw`local glyph_id=node.id('glyph')
 local glue_id=node.id('glue')
 local kern_id=node.id('kern')
+local hlist_id=node.id('hlist')
+local vlist_id=node.id('vlist')
+local whatsit_id=node.id('whatsit')
 local function sp(v) return (v or 0)/65536 end
-local x = 0
-for n in node.traverse(tex.box.m.list) do
-  if n.id==glyph_id then
-    local f=font.getfont(n.font)
-    texio.write_nl(string.format('TIKZ_MATH_TRACE glyph x=%.6f font=%s char=%d width=%.6f', x, tostring(f and f.name), n.char, sp(n.width)))
-    x=x+sp(n.width)
-  elseif n.id==glue_id then
-    local w=n.width or (n.spec and n.spec.width) or 0
-    texio.write_nl(string.format('TIKZ_MATH_TRACE glue x=%.6f width=%.6f', x, sp(w)))
-    x=x+sp(w)
-  elseif n.id==kern_id then
-    local w=n.kern or n.width
-    texio.write_nl(string.format('TIKZ_MATH_TRACE kern x=%.6f width=%.6f', x, sp(w)))
-    x=x+sp(w)
+
+local walk_vlist
+local function node_width(n)
+  return sp(n.width or 0)
+end
+local function node_height(n)
+  return sp(n.height or 0)
+end
+local function node_depth(n)
+  return sp(n.depth or 0)
+end
+local function glue_width(n)
+  return sp(n.width or (n.spec and n.spec.width) or 0)
+end
+local function kern_width(n)
+  return sp(n.kern or n.width or 0)
+end
+
+local function walk_hlist(list, origin_x, baseline_y)
+  local x = origin_x
+  for n in node.traverse(list) do
+    if n.id==glyph_id then
+      local f=font.getfont(n.font)
+      texio.write_nl(string.format('TIKZ_MATH_TRACE glyph x=%.6f y=%.6f font=%s char=%d width=%.6f', x, baseline_y, tostring(f and f.name), n.char, node_width(n)))
+      x=x+node_width(n)
+    elseif n.id==glue_id then
+      local w=glue_width(n)
+      texio.write_nl(string.format('TIKZ_MATH_TRACE glue x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
+      x=x+w
+    elseif n.id==kern_id then
+      local w=kern_width(n)
+      texio.write_nl(string.format('TIKZ_MATH_TRACE kern x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
+      x=x+w
+    elseif n.id==hlist_id then
+      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0))
+      x=x+node_width(n)
+    elseif n.id==vlist_id then
+      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n))
+      x=x+node_width(n)
+    elseif n.id~=whatsit_id then
+      x=x+node_width(n)
+    end
+  end
+  return x
+end
+
+function walk_vlist(list, origin_x, baseline_y, height)
+  local y = baseline_y - height
+  for n in node.traverse(list) do
+    if n.id==kern_id then
+      y=y+kern_width(n)
+    elseif n.id==glue_id then
+      y=y+glue_width(n)
+    elseif n.id==hlist_id then
+      local child_baseline = y + node_height(n)
+      walk_hlist(n.list, origin_x + sp(n.shift or 0), child_baseline)
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id==vlist_id then
+      local child_baseline = y + node_height(n)
+      walk_vlist(n.list, origin_x + sp(n.shift or 0), child_baseline, node_height(n))
+      y=y+node_height(n)+node_depth(n)
+    else
+      y=y+node_height(n)+node_depth(n)
+    end
   end
 end
-texio.write_nl(string.format('TIKZ_MATH_TRACE width=%.6f', x))
+local width = walk_hlist(tex.box.m.list, 0, 0)
+texio.write_nl(string.format('TIKZ_MATH_TRACE width=%.6f', width))
 `;
 }
 

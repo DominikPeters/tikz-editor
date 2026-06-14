@@ -41,6 +41,20 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(0 0) scale(70)"');
   });
 
+  it("renders simple script hlists recursively with vertical glyph offsets", () => {
+    const parsed = parseTexMath("x^2");
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmr7" data-tex-glyph="50"');
+    expect(body).toContain('transform="translate(571.528 -362.892) scale(70)"');
+  });
+
   it("creates inline math boxes for supported formulas without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
@@ -68,16 +82,40 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
   });
 
+  it("creates inline math boxes for simple superscripts and subscripts without MathJax", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const box = provider.getInlineMathBox({
+      source: "$y_i^2$",
+      content: "y_i^2",
+      delimiter: "dollar",
+      sourceStart: 4,
+      sourceEnd: 11,
+      contentStart: 5,
+      contentEnd: 10,
+    });
+
+    expect(box).toMatchObject({
+      source: "$y_i^2$",
+      content: "y_i^2",
+      sourceStart: 4,
+      sourceEnd: 11,
+      width: expect.closeTo(9.747739, 6),
+    });
+    expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+    expect(box?.svgBody).toContain('data-tex-font="cmr7" data-tex-glyph="50"');
+    expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="105"');
+  });
+
   it("returns null for unsupported formulas instead of approximate SVG", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
-      source: "$x^2$",
-      content: "x^2",
+      source: String.raw`$\frac{1}{2}$`,
+      content: String.raw`\frac{1}{2}`,
       delimiter: "dollar",
       sourceStart: 0,
-      sourceEnd: 5,
+      sourceEnd: 13,
       contentStart: 1,
-      contentEnd: 4,
+      contentEnd: 12,
     });
 
     expect(box).toBeNull();

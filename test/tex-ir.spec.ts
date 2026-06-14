@@ -881,7 +881,7 @@ describe("simple TeX paragraph IR", () => {
     ))
       .toMatchObject([
         { kind: "glyph", text: "•", code: 0x2022, font: { id: "lmroman10-regular" } },
-        { kind: "glyph", text: "–", code: 0x2013, font: { id: "lmroman10-regular" } },
+        { kind: "glyph", text: "–", code: 0x2013, font: { id: "lmroman10-bold" } },
         { kind: "glyph", text: "*", code: 42, font: { id: "tcrm1000" } },
         { kind: "glyph", text: ".", code: 183, font: { id: "tcrm1000" } },
       ]);
@@ -890,7 +890,7 @@ describe("simple TeX paragraph IR", () => {
       .map((item) => item.layout?.listItem?.label?.content)
     ).toEqual([
       { kind: "glyph", text: "•", code: 0x2022, fontId: "lmroman10-regular" },
-      { kind: "glyph", text: "–", code: 0x2013, fontId: "lmroman10-regular" },
+      { kind: "glyph", text: "–", code: 0x2013, fontId: "lmroman10-bold" },
       { kind: "glyph", text: "*", code: 42, fontId: "tcrm1000" },
       { kind: "glyph", text: ".", code: 183, fontId: "tcrm1000" },
     ]);

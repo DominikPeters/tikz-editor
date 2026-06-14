@@ -4,6 +4,7 @@ import {
   layoutTexMathList,
   parseTexMath,
   resolveMathGlyph,
+  type TexMathChildHListLayoutItem,
   type TexMathGlyphLayoutItem,
 } from "../packages/core/src/text/tex/index.js";
 
@@ -135,6 +136,59 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out simple superscripts with TeX script shifts and script space", () => {
+    const result = layout("x^2");
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist"]);
+    expect(result.hlist?.width).toBeCloseTo(10.20141, 5);
+    const script = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(script).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(5.71528, 5),
+      y: expect.closeTo(-3.62892, 5),
+      width: expect.closeTo(4.48613, 5),
+    });
+    expect(script?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr7",
+      code: 50,
+      x: 0,
+      y: 0,
+    });
+  });
+
+  it("lays out simple subscripts and combined scripts with TeX italic-correction offsets", () => {
+    const subscript = layout("x_i");
+    expect(subscript.supported).toBe(true);
+    expect(subscript.hlist?.width).toBeCloseTo(9.04457, 5);
+    expect(subscript.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(5.71528, 5),
+      y: expect.closeTo(1.5, 5),
+      width: expect.closeTo(3.3293, 5),
+    });
+
+    const combined = layout("y_i^2");
+    expect(combined.supported).toBe(true);
+    expect(combined.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "hlist"]);
+    expect(combined.hlist?.width).toBeCloseTo(9.747739, 6);
+    expect(combined.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(5.26161, 5),
+      y: expect.closeTo(-3.62892, 5),
+    });
+    expect(combined.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(4.90282, 5),
+      y: expect.closeTo(2.602982, 6),
+    });
+  });
+
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
     const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
@@ -153,11 +207,11 @@ describe("TeX math hlist layout", () => {
   });
 
   it("reports unsupported constructs instead of producing approximate layout", () => {
-    for (const source of ["x^2", String.raw`\frac{1}{2}`, "{x}"]) {
+    for (const source of [String.raw`\frac{1}{2}`, "{x}"]) {
       const result = layout(source);
       expect(result.supported).toBe(false);
       expect(result.hlist).toBeNull();
-      expect(result.errors[0]?.message).toContain("Only simple glyph math atoms");
+      expect(result.errors[0]?.message).toMatch(/Unsupported TeX math item|Only simple glyph math atoms/);
     }
   });
 });
