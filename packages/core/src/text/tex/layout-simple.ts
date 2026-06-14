@@ -1,6 +1,10 @@
 import type { Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
+import {
+  defaultTexTextFontProfile,
+  type TexTextFontProfile,
+} from "./fonts/text-profile.js";
 import type {
   ResolvedTexFont,
   ShapedTexTextRun,
@@ -33,6 +37,7 @@ export interface TexParagraphLayoutOptions {
   readonly fallbackPolicy?: "whole-node" | "placeholder";
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly textFontProfile?: TexTextFontProfile;
 }
 
 export interface TexParagraphLayoutResult {
@@ -64,8 +69,14 @@ export function layoutSimpleTexParagraph(
     };
   }
 
-  const metricProvider = options.metricProvider ?? computerModernTexMetricProvider;
-  const font = options.font ?? metricProvider.resolveFont();
+  const textFontProfile = options.textFontProfile ?? defaultTexTextFontProfile;
+  const metricProvider = options.metricProvider ?? textFontProfile.metricProvider ?? computerModernTexMetricProvider;
+  const defaultAtPt = metricProvider.resolveFont().atPt;
+  const font = options.font ?? textFontProfile.resolveTextFont(
+    textFontProfile.defaultFontState,
+    defaultAtPt,
+    metricProvider
+  );
   const layoutOptions: TexParagraphLayoutOptions = { ...options, font, metricProvider };
   const paragraphId = options.paragraphId ?? "tex:paragraph";
   const defaultAlignment = options.alignment ?? "ragged-right";

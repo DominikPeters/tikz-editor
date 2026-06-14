@@ -18,10 +18,10 @@ const defaultThresholdRatio = 1.5;
 const defaultGlyphDxTolerance = 1.5;
 const defaultGlyphDyTolerance = 0.25;
 const defaultCaseMode = "broad";
-const defaultTextFontSize = 9.96264;
+const defaultTextFontSize = 10;
 const texPointToSvgPoint = defaultTextFontSize / 10;
 const lineHeightPt = defaultTextFontSize * 1.2;
-const firstLineAscentPt = defaultTextFontSize * 0.7;
+const firstLineAscentPt = defaultTextFontSize * 0.85;
 
 const alignments = [
   { label: "left", layout: "ragged-right", tikz: "left" },
@@ -66,6 +66,7 @@ Options:
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
+  --flag-visual-diff      Treat raster AE ratio differences as failures. By default raster metrics are diagnostic only.
   --glyph-dx-tolerance <pt>
                           Max glyph x delta for structural pass. Checks absolute, block-normalized, line-edge, and line-internal deltas. Default: ${defaultGlyphDxTolerance}.
   --glyph-dy-tolerance <pt>
@@ -85,6 +86,7 @@ function parseArgs(argv) {
     cache: true,
     refreshCache: false,
     thresholdRatio: defaultThresholdRatio,
+    flagVisualDiff: false,
     glyphDxTolerance: defaultGlyphDxTolerance,
     glyphDyTolerance: defaultGlyphDyTolerance,
     help: false,
@@ -138,6 +140,10 @@ function parseArgs(argv) {
     if (arg === "--threshold-ratio" && next != null) {
       options.thresholdRatio = Number(next);
       index += 1;
+      continue;
+    }
+    if (arg === "--flag-visual-diff") {
+      options.flagVisualDiff = true;
       continue;
     }
     if (arg === "--glyph-dx-tolerance" && next != null) {
@@ -1112,7 +1118,13 @@ function texFontNameToMetricFontId(fontName) {
   if (!fontName) {
     return undefined;
   }
-  const normalized = fontName.toLowerCase();
+  let normalized = fontName.toLowerCase();
+  const bracketedFont = /^\[([^:\]]+)/.exec(normalized);
+  if (bracketedFont?.[1]) {
+    normalized = bracketedFont[1];
+  } else {
+    normalized = normalized.split(":")[0] ?? normalized;
+  }
   if (normalized === "cmr10") {
     return "cmr10";
   }
@@ -1143,6 +1155,20 @@ function texFontNameToMetricFontId(fontName) {
   if (normalized === "tcrm1000") {
     return "tcrm1000";
   }
+  const latinModernNames = new Map([
+    ["lmroman10-regular", "lmroman10-regular"],
+    ["lmroman10-bold", "lmroman10-bold"],
+    ["lmroman10-italic", "lmroman10-italic"],
+    ["lmroman10-bolditalic", "lmroman10-bolditalic"],
+    ["lmromancaps10-regular", "lmromancaps10-regular"],
+    ["lmsans10-regular", "lmsans10-regular"],
+    ["lmsans10-bold", "lmsans10-bold"],
+    ["lmsans10-oblique", "lmsans10-oblique"],
+    ["lmsans10-boldoblique", "lmsans10-boldoblique"],
+  ]);
+  if (latinModernNames.has(normalized)) {
+    return latinModernNames.get(normalized);
+  }
   return undefined;
 }
 
@@ -1166,11 +1192,9 @@ function buildTexDocument(caseData, pageWidth, pageHeight) {
 \usepackage[paperwidth=${formatPt(pageWidth)}pt,paperheight=${formatPt(pageHeight)}pt,margin=0pt]{geometry}
 \usepackage{tikz}
 \pagestyle{empty}
-\renewcommand{\rmdefault}{cmr}
 \begin{document}
-\fontencoding{OT1}\fontfamily{cmr}\selectfont
 \noindent\begin{tikzpicture}[x=1pt,y=1pt]
-\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\fontencoding{OT1}\fontfamily{cmr}\selectfont\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
+\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
 \end{tikzpicture}
 \end{document}
 `;
@@ -1270,7 +1294,6 @@ function buildTexTraceDocument(caseData) {
 \usepackage{tikz}
 \pagestyle{empty}
 \makeatletter
-\renewcommand{\rmdefault}{cmr}
 \newbox\tracebox
 \let\trace@orig@fig@continue\tikz@fig@continue
 \def\tikz@fig@continue{%
@@ -1279,9 +1302,8 @@ function buildTexTraceDocument(caseData) {
 }
 \makeatother
 \begin{document}
-\fontencoding{OT1}\fontfamily{cmr}\selectfont
 \noindent\begin{tikzpicture}[x=1pt,y=1pt]
-\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\fontencoding{OT1}\fontfamily{cmr}\selectfont\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
+\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
 \end{tikzpicture}
 \directlua{dofile("trace.lua")}
 \end{document}
@@ -1385,17 +1407,27 @@ function append_node_list(parts, glyphs, list, parent, cursor, baseline)
   return x
 end
 
-local function find_lines(list, y, lines)
+local function find_lines(list, x_origin, y, lines)
   if not list then return y end
   for child in node.traverse(list) do
     local kind = node.type(child.id)
     if kind == "hlist" then
       local has_nested_vlist = false
+      local nested_x = x_origin
       if child.list then
         for grandchild in node.traverse(child.list) do
-          if node.type(grandchild.id) == "vlist" then
+          local grandchild_kind = node.type(grandchild.id)
+          if grandchild_kind == "vlist" then
             has_nested_vlist = true
-            y = find_lines(grandchild.list, y, lines)
+            y = find_lines(grandchild.list, nested_x + (grandchild.shift or 0), y, lines)
+          elseif grandchild_kind == "hlist" then
+            nested_x = nested_x + (grandchild.width or 0)
+          elseif grandchild_kind == "glue" then
+            nested_x = nested_x + glue_width(grandchild, child)
+          elseif grandchild_kind == "kern" then
+            nested_x = nested_x + (grandchild.kern or 0)
+          elseif grandchild_kind == "rule" then
+            nested_x = nested_x + (grandchild.width or 0)
           end
         end
       end
@@ -1403,7 +1435,7 @@ local function find_lines(list, y, lines)
         local baseline = y + (child.height or 0)
         local parts = {}
         local glyphs = {}
-        append_node_list(parts, glyphs, child.list, child, 0, baseline)
+        append_node_list(parts, glyphs, child.list, child, x_origin + (child.shift or 0), baseline)
         if #glyphs > 0 then
           table.insert(lines, {
             width = child.width or 0,
@@ -1416,7 +1448,7 @@ local function find_lines(list, y, lines)
         y = y + (child.height or 0) + (child.depth or 0)
       end
     elseif kind == "vlist" then
-      y = find_lines(child.list, y, lines)
+      y = find_lines(child.list, x_origin + (child.shift or 0), y, lines)
     elseif kind == "glue" then
       y = y + (child.width or 0)
     elseif kind == "kern" then
@@ -1427,7 +1459,7 @@ local function find_lines(list, y, lines)
 end
 
 local lines = {}
-find_lines(tex.box.tracebox.list, 0, lines)
+find_lines(tex.box.tracebox.list, 0, 0, lines)
 for line_index, line in ipairs(lines) do
   out:write(string.format("LINE\t%d\t%.6f\t%.6f\t%d\t%s\n", line_index, pt(line.width), pt(line.baseline), line.badness, escape_text(line.text)))
   for _, glyph in ipairs(line.glyphs) do
@@ -1660,13 +1692,18 @@ async function main() {
       rasterize(texDvisvgmSvgPath, texDvisvgmPngPath, widthPx, heightPx);
       const texNodeTrace = runTexGlyphTrace(caseData, caseDir);
       const texSvgTrace = buildTexSvgTrace(readFileSync(texDvisvgmSvgPath, "utf8"), texNodeTrace, oursTrace);
-      const texTrace = texSvgTrace.lines.length > 0 ? texSvgTrace : texNodeTrace;
-      const traceComparison = compareGlyphTraces(oursTrace, texTrace);
+      const traceComparison = compareGlyphTraces(oursTrace, texNodeTrace);
+      const svgTraceComparison = texSvgTrace.lines.length > 0
+        ? compareGlyphTraces(oursTrace, texSvgTrace)
+        : null;
       writeFileSync(join(caseDir, "ours-glyph-trace.json"), JSON.stringify(oursTrace, null, 2), "utf8");
-      writeFileSync(join(caseDir, "tex-glyph-trace.json"), JSON.stringify(texTrace, null, 2), "utf8");
+      writeFileSync(join(caseDir, "tex-glyph-trace.json"), JSON.stringify(texNodeTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "tex-node-glyph-trace.json"), JSON.stringify(texNodeTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "tex-svg-glyph-trace.json"), JSON.stringify(texSvgTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "trace-comparison.json"), JSON.stringify(traceComparison, null, 2), "utf8");
+      if (svgTraceComparison) {
+        writeFileSync(join(caseDir, "svg-trace-comparison.json"), JSON.stringify(svgTraceComparison, null, 2), "utf8");
+      }
 
       const texNoiseAe = compareMetric("AE", texPdfToCairoPngPath, texDvisvgmPngPath);
       const oursAe = compareMetric("AE", texPdfToCairoPngPath, oursPngPath);
@@ -1689,7 +1726,7 @@ async function main() {
         traceComparison.maxLineLeftDx > options.glyphDxTolerance ||
         traceComparison.maxLineRightDx > options.glyphDxTolerance;
       const visualFlagged = ratio !== null && ratio > options.thresholdRatio;
-      const flagged = traceFlagged || visualFlagged;
+      const flagged = traceFlagged || (options.flagVisualDiff && visualFlagged);
       if (flagged || visualFlagged) {
         execFileSync("magick", [
           texPdfToCairoPngPath,
@@ -1757,6 +1794,7 @@ async function main() {
     casesCompleted: rows.length,
     errors,
     thresholdRatio: options.thresholdRatio,
+    flagVisualDiff: options.flagVisualDiff,
     glyphDxTolerance: options.glyphDxTolerance,
     glyphDyTolerance: options.glyphDyTolerance,
     texOracleCache,

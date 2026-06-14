@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_TEXT_FONT_SIZE } from "../packages/core/src/semantic/style/resolve.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
 
 const RETRY_MESSAGE =
@@ -726,7 +725,7 @@ describe("mathjax node text engine", () => {
 
     const ruleTransform = body.match(/<g transform="translate\(0 ([^)]+)\)" pointer-events="none"><rect x="0" y="0" width="24" height="3" fill="currentColor"/);
     expect(ruleTransform).not.toBeNull();
-    expect(Number(ruleTransform?.[1])).toBeCloseTo(8.8889 * DEFAULT_TEXT_FONT_SIZE / 10, 4);
+    expect(Number(ruleTransform?.[1])).toBeCloseTo(9.1, 4);
     expect(body).toContain('width="24" height="3" fill="currentColor"');
     expect(body.indexOf('data-line-index="0"')).toBeLessThan(
       body.indexOf('width="24" height="3" fill="currentColor"')
@@ -755,8 +754,7 @@ describe("mathjax node text engine", () => {
     expect(firstLine).not.toBeNull();
     expect(secondLine).not.toBeNull();
     expect(Number(firstLine?.[2])).toBeCloseTo(0, 4);
-    expect(Number(secondLine?.[2])).toBeGreaterThan(18.9);
-    expect(Number(secondLine?.[2])).toBeLessThan(19);
+    expect(Number(secondLine?.[2])).toBeCloseTo(19, 4);
     expect(Number(secondLine?.[2])).not.toBeCloseTo(12, 4);
   });
 

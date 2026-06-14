@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { renderTikzToSvg, renderTikzToSvgAsync } from "../packages/core/src/render/index.js";
 import { parseLength } from "../packages/core/src/semantic/coords/parse-length.js";
-import { DEFAULT_TEXT_FONT_SIZE } from "../packages/core/src/semantic/style/resolve.js";
 import type { SceneCircle, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
@@ -769,7 +768,7 @@ World};
     expect(xs.some((x) => x > 0.5)).toBe(true);
   });
 
-  it("uses TeX-shaped paragraph reports for simple wrapped Computer Modern text", async () => {
+  it("uses TeX-shaped paragraph reports for simple wrapped LuaLaTeX-default text", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
   \node[draw,text width=32pt,align=left] at (0,0) {Alpha Beta};
 \end{tikzpicture}`);
@@ -788,7 +787,7 @@ World};
     }
     expect(result.svg.svg).toContain('data-paragraph-id="tex:');
     expect(result.svg.svg).toContain('data-mjx-linebox="true"');
-    expect(result.svg.svg).toContain('data-tex-font="cmr10"');
+    expect(result.svg.svg).toContain('data-tex-font="lmroman10-regular"');
     expect(result.svg.svg).toContain("<path");
     expect(result.svg.svg).not.toContain("<text");
   });
@@ -814,7 +813,7 @@ World};
     expect(result.svg.svg).toContain('data-lineleading="7pt"');
     expect(readLineboxTranslateYs(result.svg.svg)).toEqual([
       expect.closeTo(0, 6),
-      expect.closeTo(DEFAULT_TEXT_FONT_SIZE * 1.2 + (parseLength("7pt", "pt") ?? 7), 6),
+      expect.closeTo(10 * 1.2 + (parseLength("7pt", "pt") ?? 7), 6),
     ]);
   });
 

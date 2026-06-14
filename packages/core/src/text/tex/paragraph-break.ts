@@ -10,6 +10,7 @@ import type {
   ShapedTexTextRun,
   TexMetricProvider,
 } from "./fonts/types.js";
+import type { TexTextFontProfile } from "./fonts/text-profile.js";
 import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
@@ -56,6 +57,7 @@ export interface TexParagraphBreakOptions {
   readonly tikzTextWidthNode?: boolean;
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly textFontProfile?: TexTextFontProfile;
 }
 
 export function breakTexParagraphRuns(params: {

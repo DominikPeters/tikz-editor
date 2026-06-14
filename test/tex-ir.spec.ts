@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeSimpleTexParagraph,
+  classicComputerModernTextFontProfile,
   computerModernTexMetricProvider,
   createSimpleTexLayoutDocumentIr,
   createSimpleTexLayoutDocumentIrFromPreparation,
+  luaLatexDefaultTextFontProfile,
   prepareSimpleTexLayoutDocument,
   prepareTexLayoutParagraphsFromVList,
   parseSimpleTexParagraphIr,
@@ -561,7 +563,7 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "justified",
       font,
-      options: {},
+      options: { textFontProfile: classicComputerModernTextFontProfile },
     });
 
     expect(layout.paragraphPlans).toHaveLength(1);
@@ -569,6 +571,7 @@ describe("simple TeX paragraph IR", () => {
       ? texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
           atPt: font.atPt,
           metricProvider: computerModernTexMetricProvider,
+          textFontProfile: classicComputerModernTextFontProfile,
         }).filter((item) => item.kind === "space")
       : [];
     expect(spaces.map((space) => space.spaceFactor)).toEqual([3000, 1000]);
@@ -584,13 +587,14 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "justified",
       font,
-      options: {},
+      options: { textFontProfile: classicComputerModernTextFontProfile },
     });
 
     expect(layout.paragraphPlans).toHaveLength(1);
     expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
       atPt: font.atPt,
       metricProvider: computerModernTexMetricProvider,
+      textFontProfile: classicComputerModernTextFontProfile,
     })
       .filter((item) => item.kind === "text")
       .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
@@ -611,24 +615,70 @@ describe("simple TeX paragraph IR", () => {
       ]);
   });
 
-  it("maps LuaLaTeX textnormal regular text to Latin Modern Roman", () => {
+  it("maps LuaLaTeX regular textnormal text to Latin Modern Roman", () => {
     const parsed = parseSimpleTexParagraphIr(String.raw`A \textnormal{B}`);
-    const font = computerModernTexMetricProvider.resolveFont();
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      10,
+      computerModernTexMetricProvider
+    );
     const layout = createSimpleTexLayoutDocumentIr({
       blocks: parsed.blocks,
       defaultAlignment: "justified",
       font,
-      options: {},
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
     });
 
     expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
       atPt: font.atPt,
       metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
     })
       .filter((item) => item.kind === "text")
       .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
-        { text: "A", font: "cmr10" },
+        { text: "A", font: "lmroman10-regular" },
         { text: "B", font: "lmroman10-regular" },
+      ]);
+  });
+
+  it("can materialize inline font commands through the LuaLaTeX default text profile", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A \textit{B \emph{C} \textbf{D}} \textnormal{\textbf{E}} \textrm{F} \textsf{G \textbf{H \textit{I}} \textsc{J}} \textsc{K \textsf{L} \textbf{M}} \textsf{\textbf{\textsc{N}}}`
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      10,
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmroman10-italic" },
+        { text: "C", font: "lmroman10-regular" },
+        { text: "D", font: "lmroman10-bolditalic" },
+        { text: "E", font: "lmroman10-bold" },
+        { text: "F", font: "lmroman10-regular" },
+        { text: "G", font: "lmsans10-regular" },
+        { text: "H", font: "lmsans10-bold" },
+        { text: "I", font: "lmsans10-boldoblique" },
+        { text: "J", font: "lmromancaps10-regular" },
+        { text: "K", font: "lmromancaps10-regular" },
+        { text: "L", font: "lmromancaps10-regular" },
+        { text: "M", font: "lmromancaps10-regular" },
+        { text: "N", font: "lmromancaps10-regular" },
       ]);
   });
 
@@ -641,13 +691,14 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "justified",
       font,
-      options: {},
+      options: { textFontProfile: classicComputerModernTextFontProfile },
     });
 
     expect(layout.paragraphPlans).toHaveLength(1);
     expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
       atPt: font.atPt,
       metricProvider: computerModernTexMetricProvider,
+      textFontProfile: classicComputerModernTextFontProfile,
     })
       .filter((item) => item.kind === "text")
       .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
@@ -678,7 +729,7 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "ragged-right",
       font,
-      options: {},
+      options: { textFontProfile: classicComputerModernTextFontProfile },
     });
 
     expect(layout.paragraphPlans).toHaveLength(1);
@@ -713,7 +764,7 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "ragged-right",
       font,
-      options: {},
+      options: { textFontProfile: classicComputerModernTextFontProfile },
     });
 
     expect(layout.paragraphPlans.map((plan) => {
@@ -770,7 +821,7 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "ragged-right",
       font,
-      options: {},
+      options: { textFontProfile: classicComputerModernTextFontProfile },
     });
 
     expect(layout.paragraphPlans.map((plan) => {
@@ -783,6 +834,7 @@ describe("simple TeX paragraph IR", () => {
         textItems: texLayoutItemsForParagraphPlan(plan, {
           atPt: font.atPt,
           metricProvider: computerModernTexMetricProvider,
+          textFontProfile: classicComputerModernTextFontProfile,
         })
           .filter((item) => item.kind === "text")
           .map((item) => ({ text: item.text, font: item.font.id })),

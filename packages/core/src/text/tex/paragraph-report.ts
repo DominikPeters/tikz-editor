@@ -232,6 +232,15 @@ function buildTexLineReport(
     const metrics = texShapedRunMetrics(shaped);
     ascent = Math.max(ascent, metrics.ascent);
     descent = Math.max(descent, metrics.descent);
+    const isSimpleInsertedDiscretionary =
+      discretionary.replaceStart === splitOffset &&
+      discretionary.replaceEnd === splitOffset &&
+      discretionary.replaceText.length === 0 &&
+      discretionary.postBreakText.length === 0;
+    const insertedWidth = line.break.width ?? discretionary.insertedWidth;
+    const segmentX = isSimpleInsertedDiscretionary
+      ? roundTexPt(x + insertedWidth - shaped.width)
+      : x;
     segments.push({
       runIndex: line.break.runIndex,
       kind: "text",
@@ -243,11 +252,11 @@ function buildTexLineReport(
       sourceEndRaw: line.break.sourceOffset,
       sourceKind: "text",
       fontId: runFont.id,
-      x,
+      x: segmentX,
       width: shaped.width,
-      caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
+      caretStops: shaped.caretStops.map((stop) => roundTexPt(segmentX + stop)),
     });
-    x = roundTexPt(x + shaped.width);
+    x = roundTexPt(x + (isSimpleInsertedDiscretionary ? insertedWidth : shaped.width));
   } else if (line.break?.kind === "hyphen" && line.break.visibleHyphen) {
     const runFont = params.shapedRuns.get(line.break.runIndex)?.font ?? params.font;
     const width = params.metricProvider.shapeText("-", runFont).width;

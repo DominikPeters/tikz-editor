@@ -126,6 +126,7 @@ export function prepareTexLayoutParagraphsFromVList(
         metricProvider: params.metricProvider,
         spaceGlueProfile: paragraphStateResult.spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
+        textFontProfile: params.options.textFontProfile,
       });
       if (listAttachments.marginLabelHBox) {
         marginLabelHBoxAttachments.push({

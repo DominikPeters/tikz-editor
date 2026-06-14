@@ -115,7 +115,7 @@ function texDefaultItemizeLabelContent(labelDepth: number): TexVBoxListItemLabel
       kind: "glyph",
       text: "\u2013",
       code: 0x2013,
-      fontId: "lmroman10-regular",
+      fontId: "lmroman10-bold",
     };
   }
   if (labelDepth === 3) {

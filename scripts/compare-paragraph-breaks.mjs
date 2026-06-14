@@ -24,7 +24,7 @@ const DEFAULT_WIDTHS = [120, 160, 220, 280, 360];
 const DEFAULT_CASE_COUNT = 25;
 const DEFAULT_MIN_WORDS = 20;
 const DEFAULT_MAX_WORDS = 90;
-const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v6-cmr10-inline-math";
+const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v7-lualatex-tu-inline-math";
 const DEFAULT_WORD_BANK_TEXT = `
 Lorem ipsum dolor sit amet consectetuer adipiscing elit Aenean commodo ligula eget dolor
 Aenean massa Cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus
@@ -84,7 +84,7 @@ Options:
   --max-words <n>        Fuzz maximum word count. Default: 90
   --inline-math-fuzz     Include simple inline math fragments in randomized paragraphs.
   --word-bank <file>     Plain text file used to build the fuzz word bank.
-  --font-encoding <enc>  One of OT1, T1. Default: OT1.
+  --font-encoding <enc>  One of TU, OT1, T1. Default: TU. OT1 forces cmr10.
   --oracle-cache-dir <dir>
                          Cache LuaLaTeX oracle JSON across runs. Default:
                          <out-dir>/oracle-cache
@@ -108,7 +108,7 @@ function parseArgs(argv) {
     inlineMathFuzz: false,
     textIsTex: false,
     wordBankPath: null,
-    fontEncoding: "OT1",
+    fontEncoding: "TU",
     oracleCacheDir: null,
     outDir: DEFAULT_OUT_DIR,
   };
@@ -185,7 +185,7 @@ function parseArgs(argv) {
     }
     if (arg === "--font-encoding" && next != null) {
       const normalized = next.toUpperCase();
-      if (normalized !== "OT1" && normalized !== "T1") {
+      if (normalized !== "TU" && normalized !== "OT1" && normalized !== "T1") {
         throw new Error(`Invalid font encoding: ${next}`);
       }
       options.fontEncoding = normalized;

@@ -1,4 +1,7 @@
-import type { DefaultComputerModernTextFont } from "./fonts/computer-modern.js";
+import {
+  defaultTexTextFontProfile,
+  type TexTextFontProfile,
+} from "./fonts/text-profile.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import {
   simpleTexInlineNodesToTokens,
@@ -109,7 +112,8 @@ export function simpleTexInlineNodesToLayoutItems(
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
-  initialFontState?: SimpleTexFontState
+  initialFontState?: SimpleTexFontState,
+  textFontProfile: TexTextFontProfile = defaultTexTextFontProfile
 ): TexLayoutInlineItem[] {
   return simpleTexSegmentToLayoutItems(
     {
@@ -123,7 +127,8 @@ export function simpleTexInlineNodesToLayoutItems(
     metricProvider,
     spaceGlueProfile,
     mathBoxProvider,
-    initialFontState
+    initialFontState,
+    textFontProfile
   );
 }
 
@@ -133,7 +138,8 @@ export function simpleTexSegmentToLayoutItems(
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
-  initialFontState?: SimpleTexFontState
+  initialFontState?: SimpleTexFontState,
+  textFontProfile: TexTextFontProfile = defaultTexTextFontProfile
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
@@ -147,7 +153,7 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "text") {
-      const font = resolveComputerModernFontForState(token.fontState, atPt, metricProvider);
+      const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
       const italicCorrectionAfter =
         token.italicCorrectionAfter === true &&
         !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]);
@@ -197,7 +203,7 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "forced-break") {
-      const font = resolveComputerModernFontForState(token.fontState, atPt, metricProvider);
+      const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
       items.push({
         kind: "forced-break",
         text: " ",
@@ -211,7 +217,7 @@ export function simpleTexSegmentToLayoutItems(
       continue;
     }
 
-    const font = resolveComputerModernFontForState(token.fontState, atPt, metricProvider);
+    const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
     items.push({
       kind: "space",
       text: " ",
@@ -233,57 +239,6 @@ function texItalicCorrectionSuppressedByNextToken(
   token: ReturnType<typeof simpleTexInlineNodesToTokens>[number] | undefined
 ): boolean {
   return token?.kind === "text" && (token.text.startsWith(",") || token.text.startsWith("."));
-}
-
-function resolveComputerModernFontForState(
-  state: SimpleTexFontState,
-  atPt: number,
-  metricProvider: TexMetricProvider
-): ResolvedTexFont {
-  return metricProvider.resolveFont({
-    fontId: computerModernFontIdForState(state),
-    atPt,
-  });
-}
-
-function computerModernFontIdForState(
-  state: SimpleTexFontState
-): DefaultComputerModernTextFont {
-  if (
-    state.family === "normal" &&
-    state.series === "medium" &&
-    state.shape === "upright"
-  ) {
-    return "lmroman10-regular";
-  }
-  if (state.family === "sans") {
-    if (state.series === "bold") {
-      return "cmssbx10";
-    }
-    if (state.shape === "small-caps") {
-      return "cmcsc10";
-    }
-    if (state.shape === "italic") {
-      return "cmssi10";
-    }
-    return "cmss10";
-  }
-  if (state.series === "bold" && state.shape === "small-caps") {
-    return "cmbx10";
-  }
-  if (state.series === "bold" && state.shape === "italic") {
-    return "cmbxti10";
-  }
-  if (state.series === "bold") {
-    return "cmbx10";
-  }
-  if (state.shape === "small-caps") {
-    return "cmcsc10";
-  }
-  if (state.shape === "italic") {
-    return "cmti10";
-  }
-  return "cmr10";
 }
 
 function updateSpaceFactorForText(current: number, text: string): number {

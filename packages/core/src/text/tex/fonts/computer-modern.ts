@@ -20,6 +20,14 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmssbx10",
   "cmcsc10",
   "lmroman10-regular",
+  "lmroman10-bold",
+  "lmroman10-italic",
+  "lmroman10-bolditalic",
+  "lmromancaps10-regular",
+  "lmsans10-regular",
+  "lmsans10-bold",
+  "lmsans10-oblique",
+  "lmsans10-boldoblique",
   "tcrm1000",
 ] as const;
 

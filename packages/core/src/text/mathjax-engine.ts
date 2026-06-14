@@ -16,6 +16,7 @@ import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import {
   computerModernTexMetricProvider,
   layoutSimpleTexParagraph,
+  luaLatexDefaultTextFontProfile,
 } from "./tex/index.js";
 import type {
   ResolvedTexFont,
@@ -100,6 +101,7 @@ export type MathJaxFont =
 
 const DEFAULT_FONT: MathJaxFont = "mathjax-newcm";
 const MIDLINE_FROM_BASELINE_RATIO = 0.215;
+const TEX_TEXT_BASE_FONT_SIZE = 10;
 const MATHJAX_PARAGRAPH_PT_PER_WIDTH_UNIT = 10;
 const MATHJAX_PARAGRAPH_WIDTH_UNIT_STEP = 0.001;
 const SINGLE_LINE_WIDTH_EPSILON_PT = 1e-4;
@@ -998,7 +1000,11 @@ function buildSimpleTexTextCacheEntry(params: {
     return null;
   }
   const metricProvider = computerModernTexMetricProvider;
-  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const renderFont = luaLatexDefaultTextFontProfile.resolveTextFont(
+    luaLatexDefaultTextFontProfile.defaultFontState,
+    TEX_TEXT_BASE_FONT_SIZE,
+    metricProvider
+  );
   const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
   let layout: ReturnType<typeof layoutSimpleTexParagraph>;
   try {
@@ -1008,6 +1014,7 @@ function buildSimpleTexTextCacheEntry(params: {
       alignment: params.alignment ?? "ragged-right",
       font: renderFont,
       metricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
       tikzTextWidthNode: true,
       mathBoxProvider: createMathJaxInlineMathBoxProvider(params.runtime),
     });
@@ -1122,7 +1129,7 @@ function createMathJaxInlineMathBoxProvider(runtime: MathJaxRuntime): TexMathBox
         cache.set(key, null);
         return null;
       }
-      const scale = DEFAULT_TEXT_FONT_SIZE / 1000;
+      const scale = TEX_TEXT_BASE_FONT_SIZE / 1000;
       const ascent = Math.max(0, -viewBox.y) * scale;
       const descent = Math.max(0, viewBox.height + viewBox.y) * scale;
       const box = {
@@ -1318,7 +1325,7 @@ function renderTexReportLineSvg(
   renderedLines: Set<number>
 ): string {
   renderedLines.add(line.lineIndex);
-  const font = options.metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const font = options.metricProvider.resolveFont({ atPt: TEX_TEXT_BASE_FONT_SIZE });
   const lineTop = texReportLineTop(report.paragraphId, line.lineIndex, options);
   const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
   const baseline = lineTop + options.firstLineAscent;
@@ -1353,7 +1360,7 @@ function renderTexReportLineSvg(
     const segmentFont = segment.fontId
       ? options.metricProvider.resolveFont({
         fontId: segment.fontId,
-        atPt: DEFAULT_TEXT_FONT_SIZE,
+        atPt: TEX_TEXT_BASE_FONT_SIZE,
       })
       : font;
     if (typeof segment.glyphCode === "number") {
@@ -1378,7 +1385,7 @@ function renderTexReportLineSvg(
 }
 
 function renderTexInlineMathSvg(body: string, x: number, baseline: number): string {
-  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(DEFAULT_TEXT_FONT_SIZE / 1000)})">${body}</g>`;
+  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(TEX_TEXT_BASE_FONT_SIZE / 1000)})">${body}</g>`;
 }
 
 function texReportLineTop(
@@ -1415,13 +1422,18 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
   readonly alignment?: NodeTextParagraphAlignment | null;
 }): string | null {
   const metricProvider = computerModernTexMetricProvider;
-  const renderFont = metricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const renderFont = luaLatexDefaultTextFontProfile.resolveTextFont(
+    luaLatexDefaultTextFontProfile.defaultFontState,
+    TEX_TEXT_BASE_FONT_SIZE,
+    metricProvider
+  );
   const layout = layoutSimpleTexParagraph(params.text, {
     paragraphId: "tex:debug-placeholder",
     width: params.width,
     alignment: params.alignment ?? "ragged-right",
     font: renderFont,
     metricProvider,
+    textFontProfile: luaLatexDefaultTextFontProfile,
     tikzTextWidthNode: true,
     fallbackPolicy: "placeholder",
   });

@@ -30,6 +30,102 @@ const DEFAULT_OTF_GLYPHS = [
       ["lig", 0xfb00, 0x6c, 0xfb04],
     ],
   },
+  {
+    fontName: "lmroman10-bold",
+    fileName: "lmroman10-bold.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman10-italic",
+    fileName: "lmroman10-italic.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman10-bolditalic",
+    fileName: "lmroman10-bolditalic.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmromancaps10-regular",
+    fileName: "lmromancaps10-regular.otf",
+    codeRanges: [[0x20, 0x7e]],
+  },
+  {
+    fontName: "lmsans10-regular",
+    fileName: "lmsans10-regular.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans10-bold",
+    fileName: "lmsans10-bold.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans10-oblique",
+    fileName: "lmsans10-oblique.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans10-boldoblique",
+    fileName: "lmsans10-boldoblique.otf",
+    codeRanges: [[0x20, 0x7e]],
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
 ];
 const outputPath = resolve(
   process.cwd(),
@@ -210,14 +306,6 @@ function generate(fontNames) {
   return fonts;
 }
 
-function parseTtxNumber(source, pattern, label) {
-  const match = pattern.exec(source);
-  if (!match?.groups) {
-    throw new Error(`Could not resolve ${label} from ttx output`);
-  }
-  return Number(match.groups.value);
-}
-
 function otfCodesForFont(font) {
   const codes = new Set(font.codes ?? []);
   for (const [start, end] of font.codeRanges ?? []) {
@@ -238,20 +326,6 @@ function parseOtfCmap(fontPath) {
     match = mapPattern.exec(cmap);
   }
   return entries;
-}
-
-function parseOtfMetricTable(fontPath) {
-  const head = execFileSync("ttx", ["-q", "-t", "head", "-o", "-", fontPath], { encoding: "utf8" });
-  const hmtx = execFileSync("ttx", ["-q", "-t", "hmtx", "-o", "-", fontPath], { encoding: "utf8" });
-  const unitsPerEm = parseTtxNumber(head, /<unitsPerEm value="(?<value>\d+)"\/>/, "unitsPerEm");
-  const metrics = new Map();
-  const metricPattern = /<mtx name="(?<name>[^"]+)" width="(?<width>\d+)"\s+lsb="[-\d]+"\/>/g;
-  let match = metricPattern.exec(hmtx);
-  while (match?.groups) {
-    metrics.set(match.groups.name, roundMetric(Number(match.groups.width) / unitsPerEm));
-    match = metricPattern.exec(hmtx);
-  }
-  return metrics;
 }
 
 function extractOtfFontDimen(fontPath) {
@@ -308,32 +382,177 @@ X
   }
 }
 
+function extractOtfCharMetrics(fontPath, codes) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-metrics-"));
+  try {
+    const fontDir = `${dirname(fontPath)}/`;
+    const fontFile = basename(fontPath);
+    const sortedCodes = codes
+      .filter((code) => Number.isInteger(code) && code >= 0)
+      .sort((a, b) => a - b);
+    const luaCodes = sortedCodes.join(",");
+    const texSource = `\\documentclass{article}
+\\usepackage{fontspec}
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=NoCommon]
+\\begin{document}
+X
+\\directlua{
+  local f = font.getfont(font.current())
+  local size = f.size or 1
+  for _, code in ipairs({${luaCodes}}) do
+    local c = (f.characters or {})[code]
+    if c then
+      texio.write_nl(
+        "TIKZ_CHAR_METRIC " .. tostring(code) ..
+        " width=" .. tostring((c.width or 0) / size) ..
+        " height=" .. tostring((c.height or 0) / size) ..
+        " depth=" .. tostring((c.depth or 0) / size) ..
+        " italic=" .. tostring((c.italic or 0) / size)
+      )
+    end
+  end
+}
+\\end{document}
+`;
+    writeFileSync(join(tempDir, "metrics.tex"), texSource, "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "metrics.tex"], {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
+      stdio: "pipe",
+    });
+    const log = readFileSync(join(tempDir, "metrics.log"), "utf8");
+    const metrics = new Map();
+    for (const line of log.split(/\r?\n/)) {
+      const match = /TIKZ_CHAR_METRIC (?<code>\d+) width=(?<width>[+-]?(?:\d+(?:\.\d*)?|\.\d+)) height=(?<height>[+-]?(?:\d+(?:\.\d*)?|\.\d+)) depth=(?<depth>[+-]?(?:\d+(?:\.\d*)?|\.\d+)) italic=(?<italic>[+-]?(?:\d+(?:\.\d*)?|\.\d+))/.exec(line);
+      if (!match?.groups) {
+        continue;
+      }
+      const metric = {
+        code: Number(match.groups.code),
+        width: roundMetric(Number(match.groups.width)),
+        height: roundMetric(Number(match.groups.height)),
+        depth: roundMetric(Number(match.groups.depth)),
+        italicCorrection: roundMetric(Number(match.groups.italic)),
+      };
+      metrics.set(metric.code, metric);
+    }
+    return metrics;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function extractOtfKernPairs(fontPath, codes) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-kerns-"));
+  try {
+    const fontDir = `${dirname(fontPath)}/`;
+    const fontFile = basename(fontPath);
+    const sortedCodes = codes
+      .filter((code) => code !== 0x20 && Number.isInteger(code) && code >= 0)
+      .sort((a, b) => a - b);
+    const pairProbes = [];
+    for (const left of sortedCodes) {
+      for (const right of sortedCodes) {
+        pairProbes.push(
+          `\\setbox\\pairbox=\\hbox{\\char"${left.toString(16).toUpperCase()}\\char"${right.toString(16).toUpperCase()}}%\n` +
+          `\\directlua{inspect_pair(${left}, ${right}, tex.box.pairbox)}`
+        );
+      }
+    }
+    const texSource = `\\documentclass{article}
+\\usepackage{fontspec}
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=TeX]
+\\newbox\\pairbox
+\\begin{document}
+\\directlua{
+  local kern_id = node.id("kern")
+  local function sp(value)
+    return (value or 0) / 65536
+  end
+  function inspect_pair(left, right, box)
+    local kern = 0
+    for n in node.traverse(box.list) do
+      if n.id == kern_id then
+        kern = kern + sp(n.kern or n.width)
+      end
+    end
+    if math.abs(kern) > 0.0000001 then
+      texio.write_nl("TIKZ_KERN " .. tostring(left) .. " " .. tostring(right) .. " " .. tostring(kern))
+    end
+  end
+}
+${pairProbes.join("\n")}
+\\end{document}
+`;
+    writeFileSync(join(tempDir, "kerns.tex"), texSource, "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "kerns.tex"], {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
+      stdio: "pipe",
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    const log = readFileSync(join(tempDir, "kerns.log"), "utf8");
+    const kerns = [];
+    for (const line of log.split(/\r?\n/)) {
+      const match = /TIKZ_KERN (?<left>\d+) (?<right>\d+) (?<width>[+-]?(?:\d+(?:\.\d*)?|\.\d+))/.exec(line);
+      if (!match?.groups) {
+        continue;
+      }
+      kerns.push([
+        "kern",
+        Number(match.groups.left),
+        Number(match.groups.right),
+        roundMetric(Number(match.groups.width) / 10),
+      ]);
+    }
+    return kerns;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 function generateOtfGlyphFont(font) {
   const fontPath = run("kpsewhich", [font.fileName]);
   if (!fontPath) {
     throw new Error(`Could not resolve ${font.fileName} through kpsewhich`);
   }
   const cmap = parseOtfCmap(fontPath);
-  const metrics = parseOtfMetricTable(fontPath);
+  const codes = otfCodesForFont(font);
+  const metrics = extractOtfCharMetrics(fontPath, codes);
   const chars = {};
   const glyphs = {};
-  for (const code of otfCodesForFont(font)) {
+  for (const code of codes) {
     const glyphName = cmap.get(code);
     if (!glyphName) {
       throw new Error(`Could not resolve cmap entry for U+${code.toString(16).toUpperCase()} in ${font.fileName}`);
     }
-    const width = metrics.get(glyphName);
-    if (width === undefined) {
-      throw new Error(`Could not resolve hmtx width for ${glyphName} in ${font.fileName}`);
+    const metric = metrics.get(code);
+    if (!metric) {
+      throw new Error(`Could not resolve LuaTeX character metric for ${glyphName} (U+${code.toString(16).toUpperCase()}) in ${font.fileName}`);
     }
-    chars[code] = {
-      code,
-      width,
-    };
+    chars[code] = metric;
     if (code !== 0x20) {
-      glyphs[code] = extractOtfSvgGlyphPath(fontPath, code);
+      glyphs[code] = "";
     }
   }
+  Object.assign(glyphs, extractOtfSvgGlyphPaths(fontPath, Object.keys(glyphs).map(Number)));
+  const ligKerns = [
+    ...font.ligKerns ?? [],
+    ...extractOtfKernPairs(fontPath, [
+      ...codes,
+      ...((font.ligKerns ?? [])
+        .filter((rule) => rule[0] === "lig")
+        .map((rule) => rule[3])),
+    ]),
+  ];
   return {
     family: font.fontName,
     codingScheme: "Unicode OpenType",
@@ -341,7 +560,7 @@ function generateOtfGlyphFont(font) {
     designSize: 10,
     fontdimen: extractOtfFontDimen(fontPath),
     chars,
-    ligKerns: font.ligKerns ?? [],
+    ligKerns,
     glyphs,
   };
 }
@@ -387,16 +606,21 @@ function escapeTexPath(value) {
   return value.replace(/\\/g, "\\textbackslash{}").replace(/([{}%#&_$])/g, "\\$1");
 }
 
-function extractOtfSvgGlyphPath(fontPath, code) {
+function extractOtfSvgGlyphPaths(fontPath, codes) {
   const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-glyph-"));
   try {
     const fontDir = `${dirname(fontPath)}/`;
     const fontFile = basename(fontPath);
-    const text = `\\char"${code.toString(16).toUpperCase()}`;
+    const sortedCodes = codes
+      .filter((code) => code !== 0x20)
+      .sort((a, b) => a - b);
+    const text = sortedCodes
+      .map((code) => `{\\char"${code.toString(16).toUpperCase()}}`)
+      .join("\\hskip1pt ");
     const texSource = `\\documentclass{article}
 \\usepackage{fontspec}
 \\pagestyle{empty}
-\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)}]
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=NoCommon]
 \\begin{document}
 ${text}
 \\end{document}
@@ -416,11 +640,30 @@ ${text}
       ["--pdf", "--no-fonts", "--exact-bbox", "--stdout", "glyph.pdf"],
       { cwd: tempDir, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }
     );
-    const path = /<path\s+id='g0-\d+'\s+d='([^']*)'\/>/.exec(output)?.[1];
-    if (!path) {
-      throw new Error(`Could not extract SVG path for U+${code.toString(16).toUpperCase()} from ${fontPath}`);
+    const pathsById = new Map();
+    const pathPattern = /<path\s+id='(?<id>g0-\d+)'\s+d='(?<path>[^']*)'\/>/g;
+    let pathMatch = pathPattern.exec(output);
+    while (pathMatch?.groups) {
+      pathsById.set(pathMatch.groups.id, pathMatch.groups.path);
+      pathMatch = pathPattern.exec(output);
     }
-    return path;
+    const usePattern = /<use\b[^>]*(?:xlink:href|href)='#(?<id>g0-\d+)'[^>]*>/g;
+    const useIds = [];
+    let useMatch = usePattern.exec(output);
+    while (useMatch?.groups) {
+      useIds.push(useMatch.groups.id);
+      useMatch = usePattern.exec(output);
+    }
+    const glyphs = {};
+    for (const [index, code] of sortedCodes.entries()) {
+      const pathId = useIds[index];
+      const path = pathId ? pathsById.get(pathId) : undefined;
+      if (!path) {
+        throw new Error(`Could not extract SVG path for U+${code.toString(16).toUpperCase()} from ${fontPath}`);
+      }
+      glyphs[code] = path;
+    }
+    return glyphs;
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

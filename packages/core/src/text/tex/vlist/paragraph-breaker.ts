@@ -65,6 +65,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         atPt: params.font.atPt,
         metricProvider: params.metricProvider,
         mathBoxProvider: params.options.mathBoxProvider,
+        textFontProfile: params.options.textFontProfile,
       })
     );
     if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {

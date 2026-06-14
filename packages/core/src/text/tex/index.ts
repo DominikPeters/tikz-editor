@@ -6,6 +6,14 @@ export {
   type ResolveComputerModernFontOptions,
 } from "./fonts/computer-modern.js";
 export {
+  classicComputerModernFontIdForState,
+  classicComputerModernTextFontProfile,
+  defaultTexTextFontProfile,
+  luaLatexDefaultFontIdForState,
+  luaLatexDefaultTextFontProfile,
+  type TexTextFontProfile,
+} from "./fonts/text-profile.js";
+export {
   analyzeSimpleTexParagraph,
   getSimpleTexFallbackReason,
   layoutSimpleTexParagraph,

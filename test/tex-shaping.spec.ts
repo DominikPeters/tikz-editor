@@ -17,6 +17,7 @@ import {
 } from "../packages/core/src/text/knuth-plass/editor/hitmap.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
+  classicComputerModernTextFontProfile,
   computerModernTexMetricProvider,
   createSimpleTexLayoutDocumentIr,
   layoutSimpleTexParagraph,
@@ -794,6 +795,7 @@ describe("simple TeX paragraph layout", () => {
     const result = layoutSimpleTexParagraph(text, {
       paragraphId: "tex:regression",
       width,
+      textFontProfile: classicComputerModernTextFontProfile,
     });
 
     expect(result.supported).toBe(true);
@@ -807,6 +809,7 @@ describe("simple TeX paragraph layout", () => {
       paragraphId: "tex:target",
       width: 120,
       tolerance: 200,
+      textFontProfile: classicComputerModernTextFontProfile,
     });
 
     expect(result.supported).toBe(true);
@@ -833,6 +836,7 @@ describe("simple TeX paragraph layout", () => {
       paragraphId: "tex:discretionary-ligature",
       width: 24,
       tolerance: 9999,
+      textFontProfile: classicComputerModernTextFontProfile,
     });
 
     expect(result.supported).toBe(true);
@@ -845,6 +849,33 @@ describe("simple TeX paragraph layout", () => {
       "l",
       "ess",
     ]);
+  });
+
+  it("positions simple discretionary hyphens with TeX font kerns", () => {
+    const font = computerModernTexMetricProvider.resolveFont();
+    const result = layoutSimpleTexParagraph("manual", {
+      paragraphId: "tex:discretionary-hyphen-kern",
+      width: 23,
+      tolerance: 9999,
+      hyphenator: { hyphenate: () => [3] },
+      font,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["man-", "ual"]);
+    const firstLineSegments = result.report?.lines[0]?.segments ?? [];
+    const prefixSegment = firstLineSegments.find((segment) => segment.text === "man");
+    const hyphenSegment = firstLineSegments.find((segment) => segment.text === "-");
+    const hyphenWidth = computerModernTexMetricProvider.shapeText("-", font).width;
+    const expectedHyphenX = (prefixSegment?.x ?? 0) +
+      (prefixSegment?.width ?? 0) +
+      (result.report?.lines[0]?.break?.width ?? hyphenWidth) -
+      hyphenWidth;
+    expect(Math.abs((hyphenSegment?.x ?? 0) - expectedHyphenX)).toBeLessThan(0.005);
+    expect(hyphenSegment?.x).not.toBeCloseTo(
+      (prefixSegment?.x ?? 0) + (prefixSegment?.width ?? 0),
+      6
+    );
   });
 
   it("treats single newlines as interword spaces in simple TeX paragraphs", () => {
@@ -1232,7 +1263,7 @@ describe("simple TeX paragraph layout", () => {
       y: item.y,
       height: item.metrics.height,
     }))).toEqual([
-      { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(6.94, 2) },
+      { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(7.16, 2) },
       { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 12, height: expect.closeTo(16.83, 2) },
       { kind: "glue", role: undefined, y: 50, height: 10 },
       { kind: "paragraph", role: undefined, y: 60, height: expect.closeTo(6.94, 2) },
@@ -1304,8 +1335,8 @@ describe("simple TeX paragraph layout", () => {
       y: item.y,
       depth: item.metrics.depth,
     }))).toEqual([
-      { kind: "paragraph", y: 0, depth: expect.closeTo(24.06, 2) },
-      { kind: "paragraph", y: 31, depth: expect.closeTo(5.17, 2) },
+      { kind: "paragraph", y: 0, depth: expect.closeTo(23.84, 2) },
+      { kind: "paragraph", y: 31, depth: expect.closeTo(4.95, 2) },
     ]);
   });
 
@@ -1347,7 +1378,7 @@ describe("simple TeX paragraph layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 11.8889]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 12.1]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
@@ -1357,8 +1388,8 @@ describe("simple TeX paragraph layout", () => {
       text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
     }))).toEqual([
       { kind: "paragraph", y: 0, width: undefined, height: undefined, depth: undefined, text: "Alpha" },
-      { kind: "rule", y: 8.8889, width: 24, height: 2, depth: 1, text: undefined },
-      { kind: "paragraph", y: 11.8889, width: undefined, height: undefined, depth: undefined, text: "Beta" },
+      { kind: "rule", y: 9.1, width: 24, height: 2, depth: 1, text: undefined },
+      { kind: "paragraph", y: 12.1, width: undefined, height: undefined, depth: undefined, text: "Beta" },
     ]);
   });
 
@@ -1649,7 +1680,7 @@ describe("simple TeX paragraph layout", () => {
         {
           kind: "paragraph",
           y: 0,
-          metrics: expect.objectContaining({ height: expect.closeTo(6.94, 2) }),
+          metrics: expect.objectContaining({ height: expect.closeTo(7.16, 2) }),
           text: "Alpha",
           reason: undefined,
           sourceSpan: { start: 0, end: 5 },
@@ -2939,7 +2970,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines[0]?.segments[0]).toMatchObject({
       kind: "text",
       text: "1.",
-      fontId: "cmr10",
+      fontId: "lmroman10-regular",
     });
     expect(result.report?.lines[0]?.segments[0]?.x ?? 0).toBeLessThan(20);
     expect(result.report?.lines[0]?.segments[1]).toMatchObject({
@@ -3109,12 +3140,12 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines[0]?.segments[0]).toMatchObject({
       kind: "text",
       text: "Step",
-      fontId: "cmr10",
+      fontId: "lmroman10-regular",
     });
     expect(result.report?.lines[1]?.segments[0]).toMatchObject({
       kind: "text",
       text: "(a)",
-      fontId: "cmr10",
+      fontId: "lmroman10-regular",
     });
     expect(result.vlistLayout?.boxReport.items
       .filter((item) => item.itemKind === "hbox")
@@ -3178,13 +3209,13 @@ describe("simple TeX paragraph layout", () => {
       kind: "text",
       role: "list-label",
       text: "Term",
-      fontId: "cmbx10",
+      fontId: "lmroman10-bold",
       x: expect.closeTo(5, 6),
     });
     expect(result.report?.lines[0]?.segments[1]).toMatchObject({
       kind: "text",
       text: "Alpha",
-      fontId: "cmr10",
+      fontId: "lmroman10-regular",
     });
   });
 
@@ -3228,7 +3259,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines.map((line) => line.segments[0]))
       .toMatchObject([
         { text: "•", fontId: "lmroman10-regular", glyphCode: 0x2022 },
-        { text: "–", fontId: "lmroman10-regular", glyphCode: 0x2013 },
+        { text: "–", fontId: "lmroman10-bold", glyphCode: 0x2013 },
         { text: "*", fontId: "tcrm1000", glyphCode: 42 },
         { text: ".", fontId: "tcrm1000", glyphCode: 183 },
       ]);
@@ -3351,20 +3382,20 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines[0]?.segments
       .filter((segment) => segment.kind === "text")
       .map((segment) => ({ text: segment.text, fontId: segment.fontId }))).toEqual([
-        { text: "A", fontId: "cmr10" },
-        { text: "B", fontId: "cmti10" },
-        { text: "C", fontId: "cmr10" },
-        { text: "D", fontId: "cmbxti10" },
-        { text: "E", fontId: "cmbx10" },
-        { text: "F", fontId: "cmr10" },
-        { text: "G", fontId: "cmss10" },
-        { text: "H", fontId: "cmssbx10" },
-        { text: "I", fontId: "cmssbx10" },
-        { text: "J", fontId: "cmcsc10" },
-        { text: "K", fontId: "cmcsc10" },
-        { text: "L", fontId: "cmcsc10" },
-        { text: "M", fontId: "cmbx10" },
-        { text: "N", fontId: "cmssbx10" },
+        { text: "A", fontId: "lmroman10-regular" },
+        { text: "B", fontId: "lmroman10-italic" },
+        { text: "C", fontId: "lmroman10-regular" },
+        { text: "D", fontId: "lmroman10-bolditalic" },
+        { text: "E", fontId: "lmroman10-bold" },
+        { text: "F", fontId: "lmroman10-regular" },
+        { text: "G", fontId: "lmsans10-regular" },
+        { text: "H", fontId: "lmsans10-bold" },
+        { text: "I", fontId: "lmsans10-boldoblique" },
+        { text: "J", fontId: "lmromancaps10-regular" },
+        { text: "K", fontId: "lmromancaps10-regular" },
+        { text: "L", fontId: "lmromancaps10-regular" },
+        { text: "M", fontId: "lmromancaps10-regular" },
+        { text: "N", fontId: "lmromancaps10-regular" },
       ]);
   });
 
@@ -3384,23 +3415,23 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines[0]?.segments
       .filter((segment) => segment.kind === "text")
       .map((segment) => ({ text: segment.text, fontId: segment.fontId }))).toEqual([
-        { text: "A", fontId: "cmr10" },
-        { text: "B", fontId: "cmti10" },
-        { text: "C", fontId: "cmbx10" },
-        { text: "D", fontId: "cmti10" },
-        { text: "E", fontId: "cmti10" },
-        { text: "F", fontId: "cmbxti10" },
-        { text: "G", fontId: "cmss10" },
-        { text: "H", fontId: "cmbx10" },
-        { text: "I", fontId: "cmssbx10" },
-        { text: "J", fontId: "cmcsc10" },
-        { text: "K", fontId: "cmcsc10" },
-        { text: "L", fontId: "cmcsc10" },
-        { text: "M", fontId: "cmbx10" },
-        { text: "N", fontId: "cmti10" },
-        { text: "O", fontId: "cmr10" },
-        { text: "P", fontId: "cmti10" },
-        { text: "Q", fontId: "cmr10" },
+        { text: "A", fontId: "lmroman10-regular" },
+        { text: "B", fontId: "lmroman10-italic" },
+        { text: "C", fontId: "lmroman10-bold" },
+        { text: "D", fontId: "lmroman10-italic" },
+        { text: "E", fontId: "lmroman10-italic" },
+        { text: "F", fontId: "lmroman10-bolditalic" },
+        { text: "G", fontId: "lmsans10-regular" },
+        { text: "H", fontId: "lmroman10-bold" },
+        { text: "I", fontId: "lmsans10-bold" },
+        { text: "J", fontId: "lmromancaps10-regular" },
+        { text: "K", fontId: "lmromancaps10-regular" },
+        { text: "L", fontId: "lmromancaps10-regular" },
+        { text: "M", fontId: "lmromancaps10-regular" },
+        { text: "N", fontId: "lmroman10-italic" },
+        { text: "O", fontId: "lmroman10-regular" },
+        { text: "P", fontId: "lmroman10-italic" },
+        { text: "Q", fontId: "lmroman10-regular" },
       ]);
   });
 
@@ -3444,7 +3475,7 @@ describe("simple TeX paragraph layout", () => {
 
     expect(centered.supported).toBe(true);
     expect(centered.report?.alignment).toBe("center");
-    expect(centered.report?.lines[0]?.xStart).toBeCloseTo(34.930645, 5);
+    expect(centered.report?.lines[0]?.xStart).toBeCloseTo(34.9285, 5);
     expect(raggedLeft.supported).toBe(true);
     expect(raggedLeft.report?.alignment).toBe("ragged-left");
     expect(raggedLeft.report?.lines[0]?.xEnd).toBeCloseTo(120, 5);
@@ -3572,6 +3603,7 @@ describe("simple TeX paragraph layout", () => {
       paragraphId: "tex:wrap",
       width: Math.max(alphaWidth, betaWidth) + 0.01,
       font,
+      textFontProfile: classicComputerModernTextFontProfile,
     });
 
     expect(result.supported).toBe(true);
@@ -3722,6 +3754,7 @@ describe("simple TeX paragraph layout", () => {
       paragraphId: "tex:hitmap",
       width: officeWidth + spaceWidth + avWidth + 0.01,
       font,
+      textFontProfile: classicComputerModernTextFontProfile,
     });
     const report = result.report;
     expect(report).not.toBeNull();
