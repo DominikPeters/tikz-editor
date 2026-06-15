@@ -86,6 +86,34 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses math accents with braced and single-atom bases", () => {
+    const result = parseTexMath(String.raw`\hat{x}+\vec y`);
+    const hat = atomAt(result, 0);
+    const vec = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(hat).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 7 },
+      nucleus: {
+        kind: "accent",
+        command: "hat",
+        commandSourceSpan: { start: 0, end: 4 },
+        sourceSpan: { start: 0, end: 7 },
+      },
+    });
+    expect(hat.nucleus.kind === "accent" ? hat.nucleus.base.sourceSpan : null).toEqual({ start: 5, end: 6 });
+    expect(vec).toMatchObject({
+      sourceSpan: { start: 8, end: 14 },
+      nucleus: {
+        kind: "accent",
+        command: "vec",
+        commandSourceSpan: { start: 8, end: 12 },
+      },
+    });
+    expect(vec.nucleus.kind === "accent" ? vec.nucleus.base.sourceSpan : null).toEqual({ start: 13, end: 14 });
+  });
+
   it("parses left-right delimiter groups with delimiter source spans", () => {
     const result = parseTexMath(String.raw`\left(\frac{1}{2}\right)`);
     const atom = atomAt(result, 0);

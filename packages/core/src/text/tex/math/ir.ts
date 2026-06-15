@@ -66,6 +66,7 @@ export type TexMathNucleus =
   | TexMathListNucleus
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
+  | TexMathAccentNucleus
   | TexMathLeftRightNucleus
   | TexMathUnsupportedNucleus;
 
@@ -110,6 +111,22 @@ export interface TexMathFractionNucleus {
 export interface TexMathRadicalNucleus {
   readonly kind: "radical";
   readonly radicand: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathAccentCommand =
+  | "bar"
+  | "dot"
+  | "ddot"
+  | "hat"
+  | "tilde"
+  | "vec";
+
+export interface TexMathAccentNucleus {
+  readonly kind: "accent";
+  readonly command: TexMathAccentCommand;
+  readonly base: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

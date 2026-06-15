@@ -89,6 +89,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('height="39.999"');
   });
 
+  it("renders math accents through TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\vec{x}+\hat{\frac{1}{2}}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="126"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="94"');
+    expect(body).toContain('transform="translate(-13.3675 0) scale(100)"');
+    expect(body).toContain('transform="translate(1863.0603 -414.2878) scale(100)"');
+  });
+
   it("renders simple radicals with the CM radical glyph and TeX rule", () => {
     const parsed = parseTexMath(String.raw`\sqrt{x}`);
     const result = layoutTexMathList(parsed.list);

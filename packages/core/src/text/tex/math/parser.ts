@@ -1,6 +1,7 @@
 import type {
   TexMathAtom,
   TexMathAtomClass,
+  TexMathAccentCommand,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDelimiter,
@@ -193,6 +194,10 @@ class TexMathParser {
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
       }
+      const accent = accentCommandName(token.text);
+      if (accent) {
+        return this.parseAccent(accent, allowScripts);
+      }
       if (commandName(token.text) === "left") {
         return this.parseLeftRight(allowScripts);
       }
@@ -293,6 +298,24 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private parseAccent(commandNameValue: TexMathAccentCommand, allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`);
+    const sourceSpan = spanUnion(command.sourceSpan, base?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "accent",
+        command: commandNameValue,
+        base: base?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
   private parseLeftRight(allowScripts: boolean): TexMathAtom {
     const leftCommand = this.advance();
     const leftDelimiter = this.parseDelimiter(leftCommand.sourceSpan, "\\left delimiter");
@@ -345,6 +368,7 @@ class TexMathParser {
     fallbackSpan: TexMathSourceSpan,
     label: string
   ): { delimiter: TexMathDelimiter; sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
     const token = this.peek();
     if (!token || token.kind === "space" || token.kind === "group-close" || token.kind === "subscript" || token.kind === "superscript") {
       this.addDiagnostic(
@@ -393,6 +417,7 @@ class TexMathParser {
     fallbackSpan: TexMathSourceSpan,
     label: string
   ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
     const next = this.peek();
     if (next?.kind !== "group-open") {
       this.addDiagnostic(
@@ -412,7 +437,44 @@ class TexMathParser {
     };
   }
 
+  private parseRequiredMathArgument(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (!next || next.kind === "group-close" || next.kind === "subscript" || next.kind === "superscript") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        `Expected a math atom or braced ${label}.`,
+        next?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    if (next.kind === "group-open") {
+      const open = this.expectGroupOpen();
+      const list = this.parseList({ stopAtGroupClose: true });
+      const close = this.consumeGroupClose(open.sourceSpan);
+      return {
+        list,
+        sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? list.sourceSpan),
+      };
+    }
+    const item = this.parseItem(false);
+    const list = {
+      kind: "math-list",
+      items: item ? [item] : [],
+      sourceSpan: item?.sourceSpan ?? fallbackSpan,
+    } satisfies TexMathList;
+    return {
+      list,
+      sourceSpan: list.sourceSpan,
+    };
+  }
+
   private parseScriptArgument(operatorSpan: TexMathSourceSpan): TexMathScript | null {
+    this.skipSpaces();
     const next = this.peek();
     if (!next || next.kind === "group-close" || next.kind === "subscript" || next.kind === "superscript") {
       this.addDiagnostic(
@@ -532,6 +594,12 @@ class TexMathParser {
   private isAtEnd(): boolean {
     return this.index >= this.tokens.length;
   }
+
+  private skipSpaces(): void {
+    while (this.peek()?.kind === "space") {
+      this.advance();
+    }
+  }
 }
 
 function emptyList(at: number): TexMathList {
@@ -563,6 +631,25 @@ function spacingCommandName(command: string): TexMathGlue["command"] | null {
     return name;
   }
   return null;
+}
+
+function accentCommandName(command: string): TexMathAccentCommand | null {
+  switch (commandName(command)) {
+    case "bar":
+      return "bar";
+    case "dot":
+      return "dot";
+    case "ddot":
+      return "ddot";
+    case "hat":
+      return "hat";
+    case "tilde":
+      return "tilde";
+    case "vec":
+      return "vec";
+    default:
+      return null;
+  }
 }
 
 function atomClassForCharacter(char: string): TexMathAtomClass {

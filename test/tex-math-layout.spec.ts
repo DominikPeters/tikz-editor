@@ -259,6 +259,67 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out math accents with TeX skew and italic-width handling", () => {
+    const hatX = layout(String.raw`\hat{x}`);
+    expect(hatX.supported).toBe(true);
+    expect(hatX.hlist?.width).toBeCloseTo(5.71528, 5);
+    expect(hatX.hlist?.items).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "cmr10",
+        code: 94,
+        x: expect.closeTo(0.63542, 5),
+        y: 0,
+      },
+      {
+        kind: "hlist",
+        items: [{ kind: "glyph", fontId: "cmmi10", code: 120, x: 0 }],
+      },
+    ]);
+
+    const hatY = layout(String.raw`\hat{y}`);
+    expect(hatY.supported).toBe(true);
+    expect(hatY.hlist?.width).toBeCloseTo(5.26161, 5);
+    expect(hatY.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      items: [{ kind: "glyph", fontId: "cmmi10", code: 121 }],
+    });
+    expect(hatY.hlist?.items[1]?.kind === "hlist" ? hatY.hlist.items[1].items : []).toHaveLength(1);
+
+    const vecX = layout(String.raw`\vec{x}`);
+    expect(vecX.supported).toBe(true);
+    expect(vecX.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmmi10",
+      code: 126,
+      x: expect.closeTo(-0.133675, 5),
+    });
+
+    const grouped = layout(String.raw`\hat{xy}`);
+    expect(grouped.supported).toBe(true);
+    expect(grouped.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      items: [
+        { kind: "glyph", fontId: "cmmi10", code: 120 },
+        { kind: "glyph", fontId: "cmmi10", code: 121 },
+        { kind: "kern", width: expect.closeTo(0.35879, 5) },
+      ],
+    });
+  });
+
+  it("raises math accents over tall nuclei like TeX", () => {
+    const result = layout(String.raw`\hat{\frac{1}{2}}`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(6.386129, 6);
+    expect(result.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr10",
+      code: 94,
+      x: expect.closeTo(0.693055, 5),
+      y: expect.closeTo(-4.142878, 5),
+    });
+  });
+
   it("lays out simple radicals with TeX-style radical glyph shifts and overbar rule", () => {
     const result = layout(String.raw`\sqrt{x}`);
 

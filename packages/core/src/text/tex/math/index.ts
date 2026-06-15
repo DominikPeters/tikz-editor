@@ -1,6 +1,8 @@
 export type {
   TexMathAtom,
   TexMathAtomClass,
+  TexMathAccentCommand,
+  TexMathAccentNucleus,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDiagnosticSeverity,

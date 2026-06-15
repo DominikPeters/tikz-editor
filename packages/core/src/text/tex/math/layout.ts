@@ -11,6 +11,7 @@ import {
 } from "./font-profile.js";
 import type {
   TexMathAtom,
+  TexMathAccentCommand,
   TexMathDelimiter,
   TexMathGlyphNucleus,
   TexMathList,
@@ -133,6 +134,7 @@ const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
+const TEX_DEFAULT_SKEW_CHAR = 127;
 
 interface TexMathAtomLayout {
   readonly items: readonly TexMathHListItem[];
@@ -342,6 +344,9 @@ function layoutNucleus(
   if (nucleus.kind === "radical") {
     return layoutRadicalNucleus(nucleus, fontProfile, style, baseAtPt);
   }
+  if (nucleus.kind === "accent") {
+    return layoutAccentNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, baseAtPt);
   }
@@ -503,6 +508,91 @@ function layoutRadicandList(
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, baseAtPt });
   return result.supported ? result.hlist : null;
+}
+
+function layoutAccentBase(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList | null {
+  const item = list.items.length === 1 ? list.items[0] : null;
+  if (
+    item?.kind === "atom" &&
+    !item.subscript &&
+    !item.superscript &&
+    item.nucleus.kind === "glyph"
+  ) {
+    const nucleus = layoutGlyphNucleus(item.nucleus, fontProfile, style, baseAtPt);
+    if (!nucleus) {
+      return null;
+    }
+    return {
+      kind: "math-hlist",
+      style,
+      width: roundTexPt(nucleus.width + nucleus.italicCorrection),
+      height: nucleus.height,
+      depth: nucleus.depth,
+      sourceSpan: list.sourceSpan,
+      items: nucleus.items,
+    };
+  }
+
+  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt });
+  return result.supported ? result.hlist : null;
+}
+
+function layoutAccentNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const base = layoutAccentBase(nucleus.base, fontProfile, style, baseAtPt);
+  if (!base) {
+    return null;
+  }
+  const accent = resolveMathAccent(nucleus.command, fontProfile, style, baseAtPt, nucleus.commandSourceSpan);
+  if (!accent) {
+    return null;
+  }
+
+  const metric = selectAccentMetric(accent.font, accent.code, base.width);
+  const accentWidth = roundTexPt(tfmToPt(accent.font, metric.width));
+  const accentCenterWidth = roundTexPt(accentWidth + tfmToPt(accent.font, metric.italicCorrection));
+  const accentHeight = roundTexPt(tfmToPt(accent.font, metric.height));
+  const accentDepth = roundTexPt(tfmToPt(accent.font, metric.depth));
+  const accentItalicCorrection = roundTexPt(tfmToPt(accent.font, metric.italicCorrection));
+  const skew = accentBaseSkew(nucleus.base, fontProfile, style, baseAtPt);
+  const delta = Math.min(base.height, accentXHeight(accent.font));
+  const accentX = roundTexPt(skew + (base.width - accentCenterWidth) / 2);
+  const accentY = roundTexPt(delta - base.height);
+  const accentItem = {
+    kind: "glyph",
+    fontId: accent.font.id,
+    atPt: accent.font.atPt,
+    family: accent.family,
+    code: metric.code,
+    text: `\\${nucleus.command}`,
+    x: accentX,
+    y: accentY,
+    width: accentWidth,
+    height: accentHeight,
+    depth: accentDepth,
+    italicCorrection: accentItalicCorrection,
+    sourceSpan: nucleus.commandSourceSpan,
+  } satisfies TexMathGlyphLayoutItem;
+  const baseChild = childHList("nucleus", 0, 0, base, nucleus.base.sourceSpan);
+
+  return {
+    items: [accentItem, baseChild],
+    width: base.width,
+    height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
+    depth: base.depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
 }
 
 function layoutLeftRightNucleus(
@@ -916,6 +1006,99 @@ export function resolveMathGlyph(
     text: nucleus.text,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function resolveMathAccent(
+  command: TexMathAccentCommand,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  sourceSpan: TexMathSourceSpan
+): ResolvedMathGlyph | null {
+  const resolved = defaultLuaLatexMathAccent(command);
+  if (!resolved) {
+    return null;
+  }
+  return {
+    font: fontProfile.resolveMathFont({
+      family: resolved.family,
+      style,
+      baseAtPt,
+    }),
+    family: resolved.family,
+    code: resolved.code,
+    text: `\\${command}`,
+    sourceSpan,
+  };
+}
+
+function defaultLuaLatexMathAccent(
+  command: TexMathAccentCommand
+): Pick<ResolvedMathGlyph, "family" | "code"> | null {
+  switch (command) {
+    case "bar":
+      return { family: "operators", code: 22 };
+    case "dot":
+      return { family: "operators", code: 95 };
+    case "ddot":
+      return { family: "operators", code: 127 };
+    case "hat":
+      return { family: "operators", code: 94 };
+    case "tilde":
+      return { family: "operators", code: 126 };
+    case "vec":
+      return { family: "letters", code: 126 };
+  }
+}
+
+function selectAccentMetric(
+  font: ResolvedTexFont,
+  code: number,
+  baseWidth: number
+): GeneratedTexCharMetric {
+  let metric = requiredCharMetric(font, code);
+  while (metric.nextLarger !== undefined) {
+    const next = requiredCharMetric(font, metric.nextLarger);
+    if (tfmToPt(font, next.width) > baseWidth) {
+      break;
+    }
+    metric = next;
+  }
+  return metric;
+}
+
+function accentXHeight(font: ResolvedTexFont): number {
+  return tfmToPt(font, font.data.fontdimen.xheight);
+}
+
+function accentBaseSkew(
+  base: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  if (base.items.length !== 1) {
+    return 0;
+  }
+  const item = base.items[0];
+  if (
+    item?.kind !== "atom" ||
+    item.subscript ||
+    item.superscript ||
+    item.nucleus.kind !== "glyph"
+  ) {
+    return 0;
+  }
+  const glyph = resolveMathGlyph(item.nucleus, fontProfile, style, baseAtPt);
+  if (!glyph) {
+    return 0;
+  }
+  const kern = glyph.font.data.ligKerns.find((rule) =>
+    rule[0] === "kern" &&
+    rule[1] === glyph.code &&
+    rule[2] === TEX_DEFAULT_SKEW_CHAR
+  );
+  return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
 }
 
 function defaultLuaLatexMathSymbol(
