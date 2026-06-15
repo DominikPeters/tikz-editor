@@ -141,6 +141,11 @@ export type TexMathOperatorCommand =
   | "prod"
   | "sum";
 
+export type TexMathOperatorLimits =
+  | "display"
+  | "limits"
+  | "nolimits";
+
 export interface TexMathOperatorNucleus {
   readonly kind: "operator";
   readonly command: TexMathOperatorCommand;
@@ -174,12 +179,19 @@ export interface TexMathAtom {
   readonly nucleus: TexMathNucleus;
   readonly subscript?: TexMathScript;
   readonly superscript?: TexMathScript;
+  readonly limits?: TexMathOperatorLimits;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
 export interface TexMathGlue {
   readonly kind: "glue";
   readonly command: TexMathSpacingCommand;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathStyleChange {
+  readonly kind: "style-change";
+  readonly style: TexMathStyle;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -192,6 +204,7 @@ export interface TexMathUnsupportedItem {
 export type TexMathItem =
   | TexMathAtom
   | TexMathGlue
+  | TexMathStyleChange
   | TexMathUnsupportedItem;
 
 export interface TexMathList {

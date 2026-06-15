@@ -7,6 +7,7 @@ import type {
   TexMathNucleus,
   TexMathScript,
   TexMathSourceSpan,
+  TexMathStyleChange,
   TexMathStyle,
   TexMathUnsupportedItem,
 } from "./ir.js";
@@ -27,6 +28,7 @@ export interface TexMathResolvedGlue {
 
 export type TexMathSpacedItem =
   | TexMathAtom
+  | TexMathStyleChange
   | TexMathResolvedGlue
   | TexMathUnsupportedItem;
 
@@ -82,7 +84,13 @@ export function spaceTexMathList(
   const normalized = normalizeTexMathAtomClasses(list);
   const items: TexMathSpacedItem[] = [];
   let previousAtom: TexMathAtom | null = null;
+  let currentStyle = style;
   for (const item of normalized.items) {
+    if (item.kind === "style-change") {
+      items.push(item);
+      currentStyle = item.style;
+      continue;
+    }
     if (item.kind === "glue") {
       const resolved = resolveExplicitMathGlue(item);
       if (resolved) {
@@ -97,7 +105,7 @@ export function spaceTexMathList(
       continue;
     }
     if (previousAtom) {
-      const glue = texMathSpacingBetween(previousAtom, item, style);
+      const glue = texMathSpacingBetween(previousAtom, item, currentStyle);
       if (glue) {
         items.push(glue);
       }

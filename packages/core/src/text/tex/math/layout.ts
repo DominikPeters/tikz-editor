@@ -17,6 +17,7 @@ import type {
   TexMathList,
   TexMathNucleus,
   TexMathOperatorCommand,
+  TexMathOperatorLimits,
   TexMathSourceSpan,
   TexMathStyle,
 } from "./ir.js";
@@ -79,7 +80,7 @@ export interface TexMathRuleLayoutItem {
 
 export interface TexMathChildHListLayoutItem {
   readonly kind: "hlist";
-  readonly role: "nucleus" | "superscript" | "subscript";
+  readonly role: "nucleus" | "superscript" | "subscript" | "limit-superscript" | "limit-subscript";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -161,6 +162,7 @@ export function layoutTexMathList(
   options: TexMathLayoutOptions = {}
 ): TexMathLayoutResult {
   const style = options.style ?? "text";
+  let currentStyle = style;
   const fontProfile = options.fontProfile ?? defaultTexMathFontProfile;
   const baseAtPt = options.baseAtPt ?? 10;
   const spaced = spaceTexMathList(list, { style });
@@ -172,9 +174,9 @@ export function layoutTexMathList(
 
   for (const item of spaced.items) {
     if (item.kind === "resolved-glue") {
-      const width = muToPt(fontProfile, style, baseAtPt, item.mu);
-      const stretch = muToPt(fontProfile, style, baseAtPt, item.stretchMu);
-      const shrink = muToPt(fontProfile, style, baseAtPt, item.shrinkMu);
+      const width = muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
+      const stretch = muToPt(fontProfile, currentStyle, baseAtPt, item.stretchMu);
+      const shrink = muToPt(fontProfile, currentStyle, baseAtPt, item.shrinkMu);
       items.push({
         kind: "glue",
         x: roundTexPt(cursor),
@@ -188,6 +190,10 @@ export function layoutTexMathList(
       cursor = roundTexPt(cursor + width);
       continue;
     }
+    if (item.kind === "style-change") {
+      currentStyle = item.style;
+      continue;
+    }
     if (item.kind === "unsupported") {
       errors.push({
         message: `Unsupported TeX math item ${item.command}.`,
@@ -196,7 +202,7 @@ export function layoutTexMathList(
       continue;
     }
 
-    const atomLayout = layoutAtom(item, fontProfile, style, baseAtPt);
+    const atomLayout = layoutAtom(item, fontProfile, currentStyle, baseAtPt);
     if (!atomLayout) {
       errors.push({
         message: "Only simple glyph math atoms are supported by the initial math hlist layout.",
@@ -244,6 +250,10 @@ function layoutAtom(
   const nucleus = layoutNucleus(atom.nucleus, fontProfile, style, baseAtPt);
   if (!nucleus) {
     return null;
+  }
+
+  if (shouldUseOperatorLimits(atom, style)) {
+    return layoutOperatorLimitsAtom(atom, nucleus, fontProfile, style, baseAtPt);
   }
 
   if (!atom.subscript && !atom.superscript) {
@@ -318,6 +328,102 @@ function layoutAtom(
     italicCorrection: nucleus.italicCorrection,
     isCharacterNucleus: nucleus.isCharacterNucleus,
     sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function shouldUseOperatorLimits(
+  atom: TexMathAtom,
+  style: TexMathStyle
+): boolean {
+  if (atom.nucleus.kind !== "operator" || (!atom.subscript && !atom.superscript)) {
+    return false;
+  }
+  const limits = atom.limits ?? defaultOperatorLimits(atom.nucleus.command);
+  if (limits === "nolimits") {
+    return false;
+  }
+  return limits === "limits" || style === "display";
+}
+
+function defaultOperatorLimits(command: TexMathOperatorCommand): TexMathOperatorLimits {
+  if (command === "int" || command === "oint") {
+    return "nolimits";
+  }
+  return "display";
+}
+
+function layoutOperatorLimitsAtom(
+  atom: TexMathAtom,
+  nucleus: TexMathAtomLayout,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const sup = atom.superscript
+    ? layoutLimitList(atom.superscript.list, fontProfile, supStyle(style), baseAtPt)
+    : null;
+  const sub = atom.subscript
+    ? layoutLimitList(atom.subscript.list, fontProfile, subStyle(style), baseAtPt)
+    : null;
+  if ((atom.superscript && !sup) || (atom.subscript && !sub)) {
+    return null;
+  }
+
+  const width = roundTexPt(Math.max(nucleus.width, sup?.width ?? 0, sub?.width ?? 0));
+  const delta = nucleus.italicCorrection;
+  const operatorX = roundTexPt((width - nucleus.width) / 2);
+  const items: TexMathHListItem[] = nucleus.items.map((item) => offsetMathLayoutItem(item, operatorX));
+  let height = nucleus.height;
+  let depth = nucleus.depth;
+
+  if (sup) {
+    const shiftUp = roundTexPt(Math.max(
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing3", baseAtPt) - sup.depth,
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing1", baseAtPt)
+    ));
+    const child = childHList(
+      "limit-superscript",
+      (width - sup.width) / 2 + delta / 2,
+      -(nucleus.height + shiftUp + sup.depth),
+      sup,
+      atom.superscript?.sourceSpan ?? nucleus.sourceSpan
+    );
+    items.unshift(child);
+    height = roundTexPt(nucleus.height +
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", baseAtPt) +
+      sup.height +
+      sup.depth +
+      shiftUp);
+  }
+
+  if (sub) {
+    const shiftDown = roundTexPt(Math.max(
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing4", baseAtPt) - sub.height,
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing2", baseAtPt)
+    ));
+    const child = childHList(
+      "limit-subscript",
+      (width - sub.width) / 2 - delta / 2,
+      nucleus.depth + shiftDown + sub.height,
+      sub,
+      atom.subscript?.sourceSpan ?? nucleus.sourceSpan
+    );
+    items.push(child);
+    depth = roundTexPt(nucleus.depth +
+      shiftDown +
+      sub.height +
+      sub.depth +
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", baseAtPt));
+  }
+
+  return {
+    items,
+    width,
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: atom.sourceSpan,
   };
 }
 
@@ -1318,6 +1424,16 @@ function layoutScriptList(
   };
 }
 
+function layoutLimitList(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList | null {
+  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt });
+  return result.supported ? result.hlist : null;
+}
+
 function childHList(
   role: TexMathChildHListLayoutItem["role"],
   x: number,
@@ -1473,7 +1589,13 @@ function mathParameterToPt(
 
 function mathExtensionParameterToPt(
   fontProfile: TexMathFontProfile,
-  name: "defaultRuleThickness",
+  name:
+    | "defaultRuleThickness"
+    | "bigOpSpacing1"
+    | "bigOpSpacing2"
+    | "bigOpSpacing3"
+    | "bigOpSpacing4"
+    | "bigOpSpacing5",
   baseAtPt: number
 ): number {
   const extension = fontProfile.resolveMathFont({

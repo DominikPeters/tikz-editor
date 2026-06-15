@@ -10,9 +10,11 @@ import type {
   TexMathList,
   TexMathNucleus,
   TexMathOperatorCommand,
+  TexMathOperatorLimits,
   TexMathParseResult,
   TexMathScript,
   TexMathSourceSpan,
+  TexMathStyle,
   TexMathToken,
   TexMathTokenKind,
   TexMathUnsupportedItem,
@@ -189,6 +191,15 @@ class TexMathParser {
           sourceSpan: token.sourceSpan,
         } satisfies TexMathGlue;
       }
+      const style = styleCommandName(token.text);
+      if (style) {
+        this.advance();
+        return {
+          kind: "style-change",
+          style,
+          sourceSpan: token.sourceSpan,
+        };
+      }
       if (commandName(token.text) === "frac") {
         return this.parseFraction(allowScripts);
       }
@@ -323,7 +334,7 @@ class TexMathParser {
 
   private parseOperator(commandNameValue: TexMathOperatorCommand, allowScripts: boolean): TexMathAtom {
     const command = this.advance();
-    return this.maybeParseScripts({
+    const atom = this.parseOperatorLimitSwitch({
       kind: "atom",
       atomClass: "op",
       nucleus: {
@@ -333,6 +344,28 @@ class TexMathParser {
       },
       sourceSpan: command.sourceSpan,
     }, allowScripts);
+    return this.maybeParseScripts(atom, allowScripts);
+  }
+
+  private parseOperatorLimitSwitch(atom: TexMathAtom, allowLimits: boolean): TexMathAtom {
+    if (!allowLimits) {
+      return atom;
+    }
+    this.skipSpaces();
+    const token = this.peek();
+    if (token?.kind !== "command") {
+      return atom;
+    }
+    const limits = operatorLimitsCommandName(token.text);
+    if (!limits) {
+      return atom;
+    }
+    this.advance();
+    return {
+      ...atom,
+      limits,
+      sourceSpan: spanUnion(atom.sourceSpan, token.sourceSpan),
+    };
   }
 
   private parseLeftRight(allowScripts: boolean): TexMathAtom {
@@ -652,6 +685,21 @@ function spacingCommandName(command: string): TexMathGlue["command"] | null {
   return null;
 }
 
+function styleCommandName(command: string): TexMathStyle | null {
+  switch (commandName(command)) {
+    case "displaystyle":
+      return "display";
+    case "textstyle":
+      return "text";
+    case "scriptstyle":
+      return "script";
+    case "scriptscriptstyle":
+      return "scriptscript";
+    default:
+      return null;
+  }
+}
+
 function accentCommandName(command: string): TexMathAccentCommand | null {
   switch (commandName(command)) {
     case "bar":
@@ -666,6 +714,19 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "tilde";
     case "vec":
       return "vec";
+    default:
+      return null;
+  }
+}
+
+function operatorLimitsCommandName(command: string): TexMathOperatorLimits | null {
+  switch (commandName(command)) {
+    case "displaylimits":
+      return "display";
+    case "limits":
+      return "limits";
+    case "nolimits":
+      return "nolimits";
     default:
       return null;
   }

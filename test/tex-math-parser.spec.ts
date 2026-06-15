@@ -143,6 +143,52 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses operator limits switches before scripts", () => {
+    const result = parseTexMath(String.raw`\sum\limits_i^n+\int\nolimits_0^1+\prod\displaylimits_i`);
+    const sum = atomAt(result, 0);
+    const integral = atomAt(result, 2);
+    const product = atomAt(result, 4);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(sum).toMatchObject({
+      limits: "limits",
+      sourceSpan: { start: 0, end: 15 },
+      subscript: { sourceSpan: { start: 11, end: 13 } },
+      superscript: { sourceSpan: { start: 13, end: 15 } },
+    });
+    expect(integral).toMatchObject({
+      limits: "nolimits",
+      sourceSpan: { start: 16, end: 33 },
+      subscript: { sourceSpan: { start: 29, end: 31 } },
+      superscript: { sourceSpan: { start: 31, end: 33 } },
+    });
+    expect(product).toMatchObject({
+      limits: "display",
+      sourceSpan: { start: 34, end: 55 },
+      subscript: { sourceSpan: { start: 53, end: 55 } },
+    });
+  });
+
+  it("keeps math style changes as source-spanned list items", () => {
+    const result = parseTexMath(String.raw`{\displaystyle\sum_i^n}`);
+    const group = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(group.nucleus.kind).toBe("list");
+    if (group.nucleus.kind !== "list") {
+      return;
+    }
+    expect(group.nucleus.list.items[0]).toMatchObject({
+      kind: "style-change",
+      style: "display",
+      sourceSpan: { start: 1, end: 14 },
+    });
+    expect(group.nucleus.list.items[1]).toMatchObject({
+      kind: "atom",
+      nucleus: { kind: "operator", command: "sum" },
+    });
+  });
+
   it("parses left-right delimiter groups with delimiter source spans", () => {
     const result = parseTexMath(String.raw`\left(\frac{1}{2}\right)`);
     const atom = atomAt(result, 0);

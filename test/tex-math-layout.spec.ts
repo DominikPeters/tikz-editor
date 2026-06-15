@@ -394,6 +394,117 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out TeX operator limits as vertical boxes", () => {
+    const result = layout(String.raw`\sum\limits_i^n+\int\limits_0^1`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.slice(0, 3)).toMatchObject([
+      {
+        kind: "hlist",
+        role: "limit-superscript",
+        x: expect.closeTo(2.806129, 5),
+        y: expect.closeTo(-9.500065, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 80,
+        y: expect.closeTo(-7.500061, 5),
+      },
+      {
+        kind: "hlist",
+        role: "limit-subscript",
+        x: expect.closeTo(3.863152, 5),
+        y: expect.closeTo(8.798677, 5),
+      },
+    ]);
+
+    const integral = layout(String.raw`\int\limits_0^1`);
+    expect(integral.supported).toBe(true);
+    expect(integral.hlist?.width).toBeCloseTo(6.66669, 5);
+    expect(integral.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "limit-superscript",
+        x: expect.closeTo(2.312511, 5),
+        y: expect.closeTo(-10.05561, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 82,
+        y: expect.closeTo(-8.05561, 5),
+      },
+      {
+        kind: "hlist",
+        role: "limit-subscript",
+        x: expect.closeTo(0.36805, 5),
+        y: expect.closeTo(9.233383, 5),
+      },
+    ]);
+  });
+
+  it("uses TeX display-style operator limit defaults", () => {
+    const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.slice(0, 3)).toMatchObject([
+      {
+        kind: "hlist",
+        role: "limit-superscript",
+        x: expect.closeTo(4.750572, 5),
+        y: expect.closeTo(-12.500065, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 88,
+        y: expect.closeTo(-9.500055, 5),
+      },
+      {
+        kind: "hlist",
+        role: "limit-subscript",
+        x: expect.closeTo(5.807594, 5),
+        y: expect.closeTo(11.798677, 5),
+      },
+    ]);
+    const integral = result.hlist?.items.find((item): item is TexMathGlyphLayoutItem =>
+      item.kind === "glyph" && item.code === 90
+    );
+    expect(integral).toMatchObject({
+      fontId: "cmex10",
+      y: expect.closeTo(-13.61123, 5),
+    });
+    const limSubscript = result.hlist?.items.at(-1);
+    expect(limSubscript).toMatchObject({
+      kind: "hlist",
+      role: "limit-subscript",
+      y: expect.closeTo(6, 5),
+    });
+  });
+
+  it("lets explicit nolimits keep display operators on side scripts", () => {
+    const parsed = parseTexMath(String.raw`\sum\nolimits_i^n`);
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 88,
+        y: expect.closeTo(-9.500055, 5),
+      },
+      {
+        kind: "hlist",
+        role: "superscript",
+      },
+      {
+        kind: "hlist",
+        role: "subscript",
+      },
+    ]);
+  });
+
   it("lays out simple radicals with TeX-style radical glyph shifts and overbar rule", () => {
     const result = layout(String.raw`\sqrt{x}`);
 
