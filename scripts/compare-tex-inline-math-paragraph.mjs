@@ -17,7 +17,9 @@ const {
 } = await import(distEntry);
 
 const args = readArgs();
-const fuzzCases = args.fuzz > 0 ? generateFuzzCases(args.fuzz, args.seed, args.widths) : [];
+const fuzzCases = args.fuzz > 0
+  ? generateFuzzCases(args.fuzz, args.seed, args.widths, args.formulaMode)
+  : [];
 const cases = fuzzCases.length > 0 ? fuzzCases : fixedCases(args.widths);
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
 const failed = results.filter((result) => !result.ok);
@@ -27,6 +29,7 @@ if (args.summaryOnly) {
     passed: results.length - failed.length,
     failed: failed.length,
     seed: fuzzCases.length > 0 ? args.seed : undefined,
+    formulaMode: fuzzCases.length > 0 ? args.formulaMode : undefined,
     cases: results.length,
     failures: failed.map((result) => ({
       id: result.id,
@@ -213,6 +216,8 @@ function normalizeLineText(text) {
     .replaceAll("\\(", "")
     .replaceAll("\\)", "")
     .replaceAll("$", "")
+    .replace(/([A-Za-z])_\{?([0-9])\}?\^\{?([0-9])\}?/gu, "$1$3$2")
+    .replace(/[_^{}]/gu, "")
     .replace(/\s+\(\.\/inline-math-paragraph\.aux\)\)+$/u, "")
     .replace(/\s+$/u, "");
 }
@@ -220,7 +225,7 @@ function normalizeLineText(text) {
 function oracleCachePath(cacheDir, caseSpec) {
   const key = createHash("sha256")
     .update(JSON.stringify({
-      version: 5,
+      version: 6,
       source: caseSpec.source,
       width: caseSpec.width,
       parindent: 0,
@@ -237,6 +242,8 @@ function fixedCases(widths) {
     String.raw`Prefix words $ab+cd=ef+gh$ suffix words.`,
     String.raw`One $x+y=m+n$ two three.`,
     String.raw`Before \(a+b=c+d\) after.`,
+    String.raw`Scripted $x^2+y_1=z_3$ after words.`,
+    String.raw`Two spans $a+b$ middle \(x^2=y_1\) end.`,
   ];
   return sources.flatMap((source, sourceIndex) =>
     widths.map((width) => ({
@@ -247,7 +254,7 @@ function fixedCases(widths) {
   );
 }
 
-function generateFuzzCases(count, seed, widths) {
+function generateFuzzCases(count, seed, widths, formulaMode) {
   const random = mulberry32(seed);
   const words = [
     "Alpha",
@@ -266,11 +273,13 @@ function generateFuzzCases(count, seed, widths) {
   const variables = ["a", "b", "c", "d", "x", "y", "m", "n"];
   return Array.from({ length: count }, (_, index) => {
     const wordCount = 5 + Math.floor(random() * 8);
-    const insertAt = 1 + Math.floor(random() * (wordCount - 2));
+    const mathSpanCount = formulaMode === "mixed" && random() < 0.35 ? 2 : 1;
+    const insertions = uniqueSortedInsertions(random, wordCount, mathSpanCount);
     const parts = [];
     for (let wordIndex = 0; wordIndex < wordCount; wordIndex += 1) {
-      if (wordIndex === insertAt) {
-        parts.push(`$${randomFormula(random, variables)}$`);
+      if (insertions.includes(wordIndex)) {
+        const formula = randomFormula(random, variables, formulaMode);
+        parts.push(random() < 0.2 ? String.raw`\(` + formula + String.raw`\)` : `$${formula}$`);
       }
       parts.push(choice(random, words));
     }
@@ -282,10 +291,36 @@ function generateFuzzCases(count, seed, widths) {
   });
 }
 
-function randomFormula(random, variables) {
-  const lhs = `${choice(random, variables)}+${choice(random, variables)}`;
-  const rhs = `${choice(random, variables)}+${choice(random, variables)}`;
+function uniqueSortedInsertions(random, wordCount, count) {
+  const indices = new Set();
+  while (indices.size < count) {
+    indices.add(1 + Math.floor(random() * Math.max(1, wordCount - 2)));
+  }
+  return [...indices].sort((a, b) => a - b);
+}
+
+function randomFormula(random, variables, formulaMode) {
+  const lhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
+  const rhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   return random() < 0.7 ? `${lhs}=${rhs}` : lhs;
+}
+
+function randomTerm(random, variables, formulaMode) {
+  const variable = choice(random, variables);
+  if (formulaMode === "basic") {
+    return variable;
+  }
+  const suffixRoll = random();
+  if (suffixRoll < 0.3) {
+    return `${variable}_${1 + Math.floor(random() * 3)}`;
+  }
+  if (suffixRoll < 0.6) {
+    return `${variable}^${1 + Math.floor(random() * 3)}`;
+  }
+  if (suffixRoll < 0.75) {
+    return `${variable}_${1 + Math.floor(random() * 3)}^${1 + Math.floor(random() * 3)}`;
+  }
+  return variable;
 }
 
 function choice(random, values) {
@@ -308,6 +343,7 @@ function readArgs() {
     fuzz: 0,
     seed: 20260615,
     widths: [80, 100, 120, 160],
+    formulaMode: "basic",
     oracleCacheDir: null,
     summaryOnly: false,
   };
@@ -324,6 +360,8 @@ function readArgs() {
         .split(",")
         .map((value) => Number(value.trim()))
         .filter((value) => Number.isFinite(value) && value > 0);
+    } else if (arg === "--formula-mode") {
+      parsed.formulaMode = readFormulaMode(process.argv[++index] ?? "");
     } else if (arg === "--oracle-cache-dir") {
       parsed.oracleCacheDir = process.argv[++index] ?? null;
     } else {
@@ -334,4 +372,11 @@ function readArgs() {
     throw new Error("--widths must contain at least one positive number.");
   }
   return parsed;
+}
+
+function readFormulaMode(value) {
+  if (value === "basic" || value === "scripts" || value === "mixed") {
+    return value;
+  }
+  throw new Error("--formula-mode must be one of: basic, scripts, mixed.");
 }
