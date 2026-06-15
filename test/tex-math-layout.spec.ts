@@ -131,6 +131,31 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out arrow, set, and logic symbols through TeX math fonts", () => {
+    const result = layout(String.raw`A\to B\mapsto C\wedge D\cup E\subseteq F`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "cmmi10", code: 65, sourceSpan: { start: 0, end: 1 } },
+      { fontId: "cmsy10", code: 33, sourceSpan: { start: 1, end: 4 } },
+      { fontId: "cmmi10", code: 66, sourceSpan: { start: 5, end: 6 } },
+      { fontId: "cmsy10", code: 55, sourceSpan: { start: 6, end: 13 } },
+      { fontId: "cmsy10", code: 33, sourceSpan: { start: 6, end: 13 } },
+      { fontId: "cmmi10", code: 67, sourceSpan: { start: 14, end: 15 } },
+      { fontId: "cmsy10", code: 94, sourceSpan: { start: 15, end: 21 } },
+      { fontId: "cmmi10", code: 68, sourceSpan: { start: 22, end: 23 } },
+      { fontId: "cmsy10", code: 91, sourceSpan: { start: 23, end: 27 } },
+      { fontId: "cmmi10", code: 69, sourceSpan: { start: 28, end: 29 } },
+      { fontId: "cmsy10", code: 18, sourceSpan: { start: 29, end: 38 } },
+      { fontId: "cmmi10", code: 70, sourceSpan: { start: 39, end: 40 } },
+    ]);
+  });
+
   it("adds math italic correction kerns after italic glyphs that need them", () => {
     const result = layout("xy");
 

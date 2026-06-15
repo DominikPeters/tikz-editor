@@ -2023,18 +2023,59 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 6 }];
     case "mp":
       return [{ family: "symbols", code: 7 }];
+    case "subseteq":
+      return [{ family: "symbols", code: 18 }];
+    case "supseteq":
+      return [{ family: "symbols", code: 19 }];
     case "le":
     case "leq":
       return [{ family: "symbols", code: 20 }];
     case "ge":
     case "geq":
       return [{ family: "symbols", code: 21 }];
+    case "approx":
+      return [{ family: "symbols", code: 25 }];
     case "subset":
       return [{ family: "symbols", code: 26 }];
+    case "supset":
+      return [{ family: "symbols", code: 27 }];
+    case "leftarrow":
+    case "gets":
+      return [{ family: "symbols", code: 32 }];
+    case "rightarrow":
+    case "to":
+      return [{ family: "symbols", code: 33 }];
+    case "leftrightarrow":
+      return [{ family: "symbols", code: 36 }];
+    case "Leftarrow":
+      return [{ family: "symbols", code: 40 }];
+    case "Rightarrow":
+      return [{ family: "symbols", code: 41 }];
+    case "Leftrightarrow":
+      return [{ family: "symbols", code: 44 }];
     case "infty":
       return [{ family: "symbols", code: 49 }];
     case "in":
       return [{ family: "symbols", code: 50 }];
+    case "mapsto":
+      return [
+        { family: "symbols", code: 55 },
+        { family: "symbols", code: 33 },
+      ];
+    case "forall":
+      return [{ family: "symbols", code: 56 }];
+    case "exists":
+      return [{ family: "symbols", code: 57 }];
+    case "cup":
+      return [{ family: "symbols", code: 91 }];
+    case "cap":
+      return [{ family: "symbols", code: 92 }];
+    case "wedge":
+      return [{ family: "symbols", code: 94 }];
+    case "vee":
+      return [{ family: "symbols", code: 95 }];
+    case "setminus":
+      return [{ family: "symbols", code: 110 }];
     case "ne":
     case "neq":
       return [

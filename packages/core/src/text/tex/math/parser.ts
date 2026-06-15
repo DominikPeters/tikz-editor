@@ -1215,15 +1215,17 @@ const ordinaryNamedSymbolCommands = new Set([
   "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",
   "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma",
   "tau", "upsilon", "phi", "varphi", "chi", "psi", "omega",
-  "infty",
+  "exists", "forall", "infty",
 ]);
 
 const binaryNamedSymbolCommands = new Set([
-  "cdot", "mp", "pm", "times",
+  "cap", "cdot", "cup", "mp", "pm", "setminus", "times", "vee", "wedge",
 ]);
 
 const relationNamedSymbolCommands = new Set([
-  "ge", "geq", "in", "le", "leq", "ne", "neq", "subset",
+  "approx", "gets", "ge", "geq", "in", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow",
+  "le", "leq", "mapsto", "ne", "neq", "rightarrow", "Rightarrow", "subset", "subseteq",
+  "supset", "supseteq", "to",
 ]);
 
 function atomClassForCharacter(char: string): TexMathAtomClass {

@@ -221,6 +221,26 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses arrow, set, and logic symbols with TeX atom classes", () => {
+    const result = parseTexMath(String.raw`\forall x\to A\cup B\subseteq C`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph"
+        ? { atomClass: item.atomClass, text: item.nucleus.text, sourceSpan: item.sourceSpan }
+        : null
+    )).toEqual([
+      { atomClass: "ord", text: String.raw`\forall`, sourceSpan: { start: 0, end: 7 } },
+      { atomClass: "ord", text: "x", sourceSpan: { start: 8, end: 9 } },
+      { atomClass: "rel", text: String.raw`\to`, sourceSpan: { start: 9, end: 12 } },
+      { atomClass: "ord", text: "A", sourceSpan: { start: 13, end: 14 } },
+      { atomClass: "bin", text: String.raw`\cup`, sourceSpan: { start: 14, end: 18 } },
+      { atomClass: "ord", text: "B", sourceSpan: { start: 19, end: 20 } },
+      { atomClass: "rel", text: String.raw`\subseteq`, sourceSpan: { start: 20, end: 29 } },
+      { atomClass: "ord", text: "C", sourceSpan: { start: 30, end: 31 } },
+    ]);
+  });
+
   it("parses TeX operator commands as op atoms with scripts", () => {
     const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
     const sum = atomAt(result, 0);

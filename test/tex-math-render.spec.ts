@@ -151,6 +151,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
   });
 
+  it("renders arrow, set, and logic symbols through TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`A\to B\mapsto C\wedge D\cup E\subseteq F`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="33"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="55"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="94"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="91"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="18"');
+  });
+
   it("renders TeX operators through the selected math fonts", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list);
