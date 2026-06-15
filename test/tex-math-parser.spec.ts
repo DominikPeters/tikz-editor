@@ -310,9 +310,11 @@ describe("TeX math parser", () => {
   });
 
   it("parses math accents with braced and single-atom bases", () => {
-    const result = parseTexMath(String.raw`\hat{x}+\vec y`);
+    const result = parseTexMath(String.raw`\hat{x}+\vec y+\dddot z+\ddddot{1}`);
     const hat = atomAt(result, 0);
     const vec = atomAt(result, 2);
+    const tripleDot = atomAt(result, 4);
+    const quadrupleDot = atomAt(result, 6);
 
     expect(result.diagnostics).toEqual([]);
     expect(hat).toMatchObject({
@@ -335,6 +337,24 @@ describe("TeX math parser", () => {
       },
     });
     expect(vec.nucleus.kind === "accent" ? vec.nucleus.base.sourceSpan : null).toEqual({ start: 13, end: 14 });
+    expect(tripleDot).toMatchObject({
+      sourceSpan: { start: 15, end: 23 },
+      nucleus: {
+        kind: "accent",
+        command: "dddot",
+        commandSourceSpan: { start: 15, end: 21 },
+      },
+    });
+    expect(tripleDot.nucleus.kind === "accent" ? tripleDot.nucleus.base.sourceSpan : null).toEqual({ start: 22, end: 23 });
+    expect(quadrupleDot).toMatchObject({
+      sourceSpan: { start: 24, end: 34 },
+      nucleus: {
+        kind: "accent",
+        command: "ddddot",
+        commandSourceSpan: { start: 24, end: 31 },
+      },
+    });
+    expect(quadrupleDot.nucleus.kind === "accent" ? quadrupleDot.nucleus.base.sourceSpan : null).toEqual({ start: 32, end: 33 });
   });
 
   it("parses overline and underline as structured line nuclei", () => {
@@ -795,9 +815,10 @@ describe("TeX math parser", () => {
   });
 
   it("parses TeX operator commands as op atoms with scripts", () => {
-    const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
+    const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}+\iiiint_0^1`);
     const sum = atomAt(result, 0);
     const lim = atomAt(result, 2);
+    const multiIntegral = atomAt(result, 4);
 
     expect(result.diagnostics).toEqual([]);
     expect(sum).toMatchObject({
@@ -821,13 +842,25 @@ describe("TeX math parser", () => {
       },
       subscript: { sourceSpan: { start: 13, end: 17 } },
     });
+    expect(multiIntegral).toMatchObject({
+      atomClass: "op",
+      sourceSpan: { start: 18, end: 29 },
+      nucleus: {
+        kind: "operator",
+        command: "iiiint",
+        sourceSpan: { start: 18, end: 25 },
+      },
+      subscript: { sourceSpan: { start: 25, end: 27 } },
+      superscript: { sourceSpan: { start: 27, end: 29 } },
+    });
   });
 
   it("parses operator limits switches before scripts", () => {
-    const result = parseTexMath(String.raw`\sum\limits_i^n+\int\nolimits_0^1+\prod\displaylimits_i`);
+    const result = parseTexMath(String.raw`\sum\limits_i^n+\int\nolimits_0^1+\prod\displaylimits_i+\idotsint\limits_a^b`);
     const sum = atomAt(result, 0);
     const integral = atomAt(result, 2);
     const product = atomAt(result, 4);
+    const dottedIntegral = atomAt(result, 6);
 
     expect(result.diagnostics).toEqual([]);
     expect(sum).toMatchObject({
@@ -846,6 +879,17 @@ describe("TeX math parser", () => {
       limits: "display",
       sourceSpan: { start: 34, end: 55 },
       subscript: { sourceSpan: { start: 53, end: 55 } },
+    });
+    expect(dottedIntegral).toMatchObject({
+      limits: "limits",
+      sourceSpan: { start: 56, end: 76 },
+      nucleus: {
+        kind: "operator",
+        command: "idotsint",
+        sourceSpan: { start: 56, end: 65 },
+      },
+      subscript: { sourceSpan: { start: 72, end: 74 } },
+      superscript: { sourceSpan: { start: 74, end: 76 } },
     });
   });
 

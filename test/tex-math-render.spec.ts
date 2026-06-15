@@ -310,7 +310,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders TeX operators through the selected math fonts", () => {
-    const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
+    const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}+\iiiint_0^1`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -320,11 +320,26 @@ describe("TeX math SVG rendering", () => {
     const body = renderTexMathHListSvgBody(result.hlist);
     expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="80"');
     expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="82"');
+    expect(body.match(/data-tex-font="cmex10" data-tex-glyph="82"/g)).toHaveLength(5);
     expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="108"');
     expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="105"');
     expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="109"');
     expect(body).toContain('transform="translate(0 -750.0065) scale(100)"');
     expect(body).toContain('transform="translate(1055.559 -502.7868) scale(70)"');
+  });
+
+  it("renders AMS multi-integral and multi-dot accent glyphs", () => {
+    const parsed = parseTexMath(String.raw`\idotsint\limits_a^b+\ddddot{1}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="82"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="1"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="46"');
   });
 
   it("renders operatorname through roman operator glyphs", () => {

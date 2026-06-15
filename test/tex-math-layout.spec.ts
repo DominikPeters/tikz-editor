@@ -1115,6 +1115,16 @@ describe("TeX math hlist layout", () => {
       y: expect.closeTo(-3.62892, 5),
     });
 
+    const multiDotAccents = layout(String.raw`\dddot{x}+\ddddot{1}`);
+    expect(multiDotAccents.supported).toBe(true);
+    const multiDotGlyphs = multiDotAccents.hlist?.items.filter((item) =>
+      item.kind === "glyph" && item.fontId === "cmr10" && item.code === 46
+    ) ?? [];
+    expect(multiDotGlyphs).toHaveLength(7);
+    expect(multiDotAccents.hlist?.items.filter((item) =>
+      item.kind === "hlist" && item.role === "nucleus"
+    )).toHaveLength(2);
+
     const nestedAccentSup = layout(String.raw`\hat{\tilde{x}}^2`);
     expect(nestedAccentSup.supported).toBe(true);
     expect(nestedAccentSup.hlist?.items.find((item) =>
@@ -1250,6 +1260,76 @@ describe("TeX math hlist layout", () => {
       role: "subscript",
       x: expect.closeTo(4.72223, 5),
     });
+  });
+
+  it("lays out AMS multi-integral operators with TeX intkern spacing", () => {
+    const result = layout(String.raw`\iiiint_0^1`);
+    expect(result.supported).toBe(true);
+
+    const operatorItems = result.hlist?.items.slice(0, 9) ?? [];
+    expect(operatorItems.map((item) => item.kind)).toEqual([
+      "glyph",
+      "kern",
+      "glyph",
+      "kern",
+      "glyph",
+      "kern",
+      "glyph",
+      "hlist",
+      "hlist",
+    ]);
+    expect(operatorItems.filter((item) => item.kind === "glyph").map((item) =>
+      item.kind === "glyph" ? { fontId: item.fontId, code: item.code } : null
+    )).toEqual([
+      { fontId: "cmex10", code: 82 },
+      { fontId: "cmex10", code: 82 },
+      { fontId: "cmex10", code: 82 },
+      { fontId: "cmex10", code: 82 },
+    ]);
+    const kerns = operatorItems.filter((item) => item.kind === "kern");
+    expect(kerns).toHaveLength(3);
+    expect(kerns.every((item) => item.kind === "kern" && item.reason === "operator-kern")).toBe(true);
+    expect(kerns[0]).toMatchObject({
+      kind: "kern",
+      width: expect.closeTo(-3.333343, 5),
+    });
+    expect(operatorItems[7]).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+    });
+    expect(operatorItems[8]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+    });
+
+    const parsed = parseTexMath(String.raw`\iint`);
+    const display = layoutTexMathList(parsed.list, { style: "display" });
+    expect(display.supported).toBe(true);
+    const displayKern = display.hlist?.items.find((item) => item.kind === "kern");
+    expect(displayKern).toMatchObject({
+      kind: "kern",
+      width: expect.closeTo(-5.000015, 5),
+    });
+
+    const dotted = layout(String.raw`\idotsint\limits_a^b`);
+    expect(dotted.supported).toBe(true);
+    const dottedItems = dotted.hlist?.items ?? [];
+    expect(dottedItems.filter((item) => item.kind === "glyph").map((item) =>
+      item.kind === "glyph" ? { fontId: item.fontId, code: item.code } : null
+    )).toEqual([
+      { fontId: "cmex10", code: 82 },
+      { fontId: "cmsy10", code: 1 },
+      { fontId: "cmsy10", code: 1 },
+      { fontId: "cmsy10", code: 1 },
+      { fontId: "cmex10", code: 82 },
+    ]);
+    expect(dottedItems.some((item) => item.kind === "hlist" && item.role === "limit-superscript")).toBe(true);
+    expect(dottedItems.some((item) => item.kind === "hlist" && item.role === "limit-subscript")).toBe(true);
+
+    const sideScriptDotted = layout(String.raw`\idotsint_a^b`);
+    expect(sideScriptDotted.supported).toBe(true);
+    expect(sideScriptDotted.hlist?.items.some((item) => item.kind === "hlist" && item.role === "superscript")).toBe(true);
+    expect(sideScriptDotted.hlist?.items.some((item) => item.kind === "hlist" && item.role === "limit-superscript")).toBe(false);
   });
 
   it("lays out named roman operators such as lim", () => {

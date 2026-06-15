@@ -2683,6 +2683,10 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "dot";
     case "ddot":
       return "ddot";
+    case "dddot":
+      return "dddot";
+    case "ddddot":
+      return "ddddot";
     case "hat":
       return "hat";
     case "tilde":
@@ -2758,6 +2762,14 @@ function operatorCommandName(command: string): TexMathOperatorCommand | null {
       return "bigcup";
     case "coprod":
       return "coprod";
+    case "idotsint":
+      return "idotsint";
+    case "iint":
+      return "iint";
+    case "iiint":
+      return "iiint";
+    case "iiiint":
+      return "iiiint";
     case "int":
       return "int";
     case "lim":

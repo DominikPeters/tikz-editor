@@ -82,7 +82,7 @@ export interface TexMathKernLayoutItem {
   readonly kind: "kern";
   readonly x: number;
   readonly width: number;
-  readonly reason: "italic-correction" | "text-kern";
+  readonly reason: "italic-correction" | "operator-kern" | "text-kern";
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -596,7 +596,14 @@ function shouldUseOperatorLimits(
 }
 
 function defaultOperatorLimits(command: TexMathOperatorCommand): TexMathOperatorLimits {
-  if (command === "int" || command === "oint") {
+  if (
+    command === "int" ||
+    command === "oint" ||
+    command === "idotsint" ||
+    command === "iint" ||
+    command === "iiint" ||
+    command === "iiiint"
+  ) {
     return "nolimits";
   }
   return "display";
@@ -2474,6 +2481,9 @@ function layoutAccentNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
+  if (nucleus.command === "dddot" || nucleus.command === "ddddot") {
+    return layoutMultiDotAccentNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+  }
   const base = layoutAccentBase(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
   if (!base) {
     return null;
@@ -2515,6 +2525,73 @@ function layoutAccentNucleus(
     items: [accentItem, baseChild],
     width: base.width,
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
+    depth: base.depth,
+    italicCorrection: singleGlyphBase?.italicCorrection ?? 0,
+    isCharacterNucleus: false,
+    scriptShiftsAsCharacter: singleGlyphBase !== null,
+    ...(singleGlyphBase ? {
+      scriptBaseWidth: singleGlyphBase.width,
+      scriptSuperscriptOffset: singleGlyphBase.italicCorrection,
+    } : {}),
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutMultiDotAccentNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const base = layoutAccentBase(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
+  if (!base) {
+    return null;
+  }
+  const font = fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
+  const dotMetric = requiredCharMetric(font, 46);
+  const dotWidth = roundTexPt(tfmToPt(font, dotMetric.width));
+  const dotHeight = roundTexPt(tfmToPt(font, dotMetric.height));
+  const dotDepth = roundTexPt(tfmToPt(font, dotMetric.depth));
+  const leadingThinSpace = muToPt(fontProfile, style, baseAtPt, 3);
+  const dotCount = nucleus.command === "ddddot" ? 4 : 3;
+  const accentWidth = roundTexPt(leadingThinSpace + dotWidth * dotCount);
+  const skew = accentBaseSkew(nucleus.base, fontProfile, style, baseAtPt, alphabet);
+  const singleGlyphBase = accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
+  const delta = Math.min(base.height, accentXHeight(font));
+  const accentX = roundTexPt(skew + (base.width - accentWidth) / 2);
+  const accentY = roundTexPt(delta - base.height);
+  const items: TexMathHListItem[] = [];
+  items.push({
+    kind: "kern",
+    x: accentX,
+    width: leadingThinSpace,
+    reason: "operator-kern",
+    sourceSpan: nucleus.commandSourceSpan,
+  });
+  for (let index = 0; index < dotCount; index++) {
+    items.push({
+      kind: "glyph",
+      fontId: font.id,
+      atPt: font.atPt,
+      family: "operators",
+      code: 46,
+      text: `\\${nucleus.command}`,
+      x: roundTexPt(accentX + leadingThinSpace + dotWidth * index),
+      y: accentY,
+      width: dotWidth,
+      height: dotHeight,
+      depth: dotDepth,
+      italicCorrection: roundTexPt(tfmToPt(font, dotMetric.italicCorrection)),
+      sourceSpan: nucleus.commandSourceSpan,
+    });
+  }
+  const baseChild = childHList("nucleus", 0, 0, base, nucleus.base.sourceSpan);
+
+  return {
+    items: [...items, baseChild],
+    width: base.width,
+    height: roundTexPt(Math.max(base.height, -accentY + dotHeight)),
     depth: base.depth,
     italicCorrection: singleGlyphBase?.italicCorrection ?? 0,
     isCharacterNucleus: false,
@@ -2694,37 +2771,67 @@ function layoutLargeOperatorNucleus(
     return null;
   }
   const font = fontProfile.resolveMathFont({ family: "extension", style, baseAtPt });
-  const code = largeOperatorCode(font, spec.code, style);
-  const metric = requiredCharMetric(font, code);
-  const glyphWidth = roundTexPt(tfmToPt(font, metric.width));
-  const italicCorrection = roundTexPt(tfmToPt(font, metric.italicCorrection));
-  const glyphHeight = roundTexPt(tfmToPt(font, metric.height));
-  const glyphDepth = roundTexPt(tfmToPt(font, metric.depth));
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
-  const y = roundTexPt((glyphHeight - glyphDepth) / 2 - axis);
-  const item = {
-    kind: "glyph",
-    fontId: font.id,
-    atPt: font.atPt,
-    family: "extension",
-    code,
-    text: `\\${nucleus.command}`,
-    x: 0,
-    y,
-    width: glyphWidth,
-    height: glyphHeight,
-    depth: glyphDepth,
-    italicCorrection,
-    sourceSpan: nucleus.sourceSpan,
-  } satisfies TexMathGlyphLayoutItem;
+  const items: TexMathHListItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+  let italicCorrection = 0;
+  for (const part of spec.parts) {
+    if (part.kind === "kern") {
+      const width = multiIntegralKernPt(fontProfile, style, baseAtPt);
+      items.push({
+        kind: "kern",
+        x: cursor,
+        width,
+        reason: "operator-kern",
+        sourceSpan: nucleus.sourceSpan,
+      });
+      cursor = roundTexPt(cursor + width);
+      continue;
+    }
+    if (part.kind === "dots") {
+      const dotExtent = appendIntegralDots(items, fontProfile, style, baseAtPt, nucleus.sourceSpan, cursor);
+      cursor = roundTexPt(cursor + dotExtent.width);
+      height = Math.max(height, dotExtent.height);
+      depth = Math.max(depth, dotExtent.depth);
+      continue;
+    }
+    const code = largeOperatorCode(font, part.code, style);
+    const metric = requiredCharMetric(font, code);
+    const glyphWidth = roundTexPt(tfmToPt(font, metric.width));
+    const glyphItalicCorrection = roundTexPt(tfmToPt(font, metric.italicCorrection));
+    const glyphHeight = roundTexPt(tfmToPt(font, metric.height));
+    const glyphDepth = roundTexPt(tfmToPt(font, metric.depth));
+    const y = roundTexPt((glyphHeight - glyphDepth) / 2 - axis);
+    items.push({
+      kind: "glyph",
+      fontId: font.id,
+      atPt: font.atPt,
+      family: "extension",
+      code,
+      text: `\\${nucleus.command}`,
+      x: cursor,
+      y,
+      width: glyphWidth,
+      height: glyphHeight,
+      depth: glyphDepth,
+      italicCorrection: glyphItalicCorrection,
+      sourceSpan: nucleus.sourceSpan,
+    } satisfies TexMathGlyphLayoutItem);
+    cursor = roundTexPt(cursor + glyphWidth);
+    height = Math.max(height, Math.max(0, -y + glyphHeight));
+    depth = Math.max(depth, Math.max(0, y + glyphDepth));
+    italicCorrection = glyphItalicCorrection;
+  }
   return {
-    items: [item],
-    width: roundTexPt(glyphWidth + italicCorrection),
-    height: roundTexPt(Math.max(0, -y + glyphHeight)),
-    depth: roundTexPt(Math.max(0, y + glyphDepth)),
+    items,
+    width: roundTexPt(cursor + italicCorrection),
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
     italicCorrection,
     isCharacterNucleus: false,
-    scriptBaseWidth: glyphWidth,
+    scriptBaseWidth: roundTexPt(cursor),
     scriptSuperscriptOffset: italicCorrection,
     sourceSpan: nucleus.sourceSpan,
   };
@@ -3015,29 +3122,121 @@ function delimiterSpec(
     case "backslash":
       return { smallFamily: "symbols", smallCode: 110, largeCode: 15 };
   }
+  return null;
 }
 
 function largeOperatorSpec(
   command: TexMathOperatorCommand
-): { readonly code: number } | null {
+): {
+  readonly parts: readonly (
+    | { readonly kind: "glyph"; readonly code: number }
+    | { readonly kind: "dots" }
+    | { readonly kind: "kern" }
+  )[];
+} | null {
   switch (command) {
     case "bigcap":
-      return { code: 84 };
+      return { parts: [{ kind: "glyph", code: 84 }] };
     case "bigcup":
-      return { code: 83 };
+      return { parts: [{ kind: "glyph", code: 83 }] };
     case "coprod":
-      return { code: 96 };
+      return { parts: [{ kind: "glyph", code: 96 }] };
+    case "idotsint":
+      return { parts: [{ kind: "glyph", code: 82 }, { kind: "dots" }, { kind: "glyph", code: 82 }] };
+    case "iint":
+      return multiIntegralSpec(2);
+    case "iiint":
+      return multiIntegralSpec(3);
+    case "iiiint":
+      return multiIntegralSpec(4);
     case "int":
-      return { code: 82 };
+      return { parts: [{ kind: "glyph", code: 82 }] };
     case "oint":
-      return { code: 72 };
+      return { parts: [{ kind: "glyph", code: 72 }] };
     case "prod":
-      return { code: 81 };
+      return { parts: [{ kind: "glyph", code: 81 }] };
     case "sum":
-      return { code: 80 };
+      return { parts: [{ kind: "glyph", code: 80 }] };
     case "lim":
       return null;
   }
+  return null;
+}
+
+function multiIntegralSpec(count: 2 | 3 | 4): NonNullable<ReturnType<typeof largeOperatorSpec>> {
+  const parts: Array<
+    | { readonly kind: "glyph"; readonly code: number }
+    | { readonly kind: "dots" }
+    | { readonly kind: "kern" }
+  > = [];
+  for (let index = 0; index < count; index += 1) {
+    if (index > 0) {
+      parts.push({ kind: "kern" });
+    }
+    parts.push({ kind: "glyph", code: 82 });
+  }
+  return { parts };
+}
+
+function multiIntegralKernPt(
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  const extraDisplayMu = style === "display" ? -3 : 0;
+  return muToPt(fontProfile, style, baseAtPt, -6 + extraDisplayMu);
+}
+
+function appendIntegralDots(
+  items: TexMathHListItem[],
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  sourceSpan: TexMathSourceSpan,
+  startX: number
+): { readonly width: number; readonly height: number; readonly depth: number } {
+  const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
+  const dotMetric = requiredCharMetric(font, 1);
+  const dotWidth = roundTexPt(tfmToPt(font, dotMetric.width));
+  const dotHeight = roundTexPt(tfmToPt(font, dotMetric.height));
+  const dotDepth = roundTexPt(tfmToPt(font, dotMetric.depth));
+  const dotItalicCorrection = roundTexPt(tfmToPt(font, dotMetric.italicCorrection));
+  const kernMu = style === "display" ? 3 : style === "text" ? 1.5 : 1;
+  const kernWidth = muToPt(fontProfile, style, baseAtPt, kernMu);
+  let cursor = startX;
+  for (let index = 0; index < 3; index += 1) {
+    items.push({
+      kind: "glyph",
+      fontId: font.id,
+      atPt: font.atPt,
+      family: "symbols",
+      code: 1,
+      text: String.raw`\idotsint`,
+      x: cursor,
+      y: 0,
+      width: dotWidth,
+      height: dotHeight,
+      depth: dotDepth,
+      italicCorrection: dotItalicCorrection,
+      sourceSpan,
+    });
+    cursor = roundTexPt(cursor + dotWidth);
+    if (index < 2) {
+      items.push({
+        kind: "kern",
+        x: cursor,
+        width: kernWidth,
+        reason: "operator-kern",
+        sourceSpan,
+      });
+      cursor = roundTexPt(cursor + kernWidth);
+    }
+  }
+  return {
+    width: roundTexPt(cursor - startX),
+    height: dotHeight,
+    depth: dotDepth,
+  };
 }
 
 function largeOperatorCode(
@@ -3401,6 +3600,9 @@ function defaultLuaLatexMathAccent(
       return { family: "operators", code: 95 };
     case "ddot":
       return { family: "operators", code: 127 };
+    case "dddot":
+    case "ddddot":
+      return null;
     case "hat":
       return { family: "operators", code: 94 };
     case "tilde":
@@ -3408,6 +3610,7 @@ function defaultLuaLatexMathAccent(
     case "vec":
       return { family: "letters", code: 126 };
   }
+  return null;
 }
 
 function defaultLuaLatexMathAlphabetGlyph(
