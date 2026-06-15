@@ -66,6 +66,7 @@ export {
 export { groupSimpleTexVListScopes } from "./scopes.js";
 export {
   addParagraphVerticalGlueToVList,
+  materializeDisplayMathVerticalGlueInVList,
   materializeParagraphVerticalGlueInVList,
   planSimpleTexParagraphVerticalSkips,
   type SimpleTexParagraphVerticalSkip,

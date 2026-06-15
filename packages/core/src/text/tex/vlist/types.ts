@@ -42,6 +42,10 @@ export type TexGlueOrigin =
   | {
       readonly kind: "list-boundary";
       readonly beforeBlockIndex: number;
+    }
+  | {
+      readonly kind: "display-math-boundary";
+      readonly side: "above" | "below";
     };
 
 export interface TexLineBox {

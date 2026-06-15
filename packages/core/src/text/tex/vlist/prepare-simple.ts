@@ -1,6 +1,9 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { groupSimpleTexVListScopes } from "./scopes.js";
-import { materializeParagraphVerticalGlueInVList } from "./spacing.js";
+import {
+  materializeDisplayMathVerticalGlueInVList,
+  materializeParagraphVerticalGlueInVList,
+} from "./spacing.js";
 import type { TexVListDocument } from "./types.js";
 
 export interface PreparedSimpleTexVList {
@@ -19,7 +22,8 @@ export function prepareSimpleTexVList(
   vlist: TexVListDocument,
   font: ResolvedTexFont
 ): PreparedSimpleTexVList {
-  const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
+  const paragraphGlue = materializeParagraphVerticalGlueInVList(vlist, font);
+  const materialized = materializeDisplayMathVerticalGlueInVList(paragraphGlue);
   return {
     materialized,
     normalized: groupSimpleTexVListScopes(materialized, font),

@@ -4,6 +4,7 @@ import type { SimpleTexListContext } from "../ir.js";
 import { texVListPathKey } from "./paths.js";
 import { texVBoxRolePathForParagraph } from "./scope-roles.js";
 import type {
+  TexDisplayMathItem,
   TexGlueItem,
   TexParagraphItem,
   TexVBoxRole,
@@ -23,6 +24,19 @@ const articleListSpacingEm = {
   nestedTopsepByDepth: [0.8, 0.8, 0.4, 0.2],
   itemsepByDepth: [0.8, 0.4, 0.2],
   parsepByDepth: [0.4, 0.2, 0],
+} as const;
+
+const latexArticleDisplaySkipsPt = {
+  above: {
+    size: 10,
+    stretch: 2,
+    shrink: 5,
+  },
+  below: {
+    size: 10,
+    stretch: 2,
+    shrink: 5,
+  },
 } as const;
 
 export interface SimpleTexParagraphVerticalSkip {
@@ -298,6 +312,59 @@ export function materializeParagraphVerticalGlueInVList(
     vlist,
     planSimpleTexParagraphVerticalSkips(vlist.items, font)
   );
+}
+
+export function materializeDisplayMathVerticalGlueInVList(
+  vlist: TexVListDocument
+): TexVListDocument {
+  return {
+    ...vlist,
+    items: materializeDisplayMathVerticalGlueInItems(vlist.items),
+  };
+}
+
+function materializeDisplayMathVerticalGlueInItems(
+  sourceItems: readonly TexVListItem[]
+): readonly TexVListItem[] {
+  const items: TexVListItem[] = [];
+  for (const item of sourceItems) {
+    if (item.kind === "vbox") {
+      items.push({
+        ...item,
+        items: materializeDisplayMathVerticalGlueInItems(item.items),
+      });
+      continue;
+    }
+    if (item.kind === "display-math") {
+      items.push(displayMathBoundaryGlueItem(item, "above"));
+      items.push(item);
+      items.push(displayMathBoundaryGlueItem(item, "below"));
+      continue;
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+function displayMathBoundaryGlueItem(
+  item: TexDisplayMathItem,
+  side: "above" | "below"
+): TexGlueItem {
+  const skip = latexArticleDisplaySkipsPt[side];
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-boundary",
+      side,
+    },
+    size: skip.size,
+    stretch: skip.stretch,
+    shrink: skip.shrink,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
 }
 
 function texArticleQuoteVerticalSkipBefore(

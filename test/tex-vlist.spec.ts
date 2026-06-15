@@ -25,6 +25,7 @@ import {
   layoutTexVListFromMeasuredParagraphs,
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
+  materializeDisplayMathVerticalGlueInVList,
   materializeParagraphVerticalGlueInVList,
   normalizeSimpleTexVList,
   planSimpleTexParagraphVerticalSkips,
@@ -191,6 +192,151 @@ describe("TeX vlist lowering", () => {
         contentEnd: 10,
       },
     });
+  });
+
+  it("materializes LaTeX article display skips around display math items", () => {
+    const source = String.raw`Alpha \[\sum_i^n\] Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+    const materialized = materializeDisplayMathVerticalGlueInVList(vlist);
+
+    expect(materialized.items.map((item) =>
+      item.kind === "glue"
+        ? {
+            kind: item.kind,
+            size: item.size,
+            stretch: item.stretch,
+            shrink: item.shrink,
+            origin: item.origin,
+            sourceSpan: item.sourceSpan,
+          }
+        : item.kind === "paragraph"
+          ? { kind: item.kind, text: item.paragraph.text }
+          : {
+              kind: item.kind,
+              sourceSpan: item.sourceSpan,
+            }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "glue",
+        size: 10,
+        stretch: 2,
+        shrink: 5,
+        origin: { kind: "display-math-boundary", side: "above" },
+        sourceSpan: {
+          start: source.indexOf(String.raw`\[`),
+          end: source.indexOf(String.raw`\]`) + 2,
+        },
+      },
+      {
+        kind: "display-math",
+        sourceSpan: {
+          start: source.indexOf(String.raw`\[`),
+          end: source.indexOf(String.raw`\]`) + 2,
+        },
+      },
+      {
+        kind: "glue",
+        size: 10,
+        stretch: 2,
+        shrink: 5,
+        origin: { kind: "display-math-boundary", side: "below" },
+        sourceSpan: {
+          start: source.indexOf(String.raw`\[`),
+          end: source.indexOf(String.raw`\]`) + 2,
+        },
+      },
+      { kind: "paragraph", text: "Beta" },
+    ]);
+  });
+
+  it("reports display skips in paragraph-display-paragraph vlist layouts", () => {
+    const source = String.raw`Alpha \[\sum_i^n\] Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+    const prepared = prepareSimpleTexVList(vlist, font);
+    const layout = layoutTexVListItems(
+      prepared.normalized.items,
+      (item) => {
+        if (item.kind !== "paragraph") {
+          return null;
+        }
+        return {
+          metrics: {
+            width: 40,
+            height: 8.5,
+            depth: 3.5,
+          },
+        };
+      },
+      null,
+      0
+    );
+    const boxReport = texVListBoxLayoutReport(
+      layout.positioned,
+      { width: 120, height: layout.cursor, depth: 0 },
+      { kind: "none" }
+    );
+
+    expect(boxReport.items.map((item) => ({
+      kind: item.itemKind,
+      y: item.y,
+      height: item.height,
+      depth: item.depth,
+      glue: item.glue,
+    }))).toEqual([
+      { kind: "paragraph", y: 0, height: 8.5, depth: 3.5, glue: undefined },
+      {
+        kind: "glue",
+        y: 12,
+        height: 10,
+        depth: 0,
+        glue: {
+          size: 10,
+          stretch: 2,
+          shrink: 5,
+          stretchOrder: "normal",
+          shrinkOrder: "normal",
+          origin: { kind: "display-math-boundary", side: "above" },
+        },
+      },
+      {
+        kind: "display-math",
+        y: 22,
+        height: expect.closeTo(16.51395, 5),
+        depth: expect.closeTo(12.798677, 5),
+        glue: undefined,
+      },
+      {
+        kind: "glue",
+        y: expect.closeTo(51.312627, 5),
+        height: 10,
+        depth: 0,
+        glue: {
+          size: 10,
+          stretch: 2,
+          shrink: 5,
+          stretchOrder: "normal",
+          shrinkOrder: "normal",
+          origin: { kind: "display-math-boundary", side: "below" },
+        },
+      },
+      {
+        kind: "paragraph",
+        y: expect.closeTo(61.312627, 5),
+        height: 8.5,
+        depth: 3.5,
+        glue: undefined,
+      },
+    ]);
   });
 
   it("uses explicit placeholders for unsupported display math formulas", () => {

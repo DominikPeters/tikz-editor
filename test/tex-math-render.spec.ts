@@ -364,6 +364,26 @@ describe("TeX math SVG rendering", () => {
         contentEnd: source.indexOf(String.raw`\]`),
       },
     });
+    expect(result.vlistLayout?.boxReport.items.filter((item) =>
+      item.glue?.origin?.kind === "display-math-boundary"
+    ).map((item) => item.glue)).toEqual([
+      {
+        size: 10,
+        stretch: 2,
+        shrink: 5,
+        stretchOrder: "normal",
+        shrinkOrder: "normal",
+        origin: { kind: "display-math-boundary", side: "above" },
+      },
+      {
+        size: 10,
+        stretch: 2,
+        shrink: 5,
+        stretchOrder: "normal",
+        shrinkOrder: "normal",
+        origin: { kind: "display-math-boundary", side: "below" },
+      },
+    ]);
     expect(result.vlistLayout?.paragraphPlacements).toHaveLength(2);
   });
 });
