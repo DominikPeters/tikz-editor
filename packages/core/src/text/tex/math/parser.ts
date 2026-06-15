@@ -38,6 +38,7 @@ interface ParseListOptions {
 
 export interface ParseTexMathOptions {
   readonly sourceOffset?: number;
+  readonly suppressTerminalEllipsisGlue?: boolean;
 }
 
 export function parseTexMath(
@@ -46,7 +47,7 @@ export function parseTexMath(
 ): TexMathParseResult {
   const sourceOffset = options.sourceOffset ?? 0;
   const tokens = tokenizeTexMath(source, sourceOffset);
-  const parser = new TexMathParser(tokens, sourceOffset, source.length);
+  const parser = new TexMathParser(tokens, sourceOffset, source.length, options);
   const list = parser.parseList({ stopAtGroupClose: false });
   return {
     list,
@@ -61,7 +62,7 @@ export function parseTexMathAlignedBody(
 ): TexMathParseResult {
   const sourceOffset = options.sourceOffset ?? 0;
   const tokens = tokenizeTexMath(source, sourceOffset);
-  const parser = new TexMathParser(tokens, sourceOffset, source.length);
+  const parser = new TexMathParser(tokens, sourceOffset, source.length, options);
   const atom = parser.parseAlignedBody({
     beginSourceSpan: { start: sourceOffset, end: sourceOffset },
     initialSourceSpan: { start: sourceOffset, end: sourceOffset },
@@ -149,7 +150,8 @@ class TexMathParser {
   constructor(
     private readonly tokens: readonly TexMathToken[],
     private readonly sourceOffset: number,
-    private readonly sourceLength: number
+    private readonly sourceLength: number,
+    private readonly options: ParseTexMathOptions = {}
   ) {}
 
   parseList(options: ParseListOptions): TexMathList {
@@ -653,7 +655,8 @@ class TexMathParser {
     if (shouldAddAmsEllipsisTrailingGlue(
       ellipsis,
       this.peekSignificantToken(),
-      suppressTrailingGlueBeforeAlignmentTab
+      suppressTrailingGlueBeforeAlignmentTab,
+      this.options.suppressTerminalEllipsisGlue === true
     )) {
       items.push({
         kind: "glue",
@@ -1973,13 +1976,14 @@ function ellipsisDotAtom(
 function shouldAddAmsEllipsisTrailingGlue(
   ellipsis: "ldots" | "cdots" | "dots",
   next: TexMathToken | null,
-  suppressBeforeAlignmentTab = false
+  suppressBeforeAlignmentTab = false,
+  suppressAtEnd = false
 ): boolean {
   if (ellipsis === "ldots") {
     return false;
   }
   if (!next) {
-    return true;
+    return !suppressAtEnd;
   }
   if (next.kind === "character" && next.text === "&") {
     return !suppressBeforeAlignmentTab;

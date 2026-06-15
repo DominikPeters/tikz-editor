@@ -409,6 +409,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
   if (nucleus.kind === "radical") {
     return texMathListNeedsAmsMath(nucleus.radicand);
   }
+  if (nucleus.kind === "line") {
+    return texMathListNeedsAmsMath(nucleus.body);
+  }
   if (nucleus.kind === "accent") {
     return texMathListNeedsAmsMath(nucleus.base);
   }

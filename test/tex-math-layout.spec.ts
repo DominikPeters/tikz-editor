@@ -238,6 +238,14 @@ describe("TeX math hlist layout", () => {
       fontId: "cmex7",
       code: 80,
     });
+
+    const lineNoadAmsProfile = layout(String.raw`\overline{\ldots}-\overline{\infty_2^\sum}`);
+    expect(lineNoadAmsProfile.supported).toBe(true);
+    const lineNoadGlyphs = flattenGlyphItems(lineNoadAmsProfile.hlist?.items ?? []);
+    expect(lineNoadGlyphs.map((glyph) => ({ fontId: glyph.fontId, code: glyph.code }))).toContainEqual({
+      fontId: "cmex7",
+      code: 80,
+    });
   });
 
   it("lays out negated relation composites with TeX overlay glyph traces", () => {

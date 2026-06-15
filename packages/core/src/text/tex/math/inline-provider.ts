@@ -69,7 +69,7 @@ function getMathBox(
   if (cached !== undefined) {
     return cached;
   }
-  const parsed = parseMathBoxContent(params);
+  const parsed = parseMathBoxContent(params, style);
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     cache.set(key, null);
     return null;
@@ -107,14 +107,16 @@ function parseMathBoxContent(params: {
   readonly content: string;
   readonly delimiter: string;
   readonly contentStart: number;
-}) {
+}, style: "text" | "display") {
   if (params.delimiter === "align-star") {
     return parseTexMathAlignedBody(params.content, {
       sourceOffset: params.contentStart,
+      suppressTerminalEllipsisGlue: style === "display",
     });
   }
   return parseTexMath(params.content, {
     sourceOffset: params.contentStart,
+    suppressTerminalEllipsisGlue: style === "display",
   });
 }
 
@@ -137,6 +139,7 @@ function getDisplayMathAlignment(
   }
   const parsed = parseTexMathAlignedBody(params.content, {
     sourceOffset: params.contentStart,
+    suppressTerminalEllipsisGlue: true,
   });
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return null;

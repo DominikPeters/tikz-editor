@@ -500,6 +500,33 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="110"');
   });
 
+  it("uses display-style AMS terminal ellipsis spacing for display math boxes", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const inlineSource = String.raw`$\dots$`;
+    const inlineBox = provider.getInlineMathBox({
+      source: inlineSource,
+      content: String.raw`\dots`,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: inlineSource.length,
+      contentStart: 1,
+      contentEnd: inlineSource.length - 1,
+    });
+    const displaySource = String.raw`\[\dots\]`;
+    const displayBox = provider.getDisplayMathBox?.({
+      source: displaySource,
+      content: String.raw`\dots`,
+      delimiter: "bracket",
+      sourceStart: 0,
+      sourceEnd: displaySource.length,
+      contentStart: 2,
+      contentEnd: displaySource.length - 2,
+    });
+
+    expect(inlineBox?.width).toBeCloseTo(13.333386, 5);
+    expect(displayBox?.width).toBeCloseTo(11.666714, 5);
+  });
+
   it("packs target-width display math boxes with TeX math glue shrink", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const content = String.raw`\begin{array}{l}x\end{array}+\begin{array}{l}y\end{array}`;

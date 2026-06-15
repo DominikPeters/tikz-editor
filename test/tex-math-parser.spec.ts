@@ -304,6 +304,11 @@ describe("TeX math parser", () => {
       { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
     ]);
     expect(comma.nucleus.kind === "list" ? comma.nucleus.list.items : []).toHaveLength(3);
+
+    const displayTerminal = atomAt(parseTexMath(String.raw`\dots`, {
+      suppressTerminalEllipsisGlue: true,
+    }), 0);
+    expect(displayTerminal.nucleus.kind === "list" ? displayTerminal.nucleus.list.items : []).toHaveLength(3);
   });
 
   it("parses amsmath substack rows as a structured centered one-column array", () => {
