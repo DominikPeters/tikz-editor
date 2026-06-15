@@ -111,10 +111,10 @@ function compareCase(caseSpec, args) {
     mismatches.push(`our layout unsupported: ${ours.errors.join("; ")}`);
     return { ...caseSpec, ok: false, mismatches, ours, tex };
   }
-  if (caseSpec.compareMode === "math-glyphs") {
+  if (caseSpec.compareMode === "math-glyphs" || caseSpec.compareMode === "document-math-glyphs") {
     compareGlyphLists(
       mismatches,
-      "display math glyph",
+      "math glyph",
       ours.glyphs,
       tex.glyphs.filter(isTeXMathGlyph),
       tolerance
@@ -195,9 +195,16 @@ function semanticHlistItem(item) {
 }
 
 function ourTrace(caseSpec) {
+  const documentMathMode = caseSpec.compareMode === "document-math-glyphs";
   const result = layoutSimpleTexParagraph(caseSpec.source, {
     paragraphId: `tex-display-math:${caseSpec.id}`,
     width: caseSpec.width,
+    ...(documentMathMode ? {
+      alignment: "ragged-right",
+      rightskipStretch: caseSpec.width,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+    } : {}),
     parindent: 0,
     hyphenator: { hyphenate: () => [] },
     mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
@@ -226,19 +233,22 @@ function ourTrace(caseSpec) {
       hboxRole: item.hboxRole,
       sourceSpan: item.sourceSpan,
     })),
-    glyphs: ourGlyphTraceFromVListItems(result.vlistLayout.items),
+    glyphs: ourGlyphTraceFromVListLayout(result.vlistLayout),
   };
 }
 
-function ourGlyphTraceFromVListItems(items) {
+function ourGlyphTraceFromVListLayout(layout) {
+  const paragraphGlyphContext = paragraphGlyphTraceContext(layout);
   const glyphs = [];
-  collectOurGlyphTraceFromVListItems(glyphs, items);
+  collectOurGlyphTraceFromVListItems(glyphs, layout.items, paragraphGlyphContext);
   return glyphs;
 }
 
-function collectOurGlyphTraceFromVListItems(glyphs, items) {
+function collectOurGlyphTraceFromVListItems(glyphs, items, paragraphGlyphContext) {
   for (const item of items) {
-    if (item.item?.kind === "display-math") {
+    if (item.item?.kind === "paragraph") {
+      glyphs.push(...inlineGlyphsFromParagraphItem(item, paragraphGlyphContext));
+    } else if (item.item?.kind === "display-math") {
       glyphs.push(...glyphsFromMathSvgBody(
         item.item.box.svgBody,
         item.x,
@@ -259,12 +269,62 @@ function collectOurGlyphTraceFromVListItems(glyphs, items) {
       }
     }
     if (item.children?.length) {
-      collectOurGlyphTraceFromVListItems(glyphs, item.children);
+      collectOurGlyphTraceFromVListItems(glyphs, item.children, paragraphGlyphContext);
     }
   }
 }
 
+function paragraphGlyphTraceContext(layout) {
+  const lineByIndex = new Map();
+  for (const report of layout.reports ?? []) {
+    if (!Array.isArray(report?.lines)) {
+      continue;
+    }
+    for (const line of report.lines) {
+      lineByIndex.set(line.lineIndex, line);
+    }
+  }
+  return {
+    lineByIndex,
+    linePlacementByIndex: new Map(layout.linePlacements.map((placement) => [placement.lineIndex, placement])),
+    paragraphPlacementByBlockIndex: new Map(layout.paragraphPlacements.map((placement) => [placement.blockIndex, placement])),
+  };
+}
+
+function inlineGlyphsFromParagraphItem(item, context) {
+  const blockIndex = item.item.blockIndex;
+  const placement = context.paragraphPlacementByBlockIndex.get(blockIndex);
+  if (!placement) {
+    return [];
+  }
+  const firstLine = context.lineByIndex.get(placement.lineIndices[0]);
+  const paragraphBaselineOffset = firstLine?.ascent ?? 0;
+  const glyphs = [];
+  for (const lineIndex of placement.lineIndices) {
+    const line = context.lineByIndex.get(lineIndex);
+    const linePlacement = context.linePlacementByIndex.get(lineIndex);
+    if (!line || !linePlacement) {
+      continue;
+    }
+    const baselineY = linePlacement.y + paragraphBaselineOffset;
+    for (const segment of line.segments ?? []) {
+      if (segment.kind !== "math" || !segment.mathSvgBody) {
+        continue;
+      }
+      glyphs.push(...glyphsFromMathSvgBody(
+        segment.mathSvgBody,
+        segment.x,
+        baselineY,
+        item.item.kind
+      ));
+    }
+  }
+  return glyphs;
+}
+
 function glyphsFromMathSvgBody(svgBody, originX, baselineY, role) {
+  const fragmentViewBox = readFragmentViewBox(svgBody);
+  const fragmentBoundaryTolerance = 1e-5;
   const glyphs = [];
   const pathPattern = /<path\b[^>]*>/g;
   for (const match of svgBody.matchAll(pathPattern)) {
@@ -276,16 +336,46 @@ function glyphsFromMathSvgBody(svgBody, originX, baselineY, role) {
     if (!fontId || !Number.isFinite(code) || !translate) {
       continue;
     }
+    const rawX = Number(translate[1]) / 100;
+    if (
+      fragmentViewBox &&
+      (
+        rawX < fragmentViewBox.xStart - fragmentBoundaryTolerance ||
+        rawX >= fragmentViewBox.xEnd - fragmentBoundaryTolerance
+      )
+    ) {
+      continue;
+    }
     glyphs.push({
       kind: "glyph",
       role,
-      x: round(originX + Number(translate[1]) / 100),
+      x: round(originX + rawX - (fragmentViewBox?.xStart ?? 0)),
       y: round(baselineY + Number(translate[2]) / 100),
       fontId,
       code,
     });
   }
   return glyphs;
+}
+
+function readFragmentViewBox(svgBody) {
+  const fragment = /<svg\b[^>]*\bdata-tex-math-fragment="true"[^>]*>/u.exec(svgBody)?.[0];
+  if (!fragment) {
+    return null;
+  }
+  const viewBox = readSvgAttribute(fragment, "viewBox");
+  if (!viewBox) {
+    return null;
+  }
+  const [rawX, , rawWidth] = viewBox.trim().split(/\s+/u).map((value) => Number(value));
+  if (!Number.isFinite(rawX) || !Number.isFinite(rawWidth)) {
+    return null;
+  }
+  const xStart = rawX / 100;
+  return {
+    xStart,
+    xEnd: xStart + rawWidth / 100,
+  };
 }
 
 function readSvgAttribute(tag, name) {
@@ -425,6 +515,16 @@ function texSource(caseSpec) {
   const amsmathPreamble = requiresAmsmath(caseSpec.source)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
+  if (caseSpec.compareMode === "document-math-glyphs") {
+    return String.raw`\documentclass{article}
+` + amsmathPreamble + String.raw`
+\newbox\tikzdisplaybox
+\begin{document}
+\setbox\tikzdisplaybox=\vbox{\fontencoding{TU}\fontfamily{lmr}\selectfont \language=-1 \hsize=` + caseSpec.width + String.raw`pt \linewidth=\hsize \columnwidth=\hsize \pretolerance=100 \tolerance=200 \parindent=0pt \rightskip=0pt plus ` + caseSpec.width + String.raw`pt ` + caseSpec.source + String.raw`\par}
+\directlua{dofile('trace.lua')}
+\end{document}
+`;
+  }
   return String.raw`\documentclass{article}
 ` + amsmathPreamble + String.raw`
 \newbox\tikzdisplaybox
@@ -618,6 +718,8 @@ function readArgs() {
       cases.push(...alignMatrixCases());
     } else if (arg === "--construct-matrix") {
       cases.push(...constructMatrixCases());
+    } else if (arg === "--document-math-matrix") {
+      cases.push(...documentMathMatrixCases());
     } else if (arg === "--mixed-vlist-matrix") {
       cases.push(...mixedVListCases());
     } else if (arg === "--mixed-vlist-fuzz") {
@@ -660,6 +762,44 @@ function mixedVListCases() {
       source: String.raw`Alpha \begin{itemize}\item Item \[x^2+1\] done.\end{itemize} Beta`,
     },
   ];
+}
+
+function documentMathMatrixCases() {
+  return [
+    {
+      id: "inline-display-inline",
+      width: 160,
+      source: String.raw`Alpha $x+y$ before \[\frac{1}{2}+z\] after \(m-n\) Beta`,
+    },
+    {
+      id: "paragraph-display-tail-inline",
+      width: 170,
+      source: String.raw`Alpha $x^2$ first. Second \[\sqrt{y+1}\] tail \(z_1\).`,
+    },
+    {
+      id: "inline-and-align",
+      width: 170,
+      source: String.raw`Alpha \(x_i^2\) \begin{align*}a&=b\\c&=d\end{align*} Beta $y^n$`,
+    },
+    {
+      id: "quote-inline-display",
+      width: 180,
+      source: String.raw`Alpha \begin{quote}Quoted $x+y$ before \[\binom{n}{k}\] after \(z\).\end{quote} Beta`,
+    },
+    {
+      id: "list-inline-align",
+      width: 190,
+      source: String.raw`Alpha \begin{itemize}\item Item $x$ \begin{align*}a&=b\\c&=d\end{align*} done \(y\).\end{itemize} Beta`,
+    },
+    {
+      id: "nested-vlist-inline-display",
+      width: 210,
+      source: String.raw`Alpha \begin{quote}\begin{itemize}\item Nested \(x-y\) \[\sum_i^n\] done.\end{itemize}\end{quote} Beta`,
+    },
+  ].map((caseSpec) => ({
+    ...caseSpec,
+    compareMode: "document-math-glyphs",
+  }));
 }
 
 function alignMatrixCases() {

@@ -613,6 +613,9 @@ supported grammar is mostly healthy under the available gates:
   description, nested quote/itemize, and multi-item list contexts;
 - display construct and large display fuzz matrices compare glyphs in
   absolute vbox coordinates and pass at the current 0.03 pt tolerance;
+- document-level math glyph matrix compares absolute coordinates for inline
+  math, display math, and aligned displays in the same source, including
+  quote/list/nested vertical contexts, at the current 0.03 pt tolerance;
 - aligned math fuzz passes for the currently supported alignment grammar.
 - mixed vertical-list display fixtures (`quote` and `itemize`) have a glyph
   oracle mode and pass at the current 0.03 pt tolerance for the focused
@@ -627,14 +630,19 @@ work should focus on:
 
 - running larger versions of the same fuzz matrices and making them cheap
   enough for regular use;
-- expanding absolute-coordinate glyph trace coverage beyond the current inline,
-  display, and mixed vertical-list gates into broader document-level matrices;
+- expanding absolute-coordinate glyph trace coverage beyond the current
+  document-level smoke matrix into generated document-level matrices;
 - expanding editor hit-test coverage beyond row-level display block geometry
   into broader document-level matrices and finer math-in-display interactions;
 - documenting each known intentional mismatch between MathJax diagnostic tests
   and LuaLaTeX behavior before using MathJax corpus failures as work items;
 - expanding the mixed vertical-list fuzz grammar to include aligned displays
   and larger generated corpora once the regular run time is cheap enough.
+
+One current document-level gap is explicit `\par` immediately before a display
+math block: the absolute glyph matrix shows a stable vertical shift after that
+paragraph boundary, so it should be fixed under vertical-list paragraph-boundary
+spacing rather than hidden inside glyph comparison tolerances.
 
 ## Phased Implementation
 
