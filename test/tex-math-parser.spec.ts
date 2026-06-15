@@ -179,6 +179,30 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses typewriter and calligraphic math alphabet commands", () => {
+    const result = parseTexMath(String.raw`\mathtt{x}+\mathcal{A}`);
+    const typewriter = atomAt(result, 0);
+    const calligraphic = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(typewriter).toMatchObject({
+      nucleus: {
+        kind: "alphabet",
+        alphabet: "mathtt",
+        commandSourceSpan: { start: 0, end: 7 },
+        sourceSpan: { start: 0, end: 10 },
+      },
+    });
+    expect(calligraphic).toMatchObject({
+      nucleus: {
+        kind: "alphabet",
+        alphabet: "mathcal",
+        commandSourceSpan: { start: 11, end: 19 },
+        sourceSpan: { start: 11, end: 22 },
+      },
+    });
+  });
+
   it("parses TeX operator commands as op atoms with scripts", () => {
     const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
     const sum = atomAt(result, 0);

@@ -15,6 +15,7 @@ const DEFAULT_FONTS = [
   "cmti7",
   "cmbxti10",
   "cmtt10",
+  "cmtt8",
   "cmss10",
   "cmss8",
   "cmssi10",

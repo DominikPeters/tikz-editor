@@ -1131,12 +1131,16 @@ function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
   switch (commandName(command)) {
     case "mathbf":
       return "mathbf";
+    case "mathcal":
+      return "mathcal";
     case "mathit":
       return "mathit";
     case "mathrm":
       return "mathrm";
     case "mathsf":
       return "mathsf";
+    case "mathtt":
+      return "mathtt";
     default:
       return null;
   }

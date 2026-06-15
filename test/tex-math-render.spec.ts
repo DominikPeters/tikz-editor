@@ -120,7 +120,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders math alphabet glyphs through vendored CM font paths", () => {
-    const parsed = parseTexMath(String.raw`\mathbf{x}+\mathsf{x}+\mathit{x}`);
+    const parsed = parseTexMath(String.raw`\mathbf{x}+\mathsf{x}+\mathit{x}+\mathtt{x}+\mathcal{A}`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -131,6 +131,8 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmbx10" data-tex-glyph="120"');
     expect(body).toContain('data-tex-font="cmss10" data-tex-glyph="120"');
     expect(body).toContain('data-tex-font="cmti10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmtt10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="65"');
   });
 
   it("renders TeX operators through the selected math fonts", () => {

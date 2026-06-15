@@ -252,7 +252,7 @@ export function layoutTexMathList(
   } satisfies TexMathHList;
   return {
     supported: true,
-    hlist: alphabet ? collapseInternalAlphabetItalicKerns(hlist) : hlist,
+    hlist: alphabet ? normalizeAlphabetHList(hlist, alphabet) : hlist,
     errors: [],
   };
 }
@@ -603,7 +603,7 @@ function layoutAlphabetNucleus(
   if (!result.supported) {
     return null;
   }
-  const hlist = collapseInternalAlphabetItalicKerns(result.hlist);
+  const hlist = normalizeAlphabetHList(result.hlist, nucleus.alphabet);
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
   return {
     items: [child],
@@ -616,7 +616,17 @@ function layoutAlphabetNucleus(
   };
 }
 
-function collapseInternalAlphabetItalicKerns(hlist: TexMathHList): TexMathHList {
+function normalizeAlphabetHList(
+  hlist: TexMathHList,
+  alphabet: TexMathAlphabetCommand
+): TexMathHList {
+  if (alphabet !== "mathit") {
+    return hlist;
+  }
+  return collapseInternalMathitItalicKerns(hlist);
+}
+
+function collapseInternalMathitItalicKerns(hlist: TexMathHList): TexMathHList {
   let removedWidth = 0;
   const items: TexMathHListItem[] = [];
   for (let index = 0; index < hlist.items.length; index += 1) {
@@ -1803,6 +1813,14 @@ function defaultLuaLatexMathAlphabetFontId(
         return "cmbx5";
       }
       return "cmbx10";
+    case "mathcal":
+      if (style === "script") {
+        return "cmsy7";
+      }
+      if (style === "scriptscript") {
+        return "cmsy5";
+      }
+      return "cmsy10";
     case "mathit":
       if (style === "text" || style === "display") {
         return "cmti10";
@@ -1821,6 +1839,11 @@ function defaultLuaLatexMathAlphabetFontId(
         return "cmss10";
       }
       return "cmss8";
+    case "mathtt":
+      if (style === "text" || style === "display") {
+        return "cmtt10";
+      }
+      return "cmtt8";
   }
 }
 

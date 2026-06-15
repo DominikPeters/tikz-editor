@@ -302,6 +302,33 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out typewriter and calligraphic alphabets with TeX script fonts", () => {
+    const result = layout(String.raw`\mathtt{ABC}+x_{\mathtt{i}}+\mathcal{ABC}+x_{y_{\mathcal{A}}}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      atPt: glyph.atPt,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmtt10", atPt: 10, code: 65 },
+      { fontId: "cmtt10", atPt: 10, code: 66 },
+      { fontId: "cmtt10", atPt: 10, code: 67 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "cmtt8", atPt: 7, code: 105 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "cmsy10", atPt: 10, code: 65 },
+      { fontId: "cmsy10", atPt: 10, code: 66 },
+      { fontId: "cmsy10", atPt: 10, code: 67 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "cmmi7", atPt: 7, code: 121 },
+      { fontId: "cmsy5", atPt: 5, code: 65 },
+    ]);
+  });
+
   it("lays out nested scripts through recursive script lists", () => {
     const result = layout("x^{y_i}");
 

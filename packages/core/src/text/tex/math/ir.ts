@@ -137,9 +137,11 @@ export interface TexMathAccentNucleus {
 
 export type TexMathAlphabetCommand =
   | "mathbf"
+  | "mathcal"
   | "mathit"
   | "mathrm"
-  | "mathsf";
+  | "mathsf"
+  | "mathtt";
 
 export interface TexMathAlphabetNucleus {
   readonly kind: "alphabet";

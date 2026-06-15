@@ -18,6 +18,7 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmti7",
   "cmbxti10",
   "cmtt10",
+  "cmtt8",
   "cmss10",
   "cmss8",
   "cmssi10",
@@ -53,6 +54,8 @@ export const DEFAULT_COMPUTER_MODERN_MATH_FONTS = [
   "cmbx5",
   "cmti10",
   "cmti7",
+  "cmtt10",
+  "cmtt8",
   "cmss10",
   "cmss8",
 ] as const;
