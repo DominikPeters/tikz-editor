@@ -111,6 +111,12 @@ const formulas = args.formulas.length > 0
       "x\\not= y",
       "x\\not\\in A",
       "x\\not\\leq y",
+      "\\ldots",
+      "\\cdots",
+      "\\dots",
+      "a\\ldots b",
+      "a+\\cdots+b",
+      "x_1,\\ldots,x_n",
       "\\sum",
       "\\sum_i^n",
       "\\begin{aligned}a&=b\\\\c&=d\\end{aligned}",
@@ -407,6 +413,7 @@ function texSource(formula) {
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula) ||
     hasSubstackCommand(formula) ||
+    hasEllipsisCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
@@ -837,6 +844,12 @@ function hasSubstackCommand(source) {
   return source.includes(String.raw`\substack`);
 }
 
+function hasEllipsisCommand(source) {
+  return source.includes(String.raw`\dots`) ||
+    source.includes(String.raw`\ldots`) ||
+    source.includes(String.raw`\cdots`);
+}
+
 function randomMatrixCell(rng) {
   return [
     randomMathAtom(rng),
@@ -866,20 +879,36 @@ function maybeWithScripts(term, rng, depth) {
 
 function randomMathScript(rng, depth) {
   if (depth >= 2) {
-    return randomMathAtom(rng);
+    return randomScriptAtom(rng);
   }
   const choices = [
-    randomMathAtom(rng),
-    randomMathAtom(rng) + "^{" + randomMathAtom(rng) + "}",
-    randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
-    String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
-    String.raw`\binom{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+    randomScriptAtom(rng),
+    randomScriptAtom(rng) + "^{" + randomScriptAtom(rng) + "}",
+    randomScriptAtom(rng) + "_{" + randomScriptAtom(rng) + "}",
+    String.raw`\frac{` + randomScriptAtom(rng) + "}{" + randomScriptAtom(rng) + "}",
+    String.raw`\binom{` + randomScriptAtom(rng) + "}{" + randomScriptAtom(rng) + "}",
     randomSubstackFormula(rng),
   ];
   return choices[randomInt(rng, choices.length)] ?? "x";
 }
 
 function randomMathAtom(rng) {
+  const atoms = [
+    "a", "b", "c", "x", "y", "z",
+    "1", "2", "3",
+    String.raw`\ldots`,
+    String.raw`\cdots`,
+    String.raw`\dots`,
+    String.raw`\alpha`,
+    String.raw`\beta`,
+    String.raw`\gamma`,
+    String.raw`\infty`,
+    String.raw`\sum`,
+  ];
+  return atoms[randomInt(rng, atoms.length)] ?? "x";
+}
+
+function randomScriptAtom(rng) {
   const atoms = [
     "a", "b", "c", "x", "y", "z",
     "1", "2", "3",

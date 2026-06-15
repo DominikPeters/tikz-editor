@@ -268,6 +268,10 @@ class TexMathParser {
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
       }
+      const ellipsis = ellipsisCommandName(token.text);
+      if (ellipsis) {
+        return this.parseEllipsis(ellipsis, allowScripts);
+      }
       if (commandName(token.text) === "substack") {
         return this.parseSubstack(allowScripts);
       }
@@ -623,6 +627,59 @@ class TexMathParser {
       limits,
       sourceSpan,
     }, allowScripts);
+  }
+
+  private parseEllipsis(
+    ellipsis: "ldots" | "cdots" | "dots",
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const resolved = ellipsis === "dots" ? this.amsDotsKind() : ellipsis;
+    const dotText: "." | "\\cdot" = resolved === "cdots" ? "\\cdot" : ".";
+    const items: TexMathItem[] = [
+      ellipsisDotAtom(dotText, command.sourceSpan),
+      ellipsisDotAtom(dotText, command.sourceSpan),
+      ellipsisDotAtom(dotText, command.sourceSpan),
+    ];
+    if (shouldAddAmsEllipsisTrailingGlue(ellipsis, this.peekSignificantToken())) {
+      items.push({
+        kind: "glue",
+        command: ",",
+        sourceSpan: command.sourceSpan,
+      });
+    }
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "inner",
+      nucleus: {
+        kind: "list",
+        list: {
+          kind: "math-list",
+          items,
+          sourceSpan: command.sourceSpan,
+        },
+        sourceSpan: command.sourceSpan,
+      },
+      sourceSpan: command.sourceSpan,
+    }, allowScripts);
+  }
+
+  private amsDotsKind(): "ldots" | "cdots" {
+    const next = this.peekSignificantToken();
+    if (!next) {
+      return "ldots";
+    }
+    if (next.kind === "character" && "+=<>-*".includes(next.text)) {
+      return "cdots";
+    }
+    if (next.kind !== "command") {
+      return "ldots";
+    }
+    if (commandName(next.text) === "not") {
+      return "cdots";
+    }
+    const atomClass = atomClassForToken(next);
+    return atomClass === "bin" || atomClass === "rel" ? "cdots" : "ldots";
   }
 
   private parseNot(allowScripts: boolean): TexMathAtom {
@@ -1787,6 +1844,14 @@ class TexMathParser {
     return this.tokens[this.index] ?? null;
   }
 
+  private peekSignificantToken(): TexMathToken | null {
+    let cursor = this.index;
+    while (this.tokens[cursor]?.kind === "space") {
+      cursor += 1;
+    }
+    return this.tokens[cursor] ?? null;
+  }
+
   private peekEnvironmentName(startIndex: number): string | null {
     let cursor = startIndex;
     while (this.tokens[cursor]?.kind === "space") {
@@ -1871,6 +1936,57 @@ function makeUnsupportedItem(
     command,
     sourceSpan,
   };
+}
+
+function ellipsisDotAtom(
+  text: "." | "\\cdot",
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass: "punct",
+    nucleus: {
+      kind: "glyph",
+      text,
+      sourceSpan,
+    },
+    sourceSpan,
+  };
+}
+
+function shouldAddAmsEllipsisTrailingGlue(
+  ellipsis: "ldots" | "cdots" | "dots",
+  next: TexMathToken | null
+): boolean {
+  if (ellipsis === "ldots") {
+    return false;
+  }
+  if (!next) {
+    return true;
+  }
+  if (ellipsis === "cdots" && next.kind === "character" && [",", ";", "."].includes(next.text)) {
+    return true;
+  }
+  return isAmsDotsRightDelimiter(next);
+}
+
+function isAmsDotsRightDelimiter(token: TexMathToken): boolean {
+  if (token.kind === "group-close") {
+    return false;
+  }
+  if (token.kind === "character") {
+    return [")", "]"].includes(token.text);
+  }
+  if (token.kind !== "command") {
+    return false;
+  }
+  return [
+    "right",
+    "rbrace",
+    "rangle",
+    "rceil",
+    "rfloor",
+  ].includes(commandName(token.text));
 }
 
 function alignedAtom(
@@ -2099,6 +2215,19 @@ function lineCommandName(command: string): TexMathLineCommand | null {
   }
 }
 
+function ellipsisCommandName(command: string): "ldots" | "cdots" | "dots" | null {
+  switch (commandName(command)) {
+    case "dots":
+      return "dots";
+    case "ldots":
+      return "ldots";
+    case "cdots":
+      return "cdots";
+    default:
+      return null;
+  }
+}
+
 function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
   switch (commandName(command)) {
     case "mathbf":
@@ -2176,6 +2305,20 @@ function notCompositeAtomClass(token: TexMathToken): TexMathAtomClass | null {
     return null;
   }
   return namedSymbolCommand(token.text)?.atomClass ?? null;
+}
+
+function atomClassForToken(token: TexMathToken): TexMathAtomClass | null {
+  if (token.kind === "character") {
+    return atomClassForCharacter(token.text);
+  }
+  if (token.kind !== "command") {
+    return null;
+  }
+  const namedSymbol = namedSymbolCommand(token.text);
+  if (namedSymbol) {
+    return namedSymbol.atomClass;
+  }
+  return operatorCommandName(token.text) ? "op" : null;
 }
 
 const ordinaryNamedSymbolCommands = new Set([

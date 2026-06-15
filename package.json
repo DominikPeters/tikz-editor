@@ -62,6 +62,7 @@
     "profile:web:compare": "npm run -w @tikz-editor/web profile:compare --",
     "profile:web:compare-report": "npm run -w @tikz-editor/web profile:compare-report --",
     "dev:web": "npm run -w @tikz-editor/web dev",
+    "predev:tex-paragraph-lab": "npm run -w @tikz-editor/core build",
     "dev:tex-paragraph-lab": "node tools/tex-paragraph-lab/server.mjs",
     "dev:landing": "npm run -w @tikz-editor/landing dev",
     "dev:desktop": "npm run -w @tikz-editor/desktop tauri:dev",

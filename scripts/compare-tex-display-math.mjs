@@ -45,6 +45,11 @@ const cases = args.cases.length > 0
         width: 160,
       },
       {
+        id: "ellipsis-display",
+        source: String.raw`Alpha \[x_1,\ldots,x_n+\cdots\] Beta`,
+        width: 160,
+      },
+      {
         id: "align-star-display",
         source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
         width: 120,
@@ -417,6 +422,7 @@ function requiresAmsmath(source) {
     hasBinomialCommand(source) ||
     hasStyledFractionCommand(source) ||
     hasSubstackCommand(source) ||
+    hasEllipsisCommand(source) ||
     source.includes(String.raw`\text`);
 }
 
@@ -804,7 +810,7 @@ function randomDisplayFormula(rng) {
   const right = randomMathTerm(rng);
   const operator = choice(rng, ["+", "-", "="]);
   if (rng() < 0.25) {
-    return `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}${operator}${right}`;
+    return `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}${operator}${right}`;
   }
   return `${left}${operator}${right}`;
 }
@@ -823,7 +829,7 @@ function randomAlignmentLeftCell(rng) {
     randomSmallMatrix(rng),
     randomMatrix(rng),
     randomOperatorName(rng),
-    `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
+    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
   ]);
 }
 
@@ -868,8 +874,8 @@ function randomTextTerm(rng) {
 
 function randomScriptTerm(rng) {
   const base = randomMathAtom(rng);
-  const sub = randomMathAtom(rng);
-  const sup = randomMathAtom(rng);
+  const sub = randomScriptAtom(rng);
+  const sup = randomScriptAtom(rng);
   return choice(rng, [`${base}_${sub}`, `${base}^${sup}`, `${base}_${sub}^${sup}`]);
 }
 
@@ -1027,11 +1033,37 @@ function hasSubstackCommand(source) {
   return source.includes(String.raw`\substack`);
 }
 
+function hasEllipsisCommand(source) {
+  return source.includes(String.raw`\dots`) ||
+    source.includes(String.raw`\ldots`) ||
+    source.includes(String.raw`\cdots`);
+}
+
 function randomLargeOperator(rng) {
   return choice(rng, [String.raw`\sum`, String.raw`\prod`, String.raw`\bigcup`, String.raw`\bigcap`]);
 }
 
 function randomMathAtom(rng) {
+  return choice(rng, [
+    "a",
+    "b",
+    "c",
+    "i",
+    "j",
+    "m",
+    "n",
+    "x",
+    "y",
+    "z",
+    "1",
+    "2",
+    String.raw`\ldots`,
+    String.raw`\cdots`,
+    String.raw`\dots`,
+  ]);
+}
+
+function randomScriptAtom(rng) {
   return choice(rng, ["a", "b", "c", "i", "j", "m", "n", "x", "y", "z", "1", "2"]);
 }
 

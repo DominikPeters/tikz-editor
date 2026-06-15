@@ -71,6 +71,23 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(2319.9158 -362.892) scale(70)"');
   });
 
+  it("renders ellipsis commands as positioned TeX dot glyphs", () => {
+    const parsed = parseTexMath(String.raw`\ldots+\cdots`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body.match(/data-tex-font="cmmi10" data-tex-glyph="58"/g)).toHaveLength(3);
+    expect(body.match(/data-tex-font="cmsy10" data-tex-glyph="1"/g)).toHaveLength(3);
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="43"');
+    expect(body).toContain('transform="translate(444.4462 0) scale(100)"');
+    expect(body).toContain('transform="translate(2388.8982 0) scale(100)"');
+    expect(body).toContain('transform="translate(3277.7906 0) scale(100)"');
+  });
+
   it("renders simple fractions with glyphs and a TeX rule", () => {
     const parsed = parseTexMath(String.raw`\frac{1}{2}`);
     const result = layoutTexMathList(parsed.list);

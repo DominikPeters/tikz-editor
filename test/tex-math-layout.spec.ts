@@ -156,6 +156,56 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out ellipsis commands as inner punctuation lists with TeX spacing", () => {
+    const ldots = layout(String.raw`\ldots`);
+    expect(ldots.supported).toBe(true);
+    expect(ldots.hlist?.width).toBeCloseTo(11.666714, 5);
+    expect(ldots.hlist?.height).toBeCloseTo(1.05556, 5);
+    expect(ldots.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      width: expect.closeTo(11.666714, 5),
+      items: [
+        { kind: "glyph", fontId: "cmmi10", code: 58, x: 0 },
+        { kind: "glue", source: "inter-atom", x: expect.closeTo(2.77779, 5), width: expect.closeTo(1.666672, 5) },
+        { kind: "glyph", fontId: "cmmi10", code: 58, x: expect.closeTo(4.444462, 5) },
+        { kind: "glue", source: "inter-atom", x: expect.closeTo(7.222252, 5), width: expect.closeTo(1.666672, 5) },
+        { kind: "glyph", fontId: "cmmi10", code: 58, x: expect.closeTo(8.888924, 5) },
+      ],
+    });
+
+    const cdots = layout(String.raw`a+\cdots+b`);
+    expect(cdots.supported).toBe(true);
+    expect(cdots.hlist?.width).toBeCloseTo(45.68882, 5);
+    expect(cdots.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmmi10", code: 97, x: 0 },
+      { kind: "glue", source: "inter-atom", width: expect.closeTo(2.222229, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 43, x: expect.closeTo(7.508129, 5) },
+      { kind: "glue", source: "inter-atom", width: expect.closeTo(2.222229, 5) },
+      {
+        kind: "hlist",
+        role: "nucleus",
+        x: expect.closeTo(17.508168, 5),
+        width: expect.closeTo(11.666714, 5),
+      },
+      { kind: "glue", source: "inter-atom", width: expect.closeTo(2.222229, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 43, x: expect.closeTo(31.397111, 5) },
+      { kind: "glue", source: "inter-atom", width: expect.closeTo(2.222229, 5) },
+      { kind: "glyph", fontId: "cmmi10", code: 98, x: expect.closeTo(41.39715, 5) },
+    ]);
+    const cdotGlyphs = flattenGlyphItems(cdots.hlist?.items ?? [])
+      .filter((glyph) => glyph.sourceSpan.start === 2 && glyph.sourceSpan.end === 8);
+    expect(cdotGlyphs.map((glyph) => ({ fontId: glyph.fontId, code: glyph.code }))).toEqual([
+      { fontId: "cmsy10", code: 1 },
+      { fontId: "cmsy10", code: 1 },
+      { fontId: "cmsy10", code: 1 },
+    ]);
+
+    const terminalDots = layout(String.raw`\dots`);
+    expect(terminalDots.supported).toBe(true);
+    expect(terminalDots.hlist?.width).toBeCloseTo(13.333386, 5);
+  });
+
   it("lays out negated relation composites with TeX overlay glyph traces", () => {
     const notIn = layout(String.raw`x\notin A`);
     expect(notIn.supported).toBe(true);

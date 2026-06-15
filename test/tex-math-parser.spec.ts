@@ -223,6 +223,63 @@ describe("TeX math parser", () => {
     expect(underline.nucleus.kind === "line" ? underline.nucleus.body.sourceSpan : null).toEqual({ start: 54, end: 55 });
   });
 
+  it("parses ellipsis commands as inner punctuation lists", () => {
+    const result = parseTexMath(String.raw`\ldots+\cdots+\dots`, { sourceOffset: 5 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(5);
+
+    const ldots = atomAt(result, 0);
+    expect(ldots).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 5, end: 11 },
+      nucleus: { kind: "list", sourceSpan: { start: 5, end: 11 } },
+    });
+    expect(ldots.nucleus.kind === "list" ? ldots.nucleus.list.items : []).toMatchObject([
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+    ]);
+
+    const cdots = atomAt(result, 2);
+    expect(cdots).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 12, end: 18 },
+    });
+    expect(cdots.nucleus.kind === "list" ? cdots.nucleus.list.items : []).toMatchObject([
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
+    ]);
+
+    const dots = atomAt(result, 4);
+    expect(dots).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 19, end: 24 },
+    });
+    expect(dots.nucleus.kind === "list" ? dots.nucleus.list.items : []).toMatchObject([
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "glue", command: "," },
+    ]);
+
+    const contextual = atomAt(parseTexMath(String.raw`\dots+1`), 0);
+    expect(contextual.nucleus.kind === "list" ? contextual.nucleus.list.items : []).toMatchObject([
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
+    ]);
+
+    const comma = atomAt(parseTexMath(String.raw`\dots,1`), 0);
+    expect(comma.nucleus.kind === "list" ? comma.nucleus.list.items : []).toMatchObject([
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+      { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
+    ]);
+    expect(comma.nucleus.kind === "list" ? comma.nucleus.list.items : []).toHaveLength(3);
+  });
+
   it("parses amsmath substack rows as a structured centered one-column array", () => {
     const result = parseTexMath(String.raw`\sum_{\substack{i=1\\j=2}}^n`);
     const sum = atomAt(result, 0);
