@@ -238,6 +238,30 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="18"');
   });
 
+  it("renders additional plain-TeX symbols and named operators through TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+\Longrightarrow+\implies+\iff`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="64"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="114"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="115"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="110"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="15"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="106"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="98"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="99"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="58"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="40"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="41"');
+  });
+
   it("renders negated relation composites through positioned TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`x\notin A+x\not\leq y`);
     const result = layoutTexMathList(parsed.list);

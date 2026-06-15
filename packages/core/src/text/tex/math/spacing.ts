@@ -373,6 +373,12 @@ function explicitGlueDimensions(
       return namedMuGlueDimensions("thick");
     case "!":
       return { mu: -3, stretchMu: 0, shrinkMu: 0 };
+    case "nobreakspace":
+      return { mu: 18, stretchMu: 0, shrinkMu: 0 };
+    case "negmedspace":
+      return { mu: -4, stretchMu: -2, shrinkMu: -4 };
+    case "negthickspace":
+      return { mu: -5, stretchMu: -5, shrinkMu: 0 };
     case "quad":
       return { mu: 18, stretchMu: 0, shrinkMu: 0 };
     case "qquad":

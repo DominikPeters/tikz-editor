@@ -505,6 +505,27 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses TeX macro arguments as single atoms when braces are omitted", () => {
+    const fraction = atomAt(parseTexMath(String.raw`\frac1c+\sqrt x`), 0);
+    const radical = atomAt(parseTexMath(String.raw`\frac1c+\sqrt x`), 2);
+
+    expect(fraction).toMatchObject({
+      nucleus: {
+        kind: "fraction",
+        numerator: { items: [{ nucleus: { kind: "glyph", text: "1" } }] },
+        denominator: { items: [{ nucleus: { kind: "glyph", text: "c" } }] },
+        sourceSpan: { start: 0, end: 7 },
+      },
+    });
+    expect(radical).toMatchObject({
+      nucleus: {
+        kind: "radical",
+        radicand: { items: [{ nucleus: { kind: "glyph", text: "x" } }] },
+        sourceSpan: { start: 8, end: 15 },
+      },
+    });
+  });
+
   it("parses named math symbols with TeX atom classes", () => {
     const result = parseTexMath(String.raw`\alpha+\times=\leq\neq`);
 
@@ -520,6 +541,49 @@ describe("TeX math parser", () => {
       { atomClass: "rel", text: "=", sourceSpan: { start: 13, end: 14 } },
       { atomClass: "rel", text: String.raw`\leq`, sourceSpan: { start: 14, end: 18 } },
       { atomClass: "rel", text: String.raw`\neq`, sourceSpan: { start: 18, end: 22 } },
+    ]);
+  });
+
+  it("parses additional plain-TeX symbols and named operators", () => {
+    const result = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+\Longrightarrow+\implies+\iff`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph"
+        ? { atomClass: item.atomClass, text: item.nucleus.text }
+        : item.kind === "atom" && item.nucleus.kind === "operator-name"
+          ? {
+              atomClass: item.atomClass,
+              text: item.nucleus.parts.map((part) => part.kind === "text" ? part.text : "").join(""),
+            }
+          : null
+    )).toEqual([
+      { atomClass: "ord", text: String.raw`\partial` },
+      { atomClass: "ord", text: "f" },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\nabla` },
+      { atomClass: "ord", text: "g" },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "op", text: "sin" },
+      { atomClass: "ord", text: "x" },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "bin", text: String.raw`\bullet` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "open", text: String.raw`\lvert` },
+      { atomClass: "ord", text: "x" },
+      { atomClass: "close", text: String.raw`\rvert` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "open", text: String.raw`\lfloor` },
+      { atomClass: "ord", text: "y" },
+      { atomClass: "close", text: String.raw`\rfloor` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "punct", text: String.raw`\colon` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\Longrightarrow` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\implies` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\iff` },
     ]);
   });
 
@@ -843,6 +907,23 @@ describe("TeX math parser", () => {
         { sourceSpan: { start: 27, end: 28 }, itemCount: 1 },
       ],
     ]);
+  });
+
+  it("parses array optional vertical positions before column preambles", () => {
+    const source = String.raw`\begin{array}[b]{c}a\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "array",
+        preambleSourceSpan: { start: 16, end: 19 },
+        columnAlignments: ["center"],
+      },
+    });
   });
 
   it("keeps unsupported array preamble extensions explicit", () => {

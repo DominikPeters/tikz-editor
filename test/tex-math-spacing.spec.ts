@@ -92,7 +92,7 @@ describe("TeX math atom classes and spacing", () => {
   });
 
   it("preserves explicit math spacing commands as resolved glue", () => {
-    const items = spacedItems(String.raw`x\,y\:z\;w\!q\quad r\qquad s`);
+    const items = spacedItems(String.raw`x\,y\:z\;w\!q\nobreakspace r\ s\negmedspace t\negthickspace u\quad v\qquad w`);
     const glues = items.filter((item) => item.kind === "resolved-glue");
 
     expect(glues).toEqual([
@@ -100,6 +100,10 @@ describe("TeX math atom classes and spacing", () => {
       expect.objectContaining({ source: "explicit", command: ":", mu: 4, stretchMu: 2, shrinkMu: 4 }),
       expect.objectContaining({ source: "explicit", command: ";", mu: 5, stretchMu: 5 }),
       expect.objectContaining({ source: "explicit", command: "!", mu: -3 }),
+      expect.objectContaining({ source: "explicit", command: "nobreakspace", mu: 18 }),
+      expect.objectContaining({ source: "explicit", command: "nobreakspace", mu: 18 }),
+      expect.objectContaining({ source: "explicit", command: "negmedspace", mu: -4, stretchMu: -2, shrinkMu: -4 }),
+      expect.objectContaining({ source: "explicit", command: "negthickspace", mu: -5, stretchMu: -5 }),
       expect.objectContaining({ source: "explicit", command: "quad", mu: 18 }),
       expect.objectContaining({ source: "explicit", command: "qquad", mu: 36 }),
     ]);

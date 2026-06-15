@@ -59,6 +59,9 @@ export type TexMathSpacingCommand =
   | ":"
   | ";"
   | "!"
+  | "nobreakspace"
+  | "negmedspace"
+  | "negthickspace"
   | "quad"
   | "qquad";
 

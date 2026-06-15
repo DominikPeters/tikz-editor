@@ -275,6 +275,10 @@ class TexMathParser {
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
       }
+      const namedOperator = namedOperatorCommandName(token.text);
+      if (namedOperator) {
+        return this.parseNamedOperator(namedOperator, allowScripts);
+      }
       const ellipsis = ellipsisCommandName(token.text);
       if (ellipsis) {
         return this.parseEllipsis(
@@ -386,8 +390,8 @@ class TexMathParser {
     allowScripts: boolean
   ): TexMathAtom {
     const command = this.advance();
-    const numerator = this.parseRequiredGroup(command.sourceSpan, `${command.text} numerator`);
-    const denominator = this.parseRequiredGroup(command.sourceSpan, `${command.text} denominator`);
+    const numerator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} numerator`);
+    const denominator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} denominator`);
     const sourceSpan = spanUnion(
       command.sourceSpan,
       denominator?.sourceSpan ?? numerator?.sourceSpan ?? command.sourceSpan
@@ -412,8 +416,8 @@ class TexMathParser {
     allowScripts: boolean
   ): TexMathAtom {
     const command = this.advance();
-    const numerator = this.parseRequiredGroup(command.sourceSpan, `${command.text} numerator`);
-    const denominator = this.parseRequiredGroup(command.sourceSpan, `${command.text} denominator`);
+    const numerator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} numerator`);
+    const denominator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} denominator`);
     const sourceSpan = spanUnion(
       command.sourceSpan,
       denominator?.sourceSpan ?? numerator?.sourceSpan ?? command.sourceSpan
@@ -438,7 +442,7 @@ class TexMathParser {
 
   private parseRadical(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
-    const radicand = this.parseRequiredGroup(command.sourceSpan, "\\sqrt radicand");
+    const radicand = this.parseRequiredMathArgument(command.sourceSpan, "\\sqrt radicand");
     const sourceSpan = spanUnion(command.sourceSpan, radicand?.sourceSpan ?? command.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
@@ -641,6 +645,28 @@ class TexMathParser {
       },
       limits,
       sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseNamedOperator(name: string, allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const parts: TexMathOperatorNamePart[] = [...name].map((character, index) => ({
+      kind: "text",
+      text: character,
+      sourceSpan: index === 0 ? command.sourceSpan : { start: command.sourceSpan.end, end: command.sourceSpan.end },
+    }));
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "operator-name",
+        parts,
+        commandSourceSpan: command.sourceSpan,
+        nameSourceSpan: command.sourceSpan,
+        sourceSpan: command.sourceSpan,
+      },
+      limits: "nolimits",
+      sourceSpan: command.sourceSpan,
     }, allowScripts);
   }
 
@@ -956,9 +982,10 @@ class TexMathParser {
     environmentName: { name: string; sourceSpan: TexMathSourceSpan },
     allowScripts: boolean
   ): TexMathAtom {
+    const position = this.consumeOptionalArrayPosition();
     const preamble = this.parseArrayPreambleGroup(beginSourceSpan);
     const initialSourceSpan = spanUnion(
-      spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      spanUnion(spanUnion(beginSourceSpan, environmentName.sourceSpan), position ?? environmentName.sourceSpan),
       preamble?.sourceSpan ?? environmentName.sourceSpan
     );
     if (!preamble || preamble.alignments.length === 0) {
@@ -1514,6 +1541,35 @@ class TexMathParser {
       return { alignments: [], sourceSpan };
     }
     return { alignments, sourceSpan };
+  }
+
+  private consumeOptionalArrayPosition(): TexMathSourceSpan | null {
+    this.skipSpaces();
+    const open = this.peek();
+    if (open?.kind !== "character" || open.text !== "[") {
+      return null;
+    }
+    this.advance();
+    let sourceSpan = open.sourceSpan;
+    let value = "";
+    while (!this.isAtEnd()) {
+      const token = this.advance();
+      sourceSpan = spanUnion(sourceSpan, token.sourceSpan);
+      if (token.kind === "character" && token.text === "]") {
+        break;
+      }
+      value += token.text;
+    }
+    const position = value.trim();
+    if (position !== "t" && position !== "c" && position !== "b") {
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported array vertical position ${position || "[]"}.`,
+        sourceSpan
+      );
+    }
+    return sourceSpan;
   }
 
   private consumeUnsupportedEnvironmentBody(
@@ -2169,7 +2225,20 @@ function isMathRowBreakToken(token: TexMathToken | null): boolean {
 
 function spacingCommandName(command: string): TexMathGlue["command"] | null {
   const name = commandName(command);
-  if (name === "," || name === ":" || name === ";" || name === "!" || name === "quad" || name === "qquad") {
+  if (name === " ") {
+    return "nobreakspace";
+  }
+  if (
+    name === "," ||
+    name === ":" ||
+    name === ";" ||
+    name === "!" ||
+    name === "nobreakspace" ||
+    name === "negmedspace" ||
+    name === "negthickspace" ||
+    name === "quad" ||
+    name === "qquad"
+  ) {
     return name;
   }
   return null;
@@ -2314,8 +2383,54 @@ function operatorCommandName(command: string): TexMathOperatorCommand | null {
   }
 }
 
+function namedOperatorCommandName(command: string): string | null {
+  switch (commandName(command)) {
+    case "arccos":
+    case "arcsin":
+    case "arctan":
+    case "arg":
+    case "cos":
+    case "cosh":
+    case "cot":
+    case "coth":
+    case "csc":
+    case "deg":
+    case "det":
+    case "dim":
+    case "exp":
+    case "gcd":
+    case "hom":
+    case "inf":
+    case "ker":
+    case "lg":
+    case "ln":
+    case "log":
+    case "max":
+    case "min":
+    case "Pr":
+    case "sec":
+    case "sin":
+    case "sinh":
+    case "sup":
+    case "tan":
+    case "tanh":
+      return commandName(command);
+    default:
+      return null;
+  }
+}
+
 function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | null {
   const name = commandName(command);
+  if (openNamedSymbolCommands.has(name)) {
+    return { atomClass: "open" };
+  }
+  if (closeNamedSymbolCommands.has(name)) {
+    return { atomClass: "close" };
+  }
+  if (punctNamedSymbolCommands.has(name)) {
+    return { atomClass: "punct" };
+  }
   if (ordinaryNamedSymbolCommands.has(name)) {
     return { atomClass: "ord" };
   }
@@ -2358,16 +2473,37 @@ const ordinaryNamedSymbolCommands = new Set([
   "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma",
   "tau", "upsilon", "phi", "varphi", "chi", "psi", "omega",
   "exists", "forall", "infty",
+  "aleph", "emptyset", "ell", "flat", "Im", "imath", "jmath", "lnot", "natural", "nabla", "partial",
+  "prime", "Re", "sharp", "top", "bot", "triangle", "wp",
 ]);
 
 const binaryNamedSymbolCommands = new Set([
-  "cap", "cdot", "cup", "mp", "pm", "setminus", "times", "vee", "wedge",
+  "amalg", "ast", "bigcirc", "bigtriangledown", "bigtriangleup", "bullet", "cap", "cdot", "circ", "cup",
+  "dagger", "ddagger", "diamond", "div", "mp", "odot", "ominus", "oplus", "oslash", "otimes", "pm",
+  "setminus", "sqcap", "sqcup", "star", "times", "triangleleft", "triangleright", "uplus", "vee", "wedge", "wr",
 ]);
 
 const relationNamedSymbolCommands = new Set([
-  "approx", "gets", "ge", "geq", "in", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow",
-  "le", "leq", "mapsto", "ne", "neq", "notin", "rightarrow", "Rightarrow", "subset", "subseteq",
-  "supset", "supseteq", "to",
+  "approx", "asymp", "dashv", "downarrow", "Downarrow", "equiv", "frown", "gets", "ge", "geq", "gg",
+  "in", "leftarrow", "Leftarrow", "leftharpoondown", "leftharpoonup", "leftrightarrow", "Leftrightarrow",
+  "le", "leq", "ll", "mapsto", "mid", "ne", "nearrow", "neq", "ni", "notin", "nwarrow",
+  "owns", "parallel", "perp", "prec", "preceq", "propto", "rightarrow", "Rightarrow", "rightharpoondown",
+  "rightharpoonup", "searrow", "sim", "simeq", "smile", "sqsubseteq", "sqsupseteq", "subset", "subseteq",
+  "iff", "implies", "longleftarrow", "longrightarrow", "Longleftarrow", "Longleftrightarrow", "Longrightarrow",
+  "succ", "succeq", "supset", "supseteq", "swarrow", "to", "uparrow", "Uparrow", "updownarrow", "Updownarrow",
+  "vdash",
+]);
+
+const openNamedSymbolCommands = new Set([
+  "langle", "lbrace", "lceil", "lfloor", "lvert", "lVert", "{",
+]);
+
+const closeNamedSymbolCommands = new Set([
+  "rangle", "rbrace", "rceil", "rfloor", "rvert", "rVert", "}",
+]);
+
+const punctNamedSymbolCommands = new Set([
+  "colon",
 ]);
 
 function atomClassForCharacter(char: string): TexMathAtomClass {

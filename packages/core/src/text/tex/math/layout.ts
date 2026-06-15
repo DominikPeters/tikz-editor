@@ -3594,14 +3594,94 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "letters", code: 38 }];
     case "varphi":
       return [{ family: "letters", code: 39 }];
+    case "lbrace":
+    case "{":
+      return [{ family: "symbols", code: 102 }];
+    case "rbrace":
+    case "}":
+      return [{ family: "symbols", code: 103 }];
+    case "langle":
+      return [{ family: "symbols", code: 104 }];
+    case "rangle":
+      return [{ family: "symbols", code: 105 }];
+    case "lfloor":
+      return [{ family: "symbols", code: 98 }];
+    case "rfloor":
+      return [{ family: "symbols", code: 99 }];
+    case "lceil":
+      return [{ family: "symbols", code: 100 }];
+    case "rceil":
+      return [{ family: "symbols", code: 101 }];
+    case "partial":
+      return [{ family: "letters", code: 64 }];
+    case "ell":
+      return [{ family: "letters", code: 96 }];
+    case "wp":
+      return [{ family: "letters", code: 125 }];
+    case "imath":
+      return [{ family: "letters", code: 123 }];
+    case "jmath":
+      return [{ family: "letters", code: 124 }];
+    case "flat":
+      return [{ family: "letters", code: 91 }];
+    case "natural":
+      return [{ family: "letters", code: 92 }];
+    case "sharp":
+      return [{ family: "letters", code: 93 }];
+    case "aleph":
+      return [{ family: "symbols", code: 64 }];
+    case "prime":
+      return [{ family: "symbols", code: 48 }];
+    case "emptyset":
+      return [{ family: "symbols", code: 59 }];
+    case "nabla":
+      return [{ family: "symbols", code: 114 }];
+    case "top":
+      return [{ family: "symbols", code: 62 }];
+    case "bot":
+      return [{ family: "symbols", code: 63 }];
+    case "triangle":
+      return [{ family: "symbols", code: 52 }];
+    case "Re":
+      return [{ family: "symbols", code: 60 }];
+    case "Im":
+      return [{ family: "symbols", code: 61 }];
     case "cdot":
       return [{ family: "symbols", code: 1 }];
     case "times":
       return [{ family: "symbols", code: 2 }];
+    case "ast":
+      return [{ family: "symbols", code: 3 }];
+    case "div":
+      return [{ family: "symbols", code: 4 }];
+    case "diamond":
+      return [{ family: "symbols", code: 5 }];
     case "pm":
       return [{ family: "symbols", code: 6 }];
     case "mp":
       return [{ family: "symbols", code: 7 }];
+    case "oplus":
+      return [{ family: "symbols", code: 8 }];
+    case "ominus":
+      return [{ family: "symbols", code: 9 }];
+    case "otimes":
+      return [{ family: "symbols", code: 10 }];
+    case "oslash":
+      return [{ family: "symbols", code: 11 }];
+    case "odot":
+      return [{ family: "symbols", code: 12 }];
+    case "bigcirc":
+      return [{ family: "symbols", code: 13 }];
+    case "circ":
+      return [{ family: "symbols", code: 14 }];
+    case "bullet":
+      return [{ family: "symbols", code: 15 }];
+    case "asymp":
+      return [{ family: "symbols", code: 16 }];
+    case "colon":
+      return [{ family: "operators", code: 58 }];
+    case "equiv":
+      return [{ family: "symbols", code: 17 }];
     case "subseteq":
       return [{ family: "symbols", code: 18 }];
     case "supseteq":
@@ -3618,6 +3698,14 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 26 }];
     case "supset":
       return [{ family: "symbols", code: 27 }];
+    case "ll":
+      return [{ family: "symbols", code: 28 }];
+    case "gg":
+      return [{ family: "symbols", code: 29 }];
+    case "prec":
+      return [{ family: "symbols", code: 30 }];
+    case "succ":
+      return [{ family: "symbols", code: 31 }];
     case "leftarrow":
     case "gets":
       return [{ family: "symbols", code: 32 }];
@@ -3626,16 +3714,67 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 33 }];
     case "leftrightarrow":
       return [{ family: "symbols", code: 36 }];
+    case "nearrow":
+      return [{ family: "symbols", code: 37 }];
+    case "searrow":
+      return [{ family: "symbols", code: 38 }];
     case "Leftarrow":
       return [{ family: "symbols", code: 40 }];
     case "Rightarrow":
       return [{ family: "symbols", code: 41 }];
+    case "Longrightarrow":
+    case "implies":
+      return [
+        { family: "operators", code: 61 },
+        { kind: "kern", width: -1.66667 },
+        { family: "symbols", code: 41 },
+      ];
+    case "Longleftarrow":
+      return [
+        { family: "symbols", code: 40 },
+        { kind: "kern", width: -1.66667 },
+        { family: "operators", code: 61 },
+      ];
+    case "longrightarrow":
+      return [
+        { family: "symbols", code: 0 },
+        { kind: "kern", width: -1.66667 },
+        { family: "symbols", code: 33 },
+      ];
+    case "longleftarrow":
+      return [
+        { family: "symbols", code: 32 },
+        { kind: "kern", width: -1.66667 },
+        { family: "symbols", code: 0 },
+      ];
+    case "Uparrow":
+      return [{ family: "symbols", code: 42 }];
+    case "Downarrow":
+      return [{ family: "symbols", code: 43 }];
     case "Leftrightarrow":
       return [{ family: "symbols", code: 44 }];
+    case "Longleftrightarrow":
+    case "iff":
+      return [
+        { family: "symbols", code: 40 },
+        { kind: "kern", width: -1.66667 },
+        { family: "symbols", code: 41 },
+      ];
+    case "nwarrow":
+      return [{ family: "symbols", code: 45 }];
+    case "swarrow":
+      return [{ family: "symbols", code: 46 }];
     case "infty":
       return [{ family: "symbols", code: 49 }];
     case "in":
       return [{ family: "symbols", code: 50 }];
+    case "ni":
+    case "owns":
+      return [{ family: "symbols", code: 51 }];
+    case "propto":
+      return [{ family: "symbols", code: 47 }];
+    case "not":
+      return [{ family: "symbols", code: 54 }];
     case "notin":
       return [
         { kind: "kern", xOffset: 0.555565, width: 0.555542 },
@@ -3651,14 +3790,71 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 56 }];
     case "exists":
       return [{ family: "symbols", code: 57 }];
+    case "neg":
+    case "lnot":
+      return [{ family: "symbols", code: 58 }];
+    case "simeq":
+      return [{ family: "symbols", code: 39 }];
+    case "preceq":
+      return [{ family: "symbols", code: 22 }];
+    case "succeq":
+      return [{ family: "symbols", code: 23 }];
+    case "sim":
+      return [{ family: "symbols", code: 24 }];
+    case "dashv":
+      return [{ family: "symbols", code: 97 }];
+    case "vdash":
+      return [{ family: "symbols", code: 96 }];
+    case "mid":
+    case "lvert":
+    case "rvert":
+      return [{ family: "symbols", code: 106 }];
+    case "parallel":
+    case "lVert":
+    case "rVert":
+      return [{ family: "symbols", code: 107 }];
+    case "uparrow":
+      return [{ family: "symbols", code: 34 }];
+    case "downarrow":
+      return [{ family: "symbols", code: 35 }];
+    case "updownarrow":
+      return [{ family: "symbols", code: 108 }];
+    case "Updownarrow":
+      return [{ family: "symbols", code: 109 }];
+    case "perp":
+      return [{ family: "symbols", code: 63 }];
     case "cup":
       return [{ family: "symbols", code: 91 }];
     case "cap":
       return [{ family: "symbols", code: 92 }];
+    case "uplus":
+      return [{ family: "symbols", code: 93 }];
     case "wedge":
       return [{ family: "symbols", code: 94 }];
     case "vee":
       return [{ family: "symbols", code: 95 }];
+    case "sqcup":
+      return [{ family: "symbols", code: 116 }];
+    case "sqcap":
+      return [{ family: "symbols", code: 117 }];
+    case "dagger":
+      return [{ family: "symbols", code: 121 }];
+    case "ddagger":
+      return [{ family: "symbols", code: 122 }];
+    case "amalg":
+      return [{ family: "symbols", code: 113 }];
+    case "wr":
+      return [{ family: "symbols", code: 111 }];
+    case "bigtriangleup":
+      return [{ family: "symbols", code: 52 }];
+    case "bigtriangledown":
+      return [{ family: "symbols", code: 53 }];
+    case "triangleleft":
+      return [{ family: "symbols", code: 47 }];
+    case "triangleright":
+      return [{ family: "symbols", code: 46 }];
+    case "star":
+      return [{ family: "letters", code: 63 }];
     case "setminus":
       return [{ family: "symbols", code: 110 }];
     case "ne":

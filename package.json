@@ -41,6 +41,8 @@
     "compare:tex-text-visual-fuzz:mixed": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode mixed --cases 60 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-mixed --cache-dir artifacts/tex-text-svgtrace-cache-mixed",
     "compare:tex-text-visual-fuzz:large": "node scripts/compare-tex-text-visual-fuzz.mjs --cases 200 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-large --cache-dir artifacts/tex-text-svgtrace-cache",
     "compare:tex-math": "node scripts/compare-tex-math.mjs",
+    "extract:mathjax-tex-corpus": "node scripts/extract-mathjax-tex-corpus.mjs",
+    "check:mathjax-tex-corpus": "node scripts/check-mathjax-tex-corpus-coverage.mjs",
     "compare:tex-math:fuzz": "node scripts/compare-tex-math.mjs --math-fuzz 40 --seed 20260615 --summary-only",
     "compare:tex-math:fuzz:large": "node scripts/compare-tex-math.mjs --math-fuzz 160 --seed 20260616 --summary-only",
     "compare:tex-math:aligned-fuzz": "node scripts/compare-tex-math.mjs --aligned-fuzz 64 --seed 20260615 --summary-only",
