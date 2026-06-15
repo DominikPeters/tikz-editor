@@ -115,7 +115,8 @@ function layoutItemsToRuns(
               syntheticWrapper,
               breakRunIndex,
               item.role,
-              fragment.breakAfter.sourceOffset
+              fragment.breakAfter.sourceOffset,
+              fragment.breakAfter.penalty
             ));
           }
         }
@@ -218,7 +219,8 @@ function mathBreakpointRun(
   wrapper: AnyWrapper,
   runIndex: number,
   role: TexLayoutInlineItem["role"],
-  sourceOffset: number
+  sourceOffset: number,
+  breakPenalty: number
 ): SpaceRun {
   return {
     kind: "space",
@@ -229,7 +231,7 @@ function mathBreakpointRun(
     text: " ",
     wrapper,
     breakRef: createSimpleBreakRef(wrapper, false),
-    texGlue: { width: 0, stretch: 0, shrink: 0 },
+    texGlue: { width: 0, stretch: 0, shrink: 0, breakPenalty },
   };
 }
 
@@ -239,6 +241,7 @@ interface TexMathBoxFragment {
   readonly sourceEnd: number;
   readonly breakAfter?: {
     readonly sourceOffset: number;
+    readonly penalty: number;
   };
 }
 
@@ -266,7 +269,7 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
         box: fragment,
         sourceStart: previousSource,
         sourceEnd: breakpoint.sourceOffset,
-        breakAfter: { sourceOffset: breakpoint.sourceOffset },
+        breakAfter: { sourceOffset: breakpoint.sourceOffset, penalty: breakpoint.penalty },
       });
     }
     previousX = breakpoint.x;

@@ -103,6 +103,7 @@ export interface SpaceRun extends BaseRun {
     stretch: number;
     shrink: number;
     spaceFactor?: number;
+    breakPenalty?: number;
   };
 }
 

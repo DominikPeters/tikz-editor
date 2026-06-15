@@ -262,7 +262,7 @@ export function runsToItems(
       items.push({
         kind: 'penalty',
         width: 0,
-        penalty: 0,
+        penalty: run.texGlue?.breakPenalty ?? 0,
         payload: {
           runIndex: run.runIndex,
           breakRef: run.breakRef,
