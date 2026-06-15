@@ -938,7 +938,7 @@ describe("TeX vlist scopes", () => {
           },
         },
         children: [
-          { kind: "glue", size: 2 },
+          { kind: "glue", size: 4 },
           { kind: "hbox", size: undefined },
           { kind: "paragraph", text: "Beta" },
         ],
@@ -1546,7 +1546,7 @@ describe("TeX vlist spacing", () => {
       { blockIndex: 1, vlistPath: [1, 0], quoteSize: 8, listSize: 0, size: 8 },
       { blockIndex: 2, vlistPath: [1, 1, 0, 0], quoteSize: 0, listSize: 8, size: 8 },
       { blockIndex: 3, vlistPath: [1, 1, 0, 1], quoteSize: 0, listSize: 2, size: 2 },
-      { blockIndex: 4, vlistPath: [1, 1, 1, 0], quoteSize: 0, listSize: 2, size: 2 },
+      { blockIndex: 4, vlistPath: [1, 1, 1, 0], quoteSize: 0, listSize: 4, size: 4 },
     ]);
 
     expect(flattenVListLeaves(materializeParagraphVerticalGlueInVList(scrubbed, font).items)).toEqual([
@@ -1557,7 +1557,7 @@ describe("TeX vlist spacing", () => {
       "paragraph:Gamma",
       "glue:2",
       "paragraph:More",
-      "glue:2",
+      "glue:4",
       "paragraph:Delta",
     ]);
   });

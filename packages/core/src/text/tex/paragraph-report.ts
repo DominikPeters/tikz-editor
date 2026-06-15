@@ -358,7 +358,22 @@ function texLinePreDisplaySize(
   if (line.spaceCount > 0 && Math.abs(line.glueSetRatio) > 1e-9) {
     return Number.POSITIVE_INFINITY;
   }
+  const bodyStartAfterInlineLabel = texLineBodyStartAfterInlineLabel(line);
+  if (bodyStartAfterInlineLabel !== undefined) {
+    return roundTexPt(Math.max(0, line.xEnd - bodyStartAfterInlineLabel) + 2 * font.atPt);
+  }
   return roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * font.atPt);
+}
+
+function texLineBodyStartAfterInlineLabel(line: LineReport): number | undefined {
+  const labelIndex = line.segments.findIndex((segment) => segment.role === "list-label");
+  if (labelIndex < 0) {
+    return undefined;
+  }
+  const bodySegment = line.segments.slice(labelIndex + 1).find((segment) =>
+    segment.role !== "list-label" && typeof segment.x === "number"
+  );
+  return bodySegment?.x;
 }
 
 function texMathBoxFromWrapper(

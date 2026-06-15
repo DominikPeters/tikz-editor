@@ -607,6 +607,9 @@ supported grammar is mostly healthy under the available gates:
 - mixed vertical-list display fixtures (`quote` and `itemize`) have a glyph
   oracle mode and pass at the current 0.03 pt tolerance for the focused
   paragraph-display-paragraph fixtures.
+- mixed vertical-list display fuzz now covers quote, itemize, enumerate,
+  description, nested quote/itemize, and two-item list contexts, and passes at
+  the current 0.03 pt tolerance for the generated display formulas.
 
 The main gaps are therefore not isolated command coverage. The next robustness
 work should focus on:
@@ -619,9 +622,8 @@ work should focus on:
   fractions, radicals, alignment rows, and line breaks around math;
 - documenting each known intentional mismatch between MathJax diagnostic tests
   and LuaLaTeX behavior before using MathJax corpus failures as work items;
-- broadening oracle fixtures for vertical-list contexts that combine
-  paragraphs, display math, lists, and quotes beyond the current focused
-  fixtures.
+- expanding the mixed vertical-list fuzz grammar to include aligned displays
+  and larger generated corpora once the regular run time is cheap enough.
 
 ## Phased Implementation
 

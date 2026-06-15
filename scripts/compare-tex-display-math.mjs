@@ -17,11 +17,16 @@ const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
 
 const args = readArgs();
+const generatedMixedVListFuzzCases = args.mixedVListFuzzCases > 0
+  ? generateMixedVListFuzzCases(args.mixedVListFuzzCases, args.seed)
+  : [];
 const generatedDisplayFuzzCases = args.displayFuzzCases > 0
   ? generateDisplayFuzzCases(args.displayFuzzCases, args.seed)
   : [];
 const cases = args.cases.length > 0
   ? args.cases
+  : generatedMixedVListFuzzCases.length > 0
+    ? generatedMixedVListFuzzCases
   : generatedDisplayFuzzCases.length > 0
     ? generatedDisplayFuzzCases
   : [
@@ -70,7 +75,10 @@ if (args.summaryOnly) {
       mismatches: result.mismatches,
       source: result.source,
     })),
-    ...(generatedDisplayFuzzCases.length > 0 ? {
+    ...(generatedMixedVListFuzzCases.length > 0 ? {
+      seed: args.seed,
+      mode: "mixed-vlist-fuzz",
+    } : generatedDisplayFuzzCases.length > 0 ? {
       seed: args.seed,
       mode: "display-fuzz",
     } : {}),
@@ -575,6 +583,7 @@ function readArgs() {
   let summaryOnly = false;
   let tolerance = 0.05;
   let displayFuzzCases = 0;
+  let mixedVListFuzzCases = 0;
   let seed = 20260615;
   for (let index = 2; index < process.argv.length; index++) {
     const arg = process.argv[index] ?? "";
@@ -611,6 +620,10 @@ function readArgs() {
       cases.push(...constructMatrixCases());
     } else if (arg === "--mixed-vlist-matrix") {
       cases.push(...mixedVListCases());
+    } else if (arg === "--mixed-vlist-fuzz") {
+      mixedVListFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--mixed-vlist-fuzz");
+    } else if (arg.startsWith("--mixed-vlist-fuzz=")) {
+      mixedVListFuzzCases = readNonNegativeInteger(arg.slice("--mixed-vlist-fuzz=".length), "--mixed-vlist-fuzz");
     } else if (arg === "--display-fuzz") {
       displayFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--display-fuzz");
     } else if (arg.startsWith("--display-fuzz=")) {
@@ -621,7 +634,7 @@ function readArgs() {
       seed = readNonNegativeInteger(arg.slice("--seed=".length), "--seed");
     }
   }
-  return { cases, displayFuzzCases, keepTemp, seed, summaryOnly, tolerance };
+  return { cases, displayFuzzCases, keepTemp, mixedVListFuzzCases, seed, summaryOnly, tolerance };
 }
 
 function readNonNegativeInteger(raw, label) {
@@ -822,6 +835,84 @@ function generateDisplayFuzzCases(count, seed) {
         : `Alpha \\[${randomDisplayFormula(rng)}\\] Beta`,
     };
   });
+}
+
+function generateMixedVListFuzzCases(count, seed) {
+  const rng = makeRng(seed);
+  const contexts = [
+    {
+      id: "quote",
+      width: 160,
+      source: (before, display, after) =>
+        `Alpha \\begin{quote}${before} ${display} ${after}.\\end{quote} Beta`,
+    },
+    {
+      id: "itemize",
+      width: 180,
+      source: (before, display, after) =>
+        `Alpha \\begin{itemize}\\item ${before} ${display} ${after}.\\end{itemize} Beta`,
+    },
+    {
+      id: "enumerate",
+      width: 180,
+      source: (before, display, after) =>
+        `Alpha \\begin{enumerate}\\item ${before} ${display} ${after}.\\end{enumerate} Beta`,
+    },
+    {
+      id: "description",
+      width: 190,
+      source: (before, display, after) =>
+        `Alpha \\begin{description}\\item[Term] ${before} ${display} ${after}.\\end{description} Beta`,
+    },
+    {
+      id: "quote-itemize",
+      width: 200,
+      source: (before, display, after) =>
+        `Alpha \\begin{quote}\\begin{itemize}\\item ${before} ${display} ${after}.\\end{itemize}\\end{quote} Beta`,
+    },
+    {
+      id: "two-item-list",
+      width: 190,
+      source: (before, display, after) =>
+        `Alpha \\begin{itemize}\\item First item.\\item ${before} ${display} ${after}.\\end{itemize} Beta`,
+    },
+  ];
+  return Array.from({ length: count }, (_, index) => {
+    const context = contexts[index % contexts.length] ?? contexts[0];
+    const before = choice(rng, ["Quoted", "Compact", "Measured", "Nested", "Aligned"]);
+    const after = choice(rng, ["done", "tail", "after", "closing", "result"]);
+    const formula = randomMixedVListDisplayFormula(rng);
+    return {
+      id: `mixed-vlist-fuzz-${index + 1}-${context.id}`,
+      width: context.width,
+      compareMode: "math-glyphs",
+      source: context.source(before, `\\[${formula}\\]`, after),
+    };
+  });
+}
+
+function randomMixedVListDisplayFormula(rng) {
+  const left = choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomBinomial(rng),
+    randomRadical(rng),
+    randomLineTerm(rng),
+    randomAccentTerm(rng),
+    randomLeftRight(rng),
+  ]);
+  const right = choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomBinomial(rng),
+    randomRadical(rng),
+  ]);
+  if (rng() < 0.25) {
+    return `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}+${right}`;
+  }
+  return `${left}${choice(rng, ["+", "-", "="])}${right}`;
 }
 
 function randomAlignStarSource(rng) {
