@@ -68,7 +68,7 @@ function renderOurs(options) {
   }
 
   setStatus(oursStatus, `${result.report.lines.length} lines`, "ok");
-  oursOutput.innerHTML = renderResultSvg(result, options.text);
+  oursOutput.innerHTML = renderResultSvg(result);
   oursLines.textContent = formatLines(result.report.lines.map((line) => ({
     text: line.segments.map((segment) => segment.text ?? "").join("").trimEnd(),
     xStart: line.xStart,
@@ -106,15 +106,22 @@ async function renderOracle(options, sequence) {
   }
 }
 
-function renderResultSvg(result, source) {
+function renderResultSvg(result) {
+  const vlistLayout = result.vlistLayout;
   const boxReport = result.vlistLayout?.boxReport;
-  if (boxReport?.items?.some((item) => item.itemKind === "display-math")) {
-    return renderVListReportSvg(result.report, boxReport, source);
+  if (
+    boxReport?.items?.some((item) => item.itemKind === "display-math") ||
+    flattenPositionedItems(vlistLayout?.items ?? []).some((item) =>
+      item.item?.kind === "hbox" && item.item.role?.kind === "display-align-row"
+    )
+  ) {
+    return renderVListReportSvg(result.report, vlistLayout);
   }
   return renderParagraphReportSvg(result.report);
 }
 
-function renderVListReportSvg(report, boxReport, source) {
+function renderVListReportSvg(report, vlistLayout) {
+  const boxReport = vlistLayout.boxReport;
   const height = Math.max(
     LINE_HEIGHT_PT,
     (boxReport.metrics?.height ?? 0) + (boxReport.metrics?.depth ?? 0)
@@ -130,28 +137,60 @@ function renderVListReportSvg(report, boxReport, source) {
       pieces.push(renderParagraphLines(lines, item.y ?? 0, item.x ?? 0));
       continue;
     }
-    if (item.itemKind === "display-math") {
-      const sourceStart = item.sourceSpan?.start ?? 0;
-      const sourceEnd = item.sourceSpan?.end ?? sourceStart;
-      const contentStart = item.displayMath?.contentStart ?? sourceStart;
-      const contentEnd = item.displayMath?.contentEnd ?? sourceEnd;
-      const box = mathBoxProvider.getDisplayMathBox?.({
-        source: source.slice(sourceStart, sourceEnd),
-        content: source.slice(contentStart, contentEnd),
-        delimiter: item.displayMath?.delimiter ?? "bracket",
-        sourceStart,
-        sourceEnd,
-        contentStart,
-        contentEnd,
-      });
-      if (box?.svgBody) {
-        const baseline = (item.y ?? 0) + box.height;
-        pieces.push(renderMathSvgBody(box.svgBody, item.x ?? 0, baseline));
-      }
+  }
+
+  for (const item of flattenPositionedItems(vlistLayout.items ?? [])) {
+    if (item.item?.kind === "display-math" && item.item.box?.svgBody) {
+      pieces.push(renderMathSvgBody(
+        item.item.box.svgBody,
+        item.x ?? 0,
+        (item.y ?? 0) + item.item.box.height
+      ));
+      continue;
+    }
+    if (item.item?.kind === "hbox" && item.item.role?.kind === "display-align-row") {
+      pieces.push(renderHorizontalRenderItems(
+        item.item.box?.renderItems ?? [],
+        item.x ?? 0,
+        item.y ?? 0
+      ));
     }
   }
 
   pieces.push("</g></svg>");
+  return pieces.join("");
+}
+
+function flattenPositionedItems(items) {
+  const flat = [];
+  for (const item of items) {
+    flat.push(item);
+    if (item.children?.length) {
+      flat.push(...flattenPositionedItems(item.children));
+    }
+  }
+  return flat;
+}
+
+function renderHorizontalRenderItems(renderItems, originX, originY) {
+  const pieces = [];
+  for (const item of renderItems) {
+    if (item.kind === "tex-math-svg") {
+      pieces.push(renderMathSvgBody(item.svgBody, originX + item.x, originY + item.baseline));
+      continue;
+    }
+    const font = computerModernTexMetricProvider.resolveFont({
+      fontId: item.fontId,
+      atPt: item.atPt ?? DEFAULT_TEXT_FONT_SIZE,
+    });
+    if (item.kind === "tex-glyph-run") {
+      pieces.push(renderGlyphRun(item.text ?? "", font, originX + item.x, originY + item.baseline));
+      continue;
+    }
+    if (item.kind === "tex-glyph") {
+      pieces.push(renderGlyphCode(item.code, font, originX + item.x, originY + item.baseline));
+    }
+  }
   return pieces.join("");
 }
 
