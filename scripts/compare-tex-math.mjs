@@ -28,6 +28,7 @@ const formulas = args.formulas.length > 0
       "\\sqrt{x+y}",
       "\\sqrt{\\frac{1}{2}}",
       "\\sqrt{\\sqrt{\\frac{1}{2}}}",
+      "\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}",
       "x^2",
       "x_i",
       "x_i^2",

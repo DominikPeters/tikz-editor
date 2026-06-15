@@ -314,12 +314,43 @@ describe("TeX math hlist layout", () => {
     });
   });
 
-  it("keeps extensible radicals unsupported until varchar assembly is implemented", () => {
+  it("assembles extensible radical glyph recipes for very tall radicals", () => {
     const result = layout(String.raw`\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}`);
 
-    expect(result.supported).toBe(false);
-    expect(result.hlist).toBeNull();
-    expect(result.errors[0]?.message).toMatch(/Only simple glyph math atoms/);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(46.941809, 6);
+    expect(result.hlist?.items.slice(0, 4)).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 118,
+        y: expect.closeTo(-22.50014, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 117,
+        y: expect.closeTo(-16.90007, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 117,
+        y: expect.closeTo(-10.90001, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 116,
+        y: expect.closeTo(-4.89995, 5),
+      },
+    ]);
+    expect(result.hlist?.items[4]).toMatchObject({
+      kind: "rule",
+      role: "radical-rule",
+      x: expect.closeTo(10.55559, 5),
+      y: expect.closeTo(-22.90013, 5),
+    });
   });
 
   it("matches vendored metrics for the generated glyph boxes", () => {

@@ -1,5 +1,6 @@
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import type {
+  GeneratedTexExtensibleRecipe,
   GeneratedTexCharMetric,
   ResolvedTexFont,
 } from "../fonts/types.js";
@@ -139,11 +140,11 @@ interface TexMathAtomLayout {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
-interface TexMathDelimiterGlyph {
-  readonly font: ResolvedTexFont;
-  readonly family: TexMathFontFamily;
-  readonly code: number;
-  readonly metric: GeneratedTexCharMetric;
+interface TexMathDelimiterLayout {
+  readonly items: readonly TexMathGlyphLayoutItem[];
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
 }
 
 export function layoutTexMathList(
@@ -436,42 +437,24 @@ function layoutRadicalNucleus(
   const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
   let clearance = radicalInitialClearance(fontProfile, style, baseAtPt, thickness);
   const targetHeight = radicand.height + radicand.depth + clearance + thickness;
-  const delimiter = selectRadicalDelimiter(fontProfile, style, baseAtPt, targetHeight);
+  const delimiter = selectRadicalDelimiter(fontProfile, style, baseAtPt, targetHeight, nucleus.sourceSpan);
   if (!delimiter) {
     return null;
   }
-  const radicalFont = delimiter.font;
-  const radicalCode = delimiter.code;
-  const radicalMetric = delimiter.metric;
-  const radicalWidth = roundTexPt(tfmToPt(radicalFont, radicalMetric.width));
-  const radicalHeight = roundTexPt(tfmToPt(radicalFont, radicalMetric.height));
-  const radicalDepth = roundTexPt(tfmToPt(radicalFont, radicalMetric.depth));
-
-  const delta = radicalDepth - (radicand.height + radicand.depth + clearance);
+  const delta = delimiter.depth - (radicand.height + radicand.depth + clearance);
   if (delta > 0) {
     clearance += delta / 2;
   }
   const radicalY = roundTexPt(-(radicand.height + clearance));
   const ruleY = roundTexPt(radicalY - thickness);
-  const radicalGlyph = {
-    kind: "glyph",
-    fontId: radicalFont.id,
-    atPt: radicalFont.atPt,
-    family: delimiter.family,
-    code: radicalCode,
-    text: "\\sqrt",
-    x: 0,
-    y: radicalY,
-    width: radicalWidth,
-    height: radicalHeight,
-    depth: radicalDepth,
-    italicCorrection: roundTexPt(tfmToPt(radicalFont, radicalMetric.italicCorrection)),
-    sourceSpan: nucleus.sourceSpan,
-  } satisfies TexMathGlyphLayoutItem;
+  const radicalItems = delimiter.items.map((item) => ({
+    ...item,
+    y: roundTexPt(item.y + radicalY),
+  })) satisfies readonly TexMathGlyphLayoutItem[];
   const rule = {
     kind: "rule",
     role: "radical-rule",
-    x: radicalWidth,
+    x: delimiter.width,
     y: ruleY,
     width: radicand.width,
     height: roundTexPt(thickness),
@@ -479,24 +462,24 @@ function layoutRadicalNucleus(
   } satisfies TexMathRuleLayoutItem;
   const radicandChild = childHList(
     "nucleus",
-    radicalWidth,
+    delimiter.width,
     0,
     radicand,
     nucleus.radicand.sourceSpan
   );
   const height = Math.max(
     radicand.height,
-    -radicalGlyph.y + radicalGlyph.height,
+    ...radicalItems.map((item) => -item.y + item.height),
     -rule.y + rule.height
   );
   const depth = Math.max(
     radicand.depth,
-    radicalGlyph.y + radicalGlyph.depth
+    ...radicalItems.map((item) => item.y + item.depth)
   );
 
   return {
-    items: [radicalGlyph, rule, radicandChild],
-    width: roundTexPt(radicalWidth + radicand.width),
+    items: [...radicalItems, rule, radicandChild],
+    width: roundTexPt(delimiter.width + radicand.width),
     height: roundTexPt(height),
     depth: roundTexPt(Math.max(0, depth)),
     italicCorrection: 0,
@@ -519,14 +502,15 @@ function selectRadicalDelimiter(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: number,
-  targetHeight: number
-): TexMathDelimiterGlyph | null {
+  targetHeight: number,
+  sourceSpan: TexMathSourceSpan
+): TexMathDelimiterLayout | null {
   const small = fontProfile.resolveMathFont({
     family: "symbols",
     style,
     baseAtPt,
   });
-  const smallCandidate = selectDelimiterFromChain(small, "symbols", 112, targetHeight);
+  const smallCandidate = selectDelimiterFromChain(small, "symbols", 112, targetHeight, sourceSpan);
   if (smallCandidate?.largeEnough) {
     return smallCandidate.delimiter;
   }
@@ -536,10 +520,7 @@ function selectRadicalDelimiter(
     style: "text",
     baseAtPt,
   });
-  const largeCandidate = selectDelimiterFromChain(large, "extension", 112, targetHeight);
-  if (largeCandidate?.delimiter.metric.varchar) {
-    return null;
-  }
+  const largeCandidate = selectDelimiterFromChain(large, "extension", 112, targetHeight, sourceSpan);
   return largeCandidate?.delimiter ?? smallCandidate?.delimiter ?? null;
 }
 
@@ -547,13 +528,14 @@ function selectDelimiterFromChain(
   font: ResolvedTexFont,
   family: TexMathFontFamily,
   startCode: number,
-  targetHeight: number
+  targetHeight: number,
+  sourceSpan: TexMathSourceSpan
 ): {
-  readonly delimiter: TexMathDelimiterGlyph;
+  readonly delimiter: TexMathDelimiterLayout;
   readonly largeEnough: boolean;
 } | null {
   let code = startCode;
-  let best: TexMathDelimiterGlyph | null = null;
+  let best: TexMathDelimiterLayout | null = null;
   let bestHeight = 0;
   const seen = new Set<number>();
   while (!seen.has(code)) {
@@ -562,16 +544,18 @@ function selectDelimiterFromChain(
     if (!metric) {
       break;
     }
-    const delimiter = { font, family, code, metric } satisfies TexMathDelimiterGlyph;
     if (metric.varchar) {
-      return { delimiter, largeEnough: true };
+      return {
+        delimiter: layoutExtensibleDelimiter(font, family, metric.varchar, targetHeight, sourceSpan),
+        largeEnough: true,
+      };
     }
     const height = charHeightPlusDepth(font, metric);
     if (height > bestHeight) {
-      best = delimiter;
+      best = layoutSingleDelimiterGlyph(font, family, code, metric, sourceSpan);
       bestHeight = height;
       if (height >= targetHeight) {
-        return { delimiter, largeEnough: true };
+        return { delimiter: best, largeEnough: true };
       }
     }
     if (metric.nextLarger === undefined) {
@@ -580,6 +564,112 @@ function selectDelimiterFromChain(
     code = metric.nextLarger;
   }
   return best ? { delimiter: best, largeEnough: false } : null;
+}
+
+function layoutSingleDelimiterGlyph(
+  font: ResolvedTexFont,
+  family: TexMathFontFamily,
+  code: number,
+  metric: GeneratedTexCharMetric,
+  sourceSpan: TexMathSourceSpan
+): TexMathDelimiterLayout {
+  const width = roundTexPt(tfmToPt(font, metric.width) + tfmToPt(font, metric.italicCorrection));
+  const height = roundTexPt(tfmToPt(font, metric.height));
+  const depth = roundTexPt(tfmToPt(font, metric.depth));
+  return {
+    items: [delimiterGlyphItem(font, family, code, metric, 0, sourceSpan)],
+    width,
+    height,
+    depth,
+  };
+}
+
+function layoutExtensibleDelimiter(
+  font: ResolvedTexFont,
+  family: TexMathFontFamily,
+  recipe: GeneratedTexExtensibleRecipe,
+  targetHeight: number,
+  sourceSpan: TexMathSourceSpan
+): TexMathDelimiterLayout {
+  const repCode = recipe.rep;
+  if (repCode === undefined) {
+    return { items: [], width: 0, height: 0, depth: 0 };
+  }
+  const repMetric = requiredCharMetric(font, repCode);
+  const repSize = charHeightPlusDepth(font, repMetric);
+  const fixedCodes = [recipe.bot, recipe.mid, recipe.top].filter((code): code is number => code !== undefined);
+  let totalSize = fixedCodes.reduce((sum, code) => sum + charHeightPlusDepth(font, requiredCharMetric(font, code)), 0);
+  let repeatCount = 0;
+  if (repSize > 0) {
+    while (totalSize < targetHeight) {
+      totalSize += repSize;
+      repeatCount += 1;
+      if (recipe.mid !== undefined) {
+        totalSize += repSize;
+      }
+    }
+  }
+
+  const componentCodes: number[] = [];
+  if (recipe.top !== undefined) {
+    componentCodes.push(recipe.top);
+  }
+  for (let index = 0; index < repeatCount; index++) {
+    componentCodes.push(repCode);
+  }
+  if (recipe.mid !== undefined) {
+    componentCodes.push(recipe.mid);
+    for (let index = 0; index < repeatCount; index++) {
+      componentCodes.push(repCode);
+    }
+  }
+  if (recipe.bot !== undefined) {
+    componentCodes.push(recipe.bot);
+  }
+
+  const width = roundTexPt(tfmToPt(font, repMetric.width) + tfmToPt(font, repMetric.italicCorrection));
+  const firstMetric = requiredCharMetric(font, componentCodes[0] ?? repCode);
+  const boxHeight = roundTexPt(tfmToPt(font, firstMetric.height));
+  const items: TexMathGlyphLayoutItem[] = [];
+  let currentTop = -boxHeight;
+  for (const code of componentCodes) {
+    const metric = requiredCharMetric(font, code);
+    const y = roundTexPt(currentTop + tfmToPt(font, metric.height));
+    items.push(delimiterGlyphItem(font, family, code, metric, y, sourceSpan));
+    currentTop = roundTexPt(currentTop + charHeightPlusDepth(font, metric));
+  }
+
+  return {
+    items,
+    width,
+    height: boxHeight,
+    depth: roundTexPt(totalSize - boxHeight),
+  };
+}
+
+function delimiterGlyphItem(
+  font: ResolvedTexFont,
+  family: TexMathFontFamily,
+  code: number,
+  metric: GeneratedTexCharMetric,
+  y: number,
+  sourceSpan: TexMathSourceSpan
+): TexMathGlyphLayoutItem {
+  return {
+    kind: "glyph",
+    fontId: font.id,
+    atPt: font.atPt,
+    family,
+    code,
+    text: "\\sqrt",
+    x: 0,
+    y,
+    width: roundTexPt(tfmToPt(font, metric.width)),
+    height: roundTexPt(tfmToPt(font, metric.height)),
+    depth: roundTexPt(tfmToPt(font, metric.depth)),
+    italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
+    sourceSpan,
+  };
 }
 
 function layoutGlyphNucleus(
