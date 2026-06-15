@@ -1026,6 +1026,71 @@ describe("TeX math hlist layout", () => {
       x: expect.closeTo(-0.133675, 5),
     });
 
+    const accentedSingleGlyphSup = layout(String.raw`\ddot{3}^2`);
+    expect(accentedSingleGlyphSup.supported).toBe(true);
+    expect(accentedSingleGlyphSup.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      y: expect.closeTo(-3.62892, 5),
+    });
+
+    const nestedAccentSup = layout(String.raw`\hat{\tilde{x}}^2`);
+    expect(nestedAccentSup.supported).toBe(true);
+    expect(nestedAccentSup.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      y: expect.closeTo(-6.845291, 5),
+    });
+
+    const accentFractionSup = layout(String.raw`\hat{\frac{x}{y}}^2`);
+    expect(accentFractionSup.supported).toBe(true);
+    expect(accentFractionSup.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      y: expect.closeTo(-7.117905, 5),
+    });
+
+    const vecSup = layout(String.raw`\vec{z}^y`);
+    expect(vecSup.supported).toBe(true);
+    expect(vecSup.hlist?.items.find((item) =>
+      item.kind === "kern" && item.reason === "italic-correction"
+    )).toMatchObject({
+      kind: "kern",
+      x: expect.closeTo(4.650497, 5),
+      width: expect.closeTo(0.43981, 5),
+    });
+    expect(vecSup.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(5.09031, 5),
+      y: expect.closeTo(-3.62892, 5),
+    });
+
+    const vecSubSup = layout(String.raw`\vec{z}_y^x`);
+    expect(vecSubSup.supported).toBe(true);
+    expect(vecSubSup.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(5.09031, 5),
+    });
+    expect(vecSubSup.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "subscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(4.650497, 5),
+    });
+
     const grouped = layout(String.raw`\hat{xy}`);
     expect(grouped.supported).toBe(true);
     expect(grouped.hlist?.items[1]).toMatchObject({

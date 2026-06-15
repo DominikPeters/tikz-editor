@@ -663,9 +663,12 @@ function randomMathTerm(rng, depth) {
   } else if (choice === "radical") {
     term = String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
   } else if (choice === "line") {
-    term = randomLineFormula(rng);
+    term = randomLineFormula(rng, depth);
   } else if (choice === "accent") {
-    term = randomAccentFormula(rng);
+    if (randomInt(rng, 3) === 0) {
+      return maybeWithScripts(randomScriptableAccentFormula(rng), rng, depth);
+    }
+    term = randomAccentFormula(rng, depth);
   } else if (choice === "left-right") {
     term = randomLeftRightFormula(rng);
   } else if (choice === "array") {
@@ -685,9 +688,22 @@ function randomMathTerm(rng, depth) {
   } else {
     term = randomMathAtom(rng);
   }
-  return choice === "atom" || choice === "group"
+  return isScriptableGeneratedTerm(choice)
     ? maybeWithScripts(term, rng, depth)
     : term;
+}
+
+function isScriptableGeneratedTerm(choice) {
+  return [
+    "atom",
+    "group",
+    "fraction",
+    "binomial",
+    "radical",
+    "line",
+    "left-right",
+    "operatorname",
+  ].includes(choice);
 }
 
 function randomFractionFormula(rng, numerator, denominator) {
@@ -702,17 +718,73 @@ function randomBinomialFormula(rng) {
       randomSimpleExpression(rng) + "}";
 }
 
-function randomLineFormula(rng) {
+function randomLineFormula(rng, depth = 0) {
   const command = lineCommands[randomInt(rng, lineCommands.length)] ?? String.raw`\overline`;
-  return command + "{" + randomSimpleExpression(rng) + "}";
+  return command + "{" + randomDecoratedExpression(rng, depth) + "}";
 }
 
-function randomAccentFormula(rng) {
+function randomAccentFormula(rng, depth = 0) {
   const command = accentCommands[randomInt(rng, accentCommands.length)] ?? String.raw`\hat`;
-  const base = randomInt(rng, 3) === 0
-    ? randomMathAtom(rng)
-    : randomSimpleExpression(rng);
+  const base = randomAccentBase(rng, depth);
   return command + "{" + base + "}";
+}
+
+function randomScriptableAccentFormula(rng) {
+  const command = accentCommands[randomInt(rng, accentCommands.length)] ?? String.raw`\hat`;
+  const base = [
+    randomMathAtom(rng),
+    randomPlainExpression(rng),
+    randomFractionFormula(rng, randomMathAtom(rng), randomMathAtom(rng)),
+    String.raw`\sqrt{` + randomPlainExpression(rng) + "}",
+    simpleNestedAccentFormula(rng),
+  ][randomInt(rng, 5)] ?? "x";
+  return command + "{" + base + "}";
+}
+
+function simpleNestedAccentFormula(rng) {
+  const command = accentCommands[randomInt(rng, accentCommands.length)] ?? String.raw`\tilde`;
+  const base = randomNonEllipsisMathAtom(rng);
+  return command + "{" + base + "}";
+}
+
+function randomAccentBase(rng, depth) {
+  const choices = depth >= 2
+    ? ["atom", "simple"]
+    : ["atom", "simple", "fraction", "radical", "line", "accent"];
+  const choice = choices[randomInt(rng, choices.length)] ?? "atom";
+  if (choice === "simple") {
+    return depth > 0 ? randomNonEllipsisMathAtom(rng) : randomSimpleExpression(rng);
+  }
+  if (choice === "fraction") {
+    return randomFractionFormula(rng, randomMathAtom(rng), randomMathAtom(rng));
+  }
+  if (choice === "radical") {
+    return String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
+  }
+  if (choice === "line") {
+    return randomLineFormula(rng, depth + 1);
+  }
+  if (choice === "accent") {
+    return randomAccentFormula(rng, depth + 1);
+  }
+  return depth > 0 ? randomNonEllipsisMathAtom(rng) : randomMathAtom(rng);
+}
+
+function randomDecoratedExpression(rng, depth) {
+  const choices = depth >= 2
+    ? ["simple", "fraction"]
+    : ["simple", "fraction", "radical", "accent"];
+  const choice = choices[randomInt(rng, choices.length)] ?? "simple";
+  if (choice === "fraction") {
+    return randomFractionFormula(rng, randomMathAtom(rng), randomMathAtom(rng));
+  }
+  if (choice === "radical") {
+    return String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
+  }
+  if (choice === "accent") {
+    return randomAccentFormula(rng, depth + 1);
+  }
+  return randomSimpleExpression(rng);
 }
 
 function randomSimpleExpression(rng) {
@@ -720,6 +792,15 @@ function randomSimpleExpression(rng) {
   let formula = maybeWithScripts(randomMathAtom(rng), rng, 1);
   for (let index = 1; index < count; index++) {
     formula += randomMathInfix(rng) + maybeWithScripts(randomMathAtom(rng), rng, 1);
+  }
+  return formula;
+}
+
+function randomPlainExpression(rng, atomFactory = randomMathAtom) {
+  const count = 1 + randomInt(rng, 3);
+  let formula = atomFactory(rng);
+  for (let index = 1; index < count; index++) {
+    formula += randomMathInfix(rng) + atomFactory(rng);
   }
   return formula;
 }
@@ -902,6 +983,7 @@ function randomMathScript(rng, depth) {
     randomScriptAtom(rng) + "_{" + randomScriptAtom(rng) + "}",
     String.raw`\frac{` + randomScriptAtom(rng) + "}{" + randomScriptAtom(rng) + "}",
     String.raw`\binom{` + randomScriptAtom(rng) + "}{" + randomScriptAtom(rng) + "}",
+    randomAccentFormula(rng, depth + 1),
     randomSubstackFormula(rng),
   ];
   return choices[randomInt(rng, choices.length)] ?? "x";
@@ -914,6 +996,19 @@ function randomMathAtom(rng) {
     String.raw`\ldots`,
     String.raw`\cdots`,
     String.raw`\dots`,
+    String.raw`\alpha`,
+    String.raw`\beta`,
+    String.raw`\gamma`,
+    String.raw`\infty`,
+    String.raw`\sum`,
+  ];
+  return atoms[randomInt(rng, atoms.length)] ?? "x";
+}
+
+function randomNonEllipsisMathAtom(rng) {
+  const atoms = [
+    "a", "b", "c", "x", "y", "z",
+    "1", "2", "3",
     String.raw`\alpha`,
     String.raw`\beta`,
     String.raw`\gamma`,

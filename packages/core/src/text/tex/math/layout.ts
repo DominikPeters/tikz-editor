@@ -204,6 +204,7 @@ interface TexMathAtomLayout {
   readonly depth: number;
   readonly italicCorrection: number;
   readonly isCharacterNucleus: boolean;
+  readonly scriptShiftsAsCharacter?: boolean;
   readonly scriptBaseWidth?: number;
   readonly scriptSuperscriptOffset?: number;
   readonly sourceSpan: TexMathSourceSpan;
@@ -468,6 +469,19 @@ function layoutAtom(
     });
     scriptStartX = roundTexPt(scriptStartX + nucleus.italicCorrection);
     atomWidth = scriptStartX;
+  } else if (
+    !atom.subscript &&
+    atom.superscript &&
+    nucleus.scriptSuperscriptOffset !== undefined &&
+    nucleus.scriptSuperscriptOffset !== 0
+  ) {
+    items.push({
+      kind: "kern",
+      x: nucleus.scriptBaseWidth ?? nucleus.width,
+      width: nucleus.scriptSuperscriptOffset,
+      reason: "italic-correction",
+      sourceSpan: nucleus.sourceSpan,
+    });
   }
 
   const sup = atom.superscript
@@ -2429,6 +2443,7 @@ function layoutAccentNucleus(
   const accentDepth = roundTexPt(tfmToPt(accent.font, metric.depth));
   const accentItalicCorrection = roundTexPt(tfmToPt(accent.font, metric.italicCorrection));
   const skew = accentBaseSkew(nucleus.base, fontProfile, style, baseAtPt, alphabet);
+  const singleGlyphBase = accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
   const delta = Math.min(base.height, accentXHeight(accent.font));
   const accentX = roundTexPt(skew + (base.width - accentCenterWidth) / 2);
   const accentY = roundTexPt(delta - base.height);
@@ -2454,8 +2469,13 @@ function layoutAccentNucleus(
     width: base.width,
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
     depth: base.depth,
-    italicCorrection: 0,
+    italicCorrection: singleGlyphBase?.italicCorrection ?? 0,
     isCharacterNucleus: false,
+    scriptShiftsAsCharacter: singleGlyphBase !== null,
+    ...(singleGlyphBase ? {
+      scriptBaseWidth: singleGlyphBase.width,
+      scriptSuperscriptOffset: singleGlyphBase.italicCorrection,
+    } : {}),
     sourceSpan: nucleus.sourceSpan,
   };
 }
@@ -3432,9 +3452,14 @@ function accentBaseSkew(
   if (
     item?.kind !== "atom" ||
     item.subscript ||
-    item.superscript ||
-    item.nucleus.kind !== "glyph"
+    item.superscript
   ) {
+    return 0;
+  }
+  if (item.nucleus.kind === "accent") {
+    return accentBaseSkew(item.nucleus.base, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (item.nucleus.kind !== "glyph") {
     return 0;
   }
   const glyph = resolveMathGlyph(item.nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -3447,6 +3472,35 @@ function accentBaseSkew(
     rule[2] === TEX_DEFAULT_SKEW_CHAR
   );
   return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
+}
+
+function accentBaseSingleGlyphMetrics(
+  base: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): { readonly width: number; readonly italicCorrection: number } | null {
+  if (base.items.length !== 1) {
+    return null;
+  }
+  const item = base.items[0];
+  if (
+    item?.kind !== "atom" ||
+    item.subscript ||
+    item.superscript ||
+    item.nucleus.kind !== "glyph"
+  ) {
+    return null;
+  }
+  const glyph = resolveMathGlyph(item.nucleus, fontProfile, style, baseAtPt, alphabet);
+  if (!glyph) {
+    return null;
+  }
+  return {
+    width: glyph.advance,
+    italicCorrection: roundTexPt(tfmToPt(glyph.font, requiredCharMetric(glyph.font, glyph.code).italicCorrection)),
+  };
 }
 
 function defaultLuaLatexMathSymbols(
@@ -3895,7 +3949,7 @@ function initialScriptShifts(
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): { readonly shiftUp: number; readonly shiftDown: number } {
-  if (nucleus.isCharacterNucleus) {
+  if (nucleus.isCharacterNucleus || nucleus.scriptShiftsAsCharacter) {
     return { shiftUp: 0, shiftDown: 0 };
   }
   return {
