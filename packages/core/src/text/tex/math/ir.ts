@@ -131,7 +131,7 @@ export interface TexMathFractionNucleus {
   readonly leftDelimiter?: TexMathDelimiter;
   readonly rightDelimiter?: TexMathDelimiter;
   readonly ruleThickness?: number;
-  readonly style?: "display" | "text";
+  readonly style?: TexMathStyle;
   readonly continued?: {
     readonly numeratorAlignment: "left" | "center" | "right";
   };

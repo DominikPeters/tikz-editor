@@ -159,6 +159,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
   });
 
+  it("renders amsmath genfrac through TeX delimiter and fraction glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\genfrac{[}{]}{0pt}{3}{a}{b}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).not.toContain('data-tex-rule="fraction-rule"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="91"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="93"');
+    expect(body).toContain('data-tex-font="cmmi5" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmmi5" data-tex-glyph="98"');
+  });
+
   it("renders math accents through TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`\vec{x}+\hat{\frac{1}{2}}`);
     const result = layoutTexMathList(parsed.list);

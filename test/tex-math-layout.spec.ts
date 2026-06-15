@@ -948,6 +948,29 @@ describe("TeX math hlist layout", () => {
       .toContainEqual(expect.objectContaining({ kind: "rule", role: "fraction-rule", height: expect.closeTo(1, 6) }));
   });
 
+  it("lays out amsmath genfrac through the generalized fraction path", () => {
+    const delimited = layout(String.raw`\genfrac{[}{]}{0pt}{3}{a}{b}`);
+    expect(delimited.supported).toBe(true);
+    expect(delimited.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
+    expect(delimited.hlist?.items[0]).toMatchObject({ kind: "glyph", fontId: "cmr10", code: 91 });
+    expect(delimited.hlist?.items[2]).toMatchObject({ kind: "glyph", fontId: "cmr10", code: 93 });
+    const delimitedBody = (delimited.hlist?.items[1] as TexMathChildHListLayoutItem | undefined)?.items ?? [];
+    expect(delimitedBody).not.toContainEqual(expect.objectContaining({ kind: "rule", role: "fraction-rule" }));
+    expect(flattenGlyphItems(delimitedBody)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fontId: "cmmi5", code: 97 }),
+      expect.objectContaining({ fontId: "cmmi5", code: 98 }),
+    ]));
+
+    const withDefaultRule = layout(String.raw`\genfrac{}{}{}{0}{a}{b}`);
+    expect(withDefaultRule.supported).toBe(true);
+    expect(withDefaultRule.hlist?.items.map((item) => item.kind)).toEqual(["hlist", "rule", "hlist"]);
+    expect(withDefaultRule.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "fraction-rule",
+      height: expect.closeTo(0.39999, 6),
+    });
+  });
+
   it("lays out TeX overline and underline noads with TeX rule spacing", () => {
     const overline = layout(String.raw`\overline{x}`);
 

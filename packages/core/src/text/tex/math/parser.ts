@@ -294,6 +294,9 @@ class TexMathParser {
       if (commandName(token.text) === "cfrac") {
         return this.parseContinuedFraction(allowScripts);
       }
+      if (commandName(token.text) === "genfrac") {
+        return this.parseGenfrac(allowScripts);
+      }
       const fractionStyle = fractionCommandStyle(token.text);
       if (fractionStyle !== null) {
         return this.parseFraction(fractionStyle, allowScripts);
@@ -472,6 +475,41 @@ class TexMathParser {
       continued: {
         numeratorAlignment: alignmentOption?.alignment ?? "center",
       },
+      sourceSpan,
+    };
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus,
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseGenfrac(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const leftDelimiter = this.parseGenfracDelimiterArgument(command, "left delimiter");
+    const rightDelimiter = this.parseGenfracDelimiterArgument(command, "right delimiter");
+    const thickness = this.parseGenfracThicknessArgument(command);
+    const style = this.parseGenfracStyleArgument(command);
+    const numerator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} numerator`);
+    const denominator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} denominator`);
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      denominator?.sourceSpan ??
+        numerator?.sourceSpan ??
+        style.sourceSpan ??
+        thickness.sourceSpan ??
+        rightDelimiter.sourceSpan ??
+        leftDelimiter.sourceSpan
+    );
+    const nucleus: TexMathNucleus = {
+      kind: "fraction",
+      numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
+      denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
+      ...(leftDelimiter.delimiter ? { leftDelimiter: leftDelimiter.delimiter } : {}),
+      ...(rightDelimiter.delimiter ? { rightDelimiter: rightDelimiter.delimiter } : {}),
+      ...(thickness.ruleThickness !== undefined ? { ruleThickness: thickness.ruleThickness } : {}),
+      ...(style.style ? { style: style.style } : {}),
       sourceSpan,
     };
     return this.maybeParseScripts({
@@ -2222,6 +2260,81 @@ class TexMathParser {
     };
   }
 
+  private parseGenfracDelimiterArgument(
+    command: TexMathToken,
+    label: string
+  ): {
+    readonly delimiter?: TexMathDelimiter;
+    readonly sourceSpan: TexMathSourceSpan;
+  } {
+    const group = this.parseRequiredRawGroup(command.sourceSpan, `${command.text} ${label}`);
+    if (!group) {
+      return { sourceSpan: command.sourceSpan };
+    }
+    const significant = group.tokens.filter((token) => token.kind !== "space");
+    if (significant.length === 0) {
+      return { sourceSpan: group.sourceSpan };
+    }
+    const delimiter = significant.length === 1 ? delimiterForToken(significant[0] ?? command) : null;
+    if (!delimiter) {
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported math delimiter ${group.text || "{}"}.`,
+        group.sourceSpan
+      );
+      return { sourceSpan: group.sourceSpan };
+    }
+    return { delimiter, sourceSpan: group.sourceSpan };
+  }
+
+  private parseGenfracThicknessArgument(
+    command: TexMathToken
+  ): {
+    readonly ruleThickness?: number;
+    readonly sourceSpan: TexMathSourceSpan;
+  } {
+    const group = this.parseRequiredRawGroup(command.sourceSpan, `${command.text} rule thickness`);
+    if (!group) {
+      return { sourceSpan: command.sourceSpan };
+    }
+    const text = group.text.trim();
+    if (text === "") {
+      return { sourceSpan: group.sourceSpan };
+    }
+    const dimension = parseTexDimensionText(text);
+    if (dimension === null) {
+      this.addDiagnostic(
+        "error",
+        "invalid-tex-dimension",
+        `Unsupported or invalid TeX dimension for ${command.text} rule thickness.`,
+        group.contentSourceSpan
+      );
+      return { sourceSpan: group.sourceSpan };
+    }
+    return { ruleThickness: dimension, sourceSpan: group.sourceSpan };
+  }
+
+  private parseGenfracStyleArgument(
+    command: TexMathToken
+  ): {
+    readonly style?: TexMathStyle;
+    readonly sourceSpan: TexMathSourceSpan;
+  } {
+    const group = this.parseRequiredRawGroup(command.sourceSpan, `${command.text} style`);
+    if (!group) {
+      return { sourceSpan: command.sourceSpan };
+    }
+    const text = group.text.trim();
+    if (text === "") {
+      return { sourceSpan: group.sourceSpan };
+    }
+    return {
+      style: genfracStyle(text),
+      sourceSpan: group.sourceSpan,
+    };
+  }
+
   private parseRequiredMathArgument(
     fallbackSpan: TexMathSourceSpan,
     label: string,
@@ -2256,6 +2369,58 @@ class TexMathParser {
     return {
       list,
       sourceSpan: list.sourceSpan,
+    };
+  }
+
+  private parseRequiredRawGroup(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): {
+    readonly text: string;
+    readonly tokens: readonly TexMathToken[];
+    readonly sourceSpan: TexMathSourceSpan;
+    readonly contentSourceSpan: TexMathSourceSpan;
+  } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "group-open") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        `Expected a braced ${label}.`,
+        next?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    const open = this.expectGroupOpen();
+    const tokens: TexMathToken[] = [];
+    let lastSpan: TexMathSourceSpan = open.sourceSpan;
+    let depth = 0;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (!token) {
+        break;
+      }
+      if (token.kind === "group-close" && depth === 0) {
+        break;
+      }
+      this.advance();
+      tokens.push(token);
+      lastSpan = token.sourceSpan;
+      if (token.kind === "group-open") {
+        depth += 1;
+      } else if (token.kind === "group-close") {
+        depth = Math.max(0, depth - 1);
+      }
+    }
+    const close = this.consumeGroupClose(open.sourceSpan);
+    const contentStart = open.sourceSpan.end;
+    const contentEnd = close?.sourceSpan.start ?? lastSpan.end;
+    return {
+      text: tokens.map((token) => token.text).join(""),
+      tokens,
+      sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
+      contentSourceSpan: { start: contentStart, end: Math.max(contentStart, contentEnd) },
     };
   }
 
@@ -2724,6 +2889,19 @@ function binomialCommandStyle(command: string): "display" | "text" | undefined |
   }
 }
 
+function genfracStyle(style: string): TexMathStyle {
+  switch (style.trim()) {
+    case "0":
+      return "display";
+    case "1":
+      return "text";
+    case "2":
+      return "script";
+    default:
+      return "scriptscript";
+  }
+}
+
 function infixFractionPrimitive(command: string): InfixFractionPrimitive | null {
   switch (commandName(command)) {
     case "above":
@@ -2785,6 +2963,16 @@ function texDimensionUnitFactor(unit: string): number | null {
     default:
       return null;
   }
+}
+
+function parseTexDimensionText(text: string): number | null {
+  const match = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([A-Za-z]{2})\s*$/.exec(text);
+  if (!match) {
+    return null;
+  }
+  const number = Number(match[1]);
+  const factor = texDimensionUnitFactor(match[2] ?? "");
+  return Number.isFinite(number) && factor !== null ? number * factor : null;
 }
 
 function styleCommandName(command: string): TexMathStyle | null {

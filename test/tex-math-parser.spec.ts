@@ -189,6 +189,59 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses amsmath genfrac as a prefix generalized fraction", () => {
+    const source = String.raw`\genfrac{[}{]}{0pt}{3}{a}{b}+\genfrac{}{}{}{2}{x}{y}`;
+    const result = parseTexMath(source, { sourceOffset: 5 });
+
+    expect(result.diagnostics).toEqual([]);
+    const delimited = atomAt(result, 0);
+    expect(delimited).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 5, end: 33 },
+      nucleus: {
+        kind: "fraction",
+        leftDelimiter: "[",
+        rightDelimiter: "]",
+        ruleThickness: 0,
+        style: "scriptscript",
+        sourceSpan: { start: 5, end: 33 },
+      },
+    });
+    if (delimited.nucleus.kind !== "fraction") {
+      return;
+    }
+    expect(delimited.nucleus.numerator.sourceSpan).toEqual({ start: 28, end: 29 });
+    expect(delimited.nucleus.denominator.sourceSpan).toEqual({ start: 31, end: 32 });
+
+    const plain = atomAt(result, 2);
+    expect(plain).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 34, end: 57 },
+      nucleus: {
+        kind: "fraction",
+        style: "script",
+        sourceSpan: { start: 34, end: 57 },
+      },
+    });
+    if (plain.nucleus.kind !== "fraction") {
+      return;
+    }
+    expect(plain.nucleus.leftDelimiter).toBeUndefined();
+    expect(plain.nucleus.rightDelimiter).toBeUndefined();
+    expect(plain.nucleus.ruleThickness).toBeUndefined();
+  });
+
+  it("keeps invalid genfrac rule dimensions explicit", () => {
+    const result = parseTexMath(String.raw`\genfrac{[}{]}{1em}{0}{a}{b}`);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "invalid-tex-dimension",
+      message: String.raw`Unsupported or invalid TeX dimension for \genfrac rule thickness.`,
+      sourceSpan: { start: 15, end: 18 },
+    });
+  });
+
   it("parses TeX infix over as a generalized fraction over the current list", () => {
     const source = String.raw`a+b \over c+d`;
     const result = parseTexMath(source, { sourceOffset: 7 });
