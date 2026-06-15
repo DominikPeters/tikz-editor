@@ -14,6 +14,7 @@ export type TexMathStyle =
 export type TexMathDiagnosticCode =
   | "duplicate-script"
   | "empty-script"
+  | "missing-environment-end"
   | "missing-delimiter"
   | "missing-group"
   | "missing-right"
@@ -69,6 +70,7 @@ export type TexMathNucleus =
   | TexMathAccentNucleus
   | TexMathOperatorNucleus
   | TexMathLeftRightNucleus
+  | TexMathAlignedNucleus
   | TexMathUnsupportedNucleus;
 
 export type TexMathDelimiter =
@@ -159,6 +161,25 @@ export interface TexMathLeftRightNucleus {
   readonly body: TexMathList;
   readonly leftDelimiterSourceSpan: TexMathSourceSpan;
   readonly rightDelimiterSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAlignedCell {
+  readonly list: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAlignedRow {
+  readonly cells: readonly TexMathAlignedCell[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly rowBreakSourceSpan?: TexMathSourceSpan;
+}
+
+export interface TexMathAlignedNucleus {
+  readonly kind: "aligned";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

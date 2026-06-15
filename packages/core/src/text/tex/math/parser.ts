@@ -2,6 +2,8 @@ import type {
   TexMathAtom,
   TexMathAtomClass,
   TexMathAccentCommand,
+  TexMathAlignedCell,
+  TexMathAlignedRow,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDelimiter,
@@ -23,6 +25,9 @@ import type {
 interface ParseListOptions {
   readonly stopAtGroupClose: boolean;
   readonly stopAtRight?: boolean;
+  readonly stopAtAlignmentTab?: boolean;
+  readonly stopAtRowBreak?: boolean;
+  readonly stopAtEnvironmentEnd?: string;
 }
 
 export interface ParseTexMathOptions {
@@ -142,6 +147,20 @@ class TexMathParser {
       if (token.kind === "command" && commandName(token.text) === "right" && options.stopAtRight) {
         break;
       }
+      if (token.kind === "character" && token.text === "&" && options.stopAtAlignmentTab) {
+        break;
+      }
+      if (isMathRowBreakToken(token) && options.stopAtRowBreak) {
+        break;
+      }
+      if (
+        token.kind === "command" &&
+        commandName(token.text) === "end" &&
+        options.stopAtEnvironmentEnd &&
+        this.peekEnvironmentName(this.index + 1) === options.stopAtEnvironmentEnd
+      ) {
+        break;
+      }
       if (token.kind === "space") {
         this.advance();
         continue;
@@ -216,6 +235,9 @@ class TexMathParser {
       }
       if (commandName(token.text) === "left") {
         return this.parseLeftRight(allowScripts);
+      }
+      if (commandName(token.text) === "begin") {
+        return this.parseEnvironment(allowScripts);
       }
       const classCommand = atomClassCommandName(token.text);
       if (classCommand) {
@@ -465,6 +487,150 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private parseEnvironment(allowScripts: boolean): TexMathAtom {
+    const beginCommand = this.advance();
+    const environmentName = this.parseEnvironmentNameGroup(
+      beginCommand.sourceSpan,
+      "\\begin environment name"
+    );
+    if (environmentName?.name === "aligned") {
+      return this.parseAlignedEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
+
+    const sourceSpan = spanUnion(beginCommand.sourceSpan, environmentName?.sourceSpan ?? beginCommand.sourceSpan);
+    this.addDiagnostic(
+      "warning",
+      "unsupported-command",
+      `Unsupported math environment ${environmentName?.name ?? "\\begin"}.`,
+      sourceSpan
+    );
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "inner",
+      nucleus: {
+        kind: "unsupported",
+        command: environmentName ? `\\begin{${environmentName.name}}` : "\\begin",
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseAlignedEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    const rows: TexMathAlignedRow[] = [];
+    let endSourceSpan: TexMathSourceSpan | undefined;
+    let sourceSpan = spanUnion(beginSourceSpan, environmentName.sourceSpan);
+
+    while (!this.isAtEnd()) {
+      if (this.isEnvironmentEnd("aligned")) {
+        endSourceSpan = this.consumeEnvironmentEnd("aligned");
+        sourceSpan = spanUnion(sourceSpan, endSourceSpan);
+        return this.maybeParseScripts(alignedAtom(rows, beginSourceSpan, endSourceSpan, sourceSpan), allowScripts);
+      }
+
+      const cells: TexMathAlignedCell[] = [];
+      let pendingRowSourceSpan: TexMathSourceSpan | undefined;
+      while (!this.isAtEnd()) {
+        const cellList = this.parseList({
+          stopAtGroupClose: false,
+          stopAtAlignmentTab: true,
+          stopAtRowBreak: true,
+          stopAtEnvironmentEnd: "aligned",
+        });
+        cells.push({
+          list: cellList,
+          sourceSpan: cellList.sourceSpan,
+        });
+        sourceSpan = spanUnion(sourceSpan, cellList.sourceSpan);
+        pendingRowSourceSpan = spanUnion(
+          pendingRowSourceSpan ?? cellList.sourceSpan,
+          cellList.sourceSpan
+        );
+
+        const separator = this.peek();
+        if (separator?.kind === "character" && separator.text === "&") {
+          this.advance();
+          sourceSpan = spanUnion(sourceSpan, separator.sourceSpan);
+          continue;
+        }
+        break;
+      }
+
+      const rowEndToken = this.peek();
+      if (isMathRowBreakToken(rowEndToken)) {
+        const rowBreak = this.advance();
+        sourceSpan = spanUnion(sourceSpan, rowBreak.sourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: spanUnion(cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
+          rowBreakSourceSpan: rowBreak.sourceSpan,
+        });
+        continue;
+      }
+      if (this.isEnvironmentEnd("aligned")) {
+        endSourceSpan = this.consumeEnvironmentEnd("aligned");
+        sourceSpan = spanUnion(sourceSpan, endSourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
+        });
+        return this.maybeParseScripts(alignedAtom(rows, beginSourceSpan, endSourceSpan, sourceSpan), allowScripts);
+      }
+      if (cells.length > 0) {
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
+        });
+      }
+    }
+
+    this.addDiagnostic(
+      "error",
+      "missing-environment-end",
+      "Expected \\end{aligned} to close math environment.",
+      beginSourceSpan
+    );
+    return this.maybeParseScripts(alignedAtom(rows, beginSourceSpan, undefined, sourceSpan), allowScripts);
+  }
+
+  private parseEnvironmentNameGroup(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { name: string; sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const open = this.peek();
+    if (open?.kind !== "group-open") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        `Expected a braced ${label}.`,
+        open?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    this.advance();
+    let name = "";
+    let lastSpan = open.sourceSpan;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (!token || token.kind === "group-close") {
+        break;
+      }
+      this.advance();
+      name += token.text;
+      lastSpan = token.sourceSpan;
+    }
+    const close = this.consumeGroupClose(open.sourceSpan);
+    return {
+      name,
+      sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
+    };
+  }
+
   private parseRequiredGroup(
     fallbackSpan: TexMathSourceSpan,
     label: string
@@ -633,6 +799,52 @@ class TexMathParser {
     return this.tokens[this.index] ?? null;
   }
 
+  private peekEnvironmentName(startIndex: number): string | null {
+    let cursor = startIndex;
+    while (this.tokens[cursor]?.kind === "space") {
+      cursor += 1;
+    }
+    const open = this.tokens[cursor];
+    if (open?.kind !== "group-open") {
+      return null;
+    }
+    cursor += 1;
+    let name = "";
+    while (cursor < this.tokens.length) {
+      const token = this.tokens[cursor];
+      if (!token || token.kind === "group-close") {
+        return name;
+      }
+      name += token.text;
+      cursor += 1;
+    }
+    return null;
+  }
+
+  private isEnvironmentEnd(name: string): boolean {
+    const token = this.peek();
+    return token?.kind === "command" &&
+      commandName(token.text) === "end" &&
+      this.peekEnvironmentName(this.index + 1) === name;
+  }
+
+  private consumeEnvironmentEnd(name: string): TexMathSourceSpan {
+    const endCommand = this.advance();
+    const environmentName = this.parseEnvironmentNameGroup(
+      endCommand.sourceSpan,
+      "\\end environment name"
+    );
+    if (environmentName?.name !== name) {
+      this.addDiagnostic(
+        "error",
+        "missing-environment-end",
+        `Expected \\end{${name}} to close math environment.`,
+        environmentName?.sourceSpan ?? endCommand.sourceSpan
+      );
+    }
+    return spanUnion(endCommand.sourceSpan, environmentName?.sourceSpan ?? endCommand.sourceSpan);
+  }
+
   private advance(): TexMathToken {
     const token = this.tokens[this.index];
     if (!token) {
@@ -673,8 +885,32 @@ function makeUnsupportedItem(
   };
 }
 
+function alignedAtom(
+  rows: readonly TexMathAlignedRow[],
+  beginSourceSpan: TexMathSourceSpan,
+  endSourceSpan: TexMathSourceSpan | undefined,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass: "inner",
+    nucleus: {
+      kind: "aligned",
+      rows,
+      beginSourceSpan,
+      ...(endSourceSpan ? { endSourceSpan } : {}),
+      sourceSpan,
+    },
+    sourceSpan,
+  };
+}
+
 function commandName(command: string): string {
   return command.startsWith("\\") ? command.slice(1) : command;
+}
+
+function isMathRowBreakToken(token: TexMathToken | null): boolean {
+  return token?.kind === "command" && token.text === String.raw`\\`;
 }
 
 function spacingCommandName(command: string): TexMathGlue["command"] | null {

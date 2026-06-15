@@ -201,6 +201,13 @@ export function layoutTexMathList(
       });
       continue;
     }
+    if (item.nucleus.kind === "aligned") {
+      errors.push({
+        message: "Aligned TeX math layout is not implemented yet.",
+        sourceSpan: item.sourceSpan,
+      });
+      continue;
+    }
 
     const atomLayout = layoutAtom(item, fontProfile, currentStyle, baseAtPt);
     if (!atomLayout) {

@@ -482,6 +482,23 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("reports aligned environments as explicitly unsupported until alignment layout lands", () => {
+    const parsed = parseTexMath(String.raw`\begin{aligned}a&=b\\c&=d\end{aligned}`);
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+
+    expect(parsed.diagnostics).toEqual([]);
+    expect(result.supported).toBe(false);
+    expect(result.errors).toEqual([
+      {
+        message: "Aligned TeX math layout is not implemented yet.",
+        sourceSpan: {
+          start: 0,
+          end: String.raw`\begin{aligned}a&=b\\c&=d\end{aligned}`.length,
+        },
+      },
+    ]);
+  });
+
   it("lets explicit nolimits keep display operators on side scripts", () => {
     const parsed = parseTexMath(String.raw`\sum\nolimits_i^n`);
     const result = layoutTexMathList(parsed.list, { style: "display" });

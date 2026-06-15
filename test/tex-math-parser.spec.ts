@@ -208,6 +208,99 @@ describe("TeX math parser", () => {
     expect(atom.nucleus.kind === "left-right" ? atom.nucleus.body.items : []).toHaveLength(1);
   });
 
+  it("parses aligned environments into source-spanned rows and cells", () => {
+    const source = String.raw`\begin{aligned}a&=b\\c&=d\end{aligned}`;
+    const result = parseTexMath(source, { sourceOffset: 5 });
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(1);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 5, end: 5 + source.length },
+      nucleus: {
+        kind: "aligned",
+        beginSourceSpan: { start: 5, end: 11 },
+        endSourceSpan: {
+          start: 5 + source.indexOf(String.raw`\end{aligned}`),
+          end: 5 + source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows).toHaveLength(2);
+    expect(atom.nucleus.rows[0]?.rowBreakSourceSpan).toEqual({
+      start: 5 + source.indexOf(String.raw`\\`),
+      end: 5 + source.indexOf(String.raw`\\`) + String.raw`\\`.length,
+    });
+    expect(atom.nucleus.rows.map((row) =>
+      row.cells.map((cell) => ({
+        sourceSpan: cell.sourceSpan,
+        itemCount: cell.list.items.length,
+      }))
+    )).toEqual([
+      [
+        {
+          sourceSpan: {
+            start: 5 + source.indexOf("a&"),
+            end: 5 + source.indexOf("a&") + 1,
+          },
+          itemCount: 1,
+        },
+        {
+          sourceSpan: {
+            start: 5 + source.indexOf("=b"),
+            end: 5 + source.indexOf("=b") + 2,
+          },
+          itemCount: 2,
+        },
+      ],
+      [
+        {
+          sourceSpan: {
+            start: 5 + source.indexOf("c&"),
+            end: 5 + source.indexOf("c&") + 1,
+          },
+          itemCount: 1,
+        },
+        {
+          sourceSpan: {
+            start: 5 + source.indexOf("=d"),
+            end: 5 + source.indexOf("=d") + 2,
+          },
+          itemCount: 2,
+        },
+      ],
+    ]);
+  });
+
+  it("reports missing aligned environment ends without throwing", () => {
+    const result = parseTexMath(String.raw`\begin{aligned}a&=b`);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "error",
+        code: "missing-environment-end",
+        message: String.raw`Expected \end{aligned} to close math environment.`,
+        sourceSpan: { start: 0, end: 6 },
+      },
+    ]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "aligned",
+      rows: [
+        {
+          cells: [
+            { sourceSpan: { start: 15, end: 16 } },
+            { sourceSpan: { start: 17, end: 19 } },
+          ],
+        },
+      ],
+    });
+  });
+
   it("maps TeX left-right delimiter commands to canonical delimiter ids", () => {
     const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert`);
     const groups = result.list.items.filter((item): item is ReturnType<typeof atomAt> => item.kind === "atom");
