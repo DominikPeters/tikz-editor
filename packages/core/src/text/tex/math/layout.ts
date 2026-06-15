@@ -485,6 +485,10 @@ function layoutNucleus(
 const TEX_ALIGNED_ROW_HEIGHT_PT = 8.399963;
 const TEX_ALIGNED_ROW_DEPTH_PT = 3.600037;
 const TEX_AMSMATH_JOT_PT = 3;
+const TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT = 10;
+const TEX_ALIGNED_BASELINE_SKIP_PT = 12;
+const TEX_ALIGNED_LINE_SKIP_LIMIT_PT = 0;
+const TEX_ALIGNED_LINE_SKIP_PT = 1;
 
 interface TexMathAlignedCellLayout {
   readonly hlist: TexMathHList;
@@ -527,10 +531,16 @@ function layoutAlignedNucleus(
   const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
     Math.max(0, ...concreteRows.map((row) => row.cells[columnIndex]?.hlist.width ?? 0))
   ).map(roundTexPt);
-  const width = roundTexPt(columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0));
+  const width = roundTexPt(
+    columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
+    alignedPairGapCount(columnCount) * TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT
+  );
+  const baselineOffsets = alignedRowBaselineOffsets(concreteRows);
+  const lastRow = concreteRows[concreteRows.length - 1];
   const naturalHeight = roundTexPt(
-    concreteRows.reduce((sum, row) => sum + row.height + row.depth, 0) +
-    TEX_AMSMATH_JOT_PT * Math.max(0, concreteRows.length - 1)
+    concreteRows[0].height +
+    (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
+    lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
@@ -538,7 +548,7 @@ function layoutAlignedNucleus(
   let baselineY = roundTexPt(-height + concreteRows[0].height);
   const rowItems: TexMathChildHListLayoutItem[] = [];
 
-  for (const row of concreteRows) {
+  for (const [rowIndex, row] of concreteRows.entries()) {
     const rowChildren: TexMathHListItem[] = [];
     let cursor = 0;
     for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
@@ -557,6 +567,9 @@ function layoutAlignedNucleus(
         cell.sourceSpan
       ));
       cursor = roundTexPt(cursor + columnWidth);
+      if (shouldInsertAlignedPairGap(columnIndex, columnCount)) {
+        cursor = roundTexPt(cursor + TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT);
+      }
     }
     rowItems.push({
       kind: "hlist",
@@ -569,7 +582,7 @@ function layoutAlignedNucleus(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     });
-    baselineY = roundTexPt(baselineY + row.depth + TEX_AMSMATH_JOT_PT + (concreteRows[rowItems.length]?.height ?? 0));
+    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   return {
@@ -589,8 +602,9 @@ function layoutAlignedRow(
   style: TexMathStyle,
   baseAtPt: number
 ): TexMathAlignedRowLayout | null {
+  const cellStyle = alignedCellStyle();
   const cells = row.cells.map((cell, columnIndex) => {
-    const result = layoutTexMathList(cell.list, { fontProfile, style, baseAtPt });
+    const result = layoutTexMathList(cell.list, { fontProfile, style: cellStyle, baseAtPt });
     return result.supported
       ? {
           hlist: alignCellHList(
@@ -598,7 +612,7 @@ function layoutAlignedRow(
             cell.list,
             columnIndex,
             fontProfile,
-            style,
+            cellStyle,
             baseAtPt
           ),
           sourceSpan: cell.sourceSpan,
@@ -615,6 +629,42 @@ function layoutAlignedRow(
     height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
   };
+}
+
+function alignedCellStyle(): TexMathStyle {
+  return "display";
+}
+
+function alignedRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
+  const offsets = [0];
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const previous = rows[rowIndex - 1];
+    const current = rows[rowIndex];
+    offsets.push(roundTexPt(
+      offsets[rowIndex - 1] +
+      alignedRowBaselineDistance(previous, current)
+    ));
+  }
+  return offsets;
+}
+
+function alignedRowBaselineDistance(
+  previous: TexMathAlignedRowLayout,
+  current: TexMathAlignedRowLayout
+): number {
+  const naturalDistance = roundTexPt(previous.depth + current.height);
+  const interlineGlue = TEX_ALIGNED_BASELINE_SKIP_PT - naturalDistance >= TEX_ALIGNED_LINE_SKIP_LIMIT_PT
+    ? roundTexPt(TEX_ALIGNED_BASELINE_SKIP_PT - naturalDistance)
+    : TEX_ALIGNED_LINE_SKIP_PT;
+  return roundTexPt(naturalDistance + interlineGlue + TEX_AMSMATH_JOT_PT);
+}
+
+function shouldInsertAlignedPairGap(columnIndex: number, columnCount: number): boolean {
+  return columnIndex % 2 === 1 && columnIndex < columnCount - 1;
+}
+
+function alignedPairGapCount(columnCount: number): number {
+  return Math.max(0, Math.ceil(columnCount / 2) - 1);
 }
 
 function alignCellHList(

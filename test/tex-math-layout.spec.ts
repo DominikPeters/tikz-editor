@@ -6,6 +6,7 @@ import {
   resolveMathGlyph,
   type TexMathChildHListLayoutItem,
   type TexMathGlyphLayoutItem,
+  type TexMathHListItem,
 } from "../packages/core/src/text/tex/index.js";
 
 function layout(source: string) {
@@ -18,6 +19,18 @@ function glyphItems(source: string): readonly TexMathGlyphLayoutItem[] {
   const result = layout(source);
   expect(result.supported).toBe(true);
   return result.hlist?.items.filter((item): item is TexMathGlyphLayoutItem => item.kind === "glyph") ?? [];
+}
+
+function flattenGlyphItems(items: readonly TexMathHListItem[]): readonly TexMathGlyphLayoutItem[] {
+  return items.flatMap((item) => {
+    if (item.kind === "glyph") {
+      return [item];
+    }
+    if (item.kind === "hlist") {
+      return flattenGlyphItems(item.items);
+    }
+    return [];
+  });
 }
 
 describe("TeX math hlist layout", () => {
@@ -515,6 +528,50 @@ describe("TeX math hlist layout", () => {
       { kind: "hlist", role: "aligned-cell", x: expect.closeTo(0.958329, 4) },
       { kind: "hlist", role: "aligned-cell", x: expect.closeTo(5.285889, 4) },
     ]);
+  });
+
+  it("uses amsmath display-style cells, inter-pair gaps, and TeX interline glue in aligned environments", () => {
+    const scriptFraction = layoutTexMathList(
+      parseTexMath(String.raw`\begin{aligned}x_i&=y^2\\\frac{1}{2}&=z\end{aligned}`).list,
+      { style: "display" }
+    );
+    expect(scriptFraction.supported).toBe(true);
+    expect(scriptFraction.hlist?.height).toBeCloseTo(20.654547, 5);
+    expect(scriptFraction.hlist?.depth).toBeCloseTo(15.654548, 5);
+    expect(scriptFraction.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "aligned-row", y: expect.closeTo(-12.014526, 4) },
+      { kind: "hlist", role: "aligned-row", y: expect.closeTo(8.795029, 4) },
+    ]);
+    expect(flattenGlyphItems(scriptFraction.hlist?.items ?? []).some((glyph) =>
+      glyph.fontId === "cmr10" && glyph.code === 49
+    )).toBe(true);
+
+    const multiplePairs = layoutTexMathList(
+      parseTexMath(String.raw`\begin{aligned}a&=b&c&=d\\e&=f&g&=h\end{aligned}`).list,
+      { style: "display" }
+    );
+    expect(multiplePairs.supported).toBe(true);
+    expect(multiplePairs.hlist?.width).toBeCloseTo(58.814636, 3);
+    const firstRow = multiplePairs.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow?.items).toMatchObject([
+      { kind: "hlist", role: "aligned-cell", x: 0 },
+      { kind: "hlist", role: "aligned-cell", x: expect.closeTo(5.285889, 4) },
+      { kind: "hlist", role: "aligned-cell", x: expect.closeTo(35.392273, 3) },
+      { kind: "hlist", role: "aligned-cell", x: expect.closeTo(39.719833, 3) },
+    ]);
+
+    const operatorRows = layoutTexMathList(
+      parseTexMath(String.raw`\begin{aligned}\sum_i^n&=x\\\sqrt{x}&=y\end{aligned}`).list,
+      { style: "display" }
+    );
+    expect(operatorRows.supported).toBe(true);
+    expect(operatorRows.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "aligned-row", y: expect.closeTo(-8.687836, 4) },
+      { kind: "hlist", role: "aligned-row", y: expect.closeTo(16.60173, 4) },
+    ]);
+    expect(flattenGlyphItems(operatorRows.hlist?.items ?? []).some((glyph) =>
+      glyph.fontId === "cmex10" && glyph.code === 88
+    )).toBe(true);
   });
 
   it("lets explicit nolimits keep display operators on side scripts", () => {
