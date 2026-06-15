@@ -625,15 +625,17 @@ supported grammar is mostly healthy under the available gates:
   at the current 0.03 pt tolerance;
 - generated document-level math glyph fuzz compares absolute coordinates for
   mixed inline math, display math, aligned display math, and supported vertical
-  contexts at the current 0.03 pt tolerance;
+  contexts at the current 0.03 pt tolerance; its generated display grammar
+  includes nested `aligned`, `alignedat`, and construct-heavy aligned cells;
 - aligned math fuzz passes for the currently supported alignment grammar.
 - mixed vertical-list display fixtures (`quote` and `itemize`) have a glyph
   oracle mode and pass at the current 0.03 pt tolerance for the focused
   paragraph-display-paragraph fixtures.
 - mixed vertical-list display fuzz now covers quote, itemize, enumerate,
   description, nested quote/itemize, and two-item list contexts, includes
-  aligned display formulas, and passes at the current 0.03 pt tolerance for
-  the generated display formulas.
+  aligned display formulas, nested `aligned`/`alignedat`, and construct-heavy
+  aligned cells, and passes at the current 0.03 pt tolerance for the generated
+  display formulas.
 
 The main gaps are therefore not isolated command coverage. The next robustness
 work should focus on:
@@ -645,8 +647,8 @@ work should focus on:
   into broader document-level matrices and finer math-in-display interactions;
 - documenting each known intentional mismatch between MathJax diagnostic tests
   and LuaLaTeX behavior before using MathJax corpus failures as work items;
-- expanding the mixed vertical-list fuzz grammar to include aligned displays
-  and larger generated corpora once the regular run time is cheap enough.
+- continuing to grow the mixed vertical-list fuzz grammar as new display math
+  constructs become supported.
 
 ## Phased Implementation
 

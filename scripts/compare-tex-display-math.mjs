@@ -123,7 +123,7 @@ function compareCase(caseSpec, args) {
     compareGlyphLists(
       mismatches,
       "math glyph",
-      ours.glyphs,
+      ours.glyphs.filter(isTeXMathGlyph),
       tex.glyphs.filter(isTeXMathGlyph),
       tolerance
     );
@@ -882,9 +882,7 @@ function generateDocumentMathFuzzCases(count, seed) {
   ];
   return Array.from({ length: count }, (_, index) => {
     const context = contexts[index % contexts.length] ?? contexts[0];
-    const display = index % 3 === 2
-      ? randomDocumentAlignStarSource(rng)
-      : `\\[${randomDocumentDisplayFormula(rng)}\\]`;
+    const display = randomDocumentDisplaySource(rng, index);
     return {
       id: `document-math-fuzz-${index + 1}-${context.id}`,
       width: context.width,
@@ -928,11 +926,20 @@ function randomDocumentDisplayFormula(rng) {
     `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}=${randomMathAtom(rng)}`,
     `${randomFraction(rng)}+${randomRadical(rng)}`,
     `${randomLineTerm(rng)}=${randomAccentTerm(rng)}`,
+    randomNestedAlignedFormula(rng),
+    randomNestedAlignedatFormula(rng),
     randomMatrix(rng),
     randomArray(rng),
     randomCases(rng),
     randomSmallMatrix(rng),
   ]);
+}
+
+function randomDocumentDisplaySource(rng, index) {
+  if (index % 4 === 3) {
+    return randomDocumentAlignStarSource(rng);
+  }
+  return `\\[${randomDocumentDisplayFormula(rng)}\\]`;
 }
 
 function randomDocumentAlignStarSource(rng) {
@@ -1165,15 +1172,26 @@ function generateDisplayFuzzCases(count, seed) {
   const rng = makeRng(seed);
   return Array.from({ length: count }, (_, index) => {
     const width = choice(rng, [100, 120, 140, 160, 180, 220]);
-    const useAlign = index % 2 === 1;
+    const displayKind = index % 4;
     return {
       id: `display-fuzz-${index + 1}`,
       width,
-      source: useAlign
-        ? `Alpha ${randomAlignStarSource(rng)} Beta`
-        : `Alpha \\[${randomDisplayFormula(rng)}\\] Beta`,
+      source: `Alpha ${randomGeneratedDisplaySource(rng, displayKind)} Beta`,
     };
   });
+}
+
+function randomGeneratedDisplaySource(rng, displayKind) {
+  if (displayKind === 1) {
+    return randomAlignStarSource(rng);
+  }
+  if (displayKind === 2) {
+    return `\\[${randomNestedAlignedFormula(rng)}\\]`;
+  }
+  if (displayKind === 3) {
+    return `\\[${randomNestedAlignedatFormula(rng)}\\]`;
+  }
+  return `\\[${randomDisplayFormula(rng)}\\]`;
 }
 
 function generateMixedVListFuzzCases(count, seed) {
@@ -1220,18 +1238,31 @@ function generateMixedVListFuzzCases(count, seed) {
     const context = contexts[index % contexts.length] ?? contexts[0];
     const before = choice(rng, ["Quoted", "Compact", "Measured", "Nested", "Aligned"]);
     const after = choice(rng, ["done", "tail", "after", "closing", "result"]);
-    const useAlign = index % 4 === 3;
+    const displayKind = index % 5;
     return {
       id: `mixed-vlist-fuzz-${index + 1}-${context.id}`,
       width: context.width,
       compareMode: "math-glyphs",
       source: context.source(
         before,
-        useAlign ? randomMixedVListAlignStarSource(rng) : `\\[${randomMixedVListDisplayFormula(rng)}\\]`,
+        randomMixedVListDisplaySource(rng, displayKind),
         after
       ),
     };
   });
+}
+
+function randomMixedVListDisplaySource(rng, displayKind) {
+  if (displayKind === 3) {
+    return randomMixedVListAlignStarSource(rng);
+  }
+  if (displayKind === 1) {
+    return `\\[${randomNestedAlignedFormula(rng)}\\]`;
+  }
+  if (displayKind === 2) {
+    return `\\[${randomNestedAlignedatFormula(rng)}\\]`;
+  }
+  return `\\[${randomMixedVListDisplayFormula(rng)}\\]`;
 }
 
 function randomMixedVListDisplayFormula(rng) {
@@ -1299,7 +1330,51 @@ function randomDisplayFormula(rng) {
   if (rng() < 0.25) {
     return `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}${operator}${right}`;
   }
-  return `${left}${operator}${right}`;
+  return choice(rng, [
+    `${left}${operator}${right}`,
+    randomNestedAlignedFormula(rng),
+    randomNestedAlignedatFormula(rng),
+  ]);
+}
+
+function randomNestedAlignedFormula(rng) {
+  return randomNestedAlignmentEnvironment(rng, "aligned");
+}
+
+function randomNestedAlignedatFormula(rng) {
+  return randomNestedAlignmentEnvironment(rng, "alignedat");
+}
+
+function randomNestedAlignmentEnvironment(rng, environment) {
+  const rowCount = 1 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomConstructHeavyAlignmentCell(rng));
+      cells.push(`=${randomConstructHeavyAlignmentCell(rng)}`);
+    }
+    rows.push(cells.join("&"));
+  }
+  const preamble = environment === "alignedat" ? `{${pairCount}}` : "";
+  return String.raw`\begin{` + environment + "}" + preamble +
+    rows.join(String.raw`\\`) +
+    String.raw`\end{` + environment + "}";
+}
+
+function randomConstructHeavyAlignmentCell(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomBinomial(rng),
+    randomRadical(rng),
+    randomLineTerm(rng),
+    randomAccentTerm(rng),
+    randomTextTerm(rng),
+    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
+  ]);
 }
 
 function randomAlignmentLeftCell(rng) {
