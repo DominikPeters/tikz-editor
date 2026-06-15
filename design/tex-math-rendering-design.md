@@ -601,8 +601,9 @@ supported grammar is mostly healthy under the available gates:
 - isolated math fuzz passes against LuaLaTeX for the current formula grammar;
 - inline text/math paragraph glyph fuzz passes for the current mixed formula
   grammar at 80, 120, and 160 pt widths;
-- inline text/math paragraph glyph fuzz also has an absolute-coordinate mode
-  that compares math glyphs after applying TeX vlist line placement;
+- inline text/math paragraph glyph fuzz also has absolute-coordinate mixed and
+  script-heavy large modes that compare math glyphs after applying TeX vlist
+  line placement;
 - display construct and display fuzz matrices pass at the current 0.03 pt
   tolerance;
 - aligned math fuzz passes for the currently supported alignment grammar.
@@ -619,7 +620,7 @@ work should focus on:
 - running larger versions of the same fuzz matrices and making them cheap
   enough for regular use;
 - expanding absolute-coordinate glyph trace coverage from the inline paragraph
-  smoke gate to the larger paragraph and display matrices;
+  large gates to display matrices and mixed vertical-list displays;
 - expanding editor hit-test fuzz beyond simple inline formulas into scripts,
   fractions, radicals, alignment rows, and line breaks around math;
 - documenting each known intentional mismatch between MathJax diagnostic tests
