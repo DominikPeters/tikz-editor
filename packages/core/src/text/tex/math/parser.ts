@@ -313,16 +313,28 @@ class TexMathParser {
 
     const fallbackSpan = leftDelimiter?.sourceSpan ?? leftCommand.sourceSpan;
     const sourceSpan = spanUnion(leftCommand.sourceSpan, rightDelimiter?.sourceSpan ?? body.sourceSpan);
+    if (!leftDelimiter || !rightDelimiter) {
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "inner",
+        nucleus: {
+          kind: "unsupported",
+          command: "\\left...\\right",
+          sourceSpan,
+        },
+        sourceSpan,
+      }, allowScripts);
+    }
     return this.maybeParseScripts({
       kind: "atom",
       atomClass: "inner",
       nucleus: {
         kind: "left-right",
-        leftDelimiter: leftDelimiter?.delimiter ?? ".",
-        rightDelimiter: rightDelimiter?.delimiter ?? ".",
+        leftDelimiter: leftDelimiter.delimiter,
+        rightDelimiter: rightDelimiter.delimiter,
         body,
         leftDelimiterSourceSpan: fallbackSpan,
-        rightDelimiterSourceSpan: rightDelimiter?.sourceSpan ?? body.sourceSpan,
+        rightDelimiterSourceSpan: rightDelimiter.sourceSpan,
         sourceSpan,
       },
       sourceSpan,
@@ -343,9 +355,10 @@ class TexMathParser {
       );
       return null;
     }
-    if (token.kind === "character" && isSupportedDelimiter(token.text)) {
+    const delimiter = delimiterForToken(token);
+    if (delimiter) {
       this.advance();
-      return { delimiter: token.text, sourceSpan: token.sourceSpan };
+      return { delimiter, sourceSpan: token.sourceSpan };
     }
     this.advance();
     this.addDiagnostic(
@@ -594,8 +607,56 @@ function atomClassCommandName(command: string): TexMathAtomClass | null {
   }
 }
 
-function isSupportedDelimiter(text: string): text is TexMathDelimiter {
-  return text === "." || text === "(" || text === ")" || text === "[" || text === "]";
+function delimiterForToken(token: TexMathToken): TexMathDelimiter | null {
+  if (token.kind === "character") {
+    switch (token.text) {
+      case ".":
+      case "(":
+      case ")":
+      case "[":
+      case "]":
+        return token.text;
+      case "|":
+        return "vert";
+      case "/":
+        return "slash";
+      default:
+        return null;
+    }
+  }
+  if (token.kind !== "command") {
+    return null;
+  }
+  switch (commandName(token.text)) {
+    case "{":
+    case "lbrace":
+      return "lbrace";
+    case "}":
+    case "rbrace":
+      return "rbrace";
+    case "|":
+    case "Vert":
+      return "Vert";
+    case "vert":
+    case "mid":
+      return "vert";
+    case "backslash":
+      return "backslash";
+    case "langle":
+      return "langle";
+    case "rangle":
+      return "rangle";
+    case "lfloor":
+      return "lfloor";
+    case "rfloor":
+      return "rfloor";
+    case "lceil":
+      return "lceil";
+    case "rceil":
+      return "rceil";
+    default:
+      return null;
+  }
 }
 
 function spanUnion(a: TexMathSourceSpan, b: TexMathSourceSpan): TexMathSourceSpan {

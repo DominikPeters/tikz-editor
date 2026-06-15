@@ -105,6 +105,41 @@ describe("TeX math parser", () => {
     expect(atom.nucleus.kind === "left-right" ? atom.nucleus.body.items : []).toHaveLength(1);
   });
 
+  it("maps TeX left-right delimiter commands to canonical delimiter ids", () => {
+    const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert`);
+    const groups = result.list.items.filter((item): item is ReturnType<typeof atomAt> => item.kind === "atom");
+
+    expect(result.diagnostics).toEqual([]);
+    expect(groups.map((group) => group.nucleus.kind === "left-right"
+      ? [group.nucleus.leftDelimiter, group.nucleus.rightDelimiter]
+      : null)).toEqual([
+      ["langle", "rangle"],
+      ["lbrace", "rbrace"],
+      ["vert", "Vert"],
+    ]);
+  });
+
+  it("keeps unsupported left-right delimiters explicit instead of treating them as null delimiters", () => {
+    const result = parseTexMath(String.raw`\left\unknown x\right)`);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "warning",
+        code: "unsupported-command",
+        message: "Unsupported math delimiter \\unknown.",
+        sourceSpan: { start: 5, end: 13 },
+      },
+    ]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      nucleus: {
+        kind: "unsupported",
+        command: String.raw`\left...\right`,
+      },
+    });
+  });
+
   it("parses explicit math spacing commands as glue items", () => {
     const result = parseTexMath(String.raw`x\,y\quad z`);
 

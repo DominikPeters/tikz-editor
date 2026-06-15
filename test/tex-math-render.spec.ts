@@ -174,6 +174,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(5360.8499 90.002) scale(100)"');
   });
 
+  it("renders TeX delimiter commands through the selected math fonts", () => {
+    const parsed = parseTexMath(String.raw`\left\langle x\right\rangle`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="104"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(body).toContain('transform="translate(960.418');
+  });
+
   it("creates inline math boxes for supported formulas without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({

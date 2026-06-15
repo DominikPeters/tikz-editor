@@ -421,6 +421,59 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out common TeX left-right delimiter commands with TeX glyph choices", () => {
+    const angle = layout(String.raw`\left\langle x\right\rangle`);
+    expect(angle.supported).toBe(true);
+    expect(angle.hlist?.width).toBeCloseTo(13.49308, 5);
+    expect(angle.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmsy10",
+      code: 104,
+    });
+    expect(angle.hlist?.items.at(-1)).toMatchObject({
+      kind: "glyph",
+      fontId: "cmsy10",
+      code: 105,
+      x: expect.closeTo(9.60418, 5),
+    });
+
+    const delimiters = layout(String.raw`\left\lbrace x\right\rbrace\left|x\right|\left\Vert x\right\Vert\left\backslash x\right/`);
+    expect(delimiters.supported).toBe(true);
+    expect(delimiters.hlist?.items.filter((item) => item.kind === "glyph").map((item) => item.code)).toEqual([
+      102,
+      103,
+      106,
+      106,
+      107,
+      107,
+      110,
+      47,
+    ]);
+    expect(delimiters.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      items: [{ kind: "glyph", fontId: "cmmi10", code: 120 }],
+    });
+  });
+
+  it("uses extension-family chains for tall TeX delimiter commands", () => {
+    const result = layout(String.raw`\left\lfloor\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}\right\rfloor`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(60.275189, 6);
+    expect(result.hlist?.items.slice(0, 5)).toMatchObject([
+      { kind: "glyph", fontId: "cmex10", code: 54, y: expect.closeTo(-23.50021, 5) },
+      { kind: "glyph", fontId: "cmex10", code: 54, y: expect.closeTo(-17.50015, 5) },
+      { kind: "glyph", fontId: "cmex10", code: 54, y: expect.closeTo(-11.50009, 5) },
+      { kind: "glyph", fontId: "cmex10", code: 54, y: expect.closeTo(-5.50003, 5) },
+      { kind: "glyph", fontId: "cmex10", code: 52, y: expect.closeTo(0.90002, 5) },
+    ]);
+    expect(result.hlist?.items.at(-1)).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 53,
+      x: expect.closeTo(53.608499, 5),
+    });
+  });
+
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
     const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
@@ -439,7 +492,7 @@ describe("TeX math hlist layout", () => {
   });
 
   it("reports unsupported constructs instead of producing approximate layout", () => {
-    for (const source of [String.raw`\unknown{x}`]) {
+    for (const source of [String.raw`\unknown{x}`, String.raw`\left\unknown x\right)`]) {
       const parsed = parseTexMath(source);
       expect(parsed.diagnostics).toMatchObject([
         {

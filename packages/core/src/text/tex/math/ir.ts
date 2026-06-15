@@ -74,7 +74,19 @@ export type TexMathDelimiter =
   | "("
   | ")"
   | "["
-  | "]";
+  | "]"
+  | "lbrace"
+  | "rbrace"
+  | "vert"
+  | "Vert"
+  | "slash"
+  | "backslash"
+  | "langle"
+  | "rangle"
+  | "lfloor"
+  | "rfloor"
+  | "lceil"
+  | "rceil";
 
 export interface TexMathGlyphNucleus {
   readonly kind: "glyph";

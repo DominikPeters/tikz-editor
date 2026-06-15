@@ -628,11 +628,11 @@ function layoutMathDelimiter(
     return null;
   }
   const small = fontProfile.resolveMathFont({
-    family: "operators",
+    family: spec.smallFamily,
     style,
     baseAtPt,
   });
-  const smallCandidate = selectDelimiterFromChain(small, "operators", spec.smallCode, targetHeight, sourceSpan);
+  const smallCandidate = selectDelimiterFromChain(small, spec.smallFamily, spec.smallCode, targetHeight, sourceSpan);
   const selected = smallCandidate?.largeEnough
     ? smallCandidate.delimiter
     : selectDelimiterFromChain(
@@ -654,16 +654,44 @@ function layoutMathDelimiter(
 
 function delimiterSpec(
   delimiter: Exclude<TexMathDelimiter, ".">
-): { readonly smallCode: number; readonly largeCode: number } | null {
+): {
+  readonly smallFamily: TexMathFontFamily;
+  readonly smallCode: number;
+  readonly largeCode: number;
+} | null {
   switch (delimiter) {
     case "(":
-      return { smallCode: 40, largeCode: 0 };
+      return { smallFamily: "operators", smallCode: 40, largeCode: 0 };
     case ")":
-      return { smallCode: 41, largeCode: 1 };
+      return { smallFamily: "operators", smallCode: 41, largeCode: 1 };
     case "[":
-      return { smallCode: 91, largeCode: 2 };
+      return { smallFamily: "operators", smallCode: 91, largeCode: 2 };
     case "]":
-      return { smallCode: 93, largeCode: 3 };
+      return { smallFamily: "operators", smallCode: 93, largeCode: 3 };
+    case "lfloor":
+      return { smallFamily: "symbols", smallCode: 98, largeCode: 4 };
+    case "rfloor":
+      return { smallFamily: "symbols", smallCode: 99, largeCode: 5 };
+    case "lceil":
+      return { smallFamily: "symbols", smallCode: 100, largeCode: 6 };
+    case "rceil":
+      return { smallFamily: "symbols", smallCode: 101, largeCode: 7 };
+    case "lbrace":
+      return { smallFamily: "symbols", smallCode: 102, largeCode: 8 };
+    case "rbrace":
+      return { smallFamily: "symbols", smallCode: 103, largeCode: 9 };
+    case "langle":
+      return { smallFamily: "symbols", smallCode: 104, largeCode: 10 };
+    case "rangle":
+      return { smallFamily: "symbols", smallCode: 105, largeCode: 11 };
+    case "vert":
+      return { smallFamily: "symbols", smallCode: 106, largeCode: 12 };
+    case "Vert":
+      return { smallFamily: "symbols", smallCode: 107, largeCode: 13 };
+    case "slash":
+      return { smallFamily: "operators", smallCode: 47, largeCode: 14 };
+    case "backslash":
+      return { smallFamily: "symbols", smallCode: 110, largeCode: 15 };
   }
 }
 
