@@ -2533,13 +2533,14 @@ class TexMathParser {
     if (significant.length === 0) {
       return { sourceSpan: group.sourceSpan };
     }
-    const delimiter = significant.length === 1 ? delimiterForToken(significant[0] ?? command) : null;
+    const delimiterToken = significant[0] ?? command;
+    const delimiter = significant.length === 1 ? delimiterForToken(delimiterToken) : null;
     if (!delimiter) {
       this.addDiagnostic(
-        "warning",
-        "unsupported-command",
-        `Unsupported math delimiter ${group.text || "{}"}.`,
-        group.sourceSpan
+        "error",
+        "missing-delimiter",
+        `Missing or unrecognized delimiter for ${command.text}.`,
+        delimiterToken.sourceSpan
       );
       return { sourceSpan: group.sourceSpan };
     }
@@ -2587,8 +2588,18 @@ class TexMathParser {
     if (text === "") {
       return { sourceSpan: group.sourceSpan };
     }
+    const style = genfracStyle(text);
+    if (!style) {
+      this.addDiagnostic(
+        "error",
+        "invalid-math-style",
+        `Bad math style for ${command.text}.`,
+        group.contentSourceSpan
+      );
+      return { sourceSpan: group.sourceSpan };
+    }
     return {
-      style: genfracStyle(text),
+      style,
       sourceSpan: group.sourceSpan,
     };
   }
@@ -3204,13 +3215,17 @@ function binomialCommandStyle(command: string): "display" | "text" | undefined |
   }
 }
 
-function genfracStyle(style: string): TexMathStyle {
-  switch (style.trim()) {
-    case "0":
+function genfracStyle(style: string): TexMathStyle | null {
+  const normalized = style.trim();
+  if (!/^[+-]?\d+$/u.test(normalized)) {
+    return null;
+  }
+  switch (Number.parseInt(normalized, 10)) {
+    case 0:
       return "display";
-    case "1":
+    case 1:
       return "text";
-    case "2":
+    case 2:
       return "script";
     default:
       return "scriptscript";

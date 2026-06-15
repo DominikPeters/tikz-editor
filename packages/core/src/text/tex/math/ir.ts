@@ -18,6 +18,7 @@ export type TexMathDiagnosticCode =
   | "extra-alignment-tab"
   | "invalid-environment-nesting"
   | "invalid-environment-argument"
+  | "invalid-math-style"
   | "invalid-tex-dimension"
   | "missing-environment-end"
   | "missing-delimiter"

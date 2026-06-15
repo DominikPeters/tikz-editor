@@ -242,6 +242,34 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses genfrac style numbers like amsmath", () => {
+    const fallbackStyle = atomAt(parseTexMath(String.raw`\genfrac{[}{]}{0pt}{4}{a}{b}`), 0);
+    expect(fallbackStyle).toMatchObject({
+      nucleus: {
+        kind: "fraction",
+        style: "scriptscript",
+      },
+    });
+
+    const invalidStyle = parseTexMath(String.raw`\genfrac{[}{]}{0pt}{x}{a}{b}`);
+    expect(invalidStyle.diagnostics).toContainEqual({
+      severity: "error",
+      code: "invalid-math-style",
+      message: String.raw`Bad math style for \genfrac.`,
+      sourceSpan: { start: 20, end: 21 },
+    });
+  });
+
+  it("reports TeX-like errors for invalid genfrac delimiters", () => {
+    const invalidDelimiter = parseTexMath(String.raw`\genfrac{(}{a}{}{2}{1}{2}`);
+    expect(invalidDelimiter.diagnostics).toContainEqual({
+      severity: "error",
+      code: "missing-delimiter",
+      message: String.raw`Missing or unrecognized delimiter for \genfrac.`,
+      sourceSpan: { start: 12, end: 13 },
+    });
+  });
+
   it("parses TeX infix over as a generalized fraction over the current list", () => {
     const source = String.raw`a+b \over c+d`;
     const result = parseTexMath(source, { sourceOffset: 7 });
