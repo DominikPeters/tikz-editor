@@ -881,12 +881,16 @@ function generateMixedVListFuzzCases(count, seed) {
     const context = contexts[index % contexts.length] ?? contexts[0];
     const before = choice(rng, ["Quoted", "Compact", "Measured", "Nested", "Aligned"]);
     const after = choice(rng, ["done", "tail", "after", "closing", "result"]);
-    const formula = randomMixedVListDisplayFormula(rng);
+    const useAlign = index % 4 === 3;
     return {
       id: `mixed-vlist-fuzz-${index + 1}-${context.id}`,
       width: context.width,
       compareMode: "math-glyphs",
-      source: context.source(before, `\\[${formula}\\]`, after),
+      source: context.source(
+        before,
+        useAlign ? randomMixedVListAlignStarSource(rng) : `\\[${randomMixedVListDisplayFormula(rng)}\\]`,
+        after
+      ),
     };
   });
 }
@@ -913,6 +917,25 @@ function randomMixedVListDisplayFormula(rng) {
     return `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}+${right}`;
   }
   return `${left}${choice(rng, ["+", "-", "="])}${right}`;
+}
+
+function randomMixedVListAlignStarSource(rng) {
+  const rowCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    rows.push(`${randomMixedVListAlignCell(rng)}&=${randomMixedVListAlignCell(rng)}`);
+  }
+  return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomMixedVListAlignCell(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomRadical(rng),
+    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
+  ]);
 }
 
 function randomAlignStarSource(rng) {

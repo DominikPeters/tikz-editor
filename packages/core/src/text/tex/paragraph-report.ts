@@ -355,25 +355,29 @@ function texLinePreDisplaySize(
   line: LineReport,
   font: ResolvedTexFont
 ): number {
+  const latexArticleListLeftMarginEm = 2.5;
   if (line.spaceCount > 0 && Math.abs(line.glueSetRatio) > 1e-9) {
     return Number.POSITIVE_INFINITY;
   }
-  const bodyStartAfterInlineLabel = texLineBodyStartAfterInlineLabel(line);
-  if (bodyStartAfterInlineLabel !== undefined) {
-    return roundTexPt(Math.max(0, line.xEnd - bodyStartAfterInlineLabel) + 2 * font.atPt);
+  if (texLineHasInlineListLabel(line)) {
+    return roundTexPt(Math.max(0, line.xEnd + 2 * font.atPt - latexArticleListLeftMarginEm * font.atPt));
   }
   return roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * font.atPt);
 }
 
-function texLineBodyStartAfterInlineLabel(line: LineReport): number | undefined {
+function texLineHasInlineListLabel(line: LineReport): boolean {
   const labelIndex = line.segments.findIndex((segment) => segment.role === "list-label");
   if (labelIndex < 0) {
-    return undefined;
+    return false;
   }
+  const labelSegment = line.segments[labelIndex];
   const bodySegment = line.segments.slice(labelIndex + 1).find((segment) =>
     segment.role !== "list-label" && typeof segment.x === "number"
   );
-  return bodySegment?.x;
+  if (!labelSegment || !bodySegment) {
+    return false;
+  }
+  return Math.abs(bodySegment.x - (labelSegment.x + labelSegment.width)) < 1e-6;
 }
 
 function texMathBoxFromWrapper(

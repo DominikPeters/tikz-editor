@@ -604,23 +604,24 @@ supported grammar is mostly healthy under the available gates:
 - inline text/math paragraph glyph fuzz also has absolute-coordinate mixed and
   script-heavy large modes that compare math glyphs after applying TeX vlist
   line placement;
-- display construct and display fuzz matrices pass at the current 0.03 pt
-  tolerance;
+- display construct and large display fuzz matrices compare glyphs in
+  absolute vbox coordinates and pass at the current 0.03 pt tolerance;
 - aligned math fuzz passes for the currently supported alignment grammar.
 - mixed vertical-list display fixtures (`quote` and `itemize`) have a glyph
   oracle mode and pass at the current 0.03 pt tolerance for the focused
   paragraph-display-paragraph fixtures.
 - mixed vertical-list display fuzz now covers quote, itemize, enumerate,
-  description, nested quote/itemize, and two-item list contexts, and passes at
-  the current 0.03 pt tolerance for the generated display formulas.
+  description, nested quote/itemize, and two-item list contexts, includes
+  aligned display formulas, and passes at the current 0.03 pt tolerance for
+  the generated display formulas.
 
 The main gaps are therefore not isolated command coverage. The next robustness
 work should focus on:
 
 - running larger versions of the same fuzz matrices and making them cheap
   enough for regular use;
-- expanding absolute-coordinate glyph trace coverage from the inline paragraph
-  large gates to display matrices and mixed vertical-list displays;
+- expanding absolute-coordinate glyph trace coverage beyond the current inline,
+  display, and mixed vertical-list gates into broader document-level matrices;
 - expanding editor hit-test fuzz beyond simple inline formulas into scripts,
   fractions, radicals, alignment rows, and line breaks around math;
 - documenting each known intentional mismatch between MathJax diagnostic tests
