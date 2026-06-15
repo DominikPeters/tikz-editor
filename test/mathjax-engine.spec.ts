@@ -837,6 +837,24 @@ describe("mathjax node text engine", () => {
     expect(Number(innerLine?.[1])).toBeLessThan(47);
   });
 
+  it("renders resumed description item lines after displays at the body indent", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`Alpha \begin{description}\item[Term] Nested \(x\) \[y\] after \(z\).\end{description} Beta`,
+      width: 190,
+      alignment: "ragged-right",
+    }) ?? "";
+    const tailLine = body.match(/data-line-index="2"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)"><rect x="([-\d.]+)"/);
+
+    expect(tailLine).not.toBeNull();
+    expect(Number(tailLine?.[1])).toBeCloseTo(0, 4);
+    expect(Number(tailLine?.[3])).toBeCloseTo(-25, 4);
+  });
+
   it("normalizes legacy font switches and records wrapped text gap metadata", async () => {
     const { outputJax, texCalls } = installFakeBrowserMathJax();
 

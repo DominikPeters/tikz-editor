@@ -1292,13 +1292,14 @@ function renderTexReportLineSvg(
   const font = options.metricProvider.resolveFont({ atPt: TEX_TEXT_BASE_FONT_SIZE });
   const lineTop = texReportLineTop(report.paragraphId, line.lineIndex, options);
   const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
+  const lineXOffset = texReportLineXOffset(line, lineLeft, options);
   const baseline = lineTop + options.firstLineAscent;
   const lineLeadingAttr = line.break?.lineLeading
     ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
     : "";
   const pieces = [
-    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineLeft - (options.originX ?? 0))} ${formatPt(lineTop - (options.originY ?? 0))})">`,
-    `<rect x="${formatPt(-lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`,
+    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineXOffset + lineLeft - (options.originX ?? 0))} ${formatPt(lineTop - (options.originY ?? 0))})">`,
+    `<rect x="${formatPt(-lineXOffset - lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
     if (options.skipListLabelSegments && segment.role === "list-label") {
@@ -1346,6 +1347,23 @@ function renderTexReportLineSvg(
   }
   pieces.push("</g>");
   return pieces.join("");
+}
+
+function texReportLineXOffset(
+  line: ParagraphLayoutReport["lines"][number],
+  lineLeft: number,
+  options: {
+    readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
+  }
+): number {
+  if (line.segments.some((segment) => segment.role === "list-label")) {
+    return 0;
+  }
+  const placement = options.linePlacementByIndex?.get(line.lineIndex);
+  if (!placement) {
+    return 0;
+  }
+  return Math.max(0, placement.x - lineLeft);
 }
 
 function renderTexInlineMathSvg(body: string, x: number, baseline: number): string {

@@ -617,6 +617,9 @@ supported grammar is mostly healthy under the available gates:
   math, display math, and aligned displays in the same source, including
   explicit `\par` before display math and quote/list/nested vertical contexts,
   at the current 0.03 pt tolerance;
+- generated document-level math glyph fuzz compares absolute coordinates for
+  mixed inline math, display math, aligned display math, and supported vertical
+  contexts at the current 0.03 pt tolerance;
 - aligned math fuzz passes for the currently supported alignment grammar.
 - mixed vertical-list display fixtures (`quote` and `itemize`) have a glyph
   oracle mode and pass at the current 0.03 pt tolerance for the focused
@@ -631,8 +634,7 @@ work should focus on:
 
 - running larger versions of the same fuzz matrices and making them cheap
   enough for regular use;
-- expanding absolute-coordinate glyph trace coverage beyond the current
-  document-level smoke matrix into generated document-level matrices;
+- broadening generated document-level matrices as the supported grammar grows;
 - expanding editor hit-test coverage beyond row-level display block geometry
   into broader document-level matrices and finer math-in-display interactions;
 - documenting each known intentional mismatch between MathJax diagnostic tests

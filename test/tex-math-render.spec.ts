@@ -1060,6 +1060,28 @@ unordered.`;
     expect(braceTail?.mathSvgBody).not.toContain('data-tex-font="cmr10" data-tex-glyph="61"');
   });
 
+  it("keeps relation breakpoints before following ellipsis glyphs", () => {
+    const source = String.raw`Alpha $\sqrt{\cdots}=\ldots$ beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-relation-before-ellipsis",
+      width: 62,
+      alignment: "ragged-right",
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const mathSegments = result.report?.lines
+      .flatMap((line) => line.segments)
+      .filter((segment) => segment.kind === "math") ?? [];
+    const beforeBreak = mathSegments.find((segment) => segment.text === String.raw`\sqrt{\cdots}=`);
+    const afterBreak = mathSegments.find((segment) => segment.text === String.raw`\ldots`);
+    expect(beforeBreak?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+    expect(beforeBreak?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="58"');
+    expect(afterBreak?.mathSvgBody?.match(/data-tex-font="cmmi10" data-tex-glyph="58"/g)).toHaveLength(3);
+  });
+
   it("carries TeX inline math breakpoint metadata into paragraph reports", () => {
     const source = String.raw`Alpha $a+b=c$ beta`;
     const result = layoutSimpleTexParagraph(source, {

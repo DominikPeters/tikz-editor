@@ -17,6 +17,9 @@ const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
 
 const args = readArgs();
+const generatedDocumentMathFuzzCases = args.documentMathFuzzCases > 0
+  ? generateDocumentMathFuzzCases(args.documentMathFuzzCases, args.seed)
+  : [];
 const generatedMixedVListFuzzCases = args.mixedVListFuzzCases > 0
   ? generateMixedVListFuzzCases(args.mixedVListFuzzCases, args.seed)
   : [];
@@ -25,6 +28,8 @@ const generatedDisplayFuzzCases = args.displayFuzzCases > 0
   : [];
 const cases = args.cases.length > 0
   ? args.cases
+  : generatedDocumentMathFuzzCases.length > 0
+    ? generatedDocumentMathFuzzCases
   : generatedMixedVListFuzzCases.length > 0
     ? generatedMixedVListFuzzCases
   : generatedDisplayFuzzCases.length > 0
@@ -75,7 +80,10 @@ if (args.summaryOnly) {
       mismatches: result.mismatches,
       source: result.source,
     })),
-    ...(generatedMixedVListFuzzCases.length > 0 ? {
+    ...(generatedDocumentMathFuzzCases.length > 0 ? {
+      seed: args.seed,
+      mode: "document-math-fuzz",
+    } : generatedMixedVListFuzzCases.length > 0 ? {
       seed: args.seed,
       mode: "mixed-vlist-fuzz",
     } : generatedDisplayFuzzCases.length > 0 ? {
@@ -307,19 +315,28 @@ function inlineGlyphsFromParagraphItem(item, context) {
       continue;
     }
     const baselineY = linePlacement.y + paragraphBaselineOffset;
+    const lineXOffset = paragraphLineXOffset(linePlacement, line);
     for (const segment of line.segments ?? []) {
       if (segment.kind !== "math" || !segment.mathSvgBody) {
         continue;
       }
       glyphs.push(...glyphsFromMathSvgBody(
         segment.mathSvgBody,
-        segment.x,
+        lineXOffset + segment.x,
         baselineY,
         item.item.kind
       ));
     }
   }
   return glyphs;
+}
+
+function paragraphLineXOffset(linePlacement, line) {
+  if (line.segments?.some((segment) => segment.role === "list-label")) {
+    return 0;
+  }
+  const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
+  return Math.max(0, linePlacement.x - lineLeft);
 }
 
 function glyphsFromMathSvgBody(svgBody, originX, baselineY, role) {
@@ -682,6 +699,7 @@ function readArgs() {
   let keepTemp = false;
   let summaryOnly = false;
   let tolerance = 0.05;
+  let documentMathFuzzCases = 0;
   let displayFuzzCases = 0;
   let mixedVListFuzzCases = 0;
   let seed = 20260615;
@@ -720,6 +738,10 @@ function readArgs() {
       cases.push(...constructMatrixCases());
     } else if (arg === "--document-math-matrix") {
       cases.push(...documentMathMatrixCases());
+    } else if (arg === "--document-math-fuzz") {
+      documentMathFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--document-math-fuzz");
+    } else if (arg.startsWith("--document-math-fuzz=")) {
+      documentMathFuzzCases = readNonNegativeInteger(arg.slice("--document-math-fuzz=".length), "--document-math-fuzz");
     } else if (arg === "--mixed-vlist-matrix") {
       cases.push(...mixedVListCases());
     } else if (arg === "--mixed-vlist-fuzz") {
@@ -736,7 +758,16 @@ function readArgs() {
       seed = readNonNegativeInteger(arg.slice("--seed=".length), "--seed");
     }
   }
-  return { cases, displayFuzzCases, keepTemp, mixedVListFuzzCases, seed, summaryOnly, tolerance };
+  return {
+    cases,
+    displayFuzzCases,
+    documentMathFuzzCases,
+    keepTemp,
+    mixedVListFuzzCases,
+    seed,
+    summaryOnly,
+    tolerance,
+  };
 }
 
 function readNonNegativeInteger(raw, label) {
@@ -805,6 +836,152 @@ function documentMathMatrixCases() {
     ...caseSpec,
     compareMode: "document-math-glyphs",
   }));
+}
+
+function generateDocumentMathFuzzCases(count, seed) {
+  const rng = makeRng(seed);
+  const contexts = [
+    {
+      id: "paragraph",
+      width: 150,
+      source: (before, inlineA, display, after, inlineB) =>
+        `${before} \\(${inlineA}\\) before ${display} ${after} $${inlineB}$ tail.`,
+    },
+    {
+      id: "explicit-par",
+      width: 170,
+      source: (before, inlineA, display, after, inlineB) =>
+        `${before} $${inlineA}$ first. \\par \\noindent ${after} ${display} closing \\(${inlineB}\\).`,
+    },
+    {
+      id: "quote",
+      width: 180,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{quote}${before} \\(${inlineA}\\) ${display} ${after} $${inlineB}$.\\end{quote} Beta`,
+    },
+    {
+      id: "itemize",
+      width: 190,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{itemize}\\item ${before} $${inlineA}$ ${display} ${after} \\(${inlineB}\\).\\end{itemize} Beta`,
+    },
+    {
+      id: "description",
+      width: 190,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{description}\\item[Term] ${before} \\(${inlineA}\\) ${display} ${after} $${inlineB}$.\\end{description} Beta`,
+    },
+    {
+      id: "nested",
+      width: 210,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{quote}\\begin{itemize}\\item ${before} $${inlineA}$ ${display} ${after} \\(${inlineB}\\).\\end{itemize}\\end{quote} Beta`,
+    },
+  ];
+  return Array.from({ length: count }, (_, index) => {
+    const context = contexts[index % contexts.length] ?? contexts[0];
+    const display = index % 3 === 2
+      ? randomDocumentAlignStarSource(rng)
+      : `\\[${randomDocumentDisplayFormula(rng)}\\]`;
+    return {
+      id: `document-math-fuzz-${index + 1}-${context.id}`,
+      width: context.width,
+      compareMode: "document-math-glyphs",
+      source: context.source(
+        choice(rng, ["Alpha", "Measured", "Compact", "Nested", "Aligned"]),
+        randomDocumentInlineFormula(rng),
+        display,
+        choice(rng, ["after", "tail", "closing", "result", "done"]),
+        randomDocumentInlineFormula(rng)
+      ),
+    };
+  });
+}
+
+function randomDocumentInlineFormula(rng) {
+  const left = choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomRadical(rng),
+    randomLineTerm(rng),
+    randomAccentTerm(rng),
+    randomLeftRight(rng),
+    randomOperatorName(rng),
+  ]);
+  if (rng() < 0.45) {
+    return left;
+  }
+  return `${left}${choice(rng, ["+", "-", "="])}${choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomRadical(rng),
+  ])}`;
+}
+
+function randomDocumentDisplayFormula(rng) {
+  return choice(rng, [
+    `${randomDocumentMathTerm(rng)}${choice(rng, ["+", "-", "="])}${randomDocumentMathTerm(rng)}`,
+    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}=${randomMathAtom(rng)}`,
+    `${randomFraction(rng)}+${randomRadical(rng)}`,
+    `${randomLineTerm(rng)}=${randomAccentTerm(rng)}`,
+    randomMatrix(rng),
+    randomArray(rng),
+    randomCases(rng),
+    randomSmallMatrix(rng),
+  ]);
+}
+
+function randomDocumentAlignStarSource(rng) {
+  const rowCount = 1 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomDocumentAlignmentCell(rng));
+      cells.push(`=${randomDocumentAlignmentCell(rng)}`);
+    }
+    rows.push(cells.join("&"));
+  }
+  return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomDocumentAlignmentCell(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomBinomial(rng),
+    randomRadical(rng),
+    randomLineTerm(rng),
+    randomAccentTerm(rng),
+    randomArray(rng),
+    randomCases(rng),
+    randomSmallMatrix(rng),
+    randomMatrix(rng),
+    randomOperatorName(rng),
+    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
+  ]);
+}
+
+function randomDocumentMathTerm(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomBinomial(rng),
+    randomRadical(rng),
+    randomLineTerm(rng),
+    randomAccentTerm(rng),
+    randomLeftRight(rng),
+    randomArray(rng),
+    randomCases(rng),
+    randomSmallMatrix(rng),
+    randomMatrix(rng),
+    randomOperatorName(rng),
+  ]);
 }
 
 function alignMatrixCases() {

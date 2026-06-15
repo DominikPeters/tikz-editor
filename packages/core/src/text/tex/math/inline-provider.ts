@@ -250,6 +250,9 @@ function mathSourceSpanEndX(
 ): number | null {
   let xEnd: number | null = null;
   for (const extent of extents) {
+    if (extent.sourceEnd < extent.sourceStart) {
+      continue;
+    }
     if (extent.sourceStart < sourceStart || extent.sourceEnd > sourceEnd) {
       continue;
     }

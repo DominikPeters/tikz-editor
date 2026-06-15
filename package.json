@@ -63,6 +63,8 @@
     "compare:tex-display-math:align-matrix": "node scripts/compare-tex-display-math.mjs --align-matrix --summary-only --tolerance 0.03",
     "compare:tex-display-math:construct-matrix": "node scripts/compare-tex-display-math.mjs --construct-matrix --summary-only --tolerance 0.03",
     "compare:tex-display-math:document-math-matrix": "node scripts/compare-tex-display-math.mjs --document-math-matrix --summary-only --tolerance 0.03",
+    "compare:tex-display-math:document-math-fuzz": "node scripts/compare-tex-display-math.mjs --document-math-fuzz 24 --seed 20260625 --summary-only --tolerance 0.03",
+    "compare:tex-display-math:document-math-fuzz:large": "node scripts/compare-tex-display-math.mjs --document-math-fuzz 96 --seed 20260626 --summary-only --tolerance 0.03",
     "compare:tex-display-math:mixed-vlist": "node scripts/compare-tex-display-math.mjs --mixed-vlist-matrix --summary-only --tolerance 0.03",
     "compare:tex-display-math:mixed-vlist-fuzz": "node scripts/compare-tex-display-math.mjs --mixed-vlist-fuzz 24 --seed 20260617 --summary-only --tolerance 0.03",
     "compare:tex-display-math:mixed-vlist-fuzz:large": "node scripts/compare-tex-display-math.mjs --mixed-vlist-fuzz 96 --seed 20260624 --summary-only --tolerance 0.03",
