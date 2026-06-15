@@ -1467,8 +1467,7 @@ function wrapFractionWithDelimiters(params: {
     depth: params.depth,
     sourceSpan: params.sourceSpan,
   };
-  const bodyShift = positiveDelimiterShift(left, right);
-  const bodyChild = childHList("nucleus", left.width, bodyShift, bodyHList, params.sourceSpan);
+  const bodyChild = childHList("nucleus", left.width, 0, bodyHList, params.sourceSpan);
   const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + params.width), 0);
   const items = [
     ...left.items,
@@ -1477,12 +1476,12 @@ function wrapFractionWithDelimiters(params: {
   ];
   const width = roundTexPt(left.width + params.width + right.width);
   const height = Math.max(
-    bodyChild.height - bodyChild.y,
+    params.height,
     ...left.items.map((item) => -item.y + item.height),
     ...shiftedRight.map((item) => -item.y + item.height)
   );
   const depth = Math.max(
-    bodyChild.y + bodyChild.depth,
+    params.depth,
     ...left.items.map((item) => item.y + item.depth),
     ...shiftedRight.map((item) => item.y + item.depth)
   );
@@ -1496,17 +1495,6 @@ function wrapFractionWithDelimiters(params: {
     isCharacterNucleus: false,
     sourceSpan: params.sourceSpan,
   };
-}
-
-function positiveDelimiterShift(
-  left: TexMathDelimiterLayout,
-  right: TexMathDelimiterLayout
-): number {
-  return roundTexPt(Math.max(
-    0,
-    ...left.items.map((item) => item.y),
-    ...right.items.map((item) => item.y)
-  ));
 }
 
 function layoutFractionList(
@@ -1907,7 +1895,7 @@ function layoutMathDelimiter(
   style: TexMathStyle,
   baseAtPt: number,
   targetHeight: number,
-  axis: number,
+  _axis: number,
   sourceSpan: TexMathSourceSpan
 ): TexMathDelimiterLayout | null {
   if (delimiter === ".") {
@@ -1933,7 +1921,7 @@ function layoutMathDelimiter(
     sourceSpan
   );
   const selected = smallCandidate?.largeEnough
-    ? smallCandidate.delimiter
+    ? smallCandidate
     : largestDelimiterCandidate(
       smallCandidate,
       selectDelimiterFromStyleLadder(
@@ -1945,14 +1933,15 @@ function layoutMathDelimiter(
         targetHeight,
         sourceSpan
       )
-    )?.delimiter ?? smallCandidate?.delimiter;
+    ) ?? smallCandidate;
   if (!selected) {
     return null;
   }
-  const shift = roundTexPt((selected.height - selected.depth) / 2 - axis);
+  const shiftAxis = mathParameterToPt(fontProfile, "axisHeight", selected.style, baseAtPt);
+  const shift = roundTexPt((selected.delimiter.height - selected.delimiter.depth) / 2 - shiftAxis);
   return {
-    ...selected,
-    items: offsetDelimiterItems(selected.items, 0, shift),
+    ...selected.delimiter,
+    items: offsetDelimiterItems(selected.delimiter.items, 0, shift),
   };
 }
 
@@ -1967,10 +1956,12 @@ function selectDelimiterFromStyleLadder(
 ): {
   readonly delimiter: TexMathDelimiterLayout;
   readonly largeEnough: boolean;
+  readonly style: TexMathStyle;
 } | null {
   let best: {
     readonly delimiter: TexMathDelimiterLayout;
     readonly largeEnough: boolean;
+    readonly style: TexMathStyle;
   } | null = null;
   for (const style of styles) {
     const candidate = selectDelimiterFromChain(
@@ -1983,10 +1974,11 @@ function selectDelimiterFromStyleLadder(
     if (!candidate) {
       continue;
     }
+    const styledCandidate = { ...candidate, style };
     if (candidate.largeEnough) {
-      return candidate;
+      return styledCandidate;
     }
-    best = largestDelimiterCandidate(best, candidate);
+    best = largestDelimiterCandidate(best, styledCandidate);
   }
   return best;
 }
@@ -1995,14 +1987,17 @@ function largestDelimiterCandidate(
   left: {
     readonly delimiter: TexMathDelimiterLayout;
     readonly largeEnough: boolean;
+    readonly style: TexMathStyle;
   } | null | undefined,
   right: {
     readonly delimiter: TexMathDelimiterLayout;
     readonly largeEnough: boolean;
+    readonly style: TexMathStyle;
   } | null | undefined
 ): {
   readonly delimiter: TexMathDelimiterLayout;
   readonly largeEnough: boolean;
+  readonly style: TexMathStyle;
 } | null {
   if (!left) {
     return right ?? null;

@@ -635,6 +635,37 @@ describe("TeX math hlist layout", () => {
       fontId: "cmmi10",
       code: 107,
     });
+
+    const scriptBinom = layout(String.raw`a^{\binom{1}{c}}`);
+    expect(scriptBinom.supported).toBe(true);
+    const superscript = scriptBinom.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(superscript).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      y: expect.closeTo(-3.628922, 5),
+    });
+    expect(superscript?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr10",
+      code: 40,
+      y: expect.closeTo(0, 6),
+    });
+
+    const binomSuperscript = layout(String.raw`\binom{n}{k}^2`);
+    expect(binomSuperscript.supported).toBe(true);
+    expect(binomSuperscript.hlist?.items.at(-1)).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      y: expect.closeTo(-6.027847, 4),
+    });
+
+    const binomSubscript = layout(String.raw`\binom{n}{k}_2`);
+    expect(binomSubscript.supported).toBe(true);
+    expect(binomSubscript.hlist?.items.at(-1)).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      y: expect.closeTo(4.000046, 4),
+    });
   });
 
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
