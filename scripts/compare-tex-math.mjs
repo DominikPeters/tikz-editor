@@ -11,8 +11,13 @@ import {
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const args = readArgs();
+const generatedAlignedFormulas = args.alignedFuzzCases > 0
+  ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
+  : [];
 const formulas = args.formulas.length > 0
   ? args.formulas
+  : generatedAlignedFormulas.length > 0
+    ? generatedAlignedFormulas
   : [
       "a+1",
       "x-y",
@@ -76,7 +81,18 @@ const formulas = args.formulas.length > 0
 const tolerance = args.tolerance;
 const results = formulas.map((formula) => compareFormula(formula, tolerance));
 const failed = results.filter((result) => !result.ok);
-console.log(JSON.stringify({ tolerance, results }, null, 2));
+if (args.summaryOnly) {
+  console.log(JSON.stringify({
+    tolerance,
+    cases: formulas.length,
+    failed: failed.length,
+    seed: args.seed,
+    mode: generatedAlignedFormulas.length > 0 ? "aligned-fuzz" : "fixed",
+    failures: failed,
+  }, null, 2));
+} else {
+  console.log(JSON.stringify({ tolerance, results }, null, 2));
+}
 if (failed.length > 0) {
   process.exitCode = 1;
 }
@@ -408,8 +424,8 @@ function walk_vlist(list, origin_x, baseline_y, height, width)
     end
   end
 end
-local width = walk_hlist(tex.box.m.list, 0, 0, tex.box.m)
-texio.write_nl(string.format('TIKZ_MATH_TRACE width=%.6f', width))
+walk_hlist(tex.box.m.list, 0, 0, tex.box.m)
+texio.write_nl(string.format('TIKZ_MATH_TRACE width=%.6f', node_width(tex.box.m)))
 `;
 }
 
@@ -422,6 +438,9 @@ function compareNumber(mismatches, label, left, right, tolerance) {
 function readArgs() {
   const formulas = [];
   let tolerance = 0.01;
+  let alignedFuzzCases = 0;
+  let seed = 20260615;
+  let summaryOnly = false;
   for (let index = 2; index < process.argv.length; index++) {
     const arg = process.argv[index] ?? "";
     if (arg === "--formula") {
@@ -432,9 +451,87 @@ function readArgs() {
       tolerance = Number(process.argv[++index] ?? tolerance);
     } else if (arg.startsWith("--tolerance=")) {
       tolerance = Number(arg.slice("--tolerance=".length));
+    } else if (arg === "--aligned-fuzz") {
+      alignedFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--aligned-fuzz");
+    } else if (arg.startsWith("--aligned-fuzz=")) {
+      alignedFuzzCases = readNonNegativeInteger(arg.slice("--aligned-fuzz=".length), "--aligned-fuzz");
+    } else if (arg === "--seed") {
+      seed = readNonNegativeInteger(process.argv[++index] ?? "", "--seed");
+    } else if (arg.startsWith("--seed=")) {
+      seed = readNonNegativeInteger(arg.slice("--seed=".length), "--seed");
+    } else if (arg === "--summary-only") {
+      summaryOnly = true;
     }
   }
-  return { formulas, tolerance };
+  return { formulas, tolerance, alignedFuzzCases, seed, summaryOnly };
+}
+
+function readNonNegativeInteger(raw, label) {
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Expected ${label} to be a non-negative integer.`);
+  }
+  return value;
+}
+
+function generateAlignedFuzzFormulas(cases, seed) {
+  const rng = makeRng(seed);
+  const formulas = [];
+  for (let index = 0; index < cases; index++) {
+    const rowCount = 1 + randomInt(rng, 3);
+    const pairCount = 1 + randomInt(rng, 2);
+    const rows = [];
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+      const cells = [];
+      for (let pairIndex = 0; pairIndex < pairCount; pairIndex++) {
+        cells.push(randomLeftAlignedCell(rng));
+        cells.push(`=${randomRightAlignedCell(rng)}`);
+      }
+      rows.push(cells.join("&"));
+    }
+    formulas.push(String.raw`\begin{aligned}` + rows.join(String.raw`\\`) + String.raw`\end{aligned}`);
+  }
+  return formulas;
+}
+
+function randomLeftAlignedCell(rng) {
+  const cells = [
+    "a",
+    "b",
+    "x_i",
+    "y^2",
+    String.raw`\frac{1}{2}`,
+    String.raw`\sqrt{x}`,
+    String.raw`\sum_i^n`,
+  ];
+  return cells[randomInt(rng, cells.length)] ?? "a";
+}
+
+function randomRightAlignedCell(rng) {
+  const cells = [
+    "a",
+    "b",
+    "x",
+    "y",
+    "z",
+    "x_i",
+    "y^2",
+    String.raw`\frac{1}{2}`,
+    String.raw`\sqrt{x}`,
+  ];
+  return cells[randomInt(rng, cells.length)] ?? "x";
+}
+
+function randomInt(rng, upperExclusive) {
+  return Math.floor(rng() * upperExclusive);
+}
+
+function makeRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
 }
 
 function round(value) {

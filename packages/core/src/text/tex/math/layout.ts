@@ -533,7 +533,8 @@ function layoutAlignedNucleus(
   ).map(roundTexPt);
   const width = roundTexPt(
     columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
-    alignedPairGapCount(columnCount) * TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT
+    alignedPairGapCount(columnCount) * TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT +
+    alignedTrailingWidth(concreteRows.length)
   );
   const baselineOffsets = alignedRowBaselineOffsets(concreteRows);
   const lastRow = concreteRows[concreteRows.length - 1];
@@ -665,6 +666,10 @@ function shouldInsertAlignedPairGap(columnIndex: number, columnCount: number): b
 
 function alignedPairGapCount(columnCount: number): number {
   return Math.max(0, Math.ceil(columnCount / 2) - 1);
+}
+
+function alignedTrailingWidth(rowCount: number): number {
+  return rowCount === 1 ? TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT : 0;
 }
 
 function alignCellHList(

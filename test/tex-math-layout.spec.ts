@@ -572,6 +572,13 @@ describe("TeX math hlist layout", () => {
     expect(flattenGlyphItems(operatorRows.hlist?.items ?? []).some((glyph) =>
       glyph.fontId === "cmex10" && glyph.code === 88
     )).toBe(true);
+
+    const singleRow = layoutTexMathList(
+      parseTexMath(String.raw`\begin{aligned}a&=y\end{aligned}`).list,
+      { style: "display" }
+    );
+    expect(singleRow.supported).toBe(true);
+    expect(singleRow.hlist?.width).toBeCloseTo(33.880707, 3);
   });
 
   it("lets explicit nolimits keep display operators on side scripts", () => {
