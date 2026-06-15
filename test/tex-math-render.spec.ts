@@ -402,6 +402,35 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmex10" data-tex-glyph="19"');
   });
 
+  it("creates inline math boxes for AMS matrix delimiter variants", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const cases = [
+      { environment: "bmatrix", left: 20, right: 21 },
+      { environment: "Bmatrix", left: 26, right: 27 },
+      { environment: "vmatrix", left: 12, right: 12 },
+      { environment: "Vmatrix", left: 13, right: 13 },
+    ];
+
+    for (const testCase of cases) {
+      const content = String.raw`\begin{` + testCase.environment + String.raw`}a&b\\c&d\end{` + testCase.environment + "}";
+      const source = `$${content}$`;
+      const box = provider.getInlineMathBox({
+        source,
+        content,
+        delimiter: "dollar",
+        sourceStart: 0,
+        sourceEnd: source.length,
+        contentStart: 1,
+        contentEnd: source.length - 1,
+      });
+
+      expect(box).not.toBeNull();
+      expect(box?.svgBody).toContain(`data-tex-font="cmex10" data-tex-glyph="${testCase.left}"`);
+      expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+      expect(box?.svgBody).toContain(`data-tex-font="cmex10" data-tex-glyph="${testCase.right}"`);
+    }
+  });
+
   it("returns null for unsupported formulas instead of approximate SVG", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const source = String.raw`$\unknown{x}$`;

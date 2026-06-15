@@ -10,6 +10,8 @@ import {
 } from "../packages/core/dist/text/tex/index.js";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
+const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
+
 const args = readArgs();
 const generatedDisplayFuzzCases = args.displayFuzzCases > 0
   ? generateDisplayFuzzCases(args.displayFuzzCases, args.seed)
@@ -388,8 +390,7 @@ function texSource(caseSpec) {
 function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
-    source.includes(String.raw`\begin{matrix}`) ||
-    source.includes(String.raw`\begin{pmatrix}`) ||
+    hasMatrixEnvironment(source) ||
     source.includes(String.raw`\text`);
 }
 
@@ -650,6 +651,26 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\] Beta`,
     },
     {
+      id: "display-bmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{bmatrix}a&b\\c&d\end{bmatrix}\] Beta`,
+    },
+    {
+      id: "display-Bmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{Bmatrix}a&b\\c&d\end{Bmatrix}\] Beta`,
+    },
+    {
+      id: "display-vmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{vmatrix}a&b\\c&d\end{vmatrix}\] Beta`,
+    },
+    {
+      id: "display-Vmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{Vmatrix}a&b\\c&d\end{Vmatrix}\] Beta`,
+    },
+    {
       id: "display-large-operator-limits",
       width: 160,
       source: String.raw`Alpha \[\prod_i^n+\sum_j^m\] Beta`,
@@ -785,7 +806,7 @@ function randomLeftRight(rng) {
 }
 
 function randomMatrix(rng) {
-  const environment = choice(rng, ["matrix", "pmatrix"]);
+  const environment = choice(rng, matrixEnvironments);
   const rowCount = 1 + randomInt(rng, 2);
   const columnCount = 1 + randomInt(rng, 3);
   const rows = [];
@@ -801,6 +822,12 @@ function randomMatrix(rng) {
     rows.push(cells.join("&"));
   }
   return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
+}
+
+function hasMatrixEnvironment(source) {
+  return matrixEnvironments.some((environment) =>
+    source.includes(String.raw`\begin{` + environment + "}")
+  );
 }
 
 function randomLargeOperator(rng) {

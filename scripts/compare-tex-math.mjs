@@ -10,6 +10,8 @@ import {
 } from "../packages/core/dist/text/tex/math/index.js";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
+const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
+
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
   ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
@@ -100,6 +102,10 @@ const formulas = args.formulas.length > 0
       "\\begin{aligned}\\sum_i^n&=x\\\\\\sqrt{x}&=y\\end{aligned}",
       "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
       "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+      "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
+      "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
+      "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}",
+      "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}",
       "\\prod_i^n",
       "\\coprod_i^n",
       "\\bigcup_i^n",
@@ -208,8 +214,7 @@ function compareFormula(formula, tolerance) {
 function comparisonItemsForFormula(formula, ours, tex) {
   if (
     formula.includes(String.raw`\begin{aligned}`) ||
-    formula.includes(String.raw`\begin{matrix}`) ||
-    formula.includes(String.raw`\begin{pmatrix}`)
+    hasMatrixEnvironment(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -362,8 +367,7 @@ function texTrace(formula) {
 
 function texSource(formula) {
   const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
-    formula.includes(String.raw`\begin{matrix}`) ||
-    formula.includes(String.raw`\begin{pmatrix}`) ||
+    hasMatrixEnvironment(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
@@ -647,7 +651,7 @@ function randomLeftRightFormula(rng) {
 }
 
 function randomMatrixFormula(rng) {
-  const environment = rng() < 0.5 ? "matrix" : "pmatrix";
+  const environment = randomMatrixEnvironment(rng);
   const rowCount = 1 + randomInt(rng, 2);
   const columnCount = 1 + randomInt(rng, 3);
   const rows = [];
@@ -659,6 +663,16 @@ function randomMatrixFormula(rng) {
     rows.push(cells.join("&"));
   }
   return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
+}
+
+function hasMatrixEnvironment(source) {
+  return matrixEnvironments.some((environment) =>
+    source.includes(String.raw`\begin{` + environment + "}")
+  );
+}
+
+function randomMatrixEnvironment(rng) {
+  return matrixEnvironments[randomInt(rng, matrixEnvironments.length)] ?? "matrix";
 }
 
 function randomMatrixCell(rng) {

@@ -211,7 +211,11 @@ export interface TexMathAlignedNucleus {
 
 export type TexMathMatrixEnvironment =
   | "matrix"
-  | "pmatrix";
+  | "pmatrix"
+  | "bmatrix"
+  | "Bmatrix"
+  | "vmatrix"
+  | "Vmatrix";
 
 export interface TexMathMatrixNucleus {
   readonly kind: "matrix";

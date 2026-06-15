@@ -1205,10 +1205,20 @@ function wrapMatrixWithDelimiters(
 function matrixDelimiters(
   environment: TexMathMatrixEnvironment
 ): { left: TexMathDelimiter; right: TexMathDelimiter } | null {
-  if (environment === "pmatrix") {
-    return { left: "(", right: ")" };
+  switch (environment) {
+    case "matrix":
+      return null;
+    case "pmatrix":
+      return { left: "(", right: ")" };
+    case "bmatrix":
+      return { left: "[", right: "]" };
+    case "Bmatrix":
+      return { left: "lbrace", right: "rbrace" };
+    case "vmatrix":
+      return { left: "vert", right: "vert" };
+    case "Vmatrix":
+      return { left: "Vert", right: "Vert" };
   }
-  return null;
 }
 
 function alignCellHList(

@@ -1004,6 +1004,52 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out AMS matrix delimiter variants with TeX delimiter glyphs", () => {
+    const cases = [
+      {
+        environment: "bmatrix",
+        width: 31.0464,
+        delimiterCodes: [20, 21],
+      },
+      {
+        environment: "Bmatrix",
+        width: 35.49082,
+        delimiterCodes: [26, 27],
+      },
+      {
+        environment: "vmatrix",
+        width: 27.15746,
+        delimiterCodes: [12, 12],
+      },
+      {
+        environment: "Vmatrix",
+        width: 31.60192,
+        delimiterCodes: [13, 13],
+      },
+    ];
+
+    for (const testCase of cases) {
+      const result = layoutTexMathList(
+        parseTexMath(String.raw`\begin{` + testCase.environment + String.raw`}a&b\\c&d\end{` + testCase.environment + "}").list,
+        { style: "display" }
+      );
+      expect(result.supported).toBe(true);
+      expect(result.hlist?.width).toBeCloseTo(testCase.width, 5);
+      expect(result.hlist?.height).toBeCloseTo(14.50012, 5);
+      expect(result.hlist?.depth).toBeCloseTo(9.50012, 5);
+      const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+      expect(glyphs.some((glyph) => glyph.fontId === "cmmi10" && glyph.code === 97)).toBe(true);
+      expect(glyphs[0]).toMatchObject({
+        fontId: "cmex10",
+        code: testCase.delimiterCodes[0],
+      });
+      expect(glyphs.at(-1)).toMatchObject({
+        fontId: "cmex10",
+        code: testCase.delimiterCodes[1],
+      });
+    }
+  });
+
   it("lets explicit nolimits keep display operators on side scripts", () => {
     const parsed = parseTexMath(String.raw`\sum\nolimits_i^n`);
     const result = layoutTexMathList(parsed.list, { style: "display" });

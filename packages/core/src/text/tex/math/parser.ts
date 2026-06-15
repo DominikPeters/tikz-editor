@@ -1290,7 +1290,20 @@ function commandName(command: string): string {
 }
 
 function matrixEnvironmentName(name: string | undefined): TexMathMatrixEnvironment | null {
-  return name === "matrix" || name === "pmatrix" ? name : null;
+  if (!name) {
+    return null;
+  }
+  switch (name) {
+    case "matrix":
+    case "pmatrix":
+    case "bmatrix":
+    case "Bmatrix":
+    case "vmatrix":
+    case "Vmatrix":
+      return name;
+    default:
+      return null;
+  }
 }
 
 function isMathRowBreakToken(token: TexMathToken | null): boolean {
