@@ -233,7 +233,12 @@ describe("TeX math parser", () => {
     expect(ldots).toMatchObject({
       atomClass: "inner",
       sourceSpan: { start: 5, end: 11 },
-      nucleus: { kind: "list", sourceSpan: { start: 5, end: 11 } },
+      nucleus: {
+        kind: "list",
+        role: "ellipsis",
+        ellipsisCommand: "ldots",
+        sourceSpan: { start: 5, end: 11 },
+      },
     });
     expect(ldots.nucleus.kind === "list" ? ldots.nucleus.list.items : []).toMatchObject([
       { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },
@@ -245,6 +250,11 @@ describe("TeX math parser", () => {
     expect(cdots).toMatchObject({
       atomClass: "inner",
       sourceSpan: { start: 12, end: 18 },
+      nucleus: {
+        kind: "list",
+        role: "ellipsis",
+        ellipsisCommand: "cdots",
+      },
     });
     expect(cdots.nucleus.kind === "list" ? cdots.nucleus.list.items : []).toMatchObject([
       { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
@@ -256,6 +266,11 @@ describe("TeX math parser", () => {
     expect(dots).toMatchObject({
       atomClass: "inner",
       sourceSpan: { start: 19, end: 24 },
+      nucleus: {
+        kind: "list",
+        role: "ellipsis",
+        ellipsisCommand: "dots",
+      },
     });
     expect(dots.nucleus.kind === "list" ? dots.nucleus.list.items : []).toMatchObject([
       { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },

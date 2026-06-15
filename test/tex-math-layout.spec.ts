@@ -204,6 +204,14 @@ describe("TeX math hlist layout", () => {
     const terminalDots = layout(String.raw`\dots`);
     expect(terminalDots.supported).toBe(true);
     expect(terminalDots.hlist?.width).toBeCloseTo(13.333386, 5);
+
+    const scriptedDots = layout(String.raw`\dots^{\sum}`);
+    expect(scriptedDots.supported).toBe(true);
+    const scriptedDotsGlyphs = flattenGlyphItems(scriptedDots.hlist?.items ?? []);
+    expect(scriptedDotsGlyphs.map((glyph) => ({ fontId: glyph.fontId, code: glyph.code }))).toContainEqual({
+      fontId: "cmex7",
+      code: 80,
+    });
   });
 
   it("lays out negated relation composites with TeX overlay glyph traces", () => {

@@ -56,6 +56,7 @@ export {
 } from "./spacing.js";
 export {
   layoutTexMathList,
+  resolveDefaultTexMathFontProfileForList,
   resolveMathGlyph,
   type TexMathChildHListLayoutItem,
   type TexMathGlueLayoutItem,

@@ -110,6 +110,8 @@ export interface TexMathGlyphNucleus {
 export interface TexMathListNucleus {
   readonly kind: "list";
   readonly list: TexMathList;
+  readonly role?: "ellipsis";
+  readonly ellipsisCommand?: "ldots" | "cdots" | "dots";
   readonly sourceSpan: TexMathSourceSpan;
 }
 

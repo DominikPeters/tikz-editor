@@ -658,6 +658,8 @@ class TexMathParser {
           items,
           sourceSpan: command.sourceSpan,
         },
+        role: "ellipsis",
+        ellipsisCommand: ellipsis,
         sourceSpan: command.sourceSpan,
       },
       sourceSpan: command.sourceSpan,

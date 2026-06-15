@@ -702,6 +702,23 @@ describe("TeX math SVG rendering", () => {
     expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
   });
 
+  it("lets the paragraph math provider use AMS font profile selection", () => {
+    const source = String.raw`Alpha $\dots^{\sum}$ beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-provider-ams-profile",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const mathSegment = result.report?.lines
+      .flatMap((line) => line.segments)
+      .find((segment) => segment.kind === "math");
+    expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmex7" data-tex-glyph="80"');
+  });
+
   it("lets TeX paragraph layout carry supported display math as a vlist item", () => {
     const source = String.raw`Alpha \[\sum_i^n\] Beta`;
     const result = layoutSimpleTexParagraph(source, {

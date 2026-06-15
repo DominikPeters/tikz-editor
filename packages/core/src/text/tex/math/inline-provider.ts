@@ -4,12 +4,10 @@ import type {
   TexMathBoxProvider,
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
-import {
-  defaultTexMathFontProfile,
-  type TexMathFontProfile,
-} from "./font-profile.js";
+import type { TexMathFontProfile } from "./font-profile.js";
 import {
   layoutTexMathList,
+  resolveDefaultTexMathFontProfileForList,
   type TexMathChildHListLayoutItem,
   type TexMathHList,
   type TexMathHListItem,
@@ -33,18 +31,18 @@ export interface TexDerivedInlineMathBoxProviderOptions {
 export function createTexDerivedInlineMathBoxProvider(
   options: TexDerivedInlineMathBoxProviderOptions = {}
 ): TexMathBoxProvider {
-  const fontProfile = options.fontProfile ?? defaultTexMathFontProfile;
+  const configuredFontProfile = options.fontProfile;
   const baseAtPt = options.baseAtPt ?? 10;
   const cache = new Map<string, TexMathBox | null>();
   return {
     getInlineMathBox: (params) => {
-      return getMathBox(params, "text", cache, fontProfile, baseAtPt);
+      return getMathBox(params, "text", cache, configuredFontProfile, baseAtPt);
     },
     getDisplayMathBox: (params) => {
-      return getMathBox(params, "display", cache, fontProfile, baseAtPt);
+      return getMathBox(params, "display", cache, configuredFontProfile, baseAtPt);
     },
     getDisplayMathAlignment: (params) => {
-      return getDisplayMathAlignment(params, fontProfile, baseAtPt);
+      return getDisplayMathAlignment(params, configuredFontProfile, baseAtPt);
     },
   };
 }
@@ -61,7 +59,7 @@ function getMathBox(
   },
   style: "text" | "display",
   cache: Map<string, TexMathBox | null>,
-  fontProfile: TexMathFontProfile,
+  configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: number
 ): TexMathBox | null {
   const key = `${style}:${params.delimiter}:${params.contentStart}:${params.content}`;
@@ -74,6 +72,7 @@ function getMathBox(
     cache.set(key, null);
     return null;
   }
+  const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
   const laidOut = layoutTexMathList(parsed.list, {
     style,
     fontProfile,
@@ -123,7 +122,7 @@ function getDisplayMathAlignment(
     readonly contentEnd: number;
     readonly targetWidth: number;
   },
-  fontProfile: TexMathFontProfile,
+  configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: number
 ): TexMathDisplayAlignment | null {
   if (params.delimiter !== "align-star") {
@@ -135,6 +134,7 @@ function getDisplayMathAlignment(
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return null;
   }
+  const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
   const laidOut = layoutTexMathList(parsed.list, {
     style: "display",
     fontProfile,

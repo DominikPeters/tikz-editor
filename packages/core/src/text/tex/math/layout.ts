@@ -224,7 +224,7 @@ export function layoutTexMathList(
   const cramped = options.cramped ?? false;
   let currentStyle = style;
   let currentCramped = cramped;
-  const fontProfile = options.fontProfile ?? defaultTexMathFontProfileForList(list);
+  const fontProfile = options.fontProfile ?? resolveDefaultTexMathFontProfileForList(list);
   const baseAtPt = options.baseAtPt ?? 10;
   const alphabet = options.alphabet;
   const spaced = spaceTexMathList(list, { style });
@@ -304,7 +304,7 @@ export function layoutTexMathList(
   };
 }
 
-function defaultTexMathFontProfileForList(list: TexMathList): TexMathFontProfile {
+export function resolveDefaultTexMathFontProfileForList(list: TexMathList): TexMathFontProfile {
   return texMathListNeedsAmsMath(list) ? luaLatexAmsMathFontProfile : defaultTexMathFontProfile;
 }
 
@@ -344,6 +344,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     );
   }
   if (nucleus.kind === "list") {
+    if (nucleus.role === "ellipsis") {
+      return true;
+    }
     return texMathListNeedsAmsMath(nucleus.list);
   }
   if (nucleus.kind === "fraction") {
