@@ -48,12 +48,11 @@ if (args.summaryOnly) {
     tolerance: args.tolerance,
     passed: results.length - failed.length,
     failed: failed.length,
-    results: results.map((result) => ({
+    failures: failed.map((result) => ({
       id: result.id,
       width: result.width,
-      ok: result.ok,
       mismatches: result.mismatches,
-      ...(!result.ok ? { source: result.source } : {}),
+      source: result.source,
     })),
     ...(generatedDisplayFuzzCases.length > 0 ? {
       seed: args.seed,
