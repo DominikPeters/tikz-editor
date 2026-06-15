@@ -1237,6 +1237,55 @@ class TexMathParser {
     };
   }
 
+  private consumeAlignmentRowMetadata(): {
+    readonly suppressTag: boolean;
+    readonly labels: readonly {
+      readonly text: string;
+      readonly sourceSpan: TexMathSourceSpan;
+      readonly textSourceSpan: TexMathSourceSpan;
+    }[];
+    readonly sourceSpan?: TexMathSourceSpan;
+  } {
+    let suppressTag = false;
+    const labels: Array<{
+      readonly text: string;
+      readonly sourceSpan: TexMathSourceSpan;
+      readonly textSourceSpan: TexMathSourceSpan;
+    }> = [];
+    let sourceSpan: TexMathSourceSpan | undefined;
+    while (!this.isAtEnd()) {
+      this.skipSpaces();
+      const token = this.peek();
+      if (token?.kind !== "command") {
+        break;
+      }
+      const metadata = alignmentMetadataCommand(token.text);
+      if (!metadata) {
+        break;
+      }
+      const command = this.advance();
+      sourceSpan = spanUnion(sourceSpan ?? command.sourceSpan, command.sourceSpan);
+      if (metadata === "notag" || metadata === "nonumber") {
+        suppressTag = true;
+        continue;
+      }
+      const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} label`);
+      sourceSpan = spanUnion(sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+      if (content && !content.unsupported) {
+        labels.push({
+          text: content.text,
+          sourceSpan: spanUnion(command.sourceSpan, content.sourceSpan),
+          textSourceSpan: content.textSourceSpan,
+        });
+      }
+    }
+    return {
+      suppressTag,
+      labels,
+      ...(sourceSpan ? { sourceSpan } : {}),
+    };
+  }
+
   private parseInfixFractionList(
     numeratorItems: readonly TexMathItem[],
     primitive: InfixFractionPrimitive,
@@ -2568,6 +2617,19 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
       return "overwithdelims";
     case "atopwithdelims":
       return "atopwithdelims";
+    default:
+      return null;
+  }
+}
+
+function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumber" | null {
+  switch (commandName(command)) {
+    case "label":
+      return "label";
+    case "notag":
+      return "notag";
+    case "nonumber":
+      return "nonumber";
     default:
       return null;
   }

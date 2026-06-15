@@ -57,7 +57,7 @@ These counts come from `npm run check:mathjax-tex-corpus -- --slice <slice>` aft
 
 | Slice | Entries | Supported | Supported % | Explicit unsupported | Parser error | Not applicable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `core-baseline` | 1,279 | 389 | 30.4% | 799 | 91 | 0 |
+| `core-baseline` | 1,279 | 390 | 30.5% | 798 | 91 | 0 |
 | `latex-oracle-candidates` | 997 | 226 | 22.7% | 767 | 0 | 4 |
 | `extra-oracle-candidates` | 108 | 3 | 2.8% | 101 | 0 | 4 |
 | `display-environments` | 209 | 4 | 1.9% | 183 | 20 | 2 |
@@ -73,4 +73,4 @@ The dominant current failure classes are:
 - Macro expansion and scoping, such as `\def`, `\let`, `\newcommand`, `\begingroup`, and `\endgroup`.
 - Diagnostic-policy gaps where MathJax expects an error but the current parser only reports unsupported-command warnings.
 
-After adding renderable Computer Modern symbol/operator mappings, TeX-like single-token arguments for `\frac`, `\binom`, and `\sqrt`, standalone delimiter commands, `\colon`, control-space, long-arrow macro composites, first-class parser/layout support for `align`/`gather` display environments, explicit amsmath-style diagnostics for invalid nested `align`/`gather` structures, TeX infix generalized fractions (`\over`, `\choose`, `\atop`, `\brack`, `\brace`, `\overwithdelims`, `\atopwithdelims`), and absolute-dimension `\above`/`\abovewithdelims`, `core-baseline` support rose from 232/1,279 to 389/1,279. Remaining high-frequency failures in that slice are now dominated by broader display/alignment behavior (`\\`, `\end`, `multline`, tags), AMS/package symbol coverage, and package-specific diagnostics rather than plain Computer Modern symbol declarations.
+After adding renderable Computer Modern symbol/operator mappings, TeX-like single-token arguments for `\frac`, `\binom`, and `\sqrt`, standalone delimiter commands, `\colon`, control-space, long-arrow macro composites, first-class parser/layout support for `align`/`gather` display environments, explicit amsmath-style diagnostics for invalid nested `align`/`gather` structures, TeX infix generalized fractions (`\over`, `\choose`, `\atop`, `\brack`, `\brace`, `\overwithdelims`, `\atopwithdelims`), absolute-dimension `\above`/`\abovewithdelims`, and non-rendering alignment row metadata (`\label`, `\notag`, `\nonumber`), `core-baseline` support rose from 232/1,279 to 390/1,279. Remaining high-frequency failures in that slice are now dominated by broader display/alignment behavior (`\\`, `\end`, `multline`, explicit tags), AMS/package symbol coverage, and package-specific diagnostics rather than plain Computer Modern symbol declarations.

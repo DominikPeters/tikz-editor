@@ -956,6 +956,56 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses alignment row metadata without visible math atoms", () => {
+    const source = String.raw`\begin{align}a&=b\label{eq:a}\\c&=d\nonumber\end{align}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus.kind).toBe("aligned");
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows).toHaveLength(2);
+    expect(atom.nucleus.rows[0]).toMatchObject({
+      labels: [
+        {
+          text: "eq:a",
+          sourceSpan: {
+            start: source.indexOf(String.raw`\label`),
+            end: source.indexOf(String.raw`\\c`),
+          },
+          textSourceSpan: {
+            start: source.indexOf("{eq:a}") + 1,
+            end: source.indexOf("{eq:a}") + 5,
+          },
+        },
+      ],
+    });
+    expect(atom.nucleus.rows[0]?.cells.map((cell) => cell.list.items.length)).toEqual([1, 2]);
+    expect(atom.nucleus.rows[1]).toMatchObject({
+      suppressTag: true,
+    });
+    expect(atom.nucleus.rows[1]?.cells.map((cell) => cell.list.items.length)).toEqual([1, 2]);
+  });
+
+  it("keeps unsupported explicit alignment tags visible until tag rendering exists", () => {
+    const result = parseTexMath(String.raw`\begin{align}a\tag{A}\end{align}`);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "warning",
+      code: "unsupported-command",
+      message: String.raw`Unsupported math command \tag.`,
+      sourceSpan: { start: 14, end: 18 },
+    });
+    expect(atom.nucleus.kind).toBe("aligned");
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows[0]?.cells[0]?.list.items).toHaveLength(3);
+  });
+
   it("parses gather environments as aligned rows without requiring alignment tabs", () => {
     const source = String.raw`\begin{gather*}a=b\\c=d\end{gather*}`;
     const result = parseTexMath(source);
