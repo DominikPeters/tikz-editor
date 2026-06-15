@@ -48,6 +48,10 @@ export type TexGlueOrigin =
       readonly kind: "display-math-boundary";
       readonly side: "above" | "below";
       readonly variant?: TexDisplayMathSkipVariant;
+    }
+  | {
+      readonly kind: "display-math-interline";
+      readonly side: "above" | "below";
     };
 
 export interface TexLineBox {

@@ -55,6 +55,8 @@ const latexArticleDisplaySkipsPt = {
   },
 } as const;
 
+const latexNormalLineSkipPt = 1;
+
 export interface SimpleTexParagraphVerticalSkip {
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
@@ -385,13 +387,17 @@ function displayMathBoundaryGlueItem(
 
 export function resolveDisplayMathVerticalGlueInVList(
   vlist: TexVListDocument,
-  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
+  options: {
+    readonly lineHeight: number;
+  }
 ): TexVListDocument {
   return {
     ...vlist,
     items: resolveDisplayMathVerticalGlueInItems(
       vlist.items,
       paragraphMeasurements,
+      options,
       []
     ),
   };
@@ -400,11 +406,15 @@ export function resolveDisplayMathVerticalGlueInVList(
 function resolveDisplayMathVerticalGlueInItems(
   sourceItems: readonly TexVListItem[],
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
+  options: {
+    readonly lineHeight: number;
+  },
   pathPrefix: readonly number[]
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
   let previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined;
   let previousDisplaySkipVariant: TexDisplayMathSkipVariant = "normal";
+  let previousDisplayItem: TexDisplayMathItem | undefined;
   for (let index = 0; index < sourceItems.length; index += 1) {
     const item = sourceItems[index];
     if (!item) {
@@ -417,6 +427,7 @@ function resolveDisplayMathVerticalGlueInItems(
         items: resolveDisplayMathVerticalGlueInItems(
           item.items,
           paragraphMeasurements,
+          options,
           path
         ),
       });
@@ -441,10 +452,40 @@ function resolveDisplayMathVerticalGlueInItems(
         previousDisplaySkipVariant = variant;
       }
       items.push(resolveDisplayMathBoundaryGlueItem(item, variant));
+      if (item.origin.side === "above" && displayItem && previousParagraphMeasurement) {
+        items.push(displayMathInterlineGlueItem(
+          item,
+          "above",
+          texInterlineGlueSize(
+            previousParagraphMeasurement.ruleLeadingMetrics.depth,
+            displayItem.box.height,
+            options.lineHeight
+          )
+        ));
+      } else if (item.origin.side === "below" && previousDisplayItem) {
+        const nextParagraph = nextParagraphMeasurement(
+          sourceItems,
+          index,
+          pathPrefix,
+          paragraphMeasurements
+        );
+        if (nextParagraph) {
+          items.push(displayMathInterlineGlueItem(
+            item,
+            "below",
+            texInterlineGlueSize(
+              previousDisplayItem.box.depth,
+              nextParagraph.ruleLeadingMetrics.height,
+              options.lineHeight
+            )
+          ));
+        }
+      }
       continue;
     }
     if (item.kind === "display-math") {
       previousParagraphMeasurement = undefined;
+      previousDisplayItem = item;
     }
     items.push(item);
   }
@@ -489,6 +530,56 @@ function resolveDisplayMathBoundaryGlueItem(
     stretch: skip.stretch,
     shrink: skip.shrink,
   };
+}
+
+function displayMathInterlineGlueItem(
+  item: TexGlueItem,
+  side: "above" | "below",
+  size: number
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-interline",
+      side,
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function nextParagraphMeasurement(
+  items: readonly TexVListItem[],
+  index: number,
+  pathPrefix: readonly number[],
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): TexVListParagraphBoxMeasurement | undefined {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) {
+      continue;
+    }
+    if (item.kind === "glue" || item.kind === "penalty") {
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      return paragraphMeasurements.get(texVListPathKey([...pathPrefix, nextIndex]));
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function texInterlineGlueSize(
+  previousDepth: number,
+  nextHeight: number,
+  lineHeight: number
+): number {
+  const baselineGlue = roundTexPt(lineHeight - previousDepth - nextHeight);
+  return baselineGlue < 0 ? latexNormalLineSkipPt : baselineGlue;
 }
 
 function texArticleQuoteVerticalSkipBefore(

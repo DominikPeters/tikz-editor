@@ -252,7 +252,8 @@ export function layoutTexVListFromMeasuredParagraphs(
   const paragraphMeasurements = texVListParagraphMeasurementMap(options.paragraphMeasurements);
   const resolvedDocument = resolveDisplayMathVerticalGlueInVList(
     document,
-    paragraphMeasurements
+    paragraphMeasurements,
+    { lineHeight: options.lineHeight }
   );
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);
   const naturalTotalHeight = computeTexVListNaturalTotalHeight(

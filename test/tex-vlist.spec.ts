@@ -315,15 +315,27 @@ describe("TeX vlist lowering", () => {
         },
       },
       {
-        kind: "display-math",
+        kind: "glue",
         y: 12,
+        height: 1,
+        depth: 0,
+        glue: {
+          size: 1,
+          stretchOrder: "normal",
+          shrinkOrder: "normal",
+          origin: { kind: "display-math-interline", side: "above" },
+        },
+      },
+      {
+        kind: "display-math",
+        y: 13,
         height: expect.closeTo(16.51395, 5),
         depth: expect.closeTo(12.798677, 5),
         glue: undefined,
       },
       {
         kind: "glue",
-        y: expect.closeTo(41.312627, 5),
+        y: expect.closeTo(42.312627, 5),
         height: 6,
         depth: 0,
         glue: {
@@ -336,8 +348,20 @@ describe("TeX vlist lowering", () => {
         },
       },
       {
+        kind: "glue",
+        y: expect.closeTo(48.312627, 5),
+        height: 1,
+        depth: 0,
+        glue: {
+          size: 1,
+          stretchOrder: "normal",
+          shrinkOrder: "normal",
+          origin: { kind: "display-math-interline", side: "below" },
+        },
+      },
+      {
         kind: "paragraph",
-        y: expect.closeTo(47.312627, 5),
+        y: expect.closeTo(49.312627, 5),
         height: 8.5,
         depth: 3.5,
         glue: undefined,
@@ -1354,13 +1378,13 @@ describe("TeX vlist spacing", () => {
       height: item.metrics.height,
       depth: item.metrics.depth,
     }))).toEqual([
-      { kind: "paragraph", y: 0, height: 7, depth: 5 },
-      { kind: "glue", y: 12, height: 16, depth: 0 },
-      { kind: "paragraph", y: 28, height: 7, depth: 5 },
+      { kind: "paragraph", y: 0, height: 7, depth: 3 },
+      { kind: "glue", y: 10, height: 20, depth: 0 },
+      { kind: "paragraph", y: 30, height: 7, depth: 3 },
     ]);
     expect(layout.linePlacements).toEqual([
       { lineIndex: 0, x: 0, y: 0, height: 12 },
-      { lineIndex: 1, x: 0, y: 28, height: 12 },
+      { lineIndex: 1, x: 0, y: 30, height: 12 },
     ]);
     expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 33 });
   });
@@ -1749,14 +1773,14 @@ describe("TeX vlist layout", () => {
         path: [0],
         x: 0,
         y: 0,
-        metrics: { width: 28, height: 7, depth: 5 },
+        metrics: { width: 28, height: 7, depth: 3 },
       },
       {
         kind: "paragraph",
         path: [0, 0],
         x: 5,
         y: 0,
-        metrics: { width: 20, height: 7, depth: 5 },
+        metrics: { width: 20, height: 7, depth: 3 },
       },
     ]);
     expect(layout.boxReport.items.map((item) => ({
@@ -1853,7 +1877,7 @@ describe("TeX vlist layout", () => {
 
     expect(layout.linePlacements).toEqual([
       { lineIndex: 0, x: 0, y: 0, height: 12 },
-      { lineIndex: 1, x: 0, y: 20, height: 12 },
+      { lineIndex: 1, x: 0, y: 22, height: 12 },
     ]);
     expect(layout.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
@@ -1865,13 +1889,13 @@ describe("TeX vlist layout", () => {
         blockIndex: 0,
         lineIndices: [0],
         y: 0,
-        metrics: { width: 80, height: 7, depth: 5 },
+        metrics: { width: 80, height: 7, depth: 3 },
       },
       {
         blockIndex: 1,
         lineIndices: [1],
-        y: 20,
-        metrics: { width: 90, height: 7, depth: 5 },
+        y: 22,
+        metrics: { width: 90, height: 7, depth: 3 },
       },
     ]);
     expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 25 });
@@ -1888,19 +1912,19 @@ describe("TeX vlist layout", () => {
           y: 0,
           width: 80,
           height: 7,
-          depth: 5,
-          totalHeight: 12,
+          depth: 3,
+          totalHeight: 10,
           blockIndex: 0,
         },
         {
           itemKind: "glue",
           path: [1],
           x: 0,
-          y: 12,
+          y: 10,
           width: 0,
-          height: 8,
+          height: 12,
           depth: 0,
-          totalHeight: 8,
+          totalHeight: 12,
           glue: {
             size: 4,
             stretch: 2,
@@ -1912,11 +1936,11 @@ describe("TeX vlist layout", () => {
           path: [2],
           sourceSpan: { start: 0, end: 5 },
           x: 0,
-          y: 20,
+          y: 22,
           width: 90,
           height: 7,
-          depth: 5,
-          totalHeight: 12,
+          depth: 3,
+          totalHeight: 10,
           blockIndex: 1,
         },
       ],
@@ -1929,19 +1953,19 @@ describe("TeX vlist layout", () => {
           y: 0,
           width: 80,
           height: 7,
-          depth: 5,
-          totalHeight: 12,
+          depth: 3,
+          totalHeight: 10,
           blockIndex: 0,
         },
         {
           itemKind: "glue",
           path: [1],
           x: 0,
-          y: 12,
+          y: 10,
           width: 0,
-          height: 8,
+          height: 12,
           depth: 0,
-          totalHeight: 8,
+          totalHeight: 12,
           glue: {
             size: 4,
             stretch: 2,
@@ -1953,11 +1977,11 @@ describe("TeX vlist layout", () => {
           path: [2],
           sourceSpan: { start: 0, end: 5 },
           x: 0,
-          y: 20,
+          y: 22,
           width: 90,
           height: 7,
-          depth: 5,
-          totalHeight: 12,
+          depth: 3,
+          totalHeight: 10,
           blockIndex: 1,
         },
       ],

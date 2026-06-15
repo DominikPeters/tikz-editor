@@ -9,7 +9,6 @@ import type {
   TexLineBox,
   TexParagraphItem,
   TexVListDocument,
-  TexVListItem,
   TexVListParagraphBoxMeasurement,
   TexVListParagraphHorizontalLayout,
   TexVListParagraphLineAssignment,
@@ -156,12 +155,16 @@ export function texVListParagraphMeasurementMap(
 export function createMeasuredParagraphVListMeasurer(
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
 ): TexVListItemMeasurer {
+  const paragraphMeasurementsByBlockIndex = texVListParagraphMeasurementBlockIndexMap(
+    paragraphMeasurements
+  );
   return (item, cursor, index, items, path) => {
     if (item.kind !== "paragraph") {
       return null;
     }
     const key = texVListPathKey(path);
-    const measurement = paragraphMeasurements.get(key);
+    const measurement = paragraphMeasurements.get(key) ??
+      paragraphMeasurementsByBlockIndex.get(item.paragraph.blockIndex);
     if (!measurement) {
       throw new Error(
         `TeX vlist layout is missing paragraph measurement for path ${key}.`
@@ -175,13 +178,24 @@ export function createMeasuredParagraphVListMeasurer(
     if (measurement.lineIndices.length === 0) {
       return null;
     }
-    const useRuleLeadingBottom = shouldUseActualParagraphBottomBeforeNextItem(items, index);
     return {
       y: cursor,
-      advance: useRuleLeadingBottom ? measurement.ruleLeadingAdvance : measurement.standardAdvance,
-      metrics: useRuleLeadingBottom ? measurement.ruleLeadingMetrics : measurement.standardMetrics,
+      advance: measurement.ruleLeadingAdvance,
+      metrics: measurement.ruleLeadingMetrics,
     };
   };
+}
+
+function texVListParagraphMeasurementBlockIndexMap(
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): ReadonlyMap<number, TexVListParagraphBoxMeasurement> {
+  const byBlockIndex = new Map<number, TexVListParagraphBoxMeasurement>();
+  for (const measurement of paragraphMeasurements.values()) {
+    if (!byBlockIndex.has(measurement.blockIndex)) {
+      byBlockIndex.set(measurement.blockIndex, measurement);
+    }
+  }
+  return byBlockIndex;
 }
 
 function texHorizontalLayoutForParagraphAssignment(
@@ -234,29 +248,6 @@ function paragraphBoxMetrics(
     height: roundTexPt(Math.max(0, baselineY)),
     depth: roundTexPt(Math.max(0, bottom - baselineY)),
   };
-}
-
-function shouldUseActualParagraphBottomBeforeNextItem(
-  items: readonly TexVListItem[],
-  index: number
-): boolean {
-  return isRuleLeadingVerticalSequence(items.slice(index + 1));
-}
-
-function isRuleLeadingVerticalSequence(items: readonly TexVListItem[]): boolean {
-  for (const item of items) {
-    if (item.kind === "rule") {
-      return true;
-    }
-    if (item.kind === "glue" || item.kind === "penalty") {
-      continue;
-    }
-    if (item.kind === "vbox") {
-      return isRuleLeadingVerticalSequence(item.items);
-    }
-    return false;
-  }
-  return false;
 }
 
 function sameLineIndices(

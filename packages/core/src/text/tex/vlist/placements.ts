@@ -80,13 +80,17 @@ function measuredPositionedTexParagraphs(
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
 ): readonly MeasuredPositionedTexParagraph[] {
   const measured: MeasuredPositionedTexParagraph[] = [];
+  const paragraphMeasurementsByBlockIndex = texVListParagraphMeasurementBlockIndexMap(
+    paragraphMeasurements
+  );
   for (const item of flattenPositionedTexVListItems(items)) {
     if (!isPositionedTexParagraph(item)) {
       continue;
     }
     const key = texVListPathKey(item.path);
     const blockIndex = texPositionedParagraphBlockIndex(item.item);
-    const measurement = paragraphMeasurements.get(key);
+    const measurement = paragraphMeasurements.get(key) ??
+      paragraphMeasurementsByBlockIndex.get(blockIndex);
     if (!measurement) {
       throw new Error(
         `TeX vlist layout is missing paragraph measurement for path ${key}.`
@@ -103,6 +107,18 @@ function measuredPositionedTexParagraphs(
     });
   }
   return measured;
+}
+
+function texVListParagraphMeasurementBlockIndexMap(
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): ReadonlyMap<number, TexVListParagraphBoxMeasurement> {
+  const byBlockIndex = new Map<number, TexVListParagraphBoxMeasurement>();
+  for (const measurement of paragraphMeasurements.values()) {
+    if (!byBlockIndex.has(measurement.blockIndex)) {
+      byBlockIndex.set(measurement.blockIndex, measurement);
+    }
+  }
+  return byBlockIndex;
 }
 
 function isPositionedTexParagraph(
