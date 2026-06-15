@@ -102,9 +102,13 @@ function compareTopLevelItems(mismatches, ours, tex, tolerance) {
     tolerance
   );
 
-  const ourVerticalGlues = ours.filter((item) => item.kind === "glue");
-  const texVerticalGlues = tex.filter((item) => item.kind === "glue");
+  const ourVerticalGlues = ours.filter(isVisibleVerticalGlue);
+  const texVerticalGlues = tex.filter(isVisibleVerticalGlue);
   compareItemLists(mismatches, "vertical glue", ourVerticalGlues, texVerticalGlues, tolerance);
+}
+
+function isVisibleVerticalGlue(item) {
+  return item.kind === "glue" && (item.size ?? 0) > 0;
 }
 
 function compareItemLists(mismatches, label, ours, tex, tolerance) {
@@ -384,7 +388,8 @@ function texSource(caseSpec) {
 
 function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
-    source.includes(String.raw`\begin{align*}`);
+    source.includes(String.raw`\begin{align*}`) ||
+    source.includes(String.raw`\text`);
 }
 
 function traceLuaSource() {
@@ -411,15 +416,21 @@ local hlist_id=node.id('hlist')
 local vlist_id=node.id('vlist')
 local rule_id=node.id('rule')
 local penalty_id=node.id('penalty')
+local disc_id=node.id('disc')
 local whatsit_id=node.id('whatsit')
 local function sp(v) return (v or 0)/65536 end
 local function font_name(font_id)
   local registered=font.fonts and font.fonts[font_id]
-  if registered and registered.name then return tostring(registered.name) end
+  if registered and registered.name then return normalize_font_name(tostring(registered.name)) end
   local ok, tex_name=pcall(function() return tex.fontname(font_id) end)
-  if ok and tex_name then return tostring(tex_name) end
+  if ok and tex_name then return normalize_font_name(tostring(tex_name)) end
   local f=font.getfont(font_id)
-  return tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename))
+  return normalize_font_name(tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename)))
+end
+function normalize_font_name(name)
+  local bracketed=string.match(name, '^%[([^%]]+)%]')
+  if bracketed then return bracketed end
+  return name
 end
 local function node_width(n) return sp(n.width or 0) end
 local function node_height(n) return sp(n.height or 0) end
@@ -446,6 +457,7 @@ local function glue_width(n, parent)
 end
 local function kern_width(n) return sp(n.kern or n.width or 0) end
 local function walk_hlist(list, origin_x, baseline_y, top_index, parent)
+  if not list then return origin_x end
   local x=origin_x
   for n in node.traverse(list) do
     if n.id==glyph_id then
@@ -461,10 +473,13 @@ local function walk_hlist(list, origin_x, baseline_y, top_index, parent)
     elseif n.id==vlist_id then
       walk_vlist(n.list, x, baseline_y + sp(n.shift or 0) - node_height(n), node_height(n), 1, top_index, n)
       x=x+node_width(n)
+    elseif n.id==disc_id then
+      x=walk_hlist(n.replace or n.pre, x, baseline_y, top_index, parent)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
     end
   end
+  return x
 end
 function walk_vlist(list, origin_x, top_y, height, level, parent_top_index, parent)
   local y=top_y
@@ -629,6 +644,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\prod_i^n+\sum_j^m\] Beta`,
     },
     {
+      id: "display-text",
+      width: 140,
+      source: String.raw`Alpha \[x+\text{if}\] Beta`,
+    },
+    {
       id: "align-script-cells",
       width: 160,
       source: String.raw`Alpha \begin{align*}x_i^2&=y^n\\a&=b\end{align*} Beta`,
@@ -637,6 +657,11 @@ function constructMatrixCases() {
       id: "align-fraction-radical-cells",
       width: 180,
       source: String.raw`Alpha \begin{align*}\frac{1}{2}&=x\\\sqrt{y+1}&=z\end{align*} Beta`,
+    },
+    {
+      id: "align-text-cells",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}\text{if}&=x\\y&=\text{off}\end{align*} Beta`,
     },
   ];
 }
@@ -687,6 +712,7 @@ function randomAlignmentLeftCell(rng) {
     randomScriptTerm(rng),
     randomFraction(rng),
     randomRadical(rng),
+    randomTextTerm(rng),
     `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
   ]);
 }
@@ -697,6 +723,7 @@ function randomAlignmentRightCell(rng) {
     randomScriptTerm(rng),
     randomFraction(rng),
     randomRadical(rng),
+    randomTextTerm(rng),
   ]);
 }
 
@@ -707,7 +734,12 @@ function randomMathTerm(rng) {
     randomFraction(rng),
     randomRadical(rng),
     randomLeftRight(rng),
+    randomTextTerm(rng),
   ]);
+}
+
+function randomTextTerm(rng) {
+  return String.raw`\text{` + choice(rng, ["if", "off", "on", "min", "max"]) + "}";
 }
 
 function randomScriptTerm(rng) {

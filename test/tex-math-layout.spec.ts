@@ -227,6 +227,40 @@ describe("TeX math hlist layout", () => {
     expect(scriptedGroup.hlist?.width).toBeCloseTo(27.685287, 6);
   });
 
+  it("lays out text command nuclei through the document text font profile", () => {
+    const result = layout(String.raw`x+\text{if}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 0, end: 1 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 1, end: 2 } },
+      { fontId: "lmroman10-regular", code: 105, sourceSpan: { start: 8, end: 9 } },
+      { fontId: "lmroman10-regular", code: 102, sourceSpan: { start: 9, end: 10 } },
+    ]);
+    expect(result.hlist?.width).toBeCloseTo(23.777548, 6);
+  });
+
+  it("scales text command nuclei in script style", () => {
+    const result = layout(String.raw`x_{\text{if}}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      atPt: glyph.atPt,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "lmroman10-regular", atPt: 7, code: 105 },
+      { fontId: "lmroman10-regular", atPt: 7, code: 102 },
+    ]);
+  });
+
   it("lays out nested scripts through recursive script lists", () => {
     const result = layout("x^{y_i}");
 

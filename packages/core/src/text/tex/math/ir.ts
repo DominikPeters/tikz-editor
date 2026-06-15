@@ -68,6 +68,7 @@ export type TexMathNucleus =
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
   | TexMathAccentNucleus
+  | TexMathTextNucleus
   | TexMathOperatorNucleus
   | TexMathLeftRightNucleus
   | TexMathAlignedNucleus
@@ -130,6 +131,13 @@ export interface TexMathAccentNucleus {
   readonly command: TexMathAccentCommand;
   readonly base: TexMathList;
   readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathTextNucleus {
+  readonly kind: "text";
+  readonly text: string;
+  readonly textSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

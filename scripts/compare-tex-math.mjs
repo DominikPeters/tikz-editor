@@ -54,6 +54,9 @@ const formulas = args.formulas.length > 0
       "\\hat{y}",
       "\\hat{xy}",
       "\\hat{\\frac{1}{2}}",
+      "\\text{if}",
+      "x+\\text{if}",
+      "\\text{office}",
       "\\sum",
       "\\sum_i^n",
       "\\begin{aligned}a&=b\\\\c&=d\\end{aligned}",
@@ -246,7 +249,7 @@ function texTrace(formula) {
     const items = [];
     let width = 0;
     for (const line of log.split(/\r?\n/)) {
-      const glyph = /^TIKZ_MATH_TRACE glyph x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) font=(?<font>\S+) char=(?<char>\d+) width=(?<width>[-.\d]+)/.exec(line);
+      const glyph = /^TMT g x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) f=(?<font>\S+) c=(?<char>\d+) w=(?<width>[-.\d]+)/.exec(line);
       if (glyph?.groups) {
         items.push({
           kind: "glyph",
@@ -258,7 +261,7 @@ function texTrace(formula) {
         });
         continue;
       }
-      const glue = /^TIKZ_MATH_TRACE glue x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) width=(?<width>[-.\d]+)/.exec(line);
+      const glue = /^TMT glue x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) w=(?<width>[-.\d]+)/.exec(line);
       if (glue?.groups) {
         items.push({
           kind: "glue",
@@ -268,7 +271,7 @@ function texTrace(formula) {
         });
         continue;
       }
-      const kern = /^TIKZ_MATH_TRACE kern x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) width=(?<width>[-.\d]+)/.exec(line);
+      const kern = /^TMT kern x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) w=(?<width>[-.\d]+)/.exec(line);
       if (kern?.groups) {
         items.push({
           kind: "kern",
@@ -278,7 +281,7 @@ function texTrace(formula) {
         });
         continue;
       }
-      const rule = /^TIKZ_MATH_TRACE rule x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) width=(?<width>[-.\d]+) height=(?<height>[-.\d]+)/.exec(line);
+      const rule = /^TMT rule x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) w=(?<width>[-.\d]+) h=(?<height>[-.\d]+)/.exec(line);
       if (rule?.groups) {
         items.push({
           kind: "rule",
@@ -289,7 +292,7 @@ function texTrace(formula) {
         });
         continue;
       }
-      const total = /^TIKZ_MATH_TRACE width=(?<width>[-.\d]+)/.exec(line);
+      const total = /^TMT width=(?<width>[-.\d]+)/.exec(line);
       if (total?.groups) {
         width = round(Number(total.groups.width));
       }
@@ -301,7 +304,8 @@ function texTrace(formula) {
 }
 
 function texSource(formula) {
-  const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`)
+  const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
+    formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
   return String.raw`\documentclass{article}
@@ -321,15 +325,21 @@ local kern_id=node.id('kern')
 local rule_id=node.id('rule')
 local hlist_id=node.id('hlist')
 local vlist_id=node.id('vlist')
+local disc_id=node.id('disc')
 local whatsit_id=node.id('whatsit')
 local function sp(v) return (v or 0)/65536 end
 local function font_name(font_id)
   local registered=font.fonts and font.fonts[font_id]
-  if registered and registered.name then return tostring(registered.name) end
+  if registered and registered.name then return normalize_font_name(tostring(registered.name)) end
   local ok, tex_name=pcall(function() return tex.fontname(font_id) end)
-  if ok and tex_name then return tostring(tex_name) end
+  if ok and tex_name then return normalize_font_name(tostring(tex_name)) end
   local f=font.getfont(font_id)
-  return tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename))
+  return normalize_font_name(tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename)))
+end
+function normalize_font_name(name)
+  local bracketed=string.match(name, '^%[([^%]]+)%]')
+  if bracketed then return bracketed end
+  return name
 end
 
 local walk_vlist
@@ -368,23 +378,24 @@ local function kern_width(n)
 end
 
 local function walk_hlist(list, origin_x, baseline_y, box)
+  if not list then return origin_x end
   local x = origin_x
   for n in node.traverse(list) do
     if n.id==glyph_id then
-      texio.write_nl(string.format('TIKZ_MATH_TRACE glyph x=%.6f y=%.6f font=%s char=%d width=%.6f', x, baseline_y, font_name(n.font), n.char, node_width(n)))
+      texio.write_nl(string.format('TMT g x=%.6f y=%.6f f=%s c=%d w=%.6f', x, baseline_y, font_name(n.font), n.char, node_width(n)))
       x=x+node_width(n)
     elseif n.id==glue_id then
       local w=glue_width(n, box)
       if glue_natural_width(n) ~= 0 then
-        texio.write_nl(string.format('TIKZ_MATH_TRACE glue x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
+        texio.write_nl(string.format('TMT glue x=%.6f y=%.6f w=%.6f', x, baseline_y, w))
       end
       x=x+w
     elseif n.id==kern_id then
       local w=kern_width(n)
-      texio.write_nl(string.format('TIKZ_MATH_TRACE kern x=%.6f y=%.6f width=%.6f', x, baseline_y, w))
+      texio.write_nl(string.format('TMT kern x=%.6f y=%.6f w=%.6f', x, baseline_y, w))
       x=x+w
     elseif n.id==rule_id then
-      texio.write_nl(string.format('TIKZ_MATH_TRACE rule x=%.6f y=%.6f width=%.6f height=%.6f', x, baseline_y-node_height(n), node_width(n), node_height(n)+node_depth(n)))
+      texio.write_nl(string.format('TMT rule x=%.6f y=%.6f w=%.6f h=%.6f', x, baseline_y-node_height(n), node_width(n), node_height(n)+node_depth(n)))
       x=x+node_width(n)
     elseif n.id==hlist_id then
       walk_hlist(n.list, x, baseline_y + sp(n.shift or 0), n)
@@ -392,6 +403,8 @@ local function walk_hlist(list, origin_x, baseline_y, box)
     elseif n.id==vlist_id then
       walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n), node_width(n))
       x=x+node_width(n)
+    elseif n.id==disc_id then
+      x=walk_hlist(n.replace or n.pre, x, baseline_y, box)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
     end
@@ -417,7 +430,7 @@ function walk_vlist(list, origin_x, baseline_y, height, width)
     elseif n.id==rule_id then
       local rule_width = node_width(n)
       if rule_width < 0 then rule_width = width end
-      texio.write_nl(string.format('TIKZ_MATH_TRACE rule x=%.6f y=%.6f width=%.6f height=%.6f', origin_x, y, rule_width, node_height(n)+node_depth(n)))
+      texio.write_nl(string.format('TMT rule x=%.6f y=%.6f w=%.6f h=%.6f', origin_x, y, rule_width, node_height(n)+node_depth(n)))
       y=y+node_height(n)+node_depth(n)
     else
       y=y+node_height(n)+node_depth(n)
@@ -425,7 +438,7 @@ function walk_vlist(list, origin_x, baseline_y, height, width)
   end
 end
 walk_hlist(tex.box.m.list, 0, 0, tex.box.m)
-texio.write_nl(string.format('TIKZ_MATH_TRACE width=%.6f', node_width(tex.box.m)))
+texio.write_nl(string.format('TMT width=%.6f', node_width(tex.box.m)))
 `;
 }
 

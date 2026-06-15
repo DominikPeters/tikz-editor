@@ -104,6 +104,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1863.0603 -414.2878) scale(100)"');
   });
 
+  it("renders text command glyphs through the document text font", () => {
+    const parsed = parseTexMath(String.raw`x+\text{if}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="102"');
+    expect(body).toContain('data-source-start="8"');
+    expect(body).toContain('data-source-end="10"');
+  });
+
   it("renders TeX operators through the selected math fonts", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list);

@@ -3,6 +3,7 @@ import type {
   GeneratedTexExtensibleRecipe,
   GeneratedTexCharMetric,
   ResolvedTexFont,
+  TexShapedItem,
 } from "../fonts/types.js";
 import {
   defaultTexMathFontProfile,
@@ -22,6 +23,7 @@ import type {
   TexMathOperatorLimits,
   TexMathSourceSpan,
   TexMathStyle,
+  TexMathTextNucleus,
 } from "./ir.js";
 import {
   spaceTexMathList,
@@ -40,7 +42,7 @@ export interface TexMathGlyphLayoutItem {
   readonly kind: "glyph";
   readonly fontId: string;
   readonly atPt: number;
-  readonly family: TexMathFontFamily;
+  readonly family: TexMathFontFamily | "text";
   readonly code: number;
   readonly text: string;
   readonly x: number;
@@ -67,7 +69,7 @@ export interface TexMathKernLayoutItem {
   readonly kind: "kern";
   readonly x: number;
   readonly width: number;
-  readonly reason: "italic-correction";
+  readonly reason: "italic-correction" | "text-kern";
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -470,6 +472,9 @@ function layoutNucleus(
   if (nucleus.kind === "accent") {
     return layoutAccentNucleus(nucleus, fontProfile, style, baseAtPt);
   }
+  if (nucleus.kind === "text") {
+    return layoutTextNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   if (nucleus.kind === "operator") {
     return layoutOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
   }
@@ -480,6 +485,96 @@ function layoutNucleus(
     return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt);
   }
   return null;
+}
+
+function layoutTextNucleus(
+  nucleus: TexMathTextNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const font = fontProfile.textFontProfile.resolveTextFont(
+    fontProfile.textFontProfile.defaultFontState,
+    textStyleAtPt(style, baseAtPt),
+    fontProfile.metricProvider
+  );
+  let shaped: ReturnType<typeof fontProfile.metricProvider.shapeText>;
+  try {
+    shaped = fontProfile.metricProvider.shapeText(nucleus.text, font, {
+      sourceStart: nucleus.textSourceSpan.start,
+    });
+  } catch {
+    return null;
+  }
+  const items: TexMathHListItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+  for (const item of shaped.items) {
+    const layoutItem = textShapedItemToMathLayoutItem(item, font, cursor);
+    items.push(layoutItem);
+    cursor = roundTexPt(cursor + layoutItem.width);
+    if (layoutItem.kind === "glyph") {
+      height = Math.max(height, layoutItem.height);
+      depth = Math.max(depth, layoutItem.depth);
+    }
+  }
+  return {
+    items,
+    width: shaped.width,
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function textShapedItemToMathLayoutItem(
+  item: TexShapedItem,
+  font: ResolvedTexFont,
+  x: number
+): TexMathGlyphLayoutItem | TexMathKernLayoutItem {
+  if (item.kind === "kern") {
+    return {
+      kind: "kern",
+      x,
+      width: item.width,
+      reason: "text-kern",
+      sourceSpan: {
+        start: item.sourceStart,
+        end: item.sourceEnd,
+      },
+    };
+  }
+  return {
+    kind: "glyph",
+    fontId: font.id,
+    atPt: font.atPt,
+    family: "text",
+    code: item.code,
+    text: String.fromCharCode(item.code),
+    x,
+    y: 0,
+    width: item.width,
+    height: item.height,
+    depth: item.depth,
+    italicCorrection: item.italicCorrection,
+    sourceSpan: {
+      start: item.sourceStart,
+      end: item.sourceEnd,
+    },
+  };
+}
+
+function textStyleAtPt(style: TexMathStyle, baseAtPt: number): number {
+  if (style === "script") {
+    return baseAtPt * 0.7;
+  }
+  if (style === "scriptscript") {
+    return baseAtPt * 0.5;
+  }
+  return baseAtPt;
 }
 
 const TEX_ALIGNED_ROW_HEIGHT_PT = 8.399963;

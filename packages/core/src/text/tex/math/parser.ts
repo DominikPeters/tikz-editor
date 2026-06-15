@@ -248,6 +248,9 @@ class TexMathParser {
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
       }
+      if (commandName(token.text) === "text") {
+        return this.parseText(allowScripts);
+      }
       const accent = accentCommandName(token.text);
       if (accent) {
         return this.parseAccent(accent, allowScripts);
@@ -353,6 +356,35 @@ class TexMathParser {
       nucleus: {
         kind: "radical",
         radicand: radicand?.list ?? emptyList(command.sourceSpan.end),
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseText(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const content = this.parseRequiredTextGroup(command.sourceSpan, "\\text content");
+    const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+    if (!content || content.unsupported) {
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "ord",
+        nucleus: {
+          kind: "unsupported",
+          command: "\\text",
+          sourceSpan,
+        },
+        sourceSpan,
+      }, allowScripts);
+    }
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "text",
+        text: content.text,
+        textSourceSpan: content.textSourceSpan,
         sourceSpan,
       },
       sourceSpan,
@@ -700,6 +732,72 @@ class TexMathParser {
     return {
       list,
       sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? list.sourceSpan),
+    };
+  }
+
+  private parseRequiredTextGroup(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): {
+    text: string;
+    sourceSpan: TexMathSourceSpan;
+    textSourceSpan: TexMathSourceSpan;
+    unsupported: boolean;
+  } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "group-open") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        `Expected a braced ${label}.`,
+        next?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    const open = this.expectGroupOpen();
+    let text = "";
+    let lastSpan: TexMathSourceSpan = open.sourceSpan;
+    let unsupported = false;
+    let depth = 0;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (!token) {
+        break;
+      }
+      if (token.kind === "group-close" && depth === 0) {
+        break;
+      }
+      this.advance();
+      lastSpan = token.sourceSpan;
+      if (token.kind === "group-open") {
+        depth += 1;
+        continue;
+      }
+      if (token.kind === "group-close") {
+        depth = Math.max(0, depth - 1);
+        continue;
+      }
+      if (token.kind === "character" || token.kind === "space") {
+        text += token.text;
+        continue;
+      }
+      unsupported = true;
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported content in \\text: ${token.text}.`,
+        token.sourceSpan
+      );
+    }
+    const close = this.consumeGroupClose(open.sourceSpan);
+    const contentStart = open.sourceSpan.end;
+    const contentEnd = close?.sourceSpan.start ?? lastSpan.end;
+    return {
+      text,
+      sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
+      textSourceSpan: { start: contentStart, end: Math.max(contentStart, contentEnd) },
+      unsupported,
     };
   }
 

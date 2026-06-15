@@ -114,6 +114,44 @@ describe("TeX math parser", () => {
     expect(vec.nucleus.kind === "accent" ? vec.nucleus.base.sourceSpan : null).toEqual({ start: 13, end: 14 });
   });
 
+  it("parses plain text commands as source-spanned text nuclei", () => {
+    const result = parseTexMath(String.raw`x+\text{if x}`, { sourceOffset: 10 });
+    const text = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(text).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 12, end: 23 },
+      nucleus: {
+        kind: "text",
+        text: "if x",
+        textSourceSpan: { start: 18, end: 22 },
+        sourceSpan: { start: 12, end: 23 },
+      },
+    });
+  });
+
+  it("keeps unsupported commands inside text explicit", () => {
+    const result = parseTexMath(String.raw`\text{\emph{x}}`);
+    const text = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "warning",
+        code: "unsupported-command",
+        message: String.raw`Unsupported content in \text: \emph.`,
+        sourceSpan: { start: 6, end: 11 },
+      },
+    ]);
+    expect(text).toMatchObject({
+      atomClass: "ord",
+      nucleus: {
+        kind: "unsupported",
+        command: String.raw`\text`,
+      },
+    });
+  });
+
   it("parses TeX operator commands as op atoms with scripts", () => {
     const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
     const sum = atomAt(result, 0);
