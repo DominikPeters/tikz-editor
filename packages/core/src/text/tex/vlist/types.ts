@@ -48,7 +48,7 @@ export type TexGlueOrigin =
     }
   | {
       readonly kind: "paragraph-boundary-interline";
-      readonly boundary: "quote" | "list";
+      readonly boundary: "plain" | "quote" | "list";
     }
   | {
       readonly kind: "display-math-boundary";

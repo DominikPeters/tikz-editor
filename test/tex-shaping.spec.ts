@@ -1415,6 +1415,53 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("inserts TeX interline glue between explicit par paragraphs before display math", () => {
+    const source = String.raw`Alpha $x^2$ first. \par \noindent Second \[\sqrt{y+1}\] tail \(z_1\).`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:explicit-par-before-display",
+      width: 170,
+      alignment: "ragged-right",
+      rightskipStretch: 170,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const paragraphs = result.vlistLayout?.paragraphPlacements ?? [];
+    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
+    const firstParagraph = paragraphs[0];
+    const secondParagraph = paragraphs[1];
+    if (!firstParagraph || !secondParagraph) {
+      throw new Error("expected explicit par to produce two paragraphs");
+    }
+    const expectedInterlineGlue = 12 -
+      firstParagraph.metrics.depth -
+      secondParagraph.metrics.height;
+    const interlineGlue = result.vlistLayout?.boxReport.items.find((item) =>
+      item.glue?.origin?.kind === "paragraph-boundary-interline" &&
+      item.glue.origin.boundary === "plain"
+    );
+
+    expect(interlineGlue?.glue).toEqual({
+      size: expect.closeTo(expectedInterlineGlue, 6),
+      stretchOrder: "normal",
+      shrinkOrder: "normal",
+      origin: {
+        kind: "paragraph-boundary-interline",
+        boundary: "plain",
+      },
+    });
+    expect(secondParagraph.y).toBeCloseTo(
+      firstParagraph.metrics.height +
+        firstParagraph.metrics.depth +
+        expectedInterlineGlue,
+      6
+    );
+  });
+
   it("suppresses paragraph indentation after TeX noindent commands", () => {
     const result = layoutSimpleTexParagraph(String.raw`\noindent Alpha \par Gamma \par \noindent Delta`, {
       paragraphId: "tex:noindent-command",
@@ -1530,14 +1577,18 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(lineTexts(result.report)).toEqual(["Alpha", "Beta", "Gamma"]);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19, 26.27]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19, 27.27]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
       depth: item.metrics.depth,
+      interlineBoundary: item.item.kind === "glue" && item.item.origin?.kind === "paragraph-boundary-interline"
+        ? item.item.origin.boundary
+        : undefined,
     }))).toEqual([
-      { kind: "paragraph", y: 0, depth: expect.closeTo(19.11, 2) },
-      { kind: "paragraph", y: 26.27, depth: expect.closeTo(0.22, 2) },
+      { kind: "paragraph", y: 0, depth: expect.closeTo(19.11, 2), interlineBoundary: undefined },
+      { kind: "glue", y: 26.27, depth: 0, interlineBoundary: "plain" },
+      { kind: "paragraph", y: 27.27, depth: expect.closeTo(0.22, 2), interlineBoundary: undefined },
     ]);
   });
 
@@ -1605,7 +1656,7 @@ describe("simple TeX paragraph layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 9.1]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 12.33]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
@@ -1613,10 +1664,14 @@ describe("simple TeX paragraph layout", () => {
       depth: item.item.kind === "penalty" ? item.metrics.depth : undefined,
       penalty: item.item.kind === "penalty" ? item.item.penalty : undefined,
       text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
+      interlineBoundary: item.item.kind === "glue" && item.item.origin?.kind === "paragraph-boundary-interline"
+        ? item.item.origin.boundary
+        : undefined,
     }))).toEqual([
-      { kind: "paragraph", y: 0, height: undefined, depth: undefined, penalty: undefined, text: "Alpha" },
-      { kind: "penalty", y: 9.1, height: 0, depth: 0, penalty: -50, text: undefined },
-      { kind: "paragraph", y: 9.1, height: undefined, depth: undefined, penalty: undefined, text: "Beta" },
+      { kind: "paragraph", y: 0, height: undefined, depth: undefined, penalty: undefined, text: "Alpha", interlineBoundary: undefined },
+      { kind: "penalty", y: 9.1, height: 0, depth: 0, penalty: -50, text: undefined, interlineBoundary: undefined },
+      { kind: "glue", y: 9.1, height: undefined, depth: undefined, penalty: undefined, text: undefined, interlineBoundary: "plain" },
+      { kind: "paragraph", y: 12.33, height: undefined, depth: undefined, penalty: undefined, text: "Beta", interlineBoundary: undefined },
     ]);
   });
 
@@ -1798,7 +1853,7 @@ describe("simple TeX paragraph layout", () => {
     });
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 9.1]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 12.33]);
 
     const center = relayoutFromExistingVListLayout(
       layoutIr.vlist,

@@ -777,6 +777,11 @@ function documentMathMatrixCases() {
       source: String.raw`Alpha $x^2$ first. Second \[\sqrt{y+1}\] tail \(z_1\).`,
     },
     {
+      id: "explicit-par-before-display",
+      width: 170,
+      source: String.raw`Alpha $x^2$ first. \par \noindent Second \[\sqrt{y+1}\] tail \(z_1\).`,
+    },
+    {
       id: "inline-and-align",
       width: 170,
       source: String.raw`Alpha \(x_i^2\) \begin{align*}a&=b\\c&=d\end{align*} Beta $y^n$`,

@@ -438,6 +438,8 @@ function resolveDisplayMathVerticalGlueInItems(
   let previousDisplaySkipVariant: TexDisplayMathSkipVariant =
     state.previousDisplaySkipVariant ?? "normal";
   let previousDisplayMaterialMetrics = state.previousDisplayMaterialMetrics;
+  let plainParagraphInterlinePending = previousParagraphMeasurement !== undefined;
+  let paragraphBoundaryInterlineAlreadyInserted = false;
   for (let index = 0; index < sourceItems.length; index += 1) {
     const item = sourceItems[index];
     if (!item) {
@@ -466,7 +468,25 @@ function resolveDisplayMathVerticalGlueInItems(
       continue;
     }
     if (item.kind === "paragraph") {
-      previousParagraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
+      const paragraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
+      if (
+        previousParagraphMeasurement &&
+        paragraphMeasurement &&
+        plainParagraphInterlinePending &&
+        !paragraphBoundaryInterlineAlreadyInserted
+      ) {
+        items.push(plainParagraphBoundaryInterlineGlueItem(
+          item,
+          texInterlineGlueSize(
+            previousParagraphMeasurement.ruleLeadingMetrics.depth,
+            paragraphMeasurement.ruleLeadingMetrics.height,
+            options.lineHeight
+          )
+        ));
+      }
+      previousParagraphMeasurement = paragraphMeasurement;
+      plainParagraphInterlinePending = true;
+      paragraphBoundaryInterlineAlreadyInserted = false;
       items.push(item);
       continue;
     }
@@ -483,6 +503,7 @@ function resolveDisplayMathVerticalGlueInItems(
       if (item.origin.side === "above") {
         previousDisplaySkipVariant = variant;
       }
+      plainParagraphInterlinePending = false;
       items.push(resolveDisplayMathBoundaryGlueItem(item, variant));
       if (item.origin.side === "above" && displayItem && previousParagraphMeasurement) {
         items.push(displayMathInterlineGlueItem(
@@ -520,6 +541,7 @@ function resolveDisplayMathVerticalGlueInItems(
       (item.origin?.kind === "quote-boundary" || item.origin?.kind === "list-boundary")
     ) {
       items.push(item);
+      plainParagraphInterlinePending = false;
       if (shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,
@@ -536,6 +558,7 @@ function resolveDisplayMathVerticalGlueInItems(
               options.lineHeight
             )
           ));
+          paragraphBoundaryInterlineAlreadyInserted = true;
         } else if (previousDisplayMaterialMetrics && nextParagraph) {
           items.push(paragraphBoundaryInterlineGlueItem(
             item,
@@ -545,6 +568,7 @@ function resolveDisplayMathVerticalGlueInItems(
               options.lineHeight
             )
           ));
+          paragraphBoundaryInterlineAlreadyInserted = true;
         }
       }
       continue;
@@ -568,6 +592,7 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (item.kind === "display-math") {
       previousParagraphMeasurement = undefined;
+      plainParagraphInterlinePending = false;
       previousDisplayMaterialMetrics = {
         width: item.box.width,
         height: item.box.height,
@@ -575,7 +600,10 @@ function resolveDisplayMathVerticalGlueInItems(
       };
     } else if (isDisplayAlignmentRowHBox(item)) {
       previousParagraphMeasurement = undefined;
+      plainParagraphInterlinePending = false;
       previousDisplayMaterialMetrics = item.box.metrics;
+    } else if (item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) {
+      plainParagraphInterlinePending = false;
     }
     items.push(item);
   }
@@ -774,6 +802,25 @@ function paragraphBoundaryInterlineGlueItem(
     origin: {
       kind: "paragraph-boundary-interline",
       boundary: item.origin?.kind === "quote-boundary" ? "quote" : "list",
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function plainParagraphBoundaryInterlineGlueItem(
+  item: TexParagraphItem,
+  size: number
+): TexGlueItem {
+  const scopePath = texVBoxRolePathForParagraph(item.paragraph);
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(scopePath.length > 0 ? { scopePath } : {}),
+    origin: {
+      kind: "paragraph-boundary-interline",
+      boundary: "plain",
     },
     size,
     stretchOrder: "normal",

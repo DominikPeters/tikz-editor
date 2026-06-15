@@ -47,7 +47,9 @@ export function validateTexVListParagraphMeasurements(
   measurements: readonly TexVListParagraphBoxMeasurement[]
 ): void {
   const paragraphs = texVListParagraphIdentityMap(document);
+  const paragraphsByBlockIndex = texVListParagraphBlockIndexMap(document);
   const measuredKeys = new Set<string>();
+  const measuredBlockIndices = new Set<number>();
   for (const measurement of measurements) {
     const key = texVListPathKey(measurement.vlistPath);
     if (measuredKeys.has(key)) {
@@ -55,7 +57,15 @@ export function validateTexVListParagraphMeasurements(
         `TeX vlist paragraph measurements contain duplicate path ${key}.`
       );
     }
-    const paragraph = paragraphs.get(key);
+    const pathParagraph = paragraphs.get(key);
+    const paragraph = pathParagraph?.blockIndex === measurement.blockIndex
+      ? pathParagraph
+      : paragraphsByBlockIndex.get(measurement.blockIndex);
+    if (!paragraph && pathParagraph) {
+      throw new Error(
+        `TeX vlist paragraph measurement path ${key} block identity mismatch: item ${pathParagraph.blockIndex}, measurement ${measurement.blockIndex}.`
+      );
+    }
     if (!paragraph) {
       throw new Error(
         `TeX vlist paragraph measurement references missing paragraph path ${key}.`
@@ -67,10 +77,11 @@ export function validateTexVListParagraphMeasurements(
       );
     }
     measuredKeys.add(key);
+    measuredBlockIndices.add(measurement.blockIndex);
   }
 
-  for (const key of paragraphs.keys()) {
-    if (!measuredKeys.has(key)) {
+  for (const [key, paragraph] of paragraphs.entries()) {
+    if (!measuredKeys.has(key) && !measuredBlockIndices.has(paragraph.blockIndex)) {
       throw new Error(
         `TeX vlist paragraph measurements are missing paragraph path ${key}.`
       );
@@ -163,8 +174,10 @@ export function createMeasuredParagraphVListMeasurer(
       return null;
     }
     const key = texVListPathKey(path);
-    const measurement = paragraphMeasurements.get(key) ??
-      paragraphMeasurementsByBlockIndex.get(item.paragraph.blockIndex);
+    const pathMeasurement = paragraphMeasurements.get(key);
+    const measurement = pathMeasurement?.blockIndex === item.paragraph.blockIndex
+      ? pathMeasurement
+      : paragraphMeasurementsByBlockIndex.get(item.paragraph.blockIndex);
     if (!measurement) {
       throw new Error(
         `TeX vlist layout is missing paragraph measurement for path ${key}.`
@@ -263,6 +276,16 @@ function texVListParagraphIdentityMap(
   const paragraphs = new Map<string, TexParagraphItem>();
   for (const entry of texVListParagraphEntries(document.items)) {
     paragraphs.set(texVListPathKey(entry.path), entry.item);
+  }
+  return paragraphs;
+}
+
+function texVListParagraphBlockIndexMap(
+  document: TexVListDocument
+): ReadonlyMap<number, TexParagraphItem> {
+  const paragraphs = new Map<number, TexParagraphItem>();
+  for (const entry of texVListParagraphEntries(document.items)) {
+    paragraphs.set(entry.item.blockIndex, entry.item);
   }
   return paragraphs;
 }

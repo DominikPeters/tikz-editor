@@ -2468,9 +2468,14 @@ describe("TeX vlist report assembly", () => {
       y: item.y,
       height: item.metrics.height,
       depth: item.metrics.depth,
+      interlineBoundary: item.item.kind === "glue" &&
+        item.item.origin?.kind === "paragraph-boundary-interline"
+        ? item.item.origin.boundary
+        : undefined,
     }))).toEqual([
-      { blockIndex: 0, y: 0, height: 7, depth: 5 },
-      { blockIndex: 1, y: 12, height: 7, depth: 5 },
+      { blockIndex: 0, y: 0, height: 7, depth: 5, interlineBoundary: undefined },
+      { blockIndex: null, y: 12, height: 0, depth: 0, interlineBoundary: "plain" },
+      { blockIndex: 1, y: 12, height: 7, depth: 5, interlineBoundary: undefined },
     ]);
 
     expect(() => layoutTexVListFromMeasuredParagraphs(document, {

@@ -89,8 +89,10 @@ function measuredPositionedTexParagraphs(
     }
     const key = texVListPathKey(item.path);
     const blockIndex = texPositionedParagraphBlockIndex(item.item);
-    const measurement = paragraphMeasurements.get(key) ??
-      paragraphMeasurementsByBlockIndex.get(blockIndex);
+    const pathMeasurement = paragraphMeasurements.get(key);
+    const measurement = pathMeasurement?.blockIndex === blockIndex
+      ? pathMeasurement
+      : paragraphMeasurementsByBlockIndex.get(blockIndex);
     if (!measurement) {
       throw new Error(
         `TeX vlist layout is missing paragraph measurement for path ${key}.`
