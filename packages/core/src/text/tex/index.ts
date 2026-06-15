@@ -101,6 +101,7 @@ export {
   type TexLayoutForcedBreakItem,
   type TexLayoutInlineItem,
   type TexLayoutMathItem,
+  type TexMathBreakpoint,
   type TexMathBox,
   type TexMathBoxProvider,
   type TexLayoutSpaceItem,

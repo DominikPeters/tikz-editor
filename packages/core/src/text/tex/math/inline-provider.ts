@@ -1,11 +1,13 @@
 import type {
   TexMathDisplayAlignment,
   TexMathBox,
+  TexMathBreakpoint,
   TexMathConstructRange,
   TexMathBoxProvider,
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { TexMathFontProfile } from "./font-profile.js";
+import type { TexMathAtom, TexMathList } from "./ir.js";
 import {
   layoutTexMathList,
   resolveDefaultTexMathFontProfileForList,
@@ -21,6 +23,9 @@ import {
 import {
   renderTexMathHListSvgBody,
 } from "./render-svg.js";
+import {
+  normalizeTexMathAtomClasses,
+} from "./spacing.js";
 
 const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
@@ -100,6 +105,7 @@ function getMathBox(
     depth: hlist.depth,
     caretStops: buildInlineMathCaretStops(hlist, params),
     constructRanges: buildInlineMathConstructRanges(hlist),
+    breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
     svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
   } satisfies TexMathBox;
   cache.set(key, box);
@@ -145,6 +151,55 @@ function buildInlineMathConstructRanges(hlist: TexMathHList): readonly TexMathCo
       candidate.xEnd === range.xEnd
     ) === index
   );
+}
+
+function buildInlineMathBreakpoints(
+  list: TexMathList,
+  hlist: TexMathHList
+): readonly TexMathBreakpoint[] {
+  const normalized = normalizeTexMathAtomClasses(list);
+  const atomItems = normalized.items.filter((item): item is TexMathAtom => item.kind === "atom");
+  if (atomItems.length < 2) {
+    return [];
+  }
+
+  const extents = collectMathItemExtents(hlist.items, 0);
+  return atomItems.flatMap((atom, index) => {
+    if (index >= atomItems.length - 1) {
+      return [];
+    }
+    if (atom.atomClass !== "bin" && atom.atomClass !== "rel") {
+      return [];
+    }
+    const x = mathSourceSpanEndX(atom.sourceSpan.start, atom.sourceSpan.end, extents, hlist.width);
+    if (x === null) {
+      return [];
+    }
+    return [{
+      kind: atom.atomClass === "bin" ? "binary" : "relation",
+      sourceOffset: atom.sourceSpan.end,
+      x,
+      penalty: atom.atomClass === "bin" ? 700 : 500,
+    }];
+  });
+}
+
+function mathSourceSpanEndX(
+  sourceStart: number,
+  sourceEnd: number,
+  extents: readonly MathItemExtent[],
+  hlistWidth: number
+): number | null {
+  let xEnd: number | null = null;
+  for (const extent of extents) {
+    if (extent.sourceStart < sourceStart || extent.sourceEnd > sourceEnd) {
+      continue;
+    }
+    xEnd = xEnd === null ? extent.xEnd : Math.max(xEnd, extent.xEnd);
+  }
+  return xEnd === null
+    ? null
+    : roundTexPt(Math.max(0, Math.min(hlistWidth, xEnd)));
 }
 
 function collectMathItemExtents(

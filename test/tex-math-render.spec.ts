@@ -431,6 +431,60 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
   });
 
+  it("reports TeX inline math breakpoints after normalized binary and relation atoms", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = "$a+b=c$";
+    const box = provider.getInlineMathBox({
+      source,
+      content: "a+b=c",
+      delimiter: "dollar",
+      sourceStart: 10,
+      sourceEnd: 17,
+      contentStart: 11,
+      contentEnd: 16,
+    });
+
+    expect(box?.breakpoints).toHaveLength(2);
+    expect(box?.breakpoints).toEqual([
+      {
+        kind: "binary",
+        sourceOffset: 13,
+        x: expect.any(Number),
+        penalty: 700,
+      },
+      {
+        kind: "relation",
+        sourceOffset: 15,
+        x: expect.any(Number),
+        penalty: 500,
+      },
+    ]);
+    expect(box?.breakpoints?.[0]?.x).toBeGreaterThan(0);
+    expect(box?.breakpoints?.[1]?.x).toBeGreaterThan(box?.breakpoints?.[0]?.x ?? 0);
+  });
+
+  it("does not report invalid leading or trailing binary operator breakpoints", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const box = provider.getInlineMathBox({
+      source: "$+a+b+$",
+      content: "+a+b+",
+      delimiter: "dollar",
+      sourceStart: 20,
+      sourceEnd: 27,
+      contentStart: 21,
+      contentEnd: 26,
+    });
+
+    expect(box?.breakpoints).toEqual([
+      {
+        kind: "binary",
+        sourceOffset: 24,
+        x: expect.any(Number),
+        penalty: 700,
+      },
+    ]);
+  });
+
   it("creates math boxes for operatorname without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const inlineContent = String.raw`\operatorname{rank}`;
@@ -765,6 +819,38 @@ describe("TeX math SVG rendering", () => {
     expect(mathSegment?.caretStops?.[3]).toBeGreaterThan(mathSegment?.caretStops?.[2] ?? 0);
     expect(mathSegment?.mathSvgBody).toContain('data-tex-math-hlist="true"');
     expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+  });
+
+  it("carries TeX inline math breakpoint metadata into paragraph reports", () => {
+    const source = String.raw`Alpha $a+b=c$ beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-breakpoint-report",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const mathSegment = result.report?.lines
+      .flatMap((line) => line.segments)
+      .find((segment) => segment.kind === "math");
+    expect(mathSegment?.mathBreakpoints).toEqual([
+      {
+        kind: "binary",
+        sourceOffsetRaw: source.indexOf("+") + 1,
+        x: expect.any(Number),
+        penalty: 700,
+      },
+      {
+        kind: "relation",
+        sourceOffsetRaw: source.indexOf("=") + 1,
+        x: expect.any(Number),
+        penalty: 500,
+      },
+    ]);
+    expect(mathSegment?.mathBreakpoints?.[0]?.x).toBeGreaterThan(mathSegment?.x ?? 0);
+    expect(mathSegment?.mathBreakpoints?.[1]?.x).toBeGreaterThan(mathSegment?.mathBreakpoints?.[0]?.x ?? 0);
   });
 
   it("reports whole-construct ranges for non-linear inline math boxes", () => {

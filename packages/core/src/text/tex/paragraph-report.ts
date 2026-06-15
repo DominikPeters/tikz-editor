@@ -188,6 +188,7 @@ function buildTexLineReport(
         width,
         caretStops: texMathBoxCaretStops(box, x, width),
         mathConstructRanges: texMathBoxConstructRanges(box, x, width),
+        mathBreakpoints: texMathBoxBreakpoints(box, x, width),
         mathSvgBody: box?.svgBody,
       });
       x = roundTexPt(x + width);
@@ -343,6 +344,12 @@ function texMathBoxFromWrapper(
     readonly xStart: number;
     readonly xEnd: number;
   }[];
+  readonly breakpoints?: readonly {
+    readonly kind: "binary" | "relation";
+    readonly sourceOffset: number;
+    readonly x: number;
+    readonly penalty: number;
+  }[];
   readonly svgBody?: string;
 } | null {
   if (!wrapper || typeof wrapper !== "object") {
@@ -358,6 +365,7 @@ function texMathBoxFromWrapper(
     readonly depth?: unknown;
     readonly caretStops?: unknown;
     readonly constructRanges?: unknown;
+    readonly breakpoints?: unknown;
     readonly svgBody?: unknown;
   };
   return {
@@ -368,6 +376,7 @@ function texMathBoxFromWrapper(
       ? typedBox.caretStops.filter((stop): stop is number => Number.isFinite(stop))
       : undefined,
     constructRanges: parseTexMathConstructRanges(typedBox.constructRanges),
+    breakpoints: parseTexMathBreakpoints(typedBox.breakpoints),
     svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
   };
 }
@@ -445,6 +454,7 @@ function buildTexLineLabelSegments(
         width: mathWidth,
         caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
         mathConstructRanges: texMathBoxConstructRanges(item.box, x, mathWidth),
+        mathBreakpoints: texMathBoxBreakpoints(item.box, x, mathWidth),
         mathSvgBody: item.box.svgBody,
       });
       x = roundTexPt(x + mathWidth);
@@ -510,6 +520,30 @@ function texMathBoxConstructRanges(
   }));
 }
 
+function texMathBoxBreakpoints(
+  box: {
+    readonly breakpoints?: readonly {
+      readonly kind: "binary" | "relation";
+      readonly sourceOffset: number;
+      readonly x: number;
+      readonly penalty: number;
+    }[];
+  } | null | undefined,
+  x: number,
+  width: number
+): LineReport["segments"][number]["mathBreakpoints"] {
+  const breakpoints = box?.breakpoints;
+  if (!breakpoints?.length) {
+    return undefined;
+  }
+  return breakpoints.map((breakpoint) => ({
+    kind: breakpoint.kind,
+    sourceOffsetRaw: breakpoint.sourceOffset,
+    x: roundTexPt(x + Math.max(0, Math.min(width, breakpoint.x))),
+    penalty: breakpoint.penalty,
+  }));
+}
+
 function parseTexMathConstructRanges(value: unknown): {
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -543,6 +577,42 @@ function parseTexMathConstructRanges(value: unknown): {
       : [];
   });
   return ranges.length > 0 ? ranges : undefined;
+}
+
+function parseTexMathBreakpoints(value: unknown): {
+  readonly kind: "binary" | "relation";
+  readonly sourceOffset: number;
+  readonly x: number;
+  readonly penalty: number;
+}[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const breakpoints = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+    const candidate = entry as {
+      readonly kind?: unknown;
+      readonly sourceOffset?: unknown;
+      readonly x?: unknown;
+      readonly penalty?: unknown;
+    };
+    const kind: "binary" | "relation" | null =
+      candidate.kind === "binary" || candidate.kind === "relation"
+      ? candidate.kind
+      : null;
+    const sourceOffset = Number(candidate.sourceOffset);
+    const x = Number(candidate.x);
+    const penalty = Number(candidate.penalty);
+    return kind &&
+      Number.isFinite(sourceOffset) &&
+      Number.isFinite(x) &&
+      Number.isFinite(penalty)
+      ? [{ kind, sourceOffset, x, penalty }]
+      : [];
+  });
+  return breakpoints.length > 0 ? breakpoints : undefined;
 }
 
 function texShapedSliceMetrics(

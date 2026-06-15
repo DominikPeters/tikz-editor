@@ -32,6 +32,7 @@ export interface LineSegmentReport {
   glyphCode?: number;
   mathSvgBody?: string;
   mathConstructRanges?: LineMathConstructRangeReport[];
+  mathBreakpoints?: LineMathBreakpointReport[];
   x: number;
   width: number;
   caretStops?: number[];
@@ -42,6 +43,13 @@ export interface LineMathConstructRangeReport {
   sourceEndRaw: number;
   xStart: number;
   xEnd: number;
+}
+
+export interface LineMathBreakpointReport {
+  kind: 'binary' | 'relation';
+  sourceOffsetRaw: number;
+  x: number;
+  penalty: number;
 }
 
 export interface LineReport {
