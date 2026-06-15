@@ -53,7 +53,7 @@ if (failed.length > 0) {
 }
 
 function compareCase(caseSpec, options) {
-  const ours = ourTrace(caseSpec);
+  const ours = ourTrace(caseSpec, options);
   let tex;
   try {
     tex = texTrace(caseSpec, options);
@@ -107,7 +107,7 @@ function tail(value, maxLength) {
   return value.length <= maxLength ? value : value.slice(value.length - maxLength);
 }
 
-function ourTrace(caseSpec) {
+function ourTrace(caseSpec, options) {
   const result = layoutSimpleTexParagraph(caseSpec.source, {
     paragraphId: `tex:inline-math-paragraph:${caseSpec.id}`,
     width: caseSpec.width,
@@ -139,21 +139,44 @@ function ourTrace(caseSpec) {
         .map((segment) => segment.text ?? "")
         .join("")
     )),
-    mathGlyphs: ourMathGlyphTrace(result.report.lines),
+    mathGlyphs: ourMathGlyphTrace(result, options),
   };
 }
 
-function ourMathGlyphTrace(lines) {
+function ourMathGlyphTrace(result, options) {
+  const lines = result.report.lines;
+  const linesByIndex = new Map(lines.map((line) => [line.lineIndex, line]));
+  const paragraphBaselineHeightByLine = new Map();
+  if (options.absoluteGlyphs) {
+    for (const paragraph of result.vlistLayout?.paragraphPlacements ?? []) {
+      const firstLine = linesByIndex.get(paragraph.lineIndices[0]);
+      if (!firstLine) {
+        continue;
+      }
+      for (const lineIndex of paragraph.lineIndices) {
+        paragraphBaselineHeightByLine.set(lineIndex, firstLine.ascent);
+      }
+    }
+  }
+  const linePlacements = new Map(
+    (options.absoluteGlyphs ? result.vlistLayout?.linePlacements ?? [] : [])
+      .map((placement) => [placement.lineIndex, placement])
+  );
   const glyphs = [];
   for (const [lineIndex, line] of lines.entries()) {
+    const linePlacement = linePlacements.get(line.lineIndex);
+    const lineX = linePlacement?.x ?? 0;
+    const baselineY = linePlacement
+      ? linePlacement.y + (paragraphBaselineHeightByLine.get(line.lineIndex) ?? line.ascent)
+      : 0;
     for (const segment of line.segments) {
       if (segment.kind !== "math" || !segment.mathSvgBody) {
         continue;
       }
       glyphs.push(...glyphsFromMathSvgBody(
         segment.mathSvgBody,
-        segment.x,
-        0,
+        lineX + segment.x,
+        baselineY,
         lineIndex
       ));
     }
@@ -223,7 +246,7 @@ function readSvgAttribute(tag, name) {
 
 function texTrace(caseSpec, options) {
   const cachePath = options.oracleCacheDir
-    ? oracleCachePath(options.oracleCacheDir, caseSpec)
+    ? oracleCachePath(options.oracleCacheDir, caseSpec, options)
     : null;
   if (cachePath && existsSync(cachePath)) {
     return JSON.parse(readFileSync(cachePath, "utf8"));
@@ -231,7 +254,7 @@ function texTrace(caseSpec, options) {
 
   const output = runTexOracleDocument({
     engine: "lualatex",
-    source: latexOracleSource(caseSpec),
+    source: latexOracleSource(caseSpec, options),
     filename: "inline-math-paragraph.tex",
     tempPrefix: "tikz-tex-inline-math-para-",
     maxBuffer: 10_000_000,
@@ -267,7 +290,7 @@ function parseMathGlyphTraceLine(line) {
   };
 }
 
-function latexOracleSource(caseSpec) {
+function latexOracleSource(caseSpec, options) {
   return String.raw`\documentclass{article}
 \begin{document}
 \fontencoding{TU}\fontfamily{lmr}\selectfont
@@ -279,14 +302,15 @@ function latexOracleSource(caseSpec) {
 \rightskip=0pt plus ${caseSpec.width}pt
 \setbox0=\vbox{${caseSpec.source}\par}
 \directlua{
-${lineCollectorLua()}
+${lineCollectorLua(options)}
 }
 \end{document}
 `;
 }
 
-function lineCollectorLua() {
-  return String.raw`local function glyph_text(n)
+function lineCollectorLua(options) {
+  return String.raw`local absolute_glyphs=${options.absoluteGlyphs ? "true" : "false"}
+local function glyph_text(n)
   if n.char == 11 then
     return "ff"
   elseif n.char == 12 then
@@ -452,14 +476,27 @@ function walk_vlist(list, line_index, origin_x, baseline_y, height, width, in_ma
 end
 
 local line_index = 0
+local y = 0
 for n in node.traverse(tex.box[0].list) do
   if node.type(n.id) == "hlist" then
+    local baseline_y = absolute_glyphs and (y + node_height(n)) or 0
     texio.write_nl(
       "term",
       "TIL " .. collect(n.list, false)
     )
-    walk_hlist(n.list, line_index, 0, 0, false, n, false)
+    walk_hlist(n.list, line_index, 0, baseline_y, false, n, false)
     line_index = line_index + 1
+    y = y + node_height(n) + node_depth(n)
+  elseif n.id==glue_id then
+    y = y + glue_width(n, nil)
+  elseif n.id==kern_id then
+    y = y + kern_width(n)
+  elseif n.id==rule_id then
+    y = y + node_height(n) + node_depth(n)
+  elseif n.id==vlist_id then
+    y = y + node_height(n) + node_depth(n)
+  else
+    y = y + node_height(n) + node_depth(n)
   end
 end`;
 }
@@ -480,10 +517,11 @@ function normalizeLineText(text) {
     .replace(/\s+$/u, "");
 }
 
-function oracleCachePath(cacheDir, caseSpec) {
+function oracleCachePath(cacheDir, caseSpec, options = args) {
   const key = createHash("sha256")
     .update(JSON.stringify({
       version: 11,
+      absoluteGlyphs: options.absoluteGlyphs,
       source: caseSpec.source,
       width: caseSpec.width,
       parindent: 0,
@@ -648,6 +686,7 @@ function readArgs() {
     oracleCacheDir: null,
     summaryOnly: false,
     compareGlyphs: false,
+    absoluteGlyphs: false,
     glyphTolerance: 0.05,
     source: null,
   };
@@ -656,6 +695,9 @@ function readArgs() {
     if (arg === "--summary-only") {
       parsed.summaryOnly = true;
     } else if (arg === "--compare-glyphs") {
+      parsed.compareGlyphs = true;
+    } else if (arg === "--absolute-glyphs") {
+      parsed.absoluteGlyphs = true;
       parsed.compareGlyphs = true;
     } else if (arg === "--fuzz") {
       parsed.fuzz = Number(process.argv[++index] ?? parsed.fuzz);
@@ -680,6 +722,9 @@ function readArgs() {
   }
   if (parsed.widths.length === 0) {
     throw new Error("--widths must contain at least one positive number.");
+  }
+  if (parsed.absoluteGlyphs && !parsed.compareGlyphs) {
+    parsed.compareGlyphs = true;
   }
   return parsed;
 }
