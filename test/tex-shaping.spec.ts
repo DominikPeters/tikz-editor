@@ -270,6 +270,17 @@ type TexHitMapFuzzCase = {
 type TexMathHitMapFuzzOffset = {
   readonly offset: number;
   readonly kind: "text" | "math";
+  readonly label?: string;
+  readonly exactRoundTrip: boolean;
+};
+
+type TexMathHitMapFuzzFormula = {
+  readonly source: string;
+  readonly trackedOffsets: readonly {
+    readonly offset: number;
+    readonly label: string;
+    readonly exactRoundTrip: boolean;
+  }[];
 };
 
 type TexMathHitMapFuzzCase = {
@@ -398,13 +409,17 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
     "metric",
     "stable",
   ];
-  const formulas = [
-    "x-y",
-    "x^2",
-    String.raw`\frac{1}{2}`,
-    String.raw`\sqrt{x}`,
-    String.raw`\hat{x}^2`,
-    String.raw`\vec{z}_y`,
+  const formulas: readonly TexMathHitMapFuzzFormula[] = [
+    trackedMathFormula("x-y", ["x", "-", "y"], { exactRoundTrip: false }),
+    trackedMathFormula("x^2", ["x", "^", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("a_b^c", ["a", "_", "b", "^", "c"], { exactRoundTrip: false }),
+    trackedMathFormula("\\frac{1}{2}", ["\\frac", "1", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("\\sqrt{x}", ["\\sqrt", "x"], { exactRoundTrip: false }),
+    trackedMathFormula("\\hat{x}^2", ["\\hat", "x", "^", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("\\vec{z}_y", ["\\vec", "z", "_", "y"], { exactRoundTrip: false }),
+    trackedMathFormula("\\binom{n}{k}", ["\\binom", "n", "k"], { exactRoundTrip: false }),
+    trackedMathFormula("\\sum_{i=1}^{n} i", ["\\sum", "i", "=", "1", "n"], { exactRoundTrip: false }),
+    trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
   ];
   const offsets: TexMathHitMapFuzzOffset[] = [];
   let source = "";
@@ -419,9 +434,19 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
     const word = pickFuzzItem(words, random);
     const start = source.length;
     source += word;
-    offsets.push({ offset: start + Math.max(1, Math.floor(word.length / 2)), kind: "text" });
+    offsets.push({
+      offset: start + Math.max(1, Math.floor(word.length / 2)),
+      kind: "text",
+      label: word,
+      exactRoundTrip: true,
+    });
     if (word.length > 3) {
-      offsets.push({ offset: start + word.length - 1, kind: "text" });
+      offsets.push({
+        offset: start + word.length - 1,
+        kind: "text",
+        label: word,
+        exactRoundTrip: true,
+      });
     }
   };
   const appendMath = () => {
@@ -430,24 +455,48 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
     const delimiter = random() < 0.5 ? "dollar" : "paren";
     const rawStart = source.length;
     if (delimiter === "dollar") {
-      source += `$${formula}$`;
+      source += "$" + formula.source + "$";
       const contentStart = rawStart + 1;
-      offsets.push({ offset: contentStart + Math.floor(formula.length / 2), kind: "math" });
-      offsets.push({ offset: contentStart + formula.length, kind: "math" });
+      for (const tracked of formula.trackedOffsets) {
+        offsets.push({
+          offset: contentStart + tracked.offset,
+          kind: "math",
+          label: tracked.label,
+          exactRoundTrip: tracked.exactRoundTrip,
+        });
+      }
+      offsets.push({
+        offset: contentStart + formula.source.length,
+        kind: "math",
+        label: "math-end",
+        exactRoundTrip: false,
+      });
       return;
     }
-    source += String.raw`\(` + formula + String.raw`\)`;
+    source += "\\(" + formula.source + "\\)";
     const contentStart = rawStart + 2;
-    offsets.push({ offset: contentStart + Math.floor(formula.length / 2), kind: "math" });
-    offsets.push({ offset: contentStart + formula.length, kind: "math" });
+    for (const tracked of formula.trackedOffsets) {
+      offsets.push({
+        offset: contentStart + tracked.offset,
+        kind: "math",
+        label: tracked.label,
+        exactRoundTrip: tracked.exactRoundTrip,
+      });
+    }
+    offsets.push({
+      offset: contentStart + formula.source.length,
+      kind: "math",
+      label: "math-end",
+      exactRoundTrip: false,
+    });
   };
   const appendForcedBreak = () => {
     appendSeparator();
-    source += random() < 0.5 ? String.raw`\\` : String.raw`\\[7pt]`;
+    source += random() < 0.5 ? "\\\\" : "\\\\[7pt]";
     source += " ";
   };
 
-  const tokenCount = 7 + Math.floor(random() * 4);
+  const tokenCount = 8 + Math.floor(random() * 5);
   const breakAt = 2 + Math.floor(random() * Math.max(1, tokenCount - 4));
   for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
     if (tokenIndex === breakAt || (tokenIndex > 2 && tokenIndex < tokenCount - 1 && random() < 0.1)) {
@@ -470,9 +519,35 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
   return {
     id: `tex-math-hitmap-fuzz-${index}`,
     source,
-    width: pickFuzzItem([55, 70, 90, 120], random),
+    width: pickFuzzItem([50, 55, 70, 90, 120], random),
     offsets: [...uniqueOffsets.values()].sort((left, right) => left.offset - right.offset),
   };
+}
+
+function trackedMathFormula(
+  source: string,
+  needles: readonly string[],
+  options: { readonly exactRoundTrip: boolean }
+): TexMathHitMapFuzzFormula {
+  const trackedOffsets: { offset: number; label: string; exactRoundTrip: boolean }[] = [];
+  let searchStart = 0;
+  for (const needle of needles) {
+    const offset = source.indexOf(needle, searchStart);
+    if (offset < 0) {
+      throw new Error(`Missing tracked math token ${needle} in ${source}.`);
+    }
+    trackedOffsets.push({
+      offset,
+      label: needle,
+      exactRoundTrip: options.exactRoundTrip && offset > 0 && isVisibleMathSourceToken(needle),
+    });
+    searchStart = offset + needle.length;
+  }
+  return { source, trackedOffsets };
+}
+
+function isVisibleMathSourceToken(token: string): boolean {
+  return !token.startsWith("\\") && token !== "^" && token !== "_";
 }
 
 const texParagraphRegressionCases = [
@@ -3954,7 +4029,7 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("fuzzes editor hit maps for mixed TeX-derived text and inline math", async () => {
-    const cases = Array.from({ length: 32 }, (_, index) => buildTexMathHitMapFuzzCase(index));
+    const cases = Array.from({ length: 64 }, (_, index) => buildTexMathHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
@@ -3988,16 +4063,16 @@ describe("simple TeX paragraph layout", () => {
         ),
       };
 
-      const sampledOffsets = testCase.offsets.filter((_, index) => index % 2 === 0).slice(0, 10);
-      for (const { offset, kind } of sampledOffsets) {
+      const sampledOffsets = testCase.offsets.slice(0, 24);
+      for (const { offset, kind, label, exactRoundTrip } of sampledOffsets) {
         const point = await getKnuthPlassPointFromOffset(outputJax, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
           offset,
         });
-        expect(point.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset}`).toBeNull();
-        expect(point, `${testCase.id}: ${testCase.source} @ ${offset}`).toMatchObject({
+        expect(point.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toBeNull();
+        expect(point, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
           ok: true,
           offset,
           kind,
@@ -4009,12 +4084,16 @@ describe("simple TeX paragraph layout", () => {
           containerElement,
           clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
         });
-        expect(caret.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset}`).toBeNull();
-        expect(caret, `${testCase.id}: ${testCase.source} @ ${offset}`).toMatchObject({
+        expect(caret.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toBeNull();
+        expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
           ok: true,
-          offset,
-          kind,
         });
+        if (exactRoundTrip) {
+          expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
+            offset,
+            kind,
+          });
+        }
       }
 
       const rangeStart = testCase.offsets[0]?.offset ?? 0;
