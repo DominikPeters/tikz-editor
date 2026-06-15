@@ -14,6 +14,7 @@ const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix"
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
+const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
 
 const args = readArgs();
 const generatedDisplayFuzzCases = args.displayFuzzCases > 0
@@ -823,6 +824,7 @@ function randomAlignmentLeftCell(rng) {
     randomBinomial(rng),
     randomRadical(rng),
     randomLineTerm(rng),
+    randomAccentTerm(rng),
     randomTextTerm(rng),
     randomArray(rng),
     randomCases(rng),
@@ -841,6 +843,7 @@ function randomAlignmentRightCell(rng) {
     randomBinomial(rng),
     randomRadical(rng),
     randomLineTerm(rng),
+    randomAccentTerm(rng),
     randomTextTerm(rng),
     randomArray(rng),
     randomCases(rng),
@@ -858,6 +861,7 @@ function randomMathTerm(rng) {
     randomBinomial(rng),
     randomRadical(rng),
     randomLineTerm(rng),
+    randomAccentTerm(rng),
     randomLeftRight(rng),
     randomTextTerm(rng),
     randomArray(rng),
@@ -906,11 +910,25 @@ function randomLineTerm(rng) {
   ]) + "}";
 }
 
+function randomAccentTerm(rng) {
+  const command = choice(rng, accentCommands);
+  const base = choice(rng, [
+    randomMathAtom(rng),
+    randomMathAtom(rng) + "+" + randomMathAtom(rng),
+    randomFraction(rng),
+  ]);
+  return command + "{" + base + "}";
+}
+
 function randomLeftRight(rng) {
   const delimiterPair = choice(rng, [
     ["(", ")"],
     ["[", "]"],
     [String.raw`\langle`, String.raw`\rangle`],
+    [String.raw`\lfloor`, String.raw`\rfloor`],
+    [String.raw`\lceil`, String.raw`\rceil`],
+    [String.raw`\lbrace`, String.raw`\rbrace`],
+    [String.raw`\Vert`, String.raw`\Vert`],
   ]);
   return String.raw`\left` + delimiterPair[0] + randomFraction(rng) + String.raw`\right` + delimiterPair[1];
 }

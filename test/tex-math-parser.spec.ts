@@ -309,6 +309,16 @@ describe("TeX math parser", () => {
       suppressTerminalEllipsisGlue: true,
     }), 0);
     expect(displayTerminal.nucleus.kind === "list" ? displayTerminal.nucleus.list.items : []).toHaveLength(3);
+
+    const accentedTerminal = atomAt(parseTexMath(String.raw`\bar\dots`), 0);
+    const accentedBase = accentedTerminal.nucleus.kind === "accent"
+      ? accentedTerminal.nucleus.base.items[0]
+      : null;
+    expect(
+      accentedBase?.kind === "atom" && accentedBase.nucleus.kind === "list"
+        ? accentedBase.nucleus.list.items
+        : []
+    ).toHaveLength(3);
   });
 
   it("parses amsmath substack rows as a structured centered one-column array", () => {

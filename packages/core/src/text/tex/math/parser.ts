@@ -34,6 +34,7 @@ interface ParseListOptions {
   readonly stopAtRowBreak?: boolean;
   readonly stopAtEnvironmentEnd?: string;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
+  readonly suppressTerminalEllipsisGlue?: boolean;
 }
 
 export interface ParseTexMathOptions {
@@ -279,7 +280,8 @@ class TexMathParser {
         return this.parseEllipsis(
           ellipsis,
           allowScripts,
-          listOptions.suppressEllipsisGlueBeforeAlignmentTab === true
+          listOptions.suppressEllipsisGlueBeforeAlignmentTab === true,
+          listOptions.suppressTerminalEllipsisGlue === true
         );
       }
       if (commandName(token.text) === "substack") {
@@ -568,7 +570,10 @@ class TexMathParser {
 
   private parseAccent(commandNameValue: TexMathAccentCommand, allowScripts: boolean): TexMathAtom {
     const command = this.advance();
-    const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`);
+    const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`, {
+      stopAtGroupClose: true,
+      suppressTerminalEllipsisGlue: true,
+    });
     const sourceSpan = spanUnion(command.sourceSpan, base?.sourceSpan ?? command.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
@@ -642,7 +647,8 @@ class TexMathParser {
   private parseEllipsis(
     ellipsis: "ldots" | "cdots" | "dots",
     allowScripts: boolean,
-    suppressTrailingGlueBeforeAlignmentTab: boolean
+    suppressTrailingGlueBeforeAlignmentTab: boolean,
+    suppressTerminalEllipsisGlue: boolean
   ): TexMathAtom {
     const command = this.advance();
     const resolved = ellipsis === "dots" ? this.amsDotsKind() : ellipsis;
@@ -656,7 +662,7 @@ class TexMathParser {
       ellipsis,
       this.peekSignificantToken(),
       suppressTrailingGlueBeforeAlignmentTab,
-      this.options.suppressTerminalEllipsisGlue === true
+      suppressTerminalEllipsisGlue || this.options.suppressTerminalEllipsisGlue === true
     )) {
       items.push({
         kind: "glue",
@@ -1721,7 +1727,8 @@ class TexMathParser {
 
   private parseRequiredMathArgument(
     fallbackSpan: TexMathSourceSpan,
-    label: string
+    label: string,
+    listOptions: Partial<ParseListOptions> = {}
   ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
     this.skipSpaces();
     const next = this.peek();
@@ -1736,14 +1743,14 @@ class TexMathParser {
     }
     if (next.kind === "group-open") {
       const open = this.expectGroupOpen();
-      const list = this.parseList({ stopAtGroupClose: true });
+      const list = this.parseList({ stopAtGroupClose: true, ...listOptions });
       const close = this.consumeGroupClose(open.sourceSpan);
       return {
         list,
         sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? list.sourceSpan),
       };
     }
-    const item = this.parseItem(false);
+    const item = this.parseItem(false, { stopAtGroupClose: false, ...listOptions });
     const list = {
       kind: "math-list",
       items: item ? [item] : [],

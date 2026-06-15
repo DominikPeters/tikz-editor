@@ -14,6 +14,7 @@ const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix"
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
+const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
 
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
@@ -651,8 +652,8 @@ function randomMathFormula(rng) {
 
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
-    ? ["atom", "group"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack"];
+    ? ["atom", "group", "accent"]
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -663,6 +664,8 @@ function randomMathTerm(rng, depth) {
     term = String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
   } else if (choice === "line") {
     term = randomLineFormula(rng);
+  } else if (choice === "accent") {
+    term = randomAccentFormula(rng);
   } else if (choice === "left-right") {
     term = randomLeftRightFormula(rng);
   } else if (choice === "array") {
@@ -704,6 +707,14 @@ function randomLineFormula(rng) {
   return command + "{" + randomSimpleExpression(rng) + "}";
 }
 
+function randomAccentFormula(rng) {
+  const command = accentCommands[randomInt(rng, accentCommands.length)] ?? String.raw`\hat`;
+  const base = randomInt(rng, 3) === 0
+    ? randomMathAtom(rng)
+    : randomSimpleExpression(rng);
+  return command + "{" + base + "}";
+}
+
 function randomSimpleExpression(rng) {
   const count = 1 + randomInt(rng, 3);
   let formula = maybeWithScripts(randomMathAtom(rng), rng, 1);
@@ -719,7 +730,11 @@ function randomLeftRightFormula(rng) {
     ["[", "]"],
     [String.raw`\lbrace`, String.raw`\rbrace`],
     [String.raw`\langle`, String.raw`\rangle`],
+    [String.raw`\lfloor`, String.raw`\rfloor`],
+    [String.raw`\lceil`, String.raw`\rceil`],
     ["|", "|"],
+    [String.raw`\Vert`, String.raw`\Vert`],
+    ["/", String.raw`\backslash`],
   ];
   const [left, right] = pairs[randomInt(rng, pairs.length)] ?? ["(", ")"];
   const leftSeparator = left.startsWith("\\") ? " " : "";

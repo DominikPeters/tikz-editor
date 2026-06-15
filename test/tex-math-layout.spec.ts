@@ -231,6 +231,14 @@ describe("TeX math hlist layout", () => {
     expect(terminalDots.supported).toBe(true);
     expect(terminalDots.hlist?.width).toBeCloseTo(13.333386, 5);
 
+    const accentedDots = layout(String.raw`\bar\dots`);
+    expect(accentedDots.supported).toBe(true);
+    expect(accentedDots.hlist?.width).toBeCloseTo(11.666714, 5);
+
+    const accentedCdots = layout(String.raw`\vec\cdots`);
+    expect(accentedCdots.supported).toBe(true);
+    expect(accentedCdots.hlist?.width).toBeCloseTo(11.666714, 5);
+
     const scriptedDots = layout(String.raw`\dots^{\sum}`);
     expect(scriptedDots.supported).toBe(true);
     const scriptedDotsGlyphs = flattenGlyphItems(scriptedDots.hlist?.items ?? []);
