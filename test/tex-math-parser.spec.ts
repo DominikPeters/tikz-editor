@@ -644,6 +644,67 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses array environments with conservative l/c/r column preambles", () => {
+    const source = String.raw`\begin{array}{lr}a&b\\c&d\end{array}`;
+    const result = parseTexMath(source, { sourceOffset: 3 });
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 3, end: 3 + source.length },
+      nucleus: {
+        kind: "array",
+        beginSourceSpan: { start: 3, end: 9 },
+        preambleSourceSpan: { start: 16, end: 20 },
+        columnAlignments: ["left", "right"],
+        endSourceSpan: {
+          start: 3 + source.indexOf(String.raw`\end{array}`),
+          end: 3 + source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "array") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) =>
+      row.cells.map((cell) => ({
+        sourceSpan: cell.sourceSpan,
+        itemCount: cell.list.items.length,
+      }))
+    )).toEqual([
+      [
+        { sourceSpan: { start: 20, end: 21 }, itemCount: 1 },
+        { sourceSpan: { start: 22, end: 23 }, itemCount: 1 },
+      ],
+      [
+        { sourceSpan: { start: 25, end: 26 }, itemCount: 1 },
+        { sourceSpan: { start: 27, end: 28 }, itemCount: 1 },
+      ],
+    ]);
+  });
+
+  it("keeps unsupported array preamble extensions explicit", () => {
+    const source = String.raw`\begin{array}{c|c}a&b\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "warning",
+        code: "unsupported-command",
+        message: "Unsupported array column specifier |.",
+        sourceSpan: { start: 15, end: 16 },
+      },
+    ]);
+    expect(result.list.items).toHaveLength(1);
+    expect(atom.nucleus).toMatchObject({
+      kind: "unsupported",
+      command: String.raw`\begin{array}`,
+      sourceSpan: { start: 0, end: source.length },
+    });
+  });
+
   it("reports missing matrix environment ends without throwing", () => {
     const result = parseTexMath(String.raw`\begin{pmatrix}a&b`);
     const atom = atomAt(result, 0);

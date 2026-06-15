@@ -689,6 +689,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\begin{matrix}a&b\\c&d\end{matrix}\] Beta`,
     },
     {
+      id: "display-array",
+      width: 160,
+      source: String.raw`Alpha \[\begin{array}{lc}a&b\\x&y\end{array}\] Beta`,
+    },
+    {
       id: "display-pmatrix",
       width: 160,
       source: String.raw`Alpha \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\] Beta`,
@@ -795,6 +800,7 @@ function randomAlignmentLeftCell(rng) {
     randomRadical(rng),
     randomLineTerm(rng),
     randomTextTerm(rng),
+    randomArray(rng),
     randomMatrix(rng),
     `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
   ]);
@@ -809,6 +815,7 @@ function randomAlignmentRightCell(rng) {
     randomRadical(rng),
     randomLineTerm(rng),
     randomTextTerm(rng),
+    randomArray(rng),
     randomMatrix(rng),
   ]);
 }
@@ -823,6 +830,7 @@ function randomMathTerm(rng) {
     randomLineTerm(rng),
     randomLeftRight(rng),
     randomTextTerm(rng),
+    randomArray(rng),
     randomMatrix(rng),
   ]);
 }
@@ -892,6 +900,28 @@ function randomMatrix(rng) {
     rows.push(cells.join("&"));
   }
   return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
+}
+
+function randomArray(rng) {
+  const columnCount = 1 + randomInt(rng, 3);
+  const preamble = Array.from({ length: columnCount }, () =>
+    choice(rng, ["l", "c", "r"])
+  ).join("");
+  const rowCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      cells.push(choice(rng, [
+        randomMathAtom(rng),
+        randomScriptTerm(rng),
+        randomFraction(rng),
+        randomBinomial(rng),
+      ]));
+    }
+    rows.push(cells.join("&"));
+  }
+  return String.raw`\begin{array}{` + preamble + "}" + rows.join(String.raw`\\`) + String.raw`\end{array}`;
 }
 
 function hasMatrixEnvironment(source) {

@@ -1234,6 +1234,49 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out array environments with TeX arraycolsep and l/c/r preamble alignment", () => {
+    const centered = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{cc}a&b\\c&d\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(centered.supported).toBe(true);
+    expect(centered.hlist?.width).toBeCloseTo(30.49078, 5);
+    expect(centered.hlist?.height).toBeCloseTo(14.5, 5);
+    expect(centered.hlist?.depth).toBeCloseTo(9.5, 5);
+    expect(centered.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "array-row", y: expect.closeTo(-6.100037, 5) },
+      { kind: "hlist", role: "array-row", y: expect.closeTo(5.899963, 5) },
+    ]);
+    const centeredFirstRow = centered.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const centeredSecondRow = centered.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(centeredFirstRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-cell", x: 5 },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(20.742493, 4) },
+    ]);
+    expect(centeredSecondRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(5.479164, 4) },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(20.285889, 4) },
+    ]);
+
+    const mixed = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{lc}a&b\\x&y\end{array}`).list,
+      { style: "display" }
+    );
+    expect(mixed.supported).toBe(true);
+    expect(mixed.hlist?.width).toBeCloseTo(30.97689, 5);
+    const mixedFirstRow = mixed.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const mixedSecondRow = mixed.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(mixedFirstRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-cell", x: 5 },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(21.200241, 4) },
+    ]);
+    expect(mixedSecondRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-cell", x: 5 },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(20.715271, 4) },
+    ]);
+  });
+
   it("uses amsmath cmex script sizing inside matrix cells", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{matrix}3_{\sum}\end{matrix}`).list

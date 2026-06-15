@@ -473,6 +473,33 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmex10" data-tex-glyph="19"');
   });
 
+  it("creates inline math boxes for array environments without MathJax", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const content = String.raw`\begin{array}{lc}a&b\\x&y\end{array}`;
+    const source = `$${content}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).toMatchObject({
+      source,
+      content,
+      width: expect.closeTo(30.97689, 5),
+      height: expect.closeTo(14.5, 5),
+      depth: expect.closeTo(9.5, 5),
+    });
+    expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+    expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+    expect(box?.svgBody).toContain('transform="translate(500 -610.0037) scale(100)"');
+    expect(box?.svgBody).toContain('transform="translate(2071.528 589.9963) scale(100)"');
+  });
+
   it("creates inline math boxes for AMS matrix delimiter variants", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const cases = [

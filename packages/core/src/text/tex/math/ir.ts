@@ -75,6 +75,7 @@ export type TexMathNucleus =
   | TexMathLeftRightNucleus
   | TexMathAlignedNucleus
   | TexMathSubstackNucleus
+  | TexMathArrayNucleus
   | TexMathMatrixNucleus
   | TexMathUnsupportedNucleus;
 
@@ -231,6 +232,21 @@ export interface TexMathSubstackNucleus {
   readonly kind: "substack";
   readonly rows: readonly TexMathAlignedRow[];
   readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathArrayColumnAlignment =
+  | "left"
+  | "center"
+  | "right";
+
+export interface TexMathArrayNucleus {
+  readonly kind: "array";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly preambleSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

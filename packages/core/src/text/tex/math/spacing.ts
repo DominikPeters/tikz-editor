@@ -220,6 +220,18 @@ function normalizeNucleus(nucleus: TexMathNucleus): TexMathNucleus {
       })),
     };
   }
+  if (nucleus.kind === "array") {
+    return {
+      ...nucleus,
+      rows: nucleus.rows.map((row) => ({
+        ...row,
+        cells: row.cells.map((cell) => ({
+          ...cell,
+          list: normalizeTexMathAtomClasses(cell.list),
+        })),
+      })),
+    };
+  }
   return nucleus;
 }
 
