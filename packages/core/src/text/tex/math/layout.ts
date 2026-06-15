@@ -379,6 +379,9 @@ function texMathAtomNeedsAmsMath(atom: TexMathAtom): boolean {
 }
 
 function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
+  if (nucleus.kind === "glyph" && amsMathSymbolCommand(nucleus.text)) {
+    return true;
+  }
   if (
     nucleus.kind === "text" ||
     nucleus.kind === "aligned" ||
@@ -402,6 +405,12 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.list);
   }
   if (nucleus.kind === "fraction") {
+    if (
+      amsMathDelimiter(nucleus.leftDelimiter) ||
+      amsMathDelimiter(nucleus.rightDelimiter)
+    ) {
+      return true;
+    }
     if (nucleus.leftDelimiter !== undefined || nucleus.rightDelimiter !== undefined || nucleus.style !== undefined) {
       return true;
     }
@@ -420,9 +429,47 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.list);
   }
   if (nucleus.kind === "left-right") {
+    if (amsMathDelimiter(nucleus.leftDelimiter) || amsMathDelimiter(nucleus.rightDelimiter)) {
+      return true;
+    }
     return texMathListNeedsAmsMath(nucleus.body);
   }
   return false;
+}
+
+function amsMathSymbolCommand(text: string): boolean {
+  const command = text.startsWith("\\") ? text.slice(1) : text;
+  switch (command) {
+    case "approxeq":
+    case "Bbbk":
+    case "blacksquare":
+    case "boxdot":
+    case "circleddash":
+    case "digamma":
+    case "dotplus":
+    case "geqslant":
+    case "gtrsim":
+    case "leqslant":
+    case "lesssim":
+    case "ngeqslant":
+    case "nleqslant":
+    case "nVdash":
+    case "square":
+    case "Subset":
+    case "Supset":
+    case "thickapprox":
+    case "ulcorner":
+    case "urcorner":
+    case "varnothing":
+    case "Vdash":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function amsMathDelimiter(delimiter: TexMathDelimiter | undefined): boolean {
+  return delimiter === "ulcorner" || delimiter === "urcorner";
 }
 
 function layoutAtom(
@@ -2823,15 +2870,17 @@ function layoutMathDelimiter(
     ? smallCandidate
     : largestDelimiterCandidate(
       smallCandidate,
-      selectDelimiterFromStyleLadder(
-        fontProfile,
-        "extension",
-        spec.largeCode,
-        probeStyles,
-        baseAtPt,
-        targetHeight,
-        sourceSpan
-      )
+      spec.largeCode === null
+        ? null
+        : selectDelimiterFromStyleLadder(
+          fontProfile,
+          "extension",
+          spec.largeCode,
+          probeStyles,
+          baseAtPt,
+          targetHeight,
+          sourceSpan
+        )
     ) ?? smallCandidate;
   if (!selected) {
     return null;
@@ -2926,7 +2975,7 @@ function delimiterSpec(
 ): {
   readonly smallFamily: TexMathFontFamily;
   readonly smallCode: number;
-  readonly largeCode: number;
+  readonly largeCode: number | null;
 } | null {
   switch (delimiter) {
     case "(":
@@ -2945,6 +2994,10 @@ function delimiterSpec(
       return { smallFamily: "symbols", smallCode: 100, largeCode: 6 };
     case "rceil":
       return { smallFamily: "symbols", smallCode: 101, largeCode: 7 };
+    case "ulcorner":
+      return { smallFamily: "amsSymbolsA", smallCode: 0x70, largeCode: null };
+    case "urcorner":
+      return { smallFamily: "amsSymbolsA", smallCode: 0x71, largeCode: null };
     case "lbrace":
       return { smallFamily: "symbols", smallCode: 102, largeCode: 8 };
     case "rbrace":
@@ -3612,6 +3665,14 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 100 }];
     case "rceil":
       return [{ family: "symbols", code: 101 }];
+    case "ulcorner":
+      return [{ family: "amsSymbolsA", code: 0x70 }];
+    case "urcorner":
+      return [{ family: "amsSymbolsA", code: 0x71 }];
+    case "square":
+      return [{ family: "amsSymbolsA", code: 0x03 }];
+    case "blacksquare":
+      return [{ family: "amsSymbolsA", code: 0x04 }];
     case "partial":
       return [{ family: "letters", code: 64 }];
     case "ell":
@@ -3660,6 +3721,12 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 6 }];
     case "mp":
       return [{ family: "symbols", code: 7 }];
+    case "boxdot":
+      return [{ family: "amsSymbolsA", code: 0x00 }];
+    case "dotplus":
+      return [{ family: "amsSymbolsA", code: 0x75 }];
+    case "circleddash":
+      return [{ family: "amsSymbolsA", code: 0x7f }];
     case "oplus":
       return [{ family: "symbols", code: 8 }];
     case "ominus":
@@ -3702,6 +3769,20 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 28 }];
     case "gg":
       return [{ family: "symbols", code: 29 }];
+    case "lesssim":
+      return [{ family: "amsSymbolsA", code: 0x2e }];
+    case "gtrsim":
+      return [{ family: "amsSymbolsA", code: 0x26 }];
+    case "leqslant":
+      return [{ family: "amsSymbolsA", code: 0x36 }];
+    case "geqslant":
+      return [{ family: "amsSymbolsA", code: 0x3e }];
+    case "Subset":
+      return [{ family: "amsSymbolsA", code: 0x62 }];
+    case "Supset":
+      return [{ family: "amsSymbolsA", code: 0x63 }];
+    case "Vdash":
+      return [{ family: "amsSymbolsA", code: 0x0d }];
     case "prec":
       return [{ family: "symbols", code: 30 }];
     case "succ":
@@ -3773,6 +3854,22 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 51 }];
     case "propto":
       return [{ family: "symbols", code: 47 }];
+    case "nleqslant":
+      return [{ family: "amsSymbolsB", code: 0x0a }];
+    case "ngeqslant":
+      return [{ family: "amsSymbolsB", code: 0x0b }];
+    case "nVdash":
+      return [{ family: "amsSymbolsB", code: 0x31 }];
+    case "varnothing":
+      return [{ family: "amsSymbolsB", code: 0x3f }];
+    case "thickapprox":
+      return [{ family: "amsSymbolsB", code: 0x74 }];
+    case "approxeq":
+      return [{ family: "amsSymbolsB", code: 0x75 }];
+    case "digamma":
+      return [{ family: "amsSymbolsB", code: 0x7a }];
+    case "Bbbk":
+      return [{ family: "amsSymbolsB", code: 0x7c }];
     case "not":
       return [{ family: "symbols", code: 54 }];
     case "notin":

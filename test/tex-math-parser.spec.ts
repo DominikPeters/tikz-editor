@@ -730,6 +730,33 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses AMS font symbols with TeX atom classes", () => {
+    const result = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thickapprox+\Bbbk`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph"
+        ? { atomClass: item.atomClass, text: item.nucleus.text }
+        : null
+    )).toEqual([
+      { atomClass: "ord", text: String.raw`\digamma` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "bin", text: String.raw`\dotplus` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "open", text: String.raw`\ulcorner` },
+      { atomClass: "ord", text: "x" },
+      { atomClass: "close", text: String.raw`\urcorner` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\lesssim` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\gtrsim` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\thickapprox` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\Bbbk` },
+    ]);
+  });
+
   it("parses arrow, set, and logic symbols with TeX atom classes", () => {
     const result = parseTexMath(String.raw`\forall x\to A\cup B\subseteq C`);
 
@@ -1350,7 +1377,7 @@ describe("TeX math parser", () => {
   });
 
   it("maps TeX left-right delimiter commands to canonical delimiter ids", () => {
-    const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert`);
+    const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert \left\ulcorner w\right\urcorner`);
     const groups = result.list.items.filter((item): item is ReturnType<typeof atomAt> => item.kind === "atom");
 
     expect(result.diagnostics).toEqual([]);
@@ -1360,6 +1387,7 @@ describe("TeX math parser", () => {
       ["langle", "rangle"],
       ["lbrace", "rbrace"],
       ["vert", "Vert"],
+      ["ulcorner", "urcorner"],
     ]);
   });
 

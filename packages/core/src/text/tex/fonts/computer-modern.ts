@@ -61,6 +61,12 @@ export const DEFAULT_COMPUTER_MODERN_MATH_FONTS = [
   "cmtt8",
   "cmss10",
   "cmss8",
+  "msam10",
+  "msam7",
+  "msam5",
+  "msbm10",
+  "msbm7",
+  "msbm5",
 ] as const;
 
 export type DefaultComputerModernMathFont = typeof DEFAULT_COMPUTER_MODERN_MATH_FONTS[number];

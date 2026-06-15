@@ -60,10 +60,14 @@ describe("TeX math font profile", () => {
       { family: "letters", text: "cmmi10", script: "cmmi7", scriptscript: "cmmi5" },
       { family: "symbols", text: "cmsy10", script: "cmsy7", scriptscript: "cmsy5" },
       { family: "extension", text: "cmex10", script: "cmex7", scriptscript: "cmex7" },
+      { family: "amsSymbolsA", text: "msam10", script: "msam7", scriptscript: "msam5" },
+      { family: "amsSymbolsB", text: "msbm10", script: "msbm7", scriptscript: "msbm5" },
     ]);
     expect(luaLatexAmsMathFontId("extension", "text")).toBe("cmex10");
     expect(luaLatexAmsMathFontId("extension", "script")).toBe("cmex7");
     expect(luaLatexAmsMathFontId("extension", "scriptscript")).toBe("cmex7");
+    expect(luaLatexAmsMathFontId("amsSymbolsA", "script")).toBe("msam7");
+    expect(luaLatexAmsMathFontId("amsSymbolsB", "scriptscript")).toBe("msbm5");
 
     const scriptExtension = luaLatexAmsMathFontProfile.resolveMathFont({
       family: "extension",
@@ -80,6 +84,22 @@ describe("TeX math font profile", () => {
     expect(scriptExtension.atPt).toBe(7);
     expect(scriptscriptExtension.id).toBe("cmex7");
     expect(scriptscriptExtension.atPt).toBe(5);
+
+    const scriptAmsA = luaLatexAmsMathFontProfile.resolveMathFont({
+      family: "amsSymbolsA",
+      style: "script",
+      baseAtPt: 10,
+    });
+    const scriptscriptAmsB = luaLatexAmsMathFontProfile.resolveMathFont({
+      family: "amsSymbolsB",
+      style: "scriptscript",
+      baseAtPt: 10,
+    });
+
+    expect(scriptAmsA.id).toBe("msam7");
+    expect(scriptAmsA.atPt).toBe(7);
+    expect(scriptscriptAmsB.id).toBe("msbm5");
+    expect(scriptscriptAmsB.atPt).toBe(5);
   });
 
   it("vendors math font metadata, parameters, and extensible recipes", () => {

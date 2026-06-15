@@ -5,6 +5,7 @@ import {
   layoutTexMathList,
   parseTexMath,
   renderTexMathHListSvgBody,
+  resolveDefaultTexMathFontProfileForList,
 } from "../packages/core/src/text/tex/index.js";
 
 describe("TeX math SVG rendering", () => {
@@ -262,6 +263,37 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="41"');
   });
 
+  it("renders AMS font symbols through their TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(resolveDefaultTexMathFontProfileForList(parsed.list).id).toBe("lualatex-ams-math");
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="122"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="117"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="112"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="113"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="46"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="38"');
+  });
+
+  it("uses AMS script-size fonts for AMS glyphs in scripts", () => {
+    const parsed = parseTexMath(String.raw`x_{\dotplus}^{\digamma}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="msam7" data-tex-glyph="117"');
+    expect(body).toContain('data-tex-font="msbm7" data-tex-glyph="122"');
+  });
+
   it("renders negated relation composites through positioned TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`x\notin A+x\not\leq y`);
     const result = layoutTexMathList(parsed.list);
@@ -392,6 +424,20 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="1"');
     expect(body).toContain('transform="translate(0 -810.007) scale(100)"');
     expect(body).toContain('transform="translate(1096.9489 -810.007) scale(100)"');
+  });
+
+  it("renders AMS left-right corner delimiters through fixed AMS glyphs", () => {
+    const parsed = parseTexMath(String.raw`\left\ulcorner A\right\urcorner`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(resolveDefaultTexMathFontProfileForList(parsed.list).id).toBe("lualatex-ams-math");
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="112"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="113"');
   });
 
   it("renders extensible left-right delimiters as stacked glyph recipes", () => {

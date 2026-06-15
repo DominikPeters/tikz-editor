@@ -2885,12 +2885,14 @@ const ordinaryNamedSymbolCommands = new Set([
   "exists", "forall", "infty",
   "aleph", "emptyset", "ell", "flat", "Im", "imath", "jmath", "lnot", "natural", "nabla", "partial",
   "prime", "Re", "sharp", "top", "bot", "triangle", "wp",
+  "Bbbk", "blacksquare", "digamma", "square", "varnothing",
 ]);
 
 const binaryNamedSymbolCommands = new Set([
   "amalg", "ast", "bigcirc", "bigtriangledown", "bigtriangleup", "bullet", "cap", "cdot", "circ", "cup",
   "dagger", "ddagger", "diamond", "div", "mp", "odot", "ominus", "oplus", "oslash", "otimes", "pm",
   "setminus", "sqcap", "sqcup", "star", "times", "triangleleft", "triangleright", "uplus", "vee", "wedge", "wr",
+  "boxdot", "circleddash", "dotplus",
 ]);
 
 const relationNamedSymbolCommands = new Set([
@@ -2900,16 +2902,18 @@ const relationNamedSymbolCommands = new Set([
   "owns", "parallel", "perp", "prec", "preceq", "propto", "rightarrow", "Rightarrow", "rightharpoondown",
   "rightharpoonup", "searrow", "sim", "simeq", "smile", "sqsubseteq", "sqsupseteq", "subset", "subseteq",
   "iff", "implies", "longleftarrow", "longrightarrow", "Longleftarrow", "Longleftrightarrow", "Longrightarrow",
+  "approxeq", "geqslant", "gtrsim", "leqslant", "lesssim", "ngeqslant", "nleqslant", "nVdash",
+  "Subset", "Supset", "thickapprox", "Vdash",
   "succ", "succeq", "supset", "supseteq", "swarrow", "to", "uparrow", "Uparrow", "updownarrow", "Updownarrow",
   "vdash",
 ]);
 
 const openNamedSymbolCommands = new Set([
-  "langle", "lbrace", "lceil", "lfloor", "lvert", "lVert", "{",
+  "langle", "lbrace", "lceil", "lfloor", "lvert", "lVert", "ulcorner", "{",
 ]);
 
 const closeNamedSymbolCommands = new Set([
-  "rangle", "rbrace", "rceil", "rfloor", "rvert", "rVert", "}",
+  "rangle", "rbrace", "rceil", "rfloor", "rvert", "rVert", "urcorner", "}",
 ]);
 
 const punctNamedSymbolCommands = new Set([
@@ -3005,6 +3009,10 @@ function delimiterForToken(token: TexMathToken): TexMathDelimiter | null {
       return "lceil";
     case "rceil":
       return "rceil";
+    case "ulcorner":
+      return "ulcorner";
+    case "urcorner":
+      return "urcorner";
     default:
       return null;
   }

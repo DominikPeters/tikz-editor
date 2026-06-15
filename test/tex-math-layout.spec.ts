@@ -157,6 +157,32 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out AMS font symbols through msam and msbm glyphs", () => {
+    const result = layout(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\thickapprox+\Bbbk`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "msbm10", code: 0x7a, sourceSpan: { start: 0, end: 8 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 8, end: 9 } },
+      { fontId: "msam10", code: 0x75, sourceSpan: { start: 9, end: 17 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 17, end: 18 } },
+      { fontId: "msam10", code: 0x70, sourceSpan: { start: 18, end: 27 } },
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 28, end: 29 } },
+      { fontId: "msam10", code: 0x71, sourceSpan: { start: 29, end: 38 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 38, end: 39 } },
+      { fontId: "msam10", code: 0x2e, sourceSpan: { start: 39, end: 47 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 47, end: 48 } },
+      { fontId: "msbm10", code: 0x74, sourceSpan: { start: 48, end: 60 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 60, end: 61 } },
+      { fontId: "msbm10", code: 0x7c, sourceSpan: { start: 61, end: 66 } },
+    ]);
+  });
+
   it("lays out arrow, set, and logic symbols through TeX math fonts", () => {
     const result = layout(String.raw`A\to B\mapsto C\wedge D\cup E\subseteq F`);
 

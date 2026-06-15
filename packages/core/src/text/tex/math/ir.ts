@@ -105,7 +105,9 @@ export type TexMathDelimiter =
   | "lfloor"
   | "rfloor"
   | "lceil"
-  | "rceil";
+  | "rceil"
+  | "ulcorner"
+  | "urcorner";
 
 export interface TexMathGlyphNucleus {
   readonly kind: "glyph";

@@ -16,7 +16,9 @@ export type TexMathFontFamily =
   | "operators"
   | "letters"
   | "symbols"
-  | "extension";
+  | "extension"
+  | "amsSymbolsA"
+  | "amsSymbolsB";
 
 export interface TexMathFontRequest {
   readonly family: TexMathFontFamily;
@@ -116,6 +118,18 @@ const amsMathManifest = [
     script: "cmex7",
     scriptscript: "cmex7",
   },
+  {
+    family: "amsSymbolsA",
+    text: "msam10",
+    script: "msam7",
+    scriptscript: "msam5",
+  },
+  {
+    family: "amsSymbolsB",
+    text: "msbm10",
+    script: "msbm7",
+    scriptscript: "msbm5",
+  },
 ] as const satisfies readonly TexMathFontManifestEntry[];
 
 export function luaLatexDefaultMathFontId(
@@ -184,9 +198,9 @@ export const luaLatexDefaultMathFontProfile: TexMathFontProfile = createComputer
 });
 
 export const luaLatexAmsMathFontProfile: TexMathFontProfile = createComputerModernMathFontProfile({
-  id: "lualatex-amsmath-math",
-  label: "LuaLaTeX amsmath Computer Modern Math",
-  preamble: [String.raw`\usepackage{amsmath}`],
+  id: "lualatex-ams-math",
+  label: "LuaLaTeX AMS Computer Modern Math",
+  preamble: [String.raw`\usepackage{amsmath,amssymb}`],
   manifest: amsMathManifest,
   resolveMathFontId: luaLatexAmsMathFontId,
 });

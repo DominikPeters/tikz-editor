@@ -32,6 +32,12 @@ const DEFAULT_FONTS = [
   "cmex9",
   "cmex8",
   "cmex7",
+  "msam10",
+  "msam7",
+  "msam5",
+  "msbm10",
+  "msbm7",
+  "msbm5",
 ];
 const DEFAULT_OTF_GLYPHS = [
   {
