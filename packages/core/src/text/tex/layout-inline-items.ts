@@ -81,6 +81,11 @@ export interface TexMathBreakpoint {
   readonly penalty: number;
   readonly stretchBefore?: number;
   readonly shrinkBefore?: number;
+  readonly postBreakGlue?: {
+    readonly width: number;
+    readonly stretch: number;
+    readonly shrink: number;
+  };
 }
 
 export interface TexMathDisplayAlignmentRowBox extends TexMathBox {

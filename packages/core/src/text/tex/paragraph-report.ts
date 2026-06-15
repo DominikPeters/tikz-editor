@@ -213,14 +213,15 @@ function buildTexLineReport(
       run.kind === "space" && (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
       line.glueSetRatio ?? 0
     );
+    const isMathGlue = isTexMathGlueSpace(run.wrapper);
     segments.push({
       runIndex: run.runIndex,
       kind: "space",
       role: run.role,
-      text: " ",
+      text: isMathGlue ? "" : " ",
       sourceStartRaw: run.sourceStart,
       sourceEndRaw: run.sourceEnd,
-      sourceKind: "text",
+      sourceKind: isMathGlue ? "math" : "text",
       x,
       width,
       caretStops: [x, roundTexPt(x + width)],
@@ -326,6 +327,14 @@ function buildTexLineReport(
       preDisplaySize: texLinePreDisplaySize(report, params.font),
     },
   };
+}
+
+function isTexMathGlueSpace(wrapper: unknown): boolean {
+  return Boolean(
+    wrapper &&
+    typeof wrapper === "object" &&
+    (wrapper as { readonly texMathGlueSpace?: unknown }).texMathGlueSpace
+  );
 }
 
 function adjustedTexGlueWidth(

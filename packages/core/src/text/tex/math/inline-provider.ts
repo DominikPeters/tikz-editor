@@ -228,12 +228,14 @@ function buildInlineMathBreakpoints(
     if (x === null) {
       return [];
     }
+    const postBreakGlue = discardableMathGlueAfterSourceOffset(hlist.items, atom.sourceSpan.end, x);
     return [{
       kind: atom.atomClass === "bin" ? "binary" : "relation",
       sourceOffset: atom.sourceSpan.end,
       x,
       penalty: atom.atomClass === "bin" ? 700 : 500,
       ...mathHListFlexBeforeX(hlist.items, x),
+      ...(postBreakGlue ? { postBreakGlue } : {}),
     }];
   });
 }
@@ -249,11 +251,46 @@ function mathSourceSpanEndX(
     if (extent.sourceStart < sourceStart || extent.sourceEnd > sourceEnd) {
       continue;
     }
+    if (extent.sourceStart === sourceEnd && extent.sourceEnd === sourceEnd) {
+      continue;
+    }
     xEnd = xEnd === null ? extent.xEnd : Math.max(xEnd, extent.xEnd);
   }
   return xEnd === null
     ? null
     : roundTexPt(Math.max(0, Math.min(hlistWidth, xEnd)));
+}
+
+function discardableMathGlueAfterSourceOffset(
+  items: readonly TexMathHListItem[],
+  sourceOffset: number,
+  x: number
+): { readonly width: number; readonly stretch: number; readonly shrink: number } | null {
+  let width = 0;
+  let stretch = 0;
+  let shrink = 0;
+  for (const item of items) {
+    if (
+      item.kind !== "glue" ||
+      item.sourceSpan.start !== sourceOffset ||
+      item.sourceSpan.end !== sourceOffset ||
+      item.x < x - 1e-6
+    ) {
+      continue;
+    }
+    width += item.width;
+    stretch += item.stretch;
+    shrink += item.shrink;
+  }
+  const roundedWidth = roundTexPt(width);
+  if (roundedWidth <= 0) {
+    return null;
+  }
+  return {
+    width: roundedWidth,
+    stretch: roundTexPt(stretch),
+    shrink: roundTexPt(shrink),
+  };
 }
 
 function collectMathItemExtents(

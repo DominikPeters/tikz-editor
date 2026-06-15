@@ -119,6 +119,15 @@ function layoutItemsToRuns(
               fragment.breakAfter.sourceOffset,
               fragment.breakAfter.penalty
             ));
+            if (fragment.breakAfter.postBreakGlue) {
+              const glueRunIndex = runs.length;
+              runs.push(mathGlueRun(
+                glueRunIndex,
+                item.role,
+                fragment.breakAfter.sourceOffset,
+                fragment.breakAfter.postBreakGlue
+              ));
+            }
           }
         }
         continue;
@@ -240,6 +249,34 @@ function mathBreakpointRun(
   };
 }
 
+function mathGlueRun(
+  runIndex: number,
+  role: TexLayoutInlineItem["role"],
+  sourceOffset: number,
+  glue: { readonly width: number; readonly stretch: number; readonly shrink: number }
+): SpaceRun {
+  const wrapper: AnyWrapper = { texMathGlueSpace: true };
+  return {
+    kind: "space",
+    runIndex,
+    role,
+    sourceStart: sourceOffset,
+    sourceEnd: sourceOffset,
+    text: " ",
+    wrapper,
+    breakRef: {
+      kind: "mspace",
+      wrapper,
+    },
+    texGlue: {
+      width: glue.width,
+      stretch: glue.stretch,
+      shrink: glue.shrink,
+      breakPenalty: 10_000,
+    },
+  };
+}
+
 interface TexMathBoxFragment {
   readonly box: TexMathBox;
   readonly sourceStart: number;
@@ -247,6 +284,11 @@ interface TexMathBoxFragment {
   readonly breakAfter?: {
     readonly sourceOffset: number;
     readonly penalty: number;
+    readonly postBreakGlue?: {
+      readonly width: number;
+      readonly stretch: number;
+      readonly shrink: number;
+    };
   };
 }
 
@@ -274,10 +316,14 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
         box: fragment,
         sourceStart: previousSource,
         sourceEnd: breakpoint.sourceOffset,
-        breakAfter: { sourceOffset: breakpoint.sourceOffset, penalty: breakpoint.penalty },
+        breakAfter: {
+          sourceOffset: breakpoint.sourceOffset,
+          penalty: breakpoint.penalty,
+          postBreakGlue: breakpoint.postBreakGlue,
+        },
       });
     }
-    previousX = breakpoint.x;
+    previousX = roundTexPt(breakpoint.x + (breakpoint.postBreakGlue?.width ?? 0));
     previousSource = breakpoint.sourceOffset;
   }
 
@@ -356,6 +402,19 @@ function mathFlexAtX(
     return key === "stretch"
       ? breakpoint.stretchBefore ?? 0
       : breakpoint.shrinkBefore ?? 0;
+  }
+  const postBreakGlueBoundary = box.breakpoints?.find((candidate) =>
+    candidate.postBreakGlue &&
+    Math.abs(candidate.x + candidate.postBreakGlue.width - x) < 1e-6
+  );
+  if (postBreakGlueBoundary?.postBreakGlue) {
+    const before = key === "stretch"
+      ? postBreakGlueBoundary.stretchBefore ?? 0
+      : postBreakGlueBoundary.shrinkBefore ?? 0;
+    const glue = key === "stretch"
+      ? postBreakGlueBoundary.postBreakGlue.stretch
+      : postBreakGlueBoundary.postBreakGlue.shrink;
+    return roundTexPt(before + glue);
   }
   if (box.width <= 0) {
     return 0;

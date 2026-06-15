@@ -846,11 +846,23 @@ describe("TeX math SVG rendering", () => {
     const mathSegments = result.report?.lines
       .flatMap((line) => line.segments)
       .filter((segment) => segment.kind === "math") ?? [];
+    const mathAdvanceSegments = result.report?.lines
+      .flatMap((line) => line.segments)
+      .filter((segment) => segment.sourceKind === "math") ?? [];
     expect(mathSegments).toHaveLength(2);
+    expect(mathAdvanceSegments).toHaveLength(3);
     expect(mathSegments.map((segment) => source.slice(
       segment.sourceStartRaw ?? 0,
       segment.sourceEndRaw ?? 0
     )).join("")).toBe("$x-y$");
+    expect(mathAdvanceSegments[1]).toMatchObject({
+      kind: "space",
+      text: "",
+      sourceStartRaw: source.indexOf("-") + 1,
+      sourceEndRaw: source.indexOf("-") + 1,
+      sourceKind: "math",
+      width: 2.222229,
+    });
     expect(mathSegments[0]).toMatchObject({
       sourceStartRaw: source.indexOf("$x-y$"),
       sourceEndRaw: source.indexOf("-") + 1,
@@ -863,7 +875,7 @@ describe("TeX math SVG rendering", () => {
       sourceKind: "math",
       mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
     });
-    expect(mathSegments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(23.199158, 6);
+    expect(mathAdvanceSegments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(23.199158, 6);
     expect(mathSegments[0]?.caretStops?.[0]).toBeCloseTo(mathSegments[0]?.x ?? 0, 6);
     expect(mathSegments[1]?.caretStops?.at(-1)).toBeCloseTo(
       (mathSegments[1]?.x ?? 0) + (mathSegments[1]?.width ?? 0),

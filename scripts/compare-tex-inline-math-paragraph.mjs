@@ -20,7 +20,9 @@ const args = readArgs();
 const fuzzCases = args.fuzz > 0
   ? generateFuzzCases(args.fuzz, args.seed, args.widths, args.formulaMode)
   : [];
-const cases = fuzzCases.length > 0 ? fuzzCases : fixedCases(args.widths);
+const cases = args.source !== null
+  ? exactCases(args.source, args.widths)
+  : fuzzCases.length > 0 ? fuzzCases : fixedCases(args.widths);
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
 const failed = results.filter((result) => !result.ok);
 
@@ -545,6 +547,14 @@ function fixedCases(widths) {
   );
 }
 
+function exactCases(source, widths) {
+  return widths.map((width) => ({
+    id: `exact-${width}`,
+    source,
+    width,
+  }));
+}
+
 function generateFuzzCases(count, seed, widths, formulaMode) {
   const random = mulberry32(seed);
   const words = [
@@ -639,6 +649,7 @@ function readArgs() {
     summaryOnly: false,
     compareGlyphs: false,
     glyphTolerance: 0.05,
+    source: null,
   };
   for (let index = 2; index < process.argv.length; index += 1) {
     const arg = process.argv[index];
@@ -661,6 +672,8 @@ function readArgs() {
       parsed.oracleCacheDir = process.argv[++index] ?? null;
     } else if (arg === "--glyph-tolerance") {
       parsed.glyphTolerance = Number(process.argv[++index] ?? parsed.glyphTolerance);
+    } else if (arg === "--source") {
+      parsed.source = process.argv[++index] ?? "";
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
