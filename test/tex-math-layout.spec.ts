@@ -840,6 +840,20 @@ describe("TeX math hlist layout", () => {
     expect(overWithDelims.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
     expect((overWithDelims.hlist?.items[1] as TexMathChildHListLayoutItem | undefined)?.items)
       .toContainEqual(expect.objectContaining({ kind: "rule", role: "fraction-rule" }));
+
+    const above = layout(String.raw`a \above 1pt b`);
+    expect(above.supported).toBe(true);
+    expect(above.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "fraction-rule",
+      height: expect.closeTo(1, 6),
+    });
+
+    const aboveWithDelims = layout(String.raw`a \abovewithdelims [ ] 1pt b`);
+    expect(aboveWithDelims.supported).toBe(true);
+    expect(aboveWithDelims.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
+    expect((aboveWithDelims.hlist?.items[1] as TexMathChildHListLayoutItem | undefined)?.items)
+      .toContainEqual(expect.objectContaining({ kind: "rule", role: "fraction-rule", height: expect.closeTo(1, 6) }));
   });
 
   it("lays out TeX overline and underline noads with TeX rule spacing", () => {

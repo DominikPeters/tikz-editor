@@ -39,6 +39,8 @@ interface ParseListOptions {
 }
 
 type InfixFractionPrimitive =
+  | "above"
+  | "abovewithdelims"
   | "over"
   | "choose"
   | "atop"
@@ -1270,6 +1272,23 @@ class TexMathParser {
         return { leftDelimiter: "[", rightDelimiter: "]", ruleThickness: 0 };
       case "brace":
         return { leftDelimiter: "lbrace", rightDelimiter: "rbrace", ruleThickness: 0 };
+      case "above": {
+        const dimension = this.parseTexDimension(commandSpan, `${primitive} rule thickness`);
+        return {
+          ...(dimension ? { ruleThickness: dimension.valuePt, sourceSpan: dimension.sourceSpan } : {}),
+        };
+      }
+      case "abovewithdelims": {
+        const leftDelimiter = this.parseDelimiter(commandSpan, `${primitive} left delimiter`);
+        const rightDelimiter = this.parseDelimiter(commandSpan, `${primitive} right delimiter`);
+        const dimension = this.parseTexDimension(commandSpan, `${primitive} rule thickness`);
+        return {
+          ...(leftDelimiter ? { leftDelimiter: leftDelimiter.delimiter } : {}),
+          ...(rightDelimiter ? { rightDelimiter: rightDelimiter.delimiter } : {}),
+          ...(dimension ? { ruleThickness: dimension.valuePt } : {}),
+          sourceSpan: spanUnion(leftDelimiter?.sourceSpan ?? commandSpan, dimension?.sourceSpan ?? rightDelimiter?.sourceSpan ?? commandSpan),
+        };
+      }
       case "overwithdelims":
       case "atopwithdelims": {
         const leftDelimiter = this.parseDelimiter(commandSpan, `${primitive} left delimiter`);
@@ -1284,6 +1303,71 @@ class TexMathParser {
       case "over":
         return {};
     }
+  }
+
+  private parseTexDimension(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { readonly valuePt: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const start = this.peek()?.sourceSpan.start ?? fallbackSpan.end;
+    let text = "";
+    let lastSpan: TexMathSourceSpan | null = null;
+    const sign = this.peek();
+    if (sign?.kind === "character" && (sign.text === "+" || sign.text === "-")) {
+      text += sign.text;
+      lastSpan = this.advance().sourceSpan;
+    }
+
+    let sawDigit = false;
+    let sawDot = false;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (token?.kind !== "character") {
+        break;
+      }
+      if (/[0-9]/.test(token.text)) {
+        sawDigit = true;
+        text += token.text;
+        lastSpan = this.advance().sourceSpan;
+        continue;
+      }
+      if (token.text === "." && !sawDot) {
+        sawDot = true;
+        text += token.text;
+        lastSpan = this.advance().sourceSpan;
+        continue;
+      }
+      break;
+    }
+
+    this.skipSpaces();
+    let unit = "";
+    while (!this.isAtEnd() && unit.length < 2) {
+      const token = this.peek();
+      if (token?.kind !== "character" || !/[A-Za-z]/.test(token.text)) {
+        break;
+      }
+      unit += token.text;
+      lastSpan = this.advance().sourceSpan;
+    }
+
+    const sourceSpan = lastSpan ? { start, end: lastSpan.end } : fallbackSpan;
+    const factor = texDimensionUnitFactor(unit);
+    const number = Number(text);
+    if (!sawDigit || !Number.isFinite(number) || factor === null) {
+      this.addDiagnostic(
+        "error",
+        "invalid-tex-dimension",
+        `Unsupported or invalid TeX dimension for ${label}.`,
+        sourceSpan
+      );
+      return null;
+    }
+    return {
+      valuePt: number * factor,
+      sourceSpan,
+    };
   }
 
   private parseMatrixBody(params: {
@@ -2442,6 +2526,10 @@ function binomialCommandStyle(command: string): "display" | "text" | undefined |
 
 function infixFractionPrimitive(command: string): InfixFractionPrimitive | null {
   switch (commandName(command)) {
+    case "above":
+      return "above";
+    case "abovewithdelims":
+      return "abovewithdelims";
     case "over":
       return "over";
     case "choose":
@@ -2456,6 +2544,31 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
       return "overwithdelims";
     case "atopwithdelims":
       return "atopwithdelims";
+    default:
+      return null;
+  }
+}
+
+function texDimensionUnitFactor(unit: string): number | null {
+  switch (unit) {
+    case "pt":
+      return 1;
+    case "in":
+      return 72.27;
+    case "pc":
+      return 12;
+    case "cm":
+      return 72.27 / 2.54;
+    case "mm":
+      return 72.27 / 25.4;
+    case "bp":
+      return 72.27 / 72;
+    case "dd":
+      return 1238 / 1157;
+    case "cc":
+      return 12 * 1238 / 1157;
+    case "sp":
+      return 1 / 65536;
     default:
       return null;
   }

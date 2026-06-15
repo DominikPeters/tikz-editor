@@ -233,6 +233,44 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses TeX above infix fractions with absolute rule dimensions", () => {
+    const above = atomAt(parseTexMath(String.raw`a \above 1pt b`), 0);
+    const aboveWithDelims = atomAt(parseTexMath(String.raw`a \abovewithdelims [ ] 0.5pt b`), 0);
+    const converted = atomAt(parseTexMath(String.raw`a \above 1in b`), 0);
+
+    expect(above).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 14 },
+      nucleus: {
+        kind: "fraction",
+        ruleThickness: 1,
+        numerator: { sourceSpan: { start: 0, end: 1 } },
+        denominator: { sourceSpan: { start: 13, end: 14 } },
+      },
+    });
+    expect(aboveWithDelims.nucleus).toMatchObject({
+      kind: "fraction",
+      leftDelimiter: "[",
+      rightDelimiter: "]",
+      ruleThickness: 0.5,
+    });
+    expect(converted.nucleus).toMatchObject({
+      kind: "fraction",
+      ruleThickness: 72.27,
+    });
+  });
+
+  it("keeps unsupported relative TeX dimensions explicit", () => {
+    const result = parseTexMath(String.raw`a \above 1em b`);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "invalid-tex-dimension",
+      message: String.raw`Unsupported or invalid TeX dimension for above rule thickness.`,
+      sourceSpan: { start: 9, end: 12 },
+    });
+  });
+
   it("keeps infix fractions scoped to their containing group or script", () => {
     const result = parseTexMath(String.raw`X_{n \choose k}+1`);
     const base = atomAt(result, 0);
