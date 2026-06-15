@@ -14,6 +14,7 @@ export type TexMathStyle =
 export type TexMathDiagnosticCode =
   | "duplicate-script"
   | "empty-script"
+  | "invalid-environment-nesting"
   | "missing-environment-end"
   | "missing-delimiter"
   | "missing-group"

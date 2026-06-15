@@ -828,6 +828,71 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("reports TeX-like errors for invalid nested display alignment environments", () => {
+    const cases = [
+      {
+        source: String.raw`\begin{align}\begin{align} \end{align}\end{align}`,
+        message: String.raw`Erroneous nesting of equation structures: \begin{align} inside \begin{align}.`,
+      },
+      {
+        source: String.raw`\begin{align}\begin{gather} a=b \end{gather}\end{align}`,
+        message: String.raw`Erroneous nesting of equation structures: \begin{gather} inside \begin{align}.`,
+      },
+      {
+        source: String.raw`\begin{gather}\begin{gather} \end{gather}\end{gather}`,
+        message: String.raw`Erroneous nesting of equation structures: \begin{gather} inside \begin{gather}.`,
+      },
+    ];
+
+    for (const { source, message } of cases) {
+      const result = parseTexMath(source);
+      expect(result.diagnostics).toContainEqual({
+        severity: "error",
+        code: "invalid-environment-nesting",
+        message,
+        sourceSpan: {
+          start: source.indexOf(String.raw`\begin{`, 1),
+          end: source.indexOf("}", source.indexOf(String.raw`\begin{`, 1)) + 1,
+        },
+      });
+      expect(atomAt(result, 0).nucleus).toMatchObject({
+        kind: "aligned",
+        endSourceSpan: {
+          start: source.lastIndexOf(String.raw`\end{`),
+          end: source.length,
+        },
+      });
+    }
+  });
+
+  it("allows align inside gather like amsmath", () => {
+    const source = String.raw`\begin{gather}\begin{align} a &= b \end{align}\end{gather}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "aligned",
+      rows: [
+        {
+          cells: [
+            {
+              list: {
+                items: [
+                  {
+                    nucleus: {
+                      kind: "aligned",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("reports missing aligned environment ends without throwing", () => {
     const result = parseTexMath(String.raw`\begin{aligned}a&=b`);
     const atom = atomAt(result, 0);

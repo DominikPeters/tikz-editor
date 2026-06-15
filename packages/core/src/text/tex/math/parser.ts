@@ -147,6 +147,7 @@ function tokenKindForCharacter(char: string): TexMathTokenKind {
 class TexMathParser {
   readonly diagnostics: TexMathDiagnostic[] = [];
   private index = 0;
+  private readonly activeAlignmentEnvironments: string[] = [];
 
   constructor(
     private readonly tokens: readonly TexMathToken[],
@@ -914,6 +915,29 @@ class TexMathParser {
       "\\begin environment name"
     );
     if (environmentName && alignedEnvironmentName(environmentName.name)) {
+      const invalidNestedAlignment = this.invalidNestedAlignmentEnvironment(environmentName.name);
+      if (invalidNestedAlignment) {
+        const sourceSpan = this.consumeUnsupportedEnvironmentBody(
+          environmentName.name,
+          spanUnion(beginCommand.sourceSpan, environmentName.sourceSpan)
+        );
+        this.addDiagnostic(
+          "error",
+          "invalid-environment-nesting",
+          invalidNestedAlignment.message,
+          spanUnion(beginCommand.sourceSpan, environmentName.sourceSpan)
+        );
+        return this.maybeParseScripts({
+          kind: "atom",
+          atomClass: "inner",
+          nucleus: {
+            kind: "unsupported",
+            command: `\\begin{${environmentName.name}}`,
+            sourceSpan,
+          },
+          sourceSpan,
+        }, allowScripts);
+      }
       return this.parseAlignedEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
     if (environmentName?.name === "array") {
@@ -1041,6 +1065,24 @@ class TexMathParser {
     readonly stopAtEnvironmentEnd?: string;
     readonly allowScripts: boolean;
   }): TexMathAtom {
+    if (params.stopAtEnvironmentEnd) {
+      this.activeAlignmentEnvironments.push(params.stopAtEnvironmentEnd);
+    }
+    try {
+      return this.parseAlignedBodyContent(params);
+    } finally {
+      if (params.stopAtEnvironmentEnd) {
+        this.activeAlignmentEnvironments.pop();
+      }
+    }
+  }
+
+  private parseAlignedBodyContent(params: {
+    readonly beginSourceSpan: TexMathSourceSpan;
+    readonly initialSourceSpan: TexMathSourceSpan;
+    readonly stopAtEnvironmentEnd?: string;
+    readonly allowScripts: boolean;
+  }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
     let endSourceSpan: TexMathSourceSpan | undefined;
     let sourceSpan = params.initialSourceSpan;
@@ -1127,6 +1169,21 @@ class TexMathParser {
       alignedAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
+  }
+
+  private invalidNestedAlignmentEnvironment(
+    candidate: string
+  ): { readonly message: string } | null {
+    const active = this.activeAlignmentEnvironments.at(-1);
+    if (!active || !displayAlignmentEnvironmentName(active) || !displayAlignmentEnvironmentName(candidate)) {
+      return null;
+    }
+    if (gatherEnvironmentName(active) && alignEnvironmentName(candidate)) {
+      return null;
+    }
+    return {
+      message: `Erroneous nesting of equation structures: \\begin{${candidate}} inside \\begin{${active}}.`,
+    };
   }
 
   private parseMatrixBody(params: {
@@ -2389,6 +2446,18 @@ function alignedEnvironmentName(name: string): boolean {
     name === "align*" ||
     name === "gather" ||
     name === "gather*";
+}
+
+function displayAlignmentEnvironmentName(name: string): boolean {
+  return alignEnvironmentName(name) || gatherEnvironmentName(name);
+}
+
+function alignEnvironmentName(name: string): boolean {
+  return name === "align" || name === "align*";
+}
+
+function gatherEnvironmentName(name: string): boolean {
+  return name === "gather" || name === "gather*";
 }
 
 function namedOperatorCommandName(command: string): string | null {
