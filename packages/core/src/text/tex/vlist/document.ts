@@ -62,10 +62,12 @@ export function prepareSimpleTexLayoutDocument(
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const baseVList = params.items
     ? lowerSimpleTexBlockItemsToVList(params.items, {
+        font: params.font,
         mathBoxProvider: params.options.mathBoxProvider,
         width: params.options.width,
       })
     : lowerSimpleTexBlocksToVList(params.blocks, {
+        font: params.font,
         mathBoxProvider: params.options.mathBoxProvider,
         width: params.options.width,
       });

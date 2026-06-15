@@ -604,6 +604,10 @@ supported grammar is mostly healthy under the available gates:
 - display construct and display fuzz matrices pass at the current 0.03 pt
   tolerance;
 - aligned math fuzz passes for the currently supported alignment grammar.
+- mixed vertical-list display fixtures (`quote` and `itemize`) have a glyph
+  oracle mode; horizontal placement and display skip selection are covered, but
+  remaining paragraph/list boundary sequencing still leaves about 1 pt of
+  vertical error in the current focused fixtures.
 
 The main gaps are therefore not isolated command coverage. The next robustness
 work should focus on:

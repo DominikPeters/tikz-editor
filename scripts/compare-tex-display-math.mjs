@@ -103,8 +103,18 @@ function compareCase(caseSpec, args) {
     mismatches.push(`our layout unsupported: ${ours.errors.join("; ")}`);
     return { ...caseSpec, ok: false, mismatches, ours, tex };
   }
-  compareTopLevelItems(mismatches, ours.topLevel, tex.topLevel, tolerance);
-  compareDisplayMathGlyphs(mismatches, ours.topLevel, ours.glyphs, tex.topLevel, tex.glyphs, tolerance);
+  if (caseSpec.compareMode === "math-glyphs") {
+    compareGlyphLists(
+      mismatches,
+      "display math glyph",
+      ours.glyphs,
+      tex.glyphs.filter(isTeXMathGlyph),
+      tolerance
+    );
+  } else {
+    compareTopLevelItems(mismatches, ours.topLevel, tex.topLevel, tolerance);
+    compareDisplayMathGlyphs(mismatches, ours.topLevel, ours.glyphs, tex.topLevel, tex.glyphs, tolerance);
+  }
   return {
     ...caseSpec,
     ok: mismatches.length === 0,
@@ -112,6 +122,10 @@ function compareCase(caseSpec, args) {
     ours,
     tex,
   };
+}
+
+function isTeXMathGlyph(glyph) {
+  return typeof glyph.fontId === "string" && /^cm/u.test(glyph.fontId);
 }
 
 function compareTopLevelItems(mismatches, ours, tex, tolerance) {
@@ -407,7 +421,7 @@ function texSource(caseSpec) {
 ` + amsmathPreamble + String.raw`
 \newbox\tikzdisplaybox
 \begin{document}
-\setbox\tikzdisplaybox=\vbox{\hsize=` + caseSpec.width + String.raw`pt \noindent ` + caseSpec.source + String.raw`\par}
+\setbox\tikzdisplaybox=\vbox{\hsize=` + caseSpec.width + String.raw`pt \linewidth=\hsize \columnwidth=\hsize \noindent ` + caseSpec.source + String.raw`\par}
 \directlua{dofile('trace.lua')}
 \end{document}
 `;
@@ -595,6 +609,8 @@ function readArgs() {
       cases.push(...alignMatrixCases());
     } else if (arg === "--construct-matrix") {
       cases.push(...constructMatrixCases());
+    } else if (arg === "--mixed-vlist-matrix") {
+      cases.push(...mixedVListCases());
     } else if (arg === "--display-fuzz") {
       displayFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--display-fuzz");
     } else if (arg.startsWith("--display-fuzz=")) {
@@ -614,6 +630,23 @@ function readNonNegativeInteger(raw, label) {
     throw new Error(`Expected ${label} to be a non-negative integer.`);
   }
   return value;
+}
+
+function mixedVListCases() {
+  return [
+    {
+      id: "quote-display",
+      width: 160,
+      compareMode: "math-glyphs",
+      source: String.raw`Alpha \begin{quote}Quoted \[x^2+1\] done.\end{quote} Beta`,
+    },
+    {
+      id: "itemize-display",
+      width: 180,
+      compareMode: "math-glyphs",
+      source: String.raw`Alpha \begin{itemize}\item Item \[x^2+1\] done.\end{itemize} Beta`,
+    },
+  ];
 }
 
 function alignMatrixCases() {

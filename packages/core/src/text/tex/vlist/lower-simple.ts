@@ -7,7 +7,11 @@ import type {
   SimpleTexVerticalGlueBlockItem,
   SimpleTexVerticalRuleBlockItem,
 } from "../ir.js";
-import { texVBoxRolePathForScope } from "./scope-roles.js";
+import type { ResolvedTexFont } from "../fonts/types.js";
+import {
+  texVBoxLayoutForScopeRole,
+  texVBoxRolePathForScope,
+} from "./scope-roles.js";
 import type {
   TexGlueItem,
   TexDisplayAlignmentItem,
@@ -24,6 +28,7 @@ import type {
 import type { TexMathBoxProvider } from "../layout-inline-items.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
+  readonly font?: ResolvedTexFont;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly width?: number;
 }
@@ -81,6 +86,8 @@ function displayMathItemFromSimpleTexDisplayMath(
     start: item.sourceStart,
     end: item.sourceEnd,
   };
+  const scopePath = scopePathForVerticalBlockItem(item);
+  const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
   if (item.delimiter === "equation" || item.delimiter === "align") {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
   }
@@ -93,7 +100,7 @@ function displayMathItemFromSimpleTexDisplayMath(
       sourceEnd: item.sourceEnd,
       contentStart: item.contentStart,
       contentEnd: item.contentEnd,
-      targetWidth: options.width ?? 0,
+      targetWidth: targetWidth ?? 0,
     }) ?? null;
     if (!alignment) {
       return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -101,13 +108,13 @@ function displayMathItemFromSimpleTexDisplayMath(
     return {
       kind: "display-alignment",
       sourceSpan,
-      scopePath: scopePathForVerticalBlockItem(item),
+      scopePath,
       text: item.text,
       content: item.content,
       delimiter: item.delimiter,
       contentStart: item.contentStart,
       contentEnd: item.contentEnd,
-      targetWidth: options.width ?? alignment.width,
+      targetWidth: targetWidth ?? alignment.width,
       alignment,
     };
   }
@@ -119,7 +126,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     sourceEnd: item.sourceEnd,
     contentStart: item.contentStart,
     contentEnd: item.contentEnd,
-    targetWidth: options.width,
+    targetWidth,
   }) ?? null;
   if (!box) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -127,15 +134,34 @@ function displayMathItemFromSimpleTexDisplayMath(
   return {
     kind: "display-math",
     sourceSpan,
-    scopePath: scopePathForVerticalBlockItem(item),
+    scopePath,
     text: item.text,
     content: item.content,
     delimiter: item.delimiter,
     contentStart: item.contentStart,
     contentEnd: item.contentEnd,
-    targetWidth: options.width ?? box.width,
+    targetWidth: targetWidth ?? box.width,
     box,
   };
+}
+
+function scopedDisplayMathTargetWidth(
+  scopePath: readonly TexVBoxRole[] | undefined,
+  options: LowerSimpleTexBlockItemsToVListOptions
+): number | undefined {
+  const width = options.width;
+  if (width === undefined) {
+    return undefined;
+  }
+  const font = options.font;
+  if (!font || !scopePath?.length) {
+    return width;
+  }
+  const marginWidth = scopePath.reduce((sum, role) => {
+    const layout = texVBoxLayoutForScopeRole(role, font);
+    return sum + layout.leftMarginWidth + layout.rightMarginWidth;
+  }, 0);
+  return Math.max(0, width - marginWidth);
 }
 
 function unsupportedDisplayMathPlaceholder(

@@ -1198,6 +1198,63 @@ describe("TeX math SVG rendering", () => {
     expect(result.vlistLayout?.paragraphPlacements).toHaveLength(2);
   });
 
+  it("centers display math inside quote-local line width", () => {
+    const source = String.raw`Alpha \begin{quote}Quoted \[x^2+1\] done.\end{quote} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:quote-display-math-provider",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const display = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "display-math"
+    );
+    expect(display).toMatchObject({
+      itemKind: "display-math",
+      x: expect.closeTo(66.288151, 5),
+      width: expect.closeTo(27.423697, 5),
+      displayMath: {
+        delimiter: "bracket",
+        contentStart: source.indexOf("x^2+1"),
+        contentEnd: source.indexOf(String.raw`\]`),
+      },
+    });
+  });
+
+  it("uses TeX short display skips after short scoped list lines", () => {
+    const source = String.raw`Alpha \begin{itemize}\item Item \[x^2+1\] done.\end{itemize} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:itemize-display-short-skip",
+      width: 180,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.boxReport.items.filter((item) =>
+      item.glue?.origin?.kind === "display-math-boundary"
+    ).map((item) => item.glue)).toEqual([
+      expect.objectContaining({
+        size: 0,
+        origin: expect.objectContaining({
+          side: "above",
+          variant: "short",
+        }),
+      }),
+      expect.objectContaining({
+        size: 6,
+        origin: expect.objectContaining({
+          side: "below",
+          variant: "short",
+        }),
+      }),
+    ]);
+  });
+
   it("lets TeX paragraph layout carry double-dollar display math as a vlist item", () => {
     const source = String.raw`Alpha $$x^2$$ Beta`;
     const result = layoutSimpleTexParagraph(source, {

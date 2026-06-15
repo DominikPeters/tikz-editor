@@ -1140,6 +1140,12 @@ class TexMathParser {
       }
       return this.parseAlignedEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
+    if (environmentName && alignatEnvironmentName(environmentName.name)) {
+      return this.parseAlignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
+    if (environmentName?.name === "alignedat") {
+      return this.parseAlignedatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
     if (environmentName && xalignatEnvironmentName(environmentName.name)) {
       return this.parseUnsupportedXalignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
@@ -1188,6 +1194,53 @@ class TexMathParser {
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
       stopAtEnvironmentEnd: environmentName.name,
+      columnSeparation: "align",
+      allowScripts,
+    });
+  }
+
+  private parseAlignatEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    const initialSourceSpan = spanUnion(beginSourceSpan, environmentName.sourceSpan);
+    const pairCount = this.parsePositiveIntegerGroup(
+      initialSourceSpan,
+      `\\begin{${environmentName.name}} column count`
+    );
+    return this.parseAlignedBody({
+      beginSourceSpan,
+      initialSourceSpan: spanUnion(initialSourceSpan, pairCount?.sourceSpan ?? initialSourceSpan),
+      preambleSourceSpan: pairCount?.sourceSpan,
+      stopAtEnvironmentEnd: environmentName.name,
+      columnSeparation: "none",
+      maxFields: pairCount ? pairCount.value * 2 : undefined,
+      allowScripts,
+    });
+  }
+
+  private parseAlignedatEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    const position = this.consumeOptionalArrayPosition();
+    const initialSourceSpan = spanUnion(
+      spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      position ?? environmentName.sourceSpan
+    );
+    const pairCount = this.parsePositiveIntegerGroup(
+      initialSourceSpan,
+      "\\begin{alignedat} column count"
+    );
+    return this.parseAlignedBody({
+      beginSourceSpan,
+      initialSourceSpan: spanUnion(initialSourceSpan, pairCount?.sourceSpan ?? initialSourceSpan),
+      preambleSourceSpan: pairCount?.sourceSpan,
+      stopAtEnvironmentEnd: environmentName.name,
+      columnSeparation: "none",
+      maxFields: pairCount ? pairCount.value * 2 : undefined,
       allowScripts,
     });
   }
@@ -1329,10 +1382,38 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private parsePositiveIntegerGroup(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { readonly value: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    const argument = this.parseRequiredRawGroup(fallbackSpan, label);
+    const text = argument?.text.trim() ?? "";
+    const value = Number.parseInt(text, 10);
+    const valid = Number.isInteger(value) &&
+      value > 0 &&
+      String(value) === text;
+    if (!valid) {
+      this.addDiagnostic(
+        "error",
+        "invalid-environment-argument",
+        `Argument to ${label.replace(/ column count$/u, "")} must be a positive integer.`,
+        argument?.contentSourceSpan ?? argument?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    return {
+      value,
+      sourceSpan: argument?.sourceSpan ?? fallbackSpan,
+    };
+  }
+
   parseAlignedBody(params: {
     readonly beginSourceSpan: TexMathSourceSpan;
     readonly initialSourceSpan: TexMathSourceSpan;
+    readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
+    readonly columnSeparation?: "align" | "none";
+    readonly maxFields?: number;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     if (params.stopAtEnvironmentEnd) {
@@ -1350,7 +1431,10 @@ class TexMathParser {
   private parseAlignedBodyContent(params: {
     readonly beginSourceSpan: TexMathSourceSpan;
     readonly initialSourceSpan: TexMathSourceSpan;
+    readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
+    readonly columnSeparation?: "align" | "none";
+    readonly maxFields?: number;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -1362,7 +1446,10 @@ class TexMathParser {
         endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          alignedAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan, {
+            columnSeparation: params.columnSeparation,
+            maxFields: params.maxFields,
+          }),
           params.allowScripts
         );
       }
@@ -1375,6 +1462,8 @@ class TexMathParser {
         readonly textSourceSpan: TexMathSourceSpan;
       }> = [];
       let pendingRowSourceSpan: TexMathSourceSpan | undefined;
+      let alignmentTabsInRow = 0;
+      let extraAlignmentTabSourceSpan: TexMathSourceSpan | undefined;
       while (!this.isAtEnd()) {
         const cellList = this.parseList({
           stopAtGroupClose: false,
@@ -1405,9 +1494,21 @@ class TexMathParser {
         if (separator?.kind === "character" && separator.text === "&") {
           this.advance();
           sourceSpan = spanUnion(sourceSpan, separator.sourceSpan);
+          alignmentTabsInRow += 1;
+          if (!extraAlignmentTabSourceSpan && params.maxFields !== undefined && alignmentTabsInRow > params.maxFields - 1) {
+            extraAlignmentTabSourceSpan = separator.sourceSpan;
+          }
           continue;
         }
         break;
+      }
+      if (extraAlignmentTabSourceSpan) {
+        this.addDiagnostic(
+          "error",
+          "extra-alignment-tab",
+          "Extra & on this line.",
+          extraAlignmentTabSourceSpan
+        );
       }
 
       const rowEndToken = this.peek();
@@ -1433,7 +1534,10 @@ class TexMathParser {
           ...(labels.length > 0 ? { labels } : {}),
         });
         return this.maybeParseScripts(
-          alignedAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan, {
+            columnSeparation: params.columnSeparation,
+            maxFields: params.maxFields,
+          }),
           params.allowScripts
         );
       }
@@ -1456,7 +1560,10 @@ class TexMathParser {
       );
     }
     return this.maybeParseScripts(
-      alignedAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
+      alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan, {
+        columnSeparation: params.columnSeparation,
+        maxFields: params.maxFields,
+      }),
       params.allowScripts
     );
   }
@@ -2994,8 +3101,13 @@ function isAmsDotsRightDelimiter(token: TexMathToken): boolean {
 function alignedAtom(
   rows: readonly TexMathAlignedRow[],
   beginSourceSpan: TexMathSourceSpan,
+  preambleSourceSpan: TexMathSourceSpan | undefined,
   endSourceSpan: TexMathSourceSpan | undefined,
-  sourceSpan: TexMathSourceSpan
+  sourceSpan: TexMathSourceSpan,
+  options: {
+    readonly columnSeparation?: "align" | "none";
+    readonly maxFields?: number;
+  } = {}
 ): TexMathAtom {
   return {
     kind: "atom",
@@ -3003,7 +3115,10 @@ function alignedAtom(
     nucleus: {
       kind: "aligned",
       rows,
+      ...(options.columnSeparation ? { columnSeparation: options.columnSeparation } : {}),
+      ...(options.maxFields !== undefined ? { maxFields: options.maxFields } : {}),
       beginSourceSpan,
+      ...(preambleSourceSpan ? { preambleSourceSpan } : {}),
       ...(endSourceSpan ? { endSourceSpan } : {}),
       sourceSpan,
     },
@@ -3447,6 +3562,10 @@ function alignedEnvironmentName(name: string): boolean {
     name === "align*" ||
     name === "gather" ||
     name === "gather*";
+}
+
+function alignatEnvironmentName(name: string): boolean {
+  return name === "alignat" || name === "alignat*";
 }
 
 function xalignatEnvironmentName(name: string): boolean {
