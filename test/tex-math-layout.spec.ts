@@ -445,6 +445,26 @@ describe("TeX math hlist layout", () => {
     expect(superscript?.items.map((item) => item.kind)).toEqual(["glyph", "hlist"]);
   });
 
+  it("uses TeX cramped styles for nested scripts inside subscripts", () => {
+    const result = layout("x_{y^2}");
+
+    expect(result.supported).toBe(true);
+    const subscript = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(subscript).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(5.71528, 5),
+      y: expect.closeTo(1.777783, 5),
+    });
+    const nestedSuperscript = subscript?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(nestedSuperscript).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(4.306757, 5),
+      y: expect.closeTo(-1.999998, 5),
+    });
+  });
+
   it("lays out simple fractions as TeX-style vertical nuclei with a rule", () => {
     const result = layout(String.raw`\frac{1}{2}`);
 
@@ -836,6 +856,32 @@ describe("TeX math hlist layout", () => {
       role: "nucleus",
       x: expect.closeTo(8.33336, 6),
       y: 0,
+    });
+  });
+
+  it("uses cramped radicand style and TeX overbar thickness for radicals", () => {
+    const result = layout(String.raw`\sqrt{y^2}`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 112,
+      y: expect.closeTo(-8.777833, 5),
+      height: expect.closeTo(0.39999, 5),
+    });
+    expect(result.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "radical-rule",
+      y: expect.closeTo(-9.177823, 5),
+      height: expect.closeTo(0.39999, 5),
+    });
+    const radicand = result.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
+    const superscript = radicand?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(superscript).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      y: expect.closeTo(-2.88889, 5),
     });
   });
 

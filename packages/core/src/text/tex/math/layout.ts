@@ -116,6 +116,7 @@ export interface TexMathHList {
 
 export interface TexMathLayoutOptions {
   readonly style?: TexMathStyle;
+  readonly cramped?: boolean;
   readonly fontProfile?: TexMathFontProfile;
   readonly baseAtPt?: number;
   readonly alphabet?: TexMathAlphabetCommand;
@@ -199,7 +200,9 @@ export function layoutTexMathList(
   options: TexMathLayoutOptions = {}
 ): TexMathLayoutResult {
   const style = options.style ?? "text";
+  const cramped = options.cramped ?? false;
   let currentStyle = style;
+  let currentCramped = cramped;
   const fontProfile = options.fontProfile ?? defaultTexMathFontProfile;
   const baseAtPt = options.baseAtPt ?? 10;
   const alphabet = options.alphabet;
@@ -230,6 +233,7 @@ export function layoutTexMathList(
     }
     if (item.kind === "style-change") {
       currentStyle = item.style;
+      currentCramped = false;
       continue;
     }
     if (item.kind === "unsupported") {
@@ -239,7 +243,7 @@ export function layoutTexMathList(
       });
       continue;
     }
-    const atomLayout = layoutAtom(item, fontProfile, currentStyle, baseAtPt, alphabet);
+    const atomLayout = layoutAtom(item, fontProfile, currentStyle, currentCramped, baseAtPt, alphabet);
     if (!atomLayout) {
       errors.push({
         message: "Only simple glyph math atoms are supported by the initial math hlist layout.",
@@ -283,16 +287,17 @@ function layoutAtom(
   atom: TexMathAtom,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const nucleus = layoutNucleus(atom.nucleus, fontProfile, style, baseAtPt, alphabet);
+  const nucleus = layoutNucleus(atom.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   if (!nucleus) {
     return null;
   }
 
   if (shouldUseOperatorLimits(atom, style)) {
-    return layoutOperatorLimitsAtom(atom, nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutOperatorLimitsAtom(atom, nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
 
   if (!atom.subscript && !atom.superscript) {
@@ -325,10 +330,10 @@ function layoutAtom(
   }
 
   const sup = atom.superscript
-    ? layoutScriptList(atom.superscript.list, fontProfile, supStyle(style), baseAtPt, alphabet)
+    ? layoutScriptList(atom.superscript.list, fontProfile, supStyle(style), cramped, baseAtPt, alphabet)
     : null;
   const sub = atom.subscript
-    ? layoutScriptList(atom.subscript.list, fontProfile, subStyle(style), baseAtPt, alphabet)
+    ? layoutScriptList(atom.subscript.list, fontProfile, subStyle(style), true, baseAtPt, alphabet)
     : null;
   if ((atom.superscript && !sup) || (atom.subscript && !sub)) {
     return null;
@@ -336,7 +341,7 @@ function layoutAtom(
 
   const baseShifts = initialScriptShifts(nucleus, style, fontProfile, baseAtPt);
   if (sup && !sub) {
-    const shiftUp = superscriptShiftUp(sup, baseShifts.shiftUp, style, fontProfile, baseAtPt);
+    const shiftUp = superscriptShiftUp(sup, baseShifts.shiftUp, style, cramped, fontProfile, baseAtPt);
     const child = childHList("superscript", scriptStartX, -shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(child);
     atomWidth = roundTexPt(scriptStartX + child.width);
@@ -350,7 +355,7 @@ function layoutAtom(
     height = Math.max(height, -child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sup && sub) {
-    const shifts = combinedScriptShifts(sup, sub, baseShifts, style, fontProfile, baseAtPt);
+    const shifts = combinedScriptShifts(sup, sub, baseShifts, style, cramped, fontProfile, baseAtPt);
     const supChild = childHList("superscript", roundTexPt(scriptStartX + delta), -shifts.shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
     const subChild = childHList("subscript", scriptStartX, shifts.shiftDown, sub, atom.subscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(supChild, subChild);
@@ -396,14 +401,15 @@ function layoutOperatorLimitsAtom(
   nucleus: TexMathAtomLayout,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const sup = atom.superscript
-    ? layoutLimitList(atom.superscript.list, fontProfile, supStyle(style), baseAtPt, alphabet)
+    ? layoutLimitList(atom.superscript.list, fontProfile, supStyle(style), cramped, baseAtPt, alphabet)
     : null;
   const sub = atom.subscript
-    ? layoutLimitList(atom.subscript.list, fontProfile, subStyle(style), baseAtPt, alphabet)
+    ? layoutLimitList(atom.subscript.list, fontProfile, subStyle(style), true, baseAtPt, alphabet)
     : null;
   if ((atom.superscript && !sup) || (atom.subscript && !sub)) {
     return null;
@@ -471,6 +477,7 @@ function layoutNucleus(
   nucleus: TexMathNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -478,7 +485,7 @@ function layoutNucleus(
     return layoutGlyphNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "list") {
-    const result = layoutTexMathList(nucleus.list, { fontProfile, style, baseAtPt, alphabet });
+    const result = layoutTexMathList(nucleus.list, { fontProfile, style, cramped, baseAtPt, alphabet });
     if (!result.supported) {
       return null;
     }
@@ -494,16 +501,16 @@ function layoutNucleus(
     };
   }
   if (nucleus.kind === "fraction") {
-    return layoutFractionNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutFractionNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "radical") {
-    return layoutRadicalNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutRadicalNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "accent") {
-    return layoutAccentNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutAccentNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "alphabet") {
-    return layoutAlphabetNucleus(nucleus, fontProfile, style, baseAtPt);
+    return layoutAlphabetNucleus(nucleus, fontProfile, style, cramped, baseAtPt);
   }
   if (nucleus.kind === "text") {
     return layoutTextNucleus(nucleus, fontProfile, style, baseAtPt);
@@ -512,7 +519,7 @@ function layoutNucleus(
     return layoutOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
   }
   if (nucleus.kind === "left-right") {
-    return layoutLeftRightNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutLeftRightNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "aligned") {
     return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -614,11 +621,13 @@ function layoutAlphabetNucleus(
   nucleus: TexMathAlphabetNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number
 ): TexMathAtomLayout | null {
   const result = layoutTexMathList(nucleus.list, {
     fontProfile,
     style,
+    cramped,
     baseAtPt,
     alphabet: nucleus.alphabet,
   });
@@ -948,11 +957,26 @@ function layoutFractionNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "fraction" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const numerator = layoutFractionList(nucleus.numerator, fontProfile, numeratorStyle(style), baseAtPt, alphabet);
-  const denominator = layoutFractionList(nucleus.denominator, fontProfile, denominatorStyle(style), baseAtPt, alphabet);
+  const numerator = layoutFractionList(
+    nucleus.numerator,
+    fontProfile,
+    numeratorStyle(style),
+    cramped,
+    baseAtPt,
+    alphabet
+  );
+  const denominator = layoutFractionList(
+    nucleus.denominator,
+    fontProfile,
+    denominatorStyle(style),
+    true,
+    baseAtPt,
+    alphabet
+  );
   if (!numerator || !denominator) {
     return null;
   }
@@ -1021,10 +1045,11 @@ function layoutFractionList(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? result.hlist : null;
 }
 
@@ -1032,10 +1057,11 @@ function layoutRadicalNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "radical" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  _cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, baseAtPt, alphabet);
+  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, true, baseAtPt, alphabet);
   if (!radicand) {
     return null;
   }
@@ -1051,8 +1077,9 @@ function layoutRadicalNucleus(
   if (delta > 0) {
     clearance += delta / 2;
   }
+  const overbarThickness = delimiter.height;
   const radicalY = roundTexPt(-(radicand.height + clearance));
-  const ruleY = roundTexPt(radicalY - thickness);
+  const ruleY = roundTexPt(radicalY - overbarThickness);
   const radicalItems = delimiter.items.map((item) => ({
     ...item,
     y: roundTexPt(item.y + radicalY),
@@ -1063,7 +1090,7 @@ function layoutRadicalNucleus(
     x: delimiter.width,
     y: ruleY,
     width: radicand.width,
-    height: roundTexPt(thickness),
+    height: roundTexPt(overbarThickness),
     sourceSpan: nucleus.sourceSpan,
   } satisfies TexMathRuleLayoutItem;
   const radicandChild = childHList(
@@ -1098,10 +1125,11 @@ function layoutRadicandList(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? result.hlist : null;
 }
 
@@ -1109,6 +1137,7 @@ function layoutAccentBase(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
@@ -1134,7 +1163,7 @@ function layoutAccentBase(
     };
   }
 
-  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? result.hlist : null;
 }
 
@@ -1142,10 +1171,11 @@ function layoutAccentNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  _cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const base = layoutAccentBase(nucleus.base, fontProfile, style, baseAtPt, alphabet);
+  const base = layoutAccentBase(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
   if (!base) {
     return null;
   }
@@ -1302,10 +1332,11 @@ function layoutLeftRightNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "left-right" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const body = layoutLeftRightBody(nucleus.body, fontProfile, style, baseAtPt, alphabet);
+  const body = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet);
   if (!body) {
     return null;
   }
@@ -1368,10 +1399,11 @@ function layoutLeftRightBody(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? result.hlist : null;
 }
 
@@ -2219,10 +2251,11 @@ function layoutScriptList(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   if (!result.supported) {
     return null;
   }
@@ -2236,10 +2269,11 @@ function layoutLimitList(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? result.hlist : null;
 }
 
@@ -2298,10 +2332,11 @@ function superscriptShiftUp(
   sup: TexMathHList,
   initialShiftUp: number,
   style: TexMathStyle,
+  cramped: boolean,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): number {
-  let shiftUp = Math.max(initialShiftUp, superscriptMinimumShift(fontProfile, style, baseAtPt));
+  let shiftUp = Math.max(initialShiftUp, superscriptMinimumShift(fontProfile, style, cramped, baseAtPt));
   shiftUp = Math.max(shiftUp, sup.depth + mathXHeight(fontProfile, style, baseAtPt) / 4);
   return roundTexPt(shiftUp);
 }
@@ -2324,10 +2359,11 @@ function combinedScriptShifts(
   sub: TexMathHList,
   initialShifts: { readonly shiftUp: number; readonly shiftDown: number },
   style: TexMathStyle,
+  cramped: boolean,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): { readonly shiftUp: number; readonly shiftDown: number } {
-  let shiftUp = superscriptShiftUp(sup, initialShifts.shiftUp, style, fontProfile, baseAtPt);
+  let shiftUp = superscriptShiftUp(sup, initialShifts.shiftUp, style, cramped, fontProfile, baseAtPt);
   let shiftDown = subscriptShiftDown(sub, initialShifts.shiftDown, true, style, fontProfile, baseAtPt);
   const defaultRuleThickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
   const clearance = 4 * defaultRuleThickness - ((shiftUp - sup.depth) - (sub.height - shiftDown));
@@ -2363,8 +2399,12 @@ function initialScriptShifts(
 function superscriptMinimumShift(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: number
 ): number {
+  if (cramped) {
+    return mathParameterToPt(fontProfile, "sup3", style, baseAtPt);
+  }
   if (style === "display") {
     return mathParameterToPt(fontProfile, "sup1", style, baseAtPt);
   }
@@ -2381,6 +2421,7 @@ function mathParameterToPt(
     | "denom2"
     | "sup1"
     | "sup2"
+    | "sup3"
     | "sub1"
     | "sub2"
     | "supDrop"
@@ -2491,6 +2532,7 @@ function mathParameterFontdimenName(
     | "denom2"
     | "sup1"
     | "sup2"
+    | "sup3"
     | "sub1"
     | "sub2"
     | "supDrop"
