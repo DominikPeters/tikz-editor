@@ -803,6 +803,45 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out TeX infix fractions through the generalized fraction path", () => {
+    const over = layout(String.raw`1 \over 2`);
+    expect(over.supported).toBe(true);
+    expect(over.hlist?.items.map((item) => item.kind)).toEqual(["hlist", "rule", "hlist"]);
+    expect(over.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "fraction-rule",
+      height: expect.closeTo(0.39999, 6),
+    });
+
+    const choose = layout(String.raw`n \choose k`);
+    expect(choose.supported).toBe(true);
+    expect(choose.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
+    expect(choose.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 0,
+    });
+    expect(choose.hlist?.items[2]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 1,
+    });
+
+    const brack = layout(String.raw`n \brack k`);
+    expect(brack.supported).toBe(true);
+    expect(brack.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 2,
+    });
+
+    const overWithDelims = layout(String.raw`1 \overwithdelims [ ] 2`);
+    expect(overWithDelims.supported).toBe(true);
+    expect(overWithDelims.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
+    expect((overWithDelims.hlist?.items[1] as TexMathChildHListLayoutItem | undefined)?.items)
+      .toContainEqual(expect.objectContaining({ kind: "rule", role: "fraction-rule" }));
+  });
+
   it("lays out TeX overline and underline noads with TeX rule spacing", () => {
     const overline = layout(String.raw`\overline{x}`);
 

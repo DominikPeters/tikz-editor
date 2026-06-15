@@ -12,6 +12,7 @@ export type TexMathStyle =
   | "scriptscript";
 
 export type TexMathDiagnosticCode =
+  | "ambiguous-infix-fraction"
   | "duplicate-script"
   | "empty-script"
   | "invalid-environment-nesting"

@@ -166,6 +166,111 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses TeX infix over as a generalized fraction over the current list", () => {
+    const source = String.raw`a+b \over c+d`;
+    const result = parseTexMath(source, { sourceOffset: 7 });
+    const fraction = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(1);
+    expect(fraction).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 7, end: 20 },
+      nucleus: {
+        kind: "fraction",
+        sourceSpan: { start: 7, end: 20 },
+      },
+    });
+    if (fraction.nucleus.kind !== "fraction") {
+      return;
+    }
+    expect(fraction.nucleus.numerator.sourceSpan).toEqual({ start: 7, end: 10 });
+    expect(fraction.nucleus.numerator.items).toHaveLength(3);
+    expect(fraction.nucleus.denominator.sourceSpan).toEqual({ start: 17, end: 20 });
+    expect(fraction.nucleus.denominator.items).toHaveLength(3);
+  });
+
+  it("parses TeX zero-rule infix fractions and delimited variants", () => {
+    const choose = atomAt(parseTexMath(String.raw`n \choose k`), 0);
+    const atop = atomAt(parseTexMath(String.raw`a \atop b`), 0);
+    const brack = atomAt(parseTexMath(String.raw`n \brack k`), 0);
+    const brace = atomAt(parseTexMath(String.raw`n \brace k`), 0);
+    const overWithDelims = atomAt(parseTexMath(String.raw`1 \overwithdelims [ ] 2`), 0);
+    const atopWithDelims = atomAt(parseTexMath(String.raw`1 \atopwithdelims \lbrace \rbrace 2`), 0);
+
+    expect(choose.nucleus).toMatchObject({
+      kind: "fraction",
+      leftDelimiter: "(",
+      rightDelimiter: ")",
+      ruleThickness: 0,
+    });
+    expect(atop.nucleus).toMatchObject({
+      kind: "fraction",
+      ruleThickness: 0,
+    });
+    expect(brack.nucleus).toMatchObject({
+      kind: "fraction",
+      leftDelimiter: "[",
+      rightDelimiter: "]",
+      ruleThickness: 0,
+    });
+    expect(brace.nucleus).toMatchObject({
+      kind: "fraction",
+      leftDelimiter: "lbrace",
+      rightDelimiter: "rbrace",
+      ruleThickness: 0,
+    });
+    expect(overWithDelims.nucleus).toMatchObject({
+      kind: "fraction",
+      leftDelimiter: "[",
+      rightDelimiter: "]",
+    });
+    expect(atopWithDelims.nucleus).toMatchObject({
+      kind: "fraction",
+      leftDelimiter: "lbrace",
+      rightDelimiter: "rbrace",
+      ruleThickness: 0,
+    });
+  });
+
+  it("keeps infix fractions scoped to their containing group or script", () => {
+    const result = parseTexMath(String.raw`X_{n \choose k}+1`);
+    const base = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(3);
+    expect(base.subscript?.list.items).toHaveLength(1);
+    const subscriptFraction = base.subscript?.list.items[0];
+    expect(subscriptFraction).toMatchObject({
+      kind: "atom",
+      sourceSpan: { start: 3, end: 14 },
+      nucleus: {
+        kind: "fraction",
+        numerator: { sourceSpan: { start: 3, end: 4 } },
+        denominator: { sourceSpan: { start: 13, end: 14 } },
+      },
+    });
+  });
+
+  it("reports ambiguous repeated TeX infix fractions in the same list", () => {
+    const result = parseTexMath(String.raw`1 \over 2 \over 3`);
+    const fraction = atomAt(result, 0);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "ambiguous-infix-fraction",
+      message: String.raw`Ambiguous use of \over.`,
+      sourceSpan: { start: 10, end: 15 },
+    });
+    expect(fraction.nucleus).toMatchObject({
+      kind: "fraction",
+    });
+    if (fraction.nucleus.kind !== "fraction") {
+      return;
+    }
+    expect(fraction.nucleus.denominator.items).toHaveLength(3);
+  });
+
   it("parses math accents with braced and single-atom bases", () => {
     const result = parseTexMath(String.raw`\hat{x}+\vec y`);
     const hat = atomAt(result, 0);

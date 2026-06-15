@@ -33,9 +33,19 @@ interface ParseListOptions {
   readonly stopAtAlignmentTab?: boolean;
   readonly stopAtRowBreak?: boolean;
   readonly stopAtEnvironmentEnd?: string;
+  readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
 }
+
+type InfixFractionPrimitive =
+  | "over"
+  | "choose"
+  | "atop"
+  | "brack"
+  | "brace"
+  | "overwithdelims"
+  | "atopwithdelims";
 
 export interface ParseTexMathOptions {
   readonly sourceOffset?: number;
@@ -211,6 +221,21 @@ class TexMathParser {
           items.push(makeUnsupportedItem("<missing-script-target>", spanUnion(token.sourceSpan, script.sourceSpan)));
         }
         continue;
+      }
+      const infixFraction = token.kind === "command" ? infixFractionPrimitive(token.text) : null;
+      if (infixFraction) {
+        if (options.allowInfixFraction === false) {
+          this.addDiagnostic(
+            "error",
+            "ambiguous-infix-fraction",
+            `Ambiguous use of ${token.text}.`,
+            token.sourceSpan
+          );
+          this.advance();
+          items.push(makeUnsupportedItem(token.text, token.sourceSpan));
+          continue;
+        }
+        return this.parseInfixFractionList(items, infixFraction, options);
       }
       const item = this.parseItem(true, options);
       if (item) {
@@ -1186,6 +1211,81 @@ class TexMathParser {
     };
   }
 
+  private parseInfixFractionList(
+    numeratorItems: readonly TexMathItem[],
+    primitive: InfixFractionPrimitive,
+    listOptions: ParseListOptions
+  ): TexMathList {
+    const command = this.advance();
+    const delimiters = this.parseInfixFractionDelimiters(primitive, command.sourceSpan);
+    this.skipSpaces();
+    const denominator = this.parseList({
+      ...listOptions,
+      allowInfixFraction: false,
+    });
+    const numerator = listFromItems(numeratorItems, {
+      start: command.sourceSpan.start,
+      end: command.sourceSpan.start,
+    });
+    const sourceSpan = spanUnion(
+      spanUnion(numerator.sourceSpan, delimiters.sourceSpan ?? command.sourceSpan),
+      denominator.sourceSpan
+    );
+    const fraction = {
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "fraction",
+        numerator,
+        denominator,
+        ...(delimiters.leftDelimiter ? { leftDelimiter: delimiters.leftDelimiter } : {}),
+        ...(delimiters.rightDelimiter ? { rightDelimiter: delimiters.rightDelimiter } : {}),
+        ...(delimiters.ruleThickness !== undefined ? { ruleThickness: delimiters.ruleThickness } : {}),
+        sourceSpan,
+      },
+      sourceSpan,
+    } satisfies TexMathAtom;
+    return {
+      kind: "math-list",
+      items: [fraction],
+      sourceSpan,
+    };
+  }
+
+  private parseInfixFractionDelimiters(
+    primitive: InfixFractionPrimitive,
+    commandSpan: TexMathSourceSpan
+  ): {
+    readonly leftDelimiter?: TexMathDelimiter;
+    readonly rightDelimiter?: TexMathDelimiter;
+    readonly ruleThickness?: number;
+    readonly sourceSpan?: TexMathSourceSpan;
+  } {
+    switch (primitive) {
+      case "choose":
+        return { leftDelimiter: "(", rightDelimiter: ")", ruleThickness: 0 };
+      case "atop":
+        return { ruleThickness: 0 };
+      case "brack":
+        return { leftDelimiter: "[", rightDelimiter: "]", ruleThickness: 0 };
+      case "brace":
+        return { leftDelimiter: "lbrace", rightDelimiter: "rbrace", ruleThickness: 0 };
+      case "overwithdelims":
+      case "atopwithdelims": {
+        const leftDelimiter = this.parseDelimiter(commandSpan, `${primitive} left delimiter`);
+        const rightDelimiter = this.parseDelimiter(commandSpan, `${primitive} right delimiter`);
+        return {
+          ...(leftDelimiter ? { leftDelimiter: leftDelimiter.delimiter } : {}),
+          ...(rightDelimiter ? { rightDelimiter: rightDelimiter.delimiter } : {}),
+          ...(primitive === "atopwithdelims" ? { ruleThickness: 0 } : {}),
+          sourceSpan: spanUnion(leftDelimiter?.sourceSpan ?? commandSpan, rightDelimiter?.sourceSpan ?? commandSpan),
+        };
+      }
+      case "over":
+        return {};
+    }
+  }
+
   private parseMatrixBody(params: {
     readonly beginSourceSpan: TexMathSourceSpan;
     readonly initialSourceSpan: TexMathSourceSpan;
@@ -2066,6 +2166,19 @@ function emptyList(at: number): TexMathList {
   };
 }
 
+function listFromItems(
+  items: readonly TexMathItem[],
+  fallbackSpan: TexMathSourceSpan
+): TexMathList {
+  return {
+    kind: "math-list",
+    items,
+    sourceSpan: items.length > 0
+      ? spanUnion(items[0]?.sourceSpan ?? fallbackSpan, items.at(-1)?.sourceSpan ?? fallbackSpan)
+      : fallbackSpan,
+  };
+}
+
 function makeUnsupportedItem(
   command: string,
   sourceSpan: TexMathSourceSpan
@@ -2322,6 +2435,27 @@ function binomialCommandStyle(command: string): "display" | "text" | undefined |
       return "display";
     case "tbinom":
       return "text";
+    default:
+      return null;
+  }
+}
+
+function infixFractionPrimitive(command: string): InfixFractionPrimitive | null {
+  switch (commandName(command)) {
+    case "over":
+      return "over";
+    case "choose":
+      return "choose";
+    case "atop":
+      return "atop";
+    case "brack":
+      return "brack";
+    case "brace":
+      return "brace";
+    case "overwithdelims":
+      return "overwithdelims";
+    case "atopwithdelims":
+      return "atopwithdelims";
     default:
       return null;
   }
