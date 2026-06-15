@@ -79,7 +79,8 @@ export interface SimpleTexMathNode extends SimpleTexSourceRange {
 export type SimpleTexDisplayMathDelimiter =
   | "bracket"
   | "double-dollar"
-  | "equation-star";
+  | "equation-star"
+  | "align-star";
 
 export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
   readonly kind: "display-math";
@@ -787,6 +788,21 @@ function scanSimpleTexDisplayMath(
         contentStart,
         contentEnd,
         end: contentEnd + equationStarEnd.length,
+      };
+    }
+  }
+
+  const alignStarBegin = String.raw`\begin{align*}`;
+  if (text.startsWith(alignStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const alignStarEnd = String.raw`\end{align*}`;
+    const contentStart = start + alignStarBegin.length;
+    const contentEnd = text.indexOf(alignStarEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "align-star",
+        contentStart,
+        contentEnd,
+        end: contentEnd + alignStarEnd.length,
       };
     }
   }

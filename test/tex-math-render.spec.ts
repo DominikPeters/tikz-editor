@@ -413,4 +413,45 @@ describe("TeX math SVG rendering", () => {
       source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
     )).toEqual(["Alpha", "Beta"]);
   });
+
+  it("lets TeX paragraph layout carry basic align-star display math as a vlist item", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:align-star-display-math-provider",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const display = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "display-math"
+    );
+    expect(display).toMatchObject({
+      itemKind: "display-math",
+      width: expect.any(Number),
+      displayMath: {
+        delimiter: "align-star",
+        contentStart: source.indexOf("a&=b"),
+        contentEnd: source.indexOf(String.raw`\end{align*}`),
+      },
+    });
+    expect(display?.width ?? 0).toBeGreaterThan(0);
+    const directBox = createTexDerivedInlineMathBoxProvider().getDisplayMathBox?.({
+      source,
+      content: String.raw`a&=b\\c&=d`,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{align*}`),
+      sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+    });
+    expect(directBox?.svgBody).toContain('data-tex-math-hlist="true"');
+    expect(directBox?.svgBody).toContain(`data-source-start="${source.indexOf("a&=b")}"`);
+    expect(directBox?.svgBody).toContain(`data-source-start="${source.indexOf("c&=d")}"`);
+    expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
+      source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
+    )).toEqual(["Alpha", "Beta"]);
+  });
 });

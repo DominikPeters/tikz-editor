@@ -49,6 +49,29 @@ export function parseTexMath(
   };
 }
 
+export function parseTexMathAlignedBody(
+  source: string,
+  options: ParseTexMathOptions = {}
+): TexMathParseResult {
+  const sourceOffset = options.sourceOffset ?? 0;
+  const tokens = tokenizeTexMath(source, sourceOffset);
+  const parser = new TexMathParser(tokens, sourceOffset, source.length);
+  const atom = parser.parseAlignedBody({
+    beginSourceSpan: { start: sourceOffset, end: sourceOffset },
+    initialSourceSpan: { start: sourceOffset, end: sourceOffset },
+    allowScripts: false,
+  });
+  return {
+    list: {
+      kind: "math-list",
+      items: [atom],
+      sourceSpan: atom.sourceSpan,
+    },
+    tokens,
+    diagnostics: parser.diagnostics,
+  };
+}
+
 export function tokenizeTexMath(
   source: string,
   sourceOffset = 0
@@ -521,15 +544,32 @@ class TexMathParser {
     environmentName: { name: string; sourceSpan: TexMathSourceSpan },
     allowScripts: boolean
   ): TexMathAtom {
+    return this.parseAlignedBody({
+      beginSourceSpan,
+      initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      stopAtEnvironmentEnd: "aligned",
+      allowScripts,
+    });
+  }
+
+  parseAlignedBody(params: {
+    readonly beginSourceSpan: TexMathSourceSpan;
+    readonly initialSourceSpan: TexMathSourceSpan;
+    readonly stopAtEnvironmentEnd?: string;
+    readonly allowScripts: boolean;
+  }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
     let endSourceSpan: TexMathSourceSpan | undefined;
-    let sourceSpan = spanUnion(beginSourceSpan, environmentName.sourceSpan);
+    let sourceSpan = params.initialSourceSpan;
 
     while (!this.isAtEnd()) {
-      if (this.isEnvironmentEnd("aligned")) {
-        endSourceSpan = this.consumeEnvironmentEnd("aligned");
+      if (params.stopAtEnvironmentEnd && this.isEnvironmentEnd(params.stopAtEnvironmentEnd)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
-        return this.maybeParseScripts(alignedAtom(rows, beginSourceSpan, endSourceSpan, sourceSpan), allowScripts);
+        return this.maybeParseScripts(
+          alignedAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          params.allowScripts
+        );
       }
 
       const cells: TexMathAlignedCell[] = [];
@@ -539,7 +579,7 @@ class TexMathParser {
           stopAtGroupClose: false,
           stopAtAlignmentTab: true,
           stopAtRowBreak: true,
-          stopAtEnvironmentEnd: "aligned",
+          stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
         });
         cells.push({
           list: cellList,
@@ -571,14 +611,17 @@ class TexMathParser {
         });
         continue;
       }
-      if (this.isEnvironmentEnd("aligned")) {
-        endSourceSpan = this.consumeEnvironmentEnd("aligned");
+      if (params.stopAtEnvironmentEnd && this.isEnvironmentEnd(params.stopAtEnvironmentEnd)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         rows.push({
           cells,
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
-        return this.maybeParseScripts(alignedAtom(rows, beginSourceSpan, endSourceSpan, sourceSpan), allowScripts);
+        return this.maybeParseScripts(
+          alignedAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          params.allowScripts
+        );
       }
       if (cells.length > 0) {
         rows.push({
@@ -588,13 +631,18 @@ class TexMathParser {
       }
     }
 
-    this.addDiagnostic(
-      "error",
-      "missing-environment-end",
-      "Expected \\end{aligned} to close math environment.",
-      beginSourceSpan
+    if (params.stopAtEnvironmentEnd) {
+      this.addDiagnostic(
+        "error",
+        "missing-environment-end",
+        `Expected \\end{${params.stopAtEnvironmentEnd}} to close math environment.`,
+        params.beginSourceSpan
+      );
+    }
+    return this.maybeParseScripts(
+      alignedAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
+      params.allowScripts
     );
-    return this.maybeParseScripts(alignedAtom(rows, beginSourceSpan, undefined, sourceSpan), allowScripts);
   }
 
   private parseEnvironmentNameGroup(

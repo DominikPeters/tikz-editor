@@ -11,6 +11,7 @@ import {
 } from "./layout.js";
 import {
   parseTexMath,
+  parseTexMathAlignedBody,
 } from "./parser.js";
 import {
   renderTexMathHListSvgBody,
@@ -57,9 +58,7 @@ function getMathBox(
   if (cached !== undefined) {
     return cached;
   }
-  const parsed = parseTexMath(params.content, {
-    sourceOffset: params.contentStart,
-  });
+  const parsed = parseMathBoxContent(params);
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     cache.set(key, null);
     return null;
@@ -85,4 +84,19 @@ function getMathBox(
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;
+}
+
+function parseMathBoxContent(params: {
+  readonly content: string;
+  readonly delimiter: string;
+  readonly contentStart: number;
+}) {
+  if (params.delimiter === "align-star") {
+    return parseTexMathAlignedBody(params.content, {
+      sourceOffset: params.contentStart,
+    });
+  }
+  return parseTexMath(params.content, {
+    sourceOffset: params.contentStart,
+  });
 }

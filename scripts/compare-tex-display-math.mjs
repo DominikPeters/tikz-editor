@@ -239,7 +239,7 @@ function parseTexTrace(log) {
 }
 
 function texSource(caseSpec) {
-  const amsmathPreamble = caseSpec.source.includes(String.raw`\begin{equation*}`)
+  const amsmathPreamble = requiresAmsmath(caseSpec.source)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
   return String.raw`\documentclass{article}
@@ -250,6 +250,11 @@ function texSource(caseSpec) {
 \directlua{dofile('trace.lua')}
 \end{document}
 `;
+}
+
+function requiresAmsmath(source) {
+  return source.includes(String.raw`\begin{equation*}`) ||
+    source.includes(String.raw`\begin{align*}`);
 }
 
 function traceLuaSource() {
