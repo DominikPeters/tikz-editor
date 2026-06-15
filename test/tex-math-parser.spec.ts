@@ -168,6 +168,35 @@ describe("TeX math parser", () => {
     expect(vec.nucleus.kind === "accent" ? vec.nucleus.base.sourceSpan : null).toEqual({ start: 13, end: 14 });
   });
 
+  it("parses overline and underline as structured line nuclei", () => {
+    const result = parseTexMath(String.raw`\overline{x}+\underline y`, { sourceOffset: 30 });
+    const overline = atomAt(result, 0);
+    const underline = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(overline).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 30, end: 42 },
+      nucleus: {
+        kind: "line",
+        command: "overline",
+        commandSourceSpan: { start: 30, end: 39 },
+        sourceSpan: { start: 30, end: 42 },
+      },
+    });
+    expect(overline.nucleus.kind === "line" ? overline.nucleus.body.sourceSpan : null).toEqual({ start: 40, end: 41 });
+    expect(underline).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 43, end: 55 },
+      nucleus: {
+        kind: "line",
+        command: "underline",
+        commandSourceSpan: { start: 43, end: 53 },
+      },
+    });
+    expect(underline.nucleus.kind === "line" ? underline.nucleus.body.sourceSpan : null).toEqual({ start: 54, end: 55 });
+  });
+
   it("parses plain text commands as source-spanned text nuclei", () => {
     const result = parseTexMath(String.raw`x+\text{if x}`, { sourceOffset: 10 });
     const text = atomAt(result, 2);

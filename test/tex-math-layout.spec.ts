@@ -668,6 +668,80 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out TeX overline and underline noads with TeX rule spacing", () => {
+    const overline = layout(String.raw`\overline{x}`);
+
+    expect(overline.supported).toBe(true);
+    expect(overline.hlist?.width).toBeCloseTo(5.71528, 6);
+    expect(overline.hlist?.height).toBeCloseTo(6.3055, 5);
+    expect(overline.hlist?.depth).toBeCloseTo(0, 6);
+    expect(overline.hlist?.items.map((item) => item.kind)).toEqual(["rule", "hlist"]);
+    expect(overline.hlist?.items[0]).toMatchObject({
+      kind: "rule",
+      role: "overline-rule",
+      x: 0,
+      y: expect.closeTo(-5.90551, 5),
+      width: expect.closeTo(5.71528, 6),
+      height: expect.closeTo(0.39999, 6),
+    });
+    expect(overline.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      x: 0,
+      y: 0,
+    });
+
+    const underline = layout(String.raw`\underline{x}`);
+    expect(underline.supported).toBe(true);
+    expect(underline.hlist?.width).toBeCloseTo(5.71528, 6);
+    expect(underline.hlist?.height).toBeCloseTo(4.30555, 5);
+    expect(underline.hlist?.depth).toBeCloseTo(1.99995, 5);
+    expect(underline.hlist?.items.map((item) => item.kind)).toEqual(["hlist", "rule"]);
+    expect(underline.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "underline-rule",
+      x: 0,
+      y: expect.closeTo(1.19997, 5),
+      width: expect.closeTo(5.71528, 6),
+      height: expect.closeTo(0.39999, 6),
+    });
+  });
+
+  it("matches TeX script placement and scriptspace widening for line noads", () => {
+    const scriptedOverline = layout(String.raw`\overline{x}^2`);
+
+    expect(scriptedOverline.supported).toBe(true);
+    expect(scriptedOverline.hlist?.items.at(-1)).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(5.71528, 6),
+      y: expect.closeTo(-3.833237, 3),
+    });
+
+    const overlineInScript = layout(String.raw`a^{\overline{x}}`);
+    expect(overlineInScript.supported).toBe(true);
+    const overlineSuperscript = overlineInScript.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(overlineSuperscript).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      width: expect.closeTo(5.03474, 5),
+    });
+    expect(overlineSuperscript?.items[0]).toMatchObject({
+      kind: "rule",
+      role: "overline-rule",
+      width: expect.closeTo(5.03474, 5),
+    });
+
+    const underlineInScript = layout(String.raw`a^{\underline{x}}`);
+    expect(underlineInScript.supported).toBe(true);
+    const underlineSuperscript = underlineInScript.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(underlineSuperscript?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "underline-rule",
+      width: expect.closeTo(5.03474, 5),
+    });
+  });
+
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
     const leadingPlus = layout(String.raw`+\frac{x}{m}`);
     expect(leadingPlus.supported).toBe(true);

@@ -124,6 +124,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1863.0603 -414.2878) scale(100)"');
   });
 
+  it("renders overline and underline rules with TeX coordinates", () => {
+    const parsed = parseTexMath(String.raw`\overline{x}+a^{\underline{x}}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-rule="overline-rule"');
+    expect(body).toContain('data-tex-rule="underline-rule"');
+    expect(body).toContain('y="-590.551"');
+    expect(body).toContain('width="571.528"');
+    expect(body).toContain('width="503.474"');
+  });
+
   it("renders text command glyphs through the document text font", () => {
     const parsed = parseTexMath(String.raw`x+\text{if}`);
     const result = layoutTexMathList(parsed.list);

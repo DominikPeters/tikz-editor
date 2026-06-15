@@ -12,6 +12,7 @@ import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
+const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
@@ -46,6 +47,13 @@ const formulas = args.formulas.length > 0
       "\\sqrt{\\frac{1}{2}}",
       "\\sqrt{\\sqrt{\\frac{1}{2}}}",
       "\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}",
+      "\\overline{x}",
+      "\\underline{x}",
+      "\\overline{x+y}",
+      "\\underline{\\frac{1}{2}}",
+      "a^{\\overline{x}}",
+      "a^{\\underline{x}}",
+      "\\overline{x}^2",
       "\\left(x\\right)",
       "\\left(\\frac{1}{2}\\right)",
       "\\left.\\frac{1}{2}\\right]",
@@ -613,7 +621,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group"]
-    : ["atom", "group", "fraction", "binomial", "radical", "left-right", "matrix"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "matrix"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -623,6 +631,8 @@ function randomMathTerm(rng, depth) {
     term = randomBinomialFormula(rng);
   } else if (choice === "radical") {
     term = String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
+  } else if (choice === "line") {
+    term = randomLineFormula(rng);
   } else if (choice === "left-right") {
     term = randomLeftRightFormula(rng);
   } else if (choice === "matrix") {
@@ -635,6 +645,11 @@ function randomMathTerm(rng, depth) {
   return choice === "atom" || choice === "group"
     ? maybeWithScripts(term, rng, depth)
     : term;
+}
+
+function randomLineFormula(rng) {
+  const command = lineCommands[randomInt(rng, lineCommands.length)] ?? String.raw`\overline`;
+  return command + "{" + randomSimpleExpression(rng) + "}";
 }
 
 function randomSimpleExpression(rng) {

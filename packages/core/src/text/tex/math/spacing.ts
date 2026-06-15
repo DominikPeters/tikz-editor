@@ -190,6 +190,12 @@ function normalizeNucleus(nucleus: TexMathNucleus): TexMathNucleus {
       radicand: normalizeTexMathAtomClasses(nucleus.radicand),
     };
   }
+  if (nucleus.kind === "line") {
+    return {
+      ...nucleus,
+      body: normalizeTexMathAtomClasses(nucleus.body),
+    };
+  }
   if (nucleus.kind === "accent") {
     return {
       ...nucleus,

@@ -10,6 +10,7 @@ import type {
   TexMathDelimiter,
   TexMathGlue,
   TexMathItem,
+  TexMathLineCommand,
   TexMathList,
   TexMathMatrixEnvironment,
   TexMathNucleus,
@@ -254,6 +255,10 @@ class TexMathParser {
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
       }
+      const lineCommand = lineCommandName(token.text);
+      if (lineCommand) {
+        return this.parseLine(lineCommand, allowScripts);
+      }
       if (commandName(token.text) === "text") {
         return this.parseText(allowScripts);
       }
@@ -412,6 +417,24 @@ class TexMathParser {
       nucleus: {
         kind: "radical",
         radicand: radicand?.list ?? emptyList(command.sourceSpan.end),
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseLine(commandNameValue: TexMathLineCommand, allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const body = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} body`);
+    const sourceSpan = spanUnion(command.sourceSpan, body?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "line",
+        command: commandNameValue,
+        body: body?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },
       sourceSpan,
@@ -1393,6 +1416,17 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "tilde";
     case "vec":
       return "vec";
+    default:
+      return null;
+  }
+}
+
+function lineCommandName(command: string): TexMathLineCommand | null {
+  switch (commandName(command)) {
+    case "overline":
+      return "overline";
+    case "underline":
+      return "underline";
     default:
       return null;
   }

@@ -20,6 +20,7 @@ import type {
   TexMathAlignedRow,
   TexMathDelimiter,
   TexMathGlyphNucleus,
+  TexMathLineNucleus,
   TexMathList,
   TexMathMatrixEnvironment,
   TexMathMatrixNucleus,
@@ -80,7 +81,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule" | "radical-rule";
+  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -567,6 +568,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "radical") {
     return layoutRadicalNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "line") {
+    return layoutLineNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "accent") {
     return layoutAccentNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -1578,6 +1582,103 @@ function layoutRadicalNucleus(
 }
 
 function layoutRadicandList(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  cramped: boolean,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathHList | null {
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
+}
+
+function layoutLineNucleus(
+  nucleus: TexMathLineNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  cramped: boolean,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
+  if (nucleus.command === "overline") {
+    return layoutOverlineNucleus(nucleus, fontProfile, style, baseAtPt, thickness, alphabet);
+  }
+  return layoutUnderlineNucleus(nucleus, fontProfile, style, cramped, baseAtPt, thickness, alphabet);
+}
+
+function layoutOverlineNucleus(
+  nucleus: TexMathLineNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  thickness: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const body = layoutLineBody(nucleus.body, fontProfile, style, true, baseAtPt, alphabet);
+  if (!body) {
+    return null;
+  }
+  const ruleY = roundTexPt(-(body.height + 4 * thickness));
+  const height = roundTexPt(body.height + 5 * thickness);
+  const rule = {
+    kind: "rule",
+    role: "overline-rule",
+    x: 0,
+    y: ruleY,
+    width: body.width,
+    height: roundTexPt(thickness),
+    sourceSpan: nucleus.commandSourceSpan,
+  } satisfies TexMathRuleLayoutItem;
+  const bodyChild = childHList("nucleus", 0, 0, body, nucleus.body.sourceSpan);
+  return {
+    items: [rule, bodyChild],
+    width: body.width,
+    height,
+    depth: body.depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutUnderlineNucleus(
+  nucleus: TexMathLineNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  cramped: boolean,
+  baseAtPt: number,
+  thickness: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const body = layoutLineBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet);
+  if (!body) {
+    return null;
+  }
+  const ruleY = roundTexPt(body.depth + 3 * thickness);
+  const rule = {
+    kind: "rule",
+    role: "underline-rule",
+    x: 0,
+    y: ruleY,
+    width: body.width,
+    height: roundTexPt(thickness),
+    sourceSpan: nucleus.commandSourceSpan,
+  } satisfies TexMathRuleLayoutItem;
+  const bodyChild = childHList("nucleus", 0, 0, body, nucleus.body.sourceSpan);
+  return {
+    items: [bodyChild, rule],
+    width: body.width,
+    height: body.height,
+    depth: roundTexPt(body.depth + 5 * thickness),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutLineBody(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
@@ -2802,9 +2903,40 @@ function layoutScriptList(
   if (!result.supported) {
     return null;
   }
+  const clean = omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list);
+  const width = roundTexPt(clean.width + TEX_SCRIPT_SPACE_PT);
   return {
-    ...omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list),
-    width: roundTexPt(result.hlist.width + TEX_SCRIPT_SPACE_PT),
+    ...expandSingleLineRuleCleanBox(clean, list, width),
+    width,
+  };
+}
+
+function expandSingleLineRuleCleanBox(
+  hlist: TexMathHList,
+  list: TexMathList,
+  width: number
+): TexMathHList {
+  const item = list.items.length === 1 ? list.items[0] : null;
+  if (
+    item?.kind !== "atom" ||
+    item.subscript ||
+    item.superscript ||
+    item.nucleus.kind !== "line"
+  ) {
+    return hlist;
+  }
+
+  return {
+    ...hlist,
+    items: hlist.items.map((layoutItem) => {
+      if (layoutItem.kind !== "rule" || (layoutItem.role !== "overline-rule" && layoutItem.role !== "underline-rule")) {
+        return layoutItem;
+      }
+      return {
+        ...layoutItem,
+        width,
+      };
+    }),
   };
 }
 

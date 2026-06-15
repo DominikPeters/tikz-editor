@@ -12,6 +12,7 @@ import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
+const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 
 const args = readArgs();
 const generatedDisplayFuzzCases = args.displayFuzzCases > 0
@@ -643,6 +644,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\sqrt{x+1}\] Beta`,
     },
     {
+      id: "display-overline-underline",
+      width: 140,
+      source: String.raw`Alpha \[\overline{x}+\underline{y}\] Beta`,
+    },
+    {
       id: "display-tall-radical",
       width: 160,
       source: String.raw`Alpha \[\sqrt{\frac{1}{2}}\] Beta`,
@@ -757,6 +763,7 @@ function randomAlignmentLeftCell(rng) {
     randomFraction(rng),
     randomBinomial(rng),
     randomRadical(rng),
+    randomLineTerm(rng),
     randomTextTerm(rng),
     randomMatrix(rng),
     `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
@@ -770,6 +777,7 @@ function randomAlignmentRightCell(rng) {
     randomFraction(rng),
     randomBinomial(rng),
     randomRadical(rng),
+    randomLineTerm(rng),
     randomTextTerm(rng),
     randomMatrix(rng),
   ]);
@@ -782,6 +790,7 @@ function randomMathTerm(rng) {
     randomFraction(rng),
     randomBinomial(rng),
     randomRadical(rng),
+    randomLineTerm(rng),
     randomLeftRight(rng),
     randomTextTerm(rng),
     randomMatrix(rng),
@@ -810,6 +819,15 @@ function randomBinomial(rng) {
 
 function randomRadical(rng) {
   return String.raw`\sqrt{` + choice(rng, [
+    randomMathAtom(rng),
+    `${randomMathAtom(rng)}+${randomMathAtom(rng)}`,
+    randomFraction(rng),
+  ]) + "}";
+}
+
+function randomLineTerm(rng) {
+  const command = choice(rng, lineCommands);
+  return command + "{" + choice(rng, [
     randomMathAtom(rng),
     `${randomMathAtom(rng)}+${randomMathAtom(rng)}`,
     randomFraction(rng),
