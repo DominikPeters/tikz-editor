@@ -113,6 +113,29 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses amsmath cfrac with TeX optional numerator alignment", () => {
+    const result = parseTexMath(String.raw`\cfrac{a}{bbb}+\cfrac[l]{a}{bbb}+\cfrac[r]{a}{bbb}+\cfrac[c]{a}{bbb}`);
+
+    expect(result.diagnostics).toEqual([]);
+    const fractions = result.list.items.filter((item) =>
+      item.kind === "atom" && item.nucleus.kind === "fraction"
+    );
+    expect(fractions.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "fraction"
+        ? {
+            sourceSpan: item.sourceSpan,
+            style: item.nucleus.style,
+            alignment: item.nucleus.continued?.numeratorAlignment,
+          }
+        : null
+    )).toEqual([
+      { sourceSpan: { start: 0, end: 14 }, style: "display", alignment: "center" },
+      { sourceSpan: { start: 15, end: 32 }, style: "display", alignment: "left" },
+      { sourceSpan: { start: 33, end: 50 }, style: "display", alignment: "right" },
+      { sourceSpan: { start: 51, end: 68 }, style: "display", alignment: "center" },
+    ]);
+  });
+
   it("parses binomial commands as TeX generalized fractions", () => {
     const source = String.raw`\binom{n}{k}+\dbinom{n}{k}+\tbinom{n}{k}`;
     const result = parseTexMath(source, { sourceOffset: 4 });

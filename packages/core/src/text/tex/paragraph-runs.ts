@@ -293,22 +293,24 @@ interface TexMathBoxFragment {
 }
 
 function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
+  const contentStart = box.contentStart;
+  const contentEnd = box.contentEnd;
   const breakpoints = (box.breakpoints ?? [])
     .filter((breakpoint) =>
       Number.isFinite(breakpoint.x) &&
       breakpoint.x > 0 &&
       breakpoint.x < box.width &&
-      breakpoint.sourceOffset > box.sourceStart &&
-      breakpoint.sourceOffset < box.sourceEnd
+      breakpoint.sourceOffset > contentStart &&
+      breakpoint.sourceOffset < contentEnd
     )
     .sort((a, b) => a.x - b.x);
   if (breakpoints.length === 0) {
-    return [{ box, sourceStart: box.sourceStart, sourceEnd: box.sourceEnd }];
+    return [{ box, sourceStart: contentStart, sourceEnd: contentEnd }];
   }
 
   const fragments: TexMathBoxFragment[] = [];
   let previousX = 0;
-  let previousSource = box.sourceStart;
+  let previousSource = contentStart;
   for (const breakpoint of breakpoints) {
     const fragment = mathBoxFragment(box, previousX, breakpoint.x, previousSource, breakpoint.sourceOffset);
     if (fragment) {
@@ -327,18 +329,18 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
     previousSource = breakpoint.sourceOffset;
   }
 
-  const tail = mathBoxFragment(box, previousX, box.width, previousSource, box.sourceEnd);
+  const tail = mathBoxFragment(box, previousX, box.width, previousSource, contentEnd);
   if (tail) {
     fragments.push({
       box: tail,
       sourceStart: previousSource,
-      sourceEnd: box.sourceEnd,
+      sourceEnd: contentEnd,
     });
   }
 
   return fragments.length > 1
     ? fragments
-    : [{ box, sourceStart: box.sourceStart, sourceEnd: box.sourceEnd }];
+    : [{ box, sourceStart: contentStart, sourceEnd: contentEnd }];
 }
 
 function mathBoxFragment(
@@ -360,6 +362,8 @@ function mathBoxFragment(
     ),
     sourceStart,
     sourceEnd,
+    contentStart: sourceStart,
+    contentEnd: sourceEnd,
     width,
     stretch: fragmentMathFlex(box, xStart, xEnd, "stretch"),
     shrink: fragmentMathFlex(box, xStart, xEnd, "shrink"),

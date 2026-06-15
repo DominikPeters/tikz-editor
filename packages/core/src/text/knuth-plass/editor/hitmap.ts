@@ -1951,6 +1951,12 @@ function alignSegmentsToSource(
       const segment = line.segments[segmentIndex];
       const explicitRange = explicitSegmentSourceRange(segment, sourceText);
       if (explicitRange) {
+        if (
+          explicitRange.sourceKind === 'math' &&
+          isTransparentMathFragmentSeparator(segment)
+        ) {
+          continue;
+        }
         const mathSpan = explicitRange.sourceKind === 'math'
           ? mathSpanByRange.get(`${explicitRange.rawStart}:${explicitRange.rawEnd}`)
           : undefined;
@@ -2254,7 +2260,7 @@ function isTransparentMathFragmentSeparator(
   }
   const rawStart = Number(segment.sourceStartRaw);
   const rawEnd = Number(segment.sourceEndRaw);
-  return Math.abs(Number(segment.width) || 0) <= EPSILON &&
+  return segment.sourceKind === 'math' &&
     Number.isFinite(rawStart) &&
     rawStart === rawEnd;
 }

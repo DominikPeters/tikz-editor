@@ -719,6 +719,39 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out amsmath cfrac with display style, numerator alignment, and trailing kern", () => {
+    const centered = layout(String.raw`\cfrac{a}{bbb}`);
+    const left = layout(String.raw`\cfrac[l]{a}{bbb}`);
+    const right = layout(String.raw`\cfrac[r]{a}{bbb}`);
+    const display = layout(String.raw`\dfrac{a}{bbb}`);
+
+    expect(centered.supported).toBe(true);
+    expect(left.supported).toBe(true);
+    expect(right.supported).toBe(true);
+    expect(display.supported).toBe(true);
+    expect(centered.hlist?.height ?? 0).toBeGreaterThan(display.hlist?.height ?? 0);
+    expect(centered.hlist?.items.at(-1)).toMatchObject({
+      kind: "kern",
+      reason: "fraction-kern",
+      width: expect.closeTo(-1.2, 6),
+    });
+
+    const centeredNumerator = centered.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const leftNumerator = left.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const rightNumerator = right.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(leftNumerator).toMatchObject({
+      kind: "hlist",
+      x: expect.closeTo(1.2, 6),
+      items: [{ kind: "glyph", fontId: "cmmi10", code: 97 }],
+    });
+    expect(centeredNumerator?.x ?? 0).toBeGreaterThan(leftNumerator?.x ?? 0);
+    expect(rightNumerator?.x ?? 0).toBeGreaterThan(centeredNumerator?.x ?? 0);
+    expect(rightNumerator).toMatchObject({
+      kind: "hlist",
+      items: [{ kind: "glyph", fontId: "cmmi10", code: 97 }],
+    });
+  });
+
   it("lays out binomial commands as zero-rule generalized fractions with TeX delimiters", () => {
     const binom = layout(String.raw`\binom{n}{k}`);
 

@@ -145,6 +145,20 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(2082.2288 -393.732) scale(70)"');
   });
 
+  it("renders amsmath cfrac through display-style TeX fraction layout", () => {
+    const parsed = parseTexMath(String.raw`\cfrac[l]{a}{bbb}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-rule="fraction-rule"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
+  });
+
   it("renders math accents through TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`\vec{x}+\hat{\frac{1}{2}}`);
     const result = layoutTexMathList(parsed.list);
@@ -606,7 +620,7 @@ describe("TeX math SVG rendering", () => {
     expect(result.report?.lines.map((line) =>
       line.segments.map((segment) => segment.text ?? "").join("")
     )).toEqual([
-      String.raw`One $x+y=m+n$`,
+      "One x+y=m+n",
       "two three.",
     ]);
   });
@@ -939,7 +953,7 @@ describe("TeX math SVG rendering", () => {
     expect(mathSegments.map((segment) => source.slice(
       segment.sourceStartRaw ?? 0,
       segment.sourceEndRaw ?? 0
-    )).join("")).toBe("$x-y$");
+    )).join("")).toBe("x-y");
     expect(mathAdvanceSegments[1]).toMatchObject({
       kind: "space",
       text: "",
@@ -949,14 +963,14 @@ describe("TeX math SVG rendering", () => {
       width: 2.222229,
     });
     expect(mathSegments[0]).toMatchObject({
-      sourceStartRaw: source.indexOf("$x-y$"),
+      sourceStartRaw: source.indexOf("x-y"),
       sourceEndRaw: source.indexOf("-") + 1,
       sourceKind: "math",
       mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
     });
     expect(mathSegments[1]).toMatchObject({
       sourceStartRaw: source.indexOf("-") + 1,
-      sourceEndRaw: source.indexOf("$x-y$") + "$x-y$".length,
+      sourceEndRaw: source.indexOf("x-y") + "x-y".length,
       sourceKind: "math",
       mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
     });
@@ -1024,8 +1038,8 @@ describe("TeX math SVG rendering", () => {
         source.slice(segment.sourceStartRaw ?? 0, segment.sourceEndRaw ?? 0)
       ).join("")
     )).toEqual([
-      String.raw`Alpha $a+b=`,
-      String.raw`c+d$ omega`,
+      "Alpha a+b=",
+      "c+d omega",
     ]);
     const mathSegmentsByLine = result.report?.lines.map((line) =>
       line.segments.filter((segment) => segment.kind === "math")
@@ -1035,8 +1049,8 @@ describe("TeX math SVG rendering", () => {
         source.slice(segment.sourceStartRaw ?? 0, segment.sourceEndRaw ?? 0)
       ).join("")
     )).toEqual([
-      String.raw`$a+b=`,
-      String.raw`c+d$`,
+      "a+b=",
+      "c+d",
     ]);
     expect(mathSegmentsByLine?.flat().every((segment) =>
       segment.mathSvgBody?.includes("data-tex-math-hlist")

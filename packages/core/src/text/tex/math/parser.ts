@@ -286,6 +286,9 @@ class TexMathParser {
           sourceSpan: token.sourceSpan,
         };
       }
+      if (commandName(token.text) === "cfrac") {
+        return this.parseContinuedFraction(allowScripts);
+      }
       const fractionStyle = fractionCommandStyle(token.text);
       if (fractionStyle !== null) {
         return this.parseFraction(fractionStyle, allowScripts);
@@ -433,6 +436,33 @@ class TexMathParser {
       numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
       ...(style ? { style } : {}),
+      sourceSpan,
+    };
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus,
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseContinuedFraction(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const alignmentOption = this.consumeOptionalCfracAlignment();
+    const numerator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} numerator`);
+    const denominator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} denominator`);
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      denominator?.sourceSpan ?? numerator?.sourceSpan ?? alignmentOption?.sourceSpan ?? command.sourceSpan
+    );
+    const nucleus: TexMathNucleus = {
+      kind: "fraction",
+      numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
+      denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
+      style: "display",
+      continued: {
+        numeratorAlignment: alignmentOption?.alignment ?? "center",
+      },
       sourceSpan,
     };
     return this.maybeParseScripts({
@@ -1898,6 +1928,33 @@ class TexMathParser {
       sourceSpan = spanUnion(sourceSpan, this.advance().sourceSpan);
     }
     return sourceSpan;
+  }
+
+  private consumeOptionalCfracAlignment(): {
+    readonly alignment: "left" | "center" | "right";
+    readonly sourceSpan: TexMathSourceSpan;
+  } | null {
+    this.skipSpaces();
+    const open = this.peek();
+    if (open?.kind !== "character" || open.text !== "[") {
+      return null;
+    }
+    this.advance();
+    let sourceSpan = open.sourceSpan;
+    let value = "";
+    while (!this.isAtEnd()) {
+      const token = this.advance();
+      sourceSpan = spanUnion(sourceSpan, token.sourceSpan);
+      if (token.kind === "character" && token.text === "]") {
+        break;
+      }
+      value += token.text;
+    }
+    const trimmed = value.trim();
+    return {
+      alignment: trimmed === "l" ? "left" : trimmed === "r" ? "right" : "center",
+      sourceSpan,
+    };
   }
 
   private parseEnvironmentNameGroup(

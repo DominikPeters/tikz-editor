@@ -54,6 +54,8 @@ export interface TexMathBox {
   readonly content: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
   readonly width: number;
   readonly height: number;
   readonly depth: number;

@@ -526,12 +526,13 @@ describe("mathjax node text engine", () => {
     const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
     const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
     expect(report?.runs.some((run) => run.kind === "math")).toBe(true);
-    const mathSegment = report?.lines.flatMap((line) => line.segments)
-      .find((segment) => segment.kind === "math" && segment.sourceKind === "math");
-    expect(mathSegment).toMatchObject({
-      text: "x-y",
-      width: expect.closeTo(23.199158, 6),
-    });
+    const mathSegments = report?.lines.flatMap((line) => line.segments)
+      .filter((segment) => segment.kind === "math" && segment.sourceKind === "math") ?? [];
+    const mathWidthSegments = report?.lines.flatMap((line) => line.segments)
+      .filter((segment) => segment.sourceKind === "math") ?? [];
+    expect(mathSegments.map((segment) => segment.text).join("")).toBe("x-y");
+    expect(mathWidthSegments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(23.199158, 6);
+    const mathSegment = mathSegments[0];
     expect(mathSegment?.mathSvgBody).toContain('data-tex-math-hlist="true"');
     expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
     const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";

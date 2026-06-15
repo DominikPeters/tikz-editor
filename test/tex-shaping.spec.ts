@@ -236,6 +236,8 @@ function makeFakeInlineMathBoxProvider(
       content: params.content,
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
+      contentStart: params.contentStart,
+      contentEnd: params.contentEnd,
       width: widthForContent(params.content),
       height: 7,
       depth: 2,
@@ -3836,20 +3838,21 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
     const mathSegments = report?.lines[0]?.segments.filter((segment) => segment.kind === "math") ?? [];
-    const mathSourceStart = sourceText.indexOf("$x-y$");
-    const mathSourceEnd = mathSourceStart + "$x-y$".length;
-    const mathCaretStops = Array.from({ length: mathSourceEnd - mathSourceStart + 1 }, () => Number.NaN);
+    const mathContentStart = sourceText.indexOf("x-y");
+    const mathContentEnd = mathContentStart + "x-y".length;
+    const mathCaretStops = new Map<number, number>();
     for (const segment of mathSegments) {
-      const rawStart = segment.sourceStartRaw ?? mathSourceStart;
+      const rawStart = segment.sourceStartRaw ?? mathContentStart;
       for (const [index, stop] of (segment.caretStops ?? []).entries()) {
-        const targetIndex = rawStart + index - mathSourceStart;
-        if (targetIndex >= 0 && targetIndex < mathCaretStops.length) {
-          mathCaretStops[targetIndex] = stop;
+        const rawOffset = rawStart + index;
+        if (rawOffset >= mathContentStart && rawOffset <= mathContentEnd) {
+          mathCaretStops.set(rawOffset, stop);
         }
       }
     }
-    expect(mathCaretStops.every((stop) => Number.isFinite(stop))).toBe(true);
-    expect(mathCaretStops).toHaveLength("$x-y$".length + 1);
+    for (let offset = mathContentStart; offset <= mathContentEnd; offset += 1) {
+      expect(Number.isFinite(mathCaretStops.get(offset))).toBe(true);
+    }
 
     const outputJax = {
       tex2svg: () => {
@@ -3876,7 +3879,7 @@ describe("simple TeX paragraph layout", () => {
       kind: "math",
       snappedToMathPrefix: false,
     });
-    expect(point.lineLocalX).toBeCloseTo(mathCaretStops[2] ?? 0, 6);
+    expect(point.lineLocalX).toBeCloseTo(mathCaretStops.get(offsetBeforeMinus) ?? 0, 6);
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
       paragraphId: "tex:inline-math-real-hitmap",

@@ -82,7 +82,7 @@ export interface TexMathKernLayoutItem {
   readonly kind: "kern";
   readonly x: number;
   readonly width: number;
-  readonly reason: "italic-correction" | "operator-kern" | "text-kern";
+  readonly reason: "fraction-kern" | "italic-correction" | "operator-kern" | "text-kern";
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -192,6 +192,8 @@ type ResolvedMathSymbolPart = ResolvedMathGlyph | {
 
 const TEX_SCRIPT_SPACE_PT = 0.5;
 const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
+const TEX_LATEX_STRUT_HEIGHT_PT = 8.39996;
+const TEX_LATEX_STRUT_DEPTH_PT = 3.60004;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
@@ -2070,7 +2072,14 @@ function layoutFractionNucleus(
     return null;
   }
 
-  const fractionWidth = roundTexPt(Math.max(numerator.width, denominator.width));
+  const numeratorWithStrut = nucleus.continued
+    ? hlistWithMinimumHeightDepth(
+      numerator,
+      TEX_LATEX_STRUT_HEIGHT_PT * (baseAtPt / 10),
+      TEX_LATEX_STRUT_DEPTH_PT * (baseAtPt / 10)
+    )
+    : numerator;
+  const fractionWidth = roundTexPt(Math.max(numeratorWithStrut.width, denominator.width));
   const leftDelimiter = nucleus.leftDelimiter ?? ".";
   const rightDelimiter = nucleus.rightDelimiter ?? ".";
   const hasVisibleDelimiters = leftDelimiter !== "." || rightDelimiter !== ".";
@@ -2090,7 +2099,7 @@ function layoutFractionNucleus(
 
   if (thickness === 0) {
     const clearance = fractionStyle === "display" ? 7 * defaultRuleThickness : 3 * defaultRuleThickness;
-    const delta = (clearance - ((shiftUp - numerator.depth) - (denominator.height - shiftDown))) / 2;
+    const delta = (clearance - ((shiftUp - numeratorWithStrut.depth) - (denominator.height - shiftDown))) / 2;
     if (delta > 0) {
       shiftUp += delta;
       shiftDown += delta;
@@ -2098,7 +2107,7 @@ function layoutFractionNucleus(
   } else {
     const halfThickness = thickness / 2;
     const clearance = fractionStyle === "display" ? 3 * thickness : thickness;
-    const delta1 = clearance - ((shiftUp - numerator.depth) - (axis + halfThickness));
+    const delta1 = clearance - ((shiftUp - numeratorWithStrut.depth) - (axis + halfThickness));
     const delta2 = clearance - ((axis - halfThickness) - (denominator.height - shiftDown));
     if (delta1 > 0) {
       shiftUp += delta1;
@@ -2108,15 +2117,20 @@ function layoutFractionNucleus(
     }
   }
 
-  const reboxedNumerator = reboxSingleCharacterItalicCorrection(numerator, fractionWidth);
+  const reboxedNumerator = reboxSingleCharacterItalicCorrection(numeratorWithStrut, fractionWidth);
   const reboxedDenominator = reboxSingleCharacterItalicCorrection(denominator, fractionWidth);
+  const numeratorX = numeratorAlignmentOffset(
+    nucleus.continued?.numeratorAlignment ?? "center",
+    fractionWidth,
+    numeratorWithStrut.width
+  );
 
   const numeratorChild = childHList(
     "nucleus",
-    bodyX + (fractionWidth - numerator.width) / 2,
+    bodyX + numeratorX,
     -shiftUp,
     reboxedNumerator,
-    numerator.sourceSpan
+    numeratorWithStrut.sourceSpan
   );
   const denominatorChild = childHList(
     "nucleus",
@@ -2140,7 +2154,7 @@ function layoutFractionNucleus(
   bodyItems.push(denominatorChild);
 
   const bodyWidth = roundTexPt(fractionWidth + (hasVisibleDelimiters ? 0 : 2 * TEX_NULL_DELIMITER_SPACE_PT));
-  const height = roundTexPt(shiftUp + numerator.height);
+  const height = roundTexPt(shiftUp + numeratorWithStrut.height);
   const depth = roundTexPt(denominator.depth + shiftDown);
 
   if (hasVisibleDelimiters) {
@@ -2158,9 +2172,19 @@ function layoutFractionNucleus(
     });
   }
 
+  if (nucleus.continued) {
+    bodyItems.push({
+      kind: "kern",
+      x: bodyWidth,
+      width: -TEX_NULL_DELIMITER_SPACE_PT,
+      reason: "fraction-kern",
+      sourceSpan: nucleus.sourceSpan,
+    });
+  }
+
   return {
     items: bodyItems,
-    width: bodyWidth,
+    width: roundTexPt(bodyWidth + (nucleus.continued ? -TEX_NULL_DELIMITER_SPACE_PT : 0)),
     height,
     depth,
     italicCorrection: 0,
@@ -2260,6 +2284,32 @@ function layoutFractionList(
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
+}
+
+function hlistWithMinimumHeightDepth(
+  hlist: TexMathHList,
+  minHeight: number,
+  minDepth: number
+): TexMathHList {
+  return {
+    ...hlist,
+    height: roundTexPt(Math.max(hlist.height, minHeight)),
+    depth: roundTexPt(Math.max(hlist.depth, minDepth)),
+  };
+}
+
+function numeratorAlignmentOffset(
+  alignment: "left" | "center" | "right",
+  fractionWidth: number,
+  numeratorWidth: number
+): number {
+  if (alignment === "left") {
+    return 0;
+  }
+  if (alignment === "right") {
+    return roundTexPt(fractionWidth - numeratorWidth);
+  }
+  return roundTexPt((fractionWidth - numeratorWidth) / 2);
 }
 
 function layoutRadicalNucleus(
