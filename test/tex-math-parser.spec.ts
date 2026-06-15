@@ -87,6 +87,59 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses binomial commands as TeX generalized fractions", () => {
+    const source = String.raw`\binom{n}{k}+\dbinom{n}{k}+\tbinom{n}{k}`;
+    const result = parseTexMath(source, { sourceOffset: 4 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(5);
+
+    const binom = atomAt(result, 0);
+    expect(binom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 4, end: 16 },
+      nucleus: {
+        kind: "fraction",
+        leftDelimiter: "(",
+        rightDelimiter: ")",
+        ruleThickness: 0,
+        sourceSpan: { start: 4, end: 16 },
+      },
+    });
+    if (binom.nucleus.kind !== "fraction") {
+      return;
+    }
+    expect(binom.nucleus.style).toBeUndefined();
+    expect(binom.nucleus.numerator.sourceSpan).toEqual({ start: 11, end: 12 });
+    expect(binom.nucleus.denominator.sourceSpan).toEqual({ start: 14, end: 15 });
+
+    const dbinom = atomAt(result, 2);
+    expect(dbinom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 17, end: 30 },
+      nucleus: {
+        kind: "fraction",
+        style: "display",
+        leftDelimiter: "(",
+        rightDelimiter: ")",
+        ruleThickness: 0,
+      },
+    });
+
+    const tbinom = atomAt(result, 4);
+    expect(tbinom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 31, end: 44 },
+      nucleus: {
+        kind: "fraction",
+        style: "text",
+        leftDelimiter: "(",
+        rightDelimiter: ")",
+        ruleThickness: 0,
+      },
+    });
+  });
+
   it("parses math accents with braced and single-atom bases", () => {
     const result = parseTexMath(String.raw`\hat{x}+\vec y`);
     const hat = atomAt(result, 0);

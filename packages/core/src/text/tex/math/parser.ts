@@ -247,6 +247,10 @@ class TexMathParser {
       if (commandName(token.text) === "frac") {
         return this.parseFraction(allowScripts);
       }
+      const binomialStyle = binomialCommandStyle(token.text);
+      if (binomialStyle !== null) {
+        return this.parseBinomial(binomialStyle, allowScripts);
+      }
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
       }
@@ -359,6 +363,35 @@ class TexMathParser {
       kind: "fraction",
       numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
+      sourceSpan,
+    };
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus,
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseBinomial(
+    style: "display" | "text" | undefined,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const numerator = this.parseRequiredGroup(command.sourceSpan, `${command.text} numerator`);
+    const denominator = this.parseRequiredGroup(command.sourceSpan, `${command.text} denominator`);
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      denominator?.sourceSpan ?? numerator?.sourceSpan ?? command.sourceSpan
+    );
+    const nucleus: TexMathNucleus = {
+      kind: "fraction",
+      numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
+      denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
+      leftDelimiter: "(",
+      rightDelimiter: ")",
+      ruleThickness: 0,
+      ...(style ? { style } : {}),
       sourceSpan,
     };
     return this.maybeParseScripts({
@@ -1316,6 +1349,19 @@ function spacingCommandName(command: string): TexMathGlue["command"] | null {
     return name;
   }
   return null;
+}
+
+function binomialCommandStyle(command: string): "display" | "text" | undefined | null {
+  switch (commandName(command)) {
+    case "binom":
+      return undefined;
+    case "dbinom":
+      return "display";
+    case "tbinom":
+      return "text";
+    default:
+      return null;
+  }
 }
 
 function styleCommandName(command: string): TexMathStyle | null {

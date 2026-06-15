@@ -89,6 +89,26 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('height="39.999"');
   });
 
+  it("renders binomial commands with TeX delimiters and no fraction rule", () => {
+    const parsed = parseTexMath(String.raw`\binom{n}{k}+\dbinom{n}{k}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="0"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="1"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="18"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="19"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="110"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="110"');
+    expect(body).not.toContain('data-tex-rule="fraction-rule"');
+    expect(body).toContain('transform="translate(0 -810.007) scale(100)"');
+    expect(body).toContain('transform="translate(2633.2318 -1410.013) scale(100)"');
+  });
+
   it("renders math accents through TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`\vec{x}+\hat{\frac{1}{2}}`);
     const result = layoutTexMathList(parsed.list);

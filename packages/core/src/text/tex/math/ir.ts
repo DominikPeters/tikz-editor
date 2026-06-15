@@ -111,6 +111,10 @@ export interface TexMathFractionNucleus {
   readonly kind: "fraction";
   readonly numerator: TexMathList;
   readonly denominator: TexMathList;
+  readonly leftDelimiter?: TexMathDelimiter;
+  readonly rightDelimiter?: TexMathDelimiter;
+  readonly ruleThickness?: number;
+  readonly style?: "display" | "text";
   readonly sourceSpan: TexMathSourceSpan;
 }
 

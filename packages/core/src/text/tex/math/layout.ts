@@ -318,6 +318,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.list);
   }
   if (nucleus.kind === "fraction") {
+    if (nucleus.leftDelimiter !== undefined || nucleus.rightDelimiter !== undefined || nucleus.style !== undefined) {
+      return true;
+    }
     return texMathListNeedsAmsMath(nucleus.numerator) || texMathListNeedsAmsMath(nucleus.denominator);
   }
   if (nucleus.kind === "radical") {
@@ -1292,18 +1295,20 @@ function layoutFractionNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
+  const fractionStyle = nucleus.style ?? style;
+  const fractionCramped = nucleus.style ? false : cramped;
   const numerator = layoutFractionList(
     nucleus.numerator,
     fontProfile,
-    numeratorStyle(style),
-    cramped,
+    numeratorStyle(fractionStyle),
+    fractionCramped,
     baseAtPt,
     alphabet
   );
   const denominator = layoutFractionList(
     nucleus.denominator,
     fontProfile,
-    denominatorStyle(style),
+    denominatorStyle(fractionStyle),
     true,
     baseAtPt,
     alphabet
@@ -1313,28 +1318,41 @@ function layoutFractionNucleus(
   }
 
   const fractionWidth = roundTexPt(Math.max(numerator.width, denominator.width));
-  const width = roundTexPt(fractionWidth + 2 * TEX_NULL_DELIMITER_SPACE_PT);
-  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
-  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const leftDelimiter = nucleus.leftDelimiter ?? ".";
+  const rightDelimiter = nucleus.rightDelimiter ?? ".";
+  const hasVisibleDelimiters = leftDelimiter !== "." || rightDelimiter !== ".";
+  const bodyX = hasVisibleDelimiters ? 0 : TEX_NULL_DELIMITER_SPACE_PT;
+  const defaultRuleThickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", fractionStyle, baseAtPt);
+  const thickness = nucleus.ruleThickness ?? defaultRuleThickness;
+  const axis = mathParameterToPt(fontProfile, "axisHeight", fractionStyle, baseAtPt);
   let shiftUp: number;
   let shiftDown: number;
-  if (style === "display") {
-    shiftUp = mathParameterToPt(fontProfile, "num1", style, baseAtPt);
-    shiftDown = mathParameterToPt(fontProfile, "denom1", style, baseAtPt);
+  if (fractionStyle === "display") {
+    shiftUp = mathParameterToPt(fontProfile, "num1", fractionStyle, baseAtPt);
+    shiftDown = mathParameterToPt(fontProfile, "denom1", fractionStyle, baseAtPt);
   } else {
-    shiftUp = mathParameterToPt(fontProfile, "num2", style, baseAtPt);
-    shiftDown = mathParameterToPt(fontProfile, "denom2", style, baseAtPt);
+    shiftUp = mathParameterToPt(fontProfile, thickness === 0 ? "num3" : "num2", fractionStyle, baseAtPt);
+    shiftDown = mathParameterToPt(fontProfile, "denom2", fractionStyle, baseAtPt);
   }
 
-  const halfThickness = thickness / 2;
-  const clearance = style === "display" ? 3 * thickness : thickness;
-  const delta1 = clearance - ((shiftUp - numerator.depth) - (axis + halfThickness));
-  const delta2 = clearance - ((axis - halfThickness) - (denominator.height - shiftDown));
-  if (delta1 > 0) {
-    shiftUp += delta1;
-  }
-  if (delta2 > 0) {
-    shiftDown += delta2;
+  if (thickness === 0) {
+    const clearance = fractionStyle === "display" ? 7 * defaultRuleThickness : 3 * defaultRuleThickness;
+    const delta = (clearance - ((shiftUp - numerator.depth) - (denominator.height - shiftDown))) / 2;
+    if (delta > 0) {
+      shiftUp += delta;
+      shiftDown += delta;
+    }
+  } else {
+    const halfThickness = thickness / 2;
+    const clearance = fractionStyle === "display" ? 3 * thickness : thickness;
+    const delta1 = clearance - ((shiftUp - numerator.depth) - (axis + halfThickness));
+    const delta2 = clearance - ((axis - halfThickness) - (denominator.height - shiftDown));
+    if (delta1 > 0) {
+      shiftUp += delta1;
+    }
+    if (delta2 > 0) {
+      shiftDown += delta2;
+    }
   }
 
   const reboxedNumerator = reboxSingleCharacterItalicCorrection(numerator, fractionWidth);
@@ -1342,37 +1360,153 @@ function layoutFractionNucleus(
 
   const numeratorChild = childHList(
     "nucleus",
-    TEX_NULL_DELIMITER_SPACE_PT + (fractionWidth - numerator.width) / 2,
+    bodyX + (fractionWidth - numerator.width) / 2,
     -shiftUp,
     reboxedNumerator,
     numerator.sourceSpan
   );
   const denominatorChild = childHList(
     "nucleus",
-    TEX_NULL_DELIMITER_SPACE_PT + (fractionWidth - denominator.width) / 2,
+    bodyX + (fractionWidth - denominator.width) / 2,
     shiftDown,
     reboxedDenominator,
     denominator.sourceSpan
   );
-  const rule = {
-    kind: "rule",
-    role: "fraction-rule",
-    x: TEX_NULL_DELIMITER_SPACE_PT,
-    y: roundTexPt(-(axis + halfThickness)),
-    width: fractionWidth,
-    height: roundTexPt(thickness),
-    sourceSpan: nucleus.sourceSpan,
-  } satisfies TexMathRuleLayoutItem;
+  const bodyItems: TexMathHListItem[] = [numeratorChild];
+  if (thickness !== 0) {
+    bodyItems.push({
+      kind: "rule",
+      role: "fraction-rule",
+      x: bodyX,
+      y: roundTexPt(-(axis + thickness / 2)),
+      width: fractionWidth,
+      height: roundTexPt(thickness),
+      sourceSpan: nucleus.sourceSpan,
+    } satisfies TexMathRuleLayoutItem);
+  }
+  bodyItems.push(denominatorChild);
+
+  const bodyWidth = roundTexPt(fractionWidth + (hasVisibleDelimiters ? 0 : 2 * TEX_NULL_DELIMITER_SPACE_PT));
+  const height = roundTexPt(shiftUp + numerator.height);
+  const depth = roundTexPt(denominator.depth + shiftDown);
+
+  if (hasVisibleDelimiters) {
+    return wrapFractionWithDelimiters({
+      items: bodyItems,
+      width: bodyWidth,
+      height,
+      depth,
+      leftDelimiter,
+      rightDelimiter,
+      fontProfile,
+      style: fractionStyle,
+      baseAtPt,
+      sourceSpan: nucleus.sourceSpan,
+    });
+  }
 
   return {
-    items: [numeratorChild, rule, denominatorChild],
-    width,
-    height: roundTexPt(shiftUp + numerator.height),
-    depth: roundTexPt(denominator.depth + shiftDown),
+    items: bodyItems,
+    width: bodyWidth,
+    height,
+    depth,
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function wrapFractionWithDelimiters(params: {
+  readonly items: readonly TexMathHListItem[];
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly leftDelimiter: TexMathDelimiter;
+  readonly rightDelimiter: TexMathDelimiter;
+  readonly fontProfile: TexMathFontProfile;
+  readonly style: TexMathStyle;
+  readonly baseAtPt: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}): TexMathAtomLayout | null {
+  const delimiterStyle = delimiterSizeStyle(params.style);
+  const targetHeight = mathParameterToPt(
+    params.fontProfile,
+    params.style === "display" ? "delim1" : "delim2",
+    params.style,
+    params.baseAtPt
+  );
+  const axis = mathParameterToPt(params.fontProfile, "axisHeight", params.style, params.baseAtPt);
+  const left = layoutMathDelimiter(
+    params.leftDelimiter,
+    params.fontProfile,
+    delimiterStyle,
+    params.baseAtPt,
+    targetHeight,
+    axis,
+    params.sourceSpan
+  );
+  const right = layoutMathDelimiter(
+    params.rightDelimiter,
+    params.fontProfile,
+    delimiterStyle,
+    params.baseAtPt,
+    targetHeight,
+    axis,
+    params.sourceSpan
+  );
+  if (!left || !right) {
+    return null;
+  }
+
+  const bodyHList: TexMathHList = {
+    kind: "math-hlist",
+    style: params.style,
+    items: params.items,
+    width: params.width,
+    height: params.height,
+    depth: params.depth,
+    sourceSpan: params.sourceSpan,
+  };
+  const bodyShift = positiveDelimiterShift(left, right);
+  const bodyChild = childHList("nucleus", left.width, bodyShift, bodyHList, params.sourceSpan);
+  const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + params.width), 0);
+  const items = [
+    ...left.items,
+    bodyChild,
+    ...shiftedRight,
+  ];
+  const width = roundTexPt(left.width + params.width + right.width);
+  const height = Math.max(
+    bodyChild.height - bodyChild.y,
+    ...left.items.map((item) => -item.y + item.height),
+    ...shiftedRight.map((item) => -item.y + item.height)
+  );
+  const depth = Math.max(
+    bodyChild.y + bodyChild.depth,
+    ...left.items.map((item) => item.y + item.depth),
+    ...shiftedRight.map((item) => item.y + item.depth)
+  );
+
+  return {
+    items,
+    width,
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: params.sourceSpan,
+  };
+}
+
+function positiveDelimiterShift(
+  left: TexMathDelimiterLayout,
+  right: TexMathDelimiterLayout
+): number {
+  return roundTexPt(Math.max(
+    0,
+    ...left.items.map((item) => item.y),
+    ...right.items.map((item) => item.y)
+  ));
 }
 
 function layoutFractionList(
@@ -1788,20 +1922,29 @@ function layoutMathDelimiter(
   if (!spec) {
     return null;
   }
-  const small = fontProfile.resolveMathFont({
-    family: spec.smallFamily,
-    style,
+  const probeStyles = delimiterProbeStyles(style);
+  const smallCandidate = selectDelimiterFromStyleLadder(
+    fontProfile,
+    spec.smallFamily,
+    spec.smallCode,
+    probeStyles,
     baseAtPt,
-  });
-  const smallCandidate = selectDelimiterFromChain(small, spec.smallFamily, spec.smallCode, targetHeight, sourceSpan);
+    targetHeight,
+    sourceSpan
+  );
   const selected = smallCandidate?.largeEnough
     ? smallCandidate.delimiter
-    : selectDelimiterFromChain(
-      fontProfile.resolveMathFont({ family: "extension", style: "text", baseAtPt }),
-      "extension",
-      spec.largeCode,
-      targetHeight,
-      sourceSpan
+    : largestDelimiterCandidate(
+      smallCandidate,
+      selectDelimiterFromStyleLadder(
+        fontProfile,
+        "extension",
+        spec.largeCode,
+        probeStyles,
+        baseAtPt,
+        targetHeight,
+        sourceSpan
+      )
     )?.delimiter ?? smallCandidate?.delimiter;
   if (!selected) {
     return null;
@@ -1811,6 +1954,77 @@ function layoutMathDelimiter(
     ...selected,
     items: offsetDelimiterItems(selected.items, 0, shift),
   };
+}
+
+function selectDelimiterFromStyleLadder(
+  fontProfile: TexMathFontProfile,
+  family: TexMathFontFamily,
+  code: number,
+  styles: readonly TexMathStyle[],
+  baseAtPt: number,
+  targetHeight: number,
+  sourceSpan: TexMathSourceSpan
+): {
+  readonly delimiter: TexMathDelimiterLayout;
+  readonly largeEnough: boolean;
+} | null {
+  let best: {
+    readonly delimiter: TexMathDelimiterLayout;
+    readonly largeEnough: boolean;
+  } | null = null;
+  for (const style of styles) {
+    const candidate = selectDelimiterFromChain(
+      fontProfile.resolveMathFont({ family, style, baseAtPt }),
+      family,
+      code,
+      targetHeight,
+      sourceSpan
+    );
+    if (!candidate) {
+      continue;
+    }
+    if (candidate.largeEnough) {
+      return candidate;
+    }
+    best = largestDelimiterCandidate(best, candidate);
+  }
+  return best;
+}
+
+function largestDelimiterCandidate(
+  left: {
+    readonly delimiter: TexMathDelimiterLayout;
+    readonly largeEnough: boolean;
+  } | null | undefined,
+  right: {
+    readonly delimiter: TexMathDelimiterLayout;
+    readonly largeEnough: boolean;
+  } | null | undefined
+): {
+  readonly delimiter: TexMathDelimiterLayout;
+  readonly largeEnough: boolean;
+} | null {
+  if (!left) {
+    return right ?? null;
+  }
+  if (!right) {
+    return left;
+  }
+  return delimiterTotalHeight(right.delimiter) > delimiterTotalHeight(left.delimiter) ? right : left;
+}
+
+function delimiterTotalHeight(delimiter: TexMathDelimiterLayout): number {
+  return delimiter.height + delimiter.depth;
+}
+
+function delimiterProbeStyles(style: TexMathStyle): readonly TexMathStyle[] {
+  if (style === "scriptscript") {
+    return ["scriptscript", "script", "text"];
+  }
+  if (style === "script") {
+    return ["script", "text"];
+  }
+  return ["text"];
 }
 
 function delimiterSpec(
@@ -2806,8 +3020,11 @@ function mathParameterToPt(
     | "axisHeight"
     | "num1"
     | "num2"
+    | "num3"
     | "denom1"
     | "denom2"
+    | "delim1"
+    | "delim2"
     | "sup1"
     | "sup2"
     | "sup3"
@@ -2937,8 +3154,11 @@ function mathParameterFontdimenName(
     | "axisHeight"
     | "num1"
     | "num2"
+    | "num3"
     | "denom1"
     | "denom2"
+    | "delim1"
+    | "delim2"
     | "sup1"
     | "sup2"
     | "sup3"

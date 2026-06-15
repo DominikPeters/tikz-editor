@@ -558,6 +558,85 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out binomial commands as zero-rule generalized fractions with TeX delimiters", () => {
+    const binom = layout(String.raw`\binom{n}{k}`);
+
+    expect(binom.supported).toBe(true);
+    expect(binom.hlist?.width).toBeCloseTo(14.11005, 5);
+    expect(binom.hlist?.height).toBeCloseTo(8.50006, 5);
+    expect(binom.hlist?.depth).toBeCloseTo(3.50006, 5);
+    expect(binom.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
+    expect(binom.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 0,
+      x: expect.closeTo(0, 6),
+      y: expect.closeTo(-8.10007, 5),
+    });
+    const body = binom.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(body).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      x: expect.closeTo(4.58336, 5),
+      width: expect.closeTo(4.94333, 5),
+    });
+    expect(body?.items[0]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(-4.43731, 5),
+      items: [{ kind: "glyph", fontId: "cmmi7", code: 110 }],
+    });
+    expect(body?.items[1]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(3.44841, 5),
+    });
+    expect((body?.items[1] as TexMathChildHListLayoutItem | undefined)?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmmi7",
+      code: 107,
+    });
+    expect(binom.hlist?.items[2]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 1,
+      x: expect.closeTo(9.52669, 5),
+      y: expect.closeTo(-8.10007, 5),
+    });
+
+    const displayBinom = layout(String.raw`\dbinom{n}{k}`);
+    expect(displayBinom.supported).toBe(true);
+    expect(displayBinom.hlist?.width).toBeCloseTo(20.72465, 5);
+    expect(displayBinom.hlist?.height).toBeCloseTo(14.50012, 5);
+    expect(displayBinom.hlist?.depth).toBeCloseTo(9.50012, 5);
+    expect(displayBinom.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 18,
+      y: expect.closeTo(-14.10013, 5),
+    });
+    expect(displayBinom.hlist?.items[2]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 19,
+      x: expect.closeTo(13.3635, 5),
+      y: expect.closeTo(-14.10013, 5),
+    });
+    const displayBody = displayBinom.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(displayBody?.items[0]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(-6.76508, 5),
+      items: [{ kind: "glyph", fontId: "cmmi10", code: 110 }],
+    });
+    expect(displayBody?.items[1]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(6.85951, 5),
+    });
+    expect((displayBody?.items[1] as TexMathChildHListLayoutItem | undefined)?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmmi10",
+      code: 107,
+    });
+  });
+
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
     const leadingPlus = layout(String.raw`+\frac{x}{m}`);
     expect(leadingPlus.supported).toBe(true);

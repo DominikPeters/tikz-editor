@@ -11,6 +11,7 @@ import {
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
+const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
@@ -35,6 +36,10 @@ const formulas = args.formulas.length > 0
       "a\\mathinner{b}",
       "\\frac{1}{2}",
       "\\frac{x+y}{2}",
+      "\\binom{n}{k}",
+      "\\dbinom{n}{k}",
+      "\\tbinom{n}{k}",
+      "x+\\binom{n}{k}",
       "x_\\frac{1}{2}",
       "\\sqrt{x}",
       "\\sqrt{x+y}",
@@ -214,7 +219,8 @@ function compareFormula(formula, tolerance) {
 function comparisonItemsForFormula(formula, ours, tex) {
   if (
     formula.includes(String.raw`\begin{aligned}`) ||
-    hasMatrixEnvironment(formula)
+    hasMatrixEnvironment(formula) ||
+    hasBinomialCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -368,6 +374,7 @@ function texTrace(formula) {
 function texSource(formula) {
   const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
     hasMatrixEnvironment(formula) ||
+    hasBinomialCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
@@ -606,12 +613,14 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group"]
-    : ["atom", "group", "fraction", "radical", "left-right", "matrix"];
+    : ["atom", "group", "fraction", "binomial", "radical", "left-right", "matrix"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
     term = String.raw`\frac{` + randomSimpleExpression(rng) + "}{" +
       randomSimpleExpression(rng) + "}";
+  } else if (choice === "binomial") {
+    term = randomBinomialFormula(rng);
   } else if (choice === "radical") {
     term = String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
   } else if (choice === "left-right") {
@@ -665,6 +674,11 @@ function randomMatrixFormula(rng) {
   return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
 }
 
+function randomBinomialFormula(rng) {
+  const command = binomialCommands[randomInt(rng, binomialCommands.length)] ?? String.raw`\binom`;
+  return command + "{" + randomSimpleExpression(rng) + "}{" + randomSimpleExpression(rng) + "}";
+}
+
 function hasMatrixEnvironment(source) {
   return matrixEnvironments.some((environment) =>
     source.includes(String.raw`\begin{` + environment + "}")
@@ -675,13 +689,18 @@ function randomMatrixEnvironment(rng) {
   return matrixEnvironments[randomInt(rng, matrixEnvironments.length)] ?? "matrix";
 }
 
+function hasBinomialCommand(source) {
+  return binomialCommands.some((command) => source.includes(command));
+}
+
 function randomMatrixCell(rng) {
   return [
     randomMathAtom(rng),
     randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
     randomMathAtom(rng) + "^{" + randomMathAtom(rng) + "}",
     String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
-  ][randomInt(rng, 4)] ?? "x";
+    String.raw`\binom{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+  ][randomInt(rng, 5)] ?? "x";
 }
 
 function maybeWithScripts(term, rng, depth) {
@@ -710,6 +729,7 @@ function randomMathScript(rng, depth) {
     randomMathAtom(rng) + "^{" + randomMathAtom(rng) + "}",
     randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
     String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+    String.raw`\binom{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
   ];
   return choices[randomInt(rng, choices.length)] ?? "x";
 }

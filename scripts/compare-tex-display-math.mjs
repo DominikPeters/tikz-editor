@@ -11,6 +11,7 @@ import {
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
+const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 
 const args = readArgs();
 const generatedDisplayFuzzCases = args.displayFuzzCases > 0
@@ -391,6 +392,7 @@ function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
     hasMatrixEnvironment(source) ||
+    hasBinomialCommand(source) ||
     source.includes(String.raw`\text`);
 }
 
@@ -626,6 +628,16 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\frac{1}{2}+x\] Beta`,
     },
     {
+      id: "display-binom",
+      width: 140,
+      source: String.raw`Alpha \[\binom{n}{k}+x\] Beta`,
+    },
+    {
+      id: "display-dbinom-tbinom",
+      width: 160,
+      source: String.raw`Alpha \[\dbinom{n}{k}+\tbinom{n}{k}\] Beta`,
+    },
+    {
       id: "display-radical",
       width: 140,
       source: String.raw`Alpha \[\sqrt{x+1}\] Beta`,
@@ -743,6 +755,7 @@ function randomAlignmentLeftCell(rng) {
     randomMathAtom(rng),
     randomScriptTerm(rng),
     randomFraction(rng),
+    randomBinomial(rng),
     randomRadical(rng),
     randomTextTerm(rng),
     randomMatrix(rng),
@@ -755,6 +768,7 @@ function randomAlignmentRightCell(rng) {
     randomMathAtom(rng),
     randomScriptTerm(rng),
     randomFraction(rng),
+    randomBinomial(rng),
     randomRadical(rng),
     randomTextTerm(rng),
     randomMatrix(rng),
@@ -766,6 +780,7 @@ function randomMathTerm(rng) {
     randomMathAtom(rng),
     randomScriptTerm(rng),
     randomFraction(rng),
+    randomBinomial(rng),
     randomRadical(rng),
     randomLeftRight(rng),
     randomTextTerm(rng),
@@ -786,6 +801,11 @@ function randomScriptTerm(rng) {
 
 function randomFraction(rng) {
   return String.raw`\frac{` + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
+}
+
+function randomBinomial(rng) {
+  const command = choice(rng, binomialCommands);
+  return command + "{" + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
 }
 
 function randomRadical(rng) {
@@ -817,6 +837,7 @@ function randomMatrix(rng) {
         randomMathAtom(rng),
         randomScriptTerm(rng),
         randomFraction(rng),
+        randomBinomial(rng),
       ]));
     }
     rows.push(cells.join("&"));
@@ -828,6 +849,10 @@ function hasMatrixEnvironment(source) {
   return matrixEnvironments.some((environment) =>
     source.includes(String.raw`\begin{` + environment + "}")
   );
+}
+
+function hasBinomialCommand(source) {
+  return binomialCommands.some((command) => source.includes(command));
 }
 
 function randomLargeOperator(rng) {
