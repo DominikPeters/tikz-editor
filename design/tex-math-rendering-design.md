@@ -616,6 +616,9 @@ supported grammar is mostly healthy under the available gates:
   description, nested quote/itemize, and multi-item list contexts;
 - display construct and large display fuzz matrices compare glyphs in
   absolute vbox coordinates and pass at the current 0.03 pt tolerance;
+- display construct matrix covers nested `aligned` and `alignedat`; `alignedat`
+  uses no automatic inter-pair gap, matching AMSMath at the current 0.03 pt
+  tolerance;
 - document-level math glyph matrix compares absolute coordinates for inline
   math, display math, and aligned displays in the same source, including
   explicit `\par` before display math and quote/list/nested vertical contexts,

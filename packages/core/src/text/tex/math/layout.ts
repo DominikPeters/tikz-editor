@@ -1034,8 +1034,8 @@ function layoutAlignedNucleus(
   ).map(roundTexPt);
   const width = roundTexPt(
     columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
-    alignedPairGapCount(columnCount) * TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT +
-    alignedTrailingWidth(concreteRows.length)
+    alignedPairGapCount(columnCount, nucleus.columnSeparation) * TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT +
+    alignedTrailingWidth(concreteRows.length, nucleus.columnSeparation)
   );
   const baselineOffsets = alignedRowBaselineOffsets(concreteRows);
   const lastRow = concreteRows[concreteRows.length - 1];
@@ -1069,7 +1069,7 @@ function layoutAlignedNucleus(
         cell.sourceSpan
       ));
       cursor = roundTexPt(cursor + columnWidth);
-      if (shouldInsertAlignedPairGap(columnIndex, columnCount)) {
+      if (shouldInsertAlignedPairGap(columnIndex, columnCount, nucleus.columnSeparation)) {
         cursor = roundTexPt(cursor + TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT);
       }
     }
@@ -1162,15 +1162,34 @@ function alignedRowBaselineDistance(
   return roundTexPt(naturalDistance + interlineGlue + TEX_AMSMATH_JOT_PT);
 }
 
-function shouldInsertAlignedPairGap(columnIndex: number, columnCount: number): boolean {
+function shouldInsertAlignedPairGap(
+  columnIndex: number,
+  columnCount: number,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"]
+): boolean {
+  if (columnSeparation === "none") {
+    return false;
+  }
   return columnIndex % 2 === 1 && columnIndex < columnCount - 1;
 }
 
-function alignedPairGapCount(columnCount: number): number {
+function alignedPairGapCount(
+  columnCount: number,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"]
+): number {
+  if (columnSeparation === "none") {
+    return 0;
+  }
   return Math.max(0, Math.ceil(columnCount / 2) - 1);
 }
 
-function alignedTrailingWidth(rowCount: number): number {
+function alignedTrailingWidth(
+  rowCount: number,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"]
+): number {
+  if (columnSeparation === "none") {
+    return 0;
+  }
   return rowCount === 1 ? TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT : 0;
 }
 

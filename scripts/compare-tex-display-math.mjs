@@ -555,6 +555,8 @@ function texSource(caseSpec) {
 function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
+    source.includes(String.raw`\begin{aligned}`) ||
+    source.includes(String.raw`\begin{alignedat}`) ||
     hasMatrixEnvironment(source) ||
     hasCasesEnvironment(source) ||
     hasSmallMatrixEnvironment(source) ||
@@ -1085,6 +1087,21 @@ function constructMatrixCases() {
       id: "display-operatorname",
       width: 160,
       source: String.raw`Alpha \[\operatorname*{arg\,max}_{x}\] Beta`,
+    },
+    {
+      id: "display-aligned",
+      width: 120,
+      source: String.raw`Alpha \[\begin{aligned}a&=b\\c&=d\end{aligned}\] Beta`,
+    },
+    {
+      id: "display-aligned-constructs",
+      width: 160,
+      source: String.raw`Alpha \[\begin{aligned}\frac{1}{2}&=x\\\sqrt{y+1}&=z\end{aligned}\] Beta`,
+    },
+    {
+      id: "display-alignedat",
+      width: 180,
+      source: String.raw`Alpha \[\begin{alignedat}{2}a&=b&c&=d\\e&=f&g&=h\end{alignedat}\] Beta`,
     },
     {
       id: "display-pmatrix",

@@ -1469,4 +1469,22 @@ unordered.`;
       source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
     )).toEqual(["Alpha", "Beta"]);
   });
+
+  it("does not insert aligned inter-pair gap for alignedat environments", () => {
+    const aligned = layoutTexMathList(parseTexMath(
+      String.raw`\begin{aligned}a&=b&c&=d\\e&=f&g&=h\end{aligned}`
+    ).list, { style: "display" });
+    const alignedat = layoutTexMathList(parseTexMath(
+      String.raw`\begin{alignedat}{2}a&=b&c&=d\\e&=f&g&=h\end{alignedat}`
+    ).list, { style: "display" });
+
+    expect(aligned.supported).toBe(true);
+    expect(alignedat.supported).toBe(true);
+    if (!aligned.supported || !alignedat.supported) {
+      return;
+    }
+    expect(aligned.hlist.width).toBeCloseTo(58.815004, 6);
+    expect(alignedat.hlist.width).toBeCloseTo(48.815004, 6);
+    expect(aligned.hlist.width - alignedat.hlist.width).toBeCloseTo(10, 6);
+  });
 });
