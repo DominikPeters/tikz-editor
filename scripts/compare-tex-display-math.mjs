@@ -413,6 +413,7 @@ function requiresAmsmath(source) {
     hasMatrixEnvironment(source) ||
     hasCasesEnvironment(source) ||
     hasSmallMatrixEnvironment(source) ||
+    hasOperatorNameCommand(source) ||
     hasBinomialCommand(source) ||
     hasStyledFractionCommand(source) ||
     hasSubstackCommand(source) ||
@@ -706,6 +707,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\begin{smallmatrix}a&b\\x&y\end{smallmatrix}\] Beta`,
     },
     {
+      id: "display-operatorname",
+      width: 160,
+      source: String.raw`Alpha \[\operatorname*{arg\,max}_{x}\] Beta`,
+    },
+    {
       id: "display-pmatrix",
       width: 160,
       source: String.raw`Alpha \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\] Beta`,
@@ -816,6 +822,7 @@ function randomAlignmentLeftCell(rng) {
     randomCases(rng),
     randomSmallMatrix(rng),
     randomMatrix(rng),
+    randomOperatorName(rng),
     `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
   ]);
 }
@@ -833,6 +840,7 @@ function randomAlignmentRightCell(rng) {
     randomCases(rng),
     randomSmallMatrix(rng),
     randomMatrix(rng),
+    randomOperatorName(rng),
   ]);
 }
 
@@ -850,6 +858,7 @@ function randomMathTerm(rng) {
     randomCases(rng),
     randomSmallMatrix(rng),
     randomMatrix(rng),
+    randomOperatorName(rng),
   ]);
 }
 
@@ -982,6 +991,12 @@ function randomSmallMatrix(rng) {
   return String.raw`\begin{smallmatrix}` + rows.join(String.raw`\\`) + String.raw`\end{smallmatrix}`;
 }
 
+function randomOperatorName(rng) {
+  const names = ["rank", "cone", "span", String.raw`arg\,max`, String.raw`proj\,lim`];
+  const command = randomInt(rng, 4) === 0 ? String.raw`\operatorname*` : String.raw`\operatorname`;
+  return command + "{" + choice(rng, names) + "}";
+}
+
 function hasMatrixEnvironment(source) {
   return matrixEnvironments.some((environment) =>
     source.includes(String.raw`\begin{` + environment + "}")
@@ -994,6 +1009,10 @@ function hasCasesEnvironment(source) {
 
 function hasSmallMatrixEnvironment(source) {
   return source.includes(String.raw`\begin{smallmatrix}`);
+}
+
+function hasOperatorNameCommand(source) {
+  return source.includes(String.raw`\operatorname`);
 }
 
 function hasBinomialCommand(source) {

@@ -23,6 +23,8 @@ export type {
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
+  TexMathOperatorNameNucleus,
+  TexMathOperatorNamePart,
   TexMathOperatorNucleus,
   TexMathParseResult,
   TexMathRadicalNucleus,

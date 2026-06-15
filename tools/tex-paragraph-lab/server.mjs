@@ -185,6 +185,8 @@ function buildOracleDocument(options) {
   const tikzAlign = texTikzAlign(options.alignment);
   const visualSetup = `text width=${formatPt(options.width)}pt, align=${tikzAlign}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\\fontencoding{OT1}\\fontfamily{cmr}\\selectfont\\parindent=${formatPt(options.parindent)}pt}`;
   return String.raw`\documentclass[tikz,border=2pt]{standalone}
+\usepackage[OT1]{fontenc}
+\usepackage{amsmath,amssymb}
 \renewcommand{\rmdefault}{cmr}
 \pagestyle{empty}
 \begin{document}

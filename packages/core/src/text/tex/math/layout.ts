@@ -30,6 +30,7 @@ import type {
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
+  TexMathOperatorNameNucleus,
   TexMathSmallMatrixNucleus,
   TexMathSourceSpan,
   TexMathStyle,
@@ -37,6 +38,7 @@ import type {
   TexMathTextNucleus,
 } from "./ir.js";
 import {
+  resolveExplicitMathGlue,
   spaceTexMathList,
   texMathSpacingBetween,
   type TexMathResolvedGlue,
@@ -325,7 +327,15 @@ function texMathAtomNeedsAmsMath(atom: TexMathAtom): boolean {
 }
 
 function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
-  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix" || nucleus.kind === "substack" || nucleus.kind === "cases" || nucleus.kind === "smallmatrix") {
+  if (
+    nucleus.kind === "text" ||
+    nucleus.kind === "aligned" ||
+    nucleus.kind === "matrix" ||
+    nucleus.kind === "substack" ||
+    nucleus.kind === "cases" ||
+    nucleus.kind === "smallmatrix" ||
+    nucleus.kind === "operator-name"
+  ) {
     return true;
   }
   if (nucleus.kind === "array") {
@@ -453,10 +463,14 @@ function shouldUseOperatorLimits(
   atom: TexMathAtom,
   style: TexMathStyle
 ): boolean {
-  if (atom.nucleus.kind !== "operator" || (!atom.subscript && !atom.superscript)) {
+  if ((atom.nucleus.kind !== "operator" && atom.nucleus.kind !== "operator-name") || (!atom.subscript && !atom.superscript)) {
     return false;
   }
-  const limits = atom.limits ?? defaultOperatorLimits(atom.nucleus.command);
+  const limits = atom.limits ?? (
+    atom.nucleus.kind === "operator"
+      ? defaultOperatorLimits(atom.nucleus.command)
+      : "nolimits"
+  );
   if (limits === "nolimits") {
     return false;
   }
@@ -602,6 +616,9 @@ function layoutNucleus(
   if (nucleus.kind === "operator") {
     return layoutOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
   }
+  if (nucleus.kind === "operator-name") {
+    return layoutOperatorNameNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
@@ -695,7 +712,8 @@ function layoutTextNucleus(
 function textShapedItemToMathLayoutItem(
   item: TexShapedItem,
   font: ResolvedTexFont,
-  x: number
+  x: number,
+  family: TexMathGlyphLayoutItem["family"] = "text"
 ): TexMathGlyphLayoutItem | TexMathKernLayoutItem {
   if (item.kind === "kern") {
     return {
@@ -713,7 +731,7 @@ function textShapedItemToMathLayoutItem(
     kind: "glyph",
     fontId: font.id,
     atPt: font.atPt,
-    family: "text",
+    family,
     code: item.code,
     text: String.fromCharCode(item.code),
     x,
@@ -2432,6 +2450,103 @@ function layoutTextOperatorNucleus(
     cursor = roundTexPt(cursor + width);
     height = Math.max(height, item.height);
     depth = Math.max(depth, item.depth);
+  }
+  return {
+    items,
+    width: cursor,
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutOperatorNameNucleus(
+  nucleus: TexMathOperatorNameNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const font = fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
+  const items: TexMathHListItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+  let textRun = "";
+  let textRunSourceStart = 0;
+
+  const flushTextRun = (): boolean => {
+    if (!textRun) {
+      return true;
+    }
+    let shaped: ReturnType<typeof fontProfile.metricProvider.shapeText>;
+    try {
+      shaped = fontProfile.metricProvider.shapeText(textRun, font, {
+        sourceStart: textRunSourceStart,
+      });
+    } catch {
+      return false;
+    }
+    for (const shapedItem of shaped.items) {
+      const layoutItem = textShapedItemToMathLayoutItem(shapedItem, font, cursor, "operators");
+      items.push(layoutItem);
+      cursor = roundTexPt(cursor + layoutItem.width);
+      if (layoutItem.kind === "glyph") {
+        height = Math.max(height, layoutItem.height);
+        depth = Math.max(depth, layoutItem.depth);
+      }
+    }
+    textRun = "";
+    textRunSourceStart = 0;
+    return true;
+  };
+
+  for (const part of nucleus.parts) {
+    if (part.kind === "spacing") {
+      if (!flushTextRun()) {
+        return null;
+      }
+      const previous = items.at(-1);
+      if (previous?.kind === "glyph" && previous.italicCorrection !== 0) {
+        items.push({
+          kind: "kern",
+          x: cursor,
+          width: previous.italicCorrection,
+          reason: "italic-correction",
+          sourceSpan: previous.sourceSpan,
+        });
+        cursor = roundTexPt(cursor + previous.italicCorrection);
+      }
+      const dimensions = resolveExplicitMathGlue({
+        kind: "glue",
+        command: part.command,
+        sourceSpan: part.sourceSpan,
+      });
+      if (!dimensions) {
+        return null;
+      }
+      const width = muToPt(fontProfile, style, baseAtPt, dimensions.mu);
+      items.push({
+        kind: "glue",
+        x: cursor,
+        width,
+        mu: dimensions.mu,
+        stretch: muToPt(fontProfile, style, baseAtPt, dimensions.stretchMu),
+        shrink: muToPt(fontProfile, style, baseAtPt, dimensions.shrinkMu),
+        source: "explicit",
+        sourceSpan: part.sourceSpan,
+      });
+      cursor = roundTexPt(cursor + width);
+      continue;
+    }
+    if (!textRun) {
+      textRunSourceStart = part.sourceSpan.start;
+    }
+    textRun += part.text;
+  }
+  if (!flushTextRun()) {
+    return null;
   }
   return {
     items,

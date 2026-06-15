@@ -293,6 +293,69 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses operatorname commands as roman operator nuclei with optional display limits", () => {
+    const result = parseTexMath(String.raw`\operatorname{rank}+\operatorname*{arg\,max}_{x}`);
+    const rank = atomAt(result, 0);
+    const argmax = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(rank).toMatchObject({
+      atomClass: "op",
+      limits: "nolimits",
+      sourceSpan: { start: 0, end: 19 },
+      nucleus: {
+        kind: "operator-name",
+        commandSourceSpan: { start: 0, end: 13 },
+        nameSourceSpan: { start: 14, end: 18 },
+      },
+    });
+    expect(rank.nucleus.kind === "operator-name" ? rank.nucleus.parts : []).toEqual([
+      { kind: "text", text: "r", sourceSpan: { start: 14, end: 15 } },
+      { kind: "text", text: "a", sourceSpan: { start: 15, end: 16 } },
+      { kind: "text", text: "n", sourceSpan: { start: 16, end: 17 } },
+      { kind: "text", text: "k", sourceSpan: { start: 17, end: 18 } },
+    ]);
+    expect(argmax).toMatchObject({
+      atomClass: "op",
+      limits: "display",
+      sourceSpan: { start: 20, end: 48 },
+      nucleus: {
+        kind: "operator-name",
+        commandSourceSpan: { start: 20, end: 34 },
+        nameSourceSpan: { start: 35, end: 43 },
+      },
+      subscript: { sourceSpan: { start: 44, end: 48 } },
+    });
+    expect(argmax.nucleus.kind === "operator-name" ? argmax.nucleus.parts : []).toEqual([
+      { kind: "text", text: "a", sourceSpan: { start: 35, end: 36 } },
+      { kind: "text", text: "r", sourceSpan: { start: 36, end: 37 } },
+      { kind: "text", text: "g", sourceSpan: { start: 37, end: 38 } },
+      { kind: "spacing", command: ",", sourceSpan: { start: 38, end: 40 } },
+      { kind: "text", text: "m", sourceSpan: { start: 40, end: 41 } },
+      { kind: "text", text: "a", sourceSpan: { start: 41, end: 42 } },
+      { kind: "text", text: "x", sourceSpan: { start: 42, end: 43 } },
+    ]);
+  });
+
+  it("keeps unsupported operatorname macro content explicit", () => {
+    const result = parseTexMath(String.raw`\operatorname{\alpha}`);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "warning",
+        code: "unsupported-command",
+        message: String.raw`Unsupported content in \operatorname: \alpha.`,
+        sourceSpan: { start: 14, end: 20 },
+      },
+    ]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "unsupported",
+      command: String.raw`\operatorname`,
+      sourceSpan: { start: 0, end: 21 },
+    });
+  });
+
   it("parses math alphabet commands as source-spanned list nuclei", () => {
     const result = parseTexMath(String.raw`\mathbf{x_i}`, { sourceOffset: 20 });
     const bold = atomAt(result, 0);

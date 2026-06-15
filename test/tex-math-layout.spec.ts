@@ -1008,6 +1008,61 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out operatorname as an AMS roman math operator", () => {
+    const rank = layout(String.raw`\operatorname{rank}`);
+    expect(rank.supported).toBe(true);
+    expect(rank.hlist?.width).toBeCloseTo(19.75008, 5);
+    expect(rank.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 114, x: 0 },
+      { kind: "glyph", fontId: "cmr10", code: 97, x: expect.closeTo(3.91668, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 110, x: expect.closeTo(8.9167, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 107, x: expect.closeTo(14.47227, 5) },
+    ]);
+
+    const projLim = layout(String.raw`\operatorname{proj\,lim}`);
+    expect(projLim.supported).toBe(true);
+    expect(projLim.hlist?.width).toBeCloseTo(33.639002, 5);
+    expect(projLim.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 112, x: 0 },
+      { kind: "glyph", fontId: "cmr10", code: 114, x: expect.closeTo(5.55557, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 111, x: expect.closeTo(9.47225, 5) },
+      {
+        kind: "kern",
+        reason: "text-kern",
+        x: expect.closeTo(14.47227, 5),
+        width: expect.closeTo(0.55555, 5),
+      },
+      { kind: "glyph", fontId: "cmr10", code: 106, x: expect.closeTo(15.02782, 5) },
+      { kind: "glue", width: expect.closeTo(1.666672, 5), x: expect.closeTo(18.08339, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 108, x: expect.closeTo(19.750062, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 105, x: expect.closeTo(22.527852, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 109, x: expect.closeTo(25.305642, 5) },
+    ]);
+
+    const argmax = layoutTexMathList(
+      parseTexMath(String.raw`\operatorname*{arg\,max}_{x}`).list,
+      { style: "display" }
+    );
+    expect(argmax.supported).toBe(true);
+    expect(argmax.hlist?.width).toBeCloseTo(34.333462, 5);
+    expect(argmax.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 97, x: 0 },
+      { kind: "glyph", fontId: "cmr10", code: 114, x: expect.closeTo(5.00002, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 103, x: expect.closeTo(8.9167, 5) },
+      { kind: "kern", width: expect.closeTo(0.13888, 5), x: expect.closeTo(13.91672, 5) },
+      { kind: "glue", width: expect.closeTo(1.666672, 5), x: expect.closeTo(14.0556, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 109, x: expect.closeTo(15.722272, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 97, x: expect.closeTo(24.055632, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 120, x: expect.closeTo(29.055652, 5) },
+      {
+        kind: "hlist",
+        role: "limit-subscript",
+        x: expect.closeTo(14.899361, 5),
+        y: expect.closeTo(7.94445, 5),
+      },
+    ]);
+  });
+
   it("lays out TeX operator limits as vertical boxes", () => {
     const result = layout(String.raw`\sum\limits_i^n+\int\limits_0^1`);
     expect(result.supported).toBe(true);

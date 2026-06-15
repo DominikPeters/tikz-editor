@@ -254,6 +254,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1055.559 -502.7868) scale(70)"');
   });
 
+  it("renders operatorname through roman operator glyphs", () => {
+    const parsed = parseTexMath(String.raw`\operatorname*{arg\,max}_{x}`);
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="103"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="109"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="120"');
+    expect(body).toContain('transform="translate(1572.2272 0) scale(100)"');
+  });
+
   it("renders substack limits recursively with scriptstyle CM glyphs", () => {
     const parsed = parseTexMath(String.raw`\sum_{\substack{i=1\\j=2}}^n`);
     const result = layoutTexMathList(parsed.list);
@@ -396,6 +412,50 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-source-start="7"');
     expect(box?.svgBody).toContain('data-source-end="10"');
     expect(box?.svgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
+  });
+
+  it("creates math boxes for operatorname without MathJax", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const inlineContent = String.raw`\operatorname{rank}`;
+    const inlineSource = `$${inlineContent}$`;
+    const inlineBox = provider.getInlineMathBox({
+      source: inlineSource,
+      content: inlineContent,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: inlineSource.length,
+      contentStart: 1,
+      contentEnd: inlineSource.length - 1,
+    });
+
+    expect(inlineBox).toMatchObject({
+      source: inlineSource,
+      content: inlineContent,
+      width: expect.closeTo(19.75008, 5),
+      height: expect.closeTo(6.94445, 5),
+      depth: 0,
+    });
+    expect(inlineBox?.svgBody).toContain('data-tex-font="cmr10" data-tex-glyph="114"');
+    expect(inlineBox?.svgBody).toContain('data-tex-font="cmr10" data-tex-glyph="107"');
+
+    const displayContent = String.raw`\operatorname*{arg\,max}_{x}`;
+    const displaySource = String.raw`\[` + displayContent + String.raw`\]`;
+    const displayBox = provider.getDisplayMathBox?.({
+      source: displaySource,
+      content: displayContent,
+      delimiter: "bracket",
+      sourceStart: 0,
+      sourceEnd: displaySource.length,
+      contentStart: 2,
+      contentEnd: displaySource.length - 2,
+    });
+    expect(displayBox).toMatchObject({
+      source: displaySource,
+      content: displayContent,
+      width: expect.closeTo(34.333462, 5),
+      depth: expect.closeTo(8.94445, 5),
+    });
+    expect(displayBox?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="120"');
   });
 
   it("creates display-style math boxes for display formulas without MathJax", () => {

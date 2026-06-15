@@ -122,6 +122,8 @@ const formulas = args.formulas.length > 0
       "\\begin{array}{lr}a&b\\\\x&y\\end{array}",
       "\\begin{cases}a&b\\\\x&y\\end{cases}",
       "\\begin{smallmatrix}a&b\\\\x&y\\end{smallmatrix}",
+      "\\operatorname{rank}",
+      "\\operatorname*{arg\\,max}_{x}",
       "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
       "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
       "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
@@ -242,6 +244,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     hasCasesEnvironment(formula) ||
     hasSmallMatrixEnvironment(formula) ||
     hasMatrixEnvironment(formula) ||
+    hasOperatorNameCommand(formula) ||
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula)
     || hasSubstackCommand(formula)
@@ -400,6 +403,7 @@ function texSource(formula) {
     hasMatrixEnvironment(formula) ||
     hasCasesEnvironment(formula) ||
     hasSmallMatrixEnvironment(formula) ||
+    hasOperatorNameCommand(formula) ||
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula) ||
     hasSubstackCommand(formula) ||
@@ -641,7 +645,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "array", "cases", "smallmatrix", "matrix", "substack"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -662,6 +666,8 @@ function randomMathTerm(rng, depth) {
     term = randomSmallMatrixFormula(rng);
   } else if (choice === "matrix") {
     term = randomMatrixFormula(rng);
+  } else if (choice === "operatorname") {
+    term = randomOperatorNameFormula(rng);
   } else if (choice === "substack") {
     term = randomSubstackFormula(rng);
   } else if (choice === "group") {
@@ -768,6 +774,13 @@ function randomSmallMatrixFormula(rng) {
   return String.raw`\begin{smallmatrix}` + rows.join(String.raw`\\`) + String.raw`\end{smallmatrix}`;
 }
 
+function randomOperatorNameFormula(rng) {
+  const names = ["rank", "cone", "span", String.raw`arg\,max`, String.raw`proj\,lim`];
+  const command = randomInt(rng, 4) === 0 ? String.raw`\operatorname*` : String.raw`\operatorname`;
+  const name = names[randomInt(rng, names.length)] ?? "rank";
+  return command + "{" + name + "}";
+}
+
 function randomSubstackFormula(rng) {
   const rowCount = 2 + randomInt(rng, 2);
   const rows = [];
@@ -802,6 +815,10 @@ function hasCasesEnvironment(source) {
 
 function hasSmallMatrixEnvironment(source) {
   return source.includes(String.raw`\begin{smallmatrix}`);
+}
+
+function hasOperatorNameCommand(source) {
+  return source.includes(String.raw`\operatorname`);
 }
 
 function randomMatrixEnvironment(rng) {

@@ -17,6 +17,7 @@ import type {
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
+  TexMathOperatorNamePart,
   TexMathParseResult,
   TexMathScript,
   TexMathSourceSpan,
@@ -263,6 +264,9 @@ class TexMathParser {
       }
       if (commandName(token.text) === "text") {
         return this.parseText(allowScripts);
+      }
+      if (commandName(token.text) === "operatorname") {
+        return this.parseOperatorName(allowScripts);
       }
       if (commandName(token.text) === "substack") {
         return this.parseSubstack(allowScripts);
@@ -579,6 +583,46 @@ class TexMathParser {
       sourceSpan: command.sourceSpan,
     }, allowScripts);
     return this.maybeParseScripts(atom, allowScripts);
+  }
+
+  private parseOperatorName(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    let commandSourceSpan = command.sourceSpan;
+    let limits: TexMathOperatorLimits = "nolimits";
+    const star = this.peek();
+    if (star?.kind === "character" && star.text === "*") {
+      this.advance();
+      commandSourceSpan = spanUnion(commandSourceSpan, star.sourceSpan);
+      limits = "display";
+    }
+    const content = this.parseRequiredOperatorNameGroup(commandSourceSpan);
+    const sourceSpan = spanUnion(commandSourceSpan, content?.sourceSpan ?? commandSourceSpan);
+    if (!content || content.unsupported) {
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "op",
+        nucleus: {
+          kind: "unsupported",
+          command: commandSourceSpan.end > command.sourceSpan.end ? "\\operatorname*" : "\\operatorname",
+          sourceSpan,
+        },
+        limits,
+        sourceSpan,
+      }, allowScripts);
+    }
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "operator-name",
+        parts: content.parts,
+        commandSourceSpan,
+        nameSourceSpan: content.nameSourceSpan,
+        sourceSpan,
+      },
+      limits,
+      sourceSpan,
+    }, allowScripts);
   }
 
   private parseNot(allowScripts: boolean): TexMathAtom {
@@ -1524,6 +1568,77 @@ class TexMathParser {
       text,
       sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
       textSourceSpan: { start: contentStart, end: Math.max(contentStart, contentEnd) },
+      unsupported,
+    };
+  }
+
+  private parseRequiredOperatorNameGroup(
+    fallbackSpan: TexMathSourceSpan
+  ): {
+    parts: readonly TexMathOperatorNamePart[];
+    sourceSpan: TexMathSourceSpan;
+    nameSourceSpan: TexMathSourceSpan;
+    unsupported: boolean;
+  } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "group-open") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        "Expected a braced \\operatorname name.",
+        next?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    const open = this.expectGroupOpen();
+    const parts: TexMathOperatorNamePart[] = [];
+    let lastSpan: TexMathSourceSpan = open.sourceSpan;
+    let unsupported = false;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (!token || token.kind === "group-close") {
+        break;
+      }
+      this.advance();
+      lastSpan = token.sourceSpan;
+      if (token.kind === "space") {
+        continue;
+      }
+      if (token.kind === "character") {
+        parts.push({
+          kind: "text",
+          text: token.text,
+          sourceSpan: token.sourceSpan,
+        });
+        continue;
+      }
+      if (token.kind === "command") {
+        const spacing = spacingCommandName(token.text);
+        if (spacing) {
+          parts.push({
+            kind: "spacing",
+            command: spacing,
+            sourceSpan: token.sourceSpan,
+          });
+          continue;
+        }
+      }
+      unsupported = true;
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported content in \\operatorname: ${token.text}.`,
+        token.sourceSpan
+      );
+    }
+    const close = this.consumeGroupClose(open.sourceSpan);
+    const contentStart = open.sourceSpan.end;
+    const contentEnd = close?.sourceSpan.start ?? lastSpan.end;
+    return {
+      parts,
+      sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
+      nameSourceSpan: { start: contentStart, end: Math.max(contentStart, contentEnd) },
       unsupported,
     };
   }

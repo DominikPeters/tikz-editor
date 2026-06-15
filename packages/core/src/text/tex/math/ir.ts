@@ -72,6 +72,7 @@ export type TexMathNucleus =
   | TexMathAlphabetNucleus
   | TexMathTextNucleus
   | TexMathOperatorNucleus
+  | TexMathOperatorNameNucleus
   | TexMathLeftRightNucleus
   | TexMathAlignedNucleus
   | TexMathSubstackNucleus
@@ -198,6 +199,26 @@ export type TexMathOperatorLimits =
 export interface TexMathOperatorNucleus {
   readonly kind: "operator";
   readonly command: TexMathOperatorCommand;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathOperatorNamePart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "spacing";
+      readonly command: TexMathSpacingCommand;
+      readonly sourceSpan: TexMathSourceSpan;
+    };
+
+export interface TexMathOperatorNameNucleus {
+  readonly kind: "operator-name";
+  readonly parts: readonly TexMathOperatorNamePart[];
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly nameSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
