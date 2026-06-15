@@ -86,6 +86,25 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses left-right delimiter groups with delimiter source spans", () => {
+    const result = parseTexMath(String.raw`\left(\frac{1}{2}\right)`);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: 24 },
+      nucleus: {
+        kind: "left-right",
+        leftDelimiter: "(",
+        rightDelimiter: ")",
+        leftDelimiterSourceSpan: { start: 5, end: 6 },
+        rightDelimiterSourceSpan: { start: 23, end: 24 },
+      },
+    });
+    expect(atom.nucleus.kind === "left-right" ? atom.nucleus.body.items : []).toHaveLength(1);
+  });
+
   it("parses explicit math spacing commands as glue items", () => {
     const result = parseTexMath(String.raw`x\,y\quad z`);
 

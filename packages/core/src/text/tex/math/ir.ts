@@ -14,7 +14,9 @@ export type TexMathStyle =
 export type TexMathDiagnosticCode =
   | "duplicate-script"
   | "empty-script"
+  | "missing-delimiter"
   | "missing-group"
+  | "missing-right"
   | "missing-script-target"
   | "unexpected-group-close"
   | "unsupported-command";
@@ -64,7 +66,15 @@ export type TexMathNucleus =
   | TexMathListNucleus
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
+  | TexMathLeftRightNucleus
   | TexMathUnsupportedNucleus;
+
+export type TexMathDelimiter =
+  | "."
+  | "("
+  | ")"
+  | "["
+  | "]";
 
 export interface TexMathGlyphNucleus {
   readonly kind: "glyph";
@@ -88,6 +98,16 @@ export interface TexMathFractionNucleus {
 export interface TexMathRadicalNucleus {
   readonly kind: "radical";
   readonly radicand: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathLeftRightNucleus {
+  readonly kind: "left-right";
+  readonly leftDelimiter: TexMathDelimiter;
+  readonly rightDelimiter: TexMathDelimiter;
+  readonly body: TexMathList;
+  readonly leftDelimiterSourceSpan: TexMathSourceSpan;
+  readonly rightDelimiterSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

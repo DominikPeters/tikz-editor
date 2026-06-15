@@ -353,6 +353,74 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out left-right delimiter groups with TeX delimiter sizing", () => {
+    const simple = layout(String.raw`\left(x\right)`);
+    expect(simple.supported).toBe(true);
+    expect(simple.hlist?.width).toBeCloseTo(13.49308, 6);
+    expect(simple.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist", "glyph"]);
+    expect(simple.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr10",
+      code: 40,
+      y: 0,
+    });
+    expect(simple.hlist?.items[2]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr10",
+      code: 41,
+      x: expect.closeTo(9.60418, 6),
+    });
+
+    const fraction = layout(String.raw`\left(\frac{1}{2}\right)`);
+    expect(fraction.supported).toBe(true);
+    expect(fraction.hlist?.width).toBeCloseTo(15.552849, 6);
+    expect(fraction.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 0,
+      y: expect.closeTo(-8.10007, 5),
+      width: expect.closeTo(4.58336, 5),
+    });
+    expect(fraction.hlist?.items.at(-1)).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 1,
+      x: expect.closeTo(10.969489, 5),
+      y: expect.closeTo(-8.10007, 5),
+    });
+  });
+
+  it("lays out null and extensible left-right delimiters like TeX", () => {
+    const nullLeft = layout(String.raw`\left.\frac{1}{2}\right]`);
+    expect(nullLeft.supported).toBe(true);
+    expect(nullLeft.hlist?.width).toBeCloseTo(11.752819, 6);
+    expect(nullLeft.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      x: expect.closeTo(1.2, 6),
+    });
+    expect(nullLeft.hlist?.items.at(-1)).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 3,
+      x: expect.closeTo(7.586129, 6),
+    });
+
+    const extensible = layout(String.raw`\left[\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}\right]`);
+    expect(extensible.supported).toBe(true);
+    expect(extensible.hlist?.width).toBeCloseTo(60.275189, 6);
+    expect(extensible.hlist?.items.slice(0, 3)).toMatchObject([
+      { kind: "glyph", fontId: "cmex10", code: 50, y: expect.closeTo(-23.10022, 5) },
+      { kind: "glyph", fontId: "cmex10", code: 54, y: expect.closeTo(-5.50003, 5) },
+      { kind: "glyph", fontId: "cmex10", code: 52, y: expect.closeTo(0.90002, 5) },
+    ]);
+    expect(extensible.hlist?.items.at(-1)).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 53,
+      x: expect.closeTo(53.608499, 5),
+    });
+  });
+
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
     const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });

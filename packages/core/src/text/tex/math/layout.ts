@@ -11,6 +11,7 @@ import {
 } from "./font-profile.js";
 import type {
   TexMathAtom,
+  TexMathDelimiter,
   TexMathGlyphNucleus,
   TexMathList,
   TexMathNucleus,
@@ -129,6 +130,9 @@ export interface ResolvedMathGlyph {
 
 const TEX_SCRIPT_SPACE_PT = 0.5;
 const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
+const TEX_DELIMITER_FACTOR = 901;
+const TEX_DELIMITER_SHORTFALL_PT = 5;
+const TEX_SP_PER_PT = 65536;
 
 interface TexMathAtomLayout {
   readonly items: readonly TexMathHListItem[];
@@ -338,6 +342,9 @@ function layoutNucleus(
   if (nucleus.kind === "radical") {
     return layoutRadicalNucleus(nucleus, fontProfile, style, baseAtPt);
   }
+  if (nucleus.kind === "left-right") {
+    return layoutLeftRightNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   return null;
 }
 
@@ -498,6 +505,81 @@ function layoutRadicandList(
   return result.supported ? result.hlist : null;
 }
 
+function layoutLeftRightNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "left-right" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const body = layoutLeftRightBody(nucleus.body, fontProfile, style, baseAtPt);
+  if (!body) {
+    return null;
+  }
+  const delimiterStyle = delimiterSizeStyle(style);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
+  const targetHeight = leftRightDelimiterTarget(body.height, body.depth, axis);
+  const left = layoutMathDelimiter(
+    nucleus.leftDelimiter,
+    fontProfile,
+    delimiterStyle,
+    baseAtPt,
+    targetHeight,
+    axis,
+    nucleus.leftDelimiterSourceSpan
+  );
+  const right = layoutMathDelimiter(
+    nucleus.rightDelimiter,
+    fontProfile,
+    delimiterStyle,
+    baseAtPt,
+    targetHeight,
+    axis,
+    nucleus.rightDelimiterSourceSpan
+  );
+  if (!left || !right) {
+    return null;
+  }
+
+  const bodyChild = childHList("nucleus", left.width, 0, body, nucleus.body.sourceSpan);
+  const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + body.width), 0);
+  const items = [
+    ...left.items,
+    bodyChild,
+    ...shiftedRight,
+  ];
+  const width = roundTexPt(left.width + body.width + right.width);
+  const height = Math.max(
+    body.height,
+    ...left.items.map((item) => -item.y + item.height),
+    ...shiftedRight.map((item) => -item.y + item.height)
+  );
+  const depth = Math.max(
+    body.depth,
+    ...left.items.map((item) => item.y + item.depth),
+    ...shiftedRight.map((item) => item.y + item.depth)
+  );
+
+  return {
+    items,
+    width,
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutLeftRightBody(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList | null {
+  const result = layoutTexMathList(list, { fontProfile, style, baseAtPt });
+  return result.supported ? result.hlist : null;
+}
+
 function selectRadicalDelimiter(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
@@ -522,6 +604,79 @@ function selectRadicalDelimiter(
   });
   const largeCandidate = selectDelimiterFromChain(large, "extension", 112, targetHeight, sourceSpan);
   return largeCandidate?.delimiter ?? smallCandidate?.delimiter ?? null;
+}
+
+function layoutMathDelimiter(
+  delimiter: TexMathDelimiter,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  targetHeight: number,
+  axis: number,
+  sourceSpan: TexMathSourceSpan
+): TexMathDelimiterLayout | null {
+  if (delimiter === ".") {
+    return {
+      items: [],
+      width: TEX_NULL_DELIMITER_SPACE_PT,
+      height: 0,
+      depth: 0,
+    };
+  }
+  const spec = delimiterSpec(delimiter);
+  if (!spec) {
+    return null;
+  }
+  const small = fontProfile.resolveMathFont({
+    family: "operators",
+    style,
+    baseAtPt,
+  });
+  const smallCandidate = selectDelimiterFromChain(small, "operators", spec.smallCode, targetHeight, sourceSpan);
+  const selected = smallCandidate?.largeEnough
+    ? smallCandidate.delimiter
+    : selectDelimiterFromChain(
+      fontProfile.resolveMathFont({ family: "extension", style: "text", baseAtPt }),
+      "extension",
+      spec.largeCode,
+      targetHeight,
+      sourceSpan
+    )?.delimiter ?? smallCandidate?.delimiter;
+  if (!selected) {
+    return null;
+  }
+  const shift = roundTexPt((selected.height - selected.depth) / 2 - axis);
+  return {
+    ...selected,
+    items: offsetDelimiterItems(selected.items, 0, shift),
+  };
+}
+
+function delimiterSpec(
+  delimiter: Exclude<TexMathDelimiter, ".">
+): { readonly smallCode: number; readonly largeCode: number } | null {
+  switch (delimiter) {
+    case "(":
+      return { smallCode: 40, largeCode: 0 };
+    case ")":
+      return { smallCode: 41, largeCode: 1 };
+    case "[":
+      return { smallCode: 91, largeCode: 2 };
+    case "]":
+      return { smallCode: 93, largeCode: 3 };
+  }
+}
+
+function offsetDelimiterItems(
+  items: readonly TexMathGlyphLayoutItem[],
+  x: number,
+  y: number
+): readonly TexMathGlyphLayoutItem[] {
+  return items.map((item) => ({
+    ...item,
+    x: roundTexPt(item.x + x),
+    y: roundTexPt(item.y + y),
+  }));
 }
 
 function selectDelimiterFromChain(
@@ -998,6 +1153,17 @@ function radicalInitialClearance(
   return defaultRuleThickness + Math.abs(defaultRuleThickness) / 4;
 }
 
+function leftRightDelimiterTarget(
+  height: number,
+  depth: number,
+  axis: number
+): number {
+  const maxDistanceFromAxis = Math.max(height - axis, depth + axis);
+  const factored = (Math.floor((maxDistanceFromAxis * TEX_SP_PER_PT) / 500) * TEX_DELIMITER_FACTOR) / TEX_SP_PER_PT;
+  const shortfallAdjusted = 2 * maxDistanceFromAxis - TEX_DELIMITER_SHORTFALL_PT;
+  return Math.max(factored, shortfallAdjusted);
+}
+
 function supStyle(style: TexMathStyle): TexMathStyle {
   return style === "text" || style === "display" ? "script" : "scriptscript";
 }
@@ -1016,6 +1182,10 @@ function denominatorStyle(style: TexMathStyle): TexMathStyle {
 
 function scriptSizeStyle(style: TexMathStyle): TexMathStyle {
   return style === "script" || style === "scriptscript" ? "scriptscript" : "script";
+}
+
+function delimiterSizeStyle(style: TexMathStyle): TexMathStyle {
+  return style === "script" || style === "scriptscript" ? style : "text";
 }
 
 function mathParameterFontdimenName(

@@ -140,6 +140,40 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('y="-2290.013"');
   });
 
+  it("renders left-right delimiters through TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\left(\frac{1}{2}\right)`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="0"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="1"');
+    expect(body).toContain('transform="translate(0 -810.007) scale(100)"');
+    expect(body).toContain('transform="translate(1096.9489 -810.007) scale(100)"');
+  });
+
+  it("renders extensible left-right delimiters as stacked glyph recipes", () => {
+    const parsed = parseTexMath(String.raw`\left[\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}\right]`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="50"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="54"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="52"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="51"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="55"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="53"');
+    expect(body).toContain('transform="translate(0 -2310.022) scale(100)"');
+    expect(body).toContain('transform="translate(5360.8499 90.002) scale(100)"');
+  });
+
   it("creates inline math boxes for supported formulas without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({

@@ -3,6 +3,7 @@ import type {
   TexMathAtomClass,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
+  TexMathDelimiter,
   TexMathGlue,
   TexMathItem,
   TexMathList,
@@ -17,6 +18,7 @@ import type {
 
 interface ParseListOptions {
   readonly stopAtGroupClose: boolean;
+  readonly stopAtRight?: boolean;
 }
 
 export interface ParseTexMathOptions {
@@ -133,6 +135,9 @@ class TexMathParser {
         this.advance();
         continue;
       }
+      if (token.kind === "command" && commandName(token.text) === "right" && options.stopAtRight) {
+        break;
+      }
       if (token.kind === "space") {
         this.advance();
         continue;
@@ -187,6 +192,9 @@ class TexMathParser {
       }
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
+      }
+      if (commandName(token.text) === "left") {
+        return this.parseLeftRight(allowScripts);
       }
       const classCommand = atomClassCommandName(token.text);
       if (classCommand) {
@@ -283,6 +291,70 @@ class TexMathParser {
       },
       sourceSpan,
     }, allowScripts);
+  }
+
+  private parseLeftRight(allowScripts: boolean): TexMathAtom {
+    const leftCommand = this.advance();
+    const leftDelimiter = this.parseDelimiter(leftCommand.sourceSpan, "\\left delimiter");
+    const body = this.parseList({ stopAtGroupClose: false, stopAtRight: true });
+    const rightCommand = this.peek();
+    let rightDelimiter: { delimiter: TexMathDelimiter; sourceSpan: TexMathSourceSpan } | null = null;
+    if (rightCommand?.kind === "command" && commandName(rightCommand.text) === "right") {
+      this.advance();
+      rightDelimiter = this.parseDelimiter(rightCommand.sourceSpan, "\\right delimiter");
+    } else {
+      this.addDiagnostic(
+        "error",
+        "missing-right",
+        "Expected \\right to close \\left in math formula.",
+        rightCommand?.sourceSpan ?? body.sourceSpan
+      );
+    }
+
+    const fallbackSpan = leftDelimiter?.sourceSpan ?? leftCommand.sourceSpan;
+    const sourceSpan = spanUnion(leftCommand.sourceSpan, rightDelimiter?.sourceSpan ?? body.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "inner",
+      nucleus: {
+        kind: "left-right",
+        leftDelimiter: leftDelimiter?.delimiter ?? ".",
+        rightDelimiter: rightDelimiter?.delimiter ?? ".",
+        body,
+        leftDelimiterSourceSpan: fallbackSpan,
+        rightDelimiterSourceSpan: rightDelimiter?.sourceSpan ?? body.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseDelimiter(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { delimiter: TexMathDelimiter; sourceSpan: TexMathSourceSpan } | null {
+    const token = this.peek();
+    if (!token || token.kind === "space" || token.kind === "group-close" || token.kind === "subscript" || token.kind === "superscript") {
+      this.addDiagnostic(
+        "error",
+        "missing-delimiter",
+        `Expected a ${label}.`,
+        token?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    if (token.kind === "character" && isSupportedDelimiter(token.text)) {
+      this.advance();
+      return { delimiter: token.text, sourceSpan: token.sourceSpan };
+    }
+    this.advance();
+    this.addDiagnostic(
+      "warning",
+      "unsupported-command",
+      `Unsupported math delimiter ${token.text}.`,
+      token.sourceSpan
+    );
+    return null;
   }
 
   private parseClassCommand(
@@ -520,6 +592,10 @@ function atomClassCommandName(command: string): TexMathAtomClass | null {
     default:
       return null;
   }
+}
+
+function isSupportedDelimiter(text: string): text is TexMathDelimiter {
+  return text === "." || text === "(" || text === ")" || text === "[" || text === "]";
 }
 
 function spanUnion(a: TexMathSourceSpan, b: TexMathSourceSpan): TexMathSourceSpan {
