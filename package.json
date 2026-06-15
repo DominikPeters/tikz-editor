@@ -43,6 +43,7 @@
     "compare:tex-math": "node scripts/compare-tex-math.mjs",
     "extract:mathjax-tex-corpus": "node scripts/extract-mathjax-tex-corpus.mjs",
     "check:mathjax-tex-corpus": "node scripts/check-mathjax-tex-corpus-coverage.mjs",
+    "fuzz:tex-math:parser": "node scripts/fuzz-tex-math.mjs --parser-only --cases 10000 --seed 20260615 --random-source-offset",
     "compare:tex-math:fuzz": "node scripts/compare-tex-math.mjs --math-fuzz 40 --seed 20260615 --summary-only",
     "compare:tex-math:fuzz:large": "node scripts/compare-tex-math.mjs --math-fuzz 160 --seed 20260616 --summary-only",
     "compare:tex-math:aligned-fuzz": "node scripts/compare-tex-math.mjs --aligned-fuzz 64 --seed 20260615 --summary-only",
