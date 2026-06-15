@@ -357,11 +357,6 @@ export interface TexVListBoxReportItem {
     readonly contentStart: number;
     readonly contentEnd: number;
   };
-  readonly displayAlignment?: {
-    readonly delimiter: SimpleTexDisplayMathDelimiter;
-    readonly contentStart: number;
-    readonly contentEnd: number;
-  };
 }
 
 export interface TexVListBoxLayoutReport {

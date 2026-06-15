@@ -2641,6 +2641,8 @@ describe("simple TeX paragraph layout", () => {
         listLabelDepth: 1,
         listItemIndex: 2,
         listLabelBlockIndex: 0,
+        displayAlignDelimiter: null,
+        displayAlignRowIndex: null,
         clientLeft: 14,
         clientRight: 38,
         clientTop: 29,
@@ -2664,6 +2666,8 @@ describe("simple TeX paragraph layout", () => {
         listLabelDepth: null,
         listItemIndex: null,
         listLabelBlockIndex: null,
+        displayAlignDelimiter: null,
+        displayAlignRowIndex: null,
         clientLeft: 30,
         clientRight: 44,
         clientTop: 56,
@@ -2687,6 +2691,8 @@ describe("simple TeX paragraph layout", () => {
         listLabelDepth: null,
         listItemIndex: null,
         listLabelBlockIndex: null,
+        displayAlignDelimiter: null,
+        displayAlignRowIndex: null,
         clientLeft: 38,
         clientRight: 38,
         clientTop: 68,
@@ -2710,6 +2716,8 @@ describe("simple TeX paragraph layout", () => {
         listLabelDepth: null,
         listItemIndex: null,
         listLabelBlockIndex: null,
+        displayAlignDelimiter: null,
+        displayAlignRowIndex: null,
         clientLeft: 46,
         clientRight: 64,
         clientTop: 83,
@@ -4300,6 +4308,80 @@ describe("simple TeX paragraph layout", () => {
       lineIndex: 0,
       offset: alphaOffset,
       kind: "text",
+    });
+  });
+
+  it("exposes display alignment rows in registered vlist hit geometry", () => {
+    const sourceText = String.raw`\begin{quote}Intro \begin{align*}x&=y\\a&=b\end{align*} Outro\end{quote}`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:display-align-row-hitmap",
+      width: 180,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    const vlistLayout = result.vlistLayout;
+    expect(report).not.toBeNull();
+    expect(vlistLayout).not.toBeNull();
+
+    const outputJax = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:display-align-row-hitmap",
+      layout: vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: report?.width ?? 1 } },
+      querySelectorAll: () => {
+        throw new Error("registered display alignment row hit-testing should avoid rendered linebox queries");
+      },
+    };
+
+    const alignRows = getKnuthPlassVListItemGeometry({
+      outputJax,
+      paragraphId: "tex:display-align-row-hitmap",
+      containerElement: containerElement as any,
+    }).filter((item) => item.hboxRole === "display-align-row");
+
+    expect(alignRows.map((row) => ({
+      role: row.hboxRole,
+      delimiter: row.displayAlignDelimiter,
+      rowIndex: row.displayAlignRowIndex,
+      source: sourceText.slice(row.sourceStart ?? 0, row.sourceEnd ?? 0),
+    }))).toEqual([
+      {
+        role: "display-align-row",
+        delimiter: "align-star",
+        rowIndex: 0,
+        source: String.raw`x&=y\\`,
+      },
+      {
+        role: "display-align-row",
+        delimiter: "align-star",
+        rowIndex: 1,
+        source: "a&=b",
+      },
+    ]);
+
+    const secondRow = alignRows[1];
+    expect(secondRow).toBeDefined();
+    const hit = getKnuthPlassVListItemFromPoint({
+      outputJax,
+      paragraphId: "tex:display-align-row-hitmap",
+      containerElement: containerElement as any,
+      clientPoint: clientPoint(
+        px(((secondRow?.clientLeft ?? 0) + (secondRow?.clientRight ?? 0)) / 2),
+        px(((secondRow?.clientTop ?? 0) + (secondRow?.clientBottom ?? 0)) / 2)
+      ),
+    });
+    expect(hit).toMatchObject({
+      kind: "hbox",
+      hboxRole: "display-align-row",
+      displayAlignDelimiter: "align-star",
+      displayAlignRowIndex: 1,
+      sourceStart: sourceText.indexOf("a&=b"),
+      sourceEnd: sourceText.indexOf("a&=b") + "a&=b".length,
     });
   });
 });

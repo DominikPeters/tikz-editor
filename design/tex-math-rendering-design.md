@@ -608,6 +608,8 @@ supported grammar is mostly healthy under the available gates:
   scripts, fractions, radicals, sums, delimiters, TeX forced breaks, and actual
   vlist line placement; a focused fragmented-inline-math fixture exercises
   caret and selection behavior across math breakpoint line splits;
+- registered vlist hit geometry exposes display alignment row hboxes, including
+  source spans and row metadata, in nested vertical-list contexts;
 - display construct and large display fuzz matrices compare glyphs in
   absolute vbox coordinates and pass at the current 0.03 pt tolerance;
 - aligned math fuzz passes for the currently supported alignment grammar.
@@ -626,8 +628,8 @@ work should focus on:
   enough for regular use;
 - expanding absolute-coordinate glyph trace coverage beyond the current inline,
   display, and mixed vertical-list gates into broader document-level matrices;
-- expanding editor hit-test fuzz from inline math into display alignment rows
-  and mixed vertical-list editing contexts;
+- expanding editor hit-test fuzz beyond focused fixtures into generated display
+  alignment rows and mixed vertical-list editing contexts;
 - documenting each known intentional mismatch between MathJax diagnostic tests
   and LuaLaTeX behavior before using MathJax corpus failures as work items;
 - expanding the mixed vertical-list fuzz grammar to include aligned displays

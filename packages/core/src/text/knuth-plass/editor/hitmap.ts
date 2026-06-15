@@ -191,7 +191,7 @@ export interface VListItemGeometry {
   sourceStart: number | null;
   sourceEnd: number | null;
   placeholderReason: string | null;
-  hboxRole: 'list-label' | null;
+  hboxRole: 'list-label' | 'display-align-row' | null;
   listLabelKind: string | null;
   listLabelPlacement: string | null;
   listKind: string | null;
@@ -199,6 +199,8 @@ export interface VListItemGeometry {
   listLabelDepth: number | null;
   listItemIndex: number | null;
   listLabelBlockIndex: number | null;
+  displayAlignDelimiter: string | null;
+  displayAlignRowIndex: number | null;
   clientLeft: number;
   clientRight: number;
   clientTop: number;
@@ -1128,21 +1130,33 @@ function texVListHboxRoleGeometryFromReportItem(item: TexVListBoxReportItem): Pi
   | 'listLabelDepth'
   | 'listItemIndex'
   | 'listLabelBlockIndex'
+  | 'displayAlignDelimiter'
+  | 'displayAlignRowIndex'
 > {
   const role = item.hboxRole;
-  if (role?.kind !== 'list-label') {
-    return emptyVListHboxRoleGeometry();
+  if (role?.kind === 'list-label') {
+    return {
+      hboxRole: 'list-label',
+      listLabelKind: role.labelKind,
+      listLabelPlacement: role.placement,
+      listKind: role.listKind,
+      listDepth: role.depth,
+      listLabelDepth: role.labelDepth,
+      listItemIndex: role.itemIndex,
+      listLabelBlockIndex: role.blockIndex,
+      displayAlignDelimiter: null,
+      displayAlignRowIndex: null,
+    };
   }
-  return {
-    hboxRole: 'list-label',
-    listLabelKind: role.labelKind,
-    listLabelPlacement: role.placement,
-    listKind: role.listKind,
-    listDepth: role.depth,
-    listLabelDepth: role.labelDepth,
-    listItemIndex: role.itemIndex,
-    listLabelBlockIndex: role.blockIndex,
-  };
+  if (role?.kind === 'display-align-row') {
+    return {
+      ...emptyVListHboxRoleGeometry(),
+      hboxRole: 'display-align-row',
+      displayAlignDelimiter: role.delimiter,
+      displayAlignRowIndex: role.rowIndex,
+    };
+  }
+  return emptyVListHboxRoleGeometry();
 }
 
 function emptyVListHboxRoleGeometry(): Pick<
@@ -1155,6 +1169,8 @@ function emptyVListHboxRoleGeometry(): Pick<
   | 'listLabelDepth'
   | 'listItemIndex'
   | 'listLabelBlockIndex'
+  | 'displayAlignDelimiter'
+  | 'displayAlignRowIndex'
 > {
   return {
     hboxRole: null,
@@ -1165,6 +1181,8 @@ function emptyVListHboxRoleGeometry(): Pick<
     listLabelDepth: null,
     listItemIndex: null,
     listLabelBlockIndex: null,
+    displayAlignDelimiter: null,
+    displayAlignRowIndex: null,
   };
 }
 
