@@ -1964,6 +1964,9 @@ function shouldAddAmsEllipsisTrailingGlue(
   if (!next) {
     return true;
   }
+  if (next.kind === "character" && next.text === "&") {
+    return true;
+  }
   if (ellipsis === "cdots" && next.kind === "character" && [",", ";", "."].includes(next.text)) {
     return true;
   }

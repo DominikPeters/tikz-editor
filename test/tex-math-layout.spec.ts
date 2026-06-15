@@ -883,6 +883,23 @@ describe("TeX math hlist layout", () => {
       role: "substack-row",
       y: expect.closeTo(2.739379, 6),
     });
+
+    const ellipsisRows = layout(String.raw`\substack{x=b\\\dots\\\cdots=\sum}`);
+    expect(ellipsisRows.supported).toBe(true);
+    const ellipsisRow = ellipsisRows.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    const ellipsisCell = ellipsisRow?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(ellipsisCell).toMatchObject({
+      kind: "hlist",
+      role: "substack-cell",
+      x: expect.closeTo(7.270865, 6),
+      width: expect.closeTo(7.125048, 6),
+    });
+    const ellipsisNucleus = ellipsisCell?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(ellipsisNucleus?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmmi7", code: 58, x: 0 },
+      { kind: "glyph", fontId: "cmmi7", code: 58, x: expect.closeTo(2.375016, 6) },
+      { kind: "glyph", fontId: "cmmi7", code: 58, x: expect.closeTo(4.750032, 6) },
+    ]);
   });
 
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
@@ -1380,6 +1397,17 @@ describe("TeX math hlist layout", () => {
       { kind: "hlist", role: "array-cell", x: 5 },
       { kind: "hlist", role: "array-cell", x: expect.closeTo(20.715271, 4) },
     ]);
+
+    const ellipsisBoundary = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{cc}\cdots&x\end{array}`).list
+    );
+    expect(ellipsisBoundary.supported).toBe(true);
+    expect(ellipsisBoundary.hlist?.width).toBeCloseTo(39.048508, 3);
+    const ellipsisRow = ellipsisBoundary.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(ellipsisRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-cell", x: 5, width: expect.closeTo(13.333386, 5) },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(28.333386, 5) },
+    ]);
   });
 
   it("lays out cases as amsmath array with stretched struts, quad gap, and left brace", () => {
@@ -1429,6 +1457,18 @@ describe("TeX math hlist layout", () => {
     expect(firstRow?.items).toMatchObject([
       { kind: "hlist", role: "cases-cell", x: 0 },
       { kind: "hlist", role: "cases-cell", x: expect.closeTo(15.71528, 5) },
+    ]);
+
+    const ellipsisBoundary = layoutTexMathList(
+      parseTexMath(String.raw`\begin{cases}\cdots&x\end{cases}`).list
+    );
+    expect(ellipsisBoundary.supported).toBe(true);
+    expect(ellipsisBoundary.hlist?.width).toBeCloseTo(36.915192, 3);
+    const ellipsisBody = ellipsisBoundary.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    const ellipsisRow = ellipsisBody?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(ellipsisRow?.items).toMatchObject([
+      { kind: "hlist", role: "cases-cell", x: 0, width: expect.closeTo(13.333386, 5) },
+      { kind: "hlist", role: "cases-cell", x: expect.closeTo(23.333386, 5) },
     ]);
   });
 
