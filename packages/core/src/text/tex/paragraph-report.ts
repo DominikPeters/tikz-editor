@@ -554,9 +554,9 @@ function texMathBoxSvgBody(
   if (!box) {
     return undefined;
   }
-  if (box.hlist && box.fontProfile && Math.abs(width - box.width) > 1e-6) {
+  if (box.hlist && box.fontProfile) {
     return renderTexMathHListSvgBody(
-      setTexMathHListWidth(box.hlist, width),
+      Math.abs(width - box.width) > 1e-6 ? setTexMathHListWidth(box.hlist, width) : box.hlist,
       { fontProfile: box.fontProfile }
     );
   }

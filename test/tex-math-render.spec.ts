@@ -1014,13 +1014,11 @@ describe("TeX math SVG rendering", () => {
       sourceStartRaw: source.indexOf("x-y"),
       sourceEndRaw: source.indexOf("-") + 1,
       sourceKind: "math",
-      mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
     });
     expect(mathSegments[1]).toMatchObject({
       sourceStartRaw: source.indexOf("-") + 1,
       sourceEndRaw: source.indexOf("x-y") + "x-y".length,
       sourceKind: "math",
-      mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
     });
     expect(mathAdvanceSegments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(23.199158, 6);
     expect(mathSegments[0]?.caretStops?.[0]).toBeCloseTo(mathSegments[0]?.x ?? 0, 6);
@@ -1028,7 +1026,38 @@ describe("TeX math SVG rendering", () => {
       (mathSegments[1]?.x ?? 0) + (mathSegments[1]?.width ?? 0),
       6
     );
+    expect(mathSegments[0]?.mathSvgBody).not.toContain('data-tex-math-fragment="true"');
+    expect(mathSegments[1]?.mathSvgBody).not.toContain('data-tex-math-fragment="true"');
     expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(mathSegments[1]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+  });
+
+  it("renders split inline math fragments without repainting earlier formula glyphs", () => {
+    const source = String.raw`Where \(p_i=\{x,y\}\) is the unordered pair of alternatives swapped when going
+from \(R_{i-1}\) to \(R_i\).  We usually write \(p_i=(x,y)\), but the pair is
+unordered.`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-fragment-no-overpaint",
+      width: 150,
+      alignment: "ragged-right",
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const mathSegments = result.report?.lines
+      .flatMap((line) => line.segments)
+      .filter((segment) => segment.kind === "math") ?? [];
+    const pairTail = mathSegments.find((segment) => segment.text === "(x,y)");
+    const braceTail = mathSegments.find((segment) => segment.text === String.raw`\{x,y\}`);
+    expect(pairTail?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="40"');
+    expect(pairTail?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(pairTail?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="112"');
+    expect(pairTail?.mathSvgBody).not.toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+    expect(braceTail?.mathSvgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="102"');
+    expect(braceTail?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="112"');
+    expect(braceTail?.mathSvgBody).not.toContain('data-tex-font="cmr10" data-tex-glyph="61"');
   });
 
   it("carries TeX inline math breakpoint metadata into paragraph reports", () => {

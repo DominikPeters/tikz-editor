@@ -370,7 +370,7 @@ function mathBoxFragment(
     caretStops: fragmentMathCaretStops(box, xStart, xEnd, sourceStart, sourceEnd),
     constructRanges: fragmentMathConstructRanges(box, xStart, xEnd),
     breakpoints: fragmentMathBreakpoints(box, xStart, xEnd),
-    svgBody: box.svgBody ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
+    svgBody: box.svgBody && !box.hlist ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
     hlist: box.hlist ? fragmentMathHList(box.hlist, xStart, xEnd, width) : undefined,
   };
 }
