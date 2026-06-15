@@ -65,6 +65,13 @@ function texVListBoxReportItem(
     } : {}),
     ...(item.item.kind === "penalty" ? { penalty: item.item.penalty } : {}),
     ...(item.item.kind === "placeholder" ? { placeholderReason: item.item.reason } : {}),
+    ...(item.item.kind === "display-math" ? {
+      displayMath: {
+        delimiter: item.item.delimiter,
+        contentStart: item.item.contentStart,
+        contentEnd: item.item.contentEnd,
+      },
+    } : {}),
   };
   return report;
 }

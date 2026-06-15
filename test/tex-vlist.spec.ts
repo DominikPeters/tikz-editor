@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computerModernTexMetricProvider,
+  createTexDerivedInlineMathBoxProvider,
   createSimpleTexLayoutDocumentIr,
   parseSimpleTexParagraphIr,
 } from "../packages/core/src/text/tex/index.js";
@@ -105,6 +106,107 @@ describe("TeX vlist lowering", () => {
     )).toEqual([
       { text: "Alpha", quoteDepth: 1, listKind: "enumerate", itemIndex: 1 },
       { text: "Beta", quoteDepth: 1, listKind: "enumerate", itemIndex: 2 },
+    ]);
+  });
+
+  it("parses and lowers display math as source-spanned vlist items", () => {
+    const source = String.raw`Alpha \[\sum_i^n\] Beta $$x^2$$`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "display-math",
+      "space",
+      "text",
+      "space",
+      "display-math",
+    ]);
+    expect(parsed.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "display-math",
+      "paragraph",
+      "display-math",
+    ]);
+
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+
+    expect(vlist.items[1]).toMatchObject({
+      kind: "display-math",
+      sourceSpan: {
+        start: source.indexOf(String.raw`\[`),
+        end: source.indexOf(String.raw`\]`) + 2,
+      },
+      delimiter: "bracket",
+      content: String.raw`\sum_i^n`,
+      contentStart: source.indexOf(String.raw`\sum`),
+      contentEnd: source.indexOf(String.raw`\]`),
+      targetWidth: 120,
+      box: {
+        width: expect.closeTo(14.44448, 5),
+      },
+    });
+    expect(vlist.items[3]).toMatchObject({
+      kind: "display-math",
+      delimiter: "double-dollar",
+      content: "x^2",
+    });
+  });
+
+  it("centers measured display math items in the vlist width", () => {
+    const source = String.raw`\[\sum_i^n\]`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+    const layout = layoutTexVListItems(
+      vlist.items,
+      () => null,
+      null,
+      0
+    );
+    const display = layout.positioned[0];
+
+    expect(display).toMatchObject({
+      item: { kind: "display-math" },
+      x: expect.closeTo((120 - 14.44448) / 2, 5),
+      y: 0,
+      metrics: {
+        width: expect.closeTo(14.44448, 5),
+      },
+    });
+    expect(texVListBoxLayoutReport(
+      layout.positioned,
+      { width: 120, height: 0, depth: display?.metrics.height ?? 0 },
+      { kind: "none" }
+    ).items[0]).toMatchObject({
+      itemKind: "display-math",
+      displayMath: {
+        delimiter: "bracket",
+        contentStart: 2,
+        contentEnd: 10,
+      },
+    });
+  });
+
+  it("uses explicit placeholders for unsupported display math formulas", () => {
+    const source = String.raw`\[\unknown{x}\]`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+
+    expect(vlist.items).toEqual([
+      expect.objectContaining({
+        kind: "placeholder",
+        sourceSpan: { start: 0, end: source.length },
+        reason: "TeX display math rendering is not implemented for this formula.",
+      }),
     ]);
   });
 

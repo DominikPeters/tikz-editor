@@ -166,6 +166,16 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
   if (item.kind === "placeholder") {
     return { metrics: item.estimated };
   }
+  if (item.kind === "display-math") {
+    return {
+      x: Math.max(0, roundTexPt((item.targetWidth - item.box.width) / 2)),
+      metrics: {
+        width: item.box.width,
+        height: item.box.height,
+        depth: item.box.depth,
+      },
+    };
+  }
   if (item.kind === "hbox") {
     return {
       x: item.x,

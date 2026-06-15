@@ -249,6 +249,31 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
   });
 
+  it("creates display-style math boxes for display formulas without MathJax", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`\[\sum_i^n\]`;
+    const box = provider.getDisplayMathBox?.({
+      source,
+      content: String.raw`\sum_i^n`,
+      delimiter: "bracket",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 2,
+      contentEnd: source.length - 2,
+    });
+
+    expect(box).toMatchObject({
+      source,
+      content: String.raw`\sum_i^n`,
+      sourceStart: 0,
+      sourceEnd: source.length,
+      width: expect.closeTo(14.44448, 5),
+    });
+    expect(box?.svgBody).toContain('data-tex-math-style="display"');
+    expect(box?.svgBody).toContain('data-tex-font="cmex10" data-tex-glyph="88"');
+    expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="110"');
+  });
+
   it("creates inline math boxes for simple superscripts and subscripts without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
@@ -313,5 +338,32 @@ describe("TeX math SVG rendering", () => {
     });
     expect(mathSegment?.mathSvgBody).toContain('data-tex-math-hlist="true"');
     expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+  });
+
+  it("lets TeX paragraph layout carry supported display math as a vlist item", () => {
+    const source = String.raw`Alpha \[\sum_i^n\] Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-math-provider",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const display = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "display-math"
+    );
+    expect(display).toMatchObject({
+      itemKind: "display-math",
+      x: expect.closeTo((160 - 14.44448) / 2, 5),
+      width: expect.closeTo(14.44448, 5),
+      displayMath: {
+        delimiter: "bracket",
+        contentStart: source.indexOf(String.raw`\sum`),
+        contentEnd: source.indexOf(String.raw`\]`),
+      },
+    });
+    expect(result.vlistLayout?.paragraphPlacements).toHaveLength(2);
   });
 });

@@ -28,6 +28,8 @@ export {
   type SimpleTexAlignmentNode,
   type SimpleTexBlockItem,
   type SimpleTexControlNode,
+  type SimpleTexDisplayMathBlockItem,
+  type SimpleTexDisplayMathNode,
   type SimpleTexEnvironmentBoundaryNode,
   type SimpleTexFontCommandName,
   type SimpleTexFontCommandNode,

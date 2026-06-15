@@ -1,5 +1,6 @@
 import type {
   SimpleTexBlockItem,
+  SimpleTexDisplayMathBlockItem,
   SimpleTexParagraphBlock,
   SimpleTexPenaltyBlockItem,
   SimpleTexPlaceholderBlockItem,
@@ -9,6 +10,7 @@ import type {
 import { texVBoxRolePathForScope } from "./scope-roles.js";
 import type {
   TexGlueItem,
+  TexDisplayMathItem,
   TexParagraphInput,
   TexPenaltyItem,
   TexPlaceholderItem,
@@ -18,19 +20,27 @@ import type {
   TexVListDocument,
   TexVListItem,
 } from "./types.js";
+import type { TexMathBoxProvider } from "../layout-inline-items.js";
+
+export interface LowerSimpleTexBlockItemsToVListOptions {
+  readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly width?: number;
+}
 
 export function lowerSimpleTexBlocksToVList(
-  blocks: readonly SimpleTexParagraphBlock[]
+  blocks: readonly SimpleTexParagraphBlock[],
+  options: LowerSimpleTexBlockItemsToVListOptions = {}
 ): TexVListDocument {
   return lowerSimpleTexBlockItemsToVList(blocks.map((block, blockIndex) => ({
     kind: "paragraph",
     blockIndex,
     block,
-  })));
+  })), options);
 }
 
 export function lowerSimpleTexBlockItemsToVList(
-  blockItems: readonly SimpleTexBlockItem[]
+  blockItems: readonly SimpleTexBlockItem[],
+  options: LowerSimpleTexBlockItemsToVListOptions = {}
 ): TexVListDocument {
   const items: TexVListItem[] = blockItems.map((item) => {
     if (item.kind === "vertical-glue") {
@@ -45,6 +55,9 @@ export function lowerSimpleTexBlockItemsToVList(
     if (item.kind === "placeholder") {
       return placeholderItemFromSimpleTexPlaceholder(item);
     }
+    if (item.kind === "display-math") {
+      return displayMathItemFromSimpleTexDisplayMath(item, options);
+    }
     return {
       kind: "paragraph",
       sourceSpan: sourceSpanFromBlock(item.block),
@@ -56,6 +69,50 @@ export function lowerSimpleTexBlockItemsToVList(
     kind: "vlist",
     sourceSpan: sourceSpanForVListItems(items),
     items,
+  };
+}
+
+function displayMathItemFromSimpleTexDisplayMath(
+  item: SimpleTexDisplayMathBlockItem,
+  options: LowerSimpleTexBlockItemsToVListOptions
+): TexDisplayMathItem | TexPlaceholderItem {
+  const sourceSpan = {
+    start: item.sourceStart,
+    end: item.sourceEnd,
+  };
+  const box = options.mathBoxProvider?.getDisplayMathBox?.({
+    source: item.text,
+    content: item.content,
+    delimiter: item.delimiter,
+    sourceStart: item.sourceStart,
+    sourceEnd: item.sourceEnd,
+    contentStart: item.contentStart,
+    contentEnd: item.contentEnd,
+  }) ?? null;
+  if (!box) {
+    return {
+      kind: "placeholder",
+      sourceSpan,
+      reason: "TeX display math rendering is not implemented for this formula.",
+      scopePath: scopePathForVerticalBlockItem(item),
+      estimated: {
+        width: 0,
+        height: 10,
+        depth: 4,
+      },
+    };
+  }
+  return {
+    kind: "display-math",
+    sourceSpan,
+    scopePath: scopePathForVerticalBlockItem(item),
+    text: item.text,
+    content: item.content,
+    delimiter: item.delimiter,
+    contentStart: item.contentStart,
+    contentEnd: item.contentEnd,
+    targetWidth: options.width ?? box.width,
+    box,
   };
 }
 
@@ -129,6 +186,7 @@ function scopePathForVerticalBlockItem(
     | SimpleTexVerticalGlueBlockItem
     | SimpleTexVerticalRuleBlockItem
     | SimpleTexPenaltyBlockItem
+    | SimpleTexDisplayMathBlockItem
     | SimpleTexPlaceholderBlockItem
 ): readonly TexVBoxRole[] | undefined {
   const path = texVBoxRolePathForScope(item);

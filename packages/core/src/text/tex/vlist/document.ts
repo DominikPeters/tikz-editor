@@ -61,8 +61,14 @@ export function prepareSimpleTexLayoutDocument(
 ): SimpleTexLayoutDocumentPreparation {
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const baseVList = params.items
-    ? lowerSimpleTexBlockItemsToVList(params.items)
-    : lowerSimpleTexBlocksToVList(params.blocks);
+    ? lowerSimpleTexBlockItemsToVList(params.items, {
+        mathBoxProvider: params.options.mathBoxProvider,
+        width: params.options.width,
+      })
+    : lowerSimpleTexBlocksToVList(params.blocks, {
+        mathBoxProvider: params.options.mathBoxProvider,
+        width: params.options.width,
+      });
   const preparedVList = prepareSimpleTexVList(baseVList, params.font);
   const paragraphPreparation = prepareTexLayoutParagraphsFromVList({
     vlist: preparedVList.normalized,

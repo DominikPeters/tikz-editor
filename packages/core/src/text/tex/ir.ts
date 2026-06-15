@@ -76,6 +76,15 @@ export interface SimpleTexMathNode extends SimpleTexSourceRange {
   readonly contentEnd: number;
 }
 
+export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
+  readonly kind: "display-math";
+  readonly text: string;
+  readonly delimiter: "bracket" | "double-dollar";
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+}
+
 export interface SimpleTexFontCommandNode extends SimpleTexSourceRange {
   readonly kind: "font-command";
   readonly text: string;
@@ -173,6 +182,7 @@ export type SimpleTexInlineNode =
 
 export type SimpleTexControlNode =
   | SimpleTexParagraphBreakNode
+  | SimpleTexDisplayMathNode
   | SimpleTexNoIndentNode
   | SimpleTexAlignmentNode
   | SimpleTexEnvironmentBoundaryNode
@@ -255,6 +265,17 @@ export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
   readonly listScope?: SimpleTexListScope;
 }
 
+export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange {
+  readonly kind: "display-math";
+  readonly text: string;
+  readonly delimiter: "bracket" | "double-dollar";
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly quoteDepth: number;
+  readonly listScope?: SimpleTexListScope;
+}
+
 export interface SimpleTexListScope {
   readonly kind: SimpleTexListKind;
   readonly depth: number;
@@ -269,6 +290,7 @@ export type SimpleTexBlockItem =
   | SimpleTexVerticalGlueBlockItem
   | SimpleTexVerticalRuleBlockItem
   | SimpleTexPenaltyBlockItem
+  | SimpleTexDisplayMathBlockItem
   | SimpleTexPlaceholderBlockItem;
 
 export interface SimpleTexListContext {
@@ -449,6 +471,22 @@ function scanSimpleTexIrNodes(
   while (index < text.length) {
     const sourceStart = sourceOffset + index;
     const char = text[index];
+
+    const displayMath = scanSimpleTexDisplayMath(text, index);
+    if (displayMath) {
+      nodes.push({
+        kind: "display-math",
+        text: text.slice(index, displayMath.end),
+        delimiter: displayMath.delimiter,
+        content: text.slice(displayMath.contentStart, displayMath.contentEnd),
+        contentStart: sourceOffset + displayMath.contentStart,
+        contentEnd: sourceOffset + displayMath.contentEnd,
+        sourceStart,
+        sourceEnd: sourceOffset + displayMath.end,
+      });
+      index = displayMath.end;
+      continue;
+    }
 
     const math = scanSimpleTexMath(text, index);
     if (math) {
@@ -677,6 +715,65 @@ function scanSimpleTexIrNodes(
   return { nodes, unsupportedCommand };
 }
 
+function scanSimpleTexDisplayMath(
+  text: string,
+  start: number
+): {
+  readonly delimiter: "bracket" | "double-dollar";
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly end: number;
+} | null {
+  if (
+    text[start] === "\\" &&
+    text[start + 1] === "[" &&
+    !isEscapedSimpleTexChar(text, start)
+  ) {
+    let index = start + 2;
+    while (index < text.length) {
+      if (
+        text[index] === "\\" &&
+        text[index + 1] === "]" &&
+        !isEscapedSimpleTexChar(text, index)
+      ) {
+        return {
+          delimiter: "bracket",
+          contentStart: start + 2,
+          contentEnd: index,
+          end: index + 2,
+        };
+      }
+      index += 1;
+    }
+    return null;
+  }
+
+  if (
+    text[start] === "$" &&
+    text[start + 1] === "$" &&
+    !isEscapedSimpleTexChar(text, start)
+  ) {
+    let index = start + 2;
+    while (index < text.length - 1) {
+      if (
+        text[index] === "$" &&
+        text[index + 1] === "$" &&
+        !isEscapedSimpleTexChar(text, index)
+      ) {
+        return {
+          delimiter: "double-dollar",
+          contentStart: start + 2,
+          contentEnd: index,
+          end: index + 2,
+        };
+      }
+      index += 1;
+    }
+  }
+
+  return null;
+}
+
 function scanSimpleTexMath(
   text: string,
   start: number
@@ -686,10 +783,14 @@ function scanSimpleTexMath(
   readonly contentEnd: number;
   readonly end: number;
 } | null {
-  if (text[start] === "$" && !isEscapedSimpleTexChar(text, start)) {
+  if (text[start] === "$" && text[start + 1] !== "$" && !isEscapedSimpleTexChar(text, start)) {
     let index = start + 1;
     while (index < text.length) {
-      if (text[index] === "$" && !isEscapedSimpleTexChar(text, index)) {
+      if (
+        text[index] === "$" &&
+        text[index + 1] !== "$" &&
+        !isEscapedSimpleTexChar(text, index)
+      ) {
         return {
           delimiter: "dollar",
           contentStart: start + 1,
@@ -1610,6 +1711,37 @@ function buildSimpleTexParagraphBlocksFromNodes(
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      index = prefix.start;
+      continue;
+    }
+
+    if (node.kind === "display-math") {
+      pushBlock(
+        blockStart,
+        node.sourceStart,
+        currentNoIndent,
+        currentQuoteDepth,
+        prefix.alignment,
+        prefix.alignmentProfile
+      );
+      if (abortScan) {
+        break;
+      }
+      items.push({
+        kind: "display-math",
+        text: node.text,
+        delimiter: node.delimiter,
+        content: node.content,
+        contentStart: node.contentStart,
+        contentEnd: node.contentEnd,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        quoteDepth: currentQuoteDepth,
+        listScope: currentSimpleTexListScope(),
+      });
+      prefix = consumeParagraphPrefix(index + 1);
+      blockStart = sourceStartForNodeIndex(prefix.start);
+      currentNoIndent = true;
       index = prefix.start;
       continue;
     }

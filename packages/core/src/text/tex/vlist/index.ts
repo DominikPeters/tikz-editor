@@ -10,6 +10,7 @@ export {
 export {
   lowerSimpleTexBlockItemsToVList,
   lowerSimpleTexBlocksToVList,
+  type LowerSimpleTexBlockItemsToVListOptions,
 } from "./lower-simple.js";
 export {
   normalizeSimpleTexVList,
@@ -122,6 +123,7 @@ export type {
   PositionedTexVListItem,
   TexBoxMetrics,
   TexDimenExpr,
+  TexDisplayMathItem,
   TexGlueItem,
   TexGlueOrigin,
   TexGlueOrder,

@@ -8,6 +8,7 @@ import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
 } from "../ir.js";
+import type { TexMathBox } from "../layout-inline-items.js";
 
 export interface TexSourceSpan {
   readonly start: number;
@@ -243,6 +244,19 @@ export interface TexPlaceholderItem {
   readonly estimated: TexBoxMetrics;
 }
 
+export interface TexDisplayMathItem {
+  readonly kind: "display-math";
+  readonly sourceSpan: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly text: string;
+  readonly content: string;
+  readonly delimiter: "bracket" | "double-dollar";
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly targetWidth: number;
+  readonly box: TexMathBox;
+}
+
 export type TexVListItem =
   | TexParagraphItem
   | TexHBoxItem
@@ -250,6 +264,7 @@ export type TexVListItem =
   | TexGlueItem
   | TexPenaltyItem
   | TexRuleItem
+  | TexDisplayMathItem
   | TexPlaceholderItem;
 
 export interface TexVListDocument {
@@ -294,6 +309,11 @@ export interface TexVListBoxReportItem {
   };
   readonly penalty?: number;
   readonly placeholderReason?: string;
+  readonly displayMath?: {
+    readonly delimiter: "bracket" | "double-dollar";
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  };
 }
 
 export interface TexVListBoxLayoutReport {

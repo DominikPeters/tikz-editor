@@ -71,7 +71,13 @@ function scopePathForItem(
     return texVBoxScopePathForParagraph(item.paragraph);
   }
   if (
-    (item.kind === "glue" || item.kind === "penalty" || item.kind === "rule" || item.kind === "placeholder") &&
+    (
+      item.kind === "glue" ||
+      item.kind === "penalty" ||
+      item.kind === "rule" ||
+      item.kind === "display-math" ||
+      item.kind === "placeholder"
+    ) &&
     item.scopePath
   ) {
     return item.scopePath.map(texVBoxScopeForRole);

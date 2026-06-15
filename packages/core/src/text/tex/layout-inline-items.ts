@@ -67,6 +67,15 @@ export interface TexMathBoxProvider {
     readonly contentStart: number;
     readonly contentEnd: number;
   }) => TexMathBox | null;
+  readonly getDisplayMathBox?: (params: {
+    readonly source: string;
+    readonly content: string;
+    readonly delimiter: "bracket" | "double-dollar";
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  }) => TexMathBox | null;
 }
 
 export interface TexLayoutMathItem {
