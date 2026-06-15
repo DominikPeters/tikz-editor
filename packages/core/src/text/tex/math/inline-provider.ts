@@ -1,6 +1,7 @@
 import type {
   TexMathDisplayAlignment,
   TexMathBox,
+  TexMathConstructRange,
   TexMathBoxProvider,
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
@@ -98,10 +99,74 @@ function getMathBox(
     height: hlist.height,
     depth: hlist.depth,
     caretStops: buildInlineMathCaretStops(hlist, params),
+    constructRanges: buildInlineMathConstructRanges(hlist),
     svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;
+}
+
+interface MathItemExtent {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly xStart: number;
+  readonly xEnd: number;
+  readonly isConstructMarker: boolean;
+}
+
+function buildInlineMathConstructRanges(hlist: TexMathHList): readonly TexMathConstructRange[] {
+  const extents = collectMathItemExtents(hlist.items, 0);
+  const constructSpans = extents.filter((extent) => extent.isConstructMarker);
+  return constructSpans.map((construct) => {
+    let xStart = construct.xStart;
+    let xEnd = construct.xEnd;
+    for (const extent of extents) {
+      if (
+        extent.sourceStart >= construct.sourceStart &&
+        extent.sourceEnd <= construct.sourceEnd
+      ) {
+        xStart = Math.min(xStart, extent.xStart);
+        xEnd = Math.max(xEnd, extent.xEnd);
+      }
+    }
+    return {
+      sourceStart: construct.sourceStart,
+      sourceEnd: construct.sourceEnd,
+      xStart: roundTexPt(Math.max(0, Math.min(hlist.width, xStart))),
+      xEnd: roundTexPt(Math.max(0, Math.min(hlist.width, xEnd))),
+    };
+  }).filter((range, index, ranges) =>
+    range.sourceEnd > range.sourceStart &&
+    range.xEnd > range.xStart &&
+    ranges.findIndex((candidate) =>
+      candidate.sourceStart === range.sourceStart &&
+      candidate.sourceEnd === range.sourceEnd &&
+      candidate.xStart === range.xStart &&
+      candidate.xEnd === range.xEnd
+    ) === index
+  );
+}
+
+function collectMathItemExtents(
+  items: readonly TexMathHListItem[],
+  originX: number
+): readonly MathItemExtent[] {
+  const extents: MathItemExtent[] = [];
+  for (const item of items) {
+    const xStart = roundTexPt(originX + item.x);
+    const xEnd = roundTexPt(xStart + Math.max(0, item.width));
+    extents.push({
+      sourceStart: item.sourceSpan.start,
+      sourceEnd: item.sourceSpan.end,
+      xStart,
+      xEnd,
+      isConstructMarker: item.kind === "rule",
+    });
+    if (item.kind === "hlist") {
+      extents.push(...collectMathItemExtents(item.items, xStart));
+    }
+  }
+  return extents;
 }
 
 function buildInlineMathCaretStops(

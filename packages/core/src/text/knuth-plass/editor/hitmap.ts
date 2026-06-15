@@ -354,6 +354,7 @@ interface LineHitMap extends LineGeometry {
   stopsByX: Stop[];
   stopsByOffset: Stop[];
   stopsByOffsetExact: Map<number, Stop[]>;
+  mathConstructRanges: MathConstructRange[];
   minOffset: number;
   maxOffset: number;
   breakInfo: ParagraphLayoutReport['lines'][number]['break'];
@@ -380,6 +381,14 @@ interface AlignedSegment {
   rawEnd: number;
   sourceKind: 'text' | 'math';
   mathSpan?: MathSourceSpan;
+  mathConstructRanges?: MathConstructRange[];
+}
+
+interface MathConstructRange {
+  sourceStartRaw: number;
+  sourceEndRaw: number;
+  xStart: number;
+  xEnd: number;
 }
 
 interface CachedParagraphEntry {
@@ -1629,6 +1638,29 @@ function explicitSegmentSourceRange(
   };
 }
 
+function normalizeMathConstructRanges(
+  ranges: LineSegmentReport['mathConstructRanges']
+): MathConstructRange[] | undefined {
+  if (!Array.isArray(ranges)) {
+    return undefined;
+  }
+  const normalized = ranges.flatMap((range) => {
+    const sourceStartRaw = Number(range.sourceStartRaw);
+    const sourceEndRaw = Number(range.sourceEndRaw);
+    const xStart = Number(range.xStart);
+    const xEnd = Number(range.xEnd);
+    return Number.isFinite(sourceStartRaw) &&
+      Number.isFinite(sourceEndRaw) &&
+      Number.isFinite(xStart) &&
+      Number.isFinite(xEnd) &&
+      sourceEndRaw > sourceStartRaw &&
+      xEnd > xStart
+      ? [{ sourceStartRaw, sourceEndRaw, xStart, xEnd }]
+      : [];
+  });
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function buildRunRawRanges(
   report: ParagraphLayoutReport,
   spans: SourceSpan[],
@@ -1937,6 +1969,9 @@ function alignSegmentsToSource(
           rawEnd: explicitRange.rawEnd,
           sourceKind: explicitRange.sourceKind,
           mathSpan,
+          mathConstructRanges: explicitRange.sourceKind === 'math'
+            ? normalizeMathConstructRanges(segment.mathConstructRanges)
+            : undefined,
         });
         continue;
       }
@@ -1997,6 +2032,9 @@ function alignSegmentsToSource(
           Array.isArray(segment.caretStops)
           ? segment.caretStops
           : [groupStartX, Math.max(groupStartX, groupEndX)];
+        const groupConstructRanges = mathGroupStartIndex === segmentIndex
+          ? normalizeMathConstructRanges(segment.mathConstructRanges)
+          : undefined;
 
         aligned.push({
           lineIndex: line.lineIndex,
@@ -2012,6 +2050,7 @@ function alignSegmentsToSource(
           rawEnd: groupRawEnd,
           sourceKind: 'math',
           mathSpan,
+          mathConstructRanges: groupConstructRanges,
         });
         continue;
       }
@@ -2202,7 +2241,8 @@ function buildLineHitMaps(
   stopsByLine: Map<number, Stop[]>,
   geometryByLineIndex: Map<number, LineGeometry>,
   sourceLength: number,
-  visibleHyphenBreakOffsetByLine: Map<number, number>
+  visibleHyphenBreakOffsetByLine: Map<number, number>,
+  mathConstructRangesByLine: Map<number, MathConstructRange[]>
 ): LineHitMap[] {
   const lines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
   return lines.map((line) => {
@@ -2234,12 +2274,28 @@ function buildLineHitMaps(
       stopsByX: byX,
       stopsByOffset: byOffset,
       stopsByOffsetExact: exact,
+      mathConstructRanges: mathConstructRangesByLine.get(line.lineIndex) ?? [],
       minOffset,
       maxOffset,
       breakInfo: line.break,
       visibleHyphenBreakOffset: visibleHyphenBreakOffsetByLine.get(line.lineIndex) ?? null,
     };
   });
+}
+
+function buildMathConstructRangesByLine(
+  alignedSegments: readonly AlignedSegment[]
+): Map<number, MathConstructRange[]> {
+  const byLine = new Map<number, MathConstructRange[]>();
+  for (const segment of alignedSegments) {
+    if (segment.sourceKind !== 'math' || !segment.mathConstructRanges?.length) {
+      continue;
+    }
+    const ranges = byLine.get(segment.lineIndex) ?? [];
+    ranges.push(...segment.mathConstructRanges);
+    byLine.set(segment.lineIndex, ranges);
+  }
+  return byLine;
 }
 
 function buildVisibleHyphenBreakOffsetByLine(
@@ -2285,12 +2341,14 @@ async function buildParagraphHitMap(
   const geometryByLineIndex = new Map(lineGeometry.map((entry) => [entry.lineIndex, entry]));
   const stopsByLine = await buildStopsByLine(outputJax, aligned.aligned);
   const visibleHyphenBreakOffsetByLine = buildVisibleHyphenBreakOffsetByLine(report, aligned.aligned);
+  const mathConstructRangesByLine = buildMathConstructRangesByLine(aligned.aligned);
   const lines = buildLineHitMaps(
     report,
     stopsByLine,
     geometryByLineIndex,
     sourceText.length,
-    visibleHyphenBreakOffsetByLine
+    visibleHyphenBreakOffsetByLine,
+    mathConstructRangesByLine
   );
 
   return {
@@ -2851,11 +2909,22 @@ export async function getKnuthPlassSelectionRects(
     if (endStop.offset < startStop.offset) {
       continue;
     }
+    const selectedMathConstructs = line.mathConstructRanges.filter((range) =>
+      rangeEnd > range.sourceStartRaw && rangeStart < range.sourceEndRaw
+    );
+    const localStartX = Math.min(
+      startStop.x,
+      ...selectedMathConstructs.map((range) => range.xStart)
+    );
+    const localEndX = Math.max(
+      endStop.x,
+      ...selectedMathConstructs.map((range) => range.xEnd)
+    );
 
     const reportLine = hitMap.report.lines.find((entry) => entry.lineIndex === line.lineIndex)!;
 
-    const startPoint = lineLocalClientPoint(line, reportLine, startStop.x);
-    const endPoint = lineLocalClientPoint(line, reportLine, endStop.x);
+    const startPoint = lineLocalClientPoint(line, reportLine, localStartX);
+    const endPoint = lineLocalClientPoint(line, reportLine, localEndX);
     const segmentWidth = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
     if (segmentWidth <= EPSILON) {
       continue;

@@ -3777,6 +3777,63 @@ describe("simple TeX paragraph layout", () => {
     });
   });
 
+  it("expands selections inside non-linear TeX-derived math to whole construct bounds", async () => {
+    const sourceText = String.raw`$\frac{1}{2}$ and $\sqrt{x}$`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-construct-selection",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+    const mathSegments = report?.lines[0]?.segments.filter((segment) => segment.kind === "math") ?? [];
+    const fractionConstruct = mathSegments[0]?.mathConstructRanges?.[0];
+    const radicalConstruct = mathSegments[1]?.mathConstructRanges?.[0];
+    expect(fractionConstruct).toBeTruthy();
+    expect(radicalConstruct).toBeTruthy();
+
+    const outputJax = {
+      tex2svg: () => {
+        throw new Error("MathJax prefix measurement should not be used for TeX-derived math selections.");
+      },
+      linebreaks: { getReports: () => report ? [report] : [] },
+    };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report?.width ?? 160, bottom: 10 }, report?.width ?? 160),
+      ],
+    };
+
+    const numeratorSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-construct-selection",
+      sourceText,
+      containerElement,
+      startOffset: sourceText.indexOf("1"),
+      endOffset: sourceText.indexOf("1") + 1,
+    });
+    expect(numeratorSelection.error?.message ?? null).toBeNull();
+    expect(numeratorSelection.ok).toBe(true);
+    expect(numeratorSelection.rects).toHaveLength(1);
+    expect(Number(numeratorSelection.rects[0]?.bounds.minX)).toBeCloseTo(fractionConstruct?.xStart ?? 0, 6);
+    expect(Number(numeratorSelection.rects[0]?.bounds.maxX)).toBeCloseTo(fractionConstruct?.xEnd ?? 0, 6);
+
+    const radicandSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-construct-selection",
+      sourceText,
+      containerElement,
+      startOffset: sourceText.lastIndexOf("x"),
+      endOffset: sourceText.lastIndexOf("x") + 1,
+    });
+    expect(radicandSelection.error?.message ?? null).toBeNull();
+    expect(radicandSelection.ok).toBe(true);
+    expect(radicandSelection.rects).toHaveLength(1);
+    expect(Number(radicandSelection.rects[0]?.bounds.minX)).toBeCloseTo(radicalConstruct?.xStart ?? 0, 6);
+    expect(Number(radicandSelection.rects[0]?.bounds.maxX)).toBeCloseTo(radicalConstruct?.xEnd ?? 0, 6);
+  });
+
   it("reports whole-node fallback for inline math without a math box provider", () => {
     const result = layoutSimpleTexParagraph(String.raw`Alpha $x$`, {
       paragraphId: "tex:fallback",

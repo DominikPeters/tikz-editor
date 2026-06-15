@@ -767,6 +767,35 @@ describe("TeX math SVG rendering", () => {
     expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
   });
 
+  it("reports whole-construct ranges for non-linear inline math boxes", () => {
+    const source = String.raw`$\frac{1}{2}$ and $\sqrt{x}$`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-construct-ranges",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const mathSegments = result.report?.lines
+      .flatMap((line) => line.segments)
+      .filter((segment) => segment.kind === "math") ?? [];
+    expect(mathSegments).toHaveLength(2);
+    expect(mathSegments[0]?.mathConstructRanges?.[0]).toMatchObject({
+      sourceStartRaw: source.indexOf(String.raw`\frac`),
+      sourceEndRaw: source.indexOf("$ and"),
+      xStart: expect.any(Number),
+      xEnd: expect.any(Number),
+    });
+    expect(mathSegments[1]?.mathConstructRanges?.[0]).toMatchObject({
+      sourceStartRaw: source.indexOf(String.raw`\sqrt`),
+      sourceEndRaw: source.lastIndexOf("}") + 1,
+      xStart: expect.any(Number),
+      xEnd: expect.any(Number),
+    });
+  });
+
   it("lets the paragraph math provider use AMS font profile selection", () => {
     const source = String.raw`Alpha $\dots^{\sum}$ beta`;
     const result = layoutSimpleTexParagraph(source, {

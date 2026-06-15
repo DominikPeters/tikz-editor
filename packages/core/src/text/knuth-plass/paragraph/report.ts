@@ -31,9 +31,17 @@ export interface LineSegmentReport {
   fontId?: string;
   glyphCode?: number;
   mathSvgBody?: string;
+  mathConstructRanges?: LineMathConstructRangeReport[];
   x: number;
   width: number;
   caretStops?: number[];
+}
+
+export interface LineMathConstructRangeReport {
+  sourceStartRaw: number;
+  sourceEndRaw: number;
+  xStart: number;
+  xEnd: number;
 }
 
 export interface LineReport {

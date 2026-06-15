@@ -56,7 +56,15 @@ export interface TexMathBox {
   readonly height: number;
   readonly depth: number;
   readonly caretStops?: readonly number[];
+  readonly constructRanges?: readonly TexMathConstructRange[];
   readonly svgBody?: string;
+}
+
+export interface TexMathConstructRange {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly xStart: number;
+  readonly xEnd: number;
 }
 
 export interface TexMathDisplayAlignmentRowBox extends TexMathBox {

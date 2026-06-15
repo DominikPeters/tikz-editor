@@ -187,6 +187,7 @@ function buildTexLineReport(
         x,
         width,
         caretStops: texMathBoxCaretStops(box, x, width),
+        mathConstructRanges: texMathBoxConstructRanges(box, x, width),
         mathSvgBody: box?.svgBody,
       });
       x = roundTexPt(x + width);
@@ -336,6 +337,12 @@ function texMathBoxFromWrapper(
   readonly height: number;
   readonly depth: number;
   readonly caretStops?: readonly number[];
+  readonly constructRanges?: readonly {
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly xStart: number;
+    readonly xEnd: number;
+  }[];
   readonly svgBody?: string;
 } | null {
   if (!wrapper || typeof wrapper !== "object") {
@@ -350,6 +357,7 @@ function texMathBoxFromWrapper(
     readonly height?: unknown;
     readonly depth?: unknown;
     readonly caretStops?: unknown;
+    readonly constructRanges?: unknown;
     readonly svgBody?: unknown;
   };
   return {
@@ -359,6 +367,7 @@ function texMathBoxFromWrapper(
     caretStops: Array.isArray(typedBox.caretStops)
       ? typedBox.caretStops.filter((stop): stop is number => Number.isFinite(stop))
       : undefined,
+    constructRanges: parseTexMathConstructRanges(typedBox.constructRanges),
     svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
   };
 }
@@ -435,6 +444,7 @@ function buildTexLineLabelSegments(
         x,
         width: mathWidth,
         caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
+        mathConstructRanges: texMathBoxConstructRanges(item.box, x, mathWidth),
         mathSvgBody: item.box.svgBody,
       });
       x = roundTexPt(x + mathWidth);
@@ -474,6 +484,65 @@ function texMathBoxCaretStops(
 
 function isFiniteNumberArray(value: unknown): value is readonly number[] {
   return Array.isArray(value) && value.every((entry) => Number.isFinite(entry));
+}
+
+function texMathBoxConstructRanges(
+  box: {
+    readonly constructRanges?: readonly {
+      readonly sourceStart: number;
+      readonly sourceEnd: number;
+      readonly xStart: number;
+      readonly xEnd: number;
+    }[];
+  } | null | undefined,
+  x: number,
+  width: number
+): LineReport["segments"][number]["mathConstructRanges"] {
+  const ranges = box?.constructRanges;
+  if (!ranges?.length) {
+    return undefined;
+  }
+  return ranges.map((range) => ({
+    sourceStartRaw: range.sourceStart,
+    sourceEndRaw: range.sourceEnd,
+    xStart: roundTexPt(x + Math.max(0, Math.min(width, range.xStart))),
+    xEnd: roundTexPt(x + Math.max(0, Math.min(width, range.xEnd))),
+  }));
+}
+
+function parseTexMathConstructRanges(value: unknown): {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly xStart: number;
+  readonly xEnd: number;
+}[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const ranges = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+    const candidate = entry as {
+      readonly sourceStart?: unknown;
+      readonly sourceEnd?: unknown;
+      readonly xStart?: unknown;
+      readonly xEnd?: unknown;
+    };
+    const sourceStart = Number(candidate.sourceStart);
+    const sourceEnd = Number(candidate.sourceEnd);
+    const xStart = Number(candidate.xStart);
+    const xEnd = Number(candidate.xEnd);
+    return Number.isFinite(sourceStart) &&
+      Number.isFinite(sourceEnd) &&
+      Number.isFinite(xStart) &&
+      Number.isFinite(xEnd) &&
+      sourceEnd > sourceStart &&
+      xEnd > xStart
+      ? [{ sourceStart, sourceEnd, xStart, xEnd }]
+      : [];
+  });
+  return ranges.length > 0 ? ranges : undefined;
 }
 
 function texShapedSliceMetrics(
