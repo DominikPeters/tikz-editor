@@ -531,6 +531,8 @@ function readArgs() {
       summaryOnly = true;
     } else if (arg === "--align-matrix") {
       cases.push(...alignMatrixCases());
+    } else if (arg === "--construct-matrix") {
+      cases.push(...constructMatrixCases());
     }
   }
   return { cases, keepTemp, summaryOnly, tolerance };
@@ -562,6 +564,51 @@ function alignMatrixCases() {
       id: "align-single-row",
       width: 120,
       source: String.raw`Alpha \begin{align*}a&=b\end{align*} Beta`,
+    },
+  ];
+}
+
+function constructMatrixCases() {
+  return [
+    {
+      id: "display-script-combined",
+      width: 140,
+      source: String.raw`Alpha \[x_i^2+y^n\] Beta`,
+    },
+    {
+      id: "display-fraction",
+      width: 140,
+      source: String.raw`Alpha \[\frac{1}{2}+x\] Beta`,
+    },
+    {
+      id: "display-radical",
+      width: 140,
+      source: String.raw`Alpha \[\sqrt{x+1}\] Beta`,
+    },
+    {
+      id: "display-tall-radical",
+      width: 160,
+      source: String.raw`Alpha \[\sqrt{\frac{1}{2}}\] Beta`,
+    },
+    {
+      id: "display-left-right-fraction",
+      width: 160,
+      source: String.raw`Alpha \[\left(\frac{1}{2}\right)\] Beta`,
+    },
+    {
+      id: "display-large-operator-limits",
+      width: 160,
+      source: String.raw`Alpha \[\prod_i^n+\sum_j^m\] Beta`,
+    },
+    {
+      id: "align-script-cells",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}x_i^2&=y^n\\a&=b\end{align*} Beta`,
+    },
+    {
+      id: "align-fraction-radical-cells",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}\frac{1}{2}&=x\\\sqrt{y+1}&=z\end{align*} Beta`,
     },
   ];
 }

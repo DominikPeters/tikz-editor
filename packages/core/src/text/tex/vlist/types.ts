@@ -54,6 +54,7 @@ export type TexGlueOrigin =
   | {
       readonly kind: "display-math-interline";
       readonly side: "above" | "below";
+      readonly purpose?: "align-top-correction" | "align-row-baseline" | "align-structural";
     };
 
 export interface TexLineBox {

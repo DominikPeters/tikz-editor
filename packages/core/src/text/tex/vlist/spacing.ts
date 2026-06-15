@@ -60,8 +60,14 @@ const latexArticleDisplaySkipsPt = {
 
 const latexNormalLineSkipPt = 1;
 const latexAmsmathAlignTopCorrectionPt = -3;
-const latexAmsmathAlignFirstRowSkipPt = 4.660034;
-const latexAmsmathAlignRowSkipPt = 3;
+const latexAmsmathOpenBaselineSkipPt = 15;
+const latexAmsmathOpenLineSkipPt = 4;
+const latexAmsmathOpenLineSkipLimitPt = 3;
+
+type DisplayAlignmentGluePurpose =
+  | "align-top-correction"
+  | "align-row-baseline"
+  | "align-structural";
 
 export interface SimpleTexParagraphVerticalSkip {
   readonly blockIndex: number;
@@ -495,6 +501,23 @@ function resolveDisplayMathVerticalGlueInItems(
       }
       continue;
     }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "display-math-interline" &&
+      item.origin.purpose === "align-row-baseline"
+    ) {
+      const nextRow = nextDisplayAlignmentRowHBox(sourceItems, index);
+      if (nextRow) {
+        const previousDepth = previousParagraphMeasurement?.ruleLeadingMetrics.depth ??
+          previousDisplayMaterialMetrics?.depth ??
+          0;
+        items.push({
+          ...item,
+          size: texOpenedInterlineGlueSize(previousDepth, nextRow.box.metrics.height),
+        });
+        continue;
+      }
+    }
     if (item.kind === "display-math") {
       previousParagraphMeasurement = undefined;
       previousDisplayMaterialMetrics = {
@@ -515,23 +538,24 @@ function displayAlignmentMaterialItems(
   item: TexDisplayAlignmentItem
 ): readonly TexVListItem[] {
   const rows: TexVListItem[] = [];
-  rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignTopCorrectionPt));
-  rows.push(displayAlignmentGlueItem(item, 0));
-  rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignFirstRowSkipPt));
+  rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignTopCorrectionPt, "align-top-correction"));
+  rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
+  rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
   for (const row of item.alignment.rows) {
     if (row.rowIndex > 0) {
-      rows.push(displayAlignmentGlueItem(item, 0));
-      rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignRowSkipPt));
+      rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
+      rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
     }
     rows.push(displayAlignmentRowHBox(item, row));
   }
-  rows.push(displayAlignmentGlueItem(item, 0));
+  rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
   return rows;
 }
 
 function displayAlignmentGlueItem(
   item: TexDisplayAlignmentItem,
-  size: number
+  size: number,
+  purpose: DisplayAlignmentGluePurpose
 ): TexGlueItem {
   return {
     kind: "glue",
@@ -540,6 +564,7 @@ function displayAlignmentGlueItem(
     origin: {
       kind: "display-math-interline",
       side: "above",
+      purpose,
     },
     size,
     stretchOrder: "normal",
@@ -584,6 +609,23 @@ function displayAlignmentRowHBox(
 
 function isDisplayAlignmentRowHBox(item: TexVListItem): item is TexHBoxItem {
   return item.kind === "hbox" && item.role?.kind === "display-align-row";
+}
+
+function nextDisplayAlignmentRowHBox(
+  items: readonly TexVListItem[],
+  index: number
+): TexHBoxItem | undefined {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) {
+      continue;
+    }
+    if (item.kind === "glue" || item.kind === "penalty") {
+      continue;
+    }
+    return isDisplayAlignmentRowHBox(item) ? item : undefined;
+  }
+  return undefined;
 }
 
 function nextDisplayMathItem(
@@ -674,6 +716,16 @@ function texInterlineGlueSize(
 ): number {
   const baselineGlue = roundTexPt(lineHeight - previousDepth - nextHeight);
   return baselineGlue < 0 ? latexNormalLineSkipPt : baselineGlue;
+}
+
+function texOpenedInterlineGlueSize(
+  previousDepth: number,
+  nextHeight: number
+): number {
+  const baselineGlue = roundTexPt(latexAmsmathOpenBaselineSkipPt - previousDepth - nextHeight);
+  return baselineGlue < latexAmsmathOpenLineSkipLimitPt
+    ? latexAmsmathOpenLineSkipPt
+    : baselineGlue;
 }
 
 function texArticleQuoteVerticalSkipBefore(
