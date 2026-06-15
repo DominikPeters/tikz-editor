@@ -224,7 +224,7 @@ function makeDeterministicRandom(seed: number): () => number {
 }
 
 function pickFuzzItem<T>(items: readonly T[], random: () => number): T {
-  return items[Math.floor(random() * items.length) % items.length]!;
+  return items[Math.floor(random() * items.length) % items.length];
 }
 
 function makeFakeInlineMathBoxProvider(
@@ -950,9 +950,9 @@ describe("Computer Modern OT1 text shaping", () => {
         });
       }
 
-      const rangeStart = testCase.offsets[0]!;
-      const rangeEnd = testCase.offsets[testCase.offsets.length - 1]!;
-      if (rangeEnd > rangeStart) {
+      const rangeStart = testCase.offsets[0];
+      const rangeEnd = testCase.offsets[testCase.offsets.length - 1];
+      if (rangeStart !== undefined && rangeEnd !== undefined && rangeEnd > rangeStart) {
         const selection = await getKnuthPlassSelectionRects(outputJax, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
@@ -2023,20 +2023,20 @@ describe("simple TeX paragraph layout", () => {
       containerElement: {
         querySelectorAll: (selector: string) =>
           selector === '[data-tex-vbox="true"]' ? boxes : [],
-      } as any,
+      },
     })).toEqual([]);
     expect(getKnuthPlassVListBoxFromPoint({
       containerElement: {
         querySelectorAll: (selector: string) =>
           selector === '[data-tex-vbox="true"]' ? boxes : [],
-      } as any,
+      },
       clientPoint: clientPoint(px(40), px(30)),
     })).toBeNull();
     expect(getKnuthPlassVListBoxFromPoint({
       containerElement: {
         querySelectorAll: (selector: string) =>
           selector === '[data-tex-vbox="true"]' ? boxes : [],
-      } as any,
+      },
       clientPoint: clientPoint(px(5), px(5)),
     })).toBeNull();
   });
@@ -2118,7 +2118,7 @@ describe("simple TeX paragraph layout", () => {
         querySelectorAll: () => {
           throw new Error("registered vlist geometry should not query DOM metadata");
         },
-      } as any,
+      },
     })).toEqual([
       {
         role: "quote",
