@@ -18,16 +18,16 @@ import type {
 } from "./types.js";
 
 const articleQuoteSpacingEm = {
-  topsep: 1,
+  topsep: 0.8,
+  partopsep: 0.2,
   parsep: 0.4,
-  compactExitTopsep: 0.8,
 } as const;
 
 const articleListSpacingEm = {
-  topsep: 1,
-  partopsep: 0.3,
-  nestedTopsepByDepth: [0.8, 0.8, 0.4, 0.2],
-  itemsepByDepth: [0.8, 0.4, 0.2],
+  topsep: 0.8,
+  partopsep: 0.2,
+  nestedTopsepByDepth: [0.8, 0.4, 0.2],
+  itemsepByDepth: [0.4, 0.2, 0.2],
   parsepByDepth: [0.4, 0.2, 0],
 } as const;
 
@@ -89,7 +89,6 @@ export function planSimpleTexParagraphVerticalSkips(
     {
       previousEmittedQuoteDepth: 0,
       previousEmittedListContext: undefined,
-      quoteEntryHadPreviousParagraphByDepth: new Map(),
       emittedListItemKeys: new Set(),
       emittedParagraphCount: 0,
     },
@@ -104,7 +103,6 @@ export function planSimpleTexParagraphVerticalSkips(
 interface SimpleTexParagraphVerticalSkipState {
   previousEmittedQuoteDepth: number;
   previousEmittedListContext: SimpleTexListContext | undefined;
-  readonly quoteEntryHadPreviousParagraphByDepth: Map<number, boolean>;
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
 }
@@ -150,8 +148,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const quoteVerticalSkipBefore = texArticleQuoteVerticalSkipBefore(
       state.previousEmittedQuoteDepth,
       scope.quoteDepth,
+      hasPreviousEmittedParagraph,
       state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
-      state.quoteEntryHadPreviousParagraphByDepth.get(state.previousEmittedQuoteDepth) ?? true,
       font
     );
 
@@ -164,23 +162,6 @@ function planSimpleTexParagraphVerticalSkipsInto(
       size: quoteVerticalSkipBefore + listVerticalSkipBefore,
     });
 
-    if (scope.quoteDepth > state.previousEmittedQuoteDepth) {
-      for (
-        let depth = state.previousEmittedQuoteDepth + 1;
-        depth <= scope.quoteDepth;
-        depth += 1
-      ) {
-        state.quoteEntryHadPreviousParagraphByDepth.set(depth, hasPreviousEmittedParagraph);
-      }
-    } else if (scope.quoteDepth < state.previousEmittedQuoteDepth) {
-      for (
-        let depth = state.previousEmittedQuoteDepth;
-        depth > scope.quoteDepth;
-        depth -= 1
-      ) {
-        state.quoteEntryHadPreviousParagraphByDepth.delete(depth);
-      }
-    }
     state.previousEmittedQuoteDepth = scope.quoteDepth;
     state.previousEmittedListContext = scope.listContext;
     if (scope.listItemKey) {
@@ -410,14 +391,15 @@ export function resolveDisplayMathVerticalGlueInVList(
     readonly lineHeight: number;
   }
 ): TexVListDocument {
+  const resolved = resolveDisplayMathVerticalGlueInItems(
+    vlist.items,
+    paragraphMeasurements,
+    options,
+    []
+  );
   return {
     ...vlist,
-    items: resolveDisplayMathVerticalGlueInItems(
-      vlist.items,
-      paragraphMeasurements,
-      options,
-      []
-    ),
+    items: resolved.items,
   };
 }
 
@@ -427,12 +409,23 @@ function resolveDisplayMathVerticalGlueInItems(
   options: {
     readonly lineHeight: number;
   },
-  pathPrefix: readonly number[]
-): readonly TexVListItem[] {
+  pathPrefix: readonly number[],
+  state: {
+    readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
+    readonly previousDisplaySkipVariant?: TexDisplayMathSkipVariant;
+    readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+  } = {}
+): {
+  readonly items: readonly TexVListItem[];
+  readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
+  readonly previousDisplaySkipVariant: TexDisplayMathSkipVariant;
+  readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+} {
   const items: TexVListItem[] = [];
-  let previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined;
-  let previousDisplaySkipVariant: TexDisplayMathSkipVariant = "normal";
-  let previousDisplayMaterialMetrics: TexBoxMetrics | undefined;
+  let previousParagraphMeasurement = state.previousParagraphMeasurement;
+  let previousDisplaySkipVariant: TexDisplayMathSkipVariant =
+    state.previousDisplaySkipVariant ?? "normal";
+  let previousDisplayMaterialMetrics = state.previousDisplayMaterialMetrics;
   for (let index = 0; index < sourceItems.length; index += 1) {
     const item = sourceItems[index];
     if (!item) {
@@ -440,15 +433,24 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
+      const nested = resolveDisplayMathVerticalGlueInItems(
+        item.items,
+        paragraphMeasurements,
+        options,
+        path,
+        {
+          previousParagraphMeasurement,
+          previousDisplaySkipVariant,
+          previousDisplayMaterialMetrics,
+        }
+      );
       items.push({
         ...item,
-        items: resolveDisplayMathVerticalGlueInItems(
-          item.items,
-          paragraphMeasurements,
-          options,
-          path
-        ),
+        items: nested.items,
       });
+      previousParagraphMeasurement = nested.previousParagraphMeasurement;
+      previousDisplaySkipVariant = nested.previousDisplaySkipVariant;
+      previousDisplayMaterialMetrics = nested.previousDisplayMaterialMetrics;
       continue;
     }
     if (item.kind === "paragraph") {
@@ -503,6 +505,40 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (
       item.kind === "glue" &&
+      (item.origin?.kind === "quote-boundary" || item.origin?.kind === "list-boundary")
+    ) {
+      items.push(item);
+      if (shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
+        const nextParagraph = nextParagraphMeasurement(
+          sourceItems,
+          index,
+          pathPrefix,
+          paragraphMeasurements
+        );
+        if (previousParagraphMeasurement && nextParagraph) {
+          items.push(paragraphBoundaryInterlineGlueItem(
+            item,
+            texInterlineGlueSize(
+              previousParagraphMeasurement.ruleLeadingMetrics.depth,
+              nextParagraph.ruleLeadingMetrics.height,
+              options.lineHeight
+            )
+          ));
+        } else if (previousDisplayMaterialMetrics && nextParagraph) {
+          items.push(paragraphBoundaryInterlineGlueItem(
+            item,
+            texInterlineGlueSize(
+              previousDisplayMaterialMetrics.depth,
+              nextParagraph.ruleLeadingMetrics.height,
+              options.lineHeight
+            )
+          ));
+        }
+      }
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
       item.origin?.kind === "display-math-interline" &&
       item.origin.purpose === "align-row-baseline"
     ) {
@@ -531,7 +567,35 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     items.push(item);
   }
-  return items;
+  return {
+    items,
+    previousParagraphMeasurement,
+    previousDisplaySkipVariant,
+    previousDisplayMaterialMetrics,
+  };
+}
+
+function shouldInsertParagraphBoundaryInterlineGlue(
+  items: readonly TexVListItem[],
+  index: number
+): boolean {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) {
+      continue;
+    }
+    if (item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      (item.origin?.kind === "quote-boundary" || item.origin?.kind === "list-boundary")
+    ) {
+      return false;
+    }
+    return item.kind === "paragraph";
+  }
+  return false;
 }
 
 function displayAlignmentMaterialItems(
@@ -687,6 +751,24 @@ function displayMathInterlineGlueItem(
   };
 }
 
+function paragraphBoundaryInterlineGlueItem(
+  item: TexGlueItem,
+  size: number
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "paragraph-boundary-interline",
+      boundary: item.origin?.kind === "quote-boundary" ? "quote" : "list",
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
 function nextParagraphMeasurement(
   items: readonly TexVListItem[],
   index: number,
@@ -698,7 +780,7 @@ function nextParagraphMeasurement(
     if (!item) {
       continue;
     }
-    if (item.kind === "glue" || item.kind === "penalty") {
+    if (item.kind === "glue" || item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
       continue;
     }
     if (item.kind === "paragraph") {
@@ -707,6 +789,10 @@ function nextParagraphMeasurement(
     return undefined;
   }
   return undefined;
+}
+
+function isBoundaryTransparentHBox(item: TexVListItem): boolean {
+  return item.kind === "hbox" && item.affectsVBoxBaseline === false;
 }
 
 function texInterlineGlueSize(
@@ -731,8 +817,8 @@ function texOpenedInterlineGlueSize(
 function texArticleQuoteVerticalSkipBefore(
   previousQuoteDepth: number,
   quoteDepth: number,
+  hasPreviousEmittedParagraph: boolean,
   listTransitionActive = false,
-  exitingQuoteHadPreviousParagraph = true,
   font: ResolvedTexFont
 ): number {
   if (listTransitionActive) {
@@ -742,15 +828,16 @@ function texArticleQuoteVerticalSkipBefore(
     return quoteDepth > 0 ? texEmSkip(articleQuoteSpacingEm.parsep, font) : 0;
   }
   if (quoteDepth > previousQuoteDepth) {
-    return texEmSkip(articleQuoteSpacingEm.topsep, font);
-  }
-  if (previousQuoteDepth > quoteDepth) {
     return texEmSkip(
-      exitingQuoteHadPreviousParagraph
-        ? articleQuoteSpacingEm.topsep
-        : articleQuoteSpacingEm.compactExitTopsep,
+      articleQuoteSpacingEm.topsep +
+        (previousQuoteDepth === 0 && !hasPreviousEmittedParagraph
+          ? articleQuoteSpacingEm.partopsep
+          : 0),
       font
     );
+  }
+  if (previousQuoteDepth > quoteDepth) {
+    return texEmSkip(articleQuoteSpacingEm.topsep, font);
   }
   return 0;
 }

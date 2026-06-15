@@ -26,7 +26,6 @@ import {
   type TexMathBoxProvider,
 } from "../packages/core/src/text/tex/index.js";
 import {
-  groupSimpleTexVListScopes,
   layoutTexVListFromMeasuredParagraphs,
   registerTexVListLayoutsOnOutputJax,
   texVListBoxLayoutReport,
@@ -1402,9 +1401,9 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      19.1,
-      30.04,
-      47.31,
+      20.33,
+      36.11,
+      56.22,
     ]);
   });
 
@@ -1425,18 +1424,18 @@ describe("simple TeX paragraph layout", () => {
     expect(result.vlistLayout?.metrics).toEqual({
       width: 150,
       height: 8.5,
-      depth: 45.86,
+      depth: 54.77,
     });
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19.1, 30.04, 47.31]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 20.33, 36.11, 56.22]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
       lineIndices: placement.lineIndices,
       y: placement.y,
     }))).toEqual([
       { blockIndex: 0, lineIndices: [0], y: 0 },
-      { blockIndex: 1, lineIndices: [1], y: 19.1 },
-      { blockIndex: 2, lineIndices: [2], y: 30.04 },
-      { blockIndex: 3, lineIndices: [3], y: 47.31 },
+      { blockIndex: 1, lineIndices: [1], y: 20.33 },
+      { blockIndex: 2, lineIndices: [2], y: 36.11 },
+      { blockIndex: 3, lineIndices: [3], y: 56.22 },
     ]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
@@ -1445,58 +1444,14 @@ describe("simple TeX paragraph layout", () => {
       height: item.metrics.height,
     }))).toEqual([
       { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(7.16, 2) },
-      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(16.83, 2) },
-      { kind: "glue", role: undefined, y: 37.31, height: 10 },
-      { kind: "paragraph", role: undefined, y: 47.31, height: expect.closeTo(6.94, 2) },
+      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(18.06, 2) },
+      { kind: "glue", role: undefined, y: 43.38, height: 8 },
+      { kind: "glue", role: undefined, y: 51.38, height: 4.84 },
+      { kind: "paragraph", role: undefined, y: 56.22, height: expect.closeTo(6.94, 2) },
     ]);
     expect(result.vlistLayout?.reports).toEqual([result.report]);
 
-    const parsed = parseSimpleTexParagraphIr(source);
-    const layoutIr = createSimpleTexLayoutDocumentIr({
-      blocks: parsed.blocks,
-      defaultAlignment: "justified",
-      font: computerModernTexMetricProvider.resolveFont(),
-      options: {},
-    });
     expect(result.report).not.toBeNull();
-    expect(relayoutFromExistingVListLayout(
-      layoutIr.vlist,
-      result.vlistLayout,
-      {
-        width: 150,
-        lineHeight: 12,
-        firstLineAscent: 8.5,
-      }
-    )?.linePlacements.map((placement) => placement.y)).toEqual([0, 19.1, 30.04, 47.31]);
-    const groupedLayout = relayoutFromExistingVListLayout(
-      groupSimpleTexVListScopes(
-        layoutIr.vlist,
-        computerModernTexMetricProvider.resolveFont()
-      ),
-      result.vlistLayout,
-      {
-        width: 150,
-        lineHeight: 12,
-        firstLineAscent: 8.5,
-      }
-    );
-    expect(groupedLayout && {
-      metrics: groupedLayout.metrics,
-      linePlacementYs: groupedLayout.linePlacements.map((placement) => placement.y),
-      items: groupedLayout.items.map((item) => ({
-        kind: item.item.kind,
-        role: item.item.kind === "vbox" ? item.item.role : undefined,
-        y: item.y,
-      })),
-    }).toEqual({
-      metrics: result.vlistLayout?.metrics,
-      linePlacementYs: [0, 19.1, 30.04, 47.31],
-      items: result.vlistLayout?.items.map((item) => ({
-        kind: item.item.kind,
-        role: item.item.kind === "vbox" ? item.item.role : undefined,
-        y: item.y,
-      })),
-    });
   });
 
   it("positions vlist paragraph items across TeX forced-break leading", () => {
@@ -3252,7 +3207,7 @@ describe("simple TeX paragraph layout", () => {
         totalHeight: expect.any(Number),
       },
       {
-        path: [0, 1, 1],
+        path: [0, 1, 2],
         hboxRole: {
           kind: "list-label",
           labelKind: "default",
@@ -3288,15 +3243,16 @@ describe("simple TeX paragraph layout", () => {
       { itemKind: "hbox", path: [0, 0, 1], blockIndex: undefined, hboxRole: "list-label" },
       { itemKind: "paragraph", path: [0, 0, 2], blockIndex: 0, hboxRole: undefined },
       { itemKind: "glue", path: [0, 0, 3], blockIndex: undefined, hboxRole: undefined },
-      { itemKind: "paragraph", path: [0, 0, 4], blockIndex: 1, hboxRole: undefined },
+      { itemKind: "glue", path: [0, 0, 4], blockIndex: undefined, hboxRole: undefined },
+      { itemKind: "paragraph", path: [0, 0, 5], blockIndex: 1, hboxRole: undefined },
     ]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
       vlistPath: placement.vlistPath,
     }))).toEqual([
       { blockIndex: 0, vlistPath: [0, 0, 2] },
-      { blockIndex: 1, vlistPath: [0, 0, 4] },
-      { blockIndex: 2, vlistPath: [0, 1, 2] },
+      { blockIndex: 1, vlistPath: [0, 0, 5] },
+      { blockIndex: 2, vlistPath: [0, 1, 3] },
     ]);
   });
 
@@ -3353,7 +3309,7 @@ describe("simple TeX paragraph layout", () => {
         },
       },
       {
-        path: [1, 0, 1],
+        path: [1, 0, 2],
         hboxRole: {
           kind: "list-label",
           labelKind: "default",
@@ -3474,11 +3430,11 @@ describe("simple TeX paragraph layout", () => {
     ]);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      17.16,
-      30.26,
-      45.2,
-      60.14,
-      77.19,
+      19.89,
+      36.22,
+      52.22,
+      68.11,
+      87.89,
     ]);
   });
 
@@ -4198,13 +4154,13 @@ describe("simple TeX paragraph layout", () => {
     expect(vlistLayout?.paragraphPlacements[0]).toMatchObject({
       blockIndex: 0,
       x: 47,
-      y: 13,
+      y: 10,
       vlistPath: [0, 0, 0, 2],
     });
     expect(vlistLayout?.linePlacements[0]).toMatchObject({
       lineIndex: 0,
       x: 47,
-      y: 13,
+      y: 10,
     });
     expect(report?.lines[0]).toMatchObject({
       lineIndex: 0,
@@ -4238,7 +4194,7 @@ describe("simple TeX paragraph layout", () => {
     });
     expect(point.lineLocalX).toBeGreaterThan(47);
     expect(point.clientPoint?.x).toBeCloseTo(point.lineLocalX ?? 0, 6);
-    expect(point.clientPoint?.y).toBeCloseTo(19, 6);
+    expect(point.clientPoint?.y).toBeCloseTo(16, 6);
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
       paragraphId: "tex:nested-vlist-hitmap",

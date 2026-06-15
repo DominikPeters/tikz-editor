@@ -1215,6 +1215,7 @@ describe("TeX math SVG rendering", () => {
     expect(display).toMatchObject({
       itemKind: "display-math",
       x: expect.closeTo(66.288151, 5),
+      y: expect.closeTo(40.519972, 5),
       width: expect.closeTo(27.423697, 5),
       displayMath: {
         delimiter: "bracket",
@@ -1222,6 +1223,10 @@ describe("TeX math SVG rendering", () => {
         contentEnd: source.indexOf(String.raw`\]`),
       },
     });
+    expect(result.vlistLayout?.boxReport.items.find((item) =>
+      item.glue?.origin?.kind === "paragraph-boundary-interline" &&
+        item.glue.origin.boundary === "quote"
+    )?.glue?.size).toBeCloseTo(3.01, 5);
   });
 
   it("uses TeX short display skips after short scoped list lines", () => {
@@ -1253,6 +1258,13 @@ describe("TeX math SVG rendering", () => {
         }),
       }),
     ]);
+    expect(result.vlistLayout?.boxReport.items.find((item) =>
+      item.glue?.origin?.kind === "paragraph-boundary-interline" &&
+        item.glue.origin.boundary === "list"
+    )?.glue?.size).toBeCloseTo(3.23, 5);
+    expect(result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "display-math"
+    )?.y).toBeCloseTo(30.519972, 5);
   });
 
   it("lets TeX paragraph layout carry double-dollar display math as a vlist item", () => {

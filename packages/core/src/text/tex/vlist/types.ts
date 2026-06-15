@@ -47,6 +47,10 @@ export type TexGlueOrigin =
       readonly beforeBlockIndex: number;
     }
   | {
+      readonly kind: "paragraph-boundary-interline";
+      readonly boundary: "quote" | "list";
+    }
+  | {
       readonly kind: "display-math-boundary";
       readonly side: "above" | "below";
       readonly variant?: TexDisplayMathSkipVariant;
