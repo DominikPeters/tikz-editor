@@ -16,6 +16,14 @@ import type {
 import type { TexParagraphAlignment } from "./ir.js";
 import type { TexLayoutLabelItem } from "./layout-inline-items.js";
 import {
+  renderTexMathHListSvgBody,
+} from "./math/render-svg.js";
+import {
+  setTexMathHListWidth,
+  type TexMathHList,
+} from "./math/layout.js";
+import type { TexMathFontProfile } from "./math/font-profile.js";
+import {
   texLayoutGlyphItemDepth,
   texLayoutGlyphItemHeight,
   texLayoutGlyphItemWidth,
@@ -172,7 +180,8 @@ function buildTexLineReport(
     }
 
     if (run.kind === "math") {
-      const width = params.runWidths.get(run.runIndex) ?? 0;
+      const naturalWidth = params.runWidths.get(run.runIndex) ?? 0;
+      const width = adjustedTexGlueWidth(naturalWidth, run.texGlue, line.glueSetRatio ?? 0);
       const box = texMathBoxFromWrapper(run.wrapper);
       ascent = Math.max(ascent, box?.height ?? 0);
       descent = Math.max(descent, box?.depth ?? 0);
@@ -189,7 +198,7 @@ function buildTexLineReport(
         caretStops: texMathBoxCaretStops(box, x, width),
         mathConstructRanges: texMathBoxConstructRanges(box, x, width),
         mathBreakpoints: texMathBoxBreakpoints(box, x, width),
-        mathSvgBody: box?.svgBody,
+        mathSvgBody: texMathBoxSvgBody(box, width),
       });
       x = roundTexPt(x + width);
       continue;
@@ -199,17 +208,11 @@ function buildTexLineReport(
       continue;
     }
 
-    let width = params.runWidths.get(run.runIndex) ?? 0;
-    if (run.kind === "space" && (line.spaceCount ?? 0) > 0) {
-      const ratio = line.glueSetRatio ?? 0;
-      const stretch = run.texGlue?.stretch;
-      const shrink = run.texGlue?.shrink;
-      if (ratio > 0 && typeof stretch === "number" && Number.isFinite(stretch)) {
-        width = Math.max(0, width + ratio * stretch);
-      } else if (ratio < 0 && typeof shrink === "number" && Number.isFinite(shrink)) {
-        width = Math.max(0, width + ratio * shrink);
-      }
-    }
+    const width = adjustedTexGlueWidth(
+      params.runWidths.get(run.runIndex) ?? 0,
+      run.kind === "space" && (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
+      line.glueSetRatio ?? 0
+    );
     segments.push({
       runIndex: run.runIndex,
       kind: "space",
@@ -325,6 +328,20 @@ function buildTexLineReport(
   };
 }
 
+function adjustedTexGlueWidth(
+  naturalWidth: number,
+  texGlue: { readonly stretch: number; readonly shrink: number } | undefined,
+  ratio: number
+): number {
+  if (ratio > 0 && typeof texGlue?.stretch === "number" && Number.isFinite(texGlue.stretch)) {
+    return roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.stretch));
+  }
+  if (ratio < 0 && typeof texGlue?.shrink === "number" && Number.isFinite(texGlue.shrink)) {
+    return roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.shrink));
+  }
+  return naturalWidth;
+}
+
 function texLinePreDisplaySize(
   line: LineReport,
   font: ResolvedTexFont
@@ -339,6 +356,7 @@ function texMathBoxFromWrapper(
   wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"]
 ): {
   readonly content: string;
+  readonly width: number;
   readonly height: number;
   readonly depth: number;
   readonly caretStops?: readonly number[];
@@ -355,6 +373,8 @@ function texMathBoxFromWrapper(
     readonly penalty: number;
   }[];
   readonly svgBody?: string;
+  readonly hlist?: TexMathHList;
+  readonly fontProfile?: TexMathFontProfile;
 } | null {
   if (!wrapper || typeof wrapper !== "object") {
     return null;
@@ -365,15 +385,19 @@ function texMathBoxFromWrapper(
   }
   const typedBox = box as {
     readonly content?: unknown;
+    readonly width?: unknown;
     readonly height?: unknown;
     readonly depth?: unknown;
     readonly caretStops?: unknown;
     readonly constructRanges?: unknown;
     readonly breakpoints?: unknown;
     readonly svgBody?: unknown;
+    readonly hlist?: unknown;
+    readonly fontProfile?: unknown;
   };
   return {
     content: typeof typedBox.content === "string" ? typedBox.content : "",
+    width: Number(typedBox.width) || 0,
     height: Number(typedBox.height) || 0,
     depth: Number(typedBox.depth) || 0,
     caretStops: Array.isArray(typedBox.caretStops)
@@ -382,6 +406,12 @@ function texMathBoxFromWrapper(
     constructRanges: parseTexMathConstructRanges(typedBox.constructRanges),
     breakpoints: parseTexMathBreakpoints(typedBox.breakpoints),
     svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
+    hlist: typeof typedBox.hlist === "object" && typedBox.hlist !== null
+      ? typedBox.hlist as TexMathHList
+      : undefined,
+    fontProfile: typeof typedBox.fontProfile === "object" && typedBox.fontProfile !== null
+      ? typedBox.fontProfile as TexMathFontProfile
+      : undefined,
   };
 }
 
@@ -459,7 +489,7 @@ function buildTexLineLabelSegments(
         caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
         mathConstructRanges: texMathBoxConstructRanges(item.box, x, mathWidth),
         mathBreakpoints: texMathBoxBreakpoints(item.box, x, mathWidth),
-        mathSvgBody: item.box.svgBody,
+        mathSvgBody: texMathBoxSvgBody(item.box, mathWidth),
       });
       x = roundTexPt(x + mathWidth);
       continue;
@@ -482,6 +512,27 @@ function buildTexLineLabelSegments(
     x = roundTexPt(x + glue.width);
   }
   return { segments, ascent, descent };
+}
+
+function texMathBoxSvgBody(
+  box: {
+    readonly width: number;
+    readonly svgBody?: string;
+    readonly hlist?: TexMathHList;
+    readonly fontProfile?: TexMathFontProfile;
+  } | null | undefined,
+  width: number
+): string | undefined {
+  if (!box) {
+    return undefined;
+  }
+  if (box.hlist && box.fontProfile && Math.abs(width - box.width) > 1e-6) {
+    return renderTexMathHListSvgBody(
+      setTexMathHListWidth(box.hlist, width),
+      { fontProfile: box.fontProfile }
+    );
+  }
+  return box.svgBody;
 }
 
 function texMathBoxCaretStops(

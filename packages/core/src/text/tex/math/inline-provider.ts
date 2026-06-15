@@ -109,6 +109,8 @@ function getMathBox(
     constructRanges: buildInlineMathConstructRanges(hlist),
     breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
     svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
+    hlist,
+    fontProfile,
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;

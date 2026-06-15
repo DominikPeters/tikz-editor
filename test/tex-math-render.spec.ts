@@ -930,13 +930,19 @@ describe("TeX math SVG rendering", () => {
       String.raw`Alpha $a+b=`,
       String.raw`c+d$ omega`,
     ]);
-    expect(result.report?.lines[0]?.segments.some((segment) =>
-      segment.kind === "math" &&
-      segment.mathSvgBody?.includes('data-tex-math-fragment="true"')
-    )).toBe(true);
-    expect(result.report?.lines[1]?.segments.some((segment) =>
-      segment.kind === "math" &&
-      segment.mathSvgBody?.includes('data-tex-math-fragment="true"')
+    const mathSegmentsByLine = result.report?.lines.map((line) =>
+      line.segments.filter((segment) => segment.kind === "math")
+    );
+    expect(mathSegmentsByLine?.map((segments) =>
+      segments.map((segment) =>
+        source.slice(segment.sourceStartRaw ?? 0, segment.sourceEndRaw ?? 0)
+      ).join("")
+    )).toEqual([
+      String.raw`$a+b=`,
+      String.raw`c+d$`,
+    ]);
+    expect(mathSegmentsByLine?.flat().every((segment) =>
+      segment.mathSvgBody?.includes("data-tex-math-hlist")
     )).toBe(true);
   });
 

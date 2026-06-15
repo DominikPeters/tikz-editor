@@ -18,6 +18,7 @@ import type {
 } from "./fonts/types.js";
 import type { TexLayoutInlineItem } from "./layout-inline-items.js";
 import type { TexMathBox } from "./layout-inline-items.js";
+import type { TexMathHList, TexMathHListItem } from "./math/layout.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
 export interface TexParagraphRunsLayout {
@@ -320,6 +321,7 @@ function mathBoxFragment(
     constructRanges: fragmentMathConstructRanges(box, xStart, xEnd),
     breakpoints: fragmentMathBreakpoints(box, xStart, xEnd),
     svgBody: box.svgBody ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
+    hlist: box.hlist ? fragmentMathHList(box.hlist, xStart, xEnd, width) : undefined,
   };
 }
 
@@ -406,6 +408,50 @@ function fragmentMathBreakpoints(
       ...breakpoint,
       x: roundTexPt(Math.max(0, Math.min(xEnd - xStart, breakpoint.x - xStart))),
     }));
+}
+
+function fragmentMathHList(
+  hlist: TexMathHList,
+  xStart: number,
+  xEnd: number,
+  width: number
+): TexMathHList {
+  return {
+    ...hlist,
+    width,
+    items: fragmentMathHListItems(hlist.items, xStart, xEnd, -xStart),
+  };
+}
+
+function fragmentMathHListItems(
+  items: readonly TexMathHListItem[],
+  xStart: number,
+  xEnd: number,
+  xOffset: number
+): readonly TexMathHListItem[] {
+  return items.flatMap((item): TexMathHListItem[] => {
+    const itemStart = item.x;
+    const itemEnd = item.x + item.width;
+    if (itemEnd <= xStart || itemStart >= xEnd) {
+      return [];
+    }
+    if (item.kind !== "hlist") {
+      return [{
+        ...item,
+        x: roundTexPt(item.x + xOffset),
+      }];
+    }
+    return [{
+      ...item,
+      x: roundTexPt(item.x + xOffset),
+      items: fragmentMathHListItems(
+        item.items,
+        xStart - item.x,
+        xEnd - item.x,
+        0
+      ),
+    }];
+  });
 }
 
 function fragmentMathSvgBody(

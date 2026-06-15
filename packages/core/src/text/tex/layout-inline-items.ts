@@ -3,6 +3,8 @@ import {
   type TexTextFontProfile,
 } from "./fonts/text-profile.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
+import type { TexMathFontProfile } from "./math/font-profile.js";
+import type { TexMathHList } from "./math/layout.js";
 import {
   simpleTexInlineNodesToTokens,
   type SimpleTexDisplayMathDelimiter,
@@ -61,6 +63,8 @@ export interface TexMathBox {
   readonly constructRanges?: readonly TexMathConstructRange[];
   readonly breakpoints?: readonly TexMathBreakpoint[];
   readonly svgBody?: string;
+  readonly hlist?: TexMathHList;
+  readonly fontProfile?: TexMathFontProfile;
 }
 
 export interface TexMathConstructRange {
