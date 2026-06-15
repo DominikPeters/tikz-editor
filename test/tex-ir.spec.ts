@@ -31,6 +31,26 @@ describe("simple TeX paragraph IR", () => {
     expect(inlineMath.fallbackReason).toBeNull();
   });
 
+  it("parses display math delimiters as vertical block items", () => {
+    const source = String.raw`Alpha $$x^2$$ \[y^2\] \begin{equation}z^2\end{equation} \begin{align}a&=b\end{align}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const displayItems = parsed.items.filter((item) => item.kind === "display-math");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(displayItems.map((item) => item.delimiter)).toEqual([
+      "double-dollar",
+      "bracket",
+      "equation",
+      "align",
+    ]);
+    expect(displayItems.map((item) => item.content)).toEqual([
+      "x^2",
+      "y^2",
+      "z^2",
+      "a&=b",
+    ]);
+  });
+
   it("splits paragraphs while preserving source-level text commands", () => {
     const ir = parseSimpleTexParagraphIr(
       String.raw`Alpha Beta \par \noindent Gamma \\[7pt] Delta`

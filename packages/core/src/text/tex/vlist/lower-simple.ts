@@ -81,6 +81,9 @@ function displayMathItemFromSimpleTexDisplayMath(
     start: item.sourceStart,
     end: item.sourceEnd,
   };
+  if (item.delimiter === "equation" || item.delimiter === "align") {
+    return unsupportedDisplayMathPlaceholder(item, sourceSpan);
+  }
   if (item.delimiter === "align-star") {
     const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
       source: item.text,
@@ -139,10 +142,13 @@ function unsupportedDisplayMathPlaceholder(
   item: SimpleTexDisplayMathBlockItem,
   sourceSpan: TexSourceSpan
 ): TexPlaceholderItem {
+  const reason = item.delimiter === "equation" || item.delimiter === "align"
+    ? "Numbered TeX display math is not implemented yet."
+    : "TeX display math rendering is not implemented for this formula.";
   return {
     kind: "placeholder",
     sourceSpan,
-    reason: "TeX display math rendering is not implemented for this formula.",
+    reason,
     scopePath: scopePathForVerticalBlockItem(item),
     estimated: {
       width: 0,

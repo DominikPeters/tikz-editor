@@ -79,7 +79,9 @@ export interface SimpleTexMathNode extends SimpleTexSourceRange {
 export type SimpleTexDisplayMathDelimiter =
   | "bracket"
   | "double-dollar"
+  | "equation"
   | "equation-star"
+  | "align"
   | "align-star";
 
 export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
@@ -792,6 +794,21 @@ function scanSimpleTexDisplayMath(
     }
   }
 
+  const equationBegin = String.raw`\begin{equation}`;
+  if (text.startsWith(equationBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const equationEnd = String.raw`\end{equation}`;
+    const contentStart = start + equationBegin.length;
+    const contentEnd = text.indexOf(equationEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "equation",
+        contentStart,
+        contentEnd,
+        end: contentEnd + equationEnd.length,
+      };
+    }
+  }
+
   const alignStarBegin = String.raw`\begin{align*}`;
   if (text.startsWith(alignStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
     const alignStarEnd = String.raw`\end{align*}`;
@@ -803,6 +820,21 @@ function scanSimpleTexDisplayMath(
         contentStart,
         contentEnd,
         end: contentEnd + alignStarEnd.length,
+      };
+    }
+  }
+
+  const alignBegin = String.raw`\begin{align}`;
+  if (text.startsWith(alignBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const alignEnd = String.raw`\end{align}`;
+    const contentStart = start + alignBegin.length;
+    const contentEnd = text.indexOf(alignEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "align",
+        contentStart,
+        contentEnd,
+        end: contentEnd + alignEnd.length,
       };
     }
   }

@@ -111,6 +111,7 @@ function renderResultSvg(result) {
   const boxReport = result.vlistLayout?.boxReport;
   if (
     boxReport?.items?.some((item) => item.itemKind === "display-math") ||
+    boxReport?.items?.some((item) => item.itemKind === "placeholder") ||
     flattenPositionedItems(vlistLayout?.items ?? []).some((item) =>
       item.item?.kind === "hbox" && item.item.role?.kind === "display-align-row"
     )
@@ -148,6 +149,10 @@ function renderVListReportSvg(report, vlistLayout) {
       ));
       continue;
     }
+    if (item.item?.kind === "placeholder") {
+      pieces.push(renderPlaceholderItem(item, report.width));
+      continue;
+    }
     if (item.item?.kind === "hbox" && item.item.role?.kind === "display-align-row") {
       pieces.push(renderHorizontalRenderItems(
         item.item.box?.renderItems ?? [],
@@ -170,6 +175,20 @@ function flattenPositionedItems(items) {
     }
   }
   return flat;
+}
+
+function renderPlaceholderItem(positionedItem, width) {
+  const itemWidth = Math.max(24, Math.min(width, positionedItem.metrics?.width ?? width));
+  const height = Math.max(10, (positionedItem.metrics?.height ?? 0) + (positionedItem.metrics?.depth ?? 0));
+  const x = positionedItem.x ?? 0;
+  const y = positionedItem.y ?? 0;
+  const reason = positionedItem.item?.reason ?? "Unsupported TeX content.";
+  return [
+    `<g class="placeholder" transform="translate(${formatPt(x)} ${formatPt(y)})">`,
+    `<rect x="0" y="0" width="${formatPt(itemWidth)}" height="${formatPt(height)}" rx="1.5" />`,
+    `<text x="4" y="${formatPt(Math.min(height - 2, 8))}">${escapeHtml(reason)}</text>`,
+    `</g>`,
+  ].join("");
 }
 
 function renderHorizontalRenderItems(renderItems, originX, originY) {

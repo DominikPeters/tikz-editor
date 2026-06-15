@@ -860,6 +860,61 @@ describe("TeX math SVG rendering", () => {
     expect(result.vlistLayout?.paragraphPlacements).toHaveLength(2);
   });
 
+  it("lets TeX paragraph layout carry double-dollar display math as a vlist item", () => {
+    const source = String.raw`Alpha $$x^2$$ Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:double-dollar-display-math-provider",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const display = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "display-math"
+    );
+    expect(display).toMatchObject({
+      itemKind: "display-math",
+      displayMath: {
+        delimiter: "double-dollar",
+        contentStart: source.indexOf("x^2"),
+        contentEnd: source.indexOf("$$ Beta"),
+      },
+    });
+  });
+
+  it("uses explicit placeholders for numbered display math environments", () => {
+    const source = String.raw`Alpha \begin{equation}x^2\end{equation} Beta \begin{align}a&=b\end{align} Gamma`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:numbered-display-math-placeholder",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const placeholders = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.itemKind === "placeholder"
+    ) ?? [];
+    expect(placeholders).toHaveLength(2);
+    expect(placeholders.map((item) => item.placeholderReason)).toEqual([
+      "Numbered TeX display math is not implemented yet.",
+      "Numbered TeX display math is not implemented yet.",
+    ]);
+    expect(placeholders.map((item) => item.sourceSpan)).toEqual([
+      {
+        start: source.indexOf(String.raw`\begin{equation}`),
+        end: source.indexOf(String.raw`\end{equation}`) + String.raw`\end{equation}`.length,
+      },
+      {
+        start: source.indexOf(String.raw`\begin{align}`),
+        end: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
+      },
+    ]);
+  });
+
   it("lets TeX paragraph layout carry equation-star display math as a vlist item", () => {
     const source = String.raw`Alpha \begin{equation*}y^2\end{equation*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
