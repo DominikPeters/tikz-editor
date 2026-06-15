@@ -363,7 +363,7 @@ class TexMathParser {
     };
     return this.maybeParseScripts({
       kind: "atom",
-      atomClass: "inner",
+      atomClass: "ord",
       nucleus,
       sourceSpan,
     }, allowScripts);

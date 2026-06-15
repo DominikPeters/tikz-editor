@@ -476,8 +476,8 @@ function layoutOperatorLimitsAtom(
 
   if (sup) {
     const shiftUp = roundTexPt(Math.max(
-      mathExtensionParameterToPt(fontProfile, "bigOpSpacing3", baseAtPt) - sup.depth,
-      mathExtensionParameterToPt(fontProfile, "bigOpSpacing1", baseAtPt)
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing3", style, baseAtPt) - sup.depth,
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing1", style, baseAtPt)
     ));
     const child = childHList(
       "limit-superscript",
@@ -488,7 +488,7 @@ function layoutOperatorLimitsAtom(
     );
     items.unshift(child);
     height = roundTexPt(nucleus.height +
-      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", baseAtPt) +
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt) +
       sup.height +
       sup.depth +
       shiftUp);
@@ -496,8 +496,8 @@ function layoutOperatorLimitsAtom(
 
   if (sub) {
     const shiftDown = roundTexPt(Math.max(
-      mathExtensionParameterToPt(fontProfile, "bigOpSpacing4", baseAtPt) - sub.height,
-      mathExtensionParameterToPt(fontProfile, "bigOpSpacing2", baseAtPt)
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing4", style, baseAtPt) - sub.height,
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing2", style, baseAtPt)
     ));
     const child = childHList(
       "limit-subscript",
@@ -511,7 +511,7 @@ function layoutOperatorLimitsAtom(
       shiftDown +
       sub.height +
       sub.depth +
-      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", baseAtPt));
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt));
   }
 
   return {
@@ -1304,7 +1304,7 @@ function layoutFractionNucleus(
 
   const fractionWidth = roundTexPt(Math.max(numerator.width, denominator.width));
   const width = roundTexPt(fractionWidth + 2 * TEX_NULL_DELIMITER_SPACE_PT);
-  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
+  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   let shiftUp: number;
   let shiftDown: number;
@@ -1390,7 +1390,7 @@ function layoutRadicalNucleus(
     return null;
   }
 
-  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
+  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
   let clearance = radicalInitialClearance(fontProfile, style, baseAtPt, thickness);
   const targetHeight = radicand.height + radicand.depth + clearance + thickness;
   const delimiter = selectRadicalDelimiter(fontProfile, style, baseAtPt, targetHeight, nucleus.sourceSpan);
@@ -2742,7 +2742,7 @@ function combinedScriptShifts(
 ): { readonly shiftUp: number; readonly shiftDown: number } {
   let shiftUp = superscriptShiftUp(sup, initialShifts.shiftUp, style, cramped, fontProfile, baseAtPt);
   let shiftDown = subscriptShiftDown(sub, initialShifts.shiftDown, true, style, fontProfile, baseAtPt);
-  const defaultRuleThickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", baseAtPt);
+  const defaultRuleThickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
   const clearance = 4 * defaultRuleThickness - ((shiftUp - sup.depth) - (sub.height - shiftDown));
   if (clearance > 0) {
     shiftDown += clearance;
@@ -2823,14 +2823,34 @@ function mathExtensionParameterToPt(
     | "bigOpSpacing3"
     | "bigOpSpacing4"
     | "bigOpSpacing5",
+  style: TexMathStyle,
   baseAtPt: number
 ): number {
   const extension = fontProfile.resolveMathFont({
     family: "extension",
-    style: "text",
+    style,
     baseAtPt,
   });
-  return tfmToPt(extension, fontProfile.parameters[name]);
+  return tfmToPt(extension, requiredFontdimen(extension, mathExtensionParameterFontdimenName(name)));
+}
+
+function mathExtensionParameterFontdimenName(
+  name:
+    | "defaultRuleThickness"
+    | "bigOpSpacing1"
+    | "bigOpSpacing2"
+    | "bigOpSpacing3"
+    | "bigOpSpacing4"
+    | "bigOpSpacing5"
+): string {
+  return {
+    defaultRuleThickness: "defaultrulethickness",
+    bigOpSpacing1: "bigopspacing1",
+    bigOpSpacing2: "bigopspacing2",
+    bigOpSpacing3: "bigopspacing3",
+    bigOpSpacing4: "bigopspacing4",
+    bigOpSpacing5: "bigopspacing5",
+  }[name];
 }
 
 function charHeightPlusDepth(

@@ -549,6 +549,44 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("spaces fractions as TeX fraction noads rather than inner noads", () => {
+    const leadingPlus = layout(String.raw`+\frac{x}{m}`);
+    expect(leadingPlus.supported).toBe(true);
+    expect(leadingPlus.hlist?.width).toBeCloseTo(17.273927, 5);
+    expect(leadingPlus.hlist?.items.map((item) => item.kind)).toEqual([
+      "glyph",
+      "hlist",
+      "rule",
+      "hlist",
+    ]);
+    expect(leadingPlus.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      x: expect.closeTo(10.258498, 5),
+    });
+    expect(leadingPlus.hlist?.items[2]).toMatchObject({
+      kind: "rule",
+      x: expect.closeTo(8.97781, 5),
+    });
+
+    const afterOperator = layout(String.raw`\prod_1^z+\frac{x}{m}`);
+    expect(afterOperator.supported).toBe(true);
+    expect(afterOperator.hlist?.width).toBeCloseTo(32.992753, 5);
+    expect(afterOperator.hlist?.items.map((item) => item.kind)).toEqual([
+      "glyph",
+      "hlist",
+      "hlist",
+      "glue",
+      "glyph",
+      "hlist",
+      "rule",
+      "hlist",
+    ]);
+    expect(afterOperator.hlist?.items[5]).toMatchObject({
+      kind: "hlist",
+      x: expect.closeTo(25.977324, 5),
+    });
+  });
+
   it("lays out math accents with TeX skew and italic-width handling", () => {
     const hatX = layout(String.raw`\hat{x}`);
     expect(hatX.supported).toBe(true);

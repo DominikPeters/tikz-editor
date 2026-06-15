@@ -73,6 +73,7 @@ describe("TeX math parser", () => {
     const fraction = atomAt(result, 0);
 
     expect(result.diagnostics).toEqual([]);
+    expect(fraction.atomClass).toBe("ord");
     expect(fraction.nucleus.kind).toBe("fraction");
     if (fraction.nucleus.kind !== "fraction") {
       return;
