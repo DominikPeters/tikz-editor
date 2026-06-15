@@ -1327,6 +1327,50 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out smallmatrix with scriptstyle cells, thin outer skips, and TeX row spacing", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{smallmatrix}a&b\\x&y\end{smallmatrix}`).list
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(14.952627, 6);
+    expect(result.hlist?.height).toBeCloseTo(8.611115, 6);
+    expect(result.hlist?.depth).toBeCloseTo(3.611115, 6);
+    expect(result.hlist?.items).toMatchObject([
+      { kind: "glue", x: 0, width: expect.closeTo(1.666672, 6), mu: 3 },
+      {
+        kind: "hlist",
+        role: "smallmatrix-row",
+        x: expect.closeTo(1.666672, 6),
+        y: expect.closeTo(-3.75, 6),
+      },
+      {
+        kind: "hlist",
+        role: "smallmatrix-row",
+        x: expect.closeTo(1.666672, 6),
+        y: expect.closeTo(2.25, 6),
+      },
+      { kind: "glue", x: expect.closeTo(13.285955, 6), width: expect.closeTo(1.666672, 6), mu: 3 },
+    ]);
+    const firstRow = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    const secondRow = result.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow?.items).toMatchObject([
+      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(0.098546, 6) },
+      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.707567, 6) },
+    ]);
+    expect(secondRow?.items).toMatchObject([
+      { kind: "hlist", role: "smallmatrix-cell", x: 0 },
+      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.312526, 6) },
+    ]);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.atPt}/${glyph.code}`)).toEqual([
+      "cmmi7/7/97",
+      "cmmi7/7/98",
+      "cmmi7/7/120",
+      "cmmi7/7/121",
+    ]);
+  });
+
   it("uses amsmath cmex script sizing inside matrix cells", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{matrix}3_{\sum}\end{matrix}`).list

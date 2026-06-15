@@ -743,6 +743,44 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses smallmatrix environments into source-spanned rows", () => {
+    const source = String.raw`\begin{smallmatrix}a&b\\x&y\end{smallmatrix}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "smallmatrix",
+        beginSourceSpan: { start: 0, end: 6 },
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{smallmatrix}`),
+          end: source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "smallmatrix") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) =>
+      row.cells.map((cell) => ({
+        sourceSpan: cell.sourceSpan,
+        itemCount: cell.list.items.length,
+      }))
+    )).toEqual([
+      [
+        { sourceSpan: { start: 19, end: 20 }, itemCount: 1 },
+        { sourceSpan: { start: 21, end: 22 }, itemCount: 1 },
+      ],
+      [
+        { sourceSpan: { start: 24, end: 25 }, itemCount: 1 },
+        { sourceSpan: { start: 26, end: 27 }, itemCount: 1 },
+      ],
+    ]);
+  });
+
   it("reports missing matrix environment ends without throwing", () => {
     const result = parseTexMath(String.raw`\begin{pmatrix}a&b`);
     const atom = atomAt(result, 0);

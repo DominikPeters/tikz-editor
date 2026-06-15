@@ -30,6 +30,7 @@ import type {
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
+  TexMathSmallMatrixNucleus,
   TexMathSourceSpan,
   TexMathStyle,
   TexMathSubstackNucleus,
@@ -110,7 +111,9 @@ export interface TexMathChildHListLayoutItem {
     | "cases-row"
     | "cases-cell"
     | "matrix-row"
-    | "matrix-cell";
+    | "matrix-cell"
+    | "smallmatrix-row"
+    | "smallmatrix-cell";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -322,7 +325,7 @@ function texMathAtomNeedsAmsMath(atom: TexMathAtom): boolean {
 }
 
 function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
-  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix" || nucleus.kind === "substack" || nucleus.kind === "cases") {
+  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix" || nucleus.kind === "substack" || nucleus.kind === "cases" || nucleus.kind === "smallmatrix") {
     return true;
   }
   if (nucleus.kind === "array") {
@@ -614,6 +617,9 @@ function layoutNucleus(
   if (nucleus.kind === "cases") {
     return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
+  if (nucleus.kind === "smallmatrix") {
+    return layoutSmallMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+  }
   if (nucleus.kind === "matrix") {
     return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
@@ -824,6 +830,8 @@ const TEX_ALIGNED_LINE_SKIP_PT = 1;
 const TEX_MATRIX_ARRAY_COL_SEP_PT = 5;
 const TEX_CASES_ARRAY_STRETCH = 1.2;
 const TEX_CASES_COLUMN_GAP_PT = 10;
+const TEX_SMALLMATRIX_BASELINE_SKIP_PT = 6;
+const TEX_SMALLMATRIX_LINE_SKIP_PT = 1.5;
 const TEX_SUBSTACK_STYLE: TexMathStyle = "script";
 
 interface TexMathAlignedCellLayout {
@@ -1354,6 +1362,121 @@ function layoutArrayNucleus(
   };
 }
 
+function layoutSmallMatrixNucleus(
+  nucleus: TexMathSmallMatrixNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const rows = nucleus.rows.map((row) =>
+    layoutSmallMatrixRow(row, fontProfile, baseAtPt, alphabet)
+  );
+  if (rows.some((row): row is null => row === null)) {
+    return null;
+  }
+  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const outerGap = muToPt(fontProfile, style, baseAtPt, 3);
+  if (concreteRows.length === 0) {
+    return {
+      items: [],
+      width: roundTexPt(outerGap * 2),
+      height: 0,
+      depth: 0,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+
+  const columnCount = Math.max(...concreteRows.map((row) => row.cells.length));
+  const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
+    Math.max(0, ...concreteRows.map((row) => row.cells[columnIndex]?.hlist.width ?? 0))
+  ).map(roundTexPt);
+  const columnGap = muToPt(fontProfile, style, baseAtPt, 5);
+  const bodyWidth = roundTexPt(
+    columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
+    Math.max(0, columnCount - 1) * columnGap
+  );
+  const width = roundTexPt(outerGap + bodyWidth + outerGap);
+  const baselineOffsets = smallMatrixRowBaselineOffsets(concreteRows);
+  const lastRow = concreteRows[concreteRows.length - 1];
+  const naturalHeight = roundTexPt(
+    concreteRows[0].height +
+    (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
+    lastRow.depth
+  );
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const height = roundTexPt(naturalHeight / 2 + axis);
+  const depth = roundTexPt(naturalHeight - height);
+  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  const items: TexMathHListItem[] = [{
+    kind: "glue",
+    x: 0,
+    width: outerGap,
+    mu: 3,
+    stretch: 0,
+    shrink: 0,
+    source: "explicit",
+    sourceSpan: nucleus.beginSourceSpan,
+  }];
+
+  for (const [rowIndex, row] of concreteRows.entries()) {
+    const rowChildren: TexMathHListItem[] = [];
+    let cursor = outerGap;
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      const columnWidth = columnWidths[columnIndex] ?? 0;
+      const cell = row.cells[columnIndex];
+      if (cell) {
+        rowChildren.push(childHList(
+          "smallmatrix-cell",
+          roundTexPt(cursor - outerGap + (columnWidth - cell.hlist.width) / 2),
+          0,
+          cell.hlist,
+          cell.sourceSpan
+        ));
+      }
+      cursor = roundTexPt(cursor + columnWidth);
+      if (columnIndex < columnCount - 1) {
+        cursor = roundTexPt(cursor + columnGap);
+      }
+    }
+    items.push({
+      kind: "hlist",
+      role: "smallmatrix-row",
+      x: outerGap,
+      y: baselineY,
+      width: bodyWidth,
+      height: row.height,
+      depth: row.depth,
+      sourceSpan: row.sourceSpan,
+      items: rowChildren,
+    });
+    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+  }
+
+  items.push({
+    kind: "glue",
+    x: roundTexPt(outerGap + bodyWidth),
+    width: outerGap,
+    mu: 3,
+    stretch: 0,
+    shrink: 0,
+    source: "explicit",
+    sourceSpan: nucleus.endSourceSpan ?? nucleus.sourceSpan,
+  });
+
+  return {
+    items,
+    width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
 function layoutMatrixBody(
   nucleus: TexMathMatrixNucleus,
   fontProfile: TexMathFontProfile,
@@ -1443,6 +1566,47 @@ function layoutMatrixBody(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function layoutSmallMatrixRow(
+  row: TexMathAlignedRow,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAlignedRowLayout | null {
+  const cells = row.cells.map((cell) => {
+    const result = layoutTexMathList(cell.list, { fontProfile, style: "script", baseAtPt, alphabet });
+    return result.supported
+      ? {
+          hlist: result.hlist,
+          sourceSpan: cell.sourceSpan,
+        }
+      : null;
+  });
+  if (cells.some((cell): cell is null => cell === null)) {
+    return null;
+  }
+  const concreteCells = cells as readonly TexMathAlignedCellLayout[];
+  return {
+    cells: concreteCells,
+    sourceSpan: row.sourceSpan,
+    height: roundTexPt(Math.max(0, ...concreteCells.map((cell) => cell.hlist.height))),
+    depth: roundTexPt(Math.max(0, ...concreteCells.map((cell) => cell.hlist.depth))),
+  };
+}
+
+function smallMatrixRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
+  const offsets = [0];
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const previous = rows[rowIndex - 1];
+    const current = rows[rowIndex];
+    const naturalDistance = roundTexPt(previous.depth + current.height);
+    const baselineDistance = TEX_SMALLMATRIX_BASELINE_SKIP_PT - naturalDistance >= TEX_SMALLMATRIX_LINE_SKIP_PT
+      ? TEX_SMALLMATRIX_BASELINE_SKIP_PT
+      : roundTexPt(naturalDistance + TEX_SMALLMATRIX_LINE_SKIP_PT);
+    offsets.push(roundTexPt((offsets[rowIndex - 1] ?? 0) + baselineDistance));
+  }
+  return offsets;
 }
 
 function arrayCellOffset(

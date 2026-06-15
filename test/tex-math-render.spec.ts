@@ -527,6 +527,33 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('transform="translate(805.56 -682.0044) scale(100)"');
   });
 
+  it("creates inline math boxes for smallmatrix environments without MathJax", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const content = String.raw`\begin{smallmatrix}a&b\\x&y\end{smallmatrix}`;
+    const source = `$${content}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).toMatchObject({
+      source,
+      content,
+      width: expect.closeTo(14.952627, 6),
+      height: expect.closeTo(8.611115, 6),
+      depth: expect.closeTo(3.611115, 6),
+    });
+    expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="97"');
+    expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="121"');
+    expect(box?.svgBody).toContain('transform="translate(176.5218 -375) scale(70)"');
+    expect(box?.svgBody).toContain('transform="translate(897.9198 225) scale(70)"');
+  });
+
   it("creates inline math boxes for AMS matrix delimiter variants", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const cases = [

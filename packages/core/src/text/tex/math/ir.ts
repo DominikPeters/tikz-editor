@@ -77,6 +77,7 @@ export type TexMathNucleus =
   | TexMathSubstackNucleus
   | TexMathArrayNucleus
   | TexMathCasesNucleus
+  | TexMathSmallMatrixNucleus
   | TexMathMatrixNucleus
   | TexMathUnsupportedNucleus;
 
@@ -253,6 +254,14 @@ export interface TexMathArrayNucleus {
 
 export interface TexMathCasesNucleus {
   readonly kind: "cases";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSmallMatrixNucleus {
+  readonly kind: "smallmatrix";
   readonly rows: readonly TexMathAlignedRow[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
