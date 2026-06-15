@@ -16,6 +16,7 @@ import type {
   TexMathGlyphNucleus,
   TexMathList,
   TexMathNucleus,
+  TexMathOperatorCommand,
   TexMathSourceSpan,
   TexMathStyle,
 } from "./ir.js";
@@ -143,6 +144,8 @@ interface TexMathAtomLayout {
   readonly depth: number;
   readonly italicCorrection: number;
   readonly isCharacterNucleus: boolean;
+  readonly scriptBaseWidth?: number;
+  readonly scriptSuperscriptOffset?: number;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -250,11 +253,16 @@ function layoutAtom(
   }
 
   const items: TexMathHListItem[] = [...nucleus.items];
-  let scriptStartX = nucleus.width;
-  let atomWidth = nucleus.width;
+  const hasSubscript = Boolean(atom.subscript);
+  let scriptStartX = hasSubscript && nucleus.scriptBaseWidth !== undefined
+    ? nucleus.scriptBaseWidth
+    : nucleus.width;
+  let atomWidth = scriptStartX;
   let height = nucleus.height;
   let depth = nucleus.depth;
-  const delta = atom.subscript && nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0;
+  const delta = atom.subscript
+    ? nucleus.scriptSuperscriptOffset ?? (nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0)
+    : 0;
   if (!atom.subscript && nucleus.isCharacterNucleus && nucleus.italicCorrection !== 0) {
     items.push({
       kind: "kern",
@@ -346,6 +354,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "accent") {
     return layoutAccentNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
+  if (nucleus.kind === "operator") {
+    return layoutOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
   }
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, baseAtPt);
@@ -595,6 +606,112 @@ function layoutAccentNucleus(
   };
 }
 
+function layoutOperatorNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  if (nucleus.command === "lim") {
+    return layoutTextOperatorNucleus(nucleus, fontProfile, style, baseAtPt, "lim");
+  }
+  return layoutLargeOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
+}
+
+function layoutTextOperatorNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  text: string
+): TexMathAtomLayout | null {
+  const font = fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
+  const items: TexMathGlyphLayoutItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+  for (const char of text) {
+    const code = char.charCodeAt(0);
+    const metric = requiredCharMetric(font, code);
+    const width = roundTexPt(tfmToPt(font, metric.width));
+    const item = {
+      kind: "glyph",
+      fontId: font.id,
+      atPt: font.atPt,
+      family: "operators",
+      code,
+      text: char,
+      x: cursor,
+      y: 0,
+      width,
+      height: roundTexPt(tfmToPt(font, metric.height)),
+      depth: roundTexPt(tfmToPt(font, metric.depth)),
+      italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
+      sourceSpan: nucleus.sourceSpan,
+    } satisfies TexMathGlyphLayoutItem;
+    items.push(item);
+    cursor = roundTexPt(cursor + width);
+    height = Math.max(height, item.height);
+    depth = Math.max(depth, item.depth);
+  }
+  return {
+    items,
+    width: cursor,
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutLargeOperatorNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const spec = largeOperatorSpec(nucleus.command);
+  if (!spec) {
+    return null;
+  }
+  const font = fontProfile.resolveMathFont({ family: "extension", style: "text", baseAtPt });
+  const code = largeOperatorCode(font, spec.code, style);
+  const metric = requiredCharMetric(font, code);
+  const glyphWidth = roundTexPt(tfmToPt(font, metric.width));
+  const italicCorrection = roundTexPt(tfmToPt(font, metric.italicCorrection));
+  const glyphHeight = roundTexPt(tfmToPt(font, metric.height));
+  const glyphDepth = roundTexPt(tfmToPt(font, metric.depth));
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const y = roundTexPt((glyphHeight - glyphDepth) / 2 - axis);
+  const item = {
+    kind: "glyph",
+    fontId: font.id,
+    atPt: font.atPt,
+    family: "extension",
+    code,
+    text: `\\${nucleus.command}`,
+    x: 0,
+    y,
+    width: glyphWidth,
+    height: glyphHeight,
+    depth: glyphDepth,
+    italicCorrection,
+    sourceSpan: nucleus.sourceSpan,
+  } satisfies TexMathGlyphLayoutItem;
+  return {
+    items: [item],
+    width: roundTexPt(glyphWidth + italicCorrection),
+    height: roundTexPt(Math.max(0, -y + glyphHeight)),
+    depth: roundTexPt(Math.max(0, y + glyphDepth)),
+    italicCorrection,
+    isCharacterNucleus: false,
+    scriptBaseWidth: glyphWidth,
+    scriptSuperscriptOffset: italicCorrection,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
 function layoutLeftRightNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "left-right" }>,
   fontProfile: TexMathFontProfile,
@@ -783,6 +900,41 @@ function delimiterSpec(
     case "backslash":
       return { smallFamily: "symbols", smallCode: 110, largeCode: 15 };
   }
+}
+
+function largeOperatorSpec(
+  command: TexMathOperatorCommand
+): { readonly code: number } | null {
+  switch (command) {
+    case "bigcap":
+      return { code: 84 };
+    case "bigcup":
+      return { code: 83 };
+    case "coprod":
+      return { code: 96 };
+    case "int":
+      return { code: 82 };
+    case "oint":
+      return { code: 72 };
+    case "prod":
+      return { code: 81 };
+    case "sum":
+      return { code: 80 };
+    case "lim":
+      return null;
+  }
+}
+
+function largeOperatorCode(
+  font: ResolvedTexFont,
+  code: number,
+  style: TexMathStyle
+): number {
+  if (style !== "display") {
+    return code;
+  }
+  const metric = requiredCharMetric(font, code);
+  return metric.nextLarger ?? code;
 }
 
 function offsetDelimiterItems(

@@ -114,6 +114,35 @@ describe("TeX math parser", () => {
     expect(vec.nucleus.kind === "accent" ? vec.nucleus.base.sourceSpan : null).toEqual({ start: 13, end: 14 });
   });
 
+  it("parses TeX operator commands as op atoms with scripts", () => {
+    const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
+    const sum = atomAt(result, 0);
+    const lim = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(sum).toMatchObject({
+      atomClass: "op",
+      sourceSpan: { start: 0, end: 8 },
+      nucleus: {
+        kind: "operator",
+        command: "sum",
+        sourceSpan: { start: 0, end: 4 },
+      },
+      subscript: { sourceSpan: { start: 4, end: 6 } },
+      superscript: { sourceSpan: { start: 6, end: 8 } },
+    });
+    expect(lim).toMatchObject({
+      atomClass: "op",
+      sourceSpan: { start: 9, end: 17 },
+      nucleus: {
+        kind: "operator",
+        command: "lim",
+        sourceSpan: { start: 9, end: 13 },
+      },
+      subscript: { sourceSpan: { start: 13, end: 17 } },
+    });
+  });
+
   it("parses left-right delimiter groups with delimiter source spans", () => {
     const result = parseTexMath(String.raw`\left(\frac{1}{2}\right)`);
     const atom = atomAt(result, 0);

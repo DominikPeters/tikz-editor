@@ -15,6 +15,8 @@ export type {
   TexMathList,
   TexMathListNucleus,
   TexMathNucleus,
+  TexMathOperatorCommand,
+  TexMathOperatorNucleus,
   TexMathParseResult,
   TexMathRadicalNucleus,
   TexMathScript,

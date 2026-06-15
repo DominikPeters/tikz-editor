@@ -9,6 +9,7 @@ import type {
   TexMathItem,
   TexMathList,
   TexMathNucleus,
+  TexMathOperatorCommand,
   TexMathParseResult,
   TexMathScript,
   TexMathSourceSpan,
@@ -198,6 +199,10 @@ class TexMathParser {
       if (accent) {
         return this.parseAccent(accent, allowScripts);
       }
+      const operator = operatorCommandName(token.text);
+      if (operator) {
+        return this.parseOperator(operator, allowScripts);
+      }
       if (commandName(token.text) === "left") {
         return this.parseLeftRight(allowScripts);
       }
@@ -313,6 +318,20 @@ class TexMathParser {
         sourceSpan,
       },
       sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseOperator(commandNameValue: TexMathOperatorCommand, allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "operator",
+        command: commandNameValue,
+        sourceSpan: command.sourceSpan,
+      },
+      sourceSpan: command.sourceSpan,
     }, allowScripts);
   }
 
@@ -647,6 +666,29 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "tilde";
     case "vec":
       return "vec";
+    default:
+      return null;
+  }
+}
+
+function operatorCommandName(command: string): TexMathOperatorCommand | null {
+  switch (commandName(command)) {
+    case "bigcap":
+      return "bigcap";
+    case "bigcup":
+      return "bigcup";
+    case "coprod":
+      return "coprod";
+    case "int":
+      return "int";
+    case "lim":
+      return "lim";
+    case "oint":
+      return "oint";
+    case "prod":
+      return "prod";
+    case "sum":
+      return "sum";
     default:
       return null;
   }

@@ -67,6 +67,7 @@ export type TexMathNucleus =
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
   | TexMathAccentNucleus
+  | TexMathOperatorNucleus
   | TexMathLeftRightNucleus
   | TexMathUnsupportedNucleus;
 
@@ -127,6 +128,22 @@ export interface TexMathAccentNucleus {
   readonly command: TexMathAccentCommand;
   readonly base: TexMathList;
   readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathOperatorCommand =
+  | "bigcap"
+  | "bigcup"
+  | "coprod"
+  | "int"
+  | "lim"
+  | "oint"
+  | "prod"
+  | "sum";
+
+export interface TexMathOperatorNucleus {
+  readonly kind: "operator";
+  readonly command: TexMathOperatorCommand;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

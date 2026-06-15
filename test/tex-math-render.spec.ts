@@ -104,6 +104,24 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1863.0603 -414.2878) scale(100)"');
   });
 
+  it("renders TeX operators through the selected math fonts", () => {
+    const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="80"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="82"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="108"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="109"');
+    expect(body).toContain('transform="translate(0 -750.0065) scale(100)"');
+    expect(body).toContain('transform="translate(1055.559 -502.7868) scale(70)"');
+  });
+
   it("renders simple radicals with the CM radical glyph and TeX rule", () => {
     const parsed = parseTexMath(String.raw`\sqrt{x}`);
     const result = layoutTexMathList(parsed.list);

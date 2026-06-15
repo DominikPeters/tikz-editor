@@ -320,6 +320,80 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out TeX large operators with inline side scripts", () => {
+    const sum = layout(String.raw`\sum_i^n`);
+    expect(sum.supported).toBe(true);
+    expect(sum.hlist?.width).toBeCloseTo(15.99892, 5);
+    expect(sum.hlist?.items).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 80,
+        y: expect.closeTo(-7.500065, 5),
+      },
+      {
+        kind: "hlist",
+        role: "superscript",
+        x: expect.closeTo(10.55559, 5),
+        y: expect.closeTo(-5.027868, 5),
+      },
+      {
+        kind: "hlist",
+        role: "subscript",
+        x: expect.closeTo(10.55559, 5),
+        y: expect.closeTo(3.000061, 5),
+      },
+    ]);
+
+    const product = layout(String.raw`\prod_i^n\coprod_i^n\bigcup_i^n\bigcap_i^n`);
+    expect(product.supported).toBe(true);
+    expect(product.hlist?.items.filter((item) => item.kind === "glyph").map((item) => item.code)).toEqual([
+      81,
+      96,
+      83,
+      84,
+    ]);
+  });
+
+  it("lays out TeX integral operators with italic-correction script offsets", () => {
+    const result = layout(String.raw`\int_0^1+\oint_0^1`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 82,
+      y: expect.closeTo(-8.05561, 5),
+      width: expect.closeTo(4.72223, 5),
+    });
+    expect(result.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+      x: expect.closeTo(6.66669, 5),
+    });
+    expect(result.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(4.72223, 5),
+    });
+  });
+
+  it("lays out named roman operators such as lim", () => {
+    const result = layout(String.raw`\lim_{x}`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(18.92368, 5);
+    expect(result.hlist?.items.slice(0, 3)).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 108, x: 0 },
+      { kind: "glyph", fontId: "cmr10", code: 105, x: expect.closeTo(2.77779, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 109, x: expect.closeTo(5.55558, 5) },
+    ]);
+    expect(result.hlist?.items[3]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(13.88894, 5),
+      y: expect.closeTo(1.5, 5),
+    });
+  });
+
   it("lays out simple radicals with TeX-style radical glyph shifts and overbar rule", () => {
     const result = layout(String.raw`\sqrt{x}`);
 
