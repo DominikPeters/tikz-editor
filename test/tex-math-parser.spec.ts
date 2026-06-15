@@ -592,6 +592,47 @@ describe("TeX math parser", () => {
     expect(substack.nucleus.rows[1]?.cells[0]?.list.sourceSpan).toEqual({ start: 21, end: 24 });
   });
 
+  it("parses amsmath subarray environments with TeX column alignment", () => {
+    const source = String.raw`\begin{subarray}{c}a\\b\end{subarray}+\begin{subarray}{l}a+b\\c\end{subarray}`;
+    const result = parseTexMath(source);
+
+    expect(result.diagnostics).toEqual([]);
+    const centered = atomAt(result, 0);
+    expect(centered).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 37 },
+      nucleus: {
+        kind: "subarray",
+        columnAlignment: "center",
+        beginSourceSpan: { start: 0, end: 6 },
+        preambleSourceSpan: { start: 16, end: 19 },
+        endSourceSpan: { start: 23, end: 37 },
+      },
+    });
+    if (centered.nucleus.kind !== "subarray") {
+      return;
+    }
+    expect(centered.nucleus.rows).toHaveLength(2);
+    expect(centered.nucleus.rows[0]).toMatchObject({
+      sourceSpan: { start: 19, end: 22 },
+      rowBreakSourceSpan: { start: 20, end: 22 },
+    });
+    expect(centered.nucleus.rows[1]?.cells[0]?.list.sourceSpan).toEqual({ start: 22, end: 23 });
+
+    const left = atomAt(result, 2);
+    expect(left).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 38, end: 77 },
+      nucleus: {
+        kind: "subarray",
+        columnAlignment: "left",
+        beginSourceSpan: { start: 38, end: 44 },
+        preambleSourceSpan: { start: 54, end: 57 },
+        endSourceSpan: { start: 63, end: 77 },
+      },
+    });
+  });
+
   it("parses plain text commands as source-spanned text nuclei", () => {
     const result = parseTexMath(String.raw`x+\text{if x}`, { sourceOffset: 10 });
     const text = atomAt(result, 2);

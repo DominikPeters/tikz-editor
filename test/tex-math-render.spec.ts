@@ -422,6 +422,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1055.559 691.1964) scale(70)"');
   });
 
+  it("renders subarray rows recursively with scriptstyle CM glyphs and role metadata", () => {
+    const parsed = parseTexMath(String.raw`\begin{subarray}{c}i\\j\end{subarray}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-math-role="subarray-row"');
+    expect(body).toContain('data-tex-math-role="subarray-cell"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="106"');
+  });
+
   it("renders simple radicals with the CM radical glyph and TeX rule", () => {
     const parsed = parseTexMath(String.raw`\sqrt{x}`);
     const result = layoutTexMathList(parsed.list);

@@ -139,6 +139,8 @@ const formulas = args.formulas.length > 0
       "\\substack{i\\\\j}",
       "x_{\\substack{i\\\\j}}",
       "\\sum_{\\substack{i=1\\\\j=2}}^n",
+      "\\begin{subarray}{c}i\\\\j\\end{subarray}",
+      "\\begin{subarray}{l}i\\\\j\\end{subarray}",
       "\\prod_i^n",
       "\\coprod_i^n",
       "\\bigcup_i^n",
@@ -255,6 +257,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula)
     || hasSubstackCommand(formula)
+    || hasSubarrayEnvironment(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -414,6 +417,7 @@ function texSource(formula) {
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula) ||
     hasSubstackCommand(formula) ||
+    hasSubarrayEnvironment(formula) ||
     hasEllipsisCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
@@ -938,6 +942,10 @@ function hasStyledFractionCommand(source) {
 
 function hasSubstackCommand(source) {
   return source.includes(String.raw`\substack`);
+}
+
+function hasSubarrayEnvironment(source) {
+  return source.includes(String.raw`\begin{subarray}`);
 }
 
 function hasEllipsisCommand(source) {

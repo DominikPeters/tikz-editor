@@ -1120,6 +1120,47 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out amsmath subarray rows with TeX scriptstyle stack parameters and column alignment", () => {
+    const centered = layout(String.raw`\begin{subarray}{c}i\\j\end{subarray}`);
+
+    expect(centered.supported).toBe(true);
+    expect(centered.hlist?.width).toBeCloseTo(3.713577, 6);
+    expect(centered.hlist?.height).toBeCloseTo(8.350493, 6);
+    expect(centered.hlist?.depth).toBeCloseTo(3.350494, 6);
+    const centeredFirstRow = centered.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const centeredSecondRow = centered.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(centeredFirstRow).toMatchObject({
+      kind: "hlist",
+      role: "subarray-row",
+      y: expect.closeTo(-3.718551, 6),
+    });
+    expect(centeredFirstRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "subarray-cell",
+      x: expect.closeTo(0.442141, 6),
+    });
+    expect(centeredSecondRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "subarray-cell",
+      x: 0,
+    });
+
+    const left = layout(String.raw`\begin{subarray}{l}i\\j\end{subarray}`);
+    expect(left.supported).toBe(true);
+    const leftFirstRow = left.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const leftSecondRow = left.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(leftFirstRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "subarray-cell",
+      x: 0,
+    });
+    expect(leftSecondRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "subarray-cell",
+      x: 0,
+    });
+  });
+
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
     const leadingPlus = layout(String.raw`+\frac{x}{m}`);
     expect(leadingPlus.supported).toBe(true);

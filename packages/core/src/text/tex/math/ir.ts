@@ -83,6 +83,7 @@ export type TexMathNucleus =
   | TexMathLeftRightNucleus
   | TexMathAlignedNucleus
   | TexMathSubstackNucleus
+  | TexMathSubarrayNucleus
   | TexMathArrayNucleus
   | TexMathCasesNucleus
   | TexMathSmallMatrixNucleus
@@ -298,6 +299,16 @@ export interface TexMathSubstackNucleus {
   readonly kind: "substack";
   readonly rows: readonly TexMathAlignedRow[];
   readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSubarrayNucleus {
+  readonly kind: "subarray";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignment: "left" | "center";
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly preambleSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

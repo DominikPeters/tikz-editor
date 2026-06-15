@@ -35,6 +35,7 @@ import type {
   TexMathSmallMatrixNucleus,
   TexMathSourceSpan,
   TexMathStyle,
+  TexMathSubarrayNucleus,
   TexMathSubstackNucleus,
   TexMathTextNucleus,
 } from "./ir.js";
@@ -109,6 +110,8 @@ export interface TexMathChildHListLayoutItem {
     | "aligned-cell"
     | "substack-row"
     | "substack-cell"
+    | "subarray-row"
+    | "subarray-cell"
     | "array-row"
     | "array-cell"
     | "cases-row"
@@ -390,6 +393,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     nucleus.kind === "aligned" ||
     nucleus.kind === "matrix" ||
     nucleus.kind === "substack" ||
+    nucleus.kind === "subarray" ||
     nucleus.kind === "cases" ||
     nucleus.kind === "smallmatrix" ||
     nucleus.kind === "operator-name"
@@ -758,6 +762,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "substack") {
     return layoutSubstackNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "subarray") {
+    return layoutSubarrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "array") {
     return layoutArrayNucleus(nucleus, fontProfile, baseAtPt, alphabet);
@@ -1265,6 +1272,93 @@ function layoutSubstackRow(
     height: result.hlist.height,
     depth: result.hlist.depth,
   };
+}
+
+function layoutSubarrayNucleus(
+  nucleus: TexMathSubarrayNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const rows = nucleus.rows.map((row) =>
+    layoutSubstackRow(row, fontProfile, baseAtPt, alphabet)
+  );
+  if (rows.some((row): row is null => row === null)) {
+    return null;
+  }
+  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  if (concreteRows.length === 0) {
+    return {
+      items: [],
+      width: 0,
+      height: 0,
+      depth: 0,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+
+  const width = roundTexPt(Math.max(...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
+  const baselineOffsets = substackRowBaselineOffsets(concreteRows, fontProfile, baseAtPt);
+  const lastRow = concreteRows[concreteRows.length - 1];
+  const naturalHeight = roundTexPt(
+    concreteRows[0].height +
+    (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
+    lastRow.depth
+  );
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const height = roundTexPt(naturalHeight / 2 + axis);
+  const depth = roundTexPt(naturalHeight - height);
+  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  const rowItems: TexMathChildHListLayoutItem[] = [];
+
+  for (const [rowIndex, row] of concreteRows.entries()) {
+    const cell = row.cells[0];
+    const cellX = cell
+      ? subarrayCellX(nucleus.columnAlignment, width, cell.hlist.width)
+      : 0;
+    const rowChildren = cell
+      ? [childHList(
+          "subarray-cell",
+          cellX,
+          0,
+          cell.hlist,
+          cell.sourceSpan
+        )]
+      : [];
+    rowItems.push({
+      kind: "hlist",
+      role: "subarray-row",
+      x: 0,
+      y: baselineY,
+      width,
+      height: row.height,
+      depth: row.depth,
+      sourceSpan: row.sourceSpan,
+      items: rowChildren,
+    });
+    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+  }
+
+  return {
+    items: rowItems,
+    width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function subarrayCellX(
+  alignment: TexMathSubarrayNucleus["columnAlignment"],
+  width: number,
+  cellWidth: number
+): number {
+  return alignment === "center" ? roundTexPt((width - cellWidth) / 2) : 0;
 }
 
 function substackRowBaselineOffsets(
