@@ -368,20 +368,20 @@ describe("TeX math SVG rendering", () => {
       item.glue?.origin?.kind === "display-math-boundary"
     ).map((item) => item.glue)).toEqual([
       {
-        size: 10,
-        stretch: 2,
-        shrink: 5,
+        size: 0,
+        stretch: 3,
+        shrink: 0,
         stretchOrder: "normal",
         shrinkOrder: "normal",
-        origin: { kind: "display-math-boundary", side: "above" },
+        origin: { kind: "display-math-boundary", side: "above", variant: "short" },
       },
       {
-        size: 10,
-        stretch: 2,
-        shrink: 5,
+        size: 6,
+        stretch: 3,
+        shrink: 3,
         stretchOrder: "normal",
         shrinkOrder: "normal",
-        origin: { kind: "display-math-boundary", side: "below" },
+        origin: { kind: "display-math-boundary", side: "below", variant: "short" },
       },
     ]);
     expect(result.vlistLayout?.paragraphPlacements).toHaveLength(2);

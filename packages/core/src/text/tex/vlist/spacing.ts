@@ -4,12 +4,14 @@ import type { SimpleTexListContext } from "../ir.js";
 import { texVListPathKey } from "./paths.js";
 import { texVBoxRolePathForParagraph } from "./scope-roles.js";
 import type {
+  TexDisplayMathSkipVariant,
   TexDisplayMathItem,
   TexGlueItem,
   TexParagraphItem,
   TexVBoxRole,
   TexVListDocument,
   TexVListItem,
+  TexVListParagraphBoxMeasurement,
 } from "./types.js";
 
 const articleQuoteSpacingEm = {
@@ -28,14 +30,28 @@ const articleListSpacingEm = {
 
 const latexArticleDisplaySkipsPt = {
   above: {
-    size: 10,
-    stretch: 2,
-    shrink: 5,
+    normal: {
+      size: 10,
+      stretch: 2,
+      shrink: 5,
+    },
+    short: {
+      size: 0,
+      stretch: 3,
+      shrink: 0,
+    },
   },
   below: {
-    size: 10,
-    stretch: 2,
-    shrink: 5,
+    normal: {
+      size: 10,
+      stretch: 2,
+      shrink: 5,
+    },
+    short: {
+      size: 6,
+      stretch: 3,
+      shrink: 3,
+    },
   },
 } as const;
 
@@ -350,7 +366,7 @@ function displayMathBoundaryGlueItem(
   item: TexDisplayMathItem,
   side: "above" | "below"
 ): TexGlueItem {
-  const skip = latexArticleDisplaySkipsPt[side];
+  const skip = latexArticleDisplaySkipsPt[side].normal;
   return {
     kind: "glue",
     sourceSpan: item.sourceSpan,
@@ -364,6 +380,114 @@ function displayMathBoundaryGlueItem(
     shrink: skip.shrink,
     stretchOrder: "normal",
     shrinkOrder: "normal",
+  };
+}
+
+export function resolveDisplayMathVerticalGlueInVList(
+  vlist: TexVListDocument,
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): TexVListDocument {
+  return {
+    ...vlist,
+    items: resolveDisplayMathVerticalGlueInItems(
+      vlist.items,
+      paragraphMeasurements,
+      []
+    ),
+  };
+}
+
+function resolveDisplayMathVerticalGlueInItems(
+  sourceItems: readonly TexVListItem[],
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
+  pathPrefix: readonly number[]
+): readonly TexVListItem[] {
+  const items: TexVListItem[] = [];
+  let previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined;
+  let previousDisplaySkipVariant: TexDisplayMathSkipVariant = "normal";
+  for (let index = 0; index < sourceItems.length; index += 1) {
+    const item = sourceItems[index];
+    if (!item) {
+      continue;
+    }
+    const path = [...pathPrefix, index];
+    if (item.kind === "vbox") {
+      items.push({
+        ...item,
+        items: resolveDisplayMathVerticalGlueInItems(
+          item.items,
+          paragraphMeasurements,
+          path
+        ),
+      });
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      previousParagraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
+      items.push(item);
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "display-math-boundary"
+    ) {
+      const displayItem = item.origin.side === "above"
+        ? nextDisplayMathItem(sourceItems, index)
+        : undefined;
+      const variant: TexDisplayMathSkipVariant = displayItem
+        ? displayMathSkipVariant(displayItem, previousParagraphMeasurement)
+        : previousDisplaySkipVariant;
+      if (item.origin.side === "above") {
+        previousDisplaySkipVariant = variant;
+      }
+      items.push(resolveDisplayMathBoundaryGlueItem(item, variant));
+      continue;
+    }
+    if (item.kind === "display-math") {
+      previousParagraphMeasurement = undefined;
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+function nextDisplayMathItem(
+  items: readonly TexVListItem[],
+  index: number
+): TexDisplayMathItem | undefined {
+  const item = items[index + 1];
+  return item?.kind === "display-math" ? item : undefined;
+}
+
+function displayMathSkipVariant(
+  item: TexDisplayMathItem,
+  previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined
+): TexDisplayMathSkipVariant {
+  const preDisplaySize = previousParagraphMeasurement?.lastLinePreDisplaySize ??
+    Number.NEGATIVE_INFINITY;
+  // TeX.web chooses the normal skips when the centered display overlaps the
+  // preceding line's pre-display size; otherwise it uses the short skips.
+  const displayLeftEdge = roundTexPt(Math.max(0, (item.targetWidth - item.box.width) / 2));
+  return displayLeftEdge <= preDisplaySize ? "normal" : "short";
+}
+
+function resolveDisplayMathBoundaryGlueItem(
+  item: TexGlueItem,
+  variant: TexDisplayMathSkipVariant
+): TexGlueItem {
+  if (item.origin?.kind !== "display-math-boundary") {
+    return item;
+  }
+  const skip = latexArticleDisplaySkipsPt[item.origin.side][variant];
+  return {
+    ...item,
+    origin: {
+      ...item.origin,
+      variant,
+    },
+    size: skip.size,
+    stretch: skip.stretch,
+    shrink: skip.shrink,
   };
 }
 

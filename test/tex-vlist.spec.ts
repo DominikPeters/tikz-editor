@@ -263,28 +263,34 @@ describe("TeX vlist lowering", () => {
       width: 120,
     });
     const prepared = prepareSimpleTexVList(vlist, font);
-    const layout = layoutTexVListItems(
-      prepared.normalized.items,
-      (item) => {
-        if (item.kind !== "paragraph") {
-          return null;
-        }
-        return {
-          metrics: {
-            width: 40,
-            height: 8.5,
-            depth: 3.5,
-          },
-        };
-      },
-      null,
-      0
-    );
-    const boxReport = texVListBoxLayoutReport(
-      layout.positioned,
-      { width: 120, height: layout.cursor, depth: 0 },
-      { kind: "none" }
-    );
+    const layout = layoutTexVListFromMeasuredParagraphs(prepared.normalized, {
+      width: 120,
+      lineHeight: 12,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          vlistPath: [0],
+          lineIndices: [0],
+          lineOffsets: [{ lineIndex: 0, y: 0 }],
+          lastLinePreDisplaySize: 35,
+          standardMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          ruleLeadingMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 12,
+        },
+        {
+          blockIndex: 1,
+          vlistPath: [4],
+          lineIndices: [1],
+          lineOffsets: [{ lineIndex: 1, y: 0 }],
+          standardMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          ruleLeadingMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 12,
+        },
+      ],
+    });
+    const boxReport = layout.boxReport;
 
     expect(boxReport.items.map((item) => ({
       kind: item.itemKind,
@@ -297,44 +303,103 @@ describe("TeX vlist lowering", () => {
       {
         kind: "glue",
         y: 12,
-        height: 10,
+        height: 0,
         depth: 0,
         glue: {
-          size: 10,
-          stretch: 2,
-          shrink: 5,
+          size: 0,
+          stretch: 3,
+          shrink: 0,
           stretchOrder: "normal",
           shrinkOrder: "normal",
-          origin: { kind: "display-math-boundary", side: "above" },
+          origin: { kind: "display-math-boundary", side: "above", variant: "short" },
         },
       },
       {
         kind: "display-math",
-        y: 22,
+        y: 12,
         height: expect.closeTo(16.51395, 5),
         depth: expect.closeTo(12.798677, 5),
         glue: undefined,
       },
       {
         kind: "glue",
-        y: expect.closeTo(51.312627, 5),
-        height: 10,
+        y: expect.closeTo(41.312627, 5),
+        height: 6,
         depth: 0,
         glue: {
-          size: 10,
-          stretch: 2,
-          shrink: 5,
+          size: 6,
+          stretch: 3,
+          shrink: 3,
           stretchOrder: "normal",
           shrinkOrder: "normal",
-          origin: { kind: "display-math-boundary", side: "below" },
+          origin: { kind: "display-math-boundary", side: "below", variant: "short" },
         },
       },
       {
         kind: "paragraph",
-        y: expect.closeTo(61.312627, 5),
+        y: expect.closeTo(47.312627, 5),
         height: 8.5,
         depth: 3.5,
         glue: undefined,
+      },
+    ]);
+  });
+
+  it("keeps normal display skips when the preceding line reaches the display", () => {
+    const source = String.raw`Alpha Beta Gamma \[\sum_i^n\] Delta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+    const prepared = prepareSimpleTexVList(vlist, font);
+    const layout = layoutTexVListFromMeasuredParagraphs(prepared.normalized, {
+      width: 120,
+      lineHeight: 12,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          vlistPath: [0],
+          lineIndices: [0],
+          lineOffsets: [{ lineIndex: 0, y: 0 }],
+          lastLinePreDisplaySize: 90,
+          standardMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          ruleLeadingMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 12,
+        },
+        {
+          blockIndex: 1,
+          vlistPath: [4],
+          lineIndices: [1],
+          lineOffsets: [{ lineIndex: 1, y: 0 }],
+          standardMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          ruleLeadingMetrics: { width: 120, height: 8.5, depth: 3.5 },
+          standardAdvance: 12,
+          ruleLeadingAdvance: 12,
+        },
+      ],
+    });
+
+    expect(layout.boxReport.items.filter((item) =>
+      item.glue?.origin?.kind === "display-math-boundary"
+    ).map((item) => item.glue)).toEqual([
+      {
+        size: 10,
+        stretch: 2,
+        shrink: 5,
+        stretchOrder: "normal",
+        shrinkOrder: "normal",
+        origin: { kind: "display-math-boundary", side: "above", variant: "normal" },
+      },
+      {
+        size: 10,
+        stretch: 2,
+        shrink: 5,
+        stretchOrder: "normal",
+        shrinkOrder: "normal",
+        origin: { kind: "display-math-boundary", side: "below", variant: "normal" },
       },
     ]);
   });

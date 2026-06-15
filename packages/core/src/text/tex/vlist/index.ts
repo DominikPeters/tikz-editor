@@ -69,6 +69,7 @@ export {
   materializeDisplayMathVerticalGlueInVList,
   materializeParagraphVerticalGlueInVList,
   planSimpleTexParagraphVerticalSkips,
+  resolveDisplayMathVerticalGlueInVList,
   type SimpleTexParagraphVerticalSkip,
 } from "./spacing.js";
 export {

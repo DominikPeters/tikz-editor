@@ -103,6 +103,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
       lineIndex: line.lineIndex,
       y: line.y,
     })),
+    lastLinePreDisplaySize: lastLine?.preDisplaySize,
     standardMetrics: paragraph.horizontal.metrics,
     ruleLeadingMetrics: paragraphBoxMetrics(
       paragraph.horizontal.metrics.width,

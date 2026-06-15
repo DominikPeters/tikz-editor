@@ -29,6 +29,7 @@ export type TexVBoxBaseline =
 
 export type TexGlueOrder = "normal" | "fil" | "fill" | "filll";
 export type TexDimenExpr = number | string;
+export type TexDisplayMathSkipVariant = "normal" | "short";
 
 export type TexGlueOrigin =
   | {
@@ -46,6 +47,7 @@ export type TexGlueOrigin =
   | {
       readonly kind: "display-math-boundary";
       readonly side: "above" | "below";
+      readonly variant?: TexDisplayMathSkipVariant;
     };
 
 export interface TexLineBox {
@@ -55,6 +57,7 @@ export interface TexLineBox {
   readonly targetWidth: number;
   readonly metrics: TexBoxMetrics;
   readonly lineLeading?: string;
+  readonly preDisplaySize?: number;
 }
 
 export type TexRenderItem =
@@ -363,6 +366,7 @@ export interface TexVListParagraphBoxMeasurement {
   readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
   readonly lineOffsets: readonly TexVListParagraphLineOffset[];
+  readonly lastLinePreDisplaySize?: number;
   readonly standardMetrics: TexBoxMetrics;
   readonly ruleLeadingMetrics: TexBoxMetrics;
   readonly standardAdvance: number;

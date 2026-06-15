@@ -314,8 +314,19 @@ function buildTexLineReport(
         depth: report.descent,
       },
       lineLeading: report.break?.lineLeading,
+      preDisplaySize: texLinePreDisplaySize(report, params.font),
     },
   };
+}
+
+function texLinePreDisplaySize(
+  line: LineReport,
+  font: ResolvedTexFont
+): number {
+  if (line.spaceCount > 0 && Math.abs(line.glueSetRatio) > 1e-9) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return roundTexPt(line.xEnd + 2 * font.atPt);
 }
 
 function texMathBoxFromWrapper(

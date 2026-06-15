@@ -41,6 +41,9 @@ import {
   texVListParagraphMeasurementMap,
   validateTexVListParagraphMeasurements,
 } from "./paragraph-measurement.js";
+import {
+  resolveDisplayMathVerticalGlueInVList,
+} from "./spacing.js";
 import { texVListBoxLayoutReport } from "./box-report.js";
 import {
   assertAllReportLinesPlaced,
@@ -247,18 +250,22 @@ export function layoutTexVListFromMeasuredParagraphs(
 ): TexVListLayout {
   validateTexVListParagraphMeasurements(document, options.paragraphMeasurements);
   const paragraphMeasurements = texVListParagraphMeasurementMap(options.paragraphMeasurements);
+  const resolvedDocument = resolveDisplayMathVerticalGlueInVList(
+    document,
+    paragraphMeasurements
+  );
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);
   const naturalTotalHeight = computeTexVListNaturalTotalHeight(
-    document.items,
+    resolvedDocument.items,
     measurer
   );
   const glueSet = texVListGlueSetForTargetHeight(
-    document.items,
+    resolvedDocument.items,
     naturalTotalHeight,
     options.height
   );
   const laidOut = layoutTexVListItems(
-    document.items,
+    resolvedDocument.items,
     measurer,
     glueSet,
     0
