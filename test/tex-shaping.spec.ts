@@ -2186,7 +2186,7 @@ describe("simple TeX paragraph layout", () => {
         querySelectorAll: () => {
           throw new Error("registered vlist box hit-testing should not query DOM metadata");
         },
-      } as any,
+      },
       clientPoint: clientPoint(px(40), px(80)),
     })).toEqual(expect.objectContaining({
       role: "list-item",
@@ -2199,7 +2199,7 @@ describe("simple TeX paragraph layout", () => {
       paragraphId: "tex:registered-vbox",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
-      } as any,
+      },
       clientPoint: clientPoint(px(4), px(4)),
     })).toBeNull();
   });
@@ -2536,7 +2536,7 @@ describe("simple TeX paragraph layout", () => {
           }
           return [];
         },
-      } as any,
+      },
     });
 
     expect(snapshot.source).toBe("empty");
@@ -3028,7 +3028,7 @@ describe("simple TeX paragraph layout", () => {
         querySelectorAll: () => {
           throw new Error("registered vlist snapshot should not query DOM metadata");
         },
-      } as any,
+      },
     });
 
     expect(snapshot.source).toBe("registered");
