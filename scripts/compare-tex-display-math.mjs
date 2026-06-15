@@ -24,6 +24,11 @@ const cases = args.cases.length > 0
         source: String.raw`Alpha Beta Gamma \[\sum_i^n\] Delta`,
         width: 120,
       },
+      {
+        id: "equation-star-display",
+        source: String.raw`Alpha \begin{equation*}\sum_i^n\end{equation*} Beta`,
+        width: 120,
+      },
     ];
 
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
@@ -234,7 +239,11 @@ function parseTexTrace(log) {
 }
 
 function texSource(caseSpec) {
+  const amsmathPreamble = caseSpec.source.includes(String.raw`\begin{equation*}`)
+    ? String.raw`\usepackage{amsmath}` + "\n"
+    : "";
   return String.raw`\documentclass{article}
+` + amsmathPreamble + String.raw`
 \newbox\tikzdisplaybox
 \begin{document}
 \setbox\tikzdisplaybox=\vbox{\hsize=` + caseSpec.width + String.raw`pt \noindent ` + caseSpec.source + String.raw`\par}

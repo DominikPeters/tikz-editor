@@ -111,7 +111,7 @@ describe("TeX vlist lowering", () => {
   });
 
   it("parses and lowers display math as source-spanned vlist items", () => {
-    const source = String.raw`Alpha \[\sum_i^n\] Beta $$x^2$$`;
+    const source = String.raw`Alpha \[\sum_i^n\] Beta $$x^2$$ \begin{equation*}y^2\end{equation*}`;
     const parsed = parseSimpleTexParagraphIr(source);
 
     expect(parsed.nodes.map((node) => node.kind)).toEqual([
@@ -122,11 +122,14 @@ describe("TeX vlist lowering", () => {
       "text",
       "space",
       "display-math",
+      "space",
+      "display-math",
     ]);
     expect(parsed.items.map((item) => item.kind)).toEqual([
       "paragraph",
       "display-math",
       "paragraph",
+      "display-math",
       "display-math",
     ]);
 
@@ -154,6 +157,17 @@ describe("TeX vlist lowering", () => {
       kind: "display-math",
       delimiter: "double-dollar",
       content: "x^2",
+    });
+    expect(vlist.items[4]).toMatchObject({
+      kind: "display-math",
+      delimiter: "equation-star",
+      content: "y^2",
+      sourceSpan: {
+        start: source.indexOf(String.raw`\begin{equation*}`),
+        end: source.indexOf(String.raw`\end{equation*}`) + String.raw`\end{equation*}`.length,
+      },
+      contentStart: source.indexOf("y^2"),
+      contentEnd: source.indexOf(String.raw`\end{equation*}`),
     });
   });
 

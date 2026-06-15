@@ -386,4 +386,31 @@ describe("TeX math SVG rendering", () => {
     ]);
     expect(result.vlistLayout?.paragraphPlacements).toHaveLength(2);
   });
+
+  it("lets TeX paragraph layout carry equation-star display math as a vlist item", () => {
+    const source = String.raw`Alpha \begin{equation*}y^2\end{equation*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:equation-star-display-math-provider",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const display = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "display-math"
+    );
+    expect(display).toMatchObject({
+      itemKind: "display-math",
+      displayMath: {
+        delimiter: "equation-star",
+        contentStart: source.indexOf("y^2"),
+        contentEnd: source.indexOf(String.raw`\end{equation*}`),
+      },
+    });
+    expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
+      source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
+    )).toEqual(["Alpha", "Beta"]);
+  });
 });

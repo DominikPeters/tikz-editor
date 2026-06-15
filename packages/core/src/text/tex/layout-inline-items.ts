@@ -5,6 +5,7 @@ import {
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import {
   simpleTexInlineNodesToTokens,
+  type SimpleTexDisplayMathDelimiter,
   type SimpleTexFontState,
   type SimpleTexInlineNode,
   type SimpleTexParagraphSegment,
@@ -70,7 +71,7 @@ export interface TexMathBoxProvider {
   readonly getDisplayMathBox?: (params: {
     readonly source: string;
     readonly content: string;
-    readonly delimiter: "bracket" | "double-dollar";
+    readonly delimiter: SimpleTexDisplayMathDelimiter;
     readonly sourceStart: number;
     readonly sourceEnd: number;
     readonly contentStart: number;

@@ -3,6 +3,7 @@ import type {
   SimpleTexListKind,
   SimpleTexListContext,
   SimpleTexFontState,
+  SimpleTexDisplayMathDelimiter,
   SimpleTexSegmentInput,
   SimpleTexVerticalGlueCommandName,
   TexAlignmentProfile,
@@ -261,7 +262,7 @@ export interface TexDisplayMathItem {
   readonly scopePath?: readonly TexVBoxRole[];
   readonly text: string;
   readonly content: string;
-  readonly delimiter: "bracket" | "double-dollar";
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly targetWidth: number;
@@ -321,7 +322,7 @@ export interface TexVListBoxReportItem {
   readonly penalty?: number;
   readonly placeholderReason?: string;
   readonly displayMath?: {
-    readonly delimiter: "bracket" | "double-dollar";
+    readonly delimiter: SimpleTexDisplayMathDelimiter;
     readonly contentStart: number;
     readonly contentEnd: number;
   };

@@ -76,10 +76,15 @@ export interface SimpleTexMathNode extends SimpleTexSourceRange {
   readonly contentEnd: number;
 }
 
+export type SimpleTexDisplayMathDelimiter =
+  | "bracket"
+  | "double-dollar"
+  | "equation-star";
+
 export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
   readonly kind: "display-math";
   readonly text: string;
-  readonly delimiter: "bracket" | "double-dollar";
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly content: string;
   readonly contentStart: number;
   readonly contentEnd: number;
@@ -268,7 +273,7 @@ export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
 export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange {
   readonly kind: "display-math";
   readonly text: string;
-  readonly delimiter: "bracket" | "double-dollar";
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly content: string;
   readonly contentStart: number;
   readonly contentEnd: number;
@@ -719,7 +724,7 @@ function scanSimpleTexDisplayMath(
   text: string,
   start: number
 ): {
-  readonly delimiter: "bracket" | "double-dollar";
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly end: number;
@@ -768,6 +773,21 @@ function scanSimpleTexDisplayMath(
         };
       }
       index += 1;
+    }
+  }
+
+  const equationStarBegin = String.raw`\begin{equation*}`;
+  if (text.startsWith(equationStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const equationStarEnd = String.raw`\end{equation*}`;
+    const contentStart = start + equationStarBegin.length;
+    const contentEnd = text.indexOf(equationStarEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "equation-star",
+        contentStart,
+        contentEnd,
+        end: contentEnd + equationStarEnd.length,
+      };
     }
   }
 
