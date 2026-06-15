@@ -223,6 +223,38 @@ describe("TeX math parser", () => {
     expect(underline.nucleus.kind === "line" ? underline.nucleus.body.sourceSpan : null).toEqual({ start: 54, end: 55 });
   });
 
+  it("parses amsmath substack rows as a structured centered one-column array", () => {
+    const result = parseTexMath(String.raw`\sum_{\substack{i=1\\j=2}}^n`);
+    const sum = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(sum.subscript?.list.items).toHaveLength(1);
+    const substack = sum.subscript?.list.items[0];
+    expect(substack).toMatchObject({
+      kind: "atom",
+      atomClass: "ord",
+      sourceSpan: { start: 6, end: 25 },
+      nucleus: {
+        kind: "substack",
+        commandSourceSpan: { start: 6, end: 15 },
+        sourceSpan: { start: 6, end: 25 },
+      },
+    });
+    if (substack?.kind !== "atom" || substack.nucleus.kind !== "substack") {
+      return;
+    }
+    expect(substack.nucleus.rows).toHaveLength(2);
+    expect(substack.nucleus.rows[0]).toMatchObject({
+      sourceSpan: { start: 16, end: 21 },
+      rowBreakSourceSpan: { start: 19, end: 21 },
+    });
+    expect(substack.nucleus.rows[0]?.cells[0]?.list.sourceSpan).toEqual({ start: 16, end: 19 });
+    expect(substack.nucleus.rows[1]).toMatchObject({
+      sourceSpan: { start: 21, end: 24 },
+    });
+    expect(substack.nucleus.rows[1]?.cells[0]?.list.sourceSpan).toEqual({ start: 21, end: 24 });
+  });
+
   it("parses plain text commands as source-spanned text nuclei", () => {
     const result = parseTexMath(String.raw`x+\text{if x}`, { sourceOffset: 10 });
     const text = atomAt(result, 2);

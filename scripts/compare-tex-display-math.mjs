@@ -79,7 +79,19 @@ if (failed.length > 0) {
 function compareCase(caseSpec, args) {
   const tolerance = args.tolerance;
   const ours = ourTrace(caseSpec);
-  const tex = texTrace(caseSpec, args);
+  let tex;
+  try {
+    tex = texTrace(caseSpec, args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ...caseSpec,
+      ok: false,
+      mismatches: [`TeX oracle failed: ${message}`],
+      ours,
+      tex: { topLevel: [], glyphs: [] },
+    };
+  }
   const mismatches = [];
   if (!ours.supported) {
     mismatches.push(`our layout unsupported: ${ours.errors.join("; ")}`);
@@ -401,6 +413,7 @@ function requiresAmsmath(source) {
     hasMatrixEnvironment(source) ||
     hasBinomialCommand(source) ||
     hasStyledFractionCommand(source) ||
+    hasSubstackCommand(source) ||
     source.includes(String.raw`\text`);
 }
 
@@ -701,6 +714,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\begin{Vmatrix}a&b\\c&d\end{Vmatrix}\] Beta`,
     },
     {
+      id: "display-substack",
+      width: 160,
+      source: String.raw`Alpha \[\sum_{\substack{i=1\\j=2}}^n\] Beta`,
+    },
+    {
       id: "display-large-operator-limits",
       width: 160,
       source: String.raw`Alpha \[\prod_i^n+\sum_j^m\] Beta`,
@@ -888,6 +906,10 @@ function hasBinomialCommand(source) {
 
 function hasStyledFractionCommand(source) {
   return source.includes(String.raw`\dfrac`) || source.includes(String.raw`\tfrac`);
+}
+
+function hasSubstackCommand(source) {
+  return source.includes(String.raw`\substack`);
 }
 
 function randomLargeOperator(rng) {

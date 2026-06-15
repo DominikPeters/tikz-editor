@@ -777,6 +777,64 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out amsmath substack rows with LuaTeX scriptstyle stack parameters", () => {
+    const standalone = layout(String.raw`\substack{i\\j}`);
+
+    expect(standalone.supported).toBe(true);
+    expect(standalone.hlist?.width).toBeCloseTo(3.713577, 6);
+    expect(standalone.hlist?.height).toBeCloseTo(8.350493, 6);
+    expect(standalone.hlist?.depth).toBeCloseTo(3.350494, 6);
+    expect(standalone.hlist?.items).toHaveLength(2);
+    const firstRow = standalone.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const secondRow = standalone.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow).toMatchObject({
+      kind: "hlist",
+      role: "substack-row",
+      y: expect.closeTo(-3.718551, 6),
+    });
+    expect(firstRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "substack-cell",
+      x: expect.closeTo(0.442141, 6),
+      items: [{ kind: "glyph", fontId: "cmmi7", code: 105 }],
+    });
+    expect(secondRow).toMatchObject({
+      kind: "hlist",
+      role: "substack-row",
+      y: expect.closeTo(1.989379, 6),
+    });
+    expect(secondRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "substack-cell",
+      x: 0,
+    });
+    expect((secondRow?.items[0] as TexMathChildHListLayoutItem | undefined)?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmmi7",
+      code: 106,
+    });
+
+    const limitSubstack = layout(String.raw`\sum_{\substack{i=1\\j=2}}^n`);
+    expect(limitSubstack.supported).toBe(true);
+    expect(limitSubstack.hlist?.width).toBeCloseTo(24.894212, 6);
+    const subscript = limitSubstack.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(subscript).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      y: expect.closeTo(4.172585, 6),
+    });
+    expect(subscript?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "substack-row",
+      y: expect.closeTo(-2.968551, 6),
+    });
+    expect(subscript?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "substack-row",
+      y: expect.closeTo(2.739379, 6),
+    });
+  });
+
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
     const leadingPlus = layout(String.raw`+\frac{x}{m}`);
     expect(leadingPlus.supported).toBe(true);

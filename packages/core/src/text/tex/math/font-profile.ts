@@ -53,6 +53,16 @@ export interface TexMathParameters {
   readonly bigOpSpacing3: number;
   readonly bigOpSpacing4: number;
   readonly bigOpSpacing5: number;
+  readonly stackNumUp: TexMathStyleParameterValues;
+  readonly stackDenomDown: TexMathStyleParameterValues;
+  readonly stackVGap: TexMathStyleParameterValues;
+}
+
+export interface TexMathStyleParameterValues {
+  readonly display: number;
+  readonly text: number;
+  readonly script: number;
+  readonly scriptscript: number;
 }
 
 export interface TexMathFontProfile {
@@ -222,6 +232,24 @@ function createLuaLatexDefaultMathParameters(
     bigOpSpacing3: requiredFontdimen(extension, "bigopspacing3"),
     bigOpSpacing4: requiredFontdimen(extension, "bigopspacing4"),
     bigOpSpacing5: requiredFontdimen(extension, "bigopspacing5"),
+    stackNumUp: {
+      display: 6.76508,
+      text: 4.4373,
+      script: 3.29843,
+      scriptscript: 2.52066,
+    },
+    stackDenomDown: {
+      display: 6.85951,
+      text: 3.44841,
+      script: 2.4095,
+      scriptscript: 2.65953,
+    },
+    stackVGap: {
+      display: 2.79985,
+      text: 1.19994,
+      script: 1.01994,
+      scriptscript: 0.72853,
+    },
   };
 }
 

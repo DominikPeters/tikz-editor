@@ -263,6 +263,9 @@ class TexMathParser {
       if (commandName(token.text) === "text") {
         return this.parseText(allowScripts);
       }
+      if (commandName(token.text) === "substack") {
+        return this.parseSubstack(allowScripts);
+      }
       const alphabet = alphabetCommandName(token.text);
       if (alphabet) {
         return this.parseAlphabet(alphabet, allowScripts);
@@ -469,6 +472,54 @@ class TexMathParser {
         kind: "text",
         text: content.text,
         textSourceSpan: content.textSourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseSubstack(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const open = this.expectGroupOpen();
+    const rows: TexMathAlignedRow[] = [];
+    let sourceSpan = spanUnion(command.sourceSpan, open.sourceSpan);
+
+    while (!this.isAtEnd()) {
+      if (this.peek()?.kind === "group-close") {
+        break;
+      }
+      const list = this.parseList({
+        stopAtGroupClose: true,
+        stopAtRowBreak: true,
+      });
+      sourceSpan = spanUnion(sourceSpan, list.sourceSpan);
+      const rowEndToken = this.peek();
+      if (isMathRowBreakToken(rowEndToken)) {
+        const rowBreak = this.advance();
+        sourceSpan = spanUnion(sourceSpan, rowBreak.sourceSpan);
+        rows.push({
+          cells: [{ list, sourceSpan: list.sourceSpan }],
+          sourceSpan: spanUnion(list.sourceSpan, rowBreak.sourceSpan),
+          rowBreakSourceSpan: rowBreak.sourceSpan,
+        });
+        continue;
+      }
+      rows.push({
+        cells: [{ list, sourceSpan: list.sourceSpan }],
+        sourceSpan: list.sourceSpan,
+      });
+      break;
+    }
+
+    const close = this.consumeGroupClose(open.sourceSpan);
+    sourceSpan = spanUnion(sourceSpan, close?.sourceSpan ?? open.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "substack",
+        rows,
+        commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },
       sourceSpan,

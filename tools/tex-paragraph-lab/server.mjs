@@ -13,7 +13,7 @@ const rootDir = resolve(new URL("../..", import.meta.url).pathname);
 const toolDir = resolve(rootDir, "tools/tex-paragraph-lab");
 const publicDir = resolve(toolDir, "public");
 const coreDistDir = resolve(rootDir, "packages/core/dist");
-const port = Number(process.env.TEX_PARAGRAPH_LAB_PORT ?? 4329);
+const port = Number(process.env.TEX_PARAGRAPH_LAB_PORT ?? 43291);
 const host = process.env.TEX_PARAGRAPH_LAB_HOST ?? "127.0.0.1";
 const oracleCache = new Map();
 

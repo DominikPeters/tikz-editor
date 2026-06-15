@@ -208,6 +208,18 @@ function normalizeNucleus(nucleus: TexMathNucleus): TexMathNucleus {
       body: normalizeTexMathAtomClasses(nucleus.body),
     };
   }
+  if (nucleus.kind === "substack") {
+    return {
+      ...nucleus,
+      rows: nucleus.rows.map((row) => ({
+        ...row,
+        cells: row.cells.map((cell) => ({
+          ...cell,
+          list: normalizeTexMathAtomClasses(cell.list),
+        })),
+      })),
+    };
+  }
   return nucleus;
 }
 

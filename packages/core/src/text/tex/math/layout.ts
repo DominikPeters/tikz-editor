@@ -29,6 +29,7 @@ import type {
   TexMathOperatorLimits,
   TexMathSourceSpan,
   TexMathStyle,
+  TexMathSubstackNucleus,
   TexMathTextNucleus,
 } from "./ir.js";
 import {
@@ -99,6 +100,8 @@ export interface TexMathChildHListLayoutItem {
     | "limit-subscript"
     | "aligned-row"
     | "aligned-cell"
+    | "substack-row"
+    | "substack-cell"
     | "matrix-row"
     | "matrix-cell";
   readonly x: number;
@@ -312,7 +315,7 @@ function texMathAtomNeedsAmsMath(atom: TexMathAtom): boolean {
 }
 
 function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
-  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix") {
+  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix" || nucleus.kind === "substack") {
     return true;
   }
   if (nucleus.kind === "list") {
@@ -590,6 +593,9 @@ function layoutNucleus(
   if (nucleus.kind === "aligned") {
     return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
+  if (nucleus.kind === "substack") {
+    return layoutSubstackNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+  }
   if (nucleus.kind === "matrix") {
     return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
@@ -798,6 +804,7 @@ const TEX_ALIGNED_BASELINE_SKIP_PT = 12;
 const TEX_ALIGNED_LINE_SKIP_LIMIT_PT = 0;
 const TEX_ALIGNED_LINE_SKIP_PT = 1;
 const TEX_MATRIX_ARRAY_COL_SEP_PT = 5;
+const TEX_SUBSTACK_STYLE: TexMathStyle = "script";
 
 interface TexMathAlignedCellLayout {
   readonly hlist: TexMathHList;
@@ -981,6 +988,129 @@ function alignedPairGapCount(columnCount: number): number {
 
 function alignedTrailingWidth(rowCount: number): number {
   return rowCount === 1 ? TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT : 0;
+}
+
+function layoutSubstackNucleus(
+  nucleus: TexMathSubstackNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const rows = nucleus.rows.map((row) =>
+    layoutSubstackRow(row, fontProfile, baseAtPt, alphabet)
+  );
+  if (rows.some((row): row is null => row === null)) {
+    return null;
+  }
+  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  if (concreteRows.length === 0) {
+    return {
+      items: [],
+      width: 0,
+      height: 0,
+      depth: 0,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+
+  const width = roundTexPt(Math.max(...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
+  const baselineOffsets = substackRowBaselineOffsets(concreteRows, fontProfile, baseAtPt);
+  const lastRow = concreteRows[concreteRows.length - 1];
+  const naturalHeight = roundTexPt(
+    concreteRows[0].height +
+    (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
+    lastRow.depth
+  );
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const height = roundTexPt(naturalHeight / 2 + axis);
+  const depth = roundTexPt(naturalHeight - height);
+  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  const rowItems: TexMathChildHListLayoutItem[] = [];
+
+  for (const [rowIndex, row] of concreteRows.entries()) {
+    const cell = row.cells[0];
+    const rowChildren = cell
+      ? [childHList(
+          "substack-cell",
+          roundTexPt((width - cell.hlist.width) / 2),
+          0,
+          cell.hlist,
+          cell.sourceSpan
+        )]
+      : [];
+    rowItems.push({
+      kind: "hlist",
+      role: "substack-row",
+      x: 0,
+      y: baselineY,
+      width,
+      height: row.height,
+      depth: row.depth,
+      sourceSpan: row.sourceSpan,
+      items: rowChildren,
+    });
+    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+  }
+
+  return {
+    items: rowItems,
+    width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutSubstackRow(
+  row: TexMathAlignedRow,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAlignedRowLayout | null {
+  const cell = row.cells[0];
+  const result = cell
+    ? layoutTexMathList(cell.list, { fontProfile, style: TEX_SUBSTACK_STYLE, baseAtPt, alphabet })
+    : null;
+  if (!result?.supported) {
+    return null;
+  }
+  return {
+    cells: [{
+      hlist: result.hlist,
+      sourceSpan: cell.sourceSpan,
+    }],
+    sourceSpan: row.sourceSpan,
+    height: result.hlist.height,
+    depth: result.hlist.depth,
+  };
+}
+
+function substackRowBaselineOffsets(
+  rows: readonly TexMathAlignedRowLayout[],
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): readonly number[] {
+  const baselineSkip = roundTexPt(
+    mathStyleParameterToPt(fontProfile, "stackNumUp", TEX_SUBSTACK_STYLE, baseAtPt) +
+    mathStyleParameterToPt(fontProfile, "stackDenomDown", TEX_SUBSTACK_STYLE, baseAtPt)
+  );
+  const lineSkip = mathStyleParameterToPt(fontProfile, "stackVGap", TEX_SUBSTACK_STYLE, baseAtPt);
+  const offsets = [0];
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const previous = rows[rowIndex - 1];
+    const current = rows[rowIndex];
+    const naturalDistance = roundTexPt(previous.depth + current.height);
+    const baselineDistance = baselineSkip - naturalDistance >= lineSkip
+      ? baselineSkip
+      : roundTexPt(naturalDistance + lineSkip);
+    offsets.push(roundTexPt((offsets[rowIndex - 1] ?? 0) + baselineDistance));
+  }
+  return offsets;
 }
 
 function layoutMatrixNucleus(
@@ -3188,6 +3318,15 @@ function mathExtensionParameterToPt(
     baseAtPt,
   });
   return tfmToPt(extension, requiredFontdimen(extension, mathExtensionParameterFontdimenName(name)));
+}
+
+function mathStyleParameterToPt(
+  fontProfile: TexMathFontProfile,
+  name: "stackNumUp" | "stackDenomDown" | "stackVGap",
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  return roundTexPt(fontProfile.parameters[name][style] * (baseAtPt / 10));
 }
 
 function mathExtensionParameterFontdimenName(

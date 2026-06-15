@@ -123,6 +123,9 @@ const formulas = args.formulas.length > 0
       "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
       "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}",
       "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}",
+      "\\substack{i\\\\j}",
+      "x_{\\substack{i\\\\j}}",
+      "\\sum_{\\substack{i=1\\\\j=2}}^n",
       "\\prod_i^n",
       "\\coprod_i^n",
       "\\bigcup_i^n",
@@ -234,6 +237,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     hasMatrixEnvironment(formula) ||
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula)
+    || hasSubstackCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -389,6 +393,7 @@ function texSource(formula) {
     hasMatrixEnvironment(formula) ||
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula) ||
+    hasSubstackCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
@@ -627,7 +632,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "matrix"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "matrix", "substack"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -642,6 +647,8 @@ function randomMathTerm(rng, depth) {
     term = randomLeftRightFormula(rng);
   } else if (choice === "matrix") {
     term = randomMatrixFormula(rng);
+  } else if (choice === "substack") {
+    term = randomSubstackFormula(rng);
   } else if (choice === "group") {
     term = "{" + randomSimpleExpression(rng) + "}";
   } else {
@@ -706,6 +713,24 @@ function randomMatrixFormula(rng) {
   return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
 }
 
+function randomSubstackFormula(rng) {
+  const rowCount = 2 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    rows.push(randomSubstackRow(rng));
+  }
+  return String.raw`\substack{` + rows.join(String.raw`\\`) + "}";
+}
+
+function randomSubstackRow(rng) {
+  return [
+    randomMathAtom(rng),
+    `${randomMathAtom(rng)}=${randomMathAtom(rng)}`,
+    `${randomMathAtom(rng)}+${randomMathAtom(rng)}`,
+    String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+  ][randomInt(rng, 4)] ?? "i";
+}
+
 function hasMatrixEnvironment(source) {
   return matrixEnvironments.some((environment) =>
     source.includes(String.raw`\begin{` + environment + "}")
@@ -722,6 +747,10 @@ function hasBinomialCommand(source) {
 
 function hasStyledFractionCommand(source) {
   return source.includes(String.raw`\dfrac`) || source.includes(String.raw`\tfrac`);
+}
+
+function hasSubstackCommand(source) {
+  return source.includes(String.raw`\substack`);
 }
 
 function randomMatrixCell(rng) {
@@ -761,6 +790,7 @@ function randomMathScript(rng, depth) {
     randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
     String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
     String.raw`\binom{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+    randomSubstackFormula(rng),
   ];
   return choices[randomInt(rng, choices.length)] ?? "x";
 }

@@ -1,5 +1,6 @@
 import {
   computerModernTexMetricProvider,
+  createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
 } from "/core/text/tex/index.js";
 import { parseLength } from "/core/semantic/coords/parse-length.js";
@@ -7,6 +8,7 @@ import { parseLength } from "/core/semantic/coords/parse-length.js";
 const DEFAULT_TEXT_FONT_SIZE = 9.96264;
 const LINE_HEIGHT_PT = DEFAULT_TEXT_FONT_SIZE * 1.2;
 const FIRST_LINE_ASCENT_PT = DEFAULT_TEXT_FONT_SIZE * 0.7;
+const MATH_SVG_SCALE = 0.01;
 
 const sourceInput = document.querySelector("#source");
 const widthInput = document.querySelector("#width");
@@ -21,6 +23,7 @@ const texLines = document.querySelector("#tex-lines");
 
 let oracleTimer = 0;
 let oracleSequence = 0;
+const mathBoxProvider = createTexDerivedInlineMathBoxProvider();
 
 for (const input of [sourceInput, widthInput, parindentInput, alignmentInput]) {
   input.addEventListener("input", scheduleRender);
@@ -54,6 +57,7 @@ function renderOurs(options) {
     alignment: options.alignment,
     parindent: options.parindent,
     tikzTextWidthNode: true,
+    mathBoxProvider,
   });
 
   if (!result.supported || !result.report) {
@@ -64,7 +68,7 @@ function renderOurs(options) {
   }
 
   setStatus(oursStatus, `${result.report.lines.length} lines`, "ok");
-  oursOutput.innerHTML = renderReportSvg(result.report);
+  oursOutput.innerHTML = renderResultSvg(result, options.text);
   oursLines.textContent = formatLines(result.report.lines.map((line) => ({
     text: line.segments.map((segment) => segment.text ?? "").join("").trimEnd(),
     xStart: line.xStart,
@@ -102,27 +106,84 @@ async function renderOracle(options, sequence) {
   }
 }
 
-function renderReportSvg(report) {
-  const font = computerModernTexMetricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
-  const lineTops = computeLineTops(report);
-  const height = Math.max(LINE_HEIGHT_PT, (lineTops.at(-1) ?? 0) + LINE_HEIGHT_PT);
+function renderResultSvg(result, source) {
+  const boxReport = result.vlistLayout?.boxReport;
+  if (boxReport?.items?.some((item) => item.itemKind === "display-math")) {
+    return renderVListReportSvg(result.report, boxReport, source);
+  }
+  return renderParagraphReportSvg(result.report);
+}
+
+function renderVListReportSvg(report, boxReport, source) {
+  const height = Math.max(
+    LINE_HEIGHT_PT,
+    (boxReport.metrics?.height ?? 0) + (boxReport.metrics?.depth ?? 0)
+  );
   const pieces = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${formatPt(report.width)}pt" height="${formatPt(height)}pt" viewBox="0 0 ${formatPt(report.width)} ${formatPt(height)}">`,
-    `<rect x="0" y="0" width="${formatPt(report.width)}" height="${formatPt(height)}" fill="white" opacity="0.92" />`,
+    svgOpen(report.width, height),
     `<g fill="currentColor">`,
   ];
 
-  for (const line of report.lines) {
-    const lineTop = lineTops[line.lineIndex] ?? line.lineIndex * LINE_HEIGHT_PT;
-    const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
-    const baseline = FIRST_LINE_ASCENT_PT;
-    pieces.push(`<g transform="translate(${formatPt(lineLeft)} ${formatPt(lineTop)})">`);
-    for (const segment of line.segments) {
-      if (segment.kind !== "text") {
-        continue;
+  for (const item of boxReport.items ?? []) {
+    if (item.itemKind === "paragraph") {
+      const lines = report.lines.filter((line) => lineOverlapsSourceSpan(line, item.sourceSpan));
+      pieces.push(renderParagraphLines(lines, item.y ?? 0, item.x ?? 0));
+      continue;
+    }
+    if (item.itemKind === "display-math") {
+      const sourceStart = item.sourceSpan?.start ?? 0;
+      const sourceEnd = item.sourceSpan?.end ?? sourceStart;
+      const contentStart = item.displayMath?.contentStart ?? sourceStart;
+      const contentEnd = item.displayMath?.contentEnd ?? sourceEnd;
+      const box = mathBoxProvider.getDisplayMathBox?.({
+        source: source.slice(sourceStart, sourceEnd),
+        content: source.slice(contentStart, contentEnd),
+        delimiter: item.displayMath?.delimiter ?? "bracket",
+        sourceStart,
+        sourceEnd,
+        contentStart,
+        contentEnd,
+      });
+      if (box?.svgBody) {
+        const baseline = (item.y ?? 0) + box.height;
+        pieces.push(renderMathSvgBody(box.svgBody, item.x ?? 0, baseline));
       }
-      const text = segment.text ?? "";
-      if (text) {
+    }
+  }
+
+  pieces.push("</g></svg>");
+  return pieces.join("");
+}
+
+function renderParagraphReportSvg(report) {
+  const height = Math.max(
+    LINE_HEIGHT_PT,
+    paragraphLinesHeight(report.lines)
+  );
+  return [
+    svgOpen(report.width, height),
+    `<g fill="currentColor">`,
+    renderParagraphLines(report.lines, 0, 0),
+    "</g></svg>",
+  ].join("");
+}
+
+function renderParagraphLines(lines, originY, originX) {
+  const font = computerModernTexMetricProvider.resolveFont({ atPt: DEFAULT_TEXT_FONT_SIZE });
+  const lineTops = computeLineTops(lines);
+  const pieces = [];
+
+  for (const [localIndex, line] of lines.entries()) {
+    const lineTop = lineTops[localIndex] ?? localIndex * LINE_HEIGHT_PT;
+    const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
+    const baseline = lineBaselinePt(line);
+    pieces.push(`<g transform="translate(${formatPt(originX + lineLeft)} ${formatPt(originY + lineTop)})">`);
+    for (const segment of line.segments) {
+      if (segment.kind === "text") {
+        const text = segment.text ?? "";
+        if (!text) {
+          continue;
+        }
         const segmentFont = segment.fontId
           ? computerModernTexMetricProvider.resolveFont({
             fontId: segment.fontId,
@@ -134,13 +195,27 @@ function renderReportSvg(report) {
         } else {
           pieces.push(renderGlyphRun(text, segmentFont, segment.x - lineLeft, baseline));
         }
+        continue;
+      }
+      if (segment.kind === "math" && segment.mathSvgBody) {
+        pieces.push(renderMathSvgBody(segment.mathSvgBody, segment.x - lineLeft, baseline));
       }
     }
     pieces.push("</g>");
   }
 
-  pieces.push("</g></svg>");
   return pieces.join("");
+}
+
+function svgOpen(width, height) {
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${formatPt(width)}pt" height="${formatPt(height)}pt" viewBox="0 0 ${formatPt(width)} ${formatPt(height)}">`,
+    `<rect x="0" y="0" width="${formatPt(width)}" height="${formatPt(height)}" fill="white" opacity="0.92" />`,
+  ].join("");
+}
+
+function renderMathSvgBody(svgBody, x, baseline) {
+  return `<g data-tex-paragraph-lab-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(MATH_SVG_SCALE)})">${svgBody}</g>`;
 }
 
 function renderGlyphRun(text, font, x, baseline) {
@@ -176,16 +251,47 @@ function renderGlyphCode(code, font, x, baseline) {
 function computeLineTops(report) {
   const tops = [];
   let cursor = 0;
-  for (const line of report.lines) {
+  for (const [index, line] of report.entries()) {
     cursor += Math.max(0, line.verticalSkipBefore ?? 0);
-    tops[line.lineIndex] = cursor;
-    cursor += LINE_HEIGHT_PT + lineLeadingPt(line.break?.lineLeading);
+    tops[index] = cursor;
+    cursor += lineHeightPt(line) + lineLeadingPt(line.break?.lineLeading);
   }
   return tops;
 }
 
+function paragraphLinesHeight(lines) {
+  if (lines.length === 0) {
+    return LINE_HEIGHT_PT;
+  }
+  const lineTops = computeLineTops(lines);
+  const lastLine = lines.at(-1);
+  return (lineTops.at(-1) ?? 0) + lineHeightPt(lastLine);
+}
+
+function lineBaselinePt(line) {
+  return Math.max(FIRST_LINE_ASCENT_PT, line?.ascent ?? FIRST_LINE_ASCENT_PT);
+}
+
+function lineHeightPt(line) {
+  return Math.max(LINE_HEIGHT_PT, (line?.ascent ?? 0) + (line?.descent ?? 0));
+}
+
 function lineLeadingPt(lineLeading) {
   return lineLeading ? parseLength(lineLeading, "pt") ?? 0 : 0;
+}
+
+function lineOverlapsSourceSpan(line, sourceSpan) {
+  if (!sourceSpan) {
+    return false;
+  }
+  return line.segments.some((segment) => {
+    const start = segment.sourceStartRaw;
+    const end = segment.sourceEndRaw;
+    return Number.isFinite(start) &&
+      Number.isFinite(end) &&
+      start < sourceSpan.end &&
+      end > sourceSpan.start;
+  });
 }
 
 function formatLines(lines) {
