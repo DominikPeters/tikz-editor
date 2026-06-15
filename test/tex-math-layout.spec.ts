@@ -347,6 +347,15 @@ describe("TeX math hlist layout", () => {
       "cmex10/80",
       "cmmi5/13",
     ]);
+
+    const groupedCombinedFractionScript = layout(String.raw`{c-\beta^1}_{\frac{b}{x}}^x`);
+    expect(groupedCombinedFractionScript.supported).toBe(true);
+    expect(groupedCombinedFractionScript.hlist?.depth).toBeCloseTo(4.881668, 5);
+    expect(groupedCombinedFractionScript.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      y: expect.closeTo(2.47217, 5),
+    });
   });
 
   it("lays out text command nuclei through the document text font profile", () => {
@@ -919,6 +928,32 @@ describe("TeX math hlist layout", () => {
     expect(secondRow?.items).toMatchObject([
       { kind: "hlist", role: "matrix-cell", x: expect.closeTo(0.47917, 5) },
       { kind: "hlist", role: "matrix-cell", x: expect.closeTo(15.2859, 5) },
+    ]);
+
+    const adjacentMatrix = layoutTexMathList(
+      parseTexMath(String.raw`a\begin{matrix}b\end{matrix}`).list,
+      { style: "display" }
+    );
+    expect(adjacentMatrix.supported).toBe(true);
+    expect(adjacentMatrix.hlist?.width).toBeCloseTo(9.57757, 5);
+    expect(adjacentMatrix.hlist?.items).toMatchObject([
+      { kind: "glyph", x: 0 },
+      { kind: "hlist", role: "matrix-row", x: expect.closeTo(5.2859, 5) },
+    ]);
+
+    const operatorMatrix = layoutTexMathList(
+      parseTexMath(String.raw`\prod_b^i+\begin{matrix}j&z_c^a&m^i\end{matrix}`).list,
+      { style: "display" }
+    );
+    expect(operatorMatrix.supported).toBe(true);
+    expect(operatorMatrix.hlist?.width).toBeCloseTo(68.950185, 5);
+    expect(operatorMatrix.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "limit-superscript" },
+      { kind: "glyph", code: 89 },
+      { kind: "hlist", role: "limit-subscript" },
+      { kind: "glue", width: expect.closeTo(1.666672, 5) },
+      { kind: "glyph", code: 43, x: expect.closeTo(14.444482, 5) },
+      { kind: "hlist", role: "matrix-row", x: expect.closeTo(22.222292, 5) },
     ]);
   });
 

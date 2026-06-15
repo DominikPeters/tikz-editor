@@ -1272,7 +1272,7 @@ function matrixAtom(
 ): TexMathAtom {
   return {
     kind: "atom",
-    atomClass: "inner",
+    atomClass: environment === "matrix" ? "ord" : "inner",
     nucleus: {
       kind: "matrix",
       environment,

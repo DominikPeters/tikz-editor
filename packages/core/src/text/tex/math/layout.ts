@@ -2727,7 +2727,9 @@ function subscriptShiftDown(
   baseAtPt: number
 ): number {
   let shiftDown = Math.max(initialShiftDown, mathParameterToPt(fontProfile, hasSuperscript ? "sub2" : "sub1", style, baseAtPt));
-  shiftDown = Math.max(shiftDown, sub.height - (mathXHeight(fontProfile, style, baseAtPt) * 4) / 5);
+  if (!hasSuperscript) {
+    shiftDown = Math.max(shiftDown, sub.height - (mathXHeight(fontProfile, style, baseAtPt) * 4) / 5);
+  }
   return roundTexPt(shiftDown);
 }
 

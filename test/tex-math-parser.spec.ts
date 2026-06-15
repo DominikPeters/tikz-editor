@@ -450,8 +450,16 @@ describe("TeX math parser", () => {
     const source = String.raw`\begin{pmatrix}a&b\\c&d\end{pmatrix}`;
     const result = parseTexMath(source, { sourceOffset: 3 });
     const atom = atomAt(result, 0);
+    const bareMatrix = atomAt(parseTexMath(String.raw`\begin{matrix}a\end{matrix}`), 0);
 
     expect(result.diagnostics).toEqual([]);
+    expect(bareMatrix).toMatchObject({
+      atomClass: "ord",
+      nucleus: {
+        kind: "matrix",
+        environment: "matrix",
+      },
+    });
     expect(atom).toMatchObject({
       atomClass: "inner",
       sourceSpan: { start: 3, end: 3 + source.length },
