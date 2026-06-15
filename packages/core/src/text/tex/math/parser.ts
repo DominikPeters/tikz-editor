@@ -245,8 +245,9 @@ class TexMathParser {
           sourceSpan: token.sourceSpan,
         };
       }
-      if (commandName(token.text) === "frac") {
-        return this.parseFraction(allowScripts);
+      const fractionStyle = fractionCommandStyle(token.text);
+      if (fractionStyle !== null) {
+        return this.parseFraction(fractionStyle, allowScripts);
       }
       const binomialStyle = binomialCommandStyle(token.text);
       if (binomialStyle !== null) {
@@ -356,10 +357,13 @@ class TexMathParser {
     }, allowScripts);
   }
 
-  private parseFraction(allowScripts: boolean): TexMathAtom {
+  private parseFraction(
+    style: "display" | "text" | undefined,
+    allowScripts: boolean
+  ): TexMathAtom {
     const command = this.advance();
-    const numerator = this.parseRequiredGroup(command.sourceSpan, "\\frac numerator");
-    const denominator = this.parseRequiredGroup(command.sourceSpan, "\\frac denominator");
+    const numerator = this.parseRequiredGroup(command.sourceSpan, `${command.text} numerator`);
+    const denominator = this.parseRequiredGroup(command.sourceSpan, `${command.text} denominator`);
     const sourceSpan = spanUnion(
       command.sourceSpan,
       denominator?.sourceSpan ?? numerator?.sourceSpan ?? command.sourceSpan
@@ -368,6 +372,7 @@ class TexMathParser {
       kind: "fraction",
       numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
+      ...(style ? { style } : {}),
       sourceSpan,
     };
     return this.maybeParseScripts({
@@ -1372,6 +1377,19 @@ function spacingCommandName(command: string): TexMathGlue["command"] | null {
     return name;
   }
   return null;
+}
+
+function fractionCommandStyle(command: string): "display" | "text" | undefined | null {
+  switch (commandName(command)) {
+    case "frac":
+      return undefined;
+    case "dfrac":
+      return "display";
+    case "tfrac":
+      return "text";
+    default:
+      return null;
+  }
 }
 
 function binomialCommandStyle(command: string): "display" | "text" | undefined | null {

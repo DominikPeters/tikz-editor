@@ -12,6 +12,7 @@ import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
+const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 
 const args = readArgs();
@@ -37,6 +38,9 @@ const formulas = args.formulas.length > 0
       "a\\mathinner{b}",
       "\\frac{1}{2}",
       "\\frac{x+y}{2}",
+      "\\dfrac{1}{2}",
+      "\\tfrac{1}{2}",
+      "x+\\dfrac{n}{k}+\\tfrac{n}{k}",
       "\\binom{n}{k}",
       "\\dbinom{n}{k}",
       "\\tbinom{n}{k}",
@@ -228,7 +232,8 @@ function comparisonItemsForFormula(formula, ours, tex) {
   if (
     formula.includes(String.raw`\begin{aligned}`) ||
     hasMatrixEnvironment(formula) ||
-    hasBinomialCommand(formula)
+    hasBinomialCommand(formula) ||
+    hasStyledFractionCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -383,6 +388,7 @@ function texSource(formula) {
   const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
     hasMatrixEnvironment(formula) ||
     hasBinomialCommand(formula) ||
+    hasStyledFractionCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
@@ -625,8 +631,7 @@ function randomMathTerm(rng, depth) {
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
-    term = String.raw`\frac{` + randomSimpleExpression(rng) + "}{" +
-      randomSimpleExpression(rng) + "}";
+    term = randomFractionFormula(rng, randomSimpleExpression(rng), randomSimpleExpression(rng));
   } else if (choice === "binomial") {
     term = randomBinomialFormula(rng);
   } else if (choice === "radical") {
@@ -645,6 +650,18 @@ function randomMathTerm(rng, depth) {
   return choice === "atom" || choice === "group"
     ? maybeWithScripts(term, rng, depth)
     : term;
+}
+
+function randomFractionFormula(rng, numerator, denominator) {
+  const command = fractionCommands[randomInt(rng, fractionCommands.length)] ?? String.raw`\frac`;
+  return command + "{" + numerator + "}{" +
+      denominator + "}";
+}
+
+function randomBinomialFormula(rng) {
+  const command = binomialCommands[randomInt(rng, binomialCommands.length)] ?? String.raw`\binom`;
+  return command + "{" + randomSimpleExpression(rng) + "}{" +
+      randomSimpleExpression(rng) + "}";
 }
 
 function randomLineFormula(rng) {
@@ -689,11 +706,6 @@ function randomMatrixFormula(rng) {
   return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
 }
 
-function randomBinomialFormula(rng) {
-  const command = binomialCommands[randomInt(rng, binomialCommands.length)] ?? String.raw`\binom`;
-  return command + "{" + randomSimpleExpression(rng) + "}{" + randomSimpleExpression(rng) + "}";
-}
-
 function hasMatrixEnvironment(source) {
   return matrixEnvironments.some((environment) =>
     source.includes(String.raw`\begin{` + environment + "}")
@@ -708,12 +720,16 @@ function hasBinomialCommand(source) {
   return binomialCommands.some((command) => source.includes(command));
 }
 
+function hasStyledFractionCommand(source) {
+  return source.includes(String.raw`\dfrac`) || source.includes(String.raw`\tfrac`);
+}
+
 function randomMatrixCell(rng) {
   return [
     randomMathAtom(rng),
     randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
     randomMathAtom(rng) + "^{" + randomMathAtom(rng) + "}",
-    String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+    randomFractionFormula(rng, randomMathAtom(rng), randomMathAtom(rng)),
     String.raw`\binom{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
   ][randomInt(rng, 5)] ?? "x";
 }

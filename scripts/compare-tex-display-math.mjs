@@ -12,6 +12,7 @@ import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
+const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 
 const args = readArgs();
@@ -37,6 +38,11 @@ const cases = args.cases.length > 0
         id: "equation-star-display",
         source: String.raw`Alpha \begin{equation*}\sum_i^n\end{equation*} Beta`,
         width: 120,
+      },
+      {
+        id: "styled-fraction-display",
+        source: String.raw`Alpha \[\dfrac{1}{2}+\tfrac{x}{y}\] Beta`,
+        width: 160,
       },
       {
         id: "align-star-display",
@@ -394,6 +400,7 @@ function requiresAmsmath(source) {
     source.includes(String.raw`\begin{align*}`) ||
     hasMatrixEnvironment(source) ||
     hasBinomialCommand(source) ||
+    hasStyledFractionCommand(source) ||
     source.includes(String.raw`\text`);
 }
 
@@ -629,6 +636,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\frac{1}{2}+x\] Beta`,
     },
     {
+      id: "display-dfrac-tfrac",
+      width: 160,
+      source: String.raw`Alpha \[\dfrac{1}{2}+\tfrac{x}{y}\] Beta`,
+    },
+    {
       id: "display-binom",
       width: 140,
       source: String.raw`Alpha \[\binom{n}{k}+x\] Beta`,
@@ -809,7 +821,8 @@ function randomScriptTerm(rng) {
 }
 
 function randomFraction(rng) {
-  return String.raw`\frac{` + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
+  const command = choice(rng, fractionCommands);
+  return command + "{" + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
 }
 
 function randomBinomial(rng) {
@@ -871,6 +884,10 @@ function hasMatrixEnvironment(source) {
 
 function hasBinomialCommand(source) {
   return binomialCommands.some((command) => source.includes(command));
+}
+
+function hasStyledFractionCommand(source) {
+  return source.includes(String.raw`\dfrac`) || source.includes(String.raw`\tfrac`);
 }
 
 function randomLargeOperator(rng) {

@@ -87,6 +87,32 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses dfrac and tfrac as style-forced generalized fractions", () => {
+    const result = parseTexMath(String.raw`\dfrac{x}{y}+\tfrac{1}{2}`, { sourceOffset: 12 });
+
+    expect(result.diagnostics).toEqual([]);
+    const displayFraction = atomAt(result, 0);
+    expect(displayFraction).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 12, end: 24 },
+      nucleus: {
+        kind: "fraction",
+        style: "display",
+        sourceSpan: { start: 12, end: 24 },
+      },
+    });
+    const textFraction = atomAt(result, 2);
+    expect(textFraction).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 25, end: 37 },
+      nucleus: {
+        kind: "fraction",
+        style: "text",
+        sourceSpan: { start: 25, end: 37 },
+      },
+    });
+  });
+
   it("parses binomial commands as TeX generalized fractions", () => {
     const source = String.raw`\binom{n}{k}+\dbinom{n}{k}+\tbinom{n}{k}`;
     const result = parseTexMath(source, { sourceOffset: 4 });

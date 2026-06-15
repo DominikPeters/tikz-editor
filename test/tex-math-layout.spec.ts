@@ -558,6 +558,41 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("honors amsmath dfrac and tfrac style-forced fraction metrics", () => {
+    const displayFraction = layout(String.raw`\dfrac{1}{2}`);
+
+    expect(displayFraction.supported).toBe(true);
+    expect(displayFraction.hlist?.width).toBeCloseTo(7.40002, 5);
+    expect(displayFraction.hlist?.height).toBeCloseTo(13.20952, 5);
+    expect(displayFraction.hlist?.depth).toBeCloseTo(6.85951, 5);
+    expect(displayFraction.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(-6.76508, 5),
+      items: [{ kind: "glyph", fontId: "cmr10", code: 49 }],
+    });
+    expect(displayFraction.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(6.85951, 5),
+      items: [{ kind: "glyph", fontId: "cmr10", code: 50 }],
+    });
+
+    const textFraction = layout(String.raw`\tfrac{1}{2}`);
+    expect(textFraction.supported).toBe(true);
+    expect(textFraction.hlist?.width).toBeCloseTo(6.386129, 6);
+    expect(textFraction.hlist?.height).toBeCloseTo(8.448428, 6);
+    expect(textFraction.hlist?.depth).toBeCloseTo(3.44841, 5);
+    expect(textFraction.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(-3.93732, 5),
+      items: [{ kind: "glyph", fontId: "cmr7", code: 49 }],
+    });
+    expect(textFraction.hlist?.items[2]).toMatchObject({
+      kind: "hlist",
+      y: expect.closeTo(3.44841, 5),
+      items: [{ kind: "glyph", fontId: "cmr7", code: 50 }],
+    });
+  });
+
   it("lays out binomial commands as zero-rule generalized fractions with TeX delimiters", () => {
     const binom = layout(String.raw`\binom{n}{k}`);
 
