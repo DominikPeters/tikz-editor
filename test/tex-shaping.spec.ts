@@ -19,6 +19,7 @@ import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
   classicComputerModernTextFontProfile,
   computerModernTexMetricProvider,
+  createTexDerivedInlineMathBoxProvider,
   createSimpleTexLayoutDocumentIr,
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
@@ -3716,6 +3717,63 @@ describe("simple TeX paragraph layout", () => {
       ok: true,
       offset: offsetInsideMath,
       kind: "math",
+    });
+  });
+
+  it("maps supported TeX-derived inline math carets without MathJax prefix measurement", async () => {
+    const sourceText = String.raw`Alpha $x-y$ beta`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-real-hitmap",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+    const mathSegment = report?.lines[0]?.segments.find((segment) => segment.kind === "math");
+    expect(mathSegment?.caretStops).toHaveLength("$x-y$".length + 1);
+
+    const outputJax = {
+      tex2svg: () => {
+        throw new Error("MathJax prefix measurement should not be used for TeX-derived math.");
+      },
+      linebreaks: { getReports: () => report ? [report] : [] },
+    };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report?.width ?? 160, bottom: 10 }, report?.width ?? 160),
+      ],
+    };
+    const offsetBeforeMinus = sourceText.indexOf("-");
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:inline-math-real-hitmap",
+      sourceText,
+      containerElement,
+      offset: offsetBeforeMinus,
+    });
+    expect(point.error?.message ?? null).toBeNull();
+    expect(point).toMatchObject({
+      ok: true,
+      offset: offsetBeforeMinus,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+    expect(point.lineLocalX).toBeCloseTo(mathSegment?.caretStops?.[2] ?? 0, 6);
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:inline-math-real-hitmap",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+    });
+    expect(caret.error?.message ?? null).toBeNull();
+    expect(caret).toMatchObject({
+      ok: true,
+      offset: offsetBeforeMinus,
+      kind: "math",
+      snappedToMathPrefix: false,
     });
   });
 

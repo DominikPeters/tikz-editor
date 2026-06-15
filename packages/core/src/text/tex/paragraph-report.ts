@@ -186,7 +186,7 @@ function buildTexLineReport(
         sourceKind: "math",
         x,
         width,
-        caretStops: [x, roundTexPt(x + width)],
+        caretStops: texMathBoxCaretStops(box, x, width),
         mathSvgBody: box?.svgBody,
       });
       x = roundTexPt(x + width);
@@ -335,6 +335,7 @@ function texMathBoxFromWrapper(
   readonly content: string;
   readonly height: number;
   readonly depth: number;
+  readonly caretStops?: readonly number[];
   readonly svgBody?: string;
 } | null {
   if (!wrapper || typeof wrapper !== "object") {
@@ -348,12 +349,16 @@ function texMathBoxFromWrapper(
     readonly content?: unknown;
     readonly height?: unknown;
     readonly depth?: unknown;
+    readonly caretStops?: unknown;
     readonly svgBody?: unknown;
   };
   return {
     content: typeof typedBox.content === "string" ? typedBox.content : "",
     height: Number(typedBox.height) || 0,
     depth: Number(typedBox.depth) || 0,
+    caretStops: Array.isArray(typedBox.caretStops)
+      ? typedBox.caretStops.filter((stop): stop is number => Number.isFinite(stop))
+      : undefined,
     svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
   };
 }
@@ -429,7 +434,7 @@ function buildTexLineLabelSegments(
         sourceKind: "math",
         x,
         width: mathWidth,
-        caretStops: [x, roundTexPt(x + mathWidth)],
+        caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
         mathSvgBody: item.box.svgBody,
       });
       x = roundTexPt(x + mathWidth);
@@ -453,6 +458,22 @@ function buildTexLineLabelSegments(
     x = roundTexPt(x + glue.width);
   }
   return { segments, ascent, descent };
+}
+
+function texMathBoxCaretStops(
+  box: { readonly caretStops?: readonly number[] } | null | undefined,
+  x: number,
+  width: number
+): number[] {
+  const localStops = box?.caretStops;
+  if (!isFiniteNumberArray(localStops) || localStops.length === 0) {
+    return [x, roundTexPt(x + width)];
+  }
+  return localStops.map((stop) => roundTexPt(x + Math.max(0, Math.min(width, stop))));
+}
+
+function isFiniteNumberArray(value: unknown): value is readonly number[] {
+  return Array.isArray(value) && value.every((entry) => Number.isFinite(entry));
 }
 
 function texShapedSliceMetrics(

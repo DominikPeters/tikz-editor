@@ -55,6 +55,7 @@ export interface TexMathBox {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+  readonly caretStops?: readonly number[];
   readonly svgBody?: string;
 }
 

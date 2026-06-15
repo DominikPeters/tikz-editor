@@ -97,10 +97,115 @@ function getMathBox(
     width: hlist.width,
     height: hlist.height,
     depth: hlist.depth,
+    caretStops: buildInlineMathCaretStops(hlist, params),
     svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;
+}
+
+function buildInlineMathCaretStops(
+  hlist: TexMathHList,
+  params: {
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  }
+): readonly number[] {
+  const rawLength = Math.max(0, params.sourceEnd - params.sourceStart);
+  const stops = Array.from({ length: rawLength + 1 }, () => Number.NaN);
+  const setStop = (rawOffset: number, x: number) => {
+    const index = rawOffset - params.sourceStart;
+    if (index < 0 || index >= stops.length || !Number.isFinite(x)) {
+      return;
+    }
+    const clamped = roundTexPt(Math.max(0, Math.min(hlist.width, x)));
+    stops[index] = Number.isFinite(stops[index])
+      ? Math.max(stops[index], clamped)
+      : clamped;
+  };
+
+  for (let rawOffset = params.sourceStart; rawOffset <= params.contentStart; rawOffset += 1) {
+    setStop(rawOffset, 0);
+  }
+  for (let rawOffset = params.contentEnd; rawOffset <= params.sourceEnd; rawOffset += 1) {
+    setStop(rawOffset, hlist.width);
+  }
+
+  addMathItemCaretStops(hlist.items, 0, setStop);
+  interpolateMissingCaretStops(stops, hlist.width);
+  enforceMonotoneCaretStops(stops, hlist.width);
+  return stops.map((stop) => roundTexPt(stop));
+}
+
+function addMathItemCaretStops(
+  items: readonly TexMathHListItem[],
+  originX: number,
+  setStop: (rawOffset: number, x: number) => void
+): void {
+  for (const item of items) {
+    const x = roundTexPt(originX + item.x);
+    addMathSourceSpanCaretStops(item.sourceSpan.start, item.sourceSpan.end, x, item.width, setStop);
+    if (item.kind === "hlist") {
+      addMathItemCaretStops(item.items, x, setStop);
+    }
+  }
+}
+
+function addMathSourceSpanCaretStops(
+  start: number,
+  end: number,
+  x: number,
+  width: number,
+  setStop: (rawOffset: number, x: number) => void
+): void {
+  const spanLength = Math.max(0, end - start);
+  if (spanLength === 0) {
+    setStop(start, x);
+    return;
+  }
+  for (let rawOffset = start; rawOffset <= end; rawOffset += 1) {
+    const t = (rawOffset - start) / spanLength;
+    setStop(rawOffset, roundTexPt(x + width * t));
+  }
+}
+
+function interpolateMissingCaretStops(stops: number[], width: number): void {
+  if (stops.length === 0) {
+    return;
+  }
+  if (!Number.isFinite(stops[0])) {
+    stops[0] = 0;
+  }
+  if (!Number.isFinite(stops[stops.length - 1])) {
+    stops[stops.length - 1] = width;
+  }
+  let lastKnown = 0;
+  for (let index = 1; index < stops.length; index += 1) {
+    if (Number.isFinite(stops[index])) {
+      const start = stops[lastKnown] ?? 0;
+      const end = stops[index] ?? start;
+      const gap = index - lastKnown;
+      for (let fill = lastKnown + 1; fill < index; fill += 1) {
+        const t = (fill - lastKnown) / gap;
+        stops[fill] = roundTexPt(start + (end - start) * t);
+      }
+      lastKnown = index;
+    }
+  }
+}
+
+function enforceMonotoneCaretStops(stops: number[], width: number): void {
+  let previous = 0;
+  for (let index = 0; index < stops.length; index += 1) {
+    const value = Number.isFinite(stops[index]) ? stops[index] : previous;
+    previous = roundTexPt(Math.max(previous, Math.min(width, value)));
+    stops[index] = previous;
+  }
+  if (stops.length > 0) {
+    stops[stops.length - 1] = roundTexPt(width);
+  }
 }
 
 function parseMathBoxContent(params: {

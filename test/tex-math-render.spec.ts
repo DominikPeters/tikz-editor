@@ -758,6 +758,11 @@ describe("TeX math SVG rendering", () => {
       sourceKind: "math",
       width: expect.closeTo(23.199158, 6),
     });
+    expect(mathSegment?.caretStops).toHaveLength("$x-y$".length + 1);
+    expect(mathSegment?.caretStops?.[0]).toBeCloseTo(mathSegment?.x ?? 0, 6);
+    expect(mathSegment?.caretStops?.at(-1)).toBeCloseTo((mathSegment?.x ?? 0) + (mathSegment?.width ?? 0), 6);
+    expect(mathSegment?.caretStops?.[2]).toBeGreaterThan(mathSegment?.caretStops?.[1] ?? 0);
+    expect(mathSegment?.caretStops?.[3]).toBeGreaterThan(mathSegment?.caretStops?.[2] ?? 0);
     expect(mathSegment?.mathSvgBody).toContain('data-tex-math-hlist="true"');
     expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
   });

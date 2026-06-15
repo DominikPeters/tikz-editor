@@ -1993,6 +1993,11 @@ function alignSegmentsToSource(
           };
         }
 
+        const groupCaretStops = mathGroupStartIndex === segmentIndex &&
+          Array.isArray(segment.caretStops)
+          ? segment.caretStops
+          : [groupStartX, Math.max(groupStartX, groupEndX)];
+
         aligned.push({
           lineIndex: line.lineIndex,
           line,
@@ -2001,7 +2006,7 @@ function alignSegmentsToSource(
             kind: 'math',
             x: groupStartX,
             width: Math.max(0, groupEndX - groupStartX),
-            caretStops: [groupStartX, Math.max(groupStartX, groupEndX)],
+            caretStops: groupCaretStops,
           },
           rawStart: groupRawStart,
           rawEnd: groupRawEnd,
@@ -2102,6 +2107,24 @@ async function buildStopsByLine(
       const span = aligned.mathSpan;
       if (!span) {
         throw new Error(`Missing parsed math span for line ${aligned.lineIndex}.`);
+      }
+      const providedStops = (getOrBuildTextSegmentCaretStops(aligned.segment) ?? [])
+        .map((value) => Number(value));
+      if (
+        providedStops.length === rawLength + 1 &&
+        providedStops.every((value) => Number.isFinite(value))
+      ) {
+        for (let i = 0; i <= rawLength; i++) {
+          addStop(aligned.lineIndex, {
+            offset: aligned.rawStart + i,
+            x: providedStops[i],
+            kind: 'math',
+            snappedToMathPrefix: false,
+            lineStart: false,
+            lineEnd: false,
+          });
+        }
+        continue;
       }
       const table = await mathPrefixCache.getOrBuild(outputJax, span);
       for (let i = 0; i <= rawLength; i++) {
