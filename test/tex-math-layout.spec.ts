@@ -482,20 +482,38 @@ describe("TeX math hlist layout", () => {
     });
   });
 
-  it("reports aligned environments as explicitly unsupported until alignment layout lands", () => {
+  it("lays out aligned environments with row baselines and column anchors", () => {
     const parsed = parseTexMath(String.raw`\begin{aligned}a&=b\\c&=d\end{aligned}`);
     const result = layoutTexMathList(parsed.list, { style: "display" });
 
     expect(parsed.diagnostics).toEqual([]);
-    expect(result.supported).toBe(false);
-    expect(result.errors).toEqual([
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(23.823975, 3);
+    expect(result.hlist?.height).toBeCloseTo(16, 5);
+    expect(result.hlist?.depth).toBeCloseTo(11, 5);
+    expect(result.hlist?.items).toMatchObject([
       {
-        message: "Aligned TeX math layout is not implemented yet.",
-        sourceSpan: {
-          start: 0,
-          end: String.raw`\begin{aligned}a&=b\\c&=d\end{aligned}`.length,
-        },
+        kind: "hlist",
+        role: "aligned-row",
+        y: expect.closeTo(-7.600037, 5),
+        width: expect.closeTo(23.823975, 3),
       },
+      {
+        kind: "hlist",
+        role: "aligned-row",
+        y: expect.closeTo(7.399963, 5),
+        width: expect.closeTo(23.823975, 3),
+      },
+    ]);
+    const firstRow = result.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const secondRow = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow?.items).toMatchObject([
+      { kind: "hlist", role: "aligned-cell", x: 0 },
+      { kind: "hlist", role: "aligned-cell", x: expect.closeTo(5.285889, 4) },
+    ]);
+    expect(secondRow?.items).toMatchObject([
+      { kind: "hlist", role: "aligned-cell", x: expect.closeTo(0.958329, 4) },
+      { kind: "hlist", role: "aligned-cell", x: expect.closeTo(5.285889, 4) },
     ]);
   });
 

@@ -12,6 +12,8 @@ import {
 import type {
   TexMathAtom,
   TexMathAccentCommand,
+  TexMathAlignedNucleus,
+  TexMathAlignedRow,
   TexMathDelimiter,
   TexMathGlyphNucleus,
   TexMathList,
@@ -23,6 +25,7 @@ import type {
 } from "./ir.js";
 import {
   spaceTexMathList,
+  texMathSpacingBetween,
   type TexMathResolvedGlue,
 } from "./spacing.js";
 
@@ -80,7 +83,14 @@ export interface TexMathRuleLayoutItem {
 
 export interface TexMathChildHListLayoutItem {
   readonly kind: "hlist";
-  readonly role: "nucleus" | "superscript" | "subscript" | "limit-superscript" | "limit-subscript";
+  readonly role:
+    | "nucleus"
+    | "superscript"
+    | "subscript"
+    | "limit-superscript"
+    | "limit-subscript"
+    | "aligned-row"
+    | "aligned-cell";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -201,14 +211,6 @@ export function layoutTexMathList(
       });
       continue;
     }
-    if (item.nucleus.kind === "aligned") {
-      errors.push({
-        message: "Aligned TeX math layout is not implemented yet.",
-        sourceSpan: item.sourceSpan,
-      });
-      continue;
-    }
-
     const atomLayout = layoutAtom(item, fontProfile, currentStyle, baseAtPt);
     if (!atomLayout) {
       errors.push({
@@ -474,7 +476,208 @@ function layoutNucleus(
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, baseAtPt);
   }
+  if (nucleus.kind === "aligned") {
+    return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   return null;
+}
+
+const TEX_ALIGNED_ROW_HEIGHT_PT = 8.399963;
+const TEX_ALIGNED_ROW_DEPTH_PT = 3.600037;
+const TEX_AMSMATH_JOT_PT = 3;
+
+interface TexMathAlignedCellLayout {
+  readonly hlist: TexMathHList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+interface TexMathAlignedRowLayout {
+  readonly cells: readonly TexMathAlignedCellLayout[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly height: number;
+  readonly depth: number;
+}
+
+function layoutAlignedNucleus(
+  nucleus: TexMathAlignedNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const rows = nucleus.rows.map((row) =>
+    layoutAlignedRow(row, fontProfile, style, baseAtPt)
+  );
+  if (rows.some((row): row is null => row === null)) {
+    return null;
+  }
+  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  if (concreteRows.length === 0) {
+    return {
+      items: [],
+      width: 0,
+      height: 0,
+      depth: 0,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+
+  const columnCount = Math.max(...concreteRows.map((row) => row.cells.length));
+  const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
+    Math.max(0, ...concreteRows.map((row) => row.cells[columnIndex]?.hlist.width ?? 0))
+  ).map(roundTexPt);
+  const width = roundTexPt(columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0));
+  const naturalHeight = roundTexPt(
+    concreteRows.reduce((sum, row) => sum + row.height + row.depth, 0) +
+    TEX_AMSMATH_JOT_PT * Math.max(0, concreteRows.length - 1)
+  );
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const height = roundTexPt(naturalHeight / 2 + axis);
+  const depth = roundTexPt(naturalHeight - height);
+  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  const rowItems: TexMathChildHListLayoutItem[] = [];
+
+  for (const row of concreteRows) {
+    const rowChildren: TexMathHListItem[] = [];
+    let cursor = 0;
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      const columnWidth = columnWidths[columnIndex] ?? 0;
+      const cell = row.cells[columnIndex];
+      if (!cell) {
+        cursor = roundTexPt(cursor + columnWidth);
+        continue;
+      }
+      const alignRight = columnIndex % 2 === 0;
+      rowChildren.push(childHList(
+        "aligned-cell",
+        alignRight ? roundTexPt(cursor + columnWidth - cell.hlist.width) : cursor,
+        0,
+        cell.hlist,
+        cell.sourceSpan
+      ));
+      cursor = roundTexPt(cursor + columnWidth);
+    }
+    rowItems.push({
+      kind: "hlist",
+      role: "aligned-row",
+      x: 0,
+      y: baselineY,
+      width,
+      height: row.height,
+      depth: row.depth,
+      sourceSpan: row.sourceSpan,
+      items: rowChildren,
+    });
+    baselineY = roundTexPt(baselineY + row.depth + TEX_AMSMATH_JOT_PT + (concreteRows[rowItems.length]?.height ?? 0));
+  }
+
+  return {
+    items: rowItems,
+    width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutAlignedRow(
+  row: TexMathAlignedRow,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAlignedRowLayout | null {
+  const cells = row.cells.map((cell, columnIndex) => {
+    const result = layoutTexMathList(cell.list, { fontProfile, style, baseAtPt });
+    return result.supported
+      ? {
+          hlist: alignCellHList(
+            result.hlist,
+            cell.list,
+            columnIndex,
+            fontProfile,
+            style,
+            baseAtPt
+          ),
+          sourceSpan: cell.sourceSpan,
+        }
+      : null;
+  });
+  if (cells.some((cell): cell is null => cell === null)) {
+    return null;
+  }
+  const concreteCells = cells as readonly TexMathAlignedCellLayout[];
+  return {
+    cells: concreteCells,
+    sourceSpan: row.sourceSpan,
+    height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
+    depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
+  };
+}
+
+function alignCellHList(
+  hlist: TexMathHList,
+  list: TexMathList,
+  columnIndex: number,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList {
+  if (columnIndex % 2 === 0) {
+    return hlist;
+  }
+  const firstAtom = list.items.find((item): item is TexMathAtom => item.kind === "atom");
+  if (!firstAtom) {
+    return hlist;
+  }
+  const emptyOrd: TexMathAtom = {
+    kind: "atom",
+    atomClass: "ord",
+    nucleus: {
+      kind: "list",
+      list: emptyListForSpan(firstAtom.sourceSpan),
+      sourceSpan: firstAtom.sourceSpan,
+    },
+    sourceSpan: {
+      start: firstAtom.sourceSpan.start,
+      end: firstAtom.sourceSpan.start,
+    },
+  };
+  const glue = texMathSpacingBetween(emptyOrd, firstAtom, style);
+  if (!glue) {
+    return hlist;
+  }
+  const width = muToPt(fontProfile, style, baseAtPt, glue.mu);
+  return {
+    ...hlist,
+    width: roundTexPt(hlist.width + width),
+    items: [
+      {
+        kind: "glue",
+        x: 0,
+        width,
+        mu: glue.mu,
+        stretch: muToPt(fontProfile, style, baseAtPt, glue.stretchMu),
+        shrink: muToPt(fontProfile, style, baseAtPt, glue.shrinkMu),
+        source: glue.source,
+        sourceSpan: glue.sourceSpan,
+      },
+      ...hlist.items.map((item) => offsetMathLayoutItem(item, width)),
+    ],
+  };
+}
+
+function emptyListForSpan(sourceSpan: TexMathSourceSpan): TexMathList {
+  return {
+    kind: "math-list",
+    items: [],
+    sourceSpan: {
+      start: sourceSpan.start,
+      end: sourceSpan.start,
+    },
+  };
 }
 
 function layoutFractionNucleus(

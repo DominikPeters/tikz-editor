@@ -51,6 +51,7 @@ const formulas = args.formulas.length > 0
       "\\hat{\\frac{1}{2}}",
       "\\sum",
       "\\sum_i^n",
+      "\\begin{aligned}a&=b\\\\c&=d\\end{aligned}",
       "\\prod_i^n",
       "\\coprod_i^n",
       "\\bigcup_i^n",
@@ -85,13 +86,14 @@ function compareFormula(formula, tolerance) {
     mismatches.push(`our layout unsupported: ${ours.errors.map((error) => error.message).join("; ")}`);
     return { formula, ok: false, mismatches, ours, tex };
   }
-  if (ours.items.length !== tex.items.length) {
-    mismatches.push(`item count differs: ours=${ours.items.length} tex=${tex.items.length}`);
+  const compareItems = comparisonItemsForFormula(formula, ours.items, tex.items);
+  if (compareItems.ours.length !== compareItems.tex.length) {
+    mismatches.push(`item count differs: ours=${compareItems.ours.length} tex=${compareItems.tex.length}`);
   }
-  const count = Math.min(ours.items.length, tex.items.length);
+  const count = Math.min(compareItems.ours.length, compareItems.tex.length);
   for (let index = 0; index < count; index++) {
-    const left = ours.items[index];
-    const right = tex.items[index];
+    const left = compareItems.ours[index];
+    const right = compareItems.tex[index];
     if (left.kind !== right.kind) {
       mismatches.push(`item ${index} kind differs: ours=${left.kind} tex=${right.kind}`);
       continue;
@@ -126,6 +128,23 @@ function compareFormula(formula, tolerance) {
     ours,
     tex,
   };
+}
+
+function comparisonItemsForFormula(formula, ours, tex) {
+  if (!formula.includes(String.raw`\begin{aligned}`)) {
+    return { ours, tex };
+  }
+  return {
+    ours: visibleMathItems(ours),
+    tex: visibleMathItems(tex),
+  };
+}
+
+function visibleMathItems(items) {
+  return items.filter((item) =>
+    item.kind === "glyph" ||
+    (item.kind === "rule" && item.width !== 0)
+  );
 }
 
 function ourTrace(formula) {
@@ -263,7 +282,11 @@ function texTrace(formula) {
 }
 
 function texSource(formula) {
+  const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`)
+    ? String.raw`\usepackage{amsmath}` + "\n"
+    : "";
   return String.raw`\documentclass{article}
+` + amsmathPreamble + String.raw`
 \newbox\m
 \begin{document}
 \setbox\m=\hbox{$` + formula + String.raw`$}
