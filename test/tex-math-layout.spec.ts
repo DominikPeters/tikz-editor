@@ -291,8 +291,31 @@ describe("TeX math hlist layout", () => {
     });
   });
 
-  it("keeps taller radicals unsupported until extensible delimiter selection is implemented", () => {
+  it("selects TeX next-larger radical glyphs for taller radicals", () => {
     const result = layout(String.raw`\sqrt{\frac{1}{2}}`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(16.386159, 6);
+    expect(result.hlist?.height).toBeCloseTo(12.350078, 6);
+    expect(result.hlist?.depth).toBeCloseTo(6.050092, 6);
+    expect(result.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 113,
+      y: expect.closeTo(-11.550098, 6),
+      width: expect.closeTo(10.00003, 6),
+    });
+    expect(result.hlist?.items[1]).toMatchObject({
+      kind: "rule",
+      role: "radical-rule",
+      x: expect.closeTo(10.00003, 6),
+      y: expect.closeTo(-11.950088, 6),
+      width: expect.closeTo(6.386129, 6),
+    });
+  });
+
+  it("keeps extensible radicals unsupported until varchar assembly is implemented", () => {
+    const result = layout(String.raw`\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}`);
 
     expect(result.supported).toBe(false);
     expect(result.hlist).toBeNull();

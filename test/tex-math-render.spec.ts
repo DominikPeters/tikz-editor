@@ -106,6 +106,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('y="-760.2764"');
   });
 
+  it("renders taller radicals with TeX next-larger extension glyphs", () => {
+    const parsed = parseTexMath(String.raw`\sqrt{\frac{1}{2}}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="113"');
+    expect(body).toContain('data-tex-rule="radical-rule"');
+    expect(body).toContain('transform="translate(0 -1155.0098) scale(100)"');
+    expect(body).toContain('x="1000.003"');
+    expect(body).toContain('y="-1195.0088"');
+  });
+
   it("creates inline math boxes for supported formulas without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
@@ -159,8 +175,8 @@ describe("TeX math SVG rendering", () => {
 
   it("returns null for unsupported formulas instead of approximate SVG", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
-    const source = String.raw`$\sqrt{\frac{1}{2}}$`;
-    const content = String.raw`\sqrt{\frac{1}{2}}`;
+    const source = String.raw`$\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}$`;
+    const content = String.raw`\sqrt{\sqrt{\sqrt{\sqrt{\frac{1}{2}}}}}`;
     const box = provider.getInlineMathBox({
       source,
       content,

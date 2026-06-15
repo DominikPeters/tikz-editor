@@ -26,6 +26,8 @@ const formulas = args.formulas.length > 0
       "x_\\frac{1}{2}",
       "\\sqrt{x}",
       "\\sqrt{x+y}",
+      "\\sqrt{\\frac{1}{2}}",
+      "\\sqrt{\\sqrt{\\frac{1}{2}}}",
       "x^2",
       "x_i",
       "x_i^2",
@@ -248,6 +250,14 @@ local hlist_id=node.id('hlist')
 local vlist_id=node.id('vlist')
 local whatsit_id=node.id('whatsit')
 local function sp(v) return (v or 0)/65536 end
+local function font_name(font_id)
+  local registered=font.fonts and font.fonts[font_id]
+  if registered and registered.name then return tostring(registered.name) end
+  local ok, tex_name=pcall(function() return tex.fontname(font_id) end)
+  if ok and tex_name then return tostring(tex_name) end
+  local f=font.getfont(font_id)
+  return tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename))
+end
 
 local walk_vlist
 local function node_width(n)
@@ -288,8 +298,7 @@ local function walk_hlist(list, origin_x, baseline_y, box)
   local x = origin_x
   for n in node.traverse(list) do
     if n.id==glyph_id then
-      local f=font.getfont(n.font)
-      texio.write_nl(string.format('TIKZ_MATH_TRACE glyph x=%.6f y=%.6f font=%s char=%d width=%.6f', x, baseline_y, tostring(f and f.name), n.char, node_width(n)))
+      texio.write_nl(string.format('TIKZ_MATH_TRACE glyph x=%.6f y=%.6f font=%s char=%d width=%.6f', x, baseline_y, font_name(n.font), n.char, node_width(n)))
       x=x+node_width(n)
     elseif n.id==glue_id then
       local w=glue_width(n, box)
