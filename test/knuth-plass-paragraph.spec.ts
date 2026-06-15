@@ -869,7 +869,7 @@ describe("knuth-plass paragraph helpers", () => {
     const cases: Array<{
       name: string;
       wrapper: any;
-      run: ParagraphRun;
+      run: TextRun;
       lineBreak: any;
       expectedError: string;
     }> = [

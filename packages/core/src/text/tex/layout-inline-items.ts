@@ -55,6 +55,8 @@ export interface TexMathBox {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+  readonly stretch?: number;
+  readonly shrink?: number;
   readonly caretStops?: readonly number[];
   readonly constructRanges?: readonly TexMathConstructRange[];
   readonly breakpoints?: readonly TexMathBreakpoint[];
@@ -73,6 +75,8 @@ export interface TexMathBreakpoint {
   readonly sourceOffset: number;
   readonly x: number;
   readonly penalty: number;
+  readonly stretchBefore?: number;
+  readonly shrinkBefore?: number;
 }
 
 export interface TexMathDisplayAlignmentRowBox extends TexMathBox {

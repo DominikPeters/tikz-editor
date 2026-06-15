@@ -110,9 +110,18 @@ export interface SpaceRun extends BaseRun {
 export interface MathRun extends BaseRun {
   kind: 'math';
   wrapper: AnyWrapper;
+  texGlue?: {
+    stretch: number;
+    shrink: number;
+  };
 }
 
-export type ParagraphRun = TextRun | SpaceRun | MathRun;
+export interface PenaltyRun extends BaseRun {
+  kind: 'penalty';
+  penalty: number;
+}
+
+export type ParagraphRun = TextRun | SpaceRun | MathRun | PenaltyRun;
 
 export interface FlattenResult {
   runs: ParagraphRun[];

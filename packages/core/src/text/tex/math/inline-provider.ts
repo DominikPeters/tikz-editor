@@ -13,6 +13,7 @@ import {
   resolveDefaultTexMathFontProfileForList,
   setTexMathHListWidth,
   type TexMathChildHListLayoutItem,
+  type TexMathGlueLayoutItem,
   type TexMathHList,
   type TexMathHListItem,
 } from "./layout.js";
@@ -103,6 +104,7 @@ function getMathBox(
     width: hlist.width,
     height: hlist.height,
     depth: hlist.depth,
+    ...mathHListFlex(hlist.items, 0, hlist.width),
     caretStops: buildInlineMathCaretStops(hlist, params),
     constructRanges: buildInlineMathConstructRanges(hlist),
     breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
@@ -110,6 +112,55 @@ function getMathBox(
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;
+}
+
+function mathHListFlex(
+  items: readonly TexMathHListItem[],
+  xStart: number,
+  xEnd: number
+): { readonly stretch?: number; readonly shrink?: number } {
+  let stretch = 0;
+  let shrink = 0;
+  collectMathHListFlex(items, 0, xStart, xEnd, (item) => {
+    stretch += item.stretch;
+    shrink += item.shrink;
+  });
+  return {
+    ...(stretch > 0 ? { stretch: roundTexPt(stretch) } : {}),
+    ...(shrink > 0 ? { shrink: roundTexPt(shrink) } : {}),
+  };
+}
+
+function collectMathHListFlex(
+  items: readonly TexMathHListItem[],
+  originX: number,
+  xStart: number,
+  xEnd: number,
+  push: (item: TexMathGlueLayoutItem) => void
+): void {
+  for (const item of items) {
+    const itemX = originX + item.x;
+    if (item.kind === "glue") {
+      if (itemX >= xStart && itemX < xEnd) {
+        push(item);
+      }
+      continue;
+    }
+    if (item.kind === "hlist") {
+      collectMathHListFlex(item.items, itemX, xStart, xEnd, push);
+    }
+  }
+}
+
+function mathHListFlexBeforeX(
+  items: readonly TexMathHListItem[],
+  x: number
+): { readonly stretchBefore?: number; readonly shrinkBefore?: number } {
+  const flex = mathHListFlex(items, 0, x);
+  return {
+    ...(flex.stretch ? { stretchBefore: flex.stretch } : {}),
+    ...(flex.shrink ? { shrinkBefore: flex.shrink } : {}),
+  };
 }
 
 interface MathItemExtent {
@@ -180,6 +231,7 @@ function buildInlineMathBreakpoints(
       sourceOffset: atom.sourceSpan.end,
       x,
       penalty: atom.atomClass === "bin" ? 700 : 500,
+      ...mathHListFlexBeforeX(hlist.items, x),
     }];
   });
 }

@@ -202,6 +202,8 @@ export function createMeasurementService(): MeasurementService {
         } else {
           measureText(' ', run.wrapper);
         }
+      } else if (run.kind === 'penalty') {
+        continue;
       } else {
         measureMath(run.wrapper);
       }

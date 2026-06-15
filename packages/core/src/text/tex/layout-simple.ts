@@ -15,6 +15,7 @@ import {
   type SimpleTexMathNode,
   type SimpleTexNode,
   type TexParagraphAlignment,
+  type TexSpaceGlueProfile,
 } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import {
@@ -34,7 +35,9 @@ export interface TexParagraphLayoutOptions {
   readonly tolerance?: number;
   readonly pretolerance?: number;
   readonly parindent?: number;
+  readonly rightskipStretch?: number;
   readonly tikzTextWidthNode?: boolean;
+  readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly fallbackPolicy?: "whole-node" | "placeholder";
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;

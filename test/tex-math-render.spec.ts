@@ -445,18 +445,22 @@ describe("TeX math SVG rendering", () => {
     });
 
     expect(box?.breakpoints).toHaveLength(2);
-    expect(box?.breakpoints).toEqual([
+    expect(box?.breakpoints).toMatchObject([
       {
         kind: "binary",
         sourceOffset: 13,
         x: expect.any(Number),
         penalty: 700,
+        stretchBefore: expect.any(Number),
+        shrinkBefore: expect.any(Number),
       },
       {
         kind: "relation",
         sourceOffset: 15,
         x: expect.any(Number),
         penalty: 500,
+        stretchBefore: expect.any(Number),
+        shrinkBefore: expect.any(Number),
       },
     ]);
     expect(box?.breakpoints?.[0]?.x).toBeGreaterThan(0);
@@ -475,13 +479,50 @@ describe("TeX math SVG rendering", () => {
       contentEnd: 26,
     });
 
-    expect(box?.breakpoints).toEqual([
+    expect(box?.breakpoints).toMatchObject([
       {
         kind: "binary",
         sourceOffset: 24,
         x: expect.any(Number),
         penalty: 700,
+        stretchBefore: expect.any(Number),
+        shrinkBefore: expect.any(Number),
       },
+    ]);
+  });
+
+  it("exposes TeX inline math glue shrink to paragraph breaking", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const box = provider.getInlineMathBox({
+      source: "$x+y=m+n$",
+      content: "x+y=m+n",
+      delimiter: "dollar",
+      sourceStart: 4,
+      sourceEnd: 13,
+      contentStart: 5,
+      contentEnd: 12,
+    });
+
+    expect(box?.shrink).toBeGreaterThan(0);
+
+    const source = String.raw`One $x+y=m+n$ two three.`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-shrink-break",
+      width: 80,
+      alignment: "ragged-right",
+      parindent: 0,
+      rightskipStretch: 80,
+      spaceGlueProfile: "font",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: provider,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines.map((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("")
+    )).toEqual([
+      String.raw`One $x+y=m+n$`,
+      "two three.",
     ]);
   });
 

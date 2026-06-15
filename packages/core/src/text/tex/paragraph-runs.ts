@@ -4,6 +4,7 @@ import type {
   BreakRef,
   MathRun,
   ParagraphRun,
+  PenaltyRun,
   SpaceRun,
   TextRun,
 } from "../knuth-plass/paragraph/types.js";
@@ -112,7 +113,6 @@ function layoutItemsToRuns(
           if (fragmentIndex < fragments.length - 1 && fragment.breakAfter) {
             const breakRunIndex = runs.length;
             runs.push(mathBreakpointRun(
-              syntheticWrapper,
               breakRunIndex,
               item.role,
               fragment.breakAfter.sourceOffset,
@@ -146,6 +146,10 @@ function layoutItemsToRuns(
         sourceStart: item.sourceStart,
         sourceEnd: item.sourceEnd,
         wrapper,
+        texGlue: {
+          stretch: item.box.stretch ?? 0,
+          shrink: item.box.shrink ?? 0,
+        },
       } satisfies MathRun);
       continue;
     }
@@ -212,26 +216,26 @@ function mathRunForBox(
     sourceStart,
     sourceEnd,
     wrapper,
+    texGlue: {
+      stretch: box.stretch ?? 0,
+      shrink: box.shrink ?? 0,
+    },
   };
 }
 
 function mathBreakpointRun(
-  wrapper: AnyWrapper,
   runIndex: number,
   role: TexLayoutInlineItem["role"],
   sourceOffset: number,
   breakPenalty: number
-): SpaceRun {
+): PenaltyRun {
   return {
-    kind: "space",
+    kind: "penalty",
     runIndex,
     role,
     sourceStart: sourceOffset,
     sourceEnd: sourceOffset,
-    text: " ",
-    wrapper,
-    breakRef: createSimpleBreakRef(wrapper, false),
-    texGlue: { width: 0, stretch: 0, shrink: 0, breakPenalty },
+    penalty: breakPenalty,
   };
 }
 
@@ -310,11 +314,52 @@ function mathBoxFragment(
     sourceStart,
     sourceEnd,
     width,
+    stretch: fragmentMathFlex(box, xStart, xEnd, "stretch"),
+    shrink: fragmentMathFlex(box, xStart, xEnd, "shrink"),
     caretStops: fragmentMathCaretStops(box, xStart, xEnd, sourceStart, sourceEnd),
     constructRanges: fragmentMathConstructRanges(box, xStart, xEnd),
     breakpoints: fragmentMathBreakpoints(box, xStart, xEnd),
     svgBody: box.svgBody ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
   };
+}
+
+function fragmentMathFlex(
+  box: TexMathBox,
+  xStart: number,
+  xEnd: number,
+  key: "stretch" | "shrink"
+): number | undefined {
+  const value = roundTexPt(
+    mathFlexAtX(box, xEnd, key) - mathFlexAtX(box, xStart, key)
+  );
+  return value > 0 ? value : undefined;
+}
+
+function mathFlexAtX(
+  box: TexMathBox,
+  x: number,
+  key: "stretch" | "shrink"
+): number {
+  const total = box[key] ?? 0;
+  if (x <= 0 || total <= 0) {
+    return 0;
+  }
+  if (x >= box.width) {
+    return total;
+  }
+  const breakpoint = box.breakpoints?.find((candidate) =>
+    Math.abs(candidate.x - x) < 1e-6
+  );
+  if (breakpoint) {
+    return key === "stretch"
+      ? breakpoint.stretchBefore ?? 0
+      : breakpoint.shrinkBefore ?? 0;
+  }
+  if (box.width <= 0) {
+    return 0;
+  }
+  const ratio = Math.max(0, Math.min(1, x / box.width));
+  return roundTexPt(total * ratio);
 }
 
 function fragmentMathCaretStops(

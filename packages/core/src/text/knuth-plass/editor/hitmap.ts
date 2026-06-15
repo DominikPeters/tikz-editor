@@ -1843,10 +1843,10 @@ function buildRunRawRanges(
   };
 
   const shouldExitActiveMath = (
-    run: { kind: 'text' | 'space' | 'math'; text?: string },
-    nextRun: { kind: 'text' | 'space' | 'math'; text?: string } | null
+    run: { kind: 'text' | 'space' | 'math' | 'penalty'; text?: string },
+    nextRun: { kind: 'text' | 'space' | 'math' | 'penalty'; text?: string } | null
   ): boolean => {
-    if (!activeMathSpan || run.kind === 'math') {
+    if (!activeMathSpan || run.kind === 'math' || run.kind === 'penalty') {
       return false;
     }
     if (nextRun?.kind === 'math') {

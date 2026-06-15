@@ -533,7 +533,39 @@ function generateCandidates(
       continue;
     }
 
+    if (run.kind === 'penalty') {
+      const spacePenalty = spacePenalties.get(runIndex);
+      const previousRun = runIndex > 0 ? model.runs[runIndex - 1] : null;
+      if (spacePenalty && previousRun && previousRun.kind !== 'space') {
+        candidates.push({
+          endRun: Math.max(cursor.runIndex, runIndex - 1),
+          endTextOffset: null,
+          naturalWidth,
+          spaceCount,
+          spaceWidth,
+          stretch,
+          shrink,
+          break: {
+            kind: 'space',
+            runIndex,
+            sourceOffset: spacePenalty.sourceOffset,
+            visibleHyphen: false,
+            flagged: false,
+          },
+          breakPenalty: spacePenalty.penalty,
+          flagged: false,
+          nextCursor: normalizeCursor(model, {
+            runIndex: runIndex + 1,
+            textOffset: 0,
+          }, forcedPenalties),
+        });
+      }
+      continue;
+    }
+
     naturalWidth += runWidth(model, runIndex);
+    stretch += run.texGlue?.stretch ?? 0;
+    shrink += run.texGlue?.shrink ?? 0;
     naturalWidthWithoutTrailingSpaces = naturalWidth;
     spaceCountWithoutTrailingSpaces = spaceCount;
     spaceWidthWithoutTrailingSpaces = spaceWidth;

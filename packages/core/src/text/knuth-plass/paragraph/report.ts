@@ -84,7 +84,7 @@ export interface BreakReport {
 
 export interface RunReport {
   runIndex: number;
-  kind: 'text' | 'space' | 'math';
+  kind: 'text' | 'space' | 'math' | 'penalty';
   sourceStart?: number;
   sourceEnd?: number;
   width: number;
@@ -209,6 +209,7 @@ export function buildParagraphLayoutReport({
     for (let i = line.startRun; i <= line.endRun && i < runReports.length; i++) {
       const run = runs.at(i);
       if (!run) continue;
+      if (run.kind === 'penalty') continue;
 
       if (run.kind === 'text') {
         const startOffset = i === line.startRun ? line.startTextOffset : 0;

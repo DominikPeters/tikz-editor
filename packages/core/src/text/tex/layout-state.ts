@@ -29,7 +29,8 @@ export class TexParagraphLayoutState {
     private readonly options: TexLayoutIrOptions
   ) {
     this.activeAlignment = defaultAlignment;
-    this.activeSpaceGlueProfile = texInitialSpaceGlueProfile(defaultAlignment);
+    this.activeSpaceGlueProfile =
+      options.spaceGlueProfile ?? texInitialSpaceGlueProfile(defaultAlignment);
   }
 
   public resolveParagraph(params: {
@@ -84,7 +85,7 @@ export class TexParagraphLayoutState {
         }
       : {}),
       spaceGlueProfile: params.scopePolicy.resetSpaceGlueProfile
-        ? texInitialSpaceGlueProfile(this.defaultAlignment)
+        ? this.options.spaceGlueProfile ?? texInitialSpaceGlueProfile(this.defaultAlignment)
         : this.activeSpaceGlueProfile,
     };
   }

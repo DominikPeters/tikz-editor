@@ -195,6 +195,10 @@ function buildTexLineReport(
       continue;
     }
 
+    if (run.kind === "penalty") {
+      continue;
+    }
+
     let width = params.runWidths.get(run.runIndex) ?? 0;
     if (run.kind === "space" && (line.spaceCount ?? 0) > 0) {
       const ratio = line.glueSetRatio ?? 0;
@@ -332,7 +336,7 @@ function texLinePreDisplaySize(
 }
 
 function texMathBoxFromWrapper(
-  wrapper: ParagraphRun["wrapper"]
+  wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"]
 ): {
   readonly content: string;
   readonly height: number;

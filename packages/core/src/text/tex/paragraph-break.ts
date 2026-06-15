@@ -54,6 +54,7 @@ export interface TexParagraphBreakOptions {
   readonly tolerance?: number;
   readonly pretolerance?: number;
   readonly parindent?: number;
+  readonly rightskipStretch?: number;
   readonly tikzTextWidthNode?: boolean;
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
@@ -197,13 +198,15 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       ),
     leftskipShrink: 0,
     rightskipWidth: scopePolicy.rightMarginWidth,
-    rightskipStretch: texDeclarationRightskipStretch(
-      alignment,
-      latexDeclaration,
-      latexQuote,
-      scopePolicy,
-      skipStretch
-    ),
+    rightskipStretch: Number.isFinite(options.rightskipStretch)
+      ? Math.max(0, options.rightskipStretch ?? 0)
+      : texDeclarationRightskipStretch(
+        alignment,
+        latexDeclaration,
+        latexQuote,
+        scopePolicy,
+        skipStretch
+      ),
     rightskipShrink: 0,
     firstLineIndentWidth:
       Number.isFinite(firstLineIndentWidth)

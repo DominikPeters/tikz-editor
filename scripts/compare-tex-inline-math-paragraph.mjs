@@ -88,6 +88,8 @@ function ourLines(caseSpec) {
     width: caseSpec.width,
     alignment: "ragged-right",
     parindent: 0,
+    rightskipStretch: caseSpec.width,
+    spaceGlueProfile: "font",
     tikzTextWidthNode: true,
     hyphenator: { hyphenate: () => [] },
     mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
@@ -218,7 +220,7 @@ function normalizeLineText(text) {
 function oracleCachePath(cacheDir, caseSpec) {
   const key = createHash("sha256")
     .update(JSON.stringify({
-      version: 1,
+      version: 5,
       source: caseSpec.source,
       width: caseSpec.width,
       parindent: 0,

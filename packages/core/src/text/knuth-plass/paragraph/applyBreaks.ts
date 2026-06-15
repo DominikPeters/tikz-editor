@@ -661,6 +661,17 @@ export function applyBreaks(
     }
 
     const run = runs.at(breakDecision.runIndex);
+    if (run?.kind === 'penalty') {
+      appliedBreaks.push({
+        lineIndex: line.lineIndex,
+        kind: 'space',
+        runIndex: run.runIndex,
+        sourceOffset: breakDecision.sourceOffset,
+        visibleHyphen: false,
+      });
+      continue;
+    }
+
     if (run?.kind !== 'space') {
       appliedBreaks.push({
         lineIndex: line.lineIndex,

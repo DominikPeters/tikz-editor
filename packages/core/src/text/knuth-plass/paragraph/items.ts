@@ -82,6 +82,10 @@ function itemWidthForRun(
     return measurement.measureText(run.text, run.wrapper);
   }
 
+  if (run.kind === 'penalty') {
+    return 0;
+  }
+
   return measurement.measureMath(run.wrapper);
 }
 
@@ -266,6 +270,21 @@ export function runsToItems(
         payload: {
           runIndex: run.runIndex,
           breakRef: run.breakRef,
+          breakKind: 'space',
+          sourceOffset: run.sourceEnd,
+          visibleHyphen: false,
+        },
+      });
+      continue;
+    }
+
+    if (run.kind === 'penalty') {
+      items.push({
+        kind: 'penalty',
+        width: 0,
+        penalty: run.penalty,
+        payload: {
+          runIndex: run.runIndex,
           breakKind: 'space',
           sourceOffset: run.sourceEnd,
           visibleHyphen: false,
