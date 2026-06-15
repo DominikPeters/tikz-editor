@@ -38,7 +38,21 @@ const cases = args.cases.length > 0
 
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
 const failed = results.filter((result) => !result.ok);
-console.log(JSON.stringify({ tolerance: args.tolerance, results }, null, 2));
+if (args.summaryOnly) {
+  console.log(JSON.stringify({
+    tolerance: args.tolerance,
+    passed: results.length - failed.length,
+    failed: failed.length,
+    results: results.map((result) => ({
+      id: result.id,
+      width: result.width,
+      ok: result.ok,
+      mismatches: result.mismatches,
+    })),
+  }, null, 2));
+} else {
+  console.log(JSON.stringify({ tolerance: args.tolerance, results }, null, 2));
+}
 if (failed.length > 0) {
   process.exitCode = 1;
 }
@@ -98,6 +112,7 @@ function compareItemLists(mismatches, label, ours, tex, tolerance) {
       continue;
     }
     compareNumber(mismatches, `${label} ${index} y`, left.y, right.y, tolerance);
+    compareNumber(mismatches, `${label} ${index} width`, left.width, right.width, tolerance);
     compareNumber(mismatches, `${label} ${index} height`, left.height, right.height, tolerance);
     compareNumber(mismatches, `${label} ${index} depth`, left.depth, right.depth, tolerance);
     if (left.kind === "glue" && right.kind === "glue") {
@@ -367,6 +382,7 @@ function compareNumber(mismatches, label, left, right, tolerance) {
 function readArgs() {
   const cases = [];
   let keepTemp = false;
+  let summaryOnly = false;
   let tolerance = 0.05;
   for (let index = 2; index < process.argv.length; index++) {
     const arg = process.argv[index] ?? "";
@@ -395,9 +411,43 @@ function readArgs() {
       tolerance = Number(arg.slice("--tolerance=".length));
     } else if (arg === "--keep-temp") {
       keepTemp = true;
+    } else if (arg === "--summary-only") {
+      summaryOnly = true;
+    } else if (arg === "--align-matrix") {
+      cases.push(...alignMatrixCases());
     }
   }
-  return { cases, keepTemp, tolerance };
+  return { cases, keepTemp, summaryOnly, tolerance };
+}
+
+function alignMatrixCases() {
+  return [
+    {
+      id: "align-three-rows",
+      width: 120,
+      source: String.raw`Alpha \begin{align*}a&=b\\c&=d\\e&=f\end{align*} Beta`,
+    },
+    {
+      id: "align-wide-width",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-narrow-width",
+      width: 90,
+      source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-two-pairs",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}a&=b&c&=d\\e&=f&g&=h\end{align*} Beta`,
+    },
+    {
+      id: "align-single-row",
+      width: 120,
+      source: String.raw`Alpha \begin{align*}a&=b\end{align*} Beta`,
+    },
+  ];
 }
 
 function parseCaseArg(value) {

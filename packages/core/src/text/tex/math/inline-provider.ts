@@ -22,6 +22,9 @@ import {
   renderTexMathHListSvgBody,
 } from "./render-svg.js";
 
+const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
+const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
+
 export interface TexDerivedInlineMathBoxProviderOptions {
   readonly fontProfile?: TexMathFontProfile;
   readonly baseAtPt?: number;
@@ -146,8 +149,13 @@ function getDisplayMathAlignment(
   if (alignedRows.length === 0) {
     return null;
   }
-  const leftOffset = Math.max(0, roundTexPt((params.targetWidth - laidOut.hlist.width) / 2));
-  const rowWidth = roundTexPt(leftOffset + laidOut.hlist.width);
+  const pairCount = displayAlignmentPairCount(alignedRows);
+  const dimensions = displayAlignmentDimensions({
+    measuredWidth: laidOut.hlist.width,
+    pairCount,
+    rowCount: alignedRows.length,
+    targetWidth: params.targetWidth,
+  });
   return {
     source: params.source,
     content: params.content,
@@ -156,16 +164,16 @@ function getDisplayMathAlignment(
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
     delimiter: "align-star",
-    width: rowWidth,
+    width: dimensions.rowWidth,
     rows: alignedRows.map((row, rowIndex) => {
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
-        width: rowWidth,
+        width: dimensions.rowWidth,
         height: row.height,
         depth: row.depth,
         sourceSpan: row.sourceSpan,
-        items: shiftTexMathHListItems(row.items, leftOffset),
+        items: displayAlignmentRowItems(row.items, dimensions),
       };
       return {
         rowIndex,
@@ -174,7 +182,7 @@ function getDisplayMathAlignment(
         content: params.content,
         sourceStart: row.sourceSpan.start,
         sourceEnd: row.sourceSpan.end,
-        width: rowWidth,
+        width: dimensions.rowWidth,
         height: row.height,
         depth: row.depth,
         svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
@@ -183,24 +191,80 @@ function getDisplayMathAlignment(
   };
 }
 
-function shiftTexMathHListItems(
-  items: readonly TexMathHListItem[],
-  dx: number
-): readonly TexMathHListItem[] {
-  if (dx === 0) {
-    return items;
+interface TexDisplayAlignmentDimensions {
+  readonly eqnShift: number;
+  readonly alignSep: number;
+  readonly rowWidth: number;
+}
+
+function displayAlignmentDimensions(params: {
+  readonly measuredWidth: number;
+  readonly pairCount: number;
+  readonly rowCount: number;
+  readonly targetWidth: number;
+}): TexDisplayAlignmentDimensions {
+  const alignSepCount = Math.max(0, params.pairCount - 1);
+  const fixedPairGapWidth = alignSepCount * TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
+  const trailingWidth = params.rowCount === 1
+    ? TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT
+    : 0;
+  const totalFieldWidth = roundTexPt(Math.max(
+    0,
+    params.measuredWidth - fixedPairGapWidth - trailingWidth
+  ));
+  const flexible = roundTexPt((params.targetWidth - totalFieldWidth) / (params.pairCount + 1));
+  if (flexible >= TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT) {
+    return {
+      eqnShift: flexible,
+      alignSep: flexible,
+      rowWidth: roundTexPt(totalFieldWidth + params.pairCount * flexible),
+    };
   }
+  const alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
+  const eqnShift = Math.max(
+    0,
+    roundTexPt((params.targetWidth - totalFieldWidth - alignSepCount * alignSep) / 2)
+  );
+  return {
+    eqnShift,
+    alignSep,
+    rowWidth: roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep),
+  };
+}
+
+function displayAlignmentPairCount(
+  rows: readonly TexMathChildHListLayoutItem[]
+): number {
+  const columnCount = Math.max(
+    0,
+    ...rows.map((row) => row.items.filter((item) =>
+      item.kind === "hlist" && item.role === "aligned-cell"
+    ).length)
+  );
+  return Math.max(1, Math.ceil(columnCount / 2));
+}
+
+function displayAlignmentRowItems(
+  items: readonly TexMathHListItem[],
+  dimensions: TexDisplayAlignmentDimensions
+): readonly TexMathHListItem[] {
+  let cellIndex = 0;
   return items.map((item) => {
-    if (item.kind === "hlist") {
+    if (item.kind === "hlist" && item.role === "aligned-cell") {
+      const pairIndex = Math.floor(cellIndex / 2);
+      cellIndex += 1;
       return {
         ...item,
-        x: roundTexPt(item.x + dx),
-        items: shiftTexMathHListItems(item.items, dx),
+        x: roundTexPt(
+          item.x +
+          dimensions.eqnShift +
+          pairIndex * (dimensions.alignSep - TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT)
+        ),
       };
     }
     return {
       ...item,
-      x: roundTexPt(item.x + dx),
+      x: roundTexPt(item.x + dimensions.eqnShift),
     };
   });
 }
