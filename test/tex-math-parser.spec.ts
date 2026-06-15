@@ -286,6 +286,17 @@ describe("TeX math parser", () => {
       { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: String.raw`\cdot` } },
     ]);
 
+    const alignmentBoundary = atomAt(parseTexMath(String.raw`\begin{aligned}\dots&1\end{aligned}`), 0);
+    const alignmentRows = alignmentBoundary.nucleus.kind === "aligned"
+      ? alignmentBoundary.nucleus.rows
+      : [];
+    const alignmentDots = alignmentRows[0]?.cells[0]?.list.items[0];
+    expect(
+      alignmentDots?.kind === "atom" && alignmentDots.nucleus.kind === "list"
+        ? alignmentDots.nucleus.list.items
+        : []
+    ).toHaveLength(3);
+
     const comma = atomAt(parseTexMath(String.raw`\dots,1`), 0);
     expect(comma.nucleus.kind === "list" ? comma.nucleus.list.items : []).toMatchObject([
       { kind: "atom", atomClass: "punct", nucleus: { kind: "glyph", text: "." } },

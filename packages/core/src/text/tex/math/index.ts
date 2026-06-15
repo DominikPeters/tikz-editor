@@ -58,6 +58,7 @@ export {
   layoutTexMathList,
   resolveDefaultTexMathFontProfileForList,
   resolveMathGlyph,
+  setTexMathHListWidth,
   type TexMathChildHListLayoutItem,
   type TexMathGlueLayoutItem,
   type TexMathGlyphLayoutItem,

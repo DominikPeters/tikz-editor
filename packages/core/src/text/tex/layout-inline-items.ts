@@ -93,6 +93,7 @@ export interface TexMathBoxProvider {
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
+    readonly targetWidth?: number;
   }) => TexMathBox | null;
   readonly getDisplayMathAlignment?: (params: {
     readonly source: string;

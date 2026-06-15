@@ -304,6 +304,57 @@ export function layoutTexMathList(
   };
 }
 
+export function setTexMathHListWidth(
+  hlist: TexMathHList,
+  targetWidth: number
+): TexMathHList {
+  if (!Number.isFinite(targetWidth)) {
+    return hlist;
+  }
+  const roundedTargetWidth = roundTexPt(targetWidth);
+  const delta = roundTexPt(roundedTargetWidth - hlist.width);
+  if (delta === 0) {
+    return hlist.width === roundedTargetWidth
+      ? hlist
+      : { ...hlist, width: roundedTargetWidth };
+  }
+  const sign = delta > 0 ? "stretch" : "shrink";
+  const total = hlist.items.reduce((sum, item) => {
+    if (item.kind !== "glue") {
+      return sum;
+    }
+    return sum + Math.max(0, sign === "stretch" ? item.stretch : item.shrink);
+  }, 0);
+  if (total <= 0) {
+    return { ...hlist, width: roundedTargetWidth };
+  }
+  const ratio = sign === "stretch"
+    ? delta / total
+    : Math.min(-delta / total, 1);
+  let offset = 0;
+  const items = hlist.items.map((item) => {
+    const shifted = {
+      ...item,
+      x: roundTexPt(item.x + offset),
+    };
+    if (item.kind !== "glue") {
+      return shifted;
+    }
+    const adjustment = (sign === "stretch" ? item.stretch : -item.shrink) * ratio;
+    const adjustedWidth = roundTexPt(item.width + adjustment);
+    offset = roundTexPt(offset + adjustedWidth - item.width);
+    return {
+      ...shifted,
+      width: adjustedWidth,
+    };
+  });
+  return {
+    ...hlist,
+    width: roundedTargetWidth,
+    items,
+  };
+}
+
 export function resolveDefaultTexMathFontProfileForList(list: TexMathList): TexMathFontProfile {
   return texMathListNeedsAmsMath(list) ? luaLatexAmsMathFontProfile : defaultTexMathFontProfile;
 }

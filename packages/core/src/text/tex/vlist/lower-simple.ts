@@ -116,6 +116,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     sourceEnd: item.sourceEnd,
     contentStart: item.contentStart,
     contentEnd: item.contentEnd,
+    targetWidth: options.width,
   }) ?? null;
   if (!box) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);

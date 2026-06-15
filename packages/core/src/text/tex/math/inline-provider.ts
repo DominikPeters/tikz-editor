@@ -8,6 +8,7 @@ import type { TexMathFontProfile } from "./font-profile.js";
 import {
   layoutTexMathList,
   resolveDefaultTexMathFontProfileForList,
+  setTexMathHListWidth,
   type TexMathChildHListLayoutItem,
   type TexMathHList,
   type TexMathHListItem,
@@ -56,13 +57,14 @@ function getMathBox(
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
+    readonly targetWidth?: number;
   },
   style: "text" | "display",
   cache: Map<string, TexMathBox | null>,
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: number
 ): TexMathBox | null {
-  const key = `${style}:${params.delimiter}:${params.contentStart}:${params.content}`;
+  const key = `${style}:${params.delimiter}:${params.contentStart}:${params.targetWidth ?? "natural"}:${params.content}`;
   const cached = cache.get(key);
   if (cached !== undefined) {
     return cached;
@@ -82,15 +84,20 @@ function getMathBox(
     cache.set(key, null);
     return null;
   }
+  const hlist = style === "display" &&
+    params.targetWidth !== undefined &&
+    laidOut.hlist.width > params.targetWidth
+    ? setTexMathHListWidth(laidOut.hlist, params.targetWidth)
+    : laidOut.hlist;
   const box = {
     source: params.source,
     content: params.content,
     sourceStart: params.sourceStart,
     sourceEnd: params.sourceEnd,
-    width: laidOut.hlist.width,
-    height: laidOut.hlist.height,
-    depth: laidOut.hlist.depth,
-    svgBody: renderTexMathHListSvgBody(laidOut.hlist, { fontProfile }),
+    width: hlist.width,
+    height: hlist.height,
+    depth: hlist.depth,
+    svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;

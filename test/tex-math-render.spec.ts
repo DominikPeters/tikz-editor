@@ -500,6 +500,39 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="110"');
   });
 
+  it("packs target-width display math boxes with TeX math glue shrink", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const content = String.raw`\begin{array}{l}x\end{array}+\begin{array}{l}y\end{array}`;
+    const source = String.raw`\[` + content + String.raw`\]`;
+    const natural = provider.getDisplayMathBox?.({
+      source,
+      content,
+      delimiter: "bracket",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 2,
+      contentEnd: source.length - 2,
+    });
+    const fixed = provider.getDisplayMathBox?.({
+      source,
+      content,
+      delimiter: "bracket",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 2,
+      contentEnd: source.length - 2,
+      targetWidth: 30,
+    });
+
+    expect(natural?.width).toBeGreaterThan(30);
+    expect(fixed).toMatchObject({
+      width: 30,
+      height: natural?.height,
+      depth: natural?.depth,
+    });
+    expect(fixed?.svgBody).toContain('data-tex-font="cmr10" data-tex-glyph="43"');
+  });
+
   it("creates inline math boxes for simple superscripts and subscripts without MathJax", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({

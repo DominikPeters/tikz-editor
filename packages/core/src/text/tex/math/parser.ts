@@ -33,6 +33,7 @@ interface ParseListOptions {
   readonly stopAtAlignmentTab?: boolean;
   readonly stopAtRowBreak?: boolean;
   readonly stopAtEnvironmentEnd?: string;
+  readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
 }
 
 export interface ParseTexMathOptions {
@@ -207,7 +208,7 @@ class TexMathParser {
         }
         continue;
       }
-      const item = this.parseItem();
+      const item = this.parseItem(true, options);
       if (item) {
         items.push(item);
       }
@@ -223,7 +224,10 @@ class TexMathParser {
     };
   }
 
-  private parseItem(allowScripts = true): TexMathItem | null {
+  private parseItem(
+    allowScripts = true,
+    listOptions: ParseListOptions = { stopAtGroupClose: false }
+  ): TexMathItem | null {
     const token = this.peek();
     if (!token) {
       return null;
@@ -270,7 +274,11 @@ class TexMathParser {
       }
       const ellipsis = ellipsisCommandName(token.text);
       if (ellipsis) {
-        return this.parseEllipsis(ellipsis, allowScripts);
+        return this.parseEllipsis(
+          ellipsis,
+          allowScripts,
+          listOptions.suppressEllipsisGlueBeforeAlignmentTab === true
+        );
       }
       if (commandName(token.text) === "substack") {
         return this.parseSubstack(allowScripts);
@@ -631,7 +639,8 @@ class TexMathParser {
 
   private parseEllipsis(
     ellipsis: "ldots" | "cdots" | "dots",
-    allowScripts: boolean
+    allowScripts: boolean,
+    suppressTrailingGlueBeforeAlignmentTab: boolean
   ): TexMathAtom {
     const command = this.advance();
     const resolved = ellipsis === "dots" ? this.amsDotsKind() : ellipsis;
@@ -641,7 +650,11 @@ class TexMathParser {
       ellipsisDotAtom(dotText, command.sourceSpan),
       ellipsisDotAtom(dotText, command.sourceSpan),
     ];
-    if (shouldAddAmsEllipsisTrailingGlue(ellipsis, this.peekSignificantToken())) {
+    if (shouldAddAmsEllipsisTrailingGlue(
+      ellipsis,
+      this.peekSignificantToken(),
+      suppressTrailingGlueBeforeAlignmentTab
+    )) {
       items.push({
         kind: "glue",
         command: ",",
@@ -1014,6 +1027,7 @@ class TexMathParser {
           stopAtAlignmentTab: true,
           stopAtRowBreak: true,
           stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
+          suppressEllipsisGlueBeforeAlignmentTab: true,
         });
         cells.push({
           list: cellList,
@@ -1958,7 +1972,8 @@ function ellipsisDotAtom(
 
 function shouldAddAmsEllipsisTrailingGlue(
   ellipsis: "ldots" | "cdots" | "dots",
-  next: TexMathToken | null
+  next: TexMathToken | null,
+  suppressBeforeAlignmentTab = false
 ): boolean {
   if (ellipsis === "ldots") {
     return false;
@@ -1967,7 +1982,7 @@ function shouldAddAmsEllipsisTrailingGlue(
     return true;
   }
   if (next.kind === "character" && next.text === "&") {
-    return true;
+    return !suppressBeforeAlignmentTab;
   }
   if (ellipsis === "cdots" && next.kind === "character" && [",", ";", "."].includes(next.text)) {
     return true;

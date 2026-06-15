@@ -4,6 +4,7 @@ import {
   layoutTexMathList,
   parseTexMath,
   resolveMathGlyph,
+  setTexMathHListWidth,
   type TexMathChildHListLayoutItem,
   type TexMathGlyphLayoutItem,
   type TexMathHListItem,
@@ -100,6 +101,31 @@ describe("TeX math hlist layout", () => {
     });
     expect(hlist?.width).toBe(22.508188);
     expect(hlist?.height).toBeGreaterThan(6);
+  });
+
+  it("sets display hlist width by stretching and shrinking top-level math glue", () => {
+    const parsed = parseTexMath("a+b");
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const plus = result.hlist.items.find((item) =>
+      item.kind === "glyph" && item.fontId === "cmr10" && item.code === 43
+    );
+    expect(plus).toMatchObject({
+      x: expect.closeTo(7.508129, 6),
+    });
+
+    const shrunk = setTexMathHListWidth(result.hlist, result.hlist.width - 10);
+    const shrunkPlus = shrunk.items.find((item) =>
+      item.kind === "glyph" && item.fontId === "cmr10" && item.code === 43
+    );
+    expect(shrunk.width).toBeCloseTo(result.hlist.width - 10, 6);
+    expect(shrunkPlus).toMatchObject({
+      x: expect.closeTo(5.2859, 5),
+    });
   });
 
   it("lays out named Greek and symbol commands through TeX math fonts", () => {
