@@ -156,6 +156,53 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out negated relation composites with TeX overlay glyph traces", () => {
+    const notIn = layout(String.raw`x\notin A`);
+    expect(notIn.supported).toBe(true);
+    expect(notIn.hlist?.items.map((item) => item.kind)).toEqual([
+      "glyph",
+      "glue",
+      "kern",
+      "glyph",
+      "glyph",
+      "glue",
+      "glyph",
+    ]);
+    expect(notIn.hlist?.items[2]).toMatchObject({
+      kind: "kern",
+      x: expect.closeTo(9.048546, 3),
+      width: expect.closeTo(0.555542, 6),
+    });
+    expect(notIn.hlist?.items[3]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmmi10",
+      code: 61,
+      x: expect.closeTo(9.604088, 3),
+      width: expect.closeTo(5.000015, 5),
+    });
+    expect(notIn.hlist?.items[4]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmsy10",
+      code: 50,
+      x: expect.closeTo(8.492981, 3),
+      width: expect.closeTo(6.666687, 5),
+    });
+
+    const genericNot = layout(String.raw`x\not\leq y`);
+    expect(genericNot.supported).toBe(true);
+    const glyphs = flattenGlyphItems(genericNot.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 0, end: 1 } },
+      { fontId: "cmsy10", code: 54, sourceSpan: { start: 1, end: 9 } },
+      { fontId: "cmsy10", code: 20, sourceSpan: { start: 1, end: 9 } },
+      { fontId: "cmmi10", code: 121, sourceSpan: { start: 10, end: 11 } },
+    ]);
+  });
+
   it("adds math italic correction kerns after italic glyphs that need them", () => {
     const result = layout("xy");
 

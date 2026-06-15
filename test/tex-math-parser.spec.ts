@@ -241,6 +241,23 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses negated relation composites as source-spanned relation atoms", () => {
+    const result = parseTexMath(String.raw`x\not= y\not\in A\notin B`);
+
+    expect(result.diagnostics).toEqual([]);
+    const relationAtoms = result.list.items
+      .filter((item) => item.kind === "atom" && item.atomClass === "rel");
+    expect(relationAtoms.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph"
+        ? { text: item.nucleus.text, sourceSpan: item.sourceSpan }
+        : null
+    )).toEqual([
+      { text: String.raw`\not=`, sourceSpan: { start: 1, end: 6 } },
+      { text: String.raw`\not\in`, sourceSpan: { start: 8, end: 15 } },
+      { text: String.raw`\notin`, sourceSpan: { start: 17, end: 23 } },
+    ]);
+  });
+
   it("parses TeX operator commands as op atoms with scripts", () => {
     const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
     const sum = atomAt(result, 0);

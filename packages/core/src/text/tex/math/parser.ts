@@ -264,6 +264,9 @@ class TexMathParser {
       if (operator) {
         return this.parseOperator(operator, allowScripts);
       }
+      if (commandName(token.text) === "not") {
+        return this.parseNot(allowScripts);
+      }
       const namedSymbol = namedSymbolCommand(token.text);
       if (namedSymbol) {
         this.advance();
@@ -462,6 +465,63 @@ class TexMathParser {
       sourceSpan: command.sourceSpan,
     }, allowScripts);
     return this.maybeParseScripts(atom, allowScripts);
+  }
+
+  private parseNot(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    this.skipSpaces();
+    const target = this.peek();
+    if (!target) {
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        "Unsupported math command \\not.",
+        command.sourceSpan
+      );
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "rel",
+        nucleus: {
+          kind: "unsupported",
+          command: "\\not",
+          sourceSpan: command.sourceSpan,
+        },
+        sourceSpan: command.sourceSpan,
+      }, allowScripts);
+    }
+    const atomClass = notCompositeAtomClass(target);
+    if (!atomClass) {
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported math command \\not${target.text}.`,
+        spanUnion(command.sourceSpan, target.sourceSpan)
+      );
+      this.advance();
+      const sourceSpan = spanUnion(command.sourceSpan, target.sourceSpan);
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "rel",
+        nucleus: {
+          kind: "unsupported",
+          command: `\\not${target.text}`,
+          sourceSpan,
+        },
+        sourceSpan,
+      }, allowScripts);
+    }
+    this.advance();
+    const sourceSpan = spanUnion(command.sourceSpan, target.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass,
+      nucleus: {
+        kind: "glyph",
+        text: `\\not${target.text}`,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
   }
 
   private parseOperatorLimitSwitch(atom: TexMathAtom, allowLimits: boolean): TexMathAtom {
@@ -1210,6 +1270,16 @@ function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | 
   return null;
 }
 
+function notCompositeAtomClass(token: TexMathToken): TexMathAtomClass | null {
+  if (token.kind === "character") {
+    return atomClassForCharacter(token.text) === "rel" ? "rel" : null;
+  }
+  if (token.kind !== "command") {
+    return null;
+  }
+  return namedSymbolCommand(token.text)?.atomClass ?? null;
+}
+
 const ordinaryNamedSymbolCommands = new Set([
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
   "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",
@@ -1224,7 +1294,7 @@ const binaryNamedSymbolCommands = new Set([
 
 const relationNamedSymbolCommands = new Set([
   "approx", "gets", "ge", "geq", "in", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow",
-  "le", "leq", "mapsto", "ne", "neq", "rightarrow", "Rightarrow", "subset", "subseteq",
+  "le", "leq", "mapsto", "ne", "neq", "notin", "rightarrow", "Rightarrow", "subset", "subseteq",
   "supset", "supseteq", "to",
 ]);
 

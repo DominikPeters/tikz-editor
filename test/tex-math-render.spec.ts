@@ -167,6 +167,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="18"');
   });
 
+  it("renders negated relation composites through positioned TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`x\notin A+x\not\leq y`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="61"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="50"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="54"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="20"');
+  });
+
   it("renders TeX operators through the selected math fonts", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list);

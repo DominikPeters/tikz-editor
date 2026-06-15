@@ -139,16 +139,33 @@ export type TexMathLayoutResult =
     };
 
 export interface ResolvedMathGlyph {
+  readonly kind: "glyph";
   readonly family: TexMathFontFamily | "alphabet";
   readonly font: ResolvedTexFont;
   readonly code: number;
   readonly text: string;
+  readonly xOffset: number;
+  readonly advance: number;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
 type MathGlyphSpec = {
+  readonly kind?: "glyph";
   readonly family: TexMathFontFamily;
   readonly code: number;
+  readonly xOffset?: number;
+  readonly advance?: number;
+} | {
+  readonly kind: "kern";
+  readonly width: number;
+  readonly xOffset?: number;
+};
+
+type ResolvedMathSymbolPart = ResolvedMathGlyph | {
+  readonly kind: "kern";
+  readonly width: number;
+  readonly xOffset: number;
+  readonly sourceSpan: TexMathSourceSpan;
 };
 
 const TEX_SCRIPT_SPACE_PT = 0.5;
@@ -1675,21 +1692,34 @@ function layoutGlyphNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const glyphs = resolveMathGlyphs(nucleus, fontProfile, style, baseAtPt, alphabet);
-  if (glyphs.length === 0) {
+  const parts = resolveMathSymbolParts(nucleus, fontProfile, style, baseAtPt, alphabet);
+  if (parts.length === 0) {
     return null;
   }
-  const items: TexMathGlyphLayoutItem[] = [];
+  const items: TexMathHListItem[] = [];
   let cursor = 0;
   let height = 0;
   let depth = 0;
   let italicCorrection = 0;
-  for (const glyph of glyphs) {
+  let glyphCount = 0;
+  for (const glyph of parts) {
+    if (glyph.kind === "kern") {
+      items.push({
+        kind: "kern",
+        x: roundTexPt(cursor + glyph.xOffset),
+        width: glyph.width,
+        reason: "italic-correction",
+        sourceSpan: glyph.sourceSpan,
+      });
+      cursor = roundTexPt(cursor + glyph.width);
+      continue;
+    }
     const metric = requiredCharMetric(glyph.font, glyph.code);
     const width = roundTexPt(tfmToPt(glyph.font, metric.width));
     const glyphHeight = roundTexPt(tfmToPt(glyph.font, metric.height));
     const glyphDepth = roundTexPt(tfmToPt(glyph.font, metric.depth));
     italicCorrection = roundTexPt(tfmToPt(glyph.font, metric.italicCorrection));
+    glyphCount += 1;
     items.push({
       kind: "glyph",
       fontId: glyph.font.id,
@@ -1697,7 +1727,7 @@ function layoutGlyphNucleus(
       family: glyph.family,
       code: glyph.code,
       text: glyph.text,
-      x: cursor,
+      x: roundTexPt(cursor + glyph.xOffset),
       y: 0,
       width,
       height: glyphHeight,
@@ -1705,7 +1735,7 @@ function layoutGlyphNucleus(
       italicCorrection,
       sourceSpan: glyph.sourceSpan,
     });
-    cursor = roundTexPt(cursor + width);
+    cursor = roundTexPt(cursor + glyph.advance);
     height = Math.max(height, glyphHeight);
     depth = Math.max(depth, glyphDepth);
   }
@@ -1714,8 +1744,8 @@ function layoutGlyphNucleus(
     width: cursor,
     height: roundTexPt(height),
     depth: roundTexPt(depth),
-    italicCorrection: glyphs.length === 1 ? italicCorrection : 0,
-    isCharacterNucleus: glyphs.length === 1,
+    italicCorrection: glyphCount === 1 ? italicCorrection : 0,
+    isCharacterNucleus: glyphCount === 1,
     sourceSpan: nucleus.sourceSpan,
   };
 }
@@ -1737,18 +1767,35 @@ export function resolveMathGlyphs(
   baseAtPt = 10,
   alphabet?: TexMathAlphabetCommand
 ): readonly ResolvedMathGlyph[] {
+  return resolveMathSymbolParts(nucleus, fontProfile, style, baseAtPt, alphabet)
+    .filter((part): part is ResolvedMathGlyph => part.kind !== "kern");
+}
+
+function resolveMathSymbolParts(
+  nucleus: TexMathGlyphNucleus,
+  fontProfile: TexMathFontProfile = defaultTexMathFontProfile,
+  style: TexMathStyle = "text",
+  baseAtPt = 10,
+  alphabet?: TexMathAlphabetCommand
+): readonly ResolvedMathSymbolPart[] {
   const alphabetGlyph = alphabet
     ? defaultLuaLatexMathAlphabetGlyph(nucleus.text, alphabet, style)
     : null;
   if (alphabetGlyph) {
+    const font = fontProfile.metricProvider.resolveFont({
+      fontId: alphabetGlyph.fontId,
+      atPt: textStyleAtPt(style, baseAtPt),
+    });
+    const metric = requiredCharMetric(font, alphabetGlyph.code);
+    const width = roundTexPt(tfmToPt(font, metric.width));
     return [{
-      font: fontProfile.metricProvider.resolveFont({
-        fontId: alphabetGlyph.fontId,
-        atPt: textStyleAtPt(style, baseAtPt),
-      }),
+      kind: "glyph",
+      font,
       family: "alphabet",
       code: alphabetGlyph.code,
       text: nucleus.text,
+      xOffset: 0,
+      advance: width,
       sourceSpan: nucleus.sourceSpan,
     }];
   }
@@ -1756,17 +1803,38 @@ export function resolveMathGlyphs(
   if (resolved.length === 0) {
     return [];
   }
-  return resolved.map((glyph) => ({
-    font: fontProfile.resolveMathFont({
+  return resolved.map((glyph) => {
+    if (glyph.kind === "kern") {
+      const scale = textStyleAtPt(style, baseAtPt) / 10;
+      return {
+        kind: "kern",
+        width: roundTexPt(glyph.width * scale),
+        xOffset: roundTexPt((glyph.xOffset ?? 0) * scale),
+        sourceSpan: nucleus.sourceSpan,
+      };
+    }
+    const font = fontProfile.resolveMathFont({
       family: glyph.family,
       style,
       baseAtPt,
-    }),
-    family: glyph.family,
-    code: glyph.code,
-    text: nucleus.text,
-    sourceSpan: nucleus.sourceSpan,
-  }));
+    });
+    const metric = requiredCharMetric(font, glyph.code);
+    const width = roundTexPt(tfmToPt(font, metric.width));
+    return {
+      kind: "glyph",
+      font,
+      family: glyph.family,
+      code: glyph.code,
+      text: nucleus.text,
+      xOffset: glyph.xOffset !== undefined
+        ? roundTexPt(glyph.xOffset * (textStyleAtPt(style, baseAtPt) / 10))
+        : 0,
+      advance: glyph.advance !== undefined
+        ? roundTexPt(glyph.advance * (textStyleAtPt(style, baseAtPt) / 10))
+        : width,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  });
 }
 
 function resolveMathAccent(
@@ -1781,6 +1849,7 @@ function resolveMathAccent(
     return null;
   }
   return {
+    kind: "glyph",
     font: fontProfile.resolveMathFont({
       family: resolved.family,
       style,
@@ -1789,6 +1858,8 @@ function resolveMathAccent(
     family: resolved.family,
     code: resolved.code,
     text: `\\${command}`,
+    xOffset: 0,
+    advance: 0,
     sourceSpan,
   };
 }
@@ -2057,6 +2128,12 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 49 }];
     case "in":
       return [{ family: "symbols", code: 50 }];
+    case "notin":
+      return [
+        { kind: "kern", xOffset: 0.555565, width: 0.555542 },
+        { family: "letters", code: 61, xOffset: 0.555565, advance: -0.555542 },
+        { family: "symbols", code: 50 },
+      ];
     case "mapsto":
       return [
         { family: "symbols", code: 55 },
@@ -2078,9 +2155,26 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 110 }];
     case "ne":
     case "neq":
+    case "not=":
       return [
         { family: "symbols", code: 54 },
         { family: "operators", code: 61 },
+      ];
+    case "not\\in":
+      return [
+        { family: "symbols", code: 54 },
+        { family: "symbols", code: 50 },
+      ];
+    case "not\\subset":
+      return [
+        { family: "symbols", code: 54 },
+        { family: "symbols", code: 26 },
+      ];
+    case "not\\le":
+    case "not\\leq":
+      return [
+        { family: "symbols", code: 54 },
+        { family: "symbols", code: 20 },
       ];
     case "+":
     case "=":
