@@ -161,6 +161,7 @@ function ourMathGlyphTrace(lines) {
 
 function glyphsFromMathSvgBody(svgBody, originX, baselineY, lineIndex) {
   const fragmentViewBox = readFragmentViewBox(svgBody);
+  const fragmentBoundaryTolerance = 1e-5;
   const glyphs = [];
   const pathPattern = /<path\b[^>]*>/g;
   for (const match of svgBody.matchAll(pathPattern)) {
@@ -175,7 +176,10 @@ function glyphsFromMathSvgBody(svgBody, originX, baselineY, lineIndex) {
     const rawX = Number(translate[1]) / 100;
     if (
       fragmentViewBox &&
-      (rawX < fragmentViewBox.xStart || rawX >= fragmentViewBox.xEnd)
+      (
+        rawX < fragmentViewBox.xStart - fragmentBoundaryTolerance ||
+        rawX >= fragmentViewBox.xEnd - fragmentBoundaryTolerance
+      )
     ) {
       continue;
     }
