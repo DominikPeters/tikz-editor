@@ -45,6 +45,7 @@
     "compare:tex-display-math": "node scripts/compare-tex-display-math.mjs",
     "compare:tex-display-math:align-matrix": "node scripts/compare-tex-display-math.mjs --align-matrix --summary-only",
     "compare:tex-display-math:construct-matrix": "node scripts/compare-tex-display-math.mjs --construct-matrix --summary-only",
+    "compare:tex-display-math:fuzz": "node scripts/compare-tex-display-math.mjs --display-fuzz 16 --seed 20260615 --summary-only",
     "compare:arrows": "node scripts/compare-arrow-fixtures.mjs",
     "compare:pgf-docs": "node scripts/compare-pgf-docs-renderings.mjs",
     "compare:kottwitz-book": "node scripts/compare-pgf-docs-renderings.mjs --mode kottwitz-book",

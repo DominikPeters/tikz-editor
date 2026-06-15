@@ -11,8 +11,13 @@ import {
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const args = readArgs();
+const generatedDisplayFuzzCases = args.displayFuzzCases > 0
+  ? generateDisplayFuzzCases(args.displayFuzzCases, args.seed)
+  : [];
 const cases = args.cases.length > 0
   ? args.cases
+  : generatedDisplayFuzzCases.length > 0
+    ? generatedDisplayFuzzCases
   : [
       {
         id: "short-display-skip",
@@ -48,7 +53,12 @@ if (args.summaryOnly) {
       width: result.width,
       ok: result.ok,
       mismatches: result.mismatches,
+      ...(!result.ok ? { source: result.source } : {}),
     })),
+    ...(generatedDisplayFuzzCases.length > 0 ? {
+      seed: args.seed,
+      mode: "display-fuzz",
+    } : {}),
   }, null, 2));
 } else {
   console.log(JSON.stringify({ tolerance: args.tolerance, results }, null, 2));
@@ -500,6 +510,8 @@ function readArgs() {
   let keepTemp = false;
   let summaryOnly = false;
   let tolerance = 0.05;
+  let displayFuzzCases = 0;
+  let seed = 20260615;
   for (let index = 2; index < process.argv.length; index++) {
     const arg = process.argv[index] ?? "";
     if (arg === "--case") {
@@ -533,9 +545,25 @@ function readArgs() {
       cases.push(...alignMatrixCases());
     } else if (arg === "--construct-matrix") {
       cases.push(...constructMatrixCases());
+    } else if (arg === "--display-fuzz") {
+      displayFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--display-fuzz");
+    } else if (arg.startsWith("--display-fuzz=")) {
+      displayFuzzCases = readNonNegativeInteger(arg.slice("--display-fuzz=".length), "--display-fuzz");
+    } else if (arg === "--seed") {
+      seed = readNonNegativeInteger(process.argv[++index] ?? "", "--seed");
+    } else if (arg.startsWith("--seed=")) {
+      seed = readNonNegativeInteger(arg.slice("--seed=".length), "--seed");
     }
   }
-  return { cases, keepTemp, summaryOnly, tolerance };
+  return { cases, displayFuzzCases, keepTemp, seed, summaryOnly, tolerance };
+}
+
+function readNonNegativeInteger(raw, label) {
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Expected ${label} to be a non-negative integer.`);
+  }
+  return value;
 }
 
 function alignMatrixCases() {
@@ -611,6 +639,127 @@ function constructMatrixCases() {
       source: String.raw`Alpha \begin{align*}\frac{1}{2}&=x\\\sqrt{y+1}&=z\end{align*} Beta`,
     },
   ];
+}
+
+function generateDisplayFuzzCases(count, seed) {
+  const rng = makeRng(seed);
+  return Array.from({ length: count }, (_, index) => {
+    const width = choice(rng, [100, 120, 140, 160, 180, 220]);
+    const useAlign = index % 2 === 1;
+    return {
+      id: `display-fuzz-${index + 1}`,
+      width,
+      source: useAlign
+        ? `Alpha ${randomAlignStarSource(rng)} Beta`
+        : `Alpha \\[${randomDisplayFormula(rng)}\\] Beta`,
+    };
+  });
+}
+
+function randomAlignStarSource(rng) {
+  const rowCount = 1 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomAlignmentLeftCell(rng));
+      cells.push(`=${randomAlignmentRightCell(rng)}`);
+    }
+    rows.push(cells.join("&"));
+  }
+  return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomDisplayFormula(rng) {
+  const left = randomMathTerm(rng);
+  const right = randomMathTerm(rng);
+  const operator = choice(rng, ["+", "-", "="]);
+  if (rng() < 0.25) {
+    return `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}${operator}${right}`;
+  }
+  return `${left}${operator}${right}`;
+}
+
+function randomAlignmentLeftCell(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomRadical(rng),
+    `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
+  ]);
+}
+
+function randomAlignmentRightCell(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomRadical(rng),
+  ]);
+}
+
+function randomMathTerm(rng) {
+  return choice(rng, [
+    randomMathAtom(rng),
+    randomScriptTerm(rng),
+    randomFraction(rng),
+    randomRadical(rng),
+    randomLeftRight(rng),
+  ]);
+}
+
+function randomScriptTerm(rng) {
+  const base = randomMathAtom(rng);
+  const sub = randomMathAtom(rng);
+  const sup = randomMathAtom(rng);
+  return choice(rng, [`${base}_${sub}`, `${base}^${sup}`, `${base}_${sub}^${sup}`]);
+}
+
+function randomFraction(rng) {
+  return String.raw`\frac{` + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
+}
+
+function randomRadical(rng) {
+  return String.raw`\sqrt{` + choice(rng, [
+    randomMathAtom(rng),
+    `${randomMathAtom(rng)}+${randomMathAtom(rng)}`,
+    randomFraction(rng),
+  ]) + "}";
+}
+
+function randomLeftRight(rng) {
+  const delimiterPair = choice(rng, [
+    ["(", ")"],
+    ["[", "]"],
+    [String.raw`\langle`, String.raw`\rangle`],
+  ]);
+  return String.raw`\left` + delimiterPair[0] + randomFraction(rng) + String.raw`\right` + delimiterPair[1];
+}
+
+function randomLargeOperator(rng) {
+  return choice(rng, [String.raw`\sum`, String.raw`\prod`, String.raw`\bigcup`, String.raw`\bigcap`]);
+}
+
+function randomMathAtom(rng) {
+  return choice(rng, ["a", "b", "c", "i", "j", "m", "n", "x", "y", "z", "1", "2"]);
+}
+
+function choice(rng, values) {
+  return values[randomInt(rng, values.length)] ?? values[0];
+}
+
+function randomInt(rng, upperExclusive) {
+  return Math.floor(rng() * upperExclusive);
+}
+
+function makeRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
 }
 
 function parseCaseArg(value) {
