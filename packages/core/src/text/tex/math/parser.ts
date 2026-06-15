@@ -264,6 +264,20 @@ class TexMathParser {
       if (operator) {
         return this.parseOperator(operator, allowScripts);
       }
+      const namedSymbol = namedSymbolCommand(token.text);
+      if (namedSymbol) {
+        this.advance();
+        return this.maybeParseScripts({
+          kind: "atom",
+          atomClass: namedSymbol.atomClass,
+          nucleus: {
+            kind: "glyph",
+            text: token.text,
+            sourceSpan: token.sourceSpan,
+          },
+          sourceSpan: token.sourceSpan,
+        }, allowScripts);
+      }
       if (commandName(token.text) === "left") {
         return this.parseLeftRight(allowScripts);
       }
@@ -1181,6 +1195,36 @@ function operatorCommandName(command: string): TexMathOperatorCommand | null {
       return null;
   }
 }
+
+function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | null {
+  const name = commandName(command);
+  if (ordinaryNamedSymbolCommands.has(name)) {
+    return { atomClass: "ord" };
+  }
+  if (binaryNamedSymbolCommands.has(name)) {
+    return { atomClass: "bin" };
+  }
+  if (relationNamedSymbolCommands.has(name)) {
+    return { atomClass: "rel" };
+  }
+  return null;
+}
+
+const ordinaryNamedSymbolCommands = new Set([
+  "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
+  "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",
+  "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma",
+  "tau", "upsilon", "phi", "varphi", "chi", "psi", "omega",
+  "infty",
+]);
+
+const binaryNamedSymbolCommands = new Set([
+  "cdot", "mp", "pm", "times",
+]);
+
+const relationNamedSymbolCommands = new Set([
+  "ge", "geq", "in", "le", "leq", "ne", "neq", "subset",
+]);
 
 function atomClassForCharacter(char: string): TexMathAtomClass {
   if (char === "(" || char === "[") {

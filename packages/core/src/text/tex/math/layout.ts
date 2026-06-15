@@ -146,6 +146,11 @@ export interface ResolvedMathGlyph {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+type MathGlyphSpec = {
+  readonly family: TexMathFontFamily;
+  readonly code: number;
+};
+
 const TEX_SCRIPT_SPACE_PT = 0.5;
 const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
 const TEX_DELIMITER_FACTOR = 901;
@@ -1670,37 +1675,48 @@ function layoutGlyphNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const glyph = resolveMathGlyph(nucleus, fontProfile, style, baseAtPt, alphabet);
-  if (!glyph) {
+  const glyphs = resolveMathGlyphs(nucleus, fontProfile, style, baseAtPt, alphabet);
+  if (glyphs.length === 0) {
     return null;
   }
-  const metric = requiredCharMetric(glyph.font, glyph.code);
-  const width = roundTexPt(tfmToPt(glyph.font, metric.width));
-  const glyphHeight = roundTexPt(tfmToPt(glyph.font, metric.height));
-  const glyphDepth = roundTexPt(tfmToPt(glyph.font, metric.depth));
-  const italicCorrection = roundTexPt(tfmToPt(glyph.font, metric.italicCorrection));
-  return {
-    items: [{
+  const items: TexMathGlyphLayoutItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+  let italicCorrection = 0;
+  for (const glyph of glyphs) {
+    const metric = requiredCharMetric(glyph.font, glyph.code);
+    const width = roundTexPt(tfmToPt(glyph.font, metric.width));
+    const glyphHeight = roundTexPt(tfmToPt(glyph.font, metric.height));
+    const glyphDepth = roundTexPt(tfmToPt(glyph.font, metric.depth));
+    italicCorrection = roundTexPt(tfmToPt(glyph.font, metric.italicCorrection));
+    items.push({
       kind: "glyph",
       fontId: glyph.font.id,
       atPt: glyph.font.atPt,
       family: glyph.family,
       code: glyph.code,
       text: glyph.text,
-      x: 0,
+      x: cursor,
       y: 0,
       width,
       height: glyphHeight,
       depth: glyphDepth,
       italicCorrection,
       sourceSpan: glyph.sourceSpan,
-    }],
-    width,
-    height: glyphHeight,
-    depth: glyphDepth,
-    italicCorrection,
-    isCharacterNucleus: true,
-    sourceSpan: glyph.sourceSpan,
+    });
+    cursor = roundTexPt(cursor + width);
+    height = Math.max(height, glyphHeight);
+    depth = Math.max(depth, glyphDepth);
+  }
+  return {
+    items,
+    width: cursor,
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    italicCorrection: glyphs.length === 1 ? italicCorrection : 0,
+    isCharacterNucleus: glyphs.length === 1,
+    sourceSpan: nucleus.sourceSpan,
   };
 }
 
@@ -1711,11 +1727,21 @@ export function resolveMathGlyph(
   baseAtPt = 10,
   alphabet?: TexMathAlphabetCommand
 ): ResolvedMathGlyph | null {
+  return resolveMathGlyphs(nucleus, fontProfile, style, baseAtPt, alphabet)[0] ?? null;
+}
+
+export function resolveMathGlyphs(
+  nucleus: TexMathGlyphNucleus,
+  fontProfile: TexMathFontProfile = defaultTexMathFontProfile,
+  style: TexMathStyle = "text",
+  baseAtPt = 10,
+  alphabet?: TexMathAlphabetCommand
+): readonly ResolvedMathGlyph[] {
   const alphabetGlyph = alphabet
     ? defaultLuaLatexMathAlphabetGlyph(nucleus.text, alphabet, style)
     : null;
   if (alphabetGlyph) {
-    return {
+    return [{
       font: fontProfile.metricProvider.resolveFont({
         fontId: alphabetGlyph.fontId,
         atPt: textStyleAtPt(style, baseAtPt),
@@ -1724,23 +1750,23 @@ export function resolveMathGlyph(
       code: alphabetGlyph.code,
       text: nucleus.text,
       sourceSpan: nucleus.sourceSpan,
-    };
+    }];
   }
-  const resolved = defaultLuaLatexMathSymbol(nucleus.text);
-  if (!resolved) {
-    return null;
+  const resolved = defaultLuaLatexMathSymbols(nucleus.text);
+  if (resolved.length === 0) {
+    return [];
   }
-  return {
+  return resolved.map((glyph) => ({
     font: fontProfile.resolveMathFont({
-      family: resolved.family,
+      family: glyph.family,
       style,
       baseAtPt,
     }),
-    family: resolved.family,
-    code: resolved.code,
+    family: glyph.family,
+    code: glyph.code,
     text: nucleus.text,
     sourceSpan: nucleus.sourceSpan,
-  };
+  }));
 }
 
 function resolveMathAccent(
@@ -1898,38 +1924,145 @@ function accentBaseSkew(
   return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
 }
 
-function defaultLuaLatexMathSymbol(
+function defaultLuaLatexMathSymbols(
   text: string
-): { family: TexMathFontFamily; code: number } | null {
+): readonly MathGlyphSpec[] {
   if (/^[A-Za-z]$/.test(text)) {
-    return { family: "letters", code: text.charCodeAt(0) };
+    return [{ family: "letters", code: text.charCodeAt(0) }];
   }
   if (/^[0-9]$/.test(text)) {
-    return { family: "operators", code: text.charCodeAt(0) };
+    return [{ family: "operators", code: text.charCodeAt(0) }];
   }
-  switch (text) {
+  const command = text.startsWith("\\") ? text.slice(1) : text;
+  switch (command) {
+    case "Gamma":
+      return [{ family: "operators", code: 0 }];
+    case "Delta":
+      return [{ family: "operators", code: 1 }];
+    case "Theta":
+      return [{ family: "operators", code: 2 }];
+    case "Lambda":
+      return [{ family: "operators", code: 3 }];
+    case "Xi":
+      return [{ family: "operators", code: 4 }];
+    case "Pi":
+      return [{ family: "operators", code: 5 }];
+    case "Sigma":
+      return [{ family: "operators", code: 6 }];
+    case "Upsilon":
+      return [{ family: "operators", code: 7 }];
+    case "Phi":
+      return [{ family: "operators", code: 8 }];
+    case "Psi":
+      return [{ family: "operators", code: 9 }];
+    case "Omega":
+      return [{ family: "operators", code: 10 }];
+    case "alpha":
+      return [{ family: "letters", code: 11 }];
+    case "beta":
+      return [{ family: "letters", code: 12 }];
+    case "gamma":
+      return [{ family: "letters", code: 13 }];
+    case "delta":
+      return [{ family: "letters", code: 14 }];
+    case "epsilon":
+      return [{ family: "letters", code: 15 }];
+    case "zeta":
+      return [{ family: "letters", code: 16 }];
+    case "eta":
+      return [{ family: "letters", code: 17 }];
+    case "theta":
+      return [{ family: "letters", code: 18 }];
+    case "iota":
+      return [{ family: "letters", code: 19 }];
+    case "kappa":
+      return [{ family: "letters", code: 20 }];
+    case "lambda":
+      return [{ family: "letters", code: 21 }];
+    case "mu":
+      return [{ family: "letters", code: 22 }];
+    case "nu":
+      return [{ family: "letters", code: 23 }];
+    case "xi":
+      return [{ family: "letters", code: 24 }];
+    case "pi":
+      return [{ family: "letters", code: 25 }];
+    case "rho":
+      return [{ family: "letters", code: 26 }];
+    case "sigma":
+      return [{ family: "letters", code: 27 }];
+    case "tau":
+      return [{ family: "letters", code: 28 }];
+    case "upsilon":
+      return [{ family: "letters", code: 29 }];
+    case "phi":
+      return [{ family: "letters", code: 30 }];
+    case "chi":
+      return [{ family: "letters", code: 31 }];
+    case "psi":
+      return [{ family: "letters", code: 32 }];
+    case "omega":
+      return [{ family: "letters", code: 33 }];
+    case "varepsilon":
+      return [{ family: "letters", code: 34 }];
+    case "vartheta":
+      return [{ family: "letters", code: 35 }];
+    case "varpi":
+      return [{ family: "letters", code: 36 }];
+    case "varrho":
+      return [{ family: "letters", code: 37 }];
+    case "varsigma":
+      return [{ family: "letters", code: 38 }];
+    case "varphi":
+      return [{ family: "letters", code: 39 }];
+    case "cdot":
+      return [{ family: "symbols", code: 1 }];
+    case "times":
+      return [{ family: "symbols", code: 2 }];
+    case "pm":
+      return [{ family: "symbols", code: 6 }];
+    case "mp":
+      return [{ family: "symbols", code: 7 }];
+    case "le":
+    case "leq":
+      return [{ family: "symbols", code: 20 }];
+    case "ge":
+    case "geq":
+      return [{ family: "symbols", code: 21 }];
+    case "subset":
+      return [{ family: "symbols", code: 26 }];
+    case "infty":
+      return [{ family: "symbols", code: 49 }];
+    case "in":
+      return [{ family: "symbols", code: 50 }];
+    case "ne":
+    case "neq":
+      return [
+        { family: "symbols", code: 54 },
+        { family: "operators", code: 61 },
+      ];
     case "+":
     case "=":
     case "(":
     case ")":
     case "[":
     case "]":
-      return { family: "operators", code: text.charCodeAt(0) };
+      return [{ family: "operators", code: text.charCodeAt(0) }];
     case "-":
-      return { family: "symbols", code: 0 };
+      return [{ family: "symbols", code: 0 }];
     case "*":
-      return { family: "symbols", code: 3 };
+      return [{ family: "symbols", code: 3 }];
     case ",":
-      return { family: "letters", code: 59 };
+      return [{ family: "letters", code: 59 }];
     case ".":
-      return { family: "letters", code: 58 };
+      return [{ family: "letters", code: 58 }];
     case "/":
-      return { family: "letters", code: 61 };
+      return [{ family: "letters", code: 61 }];
     case "<":
     case ">":
-      return { family: "letters", code: text.charCodeAt(0) };
+      return [{ family: "letters", code: text.charCodeAt(0) }];
     default:
-      return null;
+      return [];
   }
 }
 

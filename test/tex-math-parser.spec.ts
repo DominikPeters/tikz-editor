@@ -203,6 +203,24 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses named math symbols with TeX atom classes", () => {
+    const result = parseTexMath(String.raw`\alpha+\times=\leq\neq`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph"
+        ? { atomClass: item.atomClass, text: item.nucleus.text, sourceSpan: item.sourceSpan }
+        : null
+    )).toEqual([
+      { atomClass: "ord", text: String.raw`\alpha`, sourceSpan: { start: 0, end: 6 } },
+      { atomClass: "bin", text: "+", sourceSpan: { start: 6, end: 7 } },
+      { atomClass: "bin", text: String.raw`\times`, sourceSpan: { start: 7, end: 13 } },
+      { atomClass: "rel", text: "=", sourceSpan: { start: 13, end: 14 } },
+      { atomClass: "rel", text: String.raw`\leq`, sourceSpan: { start: 14, end: 18 } },
+      { atomClass: "rel", text: String.raw`\neq`, sourceSpan: { start: 18, end: 22 } },
+    ]);
+  });
+
   it("parses TeX operator commands as op atoms with scripts", () => {
     const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
     const sum = atomAt(result, 0);

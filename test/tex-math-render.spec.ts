@@ -135,6 +135,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="65"');
   });
 
+  it("renders named Greek and relation symbols through TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\alpha+\Omega+x\leq y\neq z`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="11"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="10"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="20"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="54"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+  });
+
   it("renders TeX operators through the selected math fonts", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list);

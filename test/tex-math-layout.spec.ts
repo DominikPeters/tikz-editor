@@ -102,6 +102,35 @@ describe("TeX math hlist layout", () => {
     expect(hlist?.height).toBeGreaterThan(6);
   });
 
+  it("lays out named Greek and symbol commands through TeX math fonts", () => {
+    const result = layout(String.raw`\alpha+\beta=\gamma+\Gamma+\Omega+x\leq y\neq z`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "cmmi10", code: 11, sourceSpan: { start: 0, end: 6 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 6, end: 7 } },
+      { fontId: "cmmi10", code: 12, sourceSpan: { start: 7, end: 12 } },
+      { fontId: "cmr10", code: 61, sourceSpan: { start: 12, end: 13 } },
+      { fontId: "cmmi10", code: 13, sourceSpan: { start: 13, end: 19 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 19, end: 20 } },
+      { fontId: "cmr10", code: 0, sourceSpan: { start: 20, end: 26 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 26, end: 27 } },
+      { fontId: "cmr10", code: 10, sourceSpan: { start: 27, end: 33 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 33, end: 34 } },
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 34, end: 35 } },
+      { fontId: "cmsy10", code: 20, sourceSpan: { start: 35, end: 39 } },
+      { fontId: "cmmi10", code: 121, sourceSpan: { start: 40, end: 41 } },
+      { fontId: "cmsy10", code: 54, sourceSpan: { start: 41, end: 45 } },
+      { fontId: "cmr10", code: 61, sourceSpan: { start: 41, end: 45 } },
+      { fontId: "cmmi10", code: 122, sourceSpan: { start: 46, end: 47 } },
+    ]);
+  });
+
   it("adds math italic correction kerns after italic glyphs that need them", () => {
     const result = layout("xy");
 
