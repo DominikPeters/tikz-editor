@@ -249,6 +249,14 @@ export interface TexMathAlignedRow {
   readonly cells: readonly TexMathAlignedCell[];
   readonly sourceSpan: TexMathSourceSpan;
   readonly rowBreakSourceSpan?: TexMathSourceSpan;
+  readonly suppressTag?: boolean;
+  readonly labels?: readonly TexMathAlignedRowLabel[];
+}
+
+export interface TexMathAlignedRowLabel {
+  readonly text: string;
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly textSourceSpan: TexMathSourceSpan;
 }
 
 export interface TexMathAlignedNucleus {

@@ -32,6 +32,7 @@ interface ParseListOptions {
   readonly stopAtRight?: boolean;
   readonly stopAtAlignmentTab?: boolean;
   readonly stopAtRowBreak?: boolean;
+  readonly stopAtAlignmentMetadata?: boolean;
   readonly stopAtEnvironmentEnd?: string;
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
@@ -196,6 +197,9 @@ class TexMathParser {
         break;
       }
       if (isMathRowBreakToken(token) && options.stopAtRowBreak) {
+        break;
+      }
+      if (token.kind === "command" && options.stopAtAlignmentMetadata && alignmentMetadataCommand(token.text)) {
         break;
       }
       if (
@@ -1125,12 +1129,19 @@ class TexMathParser {
       }
 
       const cells: TexMathAlignedCell[] = [];
+      let suppressTag = false;
+      const labels: Array<{
+        readonly text: string;
+        readonly sourceSpan: TexMathSourceSpan;
+        readonly textSourceSpan: TexMathSourceSpan;
+      }> = [];
       let pendingRowSourceSpan: TexMathSourceSpan | undefined;
       while (!this.isAtEnd()) {
         const cellList = this.parseList({
           stopAtGroupClose: false,
           stopAtAlignmentTab: true,
           stopAtRowBreak: true,
+          stopAtAlignmentMetadata: true,
           stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
           suppressEllipsisGlueBeforeAlignmentTab: true,
         });
@@ -1143,6 +1154,13 @@ class TexMathParser {
           pendingRowSourceSpan ?? cellList.sourceSpan,
           cellList.sourceSpan
         );
+        const metadata = this.consumeAlignmentRowMetadata();
+        if (metadata.sourceSpan) {
+          sourceSpan = spanUnion(sourceSpan, metadata.sourceSpan);
+          pendingRowSourceSpan = spanUnion(pendingRowSourceSpan ?? metadata.sourceSpan, metadata.sourceSpan);
+        }
+        suppressTag = suppressTag || metadata.suppressTag;
+        labels.push(...metadata.labels);
 
         const separator = this.peek();
         if (separator?.kind === "character" && separator.text === "&") {
@@ -1161,6 +1179,8 @@ class TexMathParser {
           cells,
           sourceSpan: spanUnion(cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
           rowBreakSourceSpan: rowBreak.sourceSpan,
+          ...(suppressTag ? { suppressTag } : {}),
+          ...(labels.length > 0 ? { labels } : {}),
         });
         continue;
       }
@@ -1170,6 +1190,8 @@ class TexMathParser {
         rows.push({
           cells,
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
+          ...(suppressTag ? { suppressTag } : {}),
+          ...(labels.length > 0 ? { labels } : {}),
         });
         return this.maybeParseScripts(
           alignedAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
@@ -1180,6 +1202,8 @@ class TexMathParser {
         rows.push({
           cells,
           sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
+          ...(suppressTag ? { suppressTag } : {}),
+          ...(labels.length > 0 ? { labels } : {}),
         });
       }
     }
