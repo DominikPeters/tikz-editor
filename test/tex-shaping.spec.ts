@@ -312,6 +312,13 @@ type TexMathHitMapFuzzCase = {
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
 };
 
+type TexDisplayAlignHitMapFuzzCase = {
+  readonly id: string;
+  readonly source: string;
+  readonly width: number;
+  readonly rows: readonly string[];
+};
+
 function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
   const random = makeDeterministicRandom(0x54584d00 + index);
   const words = [
@@ -543,6 +550,41 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
     source,
     width: pickFuzzItem([50, 55, 70, 90, 120], random),
     offsets: [...uniqueOffsets.values()].sort((left, right) => left.offset - right.offset),
+  };
+}
+
+function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMapFuzzCase {
+  const random = makeDeterministicRandom(0x414c4947 + index);
+  const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
+  const operators = ["+", "-", "="] as const;
+  const rowCount = 2 + Math.floor(random() * 2);
+  const rows = Array.from({ length: rowCount }, () => {
+    const left = pickFuzzItem(identifiers, random);
+    const right = pickFuzzItem(identifiers, random);
+    const tail = pickFuzzItem(identifiers, random);
+    const operator = pickFuzzItem(operators, random);
+    return random() < 0.45
+      ? String.raw`\frac{${left}}{${right}}&=${tail}`
+      : `${left}&${operator}${right}`;
+  });
+  const content = rows.join(String.raw`\\`);
+  const prefix = pickFuzzItem(["Intro", "Before", "Lead"], random);
+  const suffix = pickFuzzItem(["Outro", "After", "Done"], random);
+  const body = `${prefix} \\begin{align*}${content}\\end{align*} ${suffix}`;
+  const wrappers = [
+    (inner: string) => String.raw`\begin{quote}` + inner + String.raw`\end{quote}`,
+    (inner: string) => String.raw`\begin{itemize}\item ` + inner + String.raw`\end{itemize}`,
+    (inner: string) => String.raw`\begin{enumerate}\item ` + inner + String.raw`\end{enumerate}`,
+    (inner: string) => String.raw`\begin{description}\item[Term] ` + inner + String.raw`\end{description}`,
+    (inner: string) => String.raw`\begin{quote}\begin{itemize}\item ` + inner + String.raw`\end{itemize}\end{quote}`,
+    (inner: string) => String.raw`\begin{itemize}\item ` + inner + String.raw`\item Tail\end{itemize}`,
+  ] as const;
+  const source = wrappers[index % wrappers.length](body);
+  return {
+    id: `tex-display-align-hitmap-fuzz-${index}`,
+    source,
+    width: pickFuzzItem([130, 160, 190, 220], random),
+    rows,
   };
 }
 
@@ -4383,5 +4425,73 @@ describe("simple TeX paragraph layout", () => {
       sourceStart: sourceText.indexOf("a&=b"),
       sourceEnd: sourceText.indexOf("a&=b") + "a&=b".length,
     });
+  });
+
+  it("fuzzes registered hit geometry for display alignment rows in mixed vlists", () => {
+    const cases = Array.from({ length: 36 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
+    for (const testCase of cases) {
+      const result = layoutSimpleTexParagraph(testCase.source, {
+        paragraphId: testCase.id,
+        width: testCase.width,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+        mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      });
+      expect(result.supported, testCase.source).toBe(true);
+      expect(result.report, testCase.source).not.toBeNull();
+      expect(result.vlistLayout, testCase.source).not.toBeNull();
+
+      const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+      registerTexVListLayoutsOnOutputJax(outputJax, [{
+        paragraphId: testCase.id,
+        layout: result.vlistLayout!,
+      }]);
+      const containerElement = {
+        getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+        viewBox: { baseVal: { width: result.report?.width ?? 1 } },
+        querySelectorAll: () => {
+          throw new Error("registered display alignment row fuzz should avoid rendered linebox queries");
+        },
+      };
+
+      const alignRows = getKnuthPlassVListItemGeometry({
+        outputJax,
+        paragraphId: testCase.id,
+        containerElement: containerElement as any,
+      }).filter((item) => item.hboxRole === "display-align-row");
+      expect(alignRows.length, testCase.source).toBe(testCase.rows.length);
+
+      for (const [rowIndex, row] of alignRows.entries()) {
+        const expectedSource = testCase.rows[rowIndex] + (rowIndex === testCase.rows.length - 1 ? "" : String.raw`\\`);
+        expect(row, testCase.source).toMatchObject({
+          kind: "hbox",
+          hboxRole: "display-align-row",
+          displayAlignDelimiter: "align-star",
+          displayAlignRowIndex: rowIndex,
+        });
+        expect(
+          testCase.source.slice(row.sourceStart ?? 0, row.sourceEnd ?? 0),
+          `${testCase.id} row ${rowIndex}: ${testCase.source}`
+        ).toBe(expectedSource);
+
+        const hit = getKnuthPlassVListItemFromPoint({
+          outputJax,
+          paragraphId: testCase.id,
+          containerElement: containerElement as any,
+          clientPoint: clientPoint(
+            px((row.clientLeft + row.clientRight) / 2),
+            px((row.clientTop + row.clientBottom) / 2)
+          ),
+        });
+        expect(hit, `${testCase.id} row ${rowIndex}: ${testCase.source}`).toMatchObject({
+          kind: "hbox",
+          hboxRole: "display-align-row",
+          displayAlignDelimiter: "align-star",
+          displayAlignRowIndex: rowIndex,
+          sourceStart: row.sourceStart,
+          sourceEnd: row.sourceEnd,
+        });
+      }
+    }
   });
 });
