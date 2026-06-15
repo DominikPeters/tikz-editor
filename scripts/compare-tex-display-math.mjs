@@ -67,6 +67,7 @@ function compareCase(caseSpec, args) {
     return { ...caseSpec, ok: false, mismatches, ours, tex };
   }
   compareTopLevelItems(mismatches, ours.topLevel, tex.topLevel, tolerance);
+  compareDisplayMathGlyphs(mismatches, ours.topLevel, ours.glyphs, tex.topLevel, tex.glyphs, tolerance);
   return {
     ...caseSpec,
     ok: mismatches.length === 0,
@@ -162,28 +163,71 @@ function ourTrace(caseSpec) {
       hboxRole: item.hboxRole,
       sourceSpan: item.sourceSpan,
     })),
-    glyphs: ourGlyphTraceFromReport(result.report),
+    glyphs: ourGlyphTraceFromVListItems(result.vlistLayout.items),
   };
 }
 
-function ourGlyphTraceFromReport(report) {
-  if (!report) {
-    return [];
-  }
-  return report.lines.flatMap((line) =>
-    line.segments.flatMap((segment) => {
-      if (segment.kind !== "text" && segment.kind !== "math") {
-        return [];
+function ourGlyphTraceFromVListItems(items) {
+  const glyphs = [];
+  collectOurGlyphTraceFromVListItems(glyphs, items);
+  return glyphs;
+}
+
+function collectOurGlyphTraceFromVListItems(glyphs, items) {
+  for (const item of items) {
+    if (item.item?.kind === "display-math") {
+      glyphs.push(...glyphsFromMathSvgBody(
+        item.item.box.svgBody,
+        item.x,
+        item.y + item.metrics.height,
+        item.item.kind
+      ));
+    } else if (item.item?.kind === "hbox") {
+      for (const renderItem of item.item.box.renderItems ?? []) {
+        if (renderItem.kind !== "tex-math-svg") {
+          continue;
+        }
+        glyphs.push(...glyphsFromMathSvgBody(
+          renderItem.svgBody,
+          item.x + renderItem.x,
+          item.y + renderItem.baseline,
+          item.item.role?.kind ?? item.item.kind
+        ));
       }
-      return [{
-        kind: segment.kind,
-        text: segment.text,
-        x: round(segment.x),
-        y: round(line.y ?? 0),
-        width: round(segment.width),
-      }];
-    })
-  );
+    }
+    if (item.children?.length) {
+      collectOurGlyphTraceFromVListItems(glyphs, item.children);
+    }
+  }
+}
+
+function glyphsFromMathSvgBody(svgBody, originX, baselineY, role) {
+  const glyphs = [];
+  const pathPattern = /<path\b[^>]*>/g;
+  for (const match of svgBody.matchAll(pathPattern)) {
+    const tag = match[0];
+    const fontId = readSvgAttribute(tag, "data-tex-font");
+    const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
+    const transform = readSvgAttribute(tag, "transform") ?? "";
+    const translate = /translate\(([-0-9.]+)\s+([-0-9.]+)\)/.exec(transform);
+    if (!fontId || !Number.isFinite(code) || !translate) {
+      continue;
+    }
+    glyphs.push({
+      kind: "glyph",
+      role,
+      x: round(originX + Number(translate[1]) / 100),
+      y: round(baselineY + Number(translate[2]) / 100),
+      fontId,
+      code,
+    });
+  }
+  return glyphs;
+}
+
+function readSvgAttribute(tag, name) {
+  const pattern = new RegExp(`${name}="([^"]*)"`);
+  return pattern.exec(tag)?.[1];
 }
 
 function texTrace(caseSpec, args) {
@@ -250,6 +294,7 @@ function parseTexTrace(log) {
     if (entry.kind === "glyph") {
       glyphs.push({
         kind: "glyph",
+        topIndex: entry.topIndex,
         x: round(entry.x),
         y: round(entry.y),
         fontId: entry.font,
@@ -259,6 +304,58 @@ function parseTexTrace(log) {
     }
   }
   return { topLevel, glyphs };
+}
+
+function compareDisplayMathGlyphs(mismatches, oursTopLevel, oursGlyphs, texTopLevel, texGlyphs, tolerance) {
+  const texDisplayHlistIndices = matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel);
+  const displayTexGlyphs = texGlyphs.filter((glyph) =>
+    texDisplayHlistIndices.has(glyph.topIndex)
+  );
+  compareGlyphLists(mismatches, "display math glyph", oursGlyphs, displayTexGlyphs, tolerance);
+}
+
+function matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel) {
+  const indices = new Set();
+  const ourHlists = oursTopLevel.filter((item) =>
+    item.kind === "paragraph" ||
+    item.kind === "display-math" ||
+    item.hboxRole?.kind === "display-align-row"
+  );
+  const texHlists = texTopLevel.filter((item) => item.kind === "hlist");
+  const count = Math.min(ourHlists.length, texHlists.length);
+  for (let index = 0; index < count; index++) {
+    const ours = ourHlists[index];
+    const tex = texHlists[index];
+    if (
+      (ours.kind === "display-math" || ours.hboxRole?.kind === "display-align-row") &&
+      tex?.index !== undefined
+    ) {
+      indices.add(tex.index);
+    }
+  }
+  return indices;
+}
+
+function compareGlyphLists(mismatches, label, ours, tex, tolerance) {
+  if (ours.length !== tex.length) {
+    mismatches.push(`${label} count differs: ours=${ours.length} tex=${tex.length}`);
+  }
+  const count = Math.min(ours.length, tex.length);
+  for (let index = 0; index < count; index++) {
+    const left = ours[index];
+    const right = tex[index];
+    if (!left || !right) {
+      continue;
+    }
+    if (left.code !== right.code) {
+      mismatches.push(`${label} ${index} code differs: ours=${left.code} tex=${right.code}`);
+    }
+    if (left.fontId !== right.fontId) {
+      mismatches.push(`${label} ${index} font differs: ours=${left.fontId} tex=${right.fontId}`);
+    }
+    compareNumber(mismatches, `${label} ${index} x`, left.x, right.x, tolerance);
+    compareNumber(mismatches, `${label} ${index} y`, left.y, right.y, tolerance);
+  }
 }
 
 function texSource(caseSpec) {
@@ -317,37 +414,54 @@ end
 local function node_width(n) return sp(n.width or 0) end
 local function node_height(n) return sp(n.height or 0) end
 local function node_depth(n) return sp(n.depth or 0) end
-local function glue_width(n)
-  return sp(n.width or (n.spec and n.spec.width) or 0)
+local function glue_field(n, field)
+  return sp(n[field] or (n.spec and n.spec[field]) or 0)
+end
+local function glue_order(n, field)
+  return n[field] or (n.spec and n.spec[field]) or 0
+end
+local function glue_width(n, parent)
+  local width=glue_field(n, 'width')
+  if parent then
+    local sign=parent.glue_sign or 0
+    local set=parent.glue_set or 0
+    local order=parent.glue_order or 0
+    if sign==1 and glue_order(n, 'stretch_order')==order then
+      width=width + glue_field(n, 'stretch') * set
+    elseif sign==2 and glue_order(n, 'shrink_order')==order then
+      width=width - glue_field(n, 'shrink') * set
+    end
+  end
+  return width
 end
 local function kern_width(n) return sp(n.kern or n.width or 0) end
-local function walk_hlist(list, origin_x, baseline_y)
+local function walk_hlist(list, origin_x, baseline_y, top_index, parent)
   local x=origin_x
   for n in node.traverse(list) do
     if n.id==glyph_id then
-      emit({kind='glyph', x=x, y=baseline_y, font=font_name(n.font), char=n.char, width=node_width(n)})
+      emit({kind='glyph', topIndex=top_index, x=x, y=baseline_y, font=font_name(n.font), char=n.char, width=node_width(n)})
       x=x+node_width(n)
     elseif n.id==glue_id then
-      x=x+glue_width(n)
+      x=x+glue_width(n, parent)
     elseif n.id==kern_id then
       x=x+kern_width(n)
     elseif n.id==hlist_id then
-      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0))
+      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0), top_index, n)
       x=x+node_width(n)
     elseif n.id==vlist_id then
-      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n), 1)
+      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0) - node_height(n), node_height(n), 1, top_index, n)
       x=x+node_width(n)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
     end
   end
 end
-function walk_vlist(list, origin_x, top_y, height, level)
+function walk_vlist(list, origin_x, top_y, height, level, parent_top_index, parent)
   local y=top_y
   local index=0
   for n in node.traverse(list) do
     if n.id==glue_id then
-      local size=glue_width(n)
+      local size=glue_width(n, parent)
       if level==0 then emit({scope='top', kind='glue', index=index, y=y, size=size}) end
       y=y+size
     elseif n.id==kern_id then
@@ -356,7 +470,9 @@ function walk_vlist(list, origin_x, top_y, height, level)
       local child_y=y
       local baseline=child_y+node_height(n)
       if level==0 then emit({scope='top', kind='hlist', index=index, x=origin_x + sp(n.shift or 0), y=child_y, width=node_width(n), height=node_height(n), depth=node_depth(n)}) end
-      walk_hlist(n.list, origin_x + sp(n.shift or 0), baseline)
+      local top_index = parent_top_index
+      if level==0 then top_index=index end
+      walk_hlist(n.list, origin_x + sp(n.shift or 0), baseline, top_index, n)
       y=y+node_height(n)+node_depth(n)
     elseif n.id==vlist_id then
       y=y+node_height(n)+node_depth(n)
@@ -368,7 +484,7 @@ function walk_vlist(list, origin_x, top_y, height, level)
     index=index+1
   end
 end
-walk_vlist(tex.box.tikzdisplaybox.list, 0, 0, node_height(tex.box.tikzdisplaybox), 0)
+walk_vlist(tex.box.tikzdisplaybox.list, 0, 0, node_height(tex.box.tikzdisplaybox), 0, nil, tex.box.tikzdisplaybox)
 out:close()
 `;
 }
