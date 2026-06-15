@@ -391,7 +391,7 @@ describe("TeX math SVG rendering", () => {
     const source = String.raw`Alpha \begin{equation*}y^2\end{equation*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:equation-star-display-math-provider",
-      width: 160,
+      width: 120,
       parindent: 0,
       hyphenator: { hyphenate: () => [] },
       mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
@@ -414,31 +414,45 @@ describe("TeX math SVG rendering", () => {
     )).toEqual(["Alpha", "Beta"]);
   });
 
-  it("lets TeX paragraph layout carry basic align-star display math as a vlist item", () => {
+  it("lets TeX paragraph layout carry basic align-star display math as display rows", () => {
     const source = String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:align-star-display-math-provider",
-      width: 160,
+      width: 120,
       parindent: 0,
       hyphenator: { hyphenate: () => [] },
       mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
     });
 
     expect(result.supported).toBe(true);
-    const display = result.vlistLayout?.boxReport.items.find((item) =>
-      item.itemKind === "display-math"
-    );
-    expect(display).toMatchObject({
-      itemKind: "display-math",
-      width: expect.any(Number),
-      displayMath: {
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      itemKind: "hbox",
+      x: 0,
+      y: expect.closeTo(20.760034, 5),
+      width: expect.closeTo(71.912081, 5),
+      height: expect.closeTo(8.399963, 5),
+      depth: expect.closeTo(3.600037, 5),
+      hboxRole: {
+        kind: "display-align-row",
         delimiter: "align-star",
-        contentStart: source.indexOf("a&=b"),
-        contentEnd: source.indexOf(String.raw`\end{align*}`),
+        rowIndex: 0,
       },
     });
-    expect(display?.width ?? 0).toBeGreaterThan(0);
-    const directBox = createTexDerivedInlineMathBoxProvider().getDisplayMathBox?.({
+    expect(rows[1]).toMatchObject({
+      itemKind: "hbox",
+      x: 0,
+      y: expect.closeTo(35.760034, 5),
+      width: expect.closeTo(71.912081, 5),
+      hboxRole: {
+        kind: "display-align-row",
+        rowIndex: 1,
+      },
+    });
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
       source,
       content: String.raw`a&=b\\c&=d`,
       delimiter: "align-star",
@@ -446,10 +460,11 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 120,
     });
-    expect(directBox?.svgBody).toContain('data-tex-math-hlist="true"');
-    expect(directBox?.svgBody).toContain(`data-source-start="${source.indexOf("a&=b")}"`);
-    expect(directBox?.svgBody).toContain(`data-source-start="${source.indexOf("c&=d")}"`);
+    expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-math-hlist="true"');
+    expect(directAlignment?.rows[0]?.svgBody).toContain(`data-source-start="${source.indexOf("a&=b")}"`);
+    expect(directAlignment?.rows[1]?.svgBody).toContain(`data-source-start="${source.indexOf("c&=d")}"`);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
       source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
     )).toEqual(["Alpha", "Beta"]);

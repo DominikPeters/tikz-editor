@@ -1530,6 +1530,9 @@ function renderTexHBoxRenderItemSvg(
   item: TexRenderItem,
   metricProvider: TexMetricProvider
 ): string {
+  if (item.kind === "tex-math-svg") {
+    return renderTexInlineMathSvg(item.svgBody, item.x, item.baseline);
+  }
   const font = metricProvider.resolveFont({
     fontId: item.fontId,
     atPt: item.atPt,

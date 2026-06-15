@@ -173,7 +173,7 @@ describe("TeX vlist lowering", () => {
       contentEnd: source.indexOf(String.raw`\end{equation*}`),
     });
     expect(vlist.items[5]).toMatchObject({
-      kind: "display-math",
+      kind: "display-alignment",
       delimiter: "align-star",
       content: String.raw`a&=b\\c&=d`,
       sourceSpan: {
@@ -182,8 +182,12 @@ describe("TeX vlist lowering", () => {
       },
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      box: {
+      alignment: {
         width: expect.any(Number),
+        rows: [
+          { rowIndex: 0, width: expect.any(Number) },
+          { rowIndex: 1, width: expect.any(Number) },
+        ],
       },
     });
   });

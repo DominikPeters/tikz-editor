@@ -29,6 +29,11 @@ const cases = args.cases.length > 0
         source: String.raw`Alpha \begin{equation*}\sum_i^n\end{equation*} Beta`,
         width: 120,
       },
+      {
+        id: "align-star-display",
+        source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
+        width: 120,
+      },
     ];
 
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
@@ -59,7 +64,9 @@ function compareCase(caseSpec, args) {
 
 function compareTopLevelItems(mismatches, ours, tex, tolerance) {
   const ourHlists = ours.filter((item) =>
-    item.kind === "paragraph" || item.kind === "display-math"
+    item.kind === "paragraph" ||
+    item.kind === "display-math" ||
+    item.hboxRole?.kind === "display-align-row"
   );
   const texHlists = tex.filter((item) => item.kind === "hlist");
   compareItemLists(
@@ -137,6 +144,7 @@ function ourTrace(caseSpec) {
       size: item.glue ? round(item.glue.size) : undefined,
       glue: item.glue,
       displayMath: item.displayMath,
+      hboxRole: item.hboxRole,
       sourceSpan: item.sourceSpan,
     })),
     glyphs: ourGlyphTraceFromReport(result.report),

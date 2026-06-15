@@ -75,7 +75,9 @@ function scopePathForItem(
       item.kind === "glue" ||
       item.kind === "penalty" ||
       item.kind === "rule" ||
+      item.kind === "hbox" ||
       item.kind === "display-math" ||
+      item.kind === "display-alignment" ||
       item.kind === "placeholder"
     ) &&
     item.scopePath

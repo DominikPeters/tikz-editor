@@ -10,6 +10,7 @@ import type {
 import { texVBoxRolePathForScope } from "./scope-roles.js";
 import type {
   TexGlueItem,
+  TexDisplayAlignmentItem,
   TexDisplayMathItem,
   TexParagraphInput,
   TexPenaltyItem,
@@ -75,11 +76,38 @@ export function lowerSimpleTexBlockItemsToVList(
 function displayMathItemFromSimpleTexDisplayMath(
   item: SimpleTexDisplayMathBlockItem,
   options: LowerSimpleTexBlockItemsToVListOptions
-): TexDisplayMathItem | TexPlaceholderItem {
+): TexDisplayMathItem | TexDisplayAlignmentItem | TexPlaceholderItem {
   const sourceSpan = {
     start: item.sourceStart,
     end: item.sourceEnd,
   };
+  if (item.delimiter === "align-star") {
+    const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
+      source: item.text,
+      content: item.content,
+      delimiter: item.delimiter,
+      sourceStart: item.sourceStart,
+      sourceEnd: item.sourceEnd,
+      contentStart: item.contentStart,
+      contentEnd: item.contentEnd,
+      targetWidth: options.width ?? 0,
+    }) ?? null;
+    if (!alignment) {
+      return unsupportedDisplayMathPlaceholder(item, sourceSpan);
+    }
+    return {
+      kind: "display-alignment",
+      sourceSpan,
+      scopePath: scopePathForVerticalBlockItem(item),
+      text: item.text,
+      content: item.content,
+      delimiter: item.delimiter,
+      contentStart: item.contentStart,
+      contentEnd: item.contentEnd,
+      targetWidth: options.width ?? alignment.width,
+      alignment,
+    };
+  }
   const box = options.mathBoxProvider?.getDisplayMathBox?.({
     source: item.text,
     content: item.content,
@@ -90,17 +118,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     contentEnd: item.contentEnd,
   }) ?? null;
   if (!box) {
-    return {
-      kind: "placeholder",
-      sourceSpan,
-      reason: "TeX display math rendering is not implemented for this formula.",
-      scopePath: scopePathForVerticalBlockItem(item),
-      estimated: {
-        width: 0,
-        height: 10,
-        depth: 4,
-      },
-    };
+    return unsupportedDisplayMathPlaceholder(item, sourceSpan);
   }
   return {
     kind: "display-math",
@@ -113,6 +131,23 @@ function displayMathItemFromSimpleTexDisplayMath(
     contentEnd: item.contentEnd,
     targetWidth: options.width ?? box.width,
     box,
+  };
+}
+
+function unsupportedDisplayMathPlaceholder(
+  item: SimpleTexDisplayMathBlockItem,
+  sourceSpan: TexSourceSpan
+): TexPlaceholderItem {
+  return {
+    kind: "placeholder",
+    sourceSpan,
+    reason: "TeX display math rendering is not implemented for this formula.",
+    scopePath: scopePathForVerticalBlockItem(item),
+    estimated: {
+      width: 0,
+      height: 10,
+      depth: 4,
+    },
   };
 }
 

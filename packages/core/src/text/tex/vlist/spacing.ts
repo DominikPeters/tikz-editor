@@ -5,9 +5,12 @@ import { texVListPathKey } from "./paths.js";
 import { texVBoxRolePathForParagraph } from "./scope-roles.js";
 import type {
   TexDisplayMathSkipVariant,
+  TexDisplayAlignmentItem,
   TexDisplayMathItem,
   TexGlueItem,
+  TexHBoxItem,
   TexParagraphItem,
+  TexBoxMetrics,
   TexVBoxRole,
   TexVListDocument,
   TexVListItem,
@@ -56,6 +59,9 @@ const latexArticleDisplaySkipsPt = {
 } as const;
 
 const latexNormalLineSkipPt = 1;
+const latexAmsmathAlignTopCorrectionPt = -3;
+const latexAmsmathAlignFirstRowSkipPt = 4.660034;
+const latexAmsmathAlignRowSkipPt = 3;
 
 export interface SimpleTexParagraphVerticalSkip {
   readonly blockIndex: number;
@@ -359,13 +365,19 @@ function materializeDisplayMathVerticalGlueInItems(
       items.push(displayMathBoundaryGlueItem(item, "below"));
       continue;
     }
+    if (item.kind === "display-alignment") {
+      items.push(displayMathBoundaryGlueItem(item, "above"));
+      items.push(...displayAlignmentMaterialItems(item));
+      items.push(displayMathBoundaryGlueItem(item, "below"));
+      continue;
+    }
     items.push(item);
   }
   return items;
 }
 
 function displayMathBoundaryGlueItem(
-  item: TexDisplayMathItem,
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
   side: "above" | "below"
 ): TexGlueItem {
   const skip = latexArticleDisplaySkipsPt[side].normal;
@@ -414,7 +426,7 @@ function resolveDisplayMathVerticalGlueInItems(
   const items: TexVListItem[] = [];
   let previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined;
   let previousDisplaySkipVariant: TexDisplayMathSkipVariant = "normal";
-  let previousDisplayItem: TexDisplayMathItem | undefined;
+  let previousDisplayMaterialMetrics: TexBoxMetrics | undefined;
   for (let index = 0; index < sourceItems.length; index += 1) {
     const item = sourceItems[index];
     if (!item) {
@@ -462,7 +474,7 @@ function resolveDisplayMathVerticalGlueInItems(
             options.lineHeight
           )
         ));
-      } else if (item.origin.side === "below" && previousDisplayItem) {
+      } else if (item.origin.side === "below" && previousDisplayMaterialMetrics) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,
           index,
@@ -474,7 +486,7 @@ function resolveDisplayMathVerticalGlueInItems(
             item,
             "below",
             texInterlineGlueSize(
-              previousDisplayItem.box.depth,
+              previousDisplayMaterialMetrics.depth,
               nextParagraph.ruleLeadingMetrics.height,
               options.lineHeight
             )
@@ -485,11 +497,93 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (item.kind === "display-math") {
       previousParagraphMeasurement = undefined;
-      previousDisplayItem = item;
+      previousDisplayMaterialMetrics = {
+        width: item.box.width,
+        height: item.box.height,
+        depth: item.box.depth,
+      };
+    } else if (isDisplayAlignmentRowHBox(item)) {
+      previousParagraphMeasurement = undefined;
+      previousDisplayMaterialMetrics = item.box.metrics;
     }
     items.push(item);
   }
   return items;
+}
+
+function displayAlignmentMaterialItems(
+  item: TexDisplayAlignmentItem
+): readonly TexVListItem[] {
+  const rows: TexVListItem[] = [];
+  rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignTopCorrectionPt));
+  rows.push(displayAlignmentGlueItem(item, 0));
+  rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignFirstRowSkipPt));
+  for (const row of item.alignment.rows) {
+    if (row.rowIndex > 0) {
+      rows.push(displayAlignmentGlueItem(item, 0));
+      rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignRowSkipPt));
+    }
+    rows.push(displayAlignmentRowHBox(item, row));
+  }
+  rows.push(displayAlignmentGlueItem(item, 0));
+  return rows;
+}
+
+function displayAlignmentGlueItem(
+  item: TexDisplayAlignmentItem,
+  size: number
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-interline",
+      side: "above",
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function displayAlignmentRowHBox(
+  item: TexDisplayAlignmentItem,
+  row: TexDisplayAlignmentItem["alignment"]["rows"][number]
+): TexHBoxItem {
+  return {
+    kind: "hbox",
+    sourceSpan: {
+      start: row.sourceStart,
+      end: row.sourceEnd,
+    },
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    role: {
+      kind: "display-align-row",
+      delimiter: item.delimiter,
+      rowIndex: row.rowIndex,
+    },
+    x: row.x,
+    box: {
+      metrics: {
+        width: row.width,
+        height: row.height,
+        depth: row.depth,
+      },
+      renderItems: row.svgBody
+        ? [{
+            kind: "tex-math-svg",
+            svgBody: row.svgBody,
+            x: 0,
+            baseline: row.height,
+          }]
+        : [],
+    },
+  };
+}
+
+function isDisplayAlignmentRowHBox(item: TexVListItem): item is TexHBoxItem {
+  return item.kind === "hbox" && item.role?.kind === "display-align-row";
 }
 
 function nextDisplayMathItem(

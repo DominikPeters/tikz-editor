@@ -10,6 +10,7 @@ import type {
   TexParagraphAlignment,
 } from "../ir.js";
 import type { TexMathBox } from "../layout-inline-items.js";
+import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
 
 export interface TexSourceSpan {
   readonly start: number;
@@ -82,6 +83,12 @@ export type TexRenderItem =
       readonly atPt: number;
       readonly x: number;
       readonly baseline: number;
+    }
+  | {
+      readonly kind: "tex-math-svg";
+      readonly svgBody: string;
+      readonly x: number;
+      readonly baseline: number;
     };
 
 export interface TexHitMap {
@@ -125,11 +132,16 @@ export type TexHBoxRole = {
   readonly labelDepth: number;
   readonly itemIndex: number;
   readonly blockIndex: number;
+} | {
+  readonly kind: "display-align-row";
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
+  readonly rowIndex: number;
 };
 
 export interface TexHBoxItem {
   readonly kind: "hbox";
   readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
   readonly role?: TexHBoxRole;
   readonly x?: number;
   readonly advance?: number;
@@ -269,6 +281,19 @@ export interface TexDisplayMathItem {
   readonly box: TexMathBox;
 }
 
+export interface TexDisplayAlignmentItem {
+  readonly kind: "display-alignment";
+  readonly sourceSpan: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly text: string;
+  readonly content: string;
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly targetWidth: number;
+  readonly alignment: TexMathDisplayAlignment;
+}
+
 export type TexVListItem =
   | TexParagraphItem
   | TexHBoxItem
@@ -277,6 +302,7 @@ export type TexVListItem =
   | TexPenaltyItem
   | TexRuleItem
   | TexDisplayMathItem
+  | TexDisplayAlignmentItem
   | TexPlaceholderItem;
 
 export interface TexVListDocument {
@@ -322,6 +348,11 @@ export interface TexVListBoxReportItem {
   readonly penalty?: number;
   readonly placeholderReason?: string;
   readonly displayMath?: {
+    readonly delimiter: SimpleTexDisplayMathDelimiter;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  };
+  readonly displayAlignment?: {
     readonly delimiter: SimpleTexDisplayMathDelimiter;
     readonly contentStart: number;
     readonly contentEnd: number;

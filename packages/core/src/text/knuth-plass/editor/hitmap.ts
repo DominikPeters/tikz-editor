@@ -1121,7 +1121,7 @@ function texVListHboxRoleGeometryFromReportItem(item: TexVListBoxReportItem): Pi
   | 'listLabelBlockIndex'
 > {
   const role = item.hboxRole;
-  if (!role) {
+  if (role?.kind !== 'list-label') {
     return emptyVListHboxRoleGeometry();
   }
   return {

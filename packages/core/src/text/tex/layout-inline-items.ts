@@ -58,6 +58,23 @@ export interface TexMathBox {
   readonly svgBody?: string;
 }
 
+export interface TexMathDisplayAlignmentRowBox extends TexMathBox {
+  readonly rowIndex: number;
+  readonly x: number;
+}
+
+export interface TexMathDisplayAlignment {
+  readonly source: string;
+  readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
+  readonly width: number;
+  readonly rows: readonly TexMathDisplayAlignmentRowBox[];
+}
+
 export interface TexMathBoxProvider {
   readonly getInlineMathBox: (params: {
     readonly source: string;
@@ -77,6 +94,16 @@ export interface TexMathBoxProvider {
     readonly contentStart: number;
     readonly contentEnd: number;
   }) => TexMathBox | null;
+  readonly getDisplayMathAlignment?: (params: {
+    readonly source: string;
+    readonly content: string;
+    readonly delimiter: SimpleTexDisplayMathDelimiter;
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+    readonly targetWidth: number;
+  }) => TexMathDisplayAlignment | null;
 }
 
 export interface TexLayoutMathItem {
