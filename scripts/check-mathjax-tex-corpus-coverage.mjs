@@ -16,6 +16,7 @@ if (!existsSync(distEntry)) {
 const {
   createTexDerivedInlineMathBoxProvider,
   layoutTexMathList,
+  parseTexMathAlignedBody,
   parseTexMath,
 } = await import(distEntry);
 
@@ -169,7 +170,7 @@ function checkEntry(entry, provider) {
   const contentStart = alignment?.contentStart ?? 0;
   let parsed;
   try {
-    parsed = parseTexMath(content, { sourceOffset: contentStart });
+    parsed = parseProviderContent(providerKind, content, contentStart);
   } catch (error) {
     return resultFor(entry, {
       topStatus: "parser-error",
@@ -245,6 +246,19 @@ function checkEntry(entry, provider) {
     providerKind,
     diagnostics,
     layoutErrors: [],
+  });
+}
+
+function parseProviderContent(providerKind, content, contentStart) {
+  if (providerKind === "display-alignment") {
+    return parseTexMathAlignedBody(content, {
+      sourceOffset: contentStart,
+      suppressTerminalEllipsisGlue: true,
+    });
+  }
+  return parseTexMath(content, {
+    sourceOffset: contentStart,
+    suppressTerminalEllipsisGlue: providerKind === "display-box",
   });
 }
 

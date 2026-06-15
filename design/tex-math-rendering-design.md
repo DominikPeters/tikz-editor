@@ -591,6 +591,34 @@ Use explicit gates:
 A construct is "implemented" only at `default-on`. Before that, it must be
 gated by capability flags or explicit unsupported placeholders.
 
+### Current Quality Gap Inventory
+
+The quality pass on the current implementation shows that the existing
+supported grammar is mostly healthy under the available gates:
+
+- parser unit/layout/render suites pass for the current math subsystem;
+- parser fuzz is total over 10,000 generated inputs with random source offsets;
+- isolated math fuzz passes against LuaLaTeX for the current formula grammar;
+- inline text/math paragraph glyph fuzz passes for the current mixed formula
+  grammar at 80, 120, and 160 pt widths;
+- display construct and display fuzz matrices pass at the current 0.03 pt
+  tolerance;
+- aligned math fuzz passes for the currently supported alignment grammar.
+
+The main gaps are therefore not isolated command coverage. The next robustness
+work should focus on:
+
+- running larger versions of the same fuzz matrices and making them cheap
+  enough for regular use;
+- comparing glyph traces for all paragraph and display matrices in absolute
+  document coordinates;
+- expanding editor hit-test fuzz beyond simple inline formulas into scripts,
+  fractions, radicals, alignment rows, and line breaks around math;
+- documenting each known intentional mismatch between MathJax diagnostic tests
+  and LuaLaTeX behavior before using MathJax corpus failures as work items;
+- adding oracle fixtures for vertical-list contexts that combine paragraphs,
+  display math, lists, and quotes.
+
 ## Phased Implementation
 
 ### Phase 0: Remove MathJax From the New Path

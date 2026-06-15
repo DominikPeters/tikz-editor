@@ -40,6 +40,7 @@ export type {
   TexMathUnsupportedNucleus,
 } from "./ir.js";
 export {
+  parseTexMathAlignedBody,
   parseTexMath,
   tokenizeTexMath,
   type ParseTexMathOptions,
