@@ -1006,18 +1006,21 @@ function layoutFractionNucleus(
     shiftDown += delta2;
   }
 
+  const reboxedNumerator = reboxSingleCharacterItalicCorrection(numerator, fractionWidth);
+  const reboxedDenominator = reboxSingleCharacterItalicCorrection(denominator, fractionWidth);
+
   const numeratorChild = childHList(
     "nucleus",
     TEX_NULL_DELIMITER_SPACE_PT + (fractionWidth - numerator.width) / 2,
     -shiftUp,
-    numerator,
+    reboxedNumerator,
     numerator.sourceSpan
   );
   const denominatorChild = childHList(
     "nucleus",
     TEX_NULL_DELIMITER_SPACE_PT + (fractionWidth - denominator.width) / 2,
     shiftDown,
-    denominator,
+    reboxedDenominator,
     denominator.sourceSpan
   );
   const rule = {
@@ -1050,7 +1053,7 @@ function layoutFractionList(
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
-  return result.supported ? result.hlist : null;
+  return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 
 function layoutRadicalNucleus(
@@ -1130,7 +1133,7 @@ function layoutRadicandList(
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
-  return result.supported ? result.hlist : null;
+  return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 
 function layoutAccentBase(
@@ -2260,7 +2263,7 @@ function layoutScriptList(
     return null;
   }
   return {
-    ...result.hlist,
+    ...omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list),
     width: roundTexPt(result.hlist.width + TEX_SCRIPT_SPACE_PT),
   };
 }
@@ -2274,7 +2277,60 @@ function layoutLimitList(
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
-  return result.supported ? result.hlist : null;
+  return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
+}
+
+function omitSingleCharacterCleanBoxItalicCorrection(
+  hlist: TexMathHList,
+  list: TexMathList
+): TexMathHList {
+  if (!isSingleCharacterCleanBoxList(list)) {
+    return hlist;
+  }
+  const last = hlist.items.at(-1);
+  if (last?.kind !== "kern" || last.reason !== "italic-correction") {
+    return hlist;
+  }
+  return {
+    ...hlist,
+    items: hlist.items.slice(0, -1),
+  };
+}
+
+function reboxSingleCharacterItalicCorrection(hlist: TexMathHList, targetWidth: number): TexMathHList {
+  if (hlist.width === targetWidth || hlist.items.length !== 1) {
+    return hlist;
+  }
+  const glyph = hlist.items[0];
+  if (glyph?.kind !== "glyph") {
+    return hlist;
+  }
+  const italicCorrection = roundTexPt(hlist.width - glyph.width);
+  if (italicCorrection === 0) {
+    return hlist;
+  }
+  return {
+    ...hlist,
+    items: [
+      glyph,
+      {
+        kind: "kern",
+        x: roundTexPt(glyph.x + glyph.width),
+        width: italicCorrection,
+        reason: "italic-correction",
+        sourceSpan: glyph.sourceSpan,
+      },
+    ],
+  };
+}
+
+function isSingleCharacterCleanBoxList(list: TexMathList): boolean {
+  const item = list.items[0];
+  return list.items.length === 1 &&
+    item?.kind === "atom" &&
+    !item.subscript &&
+    !item.superscript &&
+    item.nucleus.kind === "glyph";
 }
 
 function childHList(

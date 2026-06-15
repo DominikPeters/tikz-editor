@@ -445,6 +445,39 @@ describe("TeX math hlist layout", () => {
     expect(superscript?.items.map((item) => item.kind)).toEqual(["glyph", "hlist"]);
   });
 
+  it("keeps trailing script italic correction in width without emitting a kern node", () => {
+    const superscript = layout("x^y");
+    expect(superscript.supported).toBe(true);
+    expect(superscript.hlist?.width).toBeCloseTo(10.522037, 5);
+    expect(flattenGlyphItems(superscript.hlist?.items ?? []).map((glyph) => glyph.code)).toEqual([120, 121]);
+    expect(superscript.hlist?.items.some((item) => item.kind === "kern")).toBe(false);
+
+    const subscript = layout("x_y");
+    expect(subscript.supported).toBe(true);
+    expect(subscript.hlist?.width).toBeCloseTo(10.522037, 5);
+    expect(subscript.hlist?.items.some((item) => item.kind === "kern")).toBe(false);
+
+    const fraction = layout(String.raw`\frac{2}{\beta}`);
+    expect(fraction.supported).toBe(true);
+    const denominator = fraction.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(denominator?.items.some((item) => item.kind === "kern")).toBe(false);
+    expect(denominator?.width).toBeCloseTo(4.894141, 5);
+  });
+
+  it("restores TeX rebox italic correction when centering one-character fraction boxes", () => {
+    const fraction = layout(String.raw`\frac{z}{x}`);
+
+    expect(fraction.supported).toBe(true);
+    const numerator = fraction.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(numerator?.items.map((item) => item.kind)).toEqual(["glyph", "kern"]);
+    expect(numerator?.items[1]).toMatchObject({
+      kind: "kern",
+      x: expect.closeTo(3.820649, 5),
+      width: expect.closeTo(0.287035, 5),
+      reason: "italic-correction",
+    });
+  });
+
   it("uses TeX cramped styles for nested scripts inside subscripts", () => {
     const result = layout("x_{y^2}");
 

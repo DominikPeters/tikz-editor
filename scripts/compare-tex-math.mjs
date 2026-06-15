@@ -14,8 +14,13 @@ const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
   ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
   : [];
+const generatedMathFormulas = args.mathFuzzCases > 0
+  ? generateMathFuzzFormulas(args.mathFuzzCases, args.seed)
+  : [];
 const formulas = args.formulas.length > 0
   ? args.formulas
+  : generatedMathFormulas.length > 0
+    ? generatedMathFormulas
   : generatedAlignedFormulas.length > 0
     ? generatedAlignedFormulas
   : [
@@ -120,7 +125,11 @@ if (args.summaryOnly) {
     cases: formulas.length,
     failed: failed.length,
     seed: args.seed,
-    mode: generatedAlignedFormulas.length > 0 ? "aligned-fuzz" : "fixed",
+    mode: generatedMathFormulas.length > 0
+      ? "math-fuzz"
+      : generatedAlignedFormulas.length > 0
+        ? "aligned-fuzz"
+        : "fixed",
     failures: failed,
   }, null, 2));
 } else {
@@ -132,7 +141,19 @@ if (failed.length > 0) {
 
 function compareFormula(formula, tolerance) {
   const ours = ourTrace(formula);
-  const tex = texTrace(formula);
+  let tex;
+  try {
+    tex = texTrace(formula);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      formula,
+      ok: false,
+      mismatches: [`TeX oracle failed: ${message}`],
+      ours,
+      tex: { items: [], width: 0 },
+    };
+  }
   const mismatches = [];
   if (!ours.supported) {
     mismatches.push(`our layout unsupported: ${ours.errors.map((error) => error.message).join("; ")}`);
@@ -482,6 +503,7 @@ function readArgs() {
   const formulas = [];
   let tolerance = 0.01;
   let alignedFuzzCases = 0;
+  let mathFuzzCases = 0;
   let seed = 20260615;
   let summaryOnly = false;
   for (let index = 2; index < process.argv.length; index++) {
@@ -498,6 +520,10 @@ function readArgs() {
       alignedFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--aligned-fuzz");
     } else if (arg.startsWith("--aligned-fuzz=")) {
       alignedFuzzCases = readNonNegativeInteger(arg.slice("--aligned-fuzz=".length), "--aligned-fuzz");
+    } else if (arg === "--math-fuzz") {
+      mathFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--math-fuzz");
+    } else if (arg.startsWith("--math-fuzz=")) {
+      mathFuzzCases = readNonNegativeInteger(arg.slice("--math-fuzz=".length), "--math-fuzz");
     } else if (arg === "--seed") {
       seed = readNonNegativeInteger(process.argv[++index] ?? "", "--seed");
     } else if (arg.startsWith("--seed=")) {
@@ -506,7 +532,7 @@ function readArgs() {
       summaryOnly = true;
     }
   }
-  return { formulas, tolerance, alignedFuzzCases, seed, summaryOnly };
+  return { formulas, tolerance, alignedFuzzCases, mathFuzzCases, seed, summaryOnly };
 }
 
 function readNonNegativeInteger(raw, label) {
@@ -535,6 +561,127 @@ function generateAlignedFuzzFormulas(cases, seed) {
     formulas.push(String.raw`\begin{aligned}` + rows.join(String.raw`\\`) + String.raw`\end{aligned}`);
   }
   return formulas;
+}
+
+function generateMathFuzzFormulas(cases, seed) {
+  const rng = makeRng(seed);
+  const formulas = [];
+  for (let index = 0; index < cases; index++) {
+    formulas.push(randomBoundedMathFormula(rng));
+  }
+  return formulas;
+}
+
+function randomBoundedMathFormula(rng) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const formula = randomMathFormula(rng);
+    if (formula.length <= 140) {
+      return formula;
+    }
+  }
+  return String.raw`\frac{x_1}{y^2}`;
+}
+
+function randomMathFormula(rng) {
+  const termCount = 1 + randomInt(rng, 3);
+  let formula = randomMathTerm(rng, 0);
+  for (let index = 1; index < termCount; index++) {
+    formula += randomMathInfix(rng) + randomMathTerm(rng, 0);
+  }
+  return formula;
+}
+
+function randomMathTerm(rng, depth) {
+  const choices = depth > 0
+    ? ["atom", "group"]
+    : ["atom", "group", "fraction", "radical", "left-right"];
+  const choice = choices[randomInt(rng, choices.length)] ?? "atom";
+  let term;
+  if (choice === "fraction") {
+    term = String.raw`\frac{` + randomSimpleExpression(rng) + "}{" +
+      randomSimpleExpression(rng) + "}";
+  } else if (choice === "radical") {
+    term = String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
+  } else if (choice === "left-right") {
+    term = randomLeftRightFormula(rng);
+  } else if (choice === "group") {
+    term = "{" + randomSimpleExpression(rng) + "}";
+  } else {
+    term = randomMathAtom(rng);
+  }
+  return choice === "atom" || choice === "group"
+    ? maybeWithScripts(term, rng, depth)
+    : term;
+}
+
+function randomSimpleExpression(rng) {
+  const count = 1 + randomInt(rng, 3);
+  let formula = maybeWithScripts(randomMathAtom(rng), rng, 1);
+  for (let index = 1; index < count; index++) {
+    formula += randomMathInfix(rng) + maybeWithScripts(randomMathAtom(rng), rng, 1);
+  }
+  return formula;
+}
+
+function randomLeftRightFormula(rng) {
+  const pairs = [
+    ["(", ")"],
+    ["[", "]"],
+    [String.raw`\lbrace`, String.raw`\rbrace`],
+    [String.raw`\langle`, String.raw`\rangle`],
+    ["|", "|"],
+  ];
+  const [left, right] = pairs[randomInt(rng, pairs.length)] ?? ["(", ")"];
+  const leftSeparator = left.startsWith("\\") ? " " : "";
+  return String.raw`\left` + left + leftSeparator + randomSimpleExpression(rng) + String.raw`\right` + right;
+}
+
+function maybeWithScripts(term, rng, depth) {
+  if (depth >= 2) {
+    return term;
+  }
+  const scriptChoice = randomInt(rng, 5);
+  if (scriptChoice === 0) {
+    return term + "^{" + randomMathScript(rng, depth + 1) + "}";
+  }
+  if (scriptChoice === 1) {
+    return term + "_{" + randomMathScript(rng, depth + 1) + "}";
+  }
+  if (scriptChoice === 2) {
+    return term + "_{" + randomMathScript(rng, depth + 1) + "}^{" + randomMathScript(rng, depth + 1) + "}";
+  }
+  return term;
+}
+
+function randomMathScript(rng, depth) {
+  if (depth >= 2) {
+    return randomMathAtom(rng);
+  }
+  const choices = [
+    randomMathAtom(rng),
+    randomMathAtom(rng) + "^{" + randomMathAtom(rng) + "}",
+    randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
+    String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+  ];
+  return choices[randomInt(rng, choices.length)] ?? "x";
+}
+
+function randomMathAtom(rng) {
+  const atoms = [
+    "a", "b", "c", "x", "y", "z",
+    "1", "2", "3",
+    String.raw`\alpha`,
+    String.raw`\beta`,
+    String.raw`\gamma`,
+    String.raw`\infty`,
+    String.raw`\sum`,
+  ];
+  return atoms[randomInt(rng, atoms.length)] ?? "x";
+}
+
+function randomMathInfix(rng) {
+  const infixes = ["+", "-", "=", String.raw` \leq `, String.raw` \in `, String.raw` \subset `];
+  return infixes[randomInt(rng, infixes.length)] ?? "+";
 }
 
 function randomLeftAlignedCell(rng) {
