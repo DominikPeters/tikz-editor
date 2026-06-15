@@ -120,6 +120,29 @@ function makeLineElement(
   };
 }
 
+function makeLineElementsFromVListLayout(
+  report: ParagraphLayoutReport,
+  layout: TexVListLayout | null | undefined
+): any[] {
+  const placementByLine = new Map(
+    (layout?.linePlacements ?? []).map((placement) => [placement.lineIndex, placement])
+  );
+  return report.lines.map((line, fallbackIndex) => {
+    const placement = placementByLine.get(line.lineIndex);
+    const top = placement?.y ?? fallbackIndex * 12;
+    const height = placement?.height ?? 12;
+    return makeLineElement(
+      {
+        left: placement?.x ?? 0,
+        top,
+        right: (placement?.x ?? 0) + report.width,
+        bottom: top + Math.max(1, height),
+      },
+      report.width
+    );
+  });
+}
+
 function makeVListBoxElement(
   bounds: { left: number; top: number; right: number; bottom: number },
   attributes: Record<string, string>
@@ -3984,6 +4007,86 @@ describe("simple TeX paragraph layout", () => {
     expect(Number(radicandSelection.rects[0]?.bounds.maxX)).toBeCloseTo(radicalConstruct?.xEnd ?? 0, 6);
   });
 
+  it("keeps hit testing coherent for inline math fragmented across line breaks", async () => {
+    const sourceText = String.raw`Alpha $x+y=z+m+n$ beta`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-fragment-hitmap",
+      width: 40,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+    expect(report?.lines.length).toBeGreaterThan(2);
+    expect(report?.lines.some((line) =>
+      line.segments.some((segment) =>
+        segment.kind === "math" &&
+        (segment.sourceStartRaw ?? 0) > sourceText.indexOf("x") &&
+        (segment.sourceEndRaw ?? 0) < sourceText.indexOf("$ beta")
+      )
+    )).toBe(true);
+
+    const outputJax = {
+      tex2svg: () => {
+        throw new Error("MathJax prefix measurement should not be used for fragmented TeX-derived math hit testing.");
+      },
+      linebreaks: { getReports: () => report ? [report] : [] },
+    };
+    const containerElement = {
+      querySelectorAll: () => makeLineElementsFromVListLayout(report!, result.vlistLayout),
+    };
+    const sampledOffsets = [
+      sourceText.indexOf("x"),
+      sourceText.indexOf("y"),
+      sourceText.indexOf("z"),
+      sourceText.indexOf("m"),
+      sourceText.indexOf("n"),
+    ];
+
+    for (const offset of sampledOffsets) {
+      const point = await getKnuthPlassPointFromOffset(outputJax, {
+        paragraphId: "tex:inline-math-fragment-hitmap",
+        sourceText,
+        containerElement,
+        offset,
+      });
+      expect(point.error?.message ?? null, `${sourceText} @ ${offset}`).toBeNull();
+      expect(point).toMatchObject({
+        ok: true,
+        offset,
+        kind: "math",
+        snappedToMathPrefix: false,
+      });
+
+      const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+        paragraphId: "tex:inline-math-fragment-hitmap",
+        sourceText,
+        containerElement,
+        clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+      });
+      expect(caret.error?.message ?? null, `${sourceText} @ ${offset}`).toBeNull();
+      expect(caret).toMatchObject({
+        ok: true,
+        offset,
+        kind: "math",
+        snappedToMathPrefix: false,
+      });
+    }
+
+    const crossFragmentSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-fragment-hitmap",
+      sourceText,
+      containerElement,
+      startOffset: sourceText.indexOf("y"),
+      endOffset: sourceText.indexOf("m") + 1,
+    });
+    expect(crossFragmentSelection.error?.message ?? null).toBeNull();
+    expect(crossFragmentSelection.ok).toBe(true);
+    expect(crossFragmentSelection.rects.length).toBeGreaterThan(1);
+  });
+
   it("fuzzes editor hit maps for mixed TeX-derived text and inline math", async () => {
     const cases = Array.from({ length: 64 }, (_, index) => buildTexMathHitMapFuzzCase(index));
     for (const testCase of cases) {
@@ -4006,17 +4109,7 @@ describe("simple TeX paragraph layout", () => {
         linebreaks: { getReports: () => [report] },
       };
       const containerElement = {
-        querySelectorAll: () => report.lines.map((line, lineIndex) =>
-          makeLineElement(
-            {
-              left: 0,
-              top: lineIndex * 12,
-              right: report.width,
-              bottom: lineIndex * 12 + 10,
-            },
-            report.width
-          )
-        ),
+        querySelectorAll: () => makeLineElementsFromVListLayout(report, result.vlistLayout),
       };
 
       const sampledOffsets = testCase.offsets.slice(0, 24);
