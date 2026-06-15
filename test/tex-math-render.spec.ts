@@ -119,6 +119,20 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-source-end="10"');
   });
 
+  it("renders math alphabet glyphs through vendored CM font paths", () => {
+    const parsed = parseTexMath(String.raw`\mathbf{x}+\mathsf{x}+\mathit{x}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmbx10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmss10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmti10" data-tex-glyph="120"');
+  });
+
   it("renders TeX operators through the selected math fonts", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list);

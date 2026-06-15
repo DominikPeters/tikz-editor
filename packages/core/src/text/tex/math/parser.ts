@@ -2,6 +2,7 @@ import type {
   TexMathAtom,
   TexMathAtomClass,
   TexMathAccentCommand,
+  TexMathAlphabetCommand,
   TexMathAlignedCell,
   TexMathAlignedRow,
   TexMathDiagnostic,
@@ -251,6 +252,10 @@ class TexMathParser {
       if (commandName(token.text) === "text") {
         return this.parseText(allowScripts);
       }
+      const alphabet = alphabetCommandName(token.text);
+      if (alphabet) {
+        return this.parseAlphabet(alphabet, allowScripts);
+      }
       const accent = accentCommandName(token.text);
       if (accent) {
         return this.parseAccent(accent, allowScripts);
@@ -385,6 +390,27 @@ class TexMathParser {
         kind: "text",
         text: content.text,
         textSourceSpan: content.textSourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseAlphabet(
+    alphabet: TexMathAlphabetCommand,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const content = this.parseRequiredGroup(command.sourceSpan, `${command.text} content`);
+    const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "alphabet",
+        alphabet,
+        list: content?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },
       sourceSpan,
@@ -1096,6 +1122,21 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "tilde";
     case "vec":
       return "vec";
+    default:
+      return null;
+  }
+}
+
+function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
+  switch (commandName(command)) {
+    case "mathbf":
+      return "mathbf";
+    case "mathit":
+      return "mathit";
+    case "mathrm":
+      return "mathrm";
+    case "mathsf":
+      return "mathsf";
     default:
       return null;
   }

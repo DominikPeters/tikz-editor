@@ -261,6 +261,47 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out math alphabet commands with LuaLaTeX CM alphabet fonts", () => {
+    const italic = layout(String.raw`\mathit{ABC123}`);
+    expect(italic.supported).toBe(true);
+    expect(flattenGlyphItems(italic.hlist?.items ?? []).map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmti10", code: 65 },
+      { fontId: "cmti10", code: 66 },
+      { fontId: "cmti10", code: 67 },
+      { fontId: "cmti10", code: 49 },
+      { fontId: "cmti10", code: 50 },
+      { fontId: "cmti10", code: 51 },
+    ]);
+    expect(italic.hlist?.width).toBeCloseTo(38.316452, 5);
+
+    const alphabets = layout(String.raw`\mathrm{x}+\mathbf{x}+\mathsf{x}`);
+    expect(alphabets.supported).toBe(true);
+    expect(flattenGlyphItems(alphabets.hlist?.items ?? []).map((glyph) => glyph.fontId))
+      .toEqual(["cmr10", "cmr10", "cmbx10", "cmr10", "cmss10"]);
+  });
+
+  it("uses exact script variants for math alphabet commands", () => {
+    const result = layout(String.raw`x_{y_{\mathbf{i}}}+x_{\mathsf{i}}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      atPt: glyph.atPt,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "cmmi7", atPt: 7, code: 121 },
+      { fontId: "cmbx5", atPt: 5, code: 105 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "cmss8", atPt: 7, code: 105 },
+    ]);
+  });
+
   it("lays out nested scripts through recursive script lists", () => {
     const result = layout("x^{y_i}");
 

@@ -152,6 +152,33 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses math alphabet commands as source-spanned list nuclei", () => {
+    const result = parseTexMath(String.raw`\mathbf{x_i}`, { sourceOffset: 20 });
+    const bold = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(bold).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 20, end: 32 },
+      nucleus: {
+        kind: "alphabet",
+        alphabet: "mathbf",
+        commandSourceSpan: { start: 20, end: 27 },
+        sourceSpan: { start: 20, end: 32 },
+      },
+    });
+    expect(bold.nucleus.kind === "alphabet" ? bold.nucleus.list.sourceSpan : null)
+      .toEqual({ start: 28, end: 31 });
+    const base = bold.nucleus.kind === "alphabet"
+      ? bold.nucleus.list.items[0]
+      : null;
+    expect(base).toMatchObject({
+      kind: "atom",
+      nucleus: { kind: "glyph", text: "x" },
+      subscript: { sourceSpan: { start: 29, end: 31 } },
+    });
+  });
+
   it("parses TeX operator commands as op atoms with scripts", () => {
     const result = parseTexMath(String.raw`\sum_i^n+\lim_{x}`);
     const sum = atomAt(result, 0);

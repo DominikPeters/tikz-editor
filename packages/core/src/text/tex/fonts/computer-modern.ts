@@ -12,10 +12,14 @@ import { shapeOt1Text } from "../shaping/shape.js";
 export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmr10",
   "cmbx10",
+  "cmbx7",
+  "cmbx5",
   "cmti10",
+  "cmti7",
   "cmbxti10",
   "cmtt10",
   "cmss10",
+  "cmss8",
   "cmssi10",
   "cmssbx10",
   "cmcsc10",
@@ -44,6 +48,13 @@ export const DEFAULT_COMPUTER_MODERN_MATH_FONTS = [
   "cmsy7",
   "cmsy5",
   "cmex10",
+  "cmbx10",
+  "cmbx7",
+  "cmbx5",
+  "cmti10",
+  "cmti7",
+  "cmss10",
+  "cmss8",
 ] as const;
 
 export type DefaultComputerModernMathFont = typeof DEFAULT_COMPUTER_MODERN_MATH_FONTS[number];
