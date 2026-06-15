@@ -326,6 +326,27 @@ describe("TeX math hlist layout", () => {
       y: expect.closeTo(-3.62892, 5),
     });
     expect(scriptedGroup.hlist?.width).toBeCloseTo(27.685287, 6);
+
+    const singleAtomGroup = layout(String.raw`{\beta}_{1}`);
+    expect(singleAtomGroup.supported).toBe(true);
+    expect(singleAtomGroup.hlist?.width).toBeCloseTo(10.142389, 5);
+    expect(singleAtomGroup.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "hlist"]);
+    expect(singleAtomGroup.hlist?.items[1]).toMatchObject({
+      kind: "hlist",
+      role: "subscript",
+      x: expect.closeTo(5.65626, 5),
+      y: expect.closeTo(1.5, 5),
+    });
+
+    const groupedLargeSubscript = layout(String.raw`{\beta}_{\sum^{\gamma}}`);
+    expect(groupedLargeSubscript.supported).toBe(true);
+    expect(groupedLargeSubscript.hlist?.width).toBeCloseTo(21.293605, 5);
+    const groupedLargeGlyphs = flattenGlyphItems(groupedLargeSubscript.hlist?.items ?? []);
+    expect(groupedLargeGlyphs.map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
+      "cmmi10/12",
+      "cmex10/80",
+      "cmmi5/13",
+    ]);
   });
 
   it("lays out text command nuclei through the document text font profile", () => {
@@ -835,6 +856,79 @@ describe("TeX math hlist layout", () => {
     );
     expect(singleRow.supported).toBe(true);
     expect(singleRow.hlist?.width).toBeCloseTo(33.880707, 3);
+  });
+
+  it("lays out matrix environments with TeX array struts and centered columns", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{matrix}a&b\\c&d\end{matrix}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(20.49078, 5);
+    expect(result.hlist?.height).toBeCloseTo(14.5, 5);
+    expect(result.hlist?.depth).toBeCloseTo(9.5, 5);
+    expect(result.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "matrix-row", y: expect.closeTo(-6.100037, 5) },
+      { kind: "hlist", role: "matrix-row", y: expect.closeTo(5.899963, 5) },
+    ]);
+    const firstRow = result.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const secondRow = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow?.items).toMatchObject([
+      { kind: "hlist", role: "matrix-cell", x: 0 },
+      { kind: "hlist", role: "matrix-cell", x: expect.closeTo(15.742505, 5) },
+    ]);
+    expect(secondRow?.items).toMatchObject([
+      { kind: "hlist", role: "matrix-cell", x: expect.closeTo(0.47917, 5) },
+      { kind: "hlist", role: "matrix-cell", x: expect.closeTo(15.2859, 5) },
+    ]);
+  });
+
+  it("uses amsmath cmex script sizing inside matrix cells", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{matrix}3_{\sum}\end{matrix}`).list
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(13.902834, 5);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.atPt}/${glyph.code}`)).toEqual([
+      "cmr10/10/51",
+      "cmex7/7/80",
+    ]);
+    expect(glyphs[1]).toMatchObject({
+      width: expect.closeTo(8.402814, 5),
+      y: expect.closeTo(-5.250046, 5),
+    });
+  });
+
+  it("lays out pmatrix as an amsmath matrix wrapped in TeX-sized delimiters", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{pmatrix}a&b\\c&d\end{pmatrix}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(35.21308, 5);
+    expect(result.hlist?.height).toBeCloseTo(14.50012, 5);
+    expect(result.hlist?.depth).toBeCloseTo(9.50012, 5);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
+      "cmex10/18",
+      "cmmi10/97",
+      "cmmi10/98",
+      "cmmi10/99",
+      "cmmi10/100",
+      "cmex10/19",
+    ]);
+    expect(glyphs[0]).toMatchObject({
+      x: 0,
+      y: expect.closeTo(-14.10013, 5),
+    });
+    expect(glyphs.at(-1)).toMatchObject({
+      x: expect.closeTo(27.85193, 5),
+      y: expect.closeTo(-14.10013, 5),
+    });
   });
 
   it("lets explicit nolimits keep display operators on side scripts", () => {

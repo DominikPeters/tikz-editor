@@ -29,6 +29,9 @@ const DEFAULT_FONTS = [
   "cmsy7",
   "cmsy5",
   "cmex10",
+  "cmex9",
+  "cmex8",
+  "cmex7",
 ];
 const DEFAULT_OTF_GLYPHS = [
   {

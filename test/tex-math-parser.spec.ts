@@ -445,6 +445,71 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses matrix environments into source-spanned rows and centered cells", () => {
+    const source = String.raw`\begin{pmatrix}a&b\\c&d\end{pmatrix}`;
+    const result = parseTexMath(source, { sourceOffset: 3 });
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 3, end: 3 + source.length },
+      nucleus: {
+        kind: "matrix",
+        environment: "pmatrix",
+        beginSourceSpan: { start: 3, end: 9 },
+        endSourceSpan: {
+          start: 3 + source.indexOf(String.raw`\end{pmatrix}`),
+          end: 3 + source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "matrix") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) =>
+      row.cells.map((cell) => ({
+        sourceSpan: cell.sourceSpan,
+        itemCount: cell.list.items.length,
+      }))
+    )).toEqual([
+      [
+        { sourceSpan: { start: 18, end: 19 }, itemCount: 1 },
+        { sourceSpan: { start: 20, end: 21 }, itemCount: 1 },
+      ],
+      [
+        { sourceSpan: { start: 23, end: 24 }, itemCount: 1 },
+        { sourceSpan: { start: 25, end: 26 }, itemCount: 1 },
+      ],
+    ]);
+  });
+
+  it("reports missing matrix environment ends without throwing", () => {
+    const result = parseTexMath(String.raw`\begin{pmatrix}a&b`);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "error",
+        code: "missing-environment-end",
+        message: String.raw`Expected \end{pmatrix} to close math environment.`,
+        sourceSpan: { start: 0, end: 6 },
+      },
+    ]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "matrix",
+      environment: "pmatrix",
+      rows: [
+        {
+          cells: [
+            { sourceSpan: { start: 15, end: 16 } },
+            { sourceSpan: { start: 17, end: 18 } },
+          ],
+        },
+      ],
+    });
+  });
+
   it("maps TeX left-right delimiter commands to canonical delimiter ids", () => {
     const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert`);
     const groups = result.list.items.filter((item): item is ReturnType<typeof atomAt> => item.kind === "atom");

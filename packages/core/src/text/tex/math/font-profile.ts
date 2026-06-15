@@ -98,11 +98,36 @@ const defaultManifest = [
   },
 ] as const satisfies readonly TexMathFontManifestEntry[];
 
+const amsMathManifest = [
+  ...defaultManifest.slice(0, 3),
+  {
+    family: "extension",
+    text: "cmex10",
+    script: "cmex7",
+    scriptscript: "cmex7",
+  },
+] as const satisfies readonly TexMathFontManifestEntry[];
+
 export function luaLatexDefaultMathFontId(
   family: TexMathFontFamily,
   style: TexMathStyle
 ): DefaultComputerModernMathFont {
-  const entry = defaultManifest.find((item) => item.family === family);
+  return resolveManifestFontId(defaultManifest, family, style);
+}
+
+export function luaLatexAmsMathFontId(
+  family: TexMathFontFamily,
+  style: TexMathStyle
+): DefaultComputerModernMathFont {
+  return resolveManifestFontId(amsMathManifest, family, style);
+}
+
+function resolveManifestFontId(
+  manifest: readonly TexMathFontManifestEntry[],
+  family: TexMathFontFamily,
+  style: TexMathStyle
+): DefaultComputerModernMathFont {
+  const entry = manifest.find((item) => item.family === family);
   if (!entry) {
     throw new Error(`Unknown TeX math font family '${family}'.`);
   }
@@ -115,26 +140,60 @@ export function luaLatexDefaultMathFontId(
   return entry.text;
 }
 
-export const luaLatexDefaultMathFontProfile: TexMathFontProfile = {
+function createComputerModernMathFontProfile(options: {
+  readonly id: string;
+  readonly label: string;
+  readonly preamble: readonly string[];
+  readonly manifest: readonly TexMathFontManifestEntry[];
+  readonly resolveMathFontId: (family: TexMathFontFamily, style: TexMathStyle) => DefaultComputerModernMathFont;
+}): TexMathFontProfile {
+  return {
+    id: options.id,
+    label: options.label,
+    engine: "lualatex",
+    preamble: options.preamble,
+    textFontProfile: luaLatexDefaultTextFontProfile,
+    metricProvider: computerModernTexMetricProvider,
+    manifest: options.manifest,
+    parameters: createLuaLatexDefaultMathParameters(computerModernTexMetricProvider),
+    resolveMathFontId: options.resolveMathFontId,
+    resolveMathFont: ({ family, style, baseAtPt = 10 }) => {
+      const fontId = options.resolveMathFontId(family, style);
+      const atPt = mathFontAtPt(family, fontId, style, baseAtPt);
+      return computerModernTexMetricProvider.resolveFont({ fontId, atPt });
+    },
+  };
+}
+
+export const luaLatexDefaultMathFontProfile: TexMathFontProfile = createComputerModernMathFontProfile({
   id: "lualatex-default-math",
   label: "LuaLaTeX Default Computer Modern Math",
-  engine: "lualatex",
   preamble: [],
-  textFontProfile: luaLatexDefaultTextFontProfile,
-  metricProvider: computerModernTexMetricProvider,
   manifest: defaultManifest,
-  parameters: createLuaLatexDefaultMathParameters(computerModernTexMetricProvider),
   resolveMathFontId: luaLatexDefaultMathFontId,
-  resolveMathFont: ({ family, style, baseAtPt = 10 }) => {
-    const fontId = luaLatexDefaultMathFontId(family, style);
-    const atPt = family === "extension"
-      ? baseAtPt
-      : baseAtPt * mathStyleScale(style);
-    return computerModernTexMetricProvider.resolveFont({ fontId, atPt });
-  },
-};
+});
+
+export const luaLatexAmsMathFontProfile: TexMathFontProfile = createComputerModernMathFontProfile({
+  id: "lualatex-amsmath-math",
+  label: "LuaLaTeX amsmath Computer Modern Math",
+  preamble: [String.raw`\usepackage{amsmath}`],
+  manifest: amsMathManifest,
+  resolveMathFontId: luaLatexAmsMathFontId,
+});
 
 export const defaultTexMathFontProfile = luaLatexDefaultMathFontProfile;
+
+function mathFontAtPt(
+  family: TexMathFontFamily,
+  fontId: DefaultComputerModernMathFont,
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  if (family === "extension" && fontId === "cmex10") {
+    return baseAtPt;
+  }
+  return baseAtPt * mathStyleScale(style);
+}
 
 function createLuaLatexDefaultMathParameters(
   metricProvider: TexMetricProvider

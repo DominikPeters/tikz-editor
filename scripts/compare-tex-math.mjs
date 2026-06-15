@@ -98,6 +98,8 @@ const formulas = args.formulas.length > 0
       "\\begin{aligned}x_i&=y^2\\\\\\frac{1}{2}&=z\\end{aligned}",
       "\\begin{aligned}a&=b&c&=d\\\\e&=f&g&=h\\end{aligned}",
       "\\begin{aligned}\\sum_i^n&=x\\\\\\sqrt{x}&=y\\end{aligned}",
+      "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
+      "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
       "\\prod_i^n",
       "\\coprod_i^n",
       "\\bigcup_i^n",
@@ -204,13 +206,17 @@ function compareFormula(formula, tolerance) {
 }
 
 function comparisonItemsForFormula(formula, ours, tex) {
-  if (!formula.includes(String.raw`\begin{aligned}`)) {
-    return { ours, tex };
+  if (
+    formula.includes(String.raw`\begin{aligned}`) ||
+    formula.includes(String.raw`\begin{matrix}`) ||
+    formula.includes(String.raw`\begin{pmatrix}`)
+  ) {
+    return {
+      ours: visibleMathItems(ours),
+      tex: visibleMathItems(tex),
+    };
   }
-  return {
-    ours: visibleMathItems(ours),
-    tex: visibleMathItems(tex),
-  };
+  return { ours, tex };
 }
 
 function visibleMathItems(items) {
@@ -356,6 +362,8 @@ function texTrace(formula) {
 
 function texSource(formula) {
   const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
+    formula.includes(String.raw`\begin{matrix}`) ||
+    formula.includes(String.raw`\begin{pmatrix}`) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
@@ -594,7 +602,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group"]
-    : ["atom", "group", "fraction", "radical", "left-right"];
+    : ["atom", "group", "fraction", "radical", "left-right", "matrix"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -604,6 +612,8 @@ function randomMathTerm(rng, depth) {
     term = String.raw`\sqrt{` + randomSimpleExpression(rng) + "}";
   } else if (choice === "left-right") {
     term = randomLeftRightFormula(rng);
+  } else if (choice === "matrix") {
+    term = randomMatrixFormula(rng);
   } else if (choice === "group") {
     term = "{" + randomSimpleExpression(rng) + "}";
   } else {
@@ -634,6 +644,30 @@ function randomLeftRightFormula(rng) {
   const [left, right] = pairs[randomInt(rng, pairs.length)] ?? ["(", ")"];
   const leftSeparator = left.startsWith("\\") ? " " : "";
   return String.raw`\left` + left + leftSeparator + randomSimpleExpression(rng) + String.raw`\right` + right;
+}
+
+function randomMatrixFormula(rng) {
+  const environment = rng() < 0.5 ? "matrix" : "pmatrix";
+  const rowCount = 1 + randomInt(rng, 2);
+  const columnCount = 1 + randomInt(rng, 3);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      cells.push(randomMatrixCell(rng));
+    }
+    rows.push(cells.join("&"));
+  }
+  return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
+}
+
+function randomMatrixCell(rng) {
+  return [
+    randomMathAtom(rng),
+    randomMathAtom(rng) + "_{" + randomMathAtom(rng) + "}",
+    randomMathAtom(rng) + "^{" + randomMathAtom(rng) + "}",
+    String.raw`\frac{` + randomMathAtom(rng) + "}{" + randomMathAtom(rng) + "}",
+  ][randomInt(rng, 4)] ?? "x";
 }
 
 function maybeWithScripts(term, rng, depth) {

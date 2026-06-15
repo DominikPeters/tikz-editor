@@ -73,6 +73,7 @@ export type TexMathNucleus =
   | TexMathOperatorNucleus
   | TexMathLeftRightNucleus
   | TexMathAlignedNucleus
+  | TexMathMatrixNucleus
   | TexMathUnsupportedNucleus;
 
 export type TexMathDelimiter =
@@ -202,6 +203,19 @@ export interface TexMathAlignedRow {
 
 export interface TexMathAlignedNucleus {
   readonly kind: "aligned";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathMatrixEnvironment =
+  | "matrix"
+  | "pmatrix";
+
+export interface TexMathMatrixNucleus {
+  readonly kind: "matrix";
+  readonly environment: TexMathMatrixEnvironment;
   readonly rows: readonly TexMathAlignedRow[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;

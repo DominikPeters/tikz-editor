@@ -11,6 +11,7 @@ import type {
   TexMathGlue,
   TexMathItem,
   TexMathList,
+  TexMathMatrixEnvironment,
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
@@ -651,6 +652,10 @@ class TexMathParser {
     if (environmentName?.name === "aligned") {
       return this.parseAlignedEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
+    const matrixEnvironment = matrixEnvironmentName(environmentName?.name);
+    if (environmentName && matrixEnvironment) {
+      return this.parseMatrixEnvironment(beginCommand.sourceSpan, environmentName, matrixEnvironment, allowScripts);
+    }
 
     const sourceSpan = spanUnion(beginCommand.sourceSpan, environmentName?.sourceSpan ?? beginCommand.sourceSpan);
     this.addDiagnostic(
@@ -680,6 +685,21 @@ class TexMathParser {
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
       stopAtEnvironmentEnd: "aligned",
+      allowScripts,
+    });
+  }
+
+  private parseMatrixEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    environment: TexMathMatrixEnvironment,
+    allowScripts: boolean
+  ): TexMathAtom {
+    return this.parseMatrixBody({
+      beginSourceSpan,
+      initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      stopAtEnvironmentEnd: environment,
+      environment,
       allowScripts,
     });
   }
@@ -773,6 +793,98 @@ class TexMathParser {
     }
     return this.maybeParseScripts(
       alignedAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
+      params.allowScripts
+    );
+  }
+
+  private parseMatrixBody(params: {
+    readonly beginSourceSpan: TexMathSourceSpan;
+    readonly initialSourceSpan: TexMathSourceSpan;
+    readonly stopAtEnvironmentEnd: TexMathMatrixEnvironment;
+    readonly environment: TexMathMatrixEnvironment;
+    readonly allowScripts: boolean;
+  }): TexMathAtom {
+    const rows: TexMathAlignedRow[] = [];
+    let endSourceSpan: TexMathSourceSpan | undefined;
+    let sourceSpan = params.initialSourceSpan;
+
+    while (!this.isAtEnd()) {
+      if (this.isEnvironmentEnd(params.stopAtEnvironmentEnd)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
+        sourceSpan = spanUnion(sourceSpan, endSourceSpan);
+        return this.maybeParseScripts(
+          matrixAtom(params.environment, rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          params.allowScripts
+        );
+      }
+
+      const cells: TexMathAlignedCell[] = [];
+      let pendingRowSourceSpan: TexMathSourceSpan | undefined;
+      while (!this.isAtEnd()) {
+        const cellList = this.parseList({
+          stopAtGroupClose: false,
+          stopAtAlignmentTab: true,
+          stopAtRowBreak: true,
+          stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
+        });
+        cells.push({
+          list: cellList,
+          sourceSpan: cellList.sourceSpan,
+        });
+        sourceSpan = spanUnion(sourceSpan, cellList.sourceSpan);
+        pendingRowSourceSpan = spanUnion(
+          pendingRowSourceSpan ?? cellList.sourceSpan,
+          cellList.sourceSpan
+        );
+
+        const separator = this.peek();
+        if (separator?.kind === "character" && separator.text === "&") {
+          this.advance();
+          sourceSpan = spanUnion(sourceSpan, separator.sourceSpan);
+          continue;
+        }
+        break;
+      }
+
+      const rowEndToken = this.peek();
+      if (isMathRowBreakToken(rowEndToken)) {
+        const rowBreak = this.advance();
+        sourceSpan = spanUnion(sourceSpan, rowBreak.sourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: spanUnion(cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
+          rowBreakSourceSpan: rowBreak.sourceSpan,
+        });
+        continue;
+      }
+      if (this.isEnvironmentEnd(params.stopAtEnvironmentEnd)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
+        sourceSpan = spanUnion(sourceSpan, endSourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
+        });
+        return this.maybeParseScripts(
+          matrixAtom(params.environment, rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          params.allowScripts
+        );
+      }
+      if (cells.length > 0) {
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
+        });
+      }
+    }
+
+    this.addDiagnostic(
+      "error",
+      "missing-environment-end",
+      `Expected \\end{${params.stopAtEnvironmentEnd}} to close math environment.`,
+      params.beginSourceSpan
+    );
+    return this.maybeParseScripts(
+      matrixAtom(params.environment, rows, params.beginSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
   }
@@ -1151,8 +1263,34 @@ function alignedAtom(
   };
 }
 
+function matrixAtom(
+  environment: TexMathMatrixEnvironment,
+  rows: readonly TexMathAlignedRow[],
+  beginSourceSpan: TexMathSourceSpan,
+  endSourceSpan: TexMathSourceSpan | undefined,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass: "inner",
+    nucleus: {
+      kind: "matrix",
+      environment,
+      rows,
+      beginSourceSpan,
+      ...(endSourceSpan ? { endSourceSpan } : {}),
+      sourceSpan,
+    },
+    sourceSpan,
+  };
+}
+
 function commandName(command: string): string {
   return command.startsWith("\\") ? command.slice(1) : command;
+}
+
+function matrixEnvironmentName(name: string | undefined): TexMathMatrixEnvironment | null {
+  return name === "matrix" || name === "pmatrix" ? name : null;
 }
 
 function isMathRowBreakToken(token: TexMathToken | null): boolean {

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_COMPUTER_MODERN_MATH_FONTS,
   computerModernTexMetricProvider,
+  luaLatexAmsMathFontId,
+  luaLatexAmsMathFontProfile,
   luaLatexDefaultMathFontId,
   luaLatexDefaultMathFontProfile,
 } from "../packages/core/src/text/tex/index.js";
@@ -36,13 +38,48 @@ describe("TeX math font profile", () => {
       style: "scriptscript",
       baseAtPt: 10,
     });
+    const scriptExtension = luaLatexDefaultMathFontProfile.resolveMathFont({
+      family: "extension",
+      style: "script",
+      baseAtPt: 10,
+    });
 
     expect(text.id).toBe("cmmi10");
     expect(text.atPt).toBe(10);
     expect(script.id).toBe("cmmi7");
     expect(script.atPt).toBe(7);
+    expect(scriptExtension.id).toBe("cmex10");
+    expect(scriptExtension.atPt).toBe(10);
     expect(extension.id).toBe("cmex10");
     expect(extension.atPt).toBe(10);
+  });
+
+  it("models amsmath cmex font-size selection for extension symbols", () => {
+    expect(luaLatexAmsMathFontProfile.manifest).toEqual([
+      { family: "operators", text: "cmr10", script: "cmr7", scriptscript: "cmr5" },
+      { family: "letters", text: "cmmi10", script: "cmmi7", scriptscript: "cmmi5" },
+      { family: "symbols", text: "cmsy10", script: "cmsy7", scriptscript: "cmsy5" },
+      { family: "extension", text: "cmex10", script: "cmex7", scriptscript: "cmex7" },
+    ]);
+    expect(luaLatexAmsMathFontId("extension", "text")).toBe("cmex10");
+    expect(luaLatexAmsMathFontId("extension", "script")).toBe("cmex7");
+    expect(luaLatexAmsMathFontId("extension", "scriptscript")).toBe("cmex7");
+
+    const scriptExtension = luaLatexAmsMathFontProfile.resolveMathFont({
+      family: "extension",
+      style: "script",
+      baseAtPt: 10,
+    });
+    const scriptscriptExtension = luaLatexAmsMathFontProfile.resolveMathFont({
+      family: "extension",
+      style: "scriptscript",
+      baseAtPt: 10,
+    });
+
+    expect(scriptExtension.id).toBe("cmex7");
+    expect(scriptExtension.atPt).toBe(7);
+    expect(scriptscriptExtension.id).toBe("cmex7");
+    expect(scriptscriptExtension.atPt).toBe(5);
   });
 
   it("vendors math font metadata, parameters, and extensible recipes", () => {

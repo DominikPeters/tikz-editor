@@ -73,6 +73,8 @@ export {
 } from "./inline-provider.js";
 export {
   defaultTexMathFontProfile,
+  luaLatexAmsMathFontId,
+  luaLatexAmsMathFontProfile,
   luaLatexDefaultMathFontId,
   luaLatexDefaultMathFontProfile,
   type TexMathFontFamily,

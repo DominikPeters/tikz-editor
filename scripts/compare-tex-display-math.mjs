@@ -388,6 +388,8 @@ function texSource(caseSpec) {
 function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
+    source.includes(String.raw`\begin{matrix}`) ||
+    source.includes(String.raw`\begin{pmatrix}`) ||
     source.includes(String.raw`\text`);
 }
 
@@ -638,6 +640,16 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\left(\frac{1}{2}\right)\] Beta`,
     },
     {
+      id: "display-matrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{matrix}a&b\\c&d\end{matrix}\] Beta`,
+    },
+    {
+      id: "display-pmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\] Beta`,
+    },
+    {
       id: "display-large-operator-limits",
       width: 160,
       source: String.raw`Alpha \[\prod_i^n+\sum_j^m\] Beta`,
@@ -712,6 +724,7 @@ function randomAlignmentLeftCell(rng) {
     randomFraction(rng),
     randomRadical(rng),
     randomTextTerm(rng),
+    randomMatrix(rng),
     `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
   ]);
 }
@@ -723,6 +736,7 @@ function randomAlignmentRightCell(rng) {
     randomFraction(rng),
     randomRadical(rng),
     randomTextTerm(rng),
+    randomMatrix(rng),
   ]);
 }
 
@@ -734,6 +748,7 @@ function randomMathTerm(rng) {
     randomRadical(rng),
     randomLeftRight(rng),
     randomTextTerm(rng),
+    randomMatrix(rng),
   ]);
 }
 
@@ -767,6 +782,25 @@ function randomLeftRight(rng) {
     [String.raw`\langle`, String.raw`\rangle`],
   ]);
   return String.raw`\left` + delimiterPair[0] + randomFraction(rng) + String.raw`\right` + delimiterPair[1];
+}
+
+function randomMatrix(rng) {
+  const environment = choice(rng, ["matrix", "pmatrix"]);
+  const rowCount = 1 + randomInt(rng, 2);
+  const columnCount = 1 + randomInt(rng, 3);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      cells.push(choice(rng, [
+        randomMathAtom(rng),
+        randomScriptTerm(rng),
+        randomFraction(rng),
+      ]));
+    }
+    rows.push(cells.join("&"));
+  }
+  return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
 }
 
 function randomLargeOperator(rng) {

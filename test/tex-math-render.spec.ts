@@ -376,6 +376,32 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="105"');
   });
 
+  it("creates inline math boxes for pmatrix without MathJax", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const content = String.raw`\begin{pmatrix}a&b\\c&d\end{pmatrix}`;
+    const source = `$${content}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).toMatchObject({
+      source,
+      content,
+      width: expect.closeTo(35.21308, 5),
+      height: expect.closeTo(14.50012, 5),
+      depth: expect.closeTo(9.50012, 5),
+    });
+    expect(box?.svgBody).toContain('data-tex-font="cmex10" data-tex-glyph="18"');
+    expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+    expect(box?.svgBody).toContain('data-tex-font="cmex10" data-tex-glyph="19"');
+  });
+
   it("returns null for unsupported formulas instead of approximate SVG", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const source = String.raw`$\unknown{x}$`;
