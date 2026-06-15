@@ -120,6 +120,7 @@ const formulas = args.formulas.length > 0
       "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
       "\\begin{array}{cc}a&b\\\\c&d\\end{array}",
       "\\begin{array}{lr}a&b\\\\x&y\\end{array}",
+      "\\begin{cases}a&b\\\\x&y\\end{cases}",
       "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
       "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
       "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
@@ -237,6 +238,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
   if (
     formula.includes(String.raw`\begin{aligned}`) ||
     hasArrayEnvironment(formula) ||
+    hasCasesEnvironment(formula) ||
     hasMatrixEnvironment(formula) ||
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula)
@@ -394,6 +396,7 @@ function texTrace(formula) {
 function texSource(formula) {
   const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
     hasMatrixEnvironment(formula) ||
+    hasCasesEnvironment(formula) ||
     hasBinomialCommand(formula) ||
     hasStyledFractionCommand(formula) ||
     hasSubstackCommand(formula) ||
@@ -635,7 +638,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "array", "matrix", "substack"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "left-right", "array", "cases", "matrix", "substack"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -650,6 +653,8 @@ function randomMathTerm(rng, depth) {
     term = randomLeftRightFormula(rng);
   } else if (choice === "array") {
     term = randomArrayFormula(rng);
+  } else if (choice === "cases") {
+    term = randomCasesFormula(rng);
   } else if (choice === "matrix") {
     term = randomMatrixFormula(rng);
   } else if (choice === "substack") {
@@ -735,6 +740,15 @@ function randomArrayFormula(rng) {
   return String.raw`\begin{array}{` + preamble + "}" + rows.join(String.raw`\\`) + String.raw`\end{array}`;
 }
 
+function randomCasesFormula(rng) {
+  const rowCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    rows.push(randomMatrixCell(rng) + "&" + randomMatrixCell(rng));
+  }
+  return String.raw`\begin{cases}` + rows.join(String.raw`\\`) + String.raw`\end{cases}`;
+}
+
 function randomSubstackFormula(rng) {
   const rowCount = 2 + randomInt(rng, 2);
   const rows = [];
@@ -761,6 +775,10 @@ function hasMatrixEnvironment(source) {
 
 function hasArrayEnvironment(source) {
   return source.includes(String.raw`\begin{array}`);
+}
+
+function hasCasesEnvironment(source) {
+  return source.includes(String.raw`\begin{cases}`);
 }
 
 function randomMatrixEnvironment(rng) {

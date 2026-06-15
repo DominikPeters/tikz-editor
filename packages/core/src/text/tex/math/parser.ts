@@ -768,6 +768,9 @@ class TexMathParser {
     if (environmentName?.name === "array") {
       return this.parseArrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
+    if (environmentName?.name === "cases") {
+      return this.parseCasesEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
     const matrixEnvironment = matrixEnvironmentName(environmentName?.name);
     if (environmentName && matrixEnvironment) {
       return this.parseMatrixEnvironment(beginCommand.sourceSpan, environmentName, matrixEnvironment, allowScripts);
@@ -849,6 +852,18 @@ class TexMathParser {
       initialSourceSpan,
       preambleSourceSpan: preamble.sourceSpan,
       columnAlignments: preamble.alignments,
+      allowScripts,
+    });
+  }
+
+  private parseCasesEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    return this.parseCasesBody({
+      beginSourceSpan,
+      initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
       allowScripts,
     });
   }
@@ -1126,6 +1141,96 @@ class TexMathParser {
     );
     return this.maybeParseScripts(
       arrayAtom(rows, params.columnAlignments, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
+      params.allowScripts
+    );
+  }
+
+  private parseCasesBody(params: {
+    readonly beginSourceSpan: TexMathSourceSpan;
+    readonly initialSourceSpan: TexMathSourceSpan;
+    readonly allowScripts: boolean;
+  }): TexMathAtom {
+    const rows: TexMathAlignedRow[] = [];
+    let endSourceSpan: TexMathSourceSpan | undefined;
+    let sourceSpan = params.initialSourceSpan;
+
+    while (!this.isAtEnd()) {
+      if (this.isEnvironmentEnd("cases")) {
+        endSourceSpan = this.consumeEnvironmentEnd("cases");
+        sourceSpan = spanUnion(sourceSpan, endSourceSpan);
+        return this.maybeParseScripts(
+          casesAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          params.allowScripts
+        );
+      }
+
+      const cells: TexMathAlignedCell[] = [];
+      let pendingRowSourceSpan: TexMathSourceSpan | undefined;
+      while (!this.isAtEnd()) {
+        const cellList = this.parseList({
+          stopAtGroupClose: false,
+          stopAtAlignmentTab: true,
+          stopAtRowBreak: true,
+          stopAtEnvironmentEnd: "cases",
+        });
+        cells.push({
+          list: cellList,
+          sourceSpan: cellList.sourceSpan,
+        });
+        sourceSpan = spanUnion(sourceSpan, cellList.sourceSpan);
+        pendingRowSourceSpan = spanUnion(
+          pendingRowSourceSpan ?? cellList.sourceSpan,
+          cellList.sourceSpan
+        );
+
+        const separator = this.peek();
+        if (separator?.kind === "character" && separator.text === "&") {
+          this.advance();
+          sourceSpan = spanUnion(sourceSpan, separator.sourceSpan);
+          continue;
+        }
+        break;
+      }
+
+      const rowEndToken = this.peek();
+      if (isMathRowBreakToken(rowEndToken)) {
+        const rowBreak = this.advance();
+        sourceSpan = spanUnion(sourceSpan, rowBreak.sourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: spanUnion(cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
+          rowBreakSourceSpan: rowBreak.sourceSpan,
+        });
+        continue;
+      }
+      if (this.isEnvironmentEnd("cases")) {
+        endSourceSpan = this.consumeEnvironmentEnd("cases");
+        sourceSpan = spanUnion(sourceSpan, endSourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
+        });
+        return this.maybeParseScripts(
+          casesAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          params.allowScripts
+        );
+      }
+      if (cells.length > 0) {
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
+        });
+      }
+    }
+
+    this.addDiagnostic(
+      "error",
+      "missing-environment-end",
+      "Expected \\end{cases} to close math environment.",
+      params.beginSourceSpan
+    );
+    return this.maybeParseScripts(
+      casesAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
   }
@@ -1607,6 +1712,26 @@ function arrayAtom(
       columnAlignments,
       beginSourceSpan,
       preambleSourceSpan,
+      ...(endSourceSpan ? { endSourceSpan } : {}),
+      sourceSpan,
+    },
+    sourceSpan,
+  };
+}
+
+function casesAtom(
+  rows: readonly TexMathAlignedRow[],
+  beginSourceSpan: TexMathSourceSpan,
+  endSourceSpan: TexMathSourceSpan | undefined,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass: "inner",
+    nucleus: {
+      kind: "cases",
+      rows,
+      beginSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),
       sourceSpan,
     },

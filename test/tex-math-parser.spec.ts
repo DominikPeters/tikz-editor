@@ -705,6 +705,44 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses cases environments into source-spanned rows", () => {
+    const source = String.raw`\begin{cases}a&b\\x&y\end{cases}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "cases",
+        beginSourceSpan: { start: 0, end: 6 },
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{cases}`),
+          end: source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "cases") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) =>
+      row.cells.map((cell) => ({
+        sourceSpan: cell.sourceSpan,
+        itemCount: cell.list.items.length,
+      }))
+    )).toEqual([
+      [
+        { sourceSpan: { start: 13, end: 14 }, itemCount: 1 },
+        { sourceSpan: { start: 15, end: 16 }, itemCount: 1 },
+      ],
+      [
+        { sourceSpan: { start: 18, end: 19 }, itemCount: 1 },
+        { sourceSpan: { start: 20, end: 21 }, itemCount: 1 },
+      ],
+    ]);
+  });
+
   it("reports missing matrix environment ends without throwing", () => {
     const result = parseTexMath(String.raw`\begin{pmatrix}a&b`);
     const atom = atomAt(result, 0);

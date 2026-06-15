@@ -20,6 +20,7 @@ import type {
   TexMathAlignedRow,
   TexMathArrayColumnAlignment,
   TexMathArrayNucleus,
+  TexMathCasesNucleus,
   TexMathDelimiter,
   TexMathGlyphNucleus,
   TexMathLineNucleus,
@@ -106,6 +107,8 @@ export interface TexMathChildHListLayoutItem {
     | "substack-cell"
     | "array-row"
     | "array-cell"
+    | "cases-row"
+    | "cases-cell"
     | "matrix-row"
     | "matrix-cell";
   readonly x: number;
@@ -319,7 +322,7 @@ function texMathAtomNeedsAmsMath(atom: TexMathAtom): boolean {
 }
 
 function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
-  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix" || nucleus.kind === "substack") {
+  if (nucleus.kind === "text" || nucleus.kind === "aligned" || nucleus.kind === "matrix" || nucleus.kind === "substack" || nucleus.kind === "cases") {
     return true;
   }
   if (nucleus.kind === "array") {
@@ -608,6 +611,9 @@ function layoutNucleus(
   if (nucleus.kind === "array") {
     return layoutArrayNucleus(nucleus, fontProfile, baseAtPt, alphabet);
   }
+  if (nucleus.kind === "cases") {
+    return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+  }
   if (nucleus.kind === "matrix") {
     return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
@@ -816,6 +822,8 @@ const TEX_ALIGNED_BASELINE_SKIP_PT = 12;
 const TEX_ALIGNED_LINE_SKIP_LIMIT_PT = 0;
 const TEX_ALIGNED_LINE_SKIP_PT = 1;
 const TEX_MATRIX_ARRAY_COL_SEP_PT = 5;
+const TEX_CASES_ARRAY_STRETCH = 1.2;
+const TEX_CASES_COLUMN_GAP_PT = 10;
 const TEX_SUBSTACK_STYLE: TexMathStyle = "script";
 
 interface TexMathAlignedCellLayout {
@@ -1142,6 +1150,114 @@ function layoutMatrixNucleus(
   return wrapMatrixWithDelimiters(body, nucleus.environment, fontProfile, style, baseAtPt, nucleus);
 }
 
+function layoutCasesNucleus(
+  nucleus: TexMathCasesNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const body = layoutCasesBody(nucleus, fontProfile, baseAtPt, alphabet);
+  if (!body) {
+    return null;
+  }
+  return wrapCasesWithDelimiters(body, nucleus, fontProfile, style, baseAtPt);
+}
+
+function layoutCasesBody(
+  nucleus: TexMathCasesNucleus,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const rowHeight = roundTexPt(TEX_ALIGNED_ROW_HEIGHT_PT * TEX_CASES_ARRAY_STRETCH);
+  const rowDepth = roundTexPt(TEX_ALIGNED_ROW_DEPTH_PT * TEX_CASES_ARRAY_STRETCH);
+  const rows = nucleus.rows.map((row) =>
+    layoutMatrixRow(row, fontProfile, baseAtPt, alphabet, rowHeight, rowDepth)
+  );
+  if (
+    rows.some((row): row is null => row === null) ||
+    nucleus.rows.some((row) => row.cells.length > 2)
+  ) {
+    return null;
+  }
+  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  if (concreteRows.length === 0) {
+    return {
+      items: [],
+      width: 0,
+      height: 0,
+      depth: 0,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+
+  const firstColumnWidth = roundTexPt(Math.max(0, ...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
+  const secondColumnWidth = roundTexPt(Math.max(0, ...concreteRows.map((row) => row.cells[1]?.hlist.width ?? 0)));
+  const hasSecondColumn = concreteRows.some((row) => row.cells.length > 1);
+  const width = roundTexPt(firstColumnWidth + (hasSecondColumn ? TEX_CASES_COLUMN_GAP_PT + secondColumnWidth : 0));
+  const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
+  const lastRow = concreteRows[concreteRows.length - 1];
+  const naturalHeight = roundTexPt(
+    concreteRows[0].height +
+    (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
+    lastRow.depth
+  );
+  const axis = mathParameterToPt(fontProfile, "axisHeight", "text", baseAtPt);
+  const height = roundTexPt(naturalHeight / 2 + axis);
+  const depth = roundTexPt(naturalHeight - height);
+  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  const rowItems: TexMathChildHListLayoutItem[] = [];
+
+  for (const [rowIndex, row] of concreteRows.entries()) {
+    const rowChildren: TexMathHListItem[] = [];
+    const firstCell = row.cells[0];
+    const secondCell = row.cells[1];
+    if (firstCell) {
+      rowChildren.push(childHList(
+        "cases-cell",
+        0,
+        0,
+        firstCell.hlist,
+        firstCell.sourceSpan
+      ));
+    }
+    if (secondCell) {
+      rowChildren.push(childHList(
+        "cases-cell",
+        roundTexPt(firstColumnWidth + TEX_CASES_COLUMN_GAP_PT),
+        0,
+        secondCell.hlist,
+        secondCell.sourceSpan
+      ));
+    }
+    rowItems.push({
+      kind: "hlist",
+      role: "cases-row",
+      x: 0,
+      y: baselineY,
+      width,
+      height: row.height,
+      depth: row.depth,
+      sourceSpan: row.sourceSpan,
+      items: rowChildren,
+    });
+    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+  }
+
+  return {
+    items: rowItems,
+    width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
 function layoutArrayNucleus(
   nucleus: TexMathArrayNucleus,
   fontProfile: TexMathFontProfile,
@@ -1348,7 +1464,9 @@ function layoutMatrixRow(
   row: TexMathAlignedRow,
   fontProfile: TexMathFontProfile,
   baseAtPt: number,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  minimumHeight = TEX_ALIGNED_ROW_HEIGHT_PT,
+  minimumDepth = TEX_ALIGNED_ROW_DEPTH_PT
 ): TexMathAlignedRowLayout | null {
   const cellStyle: TexMathStyle = "text";
   const cells = row.cells.map((cell) => {
@@ -1367,8 +1485,8 @@ function layoutMatrixRow(
   return {
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
-    height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
-    depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
+    height: roundTexPt(Math.max(minimumHeight, ...concreteCells.map((cell) => cell.hlist.height))),
+    depth: roundTexPt(Math.max(minimumDepth, ...concreteCells.map((cell) => cell.hlist.depth))),
   };
 }
 
@@ -1412,6 +1530,77 @@ function wrapMatrixWithDelimiters(
   );
   const right = layoutMathDelimiter(
     delimiters.right,
+    fontProfile,
+    delimiterStyle,
+    baseAtPt,
+    targetHeight,
+    axis,
+    nucleus.endSourceSpan ?? nucleus.sourceSpan
+  );
+  if (!left || !right) {
+    return null;
+  }
+
+  const bodyHList: TexMathHList = {
+    kind: "math-hlist",
+    style: "text",
+    items: body.items,
+    width: body.width,
+    height: body.height,
+    depth: body.depth,
+    sourceSpan: nucleus.sourceSpan,
+  };
+  const bodyChild = childHList("nucleus", left.width, 0, bodyHList, nucleus.sourceSpan);
+  const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + body.width), 0);
+  const items = [
+    ...left.items,
+    bodyChild,
+    ...shiftedRight,
+  ];
+  const width = roundTexPt(left.width + body.width + right.width);
+  const height = Math.max(
+    body.height,
+    ...left.items.map((item) => -item.y + item.height),
+    ...shiftedRight.map((item) => -item.y + item.height)
+  );
+  const depth = Math.max(
+    body.depth,
+    ...left.items.map((item) => item.y + item.depth),
+    ...shiftedRight.map((item) => item.y + item.depth)
+  );
+
+  return {
+    items,
+    width,
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function wrapCasesWithDelimiters(
+  body: TexMathAtomLayout,
+  nucleus: TexMathCasesNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const delimiterStyle = delimiterSizeStyle(style);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
+  const targetHeight = leftRightDelimiterTarget(body.height, body.depth, axis);
+  const left = layoutMathDelimiter(
+    "lbrace",
+    fontProfile,
+    delimiterStyle,
+    baseAtPt,
+    targetHeight,
+    axis,
+    nucleus.beginSourceSpan
+  );
+  const right = layoutMathDelimiter(
+    ".",
     fontProfile,
     delimiterStyle,
     baseAtPt,

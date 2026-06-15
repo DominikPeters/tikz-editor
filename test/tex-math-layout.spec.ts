@@ -1277,6 +1277,56 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out cases as amsmath array with stretched struts, quad gap, and left brace", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{cases}a&b\\x&y\end{cases}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(30.23249, 5);
+    expect(result.hlist?.height).toBeCloseTo(17.50015, 5);
+    expect(result.hlist?.depth).toBeCloseTo(12.50015, 5);
+    expect(result.hlist?.items).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 40,
+        y: expect.closeTo(-17.10016, 5),
+      },
+      {
+        kind: "hlist",
+        role: "nucleus",
+        x: expect.closeTo(8.0556, 5),
+        width: expect.closeTo(20.97689, 5),
+        height: expect.closeTo(16.9, 5),
+        depth: expect.closeTo(11.9, 5),
+      },
+    ]);
+    const body = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(body?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "cases-row",
+        y: expect.closeTo(-6.820044, 5),
+        height: expect.closeTo(10.079956, 5),
+        depth: expect.closeTo(4.320044, 5),
+      },
+      {
+        kind: "hlist",
+        role: "cases-row",
+        y: expect.closeTo(7.579956, 5),
+        height: expect.closeTo(10.079956, 5),
+        depth: expect.closeTo(4.320044, 5),
+      },
+    ]);
+    const firstRow = body?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow?.items).toMatchObject([
+      { kind: "hlist", role: "cases-cell", x: 0 },
+      { kind: "hlist", role: "cases-cell", x: expect.closeTo(15.71528, 5) },
+    ]);
+  });
+
   it("uses amsmath cmex script sizing inside matrix cells", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{matrix}3_{\sum}\end{matrix}`).list

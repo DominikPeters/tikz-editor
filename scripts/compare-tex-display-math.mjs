@@ -411,6 +411,7 @@ function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
     hasMatrixEnvironment(source) ||
+    hasCasesEnvironment(source) ||
     hasBinomialCommand(source) ||
     hasStyledFractionCommand(source) ||
     hasSubstackCommand(source) ||
@@ -694,6 +695,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[\begin{array}{lc}a&b\\x&y\end{array}\] Beta`,
     },
     {
+      id: "display-cases",
+      width: 160,
+      source: String.raw`Alpha \[\begin{cases}a&b\\x&y\end{cases}\] Beta`,
+    },
+    {
       id: "display-pmatrix",
       width: 160,
       source: String.raw`Alpha \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\] Beta`,
@@ -801,6 +807,7 @@ function randomAlignmentLeftCell(rng) {
     randomLineTerm(rng),
     randomTextTerm(rng),
     randomArray(rng),
+    randomCases(rng),
     randomMatrix(rng),
     `${randomLargeOperator(rng)}_${randomMathAtom(rng)}^${randomMathAtom(rng)}`,
   ]);
@@ -816,6 +823,7 @@ function randomAlignmentRightCell(rng) {
     randomLineTerm(rng),
     randomTextTerm(rng),
     randomArray(rng),
+    randomCases(rng),
     randomMatrix(rng),
   ]);
 }
@@ -831,6 +839,7 @@ function randomMathTerm(rng) {
     randomLeftRight(rng),
     randomTextTerm(rng),
     randomArray(rng),
+    randomCases(rng),
     randomMatrix(rng),
   ]);
 }
@@ -924,10 +933,35 @@ function randomArray(rng) {
   return String.raw`\begin{array}{` + preamble + "}" + rows.join(String.raw`\\`) + String.raw`\end{array}`;
 }
 
+function randomCases(rng) {
+  const rowCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const left = choice(rng, [
+      randomMathAtom(rng),
+      randomScriptTerm(rng),
+      randomFraction(rng),
+      randomBinomial(rng),
+    ]);
+    const right = choice(rng, [
+      randomMathAtom(rng),
+      randomScriptTerm(rng),
+      randomFraction(rng),
+      randomBinomial(rng),
+    ]);
+    rows.push(left + "&" + right);
+  }
+  return String.raw`\begin{cases}` + rows.join(String.raw`\\`) + String.raw`\end{cases}`;
+}
+
 function hasMatrixEnvironment(source) {
   return matrixEnvironments.some((environment) =>
     source.includes(String.raw`\begin{` + environment + "}")
   );
+}
+
+function hasCasesEnvironment(source) {
+  return source.includes(String.raw`\begin{cases}`);
 }
 
 function hasBinomialCommand(source) {

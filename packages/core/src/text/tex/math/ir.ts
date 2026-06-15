@@ -76,6 +76,7 @@ export type TexMathNucleus =
   | TexMathAlignedNucleus
   | TexMathSubstackNucleus
   | TexMathArrayNucleus
+  | TexMathCasesNucleus
   | TexMathMatrixNucleus
   | TexMathUnsupportedNucleus;
 
@@ -246,6 +247,14 @@ export interface TexMathArrayNucleus {
   readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathCasesNucleus {
+  readonly kind: "cases";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly beginSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }

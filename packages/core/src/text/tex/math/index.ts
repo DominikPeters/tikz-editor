@@ -8,6 +8,7 @@ export type {
   TexMathAlignedRow,
   TexMathArrayColumnAlignment,
   TexMathArrayNucleus,
+  TexMathCasesNucleus,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDiagnosticSeverity,
