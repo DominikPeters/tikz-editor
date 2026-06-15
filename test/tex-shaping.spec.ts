@@ -265,6 +265,18 @@ type TexHitMapFuzzCase = {
   readonly offsets: readonly number[];
 };
 
+type TexMathHitMapFuzzOffset = {
+  readonly offset: number;
+  readonly kind: "text" | "math";
+};
+
+type TexMathHitMapFuzzCase = {
+  readonly id: string;
+  readonly source: string;
+  readonly width: number;
+  readonly offsets: readonly TexMathHitMapFuzzOffset[];
+};
+
 function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
   const random = makeDeterministicRandom(0x54584d00 + index);
   const words = [
@@ -367,6 +379,97 @@ function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
     source,
     width: pickFuzzItem([70, 90, 120, 150], random),
     offsets: [...new Set(offsets)].sort((left, right) => left - right),
+  };
+}
+
+function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
+  const random = makeDeterministicRandom(0x4d415448 + index);
+  const words = [
+    "Alpha",
+    "beta",
+    "canvas",
+    "delta",
+    "editor",
+    "focus",
+    "gamma",
+    "layout",
+    "metric",
+    "stable",
+  ];
+  const formulas = [
+    "x-y",
+    "x^2",
+    String.raw`\frac{1}{2}`,
+    String.raw`\sqrt{x}`,
+    String.raw`\hat{x}^2`,
+    String.raw`\vec{z}_y`,
+  ];
+  const offsets: TexMathHitMapFuzzOffset[] = [];
+  let source = "";
+
+  const appendSeparator = () => {
+    if (source.length > 0 && !/\s$/.test(source)) {
+      source += " ";
+    }
+  };
+  const appendWord = () => {
+    appendSeparator();
+    const word = pickFuzzItem(words, random);
+    const start = source.length;
+    source += word;
+    offsets.push({ offset: start + Math.max(1, Math.floor(word.length / 2)), kind: "text" });
+    if (word.length > 3) {
+      offsets.push({ offset: start + word.length - 1, kind: "text" });
+    }
+  };
+  const appendMath = () => {
+    appendSeparator();
+    const formula = pickFuzzItem(formulas, random);
+    const delimiter = random() < 0.5 ? "dollar" : "paren";
+    const rawStart = source.length;
+    if (delimiter === "dollar") {
+      source += `$${formula}$`;
+      const contentStart = rawStart + 1;
+      offsets.push({ offset: contentStart + Math.floor(formula.length / 2), kind: "math" });
+      offsets.push({ offset: contentStart + formula.length, kind: "math" });
+      return;
+    }
+    source += String.raw`\(` + formula + String.raw`\)`;
+    const contentStart = rawStart + 2;
+    offsets.push({ offset: contentStart + Math.floor(formula.length / 2), kind: "math" });
+    offsets.push({ offset: contentStart + formula.length, kind: "math" });
+  };
+  const appendForcedBreak = () => {
+    appendSeparator();
+    source += random() < 0.5 ? String.raw`\\` : String.raw`\\[7pt]`;
+    source += " ";
+  };
+
+  const tokenCount = 7 + Math.floor(random() * 4);
+  const breakAt = 2 + Math.floor(random() * Math.max(1, tokenCount - 4));
+  for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
+    if (tokenIndex === breakAt || (tokenIndex > 2 && tokenIndex < tokenCount - 1 && random() < 0.1)) {
+      appendForcedBreak();
+    }
+    if (tokenIndex === 1 || tokenIndex === tokenCount - 2 || random() < 0.42) {
+      appendMath();
+    } else {
+      appendWord();
+    }
+  }
+
+  const uniqueOffsets = new Map<number, TexMathHitMapFuzzOffset>();
+  for (const entry of offsets) {
+    if (entry.offset > 0 && entry.offset < source.length) {
+      uniqueOffsets.set(entry.offset, entry);
+    }
+  }
+
+  return {
+    id: `tex-math-hitmap-fuzz-${index}`,
+    source,
+    width: pickFuzzItem([55, 70, 90, 120], random),
+    offsets: [...uniqueOffsets.values()].sort((left, right) => left.offset - right.offset),
   };
 }
 
@@ -3832,6 +3935,87 @@ describe("simple TeX paragraph layout", () => {
     expect(radicandSelection.rects).toHaveLength(1);
     expect(Number(radicandSelection.rects[0]?.bounds.minX)).toBeCloseTo(radicalConstruct?.xStart ?? 0, 6);
     expect(Number(radicandSelection.rects[0]?.bounds.maxX)).toBeCloseTo(radicalConstruct?.xEnd ?? 0, 6);
+  });
+
+  it("fuzzes editor hit maps for mixed TeX-derived text and inline math", async () => {
+    const cases = Array.from({ length: 32 }, (_, index) => buildTexMathHitMapFuzzCase(index));
+    for (const testCase of cases) {
+      const result = layoutSimpleTexParagraph(testCase.source, {
+        paragraphId: testCase.id,
+        width: testCase.width,
+        parindent: 0,
+        hyphenator: { hyphenate: () => [] },
+        mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      });
+      expect(result.supported, testCase.source).toBe(true);
+      expect(result.report, testCase.source).toBeTruthy();
+      expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
+
+      const report = result.report!;
+      const outputJax = {
+        tex2svg: () => {
+          throw new Error("MathJax prefix measurement should not be used for TeX-derived mixed hit-map fuzz.");
+        },
+        linebreaks: { getReports: () => [report] },
+      };
+      const containerElement = {
+        querySelectorAll: () => report.lines.map((line, lineIndex) =>
+          makeLineElement(
+            {
+              left: 0,
+              top: lineIndex * 12,
+              right: report.width,
+              bottom: lineIndex * 12 + 10,
+            },
+            report.width
+          )
+        ),
+      };
+
+      const sampledOffsets = testCase.offsets.filter((_, index) => index % 2 === 0).slice(0, 10);
+      for (const { offset, kind } of sampledOffsets) {
+        const point = await getKnuthPlassPointFromOffset(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          offset,
+        });
+        expect(point.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset}`).toBeNull();
+        expect(point, `${testCase.id}: ${testCase.source} @ ${offset}`).toMatchObject({
+          ok: true,
+          offset,
+          kind,
+        });
+
+        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+        });
+        expect(caret.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset}`).toBeNull();
+        expect(caret, `${testCase.id}: ${testCase.source} @ ${offset}`).toMatchObject({
+          ok: true,
+          offset,
+          kind,
+        });
+      }
+
+      const rangeStart = testCase.offsets[0]?.offset ?? 0;
+      const rangeEnd = testCase.offsets.at(-1)?.offset ?? 0;
+      if (rangeEnd > rangeStart) {
+        const selection = await getKnuthPlassSelectionRects(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          startOffset: rangeStart,
+          endOffset: rangeEnd,
+        });
+        expect(selection.error?.message ?? null, `${testCase.id}: ${testCase.source}`).toBeNull();
+        expect(selection.ok, `${testCase.id}: ${testCase.source}`).toBe(true);
+        expect(selection.rects.length, `${testCase.id}: ${testCase.source}`).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("reports whole-node fallback for inline math without a math box provider", () => {
