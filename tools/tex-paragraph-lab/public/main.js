@@ -56,6 +56,8 @@ function renderOurs(options) {
     width: options.width,
     alignment: options.alignment,
     parindent: options.parindent,
+    rightskipStretch: options.width,
+    spaceGlueProfile: "font",
     tikzTextWidthNode: true,
     mathBoxProvider,
   });

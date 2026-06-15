@@ -319,6 +319,14 @@ type TexDisplayAlignHitMapFuzzCase = {
   readonly rows: readonly string[];
 };
 
+type TexDocumentMathHitMapFuzzCase = {
+  readonly id: string;
+  readonly source: string;
+  readonly width: number;
+  readonly offsets: readonly TexMathHitMapFuzzOffset[];
+  readonly rows: readonly string[];
+};
+
 function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
   const random = makeDeterministicRandom(0x54584d00 + index);
   const words = [
@@ -438,18 +446,7 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
     "metric",
     "stable",
   ];
-  const formulas: readonly TexMathHitMapFuzzFormula[] = [
-    trackedMathFormula("x-y", ["x", "-", "y"], { exactRoundTrip: false }),
-    trackedMathFormula("x^2", ["x", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("a_b^c", ["a", "_", "b", "^", "c"], { exactRoundTrip: false }),
-    trackedMathFormula("\\frac{1}{2}", ["\\frac", "1", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\sqrt{x}", ["\\sqrt", "x"], { exactRoundTrip: false }),
-    trackedMathFormula("\\hat{x}^2", ["\\hat", "x", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\vec{z}_y", ["\\vec", "z", "_", "y"], { exactRoundTrip: false }),
-    trackedMathFormula("\\binom{n}{k}", ["\\binom", "n", "k"], { exactRoundTrip: false }),
-    trackedMathFormula("\\sum_{i=1}^{n} i", ["\\sum", "i", "=", "1", "n"], { exactRoundTrip: false }),
-    trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
-  ];
+  const formulas = texMathHitMapFuzzFormulas();
   const offsets: TexMathHitMapFuzzOffset[] = [];
   let source = "";
 
@@ -551,6 +548,120 @@ function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
     width: pickFuzzItem([50, 55, 70, 90, 120], random),
     offsets: [...uniqueOffsets.values()].sort((left, right) => left.offset - right.offset),
   };
+}
+
+function buildTexDocumentMathHitMapFuzzCase(index: number): TexDocumentMathHitMapFuzzCase {
+  const random = makeDeterministicRandom(0x444f434d + index);
+  const formulas = texMathHitMapFuzzFormulas();
+  const offsets: TexMathHitMapFuzzOffset[] = [];
+  let body = pickFuzzItem(["Intro", "Before", "Lead", "Start"], random);
+
+  const appendSpace = () => {
+    if (!/\s$/.test(body)) {
+      body += " ";
+    }
+  };
+  const appendInlineMath = () => {
+    appendSpace();
+    const formula = pickFuzzItem(formulas, random);
+    const delimiter = random() < 0.5 ? "dollar" : "paren";
+    const rawStart = body.length;
+    const open = delimiter === "dollar" ? "$" : String.raw`\(`;
+    const close = delimiter === "dollar" ? "$" : String.raw`\)`;
+    body += open + formula.source + close;
+    const contentStart = rawStart + open.length;
+    for (const tracked of formula.trackedOffsets) {
+      offsets.push({
+        offset: contentStart + tracked.offset,
+        kind: "math",
+        label: tracked.label,
+        exactRoundTrip: tracked.exactRoundTrip,
+      });
+    }
+  };
+
+  appendInlineMath();
+  body += ` ${pickFuzzItem(["before", "near", "beside"], random)} `;
+  body += String.raw`\[` + randomDocumentHitMapDisplayFormula(random) + String.raw`\]`;
+  body += ` ${pickFuzzItem(["middle", "after", "tail"], random)} `;
+  appendInlineMath();
+
+  const rows = documentHitMapAlignRows(random);
+  body += " " + String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+  body += ` ${pickFuzzItem(["Done", "Close", "Finish"], random)} `;
+  appendInlineMath();
+
+  const wrappers = [
+    { prefix: "", suffix: "" },
+    { prefix: String.raw`\begin{quote}`, suffix: String.raw`\end{quote}` },
+    { prefix: String.raw`\begin{itemize}\item `, suffix: String.raw`\end{itemize}` },
+    { prefix: String.raw`\begin{enumerate}\item `, suffix: String.raw`\end{enumerate}` },
+    { prefix: String.raw`\begin{description}\item[Term] `, suffix: String.raw`\end{description}` },
+    {
+      prefix: String.raw`\begin{quote}\begin{itemize}\item `,
+      suffix: String.raw`\end{itemize}\end{quote}`,
+    },
+  ] as const;
+  const wrapper = wrappers[index % wrappers.length] ?? wrappers[0];
+  const source = wrapper.prefix + body + wrapper.suffix;
+  const shiftedOffsets = offsets
+    .map((entry) => ({
+      ...entry,
+      offset: entry.offset + wrapper.prefix.length,
+    }))
+    .filter((entry, entryIndex, entries) =>
+      entry.offset > 0 &&
+      entry.offset < source.length &&
+      entries.findIndex((candidate) => candidate.offset === entry.offset) === entryIndex
+    )
+    .sort((left, right) => left.offset - right.offset);
+
+  return {
+    id: `tex-document-math-hitmap-fuzz-${index}`,
+    source,
+    width: pickFuzzItem([130, 160, 190, 220], random),
+    offsets: shiftedOffsets,
+    rows,
+  };
+}
+
+function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
+  return [
+    trackedMathFormula("x-y", ["x", "-", "y"], { exactRoundTrip: false }),
+    trackedMathFormula("x^2", ["x", "^", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("a_b^c", ["a", "_", "b", "^", "c"], { exactRoundTrip: false }),
+    trackedMathFormula("\\frac{1}{2}", ["\\frac", "1", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("\\sqrt{x}", ["\\sqrt", "x"], { exactRoundTrip: false }),
+    trackedMathFormula("\\hat{x}^2", ["\\hat", "x", "^", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("\\vec{z}_y", ["\\vec", "z", "_", "y"], { exactRoundTrip: false }),
+    trackedMathFormula("\\binom{n}{k}", ["\\binom", "n", "k"], { exactRoundTrip: false }),
+    trackedMathFormula("\\sum_{i=1}^{n} i", ["\\sum", "i", "=", "1", "n"], { exactRoundTrip: false }),
+    trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
+  ];
+}
+
+function randomDocumentHitMapDisplayFormula(random: () => number): string {
+  const terms = [
+    "x+y",
+    String.raw`\frac{1}{2}+z`,
+    String.raw`\sqrt{x+1}`,
+    String.raw`\binom{n}{k}`,
+    String.raw`\sum_i^n`,
+    String.raw`\left(x+y\right)`,
+  ] as const;
+  return pickFuzzItem(terms, random);
+}
+
+function documentHitMapAlignRows(random: () => number): readonly string[] {
+  const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
+  const rowCount = 1 + Math.floor(random() * 3);
+  return Array.from({ length: rowCount }, () => {
+    const left = pickFuzzItem(identifiers, random);
+    const right = pickFuzzItem(identifiers, random);
+    return random() < 0.4
+      ? String.raw`\frac{` + left + String.raw`}{` + right + String.raw`}&=` + pickFuzzItem(identifiers, random)
+      : `${left}&=${right}`;
+  });
 }
 
 function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMapFuzzCase {
@@ -4529,6 +4640,102 @@ describe("simple TeX paragraph layout", () => {
           `${testCase.id} row ${rowIndex}: ${testCase.source}`
         ).toBe(expectedSource);
 
+        const hit = getKnuthPlassVListItemFromPoint({
+          outputJax,
+          paragraphId: testCase.id,
+          containerElement: containerElement as any,
+          clientPoint: clientPoint(
+            px((row.clientLeft + row.clientRight) / 2),
+            px((row.clientTop + row.clientBottom) / 2)
+          ),
+        });
+        expect(hit, `${testCase.id} row ${rowIndex}: ${testCase.source}`).toMatchObject({
+          kind: "hbox",
+          hboxRole: "display-align-row",
+          displayAlignDelimiter: "align-star",
+          displayAlignRowIndex: rowIndex,
+          sourceStart: row.sourceStart,
+          sourceEnd: row.sourceEnd,
+        });
+      }
+    }
+  });
+
+  it("fuzzes registered document-level hit geometry for mixed inline and display math", async () => {
+    const cases = Array.from({ length: 24 }, (_, index) => buildTexDocumentMathHitMapFuzzCase(index));
+    for (const testCase of cases) {
+      const result = layoutSimpleTexParagraph(testCase.source, {
+        paragraphId: testCase.id,
+        width: testCase.width,
+        alignment: "ragged-right",
+        rightskipStretch: testCase.width,
+        spaceGlueProfile: "font",
+        tikzTextWidthNode: true,
+        parindent: 0,
+        hyphenator: { hyphenate: () => [] },
+        mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      });
+      expect(result.supported, testCase.source).toBe(true);
+      expect(result.report, testCase.source).not.toBeNull();
+      expect(result.vlistLayout, testCase.source).not.toBeNull();
+      expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
+
+      const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+      registerTexVListLayoutsOnOutputJax(outputJax, [{
+        paragraphId: testCase.id,
+        layout: result.vlistLayout!,
+      }]);
+      const containerElement = {
+        getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+        viewBox: { baseVal: { width: result.report?.width ?? 1 } },
+        querySelectorAll: () => {
+          throw new Error("registered document-level math hit-map fuzz should avoid rendered linebox queries");
+        },
+      };
+
+      const snapshot = getKnuthPlassVListGeometrySnapshot({
+        outputJax,
+        paragraphId: testCase.id,
+        containerElement: containerElement as any,
+      });
+      expect(snapshot.source, testCase.source).toBe("registered");
+      expect(snapshot.paragraphs.length, testCase.source).toBeGreaterThan(0);
+
+      for (const { offset, label } of testCase.offsets.slice(0, 18)) {
+        const point = await getKnuthPlassPointFromOffset(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          offset,
+        });
+        expect(point.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toBeNull();
+        expect(point, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
+          ok: true,
+          offset,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+
+        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+        });
+        expect(caret.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toBeNull();
+        expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
+          ok: true,
+        });
+      }
+
+      const alignRows = snapshot.items.filter((item) => item.hboxRole === "display-align-row");
+      expect(alignRows.length, testCase.source).toBe(testCase.rows.length);
+      for (const [rowIndex, row] of alignRows.entries()) {
+        const expectedSource = testCase.rows[rowIndex] + (rowIndex === testCase.rows.length - 1 ? "" : String.raw`\\`);
+        expect(
+          testCase.source.slice(row.sourceStart ?? 0, row.sourceEnd ?? 0),
+          `${testCase.id} row ${rowIndex}: ${testCase.source}`
+        ).toBe(expectedSource);
         const hit = getKnuthPlassVListItemFromPoint({
           outputJax,
           paragraphId: testCase.id,

@@ -671,6 +671,11 @@ describe("TeX math SVG rendering", () => {
       "One x+y=m+n",
       "two three.",
     ]);
+    const mathAdvance = result.report?.lines
+      .flatMap((line) => line.segments)
+      .filter((segment) => segment.sourceKind === "math")
+      .reduce((sum, segment) => sum + segment.width, 0) ?? 0;
+    expect(mathAdvance).toBeLessThan(box?.width ?? 0);
   });
 
   it("creates math boxes for operatorname without MathJax", () => {
@@ -1041,6 +1046,9 @@ unordered.`;
       width: 150,
       alignment: "ragged-right",
       parindent: 0,
+      rightskipStretch: 150,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
       hyphenator: { hyphenate: () => [] },
       mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
     });
@@ -1051,6 +1059,12 @@ unordered.`;
       .filter((segment) => segment.kind === "math") ?? [];
     const pairTail = mathSegments.find((segment) => segment.text === "(x,y)");
     const braceTail = mathSegments.find((segment) => segment.text === String.raw`\{x,y\}`);
+    const relationFragments = mathSegments.filter((segment) => segment.text === "p_i=");
+    expect(relationFragments).toHaveLength(2);
+    expect(relationFragments[0]?.width).toBeCloseTo(19.671275, 6);
+    expect(relationFragments[0]?.mathSvgBody).toContain('transform="translate(1189.3465 0) scale(100)"');
+    expect(relationFragments[1]?.width).toBeCloseTo(19.036204, 6);
+    expect(relationFragments[1]?.mathSvgBody).toContain('transform="translate(1125.8394 0) scale(100)"');
     expect(pairTail?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="40"');
     expect(pairTail?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
     expect(pairTail?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="112"');

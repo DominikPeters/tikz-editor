@@ -608,6 +608,9 @@ supported grammar is mostly healthy under the available gates:
   scripts, fractions, radicals, sums, delimiters, TeX forced breaks, and actual
   vlist line placement; a focused fragmented-inline-math fixture exercises
   caret and selection behavior across math breakpoint line splits;
+- document-level editor hit-map fuzz covers registered vlist geometry for
+  mixed inline math, display math, aligned display rows, and supported vertical
+  contexts without relying on rendered DOM linebox queries;
 - generated editor hit-map fuzz covers display alignment row hboxes, including
   source spans, row metadata, and point hits, across quote, itemize, enumerate,
   description, nested quote/itemize, and multi-item list contexts;

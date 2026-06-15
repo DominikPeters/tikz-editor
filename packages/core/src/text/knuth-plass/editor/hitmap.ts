@@ -2032,6 +2032,9 @@ function alignSegmentsToSource(
         });
         continue;
       }
+      if (segment.role === 'list-label') {
+        continue;
+      }
 
       const runRaw = getFallbackRunRaw();
       if (runRaw.error) {
