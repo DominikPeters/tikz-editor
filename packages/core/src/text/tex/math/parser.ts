@@ -52,6 +52,11 @@ type InfixFractionPrimitive =
   | "overwithdelims"
   | "atopwithdelims";
 
+interface DeclaredMathOperator {
+  readonly parts: readonly TexMathOperatorNamePart[];
+  readonly limits: TexMathOperatorLimits;
+}
+
 export interface ParseTexMathOptions {
   readonly sourceOffset?: number;
   readonly suppressTerminalEllipsisGlue?: boolean;
@@ -163,6 +168,7 @@ class TexMathParser {
   readonly diagnostics: TexMathDiagnostic[] = [];
   private index = 0;
   private readonly activeAlignmentEnvironments: string[] = [];
+  private readonly declaredMathOperators = new Map<string, DeclaredMathOperator>();
 
   constructor(
     private readonly tokens: readonly TexMathToken[],
@@ -318,9 +324,17 @@ class TexMathParser {
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
       }
+      if (commandName(token.text) === "DeclareMathOperator") {
+        this.parseDeclareMathOperator();
+        return null;
+      }
       const extensibleArrow = extensibleArrowCommandName(token.text);
       if (extensibleArrow) {
         return this.parseExtensibleArrow(extensibleArrow, allowScripts);
+      }
+      const declaredOperator = this.declaredMathOperators.get(commandName(token.text));
+      if (declaredOperator) {
+        return this.parseDeclaredMathOperator(declaredOperator, allowScripts);
       }
       const namedOperator = namedOperatorCommandName(token.text);
       if (namedOperator) {
@@ -757,6 +771,56 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private parseDeclareMathOperator(): void {
+    const command = this.advance();
+    let commandSourceSpan = command.sourceSpan;
+    let limits: TexMathOperatorLimits = "nolimits";
+    const star = this.peek();
+    if (star?.kind === "character" && star.text === "*") {
+      this.advance();
+      commandSourceSpan = spanUnion(commandSourceSpan, star.sourceSpan);
+      limits = "display";
+    }
+    const declaredCommand = this.parseRequiredControlSequenceGroup(
+      commandSourceSpan,
+      `${command.text} command name`
+    );
+    const content = this.parseRequiredOperatorNameGroup(commandSourceSpan);
+    if (!declaredCommand || !content || content.unsupported) {
+      return;
+    }
+    this.declaredMathOperators.set(declaredCommand.name, {
+      parts: content.parts,
+      limits,
+    });
+  }
+
+  private parseDeclaredMathOperator(
+    declaration: DeclaredMathOperator,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const parts = declaration.parts.map((part, index): TexMathOperatorNamePart => {
+      const sourceSpan = operatorPartUseSourceSpan(command.sourceSpan, index);
+      return part.kind === "text"
+        ? { kind: "text", text: part.text, sourceSpan }
+        : { kind: "spacing", command: part.command, sourceSpan };
+    });
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "operator-name",
+        parts,
+        commandSourceSpan: command.sourceSpan,
+        nameSourceSpan: command.sourceSpan,
+        sourceSpan: command.sourceSpan,
+      },
+      limits: declaration.limits,
+      sourceSpan: command.sourceSpan,
+    }, allowScripts);
+  }
+
   private parseExtensibleArrow(
     commandNameValue: TexMathExtensibleArrowCommand,
     allowScripts: boolean
@@ -1076,6 +1140,9 @@ class TexMathParser {
       }
       return this.parseAlignedEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
+    if (environmentName && xalignatEnvironmentName(environmentName.name)) {
+      return this.parseUnsupportedXalignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
     if (environmentName?.name === "array") {
       return this.parseArrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
@@ -1215,6 +1282,51 @@ class TexMathParser {
       columnAlignment: preamble?.alignment ?? "left",
       allowScripts,
     });
+  }
+
+  private parseUnsupportedXalignatEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    const initialSourceSpan = spanUnion(beginSourceSpan, environmentName.sourceSpan);
+    const argument = this.parseRequiredRawGroup(initialSourceSpan, `\\begin{${environmentName.name}} column count`);
+    const argumentValue = argument ? Number.parseInt(argument.text.trim(), 10) : Number.NaN;
+    const validArgument = Number.isInteger(argumentValue) &&
+      argumentValue > 0 &&
+      String(argumentValue) === argument?.text.trim();
+    if (!validArgument) {
+      this.addDiagnostic(
+        "error",
+        "invalid-environment-argument",
+        `Argument to \\begin{${environmentName.name}} must be a positive integer.`,
+        argument?.contentSourceSpan ?? argument?.sourceSpan ?? initialSourceSpan
+      );
+    }
+
+    const body = this.consumeXalignatBody(environmentName.name, validArgument ? argumentValue : null);
+    const sourceSpan = spanUnion(
+      initialSourceSpan,
+      body.sourceSpan ?? argument?.sourceSpan ?? initialSourceSpan
+    );
+    if (body.extraAlignmentTabSourceSpan) {
+      this.addDiagnostic(
+        "error",
+        "extra-alignment-tab",
+        `Extra & in row of ${environmentName.name}.`,
+        body.extraAlignmentTabSourceSpan
+      );
+    }
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "inner",
+      nucleus: {
+        kind: "unsupported",
+        command: `\\begin{${environmentName.name}}`,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
   }
 
   parseAlignedBody(params: {
@@ -1361,6 +1473,45 @@ class TexMathParser {
     }
     return {
       message: `Erroneous nesting of equation structures: \\begin{${candidate}} inside \\begin{${active}}.`,
+    };
+  }
+
+  private consumeXalignatBody(
+    environmentName: string,
+    pairCount: number | null
+  ): {
+    readonly sourceSpan?: TexMathSourceSpan;
+    readonly extraAlignmentTabSourceSpan?: TexMathSourceSpan;
+  } {
+    let sourceSpan: TexMathSourceSpan | undefined;
+    let alignmentTabsInRow = 0;
+    let extraAlignmentTabSourceSpan: TexMathSourceSpan | undefined;
+    const maxAlignmentTabs = pairCount === null ? Number.POSITIVE_INFINITY : Math.max(0, 2 * pairCount - 1);
+    while (!this.isAtEnd()) {
+      if (this.isEnvironmentEnd(environmentName)) {
+        const end = this.consumeEnvironmentEnd(environmentName);
+        sourceSpan = spanUnion(sourceSpan ?? end, end);
+        return {
+          ...(sourceSpan ? { sourceSpan } : {}),
+          ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan } : {}),
+        };
+      }
+      const token = this.advance();
+      sourceSpan = spanUnion(sourceSpan ?? token.sourceSpan, token.sourceSpan);
+      if (isMathRowBreakToken(token)) {
+        alignmentTabsInRow = 0;
+        continue;
+      }
+      if (token.kind === "character" && token.text === "&") {
+        alignmentTabsInRow += 1;
+        if (!extraAlignmentTabSourceSpan && alignmentTabsInRow > maxAlignmentTabs) {
+          extraAlignmentTabSourceSpan = token.sourceSpan;
+        }
+      }
+    }
+    return {
+      ...(sourceSpan ? { sourceSpan } : {}),
+      ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan } : {}),
     };
   }
 
@@ -2531,6 +2682,33 @@ class TexMathParser {
     };
   }
 
+  private parseRequiredControlSequenceGroup(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): {
+    readonly name: string;
+    readonly sourceSpan: TexMathSourceSpan;
+  } | null {
+    const group = this.parseRequiredRawGroup(fallbackSpan, label);
+    if (!group) {
+      return null;
+    }
+    const significant = group.tokens.filter((token) => token.kind !== "space");
+    if (significant.length !== 1 || significant[0]?.kind !== "command") {
+      this.addDiagnostic(
+        "error",
+        "unsupported-command",
+        `Expected a single control sequence for ${label}.`,
+        group.contentSourceSpan
+      );
+      return null;
+    }
+    return {
+      name: commandName(significant[0].text),
+      sourceSpan: group.sourceSpan,
+    };
+  }
+
   private parseScriptArgument(operatorSpan: TexMathSourceSpan): TexMathScript | null {
     this.skipSpaces();
     const next = this.peek();
@@ -2936,6 +3114,12 @@ function commandName(command: string): string {
   return command.startsWith("\\") ? command.slice(1) : command;
 }
 
+function operatorPartUseSourceSpan(commandSourceSpan: TexMathSourceSpan, index: number): TexMathSourceSpan {
+  return index === 0
+    ? commandSourceSpan
+    : { start: commandSourceSpan.end, end: commandSourceSpan.end };
+}
+
 function arrayPreambleAlignment(token: TexMathToken): TexMathArrayColumnAlignment | null {
   if (token.kind !== "character") {
     return null;
@@ -3248,6 +3432,10 @@ function alignedEnvironmentName(name: string): boolean {
     name === "align*" ||
     name === "gather" ||
     name === "gather*";
+}
+
+function xalignatEnvironmentName(name: string): boolean {
+  return name === "xalignat" || name === "xalignat*";
 }
 
 function displayAlignmentEnvironmentName(name: string): boolean {

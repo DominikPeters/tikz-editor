@@ -715,6 +715,49 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses DeclareMathOperator declarations as later roman operator uses", () => {
+    const result = parseTexMath(String.raw`\DeclareMathOperator{\R}{R}a\R b`);
+    const a = atomAt(result, 0);
+    const operator = atomAt(result, 1);
+    const b = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(a.sourceSpan).toEqual({ start: 27, end: 28 });
+    expect(b.sourceSpan).toEqual({ start: 31, end: 32 });
+    expect(operator).toMatchObject({
+      atomClass: "op",
+      limits: "nolimits",
+      sourceSpan: { start: 28, end: 30 },
+      nucleus: {
+        kind: "operator-name",
+        commandSourceSpan: { start: 28, end: 30 },
+        nameSourceSpan: { start: 28, end: 30 },
+      },
+    });
+    expect(operator.nucleus.kind === "operator-name" ? operator.nucleus.parts : []).toEqual([
+      { kind: "text", text: "R", sourceSpan: { start: 28, end: 30 } },
+    ]);
+  });
+
+  it("parses starred DeclareMathOperator declarations with display limits", () => {
+    const result = parseTexMath(String.raw`\DeclareMathOperator*{\R}{R}\R_{n}`);
+    const operator = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(1);
+    expect(operator).toMatchObject({
+      atomClass: "op",
+      limits: "display",
+      sourceSpan: { start: 28, end: 34 },
+      nucleus: {
+        kind: "operator-name",
+        commandSourceSpan: { start: 28, end: 30 },
+        nameSourceSpan: { start: 28, end: 30 },
+      },
+      subscript: { sourceSpan: { start: 30, end: 34 } },
+    });
+  });
+
   it("keeps unsupported operatorname macro content explicit", () => {
     const result = parseTexMath(String.raw`\operatorname{\alpha}`);
     const atom = atomAt(result, 0);
@@ -1279,6 +1322,44 @@ describe("TeX math parser", () => {
         },
       });
     }
+  });
+
+  it("reports TeX-like xalignat argument and row errors while keeping the environment unsupported", () => {
+    const invalidArgument = parseTexMath(String.raw`\begin{xalignat}{x} \and{xalignat}`);
+    expect(invalidArgument.diagnostics).toContainEqual({
+      severity: "error",
+      code: "invalid-environment-argument",
+      message: String.raw`Argument to \begin{xalignat} must be a positive integer.`,
+      sourceSpan: { start: 17, end: 18 },
+    });
+    expect(atomAt(invalidArgument, 0)).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: 34 },
+      nucleus: {
+        kind: "unsupported",
+        command: String.raw`\begin{xalignat}`,
+        sourceSpan: { start: 0, end: 34 },
+      },
+    });
+    expect(invalidArgument.list.items).toHaveLength(1);
+
+    const extraAlignmentTab = parseTexMath(String.raw`\begin{xalignat}{1} a&b & \end{xalignat}`);
+    expect(extraAlignmentTab.diagnostics).toContainEqual({
+      severity: "error",
+      code: "extra-alignment-tab",
+      message: "Extra & in row of xalignat.",
+      sourceSpan: { start: 24, end: 25 },
+    });
+    expect(atomAt(extraAlignmentTab, 0)).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: 40 },
+      nucleus: {
+        kind: "unsupported",
+        command: String.raw`\begin{xalignat}`,
+        sourceSpan: { start: 0, end: 40 },
+      },
+    });
+    expect(extraAlignmentTab.list.items).toHaveLength(1);
   });
 
   it("allows align inside gather like amsmath", () => {

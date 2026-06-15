@@ -1534,6 +1534,22 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out declared math operators as roman operator names", () => {
+    const declared = layout(String.raw`\DeclareMathOperator{\R}{R}\R`);
+    expect(declared.supported).toBe(true);
+    expect(declared.hlist?.width).toBeCloseTo(7.36113, 5);
+    expect(declared.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 82, x: 0 },
+    ]);
+
+    const starred = layoutTexMathList(
+      parseTexMath(String.raw`\DeclareMathOperator*{\R}{R}\R_{n}`).list,
+      { style: "display" }
+    );
+    expect(starred.supported).toBe(true);
+    expect(starred.hlist?.items.some((item) => item.kind === "hlist" && item.role === "limit-subscript")).toBe(true);
+  });
+
   it("lays out TeX operator limits as vertical boxes", () => {
     const result = layout(String.raw`\sum\limits_i^n+\int\limits_0^1`);
     expect(result.supported).toBe(true);
