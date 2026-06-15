@@ -1368,6 +1368,36 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out display align and gather environments through the aligned hlist model", () => {
+    const align = layoutTexMathList(
+      parseTexMath(String.raw`\begin{align}a&=b\\c&=d\end{align}`).list,
+      { style: "display" }
+    );
+    const gather = layoutTexMathList(
+      parseTexMath(String.raw`\begin{gather*}a=b\\c=d\end{gather*}`).list,
+      { style: "display" }
+    );
+
+    expect(align.supported).toBe(true);
+    expect(align.hlist?.items.map((item) => item.kind === "hlist" ? item.role : null)).toEqual([
+      "aligned-row",
+      "aligned-row",
+    ]);
+    const alignFirstRow = align.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(alignFirstRow?.items.map((item) => item.kind === "hlist" ? item.role : null)).toEqual([
+      "aligned-cell",
+      "aligned-cell",
+    ]);
+
+    expect(gather.supported).toBe(true);
+    expect(gather.hlist?.items.map((item) => item.kind === "hlist" ? item.role : null)).toEqual([
+      "aligned-row",
+      "aligned-row",
+    ]);
+    const gatherFirstRow = gather.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(gatherFirstRow?.items).toHaveLength(1);
+  });
+
   it("uses amsmath display-style cells, inter-pair gaps, and TeX interline glue in aligned environments", () => {
     const scriptFraction = layoutTexMathList(
       parseTexMath(String.raw`\begin{aligned}x_i&=y^2\\\frac{1}{2}&=z\end{aligned}`).list,

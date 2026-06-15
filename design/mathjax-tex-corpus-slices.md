@@ -57,7 +57,7 @@ These counts come from `npm run check:mathjax-tex-corpus -- --slice <slice>` aft
 
 | Slice | Entries | Supported | Supported % | Explicit unsupported | Parser error | Not applicable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `core-baseline` | 1,279 | 354 | 27.7% | 831 | 94 | 0 |
+| `core-baseline` | 1,279 | 364 | 28.5% | 821 | 94 | 0 |
 | `latex-oracle-candidates` | 997 | 226 | 22.7% | 767 | 0 | 4 |
 | `extra-oracle-candidates` | 108 | 3 | 2.8% | 101 | 0 | 4 |
 | `display-environments` | 209 | 4 | 1.9% | 183 | 20 | 2 |
@@ -73,4 +73,4 @@ The dominant current failure classes are:
 - Macro expansion and scoping, such as `\def`, `\let`, `\newcommand`, `\begingroup`, and `\endgroup`.
 - Diagnostic-policy gaps where MathJax expects an error but the current parser only reports unsupported-command warnings.
 
-After adding renderable Computer Modern symbol/operator mappings, TeX-like single-token arguments for `\frac`, `\binom`, and `\sqrt`, standalone delimiter commands, `\colon`, control-space, and long-arrow macro composites, `core-baseline` support rose from 232/1,279 to 354/1,279. Remaining high-frequency failures in that slice are now dominated by display/alignment tokens (`\\`, `\end`, `align`, `multline`, tags) and TeX infix fraction primitives (`\over`, `\choose`, `\overwithdelims`) rather than plain Computer Modern symbol declarations.
+After adding renderable Computer Modern symbol/operator mappings, TeX-like single-token arguments for `\frac`, `\binom`, and `\sqrt`, standalone delimiter commands, `\colon`, control-space, long-arrow macro composites, and first-class parser/layout support for `align`/`gather` display environments, `core-baseline` support rose from 232/1,279 to 364/1,279. Remaining high-frequency failures in that slice are now dominated by broader display/alignment behavior (`\\`, `\end`, `multline`, tags, invalid nesting diagnostics) and TeX infix fraction primitives (`\over`, `\choose`, `\overwithdelims`) rather than plain Computer Modern symbol declarations.

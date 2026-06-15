@@ -786,6 +786,48 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses display alignment environments with their own end delimiters", () => {
+    const source = String.raw`\begin{align}a&=b\\c&=d\end{align}`;
+    const result = parseTexMath(source, { sourceOffset: 2 });
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 2, end: 2 + source.length },
+      nucleus: {
+        kind: "aligned",
+        beginSourceSpan: { start: 2, end: 8 },
+        endSourceSpan: {
+          start: 2 + source.indexOf(String.raw`\end{align}`),
+          end: 2 + source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) => row.cells.map((cell) => cell.list.items.length))).toEqual([
+      [1, 2],
+      [1, 2],
+    ]);
+  });
+
+  it("parses gather environments as aligned rows without requiring alignment tabs", () => {
+    const source = String.raw`\begin{gather*}a=b\\c=d\end{gather*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "aligned",
+      rows: [
+        { cells: [{ sourceSpan: { start: 15, end: 18 } }] },
+        { cells: [{ sourceSpan: { start: 20, end: 23 } }] },
+      ],
+    });
+  });
+
   it("reports missing aligned environment ends without throwing", () => {
     const result = parseTexMath(String.raw`\begin{aligned}a&=b`);
     const atom = atomAt(result, 0);

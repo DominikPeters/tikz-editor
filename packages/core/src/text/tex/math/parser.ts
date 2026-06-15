@@ -913,7 +913,7 @@ class TexMathParser {
       beginCommand.sourceSpan,
       "\\begin environment name"
     );
-    if (environmentName?.name === "aligned") {
+    if (environmentName && alignedEnvironmentName(environmentName.name)) {
       return this.parseAlignedEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
     if (environmentName?.name === "array") {
@@ -957,7 +957,7 @@ class TexMathParser {
     return this.parseAlignedBody({
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
-      stopAtEnvironmentEnd: "aligned",
+      stopAtEnvironmentEnd: environmentName.name,
       allowScripts,
     });
   }
@@ -2381,6 +2381,14 @@ function operatorCommandName(command: string): TexMathOperatorCommand | null {
     default:
       return null;
   }
+}
+
+function alignedEnvironmentName(name: string): boolean {
+  return name === "aligned" ||
+    name === "align" ||
+    name === "align*" ||
+    name === "gather" ||
+    name === "gather*";
 }
 
 function namedOperatorCommandName(command: string): string | null {
