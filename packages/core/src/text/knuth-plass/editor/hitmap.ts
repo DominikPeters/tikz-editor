@@ -1951,16 +1951,49 @@ function alignSegmentsToSource(
       const segment = line.segments[segmentIndex];
       const explicitRange = explicitSegmentSourceRange(segment, sourceText);
       if (explicitRange) {
-        annotateSegmentSource(segment, explicitRange.rawStart, explicitRange.rawEnd, explicitRange.sourceKind);
         const mathSpan = explicitRange.sourceKind === 'math'
           ? mathSpanByRange.get(`${explicitRange.rawStart}:${explicitRange.rawEnd}`)
           : undefined;
         if (explicitRange.sourceKind === 'math' && !mathSpan) {
+          const grouped = alignExplicitMathSegmentGroup(
+            line,
+            segmentIndex,
+            sourceText,
+            mathSpanByRange
+          );
+          if (grouped.error) {
+            const containingMathSpan = findContainingMathSpan(
+              mathSpanByRange,
+              explicitRange.rawStart,
+              explicitRange.rawEnd
+            );
+            if (containingMathSpan) {
+              annotateSegmentSource(segment, explicitRange.rawStart, explicitRange.rawEnd, 'math');
+              aligned.push({
+                lineIndex: line.lineIndex,
+                line,
+                segment,
+                rawStart: explicitRange.rawStart,
+                rawEnd: explicitRange.rawEnd,
+                sourceKind: 'math',
+                mathSpan: containingMathSpan,
+                mathConstructRanges: normalizeMathConstructRanges(segment.mathConstructRanges),
+              });
+              continue;
+            }
+            return { aligned: [], error: grouped.error };
+          }
+          if (grouped.entry) {
+            aligned.push(grouped.entry);
+            segmentIndex = grouped.endSegmentIndex ?? segmentIndex;
+            continue;
+          }
           return {
             aligned: [],
             error: `Failed to align math segment ${explicitRange.rawStart}:${explicitRange.rawEnd} to parsed source span.`,
           };
         }
+        annotateSegmentSource(segment, explicitRange.rawStart, explicitRange.rawEnd, explicitRange.sourceKind);
         aligned.push({
           lineIndex: line.lineIndex,
           line,
@@ -2106,6 +2139,185 @@ function alignSegmentsToSource(
   }
 
   return { aligned, error: null };
+}
+
+function findContainingMathSpan(
+  mathSpanByRange: ReadonlyMap<string, MathSourceSpan>,
+  rawStart: number,
+  rawEnd: number
+): MathSourceSpan | undefined {
+  for (const span of mathSpanByRange.values()) {
+    if (span.rawStart <= rawStart && rawEnd <= span.rawEnd) {
+      return span;
+    }
+  }
+  return undefined;
+}
+
+function alignExplicitMathSegmentGroup(
+  line: ParagraphLayoutReport['lines'][number],
+  startSegmentIndex: number,
+  sourceText: string,
+  mathSpanByRange: ReadonlyMap<string, MathSourceSpan>
+): {
+  readonly entry?: AlignedSegment;
+  readonly endSegmentIndex?: number;
+  readonly error?: string;
+} {
+  const first = line.segments[startSegmentIndex];
+  if (first.kind !== 'math') {
+    return {};
+  }
+  const firstRange = explicitSegmentSourceRange(first, sourceText);
+  if (firstRange?.sourceKind !== 'math') {
+    return {};
+  }
+
+  const segments: LineSegmentReport[] = [first];
+  let groupRawStart = firstRange.rawStart;
+  let groupRawEnd = firstRange.rawEnd;
+  let groupStartX = first.x;
+  let groupEndX = first.x + Math.max(0, first.width);
+  let endSegmentIndex = startSegmentIndex;
+  let mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
+
+  while (!mathSpan && endSegmentIndex + 1 < line.segments.length) {
+    let nextSegmentIndex = endSegmentIndex + 1;
+    while (
+      nextSegmentIndex < line.segments.length &&
+      isTransparentMathFragmentSeparator(line.segments[nextSegmentIndex])
+    ) {
+      nextSegmentIndex += 1;
+    }
+    const next = line.segments.at(nextSegmentIndex);
+    if (next?.kind !== 'math') {
+      break;
+    }
+    const nextRange = explicitSegmentSourceRange(next, sourceText);
+    if (nextRange?.sourceKind !== 'math') {
+      break;
+    }
+    segments.push(next);
+    groupRawStart = Math.min(groupRawStart, nextRange.rawStart);
+    groupRawEnd = Math.max(groupRawEnd, nextRange.rawEnd);
+    groupStartX = Math.min(groupStartX, next.x);
+    groupEndX = Math.max(groupEndX, next.x + Math.max(0, next.width));
+    endSegmentIndex = nextSegmentIndex;
+    mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
+  }
+
+  if (!mathSpan) {
+    return {
+      error: `Failed to align math segment ${groupRawStart}:${groupRawEnd} to parsed source span.`,
+    };
+  }
+
+  const caretStops = combineExplicitMathGroupCaretStops(
+    segments,
+    groupRawStart,
+    groupRawEnd,
+    groupStartX,
+    groupEndX
+  );
+  const mathConstructRanges = combineExplicitMathConstructRanges(segments);
+
+  for (const groupedSegment of segments) {
+    annotateSegmentSource(groupedSegment, groupRawStart, groupRawEnd, 'math');
+  }
+
+  return {
+    endSegmentIndex,
+    entry: {
+      lineIndex: line.lineIndex,
+      line,
+      segment: {
+        runIndex: first.runIndex,
+        kind: 'math',
+        x: groupStartX,
+        width: Math.max(0, groupEndX - groupStartX),
+        caretStops,
+      },
+      rawStart: groupRawStart,
+      rawEnd: groupRawEnd,
+      sourceKind: 'math',
+      mathSpan,
+      mathConstructRanges,
+    },
+  };
+}
+
+function isTransparentMathFragmentSeparator(
+  segment: LineSegmentReport | undefined
+): boolean {
+  if (segment?.kind !== 'space') {
+    return false;
+  }
+  const rawStart = Number(segment.sourceStartRaw);
+  const rawEnd = Number(segment.sourceEndRaw);
+  return Math.abs(Number(segment.width) || 0) <= EPSILON &&
+    Number.isFinite(rawStart) &&
+    rawStart === rawEnd;
+}
+
+function combineExplicitMathGroupCaretStops(
+  segments: readonly LineSegmentReport[],
+  groupRawStart: number,
+  groupRawEnd: number,
+  groupStartX: number,
+  groupEndX: number
+): number[] {
+  const stops = Array.from({ length: Math.max(0, groupRawEnd - groupRawStart) + 1 }, () => Number.NaN);
+  stops[0] = groupStartX;
+  stops[stops.length - 1] = groupEndX;
+  for (const segment of segments) {
+    const rawStart = Number(segment.sourceStartRaw);
+    const rawEnd = Number(segment.sourceEndRaw);
+    if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd)) {
+      continue;
+    }
+    if (!Array.isArray(segment.caretStops)) {
+      continue;
+    }
+    for (let rawOffset = rawStart; rawOffset <= rawEnd; rawOffset += 1) {
+      const groupIndex = rawOffset - groupRawStart;
+      const segmentIndex = rawOffset - rawStart;
+      const stop = segment.caretStops[segmentIndex];
+      if (groupIndex >= 0 && groupIndex < stops.length && Number.isFinite(stop)) {
+        stops[groupIndex] = stop;
+      }
+    }
+  }
+  interpolateLineStops(stops, groupStartX, groupEndX);
+  return stops;
+}
+
+function interpolateLineStops(stops: number[], startX: number, endX: number): void {
+  if (!Number.isFinite(stops[0])) {
+    stops[0] = startX;
+  }
+  if (!Number.isFinite(stops[stops.length - 1])) {
+    stops[stops.length - 1] = endX;
+  }
+  let previousKnown = 0;
+  for (let index = 1; index < stops.length; index += 1) {
+    if (!Number.isFinite(stops[index])) {
+      continue;
+    }
+    const left = stops[previousKnown] ?? startX;
+    const right = stops[index] ?? left;
+    const gap = index - previousKnown;
+    for (let fill = previousKnown + 1; fill < index; fill += 1) {
+      stops[fill] = left + ((right - left) * (fill - previousKnown)) / gap;
+    }
+    previousKnown = index;
+  }
+}
+
+function combineExplicitMathConstructRanges(
+  segments: readonly LineSegmentReport[]
+): MathConstructRange[] | undefined {
+  const ranges = segments.flatMap((segment) => normalizeMathConstructRanges(segment.mathConstructRanges) ?? []);
+  return ranges.length > 0 ? ranges : undefined;
 }
 
 function markLineEndpoints(stops: Stop[]): Stop[] {

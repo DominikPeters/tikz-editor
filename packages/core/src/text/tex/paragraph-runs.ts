@@ -16,6 +16,7 @@ import type {
   TexMetricProvider,
 } from "./fonts/types.js";
 import type { TexLayoutInlineItem } from "./layout-inline-items.js";
+import type { TexMathBox } from "./layout-inline-items.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
 export interface TexParagraphRunsLayout {
@@ -97,6 +98,29 @@ function layoutItemsToRuns(
 
     if (item.kind === "math") {
       pendingItalicCorrection = 0;
+      const fragments = mathBoxFragments(item.box);
+      if (fragments.length > 1) {
+        for (const [fragmentIndex, fragment] of fragments.entries()) {
+          const fragmentRunIndex = runs.length;
+          runs.push(mathRunForBox(
+            fragment.box,
+            fragmentRunIndex,
+            item.role,
+            fragment.sourceStart,
+            fragment.sourceEnd
+          ));
+          if (fragmentIndex < fragments.length - 1 && fragment.breakAfter) {
+            const breakRunIndex = runs.length;
+            runs.push(mathBreakpointRun(
+              syntheticWrapper,
+              breakRunIndex,
+              item.role,
+              fragment.breakAfter.sourceOffset
+            ));
+          }
+        }
+        continue;
+      }
       const wrapper: AnyWrapper = {
         getBBox: () => ({
           L: 0,
@@ -154,6 +178,214 @@ function layoutItemsToRuns(
     } satisfies SpaceRun);
   }
   return { runs, shapedRuns };
+}
+
+function mathRunForBox(
+  box: TexMathBox,
+  runIndex: number,
+  role: TexLayoutInlineItem["role"],
+  sourceStart: number,
+  sourceEnd: number
+): MathRun {
+  const wrapper: AnyWrapper = {
+    getBBox: () => ({
+      L: 0,
+      R: 0,
+      w: box.width,
+      h: box.height,
+      d: box.depth,
+    }),
+    getOuterBBox: () => ({
+      L: 0,
+      R: 0,
+      w: box.width,
+      h: box.height,
+      d: box.depth,
+    }),
+    texMathBox: box,
+  };
+  return {
+    kind: "math",
+    runIndex,
+    role,
+    sourceStart,
+    sourceEnd,
+    wrapper,
+  };
+}
+
+function mathBreakpointRun(
+  wrapper: AnyWrapper,
+  runIndex: number,
+  role: TexLayoutInlineItem["role"],
+  sourceOffset: number
+): SpaceRun {
+  return {
+    kind: "space",
+    runIndex,
+    role,
+    sourceStart: sourceOffset,
+    sourceEnd: sourceOffset,
+    text: " ",
+    wrapper,
+    breakRef: createSimpleBreakRef(wrapper, false),
+    texGlue: { width: 0, stretch: 0, shrink: 0 },
+  };
+}
+
+interface TexMathBoxFragment {
+  readonly box: TexMathBox;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly breakAfter?: {
+    readonly sourceOffset: number;
+  };
+}
+
+function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
+  const breakpoints = (box.breakpoints ?? [])
+    .filter((breakpoint) =>
+      Number.isFinite(breakpoint.x) &&
+      breakpoint.x > 0 &&
+      breakpoint.x < box.width &&
+      breakpoint.sourceOffset > box.sourceStart &&
+      breakpoint.sourceOffset < box.sourceEnd
+    )
+    .sort((a, b) => a.x - b.x);
+  if (breakpoints.length === 0) {
+    return [{ box, sourceStart: box.sourceStart, sourceEnd: box.sourceEnd }];
+  }
+
+  const fragments: TexMathBoxFragment[] = [];
+  let previousX = 0;
+  let previousSource = box.sourceStart;
+  for (const breakpoint of breakpoints) {
+    const fragment = mathBoxFragment(box, previousX, breakpoint.x, previousSource, breakpoint.sourceOffset);
+    if (fragment) {
+      fragments.push({
+        box: fragment,
+        sourceStart: previousSource,
+        sourceEnd: breakpoint.sourceOffset,
+        breakAfter: { sourceOffset: breakpoint.sourceOffset },
+      });
+    }
+    previousX = breakpoint.x;
+    previousSource = breakpoint.sourceOffset;
+  }
+
+  const tail = mathBoxFragment(box, previousX, box.width, previousSource, box.sourceEnd);
+  if (tail) {
+    fragments.push({
+      box: tail,
+      sourceStart: previousSource,
+      sourceEnd: box.sourceEnd,
+    });
+  }
+
+  return fragments.length > 1
+    ? fragments
+    : [{ box, sourceStart: box.sourceStart, sourceEnd: box.sourceEnd }];
+}
+
+function mathBoxFragment(
+  box: TexMathBox,
+  xStart: number,
+  xEnd: number,
+  sourceStart: number,
+  sourceEnd: number
+): TexMathBox | null {
+  const width = roundTexPt(xEnd - xStart);
+  if (width <= 0) {
+    return null;
+  }
+  return {
+    ...box,
+    content: box.source.slice(
+      Math.max(0, sourceStart - box.sourceStart),
+      Math.max(0, sourceEnd - box.sourceStart)
+    ),
+    sourceStart,
+    sourceEnd,
+    width,
+    caretStops: fragmentMathCaretStops(box, xStart, xEnd, sourceStart, sourceEnd),
+    constructRanges: fragmentMathConstructRanges(box, xStart, xEnd),
+    breakpoints: fragmentMathBreakpoints(box, xStart, xEnd),
+    svgBody: box.svgBody ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
+  };
+}
+
+function fragmentMathCaretStops(
+  box: TexMathBox,
+  xStart: number,
+  xEnd: number,
+  sourceStart: number,
+  sourceEnd: number
+): readonly number[] {
+  const length = Math.max(0, sourceEnd - sourceStart);
+  if (!box.caretStops?.length) {
+    return [0, roundTexPt(xEnd - xStart)];
+  }
+  return Array.from({ length: length + 1 }, (_, offset) => {
+    const rawOffset = sourceStart + offset;
+    const originalIndex = rawOffset - box.sourceStart;
+    const originalStop = box.caretStops?.[originalIndex] ?? xStart;
+    return roundTexPt(Math.max(0, Math.min(xEnd - xStart, originalStop - xStart)));
+  });
+}
+
+function fragmentMathConstructRanges(
+  box: TexMathBox,
+  xStart: number,
+  xEnd: number
+): TexMathBox["constructRanges"] {
+  return box.constructRanges
+    ?.map((range) => ({
+      ...range,
+      xStart: roundTexPt(Math.max(0, range.xStart - xStart)),
+      xEnd: roundTexPt(Math.min(xEnd - xStart, range.xEnd - xStart)),
+    }))
+    .filter((range) => range.xEnd > range.xStart);
+}
+
+function fragmentMathBreakpoints(
+  box: TexMathBox,
+  xStart: number,
+  xEnd: number
+): TexMathBox["breakpoints"] {
+  return box.breakpoints
+    ?.filter((breakpoint) => breakpoint.x > xStart && breakpoint.x <= xEnd)
+    .map((breakpoint) => ({
+      ...breakpoint,
+      x: roundTexPt(Math.max(0, Math.min(xEnd - xStart, breakpoint.x - xStart))),
+    }));
+}
+
+function fragmentMathSvgBody(
+  box: TexMathBox,
+  xStart: number,
+  xEnd: number
+): string | undefined {
+  if (!box.svgBody) {
+    return undefined;
+  }
+  const width = roundTexPt(xEnd - xStart);
+  const yStart = -roundTexPt(box.height + 2) * 100;
+  const height = roundTexPt(box.height + box.depth + 4) * 100;
+  return [
+    `<svg data-tex-math-fragment="true" x="0" y="${formatMathSvgNumber(yStart)}"`,
+    ` width="${formatMathSvgNumber(width * 100)}" height="${formatMathSvgNumber(height)}"`,
+    ` viewBox="${formatMathSvgNumber(xStart * 100)} ${formatMathSvgNumber(yStart)} ${formatMathSvgNumber(width * 100)} ${formatMathSvgNumber(height)}"`,
+    ` overflow="hidden">`,
+    box.svgBody,
+    `</svg>`,
+  ].join("");
+}
+
+function formatMathSvgNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  return Number(value.toFixed(6)).toString();
 }
 
 function withTrailingItalicCorrection(

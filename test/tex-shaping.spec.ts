@@ -3835,8 +3835,21 @@ describe("simple TeX paragraph layout", () => {
     const report = result.report;
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
-    const mathSegment = report?.lines[0]?.segments.find((segment) => segment.kind === "math");
-    expect(mathSegment?.caretStops).toHaveLength("$x-y$".length + 1);
+    const mathSegments = report?.lines[0]?.segments.filter((segment) => segment.kind === "math") ?? [];
+    const mathSourceStart = sourceText.indexOf("$x-y$");
+    const mathSourceEnd = mathSourceStart + "$x-y$".length;
+    const mathCaretStops = Array.from({ length: mathSourceEnd - mathSourceStart + 1 }, () => Number.NaN);
+    for (const segment of mathSegments) {
+      const rawStart = segment.sourceStartRaw ?? mathSourceStart;
+      for (const [index, stop] of (segment.caretStops ?? []).entries()) {
+        const targetIndex = rawStart + index - mathSourceStart;
+        if (targetIndex >= 0 && targetIndex < mathCaretStops.length) {
+          mathCaretStops[targetIndex] = stop;
+        }
+      }
+    }
+    expect(mathCaretStops.every((stop) => Number.isFinite(stop))).toBe(true);
+    expect(mathCaretStops).toHaveLength("$x-y$".length + 1);
 
     const outputJax = {
       tex2svg: () => {
@@ -3863,7 +3876,7 @@ describe("simple TeX paragraph layout", () => {
       kind: "math",
       snappedToMathPrefix: false,
     });
-    expect(point.lineLocalX).toBeCloseTo(mathSegment?.caretStops?.[2] ?? 0, 6);
+    expect(point.lineLocalX).toBeCloseTo(mathCaretStops[2] ?? 0, 6);
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
       paragraphId: "tex:inline-math-real-hitmap",

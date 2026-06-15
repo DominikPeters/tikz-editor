@@ -802,23 +802,33 @@ describe("TeX math SVG rendering", () => {
     });
 
     expect(result.supported).toBe(true);
-    const mathSegment = result.report?.lines
+    const mathSegments = result.report?.lines
       .flatMap((line) => line.segments)
-      .find((segment) => segment.kind === "math");
-    expect(mathSegment).toMatchObject({
-      text: "x-y",
+      .filter((segment) => segment.kind === "math") ?? [];
+    expect(mathSegments).toHaveLength(2);
+    expect(mathSegments.map((segment) => source.slice(
+      segment.sourceStartRaw ?? 0,
+      segment.sourceEndRaw ?? 0
+    )).join("")).toBe("$x-y$");
+    expect(mathSegments[0]).toMatchObject({
       sourceStartRaw: source.indexOf("$x-y$"),
+      sourceEndRaw: source.indexOf("-") + 1,
+      sourceKind: "math",
+      mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
+    });
+    expect(mathSegments[1]).toMatchObject({
+      sourceStartRaw: source.indexOf("-") + 1,
       sourceEndRaw: source.indexOf("$x-y$") + "$x-y$".length,
       sourceKind: "math",
-      width: expect.closeTo(23.199158, 6),
+      mathSvgBody: expect.stringContaining('data-tex-math-fragment="true"'),
     });
-    expect(mathSegment?.caretStops).toHaveLength("$x-y$".length + 1);
-    expect(mathSegment?.caretStops?.[0]).toBeCloseTo(mathSegment?.x ?? 0, 6);
-    expect(mathSegment?.caretStops?.at(-1)).toBeCloseTo((mathSegment?.x ?? 0) + (mathSegment?.width ?? 0), 6);
-    expect(mathSegment?.caretStops?.[2]).toBeGreaterThan(mathSegment?.caretStops?.[1] ?? 0);
-    expect(mathSegment?.caretStops?.[3]).toBeGreaterThan(mathSegment?.caretStops?.[2] ?? 0);
-    expect(mathSegment?.mathSvgBody).toContain('data-tex-math-hlist="true"');
-    expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(mathSegments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(23.199158, 6);
+    expect(mathSegments[0]?.caretStops?.[0]).toBeCloseTo(mathSegments[0]?.x ?? 0, 6);
+    expect(mathSegments[1]?.caretStops?.at(-1)).toBeCloseTo(
+      (mathSegments[1]?.x ?? 0) + (mathSegments[1]?.width ?? 0),
+      6
+    );
+    expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
   });
 
   it("carries TeX inline math breakpoint metadata into paragraph reports", () => {
@@ -832,10 +842,11 @@ describe("TeX math SVG rendering", () => {
     });
 
     expect(result.supported).toBe(true);
-    const mathSegment = result.report?.lines
+    const mathBreakpoints = result.report?.lines
       .flatMap((line) => line.segments)
-      .find((segment) => segment.kind === "math");
-    expect(mathSegment?.mathBreakpoints).toEqual([
+      .filter((segment) => segment.kind === "math")
+      .flatMap((segment) => segment.mathBreakpoints ?? []) ?? [];
+    expect(mathBreakpoints).toEqual([
       {
         kind: "binary",
         sourceOffsetRaw: source.indexOf("+") + 1,
@@ -849,8 +860,43 @@ describe("TeX math SVG rendering", () => {
         penalty: 500,
       },
     ]);
-    expect(mathSegment?.mathBreakpoints?.[0]?.x).toBeGreaterThan(mathSegment?.x ?? 0);
-    expect(mathSegment?.mathBreakpoints?.[1]?.x).toBeGreaterThan(mathSegment?.mathBreakpoints?.[0]?.x ?? 0);
+    expect(mathBreakpoints[0]?.x).toBeGreaterThan(0);
+    expect(mathBreakpoints[1]?.x).toBeGreaterThan(mathBreakpoints[0]?.x ?? 0);
+  });
+
+  it("uses TeX inline math breakpoints as paragraph break candidates", () => {
+    const source = String.raw`Alpha $a+b=c+d$ omega`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-break-candidate",
+      width: 65,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines).toHaveLength(2);
+    expect(result.report?.lines[0]?.break).toMatchObject({
+      kind: "space",
+      sourceOffset: source.indexOf("=") + 1,
+      visibleHyphen: false,
+    });
+    expect(result.report?.lines.map((line) =>
+      line.segments.map((segment) =>
+        source.slice(segment.sourceStartRaw ?? 0, segment.sourceEndRaw ?? 0)
+      ).join("")
+    )).toEqual([
+      String.raw`Alpha $a+b=`,
+      String.raw`c+d$ omega`,
+    ]);
+    expect(result.report?.lines[0]?.segments.some((segment) =>
+      segment.kind === "math" &&
+      segment.mathSvgBody?.includes('data-tex-math-fragment="true"')
+    )).toBe(true);
+    expect(result.report?.lines[1]?.segments.some((segment) =>
+      segment.kind === "math" &&
+      segment.mathSvgBody?.includes('data-tex-math-fragment="true"')
+    )).toBe(true);
   });
 
   it("reports whole-construct ranges for non-linear inline math boxes", () => {
