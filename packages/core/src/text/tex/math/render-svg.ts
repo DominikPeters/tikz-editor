@@ -38,12 +38,18 @@ function renderMathHListItems(
   const pieces: string[] = [];
   for (const item of items) {
     if (item.kind === "hlist") {
+      pieces.push([
+        `<g data-tex-math-role="${escapeXmlAttribute(item.role)}"`,
+        ` data-source-start="${item.sourceSpan.start}"`,
+        ` data-source-end="${item.sourceSpan.end}">`,
+      ].join(""));
       pieces.push(...renderMathHListItems(
         item.items,
         fontProfile,
         originX + item.x,
         originY + item.y
       ));
+      pieces.push("</g>");
       continue;
     }
     if (item.kind === "rule") {

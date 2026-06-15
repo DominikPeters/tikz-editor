@@ -208,6 +208,39 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out AMS extensible arrows with script labels and stretched relation bars", () => {
+    const right = layout(String.raw`\xrightarrow[xy]{abcd}`);
+    const left = layout(String.raw`\xleftarrow{abcd}`);
+
+    expect(right.supported).toBe(true);
+    expect(left.supported).toBe(true);
+    const rightItems = right.hlist?.items ?? [];
+    const leftItems = left.hlist?.items ?? [];
+    expect(rightItems.filter((item): item is TexMathChildHListLayoutItem => item.kind === "hlist").map((item) => item.role)).toEqual([
+      "limit-superscript",
+      "limit-subscript",
+    ]);
+    expect(leftItems.filter((item): item is TexMathChildHListLayoutItem => item.kind === "hlist").map((item) => item.role)).toEqual([
+      "limit-superscript",
+    ]);
+    const rightBodyGlyphs = rightItems.filter((item): item is TexMathGlyphLayoutItem => item.kind === "glyph");
+    const leftBodyGlyphs = leftItems.filter((item): item is TexMathGlyphLayoutItem => item.kind === "glyph");
+    expect(rightBodyGlyphs[0]).toMatchObject({ fontId: "cmsy10", code: 0, sourceSpan: { start: 0, end: 12 } });
+    expect(rightBodyGlyphs.at(-1)).toMatchObject({ fontId: "cmsy10", code: 33, sourceSpan: { start: 0, end: 12 } });
+    expect(leftBodyGlyphs[0]).toMatchObject({ fontId: "cmsy10", code: 32, sourceSpan: { start: 0, end: 11 } });
+    expect(leftBodyGlyphs.at(-1)).toMatchObject({ fontId: "cmsy10", code: 0, sourceSpan: { start: 0, end: 11 } });
+    expect(rightBodyGlyphs.length).toBeGreaterThan(2);
+    expect(leftBodyGlyphs.length).toBeGreaterThan(2);
+    expect(right.hlist?.width).toBeGreaterThan(0);
+    expect(left.hlist?.width).toBeGreaterThan(0);
+
+    const rightGlyphs = flattenGlyphItems(rightItems);
+    expect(rightGlyphs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fontId: "cmmi7", code: 97, sourceSpan: { start: 17, end: 18 } }),
+      expect.objectContaining({ fontId: "cmmi7", code: 120, sourceSpan: { start: 13, end: 14 } }),
+    ]));
+  });
+
   it("lays out ellipsis commands as inner punctuation lists with TeX spacing", () => {
     const ldots = layout(String.raw`\ldots`);
     expect(ldots.supported).toBe(true);

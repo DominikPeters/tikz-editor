@@ -253,6 +253,23 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="18"');
   });
 
+  it("renders AMS extensible arrows with TeX arrow and script-label glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\xleftarrow[xy]{abcd}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="32"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-math-role="limit-superscript"');
+    expect(body).toContain('data-tex-math-role="limit-subscript"');
+  });
+
   it("renders additional plain-TeX symbols and named operators through TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+\Longrightarrow+\implies+\iff`);
     const result = layoutTexMathList(parsed.list);

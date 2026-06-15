@@ -9,6 +9,7 @@ import type {
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDelimiter,
+  TexMathExtensibleArrowCommand,
   TexMathGlue,
   TexMathItem,
   TexMathLineCommand,
@@ -34,6 +35,7 @@ interface ParseListOptions {
   readonly stopAtRowBreak?: boolean;
   readonly stopAtAlignmentMetadata?: boolean;
   readonly stopAtEnvironmentEnd?: string;
+  readonly stopAtOptionalBracketClose?: boolean;
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
@@ -210,6 +212,9 @@ class TexMathParser {
       ) {
         break;
       }
+      if (token.kind === "character" && token.text === "]" && options.stopAtOptionalBracketClose) {
+        break;
+      }
       if (token.kind === "space") {
         this.advance();
         continue;
@@ -309,6 +314,10 @@ class TexMathParser {
       }
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
+      }
+      const extensibleArrow = extensibleArrowCommandName(token.text);
+      if (extensibleArrow) {
+        return this.parseExtensibleArrow(extensibleArrow, allowScripts);
       }
       const namedOperator = namedOperatorCommandName(token.text);
       if (namedOperator) {
@@ -706,6 +715,34 @@ class TexMathParser {
         sourceSpan,
       },
       limits,
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseExtensibleArrow(
+    commandNameValue: TexMathExtensibleArrowCommand,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const below = this.parseOptionalBracketMathArgument(command.sourceSpan);
+    const above = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} label`);
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      above?.sourceSpan ?? below?.sourceSpan ?? command.sourceSpan
+    );
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "rel",
+      nucleus: {
+        kind: "extensible-arrow",
+        command: commandNameValue,
+        above: above?.list ?? emptyList(command.sourceSpan.end),
+        ...(below ? { below: below.list } : {}),
+        commandSourceSpan: command.sourceSpan,
+        aboveSourceSpan: above?.sourceSpan ?? command.sourceSpan,
+        ...(below ? { belowSourceSpan: below.sourceSpan } : {}),
+        sourceSpan,
+      },
       sourceSpan,
     }, allowScripts);
   }
@@ -2152,6 +2189,39 @@ class TexMathParser {
     };
   }
 
+  private parseOptionalBracketMathArgument(
+    fallbackSpan: TexMathSourceSpan
+  ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "character" || next.text !== "[") {
+      return null;
+    }
+    const open = this.advance();
+    const list = this.parseList({
+      stopAtGroupClose: false,
+      stopAtOptionalBracketClose: true,
+    });
+    const close = this.peek();
+    if (close?.kind === "character" && close.text === "]") {
+      this.advance();
+      return {
+        list,
+        sourceSpan: spanUnion(open.sourceSpan, close.sourceSpan),
+      };
+    }
+    this.addDiagnostic(
+      "error",
+      "missing-delimiter",
+      "Expected a closing bracket in optional math argument.",
+      next?.sourceSpan ?? fallbackSpan
+    );
+    return {
+      list,
+      sourceSpan: spanUnion(open.sourceSpan, list.sourceSpan),
+    };
+  }
+
   private parseRequiredMathArgument(
     fallbackSpan: TexMathSourceSpan,
     label: string,
@@ -2837,6 +2907,17 @@ function operatorCommandName(command: string): TexMathOperatorCommand | null {
       return "prod";
     case "sum":
       return "sum";
+    default:
+      return null;
+  }
+}
+
+function extensibleArrowCommandName(command: string): TexMathExtensibleArrowCommand | null {
+  switch (commandName(command)) {
+    case "xleftarrow":
+      return "xleftarrow";
+    case "xrightarrow":
+      return "xrightarrow";
     default:
       return null;
   }

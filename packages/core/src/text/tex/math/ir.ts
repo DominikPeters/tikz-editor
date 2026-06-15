@@ -79,6 +79,7 @@ export type TexMathNucleus =
   | TexMathTextNucleus
   | TexMathOperatorNucleus
   | TexMathOperatorNameNucleus
+  | TexMathExtensibleArrowNucleus
   | TexMathLeftRightNucleus
   | TexMathAlignedNucleus
   | TexMathSubstackNucleus
@@ -238,6 +239,21 @@ export interface TexMathOperatorNameNucleus {
   readonly parts: readonly TexMathOperatorNamePart[];
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly nameSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathExtensibleArrowCommand =
+  | "xleftarrow"
+  | "xrightarrow";
+
+export interface TexMathExtensibleArrowNucleus {
+  readonly kind: "extensible-arrow";
+  readonly command: TexMathExtensibleArrowCommand;
+  readonly above: TexMathList;
+  readonly below?: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly aboveSourceSpan: TexMathSourceSpan;
+  readonly belowSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

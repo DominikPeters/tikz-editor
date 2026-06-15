@@ -800,6 +800,41 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses AMS extensible arrows with optional below and required above labels", () => {
+    const result = parseTexMath(String.raw`\xrightarrow[xy]{abcd}+\xleftarrow{z}`);
+
+    expect(result.diagnostics).toEqual([]);
+    const rightArrow = atomAt(result, 0);
+    const leftArrow = atomAt(result, 2);
+    expect(rightArrow).toMatchObject({
+      atomClass: "rel",
+      sourceSpan: { start: 0, end: 22 },
+      nucleus: {
+        kind: "extensible-arrow",
+        command: "xrightarrow",
+        commandSourceSpan: { start: 0, end: 12 },
+        belowSourceSpan: { start: 12, end: 16 },
+        aboveSourceSpan: { start: 16, end: 22 },
+      },
+    });
+    expect(rightArrow.nucleus.kind === "extensible-arrow" ? rightArrow.nucleus.below?.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph" ? item.nucleus.text : null
+    ) : []).toEqual(["x", "y"]);
+    expect(rightArrow.nucleus.kind === "extensible-arrow" ? rightArrow.nucleus.above.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph" ? item.nucleus.text : null
+    ) : []).toEqual(["a", "b", "c", "d"]);
+    expect(leftArrow).toMatchObject({
+      atomClass: "rel",
+      sourceSpan: { start: 23, end: 37 },
+      nucleus: {
+        kind: "extensible-arrow",
+        command: "xleftarrow",
+        commandSourceSpan: { start: 23, end: 34 },
+        aboveSourceSpan: { start: 34, end: 37 },
+      },
+    });
+  });
+
   it("parses arrow, set, and logic symbols with TeX atom classes", () => {
     const result = parseTexMath(String.raw`\forall x\to A\cup B\subseteq C`);
 

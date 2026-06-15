@@ -22,6 +22,7 @@ import type {
   TexMathArrayNucleus,
   TexMathCasesNucleus,
   TexMathDelimiter,
+  TexMathExtensibleArrowNucleus,
   TexMathGlyphNucleus,
   TexMathLineNucleus,
   TexMathList,
@@ -745,6 +746,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "operator-name") {
     return layoutOperatorNameNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
+  if (nucleus.kind === "extensible-arrow") {
+    return layoutExtensibleArrowNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -2810,6 +2814,86 @@ function layoutOperatorNameNucleus(
   };
 }
 
+function layoutExtensibleArrowNucleus(
+  nucleus: TexMathExtensibleArrowNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const above = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, alphabet);
+  const below = nucleus.below
+    ? layoutLimitList(nucleus.below, fontProfile, "script", true, baseAtPt, alphabet)
+    : null;
+  if (!above || (nucleus.below && !below)) {
+    return null;
+  }
+  const padding = extensibleArrowPadding(nucleus.command, fontProfile, "script", baseAtPt);
+  const targetWidth = roundTexPt(Math.max(
+    extensibleArrowMinimumWidth(fontProfile, "display", baseAtPt),
+    above.width + padding.measureLeft + padding.measureRight,
+    (below?.width ?? 0) + padding.measureLeft + padding.measureRight
+  ));
+  const body = layoutExtensibleArrowBody(nucleus.command, fontProfile, "display", baseAtPt, targetWidth, nucleus.commandSourceSpan);
+  const width = roundTexPt(Math.max(
+    body.width,
+    above.width + padding.limitLeft + padding.limitRight,
+    (below?.width ?? 0) + padding.limitLeft + padding.limitRight
+  ));
+  const bodyX = roundTexPt((width - body.width) / 2);
+  const items: TexMathHListItem[] = body.items.map((item) => offsetMathLayoutItem(item, bodyX));
+
+  const aboveShift = roundTexPt(Math.max(
+    mathExtensionParameterToPt(fontProfile, "bigOpSpacing3", style, baseAtPt) - above.depth,
+    mathExtensionParameterToPt(fontProfile, "bigOpSpacing1", style, baseAtPt)
+  ));
+  items.unshift(childHList(
+    "limit-superscript",
+    roundTexPt((width - above.width + padding.limitLeft - padding.limitRight) / 2),
+    roundTexPt(-(body.height + aboveShift + above.depth)),
+    above,
+    nucleus.aboveSourceSpan
+  ));
+  const height = roundTexPt(body.height +
+    mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt) +
+    above.height +
+    above.depth +
+    aboveShift);
+
+  const belowShift = below
+    ? roundTexPt(Math.max(
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing4", style, baseAtPt) - below.height,
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing2", style, baseAtPt)
+    ))
+    : 0;
+  if (below) {
+    items.push(childHList(
+      "limit-subscript",
+      roundTexPt((width - below.width + padding.limitLeft - padding.limitRight) / 2),
+      roundTexPt(body.depth + belowShift + below.height),
+      below,
+      nucleus.belowSourceSpan ?? nucleus.sourceSpan
+    ));
+  }
+  const depth = below
+    ? roundTexPt(body.depth +
+      belowShift +
+      below.height +
+      below.depth +
+      mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt))
+    : body.depth;
+
+  return {
+    items,
+    width,
+    height,
+    depth: roundTexPt(depth),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
 function layoutLargeOperatorNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
   fontProfile: TexMathFontProfile,
@@ -3286,6 +3370,145 @@ function appendIntegralDots(
     width: roundTexPt(cursor - startX),
     height: dotHeight,
     depth: dotDepth,
+  };
+}
+
+function extensibleArrowPadding(
+  command: TexMathExtensibleArrowNucleus["command"],
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): {
+  readonly measureLeft: number;
+  readonly measureRight: number;
+  readonly limitLeft: number;
+  readonly limitRight: number;
+} {
+  if (command === "xleftarrow") {
+    return {
+      measureLeft: muToPt(fontProfile, style, baseAtPt, 9),
+      measureRight: muToPt(fontProfile, style, baseAtPt, 5),
+      limitLeft: muToPt(fontProfile, style, baseAtPt, 3),
+      limitRight: 0,
+    };
+  }
+  return {
+    measureLeft: muToPt(fontProfile, style, baseAtPt, 5),
+    measureRight: muToPt(fontProfile, style, baseAtPt, 9),
+    limitLeft: 0,
+    limitRight: muToPt(fontProfile, style, baseAtPt, 3),
+  };
+}
+
+function extensibleArrowMinimumWidth(
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
+  const relbarWidth = roundTexPt(tfmToPt(font, requiredCharMetric(font, 0).width));
+  const arrowWidth = roundTexPt(tfmToPt(font, requiredCharMetric(font, 33).width));
+  return roundTexPt(relbarWidth * 2 + arrowWidth + muToPt(fontProfile, style, baseAtPt, -14));
+}
+
+function layoutExtensibleArrowBody(
+  command: TexMathExtensibleArrowNucleus["command"],
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  targetWidth: number,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtomLayout {
+  const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
+  const relbarCode = 0;
+  const leftArrowCode = 32;
+  const rightArrowCode = 33;
+  const headCode = command === "xleftarrow" ? leftArrowCode : rightArrowCode;
+  const relbarMetric = requiredCharMetric(font, relbarCode);
+  const headMetric = requiredCharMetric(font, headCode);
+  const relbarWidth = roundTexPt(tfmToPt(font, relbarMetric.width));
+  const headWidth = roundTexPt(tfmToPt(font, headMetric.width));
+  const headKern = muToPt(fontProfile, style, baseAtPt, -7);
+  const leaderSideKern = muToPt(fontProfile, style, baseAtPt, -2);
+  const leaderUnitWidth = roundTexPt(relbarWidth + 2 * leaderSideKern);
+  const minimumWidth = roundTexPt(relbarWidth + headKern + headWidth);
+  const repeatCount = Math.max(
+    1,
+    Math.ceil((targetWidth - minimumWidth - headKern - relbarWidth) / Math.max(0.1, leaderUnitWidth))
+  );
+  const items: TexMathHListItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+
+  const appendGlyph = (code: number, text: string): void => {
+    const metric = requiredCharMetric(font, code);
+    const item = {
+      kind: "glyph",
+      fontId: font.id,
+      atPt: font.atPt,
+      family: "symbols",
+      code,
+      text,
+      x: roundTexPt(cursor),
+      y: 0,
+      width: roundTexPt(tfmToPt(font, metric.width)),
+      height: roundTexPt(tfmToPt(font, metric.height)),
+      depth: roundTexPt(tfmToPt(font, metric.depth)),
+      italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
+      sourceSpan,
+    } satisfies TexMathGlyphLayoutItem;
+    items.push(item);
+    cursor = roundTexPt(cursor + item.width);
+    height = Math.max(height, item.height);
+    depth = Math.max(depth, item.depth);
+  };
+  const appendKern = (width: number): void => {
+    items.push({
+      kind: "kern",
+      x: roundTexPt(cursor),
+      width,
+      reason: "operator-kern",
+      sourceSpan,
+    });
+    cursor = roundTexPt(cursor + width);
+  };
+  const appendLeader = (): void => {
+    appendKern(leaderSideKern);
+    appendGlyph(relbarCode, "\\relbar");
+    appendKern(leaderSideKern);
+  };
+
+  if (command === "xleftarrow") {
+    appendGlyph(leftArrowCode, "\\leftarrow");
+    appendKern(headKern);
+    for (let index = 0; index < repeatCount; index += 1) {
+      appendLeader();
+    }
+    appendKern(headKern);
+    appendGlyph(relbarCode, "\\relbar");
+  } else {
+    appendGlyph(relbarCode, "\\relbar");
+    appendKern(headKern);
+    for (let index = 0; index < repeatCount; index += 1) {
+      appendLeader();
+    }
+    appendKern(headKern);
+    appendGlyph(rightArrowCode, "\\rightarrow");
+  }
+
+  const extra = roundTexPt(targetWidth - cursor);
+  if (extra > 0) {
+    appendKern(extra);
+  }
+  return {
+    items,
+    width: roundTexPt(Math.max(targetWidth, cursor)),
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan,
   };
 }
 
