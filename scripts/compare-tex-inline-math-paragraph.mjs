@@ -151,44 +151,9 @@ function ourTrace(caseSpec, options) {
 
 function lineSegmentText(segment) {
   if (segment.kind === "math" && segment.mathSvgBody) {
-    return mathGlyphTextFromSvgBody(segment.mathSvgBody);
+    return "[M]";
   }
   return segment.text ?? "";
-}
-
-function mathGlyphTextFromSvgBody(svgBody) {
-  const pieces = [];
-  const pathPattern = /<path\b[^>]*>/g;
-  for (const match of svgBody.matchAll(pathPattern)) {
-    const code = Number(readSvgAttribute(match[0], "data-tex-glyph"));
-    if (!Number.isFinite(code)) {
-      continue;
-    }
-    pieces.push(texTraceGlyphText(code));
-  }
-  return pieces.join("");
-}
-
-function texTraceGlyphText(code) {
-  if (code === 11) {
-    return "ff";
-  }
-  if (code === 12) {
-    return "fi";
-  }
-  if (code === 13) {
-    return "fl";
-  }
-  if (code === 14) {
-    return "ffi";
-  }
-  if (code === 15) {
-    return "ffl";
-  }
-  if (code === 0) {
-    return "-";
-  }
-  return String.fromCodePoint(code);
 }
 
 function ourMathGlyphTrace(result, options) {
@@ -467,18 +432,45 @@ end
 
 local function collect(list, in_math)
   local out = table.pack()
+  local math_marker_active = false
+  local last_math_like = in_math or false
   for n in node.traverse(list) do
     local kind = node.type(n.id)
     if kind == "math" then
       in_math = n.subtype == 0
+      math_marker_active = false
+      last_math_like = in_math
     elseif kind == "glyph" then
-      table.insert(out, glyph_text(n))
+      local current_font = font_name(n.font)
+      local math_like = in_math or is_math_font_name(current_font) or
+        is_math_script_text_font(current_font) or is_math_operator_text_font(current_font)
+      if math_like then
+        if not math_marker_active then
+          table.insert(out, "[M]")
+          math_marker_active = true
+        end
+      else
+        table.insert(out, glyph_text(n))
+        math_marker_active = false
+      end
+      last_math_like = math_like
     elseif kind == "glue" then
       if not in_math and n.subtype == 13 then
         table.insert(out, " ")
+        math_marker_active = false
+        last_math_like = false
       end
     elseif (kind == "hlist" or kind == "vlist") and not (n.list == nil) then
-      table.insert(out, collect(n.list, in_math))
+      if in_math or last_math_like then
+        if not math_marker_active then
+          table.insert(out, "[M]")
+          math_marker_active = true
+        end
+      else
+        table.insert(out, collect(n.list, in_math))
+        math_marker_active = false
+      end
+      last_math_like = in_math
     end
   end
   return table.concat(out)
@@ -586,9 +578,11 @@ function normalizeLineText(text) {
     .replaceAll("ﬂ", "fl")
     .replaceAll("ﬃ", "ffi")
     .replaceAll("ﬄ", "ffl")
+    .replaceAll("’", "'")
     .replaceAll("\\(", "")
     .replaceAll("\\)", "")
     .replaceAll("$", "")
+    .replace(/\[M\](?:\[M\])+/gu, "[M]")
     .replace(/([A-Za-z])_\{?([0-9])\}?\^\{?([0-9])\}?/gu, "$1$3$2")
     .replace(/[_^{}]/gu, "")
     .replace(/\s+\(\.\/inline-math-paragraph\.aux\)\)+$/u, "")
@@ -598,7 +592,7 @@ function normalizeLineText(text) {
 function oracleCachePath(cacheDir, caseSpec, options = args) {
   const key = createHash("sha256")
     .update(JSON.stringify({
-      version: 14,
+      version: 16,
       absoluteGlyphs: options.absoluteGlyphs,
       source: caseSpec.source,
       width: caseSpec.width,
