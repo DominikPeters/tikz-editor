@@ -32,7 +32,8 @@ const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_TAGGED_EQN_SHIFT_ADJUSTMENT_PT = 5 / 3;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
-const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_SHIFT_PT = 20;
+const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT = 20;
+const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT = 13;
 
 export interface TexDerivedInlineMathBoxProviderOptions {
   readonly fontProfile?: TexMathFontProfile;
@@ -605,18 +606,24 @@ function addDisplayAlignmentTag(
   const width = Math.max(baseWidth, dimensions.targetWidth);
   const tagX = Math.max(0, roundTexPt(width - tag.hlist.width));
   const rowRight = mathItemsRightEdge(rowItems);
-  const tagShiftY = rowRight > tagX
+  const tagCollides = rowRight > tagX;
+  const tagRenderShiftY = tagCollides
     ? rowCount > 1
-      ? TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_SHIFT_PT
+      ? TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT
+      : TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
+    : 0;
+  const tagMetricShiftY = tagCollides
+    ? rowCount > 1
+      ? TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT
       : TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
     : 0;
   return {
     width,
     height: Math.max(row.height, tag.hlist.height),
-    depth: Math.max(row.depth + tagShiftY, tagShiftY + tag.hlist.depth),
+    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.hlist.depth),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(tag.hlist.items, tagX, tagShiftY),
+      ...offsetMathHListItems(tag.hlist.items, tagX, tagRenderShiftY),
     ],
   };
 }

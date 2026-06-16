@@ -1508,6 +1508,23 @@ unordered.`;
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="76"');
   });
 
+  it("does not inflate multi-row align tag metrics by the full visual tag shift", () => {
+    const source = String.raw`\begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\\c&=d\end{align*}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\\c&=d`,
+      delimiter: "align-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 300,
+    });
+
+    expect(directAlignment?.rows[0]?.depth).toBeCloseTo(16.600037, 5);
+    expect(directAlignment?.rows[0]?.svgBody).toMatch(/translate\([0-9.]+ 2000\) scale\(100\)/u);
+  });
+
   it("keeps non-colliding align-star tags on the equation baseline", () => {
     const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
     const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
