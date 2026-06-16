@@ -85,6 +85,39 @@ function relayoutFromExistingVListLayout(
   });
 }
 
+function mathSegmentGlyphSpans(
+  segment: ParagraphLayoutReport["lines"][number]["segments"][number]
+): { readonly code: number; readonly sourceStart: number; readonly sourceEnd: number }[] {
+  if (segment.kind !== "math" || !segment.mathSvgBody) {
+    return [];
+  }
+  return [...segment.mathSvgBody.matchAll(
+    /data-tex-glyph="(\d+)"[^>]*data-source-start="(\d+)"[^>]*data-source-end="(\d+)"/g
+  )].map((match) => ({
+    code: Number(match[1]),
+    sourceStart: Number(match[2]),
+    sourceEnd: Number(match[3]),
+  }));
+}
+
+function expectMathSegmentGlyphsWithinSourceSpans(
+  report: ParagraphLayoutReport
+): void {
+  for (const line of report.lines) {
+    for (const segment of line.segments) {
+      if (segment.kind !== "math") {
+        continue;
+      }
+      const sourceStart = segment.sourceStartRaw ?? 0;
+      const sourceEnd = segment.sourceEndRaw ?? sourceStart;
+      for (const glyph of mathSegmentGlyphSpans(segment)) {
+        expect(glyph.sourceStart, `${segment.text}: glyph starts before fragment`).toBeGreaterThanOrEqual(sourceStart);
+        expect(glyph.sourceEnd, `${segment.text}: glyph ends after fragment`).toBeLessThanOrEqual(sourceEnd);
+      }
+    }
+  }
+}
+
 function registeredLayoutWithBoxReport<T extends {
   readonly items: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
@@ -4303,6 +4336,39 @@ describe("simple TeX paragraph layout", () => {
     expect(crossFragmentSelection.rects.length).toBeGreaterThan(1);
   });
 
+  it("keeps inline math fragment SVG glyphs inside their source spans", () => {
+    const sourceText = String.raw`Where \(p_i=\{x,y\}\) is the unordered pair of alternatives swapped when going
+from \(R_{i-1}\) to \(R_i\).  We usually write \(p_i=(x,y)\), but the pair is
+unordered.`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-fragment-svg-spans",
+      width: 150,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+    expectMathSegmentGlyphsWithinSourceSpans(report!);
+
+    const lastFormulaStart = sourceText.lastIndexOf("p_i=(x,y)");
+    const firstFragment = report?.lines.flatMap((line) => line.segments).find((segment) =>
+      segment.kind === "math" &&
+      segment.sourceStartRaw === lastFormulaStart &&
+      segment.sourceEndRaw === lastFormulaStart + "p_i=".length
+    );
+    const secondFragment = report?.lines.flatMap((line) => line.segments).find((segment) =>
+      segment.kind === "math" &&
+      segment.sourceStartRaw === lastFormulaStart + "p_i=".length &&
+      segment.sourceEndRaw === lastFormulaStart + "p_i=(x,y)".length
+    );
+    expect(firstFragment).toBeTruthy();
+    expect(secondFragment).toBeTruthy();
+    expect(mathSegmentGlyphSpans(firstFragment!).map((glyph) => glyph.code)).toEqual([112, 105, 61]);
+    expect(mathSegmentGlyphSpans(secondFragment!).map((glyph) => glyph.code)).toEqual([40, 120, 59, 121, 41]);
+  });
+
   it("fuzzes editor hit maps for mixed TeX-derived text and inline math", async () => {
     const cases = Array.from({ length: 64 }, (_, index) => buildTexMathHitMapFuzzCase(index));
     for (const testCase of cases) {
@@ -4318,6 +4384,7 @@ describe("simple TeX paragraph layout", () => {
       expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
 
       const report = result.report!;
+      expectMathSegmentGlyphsWithinSourceSpans(report);
       const outputJax = {
         tex2svg: () => {
           throw new Error("MathJax prefix measurement should not be used for TeX-derived mixed hit-map fuzz.");

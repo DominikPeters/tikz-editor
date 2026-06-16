@@ -371,7 +371,7 @@ function mathBoxFragment(
     constructRanges: fragmentMathConstructRanges(box, xStart, xEnd),
     breakpoints: fragmentMathBreakpoints(box, xStart, xEnd),
     svgBody: box.svgBody && !box.hlist ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
-    hlist: box.hlist ? fragmentMathHList(box.hlist, xStart, xEnd, width) : undefined,
+    hlist: box.hlist ? fragmentMathHList(box.hlist, xStart, xEnd, width, sourceStart, sourceEnd) : undefined,
   };
 }
 
@@ -477,12 +477,21 @@ function fragmentMathHList(
   hlist: TexMathHList,
   xStart: number,
   xEnd: number,
-  width: number
+  width: number,
+  sourceStart: number,
+  sourceEnd: number
 ): TexMathHList {
   return {
     ...hlist,
     width,
-    items: fragmentMathHListItems(hlist.items, xStart, xEnd, -xStart),
+    items: fragmentMathHListItems(
+      hlist.items,
+      xStart,
+      xEnd,
+      -xStart,
+      sourceStart,
+      sourceEnd
+    ),
   };
 }
 
@@ -490,7 +499,9 @@ function fragmentMathHListItems(
   items: readonly TexMathHListItem[],
   xStart: number,
   xEnd: number,
-  xOffset: number
+  xOffset: number,
+  sourceStart: number,
+  sourceEnd: number
 ): readonly TexMathHListItem[] {
   return items.flatMap((item): TexMathHListItem[] => {
     const itemStart = item.x;
@@ -499,22 +510,46 @@ function fragmentMathHListItems(
       return [];
     }
     if (item.kind !== "hlist") {
+      if (!mathSourceSpanOverlaps(item.sourceSpan.start, item.sourceSpan.end, sourceStart, sourceEnd)) {
+        return [];
+      }
       return [{
         ...item,
         x: roundTexPt(item.x + xOffset),
       }];
     }
+    const childItems = fragmentMathHListItems(
+      item.items,
+      xStart - item.x,
+      xEnd - item.x,
+      0,
+      sourceStart,
+      sourceEnd
+    );
+    if (childItems.length === 0) {
+      return [];
+    }
     return [{
       ...item,
       x: roundTexPt(item.x + xOffset),
-      items: fragmentMathHListItems(
-        item.items,
-        xStart - item.x,
-        xEnd - item.x,
-        0
-      ),
+      items: childItems,
     }];
   });
+}
+
+function mathSourceSpanOverlaps(
+  itemStart: number,
+  itemEnd: number,
+  sourceStart: number,
+  sourceEnd: number
+): boolean {
+  if (itemEnd < itemStart) {
+    return false;
+  }
+  if (itemStart === itemEnd) {
+    return itemStart >= sourceStart && itemStart <= sourceEnd;
+  }
+  return itemStart < sourceEnd && itemEnd > sourceStart;
 }
 
 function fragmentMathSvgBody(
