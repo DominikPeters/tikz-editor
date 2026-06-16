@@ -72,6 +72,9 @@ function compareCase(caseSpec, options) {
   if (!ours.supported) {
     mismatches.push(`our layout unsupported: ${ours.errors.join("; ")}`);
   }
+  for (const integrityError of ours.integrityErrors ?? []) {
+    mismatches.push(integrityError);
+  }
   if (ours.lines.length !== tex.lines.length) {
     mismatches.push(`line count differs: ours=${ours.lines.length} tex=${tex.lines.length}`);
   }
@@ -123,24 +126,69 @@ function ourTrace(caseSpec, options) {
     return {
       supported: false,
       errors: result.errors ?? [result.fallbackReason ?? "unknown failure"],
+      integrityErrors: [],
       lines: [],
       mathGlyphs: [],
     };
   }
+  const mathTrace = ourMathGlyphTrace(result, options);
   return {
     supported: true,
     errors: result.errors,
+    integrityErrors: mathTrace.integrityErrors,
     lines: result.report.lines.map((line) => normalizeLineText(
       line.segments
         .filter((segment) => segment.role !== "list-label")
         .filter((segment) => !(segment.kind === "space" &&
           segment.width === 0 &&
           segment.sourceStartRaw === segment.sourceEndRaw))
-        .map((segment) => segment.text ?? "")
+        .map(lineSegmentText)
         .join("")
     )),
-    mathGlyphs: ourMathGlyphTrace(result, options),
+    mathGlyphs: mathTrace.glyphs,
   };
+}
+
+function lineSegmentText(segment) {
+  if (segment.kind === "math" && segment.mathSvgBody) {
+    return mathGlyphTextFromSvgBody(segment.mathSvgBody);
+  }
+  return segment.text ?? "";
+}
+
+function mathGlyphTextFromSvgBody(svgBody) {
+  const pieces = [];
+  const pathPattern = /<path\b[^>]*>/g;
+  for (const match of svgBody.matchAll(pathPattern)) {
+    const code = Number(readSvgAttribute(match[0], "data-tex-glyph"));
+    if (!Number.isFinite(code)) {
+      continue;
+    }
+    pieces.push(texTraceGlyphText(code));
+  }
+  return pieces.join("");
+}
+
+function texTraceGlyphText(code) {
+  if (code === 11) {
+    return "ff";
+  }
+  if (code === 12) {
+    return "fi";
+  }
+  if (code === 13) {
+    return "fl";
+  }
+  if (code === 14) {
+    return "ffi";
+  }
+  if (code === 15) {
+    return "ffl";
+  }
+  if (code === 0) {
+    return "-";
+  }
+  return String.fromCodePoint(code);
 }
 
 function ourMathGlyphTrace(result, options) {
@@ -163,6 +211,7 @@ function ourMathGlyphTrace(result, options) {
       .map((placement) => [placement.lineIndex, placement])
   );
   const glyphs = [];
+  const integrityErrors = [];
   for (const [lineIndex, line] of lines.entries()) {
     const linePlacement = linePlacements.get(line.lineIndex);
     const lineX = linePlacement?.x ?? 0;
@@ -173,30 +222,50 @@ function ourMathGlyphTrace(result, options) {
       if (segment.kind !== "math" || !segment.mathSvgBody) {
         continue;
       }
-      glyphs.push(...glyphsFromMathSvgBody(
+      const trace = glyphsFromMathSvgBody(
         segment.mathSvgBody,
         lineX + segment.x,
         baselineY,
-        lineIndex
-      ));
+        lineIndex,
+        segment
+      );
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
     }
   }
-  return glyphs;
+  return { glyphs, integrityErrors };
 }
 
-function glyphsFromMathSvgBody(svgBody, originX, baselineY, lineIndex) {
+function glyphsFromMathSvgBody(svgBody, originX, baselineY, lineIndex, segment) {
   const fragmentViewBox = readFragmentViewBox(svgBody);
   const fragmentBoundaryTolerance = 1e-5;
   const glyphs = [];
+  const integrityErrors = [];
+  const segmentSourceStart = Number(segment.sourceStartRaw);
+  const segmentSourceEnd = Number(segment.sourceEndRaw);
   const pathPattern = /<path\b[^>]*>/g;
   for (const match of svgBody.matchAll(pathPattern)) {
     const tag = match[0];
     const fontId = readSvgAttribute(tag, "data-tex-font");
     const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
+    const sourceStart = Number(readSvgAttribute(tag, "data-source-start"));
+    const sourceEnd = Number(readSvgAttribute(tag, "data-source-end"));
     const transform = readSvgAttribute(tag, "transform") ?? "";
     const translate = /translate\(([-0-9.]+)\s+([-0-9.]+)\)/.exec(transform);
     if (!fontId || !Number.isFinite(code) || !translate) {
       continue;
+    }
+    if (
+      Number.isFinite(segmentSourceStart) &&
+      Number.isFinite(segmentSourceEnd) &&
+      Number.isFinite(sourceStart) &&
+      Number.isFinite(sourceEnd) &&
+      (sourceStart < segmentSourceStart || sourceEnd > segmentSourceEnd)
+    ) {
+      integrityErrors.push(
+        `math SVG glyph source span escapes segment: line=${lineIndex + 1} segment=${JSON.stringify(segment.text ?? "")}` +
+        ` segmentSource=${segmentSourceStart}:${segmentSourceEnd} glyph=${code} glyphSource=${sourceStart}:${sourceEnd}`
+      );
     }
     const rawX = Number(translate[1]) / 100;
     if (
@@ -214,9 +283,11 @@ function glyphsFromMathSvgBody(svgBody, originX, baselineY, lineIndex) {
       y: round(baselineY + Number(translate[2]) / 100),
       fontId,
       code,
+      sourceStart,
+      sourceEnd,
     });
   }
-  return glyphs;
+  return { glyphs, integrityErrors };
 }
 
 function readFragmentViewBox(svgBody) {
@@ -336,6 +407,7 @@ local disc_id=node.id('disc')
 local whatsit_id=node.id('whatsit')
 local math_id=node.id('math')
 local rule_id=node.id('rule')
+local penalty_id=node.id('penalty')
 local function sp(v) return (v or 0)/65536 end
 local function normalize_font_name(name)
   if string.sub(name, 1, 1) == "[" then
@@ -383,6 +455,9 @@ end
 local function is_math_script_text_font(name)
   return starts_with(name, "cmr7") or starts_with(name, "cmr5")
 end
+local function is_math_operator_text_font(name)
+  return starts_with(name, "cmr")
+end
 local function is_math_operator_char(char)
   return char == 43 or char == 45 or char == 61 or char == 40 or char == 41 or
     char == 44 or char == 47 or char == 91 or char == 93 or
@@ -420,7 +495,7 @@ local function walk_hlist(list, line_index, origin_x, baseline_y, in_math, box, 
       local current_font = font_name(n.font)
       local math_like = in_math or is_math_font_name(current_font) or
         is_math_script_text_font(current_font) or
-        (last_math_like and is_math_operator_char(n.char))
+        (last_math_like and is_math_operator_text_font(current_font) and is_math_operator_char(n.char))
       if math_like then
         texio.write_nl(
           'TMG line=' .. line_index ..
@@ -444,6 +519,8 @@ local function walk_hlist(list, line_index, origin_x, baseline_y, in_math, box, 
       x=x+node_width(n)
     elseif n.id==disc_id then
       x=walk_hlist(n.replace or n.pre, line_index, x, baseline_y, in_math, box, last_math_like)
+    elseif n.id==penalty_id then
+      x=x+node_width(n)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
       last_math_like = false
@@ -520,7 +597,7 @@ function normalizeLineText(text) {
 function oracleCachePath(cacheDir, caseSpec, options = args) {
   const key = createHash("sha256")
     .update(JSON.stringify({
-      version: 11,
+      version: 13,
       absoluteGlyphs: options.absoluteGlyphs,
       source: caseSpec.source,
       width: caseSpec.width,
@@ -575,6 +652,8 @@ function fixedCases(widths) {
     String.raw`Before \(a+b=c+d\) after.`,
     String.raw`Scripted $x^2+y_1=z_3$ after words.`,
     String.raw`Two spans $a+b$ middle \(x^2=y_1\) end.`,
+    String.raw`Where \(p_i=\{x,y\}\) is the unordered pair.`,
+    String.raw`We usually write \(p_i=(x,y)\), but the pair is unordered.`,
   ];
   return sources.flatMap((source, sourceIndex) =>
     widths.map((width) => ({
@@ -639,9 +718,22 @@ function uniqueSortedInsertions(random, wordCount, count) {
 }
 
 function randomFormula(random, variables, formulaMode) {
+  if (formulaMode === "mixed" && random() < 0.25) {
+    return randomPairFormula(random, variables);
+  }
   const lhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   const rhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   return random() < 0.7 ? `${lhs}=${rhs}` : lhs;
+}
+
+function randomPairFormula(random, variables) {
+  const left = `${choice(random, variables)}_${1 + Math.floor(random() * 3)}`;
+  const x = choice(random, variables);
+  const y = choice(random, variables.filter((variable) => variable !== x));
+  const pair = random() < 0.5
+    ? `(${x},${y})`
+    : String.raw`\{` + `${x},${y}` + String.raw`\}`;
+  return `${left}=${pair}`;
 }
 
 function randomTerm(random, variables, formulaMode) {
