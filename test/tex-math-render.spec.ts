@@ -1521,7 +1521,7 @@ unordered.`;
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="76"');
   });
 
-  it("does not inflate multi-row align tag metrics by the full visual tag shift", () => {
+  it("uses TeX shifted-tag metrics for two-row alignments", () => {
     const source = String.raw`\begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\\c&=d\end{align*}`;
     const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
       source,
@@ -1534,8 +1534,8 @@ unordered.`;
       targetWidth: 300,
     });
 
-    expect(directAlignment?.rows[0]?.depth).toBeCloseTo(16.600037, 5);
-    expect(directAlignment?.rows[0]?.svgBody).toMatch(/translate\([0-9.]+ 2000\) scale\(100\)/u);
+    expect(directAlignment?.rows[0]?.depth).toBeCloseTo(15.600037, 5);
+    expect(directAlignment?.rows[0]?.svgBody).toMatch(/translate\([0-9.]+ 1200\) scale\(100\)/u);
   });
 
   it("keeps non-colliding align-star tags on the equation baseline", () => {

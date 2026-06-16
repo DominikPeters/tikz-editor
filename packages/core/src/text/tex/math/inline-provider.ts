@@ -591,14 +591,10 @@ function addDisplayAlignmentTag(
   const rowRight = mathItemsRightEdge(rowItems);
   const tagCollides = rowRight > tagX;
   const tagRenderShiftY = tagCollides
-    ? rowCount > 1
-      ? TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT
-      : TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
+    ? displayAlignmentShiftedTagRenderShift(rowCount)
     : 0;
   const tagMetricShiftY = tagCollides
-    ? rowCount > 1
-      ? TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT
-      : TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
+    ? displayAlignmentShiftedTagMetricShift(rowCount)
     : 0;
   return {
     width,
@@ -609,6 +605,18 @@ function addDisplayAlignmentTag(
       ...offsetMathHListItems(tag.hlist.items, tagX, tagRenderShiftY),
     ],
   };
+}
+
+function displayAlignmentShiftedTagRenderShift(rowCount: number): number {
+  return rowCount <= 2
+    ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
+    : TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT;
+}
+
+function displayAlignmentShiftedTagMetricShift(rowCount: number): number {
+  return rowCount <= 2
+    ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
+    : TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT;
 }
 
 interface TexDisplayAlignmentDimensions {
