@@ -1740,6 +1740,15 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("uses TeX math classes for big delimiter command variants", () => {
+    const result = parseTexMath(String.raw`\big) \bigl( \bigr) \bigm|`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.filter((item) => item.kind === "atom").map((item) =>
+      item.kind === "atom" ? item.atomClass : null
+    )).toEqual(["ord", "open", "close", "rel"]);
+  });
+
   it("keeps unsupported left-right delimiters explicit instead of treating them as null delimiters", () => {
     const result = parseTexMath(String.raw`\left\unknown x\right)`);
     const atom = atomAt(result, 0);

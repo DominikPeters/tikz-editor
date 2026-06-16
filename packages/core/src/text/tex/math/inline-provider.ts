@@ -30,7 +30,6 @@ import {
 
 const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
-const TEX_DISPLAY_ALIGNMENT_TAGGED_EQN_SHIFT_ADJUSTMENT_PT = 5 / 3;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
 const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT = 20;
 const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT = 13;
@@ -493,27 +492,11 @@ function getDisplayMathAlignment(
     targetWidth: params.targetWidth,
   });
   const hasAlignmentTags = alignedNucleus?.rows.some((row) => (row.labels?.length ?? 0) > 0) ?? false;
-  const hasCollidingAlignmentTags = hasAlignmentTags &&
-    alignedRows.some((row, rowIndex) =>
-      displayAlignmentRowTagCollides(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, dimensions, fontProfile, baseAtPt)
-    );
   const forcedRowWidth = hasAlignmentTags
     ? Math.max(dimensions.rowWidth, dimensions.targetWidth)
     : null;
   const rows = alignedRows.map((row, rowIndex) => {
-    const rowDimensions =
-      hasCollidingAlignmentTags &&
-      alignedRows.length > 1 &&
-      displayAlignmentRowHasNonEmptyFirstCell(row)
-        ? {
-            ...dimensions,
-            eqnShift: Math.max(
-              0,
-              roundTexPt(dimensions.eqnShift - TEX_DISPLAY_ALIGNMENT_TAGGED_EQN_SHIFT_ADJUSTMENT_PT)
-            ),
-          }
-        : dimensions;
-    const taggedRow = addDisplayAlignmentTag(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, rowDimensions, fontProfile, baseAtPt, forcedRowWidth, alignedRows.length);
+    const taggedRow = addDisplayAlignmentTag(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, dimensions, fontProfile, baseAtPt, forcedRowWidth, alignedRows.length);
     const rowHList: TexMathHList = {
       kind: "math-hlist",
       style: laidOut.hlist.style,
@@ -626,46 +609,6 @@ function addDisplayAlignmentTag(
       ...offsetMathHListItems(tag.hlist.items, tagX, tagRenderShiftY),
     ],
   };
-}
-
-function displayAlignmentRowTagCollides(
-  row: TexMathChildHListLayoutItem,
-  label: TexMathAlignedRowLabel | null,
-  dimensions: TexDisplayAlignmentDimensions,
-  fontProfile: TexMathFontProfile,
-  baseAtPt: number
-): boolean {
-  if (!label) {
-    return false;
-  }
-  const rowItems = displayAlignmentRowItems(row.items, dimensions);
-  const tagSource = String.raw`\text{(` + label.text + ")}";
-  const parsedTag = parseTexMath(tagSource, {
-    sourceOffset: Math.max(row.sourceSpan.start, label.sourceSpan.end - tagSource.length),
-  });
-  if (parsedTag.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-    return false;
-  }
-  const tag = layoutTexMathList(parsedTag.list, {
-    style: "text",
-    fontProfile,
-    baseAtPt,
-  });
-  if (!tag.supported) {
-    return false;
-  }
-  const width = Math.max(dimensions.rowWidth, dimensions.targetWidth);
-  const tagX = Math.max(0, roundTexPt(width - tag.hlist.width));
-  return mathItemsRightEdge(rowItems) > tagX;
-}
-
-function displayAlignmentRowHasNonEmptyFirstCell(
-  row: TexMathChildHListLayoutItem
-): boolean {
-  const firstCell = row.items.find((item) =>
-    item.kind === "hlist" && item.role === "aligned-cell"
-  );
-  return (firstCell?.width ?? 0) > 0;
 }
 
 interface TexDisplayAlignmentDimensions {

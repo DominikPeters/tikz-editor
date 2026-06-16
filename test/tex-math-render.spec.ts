@@ -310,6 +310,19 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="41"');
   });
 
+  it("keeps automatic atom spacing around explicit math glue", () => {
+    const parsed = parseTexMath(String.raw`= \: x`);
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    expect(result.hlist.width).toBeCloseTo(18.493105, 5);
+    const glues = result.hlist.items.filter((item) => item.kind === "glue");
+    expect(glues.map((item) => item.mu)).toEqual([4, 5]);
+  });
+
   it("renders AMS font symbols through their TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim`);
     const result = layoutTexMathList(parsed.list);

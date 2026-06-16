@@ -334,7 +334,7 @@ class TexMathParser {
       if (extensibleArrow) {
         return this.parseExtensibleArrow(extensibleArrow, allowScripts);
       }
-      const bigDelimiter = bigDelimiterCommandName(token.text);
+      const bigDelimiter = bigDelimiterCommand(token.text);
       if (bigDelimiter) {
         return this.parseBigDelimiter(bigDelimiter, allowScripts);
       }
@@ -1066,17 +1066,17 @@ class TexMathParser {
     }, allowScripts);
   }
 
-  private parseBigDelimiter(commandNameValue: TexMathDelimiterSizeCommand, allowScripts: boolean): TexMathAtom {
+  private parseBigDelimiter(commandNameValue: TexMathBigDelimiterCommand, allowScripts: boolean): TexMathAtom {
     const command = this.advance();
     const delimiter = this.parseDelimiter(command.sourceSpan, `${command.text} delimiter`);
     const sourceSpan = spanUnion(command.sourceSpan, delimiter?.sourceSpan ?? command.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
-      atomClass: delimiter ? atomClassForDelimiter(delimiter.delimiter) : "ord",
+      atomClass: commandNameValue.atomClass ?? (delimiter ? atomClassForDelimiter(delimiter.delimiter) : "ord"),
       nucleus: delimiter
         ? {
             kind: "sized-delimiter",
-            command: commandNameValue,
+            command: commandNameValue.size,
             delimiter: delimiter.delimiter,
             commandSourceSpan: command.sourceSpan,
             delimiterSourceSpan: delimiter.sourceSpan,
@@ -3495,28 +3495,45 @@ function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumbe
   }
 }
 
-function bigDelimiterCommandName(command: string): TexMathDelimiterSizeCommand | null {
+interface TexMathBigDelimiterCommand {
+  readonly size: TexMathDelimiterSizeCommand;
+  readonly atomClass?: TexMathAtomClass;
+}
+
+function bigDelimiterCommand(command: string): TexMathBigDelimiterCommand | null {
   switch (commandName(command)) {
     case "big":
+      return { size: "big", atomClass: "ord" };
     case "bigl":
+      return { size: "big", atomClass: "open" };
     case "bigr":
+      return { size: "big", atomClass: "close" };
     case "bigm":
-      return "big";
+      return { size: "big", atomClass: "rel" };
     case "Big":
+      return { size: "Big", atomClass: "ord" };
     case "Bigl":
+      return { size: "Big", atomClass: "open" };
     case "Bigr":
+      return { size: "Big", atomClass: "close" };
     case "Bigm":
-      return "Big";
+      return { size: "Big", atomClass: "rel" };
     case "bigg":
+      return { size: "bigg", atomClass: "ord" };
     case "biggl":
+      return { size: "bigg", atomClass: "open" };
     case "biggr":
+      return { size: "bigg", atomClass: "close" };
     case "biggm":
-      return "bigg";
+      return { size: "bigg", atomClass: "rel" };
     case "Bigg":
+      return { size: "Bigg", atomClass: "ord" };
     case "Biggl":
+      return { size: "Bigg", atomClass: "open" };
     case "Biggr":
+      return { size: "Bigg", atomClass: "close" };
     case "Biggm":
-      return "Bigg";
+      return { size: "Bigg", atomClass: "rel" };
     default:
       return null;
   }

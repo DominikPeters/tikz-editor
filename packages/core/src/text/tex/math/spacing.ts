@@ -96,7 +96,6 @@ export function spaceTexMathList(
       if (resolved) {
         items.push(resolved);
       }
-      previousAtom = null;
       continue;
     }
     if (item.kind === "unsupported") {
