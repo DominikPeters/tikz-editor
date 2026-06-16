@@ -350,6 +350,7 @@ type TexDisplayAlignHitMapFuzzCase = {
   readonly source: string;
   readonly width: number;
   readonly rows: readonly string[];
+  readonly offsets: readonly TexMathHitMapFuzzOffset[];
 };
 
 type TexDocumentMathHitMapFuzzCase = {
@@ -728,14 +729,20 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
   const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const operators = ["+", "-", "="] as const;
   const rowCount = 2 + Math.floor(random() * 2);
-  const rows = Array.from({ length: rowCount }, () => {
+  const rowOffsets: TexMathHitMapFuzzOffset[] = [];
+  const rows = Array.from({ length: rowCount }, (_, rowIndex) => {
     const left = pickFuzzItem(identifiers, random);
     const right = pickFuzzItem(identifiers, random);
     const tail = pickFuzzItem(identifiers, random);
     const operator = pickFuzzItem(operators, random);
-    return random() < 0.45
+    const row = random() < 0.45
       ? String.raw`\frac{${left}}{${right}}&=${tail}`
       : `${left}&${operator}${right}`;
+    return rowIndex === 0 && index % 3 === 0
+      ? `${row} \\tag{A}`
+      : rowIndex === 1 && index % 5 === 0
+        ? `${row}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \\tag{Long tag}`
+        : row;
   });
   const content = rows.join(String.raw`\\`);
   const prefix = pickFuzzItem(["Intro", "Before", "Lead"], random);
@@ -749,12 +756,42 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
     (inner: string) => String.raw`\begin{quote}\begin{itemize}\item ` + inner + String.raw`\end{itemize}\end{quote}`,
     (inner: string) => String.raw`\begin{itemize}\item ` + inner + String.raw`\item Tail\end{itemize}`,
   ] as const;
-  const source = wrappers[index % wrappers.length](body);
+  const wrapper = wrappers[index % wrappers.length];
+  const source = wrapper(body);
+  const alignOpen = String.raw`\begin{align*}`;
+  const alignContentStart = source.indexOf(alignOpen) + alignOpen.length;
+  let rowStart = 0;
+  for (const [rowIndex, row] of rows.entries()) {
+    for (const token of ["\\frac", "&", "=", "A", "Long tag"]) {
+      const tokenIndex = row.indexOf(token);
+      if (tokenIndex >= 0) {
+        rowOffsets.push({
+          offset: alignContentStart + rowStart + tokenIndex,
+          kind: "math",
+          label: `align-row-${rowIndex}:${token}`,
+          exactRoundTrip: false,
+        });
+      }
+    }
+    const firstIdentifier = row.search(/[a-z]/);
+    if (firstIdentifier >= 0) {
+      rowOffsets.push({
+        offset: alignContentStart + rowStart + firstIdentifier,
+        kind: "math",
+        label: `align-row-${rowIndex}:identifier`,
+        exactRoundTrip: false,
+      });
+    }
+    rowStart += row.length + (rowIndex === rows.length - 1 ? 0 : String.raw`\\`.length);
+  }
   return {
     id: `tex-display-align-hitmap-fuzz-${index}`,
     source,
     width: pickFuzzItem([130, 160, 190, 220], random),
     rows,
+    offsets: [...new Map(rowOffsets.map((entry) => [entry.offset, entry])).values()]
+      .filter((entry) => entry.offset > 0 && entry.offset < source.length)
+      .sort((left, right) => left.offset - right.offset),
   };
 }
 
@@ -4753,6 +4790,82 @@ unordered.`;
     expect(selection.rects.some((rect) => rect.lineIndex === point.lineIndex)).toBe(true);
   });
 
+  it("round-trips editor carets inside non-linear display math boxes", async () => {
+    const formulas = texMathHitMapFuzzFormulas();
+    for (const [formulaIndex, formula] of formulas.entries()) {
+      const sourceText = String.raw`Intro \[` + formula.source + String.raw`\] Outro`;
+      const result = layoutSimpleTexParagraph(sourceText, {
+        paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
+        width: 180,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+        mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      });
+      expect(result.supported, sourceText).toBe(true);
+      expect(result.report, sourceText).not.toBeNull();
+      expect(result.vlistLayout, sourceText).not.toBeNull();
+
+      const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+      registerTexVListLayoutsOnOutputJax(outputJax, [{
+        paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
+        layout: result.vlistLayout!,
+      }]);
+      const containerElement = {
+        getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+        viewBox: { baseVal: { width: result.report?.width ?? 1 } },
+        querySelectorAll: () => {
+          throw new Error("display math construct caret mapping should use registered vlist geometry");
+        },
+      };
+      const contentStart = sourceText.indexOf(formula.source);
+
+      for (const tracked of formula.trackedOffsets) {
+        const offset = contentStart + tracked.offset;
+        const point = await getKnuthPlassPointFromOffset(outputJax, {
+          paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
+          sourceText,
+          containerElement,
+          offset,
+        });
+        expect(point.error?.message ?? null, `${sourceText} @ ${offset} (${tracked.label})`).toBeNull();
+        expect(point, `${sourceText} @ ${offset} (${tracked.label})`).toMatchObject({
+          ok: true,
+          offset,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+
+        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+          paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
+          sourceText,
+          containerElement,
+          clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+        });
+        expect(caret.error?.message ?? null, `${sourceText} @ ${offset} (${tracked.label})`).toBeNull();
+        expect(caret, `${sourceText} @ ${offset} (${tracked.label})`).toMatchObject({
+          ok: true,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+      }
+
+      const selectionStart = contentStart + (formula.trackedOffsets[0]?.offset ?? 0);
+      const selectionEnd = contentStart + (formula.trackedOffsets.at(-1)?.offset ?? 0) + 1;
+      if (selectionEnd > selectionStart) {
+        const selection = await getKnuthPlassSelectionRects(outputJax, {
+          paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
+          sourceText,
+          containerElement,
+          startOffset: selectionStart,
+          endOffset: selectionEnd,
+        });
+        expect(selection.error?.message ?? null, sourceText).toBeNull();
+        expect(selection.ok, sourceText).toBe(true);
+        expect(selection.rects.length, sourceText).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("maps editor carets inside display alignment rows from registered vlist geometry", async () => {
     const sourceText = String.raw`Intro \begin{align*}x&=y\\a&=b\end{align*} Outro`;
     const result = layoutSimpleTexParagraph(sourceText, {
@@ -4809,7 +4922,7 @@ unordered.`;
     });
   });
 
-  it("fuzzes registered hit geometry for display alignment rows in mixed vlists", () => {
+  it("fuzzes registered hit geometry for display alignment rows in mixed vlists", async () => {
     const cases = Array.from({ length: 36 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
@@ -4873,6 +4986,51 @@ unordered.`;
           sourceStart: row.sourceStart,
           sourceEnd: row.sourceEnd,
         });
+      }
+
+      expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
+      for (const { offset, label } of testCase.offsets.slice(0, 10)) {
+        const point = await getKnuthPlassPointFromOffset(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          offset,
+        });
+        expect(point.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toBeNull();
+        expect(point, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
+          ok: true,
+          offset,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+
+        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+        });
+        expect(caret.error?.message ?? null, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toBeNull();
+        expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
+          ok: true,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+      }
+
+      const selectionStart = testCase.offsets[0]?.offset ?? 0;
+      const selectionEnd = (testCase.offsets.at(-1)?.offset ?? selectionStart) + 1;
+      if (selectionEnd > selectionStart) {
+        const selection = await getKnuthPlassSelectionRects(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          startOffset: selectionStart,
+          endOffset: selectionEnd,
+        });
+        expect(selection.error?.message ?? null, `${testCase.id}: ${testCase.source}`).toBeNull();
+        expect(selection.ok, `${testCase.id}: ${testCase.source}`).toBe(true);
+        expect(selection.rects.length, `${testCase.id}: ${testCase.source}`).toBeGreaterThan(0);
       }
     }
   });
