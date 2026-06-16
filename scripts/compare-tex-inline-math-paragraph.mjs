@@ -363,6 +363,7 @@ function parseMathGlyphTraceLine(line) {
 
 function latexOracleSource(caseSpec, options) {
   return String.raw`\documentclass{article}
+\usepackage{amsmath,amssymb}
 \begin{document}
 \fontencoding{TU}\fontfamily{lmr}\selectfont
 \language=-1
@@ -597,7 +598,7 @@ function normalizeLineText(text) {
 function oracleCachePath(cacheDir, caseSpec, options = args) {
   const key = createHash("sha256")
     .update(JSON.stringify({
-      version: 13,
+      version: 14,
       absoluteGlyphs: options.absoluteGlyphs,
       source: caseSpec.source,
       width: caseSpec.width,

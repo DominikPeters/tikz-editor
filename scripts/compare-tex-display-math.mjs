@@ -119,6 +119,9 @@ function compareCase(caseSpec, args) {
     mismatches.push(`our layout unsupported: ${ours.errors.join("; ")}`);
     return { ...caseSpec, ok: false, mismatches, ours, tex };
   }
+  for (const integrityError of ours.integrityErrors ?? []) {
+    mismatches.push(integrityError);
+  }
   if (caseSpec.compareMode === "math-glyphs" || caseSpec.compareMode === "document-math-glyphs") {
     compareGlyphLists(
       mismatches,
@@ -223,8 +226,10 @@ function ourTrace(caseSpec) {
       errors: result.errors ?? [result.fallbackReason ?? "unknown failure"],
       topLevel: [],
       glyphs: [],
+      integrityErrors: [],
     };
   }
+  const glyphTrace = ourGlyphTraceFromVListLayout(result.vlistLayout);
   return {
     supported: true,
     errors: result.errors,
@@ -241,43 +246,53 @@ function ourTrace(caseSpec) {
       hboxRole: item.hboxRole,
       sourceSpan: item.sourceSpan,
     })),
-    glyphs: ourGlyphTraceFromVListLayout(result.vlistLayout),
+    glyphs: glyphTrace.glyphs,
+    integrityErrors: glyphTrace.integrityErrors,
   };
 }
 
 function ourGlyphTraceFromVListLayout(layout) {
   const paragraphGlyphContext = paragraphGlyphTraceContext(layout);
   const glyphs = [];
-  collectOurGlyphTraceFromVListItems(glyphs, layout.items, paragraphGlyphContext);
-  return glyphs;
+  const integrityErrors = [];
+  collectOurGlyphTraceFromVListItems(glyphs, integrityErrors, layout.items, paragraphGlyphContext);
+  return { glyphs, integrityErrors };
 }
 
-function collectOurGlyphTraceFromVListItems(glyphs, items, paragraphGlyphContext) {
+function collectOurGlyphTraceFromVListItems(glyphs, integrityErrors, items, paragraphGlyphContext) {
   for (const item of items) {
     if (item.item?.kind === "paragraph") {
-      glyphs.push(...inlineGlyphsFromParagraphItem(item, paragraphGlyphContext));
+      const trace = inlineGlyphsFromParagraphItem(item, paragraphGlyphContext);
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
     } else if (item.item?.kind === "display-math") {
-      glyphs.push(...glyphsFromMathSvgBody(
+      const trace = glyphsFromMathSvgBody(
         item.item.box.svgBody,
         item.x,
         item.y + item.metrics.height,
-        item.item.kind
-      ));
+        item.item.kind,
+        item.item.sourceSpan
+      );
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
     } else if (item.item?.kind === "hbox") {
       for (const renderItem of item.item.box.renderItems ?? []) {
         if (renderItem.kind !== "tex-math-svg") {
           continue;
         }
-        glyphs.push(...glyphsFromMathSvgBody(
+        const trace = glyphsFromMathSvgBody(
           renderItem.svgBody,
           item.x + renderItem.x,
           item.y + renderItem.baseline,
-          item.item.role?.kind ?? item.item.kind
-        ));
+          item.item.role?.kind ?? item.item.kind,
+          item.item.sourceSpan
+        );
+        glyphs.push(...trace.glyphs);
+        integrityErrors.push(...trace.integrityErrors);
       }
     }
     if (item.children?.length) {
-      collectOurGlyphTraceFromVListItems(glyphs, item.children, paragraphGlyphContext);
+      collectOurGlyphTraceFromVListItems(glyphs, integrityErrors, item.children, paragraphGlyphContext);
     }
   }
 }
@@ -303,11 +318,12 @@ function inlineGlyphsFromParagraphItem(item, context) {
   const blockIndex = item.item.blockIndex;
   const placement = context.paragraphPlacementByBlockIndex.get(blockIndex);
   if (!placement) {
-    return [];
+    return { glyphs: [], integrityErrors: [] };
   }
   const firstLine = context.lineByIndex.get(placement.lineIndices[0]);
   const paragraphBaselineOffset = firstLine?.ascent ?? 0;
   const glyphs = [];
+  const integrityErrors = [];
   for (const lineIndex of placement.lineIndices) {
     const line = context.lineByIndex.get(lineIndex);
     const linePlacement = context.linePlacementByIndex.get(lineIndex);
@@ -320,15 +336,18 @@ function inlineGlyphsFromParagraphItem(item, context) {
       if (segment.kind !== "math" || !segment.mathSvgBody) {
         continue;
       }
-      glyphs.push(...glyphsFromMathSvgBody(
+      const trace = glyphsFromMathSvgBody(
         segment.mathSvgBody,
         lineXOffset + segment.x,
         baselineY,
-        item.item.kind
-      ));
+        item.item.kind,
+        sourceSpanFromSegment(segment)
+      );
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
     }
   }
-  return glyphs;
+  return { glyphs, integrityErrors };
 }
 
 function paragraphLineXOffset(linePlacement, line) {
@@ -339,19 +358,41 @@ function paragraphLineXOffset(linePlacement, line) {
   return Math.max(0, linePlacement.x - lineLeft);
 }
 
-function glyphsFromMathSvgBody(svgBody, originX, baselineY, role) {
+function sourceSpanFromSegment(segment) {
+  const start = Number(segment.sourceStartRaw);
+  const end = Number(segment.sourceEndRaw);
+  return Number.isFinite(start) && Number.isFinite(end)
+    ? { start, end }
+    : null;
+}
+
+function glyphsFromMathSvgBody(svgBody, originX, baselineY, role, sourceSpan = null) {
   const fragmentViewBox = readFragmentViewBox(svgBody);
   const fragmentBoundaryTolerance = 1e-5;
   const glyphs = [];
+  const integrityErrors = [];
   const pathPattern = /<path\b[^>]*>/g;
   for (const match of svgBody.matchAll(pathPattern)) {
     const tag = match[0];
     const fontId = readSvgAttribute(tag, "data-tex-font");
     const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
+    const sourceStart = Number(readSvgAttribute(tag, "data-source-start"));
+    const sourceEnd = Number(readSvgAttribute(tag, "data-source-end"));
     const transform = readSvgAttribute(tag, "transform") ?? "";
     const translate = /translate\(([-0-9.]+)\s+([-0-9.]+)\)/.exec(transform);
     if (!fontId || !Number.isFinite(code) || !translate) {
       continue;
+    }
+    if (
+      sourceSpan &&
+      Number.isFinite(sourceStart) &&
+      Number.isFinite(sourceEnd) &&
+      (sourceStart < sourceSpan.start || sourceEnd > sourceSpan.end)
+    ) {
+      integrityErrors.push(
+        `math SVG glyph source span escapes owner: role=${role}` +
+        ` ownerSource=${sourceSpan.start}:${sourceSpan.end} glyph=${code} glyphSource=${sourceStart}:${sourceEnd}`
+      );
     }
     const rawX = Number(translate[1]) / 100;
     if (
@@ -370,9 +411,11 @@ function glyphsFromMathSvgBody(svgBody, originX, baselineY, role) {
       y: round(baselineY + Number(translate[2]) / 100),
       fontId,
       code,
+      sourceStart,
+      sourceEnd,
     });
   }
-  return glyphs;
+  return { glyphs, integrityErrors };
 }
 
 function readFragmentViewBox(svgBody) {
