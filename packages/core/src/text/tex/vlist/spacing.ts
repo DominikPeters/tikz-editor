@@ -699,6 +699,19 @@ function displayAlignmentRowHBox(
         height: row.height,
         depth: row.depth,
       },
+      hitMap: {
+        kind: "tex-math",
+        sourceStart: row.sourceStart,
+        sourceEnd: row.sourceEnd,
+        contentStart: row.contentStart,
+        contentEnd: row.contentEnd,
+        width: row.width,
+        height: row.height,
+        depth: row.depth,
+        ...(row.caretStops ? { caretStops: row.caretStops } : {}),
+        ...(row.constructRanges ? { constructRanges: row.constructRanges } : {}),
+        ...(row.breakpoints ? { breakpoints: row.breakpoints } : {}),
+      },
       renderItems: row.svgBody
         ? [{
             kind: "tex-math-svg",

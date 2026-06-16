@@ -17,7 +17,16 @@ import {
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
 import { getTexVListLayoutFromOutputJax } from '../../tex/vlist/registry.js';
-import type { TexVBoxRole, TexVListBoxReportItem, TexVListLayout } from '../../tex/vlist/types.js';
+import { flattenPositionedTexVListItems } from '../../tex/vlist/traversal.js';
+import type {
+  PositionedTexVListItem,
+  TexBoxMetrics,
+  TexHBoxItem,
+  TexVBoxRole,
+  TexVListBoxReportItem,
+  TexVListLayout,
+} from '../../tex/vlist/types.js';
+import type { TexMathBox } from '../../tex/layout-inline-items.js';
 import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
 
 // The core package builds without the DOM lib; keep the editor hit-testing
@@ -353,6 +362,7 @@ interface LineGeometry {
 }
 
 interface LineHitMap extends LineGeometry {
+  reportLine: ParagraphLayoutReport['lines'][number];
   stopsByX: Stop[];
   stopsByOffset: Stop[];
   stopsByOffsetExact: Map<number, Stop[]>;
@@ -2510,6 +2520,7 @@ function buildLineHitMaps(
 
     return {
       ...geometry,
+      reportLine: line,
       stopsByX: byX,
       stopsByOffset: byOffset,
       stopsByOffsetExact: exact,
@@ -2520,6 +2531,281 @@ function buildLineHitMaps(
       visibleHyphenBreakOffset: visibleHyphenBreakOffsetByLine.get(line.lineIndex) ?? null,
     };
   });
+}
+
+function buildDisplayMathLineHitMaps(
+  outputJax: unknown,
+  report: ParagraphLayoutReport,
+  containerElement: Element
+): LineHitMap[] {
+  const layout = getTexVListLayoutFromOutputJax(outputJax, report.paragraphId);
+  const rootMatrix = containerElement.getScreenCTM?.();
+  const viewBoxWidth = Number(
+    containerElement.viewBox?.baseVal?.width ??
+      containerElement.ownerSVGElement?.viewBox?.baseVal?.width
+  );
+  if (!layout || !rootMatrix || !Number.isFinite(viewBoxWidth) || viewBoxWidth <= EPSILON) {
+    return [];
+  }
+
+  const baseMatrix = normalizedScreenMatrix(rootMatrix, `paragraph '${report.paragraphId}'`);
+  const reportToSvgScaleX = viewBoxWidth / report.width;
+  if (!Number.isFinite(reportToSvgScaleX) || reportToSvgScaleX <= EPSILON) {
+    return [];
+  }
+
+  const baseLineIndex = Math.max(-1, ...report.lines.map((line) => line.lineIndex));
+  return flattenPositionedTexVListItems(layout.items)
+    .flatMap((item, displayIndex) =>
+      displayMathLineHitMapFromPositionedItem({
+        item,
+        lineIndex: baseLineIndex + 1 + displayIndex,
+        report,
+        matrix: baseMatrix,
+        reportToSvgScaleX,
+      })
+    )
+    .sort((left, right) => {
+      if (Math.abs(left.clientCenterY - right.clientCenterY) > EPSILON) {
+        return left.clientCenterY - right.clientCenterY;
+      }
+      return left.lineIndex - right.lineIndex;
+    });
+}
+
+function displayMathLineHitMapFromPositionedItem(params: {
+  readonly item: PositionedTexVListItem;
+  readonly lineIndex: number;
+  readonly report: ParagraphLayoutReport;
+  readonly matrix: ScreenMatrixLike;
+  readonly reportToSvgScaleX: number;
+}): LineHitMap[] {
+  const source = displayMathSourceForPositionedItem(params.item);
+  if (!source) {
+    return [];
+  }
+  const metrics = params.item.metrics;
+  const totalHeight = Math.max(1, metrics.height + metrics.depth);
+  const width = Math.max(0, metrics.width);
+  const sourceStart = Math.max(0, Math.floor(source.sourceStart));
+  const sourceEnd = Math.max(sourceStart, Math.floor(source.sourceEnd));
+  if (sourceEnd <= sourceStart || width <= EPSILON) {
+    return [];
+  }
+
+  const xStart = Number(params.item.x);
+  const y = Number(params.item.y);
+  if (!Number.isFinite(xStart) || !Number.isFinite(y)) {
+    return [];
+  }
+  const xEnd = xStart + width;
+  const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y);
+  const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, params.lineIndex);
+  const bounds = clientRectForLocalBox(
+    0,
+    0,
+    width,
+    totalHeight,
+    lineMatrix
+  );
+  if (!bounds) {
+    return [];
+  }
+
+  const reportLine = displayMathSyntheticReportLine({
+    lineIndex: params.lineIndex,
+    source,
+    metrics,
+    xStart,
+    xEnd,
+  });
+  const stops = displayMathStopsForBox(source, xStart, width);
+  const exact = new Map<number, Stop[]>();
+  for (const stop of stops) {
+    const list = exact.get(stop.offset) ?? [];
+    list.push(stop);
+    exact.set(stop.offset, list);
+  }
+  const constructRanges = displayMathConstructRangesForBox(source, xStart, width) ?? [];
+  return [{
+    lineIndex: params.lineIndex,
+    clientLeft: bounds.clientLeft,
+    clientRight: bounds.clientRight,
+    clientTop: bounds.clientTop,
+    clientBottom: bounds.clientBottom,
+    clientCenterY: (bounds.clientTop + bounds.clientBottom) / 2,
+    reportToSvgScaleX: params.reportToSvgScaleX,
+    screenMatrix: lineMatrix,
+    inverseScreenMatrix,
+    reportLine,
+    stopsByX: stops,
+    stopsByOffset: [...stops].sort((left, right) => {
+      if (left.offset !== right.offset) {
+        return left.offset - right.offset;
+      }
+      return left.x - right.x;
+    }),
+    stopsByOffsetExact: exact,
+    mathConstructRanges: constructRanges,
+    minOffset: sourceStart,
+    maxOffset: sourceEnd,
+    breakInfo: null,
+    visibleHyphenBreakOffset: null,
+  }];
+}
+
+function displayMathSyntheticReportLine(params: {
+  readonly lineIndex: number;
+  readonly source: TexMathBox;
+  readonly metrics: TexBoxMetrics;
+  readonly xStart: number;
+  readonly xEnd: number;
+}): ParagraphLayoutReport['lines'][number] {
+  const width = Math.max(0, params.xEnd - params.xStart);
+  return {
+    lineIndex: params.lineIndex,
+    startRun: -1,
+    endRun: -1,
+    width,
+    targetWidth: width,
+    naturalWidth: width,
+    glueSetRatio: 0,
+    badness: 0,
+    spaceCount: 0,
+    spaceDeltaPerGap: 0,
+    ascent: params.metrics.height,
+    descent: params.metrics.depth,
+    xStart: params.xStart,
+    xEnd: params.xEnd,
+    break: null,
+    segments: [{
+      runIndex: -1,
+      kind: 'math',
+      text: params.source.content,
+      sourceStartRaw: params.source.sourceStart,
+      sourceEndRaw: params.source.sourceEnd,
+      sourceKind: 'math',
+      x: params.xStart,
+      width,
+      caretStops: displayMathCaretStopsForBox(params.source, params.xStart, width),
+      mathConstructRanges: displayMathConstructRangesForBox(params.source, params.xStart, width),
+      mathBreakpoints: displayMathBreakpointsForBox(params.source, params.xStart, width),
+      mathSvgBody: params.source.svgBody,
+    }],
+  };
+}
+
+function displayMathSourceForPositionedItem(item: PositionedTexVListItem): TexMathBox | null {
+  if (item.item.kind === 'display-math') {
+    return item.item.box;
+  }
+  if (item.item.kind !== 'hbox') {
+    return null;
+  }
+  return displayMathSourceForHBox(item.item);
+}
+
+function displayMathSourceForHBox(item: TexHBoxItem): TexMathBox | null {
+  if (item.role?.kind !== 'display-align-row') {
+    return null;
+  }
+  const hitMap = item.box.hitMap;
+  if (hitMap?.kind !== 'tex-math') {
+    return null;
+  }
+  if (
+    !Number.isFinite(hitMap.sourceStart) ||
+    !Number.isFinite(hitMap.sourceEnd) ||
+    !Number.isFinite(hitMap.contentStart) ||
+    !Number.isFinite(hitMap.contentEnd) ||
+    !Number.isFinite(hitMap.width) ||
+    !Number.isFinite(hitMap.height) ||
+    !Number.isFinite(hitMap.depth)
+  ) {
+    return null;
+  }
+  return {
+    source: '',
+    content: '',
+    sourceStart: hitMap.sourceStart as number,
+    sourceEnd: hitMap.sourceEnd as number,
+    contentStart: hitMap.contentStart as number,
+    contentEnd: hitMap.contentEnd as number,
+    width: hitMap.width as number,
+    height: hitMap.height as number,
+    depth: hitMap.depth as number,
+    caretStops: hitMap.caretStops,
+    constructRanges: hitMap.constructRanges,
+    breakpoints: hitMap.breakpoints,
+  };
+}
+
+function displayMathStopsForBox(
+  box: TexMathBox,
+  x: number,
+  width: number
+): Stop[] {
+  const stops = displayMathCaretStopsForBox(box, x, width);
+  const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
+  return markLineEndpoints(stops.map((stopX, index): Stop => ({
+    offset: Math.max(0, Math.floor(box.sourceStart + index)),
+    x: stopX,
+    kind: 'math',
+    snappedToMathPrefix: false,
+    lineStart: false,
+    lineEnd: false,
+  })).filter((stop, index) => index <= rawLength));
+}
+
+function displayMathCaretStopsForBox(
+  box: Pick<TexMathBox, 'sourceStart' | 'sourceEnd' | 'caretStops'>,
+  x: number,
+  width: number
+): number[] {
+  const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
+  const localStops = box.caretStops;
+  if (Array.isArray(localStops) && localStops.length === rawLength + 1) {
+    return localStops.map((stop) =>
+      x + Math.max(0, Math.min(width, Number.isFinite(stop) ? stop : 0))
+    );
+  }
+  return Array.from({ length: rawLength + 1 }, (_, index) =>
+    x + (rawLength > 0 ? (width * index) / rawLength : 0)
+  );
+}
+
+function displayMathConstructRangesForBox(
+  box: Pick<TexMathBox, 'constructRanges'>,
+  x: number,
+  width: number
+): LineSegmentReport['mathConstructRanges'] {
+  const ranges = box.constructRanges;
+  if (!ranges?.length) {
+    return undefined;
+  }
+  return ranges.map((range) => ({
+    sourceStartRaw: range.sourceStart,
+    sourceEndRaw: range.sourceEnd,
+    xStart: x + Math.max(0, Math.min(width, range.xStart)),
+    xEnd: x + Math.max(0, Math.min(width, range.xEnd)),
+  }));
+}
+
+function displayMathBreakpointsForBox(
+  box: Pick<TexMathBox, 'breakpoints'>,
+  x: number,
+  width: number
+): LineSegmentReport['mathBreakpoints'] {
+  const breakpoints = box.breakpoints;
+  if (!breakpoints?.length) {
+    return undefined;
+  }
+  return breakpoints.map((breakpoint) => ({
+    kind: breakpoint.kind,
+    sourceOffsetRaw: breakpoint.sourceOffset,
+    x: x + Math.max(0, Math.min(width, breakpoint.x)),
+    penalty: breakpoint.penalty,
+  }));
 }
 
 function buildMathConstructRangesByLine(
@@ -2589,11 +2875,12 @@ async function buildParagraphHitMap(
     visibleHyphenBreakOffsetByLine,
     mathConstructRangesByLine
   );
+  const displayLines = buildDisplayMathLineHitMaps(outputJax, report, containerElement);
 
   return {
     report,
     sourceText,
-    lines,
+    lines: [...lines, ...displayLines],
   };
 }
 
@@ -2802,7 +3089,7 @@ function inferLineByClientPoint(
   let bestFallbackDistance = Number.POSITIVE_INFINITY;
 
   for (const line of hitMap.lines) {
-    const reportLine = reportLineByIndex.get(line.lineIndex)!;
+    const reportLine = reportLineByIndex.get(line.lineIndex) ?? line.reportLine;
 
     const origin = lineBaselineOriginPoint(line, reportLine);
     const reportLineEnd = Number(reportLine.xEnd);
@@ -2910,7 +3197,7 @@ export async function getKnuthPlassCaretFromPoint(
   }
 
   const line = inferLineByClientPoint(hitMap, params.clientPoint);
-  const reportLine = hitMap.report.lines.find((entry) => entry.lineIndex === line.lineIndex)!;
+  const reportLine = line.reportLine;
 
   const lineX = clientToLineLocalX(line, reportLine, params.clientPoint);
   const stop = nearestStopByX(line.stopsByX, lineX);
@@ -3031,9 +3318,7 @@ export async function getKnuthPlassPointFromOffset(
     );
   }
 
-  const reportLine = hitMap.report.lines.find(
-    (entry) => entry.lineIndex === selected.line.lineIndex
-  )!;
+  const reportLine = selected.line.reportLine;
 
   const baselinePoint = lineLocalClientPoint(selected.line, reportLine, selected.stop.x);
   const normal = lineNormalUnit(selected.line);
@@ -3160,7 +3445,7 @@ export async function getKnuthPlassSelectionRects(
       ...selectedMathConstructs.map((range) => range.xEnd)
     );
 
-    const reportLine = hitMap.report.lines.find((entry) => entry.lineIndex === line.lineIndex)!;
+    const reportLine = line.reportLine;
 
     const startPoint = lineLocalClientPoint(line, reportLine, localStartX);
     const endPoint = lineLocalClientPoint(line, reportLine, localEndX);

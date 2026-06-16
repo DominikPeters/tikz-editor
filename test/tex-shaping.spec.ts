@@ -615,12 +615,50 @@ function buildTexDocumentMathHitMapFuzzCase(index: number): TexDocumentMathHitMa
 
   appendInlineMath();
   body += ` ${pickFuzzItem(["before", "near", "beside"], random)} `;
-  body += String.raw`\[` + randomDocumentHitMapDisplayFormula(random) + String.raw`\]`;
+  const displayFormula = pickFuzzItem(formulas, random);
+  const displayStart = body.length;
+  body += String.raw`\[` + displayFormula.source + String.raw`\]`;
+  const displayContentStart = displayStart + String.raw`\[`.length;
+  for (const tracked of displayFormula.trackedOffsets) {
+    offsets.push({
+      offset: displayContentStart + tracked.offset,
+      kind: "math",
+      label: `display:${tracked.label}`,
+      exactRoundTrip: tracked.exactRoundTrip,
+    });
+  }
   body += ` ${pickFuzzItem(["middle", "after", "tail"], random)} `;
   appendInlineMath();
 
   const rows = documentHitMapAlignRows(random);
-  body += " " + String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+  body += " ";
+  const alignStart = body.length;
+  const alignOpen = String.raw`\begin{align*}`;
+  const alignContent = rows.join(String.raw`\\`);
+  body += alignOpen + alignContent + String.raw`\end{align*}`;
+  const alignContentStart = alignStart + alignOpen.length;
+  let alignRowOffset = 0;
+  for (const [rowIndex, row] of rows.entries()) {
+    const firstToken = row.match(/[A-Za-z0-9\\]/);
+    if (firstToken?.index !== undefined) {
+      offsets.push({
+        offset: alignContentStart + alignRowOffset + firstToken.index,
+        kind: "math",
+        label: `align-row-${rowIndex}`,
+        exactRoundTrip: false,
+      });
+    }
+    const relation = row.indexOf("=");
+    if (relation >= 0) {
+      offsets.push({
+        offset: alignContentStart + alignRowOffset + relation,
+        kind: "math",
+        label: `align-row-${rowIndex}:=`,
+        exactRoundTrip: false,
+      });
+    }
+    alignRowOffset += row.length + (rowIndex === rows.length - 1 ? 0 : String.raw`\\`.length);
+  }
   body += ` ${pickFuzzItem(["Done", "Close", "Finish"], random)} `;
   appendInlineMath();
 
@@ -671,18 +709,6 @@ function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
     trackedMathFormula("\\sum_{i=1}^{n} i", ["\\sum", "i", "=", "1", "n"], { exactRoundTrip: false }),
     trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
   ];
-}
-
-function randomDocumentHitMapDisplayFormula(random: () => number): string {
-  const terms = [
-    "x+y",
-    String.raw`\frac{1}{2}+z`,
-    String.raw`\sqrt{x+1}`,
-    String.raw`\binom{n}{k}`,
-    String.raw`\sum_i^n`,
-    String.raw`\left(x+y\right)`,
-  ] as const;
-  return pickFuzzItem(terms, random);
 }
 
 function documentHitMapAlignRows(random: () => number): readonly string[] {
@@ -4657,6 +4683,129 @@ unordered.`;
       displayAlignRowIndex: 1,
       sourceStart: sourceText.indexOf("a&=b"),
       sourceEnd: sourceText.indexOf("a&=b") + "a&=b".length,
+    });
+  });
+
+  it("maps editor carets inside display math boxes from registered vlist geometry", async () => {
+    const sourceText = String.raw`Intro \[x^2=y\] Outro`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:display-math-caret",
+      width: 180,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    expect(result.supported, sourceText).toBe(true);
+    expect(result.report, sourceText).not.toBeNull();
+    expect(result.vlistLayout, sourceText).not.toBeNull();
+
+    const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:display-math-caret",
+      layout: result.vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: result.report?.width ?? 1 } },
+      querySelectorAll: () => {
+        throw new Error("display math caret mapping should use registered vlist geometry");
+      },
+    };
+
+    const offset = sourceText.indexOf("^");
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:display-math-caret",
+      sourceText,
+      containerElement,
+      offset,
+    });
+    expect(point.error?.message ?? null).toBeNull();
+    expect(point).toMatchObject({
+      ok: true,
+      offset,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:display-math-caret",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+    });
+    expect(caret.error?.message ?? null).toBeNull();
+    expect(caret).toMatchObject({
+      ok: true,
+      offset,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+
+    const selection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:display-math-caret",
+      sourceText,
+      containerElement,
+      startOffset: sourceText.indexOf("x"),
+      endOffset: sourceText.indexOf("y") + 1,
+    });
+    expect(selection.error?.message ?? null).toBeNull();
+    expect(selection.ok).toBe(true);
+    expect(selection.rects.some((rect) => rect.lineIndex === point.lineIndex)).toBe(true);
+  });
+
+  it("maps editor carets inside display alignment rows from registered vlist geometry", async () => {
+    const sourceText = String.raw`Intro \begin{align*}x&=y\\a&=b\end{align*} Outro`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:display-align-caret",
+      width: 180,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    expect(result.supported, sourceText).toBe(true);
+    expect(result.report, sourceText).not.toBeNull();
+    expect(result.vlistLayout, sourceText).not.toBeNull();
+
+    const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:display-align-caret",
+      layout: result.vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: result.report?.width ?? 1 } },
+      querySelectorAll: () => {
+        throw new Error("display alignment caret mapping should use registered vlist geometry");
+      },
+    };
+
+    const offset = sourceText.indexOf("&=b");
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:display-align-caret",
+      sourceText,
+      containerElement,
+      offset,
+    });
+    expect(point.error?.message ?? null).toBeNull();
+    expect(point).toMatchObject({
+      ok: true,
+      offset,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:display-align-caret",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
+    });
+    expect(caret.error?.message ?? null).toBeNull();
+    expect(caret).toMatchObject({
+      ok: true,
+      offset,
+      kind: "math",
+      snappedToMathPrefix: false,
     });
   });
 

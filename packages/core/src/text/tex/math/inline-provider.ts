@@ -518,7 +518,17 @@ function getDisplayMathAlignment(
       width: taggedRow.width,
       height: taggedRow.height,
       depth: taggedRow.depth,
+      caretStops: buildInlineMathCaretStops(rowHList, {
+        sourceStart: row.sourceSpan.start,
+        sourceEnd: row.sourceSpan.end,
+        contentStart: row.sourceSpan.start,
+        contentEnd: row.sourceSpan.end,
+      }),
+      constructRanges: buildInlineMathConstructRanges(rowHList),
+      breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
       svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
+      hlist: rowHList,
+      fontProfile,
     };
   });
   return {

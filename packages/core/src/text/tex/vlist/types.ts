@@ -98,6 +98,16 @@ export type TexRenderItem =
 
 export interface TexHitMap {
   readonly kind: string;
+  readonly sourceStart?: number;
+  readonly sourceEnd?: number;
+  readonly contentStart?: number;
+  readonly contentEnd?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly depth?: number;
+  readonly caretStops?: readonly number[];
+  readonly constructRanges?: TexMathBox["constructRanges"];
+  readonly breakpoints?: TexMathBox["breakpoints"];
 }
 
 export interface TexHorizontalLayout {
