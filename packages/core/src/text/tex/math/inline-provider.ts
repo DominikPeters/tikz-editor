@@ -7,7 +7,7 @@ import type {
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { TexMathFontProfile } from "./font-profile.js";
-import type { TexMathAtom, TexMathList } from "./ir.js";
+import type { TexMathAlignedNucleus, TexMathAlignedRowLabel, TexMathAtom, TexMathList } from "./ir.js";
 import {
   layoutTexMathList,
   resolveDefaultTexMathFontProfileForList,
@@ -480,6 +480,7 @@ function getDisplayMathAlignment(
   if (alignedRows.length === 0) {
     return null;
   }
+  const alignedNucleus = alignedNucleusFromList(parsed.list);
   const pairCount = displayAlignmentPairCount(alignedRows);
   const dimensions = displayAlignmentDimensions({
     measuredWidth: laidOut.hlist.width,
@@ -497,14 +498,15 @@ function getDisplayMathAlignment(
     delimiter: "align-star",
     width: dimensions.rowWidth,
     rows: alignedRows.map((row, rowIndex) => {
+      const taggedRow = addDisplayAlignmentTag(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, dimensions, fontProfile, baseAtPt);
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
-        width: dimensions.rowWidth,
-        height: row.height,
-        depth: row.depth,
+        width: taggedRow.width,
+        height: taggedRow.height,
+        depth: taggedRow.depth,
         sourceSpan: row.sourceSpan,
-        items: displayAlignmentRowItems(row.items, dimensions),
+        items: taggedRow.items,
       };
       return {
         rowIndex,
@@ -515,12 +517,74 @@ function getDisplayMathAlignment(
         sourceEnd: row.sourceSpan.end,
         contentStart: row.sourceSpan.start,
         contentEnd: row.sourceSpan.end,
-        width: dimensions.rowWidth,
-        height: row.height,
-        depth: row.depth,
+        width: taggedRow.width,
+        height: taggedRow.height,
+        depth: taggedRow.depth,
         svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
       };
     }),
+  };
+}
+
+function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null {
+  const item = list.items[0];
+  if (item?.kind !== "atom" || item.nucleus.kind !== "aligned") {
+    return null;
+  }
+  return item.nucleus;
+}
+
+function addDisplayAlignmentTag(
+  row: TexMathChildHListLayoutItem,
+  label: TexMathAlignedRowLabel | null,
+  dimensions: TexDisplayAlignmentDimensions,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
+  const rowItems = displayAlignmentRowItems(row.items, dimensions);
+  if (!label) {
+    return {
+      width: dimensions.rowWidth,
+      height: row.height,
+      depth: row.depth,
+      items: rowItems,
+    };
+  }
+  const tagSource = String.raw`\text{(` + label.text + ")}";
+  const parsedTag = parseTexMath(tagSource, {
+    sourceOffset: Math.max(row.sourceSpan.start, label.sourceSpan.end - tagSource.length),
+  });
+  if (parsedTag.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    return {
+      width: dimensions.rowWidth,
+      height: row.height,
+      depth: row.depth,
+      items: rowItems,
+    };
+  }
+  const tag = layoutTexMathList(parsedTag.list, {
+    style: "text",
+    fontProfile,
+    baseAtPt,
+  });
+  if (!tag.supported) {
+    return {
+      width: dimensions.rowWidth,
+      height: row.height,
+      depth: row.depth,
+      items: rowItems,
+    };
+  }
+  const width = Math.max(dimensions.rowWidth, dimensions.targetWidth);
+  const tagX = Math.max(0, roundTexPt(width - tag.hlist.width));
+  return {
+    width,
+    height: Math.max(row.height, tag.hlist.height),
+    depth: Math.max(row.depth, tag.hlist.depth),
+    items: [
+      ...rowItems,
+      ...offsetMathHListItems(tag.hlist.items, tagX),
+    ],
   };
 }
 
@@ -528,6 +592,7 @@ interface TexDisplayAlignmentDimensions {
   readonly eqnShift: number;
   readonly alignSep: number;
   readonly rowWidth: number;
+  readonly targetWidth: number;
 }
 
 function displayAlignmentDimensions(params: {
@@ -551,6 +616,7 @@ function displayAlignmentDimensions(params: {
       eqnShift: flexible,
       alignSep: flexible,
       rowWidth: roundTexPt(totalFieldWidth + params.pairCount * flexible),
+      targetWidth: params.targetWidth,
     };
   }
   const alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
@@ -562,7 +628,27 @@ function displayAlignmentDimensions(params: {
     eqnShift,
     alignSep,
     rowWidth: roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep),
+    targetWidth: params.targetWidth,
   };
+}
+
+function offsetMathHListItems(
+  items: readonly TexMathHListItem[],
+  offsetX: number
+): readonly TexMathHListItem[] {
+  return items.map((item) => {
+    const shifted = {
+      ...item,
+      x: roundTexPt(item.x + offsetX),
+    };
+    if (item.kind !== "hlist") {
+      return shifted;
+    }
+    return {
+      ...shifted,
+      items: offsetMathHListItems(item.items, 0),
+    };
+  });
 }
 
 function displayAlignmentPairCount(

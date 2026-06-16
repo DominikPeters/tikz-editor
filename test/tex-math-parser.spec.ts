@@ -678,6 +678,28 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses inline math islands inside text commands", () => {
+    const source = String.raw`\text{if $Ax \ge b$,}`;
+    const result = parseTexMath(source);
+    const text = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(text).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "text",
+        text: "if ,",
+        textSourceSpan: { start: 6, end: source.length - 1 },
+      },
+    });
+    expect(text.nucleus.kind === "text" ? text.nucleus.parts : []).toMatchObject([
+      { kind: "text", text: "if " },
+      { kind: "math", contentSourceSpan: { start: 10, end: 18 } },
+      { kind: "text", text: "," },
+    ]);
+  });
+
   it("keeps unsupported commands inside text explicit", () => {
     const result = parseTexMath(String.raw`\text{\emph{x}}`);
     const text = atomAt(result, 0);
@@ -878,7 +900,7 @@ describe("TeX math parser", () => {
   });
 
   it("parses named math symbols with TeX atom classes", () => {
-    const result = parseTexMath(String.raw`\alpha+\times=\leq\neq`);
+    const result = parseTexMath(String.raw`\alpha+\times=\leq\neq:x`);
 
     expect(result.diagnostics).toEqual([]);
     expect(result.list.items.map((item) =>
@@ -892,6 +914,8 @@ describe("TeX math parser", () => {
       { atomClass: "rel", text: "=", sourceSpan: { start: 13, end: 14 } },
       { atomClass: "rel", text: String.raw`\leq`, sourceSpan: { start: 14, end: 18 } },
       { atomClass: "rel", text: String.raw`\neq`, sourceSpan: { start: 18, end: 22 } },
+      { atomClass: "rel", text: ":", sourceSpan: { start: 22, end: 23 } },
+      { atomClass: "ord", text: "x", sourceSpan: { start: 23, end: 24 } },
     ]);
   });
 
@@ -1283,21 +1307,25 @@ describe("TeX math parser", () => {
     expect(atom.nucleus.rows[1]?.cells.map((cell) => cell.list.items.length)).toEqual([1, 2]);
   });
 
-  it("keeps unsupported explicit alignment tags visible until tag rendering exists", () => {
+  it("parses explicit alignment tags as row labels", () => {
     const result = parseTexMath(String.raw`\begin{align}a\tag{A}\end{align}`);
     const atom = atomAt(result, 0);
 
-    expect(result.diagnostics).toContainEqual({
-      severity: "warning",
-      code: "unsupported-command",
-      message: String.raw`Unsupported math command \tag.`,
-      sourceSpan: { start: 14, end: 18 },
-    });
+    expect(result.diagnostics).toEqual([]);
     expect(atom.nucleus.kind).toBe("aligned");
     if (atom.nucleus.kind !== "aligned") {
       return;
     }
-    expect(atom.nucleus.rows[0]?.cells[0]?.list.items).toHaveLength(3);
+    expect(atom.nucleus.rows[0]).toMatchObject({
+      labels: [
+        {
+          text: "A",
+          sourceSpan: { start: 14, end: 21 },
+          textSourceSpan: { start: 19, end: 20 },
+        },
+      ],
+    });
+    expect(atom.nucleus.rows[0]?.cells[0]?.list.items).toHaveLength(1);
   });
 
   it("parses gather environments as aligned rows without requiring alignment tabs", () => {
@@ -1693,6 +1721,22 @@ describe("TeX math parser", () => {
       ["lbrace", "rbrace"],
       ["vert", "Vert"],
       ["ulcorner", "urcorner"],
+    ]);
+  });
+
+  it("parses big delimiter prefixes without treating them as unsupported commands", () => {
+    const source = String.raw`\big( x \big)`;
+    const result = parseTexMath(source);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) =>
+      item.kind === "atom"
+        ? { kind: item.nucleus.kind, sourceSpan: item.sourceSpan }
+        : null
+    )).toEqual([
+      { kind: "sized-delimiter", sourceSpan: { start: 0, end: 5 } },
+      { kind: "glyph", sourceSpan: { start: 6, end: 7 } },
+      { kind: "sized-delimiter", sourceSpan: { start: 8, end: 13 } },
     ]);
   });
 

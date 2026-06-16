@@ -35,6 +35,7 @@ import type {
   TexMathSmallMatrixNucleus,
   TexMathSourceSpan,
   TexMathStyle,
+  TexMathSizedDelimiterNucleus,
   TexMathSubarrayNucleus,
   TexMathSubstackNucleus,
   TexMathTextNucleus,
@@ -704,6 +705,9 @@ function layoutNucleus(
   if (nucleus.kind === "glyph") {
     return layoutGlyphNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
+  if (nucleus.kind === "sized-delimiter") {
+    return layoutSizedDelimiterNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   if (nucleus.kind === "list") {
     const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet);
     if (unwrapped) {
@@ -804,6 +808,50 @@ function layoutSingleAtomGroupNucleus(
   return layoutNucleus(item.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
 }
 
+function layoutSizedDelimiterNucleus(
+  nucleus: TexMathSizedDelimiterNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout | null {
+  const delimiterStyle = delimiterSizeStyle(style);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
+  const delimiter = layoutMathDelimiter(
+    nucleus.delimiter,
+    fontProfile,
+    delimiterStyle,
+    baseAtPt,
+    sizedDelimiterTargetHeight(nucleus.command),
+    axis,
+    nucleus.delimiterSourceSpan
+  );
+  if (!delimiter) {
+    return null;
+  }
+  return {
+    items: delimiter.items,
+    width: delimiter.width,
+    height: delimiter.height,
+    depth: delimiter.depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function sizedDelimiterTargetHeight(command: TexMathSizedDelimiterNucleus["command"]): number {
+  switch (command) {
+    case "big":
+      return 8.5;
+    case "Big":
+      return 11.5;
+    case "bigg":
+      return 14.5;
+    case "Bigg":
+      return 17.5;
+  }
+}
+
 function layoutTextNucleus(
   nucleus: TexMathTextNucleus,
   fontProfile: TexMathFontProfile,
@@ -815,30 +863,58 @@ function layoutTextNucleus(
     textStyleAtPt(style, baseAtPt),
     fontProfile.metricProvider
   );
-  let shaped: ReturnType<typeof fontProfile.metricProvider.shapeText>;
-  try {
-    shaped = fontProfile.metricProvider.shapeText(nucleus.text, font, {
-      sourceStart: nucleus.textSourceSpan.start,
-    });
-  } catch {
-    return null;
-  }
   const items: TexMathHListItem[] = [];
   let cursor = 0;
   let height = 0;
   let depth = 0;
-  for (const item of shaped.items) {
-    const layoutItem = textShapedItemToMathLayoutItem(item, font, cursor);
-    items.push(layoutItem);
-    cursor = roundTexPt(cursor + layoutItem.width);
-    if (layoutItem.kind === "glyph") {
-      height = Math.max(height, layoutItem.height);
-      depth = Math.max(depth, layoutItem.depth);
+
+  const appendTextRun = (text: string, sourceStart: number): boolean => {
+    if (!text) {
+      return true;
     }
+    let shaped: ReturnType<typeof fontProfile.metricProvider.shapeText>;
+    try {
+      shaped = fontProfile.metricProvider.shapeText(text, font, { sourceStart });
+    } catch {
+      return false;
+    }
+    for (const item of shaped.items) {
+      const layoutItem = textShapedItemToMathLayoutItem(item, font, cursor);
+      items.push(layoutItem);
+      cursor = roundTexPt(cursor + layoutItem.width);
+      if (layoutItem.kind === "glyph") {
+        height = Math.max(height, layoutItem.height);
+        depth = Math.max(depth, layoutItem.depth);
+      }
+    }
+    return true;
+  };
+
+  for (const part of nucleus.parts ?? [{
+    kind: "text" as const,
+    text: nucleus.text,
+    sourceSpan: nucleus.textSourceSpan,
+  }]) {
+    if (part.kind === "text") {
+      if (!appendTextRun(part.text, part.sourceSpan.start)) {
+        return null;
+      }
+      continue;
+    }
+    const math = layoutTexMathList(part.list, { fontProfile, style, baseAtPt });
+    if (!math.supported) {
+      return null;
+    }
+    const child = childHList("nucleus", cursor, 0, math.hlist, part.sourceSpan);
+    items.push(child);
+    cursor = roundTexPt(cursor + child.width);
+    height = Math.max(height, child.height);
+    depth = Math.max(depth, child.depth);
   }
+
   return {
     items,
-    width: shaped.width,
+    width: cursor,
     height: roundTexPt(height),
     depth: roundTexPt(depth),
     italicCorrection: 0,
@@ -4579,6 +4655,8 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 3 }];
     case ",":
       return [{ family: "letters", code: 59 }];
+    case ":":
+      return [{ family: "operators", code: 58 }];
     case ".":
       return [{ family: "letters", code: 58 }];
     case "/":

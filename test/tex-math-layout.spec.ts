@@ -535,6 +535,23 @@ describe("TeX math hlist layout", () => {
     expect(result.hlist?.width).toBeCloseTo(23.777548, 6);
   });
 
+  it("lays out math islands inside text command nuclei", () => {
+    const result = layout(String.raw`\text{if $Ax \ge b$,}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
+      "lmroman10-regular/105",
+      "lmroman10-regular/102",
+      "lmroman10-regular/32",
+      "cmmi10/65",
+      "cmmi10/120",
+      "cmsy10/21",
+      "cmmi10/98",
+      "lmroman10-regular/44",
+    ]);
+  });
+
   it("scales text command nuclei in script style", () => {
     const result = layout(String.raw`x_{\text{if}}`);
 

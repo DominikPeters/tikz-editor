@@ -73,6 +73,7 @@ export type TexMathSpacingCommand =
 
 export type TexMathNucleus =
   | TexMathGlyphNucleus
+  | TexMathSizedDelimiterNucleus
   | TexMathListNucleus
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
@@ -117,6 +118,21 @@ export type TexMathDelimiter =
 export interface TexMathGlyphNucleus {
   readonly kind: "glyph";
   readonly text: string;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathDelimiterSizeCommand =
+  | "big"
+  | "Big"
+  | "bigg"
+  | "Bigg";
+
+export interface TexMathSizedDelimiterNucleus {
+  readonly kind: "sized-delimiter";
+  readonly command: TexMathDelimiterSizeCommand;
+  readonly delimiter: TexMathDelimiter;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly delimiterSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -194,9 +210,23 @@ export interface TexMathAlphabetNucleus {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export type TexMathTextPart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "math";
+      readonly list: TexMathList;
+      readonly sourceSpan: TexMathSourceSpan;
+      readonly contentSourceSpan: TexMathSourceSpan;
+    };
+
 export interface TexMathTextNucleus {
   readonly kind: "text";
   readonly text: string;
+  readonly parts?: readonly TexMathTextPart[];
   readonly textSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }

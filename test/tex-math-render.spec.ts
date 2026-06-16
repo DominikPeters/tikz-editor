@@ -287,7 +287,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders additional plain-TeX symbols and named operators through TeX glyph paths", () => {
-    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+\Longrightarrow+\implies+\iff`);
+    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+x:y+\Longrightarrow+\implies+\iff`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -1468,6 +1468,27 @@ unordered.`;
     expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
       source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
     )).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("renders explicit align-star tags as right-aligned row labels", () => {
+    const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`a&=b \tag{A}`,
+      delimiter: "align-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 120,
+    });
+
+    expect(directAlignment?.rows[0]).toMatchObject({
+      width: 120,
+    });
+    expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="40"');
+    expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="65"');
+    expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="41"');
   });
 
   it("does not insert aligned inter-pair gap for alignedat environments", () => {

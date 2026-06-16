@@ -9,6 +9,7 @@ import type {
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDelimiter,
+  TexMathDelimiterSizeCommand,
   TexMathExtensibleArrowCommand,
   TexMathGlue,
   TexMathItem,
@@ -23,6 +24,7 @@ import type {
   TexMathScript,
   TexMathSourceSpan,
   TexMathStyle,
+  TexMathTextPart,
   TexMathToken,
   TexMathTokenKind,
   TexMathUnsupportedItem,
@@ -332,6 +334,10 @@ class TexMathParser {
       if (extensibleArrow) {
         return this.parseExtensibleArrow(extensibleArrow, allowScripts);
       }
+      const bigDelimiter = bigDelimiterCommandName(token.text);
+      if (bigDelimiter) {
+        return this.parseBigDelimiter(bigDelimiter, allowScripts);
+      }
       const declaredOperator = this.declaredMathOperators.get(commandName(token.text));
       if (declaredOperator) {
         return this.parseDeclaredMathOperator(declaredOperator, allowScripts);
@@ -619,6 +625,7 @@ class TexMathParser {
       nucleus: {
         kind: "text",
         text: content.text,
+        parts: content.parts,
         textSourceSpan: content.textSourceSpan,
         sourceSpan,
       },
@@ -1055,6 +1062,31 @@ class TexMathParser {
         rightDelimiterSourceSpan: rightDelimiter.sourceSpan,
         sourceSpan,
       },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseBigDelimiter(commandNameValue: TexMathDelimiterSizeCommand, allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const delimiter = this.parseDelimiter(command.sourceSpan, `${command.text} delimiter`);
+    const sourceSpan = spanUnion(command.sourceSpan, delimiter?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: delimiter ? atomClassForDelimiter(delimiter.delimiter) : "ord",
+      nucleus: delimiter
+        ? {
+            kind: "sized-delimiter",
+            command: commandNameValue,
+            delimiter: delimiter.delimiter,
+            commandSourceSpan: command.sourceSpan,
+            delimiterSourceSpan: delimiter.sourceSpan,
+            sourceSpan,
+          }
+        : {
+            kind: "unsupported",
+            command: command.text,
+            sourceSpan,
+          },
       sourceSpan,
     }, allowScripts);
   }
@@ -2460,6 +2492,7 @@ class TexMathParser {
     label: string
   ): {
     text: string;
+    parts: readonly TexMathTextPart[];
     sourceSpan: TexMathSourceSpan;
     textSourceSpan: TexMathSourceSpan;
     unsupported: boolean;
@@ -2477,9 +2510,25 @@ class TexMathParser {
     }
     const open = this.expectGroupOpen();
     let text = "";
+    let textRun = "";
+    let textRunSourceStart = open.sourceSpan.end;
+    const parts: TexMathTextPart[] = [];
     let lastSpan: TexMathSourceSpan = open.sourceSpan;
     let unsupported = false;
     let depth = 0;
+    const flushTextRun = (sourceEnd: number): void => {
+      if (!textRun) {
+        textRunSourceStart = sourceEnd;
+        return;
+      }
+      parts.push({
+        kind: "text",
+        text: textRun,
+        sourceSpan: { start: textRunSourceStart, end: sourceEnd },
+      });
+      textRun = "";
+      textRunSourceStart = sourceEnd;
+    };
     while (!this.isAtEnd()) {
       const token = this.peek();
       if (!token) {
@@ -2487,6 +2536,60 @@ class TexMathParser {
       }
       if (token.kind === "group-close" && depth === 0) {
         break;
+      }
+      if (depth === 0 && token.kind === "character" && token.text === "$") {
+        flushTextRun(token.sourceSpan.start);
+        const openMath = this.advance();
+        lastSpan = openMath.sourceSpan;
+        const mathStart = openMath.sourceSpan.end;
+        const mathTokens: TexMathToken[] = [];
+        let closeMath: TexMathToken | undefined;
+        while (!this.isAtEnd()) {
+          const mathToken = this.peek();
+          if (!mathToken || mathToken.kind === "group-close") {
+            break;
+          }
+          this.advance();
+          lastSpan = mathToken.sourceSpan;
+          if (mathToken.kind === "character" && mathToken.text === "$") {
+            closeMath = mathToken;
+            break;
+          }
+          mathTokens.push(mathToken);
+        }
+        if (!closeMath) {
+          unsupported = true;
+          text += "$";
+          if (!textRun) {
+            textRunSourceStart = openMath.sourceSpan.start;
+          }
+          textRun += "$";
+          this.addDiagnostic(
+            "warning",
+            "unsupported-command",
+            "Unsupported unterminated math shift in \\text.",
+            openMath.sourceSpan
+          );
+          continue;
+        }
+        const mathSource = mathTokens.map((mathToken) => mathToken.text).join("");
+        const parsed = parseTexMath(mathSource, {
+          sourceOffset: mathStart,
+          suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
+        });
+        this.diagnostics.push(...parsed.diagnostics);
+        if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+          unsupported = true;
+          continue;
+        }
+        parts.push({
+          kind: "math",
+          list: parsed.list,
+          sourceSpan: spanUnion(openMath.sourceSpan, closeMath.sourceSpan),
+          contentSourceSpan: { start: mathStart, end: closeMath.sourceSpan.start },
+        });
+        textRunSourceStart = closeMath.sourceSpan.end;
+        continue;
       }
       this.advance();
       lastSpan = token.sourceSpan;
@@ -2500,6 +2603,10 @@ class TexMathParser {
       }
       if (token.kind === "character" || token.kind === "space") {
         text += token.text;
+        if (!textRun) {
+          textRunSourceStart = token.sourceSpan.start;
+        }
+        textRun += token.text;
         continue;
       }
       unsupported = true;
@@ -2513,8 +2620,10 @@ class TexMathParser {
     const close = this.consumeGroupClose(open.sourceSpan);
     const contentStart = open.sourceSpan.end;
     const contentEnd = close?.sourceSpan.start ?? lastSpan.end;
+    flushTextRun(contentEnd);
     return {
       text,
+      parts,
       sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
       textSourceSpan: { start: contentStart, end: Math.max(contentStart, contentEnd) },
       unsupported,
@@ -3375,11 +3484,39 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
 function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumber" | null {
   switch (commandName(command)) {
     case "label":
+    case "tag":
       return "label";
     case "notag":
       return "notag";
     case "nonumber":
       return "nonumber";
+    default:
+      return null;
+  }
+}
+
+function bigDelimiterCommandName(command: string): TexMathDelimiterSizeCommand | null {
+  switch (commandName(command)) {
+    case "big":
+    case "bigl":
+    case "bigr":
+    case "bigm":
+      return "big";
+    case "Big":
+    case "Bigl":
+    case "Bigr":
+    case "Bigm":
+      return "Big";
+    case "bigg":
+    case "biggl":
+    case "biggr":
+    case "biggm":
+      return "bigg";
+    case "Bigg":
+    case "Biggl":
+    case "Biggr":
+    case "Biggm":
+      return "Bigg";
     default:
       return null;
   }
@@ -3721,7 +3858,7 @@ function atomClassForCharacter(char: string): TexMathAtomClass {
   if (char === "," || char === ";") {
     return "punct";
   }
-  if (char === "=" || char === "<" || char === ">") {
+  if (char === "=" || char === "<" || char === ">" || char === ":") {
     return "rel";
   }
   if (char === "+" || char === "-" || char === "*" || char === "/") {
@@ -3806,6 +3943,29 @@ function delimiterForToken(token: TexMathToken): TexMathDelimiter | null {
       return "urcorner";
     default:
       return null;
+  }
+}
+
+function atomClassForDelimiter(delimiter: TexMathDelimiter): TexMathAtomClass {
+  switch (delimiter) {
+    case "(":
+    case "[":
+    case "langle":
+    case "lbrace":
+    case "lceil":
+    case "lfloor":
+    case "ulcorner":
+      return "open";
+    case ")":
+    case "]":
+    case "rangle":
+    case "rbrace":
+    case "rceil":
+    case "rfloor":
+    case "urcorner":
+      return "close";
+    default:
+      return "ord";
   }
 }
 
