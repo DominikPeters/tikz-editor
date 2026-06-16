@@ -1587,6 +1587,20 @@ describe("TeX math hlist layout", () => {
     )).toBe(false);
   });
 
+  it("preserves trailing italic correction in named operator widths", () => {
+    const inf = layoutTexMathList(parseTexMath(String.raw`\inf_x f(x)`).list, {
+      style: "display",
+    });
+    expect(inf.supported).toBe(true);
+    expect(inf.hlist?.width).toBeCloseTo(33.298676, 3);
+
+    const sin = layoutTexMathList(parseTexMath(String.raw`\sin x`).list, {
+      style: "display",
+    });
+    expect(sin.supported).toBe(true);
+    expect(sin.hlist?.width).toBeCloseTo(19.659762, 5);
+  });
+
   it("lays out TeX operator limits as vertical boxes", () => {
     const result = layout(String.raw`\sum\limits_i^n+\int\limits_0^1`);
     expect(result.supported).toBe(true);

@@ -3018,6 +3018,17 @@ function layoutOperatorNameNucleus(
   if (!flushTextRun()) {
     return null;
   }
+  const previous = items.at(-1);
+  if (previous?.kind === "glyph" && previous.italicCorrection !== 0) {
+    items.push({
+      kind: "kern",
+      x: cursor,
+      width: previous.italicCorrection,
+      reason: "italic-correction",
+      sourceSpan: previous.sourceSpan,
+    });
+    cursor = roundTexPt(cursor + previous.italicCorrection);
+  }
   return {
     items,
     width: cursor,
