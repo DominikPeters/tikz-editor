@@ -2766,9 +2766,10 @@ function displayMathCaretStopsForBox(
   const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
   const localStops = box.caretStops;
   if (Array.isArray(localStops) && localStops.length === rawLength + 1) {
-    return localStops.map((stop) =>
-      x + Math.max(0, Math.min(width, Number.isFinite(stop) ? stop : 0))
-    );
+    return localStops.map((stop) => {
+      const numericStop = Number(stop);
+      return x + Math.max(0, Math.min(width, Number.isFinite(numericStop) ? numericStop : 0));
+    });
   }
   return Array.from({ length: rawLength + 1 }, (_, index) =>
     x + (rawLength > 0 ? (width * index) / rawLength : 0)

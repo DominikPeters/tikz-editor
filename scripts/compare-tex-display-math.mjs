@@ -988,12 +988,12 @@ function randomDocumentDisplayFormula(rng) {
 
 function randomDocumentDisplaySource(rng, index) {
   if (index % 4 === 3) {
-    return randomDocumentAlignStarSource(rng);
+    return randomDocumentAlignStarSource(rng, index % 3);
   }
   return `\\[${randomDocumentDisplayFormula(rng)}\\]`;
 }
 
-function randomDocumentAlignStarSource(rng) {
+function randomDocumentAlignStarSource(rng, tagMode = 0) {
   const rowCount = 1 + randomInt(rng, 3);
   const pairCount = 1 + randomInt(rng, 2);
   const rows = [];
@@ -1003,7 +1003,7 @@ function randomDocumentAlignStarSource(rng) {
       cells.push(randomDocumentAlignmentCell(rng));
       cells.push(`=${randomDocumentAlignmentCell(rng)}`);
     }
-    rows.push(cells.join("&"));
+    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, pairCount, tagMode));
   }
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
 }
@@ -1247,14 +1247,14 @@ function generateDisplayFuzzCases(count, seed) {
     return {
       id: `display-fuzz-${index + 1}`,
       width,
-      source: `Alpha ${randomGeneratedDisplaySource(rng, displayKind)} Beta`,
+      source: `Alpha ${randomGeneratedDisplaySource(rng, displayKind, index)} Beta`,
     };
   });
 }
 
-function randomGeneratedDisplaySource(rng, displayKind) {
+function randomGeneratedDisplaySource(rng, displayKind, index) {
   if (displayKind === 1) {
-    return randomAlignStarSource(rng);
+    return randomAlignStarSource(rng, index % 3);
   }
   if (displayKind === 2) {
     return `\\[${randomNestedAlignedFormula(rng)}\\]`;
@@ -1316,16 +1316,16 @@ function generateMixedVListFuzzCases(count, seed) {
       compareMode: "math-glyphs",
       source: context.source(
         before,
-        randomMixedVListDisplaySource(rng, displayKind),
+        randomMixedVListDisplaySource(rng, displayKind, index),
         after
       ),
     };
   });
 }
 
-function randomMixedVListDisplaySource(rng, displayKind) {
+function randomMixedVListDisplaySource(rng, displayKind, index) {
   if (displayKind === 3) {
-    return randomMixedVListAlignStarSource(rng);
+    return randomMixedVListAlignStarSource(rng, index % 3);
   }
   if (displayKind === 1) {
     return `\\[${randomNestedAlignedFormula(rng)}\\]`;
@@ -1362,11 +1362,17 @@ function randomMixedVListDisplayFormula(rng) {
   return `${left}${choice(rng, ["+", "-", "="])}${right}`;
 }
 
-function randomMixedVListAlignStarSource(rng) {
+function randomMixedVListAlignStarSource(rng, tagMode = 0) {
   const rowCount = 1 + randomInt(rng, 2);
   const rows = [];
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    rows.push(`${randomMixedVListAlignCell(rng)}&=${randomMixedVListAlignCell(rng)}`);
+    rows.push(alignRowWithGeneratedTag(
+      `${randomMixedVListAlignCell(rng)}&=${randomMixedVListAlignCell(rng)}`,
+      rowIndex,
+      rowCount,
+      1,
+      tagMode
+    ));
   }
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
 }
@@ -1383,7 +1389,7 @@ function randomMixedVListAlignCell(rng) {
   ]);
 }
 
-function randomAlignStarSource(rng) {
+function randomAlignStarSource(rng, tagMode = 0) {
   const rowCount = 1 + randomInt(rng, 3);
   const pairCount = 1 + randomInt(rng, 2);
   const rows = [];
@@ -1393,9 +1399,28 @@ function randomAlignStarSource(rng) {
       cells.push(randomAlignmentLeftCell(rng));
       cells.push(`=${randomAlignmentRightCell(rng)}`);
     }
-    rows.push(cells.join("&"));
+    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, pairCount, tagMode));
   }
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function alignRowWithGeneratedTag(row, rowIndex, rowCount, pairCount, tagMode) {
+  if (rowIndex !== 0) {
+    return row;
+  }
+  // Multi-pair tagged rows require the fuller AMS \calc@shift@align
+  // eqnshift/alignsep adjustment; keep the regular fuzz gate on implemented
+  // tag regimes and cover the broader cases with fixed regression fixtures.
+  if (pairCount !== 1) {
+    return row;
+  }
+  if (tagMode === 1) {
+    return `${row} \\tag{A}`;
+  }
+  if (tagMode === 2 && rowCount === 1) {
+    return `${row}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \\tag{Long tag}`;
+  }
+  return row;
 }
 
 function randomDisplayFormula(rng) {

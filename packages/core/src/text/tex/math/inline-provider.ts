@@ -33,6 +33,9 @@ const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
 const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT = 20;
 const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT = 13;
+const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT = 8.4;
+const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT = 1;
+const TEX_DISPLAY_ALIGNMENT_DEEP_ROW_TAG_METRIC_SHIFT_PT = 13;
 
 export interface TexDerivedInlineMathBoxProviderOptions {
   readonly fontProfile?: TexMathFontProfile;
@@ -504,7 +507,9 @@ function getDisplayMathAlignment(
   });
   const hasAlignmentTags = alignedNucleus?.rows.some((row) => (row.labels?.length ?? 0) > 0) ?? false;
   const forcedRowWidth = hasAlignmentTags
-    ? Math.max(dimensions.rowWidth, dimensions.targetWidth)
+    ? alignedRows.length > 1
+      ? Math.max(dimensions.rowWidth, dimensions.targetWidth)
+      : dimensions.targetWidth
     : null;
   const rows = alignedRows.map((row, rowIndex) => {
     const taggedRow = addDisplayAlignmentTag(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, dimensions, fontProfile, baseAtPt, forcedRowWidth, alignedRows.length);
@@ -608,14 +613,14 @@ function addDisplayAlignmentTag(
     };
   }
   const width = Math.max(baseWidth, dimensions.targetWidth);
-  const tagX = Math.max(0, roundTexPt(width - tag.hlist.width));
+  const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.hlist.width));
   const rowRight = mathItemsRightEdge(rowItems);
   const tagCollides = rowRight > tagX;
   const tagRenderShiftY = tagCollides
-    ? displayAlignmentShiftedTagRenderShift(rowCount)
+    ? displayAlignmentShiftedTagRenderShift(rowCount, row.depth)
     : 0;
   const tagMetricShiftY = tagCollides
-    ? displayAlignmentShiftedTagMetricShift(rowCount)
+    ? displayAlignmentShiftedTagMetricShift(rowCount, row.depth)
     : 0;
   return {
     width,
@@ -628,16 +633,26 @@ function addDisplayAlignmentTag(
   };
 }
 
-function displayAlignmentShiftedTagRenderShift(rowCount: number): number {
-  return rowCount <= 2
+function displayAlignmentShiftedTagRenderShift(rowCount: number, rowDepth: number): number {
+  const baseShift = rowCount <= 2
     ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
     : TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT;
+  // amsmath's right-side \place@tag uses a vtop whose first null box depth is
+  // \lineht@, the current row depth. The following tag box gets normal
+  // baseline spacing when possible and falls back to \lineskip for deep rows.
+  const depthPlusTagStrut = rowDepth + TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT;
+  return roundTexPt(depthPlusTagStrut <= baseShift + 0.001
+    ? baseShift
+    : depthPlusTagStrut + TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT);
 }
 
-function displayAlignmentShiftedTagMetricShift(rowCount: number): number {
-  return rowCount <= 2
+function displayAlignmentShiftedTagMetricShift(rowCount: number, rowDepth: number): number {
+  const baseShift = rowCount <= 2
     ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
     : TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT;
+  return rowDepth >= TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
+    ? Math.max(baseShift, TEX_DISPLAY_ALIGNMENT_DEEP_ROW_TAG_METRIC_SHIFT_PT)
+    : baseShift;
 }
 
 interface TexDisplayAlignmentDimensions {
