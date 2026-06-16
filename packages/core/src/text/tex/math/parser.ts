@@ -873,7 +873,7 @@ class TexMathParser {
         nameSourceSpan: command.sourceSpan,
         sourceSpan: command.sourceSpan,
       },
-      limits: "nolimits",
+      limits: defaultNamedOperatorLimits(name),
       sourceSpan: command.sourceSpan,
     }, allowScripts);
   }
@@ -3758,6 +3758,22 @@ function namedOperatorCommandName(command: string): string | null {
   }
 }
 
+function defaultNamedOperatorLimits(name: string): TexMathOperatorLimits {
+  switch (name) {
+    case "det":
+    case "gcd":
+    case "inf":
+    case "lim":
+    case "max":
+    case "min":
+    case "Pr":
+    case "sup":
+      return "display";
+    default:
+      return "nolimits";
+  }
+}
+
 function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | null {
   const name = commandName(command);
   if (openNamedSymbolCommands.has(name)) {
@@ -3964,6 +3980,12 @@ function atomClassForDelimiter(delimiter: TexMathDelimiter): TexMathAtomClass {
     case "rfloor":
     case "urcorner":
       return "close";
+    case ".":
+    case "vert":
+    case "Vert":
+    case "slash":
+    case "backslash":
+      return "ord";
     default:
       return "ord";
   }

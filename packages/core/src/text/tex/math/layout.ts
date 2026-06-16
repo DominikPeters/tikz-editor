@@ -831,8 +831,8 @@ function layoutSizedDelimiterNucleus(
   return {
     items: delimiter.items,
     width: delimiter.width,
-    height: delimiter.height,
-    depth: delimiter.depth,
+    height: sizedDelimiterBoxHeight(nucleus.command),
+    depth: sizedDelimiterBoxDepth(nucleus.command),
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
@@ -842,6 +842,19 @@ function layoutSizedDelimiterNucleus(
 function sizedDelimiterTargetHeight(command: TexMathSizedDelimiterNucleus["command"]): number {
   switch (command) {
     case "big":
+      return 12;
+    case "Big":
+      return 18;
+    case "bigg":
+      return 24;
+    case "Bigg":
+      return 30;
+  }
+}
+
+function sizedDelimiterBoxHeight(command: TexMathSizedDelimiterNucleus["command"]): number {
+  switch (command) {
+    case "big":
       return 8.5;
     case "Big":
       return 11.5;
@@ -849,6 +862,19 @@ function sizedDelimiterTargetHeight(command: TexMathSizedDelimiterNucleus["comma
       return 14.5;
     case "Bigg":
       return 17.5;
+  }
+}
+
+function sizedDelimiterBoxDepth(command: TexMathSizedDelimiterNucleus["command"]): number {
+  switch (command) {
+    case "big":
+      return 3.5;
+    case "Big":
+      return 6.5;
+    case "bigg":
+      return 9.5;
+    case "Bigg":
+      return 12.5;
   }
 }
 

@@ -1491,6 +1491,39 @@ unordered.`;
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="41"');
   });
 
+  it("lowers align-star tags that collide with the equation body", () => {
+    const source = String.raw`\begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\end{align*}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}`,
+      delimiter: "align-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 300,
+    });
+
+    expect(directAlignment?.rows[0]?.depth).toBeCloseTo(15.600037, 5);
+    expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="76"');
+  });
+
+  it("keeps non-colliding align-star tags on the equation baseline", () => {
+    const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`a&=b \tag{A}`,
+      delimiter: "align-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 300,
+    });
+
+    expect(directAlignment?.rows[0]?.depth).toBeLessThan(4);
+  });
+
   it("does not insert aligned inter-pair gap for alignedat environments", () => {
     const aligned = layoutTexMathList(parseTexMath(
       String.raw`\begin{aligned}a&=b&c&=d\\e&=f&g&=h\end{aligned}`

@@ -809,6 +809,8 @@ function readArgs() {
       parsed.glyphTolerance = Number(process.argv[++index] ?? parsed.glyphTolerance);
     } else if (arg === "--source") {
       parsed.source = process.argv[++index] ?? "";
+    } else if (arg === "--source-file") {
+      parsed.source = readFileSync(process.argv[++index] ?? "", "utf8");
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }

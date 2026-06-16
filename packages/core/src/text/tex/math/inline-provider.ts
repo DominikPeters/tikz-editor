@@ -488,6 +488,36 @@ function getDisplayMathAlignment(
     rowCount: alignedRows.length,
     targetWidth: params.targetWidth,
   });
+  const hasAlignmentTags = alignedNucleus?.rows.some((row) => (row.labels?.length ?? 0) > 0) ?? false;
+  const forcedRowWidth = hasAlignmentTags
+    ? Math.max(dimensions.rowWidth, dimensions.targetWidth)
+    : null;
+  const rows = alignedRows.map((row, rowIndex) => {
+    const taggedRow = addDisplayAlignmentTag(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, dimensions, fontProfile, baseAtPt, forcedRowWidth);
+    const rowHList: TexMathHList = {
+      kind: "math-hlist",
+      style: laidOut.hlist.style,
+      width: taggedRow.width,
+      height: taggedRow.height,
+      depth: taggedRow.depth,
+      sourceSpan: row.sourceSpan,
+      items: taggedRow.items,
+    };
+    return {
+      rowIndex,
+      x: 0,
+      source: params.source,
+      content: params.content,
+      sourceStart: row.sourceSpan.start,
+      sourceEnd: row.sourceSpan.end,
+      contentStart: row.sourceSpan.start,
+      contentEnd: row.sourceSpan.end,
+      width: taggedRow.width,
+      height: taggedRow.height,
+      depth: taggedRow.depth,
+      svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
+    };
+  });
   return {
     source: params.source,
     content: params.content,
@@ -496,33 +526,8 @@ function getDisplayMathAlignment(
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
     delimiter: "align-star",
-    width: dimensions.rowWidth,
-    rows: alignedRows.map((row, rowIndex) => {
-      const taggedRow = addDisplayAlignmentTag(row, alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null, dimensions, fontProfile, baseAtPt);
-      const rowHList: TexMathHList = {
-        kind: "math-hlist",
-        style: laidOut.hlist.style,
-        width: taggedRow.width,
-        height: taggedRow.height,
-        depth: taggedRow.depth,
-        sourceSpan: row.sourceSpan,
-        items: taggedRow.items,
-      };
-      return {
-        rowIndex,
-        x: 0,
-        source: params.source,
-        content: params.content,
-        sourceStart: row.sourceSpan.start,
-        sourceEnd: row.sourceSpan.end,
-        contentStart: row.sourceSpan.start,
-        contentEnd: row.sourceSpan.end,
-        width: taggedRow.width,
-        height: taggedRow.height,
-        depth: taggedRow.depth,
-        svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
-      };
-    }),
+    width: Math.max(dimensions.rowWidth, ...rows.map((row) => row.width)),
+    rows,
   };
 }
 
@@ -539,12 +544,14 @@ function addDisplayAlignmentTag(
   label: TexMathAlignedRowLabel | null,
   dimensions: TexDisplayAlignmentDimensions,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: number,
+  forcedRowWidth: number | null = null
 ): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
   const rowItems = displayAlignmentRowItems(row.items, dimensions);
+  const baseWidth = forcedRowWidth ?? dimensions.rowWidth;
   if (!label) {
     return {
-      width: dimensions.rowWidth,
+      width: baseWidth,
       height: row.height,
       depth: row.depth,
       items: rowItems,
@@ -556,7 +563,7 @@ function addDisplayAlignmentTag(
   });
   if (parsedTag.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return {
-      width: dimensions.rowWidth,
+      width: baseWidth,
       height: row.height,
       depth: row.depth,
       items: rowItems,
@@ -569,21 +576,23 @@ function addDisplayAlignmentTag(
   });
   if (!tag.supported) {
     return {
-      width: dimensions.rowWidth,
+      width: baseWidth,
       height: row.height,
       depth: row.depth,
       items: rowItems,
     };
   }
-  const width = Math.max(dimensions.rowWidth, dimensions.targetWidth);
+  const width = Math.max(baseWidth, dimensions.targetWidth);
   const tagX = Math.max(0, roundTexPt(width - tag.hlist.width));
+  const rowRight = mathItemsRightEdge(rowItems);
+  const tagShiftY = rowRight > tagX ? 12 : 0;
   return {
     width,
     height: Math.max(row.height, tag.hlist.height),
-    depth: Math.max(row.depth, tag.hlist.depth),
+    depth: Math.max(row.depth + tagShiftY, tagShiftY + tag.hlist.depth),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(tag.hlist.items, tagX),
+      ...offsetMathHListItems(tag.hlist.items, tagX, tagShiftY),
     ],
   };
 }
@@ -634,21 +643,39 @@ function displayAlignmentDimensions(params: {
 
 function offsetMathHListItems(
   items: readonly TexMathHListItem[],
-  offsetX: number
+  offsetX: number,
+  offsetY = 0
 ): readonly TexMathHListItem[] {
   return items.map((item) => {
-    const shifted = {
-      ...item,
-      x: roundTexPt(item.x + offsetX),
-    };
-    if (item.kind !== "hlist") {
-      return shifted;
+    const x = roundTexPt(item.x + offsetX);
+    if (item.kind === "glyph" || item.kind === "rule") {
+      return {
+        ...item,
+        x,
+        y: roundTexPt(item.y + offsetY),
+      };
+    }
+    if (item.kind === "hlist") {
+      return {
+        ...item,
+        x,
+        y: roundTexPt(item.y + offsetY),
+        items: offsetMathHListItems(item.items, 0, 0),
+      };
     }
     return {
-      ...shifted,
-      items: offsetMathHListItems(item.items, 0),
+      ...item,
+      x,
     };
   });
+}
+
+function mathItemsRightEdge(items: readonly TexMathHListItem[]): number {
+  let right = 0;
+  for (const item of items) {
+    right = Math.max(right, item.x + item.width);
+  }
+  return roundTexPt(right);
 }
 
 function displayAlignmentPairCount(

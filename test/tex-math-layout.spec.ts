@@ -1567,6 +1567,26 @@ describe("TeX math hlist layout", () => {
     expect(starred.hlist?.items.some((item) => item.kind === "hlist" && item.role === "limit-subscript")).toBe(true);
   });
 
+  it("uses TeX display limits for built-in named operators that take limits", () => {
+    const displayLimits = layoutTexMathList(
+      parseTexMath(String.raw`\min_{x:Ax\ge b} f(x)+\inf_x g(x)`).list,
+      { style: "display" }
+    );
+    expect(displayLimits.supported).toBe(true);
+    expect(displayLimits.hlist?.items.filter((item) =>
+      item.kind === "hlist" && item.role === "limit-subscript"
+    )).toHaveLength(2);
+
+    const noLimits = layoutTexMathList(
+      parseTexMath(String.raw`\sin_x x+\log_y y`).list,
+      { style: "display" }
+    );
+    expect(noLimits.supported).toBe(true);
+    expect(noLimits.hlist?.items.some((item) =>
+      item.kind === "hlist" && item.role === "limit-subscript"
+    )).toBe(false);
+  });
+
   it("lays out TeX operator limits as vertical boxes", () => {
     const result = layout(String.raw`\sum\limits_i^n+\int\limits_0^1`);
     expect(result.supported).toBe(true);

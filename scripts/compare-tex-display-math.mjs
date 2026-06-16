@@ -759,6 +759,11 @@ function readArgs() {
       cases.push({ id: `case-${cases.length + 1}`, source, width: 120 });
     } else if (arg.startsWith("--source=")) {
       cases.push({ id: `case-${cases.length + 1}`, source: arg.slice("--source=".length), width: 120 });
+    } else if (arg === "--source-file") {
+      const sourceFile = process.argv[++index] ?? "";
+      cases.push({ id: `case-${cases.length + 1}`, source: readFileSync(sourceFile, "utf8"), width: 120 });
+    } else if (arg.startsWith("--source-file=")) {
+      cases.push({ id: `case-${cases.length + 1}`, source: readFileSync(arg.slice("--source-file=".length), "utf8"), width: 120 });
     } else if (arg === "--width") {
       const width = Number(process.argv[++index] ?? 120);
       if (cases.length > 0) {
@@ -1194,6 +1199,16 @@ function constructMatrixCases() {
       source: String.raw`Alpha \[x+\text{if}\] Beta`,
     },
     {
+      id: "display-text-inline-math",
+      width: 180,
+      source: String.raw`Alpha \[\text{if $Ax \ge b$,}\] Beta`,
+    },
+    {
+      id: "display-big-delimiters",
+      width: 180,
+      source: String.raw`Alpha \[\big( x+1 \big)\] Beta`,
+    },
+    {
       id: "align-script-cells",
       width: 160,
       source: String.raw`Alpha \begin{align*}x_i^2&=y^n\\a&=b\end{align*} Beta`,
@@ -1207,6 +1222,16 @@ function constructMatrixCases() {
       id: "align-text-cells",
       width: 160,
       source: String.raw`Alpha \begin{align*}\text{if}&=x\\y&=\text{off}\end{align*} Beta`,
+    },
+    {
+      id: "align-tagged-row",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}a&=b \tag{A}\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-tag-collision",
+      width: 300,
+      source: String.raw`Alpha \begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\end{align*} Beta`,
     },
   ];
 }
@@ -1318,6 +1343,8 @@ function randomMixedVListDisplayFormula(rng) {
     randomLineTerm(rng),
     randomAccentTerm(rng),
     randomLeftRight(rng),
+    randomBigDelimiterTerm(rng),
+    randomTextMathTerm(rng),
   ]);
   const right = choice(rng, [
     randomMathAtom(rng),
@@ -1347,6 +1374,8 @@ function randomMixedVListAlignCell(rng) {
     randomScriptTerm(rng),
     randomFraction(rng),
     randomRadical(rng),
+    randomBigDelimiterTerm(rng),
+    randomTextMathTerm(rng),
     `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
   ]);
 }
@@ -1430,6 +1459,8 @@ function randomAlignmentLeftCell(rng) {
     randomLineTerm(rng),
     randomAccentTerm(rng),
     randomTextTerm(rng),
+    randomTextMathTerm(rng),
+    randomBigDelimiterTerm(rng),
     randomArray(rng),
     randomCases(rng),
     randomSmallMatrix(rng),
@@ -1449,6 +1480,8 @@ function randomAlignmentRightCell(rng) {
     randomLineTerm(rng),
     randomAccentTerm(rng),
     randomTextTerm(rng),
+    randomTextMathTerm(rng),
+    randomBigDelimiterTerm(rng),
     randomArray(rng),
     randomCases(rng),
     randomSmallMatrix(rng),
@@ -1468,6 +1501,8 @@ function randomMathTerm(rng) {
     randomAccentTerm(rng),
     randomLeftRight(rng),
     randomTextTerm(rng),
+    randomTextMathTerm(rng),
+    randomBigDelimiterTerm(rng),
     randomArray(rng),
     randomCases(rng),
     randomSmallMatrix(rng),
@@ -1478,6 +1513,35 @@ function randomMathTerm(rng) {
 
 function randomTextTerm(rng) {
   return String.raw`\text{` + choice(rng, ["if", "off", "on", "min", "max"]) + "}";
+}
+
+function randomTextMathTerm(rng) {
+  return String.raw`\text{` + choice(rng, [
+    String.raw`if $Ax \ge b$,`,
+    String.raw`when $x_i=y$,`,
+    String.raw`for $n \ge 1$`,
+  ]) + "}";
+}
+
+function randomBigDelimiterTerm(rng) {
+  const command = choice(rng, [String.raw`\big`, String.raw`\Big`, String.raw`\bigg`, String.raw`\Bigg`]);
+  const pair = choice(rng, [
+    ["(", ")"],
+    ["[", "]"],
+    [String.raw`\langle`, String.raw`\rangle`],
+  ]);
+  return command + sizedDelimiterOpenToken(pair[0]) + choice(rng, [
+    `${randomSimpleDelimiterAtom(rng)}+${randomSimpleDelimiterAtom(rng)}`,
+    randomFraction(rng),
+  ]) + command + pair[1];
+}
+
+function sizedDelimiterOpenToken(delimiter) {
+  return /\\[A-Za-z]+$/u.test(delimiter) ? `${delimiter} ` : delimiter;
+}
+
+function randomSimpleDelimiterAtom(rng) {
+  return choice(rng, ["a", "b", "c", "x", "y", "1", "2"]);
 }
 
 function randomScriptTerm(rng) {
