@@ -518,7 +518,7 @@ local function walk_hlist(list, origin_x, baseline_y, box)
       walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n), node_width(n))
       x=x+node_width(n)
     elseif n.id==disc_id then
-      x=walk_hlist(n.replace or n.pre, x, baseline_y, box)
+      x=walk_hlist(n.replace, x, baseline_y, box)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
     end

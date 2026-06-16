@@ -521,10 +521,13 @@ function parseTexTrace(log) {
 
 function compareDisplayMathGlyphs(mismatches, oursTopLevel, oursGlyphs, texTopLevel, texGlyphs, tolerance) {
   const texDisplayHlistIndices = matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel);
+  const displayOurGlyphs = oursGlyphs.filter((glyph) =>
+    glyph.role === "display-math" || glyph.role === "display-align-row"
+  );
   const displayTexGlyphs = texGlyphs.filter((glyph) =>
     texDisplayHlistIndices.has(glyph.topIndex)
   );
-  compareGlyphLists(mismatches, "display math glyph", oursGlyphs, displayTexGlyphs, tolerance);
+  compareGlyphLists(mismatches, "display math glyph", displayOurGlyphs, displayTexGlyphs, tolerance);
 }
 
 function matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel) {
@@ -693,7 +696,7 @@ local function walk_hlist(list, origin_x, baseline_y, top_index, parent)
       walk_vlist(n.list, x, baseline_y + sp(n.shift or 0) - node_height(n), node_height(n), 1, top_index, n)
       x=x+node_width(n)
     elseif n.id==disc_id then
-      x=walk_hlist(n.replace or n.pre, x, baseline_y, top_index, parent)
+      x=walk_hlist(n.replace, x, baseline_y, top_index, parent)
     elseif n.id~=whatsit_id then
       x=x+node_width(n)
     end
