@@ -1017,6 +1017,75 @@ test("wrapped TeX-derived mixed math and styled text keeps canvas caret mapping"
   await expect(geometryErrors).toEqual([]);
 });
 
+test("wrapped TeX-derived align display rows and tags keep canvas caret mapping", async ({ page }) => {
+  const geometryErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    const text = message.text();
+    if (text.includes("paragraph geometry") || text.includes("caret")) {
+      geometryErrors.push(text);
+    }
+  });
+
+  const text = String.raw`Intro \begin{align*}x&=y \tag{A}\\a&=b\end{align*} Outro`;
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\node[text width=180pt,align=left] at (0,0) {Intro \begin{align*}x&=y \tag{A}\\a&=b\end{align*} Outro};
+\end{tikzpicture}`);
+
+  await waitForHitRegions(page, 1);
+  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+    "data-paragraph-id",
+    /.+/
+  );
+
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  for (const offset of [text.indexOf("y"), text.lastIndexOf("b")]) {
+    const point = await readMathJaxSourceClientPoint(page, {
+      sourceId: "path:0",
+      sourceOffset: offset,
+      sourceText: text
+    });
+    await page.mouse.click(point.x, point.y);
+    await expect(textarea).toBeVisible();
+    await expect(textarea).toBeFocused();
+    await expect(textarea).toHaveValue(text);
+    await expect.poll(async () => {
+      const selection = await readTextareaSelection(page);
+      return selection.start != null &&
+        selection.end === selection.start &&
+        Math.abs(selection.start - offset) <= 1;
+    }).toBe(true);
+  }
+
+  const tagStart = text.indexOf(String.raw`\tag`);
+  const tagEnd = text.indexOf("}", tagStart) + 1;
+  const tagPoint = await readMathJaxSourceClientPoint(page, {
+    sourceId: "path:0",
+    sourceOffset: text.indexOf("A", tagStart),
+    sourceText: text
+  });
+  await page.mouse.click(tagPoint.x, tagPoint.y);
+  await expect(textarea).toBeVisible();
+  await expect(textarea).toBeFocused();
+  await expect.poll(async () => {
+    const selection = await readTextareaSelection(page);
+    return selection.start != null &&
+      selection.end === selection.start &&
+      selection.start >= tagStart &&
+      selection.start <= tagEnd;
+  }).toBe(true);
+
+  const alignStart = text.indexOf(String.raw`\begin{align*}`);
+  const alignEnd = text.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length;
+  await setTextareaSelection(page, alignStart, alignEnd);
+  await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(0);
+  await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(1);
+  await expect(geometryErrors).toEqual([]);
+});
+
 test("rotated wrapped text selection overlays follow text rotation", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
