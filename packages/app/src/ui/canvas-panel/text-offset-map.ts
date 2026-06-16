@@ -54,7 +54,7 @@ export function createSourceRenderOffsetMap(sourceText: string, renderText: stri
       const renderChar = renderText[renderCursor - 1] ?? "";
       const substitutionCost = equivalentChars(sourceChar, renderChar) ? 0 : 1;
       const diagonal = distance[(sourceCursor - 1) * width + (renderCursor - 1)] + substitutionCost;
-      if (diagonal === current) {
+      if (substitutionCost === 0 && diagonal === current) {
         operations.push("match");
         sourceCursor -= 1;
         renderCursor -= 1;
@@ -68,6 +68,25 @@ export function createSourceRenderOffsetMap(sourceText: string, renderText: stri
         sourceCursor -= 1;
         continue;
       }
+    }
+    if (renderCursor > 0) {
+      const insertion = distance[sourceCursor * width + (renderCursor - 1)] + 1;
+      if (insertion === current) {
+        operations.push("insert");
+        renderCursor -= 1;
+        continue;
+      }
+    }
+    if (sourceCursor > 0 && renderCursor > 0) {
+      operations.push("match");
+      sourceCursor -= 1;
+      renderCursor -= 1;
+      continue;
+    }
+    if (sourceCursor > 0) {
+      operations.push("delete");
+      sourceCursor -= 1;
+      continue;
     }
     operations.push("insert");
     renderCursor -= 1;

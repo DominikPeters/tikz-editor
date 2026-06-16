@@ -213,10 +213,124 @@ async function readMathJaxLocalClientPoint(
 
 async function readMathJaxSourceClientPoint(
   page: Page,
-  options: { sourceId: string; sourceOffset: number }
+  options: { sourceId: string; sourceOffset: number; sourceText?: string }
 ): Promise<{ x: number; y: number }> {
   return await page.evaluate((raw) => {
-    const { sourceId, sourceOffset } = raw;
+    const { sourceId, sourceOffset, sourceText } = raw;
+    const clamp = (value: number, min: number, max: number): number => {
+      if (!Number.isFinite(value)) {
+        return min;
+      }
+      return Math.min(max, Math.max(min, value));
+    };
+    const equivalentChars = (source: string, render: string): boolean => {
+      return source === render || (/\s/.test(source) && /\s/.test(render));
+    };
+    const sourceToRenderOffset = (sourceText: string, renderText: string, offset: number): number => {
+      const sourceLength = sourceText.length;
+      const renderLength = renderText.length;
+      const width = renderLength + 1;
+      const distance = Array.from<number>({ length: (sourceLength + 1) * (renderLength + 1) }).fill(0);
+      for (let sourceIndex = 0; sourceIndex <= sourceLength; sourceIndex += 1) {
+        distance[sourceIndex * width] = sourceIndex;
+      }
+      for (let renderIndex = 0; renderIndex <= renderLength; renderIndex += 1) {
+        distance[renderIndex] = renderIndex;
+      }
+      for (let sourceIndex = 1; sourceIndex <= sourceLength; sourceIndex += 1) {
+        for (let renderIndex = 1; renderIndex <= renderLength; renderIndex += 1) {
+          const sourceChar = sourceText[sourceIndex - 1] ?? "";
+          const renderChar = renderText[renderIndex - 1] ?? "";
+          const substitutionCost = equivalentChars(sourceChar, renderChar) ? 0 : 1;
+          const substitution = distance[(sourceIndex - 1) * width + (renderIndex - 1)] + substitutionCost;
+          const deletion = distance[(sourceIndex - 1) * width + renderIndex] + 1;
+          const insertion = distance[sourceIndex * width + (renderIndex - 1)] + 1;
+          distance[sourceIndex * width + renderIndex] = Math.min(substitution, deletion, insertion);
+        }
+      }
+
+      const operations: Array<"match" | "delete" | "insert"> = [];
+      let sourceCursor = sourceLength;
+      let renderCursor = renderLength;
+      while (sourceCursor > 0 || renderCursor > 0) {
+        const current = distance[sourceCursor * width + renderCursor];
+        if (sourceCursor > 0 && renderCursor > 0) {
+          const sourceChar = sourceText[sourceCursor - 1] ?? "";
+          const renderChar = renderText[renderCursor - 1] ?? "";
+          const substitutionCost = equivalentChars(sourceChar, renderChar) ? 0 : 1;
+          const diagonal = distance[(sourceCursor - 1) * width + (renderCursor - 1)] + substitutionCost;
+          if (substitutionCost === 0 && diagonal === current) {
+            operations.push("match");
+            sourceCursor -= 1;
+            renderCursor -= 1;
+            continue;
+          }
+        }
+        if (sourceCursor > 0) {
+          const deletion = distance[(sourceCursor - 1) * width + renderCursor] + 1;
+          if (deletion === current) {
+            operations.push("delete");
+            sourceCursor -= 1;
+            continue;
+          }
+        }
+        if (renderCursor > 0) {
+          const insertion = distance[sourceCursor * width + (renderCursor - 1)] + 1;
+          if (insertion === current) {
+            operations.push("insert");
+            renderCursor -= 1;
+            continue;
+          }
+        }
+        if (sourceCursor > 0 && renderCursor > 0) {
+          operations.push("match");
+          sourceCursor -= 1;
+          renderCursor -= 1;
+          continue;
+        }
+        if (sourceCursor > 0) {
+          operations.push("delete");
+          sourceCursor -= 1;
+          continue;
+        }
+        operations.push("insert");
+        renderCursor -= 1;
+      }
+      operations.reverse();
+
+      const sourceToRenderMap = Array.from<number>({ length: sourceLength + 1 }).fill(0);
+      let sourceIndex = 0;
+      let renderIndex = 0;
+      for (const operation of operations) {
+        if (operation === "match") {
+          sourceIndex += 1;
+          renderIndex += 1;
+          sourceToRenderMap[sourceIndex] = renderIndex;
+          continue;
+        }
+        if (operation === "delete") {
+          sourceIndex += 1;
+          sourceToRenderMap[sourceIndex] = renderIndex;
+          continue;
+        }
+        renderIndex += 1;
+      }
+      return sourceToRenderMap[clamp(Math.floor(offset), 0, sourceLength)] ?? 0;
+    };
+    const api = (globalThis as {
+      __TIKZ_EDITOR_APP_TEST_API__?: {
+        getSceneTextDebug?: () => Array<{
+          sourceId: string;
+          text: string;
+          renderSourceText: string | null;
+        }>;
+      };
+    }).__TIKZ_EDITOR_APP_TEST_API__;
+    const debugText = api?.getSceneTextDebug?.().find((entry) => entry.sourceId === sourceId);
+    const editableText = sourceText ?? debugText?.text ?? "";
+    const renderOffset = debugText?.renderSourceText && editableText
+      ? sourceToRenderOffset(editableText, debugText.renderSourceText, sourceOffset)
+      : sourceOffset;
     const rendered = document.querySelector(
       `svg[data-text-renderer="mathjax"][data-source-id="${sourceId}"]`
     );
@@ -234,16 +348,18 @@ async function readMathJaxSourceClientPoint(
     const minSourceStart = sourceRanges.length > 0
       ? Math.min(...sourceRanges.map((entry) => entry.start))
       : null;
-    const offsets = [sourceOffset];
+    const offsets = [renderOffset];
     if (minSourceStart != null && minSourceStart !== 0) {
-      offsets.push(minSourceStart + sourceOffset);
+      offsets.push(minSourceStart + renderOffset);
     }
     const candidates = sourceRanges.filter(({ start, end }) => {
       return Number.isFinite(start) &&
         Number.isFinite(end) &&
         offsets.some((offset) => start <= offset && offset < Math.max(start + 1, end));
     });
-    const glyphEntry = candidates.find(({ element }) => element.hasAttribute("data-tex-glyph")) ?? candidates[0];
+    const glyphEntry = candidates
+      .filter(({ element }) => element.hasAttribute("data-tex-glyph"))
+      .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0] ?? candidates[0];
     const glyph = glyphEntry?.element;
     if (!glyph) {
       const sample = sourceRanges.slice(0, 24).map(({ start, end, element }) => {
@@ -251,7 +367,7 @@ async function readMathJaxSourceClientPoint(
         return glyphCode == null ? `${start}:${end}` : `${start}:${end}#${glyphCode}`;
       }).join(", ");
       throw new Error(
-        `Rendered MathJax source glyph not found for ${sourceId} offset ${sourceOffset}. ` +
+        `Rendered MathJax source glyph not found for ${sourceId} offset ${sourceOffset} (render offset ${renderOffset}). ` +
           `Tried offsets ${offsets.join(", ")}; available ranges: ${sample || "none"}.`
       );
     }
@@ -820,7 +936,8 @@ test("wrapped TeX-derived display math supports canvas caret and selection mappi
   const yOffset = text.indexOf("y");
   const clickPoint = await readMathJaxSourceClientPoint(page, {
     sourceId: "path:0",
-    sourceOffset: yOffset
+    sourceOffset: yOffset,
+    sourceText: text
   });
   await page.mouse.click(clickPoint.x, clickPoint.y);
 
@@ -840,6 +957,63 @@ test("wrapped TeX-derived display math supports canvas caret and selection mappi
   await setTextareaSelection(page, displayStart, displayEnd);
   await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(0);
   await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(0);
+  await expect(geometryErrors).toEqual([]);
+});
+
+test("wrapped TeX-derived mixed math and styled text keeps canvas caret mapping", async ({ page }) => {
+  const geometryErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    const text = message.text();
+    if (text.includes("paragraph geometry") || text.includes("caret")) {
+      geometryErrors.push(text);
+    }
+  });
+
+  const text = String.raw`Alpha \textsf{sans} plus $a^2=b$. \\[4pt] Beta \[\frac{1}{2}=\sqrt{z}\] Gamma`;
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\node[text width=150pt,align=left] at (0,0) {Alpha \textsf{sans} plus $a^2=b$. \\[4pt] Beta \[\frac{1}{2}=\sqrt{z}\] Gamma};
+\end{tikzpicture}`);
+
+  await waitForHitRegions(page, 1);
+  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+    "data-paragraph-id",
+    /.+/
+  );
+
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  const clickOffsets = [
+    text.indexOf("n"),
+    text.indexOf("b"),
+    text.indexOf("z"),
+  ];
+  for (const offset of clickOffsets) {
+    const point = await readMathJaxSourceClientPoint(page, {
+      sourceId: "path:0",
+      sourceOffset: offset,
+      sourceText: text
+    });
+    await page.mouse.click(point.x, point.y);
+    await expect(textarea).toBeVisible();
+    await expect(textarea).toBeFocused();
+    await expect(textarea).toHaveValue(text);
+    await expect.poll(async () => {
+      const selection = await readTextareaSelection(page);
+      return selection.start != null &&
+        selection.end === selection.start &&
+        Math.abs(selection.start - offset) <= 1;
+    }).toBe(true);
+    await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(1);
+  }
+
+  const selectionStart = text.indexOf(String.raw`\textsf`);
+  const selectionEnd = text.indexOf(String.raw`\]`) + String.raw`\]`.length;
+  await setTextareaSelection(page, selectionStart, selectionEnd);
+  await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(0);
+  await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(1);
   await expect(geometryErrors).toEqual([]);
 });
 

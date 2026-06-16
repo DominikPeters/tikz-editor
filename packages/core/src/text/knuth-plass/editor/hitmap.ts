@@ -191,7 +191,7 @@ export interface VListBoxHitParams extends VListBoxGeometryParams {
 }
 
 export interface VListItemGeometry {
-  kind: 'glue' | 'hbox' | 'rule' | 'penalty' | 'placeholder' | null;
+  kind: 'glue' | 'hbox' | 'rule' | 'penalty' | 'placeholder' | 'display-math' | null;
   vlistPath: readonly number[];
   localLeft: number | null;
   localRight: number | null;
@@ -726,7 +726,7 @@ export function getKnuthPlassVListSourceHit(
   }
 
   const item = params?.itemHit;
-  if (!item || item.kind === 'hbox') {
+  if (!item || item.kind === 'hbox' || item.kind === 'display-math') {
     return null;
   }
   const itemStart = sourceBackedStart(item.sourceStart, item.sourceEnd);
@@ -880,7 +880,8 @@ function registeredVListItemGeometry(
       item.itemKind !== 'hbox' &&
       item.itemKind !== 'rule' &&
       item.itemKind !== 'penalty' &&
-      item.itemKind !== 'placeholder'
+      item.itemKind !== 'placeholder' &&
+      item.itemKind !== 'display-math'
     ) {
       continue;
     }

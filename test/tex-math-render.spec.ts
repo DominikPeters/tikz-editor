@@ -1210,6 +1210,13 @@ unordered.`;
       xStart: expect.any(Number),
       xEnd: expect.any(Number),
     });
+    const radicalSegment = mathSegments[1];
+    const radicalStart = radicalSegment?.sourceStartRaw ?? 0;
+    const commandEnd = source.indexOf(String.raw`\sqrt`) + String.raw`\sqrt`.length;
+    const radicandStart = source.indexOf("x", source.indexOf(String.raw`\sqrt`));
+    expect(radicalSegment?.caretStops?.[commandEnd - radicalStart]).toBeLessThan(
+      radicalSegment?.caretStops?.[radicandStart - radicalStart] ?? 0
+    );
   });
 
   it("lets the paragraph math provider use AMS font profile selection", () => {

@@ -365,11 +365,22 @@ function addMathItemCaretStops(
 ): void {
   for (const item of items) {
     const x = roundTexPt(originX + item.x);
-    addMathSourceSpanCaretStops(item.sourceSpan.start, item.sourceSpan.end, x, item.width, setStop);
     if (item.kind === "hlist") {
       addMathItemCaretStops(item.items, x, setStop);
+      continue;
     }
+    if (item.kind === "rule") {
+      continue;
+    }
+    if (item.kind === "glyph" && mathGlyphCoversConstructSpan(item)) {
+      continue;
+    }
+    addMathSourceSpanCaretStops(item.sourceSpan.start, item.sourceSpan.end, x, item.width, setStop);
   }
+}
+
+function mathGlyphCoversConstructSpan(item: Extract<TexMathHListItem, { readonly kind: "glyph" }>): boolean {
+  return item.sourceSpan.end - item.sourceSpan.start > Math.max(1, item.text.length);
 }
 
 function addMathSourceSpanCaretStops(
