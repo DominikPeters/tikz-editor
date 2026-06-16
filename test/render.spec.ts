@@ -792,6 +792,19 @@ World};
     expect(result.svg.svg).not.toContain("<text");
   });
 
+  it("emits TeX-derived glyph source ranges for wrapped display math editing", async () => {
+    const sourceText = String.raw`Intro \[x^2=y\] Outro`;
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[text width=120pt,align=left] at (0,0) {Intro \[x^2=y\] Outro};
+\end{tikzpicture}`);
+
+    const yOffset = sourceText.indexOf("y");
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-tex-glyph="73" data-source-start="0" data-source-end="1"');
+    expect(result.svg.svg).toContain(`data-source-start="${yOffset}" data-source-end="${yOffset + 1}"`);
+  });
+
   it("keeps explicit TeX line breaks on the TeX-shaped paragraph path", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
   \node[draw,text width=150pt,align=left] at (0,0) {Alpha \\[7pt] Beta};

@@ -211,6 +211,68 @@ async function readMathJaxLocalClientPoint(
   }, options);
 }
 
+async function readMathJaxSourceClientPoint(
+  page: Page,
+  options: { sourceId: string; sourceOffset: number }
+): Promise<{ x: number; y: number }> {
+  return await page.evaluate((raw) => {
+    const { sourceId, sourceOffset } = raw;
+    const rendered = document.querySelector(
+      `svg[data-text-renderer="mathjax"][data-source-id="${sourceId}"]`
+    );
+    if (!rendered) {
+      throw new Error(`Rendered MathJax SVG not found for ${sourceId}.`);
+    }
+    const sourceBackedElements = Array.from(
+      rendered.querySelectorAll<SVGGraphicsElement>("[data-source-start][data-source-end]")
+    );
+    const sourceRanges = sourceBackedElements.map((element) => {
+      const start = Number(element.getAttribute("data-source-start"));
+      const end = Number(element.getAttribute("data-source-end"));
+      return { element, start, end };
+    }).filter((entry) => Number.isFinite(entry.start) && Number.isFinite(entry.end));
+    const minSourceStart = sourceRanges.length > 0
+      ? Math.min(...sourceRanges.map((entry) => entry.start))
+      : null;
+    const offsets = [sourceOffset];
+    if (minSourceStart != null && minSourceStart !== 0) {
+      offsets.push(minSourceStart + sourceOffset);
+    }
+    const candidates = sourceRanges.filter(({ start, end }) => {
+      return Number.isFinite(start) &&
+        Number.isFinite(end) &&
+        offsets.some((offset) => start <= offset && offset < Math.max(start + 1, end));
+    });
+    const glyphEntry = candidates.find(({ element }) => element.hasAttribute("data-tex-glyph")) ?? candidates[0];
+    const glyph = glyphEntry?.element;
+    if (!glyph) {
+      const sample = sourceRanges.slice(0, 24).map(({ start, end, element }) => {
+        const glyphCode = element.getAttribute("data-tex-glyph");
+        return glyphCode == null ? `${start}:${end}` : `${start}:${end}#${glyphCode}`;
+      }).join(", ");
+      throw new Error(
+        `Rendered MathJax source glyph not found for ${sourceId} offset ${sourceOffset}. ` +
+          `Tried offsets ${offsets.join(", ")}; available ranges: ${sample || "none"}.`
+      );
+    }
+    const rect = glyph.getBoundingClientRect();
+    if (
+      !Number.isFinite(rect.left) ||
+      !Number.isFinite(rect.right) ||
+      !Number.isFinite(rect.top) ||
+      !Number.isFinite(rect.bottom) ||
+      rect.width <= 0 ||
+      rect.height <= 0
+    ) {
+      throw new Error(`Rendered MathJax source glyph geometry is invalid for ${sourceId} offset ${sourceOffset}.`);
+    }
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }, options);
+}
+
 test("single-line node text enters canvas edit mode and closes when CodeMirror takes focus", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
@@ -727,6 +789,58 @@ test("wrapped text selection sync produces multiple canvas highlight rects", asy
   await setTextareaSelection(page, 0, "Hello wrapped world with more text".length);
   await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(0);
   await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(1);
+});
+
+test("wrapped TeX-derived display math supports canvas caret and selection mapping", async ({ page }) => {
+  const geometryErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    const text = message.text();
+    if (text.includes("paragraph geometry") || text.includes("caret")) {
+      geometryErrors.push(text);
+    }
+  });
+
+  const text = String.raw`Intro \[x^2=y\] Outro`;
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\node[text width=120pt,align=left] at (0,0) {Intro \[x^2=y\] Outro};
+\end{tikzpicture}`);
+
+  await waitForHitRegions(page, 1);
+  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+    "data-paragraph-id",
+    /.+/
+  );
+
+  const displayStart = text.indexOf(String.raw`\[`);
+  const displayEnd = text.indexOf(String.raw`\]`) + String.raw`\]`.length;
+  const yOffset = text.indexOf("y");
+  const clickPoint = await readMathJaxSourceClientPoint(page, {
+    sourceId: "path:0",
+    sourceOffset: yOffset
+  });
+  await page.mouse.click(clickPoint.x, clickPoint.y);
+
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toBeVisible();
+  await expect(textarea).toBeFocused();
+  await expect(textarea).toHaveValue(text);
+  await expect.poll(async () => {
+    const selection = await readTextareaSelection(page);
+    return selection.start != null &&
+      selection.end === selection.start &&
+      selection.start >= displayStart &&
+      selection.start <= displayEnd;
+  }).toBe(true);
+  await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(1);
+
+  await setTextareaSelection(page, displayStart, displayEnd);
+  await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(0);
+  await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(0);
+  await expect(geometryErrors).toEqual([]);
 });
 
 test("rotated wrapped text selection overlays follow text rotation", async ({ page }) => {

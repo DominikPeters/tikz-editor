@@ -218,6 +218,19 @@ describe("mathjax node text engine", () => {
     });
   });
 
+  it("validates TeX-derived display math without MathJax text-mode probing", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBefore = texCalls.length;
+
+    const issue = engine.validate(String.raw`Intro \[x^2=y\] Outro`);
+
+    expect(issue).toBeNull();
+    expect(texCalls).toHaveLength(callsBefore);
+  });
+
   it("does not queue async retry work when no promise renderer exists", async () => {
     const target = globalThis as {
       window?: unknown;

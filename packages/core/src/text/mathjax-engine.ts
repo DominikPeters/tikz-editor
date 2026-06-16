@@ -233,6 +233,10 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
         fontWeight: "normal",
         fontFamily: "serif"
       });
+      if (canValidateWithSimpleTexText(prepared)) {
+        validationCache.set(text, null);
+        return null;
+      }
       const defaultMeasureKey = measurementKey("text", prepared.text, null, prepared.font, null);
 
       try {
@@ -1243,6 +1247,10 @@ function renderTexVListItemsSvgContent(
       pieces.push(renderTexRuleSvgContent(item, options));
       continue;
     }
+    if (item.item.kind === "display-math") {
+      pieces.push(renderTexDisplayMathSvgContent(item, options));
+      continue;
+    }
     if (item.item.kind === "hbox" || item.item.kind === "penalty") {
       pieces.push(renderTexVListLeafBoxSvgMetadata(item, options.metricProvider, options));
       continue;
@@ -1333,7 +1341,10 @@ function renderTexReportLineSvg(
         segment.glyphCode,
         segmentFont,
         segment.x - lineLeft,
-        baseline - lineTop
+        baseline - lineTop,
+        typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
+          ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
+          : undefined
       ));
     } else {
       pieces.push(renderTexGlyphRun(
@@ -1341,7 +1352,8 @@ function renderTexReportLineSvg(
         segmentFont,
         segment.x - lineLeft,
         baseline - lineTop,
-        options.metricProvider
+        options.metricProvider,
+        segment.sourceStartRaw
       ));
     }
   }
@@ -1470,6 +1482,10 @@ function renderTexVListSvgMetadataItems(
       pieces.push(renderTexVListLeafBoxSvgMetadata(item, undefined, origin));
       continue;
     }
+    if (item.item.kind === "display-math") {
+      pieces.push(renderTexDisplayMathSvgContent(item, origin));
+      continue;
+    }
     if (item.item.kind !== "vbox") {
       continue;
     }
@@ -1544,6 +1560,22 @@ function renderTexVListLeafBoxSvgMetadata(
   ].join("");
 }
 
+function renderTexDisplayMathSvgContent(
+  item: PositionedTexVListItem,
+  origin: TexVListSvgOrigin = {}
+): string {
+  if (item.item.kind !== "display-math") {
+    return "";
+  }
+  const boxHeight = item.metrics.height + item.metrics.depth;
+  return [
+    `<g data-tex-display-math="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
+    renderTexInlineMathSvg(item.item.box.svgBody ?? "", 0, item.metrics.height),
+    `</g>`,
+  ].join("");
+}
+
 function renderTexHBoxRenderItemSvg(
   item: TexRenderItem,
   metricProvider: TexMetricProvider
@@ -1597,9 +1629,14 @@ function renderTexGlyphRun(
   font: ResolvedTexFont,
   x: number,
   baseline: number,
-  metricProvider: TexMetricProvider
+  metricProvider: TexMetricProvider,
+  sourceStart?: number
 ): string {
-  const shaped = metricProvider.shapeText(text, font);
+  const shaped = metricProvider.shapeText(
+    text,
+    font,
+    typeof sourceStart === "number" ? { sourceStart } : undefined
+  );
   const pieces: string[] = [];
   let cursor = x;
   for (const item of shaped.items) {
@@ -1607,28 +1644,46 @@ function renderTexGlyphRun(
       cursor += item.width;
       continue;
     }
-    pieces.push(renderTexGlyphPath(item, font, cursor, baseline));
+    pieces.push(renderTexGlyphPath(
+      item,
+      font,
+      cursor,
+      baseline,
+      typeof sourceStart === "number"
+    ));
     cursor += item.width;
   }
   return pieces.join("");
 }
 
-function renderTexGlyphCode(code: number, font: ResolvedTexFont, x: number, baseline: number): string {
+function renderTexGlyphCode(
+  code: number,
+  font: ResolvedTexFont,
+  x: number,
+  baseline: number,
+  sourceSpan?: { readonly start: number; readonly end: number }
+): string {
   return renderTexGlyphPath({
     kind: "glyph",
     fontId: font.id,
     code,
-    sourceStart: 0,
-    sourceEnd: 0,
+    sourceStart: sourceSpan?.start ?? 0,
+    sourceEnd: sourceSpan?.end ?? 0,
     width: 0,
     height: 0,
     depth: 0,
     italicCorrection: 0,
     components: [code],
-  }, font, x, baseline);
+  }, font, x, baseline, Boolean(sourceSpan));
 }
 
-function renderTexGlyphPath(item: Extract<TexShapedItem, { kind: "glyph" }>, font: ResolvedTexFont, x: number, baseline: number): string {
+function renderTexGlyphPath(
+  item: Extract<TexShapedItem, { kind: "glyph" }>,
+  font: ResolvedTexFont,
+  x: number,
+  baseline: number,
+  sourceBacked = false
+): string {
   if (item.code === 32) {
     return "";
   }
@@ -1638,7 +1693,10 @@ function renderTexGlyphPath(item: Extract<TexShapedItem, { kind: "glyph" }>, fon
   }
   const scale = font.atPt / 10;
   const scaleSuffix = Math.abs(scale - 1) > 1e-6 ? ` scale(${formatPt(scale)})` : "";
-  return `<path data-tex-font="${escapeXmlAttribute(font.id)}" data-tex-glyph="${item.code}" d="${escapeXmlAttribute(d)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})${scaleSuffix}" />`;
+  const sourceAttrs = sourceBacked
+    ? ` data-source-start="${item.sourceStart}" data-source-end="${item.sourceEnd}"`
+    : "";
+  return `<path data-tex-font="${escapeXmlAttribute(font.id)}" data-tex-glyph="${item.code}"${sourceAttrs} d="${escapeXmlAttribute(d)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})${scaleSuffix}" />`;
 }
 
 function mathJaxAlignAttributeValue(alignment: NodeTextParagraphAlignment): string {
@@ -2478,6 +2536,42 @@ function buildWrappedTeX(
   return `\\parbox[t]{${formatPt(textWidthPt)}pt}{${styledText}}`;
 }
 
+
+function canValidateWithSimpleTexText(prepared: {
+  readonly text: string;
+  readonly simpleTexEligible: boolean;
+}): boolean {
+  if (!prepared.simpleTexEligible || !hasSimpleTexDisplayMath(prepared.text)) {
+    return false;
+  }
+  const metricProvider = computerModernTexMetricProvider;
+  const renderFont = luaLatexDefaultTextFontProfile.resolveTextFont(
+    luaLatexDefaultTextFontProfile.defaultFontState,
+    TEX_TEXT_BASE_FONT_SIZE,
+    metricProvider
+  );
+  try {
+    const layout = layoutSimpleTexParagraph(prepared.text, {
+      paragraphId: "tex:validation",
+      width: 120,
+      alignment: "ragged-right",
+      font: renderFont,
+      metricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+      tikzTextWidthNode: true,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider({
+        baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
+      }),
+    });
+    return layout.supported;
+  } catch {
+    return false;
+  }
+}
+
+function hasSimpleTexDisplayMath(text: string): boolean {
+  return /(?:\$\$|\\\[|\\begin\{(?:equation\*?|align\*?)\})/.test(text);
+}
 
 function normalizeMathJaxTextInput(
   text: string,
