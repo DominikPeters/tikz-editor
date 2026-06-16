@@ -499,8 +499,10 @@ function getDisplayMathAlignment(
   }
   const alignedNucleus = alignedNucleusFromList(parsed.list);
   const pairCount = displayAlignmentPairCount(alignedRows);
+  const maxTagWidth = displayAlignmentMaxTagWidth(alignedNucleus, fontProfile, baseAtPt);
   const dimensions = displayAlignmentDimensions({
     measuredWidth: laidOut.hlist.width,
+    maxTagWidth,
     pairCount,
     rowCount: alignedRows.length,
     targetWidth: params.targetWidth,
@@ -568,6 +570,46 @@ function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null
   return item.nucleus;
 }
 
+function displayAlignmentMaxTagWidth(
+  alignedNucleus: TexMathAlignedNucleus | null,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): number {
+  let maxWidth = 0;
+  for (const row of alignedNucleus?.rows ?? []) {
+    const label = row.labels?.[0];
+    if (!label) {
+      continue;
+    }
+    const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
+    if (tag) {
+      maxWidth = Math.max(maxWidth, tag.width);
+    }
+  }
+  return roundTexPt(maxWidth);
+}
+
+function layoutDisplayAlignmentTag(
+  label: TexMathAlignedRowLabel,
+  rowStart: number,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): TexMathHList | null {
+  const tagSource = String.raw`\text{(` + label.text + ")}";
+  const parsedTag = parseTexMath(tagSource, {
+    sourceOffset: Math.max(rowStart, label.sourceSpan.end - tagSource.length),
+  });
+  if (parsedTag.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    return null;
+  }
+  const tag = layoutTexMathList(parsedTag.list, {
+    style: "text",
+    fontProfile,
+    baseAtPt,
+  });
+  return tag.supported ? tag.hlist : null;
+}
+
 function addDisplayAlignmentTag(
   row: TexMathChildHListLayoutItem,
   label: TexMathAlignedRowLabel | null,
@@ -587,24 +629,8 @@ function addDisplayAlignmentTag(
       items: rowItems,
     };
   }
-  const tagSource = String.raw`\text{(` + label.text + ")}";
-  const parsedTag = parseTexMath(tagSource, {
-    sourceOffset: Math.max(row.sourceSpan.start, label.sourceSpan.end - tagSource.length),
-  });
-  if (parsedTag.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-    return {
-      width: baseWidth,
-      height: row.height,
-      depth: row.depth,
-      items: rowItems,
-    };
-  }
-  const tag = layoutTexMathList(parsedTag.list, {
-    style: "text",
-    fontProfile,
-    baseAtPt,
-  });
-  if (!tag.supported) {
+  const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
+  if (!tag) {
     return {
       width: baseWidth,
       height: row.height,
@@ -613,7 +639,7 @@ function addDisplayAlignmentTag(
     };
   }
   const width = Math.max(baseWidth, dimensions.targetWidth);
-  const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.hlist.width));
+  const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.width));
   const rowRight = mathItemsRightEdge(rowItems);
   const tagCollides = rowRight > tagX;
   const tagRenderShiftY = tagCollides
@@ -624,11 +650,11 @@ function addDisplayAlignmentTag(
     : 0;
   return {
     width,
-    height: Math.max(row.height, tag.hlist.height),
-    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.hlist.depth),
+    height: Math.max(row.height, tag.height),
+    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(tag.hlist.items, tagX, tagRenderShiftY),
+      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
     ],
   };
 }
@@ -664,6 +690,7 @@ interface TexDisplayAlignmentDimensions {
 
 function displayAlignmentDimensions(params: {
   readonly measuredWidth: number;
+  readonly maxTagWidth: number;
   readonly pairCount: number;
   readonly rowCount: number;
   readonly targetWidth: number;
@@ -678,7 +705,21 @@ function displayAlignmentDimensions(params: {
     params.measuredWidth - fixedPairGapWidth - trailingWidth
   ));
   const flexible = roundTexPt((params.targetWidth - totalFieldWidth) / (params.pairCount + 1));
+  const tagAdjustedEqnShift = params.pairCount > 1 && params.maxTagWidth > 0
+    ? roundTexPt(Math.max(
+      0,
+      (params.targetWidth - totalFieldWidth - fixedPairGapWidth - params.maxTagWidth) / 2
+    ))
+    : null;
   if (flexible >= TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT) {
+    if (tagAdjustedEqnShift !== null && tagAdjustedEqnShift < flexible) {
+      return {
+        eqnShift: tagAdjustedEqnShift,
+        alignSep: TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT,
+        rowWidth: roundTexPt(tagAdjustedEqnShift + totalFieldWidth + fixedPairGapWidth),
+        targetWidth: params.targetWidth,
+      };
+    }
     return {
       eqnShift: flexible,
       alignSep: flexible,
@@ -691,10 +732,13 @@ function displayAlignmentDimensions(params: {
     0,
     roundTexPt((params.targetWidth - totalFieldWidth - alignSepCount * alignSep) / 2)
   );
+  const adjustedEqnShift = tagAdjustedEqnShift === null
+    ? eqnShift
+    : Math.min(eqnShift, tagAdjustedEqnShift);
   return {
-    eqnShift,
+    eqnShift: adjustedEqnShift,
     alignSep,
-    rowWidth: roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep),
+    rowWidth: roundTexPt(adjustedEqnShift + totalFieldWidth + alignSepCount * alignSep),
     targetWidth: params.targetWidth,
   };
 }

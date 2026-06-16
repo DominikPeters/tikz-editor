@@ -1003,7 +1003,7 @@ function randomDocumentAlignStarSource(rng, tagMode = 0) {
       cells.push(randomDocumentAlignmentCell(rng));
       cells.push(`=${randomDocumentAlignmentCell(rng)}`);
     }
-    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, pairCount, tagMode));
+    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, tagMode));
   }
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
 }
@@ -1370,7 +1370,6 @@ function randomMixedVListAlignStarSource(rng, tagMode = 0) {
       `${randomMixedVListAlignCell(rng)}&=${randomMixedVListAlignCell(rng)}`,
       rowIndex,
       rowCount,
-      1,
       tagMode
     ));
   }
@@ -1399,19 +1398,13 @@ function randomAlignStarSource(rng, tagMode = 0) {
       cells.push(randomAlignmentLeftCell(rng));
       cells.push(`=${randomAlignmentRightCell(rng)}`);
     }
-    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, pairCount, tagMode));
+    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, tagMode));
   }
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
 }
 
-function alignRowWithGeneratedTag(row, rowIndex, rowCount, pairCount, tagMode) {
+function alignRowWithGeneratedTag(row, rowIndex, rowCount, tagMode) {
   if (rowIndex !== 0) {
-    return row;
-  }
-  // Multi-pair tagged rows require the fuller AMS \calc@shift@align
-  // eqnshift/alignsep adjustment; keep the regular fuzz gate on implemented
-  // tag regimes and cover the broader cases with fixed regression fixtures.
-  if (pairCount !== 1) {
     return row;
   }
   if (tagMode === 1) {
