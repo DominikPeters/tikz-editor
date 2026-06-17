@@ -1749,6 +1749,27 @@ describe("TeX math hlist layout", () => {
     expect(projLim.hlist?.items.some((item) => item.kind === "hlist" && item.role === "limit-subscript")).toBe(true);
   });
 
+  it("lays out amsmath varlim operators through TeX-style operator boxes", () => {
+    const varLimits = layout(String.raw`\varliminf+\varlimsup+\varinjlim+\varprojlim`);
+    expect(varLimits.supported).toBe(true);
+    expect(varLimits.hlist?.height).toBeCloseTo(8.9444, 4);
+    expect(varLimits.hlist?.depth).toBeCloseTo(4.16885, 4);
+    expect(varLimits.hlist?.items.filter((item) => item.kind === "rule")).toMatchObject([
+      { kind: "rule", role: "var-limit-rule", y: expect.closeTo(1.399965, 5) },
+      { kind: "rule", role: "var-limit-rule", y: expect.closeTo(-8.54441, 5) },
+    ]);
+    expect(varLimits.hlist?.items.filter((item) => item.kind === "hlist" && item.role === "var-limit-row")).toHaveLength(6);
+
+    const scripted = layout(String.raw`\varinjlim_i^n`);
+    expect(scripted.supported).toBe(true);
+    expect(scripted.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "var-limit-row", y: 0 },
+      { kind: "hlist", role: "var-limit-row", y: expect.closeTo(5.16666, 5) },
+      { kind: "hlist", role: "superscript", x: expect.closeTo(13.88894, 5), y: expect.closeTo(-4.472253, 5) },
+      { kind: "hlist", role: "subscript", x: expect.closeTo(13.88894, 5), y: expect.closeTo(4.668846, 5) },
+    ]);
+  });
+
   it("lays out operatorname as an AMS roman math operator", () => {
     const rank = layout(String.raw`\operatorname{rank}`);
     expect(rank.supported).toBe(true);

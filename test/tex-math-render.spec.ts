@@ -524,6 +524,25 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-math-role="limit-subscript"');
   });
 
+  it("renders amsmath varlim operators through TeX glyphs and rules", () => {
+    const parsed = parseTexMath(String.raw`\varliminf+\varlimsup+\varinjlim+\varprojlim_i^n`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-rule="var-limit-rule"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="108"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="33"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="32"');
+    expect(body).toContain('data-tex-math-role="var-limit-row"');
+    expect(body).toContain('data-tex-math-role="superscript"');
+    expect(body).toContain('data-tex-math-role="subscript"');
+  });
+
   it("renders substack limits recursively with scriptstyle CM glyphs", () => {
     const parsed = parseTexMath(String.raw`\sum_{\substack{i=1\\j=2}}^n`);
     const result = layoutTexMathList(parsed.list);

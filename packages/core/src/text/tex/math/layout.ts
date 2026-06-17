@@ -47,6 +47,7 @@ import type {
   TexMathSubarrayNucleus,
   TexMathSubstackNucleus,
   TexMathTextNucleus,
+  TexMathVarLimitNucleus,
 } from "./ir.js";
 import {
   normalizeTexMathAtomClasses,
@@ -101,7 +102,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule" | "boxed-rule";
+  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule" | "boxed-rule" | "var-limit-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -125,6 +126,7 @@ export interface TexMathChildHListLayoutItem {
     | "subarray-cell"
     | "sideset-pre"
     | "sideset-base"
+    | "var-limit-row"
     | "boxed-body"
     | "array-row"
     | "array-cell"
@@ -222,6 +224,7 @@ const TEX_LATEX_DOUBLE_RULE_SEP_PT = 2;
 const TEX_LATEX_FBOX_RULE_PT = 0.4;
 const TEX_LATEX_FBOX_SEP_PT = 3;
 const TEX_AMSMATH_MULTIDOT_LIMIT_CORRECTION_PT = 0.014;
+const TEX_AMSOPN_VARLIM_ARROW_DEPTH_EX_CORRECTION = 0.4253;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
@@ -778,6 +781,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "line") {
     return layoutLineNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "var-limit") {
+    return layoutVarLimitNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "accent") {
     return layoutAccentNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -3508,6 +3514,218 @@ function layoutLineBody(
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
+}
+
+function layoutVarLimitNucleus(
+  nucleus: TexMathVarLimitNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const lim = layoutVarLimitLimHList(nucleus.commandSourceSpan, fontProfile, style, baseAtPt);
+  if (!lim) {
+    return null;
+  }
+  const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
+  switch (nucleus.command) {
+    case "varliminf":
+      return layoutVarLimitInfSup(nucleus, lim, "underline", thickness);
+    case "varlimsup":
+      return layoutVarLimitInfSup(nucleus, lim, "overline", thickness);
+    case "varinjlim":
+      return layoutVarLimitArrow(nucleus, lim, "xrightarrow", fontProfile, baseAtPt, alphabet);
+    case "varprojlim":
+      return layoutVarLimitArrow(nucleus, lim, "xleftarrow", fontProfile, baseAtPt, alphabet);
+  }
+}
+
+function layoutVarLimitLimHList(
+  sourceSpan: TexMathSourceSpan,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList | null {
+  const lim = layoutOperatorNameNucleus({
+    kind: "operator-name",
+    parts: [
+      { kind: "text", text: "l", sourceSpan },
+      { kind: "text", text: "i", sourceSpan },
+      { kind: "text", text: "m", sourceSpan },
+    ],
+    commandSourceSpan: sourceSpan,
+    nameSourceSpan: sourceSpan,
+    sourceSpan,
+  }, fontProfile, style, baseAtPt);
+  return lim ? atomLayoutToHList(lim, style, sourceSpan) : null;
+}
+
+function layoutVarLimitInfSup(
+  nucleus: TexMathVarLimitNucleus,
+  lim: TexMathHList,
+  command: "underline" | "overline",
+  thickness: number
+): TexMathAtomLayout {
+  if (command === "overline") {
+    const ruleY = roundTexPt(-(lim.height + 4 * thickness));
+    return {
+      items: [
+        {
+          kind: "rule",
+          role: "var-limit-rule",
+          x: 0,
+          y: ruleY,
+          width: lim.width,
+          height: roundTexPt(thickness),
+          sourceSpan: nucleus.commandSourceSpan,
+        },
+        childHList("var-limit-row", 0, 0, lim, nucleus.commandSourceSpan),
+      ],
+      width: lim.width,
+      height: roundTexPt(lim.height + 5 * thickness),
+      depth: lim.depth,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+  const ruleY = roundTexPt(lim.depth + 3.5 * thickness);
+  return {
+    items: [
+      childHList("var-limit-row", 0, 0, lim, nucleus.commandSourceSpan),
+      {
+        kind: "rule",
+        role: "var-limit-rule",
+        x: 0,
+        y: ruleY,
+        width: lim.width,
+        height: roundTexPt(thickness),
+        sourceSpan: nucleus.commandSourceSpan,
+      },
+    ],
+    width: lim.width,
+    height: lim.height,
+    depth: roundTexPt(lim.depth + 5.5 * thickness),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutVarLimitArrow(
+  nucleus: TexMathVarLimitNucleus,
+  lim: TexMathHList,
+  command: TexMathExtensibleArrowNucleus["command"],
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  void alphabet;
+  const arrow = layoutVarLimitArrowBody(command, fontProfile, baseAtPt, nucleus.commandSourceSpan);
+  const arrowHList = atomLayoutToHList(arrow, "text", nucleus.commandSourceSpan);
+  const xHeight = mathXHeight(fontProfile, "text", baseAtPt);
+  const arrowY = roundTexPt(1.2 * xHeight);
+  const width = lim.width;
+  return {
+    items: [
+      childHList("var-limit-row", 0, 0, lim, nucleus.commandSourceSpan),
+      childHList("var-limit-row", 0, arrowY, arrowHList, nucleus.commandSourceSpan),
+    ],
+    width,
+    height: lim.height,
+    depth: roundTexPt(Math.max(
+      lim.depth,
+      arrowY + arrowHList.depth - TEX_AMSOPN_VARLIM_ARROW_DEPTH_EX_CORRECTION * xHeight
+    )),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutVarLimitArrowBody(
+  command: TexMathExtensibleArrowNucleus["command"],
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtomLayout {
+  const font = fontProfile.resolveMathFont({ family: "symbols", style: "text", baseAtPt });
+  const relbarCode = 0;
+  const leftArrowCode = 32;
+  const rightArrowCode = 33;
+  const joinRel = muToPt(fontProfile, "text", baseAtPt, -7);
+  const items: TexMathHListItem[] = [];
+  const glyph = (code: number, text: string, x: number): TexMathGlyphLayoutItem => {
+    const metric = requiredCharMetric(font, code);
+    return {
+      kind: "glyph",
+      fontId: font.id,
+      atPt: font.atPt,
+      family: "symbols",
+      code,
+      text,
+      x: roundTexPt(x),
+      y: 0,
+      width: roundTexPt(tfmToPt(font, metric.width)),
+      height: roundTexPt(tfmToPt(font, metric.height)),
+      depth: roundTexPt(tfmToPt(font, metric.depth)),
+      italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
+      sourceSpan,
+    };
+  };
+  const kern = (x: number): TexMathKernLayoutItem => ({
+    kind: "kern",
+    x: roundTexPt(x),
+    width: joinRel,
+    reason: "operator-kern",
+    sourceSpan,
+  });
+  const relbarMetric = requiredCharMetric(font, relbarCode);
+  const relbarWidth = roundTexPt(tfmToPt(font, relbarMetric.width));
+  const arrowCode = command === "xleftarrow" ? leftArrowCode : rightArrowCode;
+  const arrowMetric = requiredCharMetric(font, arrowCode);
+  const arrowWidth = roundTexPt(tfmToPt(font, arrowMetric.width));
+  if (command === "xleftarrow") {
+    items.push(
+      glyph(leftArrowCode, "\\leftarrow", 0),
+      kern(arrowWidth),
+      kern(roundTexPt(arrowWidth + joinRel)),
+      glyph(relbarCode, "\\relbar", roundTexPt(arrowWidth + joinRel))
+    );
+  } else {
+    items.push(
+      glyph(relbarCode, "\\relbar", 0),
+      kern(relbarWidth),
+      kern(roundTexPt(relbarWidth + joinRel)),
+      glyph(rightArrowCode, "\\rightarrow", roundTexPt(relbarWidth + joinRel))
+    );
+  }
+  const rightEdge = Math.max(...items.map((item) => item.x + (item.kind === "glyph" ? item.width : 0)));
+  return {
+    items,
+    width: roundTexPt(rightEdge),
+    height: roundTexPt(Math.max(...items.map((item) => item.kind === "glyph" ? item.height : 0))),
+    depth: roundTexPt(Math.max(...items.map((item) => item.kind === "glyph" ? item.depth : 0))),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan,
+  };
+}
+
+function atomLayoutToHList(
+  layout: TexMathAtomLayout,
+  style: TexMathStyle,
+  sourceSpan: TexMathSourceSpan
+): TexMathHList {
+  return {
+    kind: "math-hlist",
+    style,
+    width: layout.width,
+    height: layout.height,
+    depth: layout.depth,
+    sourceSpan,
+    items: layout.items,
+  };
 }
 
 function layoutAccentBase(

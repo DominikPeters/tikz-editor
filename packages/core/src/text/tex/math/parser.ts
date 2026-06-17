@@ -36,6 +36,7 @@ import type {
   TexMathToken,
   TexMathTokenKind,
   TexMathUnsupportedItem,
+  TexMathVarLimitCommand,
 } from "./ir.js";
 import { texMathSymbolDeclaration } from "./symbol-definitions.js";
 
@@ -395,6 +396,10 @@ class TexMathParser {
       if (lineCommand) {
         return this.parseLine(lineCommand, allowScripts);
       }
+      const varLimit = varLimitCommandName(token.text);
+      if (varLimit) {
+        return this.parseVarLimit(varLimit, allowScripts);
+      }
       if (commandName(token.text) === "text" || commandName(token.text) === "mbox") {
         return this.parseText(allowScripts);
       }
@@ -741,6 +746,22 @@ class TexMathParser {
         sourceSpan,
       },
       sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseVarLimit(commandNameValue: TexMathVarLimitCommand, allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "var-limit",
+        command: commandNameValue,
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan: command.sourceSpan,
+      },
+      limits: "display",
+      sourceSpan: command.sourceSpan,
     }, allowScripts);
   }
 
@@ -5057,6 +5078,21 @@ function lineCommandName(command: string): TexMathLineCommand | null {
       return "overline";
     case "underline":
       return "underline";
+    default:
+      return null;
+  }
+}
+
+function varLimitCommandName(command: string): TexMathVarLimitCommand | null {
+  switch (commandName(command)) {
+    case "varinjlim":
+      return "varinjlim";
+    case "varprojlim":
+      return "varprojlim";
+    case "varliminf":
+      return "varliminf";
+    case "varlimsup":
+      return "varlimsup";
     default:
       return null;
   }

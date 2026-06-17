@@ -79,6 +79,7 @@ export type TexMathNucleus =
   | TexMathRadicalNucleus
   | TexMathBoxedNucleus
   | TexMathLineNucleus
+  | TexMathVarLimitNucleus
   | TexMathAccentNucleus
   | TexMathAlphabetNucleus
   | TexMathTextNucleus
@@ -183,6 +184,19 @@ export interface TexMathLineNucleus {
   readonly kind: "line";
   readonly command: TexMathLineCommand;
   readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathVarLimitCommand =
+  | "varinjlim"
+  | "varprojlim"
+  | "varliminf"
+  | "varlimsup";
+
+export interface TexMathVarLimitNucleus {
+  readonly kind: "var-limit";
+  readonly command: TexMathVarLimitCommand;
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }

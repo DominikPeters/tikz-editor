@@ -1174,6 +1174,31 @@ describe("TeX math parser", () => {
     ) : []).toEqual(["p", "r", "o", "j", ",", "l", "i", "m"]);
   });
 
+  it("parses amsmath varlim operators as scriptable mathop nuclei", () => {
+    const result = parseTexMath(String.raw`\varliminf+\varlimsup+\varinjlim+\varprojlim_{i}^{n}`);
+
+    expect(result.diagnostics).toEqual([]);
+    const atoms = result.list.items.filter((item) => item.kind === "atom");
+    expect(atoms.map((atom) => atom.nucleus.kind === "var-limit"
+      ? {
+          atomClass: atom.atomClass,
+          command: atom.nucleus.command,
+          limits: atom.limits,
+          hasSubscript: Boolean(atom.subscript),
+          hasSuperscript: Boolean(atom.superscript),
+        }
+      : null
+    )).toEqual([
+      { atomClass: "op", command: "varliminf", limits: "display", hasSubscript: false, hasSuperscript: false },
+      null,
+      { atomClass: "op", command: "varlimsup", limits: "display", hasSubscript: false, hasSuperscript: false },
+      null,
+      { atomClass: "op", command: "varinjlim", limits: "display", hasSubscript: false, hasSuperscript: false },
+      null,
+      { atomClass: "op", command: "varprojlim", limits: "display", hasSubscript: true, hasSuperscript: true },
+    ]);
+  });
+
   it("lowers models through TeX joinrel relation pieces", () => {
     const result = parseTexMath(String.raw`x\models y`);
     const models = atomAt(result, 1);

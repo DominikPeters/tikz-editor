@@ -32,6 +32,10 @@ const amsMathCommands = [
   String.raw`\implies`,
   String.raw`\impliedby`,
   String.raw`\projlim`,
+  String.raw`\varinjlim`,
+  String.raw`\varliminf`,
+  String.raw`\varlimsup`,
+  String.raw`\varprojlim`,
   ...texMathSymbolCommandNames({ requiredLatexPackage: "amsmath" }),
 ];
 const amsMathDelimiterCommands = [
