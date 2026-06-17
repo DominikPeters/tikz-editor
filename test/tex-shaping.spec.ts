@@ -349,7 +349,7 @@ type TexDisplayAlignHitMapFuzzCase = {
   readonly id: string;
   readonly source: string;
   readonly width: number;
-  readonly delimiter: "align" | "align-star" | "gather-star" | "multline-star";
+  readonly delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline-star";
   readonly rows: readonly string[];
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
 };
@@ -359,7 +359,7 @@ type TexDocumentMathHitMapFuzzCase = {
   readonly source: string;
   readonly width: number;
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
-  readonly delimiter: "align" | "align-star" | "gather-star" | "multline-star";
+  readonly delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline-star";
   readonly rows: readonly string[];
 };
 
@@ -718,7 +718,7 @@ function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
 
 function documentHitMapDisplayRows(
   random: () => number,
-  delimiter: "align" | "align-star" | "gather-star" | "multline-star"
+  delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline-star"
 ): readonly string[] {
   const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const rowCount = 1 + Math.floor(random() * 3);
@@ -737,11 +737,11 @@ function documentHitMapDisplayRows(
 }
 
 function texDisplayRowFuzzKind(index: number): {
-  readonly delimiter: "align" | "align-star" | "gather-star" | "multline-star";
+  readonly delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline-star";
   readonly open: string;
   readonly close: string;
 } {
-  switch (index % 4) {
+  switch (index % 5) {
     case 1:
       return {
         delimiter: "gather-star",
@@ -759,6 +759,12 @@ function texDisplayRowFuzzKind(index: number): {
         delimiter: "align",
         open: String.raw`\begin{align}`,
         close: String.raw`\end{align}`,
+      };
+    case 4:
+      return {
+        delimiter: "gather",
+        open: String.raw`\begin{gather}`,
+        close: String.raw`\end{gather}`,
       };
     default:
       return {
@@ -789,6 +795,12 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
         ? String.raw`\frac{${left}}{${right}}+${tail}`
         : `${left}${operator}${right}`;
     if (displayKind.delimiter !== "align" && displayKind.delimiter !== "align-star") {
+      if (displayKind.delimiter === "gather" && rowIndex === 1 && index % 7 === 0) {
+        return `${row} \\notag`;
+      }
+      if (displayKind.delimiter === "gather" && rowIndex === 0 && index % 3 === 0) {
+        return `${row} \\tag{A}`;
+      }
       return row;
     }
     return rowIndex === 0 && index % 3 === 0

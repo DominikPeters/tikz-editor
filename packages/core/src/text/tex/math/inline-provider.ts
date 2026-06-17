@@ -634,17 +634,35 @@ function getDisplayMathAlignment(
       rows,
     };
   }
-  if (params.delimiter === "gather-star") {
+  if (params.delimiter === "gather" || params.delimiter === "gather-star") {
     const rowOffset = roundTexPt(Math.max(0, (params.targetWidth - laidOut.hlist.width) / 2));
+    const alignedNucleus = alignedNucleusFromList(parsed.list);
     const rows = alignedRows.map((row, rowIndex) => {
+      const rowItems = offsetMathHListItems(row.items, rowOffset);
+      const taggedRow = params.delimiter === "gather"
+        ? addGatherDisplayTag(
+          row,
+          rowItems,
+          displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex),
+          params.targetWidth,
+          fontProfile,
+          baseAtPt,
+          displayAlignmentRowLineDepth(alignedRows, rowIndex)
+        )
+        : {
+          width: params.targetWidth,
+          height: row.height,
+          depth: row.depth,
+          items: rowItems,
+        };
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
-        width: params.targetWidth,
-        height: row.height,
-        depth: row.depth,
+        width: taggedRow.width,
+        height: taggedRow.height,
+        depth: taggedRow.depth,
         sourceSpan: row.sourceSpan,
-        items: offsetMathHListItems(row.items, rowOffset),
+        items: taggedRow.items,
       };
       return {
         rowIndex,
@@ -655,9 +673,9 @@ function getDisplayMathAlignment(
         sourceEnd: row.sourceSpan.end,
         contentStart: row.sourceSpan.start,
         contentEnd: row.sourceSpan.end,
-        width: rowHList.width,
-        height: rowHList.height,
-        depth: rowHList.depth,
+        width: taggedRow.width,
+        height: taggedRow.height,
+        depth: taggedRow.depth,
         caretStops: buildInlineMathCaretStops(rowHList, {
           sourceStart: row.sourceSpan.start,
           sourceEnd: row.sourceSpan.end,
@@ -772,16 +790,17 @@ function displayAlignmentRowLabel(
 
 function texMathDisplayAlignmentDelimiter(
   delimiter: string
-): delimiter is "align" | "align-star" | "gather-star" | "multline-star" {
+): delimiter is "align" | "align-star" | "gather" | "gather-star" | "multline-star" {
   return delimiter === "align" ||
     delimiter === "align-star" ||
+    delimiter === "gather" ||
     delimiter === "gather-star" ||
     delimiter === "multline-star";
 }
 
-function displayAlignmentColumnSeparation(delimiter: "align" | "align-star" | "gather-star" | "multline-star"):
+function displayAlignmentColumnSeparation(delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline-star"):
   "align" | "gather" | "multline" {
-  if (delimiter === "gather-star") {
+  if (delimiter === "gather" || delimiter === "gather-star") {
     return "gather";
   }
   if (delimiter === "multline-star") {
@@ -919,6 +938,52 @@ function addDisplayAlignmentTag(
     : 0;
   return {
     width,
+    height: Math.max(row.height, tag.height),
+    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    items: [
+      ...rowItems,
+      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+    ],
+  };
+}
+
+function addGatherDisplayTag(
+  row: TexMathChildHListLayoutItem,
+  rowItems: readonly TexMathHListItem[],
+  label: TexMathAlignedRowLabel | null,
+  targetWidth: number,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  tagLineDepth = row.depth
+): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
+  if (!label) {
+    return {
+      width: targetWidth,
+      height: row.height,
+      depth: row.depth,
+      items: rowItems,
+    };
+  }
+  const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
+  if (!tag) {
+    return {
+      width: targetWidth,
+      height: row.height,
+      depth: row.depth,
+      items: rowItems,
+    };
+  }
+  const tagX = Math.max(0, roundTexPt(targetWidth - tag.width));
+  const rowRight = mathItemsRightEdge(rowItems);
+  const tagCollides = rowRight > tagX;
+  const tagRenderShiftY = tagCollides
+    ? displayAlignmentShiftedTagRenderShift(tagLineDepth)
+    : 0;
+  const tagMetricShiftY = tagCollides
+    ? displayAlignmentShiftedTagMetricShift(row.depth, tagLineDepth)
+    : 0;
+  return {
+    width: Math.max(targetWidth, rowRight, roundTexPt(tagX + tag.width)),
     height: Math.max(row.height, tag.height),
     depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
     items: [

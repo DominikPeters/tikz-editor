@@ -235,7 +235,7 @@ describe("TeX vlist lowering", () => {
     });
   });
 
-  it("lowers numbered gather and multline display math to source-spanned placeholders", () => {
+  it("lowers numbered gather display math and keeps numbered multline as a placeholder", () => {
     const source = String.raw`Alpha \begin{gather}a=b\\c=d\end{gather} Beta \begin{multline}x=y\\z=w\end{multline} Gamma`;
     const parsed = parseSimpleTexParagraphIr(source);
 
@@ -253,11 +253,18 @@ describe("TeX vlist lowering", () => {
     });
 
     expect(vlist.items[1]).toMatchObject({
-      kind: "placeholder",
-      reason: "Numbered TeX display math is not implemented yet.",
+      kind: "display-alignment",
       sourceSpan: {
         start: source.indexOf(String.raw`\begin{gather}`),
         end: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
+      },
+      delimiter: "gather",
+      alignment: {
+        delimiter: "gather",
+        rows: [
+          { rowIndex: 0, width: expect.any(Number) },
+          { rowIndex: 1, width: expect.any(Number) },
+        ],
       },
     });
     expect(vlist.items[3]).toMatchObject({

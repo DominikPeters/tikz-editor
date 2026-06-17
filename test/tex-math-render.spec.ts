@@ -1501,7 +1501,7 @@ unordered.`;
     expect(secondBox?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="50"');
   });
 
-  it("uses explicit placeholders for numbered gather and multline display math environments", () => {
+  it("uses explicit placeholders for numbered multline display math environments", () => {
     const source = String.raw`Alpha \begin{equation}x^2\end{equation} Beta \begin{align}a&=b\end{align} Gamma \begin{gather}c=d\\e=f\end{gather} Delta \begin{multline}x=y\\z=w\end{multline} Epsilon`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:numbered-display-math-placeholder",
@@ -1515,16 +1515,11 @@ unordered.`;
     const placeholders = result.vlistLayout?.boxReport.items.filter((item) =>
       item.itemKind === "placeholder"
     ) ?? [];
-    expect(placeholders).toHaveLength(2);
+    expect(placeholders).toHaveLength(1);
     expect(placeholders.map((item) => item.placeholderReason)).toEqual([
-      "Numbered TeX display math is not implemented yet.",
       "Numbered TeX display math is not implemented yet.",
     ]);
     expect(placeholders.map((item) => item.sourceSpan)).toEqual([
-      {
-        start: source.indexOf(String.raw`\begin{gather}`),
-        end: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
-      },
       {
         start: source.indexOf(String.raw`\begin{multline}`),
         end: source.indexOf(String.raw`\end{multline}`) + String.raw`\end{multline}`.length,
@@ -1550,6 +1545,41 @@ unordered.`;
     expect(rows.map((row) =>
       row.hboxRole?.kind === "display-align-row" ? row.hboxRole.delimiter : null
     )).toEqual(["align", "align", "align", "align"]);
+
+    const positionedRows = result.vlistLayout?.items.filter((item) =>
+      item.item.kind === "hbox" && item.item.role?.kind === "display-align-row"
+    ) ?? [];
+    const rowSvgBodies = positionedRows.map((row) =>
+      row.item.kind === "hbox" ? row.item.box.renderItems.map((renderItem) =>
+        renderItem.kind === "tex-math-svg" ? renderItem.svgBody : ""
+      ).join("") : ""
+    );
+    expect(rowSvgBodies).toHaveLength(4);
+    expect(rowSvgBodies[0]).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="49"');
+    expect(rowSvgBodies[1]).not.toContain('data-tex-font="lmroman10-regular" data-tex-glyph="49"');
+    expect(rowSvgBodies[1]).not.toContain('data-tex-font="lmroman10-regular" data-tex-glyph="50"');
+    expect(rowSvgBodies[2]).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="65"');
+    expect(rowSvgBodies[3]).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="50"');
+  });
+
+  it("renders numbered gather display math with automatic row labels", () => {
+    const source = String.raw`Alpha \begin{gather}a=b\\c=d\notag\\e=f\tag{A}\\g=h\end{gather} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:numbered-gather-display-math",
+      width: 180,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(4);
+    expect(rows.map((row) =>
+      row.hboxRole?.kind === "display-align-row" ? row.hboxRole.delimiter : null
+    )).toEqual(["gather", "gather", "gather", "gather"]);
 
     const positionedRows = result.vlistLayout?.items.filter((item) =>
       item.item.kind === "hbox" && item.item.role?.kind === "display-align-row"

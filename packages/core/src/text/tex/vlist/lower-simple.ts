@@ -76,10 +76,14 @@ export function lowerSimpleTexBlockItemsToVList(
         ]));
         continue;
       }
-      if (item.delimiter === "align") {
-        const numberedAlign = displayLabelsForNumberedAlign(item, equationNumber);
-        equationNumber = numberedAlign.nextEquationNumber;
-        items.push(displayMathItemFromSimpleTexDisplayMath(item, options, numberedAlign.displayLabels));
+      if (item.delimiter === "align" || item.delimiter === "gather") {
+        const numberedRows = displayLabelsForNumberedDisplayRows(
+          item,
+          equationNumber,
+          item.delimiter
+        );
+        equationNumber = numberedRows.nextEquationNumber;
+        items.push(displayMathItemFromSimpleTexDisplayMath(item, options, numberedRows.displayLabels));
         continue;
       }
       items.push(displayMathItemFromSimpleTexDisplayMath(item, options));
@@ -111,7 +115,6 @@ function displayMathItemFromSimpleTexDisplayMath(
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
   if (
-    item.delimiter === "gather" ||
     item.delimiter === "multline"
   ) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -119,6 +122,7 @@ function displayMathItemFromSimpleTexDisplayMath(
   if (
     item.delimiter === "align" ||
     item.delimiter === "align-star" ||
+    item.delimiter === "gather" ||
     item.delimiter === "gather-star" ||
     item.delimiter === "multline-star"
   ) {
@@ -177,13 +181,14 @@ function displayMathItemFromSimpleTexDisplayMath(
   };
 }
 
-function displayLabelsForNumberedAlign(
+function displayLabelsForNumberedDisplayRows(
   item: SimpleTexDisplayMathBlockItem,
-  previousEquationNumber: number
+  previousEquationNumber: number,
+  columnSeparation: "align" | "gather"
 ): { readonly displayLabels: readonly (TexMathDisplayLabel | null)[]; readonly nextEquationNumber: number } {
   const parsed = parseTexMathAlignedBody(item.content, {
     sourceOffset: item.contentStart,
-    columnSeparation: "align",
+    columnSeparation,
     suppressTerminalEllipsisGlue: true,
   });
   const aligned = parsed.list.items[0];
