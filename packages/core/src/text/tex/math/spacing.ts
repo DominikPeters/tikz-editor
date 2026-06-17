@@ -5,6 +5,7 @@ import type {
   TexMathGlue,
   TexMathItem,
   TexMathList,
+  TexMathMiddleDelimiter,
   TexMathMuGlue,
   TexMathNucleus,
   TexMathPenalty,
@@ -34,6 +35,7 @@ export type TexMathSpacedItem =
   | TexMathAtom
   | TexMathStyleChange
   | TexMathAlphabetChange
+  | TexMathMiddleDelimiter
   | TexMathPenalty
   | TexMathResolvedGlue
   | TexMathUnsupportedItem;
@@ -107,6 +109,11 @@ export function spaceTexMathList(
     }
     if (item.kind === "alphabet-change") {
       items.push(item);
+      continue;
+    }
+    if (item.kind === "middle-delimiter") {
+      items.push(item);
+      previousAtom = null;
       continue;
     }
     if (item.kind === "penalty") {

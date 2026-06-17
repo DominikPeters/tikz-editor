@@ -3274,6 +3274,53 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out middle delimiters with the enclosing left-right target size", () => {
+    const simple = layout(String.raw`\left(a\middle|b\right)`);
+    expect(simple.supported).toBe(true);
+    expect(simple.hlist?.width).toBeCloseTo(20.13316, 5);
+    expect(simple.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 40, x: 0 },
+      {
+        kind: "hlist",
+        role: "nucleus",
+        x: expect.closeTo(3.888901, 5),
+        items: [
+          { kind: "glyph", fontId: "cmmi10", code: 97, x: 0 },
+          { kind: "glyph", fontId: "cmsy10", code: 106, x: expect.closeTo(5.2859, 5) },
+          { kind: "glyph", fontId: "cmmi10", code: 98, x: expect.closeTo(8.06369, 5) },
+        ],
+      },
+      { kind: "glyph", fontId: "cmr10", code: 41, x: expect.closeTo(16.24426, 5) },
+    ]);
+
+    const nullDelimiters = layout(String.raw`\left. a \middle| b \right.`);
+    expect(nullDelimiters.supported).toBe(true);
+    expect(nullDelimiters.hlist?.width).toBeCloseTo(14.75536, 5);
+    expect(nullDelimiters.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "nucleus",
+        x: expect.closeTo(1.2, 5),
+        items: [
+          { kind: "glyph", fontId: "cmmi10", code: 97, x: 0 },
+          { kind: "glyph", fontId: "cmsy10", code: 106, x: expect.closeTo(5.2859, 5) },
+          { kind: "glyph", fontId: "cmmi10", code: 98, x: expect.closeTo(8.06369, 5) },
+        ],
+      },
+    ]);
+
+    const tall = layout(String.raw`\left(\frac{1}{2}\middle|\sqrt{\frac{1}{2}}\right)`);
+    expect(tall.supported).toBe(true);
+    const body = tall.hlist?.items.find((item): item is TexMathChildHListLayoutItem =>
+      item.kind === "hlist" && item.role === "nucleus"
+    );
+    expect(body?.items).toContainEqual(expect.objectContaining({
+      kind: "glyph",
+      fontId: "cmex10",
+      code: 12,
+    }));
+  });
+
   it("lays out null and extensible left-right delimiters like TeX", () => {
     const nullLeft = layout(String.raw`\left.\frac{1}{2}\right]`);
     expect(nullLeft.supported).toBe(true);

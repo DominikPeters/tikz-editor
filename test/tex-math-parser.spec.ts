@@ -1733,8 +1733,9 @@ describe("TeX math parser", () => {
   });
 
   it("parses left-right delimiter groups with delimiter source spans", () => {
-    const result = parseTexMath(String.raw`\left(\frac{1}{2}\right)`);
+    const result = parseTexMath(String.raw`\left(\frac{1}{2}\right)+\left(a\middle|b\right)`);
     const atom = atomAt(result, 0);
+    const withMiddle = atomAt(result, 2);
 
     expect(result.diagnostics).toEqual([]);
     expect(atom).toMatchObject({
@@ -1749,6 +1750,28 @@ describe("TeX math parser", () => {
       },
     });
     expect(atom.nucleus.kind === "left-right" ? atom.nucleus.body.items : []).toHaveLength(1);
+    expect(withMiddle).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 25, end: 48 },
+      nucleus: {
+        kind: "left-right",
+        leftDelimiter: "(",
+        rightDelimiter: ")",
+        leftDelimiterSourceSpan: { start: 30, end: 31 },
+        rightDelimiterSourceSpan: { start: 47, end: 48 },
+      },
+    });
+    expect(withMiddle.nucleus.kind === "left-right" ? withMiddle.nucleus.body.items : []).toMatchObject([
+      { kind: "atom", nucleus: { kind: "glyph", text: "a" } },
+      {
+        kind: "middle-delimiter",
+        delimiter: "vert",
+        commandSourceSpan: { start: 32, end: 39 },
+        delimiterSourceSpan: { start: 39, end: 40 },
+        sourceSpan: { start: 32, end: 40 },
+      },
+      { kind: "atom", nucleus: { kind: "glyph", text: "b" } },
+    ]);
   });
 
   it("parses aligned environments into source-spanned rows and cells", () => {

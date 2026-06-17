@@ -527,6 +527,9 @@ class TexMathParser {
       if (commandName(token.text) === "left") {
         return this.parseLeftRight(allowScripts);
       }
+      if (commandName(token.text) === "middle") {
+        return this.parseMiddleDelimiter();
+      }
       if (commandName(token.text) === "begin") {
         return this.parseEnvironment(allowScripts);
       }
@@ -1707,6 +1710,26 @@ class TexMathParser {
       },
       sourceSpan,
     }, allowScripts);
+  }
+
+  private parseMiddleDelimiter(): TexMathItem {
+    const command = this.advance();
+    const delimiter = this.parseDelimiter(command.sourceSpan, "\\middle delimiter");
+    const sourceSpan = spanUnion(command.sourceSpan, delimiter?.sourceSpan ?? command.sourceSpan);
+    if (!delimiter) {
+      return {
+        kind: "unsupported",
+        command: "\\middle",
+        sourceSpan,
+      };
+    }
+    return {
+      kind: "middle-delimiter",
+      delimiter: delimiter.delimiter,
+      commandSourceSpan: command.sourceSpan,
+      delimiterSourceSpan: delimiter.sourceSpan,
+      sourceSpan,
+    };
   }
 
   private parseBigDelimiter(commandNameValue: TexMathBigDelimiterCommand, allowScripts: boolean): TexMathAtom {

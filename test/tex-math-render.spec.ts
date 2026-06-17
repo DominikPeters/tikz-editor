@@ -801,6 +801,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1096.9489 -810.007) scale(100)"');
   });
 
+  it("renders middle delimiters as TeX delimiter glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\left(a\middle|b\right)`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="40"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="106"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="41"');
+    expect(body).not.toContain("middle-delimiter");
+  });
+
   it("renders AMS left-right corner delimiters through fixed AMS glyphs", () => {
     const parsed = parseTexMath(String.raw`\left\ulcorner A\right\urcorner+\left\llcorner B\right\lrcorner`);
     const result = layoutTexMathList(parsed.list);

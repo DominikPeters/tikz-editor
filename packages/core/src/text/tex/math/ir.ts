@@ -340,6 +340,14 @@ export interface TexMathLeftRightNucleus {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathMiddleDelimiter {
+  readonly kind: "middle-delimiter";
+  readonly delimiter: TexMathDelimiter;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly delimiterSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathAlignedCell {
   readonly list: TexMathList;
   readonly sourceSpan: TexMathSourceSpan;
@@ -574,6 +582,7 @@ export type TexMathItem =
   | TexMathMuGlue
   | TexMathStyleChange
   | TexMathAlphabetChange
+  | TexMathMiddleDelimiter
   | TexMathPenalty
   | TexMathUnsupportedItem;
 

@@ -64,6 +64,7 @@ export type TexMathHListItem =
   | TexMathGlueLayoutItem
   | TexMathKernLayoutItem
   | TexMathRuleLayoutItem
+  | TexMathMiddleDelimiterLayoutItem
   | TexMathChildHListLayoutItem;
 
 export interface TexMathGlyphLayoutItem {
@@ -108,6 +109,16 @@ export interface TexMathRuleLayoutItem {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathMiddleDelimiterLayoutItem {
+  readonly kind: "middle-delimiter";
+  readonly delimiter: TexMathDelimiter;
+  readonly x: number;
+  readonly width: 0;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly delimiterSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -166,6 +177,7 @@ export interface TexMathLayoutOptions {
   readonly fontProfile?: TexMathFontProfile;
   readonly baseAtPt?: number;
   readonly alphabet?: TexMathAlphabetCommand;
+  readonly allowMiddleDelimiters?: boolean;
 }
 
 export interface TexMathLayoutError {
@@ -303,6 +315,25 @@ export function layoutTexMathList(
     if (item.kind === "penalty") {
       continue;
     }
+    if (item.kind === "middle-delimiter") {
+      if (options.allowMiddleDelimiters === true) {
+        items.push({
+          kind: "middle-delimiter",
+          delimiter: item.delimiter,
+          x: roundTexPt(cursor),
+          width: 0,
+          commandSourceSpan: item.commandSourceSpan,
+          delimiterSourceSpan: item.delimiterSourceSpan,
+          sourceSpan: item.sourceSpan,
+        });
+      } else {
+        errors.push({
+          message: "Unsupported TeX math item \\middle.",
+          sourceSpan: item.sourceSpan,
+        });
+      }
+      continue;
+    }
     if (item.kind === "unsupported") {
       errors.push({
         message: `Unsupported TeX math item ${item.command}.`,
@@ -378,7 +409,14 @@ export function setTexMathHListWidth(
     ? delta / total
     : Math.min(-delta / total, 1);
   let offset = 0;
-  const items = hlist.items.map((item) => {
+  const items = hlist.items.map((item): TexMathHListItem => {
+    if (item.kind === "middle-delimiter") {
+      return {
+        ...item,
+        x: roundTexPt(item.x + offset),
+        width: 0,
+      };
+    }
     const shifted = {
       ...item,
       x: roundTexPt(item.x + offset),
@@ -4331,13 +4369,24 @@ function layoutLeftRightNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const body = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet);
+  const delimiterStyle = delimiterSizeStyle(style);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
+  const rawBody = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet);
+  if (!rawBody) {
+    return null;
+  }
+  const targetHeight = leftRightDelimiterTarget(rawBody.height, rawBody.depth, axis);
+  const body = expandMiddleDelimitersInHList(
+    rawBody,
+    fontProfile,
+    delimiterStyle,
+    baseAtPt,
+    targetHeight,
+    axis
+  );
   if (!body) {
     return null;
   }
-  const delimiterStyle = delimiterSizeStyle(style);
-  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
-  const targetHeight = leftRightDelimiterTarget(body.height, body.depth, axis);
   const left = layoutMathDelimiter(
     nucleus.leftDelimiter,
     fontProfile,
@@ -4398,8 +4447,63 @@ function layoutLeftRightBody(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, {
+    fontProfile,
+    style,
+    cramped,
+    baseAtPt,
+    alphabet,
+    allowMiddleDelimiters: true,
+  });
   return result.supported ? result.hlist : null;
+}
+
+function expandMiddleDelimitersInHList(
+  hlist: TexMathHList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  targetHeight: number,
+  axis: number
+): TexMathHList | null {
+  if (!hlist.items.some((item) => item.kind === "middle-delimiter")) {
+    return hlist;
+  }
+  const items: TexMathHListItem[] = [];
+  let addedWidth = 0;
+  let height = hlist.height;
+  let depth = hlist.depth;
+  for (const item of hlist.items) {
+    if (item.kind !== "middle-delimiter") {
+      items.push(offsetMathLayoutItem(item, addedWidth));
+      continue;
+    }
+    const delimiter = layoutMathDelimiter(
+      item.delimiter,
+      fontProfile,
+      style,
+      baseAtPt,
+      targetHeight,
+      axis,
+      item.delimiterSourceSpan
+    );
+    if (!delimiter) {
+      return null;
+    }
+    const x = roundTexPt(item.x + addedWidth);
+    const delimiterItems = offsetDelimiterItems(delimiter.items, x, 0);
+    items.push(...delimiterItems);
+    addedWidth = roundTexPt(addedWidth + delimiter.width);
+    height = Math.max(height, ...delimiterItems.map((delimiterItem) => -delimiterItem.y + delimiterItem.height));
+    depth = Math.max(depth, ...delimiterItems.map((delimiterItem) => delimiterItem.y + delimiterItem.depth));
+  }
+  return {
+    ...hlist,
+    items,
+    width: roundTexPt(hlist.width + addedWidth),
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+  };
 }
 
 function selectRadicalDelimiter(
