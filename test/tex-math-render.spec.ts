@@ -1599,6 +1599,33 @@ unordered.`;
     ]);
   });
 
+  it("uses the maximum measured align-row depth for the first shifted tag", () => {
+    const source = String.raw`Aligned $\underline{x+2}+\tfrac{\ldots}{n}$ first. \par \noindent after \begin{align*}\sqrt{j}&=\hat{\ldots+n}&\begin{smallmatrix}\frac{\ldots}{j}&n_x^y\\\tfrac{2}{c}&\tfrac{c}{a}\end{smallmatrix}&=\begin{array}{cr}x&\binom{z}{\cdots}\end{array} \tag{A}\\\begin{cases}\dbinom{\dots}{b}&\binom{a}{n}\\\dfrac{i}{\cdots}&i\end{cases}&=2_n^2&1^y&=\operatorname*{arg\,max}\\\dbinom{n}{y}&=\frac{1}{x}&\begin{pmatrix}c&\frac{2}{c}\\a&\cdots^j\end{pmatrix}&=\underline{\ldots+x}\end{align*} closing \(n\).`;
+    const content = String.raw`\sqrt{j}&=\hat{\ldots+n}&\begin{smallmatrix}\frac{\ldots}{j}&n_x^y\\\tfrac{2}{c}&\tfrac{c}{a}\end{smallmatrix}&=\begin{array}{cr}x&\binom{z}{\cdots}\end{array} \tag{A}\\\begin{cases}\dbinom{\dots}{b}&\binom{a}{n}\\\dfrac{i}{\cdots}&i\end{cases}&=2_n^2&1^y&=\operatorname*{arg\,max}\\\dbinom{n}{y}&=\frac{1}{x}&\begin{pmatrix}c&\frac{2}{c}\\a&\cdots^j\end{pmatrix}&=\underline{\ldots+x}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{align*}`),
+      sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      contentStart: source.indexOf(String.raw`\sqrt`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 170,
+    });
+    const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
+      item.kind === "glyph" &&
+      item.fontId === "lmroman10-regular" &&
+      (item.code === 40 || item.code === 65 || item.code === 41)
+    ) ?? [];
+
+    expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(32.610077, 4);
+    expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
+      expect.closeTo(29.01004, 5),
+      expect.closeTo(29.01004, 5),
+      expect.closeTo(29.01004, 5),
+    ]);
+  });
+
   it("keeps non-colliding align-star tags on the equation baseline", () => {
     const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
     const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({

@@ -684,9 +684,9 @@ function displayAlignmentRowLineDepth(
   if (rowIndex !== 0) {
     return rowDepth;
   }
-  // amsmath's measuring pass leaves \lineht@ at the last measured row depth.
+  // amsmath's measuring pass leaves \lineht@ at the maximum measured row depth.
   // The first real row inherits that value until its fields exceed it.
-  return Math.max(rowDepth, rows.at(-1)?.depth ?? 0);
+  return Math.max(rowDepth, ...rows.map((row) => row.depth));
 }
 
 function displayAlignmentShiftedTagRenderShift(lineDepth: number): number {
