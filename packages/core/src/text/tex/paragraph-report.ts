@@ -24,6 +24,7 @@ import {
 import {
   setTexMathHListWidth,
   type TexMathHList,
+  type TexMathHListItem,
 } from "./math/layout.js";
 import type { TexMathFontProfile } from "./math/font-profile.js";
 import {
@@ -183,7 +184,8 @@ function buildTexLineReport(
     }
 
     if (run.kind === "math") {
-      const coalesced = coalescedSameLineMathSegment(runIndex, line, params, x);
+      const continuationLineStart = isContinuationLineStartMath(line, runIndex, x);
+      const coalesced = coalescedSameLineMathSegment(runIndex, line, params, x, continuationLineStart);
       if (coalesced) {
         segments.push(coalesced.segment);
         ascent = Math.max(ascent, coalesced.ascent);
@@ -210,7 +212,9 @@ function buildTexLineReport(
         caretStops: texMathBoxCaretStops(box, x, width),
         mathConstructRanges: texMathBoxConstructRanges(box, x, width),
         mathBreakpoints: texMathBoxBreakpoints(box, x, width),
-        mathSvgBody: texMathBoxSvgBody(box, width),
+        mathSvgBody: texMathBoxSvgBody(box, width, {
+          omitLineInitialOperator: continuationLineStart && box?.sourceStart === box?.contentStart,
+        }),
       });
       x = roundTexPt(x + width);
       continue;
@@ -348,7 +352,8 @@ function coalescedSameLineMathSegment(
     runs: readonly ParagraphRun[];
     runWidths: ReadonlyMap<number, number>;
   },
-  x: number
+  x: number,
+  omitLineInitialOperator: boolean
 ): {
   readonly segment: LineReport["segments"][number];
   readonly ascent: number;
@@ -426,12 +431,22 @@ function coalescedSameLineMathSegment(
       caretStops: texMathBoxCaretStops(rootBox, x, width),
       mathConstructRanges: texMathBoxConstructRanges(rootBox, x, width),
       mathBreakpoints: texMathBoxBreakpoints(rootBox, x, width),
-      mathSvgBody: texMathBoxSvgBody(rootBox, width),
+      mathSvgBody: texMathBoxSvgBody(rootBox, width, { omitLineInitialOperator }),
     },
     ascent: rootBox.height,
     descent: rootBox.depth,
     endRunIndex,
   };
+}
+
+function isContinuationLineStartMath(
+  line: GreedyLine,
+  runIndex: number,
+  x: number
+): boolean {
+  return line.lineIndex > 0 &&
+    runIndex === line.startRun &&
+    Math.abs(x - (line.xOffset ?? 0)) < 1e-6;
 }
 
 function isTexMathGlueSpace(wrapper: unknown): boolean {
@@ -666,23 +681,54 @@ function buildTexLineLabelSegments(
 
 function texMathBoxSvgBody(
   box: {
+    readonly contentStart: number;
     readonly width: number;
     readonly svgBody?: string;
     readonly hlist?: TexMathHList;
     readonly fontProfile?: TexMathFontProfile;
   } | null | undefined,
-  width: number
+  width: number,
+  options: { readonly omitLineInitialOperator?: boolean } = {}
 ): string | undefined {
   if (!box) {
     return undefined;
   }
   if (box.hlist && box.fontProfile) {
+    const resized = Math.abs(width - box.width) > 1e-6
+      ? setTexMathHListWidth(box.hlist, width)
+      : box.hlist;
+    const hlist = options.omitLineInitialOperator
+      ? omitLineInitialDiscardedMathOperator(resized, box.contentStart)
+      : resized;
     return renderTexMathHListSvgBody(
-      Math.abs(width - box.width) > 1e-6 ? setTexMathHListWidth(box.hlist, width) : box.hlist,
+      hlist,
       { fontProfile: box.fontProfile }
     );
   }
   return box.svgBody;
+}
+
+function omitLineInitialDiscardedMathOperator(
+  hlist: TexMathHList,
+  contentStart: number
+): TexMathHList {
+  const first = hlist.items[0];
+  if (!isLineInitialDiscardedMathOperator(first, contentStart)) {
+    return hlist;
+  }
+  return {
+    ...hlist,
+    items: hlist.items.slice(1),
+  };
+}
+
+function isLineInitialDiscardedMathOperator(
+  item: TexMathHListItem | undefined,
+  contentStart: number
+): boolean {
+  return item?.kind === "glyph" &&
+    (item.text === "+" || item.text === "=") &&
+    item.sourceSpan.start === contentStart;
 }
 
 function texMathBoxCaretStops(

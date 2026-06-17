@@ -713,12 +713,14 @@ function randomFormula(random, variables, formulaMode) {
 
 function randomSpacingFormula(random, variables) {
   const variable = choice(random, variables);
-  const left = choice(random, [`${choice(random, variables)}+`, `${choice(random, variables)}=`]);
+  const left = random() < 0.25
+    ? choice(random, ["+", "="])
+    : choice(random, [`${choice(random, variables)}+`, `${choice(random, variables)}=`]);
   const explicitSpace = choice(random, [
     String.raw`\:`,
     String.raw`\;`,
     String.raw`\!`,
-    String.raw`\quad`,
+    String.raw`\quad `,
     String.raw`\kern2pt`,
     String.raw`\kern-1pt`,
     String.raw`\mkern3mu`,

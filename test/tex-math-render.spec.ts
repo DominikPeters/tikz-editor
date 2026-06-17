@@ -1601,6 +1601,42 @@ describe("TeX math SVG rendering", () => {
     expect(mathSegments[3]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="100"');
   });
 
+  it("omits TeX-discarded leading relation and binary glyphs after paragraph line breaks", () => {
+    const source = String.raw`render chapter width \(+\kern-1pta+n\) Alpha anchor render width anchor width.`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:line-initial-math-operator",
+      width: 120,
+      alignment: "ragged-right",
+      parindent: 0,
+      rightskipStretch: 120,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const mathSegment = result.report?.lines[1]?.segments.find((segment) =>
+      segment.kind === "math"
+    );
+    expect(mathSegment?.text).toBe(String.raw`+\kern-1pta+n`);
+    expect(mathSegment?.mathSvgBody).not.toContain('data-tex-font="cmr10" data-tex-glyph="43" data-source-start="23"');
+    expect(mathSegment?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+    expect(mathSegment?.caretStops?.[0]).toBeCloseTo(mathSegment?.x ?? 0, 6);
+
+    const paragraphStart = layoutSimpleTexParagraph(String.raw`$+\kern-1pta+n$ Alpha anchor`, {
+      paragraphId: "tex:paragraph-start-math-operator",
+      width: 120,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const paragraphStartMath = paragraphStart.report?.lines[0]?.segments.find((segment) =>
+      segment.kind === "math"
+    );
+    expect(paragraphStartMath?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="43"');
+  });
+
   it("keeps relation breakpoints before following ellipsis glyphs", () => {
     const source = String.raw`Alpha $\sqrt{\cdots}=\ldots$ beta`;
     const result = layoutSimpleTexParagraph(source, {
