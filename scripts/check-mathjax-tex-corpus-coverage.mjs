@@ -7,6 +7,23 @@ import { mkdirSync } from "node:fs";
 const DEFAULT_INPUT = "artifacts/mathjax-tex-corpus/corpus.jsonl";
 const DEFAULT_OUT = "artifacts/mathjax-tex-corpus/coverage-summary.json";
 const DEFAULT_SLICES = "scripts/mathjax-tex-corpus-slices.json";
+const DISPLAY_ALIGNMENT_ENVIRONMENTS = [
+  {
+    delimiter: "align-star",
+    begin: String.raw`\begin{align*}`,
+    end: String.raw`\end{align*}`,
+  },
+  {
+    delimiter: "gather-star",
+    begin: String.raw`\begin{gather*}`,
+    end: String.raw`\end{gather*}`,
+  },
+  {
+    delimiter: "multline-star",
+    begin: String.raw`\begin{multline*}`,
+    end: String.raw`\end{multline*}`,
+  },
+];
 const distEntry = resolve(process.cwd(), "packages/core/dist/text/tex/math/index.js");
 
 if (!existsSync(distEntry)) {
@@ -164,13 +181,14 @@ function checkEntry(entry, provider) {
     });
   }
 
-  const alignment = alignStarContent(entry.source);
+  const alignment = displayAlignmentContent(entry.source);
   const providerKind = alignment ? "display-alignment" : entry.display === true ? "display-box" : "inline-box";
   const content = alignment?.content ?? entry.source;
   const contentStart = alignment?.contentStart ?? 0;
+  const delimiter = alignment?.delimiter ?? null;
   let parsed;
   try {
-    parsed = parseProviderContent(providerKind, content, contentStart);
+    parsed = parseProviderContent(providerKind, content, contentStart, delimiter);
   } catch (error) {
     return resultFor(entry, {
       topStatus: "parser-error",
@@ -228,7 +246,7 @@ function checkEntry(entry, provider) {
 
   let box = null;
   try {
-    box = providerBox(provider, providerKind, entry.source, content, contentStart);
+    box = providerBox(provider, providerKind, entry.source, content, contentStart, delimiter);
   } catch (error) {
     return resultFor(entry, {
       topStatus: "parser-error",
@@ -249,10 +267,11 @@ function checkEntry(entry, provider) {
   });
 }
 
-function parseProviderContent(providerKind, content, contentStart) {
+function parseProviderContent(providerKind, content, contentStart, delimiter) {
   if (providerKind === "display-alignment") {
     return parseTexMathAlignedBody(content, {
       sourceOffset: contentStart,
+      columnSeparation: displayAlignmentColumnSeparation(delimiter),
       suppressTerminalEllipsisGlue: true,
     });
   }
@@ -262,12 +281,12 @@ function parseProviderContent(providerKind, content, contentStart) {
   });
 }
 
-function providerBox(provider, providerKind, source, content, contentStart) {
+function providerBox(provider, providerKind, source, content, contentStart, delimiter) {
   if (providerKind === "display-alignment") {
     return provider.getDisplayMathAlignment?.({
       source,
       content,
-      delimiter: "align-star",
+      delimiter: delimiter ?? "align-star",
       sourceStart: 0,
       sourceEnd: source.length,
       contentStart,
@@ -298,19 +317,31 @@ function providerBox(provider, providerKind, source, content, contentStart) {
   });
 }
 
-function alignStarContent(source) {
-  const begin = String.raw`\begin{align*}`;
-  const end = String.raw`\end{align*}`;
-  const start = source.indexOf(begin);
-  const finish = source.lastIndexOf(end);
-  if (start < 0 || finish < start) {
-    return null;
+function displayAlignmentContent(source) {
+  for (const environment of DISPLAY_ALIGNMENT_ENVIRONMENTS) {
+    const start = source.indexOf(environment.begin);
+    const finish = source.lastIndexOf(environment.end);
+    if (start < 0 || finish < start) {
+      continue;
+    }
+    const contentStart = start + environment.begin.length;
+    return {
+      content: source.slice(contentStart, finish),
+      contentStart,
+      delimiter: environment.delimiter,
+    };
   }
-  const contentStart = start + begin.length;
-  return {
-    content: source.slice(contentStart, finish),
-    contentStart,
-  };
+  return null;
+}
+
+function displayAlignmentColumnSeparation(delimiter) {
+  if (delimiter === "gather-star") {
+    return "gather";
+  }
+  if (delimiter === "multline-star") {
+    return "multline";
+  }
+  return "align";
 }
 
 function resultFor(entry, status) {
