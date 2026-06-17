@@ -80,6 +80,7 @@ export type TexMathNucleus =
   | TexMathRadicalNucleus
   | TexMathBoxedNucleus
   | TexMathSmashNucleus
+  | TexMathShiftBoxNucleus
   | TexMathRuleNucleus
   | TexMathLineNucleus
   | TexMathVarLimitNucleus
@@ -188,6 +189,16 @@ export interface TexMathSmashNucleus {
   readonly smashDepth: boolean;
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly optionSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathShiftBoxNucleus {
+  readonly kind: "shift-box";
+  readonly direction: "raise" | "lower";
+  readonly amount: number;
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly amountSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

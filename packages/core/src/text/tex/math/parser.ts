@@ -423,6 +423,9 @@ class TexMathParser {
       if (commandName(token.text) === "rule") {
         return this.parseRule(allowScripts);
       }
+      if (commandName(token.text) === "raise" || commandName(token.text) === "lower") {
+        return this.parseShiftBox(commandName(token.text) === "raise" ? "raise" : "lower", allowScripts);
+      }
       const lineCommand = lineCommandName(token.text);
       if (lineCommand) {
         return this.parseLine(lineCommand, allowScripts);
@@ -431,7 +434,7 @@ class TexMathParser {
       if (varLimit) {
         return this.parseVarLimit(varLimit, allowScripts);
       }
-      if (commandName(token.text) === "text" || commandName(token.text) === "mbox") {
+      if (commandName(token.text) === "text" || commandName(token.text) === "mbox" || commandName(token.text) === "hbox") {
         return this.parseText(allowScripts);
       }
       if (commandName(token.text) === "cases") {
@@ -1077,6 +1080,50 @@ class TexMathParser {
         height: height?.valuePt ?? 0,
         raise: raise?.valuePt ?? 0,
         commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseShiftBox(direction: "raise" | "lower", allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const amount = this.parseTexDimension(command.sourceSpan, `${command.text} amount`);
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "command" || commandName(next.text) !== "hbox") {
+      this.addDiagnostic(
+        "error",
+        "missing-command",
+        `Expected \\hbox after ${command.text}.`,
+        next?.sourceSpan ?? command.sourceSpan
+      );
+      const sourceSpan = spanUnion(command.sourceSpan, amount?.sourceSpan ?? command.sourceSpan);
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "ord",
+        nucleus: {
+          kind: "unsupported",
+          command: command.text,
+          sourceSpan,
+        },
+        sourceSpan,
+      }, allowScripts);
+    }
+
+    const box = this.parseText(false);
+    const body = listFromItems([box], box.sourceSpan);
+    const sourceSpan = spanUnion(command.sourceSpan, box.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "shift-box",
+        direction,
+        amount: amount?.valuePt ?? 0,
+        body,
+        commandSourceSpan: command.sourceSpan,
+        amountSourceSpan: amount?.sourceSpan ?? command.sourceSpan,
         sourceSpan,
       },
       sourceSpan,

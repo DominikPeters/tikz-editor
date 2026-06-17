@@ -980,6 +980,27 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses hbox commands through the text-in-math nucleus", () => {
+    const result = parseTexMath(String.raw`\hbox{label $x$}`);
+    const text = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(text).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 16 },
+      nucleus: {
+        kind: "text",
+        text: "label ",
+        textSourceSpan: { start: 6, end: 15 },
+        sourceSpan: { start: 0, end: 16 },
+        parts: [
+          { kind: "text", text: "label ", sourceSpan: { start: 6, end: 12 } },
+          { kind: "math", content: "x", sourceSpan: { start: 12, end: 15 }, contentSourceSpan: { start: 13, end: 14 } },
+        ],
+      },
+    });
+  });
+
   it("parses inline math islands inside text commands", () => {
     const source = String.raw`\text{if $Ax \ge b$,}`;
     const result = parseTexMath(source);
@@ -1000,6 +1021,36 @@ describe("TeX math parser", () => {
       { kind: "math", contentSourceSpan: { start: 10, end: 18 } },
       { kind: "text", text: "," },
     ]);
+  });
+
+  it("parses TeX raise and lower primitives over hboxes", () => {
+    const result = parseTexMath(String.raw`\raise2pt\hbox{$x$}+\lower2pt\hbox{$y$}`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 19 },
+      nucleus: {
+        kind: "shift-box",
+        direction: "raise",
+        amount: 2,
+        commandSourceSpan: { start: 0, end: 6 },
+        amountSourceSpan: { start: 6, end: 9 },
+        sourceSpan: { start: 0, end: 19 },
+      },
+    });
+    expect(atomAt(result, 2)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 20, end: 39 },
+      nucleus: {
+        kind: "shift-box",
+        direction: "lower",
+        amount: 2,
+        commandSourceSpan: { start: 20, end: 26 },
+        amountSourceSpan: { start: 26, end: 29 },
+        sourceSpan: { start: 20, end: 39 },
+      },
+    });
   });
 
   it("keeps unsupported commands inside text explicit", () => {

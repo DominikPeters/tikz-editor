@@ -675,6 +675,22 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out hbox command nuclei through the text box path", () => {
+    const result = layout(String.raw`\hbox{x $y$}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "lmroman10-regular", code: 120, sourceSpan: { start: 6, end: 7 } },
+      { fontId: "lmroman10-regular", code: 32, sourceSpan: { start: 7, end: 8 } },
+      { fontId: "cmmi10", code: 121, sourceSpan: { start: 9, end: 10 } },
+    ]);
+  });
+
   it("scales text command nuclei in script style", () => {
     const result = layout(String.raw`x_{\text{if}}`);
 
@@ -1075,6 +1091,36 @@ describe("TeX math hlist layout", () => {
         expect.objectContaining({ kind: "rule", role: "fraction-rule" }),
       ]),
     });
+  });
+
+  it("lays out TeX raise and lower primitives by shifting hboxes", () => {
+    const raised = layout(String.raw`\raise2pt\hbox{$x$}`);
+    const lowered = layout(String.raw`\lower2pt\hbox{$x$}`);
+
+    expect(raised.supported).toBe(true);
+    expect(lowered.supported).toBe(true);
+
+    const raisedBox = raised.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const loweredBox = lowered.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(raisedBox).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      y: -2,
+    });
+    expect(loweredBox).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      y: 2,
+    });
+
+    expect(flattenGlyphItems(raised.hlist?.items ?? [])).toMatchObject([
+      { fontId: "cmmi10", code: 120 },
+    ]);
+    expect(flattenGlyphItems(lowered.hlist?.items ?? [])).toMatchObject([
+      { fontId: "cmmi10", code: 120 },
+    ]);
+    expect(raised.hlist?.height).toBeGreaterThan(lowered.hlist?.height ?? 0);
+    expect(lowered.hlist?.depth).toBeGreaterThan(raised.hlist?.depth ?? 0);
   });
 
   it("lays out amsmath cfrac with display style, numerator alignment, and trailing kern", () => {
