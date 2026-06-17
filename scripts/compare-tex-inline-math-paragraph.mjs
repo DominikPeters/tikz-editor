@@ -560,6 +560,7 @@ end`;
 
 function normalizeLineText(text) {
   return text
+    .replace(/\s+\(\.\/inline-math-paragraph\.(?:aux|tex).*/u, "")
     .replaceAll("ﬀ", "ff")
     .replaceAll("ﬁ", "fi")
     .replaceAll("ﬂ", "fl")
@@ -572,14 +573,13 @@ function normalizeLineText(text) {
     .replace(/\[M\](?:\[M\])+/gu, "[M]")
     .replace(/([A-Za-z])_\{?([0-9])\}?\^\{?([0-9])\}?/gu, "$1$3$2")
     .replace(/[_^{}]/gu, "")
-    .replace(/\s+\(\.\/inline-math-paragraph\.aux\)\)+$/u, "")
     .replace(/\s+$/u, "");
 }
 
 function oracleCachePath(cacheDir, caseSpec, options = args) {
   const key = createHash("sha256")
     .update(JSON.stringify({
-      version: 16,
+      version: 17,
       absoluteGlyphs: options.absoluteGlyphs,
       source: caseSpec.source,
       width: caseSpec.width,

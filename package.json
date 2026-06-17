@@ -59,6 +59,8 @@
     "compare:tex-inline-math-paragraph:fuzz": "node scripts/compare-tex-inline-math-paragraph.mjs --fuzz 64 --seed 20260615 --summary-only --oracle-cache-dir artifacts/tex-inline-math-paragraph-oracle-cache",
     "compare:tex-inline-math-paragraph:scripts-fuzz": "node scripts/compare-tex-inline-math-paragraph.mjs --fuzz 64 --seed 20260617 --formula-mode scripts --summary-only --oracle-cache-dir artifacts/tex-inline-math-paragraph-oracle-cache",
     "compare:tex-inline-math-paragraph:mixed-fuzz": "node scripts/compare-tex-inline-math-paragraph.mjs --fuzz 96 --seed 20260617 --formula-mode mixed --widths 70,80,100,120,160,200 --summary-only --oracle-cache-dir artifacts/tex-inline-math-paragraph-oracle-cache",
+    "compare:tex-inline-math:fidelity": "node scripts/compare-tex-inline-math-fidelity.mjs",
+    "compare:tex-inline-math:fidelity:large": "node scripts/compare-tex-inline-math-fidelity.mjs --line-fuzz-cases 96 --line-seeds 20260617 --glyph-fuzz-cases 96 --glyph-seeds 20260619,20260620 --absolute-fuzz-cases 96 --absolute-seeds 20260622,20260623 --widths 70,80,100,120,160,200",
     "compare:tex-display-math": "node scripts/compare-tex-display-math.mjs --tolerance 0.03",
     "compare:tex-display-math:align-matrix": "node scripts/compare-tex-display-math.mjs --align-matrix --summary-only --tolerance 0.03",
     "compare:tex-display-math:construct-matrix": "node scripts/compare-tex-display-math.mjs --construct-matrix --summary-only --tolerance 0.03",
