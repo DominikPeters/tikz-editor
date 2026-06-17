@@ -621,6 +621,63 @@ describe("TeX math parser", () => {
     expect(substack.nucleus.rows[1]?.cells[0]?.list.sourceSpan).toEqual({ start: 21, end: 24 });
   });
 
+  it("parses AMS sideset as source-spanned operator side material", () => {
+    const source = String.raw`\sideset{^a}{'}\sum_{n=0}^{k}n`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "op",
+      limits: "display",
+      sourceSpan: { start: 0, end: 29 },
+      nucleus: {
+        kind: "sideset",
+        commandSourceSpan: { start: 0, end: 8 },
+        sourceSpan: { start: 0, end: 19 },
+      },
+      subscript: { sourceSpan: { start: 19, end: 25 } },
+      superscript: { sourceSpan: { start: 25, end: 29 } },
+    });
+    if (atom.nucleus.kind !== "sideset") {
+      return;
+    }
+    expect(atom.nucleus.prescript.items[0]).toMatchObject({
+      kind: "atom",
+      superscript: { sourceSpan: { start: 9, end: 11 } },
+    });
+    expect(atom.nucleus.postscript.items[0]).toMatchObject({
+      kind: "atom",
+      nucleus: { kind: "glyph", text: String.raw`\prime`, sourceSpan: { start: 13, end: 14 } },
+    });
+    expect(atom.nucleus.base.items[0]).toMatchObject({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: { kind: "operator", command: "sum", sourceSpan: { start: 15, end: 19 } },
+    });
+    expect(result.list.items[1]).toMatchObject({
+      kind: "atom",
+      nucleus: { kind: "glyph", text: "n" },
+    });
+  });
+
+  it("parses prime shorthand as a TeX superscript on ordinary atoms", () => {
+    const result = parseTexMath("x''_i");
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      nucleus: { kind: "glyph", text: "x" },
+      superscript: { sourceSpan: { start: 1, end: 3 } },
+      subscript: { sourceSpan: { start: 3, end: 5 } },
+    });
+    expect(atom.superscript?.list.items).toHaveLength(2);
+    expect(atom.superscript?.list.items[0]).toMatchObject({
+      kind: "atom",
+      nucleus: { kind: "glyph", text: String.raw`\prime`, sourceSpan: { start: 1, end: 2 } },
+    });
+  });
+
   it("parses amsmath subarray environments with TeX column alignment", () => {
     const source = String.raw`\begin{subarray}{c}a\\b\end{subarray}+\begin{subarray}{l}a+b\\c\end{subarray}`;
     const result = parseTexMath(source);

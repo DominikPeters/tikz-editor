@@ -30,6 +30,7 @@ export type {
   TexMathParseResult,
   TexMathRadicalNucleus,
   TexMathScript,
+  TexMathSidesetNucleus,
   TexMathSmallMatrixNucleus,
   TexMathSourceSpan,
   TexMathSpacingCommand,

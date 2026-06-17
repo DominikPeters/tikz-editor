@@ -258,6 +258,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     hasStyledFractionCommand(formula)
     || hasSubstackCommand(formula)
     || hasSubarrayEnvironment(formula)
+    || hasSidesetCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -418,6 +419,7 @@ function texSource(formula) {
     hasStyledFractionCommand(formula) ||
     hasSubstackCommand(formula) ||
     hasSubarrayEnvironment(formula) ||
+    hasSidesetCommand(formula) ||
     hasEllipsisCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
@@ -946,6 +948,10 @@ function hasSubstackCommand(source) {
 
 function hasSubarrayEnvironment(source) {
   return source.includes(String.raw`\begin{subarray}`);
+}
+
+function hasSidesetCommand(source) {
+  return source.includes(String.raw`\sideset`);
 }
 
 function hasEllipsisCommand(source) {

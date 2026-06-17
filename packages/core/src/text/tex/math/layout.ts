@@ -34,6 +34,7 @@ import type {
   TexMathOperatorCommand,
   TexMathOperatorLimits,
   TexMathOperatorNameNucleus,
+  TexMathSidesetNucleus,
   TexMathSmallMatrixNucleus,
   TexMathSmallMatrixEnvironment,
   TexMathSourceSpan,
@@ -117,6 +118,8 @@ export interface TexMathChildHListLayoutItem {
     | "substack-cell"
     | "subarray-row"
     | "subarray-cell"
+    | "sideset-pre"
+    | "sideset-base"
     | "array-row"
     | "array-cell"
     | "cases-row"
@@ -402,6 +405,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     nucleus.kind === "matrix" ||
     nucleus.kind === "substack" ||
     nucleus.kind === "subarray" ||
+    nucleus.kind === "sideset" ||
     nucleus.kind === "cases" ||
     nucleus.kind === "smallmatrix" ||
     nucleus.kind === "operator-name"
@@ -597,7 +601,10 @@ function shouldUseOperatorLimits(
   atom: TexMathAtom,
   style: TexMathStyle
 ): boolean {
-  if ((atom.nucleus.kind !== "operator" && atom.nucleus.kind !== "operator-name") || (!atom.subscript && !atom.superscript)) {
+  if (!atom.subscript && !atom.superscript) {
+    return false;
+  }
+  if (atom.nucleus.kind !== "operator" && atom.nucleus.kind !== "operator-name" && atom.limits === undefined) {
     return false;
   }
   const limits = atom.limits ?? (
@@ -777,6 +784,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "subarray") {
     return layoutSubarrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "sideset") {
+    return layoutSidesetNucleus(nucleus, fontProfile, baseAtPt, alphabet);
   }
   if (nucleus.kind === "array") {
     return layoutArrayNucleus(nucleus, fontProfile, baseAtPt, alphabet);
@@ -1580,6 +1590,231 @@ function subarrayCellX(
   cellWidth: number
 ): number {
   return alignment === "center" ? roundTexPt((width - cellWidth) / 2) : 0;
+}
+
+function layoutSidesetNucleus(
+  nucleus: TexMathSidesetNucleus,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const base = layoutTexMathList(nucleus.base, {
+    fontProfile,
+    style: "display",
+    baseAtPt,
+    alphabet,
+  });
+  const postBaseList = sidesetBaseWithPostscript(nucleus.base, nucleus.postscript);
+  const postBase = layoutTexMathList(postBaseList, {
+    fontProfile,
+    style: "display",
+    baseAtPt,
+    alphabet,
+  });
+  if (!base.supported || !postBase.supported) {
+    return null;
+  }
+  const prescript = layoutSidesetPrescript(nucleus.prescript, base.hlist, fontProfile, baseAtPt, alphabet);
+  if (!prescript) {
+    return null;
+  }
+
+  const preChild = prescript.width > 0
+    ? childHList("sideset-pre", mathOperatorThinSpace(fontProfile, baseAtPt), 0, prescript, nucleus.prescript.sourceSpan)
+    : null;
+  const baseChild = childHList(
+    "sideset-base",
+    roundTexPt((preChild?.width ?? 0) + mathOperatorThinSpace(fontProfile, baseAtPt)),
+    0,
+    postBase.hlist,
+    spanUnion(nucleus.base.sourceSpan, nucleus.postscript.sourceSpan)
+  );
+  const items = preChild ? [preChild, baseChild] : [baseChild];
+  const height = Math.max(
+    base.hlist.height,
+    prescript.height,
+    postBase.hlist.height
+  );
+  const depth = Math.max(
+    base.hlist.depth,
+    prescript.depth,
+    postBase.hlist.depth
+  );
+
+  return {
+    items,
+    width: roundTexPt((preChild?.width ?? 0) + postBase.hlist.width + mathOperatorThinSpace(fontProfile, baseAtPt)),
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutSidesetPrescript(
+  list: TexMathList,
+  base: TexMathHList,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathHList | null {
+  const scriptAtom = list.items[0];
+  if (
+    list.items.length !== 1 ||
+    scriptAtom?.kind !== "atom" ||
+    scriptAtom.nucleus.kind !== "list" ||
+    scriptAtom.nucleus.list.items.length !== 0 ||
+    (!scriptAtom.subscript && !scriptAtom.superscript)
+  ) {
+    const result = layoutTexMathList(list, {
+      fontProfile,
+      style: "display",
+      baseAtPt,
+      alphabet,
+    });
+    return result.supported ? result.hlist : null;
+  }
+
+  const phantomBase: TexMathAtomLayout = {
+    items: [],
+    width: 0,
+    height: base.height,
+    depth: base.depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: scriptAtom.nucleus.sourceSpan,
+  };
+  const sup = scriptAtom.superscript
+    ? layoutScriptList(scriptAtom.superscript.list, fontProfile, "script", false, baseAtPt, alphabet)
+    : null;
+  const sub = scriptAtom.subscript
+    ? layoutScriptList(scriptAtom.subscript.list, fontProfile, "script", true, baseAtPt, alphabet)
+    : null;
+  if ((scriptAtom.superscript && !sup) || (scriptAtom.subscript && !sub)) {
+    return null;
+  }
+
+  const baseShifts = initialScriptShifts(phantomBase, "display", fontProfile, baseAtPt);
+  const items: TexMathHListItem[] = [];
+  let width = 0;
+  let height = phantomBase.height;
+  let depth = phantomBase.depth;
+  if (sup && !sub) {
+    const shiftUp = superscriptShiftUp(sup, baseShifts.shiftUp, "display", false, fontProfile, baseAtPt);
+    const child = childHList("superscript", 0, -shiftUp, sup, scriptAtom.superscript?.sourceSpan ?? list.sourceSpan);
+    items.push(child);
+    width = Math.max(width, child.width);
+    height = Math.max(height, -child.y + child.height);
+    depth = Math.max(depth, child.y + child.depth);
+  } else if (sub && !sup) {
+    const shiftDown = subscriptShiftDown(sub, baseShifts.shiftDown, false, "display", fontProfile, baseAtPt);
+    const child = childHList("subscript", 0, shiftDown, sub, scriptAtom.subscript?.sourceSpan ?? list.sourceSpan);
+    items.push(child);
+    width = Math.max(width, child.width);
+    height = Math.max(height, -child.y + child.height);
+    depth = Math.max(depth, child.y + child.depth);
+  } else if (sup && sub) {
+    const shifts = combinedScriptShifts(sup, sub, baseShifts, "display", false, fontProfile, baseAtPt);
+    const supChild = childHList("superscript", 0, -shifts.shiftUp, sup, scriptAtom.superscript?.sourceSpan ?? list.sourceSpan);
+    const subChild = childHList("subscript", 0, shifts.shiftDown, sub, scriptAtom.subscript?.sourceSpan ?? list.sourceSpan);
+    items.push(supChild, subChild);
+    width = Math.max(width, supChild.width, subChild.width);
+    height = Math.max(height, -supChild.y + supChild.height, -subChild.y + subChild.height);
+    depth = Math.max(depth, supChild.y + supChild.depth, subChild.y + subChild.depth);
+  }
+
+  return {
+    kind: "math-hlist",
+    style: "display",
+    width: roundTexPt(width),
+    height: roundTexPt(height),
+    depth: roundTexPt(Math.max(0, depth)),
+    sourceSpan: list.sourceSpan,
+    items,
+  };
+}
+
+function mathOperatorThinSpace(
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): number {
+  return muToPt(fontProfile, "display", baseAtPt, 3);
+}
+
+function sidesetBaseWithPostscript(
+  base: TexMathList,
+  postscript: TexMathList
+): TexMathList {
+  const baseItems = [...base.items];
+  const postItems = [...postscript.items];
+  const baseAtom = baseItems.at(-1);
+  if (baseAtom?.kind !== "atom" || postItems.length === 0) {
+    return {
+      kind: "math-list",
+      items: [...baseItems, ...postItems],
+      sourceSpan: spanUnion(base.sourceSpan, postscript.sourceSpan),
+    };
+  }
+
+  const firstPost = postItems[0];
+  let merged = baseAtom;
+  let consumed = 0;
+  if (
+    firstPost?.kind === "atom" &&
+    firstPost.nucleus.kind === "glyph" &&
+    firstPost.nucleus.text === "\\prime"
+  ) {
+    const primes: TexMathAtom[] = [];
+    let primeSpan = firstPost.sourceSpan;
+    for (const item of postItems) {
+      if (
+        item.kind !== "atom" ||
+        item.subscript ||
+        item.superscript ||
+        item.nucleus.kind !== "glyph" ||
+        item.nucleus.text !== "\\prime"
+      ) {
+        break;
+      }
+      primes.push(item);
+      primeSpan = spanUnion(primeSpan, item.sourceSpan);
+      consumed += 1;
+    }
+    merged = {
+      ...baseAtom,
+      limits: "nolimits",
+      superscript: {
+        list: {
+          kind: "math-list",
+          items: primes,
+          sourceSpan: primeSpan,
+        },
+        sourceSpan: primeSpan,
+      },
+      sourceSpan: spanUnion(baseAtom.sourceSpan, primeSpan),
+    };
+  } else if (
+    firstPost?.kind === "atom" &&
+    firstPost.nucleus.kind === "list" &&
+    firstPost.nucleus.list.items.length === 0 &&
+    (firstPost.subscript || firstPost.superscript)
+  ) {
+    merged = {
+      ...baseAtom,
+      limits: "nolimits",
+      ...(firstPost.subscript ? { subscript: firstPost.subscript } : {}),
+      ...(firstPost.superscript ? { superscript: firstPost.superscript } : {}),
+      sourceSpan: spanUnion(baseAtom.sourceSpan, firstPost.sourceSpan),
+    };
+    consumed = 1;
+  }
+
+  return {
+    kind: "math-list",
+    items: [...baseItems.slice(0, -1), merged, ...postItems.slice(consumed)],
+    sourceSpan: spanUnion(base.sourceSpan, postscript.sourceSpan),
+  };
 }
 
 function substackRowBaselineOffsets(
@@ -5069,6 +5304,16 @@ function offsetMathLayoutItem(item: TexMathHListItem, x: number): TexMathHListIt
   return {
     ...item,
     x: roundTexPt(item.x + x),
+  };
+}
+
+function spanUnion(
+  left: TexMathSourceSpan,
+  right: TexMathSourceSpan
+): TexMathSourceSpan {
+  return {
+    start: Math.min(left.start, right.start),
+    end: Math.max(left.end, right.end),
   };
 }
 

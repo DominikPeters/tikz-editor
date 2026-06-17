@@ -1232,6 +1232,50 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out AMS sideset as a scriptable operator hlist", () => {
+    const simple = layout(String.raw`\sideset{a}{b}X`);
+
+    expect(simple.supported).toBe(true);
+    expect(simple.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "sideset-pre",
+        x: expect.closeTo(1.666672, 6),
+        items: [{ kind: "glyph", fontId: "cmmi10", code: 97 }],
+      },
+      {
+        kind: "hlist",
+        role: "sideset-base",
+        items: [
+          { kind: "glyph", fontId: "cmmi10", code: 88 },
+          { kind: "kern", reason: "italic-correction" },
+          { kind: "glyph", fontId: "cmmi10", code: 98 },
+        ],
+      },
+    ]);
+
+    const limitedParsed = parseTexMath(String.raw`\sideset{}{'}\sum_{n=0}^{k}n`);
+    expect(limitedParsed.diagnostics).toEqual([]);
+    const limited = layoutTexMathList(limitedParsed.list, { style: "display" });
+    expect(limited.supported).toBe(true);
+    expect(limited.hlist?.items.map((item) => item.kind === "hlist" ? item.role : item.kind)).toEqual([
+      "limit-superscript",
+      "sideset-base",
+      "limit-subscript",
+      "glue",
+      "glyph",
+    ]);
+    const base = limited.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(base).toMatchObject({
+      kind: "hlist",
+      role: "sideset-base",
+    });
+    expect(flattenGlyphItems(base?.items ?? []).map((item) => item.text)).toEqual([
+      String.raw`\sum`,
+      String.raw`\prime`,
+    ]);
+  });
+
   it("spaces fractions as TeX fraction noads rather than inner noads", () => {
     const leadingPlus = layout(String.raw`+\frac{x}{m}`);
     expect(leadingPlus.supported).toBe(true);

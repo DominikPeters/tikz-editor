@@ -258,6 +258,14 @@ function normalizeNucleus(nucleus: TexMathNucleus): TexMathNucleus {
       })),
     };
   }
+  if (nucleus.kind === "sideset") {
+    return {
+      ...nucleus,
+      prescript: normalizeTexMathAtomClasses(nucleus.prescript),
+      postscript: normalizeTexMathAtomClasses(nucleus.postscript),
+      base: normalizeTexMathAtomClasses(nucleus.base),
+    };
+  }
   if (nucleus.kind === "array") {
     return {
       ...nucleus,

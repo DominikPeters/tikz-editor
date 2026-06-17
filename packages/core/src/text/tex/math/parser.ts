@@ -429,6 +429,9 @@ class TexMathParser {
       if (commandName(token.text) === "substack") {
         return this.parseSubstack(allowScripts);
       }
+      if (commandName(token.text) === "sideset") {
+        return this.parseSideset(allowScripts);
+      }
       const alphabet = alphabetCommandName(token.text);
       if (alphabet) {
         return this.parseAlphabet(alphabet, allowScripts);
@@ -495,6 +498,18 @@ class TexMathParser {
     }
     if (token.kind === "character") {
       this.advance();
+      if (token.text === "'") {
+        return this.maybeParseScripts({
+          kind: "atom",
+          atomClass: "ord",
+          nucleus: {
+            kind: "glyph",
+            text: "\\prime",
+            sourceSpan: token.sourceSpan,
+          },
+          sourceSpan: token.sourceSpan,
+        }, allowScripts);
+      }
       return this.maybeParseScripts({
         kind: "atom",
         atomClass: atomClassForCharacter(token.text),
@@ -523,6 +538,31 @@ class TexMathParser {
         list,
         sourceSpan,
       },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseSideset(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const prescript = this.parseRequiredSidesetSideGroup(command.sourceSpan, `${command.text} left side`);
+    const postscript = this.parseRequiredSidesetSideGroup(command.sourceSpan, `${command.text} right side`);
+    const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`);
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      base?.sourceSpan ?? postscript?.sourceSpan ?? prescript?.sourceSpan ?? command.sourceSpan
+    );
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "sideset",
+        prescript: prescript?.list ?? emptyList(command.sourceSpan.end),
+        postscript: postscript?.list ?? emptyList(command.sourceSpan.end),
+        base: base?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      limits: "display",
       sourceSpan,
     }, allowScripts);
   }
@@ -3441,6 +3481,47 @@ class TexMathParser {
     };
   }
 
+  private parseRequiredSidesetSideGroup(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "group-open") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        `Expected a braced ${label}.`,
+        next?.sourceSpan ?? fallbackSpan
+      );
+      return null;
+    }
+    const open = this.expectGroupOpen();
+    const items: TexMathItem[] = [];
+    const first = this.peekSignificantToken();
+    if (first?.kind === "subscript" || first?.kind === "superscript") {
+      const emptyBase: TexMathAtom = {
+        kind: "atom",
+        atomClass: "ord",
+        nucleus: {
+          kind: "list",
+          list: emptyList(first.sourceSpan.start),
+          sourceSpan: { start: first.sourceSpan.start, end: first.sourceSpan.start },
+        },
+        sourceSpan: { start: first.sourceSpan.start, end: first.sourceSpan.start },
+      };
+      items.push(this.parseScripts(emptyBase));
+    }
+    const list = this.parseList({ stopAtGroupClose: true });
+    items.push(...list.items);
+    const close = this.consumeGroupClose(open.sourceSpan);
+    const sourceSpan = spanUnion(open.sourceSpan, close?.sourceSpan ?? list.sourceSpan);
+    return {
+      list: listFromItems(items, { start: open.sourceSpan.end, end: open.sourceSpan.end }),
+      sourceSpan,
+    };
+  }
+
   private parseRequiredRawGroup(
     fallbackSpan: TexMathSourceSpan,
     label: string
@@ -3563,8 +3644,35 @@ class TexMathParser {
     let sourceSpan = atom.sourceSpan;
     while (true) {
       const token = this.peek();
-      if (!token || (token.kind !== "subscript" && token.kind !== "superscript")) {
+      if (!token || (token.kind !== "subscript" && token.kind !== "superscript" && !(token.kind === "character" && token.text === "'"))) {
         break;
+      }
+      if (token.kind === "character" && token.text === "'") {
+        const primes: TexMathAtom[] = [];
+        let primeSourceSpan = token.sourceSpan;
+        while (this.peek()?.kind === "character" && this.peek()?.text === "'") {
+          const prime = this.advance();
+          primeSourceSpan = spanUnion(primeSourceSpan, prime.sourceSpan);
+          primes.push({
+            kind: "atom",
+            atomClass: "ord",
+            nucleus: {
+              kind: "glyph",
+              text: "\\prime",
+              sourceSpan: prime.sourceSpan,
+            },
+            sourceSpan: prime.sourceSpan,
+          });
+        }
+        if (superscript) {
+          this.addDiagnostic("error", "duplicate-script", "Duplicate math superscript.", token.sourceSpan);
+        }
+        superscript = {
+          list: listFromItems(primes, primeSourceSpan),
+          sourceSpan: primeSourceSpan,
+        };
+        sourceSpan = spanUnion(sourceSpan, primeSourceSpan);
+        continue;
       }
       this.advance();
       const script = this.parseScriptArgument(token.sourceSpan);

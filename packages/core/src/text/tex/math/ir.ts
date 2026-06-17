@@ -88,6 +88,7 @@ export type TexMathNucleus =
   | TexMathAlignedNucleus
   | TexMathSubstackNucleus
   | TexMathSubarrayNucleus
+  | TexMathSidesetNucleus
   | TexMathArrayNucleus
   | TexMathCasesNucleus
   | TexMathSmallMatrixNucleus
@@ -356,6 +357,15 @@ export interface TexMathSubarrayNucleus {
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSidesetNucleus {
+  readonly kind: "sideset";
+  readonly prescript: TexMathList;
+  readonly postscript: TexMathList;
+  readonly base: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
