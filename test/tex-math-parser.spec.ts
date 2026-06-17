@@ -2074,6 +2074,27 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses Mathtools starred matrix alignment options", () => {
+    const source = String.raw`\begin{pmatrix*}[r]a&bb\\ccc&d\end{pmatrix*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      nucleus: {
+        kind: "matrix",
+        environment: "pmatrix",
+        columnAlignment: "right",
+        beginSourceSpan: { start: 0, end: 6 },
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{pmatrix*}`),
+          end: source.length,
+        },
+      },
+    });
+  });
+
   it("parses array environments with conservative l/c/r column preambles", () => {
     const source = String.raw`\begin{array}{lr}a&b\\c&d\end{array}`;
     const result = parseTexMath(source, { sourceOffset: 3 });
@@ -2299,6 +2320,27 @@ describe("TeX math parser", () => {
         { sourceSpan: { start: 26, end: 27 }, itemCount: 1 },
       ],
     ]);
+  });
+
+  it("parses Mathtools fenced smallmatrix environments", () => {
+    const source = String.raw`\begin{bsmallmatrix*}[l]a&bb\\ccc&d\end{bsmallmatrix*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      nucleus: {
+        kind: "smallmatrix",
+        environment: "bsmallmatrix",
+        columnAlignment: "left",
+        beginSourceSpan: { start: 0, end: 6 },
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{bsmallmatrix*}`),
+          end: source.length,
+        },
+      },
+    });
   });
 
   it("reports missing matrix environment ends without throwing", () => {

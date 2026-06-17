@@ -390,11 +390,21 @@ export interface TexMathCasesNucleus {
 
 export interface TexMathSmallMatrixNucleus {
   readonly kind: "smallmatrix";
+  readonly environment?: TexMathSmallMatrixEnvironment;
   readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignment?: TexMathArrayColumnAlignment;
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
+
+export type TexMathSmallMatrixEnvironment =
+  | "smallmatrix"
+  | "psmallmatrix"
+  | "bsmallmatrix"
+  | "Bsmallmatrix"
+  | "vsmallmatrix"
+  | "Vsmallmatrix";
 
 export type TexMathMatrixEnvironment =
   | "matrix"
@@ -408,6 +418,7 @@ export interface TexMathMatrixNucleus {
   readonly kind: "matrix";
   readonly environment: TexMathMatrixEnvironment;
   readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignment?: TexMathArrayColumnAlignment;
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;

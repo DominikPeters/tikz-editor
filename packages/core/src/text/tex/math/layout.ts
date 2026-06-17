@@ -35,6 +35,7 @@ import type {
   TexMathOperatorLimits,
   TexMathOperatorNameNucleus,
   TexMathSmallMatrixNucleus,
+  TexMathSmallMatrixEnvironment,
   TexMathSourceSpan,
   TexMathStyle,
   TexMathSizedDelimiterNucleus,
@@ -1824,6 +1825,30 @@ function layoutSmallMatrixNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
+  const body = layoutSmallMatrixBody(nucleus, fontProfile, style, baseAtPt, alphabet);
+  if (!body) {
+    return null;
+  }
+  if ((nucleus.environment ?? "smallmatrix") === "smallmatrix") {
+    return body;
+  }
+  return wrapMatrixWithDelimiters(
+    body,
+    smallMatrixDelimiterEnvironment(nucleus.environment ?? "smallmatrix"),
+    fontProfile,
+    style,
+    baseAtPt,
+    nucleus
+  );
+}
+
+function layoutSmallMatrixBody(
+  nucleus: TexMathSmallMatrixNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
     layoutSmallMatrixRow(row, fontProfile, baseAtPt, alphabet)
   );
@@ -1885,7 +1910,7 @@ function layoutSmallMatrixNucleus(
       if (cell) {
         rowChildren.push(childHList(
           "smallmatrix-cell",
-          roundTexPt(cursor - outerGap + (columnWidth - cell.hlist.width) / 2),
+          roundTexPt(cursor - outerGap + matrixCellOffset(nucleus.columnAlignment ?? "center", columnWidth, cell.hlist.width)),
           0,
           cell.hlist,
           cell.sourceSpan
@@ -1987,7 +2012,7 @@ function layoutMatrixBody(
       if (cell) {
         rowChildren.push(childHList(
           "matrix-cell",
-          roundTexPt(cursor + (columnWidth - cell.hlist.width) / 2),
+          roundTexPt(cursor + matrixCellOffset(nucleus.columnAlignment ?? "center", columnWidth, cell.hlist.width)),
           0,
           cell.hlist,
           cell.sourceSpan
@@ -2021,6 +2046,21 @@ function layoutMatrixBody(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function matrixCellOffset(
+  alignment: TexMathArrayColumnAlignment,
+  columnWidth: number,
+  cellWidth: number
+): number {
+  switch (alignment) {
+    case "left":
+      return 0;
+    case "right":
+      return columnWidth - cellWidth;
+    case "center":
+      return (columnWidth - cellWidth) / 2;
+  }
 }
 
 function layoutSmallMatrixRow(
@@ -2129,7 +2169,7 @@ function wrapMatrixWithDelimiters(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: number,
-  nucleus: TexMathMatrixNucleus
+  nucleus: Pick<TexMathMatrixNucleus | TexMathSmallMatrixNucleus, "beginSourceSpan" | "endSourceSpan" | "sourceSpan">
 ): TexMathAtomLayout | null {
   const delimiters = matrixDelimiters(environment);
   if (!delimiters) {
@@ -2197,6 +2237,23 @@ function wrapMatrixWithDelimiters(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function smallMatrixDelimiterEnvironment(environment: TexMathSmallMatrixEnvironment): TexMathMatrixEnvironment {
+  switch (environment) {
+    case "psmallmatrix":
+      return "pmatrix";
+    case "bsmallmatrix":
+      return "bmatrix";
+    case "Bsmallmatrix":
+      return "Bmatrix";
+    case "vsmallmatrix":
+      return "vmatrix";
+    case "Vsmallmatrix":
+      return "Vmatrix";
+    case "smallmatrix":
+      return "matrix";
+  }
 }
 
 function wrapCasesWithDelimiters(

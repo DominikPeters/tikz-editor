@@ -25,6 +25,7 @@ import type {
   TexMathOperatorNamePart,
   TexMathParseResult,
   TexMathScript,
+  TexMathSmallMatrixEnvironment,
   TexMathSourceSpan,
   TexMathStyle,
   TexMathTextPart,
@@ -1470,11 +1471,12 @@ class TexMathParser {
     if (environmentName?.name === "cases") {
       return this.parseCasesEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
-    if (environmentName?.name === "smallmatrix") {
-      return this.parseSmallMatrixEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
-    }
     if (environmentName?.name === "subarray") {
       return this.parseSubarrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
+    const smallMatrixEnvironment = smallMatrixEnvironmentName(environmentName?.name);
+    if (environmentName && smallMatrixEnvironment) {
+      return this.parseSmallMatrixEnvironment(beginCommand.sourceSpan, environmentName, smallMatrixEnvironment, allowScripts);
     }
     const matrixEnvironment = matrixEnvironmentName(environmentName?.name);
     if (environmentName && matrixEnvironment) {
@@ -1615,11 +1617,15 @@ class TexMathParser {
     environment: TexMathMatrixEnvironment,
     allowScripts: boolean
   ): TexMathAtom {
+    const alignment = environmentName.name.endsWith("*")
+      ? this.consumeOptionalMatrixColumnAlignment() ?? { alignment: "center" as const, sourceSpan: environmentName.sourceSpan }
+      : { alignment: "center" as const, sourceSpan: environmentName.sourceSpan };
     return this.parseMatrixBody({
       beginSourceSpan,
-      initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
-      stopAtEnvironmentEnd: environment,
+      initialSourceSpan: spanUnion(spanUnion(beginSourceSpan, environmentName.sourceSpan), alignment.sourceSpan),
+      stopAtEnvironmentEnd: environmentName.name,
       environment,
+      columnAlignment: alignment.alignment,
       allowScripts,
     });
   }
@@ -1674,11 +1680,18 @@ class TexMathParser {
   private parseSmallMatrixEnvironment(
     beginSourceSpan: TexMathSourceSpan,
     environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    environment: TexMathSmallMatrixEnvironment,
     allowScripts: boolean
   ): TexMathAtom {
+    const alignment = environmentName.name.endsWith("*")
+      ? this.consumeOptionalMatrixColumnAlignment() ?? { alignment: "center" as const, sourceSpan: environmentName.sourceSpan }
+      : { alignment: "center" as const, sourceSpan: environmentName.sourceSpan };
     return this.parseSmallMatrixBody({
       beginSourceSpan,
-      initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      initialSourceSpan: spanUnion(spanUnion(beginSourceSpan, environmentName.sourceSpan), alignment.sourceSpan),
+      stopAtEnvironmentEnd: environmentName.name,
+      environment,
+      columnAlignment: alignment.alignment,
       allowScripts,
     });
   }
@@ -2300,8 +2313,9 @@ class TexMathParser {
   private parseMatrixBody(params: {
     readonly beginSourceSpan: TexMathSourceSpan;
     readonly initialSourceSpan: TexMathSourceSpan;
-    readonly stopAtEnvironmentEnd: TexMathMatrixEnvironment;
+    readonly stopAtEnvironmentEnd: string;
     readonly environment: TexMathMatrixEnvironment;
+    readonly columnAlignment: TexMathArrayColumnAlignment;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -2313,7 +2327,7 @@ class TexMathParser {
         endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          matrixAtom(params.environment, rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          matrixAtom(params.environment, rows, params.columnAlignment, params.beginSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2365,7 +2379,7 @@ class TexMathParser {
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
         return this.maybeParseScripts(
-          matrixAtom(params.environment, rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          matrixAtom(params.environment, rows, params.columnAlignment, params.beginSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2384,7 +2398,7 @@ class TexMathParser {
       params.beginSourceSpan
     );
     return this.maybeParseScripts(
-      matrixAtom(params.environment, rows, params.beginSourceSpan, undefined, sourceSpan),
+      matrixAtom(params.environment, rows, params.columnAlignment, params.beginSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
   }
@@ -2587,6 +2601,9 @@ class TexMathParser {
   private parseSmallMatrixBody(params: {
     readonly beginSourceSpan: TexMathSourceSpan;
     readonly initialSourceSpan: TexMathSourceSpan;
+    readonly stopAtEnvironmentEnd: string;
+    readonly environment: TexMathSmallMatrixEnvironment;
+    readonly columnAlignment: TexMathArrayColumnAlignment;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -2594,11 +2611,11 @@ class TexMathParser {
     let sourceSpan = params.initialSourceSpan;
 
     while (!this.isAtEnd()) {
-      if (this.isEnvironmentEnd("smallmatrix")) {
-        endSourceSpan = this.consumeEnvironmentEnd("smallmatrix");
+      if (this.isEnvironmentEnd(params.stopAtEnvironmentEnd)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          smallMatrixAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          smallMatrixAtom(params.environment, rows, params.columnAlignment, params.beginSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2610,7 +2627,7 @@ class TexMathParser {
           stopAtGroupClose: false,
           stopAtAlignmentTab: true,
           stopAtRowBreak: true,
-          stopAtEnvironmentEnd: "smallmatrix",
+          stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
         });
         cells.push({
           list: cellList,
@@ -2642,15 +2659,15 @@ class TexMathParser {
         });
         continue;
       }
-      if (this.isEnvironmentEnd("smallmatrix")) {
-        endSourceSpan = this.consumeEnvironmentEnd("smallmatrix");
+      if (this.isEnvironmentEnd(params.stopAtEnvironmentEnd)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.stopAtEnvironmentEnd);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         rows.push({
           cells,
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
         return this.maybeParseScripts(
-          smallMatrixAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          smallMatrixAtom(params.environment, rows, params.columnAlignment, params.beginSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2665,11 +2682,11 @@ class TexMathParser {
     this.addDiagnostic(
       "error",
       "missing-environment-end",
-      "Expected \\end{smallmatrix} to close math environment.",
+      `Expected \\end{${params.stopAtEnvironmentEnd}} to close math environment.`,
       params.beginSourceSpan
     );
     return this.maybeParseScripts(
-      smallMatrixAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
+      smallMatrixAtom(params.environment, rows, params.columnAlignment, params.beginSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
   }
@@ -2887,6 +2904,52 @@ class TexMathParser {
     const trimmed = value.trim();
     return {
       alignment: trimmed === "l" ? "left" : trimmed === "r" ? "right" : "center",
+      sourceSpan,
+    };
+  }
+
+  private consumeOptionalMatrixColumnAlignment(): {
+    readonly alignment: TexMathArrayColumnAlignment;
+    readonly sourceSpan: TexMathSourceSpan;
+  } | null {
+    this.skipSpaces();
+    const open = this.peek();
+    if (open?.kind !== "character" || open.text !== "[") {
+      return null;
+    }
+    this.advance();
+    let sourceSpan = open.sourceSpan;
+    let value = "";
+    while (!this.isAtEnd()) {
+      const token = this.advance();
+      sourceSpan = spanUnion(sourceSpan, token.sourceSpan);
+      if (token.kind === "character" && token.text === "]") {
+        break;
+      }
+      value += token.text;
+    }
+    const trimmed = value.trim();
+    const alignment = trimmed === "l"
+      ? "left"
+      : trimmed === "c"
+        ? "center"
+        : trimmed === "r"
+          ? "right"
+          : null;
+    if (!alignment) {
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported matrix column alignment ${trimmed || "[]"}.`,
+        sourceSpan
+      );
+      return {
+        alignment: "center",
+        sourceSpan,
+      };
+    }
+    return {
+      alignment,
       sourceSpan,
     };
   }
@@ -3735,6 +3798,7 @@ function alignedAtom(
 function matrixAtom(
   environment: TexMathMatrixEnvironment,
   rows: readonly TexMathAlignedRow[],
+  columnAlignment: TexMathArrayColumnAlignment,
   beginSourceSpan: TexMathSourceSpan,
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan
@@ -3746,6 +3810,7 @@ function matrixAtom(
       kind: "matrix",
       environment,
       rows,
+      ...(columnAlignment !== "center" ? { columnAlignment } : {}),
       beginSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),
       sourceSpan,
@@ -3801,17 +3866,21 @@ function casesAtom(
 }
 
 function smallMatrixAtom(
+  environment: TexMathSmallMatrixEnvironment,
   rows: readonly TexMathAlignedRow[],
+  columnAlignment: TexMathArrayColumnAlignment,
   beginSourceSpan: TexMathSourceSpan,
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan
 ): TexMathAtom {
   return {
     kind: "atom",
-    atomClass: "ord",
+    atomClass: environment === "smallmatrix" ? "ord" : "inner",
     nucleus: {
       kind: "smallmatrix",
+      environment,
       rows,
+      ...(columnAlignment !== "center" ? { columnAlignment } : {}),
       beginSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),
       sourceSpan,
@@ -3982,14 +4051,33 @@ function matrixEnvironmentName(name: string | undefined): TexMathMatrixEnvironme
   if (!name) {
     return null;
   }
-  switch (name) {
+  const baseName = name.endsWith("*") ? name.slice(0, -1) : name;
+  switch (baseName) {
     case "matrix":
     case "pmatrix":
     case "bmatrix":
     case "Bmatrix":
     case "vmatrix":
     case "Vmatrix":
-      return name;
+      return baseName;
+    default:
+      return null;
+  }
+}
+
+function smallMatrixEnvironmentName(name: string | undefined): TexMathSmallMatrixEnvironment | null {
+  if (!name) {
+    return null;
+  }
+  const baseName = name.endsWith("*") ? name.slice(0, -1) : name;
+  switch (baseName) {
+    case "smallmatrix":
+    case "psmallmatrix":
+    case "bsmallmatrix":
+    case "Bsmallmatrix":
+    case "vsmallmatrix":
+    case "Vsmallmatrix":
+      return baseName;
     default:
       return null;
   }

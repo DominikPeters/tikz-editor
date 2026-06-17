@@ -2035,6 +2035,27 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out Mathtools starred matrix column alignment options", () => {
+    const left = layoutTexMathList(
+      parseTexMath(String.raw`\begin{matrix*}[l]a&bb\\ccc&d\end{matrix*}`).list,
+      { style: "display" }
+    );
+    const right = layoutTexMathList(
+      parseTexMath(String.raw`\begin{matrix*}[r]a&bb\\ccc&d\end{matrix*}`).list,
+      { style: "display" }
+    );
+
+    expect(left.supported).toBe(true);
+    expect(right.supported).toBe(true);
+    const leftFirstRow = left.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const rightFirstRow = right.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const leftFirstCell = leftFirstRow?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const rightFirstCell = rightFirstRow?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(leftFirstCell?.x).toBe(0);
+    expect(rightFirstCell?.x ?? 0).toBeGreaterThan(0);
+    expect(left.hlist?.width).toBeCloseTo(right.hlist?.width ?? 0, 6);
+  });
+
   it("lays out array environments with TeX arraycolsep and l/c/r preamble alignment", () => {
     const centered = layoutTexMathList(
       parseTexMath(String.raw`\begin{array}{cc}a&b\\c&d\end{array}`).list,
@@ -2243,6 +2264,24 @@ describe("TeX math hlist layout", () => {
       "cmmi7/7/120",
       "cmmi7/7/121",
     ]);
+  });
+
+  it("lays out Mathtools fenced smallmatrix variants with alignment options", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{bsmallmatrix*}[l]a&bb\\ccc&d\end{bsmallmatrix*}`).list
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.some((item) => item.kind === "hlist" && item.role === "nucleus")).toBe(true);
+    const body = result.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "nucleus"
+    ) as TexMathChildHListLayoutItem | undefined;
+    const firstRow = body?.items[1] as TexMathChildHListLayoutItem | undefined;
+    const firstCell = firstRow?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(firstCell?.x).toBe(0);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.some((glyph) => glyph.fontId === "cmex10" && glyph.code === 2)).toBe(true);
+    expect(glyphs.some((glyph) => glyph.fontId === "cmex10" && glyph.code === 3)).toBe(true);
   });
 
   it("uses amsmath cmex script sizing inside matrix cells", () => {
