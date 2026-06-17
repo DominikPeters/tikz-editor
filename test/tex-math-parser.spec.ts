@@ -679,6 +679,23 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses mbox commands through the text-in-math nucleus", () => {
+    const result = parseTexMath(String.raw`\mbox{if}`);
+    const text = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(text).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 9 },
+      nucleus: {
+        kind: "text",
+        text: "if",
+        textSourceSpan: { start: 6, end: 8 },
+        sourceSpan: { start: 0, end: 9 },
+      },
+    });
+  });
+
   it("parses inline math islands inside text commands", () => {
     const source = String.raw`\text{if $Ax \ge b$,}`;
     const result = parseTexMath(source);
@@ -2077,6 +2094,62 @@ describe("TeX math parser", () => {
         { sourceSpan: { start: 18, end: 19 }, itemCount: 1 },
         { sourceSpan: { start: 20, end: 21 }, itemCount: 1 },
       ],
+    ]);
+  });
+
+  it("parses plain-TeX cases macros into source-spanned rows", () => {
+    const source = String.raw`\cases{a&b\\c&d}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "cases",
+        beginSourceSpan: { start: 0, end: 6 },
+      },
+    });
+    if (atom.nucleus.kind !== "cases") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) =>
+      row.cells.map((cell) => ({
+        sourceSpan: cell.sourceSpan,
+        itemCount: cell.list.items.length,
+      }))
+    )).toEqual([
+      [
+        { sourceSpan: { start: 7, end: 8 }, itemCount: 1 },
+        { sourceSpan: { start: 9, end: 10 }, itemCount: 1 },
+      ],
+      [
+        { sourceSpan: { start: 12, end: 13 }, itemCount: 1 },
+        { sourceSpan: { start: 14, end: 15 }, itemCount: 1 },
+      ],
+    ]);
+  });
+
+  it("reports extra alignment tabs in cases rows", () => {
+    const macro = parseTexMath(String.raw`\cases{b & l & k}`);
+    expect(macro.diagnostics).toEqual([
+      {
+        severity: "error",
+        code: "extra-alignment-tab",
+        message: String.raw`Extra alignment tab in \cases text.`,
+        sourceSpan: { start: 13, end: 14 },
+      },
+    ]);
+
+    const environment = parseTexMath(String.raw`\begin{cases}b & l & k\end{cases}`);
+    expect(environment.diagnostics).toEqual([
+      {
+        severity: "error",
+        code: "extra-alignment-tab",
+        message: String.raw`Extra alignment tab in \cases text.`,
+        sourceSpan: { start: 19, end: 20 },
+      },
     ]);
   });
 

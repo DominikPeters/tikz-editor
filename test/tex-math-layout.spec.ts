@@ -552,6 +552,23 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out mbox command nuclei through the same text-in-math path", () => {
+    const result = layout(String.raw`x+\mbox{if}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+      sourceSpan: glyph.sourceSpan,
+    }))).toEqual([
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 0, end: 1 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 1, end: 2 } },
+      { fontId: "lmroman10-regular", code: 105, sourceSpan: { start: 8, end: 9 } },
+      { fontId: "lmroman10-regular", code: 102, sourceSpan: { start: 9, end: 10 } },
+    ]);
+  });
+
   it("scales text command nuclei in script style", () => {
     const result = layout(String.raw`x_{\text{if}}`);
 
@@ -2031,6 +2048,20 @@ describe("TeX math hlist layout", () => {
       { kind: "hlist", role: "cases-cell", x: 0, width: expect.closeTo(13.333386, 5) },
       { kind: "hlist", role: "cases-cell", x: expect.closeTo(23.333386, 5) },
     ]);
+  });
+
+  it("lays out plain-TeX cases macros through the cases layout", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\cases{a&b\\x&y}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(30.23249, 5);
+    expect(result.hlist?.height).toBeCloseTo(17.50015, 5);
+    expect(result.hlist?.depth).toBeCloseTo(12.50015, 5);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.code}`)).toContain("cmex10/40");
   });
 
   it("lays out smallmatrix with scriptstyle cells, thin outer skips, and TeX row spacing", () => {

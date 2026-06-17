@@ -378,8 +378,11 @@ class TexMathParser {
       if (lineCommand) {
         return this.parseLine(lineCommand, allowScripts);
       }
-      if (commandName(token.text) === "text") {
+      if (commandName(token.text) === "text" || commandName(token.text) === "mbox") {
         return this.parseText(allowScripts);
+      }
+      if (commandName(token.text) === "cases") {
+        return this.parseCasesMacro(allowScripts);
       }
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
@@ -667,7 +670,8 @@ class TexMathParser {
 
   private parseText(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
-    const content = this.parseRequiredTextGroup(command.sourceSpan, "\\text content");
+    const name = commandName(command.text);
+    const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} content`);
     const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
     if (!content || content.unsupported) {
       return this.maybeParseScripts({
@@ -675,7 +679,7 @@ class TexMathParser {
         atomClass: "ord",
         nucleus: {
           kind: "unsupported",
-          command: "\\text",
+          command: `\\${name}`,
           sourceSpan,
         },
         sourceSpan,
@@ -693,6 +697,121 @@ class TexMathParser {
       },
       sourceSpan,
     }, allowScripts);
+  }
+
+  private parseCasesMacro(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "group-open") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        "Expected a braced \\cases body.",
+        next?.sourceSpan ?? command.sourceSpan
+      );
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "inner",
+        nucleus: {
+          kind: "unsupported",
+          command: "\\cases",
+          sourceSpan: command.sourceSpan,
+        },
+        sourceSpan: command.sourceSpan,
+      }, allowScripts);
+    }
+
+    const open = this.expectGroupOpen();
+    const rows: TexMathAlignedRow[] = [];
+    let sourceSpan = spanUnion(command.sourceSpan, open.sourceSpan);
+
+    while (!this.isAtEnd()) {
+      const end = this.peek();
+      if (end?.kind === "group-close") {
+        const close = this.advance();
+        sourceSpan = spanUnion(sourceSpan, close.sourceSpan);
+        return this.maybeParseScripts(
+          casesAtom(rows, command.sourceSpan, undefined, sourceSpan),
+          allowScripts
+        );
+      }
+
+      const cells: TexMathAlignedCell[] = [];
+      let pendingRowSourceSpan: TexMathSourceSpan | undefined;
+      let extraAlignmentTabSourceSpan: TexMathSourceSpan | undefined;
+      while (!this.isAtEnd()) {
+        const cellList = this.parseList({
+          stopAtGroupClose: true,
+          stopAtAlignmentTab: true,
+          stopAtRowBreak: true,
+        });
+        cells.push({
+          list: cellList,
+          sourceSpan: cellList.sourceSpan,
+        });
+        sourceSpan = spanUnion(sourceSpan, cellList.sourceSpan);
+        pendingRowSourceSpan = spanUnion(
+          pendingRowSourceSpan ?? cellList.sourceSpan,
+          cellList.sourceSpan
+        );
+
+        const separator = this.peek();
+        if (separator?.kind === "character" && separator.text === "&") {
+          this.advance();
+          sourceSpan = spanUnion(sourceSpan, separator.sourceSpan);
+          if (!extraAlignmentTabSourceSpan && cells.length >= 2) {
+            extraAlignmentTabSourceSpan = separator.sourceSpan;
+          }
+          continue;
+        }
+        break;
+      }
+      if (extraAlignmentTabSourceSpan) {
+        this.addDiagnostic(
+          "error",
+          "extra-alignment-tab",
+          "Extra alignment tab in \\cases text.",
+          extraAlignmentTabSourceSpan
+        );
+      }
+
+      const rowEndToken = this.peek();
+      if (isMathRowBreakToken(rowEndToken)) {
+        const rowBreak = this.advance();
+        sourceSpan = spanUnion(sourceSpan, rowBreak.sourceSpan);
+        rows.push({
+          cells,
+          sourceSpan: spanUnion(cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
+          rowBreakSourceSpan: rowBreak.sourceSpan,
+        });
+        continue;
+      }
+      if (this.peek()?.kind === "group-close") {
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? this.peek()?.sourceSpan ?? sourceSpan,
+        });
+        continue;
+      }
+      if (cells.length > 0) {
+        rows.push({
+          cells,
+          sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
+        });
+      }
+    }
+
+    this.addDiagnostic(
+      "error",
+      "unexpected-group-close",
+      "Expected } to close \\cases body.",
+      open.sourceSpan
+    );
+    return this.maybeParseScripts(
+      casesAtom(rows, command.sourceSpan, undefined, sourceSpan),
+      allowScripts
+    );
   }
 
   private parseSubstack(allowScripts: boolean): TexMathAtom {
@@ -2324,6 +2443,7 @@ class TexMathParser {
 
       const cells: TexMathAlignedCell[] = [];
       let pendingRowSourceSpan: TexMathSourceSpan | undefined;
+      let extraAlignmentTabSourceSpan: TexMathSourceSpan | undefined;
       while (!this.isAtEnd()) {
         const cellList = this.parseList({
           stopAtGroupClose: false,
@@ -2345,9 +2465,20 @@ class TexMathParser {
         if (separator?.kind === "character" && separator.text === "&") {
           this.advance();
           sourceSpan = spanUnion(sourceSpan, separator.sourceSpan);
+          if (!extraAlignmentTabSourceSpan && cells.length >= 2) {
+            extraAlignmentTabSourceSpan = separator.sourceSpan;
+          }
           continue;
         }
         break;
+      }
+      if (extraAlignmentTabSourceSpan) {
+        this.addDiagnostic(
+          "error",
+          "extra-alignment-tab",
+          "Extra alignment tab in \\cases text.",
+          extraAlignmentTabSourceSpan
+        );
       }
 
       const rowEndToken = this.peek();
