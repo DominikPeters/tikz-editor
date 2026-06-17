@@ -50,6 +50,7 @@ import type {
   TexMathSubarrayNucleus,
   TexMathSubstackNucleus,
   TexMathTextNucleus,
+  TexMathVCenterNucleus,
   TexMathVarLimitNucleus,
 } from "./ir.js";
 import {
@@ -143,6 +144,7 @@ export interface TexMathChildHListLayoutItem {
     | "radical-degree"
     | "var-limit-row"
     | "boxed-body"
+    | "vcenter-body"
     | "array-row"
     | "array-cell"
     | "array-insert"
@@ -516,6 +518,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
   if (nucleus.kind === "shift-box") {
     return texMathListNeedsAmsMath(nucleus.body);
   }
+  if (nucleus.kind === "vcenter") {
+    return texMathListNeedsAmsMath(nucleus.body);
+  }
   if (nucleus.kind === "accent") {
     return true;
   }
@@ -870,6 +875,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "shift-box") {
     return layoutShiftBoxNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "vcenter") {
+    return layoutVCenterNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "rule") {
     return layoutRuleNucleus(nucleus);
@@ -3621,6 +3629,61 @@ function layoutShiftBoxNucleus(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function layoutVCenterNucleus(
+  nucleus: TexMathVCenterNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  cramped: boolean,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  if (!isSupportedVCenterHBoxBody(nucleus.body)) {
+    return null;
+  }
+  const body = layoutTexMathList(nucleus.body, {
+    fontProfile,
+    style,
+    cramped,
+    baseAtPt,
+    alphabet,
+  });
+  if (!body.supported) {
+    return null;
+  }
+  const naturalHeight = roundTexPt(body.hlist.height + body.hlist.depth);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const height = roundTexPt(naturalHeight / 2 + axis);
+  const depth = roundTexPt(Math.max(0, naturalHeight - height));
+  const bodyChild = childHList(
+    "vcenter-body",
+    0,
+    roundTexPt(-height + body.hlist.height),
+    body.hlist,
+    nucleus.body.sourceSpan
+  );
+  return {
+    items: [bodyChild],
+    width: body.hlist.width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function isSupportedVCenterHBoxBody(list: TexMathList): boolean {
+  if (list.items.length !== 1) {
+    return false;
+  }
+  const item = list.items[0];
+  return item?.kind === "atom" &&
+    item.subscript === undefined &&
+    item.superscript === undefined &&
+    item.nucleus.kind === "text" &&
+    item.nucleus.command === "hbox";
 }
 
 function layoutRuleNucleus(nucleus: TexMathRuleNucleus): TexMathAtomLayout {

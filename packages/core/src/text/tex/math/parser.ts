@@ -426,6 +426,9 @@ class TexMathParser {
       if (commandName(token.text) === "raise" || commandName(token.text) === "lower") {
         return this.parseShiftBox(commandName(token.text) === "raise" ? "raise" : "lower", allowScripts);
       }
+      if (commandName(token.text) === "vcenter") {
+        return this.parseVCenter(allowScripts);
+      }
       const lineCommand = lineCommandName(token.text);
       if (lineCommand) {
         return this.parseLine(lineCommand, allowScripts);
@@ -1130,6 +1133,23 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private parseVCenter(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const body = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} body`);
+    const sourceSpan = spanUnion(command.sourceSpan, body?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "vcenter",
+        body: body?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
   private parseText(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
     const name = commandName(command.text);
@@ -1152,6 +1172,7 @@ class TexMathParser {
       atomClass: "ord",
       nucleus: {
         kind: "text",
+        ...(name === "hbox" || name === "mbox" || name === "text" ? { command: name } : {}),
         text: content.text,
         parts: content.parts,
         textSourceSpan: content.textSourceSpan,

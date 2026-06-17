@@ -81,6 +81,7 @@ export type TexMathNucleus =
   | TexMathBoxedNucleus
   | TexMathSmashNucleus
   | TexMathShiftBoxNucleus
+  | TexMathVCenterNucleus
   | TexMathRuleNucleus
   | TexMathLineNucleus
   | TexMathVarLimitNucleus
@@ -202,6 +203,13 @@ export interface TexMathShiftBoxNucleus {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathVCenterNucleus {
+  readonly kind: "vcenter";
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathRuleNucleus {
   readonly kind: "rule";
   readonly width: number;
@@ -287,6 +295,7 @@ export type TexMathTextPart =
 
 export interface TexMathTextNucleus {
   readonly kind: "text";
+  readonly command?: "text" | "mbox" | "hbox";
   readonly text: string;
   readonly parts?: readonly TexMathTextPart[];
   readonly textSourceSpan: TexMathSourceSpan;

@@ -1053,6 +1053,30 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses TeX vcenter boxes with hbox bodies", () => {
+    const result = parseTexMath(String.raw`\vcenter{\hbox{$x$}}`);
+
+    expect(result.diagnostics).toEqual([]);
+    const atom = atomAt(result, 0);
+    expect(atom).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 20 },
+      nucleus: {
+        kind: "vcenter",
+        commandSourceSpan: { start: 0, end: 8 },
+        sourceSpan: { start: 0, end: 20 },
+      },
+    });
+    expect(atom.nucleus.kind === "vcenter" ? atom.nucleus.body.items[0] : null).toMatchObject({
+      kind: "atom",
+      nucleus: {
+        kind: "text",
+        command: "hbox",
+        sourceSpan: { start: 9, end: 19 },
+      },
+    });
+  });
+
   it("keeps unsupported commands inside text explicit", () => {
     const result = parseTexMath(String.raw`\text{\emph{x}}`);
     const text = atomAt(result, 0);

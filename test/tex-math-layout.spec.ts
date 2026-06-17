@@ -1123,6 +1123,29 @@ describe("TeX math hlist layout", () => {
     expect(lowered.hlist?.depth).toBeGreaterThan(raised.hlist?.depth ?? 0);
   });
 
+  it("lays out TeX vcenter hboxes around the math axis", () => {
+    const result = layout(String.raw`\vcenter{\hbox{$x$}}`);
+
+    expect(result.supported).toBe(true);
+    const body = result.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(body).toMatchObject({
+      kind: "hlist",
+      role: "vcenter-body",
+      y: expect.closeTo(-0.34723, 5),
+    });
+    expect(result.hlist?.height).toBeCloseTo(4.65277, 5);
+    expect(result.hlist?.depth).toBeCloseTo(0, 5);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])).toMatchObject([
+      { fontId: "cmmi10", code: 120 },
+    ]);
+  });
+
+  it("leaves bare TeX vcenter vertical-mode bodies unsupported", () => {
+    const result = layout(String.raw`\vcenter{x}`);
+
+    expect(result.supported).toBe(false);
+  });
+
   it("lays out amsmath cfrac with display style, numerator alignment, and trailing kern", () => {
     const centered = layout(String.raw`\cfrac{a}{bbb}`);
     const left = layout(String.raw`\cfrac[l]{a}{bbb}`);

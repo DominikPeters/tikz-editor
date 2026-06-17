@@ -349,6 +349,20 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain(' 200)');
   });
 
+  it("renders TeX vcenter hboxes through axis-centered child hlists", () => {
+    const parsed = parseTexMath(String.raw`\vcenter{\hbox{$x$}}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-math-role="vcenter-body"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(body).toContain('translate(0 -34.7225)');
+  });
+
   it("renders text command glyphs through the document text font", () => {
     const parsed = parseTexMath(String.raw`x+\text{if}`);
     const result = layoutTexMathList(parsed.list);
