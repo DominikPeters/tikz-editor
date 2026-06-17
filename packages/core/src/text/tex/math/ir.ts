@@ -328,6 +328,7 @@ export interface TexMathAlignedRowLabel {
   readonly text: string;
   readonly sourceSpan: TexMathSourceSpan;
   readonly textSourceSpan: TexMathSourceSpan;
+  readonly explicit?: boolean;
 }
 
 export interface TexMathAlignedNucleus {

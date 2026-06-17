@@ -80,6 +80,7 @@ export interface TexMathDisplayLabel {
     readonly start: number;
     readonly end: number;
   };
+  readonly explicit?: boolean;
 }
 
 export interface TexMathConstructRange {

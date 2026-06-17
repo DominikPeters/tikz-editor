@@ -136,6 +136,7 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly listContext?: SimpleTexListContext;
+  readonly ignoreAncestorBreakMargins?: boolean;
 }
 
 export interface TexParagraphItem {

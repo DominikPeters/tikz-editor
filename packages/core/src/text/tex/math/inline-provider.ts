@@ -45,6 +45,7 @@ const TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT = 3.600037;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT = 8.4;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT = 1;
 const TEX_DISPLAY_ALIGNMENT_OVERFULL_BODY_TOLERANCE_PT = 1;
+const TEX_DISPLAY_ALIGNMENT_TAGGED_ROW_OVERFULL_TOLERANCE_PT = 10;
 const TEX_MULTLINE_GAP_PT = 10;
 const TEX_MULTLINE_TAG_GAP_PT = 10;
 
@@ -775,10 +776,27 @@ function getDisplayMathAlignment(
   const hasAlignmentTags = alignedRows.some((_, rowIndex) =>
     displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) !== null
   );
+  const hasExplicitAlignmentTags = alignedRows.some((_, rowIndex) =>
+    displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex)?.explicit === true
+  );
   const overfullBodyWidth = displayAlignmentOverfullBodyWidth(
     alignedRows,
     dimensions,
-    (rowIndex) => displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) === null
+    (rowIndex) => {
+      const label = displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex);
+      if (label === null) {
+        return true;
+      }
+      if (hasExplicitAlignmentTags || label.explicit === true) {
+        return false;
+      }
+      const row = alignedRows[rowIndex];
+      const rowRightEdge = row
+        ? mathItemsRightEdge(displayAlignmentRowItems(row.items, dimensions))
+        : dimensions.targetWidth;
+      return rowRightEdge > dimensions.targetWidth +
+        TEX_DISPLAY_ALIGNMENT_TAGGED_ROW_OVERFULL_TOLERANCE_PT;
+    }
   );
   const forcedRowWidth = hasAlignmentTags
     ? overfullBodyWidth

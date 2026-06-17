@@ -1883,6 +1883,7 @@ class TexMathParser {
       readonly text: string;
       readonly sourceSpan: TexMathSourceSpan;
       readonly textSourceSpan: TexMathSourceSpan;
+      readonly explicit?: boolean;
     }[];
     readonly sourceSpan?: TexMathSourceSpan;
   } {
@@ -1891,6 +1892,7 @@ class TexMathParser {
       readonly text: string;
       readonly sourceSpan: TexMathSourceSpan;
       readonly textSourceSpan: TexMathSourceSpan;
+      readonly explicit?: boolean;
     }> = [];
     let sourceSpan: TexMathSourceSpan | undefined;
     while (!this.isAtEnd()) {
@@ -1949,6 +1951,7 @@ class TexMathParser {
           text: content.text,
           sourceSpan: spanUnion(command.sourceSpan, content.sourceSpan),
           textSourceSpan: content.textSourceSpan,
+          explicit: true,
         });
       }
     }

@@ -1749,6 +1749,28 @@ unordered.`;
     expect(labels).toHaveLength(2);
   });
 
+  it("does not double-apply list margins when breaking display alignment intertext", () => {
+    const source = String.raw`Alpha \begin{itemize}\item First item.\item Quoted \begin{align*}\dbinom{2}{\cdots}&=1^z\\\intertext{second condition measured second holds}\big[x+c\big]&=\sqrt{i}\end{align*} result.\end{itemize} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-list-break-width",
+      width: 190,
+      alignment: "ragged-right",
+      rightskipStretch: 190,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const lineTexts = result.report?.lines.map((line) =>
+      line.segments.map((segment) => segment.text).join("")
+    ) ?? [];
+    expect(lineTexts).toContain("second condition measured second holds");
+    expect(lineTexts).not.toContain("holds");
+  });
+
   it("renders displaybreak in alignments as a non-visual page-break directive", () => {
     const source = String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
@@ -2299,6 +2321,33 @@ unordered.`;
     expect(directAlignment?.rows.map((row) => row.width)).toEqual([
       expect.closeTo(178.220987, 5),
       expect.closeTo(178.220987, 5),
+    ]);
+  });
+
+  it("expands numbered align rows when a tagged equation body exceeds the display width", () => {
+    const source = String.raw`Alpha \begin{align}\operatorname{span}&=c_x&\sqrt{\tfrac{y}{\cdots}}&=\begin{array}{cl}m_y^i&\tbinom{b}{n}\\\dbinom{a}{a}&x\end{array}\\\underline{b+\cdots}&=\operatorname{cone}&\tbinom{\ldots}{j}&=\text{max} \notag\\\tbinom{2}{\ldots}&=i&\begin{array}{rl}\dbinom{a}{m}&y_x\end{array}&=\begin{Vmatrix}\dots^j&\dbinom{i}{\cdots}\\2_x^a&\tfrac{\dots}{1}\end{Vmatrix}\\\sum_i^b&=1&\dots_c&=\Bigg(\tfrac{2}{z}\Bigg)\end{align} Beta`;
+    const content = source.slice(
+      source.indexOf(String.raw`\operatorname`),
+      source.indexOf(String.raw`\end{align}`)
+    );
+    const contentEnd = source.indexOf(String.raw`\end{align}`);
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "align",
+      sourceStart: source.indexOf(String.raw`\begin{align}`),
+      sourceEnd: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
+      contentStart: source.indexOf(String.raw`\operatorname`),
+      contentEnd,
+      targetWidth: 160,
+    });
+
+    expect(directAlignment?.rows).toHaveLength(4);
+    expect(directAlignment?.rows.map((row) => row.width)).toEqual([
+      expect.closeTo(201.112371, 6),
+      expect.closeTo(201.112371, 6),
+      expect.closeTo(201.112371, 6),
+      expect.closeTo(201.112371, 6),
     ]);
   });
 

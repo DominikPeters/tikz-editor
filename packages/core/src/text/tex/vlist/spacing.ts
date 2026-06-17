@@ -760,6 +760,7 @@ function displayAlignmentIntertextParagraph(
       noIndent: true,
       quoteDepth: scope.quoteDepth,
       ...(scope.listContext ? { listContext: scope.listContext } : {}),
+      ignoreAncestorBreakMargins: true,
       blockIndex,
     },
   };

@@ -99,6 +99,9 @@ export function prepareTexLayoutParagraphsFromVList(
   for (const entry of paragraphEntries) {
     const paragraph = entry.item.paragraph;
     const scopeContext = texParagraphScopeContext(entry.ancestors);
+    const breakScopeContext = paragraph.ignoreAncestorBreakMargins === true
+      ? texParagraphScopeContextWithoutBreakMargins(scopeContext)
+      : scopeContext;
     const blockIndex = paragraph.blockIndex;
     const paragraphStateResult = paragraphState.resolveParagraph({
       paragraph,
@@ -120,8 +123,12 @@ export function prepareTexLayoutParagraphsFromVList(
       const listAttachments = texListItemParagraphAttachments({
         blockIndex,
         segmentIndex,
-        listContext: paragraph.listContext,
-        listItemLayout: scopeContext.listItemLayout,
+        listContext: paragraph.ignoreAncestorBreakMargins === true
+          ? undefined
+          : paragraph.listContext,
+        listItemLayout: paragraph.ignoreAncestorBreakMargins === true
+          ? undefined
+          : scopeContext.listItemLayout,
         font: params.font,
         metricProvider: params.metricProvider,
         spaceGlueProfile: paragraphStateResult.spaceGlueProfile,
@@ -149,7 +156,7 @@ export function prepareTexLayoutParagraphsFromVList(
           blockIndex,
           segmentIndex,
           firstLineIndentWidth: listAttachments.firstLineIndentWidth,
-          scopePolicy: texParagraphBreakScopePolicy(scopeContext),
+          scopePolicy: texParagraphBreakScopePolicy(breakScopeContext),
         },
         ...(listAttachments.marginLabel
           ? {
@@ -176,6 +183,21 @@ export function prepareTexLayoutParagraphsFromVList(
       paragraphPlans,
       attachmentResult.paragraphPathRemaps
     ),
+  };
+}
+
+function texParagraphScopeContextWithoutBreakMargins(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>
+): ReturnType<typeof texParagraphScopeContext> {
+  return {
+    ...scopeContext,
+    layout: {
+      leftMarginWidth: 0,
+      rightMarginWidth: 0,
+    },
+    quoteContextActive: false,
+    listContextActive: false,
+    listItemLayout: undefined,
   };
 }
 

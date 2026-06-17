@@ -1385,6 +1385,7 @@ describe("TeX math parser", () => {
           start: source.indexOf("{A}") + 1,
           end: source.indexOf("{A}") + 2,
         },
+        explicit: true,
       },
     ]);
   });
@@ -1399,6 +1400,7 @@ describe("TeX math parser", () => {
         text: "A",
         sourceSpan: { start: 23, end: 30 },
         textSourceSpan: { start: 28, end: 29 },
+        explicit: true,
       },
     ]);
     expect(result.list.items).toHaveLength(3);
