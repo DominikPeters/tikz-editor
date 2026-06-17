@@ -5328,7 +5328,26 @@ unordered.`;
       expect(snapshot.source, testCase.source).toBe("registered");
       expect(snapshot.paragraphs.length, testCase.source).toBeGreaterThan(0);
 
-      for (const { offset, label } of testCase.offsets.slice(0, 18)) {
+      const displayItems = snapshot.items.filter((item) => item.kind === "display-math");
+      expect(displayItems.length, testCase.source).toBeGreaterThan(0);
+      for (const displayItem of displayItems) {
+        const displayHit = getKnuthPlassVListSourceHitFromSnapshot({
+          snapshot,
+          clientPoint: clientPoint(
+            px((displayItem.clientLeft + displayItem.clientRight) / 2),
+            px((displayItem.clientTop + displayItem.clientBottom) / 2)
+          ),
+        });
+        expect(displayHit, `${testCase.id}: ${testCase.source}`).toEqual({
+          offset: displayItem.sourceStart,
+          selectionRange: {
+            start: displayItem.sourceStart,
+            end: displayItem.sourceEnd,
+          },
+        });
+      }
+
+      for (const { offset, kind, label, exactRoundTrip } of testCase.offsets.slice(0, 18)) {
         const point = await getKnuthPlassPointFromOffset(outputJax, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
@@ -5353,6 +5372,28 @@ unordered.`;
         expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
           ok: true,
         });
+        if (exactRoundTrip) {
+          expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
+            offset,
+            kind,
+            snappedToMathPrefix: false,
+          });
+        }
+      }
+
+      const firstOffset = testCase.offsets[0]?.offset ?? 0;
+      const lastOffset = testCase.offsets.at(-1)?.offset ?? firstOffset;
+      if (lastOffset > firstOffset) {
+        const selection = await getKnuthPlassSelectionRects(outputJax, {
+          paragraphId: testCase.id,
+          sourceText: testCase.source,
+          containerElement,
+          startOffset: firstOffset,
+          endOffset: lastOffset,
+        });
+        expect(selection.error?.message ?? null, `${testCase.id}: ${testCase.source}`).toBeNull();
+        expect(selection.ok, `${testCase.id}: ${testCase.source}`).toBe(true);
+        expect(selection.rects.length, `${testCase.id}: ${testCase.source}`).toBeGreaterThan(1);
       }
 
       const alignRows = snapshot.items.filter((item) => item.hboxRole === "display-align-row");
