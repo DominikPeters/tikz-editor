@@ -45,7 +45,7 @@ interface ParseListOptions {
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
-  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
+  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat";
 }
 
 type InfixFractionPrimitive =
@@ -70,7 +70,7 @@ export interface ParseTexMathOptions {
 }
 
 interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
-  readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
+  readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat";
   readonly allowDisplayBreak?: boolean;
   readonly allowIntertext?: boolean;
 }
@@ -1255,7 +1255,7 @@ class TexMathParser {
   }
 
   private parseMisplacedShoveCommand(
-    columnSeparation: "align" | "none" | "gather" | "multline" | "eqnarray" | undefined
+    columnSeparation: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | undefined
   ): TexMathAtom {
     const command = this.advance();
     this.addDiagnostic(
@@ -1460,7 +1460,7 @@ class TexMathParser {
       return this.parseAlignedatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
     if (environmentName && xalignatEnvironmentName(environmentName.name)) {
-      return this.parseUnsupportedXalignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+      return this.parseXalignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
     if (environmentName && eqnarrayEnvironmentName(environmentName.name)) {
       return this.parseEqnarrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
@@ -1736,30 +1736,35 @@ class TexMathParser {
     });
   }
 
-  private parseUnsupportedXalignatEnvironment(
+  private parseXalignatEnvironment(
     beginSourceSpan: TexMathSourceSpan,
     environmentName: { name: string; sourceSpan: TexMathSourceSpan },
     allowScripts: boolean
   ): TexMathAtom {
     const initialSourceSpan = spanUnion(beginSourceSpan, environmentName.sourceSpan);
-    const argument = this.parseRequiredRawGroup(initialSourceSpan, `\\begin{${environmentName.name}} column count`);
-    const argumentValue = argument ? Number.parseInt(argument.text.trim(), 10) : Number.NaN;
-    const validArgument = Number.isInteger(argumentValue) &&
-      argumentValue > 0 &&
-      String(argumentValue) === argument?.text.trim();
-    if (!validArgument) {
-      this.addDiagnostic(
-        "error",
-        "invalid-environment-argument",
-        `Argument to \\begin{${environmentName.name}} must be a positive integer.`,
-        argument?.contentSourceSpan ?? argument?.sourceSpan ?? initialSourceSpan
-      );
+    const pairCount = this.parsePositiveIntegerGroup(
+      initialSourceSpan,
+      `\\begin{${environmentName.name}} column count`
+    );
+    if (pairCount) {
+      return this.parseAlignedBody({
+        beginSourceSpan,
+        initialSourceSpan: spanUnion(initialSourceSpan, pairCount.sourceSpan),
+        preambleSourceSpan: pairCount.sourceSpan,
+        stopAtEnvironmentEnd: environmentName.name,
+        columnSeparation: "xalignat",
+        maxFields: pairCount.value * 2,
+        allowAlignmentTags: true,
+        allowDisplayBreak: true,
+        allowIntertext: true,
+        allowScripts,
+      });
     }
 
-    const body = this.consumeXalignatBody(environmentName.name, validArgument ? argumentValue : null);
+    const body = this.consumeXalignatBody(environmentName.name, null);
     const sourceSpan = spanUnion(
       initialSourceSpan,
-      body.sourceSpan ?? argument?.sourceSpan ?? initialSourceSpan
+      body.sourceSpan ?? initialSourceSpan
     );
     if (body.extraAlignmentTabSourceSpan) {
       this.addDiagnostic(
@@ -1811,7 +1816,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
@@ -1835,7 +1840,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
@@ -3795,7 +3800,7 @@ function alignedAtom(
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan,
   options: {
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat";
     readonly maxFields?: number;
   } = {}
 ): TexMathAtom {
@@ -4483,7 +4488,11 @@ function xalignatEnvironmentName(name: string): boolean {
 }
 
 function displayAlignmentEnvironmentName(name: string): boolean {
-  return alignEnvironmentName(name) || gatherEnvironmentName(name) || multlineEnvironmentName(name);
+  return alignEnvironmentName(name) ||
+    alignatEnvironmentName(name) ||
+    xalignatEnvironmentName(name) ||
+    gatherEnvironmentName(name) ||
+    multlineEnvironmentName(name);
 }
 
 function alignEnvironmentName(name: string): boolean {

@@ -1925,7 +1925,7 @@ describe("TeX math parser", () => {
     }
   });
 
-  it("reports TeX-like xalignat argument and row errors while keeping the environment unsupported", () => {
+  it("reports TeX-like xalignat argument errors while keeping invalid environments unsupported", () => {
     const invalidArgument = parseTexMath(String.raw`\begin{xalignat}{x} \and{xalignat}`);
     expect(invalidArgument.diagnostics).toContainEqual({
       severity: "error",
@@ -1943,21 +1943,55 @@ describe("TeX math parser", () => {
       },
     });
     expect(invalidArgument.list.items).toHaveLength(1);
+  });
 
+  it("parses xalignat environments as fixed-field stretched alignments", () => {
+    const source = String.raw`\begin{xalignat}{2}a&=&b&c\\d&=&e&f\end{xalignat}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "aligned",
+        columnSeparation: "xalignat",
+        maxFields: 4,
+        preambleSourceSpan: {
+          start: source.indexOf("{2}"),
+          end: source.indexOf("{2}") + 3,
+        },
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{xalignat}`),
+          end: source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) => row.cells.map((cell) => source.slice(cell.sourceSpan.start, cell.sourceSpan.end)))).toEqual([
+      ["a", "=", "b", "c"],
+      ["d", "=", "e", "f"],
+    ]);
+  });
+
+  it("reports TeX-like xalignat row errors while keeping the aligned body", () => {
     const extraAlignmentTab = parseTexMath(String.raw`\begin{xalignat}{1} a&b & \end{xalignat}`);
     expect(extraAlignmentTab.diagnostics).toContainEqual({
       severity: "error",
       code: "extra-alignment-tab",
-      message: "Extra & in row of xalignat.",
+      message: "Extra & on this line.",
       sourceSpan: { start: 24, end: 25 },
     });
     expect(atomAt(extraAlignmentTab, 0)).toMatchObject({
       atomClass: "inner",
       sourceSpan: { start: 0, end: 40 },
       nucleus: {
-        kind: "unsupported",
-        command: String.raw`\begin{xalignat}`,
-        sourceSpan: { start: 0, end: 40 },
+        kind: "aligned",
+        columnSeparation: "xalignat",
+        maxFields: 2,
       },
     });
     expect(extraAlignmentTab.list.items).toHaveLength(1);
