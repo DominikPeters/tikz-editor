@@ -149,6 +149,7 @@ export interface TexMathListNucleus {
   readonly list: TexMathList;
   readonly role?: "ellipsis";
   readonly ellipsisCommand?: "ldots" | "cdots" | "dots";
+  readonly leadingKern?: number;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

@@ -2221,6 +2221,28 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out TeX buildrel as a relation with operator limits", () => {
+    const result = layout(String.raw`\buildrel{a}\over =`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "limit-superscript",
+        items: [{ kind: "glyph", fontId: "cmmi7", code: 97 }],
+      },
+      {
+        kind: "kern",
+        width: 0,
+        reason: "operator-kern",
+      },
+      {
+        kind: "glyph",
+        fontId: "cmr10",
+        code: 61,
+      },
+    ]);
+  });
+
   it("uses TeX display-style operator limit defaults", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list, { style: "display" });

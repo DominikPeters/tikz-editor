@@ -50,6 +50,7 @@ interface ParseListOptions {
   readonly stopAtEnvironmentEnd?: string;
   readonly stopAtOptionalBracketClose?: boolean;
   readonly stopAtRootOf?: boolean;
+  readonly stopAtBuildrelOver?: boolean;
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
@@ -286,6 +287,9 @@ class TexMathParser {
       if (token.kind === "command" && commandName(token.text) === "of" && options.stopAtRootOf) {
         break;
       }
+      if (token.kind === "command" && commandName(token.text) === "over" && options.stopAtBuildrelOver) {
+        break;
+      }
       if (token.kind === "space") {
         this.advance();
         continue;
@@ -490,6 +494,9 @@ class TexMathParser {
       if (commandName(token.text) === "sideset") {
         return this.parseSideset(allowScripts);
       }
+      if (commandName(token.text) === "buildrel") {
+        return this.parseBuildrel(allowScripts);
+      }
       const stackCommand = stackingCommandName(token.text);
       if (stackCommand) {
         return this.parseStackingCommand(stackCommand, allowScripts);
@@ -659,6 +666,56 @@ class TexMathParser {
       },
       ...(below ? { subscript: { list: below.list, sourceSpan: below.sourceSpan } } : {}),
       ...(above ? { superscript: { list: above.list, sourceSpan: above.sourceSpan } } : {}),
+      limits: "limits",
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseBuildrel(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    this.skipSpaces();
+    const above = this.parseList({
+      stopAtGroupClose: true,
+      stopAtBuildrelOver: true,
+      allowInfixFraction: false,
+    });
+    const over = this.peek();
+    if (over?.kind !== "command" || commandName(over.text) !== "over") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        String.raw`Expected \over in \buildrel expression.`,
+        over?.sourceSpan ?? command.sourceSpan
+      );
+      const sourceSpan = spanUnion(command.sourceSpan, above.sourceSpan);
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "rel",
+        nucleus: {
+          kind: "unsupported",
+          command: command.text,
+          sourceSpan,
+        },
+        sourceSpan,
+      }, allowScripts);
+    }
+    this.advance();
+    const base = this.parseRequiredMathArgument(over.sourceSpan, `${command.text} base`);
+    const baseList = base?.list ?? emptyList(over.sourceSpan.end);
+    const sourceSpan = spanUnion(command.sourceSpan, base?.sourceSpan ?? above.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "rel",
+      nucleus: {
+        kind: "list",
+        list: baseList,
+        leadingKern: 0,
+        sourceSpan: base?.sourceSpan ?? over.sourceSpan,
+      },
+      superscript: {
+        list: above,
+        sourceSpan: above.sourceSpan,
+      },
       limits: "limits",
       sourceSpan,
     }, allowScripts);

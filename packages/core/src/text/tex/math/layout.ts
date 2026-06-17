@@ -807,16 +807,39 @@ function layoutNucleus(
     return layoutSizedDelimiterNucleus(nucleus, fontProfile, style, baseAtPt);
   }
   if (nucleus.kind === "list") {
-    const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet);
-    if (unwrapped) {
-      return {
-        ...unwrapped,
-        sourceSpan: nucleus.sourceSpan,
-      };
+    if (nucleus.leadingKern === undefined) {
+      const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet);
+      if (unwrapped) {
+        return {
+          ...unwrapped,
+          sourceSpan: nucleus.sourceSpan,
+        };
+      }
     }
     const result = layoutTexMathList(nucleus.list, { fontProfile, style, cramped, baseAtPt, alphabet });
     if (!result.supported) {
       return null;
+    }
+    if (nucleus.leadingKern !== undefined) {
+      const leadingKern = roundTexPt(nucleus.leadingKern);
+      return {
+        items: [
+          {
+            kind: "kern",
+            x: 0,
+            width: leadingKern,
+            reason: "operator-kern",
+            sourceSpan: nucleus.sourceSpan,
+          },
+          ...result.hlist.items.map((item) => offsetMathLayoutItem(item, leadingKern)),
+        ],
+        width: roundTexPt(leadingKern + result.hlist.width),
+        height: result.hlist.height,
+        depth: result.hlist.depth,
+        italicCorrection: 0,
+        isCharacterNucleus: false,
+        sourceSpan: nucleus.sourceSpan,
+      };
     }
     const child = childHList("nucleus", 0, 0, result.hlist, nucleus.sourceSpan);
     return {

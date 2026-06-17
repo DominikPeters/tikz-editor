@@ -838,6 +838,56 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("lowers TeX buildrel through source-spanned relation limits", () => {
+    const result = parseTexMath(String.raw`x\buildrel{a}\over b y`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toHaveLength(3);
+    expect(atomAt(result, 1)).toMatchObject({
+      atomClass: "rel",
+      limits: "limits",
+      sourceSpan: { start: 1, end: 20 },
+      nucleus: {
+        kind: "list",
+        sourceSpan: { start: 19, end: 20 },
+        list: {
+          items: [{ kind: "atom", nucleus: { kind: "glyph", text: "b" } }],
+        },
+      },
+      superscript: {
+        sourceSpan: { start: 10, end: 13 },
+        list: {
+          items: [{ kind: "atom", nucleus: { kind: "list" } }],
+        },
+      },
+    });
+    expect(atomAt(result, 2)).toMatchObject({
+      nucleus: { kind: "glyph", text: "y" },
+    });
+  });
+
+  it("parses unbraced TeX buildrel labels before the over delimiter", () => {
+    const result = parseTexMath(String.raw`\buildrel a+b \over =`);
+
+    expect(result.diagnostics).toEqual([]);
+    const atom = atomAt(result, 0);
+    expect(atom).toMatchObject({
+      atomClass: "rel",
+      limits: "limits",
+      sourceSpan: { start: 0, end: 21 },
+      nucleus: {
+        kind: "list",
+        list: {
+          items: [{ kind: "atom", atomClass: "rel", nucleus: { kind: "glyph", text: "=" } }],
+        },
+      },
+      superscript: {
+        sourceSpan: { start: 10, end: 13 },
+      },
+    });
+    expect(atom.superscript?.list.items).toHaveLength(3);
+  });
+
   it("parses prime shorthand as a TeX superscript on ordinary atoms", () => {
     const result = parseTexMath("x''_i");
     const atom = atomAt(result, 0);
