@@ -34,6 +34,7 @@ const amsMathCommands = [
   String.raw`\overunderset`,
   String.raw`\overset`,
   String.raw`\projlim`,
+  String.raw`\smash`,
   String.raw`\underset`,
   String.raw`\varinjlim`,
   String.raw`\varliminf`,

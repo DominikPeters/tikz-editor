@@ -302,6 +302,23 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('x="0" y="-11381.1024" width="5690.5512" height="2845.2756"');
   });
 
+  it("renders smash box contents through the child hlist", () => {
+    const parsed = parseTexMath(String.raw`\smash{\frac{1}{2}}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(result.hlist.height).toBe(0);
+    expect(result.hlist.depth).toBe(0);
+    expect(body).toContain('data-tex-math-role="nucleus"');
+    expect(body).toContain('data-tex-rule="fraction-rule"');
+    expect(body).toContain('data-tex-font="cmr7" data-tex-glyph="49"');
+    expect(body).toContain('data-tex-font="cmr7" data-tex-glyph="50"');
+  });
+
   it("renders text command glyphs through the document text font", () => {
     const parsed = parseTexMath(String.raw`x+\text{if}`);
     const result = layoutTexMathList(parsed.list);

@@ -1044,6 +1044,39 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out smash boxes by preserving contents but zeroing requested dimensions", () => {
+    const natural = layout(String.raw`\frac{1}{2}`);
+    const full = layout(String.raw`\smash{\frac{1}{2}}`);
+    const top = layout(String.raw`\smash[t]{\frac{1}{2}}`);
+    const bottom = layout(String.raw`\smash[b]{\frac{1}{2}}`);
+
+    expect(natural.supported).toBe(true);
+    expect(full.supported).toBe(true);
+    expect(top.supported).toBe(true);
+    expect(bottom.supported).toBe(true);
+    expect(full.hlist?.width).toBeCloseTo(natural.hlist?.width ?? 0, 6);
+    expect(top.hlist?.width).toBeCloseTo(natural.hlist?.width ?? 0, 6);
+    expect(bottom.hlist?.width).toBeCloseTo(natural.hlist?.width ?? 0, 6);
+
+    expect(full.hlist?.height).toBe(0);
+    expect(full.hlist?.depth).toBe(0);
+    expect(top.hlist?.height).toBe(0);
+    expect(top.hlist?.depth).toBeCloseTo(natural.hlist?.depth ?? 0, 6);
+    expect(bottom.hlist?.height).toBeCloseTo(natural.hlist?.height ?? 0, 6);
+    expect(bottom.hlist?.depth).toBe(0);
+
+    const fullBody = full.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(fullBody).toMatchObject({
+      kind: "hlist",
+      role: "nucleus",
+      height: expect.closeTo(natural.hlist?.height ?? 0, 6),
+      depth: expect.closeTo(natural.hlist?.depth ?? 0, 6),
+      items: expect.arrayContaining([
+        expect.objectContaining({ kind: "rule", role: "fraction-rule" }),
+      ]),
+    });
+  });
+
   it("lays out amsmath cfrac with display style, numerator alignment, and trailing kern", () => {
     const centered = layout(String.raw`\cfrac{a}{bbb}`);
     const left = layout(String.raw`\cfrac[l]{a}{bbb}`);

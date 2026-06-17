@@ -179,6 +179,44 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses smash boxes with AMS top and bottom options", () => {
+    const result = parseTexMath(String.raw`\smash{x}+\smash[t]{y}+\smash[b]{z}`, { sourceOffset: 4 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 4, end: 13 },
+      nucleus: {
+        kind: "smash",
+        smashHeight: true,
+        smashDepth: true,
+        commandSourceSpan: { start: 4, end: 10 },
+        sourceSpan: { start: 4, end: 13 },
+        body: { sourceSpan: { start: 11, end: 12 } },
+      },
+    });
+    expect(atomAt(result, 2)).toMatchObject({
+      sourceSpan: { start: 14, end: 26 },
+      nucleus: {
+        kind: "smash",
+        smashHeight: true,
+        smashDepth: false,
+        optionSourceSpan: { start: 20, end: 23 },
+        body: { sourceSpan: { start: 24, end: 25 } },
+      },
+    });
+    expect(atomAt(result, 4)).toMatchObject({
+      sourceSpan: { start: 27, end: 39 },
+      nucleus: {
+        kind: "smash",
+        smashHeight: false,
+        smashDepth: true,
+        optionSourceSpan: { start: 33, end: 36 },
+        body: { sourceSpan: { start: 37, end: 38 } },
+      },
+    });
+  });
+
   it("parses dfrac and tfrac as style-forced generalized fractions", () => {
     const result = parseTexMath(String.raw`\dfrac{x}{y}+\tfrac{1}{2}`, { sourceOffset: 12 });
 

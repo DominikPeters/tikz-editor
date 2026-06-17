@@ -39,6 +39,7 @@ import type {
   TexMathOperatorLimits,
   TexMathOperatorNameNucleus,
   TexMathRuleNucleus,
+  TexMathSmashNucleus,
   TexMathSidesetNucleus,
   TexMathSmallMatrixNucleus,
   TexMathSmallMatrixEnvironment,
@@ -508,6 +509,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
   if (nucleus.kind === "line") {
     return texMathListNeedsAmsMath(nucleus.body);
   }
+  if (nucleus.kind === "smash") {
+    return texMathListNeedsAmsMath(nucleus.body);
+  }
   if (nucleus.kind === "accent") {
     return true;
   }
@@ -833,6 +837,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "boxed") {
     return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "smash") {
+    return layoutSmashNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "rule") {
     return layoutRuleNucleus(nucleus);
@@ -3519,6 +3526,36 @@ function layoutBoxedNucleus(
     width,
     height,
     depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutSmashNucleus(
+  nucleus: TexMathSmashNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  cramped: boolean,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const body = layoutTexMathList(nucleus.body, {
+    fontProfile,
+    style,
+    cramped,
+    baseAtPt,
+    alphabet,
+  });
+  if (!body.supported) {
+    return null;
+  }
+  const bodyChild = childHList("nucleus", 0, 0, body.hlist, nucleus.body.sourceSpan);
+  return {
+    items: [bodyChild],
+    width: body.hlist.width,
+    height: nucleus.smashHeight ? 0 : body.hlist.height,
+    depth: nucleus.smashDepth ? 0 : body.hlist.depth,
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,

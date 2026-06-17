@@ -413,6 +413,9 @@ class TexMathParser {
       if (commandName(token.text) === "boxed") {
         return this.parseBoxed(allowScripts);
       }
+      if (commandName(token.text) === "smash") {
+        return this.parseSmash(allowScripts);
+      }
       if (commandName(token.text) === "rule") {
         return this.parseRule(allowScripts);
       }
@@ -958,6 +961,41 @@ class TexMathParser {
         kind: "boxed",
         body: body?.list ?? emptyList(command.sourceSpan.end),
         commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseSmash(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const option = this.parseOptionalBracketTextArgument(command.sourceSpan, `${command.text} option`);
+    const body = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} body`);
+    const optionText = option?.text.trim() ?? "tb";
+    const smashHeight = optionText.includes("t");
+    const smashDepth = optionText.includes("b");
+    if (option && !/^[tb]+$/u.test(optionText)) {
+      this.addDiagnostic(
+        "warning",
+        "unsupported-command",
+        `Unsupported \\smash option [${optionText}].`,
+        option.contentSourceSpan
+      );
+    }
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      body?.sourceSpan ?? option?.sourceSpan ?? command.sourceSpan
+    );
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "smash",
+        body: body?.list ?? emptyList(command.sourceSpan.end),
+        smashHeight: !option || smashHeight,
+        smashDepth: !option || smashDepth,
+        commandSourceSpan: command.sourceSpan,
+        ...(option ? { optionSourceSpan: option.sourceSpan } : {}),
         sourceSpan,
       },
       sourceSpan,
@@ -3938,6 +3976,58 @@ class TexMathParser {
     return {
       list,
       sourceSpan: spanUnion(open.sourceSpan, list.sourceSpan),
+    };
+  }
+
+  private parseOptionalBracketTextArgument(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): {
+    readonly text: string;
+    readonly sourceSpan: TexMathSourceSpan;
+    readonly contentSourceSpan: TexMathSourceSpan;
+  } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "character" || next.text !== "[") {
+      return null;
+    }
+    const open = this.advance();
+    const tokens: TexMathToken[] = [];
+    let lastSpan: TexMathSourceSpan = open.sourceSpan;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (!token) {
+        break;
+      }
+      if (token.kind === "character" && token.text === "]") {
+        const close = this.advance();
+        return {
+          text: tokens.map((part) => part.text).join(""),
+          sourceSpan: spanUnion(open.sourceSpan, close.sourceSpan),
+          contentSourceSpan: {
+            start: open.sourceSpan.end,
+            end: Math.max(open.sourceSpan.end, close.sourceSpan.start),
+          },
+        };
+      }
+      this.advance();
+      tokens.push(token);
+      lastSpan = token.sourceSpan;
+    }
+    this.addDiagnostic(
+      "error",
+      "missing-delimiter",
+      `Expected a closing bracket in optional ${label}.`,
+      next?.sourceSpan ?? fallbackSpan
+    );
+    return {
+      text: tokens.map((part) => part.text).join(""),
+      sourceSpan: spanUnion(open.sourceSpan, lastSpan),
+      contentSourceSpan: {
+        start: open.sourceSpan.end,
+        end: Math.max(open.sourceSpan.end, lastSpan.end),
+      },
     };
   }
 

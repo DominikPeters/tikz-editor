@@ -79,6 +79,7 @@ export type TexMathNucleus =
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
   | TexMathBoxedNucleus
+  | TexMathSmashNucleus
   | TexMathRuleNucleus
   | TexMathLineNucleus
   | TexMathVarLimitNucleus
@@ -176,6 +177,16 @@ export interface TexMathBoxedNucleus {
   readonly kind: "boxed";
   readonly body: TexMathList;
   readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSmashNucleus {
+  readonly kind: "smash";
+  readonly body: TexMathList;
+  readonly smashHeight: boolean;
+  readonly smashDepth: boolean;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly optionSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
