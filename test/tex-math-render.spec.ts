@@ -2179,6 +2179,27 @@ unordered.`;
     ]);
   });
 
+  it("expands tagged align rows when the equation body exceeds the display width", () => {
+    const source = String.raw`Alpha \begin{align*}\begin{cases}a&2\end{cases}&=\bigg(1+x\bigg)&\sqrt{c+m}&=\text{if} \tag{A}\\\text{when $x_i=y$,}&=\begin{Bmatrix}\tfrac{y}{m}\end{Bmatrix}&\underline{\tfrac{i}{c}}&=\tbinom{2}{x}\end{align*} Beta`;
+    const content = String.raw`\begin{cases}a&2\end{cases}&=\bigg(1+x\bigg)&\sqrt{c+m}&=\text{if} \tag{A}\\\text{when $x_i=y$,}&=\begin{Bmatrix}\tfrac{y}{m}\end{Bmatrix}&\underline{\tfrac{i}{c}}&=\tbinom{2}{x}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{align*}`),
+      sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      contentStart: source.indexOf(String.raw`\begin{cases}`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 120,
+    });
+
+    expect(directAlignment?.rows).toHaveLength(2);
+    expect(directAlignment?.rows.map((row) => row.width)).toEqual([
+      expect.closeTo(178.220987, 5),
+      expect.closeTo(178.220987, 5),
+    ]);
+  });
+
   it("does not insert aligned inter-pair gap for alignedat environments", () => {
     const aligned = layoutTexMathList(parseTexMath(
       String.raw`\begin{aligned}a&=b&c&=d\\e&=f&g&=h\end{aligned}`

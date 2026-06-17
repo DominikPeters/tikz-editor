@@ -43,6 +43,7 @@ const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
 const TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT = 3.600037;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT = 8.4;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT = 1;
+const TEX_DISPLAY_ALIGNMENT_OVERFULL_BODY_TOLERANCE_PT = 1;
 const TEX_MULTLINE_GAP_PT = 10;
 const TEX_MULTLINE_TAG_GAP_PT = 10;
 
@@ -766,8 +767,13 @@ function getDisplayMathAlignment(
   const hasAlignmentTags = alignedRows.some((_, rowIndex) =>
     displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) !== null
   );
+  const overfullBodyWidth = displayAlignmentOverfullBodyWidth(
+    alignedRows,
+    dimensions,
+    (rowIndex) => displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) === null
+  );
   const forcedRowWidth = hasAlignmentTags
-    ? dimensions.targetWidth
+    ? overfullBodyWidth
     : null;
   const rows = alignedRows.map((row, rowIndex) => {
     const taggedRow = addDisplayAlignmentTag(
@@ -822,9 +828,10 @@ function getDisplayMathAlignment(
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
     delimiter: params.delimiter,
-    width: hasAlignmentTags
-      ? dimensions.targetWidth
-      : Math.max(dimensions.rowWidth, ...rows.map((row) => row.width)),
+    width: Math.max(
+      hasAlignmentTags ? dimensions.targetWidth : dimensions.rowWidth,
+      ...rows.map((row) => row.width)
+    ),
     rows,
   };
 }
@@ -1055,9 +1062,9 @@ function addDisplayAlignmentTag(
       rowItems = offsetMathHListItems(rowItems, tagAdjustedEqnShift - dimensions.eqnShift);
     }
   }
-  const width = Math.max(baseWidth, dimensions.targetWidth);
   const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.width));
   const rowRight = mathItemsRightEdge(rowItems);
+  const width = Math.max(baseWidth, dimensions.targetWidth);
   const tagCollides = displayAlignmentRightTagMustShift(row.items, tag.width, dimensions) || rowRight > tagX;
   const tagRenderShiftY = tagCollides
     ? displayAlignmentShiftedTagRenderShift(tagLineDepth)
@@ -1317,6 +1324,30 @@ function displayAlignmentRightTagMustShift(
     2 * TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT
   );
   return minimumClearanceWidth > dimensions.targetWidth;
+}
+
+function displayAlignmentOverfullBodyWidth(
+  rows: readonly TexMathChildHListLayoutItem[],
+  dimensions: TexDisplayAlignmentDimensions,
+  includeRow: (rowIndex: number) => boolean
+): number {
+  const includedBodyWidth = roundTexPt(Math.max(
+    dimensions.targetWidth,
+    ...rows.map((row, rowIndex) =>
+      includeRow(rowIndex)
+        ? mathItemsRightEdge(displayAlignmentRowItems(row.items, dimensions))
+        : dimensions.targetWidth
+    )
+  ));
+  if (includedBodyWidth <= dimensions.targetWidth + TEX_DISPLAY_ALIGNMENT_OVERFULL_BODY_TOLERANCE_PT) {
+    return dimensions.targetWidth;
+  }
+  return roundTexPt(Math.max(
+    includedBodyWidth,
+    ...rows.map((row) =>
+      mathItemsRightEdge(displayAlignmentRowItems(row.items, dimensions))
+    )
+  ));
 }
 
 function displayAlignmentMaxColumnWidths(
