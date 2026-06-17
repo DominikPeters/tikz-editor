@@ -6,6 +6,7 @@ import type {
   TexMathList,
   TexMathMuGlue,
   TexMathNucleus,
+  TexMathPenalty,
   TexMathScript,
   TexMathSourceSpan,
   TexMathStyleChange,
@@ -31,6 +32,7 @@ export interface TexMathResolvedGlue {
 export type TexMathSpacedItem =
   | TexMathAtom
   | TexMathStyleChange
+  | TexMathPenalty
   | TexMathResolvedGlue
   | TexMathUnsupportedItem;
 
@@ -99,6 +101,10 @@ export function spaceTexMathList(
     if (item.kind === "style-change") {
       items.push(item);
       currentStyle = item.style;
+      continue;
+    }
+    if (item.kind === "penalty") {
+      items.push(item);
       continue;
     }
     if (item.kind === "glue") {

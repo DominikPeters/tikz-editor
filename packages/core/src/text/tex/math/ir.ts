@@ -539,6 +539,13 @@ export interface TexMathStyleChange {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathPenalty {
+  readonly kind: "penalty";
+  readonly command: "allowbreak" | "break" | "nobreak" | "penalty";
+  readonly penalty: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathUnsupportedItem {
   readonly kind: "unsupported";
   readonly command: string;
@@ -550,6 +557,7 @@ export type TexMathItem =
   | TexMathGlue
   | TexMathMuGlue
   | TexMathStyleChange
+  | TexMathPenalty
   | TexMathUnsupportedItem;
 
 export interface TexMathList {

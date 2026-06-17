@@ -28,6 +28,7 @@ export type {
   TexMathOperatorNameNucleus,
   TexMathOperatorNamePart,
   TexMathOperatorNucleus,
+  TexMathPenalty,
   TexMathParseResult,
   TexMathRadicalNucleus,
   TexMathScript,

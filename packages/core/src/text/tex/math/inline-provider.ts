@@ -14,6 +14,7 @@ import type {
   TexMathAlignedRowLabel,
   TexMathAtom,
   TexMathList,
+  TexMathPenalty,
   TexMathSourceSpan,
 } from "./ir.js";
 import {
@@ -304,32 +305,47 @@ function buildInlineMathBreakpoints(
 ): readonly TexMathBreakpoint[] {
   const normalized = normalizeTexMathAtomClasses(list);
   const atomItems = normalized.items.filter((item): item is TexMathAtom => item.kind === "atom");
-  if (atomItems.length < 2) {
+  const penaltyItems = normalized.items.filter((item): item is TexMathPenalty => item.kind === "penalty");
+  if (atomItems.length < 2 && penaltyItems.length === 0) {
     return [];
   }
 
   const extents = collectMathItemExtents(hlist.items, 0);
-  return atomItems.flatMap((atom, index) => {
-    if (index >= atomItems.length - 1) {
-      return [];
-    }
-    if (atom.atomClass !== "bin" && atom.atomClass !== "rel") {
-      return [];
+  const breakpoints: TexMathBreakpoint[] = [];
+  for (let index = 0; index < atomItems.length - 1; index += 1) {
+    const atom = atomItems[index];
+    if (!atom || (atom.atomClass !== "bin" && atom.atomClass !== "rel")) {
+      continue;
     }
     const x = mathSourceSpanEndX(atom.sourceSpan.start, atom.sourceSpan.end, extents, hlist.width);
     if (x === null) {
-      return [];
+      continue;
     }
     const postBreakGlue = discardableMathGlueAfterSourceOffset(hlist.items, atom.sourceSpan.end, x);
-    return [{
+    breakpoints.push({
       kind: atom.atomClass === "bin" ? "binary" : "relation",
       sourceOffset: atom.sourceSpan.end,
       x,
       penalty: atom.atomClass === "bin" ? 700 : 500,
       ...mathHListFlexBeforeX(hlist.items, x),
       ...(postBreakGlue ? { postBreakGlue } : {}),
-    }];
-  });
+    });
+  }
+  for (const penalty of penaltyItems) {
+    const x = mathSourceOffsetX(penalty.sourceSpan.start, extents, hlist.width);
+    breakpoints.push({
+      kind: "penalty",
+      sourceOffset: penalty.sourceSpan.end,
+      x,
+      penalty: penalty.penalty,
+      ...mathHListFlexBeforeX(hlist.items, x),
+    });
+  }
+  return breakpoints.sort((left, right) =>
+    left.x === right.x
+      ? left.sourceOffset - right.sourceOffset
+      : left.x - right.x
+  );
 }
 
 function mathSourceSpanEndX(
@@ -354,6 +370,20 @@ function mathSourceSpanEndX(
   return xEnd === null
     ? null
     : roundTexPt(Math.max(0, Math.min(hlistWidth, xEnd)));
+}
+
+function mathSourceOffsetX(
+  sourceOffset: number,
+  extents: readonly MathItemExtent[],
+  hlistWidth: number
+): number {
+  let x = 0;
+  for (const extent of extents) {
+    if (extent.sourceEnd <= sourceOffset) {
+      x = Math.max(x, extent.xEnd);
+    }
+  }
+  return roundTexPt(Math.max(0, Math.min(hlistWidth, x)));
 }
 
 function discardableMathGlueAfterSourceOffset(

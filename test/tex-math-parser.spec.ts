@@ -3081,6 +3081,38 @@ describe("TeX math parser", () => {
     expect(result.list.items[3]).toMatchObject({ kind: "glue", command: "quad" });
   });
 
+  it("parses TeX math penalty commands as source-spanned penalty items", () => {
+    const result = parseTexMath(String.raw`a\allowbreak b\break c\nobreak d\penalty -250 e`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.filter((item) => item.kind === "penalty")).toMatchObject([
+      {
+        kind: "penalty",
+        command: "allowbreak",
+        penalty: 0,
+        sourceSpan: { start: 1, end: 12 },
+      },
+      {
+        kind: "penalty",
+        command: "break",
+        penalty: -10_000,
+        sourceSpan: { start: 14, end: 20 },
+      },
+      {
+        kind: "penalty",
+        command: "nobreak",
+        penalty: 10_000,
+        sourceSpan: { start: 22, end: 30 },
+      },
+      {
+        kind: "penalty",
+        command: "penalty",
+        penalty: -250,
+        sourceSpan: { start: 32, end: 45 },
+      },
+    ]);
+  });
+
   it("keeps parsing unsupported commands and reports diagnostics with spans", () => {
     const result = parseTexMath(String.raw`x+\unknown{y}`);
 

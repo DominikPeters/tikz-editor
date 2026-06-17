@@ -892,6 +892,49 @@ describe("TeX math SVG rendering", () => {
     ]);
   });
 
+  it("reports explicit TeX math penalty commands as inline math breakpoints", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`$a\allowbreak b\break c\nobreak d\penalty -250 e$`;
+    const content = source.slice(1, -1);
+    const box = provider.getInlineMathBox({
+      source,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).not.toBeNull();
+    expect(box?.breakpoints?.filter((breakpoint) => breakpoint.kind === "penalty")).toMatchObject([
+      {
+        kind: "penalty",
+        sourceOffset: 13,
+        x: expect.closeTo(5.2859, 5),
+        penalty: 0,
+      },
+      {
+        kind: "penalty",
+        sourceOffset: 21,
+        x: expect.closeTo(9.57757, 5),
+        penalty: -10_000,
+      },
+      {
+        kind: "penalty",
+        sourceOffset: 31,
+        x: expect.closeTo(13.90513, 5),
+        penalty: 10_000,
+      },
+      {
+        kind: "penalty",
+        sourceOffset: 46,
+        x: expect.closeTo(19.11001, 5),
+        penalty: -250,
+      },
+    ]);
+  });
+
   it("exposes TeX inline math glue shrink to paragraph breaking", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({

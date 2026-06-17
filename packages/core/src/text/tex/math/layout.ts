@@ -292,6 +292,9 @@ export function layoutTexMathList(
       currentCramped = false;
       continue;
     }
+    if (item.kind === "penalty") {
+      continue;
+    }
     if (item.kind === "unsupported") {
       errors.push({
         message: `Unsupported TeX math item ${item.command}.`,

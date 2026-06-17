@@ -46,7 +46,7 @@ export interface LineMathConstructRangeReport {
 }
 
 export interface LineMathBreakpointReport {
-  kind: 'binary' | 'relation';
+  kind: 'binary' | 'relation' | 'penalty';
   sourceOffsetRaw: number;
   x: number;
   penalty: number;

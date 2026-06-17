@@ -63,8 +63,8 @@ These counts come from `npm run check:mathjax-tex-corpus:slices`. The aggregate 
 
 | Slice | Entries | Supported | Supported % | Explicit unsupported | Parser error | Not applicable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `core-baseline` | 1,279 | 672 | 52.5% | 532 | 75 | 0 |
-| `latex-oracle-candidates` | 997 | 616 | 61.8% | 377 | 0 | 4 |
+| `core-baseline` | 1,279 | 677 | 52.9% | 527 | 75 | 0 |
+| `latex-oracle-candidates` | 997 | 621 | 62.3% | 372 | 0 | 4 |
 | `extra-oracle-candidates` | 108 | 60 | 55.6% | 44 | 0 | 4 |
 | `display-environments` | 209 | 74 | 35.4% | 116 | 17 | 2 |
 | `font-symbol-text` | 295 | 7 | 2.4% | 274 | 14 | 0 |

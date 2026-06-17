@@ -91,7 +91,7 @@ export interface TexMathConstructRange {
 }
 
 export interface TexMathBreakpoint {
-  readonly kind: "binary" | "relation";
+  readonly kind: "binary" | "relation" | "penalty";
   readonly sourceOffset: number;
   readonly x: number;
   readonly penalty: number;

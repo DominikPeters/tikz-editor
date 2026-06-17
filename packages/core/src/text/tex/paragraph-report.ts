@@ -395,7 +395,7 @@ function texMathBoxFromWrapper(
     readonly xEnd: number;
   }[];
   readonly breakpoints?: readonly {
-    readonly kind: "binary" | "relation";
+    readonly kind: "binary" | "relation" | "penalty";
     readonly sourceOffset: number;
     readonly x: number;
     readonly penalty: number;
@@ -606,7 +606,7 @@ function texMathBoxConstructRanges(
 function texMathBoxBreakpoints(
   box: {
     readonly breakpoints?: readonly {
-      readonly kind: "binary" | "relation";
+      readonly kind: "binary" | "relation" | "penalty";
       readonly sourceOffset: number;
       readonly x: number;
       readonly penalty: number;
@@ -663,7 +663,7 @@ function parseTexMathConstructRanges(value: unknown): {
 }
 
 function parseTexMathBreakpoints(value: unknown): {
-  readonly kind: "binary" | "relation";
+  readonly kind: "binary" | "relation" | "penalty";
   readonly sourceOffset: number;
   readonly x: number;
   readonly penalty: number;
@@ -681,8 +681,8 @@ function parseTexMathBreakpoints(value: unknown): {
       readonly x?: unknown;
       readonly penalty?: unknown;
     };
-    const kind: "binary" | "relation" | null =
-      candidate.kind === "binary" || candidate.kind === "relation"
+    const kind: "binary" | "relation" | "penalty" | null =
+      candidate.kind === "binary" || candidate.kind === "relation" || candidate.kind === "penalty"
       ? candidate.kind
       : null;
     const sourceOffset = Number(candidate.sourceOffset);

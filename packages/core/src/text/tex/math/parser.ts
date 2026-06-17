@@ -27,6 +27,7 @@ import type {
   TexMathOperatorCommand,
   TexMathOperatorLimits,
   TexMathOperatorNamePart,
+  TexMathPenalty,
   TexMathParseResult,
   TexMathScript,
   TexMathSmallMatrixEnvironment,
@@ -375,6 +376,10 @@ class TexMathParser {
           style,
           sourceSpan: token.sourceSpan,
         };
+      }
+      const penalty = this.parsePenaltyCommand();
+      if (penalty) {
+        return penalty;
       }
       if (commandName(token.text) === "cfrac") {
         return this.parseContinuedFraction(allowScripts);
@@ -782,6 +787,79 @@ class TexMathParser {
       },
       sourceSpan,
     }, allowScripts);
+  }
+
+  private parsePenaltyCommand(): TexMathPenalty | null {
+    const token = this.peek();
+    if (token?.kind !== "command") {
+      return null;
+    }
+    const name = commandName(token.text);
+    if (name === "allowbreak") {
+      this.advance();
+      return {
+        kind: "penalty",
+        command: "allowbreak",
+        penalty: 0,
+        sourceSpan: token.sourceSpan,
+      };
+    }
+    if (name === "break") {
+      this.advance();
+      return {
+        kind: "penalty",
+        command: "break",
+        penalty: -10_000,
+        sourceSpan: token.sourceSpan,
+      };
+    }
+    if (name === "nobreak") {
+      this.advance();
+      return {
+        kind: "penalty",
+        command: "nobreak",
+        penalty: 10_000,
+        sourceSpan: token.sourceSpan,
+      };
+    }
+    if (name !== "penalty") {
+      return null;
+    }
+
+    const command = this.advance();
+    this.skipSpaces();
+    const start = this.peek();
+    let sign = "";
+    if (start?.kind === "character" && (start.text === "+" || start.text === "-")) {
+      sign = this.advance().text;
+    }
+    let digits = "";
+    let sourceSpan = sign ? spanUnion(command.sourceSpan, start?.sourceSpan ?? command.sourceSpan) : command.sourceSpan;
+    while (this.peek()?.kind === "character" && /^\d$/.test(this.peek()?.text ?? "")) {
+      const digit = this.advance();
+      digits += digit.text;
+      sourceSpan = spanUnion(sourceSpan, digit.sourceSpan);
+    }
+    if (digits === "") {
+      this.addDiagnostic(
+        "error",
+        "missing-group",
+        "Expected an integer after \\penalty.",
+        start?.sourceSpan ?? command.sourceSpan
+      );
+      return {
+        kind: "penalty",
+        command: "penalty",
+        penalty: 0,
+        sourceSpan,
+      };
+    }
+    return {
+      kind: "penalty",
+      command: "penalty",
+      penalty: Number.parseInt(`${sign}${digits}`, 10),
+      sourceSpan,
+    };
   }
 
   private parseLine(commandNameValue: TexMathLineCommand, allowScripts: boolean): TexMathAtom {
