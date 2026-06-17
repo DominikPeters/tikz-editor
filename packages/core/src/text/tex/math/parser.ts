@@ -17,6 +17,7 @@ import type {
   TexMathLineCommand,
   TexMathList,
   TexMathMatrixEnvironment,
+  TexMathMuGlue,
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
@@ -383,6 +384,10 @@ class TexMathParser {
       }
       if (commandName(token.text) === "cases") {
         return this.parseCasesMacro(allowScripts);
+      }
+      const modularCommand = modularArithmeticCommandName(token.text);
+      if (modularCommand) {
+        return this.parseModularArithmeticCommand(modularCommand, allowScripts);
       }
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
@@ -1039,24 +1044,60 @@ class TexMathParser {
 
   private parseNamedOperator(name: string, allowScripts: boolean): TexMathAtom {
     const command = this.advance();
-    const parts: TexMathOperatorNamePart[] = [...name].map((character, index) => ({
-      kind: "text",
-      text: character,
-      sourceSpan: index === 0 ? command.sourceSpan : { start: command.sourceSpan.end, end: command.sourceSpan.end },
-    }));
     return this.maybeParseScripts({
       kind: "atom",
       atomClass: "op",
-      nucleus: {
-        kind: "operator-name",
-        parts,
-        commandSourceSpan: command.sourceSpan,
-        nameSourceSpan: command.sourceSpan,
-        sourceSpan: command.sourceSpan,
-      },
+      nucleus: operatorNameNucleus(name, command.sourceSpan, command.sourceSpan),
       limits: defaultNamedOperatorLimits(name),
       sourceSpan: command.sourceSpan,
     }, allowScripts);
+  }
+
+  private parseModularArithmeticCommand(
+    commandNameValue: "bmod" | "pmod" | "mod",
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    if (commandNameValue === "bmod") {
+      return this.maybeParseScripts(modularArithmeticAtom(
+        command.sourceSpan,
+        [
+          nonscriptNegativeMedMu(command.sourceSpan),
+          explicitMu(5, command.sourceSpan),
+          generatedOperatorNameAtom("mod", "bin", command.sourceSpan, command.sourceSpan),
+          explicitMu(5, command.sourceSpan),
+          nonscriptNegativeMedMu(command.sourceSpan),
+        ]
+      ), allowScripts);
+    }
+
+    const argument = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} argument`);
+    const sourceSpan = spanUnion(command.sourceSpan, argument?.sourceSpan ?? command.sourceSpan);
+    const argumentItems = argument?.list.items ?? [];
+    if (commandNameValue === "pmod") {
+      return this.maybeParseScripts(modularArithmeticAtom(
+        sourceSpan,
+        [
+          explicitMu(8, command.sourceSpan, { displayMu: 18 }),
+          generatedGlyphAtom("(", "open", command.sourceSpan),
+          generatedOperatorNameAtom("mod", "ord", command.sourceSpan, command.sourceSpan),
+          explicitMu(6, command.sourceSpan),
+          ...argumentItems,
+          generatedGlyphAtom(")", "close", command.sourceSpan),
+        ]
+      ), allowScripts);
+    }
+
+    return this.maybeParseScripts(modularArithmeticAtom(
+      sourceSpan,
+      [
+        explicitMu(12, command.sourceSpan, { displayMu: 18 }),
+        generatedOperatorNameAtom("mod", "ord", command.sourceSpan, command.sourceSpan),
+        explicitMu(3, command.sourceSpan),
+        explicitMu(3, command.sourceSpan),
+        ...argumentItems,
+      ]
+    ), allowScripts);
   }
 
   private parseEllipsis(
@@ -3770,6 +3811,106 @@ function subarrayAtom(
   };
 }
 
+function modularArithmeticAtom(
+  sourceSpan: TexMathSourceSpan,
+  items: readonly TexMathItem[]
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass: "ord",
+    nucleus: {
+      kind: "list",
+      list: {
+        kind: "math-list",
+        items,
+        sourceSpan,
+      },
+      sourceSpan,
+    },
+    sourceSpan,
+  };
+}
+
+function generatedOperatorNameAtom(
+  name: string,
+  atomClass: TexMathAtomClass,
+  commandSourceSpan: TexMathSourceSpan,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass,
+    nucleus: operatorNameNucleus(name, commandSourceSpan, sourceSpan),
+    ...(atomClass === "op" ? { limits: defaultNamedOperatorLimits(name) } : {}),
+    sourceSpan,
+  };
+}
+
+function operatorNameNucleus(
+  name: string,
+  commandSourceSpan: TexMathSourceSpan,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom["nucleus"] {
+  const parts: TexMathOperatorNamePart[] = [...name].map((character, index) => ({
+    kind: "text",
+    text: character,
+    sourceSpan: index === 0 ? commandSourceSpan : { start: commandSourceSpan.end, end: commandSourceSpan.end },
+  }));
+  return {
+    kind: "operator-name",
+    parts,
+    commandSourceSpan,
+    nameSourceSpan: commandSourceSpan,
+    sourceSpan,
+  };
+}
+
+function generatedGlyphAtom(
+  text: string,
+  atomClass: TexMathAtomClass,
+  sourceSpan: TexMathSourceSpan
+): TexMathAtom {
+  return {
+    kind: "atom",
+    atomClass,
+    nucleus: {
+      kind: "glyph",
+      text,
+      sourceSpan,
+    },
+    sourceSpan,
+  };
+}
+
+function explicitMu(
+  mu: number,
+  sourceSpan: TexMathSourceSpan,
+  options: {
+    readonly displayMu?: number;
+    readonly stretchMu?: number;
+    readonly shrinkMu?: number;
+    readonly omitInScript?: boolean;
+  } = {}
+): TexMathMuGlue {
+  return {
+    kind: "mu-glue",
+    mu,
+    ...(options.displayMu !== undefined ? { displayMu: options.displayMu } : {}),
+    ...(options.stretchMu !== undefined ? { stretchMu: options.stretchMu } : {}),
+    ...(options.shrinkMu !== undefined ? { shrinkMu: options.shrinkMu } : {}),
+    ...(options.omitInScript === true ? { omitInScript: true } : {}),
+    sourceSpan,
+  };
+}
+
+function nonscriptNegativeMedMu(sourceSpan: TexMathSourceSpan): TexMathMuGlue {
+  return explicitMu(-4, sourceSpan, {
+    stretchMu: -2,
+    shrinkMu: -4,
+    omitInScript: true,
+  });
+}
+
 function commandName(command: string): string {
   return command.startsWith("\\") ? command.slice(1) : command;
 }
@@ -3836,6 +3977,19 @@ function spacingCommandName(command: string): TexMathGlue["command"] | null {
     return name;
   }
   return null;
+}
+
+function modularArithmeticCommandName(command: string): "bmod" | "pmod" | "mod" | null {
+  switch (commandName(command)) {
+    case "bmod":
+      return "bmod";
+    case "pmod":
+      return "pmod";
+    case "mod":
+      return "mod";
+    default:
+      return null;
+  }
 }
 
 function fractionCommandStyle(command: string): "display" | "text" | undefined | null {

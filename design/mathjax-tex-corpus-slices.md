@@ -57,7 +57,7 @@ These counts come from `npm run check:mathjax-tex-corpus -- --slice <slice>` aft
 
 | Slice | Entries | Supported | Supported % | Explicit unsupported | Parser error | Not applicable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `core-baseline` | 1,279 | 476 | 37.2% | 723 | 80 | 0 |
+| `core-baseline` | 1,279 | 483 | 37.8% | 716 | 80 | 0 |
 | `latex-oracle-candidates` | 997 | 510 | 51.2% | 483 | 0 | 4 |
 | `extra-oracle-candidates` | 108 | 60 | 55.6% | 44 | 0 | 4 |
 | `display-environments` | 209 | 74 | 35.4% | 116 | 17 | 2 |

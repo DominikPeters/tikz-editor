@@ -4,6 +4,7 @@ import type {
   TexMathGlue,
   TexMathItem,
   TexMathList,
+  TexMathMuGlue,
   TexMathNucleus,
   TexMathScript,
   TexMathSourceSpan,
@@ -22,6 +23,7 @@ export interface TexMathResolvedGlue {
   readonly shrinkMu: number;
   readonly sourceSpan: TexMathSourceSpan;
   readonly command?: TexMathGlue["command"];
+  readonly explicitMu?: boolean;
   readonly leftClass?: TexMathAtomClass;
   readonly rightClass?: TexMathAtomClass;
 }
@@ -98,6 +100,13 @@ export function spaceTexMathList(
       }
       continue;
     }
+    if (item.kind === "mu-glue") {
+      const resolved = resolveExplicitMuGlue(item, currentStyle);
+      if (resolved) {
+        items.push(resolved);
+      }
+      continue;
+    }
     if (item.kind === "unsupported") {
       items.push(item);
       previousAtom = null;
@@ -153,6 +162,24 @@ export function resolveExplicitMathGlue(glue: TexMathGlue): TexMathResolvedGlue 
     source: "explicit",
     command: glue.command,
     ...dimensions,
+    sourceSpan: glue.sourceSpan,
+  };
+}
+
+export function resolveExplicitMuGlue(
+  glue: TexMathMuGlue,
+  style: TexMathStyle
+): TexMathResolvedGlue | null {
+  if (glue.omitInScript === true && isScriptStyle(style)) {
+    return null;
+  }
+  return {
+    kind: "resolved-glue",
+    source: "explicit",
+    explicitMu: true,
+    mu: style === "display" && glue.displayMu !== undefined ? glue.displayMu : glue.mu,
+    stretchMu: glue.stretchMu ?? 0,
+    shrinkMu: glue.shrinkMu ?? 0,
     sourceSpan: glue.sourceSpan,
   };
 }

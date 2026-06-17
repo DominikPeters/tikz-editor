@@ -980,6 +980,73 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("lowers modular arithmetic commands through TeX macro-shaped lists", () => {
+    const bmod = parseTexMath(String.raw`a\bmod b`);
+    const bmodMacro = atomAt(bmod, 1);
+
+    expect(bmod.diagnostics).toEqual([]);
+    expect(bmodMacro).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 1, end: 6 },
+      nucleus: {
+        kind: "list",
+        sourceSpan: { start: 1, end: 6 },
+      },
+    });
+    expect(bmodMacro.nucleus.kind === "list" ? bmodMacro.nucleus.list.items.map((item) =>
+      item.kind === "mu-glue"
+        ? { kind: item.kind, mu: item.mu, stretchMu: item.stretchMu, shrinkMu: item.shrinkMu, omitInScript: item.omitInScript }
+        : item.kind === "atom" && item.nucleus.kind === "operator-name"
+          ? { kind: item.kind, atomClass: item.atomClass, text: item.nucleus.parts.map((part) => part.kind === "text" ? part.text : "").join("") }
+          : { kind: item.kind }
+    ) : []).toEqual([
+      { kind: "mu-glue", mu: -4, stretchMu: -2, shrinkMu: -4, omitInScript: true },
+      { kind: "mu-glue", mu: 5, stretchMu: undefined, shrinkMu: undefined, omitInScript: undefined },
+      { kind: "atom", atomClass: "bin", text: "mod" },
+      { kind: "mu-glue", mu: 5, stretchMu: undefined, shrinkMu: undefined, omitInScript: undefined },
+      { kind: "mu-glue", mu: -4, stretchMu: -2, shrinkMu: -4, omitInScript: true },
+    ]);
+
+    const pmod = parseTexMath(String.raw`a\pmod b`);
+    const pmodMacro = atomAt(pmod, 1);
+    expect(pmod.diagnostics).toEqual([]);
+    expect(pmodMacro.nucleus.kind === "list" ? pmodMacro.nucleus.list.items.map((item) =>
+      item.kind === "mu-glue"
+        ? { kind: item.kind, mu: item.mu, displayMu: item.displayMu }
+        : item.kind === "atom" && item.nucleus.kind === "glyph"
+          ? { kind: item.kind, atomClass: item.atomClass, text: item.nucleus.text }
+          : item.kind === "atom" && item.nucleus.kind === "operator-name"
+            ? { kind: item.kind, atomClass: item.atomClass, text: "mod" }
+            : { kind: item.kind }
+    ) : []).toEqual([
+      { kind: "mu-glue", mu: 8, displayMu: 18 },
+      { kind: "atom", atomClass: "open", text: "(" },
+      { kind: "atom", atomClass: "ord", text: "mod" },
+      { kind: "mu-glue", mu: 6, displayMu: undefined },
+      { kind: "atom", atomClass: "ord", text: "b" },
+      { kind: "atom", atomClass: "close", text: ")" },
+    ]);
+
+    const mod = parseTexMath(String.raw`a\mod b`);
+    const modMacro = atomAt(mod, 1);
+    expect(mod.diagnostics).toEqual([]);
+    expect(modMacro.nucleus.kind === "list" ? modMacro.nucleus.list.items.map((item) =>
+      item.kind === "mu-glue"
+        ? { kind: item.kind, mu: item.mu, displayMu: item.displayMu }
+        : item.kind === "atom" && item.nucleus.kind === "operator-name"
+          ? { kind: item.kind, atomClass: item.atomClass, text: "mod" }
+          : item.kind === "atom" && item.nucleus.kind === "glyph"
+            ? { kind: item.kind, atomClass: item.atomClass, text: item.nucleus.text }
+            : { kind: item.kind }
+    ) : []).toEqual([
+      { kind: "mu-glue", mu: 12, displayMu: 18 },
+      { kind: "atom", atomClass: "ord", text: "mod" },
+      { kind: "mu-glue", mu: 3, displayMu: undefined },
+      { kind: "mu-glue", mu: 3, displayMu: undefined },
+      { kind: "atom", atomClass: "ord", text: "b" },
+    ]);
+  });
+
   it("parses AMS font symbols with TeX atom classes", () => {
     const result = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thickapprox+\Bbbk`);
 

@@ -434,6 +434,16 @@ export interface TexMathGlue {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathMuGlue {
+  readonly kind: "mu-glue";
+  readonly mu: number;
+  readonly displayMu?: number;
+  readonly stretchMu?: number;
+  readonly shrinkMu?: number;
+  readonly omitInScript?: boolean;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathStyleChange {
   readonly kind: "style-change";
   readonly style: TexMathStyle;
@@ -449,6 +459,7 @@ export interface TexMathUnsupportedItem {
 export type TexMathItem =
   | TexMathAtom
   | TexMathGlue
+  | TexMathMuGlue
   | TexMathStyleChange
   | TexMathUnsupportedItem;
 

@@ -1568,6 +1568,76 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out modular arithmetic macros with TeX mu glue", () => {
+    const bmod = layout(String.raw`a\bmod b`);
+    expect(bmod.supported).toBe(true);
+    expect(bmod.hlist?.width).toBeCloseTo(29.855424, 5);
+    const bmodBody = bmod.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(bmodBody?.items.filter((item) => item.kind === "glue").map((item) =>
+      item.kind === "glue"
+        ? { mu: item.mu, width: item.width, stretch: item.stretch, shrink: item.shrink }
+        : null
+    )).toEqual([
+      { mu: -4, width: expect.closeTo(-2.222229, 5), stretch: expect.closeTo(-1.111114, 5), shrink: expect.closeTo(-2.222229, 5) },
+      { mu: 5, width: expect.closeTo(2.777786, 5), stretch: 0, shrink: 0 },
+      { mu: 5, width: expect.closeTo(2.777786, 5), stretch: 0, shrink: 0 },
+      { mu: -4, width: expect.closeTo(-2.222229, 5), stretch: expect.closeTo(-1.111114, 5), shrink: expect.closeTo(-2.222229, 5) },
+    ]);
+
+    const scriptBmod = layoutTexMathList(
+      parseTexMath(String.raw`a\bmod b`).list,
+      { style: "script" }
+    );
+    expect(scriptBmod.supported).toBe(true);
+    expect(scriptBmod.hlist?.width).toBeCloseTo(27.594399, 5);
+    const scriptBmodBody = scriptBmod.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(scriptBmodBody?.items.filter((item) => item.kind === "glue").map((item) =>
+      item.kind === "glue" ? item.mu : null
+    )).toEqual([5, 5]);
+
+    const pmod = layout(String.raw`a\pmod b`);
+    expect(pmod.supported).toBe(true);
+    expect(pmod.hlist?.width).toBeCloseTo(44.299911, 5);
+    const pmodBody = pmod.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(pmodBody?.items.find((item) => item.kind === "glue")).toMatchObject({
+      kind: "glue",
+      mu: 8,
+      width: expect.closeTo(4.444458, 5),
+    });
+
+    const displayPmod = layoutTexMathList(
+      parseTexMath(String.raw`a\pmod b`).list,
+      { style: "display" }
+    );
+    expect(displayPmod.supported).toBe(true);
+    expect(displayPmod.hlist?.width).toBeCloseTo(49.855483, 5);
+    const displayPmodBody = displayPmod.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(displayPmodBody?.items.find((item) => item.kind === "glue")).toMatchObject({
+      kind: "glue",
+      mu: 18,
+      width: expect.closeTo(10.00003, 5),
+    });
+
+    const mod = layout(String.raw`a\mod b`);
+    expect(mod.supported).toBe(true);
+    expect(mod.hlist?.width).toBeCloseTo(38.744341, 5);
+    const modBody = mod.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(modBody?.items.filter((item) => item.kind === "glue").map((item) =>
+      item.kind === "glue" ? item.mu : null
+    )).toEqual([12, 3, 3]);
+
+    const displayMod = layoutTexMathList(
+      parseTexMath(String.raw`a\mod b`).list,
+      { style: "display" }
+    );
+    expect(displayMod.supported).toBe(true);
+    expect(displayMod.hlist?.width).toBeCloseTo(42.077684, 5);
+    const displayModBody = displayMod.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    expect(displayModBody?.items.filter((item) => item.kind === "glue").map((item) =>
+      item.kind === "glue" ? item.mu : null
+    )).toEqual([18, 3, 3]);
+  });
+
   it("lays out declared math operators as roman operator names", () => {
     const declared = layout(String.raw`\DeclareMathOperator{\R}{R}\R`);
     expect(declared.supported).toBe(true);

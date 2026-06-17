@@ -20,6 +20,7 @@ export type {
   TexMathLeftRightNucleus,
   TexMathList,
   TexMathListNucleus,
+  TexMathMuGlue,
   TexMathNucleus,
   TexMathOperatorCommand,
   TexMathOperatorLimits,
