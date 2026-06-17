@@ -42,6 +42,10 @@ const runs = [
       id: `line-fuzz:spacing:${seed}`,
       args: [...common, "--fuzz", String(args.spacingFuzzCases), "--seed", String(seed), "--formula-mode", "spacing"],
     },
+    {
+      id: `line-fuzz:constructs:${seed}`,
+      args: [...common, "--fuzz", String(args.constructFuzzCases), "--seed", String(seed), "--formula-mode", "constructs"],
+    },
   ]),
   ...args.glyphSeeds.flatMap((seed) => [
     {
@@ -56,6 +60,10 @@ const runs = [
       id: `glyph-fuzz:spacing:${seed}`,
       args: [...common, "--compare-glyphs", "--fuzz", String(args.spacingGlyphFuzzCases), "--seed", String(seed), "--formula-mode", "spacing"],
     },
+    {
+      id: `glyph-fuzz:constructs:${seed}`,
+      args: [...common, "--compare-glyphs", "--fuzz", String(args.constructGlyphFuzzCases), "--seed", String(seed), "--formula-mode", "constructs"],
+    },
   ]),
   ...args.absoluteSeeds.flatMap((seed) => [
     {
@@ -69,6 +77,10 @@ const runs = [
     {
       id: `absolute-glyph-fuzz:spacing:${seed}`,
       args: [...common, "--absolute-glyphs", "--fuzz", String(args.spacingAbsoluteFuzzCases), "--seed", String(seed), "--formula-mode", "spacing"],
+    },
+    {
+      id: `absolute-glyph-fuzz:constructs:${seed}`,
+      args: [...common, "--absolute-glyphs", "--fuzz", String(args.constructAbsoluteFuzzCases), "--seed", String(seed), "--formula-mode", "constructs"],
     },
   ]),
 ];
@@ -96,6 +108,9 @@ function readArgs() {
   const parsed = {
     absoluteFuzzCases: 24,
     absoluteSeeds: [20260621],
+    constructAbsoluteFuzzCases: 12,
+    constructFuzzCases: 24,
+    constructGlyphFuzzCases: 12,
     glyphFuzzCases: 24,
     glyphSeeds: [20260618],
     glyphTolerance: "0.05",
@@ -139,6 +154,18 @@ function readArgs() {
       parsed.lineSeeds = readSeedList(process.argv[++index] ?? "", "--line-seeds");
     } else if (arg.startsWith("--line-seeds=")) {
       parsed.lineSeeds = readSeedList(arg.slice("--line-seeds=".length), "--line-seeds");
+    } else if (arg === "--construct-fuzz-cases") {
+      parsed.constructFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--construct-fuzz-cases");
+    } else if (arg.startsWith("--construct-fuzz-cases=")) {
+      parsed.constructFuzzCases = readPositiveInteger(arg.slice("--construct-fuzz-cases=".length), "--construct-fuzz-cases");
+    } else if (arg === "--construct-glyph-fuzz-cases") {
+      parsed.constructGlyphFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--construct-glyph-fuzz-cases");
+    } else if (arg.startsWith("--construct-glyph-fuzz-cases=")) {
+      parsed.constructGlyphFuzzCases = readPositiveInteger(arg.slice("--construct-glyph-fuzz-cases=".length), "--construct-glyph-fuzz-cases");
+    } else if (arg === "--construct-absolute-fuzz-cases") {
+      parsed.constructAbsoluteFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--construct-absolute-fuzz-cases");
+    } else if (arg.startsWith("--construct-absolute-fuzz-cases=")) {
+      parsed.constructAbsoluteFuzzCases = readPositiveInteger(arg.slice("--construct-absolute-fuzz-cases=".length), "--construct-absolute-fuzz-cases");
     } else if (arg === "--spacing-fuzz-cases") {
       parsed.spacingFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--spacing-fuzz-cases");
     } else if (arg.startsWith("--spacing-fuzz-cases=")) {

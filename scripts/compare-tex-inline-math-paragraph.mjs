@@ -700,6 +700,9 @@ function uniqueSortedInsertions(random, wordCount, count) {
 }
 
 function randomFormula(random, variables, formulaMode) {
+  if (formulaMode === "constructs") {
+    return randomConstructFormula(random, variables);
+  }
   if (formulaMode === "spacing") {
     return randomSpacingFormula(random, variables);
   }
@@ -733,6 +736,38 @@ function randomSpacingFormula(random, variables) {
   ]);
   const maybeRight = random() < 0.3 ? `+${choice(random, variables)}` : "";
   return `${left}${explicitSpace}${variable}${maybeRight}`;
+}
+
+function randomConstructFormula(random, variables) {
+  const lhs = randomConstructTerm(random, variables);
+  const rhs = randomConstructTerm(random, variables);
+  if (random() < 0.7) {
+    return `${lhs}${choice(random, ["+", "="])}${rhs}`;
+  }
+  return lhs;
+}
+
+function randomConstructTerm(random, variables) {
+  const a = choice(random, variables);
+  const b = choice(random, variables.filter((variable) => variable !== a));
+  switch (Math.floor(random() * 8)) {
+    case 0:
+      return `${a}_${1 + Math.floor(random() * 3)}^${1 + Math.floor(random() * 3)}`;
+    case 1:
+      return String.raw`\frac{` + `${a}` + String.raw`}{` + `${b}` + String.raw`}`;
+    case 2:
+      return String.raw`\sqrt{` + `${a}+${b}` + String.raw`}`;
+    case 3:
+      return String.raw`\left(` + `${a}+${b}` + String.raw`\right)`;
+    case 4:
+      return String.raw`\overline{` + `${a}` + String.raw`}`;
+    case 5:
+      return String.raw`\underline{` + `${a}` + String.raw`}`;
+    case 6:
+      return String.raw`\binom{` + `${a}` + String.raw`}{` + `${b}` + String.raw`}`;
+    default:
+      return randomTerm(random, variables, "scripts");
+  }
 }
 
 function randomPairFormula(random, variables) {
@@ -833,8 +868,8 @@ function readArgs() {
 }
 
 function readFormulaMode(value) {
-  if (value === "basic" || value === "scripts" || value === "mixed" || value === "spacing") {
+  if (value === "basic" || value === "scripts" || value === "mixed" || value === "spacing" || value === "constructs") {
     return value;
   }
-  throw new Error("--formula-mode must be one of: basic, scripts, mixed, spacing.");
+  throw new Error("--formula-mode must be one of: basic, scripts, mixed, spacing, constructs.");
 }

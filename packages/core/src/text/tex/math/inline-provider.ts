@@ -22,7 +22,6 @@ import {
   resolveDefaultTexMathFontProfileForList,
   setTexMathHListWidth,
   type TexMathChildHListLayoutItem,
-  type TexMathGlueLayoutItem,
   type TexMathHList,
   type TexMathHListItem,
 } from "./layout.js";
@@ -216,35 +215,17 @@ function mathHListFlex(
 ): { readonly stretch?: number; readonly shrink?: number } {
   let stretch = 0;
   let shrink = 0;
-  collectMathHListFlex(items, 0, xStart, xEnd, (item) => {
+  for (const item of items) {
+    if (item.kind !== "glue" || item.x < xStart || item.x >= xEnd) {
+      continue;
+    }
     stretch += item.stretch;
     shrink += item.shrink;
-  });
+  }
   return {
     ...(stretch > 0 ? { stretch: roundTexPt(stretch) } : {}),
     ...(shrink > 0 ? { shrink: roundTexPt(shrink) } : {}),
   };
-}
-
-function collectMathHListFlex(
-  items: readonly TexMathHListItem[],
-  originX: number,
-  xStart: number,
-  xEnd: number,
-  push: (item: TexMathGlueLayoutItem) => void
-): void {
-  for (const item of items) {
-    const itemX = originX + item.x;
-    if (item.kind === "glue") {
-      if (itemX >= xStart && itemX < xEnd) {
-        push(item);
-      }
-      continue;
-    }
-    if (item.kind === "hlist") {
-      collectMathHListFlex(item.items, itemX, xStart, xEnd, push);
-    }
-  }
 }
 
 function mathHListFlexBeforeX(

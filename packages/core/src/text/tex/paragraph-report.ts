@@ -712,23 +712,97 @@ function omitLineInitialDiscardedMathOperator(
   hlist: TexMathHList,
   contentStart: number
 ): TexMathHList {
-  const first = hlist.items[0];
-  if (!isLineInitialDiscardedMathOperator(first, contentStart)) {
+  const filtered = hlist.items.filter((item, index, items) =>
+    !isLineInitialDiscardedMathOperator(item, index, items, contentStart)
+  );
+  if (filtered.length === hlist.items.length) {
     return hlist;
   }
   return {
     ...hlist,
-    items: hlist.items.slice(1),
+    items: filtered,
   };
 }
 
 function isLineInitialDiscardedMathOperator(
   item: TexMathHListItem | undefined,
+  index: number,
+  items: readonly TexMathHListItem[],
   contentStart: number
 ): boolean {
-  return item?.kind === "glyph" &&
-    (item.text === "+" || item.text === "=") &&
-    item.sourceSpan.start === contentStart;
+  if (item?.kind !== "glyph") {
+    return false;
+  }
+  if ((item.text === "+" || item.text === "=") && item.sourceSpan.start === contentStart) {
+    return true;
+  }
+  if (isOpeningDelimiterGlyph(item)) {
+    return true;
+  }
+  return (item.text === "+" || item.text === "=") &&
+    (isCompositeMathBoundaryItem(previousVisibleMathItem(items, index)) ||
+      isCompositeMathBoundaryItem(nextVisibleMathItem(items, index)));
+}
+
+function isOpeningDelimiterGlyph(item: TexMathHListItem): boolean {
+  return item.kind === "glyph" &&
+    item.family === "operators" &&
+    item.fontId === "cmr10" &&
+    item.text === "\\sqrt" &&
+    (item.code === 40 || item.code === 91);
+}
+
+function previousVisibleMathItem(
+  items: readonly TexMathHListItem[],
+  index: number
+): TexMathHListItem | undefined {
+  for (let candidateIndex = index - 1; candidateIndex >= 0; candidateIndex -= 1) {
+    const candidate = items[candidateIndex];
+    if (isVisibleMathItem(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function nextVisibleMathItem(
+  items: readonly TexMathHListItem[],
+  index: number
+): TexMathHListItem | undefined {
+  for (let candidateIndex = index + 1; candidateIndex < items.length; candidateIndex += 1) {
+    const candidate = items[candidateIndex];
+    if (isVisibleMathItem(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function isVisibleMathItem(item: TexMathHListItem | undefined): item is TexMathHListItem {
+  return item?.kind === "glyph" || item?.kind === "hlist" || item?.kind === "rule";
+}
+
+function isCompositeMathBoundaryItem(item: TexMathHListItem | undefined): boolean {
+  if (!item) {
+    return false;
+  }
+  if (item.kind === "rule") {
+    return true;
+  }
+  if (item.kind === "hlist") {
+    return item.role === "nucleus";
+  }
+  return isGeneratedDelimiterGlyph(item);
+}
+
+function isGeneratedDelimiterGlyph(item: TexMathHListItem): boolean {
+  if (item.kind !== "glyph" || item.text !== "\\sqrt") {
+    return false;
+  }
+  if (item.family === "operators" && item.fontId === "cmr10") {
+    return item.code === 40 || item.code === 41 || item.code === 91 || item.code === 93;
+  }
+  return item.family === "extension";
 }
 
 function texMathBoxCaretStops(
