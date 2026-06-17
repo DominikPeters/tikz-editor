@@ -362,6 +362,37 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out models as a TeX joined relation", () => {
+    const result = layout(String.raw`x\models y`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(25.42139, 5);
+    expect(result.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmmi10", code: 120, x: 0 },
+      { kind: "glue", source: "inter-atom", mu: 5, width: expect.closeTo(2.777786, 5) },
+      {
+        kind: "hlist",
+        role: "nucleus",
+        x: expect.closeTo(8.493066, 5),
+        width: expect.closeTo(8.888928, 5),
+      },
+      { kind: "glue", source: "inter-atom", mu: 5, width: expect.closeTo(2.777786, 5) },
+      { kind: "glyph", fontId: "cmmi10", code: 121, x: expect.closeTo(20.15978, 5) },
+      {
+        kind: "kern",
+        reason: "italic-correction",
+        x: expect.closeTo(25.0626, 5),
+        width: expect.closeTo(0.35879, 5),
+      },
+    ]);
+    const body = result.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(body?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmsy10", code: 106, x: 0, width: expect.closeTo(2.77779, 5) },
+      { kind: "glue", source: "explicit", mu: -3, x: expect.closeTo(2.77779, 5), width: expect.closeTo(-1.666672, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 61, x: expect.closeTo(1.111118, 5), width: expect.closeTo(7.77781, 5) },
+    ]);
+  });
+
   it("adds math italic correction kerns after italic glyphs that need them", () => {
     const result = layout("xy");
 

@@ -1047,6 +1047,32 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("lowers models through TeX joinrel relation pieces", () => {
+    const result = parseTexMath(String.raw`x\models y`);
+    const models = atomAt(result, 1);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(models).toMatchObject({
+      atomClass: "rel",
+      sourceSpan: { start: 1, end: 8 },
+      nucleus: {
+        kind: "list",
+        sourceSpan: { start: 1, end: 8 },
+      },
+    });
+    expect(models.nucleus.kind === "list" ? models.nucleus.list.items.map((item) =>
+      item.kind === "mu-glue"
+        ? { kind: item.kind, mu: item.mu }
+        : item.kind === "atom" && item.nucleus.kind === "glyph"
+          ? { kind: item.kind, atomClass: item.atomClass, text: item.nucleus.text }
+          : { kind: item.kind }
+    ) : []).toEqual([
+      { kind: "atom", atomClass: "rel", text: String.raw`\mid` },
+      { kind: "mu-glue", mu: -3 },
+      { kind: "atom", atomClass: "rel", text: "=" },
+    ]);
+  });
+
   it("parses AMS font symbols with TeX atom classes", () => {
     const result = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thickapprox+\Bbbk`);
 

@@ -389,6 +389,9 @@ class TexMathParser {
       if (modularCommand) {
         return this.parseModularArithmeticCommand(modularCommand, allowScripts);
       }
+      if (commandName(token.text) === "models") {
+        return this.parseModelsRelation(allowScripts);
+      }
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
       }
@@ -1096,6 +1099,19 @@ class TexMathParser {
         explicitMu(3, command.sourceSpan),
         explicitMu(3, command.sourceSpan),
         ...argumentItems,
+      ]
+    ), allowScripts);
+  }
+
+  private parseModelsRelation(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    return this.maybeParseScripts(generatedListAtom(
+      "rel",
+      command.sourceSpan,
+      [
+        generatedGlyphAtom("\\mid", "rel", command.sourceSpan),
+        explicitMu(-3, command.sourceSpan),
+        generatedGlyphAtom("=", "rel", command.sourceSpan),
       ]
     ), allowScripts);
   }
@@ -3815,9 +3831,17 @@ function modularArithmeticAtom(
   sourceSpan: TexMathSourceSpan,
   items: readonly TexMathItem[]
 ): TexMathAtom {
+  return generatedListAtom("ord", sourceSpan, items);
+}
+
+function generatedListAtom(
+  atomClass: TexMathAtomClass,
+  sourceSpan: TexMathSourceSpan,
+  items: readonly TexMathItem[]
+): TexMathAtom {
   return {
     kind: "atom",
-    atomClass: "ord",
+    atomClass,
     nucleus: {
       kind: "list",
       list: {
