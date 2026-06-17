@@ -3406,6 +3406,39 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses TeX math skip primitives as source-spanned glue items", () => {
+    const result = parseTexMath(String.raw`a\hskip2pt plus1pt minus.5pt b\mskip-3mu plus2mu minus1mu c`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) => item.kind)).toEqual([
+      "atom",
+      "skip-glue",
+      "atom",
+      "skip-glue",
+      "atom",
+    ]);
+    expect(result.list.items[1]).toMatchObject({
+      kind: "skip-glue",
+      command: "hskip",
+      widthPt: 2,
+      stretchPt: 1,
+      shrinkPt: 0.5,
+      commandSourceSpan: { start: 1, end: 7 },
+      amountSourceSpan: { start: 7, end: 10 },
+      sourceSpan: { start: 1, end: 28 },
+    });
+    expect(result.list.items[3]).toMatchObject({
+      kind: "skip-glue",
+      command: "mskip",
+      mu: -3,
+      stretchMu: 2,
+      shrinkMu: 1,
+      commandSourceSpan: { start: 30, end: 36 },
+      amountSourceSpan: { start: 36, end: 40 },
+      sourceSpan: { start: 30, end: 57 },
+    });
+  });
+
   it("parses TeX math penalty commands as source-spanned penalty items", () => {
     const result = parseTexMath(String.raw`a\allowbreak b\break c\nobreak d\penalty -250 e`);
 

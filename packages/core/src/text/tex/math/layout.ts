@@ -323,6 +323,29 @@ export function layoutTexMathList(
       cursor = roundTexPt(cursor + width);
       continue;
     }
+    if (item.kind === "skip-glue") {
+      const width = item.command === "hskip"
+        ? roundTexPt(item.widthPt)
+        : muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
+      const stretch = item.command === "hskip"
+        ? roundTexPt(item.stretchPt ?? 0)
+        : muToPt(fontProfile, currentStyle, baseAtPt, item.stretchMu ?? 0);
+      const shrink = item.command === "hskip"
+        ? roundTexPt(item.shrinkPt ?? 0)
+        : muToPt(fontProfile, currentStyle, baseAtPt, item.shrinkMu ?? 0);
+      items.push({
+        kind: "glue",
+        x: roundTexPt(cursor),
+        width,
+        mu: item.command === "mskip" ? item.mu : 0,
+        stretch,
+        shrink,
+        source: "explicit",
+        sourceSpan: item.sourceSpan,
+      });
+      cursor = roundTexPt(cursor + width);
+      continue;
+    }
     if (item.kind === "style-change") {
       currentStyle = item.style;
       currentCramped = false;

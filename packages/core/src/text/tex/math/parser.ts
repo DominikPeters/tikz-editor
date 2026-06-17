@@ -31,6 +31,7 @@ import type {
   TexMathPenalty,
   TexMathParseResult,
   TexMathScript,
+  TexMathSkipGlue,
   TexMathSmallMatrixEnvironment,
   TexMathSourceSpan,
   TexMathStyle,
@@ -394,6 +395,10 @@ class TexMathParser {
       const kern = this.parseKernCommand();
       if (kern) {
         return kern;
+      }
+      const skip = this.parseSkipCommand();
+      if (skip) {
+        return skip;
       }
       const penalty = this.parsePenaltyCommand();
       if (penalty) {
@@ -1021,6 +1026,54 @@ class TexMathParser {
       commandSourceSpan: command.sourceSpan,
       amountSourceSpan: amount.sourceSpan,
       sourceSpan: spanUnion(command.sourceSpan, amount.sourceSpan),
+    };
+  }
+
+  private parseSkipCommand(): TexMathSkipGlue | TexMathUnsupportedItem | null {
+    const token = this.peek();
+    if (token?.kind !== "command") {
+      return null;
+    }
+    const name = commandName(token.text);
+    if (name !== "hskip" && name !== "mskip") {
+      return null;
+    }
+
+    const command = this.advance();
+    if (name === "hskip") {
+      const amount = this.parseTexDimension(command.sourceSpan, "\\hskip amount");
+      if (!amount) {
+        return makeUnsupportedItem(command.text, command.sourceSpan);
+      }
+      const stretch = this.parseOptionalTexDimensionKeyword("plus", "\\hskip stretch");
+      const shrink = this.parseOptionalTexDimensionKeyword("minus", "\\hskip shrink");
+      return {
+        kind: "skip-glue",
+        command: "hskip",
+        widthPt: amount.valuePt,
+        ...(stretch ? { stretchPt: stretch.valuePt } : {}),
+        ...(shrink ? { shrinkPt: shrink.valuePt } : {}),
+        commandSourceSpan: command.sourceSpan,
+        amountSourceSpan: amount.sourceSpan,
+        sourceSpan: spanUnion(command.sourceSpan, shrink?.sourceSpan ?? stretch?.sourceSpan ?? amount.sourceSpan),
+      };
+    }
+
+    const amount = this.parseTexMuDimension(command.sourceSpan, "\\mskip amount");
+    if (!amount) {
+      return makeUnsupportedItem(command.text, command.sourceSpan);
+    }
+    const stretch = this.parseOptionalTexMuDimensionKeyword("plus", "\\mskip stretch");
+    const shrink = this.parseOptionalTexMuDimensionKeyword("minus", "\\mskip shrink");
+    return {
+      kind: "skip-glue",
+      command: "mskip",
+      mu: amount.valueMu,
+      ...(stretch ? { stretchMu: stretch.valueMu } : {}),
+      ...(shrink ? { shrinkMu: shrink.valueMu } : {}),
+      commandSourceSpan: command.sourceSpan,
+      amountSourceSpan: amount.sourceSpan,
+      sourceSpan: spanUnion(command.sourceSpan, shrink?.sourceSpan ?? stretch?.sourceSpan ?? amount.sourceSpan),
     };
   }
 
@@ -3001,6 +3054,60 @@ class TexMathParser {
       valueMu: number,
       sourceSpan,
     };
+  }
+
+  private parseOptionalTexDimensionKeyword(
+    keyword: "plus" | "minus",
+    label: string
+  ): { readonly valuePt: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    const checkpoint = this.index;
+    const keywordSpan = this.consumeCharacterKeyword(keyword);
+    if (!keywordSpan) {
+      this.index = checkpoint;
+      return null;
+    }
+    const dimension = this.parseTexDimension(keywordSpan, label);
+    if (!dimension) {
+      return null;
+    }
+    return {
+      valuePt: dimension.valuePt,
+      sourceSpan: spanUnion(keywordSpan, dimension.sourceSpan),
+    };
+  }
+
+  private parseOptionalTexMuDimensionKeyword(
+    keyword: "plus" | "minus",
+    label: string
+  ): { readonly valueMu: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    const checkpoint = this.index;
+    const keywordSpan = this.consumeCharacterKeyword(keyword);
+    if (!keywordSpan) {
+      this.index = checkpoint;
+      return null;
+    }
+    const dimension = this.parseTexMuDimension(keywordSpan, label);
+    if (!dimension) {
+      return null;
+    }
+    return {
+      valueMu: dimension.valueMu,
+      sourceSpan: spanUnion(keywordSpan, dimension.sourceSpan),
+    };
+  }
+
+  private consumeCharacterKeyword(keyword: string): TexMathSourceSpan | null {
+    this.skipSpaces();
+    let sourceSpan: TexMathSourceSpan | null = null;
+    for (const expected of keyword) {
+      const token = this.peek();
+      if (token?.kind !== "character" || token.text !== expected) {
+        return null;
+      }
+      const consumed = this.advance();
+      sourceSpan = sourceSpan ? spanUnion(sourceSpan, consumed.sourceSpan) : consumed.sourceSpan;
+    }
+    return sourceSpan;
   }
 
   private parseMatrixBody(params: {

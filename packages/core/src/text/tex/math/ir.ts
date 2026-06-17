@@ -601,6 +601,28 @@ export type TexMathKern =
       readonly sourceSpan: TexMathSourceSpan;
     };
 
+export type TexMathSkipGlue =
+  | {
+      readonly kind: "skip-glue";
+      readonly command: "hskip";
+      readonly widthPt: number;
+      readonly stretchPt?: number;
+      readonly shrinkPt?: number;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "skip-glue";
+      readonly command: "mskip";
+      readonly mu: number;
+      readonly stretchMu?: number;
+      readonly shrinkMu?: number;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    };
+
 export interface TexMathStyleChange {
   readonly kind: "style-change";
   readonly style: TexMathStyle;
@@ -631,6 +653,7 @@ export type TexMathItem =
   | TexMathGlue
   | TexMathMuGlue
   | TexMathKern
+  | TexMathSkipGlue
   | TexMathStyleChange
   | TexMathAlphabetChange
   | TexMathMiddleDelimiter

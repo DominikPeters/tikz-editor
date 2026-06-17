@@ -1057,6 +1057,34 @@ describe("TeX math SVG rendering", () => {
     ]);
   });
 
+  it("reports caret stops across explicit TeX math skip primitives", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`$a\hskip2pt b\mskip3mu c$`;
+    const content = source.slice(1, -1);
+    const box = provider.getInlineMathBox({
+      source,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).not.toBeNull();
+    expect(box?.caretStops).toHaveLength(source.length + 1);
+    const hskipStart = source.indexOf(String.raw`\hskip`);
+    const hskipEnd = source.indexOf(" b");
+    const mskipStart = source.indexOf(String.raw`\mskip`);
+    const mskipEnd = source.indexOf(" c");
+    expect(box?.caretStops?.[hskipStart]).toBeCloseTo(box?.caretStops?.[source.indexOf("a") + 1] ?? 0, 5);
+    expect(box?.caretStops?.[hskipEnd]).toBeGreaterThan(box?.caretStops?.[hskipStart] ?? 0);
+    expect(box?.caretStops?.[mskipEnd]).toBeGreaterThan(box?.caretStops?.[mskipStart] ?? 0);
+    for (let index = 1; index < (box?.caretStops?.length ?? 0); index += 1) {
+      expect(box?.caretStops?.[index]).toBeGreaterThanOrEqual((box?.caretStops?.[index - 1] ?? 0) - 1e-6);
+    }
+  });
+
   it("exposes TeX inline math glue shrink to paragraph breaking", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({

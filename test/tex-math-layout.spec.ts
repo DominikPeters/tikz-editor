@@ -176,6 +176,39 @@ describe("TeX math hlist layout", () => {
     }
   });
 
+  it("lays out TeX math skip primitives as explicit glue", () => {
+    const result = layout(String.raw`a\hskip2pt plus1pt minus.5pt b\mskip3mu plus2mu minus1mu c`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.map((item) => item.kind)).toEqual([
+      "glyph",
+      "glue",
+      "glyph",
+      "glue",
+      "glyph",
+    ]);
+    expect(result.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmmi10", code: 97, x: 0 },
+      {
+        kind: "glue",
+        source: "explicit",
+        x: expect.closeTo(5.2859, 5),
+        width: 2,
+        stretch: 1,
+        shrink: 0.5,
+      },
+      { kind: "glyph", fontId: "cmmi10", code: 98, x: expect.closeTo(7.2859, 5) },
+      {
+        kind: "glue",
+        source: "explicit",
+        width: expect.closeTo(1.666672, 5),
+        stretch: expect.closeTo(1.111115, 5),
+        shrink: expect.closeTo(0.555557, 5),
+      },
+      { kind: "glyph", fontId: "cmmi10", code: 99 },
+    ]);
+  });
+
   it("lays out named Greek and symbol commands through TeX math fonts", () => {
     const result = layout(String.raw`\alpha+\beta=\gamma+\Gamma+\Omega+x\leq y\neq z`);
 
