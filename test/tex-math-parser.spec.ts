@@ -1328,6 +1328,17 @@ describe("TeX math parser", () => {
     expect(atom.nucleus.rows[0]?.cells[0]?.list.items).toHaveLength(1);
   });
 
+  it("reports multiple top-level tags as a TeX-style error", () => {
+    const result = parseTexMath(String.raw`a\tag{1}\tag{2}`);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "unsupported-command",
+      message: String.raw`Multiple \tag`,
+      sourceSpan: { start: 1, end: 12 },
+    });
+  });
+
   it("parses gather environments as aligned rows without requiring alignment tabs", () => {
     const source = String.raw`\begin{gather*}a=b\\c=d\end{gather*}`;
     const result = parseTexMath(source);

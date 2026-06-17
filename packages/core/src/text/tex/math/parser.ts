@@ -77,6 +77,7 @@ export function parseTexMath(
   const tokens = tokenizeTexMath(source, sourceOffset);
   const parser = new TexMathParser(tokens, sourceOffset, source.length, options);
   const list = parser.parseList({ stopAtGroupClose: false });
+  parser.reportTopLevelTagDiagnostics();
   return {
     list,
     tokens,
@@ -184,6 +185,21 @@ class TexMathParser {
     private readonly sourceLength: number,
     private readonly options: ParseTexMathOptions = {}
   ) {}
+
+  reportTopLevelTagDiagnostics(): void {
+    const tagTokens = this.tokens.filter((token) =>
+      token.kind === "command" && alignmentMetadataCommand(token.text) === "tag"
+    );
+    if (tagTokens.length <= 1) {
+      return;
+    }
+    this.addDiagnostic(
+      "error",
+      "unsupported-command",
+      String.raw`Multiple \tag`,
+      spanUnion(tagTokens[0]?.sourceSpan, tagTokens[1]?.sourceSpan)
+    );
+  }
 
   parseList(options: ParseListOptions): TexMathList {
     const start = this.peek()?.sourceSpan.start ?? this.sourceOffset;
