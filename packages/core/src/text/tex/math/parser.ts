@@ -1248,6 +1248,9 @@ class TexMathParser {
     if (environmentName && xalignatEnvironmentName(environmentName.name)) {
       return this.parseUnsupportedXalignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
+    if (environmentName?.name === "equation*") {
+      return this.parseSingleBodyDisplayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
     if (environmentName?.name === "array") {
       return this.parseArrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
@@ -1278,6 +1281,33 @@ class TexMathParser {
       nucleus: {
         kind: "unsupported",
         command: environmentName ? `\\begin{${environmentName.name}}` : "\\begin",
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseSingleBodyDisplayEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    const initialSourceSpan = spanUnion(beginSourceSpan, environmentName.sourceSpan);
+    const list = this.parseList({
+      stopAtGroupClose: false,
+      stopAtEnvironmentEnd: environmentName.name,
+      suppressTerminalEllipsisGlue: true,
+    });
+    const endSourceSpan = this.isEnvironmentEnd(environmentName.name)
+      ? this.consumeEnvironmentEnd(environmentName.name)
+      : this.missingEnvironmentEnd(environmentName.name, list.sourceSpan);
+    const sourceSpan = spanUnion(spanUnion(initialSourceSpan, list.sourceSpan), endSourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "inner",
+      nucleus: {
+        kind: "list",
+        list,
         sourceSpan,
       },
       sourceSpan,
@@ -3238,6 +3268,16 @@ class TexMathParser {
       );
     }
     return spanUnion(endCommand.sourceSpan, environmentName?.sourceSpan ?? endCommand.sourceSpan);
+  }
+
+  private missingEnvironmentEnd(name: string, fallbackSpan: TexMathSourceSpan): TexMathSourceSpan {
+    this.addDiagnostic(
+      "error",
+      "missing-environment-end",
+      `Expected \\end{${name}} to close math environment.`,
+      fallbackSpan
+    );
+    return fallbackSpan;
   }
 
   private advance(): TexMathToken {

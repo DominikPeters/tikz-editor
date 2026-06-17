@@ -1339,6 +1339,30 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses raw equation-star display environments as source-spanned list nuclei", () => {
+    const source = String.raw`\begin{equation*}a=b\end{equation*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "list",
+        sourceSpan: { start: 0, end: source.length },
+      },
+    });
+    if (atom.nucleus.kind !== "list") {
+      return;
+    }
+    expect(atom.nucleus.list.sourceSpan).toEqual({
+      start: source.indexOf("a=b"),
+      end: source.indexOf(String.raw`\end{equation*}`),
+    });
+    expect(atom.nucleus.list.items).toHaveLength(3);
+  });
+
   it("parses gather environments as aligned rows without requiring alignment tabs", () => {
     const source = String.raw`\begin{gather*}a=b\\c=d\end{gather*}`;
     const result = parseTexMath(source);
