@@ -83,7 +83,9 @@ export type SimpleTexDisplayMathDelimiter =
   | "equation-star"
   | "align"
   | "align-star"
+  | "gather"
   | "gather-star"
+  | "multline"
   | "multline-star";
 
 export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
@@ -856,6 +858,21 @@ function scanSimpleTexDisplayMath(
     }
   }
 
+  const gatherBegin = String.raw`\begin{gather}`;
+  if (text.startsWith(gatherBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const gatherEnd = String.raw`\end{gather}`;
+    const contentStart = start + gatherBegin.length;
+    const contentEnd = text.indexOf(gatherEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "gather",
+        contentStart,
+        contentEnd,
+        end: contentEnd + gatherEnd.length,
+      };
+    }
+  }
+
   const multlineStarBegin = String.raw`\begin{multline*}`;
   if (text.startsWith(multlineStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
     const multlineStarEnd = String.raw`\end{multline*}`;
@@ -867,6 +884,21 @@ function scanSimpleTexDisplayMath(
         contentStart,
         contentEnd,
         end: contentEnd + multlineStarEnd.length,
+      };
+    }
+  }
+
+  const multlineBegin = String.raw`\begin{multline}`;
+  if (text.startsWith(multlineBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const multlineEnd = String.raw`\end{multline}`;
+    const contentStart = start + multlineBegin.length;
+    const contentEnd = text.indexOf(multlineEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "multline",
+        contentStart,
+        contentEnd,
+        end: contentEnd + multlineEnd.length,
       };
     }
   }

@@ -1377,7 +1377,7 @@ unordered.`;
   });
 
   it("uses explicit placeholders for numbered display math environments", () => {
-    const source = String.raw`Alpha \begin{equation}x^2\end{equation} Beta \begin{align}a&=b\end{align} Gamma`;
+    const source = String.raw`Alpha \begin{equation}x^2\end{equation} Beta \begin{align}a&=b\end{align} Gamma \begin{gather}c=d\\e=f\end{gather} Delta \begin{multline}x=y\\z=w\end{multline} Epsilon`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:numbered-display-math-placeholder",
       width: 160,
@@ -1390,8 +1390,10 @@ unordered.`;
     const placeholders = result.vlistLayout?.boxReport.items.filter((item) =>
       item.itemKind === "placeholder"
     ) ?? [];
-    expect(placeholders).toHaveLength(2);
+    expect(placeholders).toHaveLength(4);
     expect(placeholders.map((item) => item.placeholderReason)).toEqual([
+      "Numbered TeX display math is not implemented yet.",
+      "Numbered TeX display math is not implemented yet.",
       "Numbered TeX display math is not implemented yet.",
       "Numbered TeX display math is not implemented yet.",
     ]);
@@ -1403,6 +1405,14 @@ unordered.`;
       {
         start: source.indexOf(String.raw`\begin{align}`),
         end: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
+      },
+      {
+        start: source.indexOf(String.raw`\begin{gather}`),
+        end: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
+      },
+      {
+        start: source.indexOf(String.raw`\begin{multline}`),
+        end: source.indexOf(String.raw`\end{multline}`) + String.raw`\end{multline}`.length,
       },
     ]);
   });

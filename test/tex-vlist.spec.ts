@@ -235,6 +235,41 @@ describe("TeX vlist lowering", () => {
     });
   });
 
+  it("lowers numbered gather and multline display math to source-spanned placeholders", () => {
+    const source = String.raw`Alpha \begin{gather}a=b\\c=d\end{gather} Beta \begin{multline}x=y\\z=w\end{multline} Gamma`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "display-math",
+      "paragraph",
+      "display-math",
+      "paragraph",
+    ]);
+
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+
+    expect(vlist.items[1]).toMatchObject({
+      kind: "placeholder",
+      reason: "Numbered TeX display math is not implemented yet.",
+      sourceSpan: {
+        start: source.indexOf(String.raw`\begin{gather}`),
+        end: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
+      },
+    });
+    expect(vlist.items[3]).toMatchObject({
+      kind: "placeholder",
+      reason: "Numbered TeX display math is not implemented yet.",
+      sourceSpan: {
+        start: source.indexOf(String.raw`\begin{multline}`),
+        end: source.indexOf(String.raw`\end{multline}`) + String.raw`\end{multline}`.length,
+      },
+    });
+  });
+
   it("centers measured display math items in the vlist width", () => {
     const source = String.raw`\[\sum_i^n\]`;
     const parsed = parseSimpleTexParagraphIr(source);

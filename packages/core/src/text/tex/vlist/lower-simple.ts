@@ -88,7 +88,12 @@ function displayMathItemFromSimpleTexDisplayMath(
   };
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
-  if (item.delimiter === "equation" || item.delimiter === "align") {
+  if (
+    item.delimiter === "equation" ||
+    item.delimiter === "align" ||
+    item.delimiter === "gather" ||
+    item.delimiter === "multline"
+  ) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
   }
   if (
@@ -172,7 +177,10 @@ function unsupportedDisplayMathPlaceholder(
   item: SimpleTexDisplayMathBlockItem,
   sourceSpan: TexSourceSpan
 ): TexPlaceholderItem {
-  const reason = item.delimiter === "equation" || item.delimiter === "align"
+  const reason = item.delimiter === "equation" ||
+    item.delimiter === "align" ||
+    item.delimiter === "gather" ||
+    item.delimiter === "multline"
     ? "Numbered TeX display math is not implemented yet."
     : "TeX display math rendering is not implemented for this formula.";
   return {
