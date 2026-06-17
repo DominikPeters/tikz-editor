@@ -502,12 +502,13 @@ function getDisplayMathAlignment(
   }
   const alignedNucleus = alignedNucleusFromList(parsed.list);
   const pairCount = displayAlignmentPairCount(alignedRows);
-  const maxTagWidth = displayAlignmentMaxTagWidth(alignedNucleus, fontProfile, baseAtPt);
+  const rowTagWidths = displayAlignmentRowTagWidths(alignedNucleus, fontProfile, baseAtPt);
   const dimensions = displayAlignmentDimensions({
     measuredWidth: laidOut.hlist.width,
-    maxTagWidth,
     pairCount,
     rowCount: alignedRows.length,
+    rows: alignedRows,
+    rowTagWidths,
     targetWidth: params.targetWidth,
   });
   const hasAlignmentTags = alignedNucleus?.rows.some((row) => (row.labels?.length ?? 0) > 0) ?? false;
@@ -573,23 +574,19 @@ function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null
   return item.nucleus;
 }
 
-function displayAlignmentMaxTagWidth(
+function displayAlignmentRowTagWidths(
   alignedNucleus: TexMathAlignedNucleus | null,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
-): number {
-  let maxWidth = 0;
-  for (const row of alignedNucleus?.rows ?? []) {
+): readonly number[] {
+  return (alignedNucleus?.rows ?? []).map((row) => {
     const label = row.labels?.[0];
     if (!label) {
-      continue;
+      return 0;
     }
     const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
-    if (tag) {
-      maxWidth = Math.max(maxWidth, tag.width);
-    }
-  }
-  return roundTexPt(maxWidth);
+    return tag ? roundTexPt(tag.width) : 0;
+  });
 }
 
 function layoutDisplayAlignmentTag(
@@ -707,9 +704,10 @@ interface TexDisplayAlignmentDimensions {
 
 function displayAlignmentDimensions(params: {
   readonly measuredWidth: number;
-  readonly maxTagWidth: number;
   readonly pairCount: number;
   readonly rowCount: number;
+  readonly rows: readonly TexMathChildHListLayoutItem[];
+  readonly rowTagWidths: readonly number[];
   readonly targetWidth: number;
 }): TexDisplayAlignmentDimensions {
   const alignSepCount = Math.max(0, params.pairCount - 1);
@@ -722,45 +720,144 @@ function displayAlignmentDimensions(params: {
     params.measuredWidth - fixedPairGapWidth - trailingWidth
   ));
   const flexible = roundTexPt((params.targetWidth - totalFieldWidth) / (params.pairCount + 1));
-  const tagAdjustedEqnShift = params.pairCount > 1 && params.maxTagWidth > 0
-    ? roundTexPt(Math.max(
-      0,
-      (params.targetWidth - totalFieldWidth - fixedPairGapWidth - params.maxTagWidth) / 2
-    ))
-    : null;
+  let eqnShift: number;
+  let alignSep: number;
   if (flexible >= TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT) {
-    if (tagAdjustedEqnShift !== null && tagAdjustedEqnShift < flexible) {
-      return {
-        eqnShift: tagAdjustedEqnShift,
-        alignSep: TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT,
-        pairCount: params.pairCount,
-        rowWidth: roundTexPt(tagAdjustedEqnShift + totalFieldWidth + fixedPairGapWidth),
-        targetWidth: params.targetWidth,
-      };
-    }
-    return {
-      eqnShift: flexible,
-      alignSep: flexible,
-      pairCount: params.pairCount,
-      rowWidth: roundTexPt(totalFieldWidth + params.pairCount * flexible),
-      targetWidth: params.targetWidth,
-    };
+    eqnShift = flexible;
+    alignSep = flexible;
+  } else {
+    alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
+    eqnShift = Math.max(
+      0,
+      roundTexPt((params.targetWidth - totalFieldWidth - alignSepCount * alignSep) / 2)
+    );
   }
-  const alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
-  const eqnShift = Math.max(
-    0,
-    roundTexPt((params.targetWidth - totalFieldWidth - alignSepCount * alignSep) / 2)
-  );
-  const adjustedEqnShift = tagAdjustedEqnShift === null
-    ? eqnShift
-    : Math.min(eqnShift, tagAdjustedEqnShift);
+  if (params.pairCount > 1 && params.rowTagWidths.some((width) => width > 0)) {
+    ({ eqnShift, alignSep } = applyAmsmathCenteredRightTagClearance({
+      eqnShift,
+      alignSep,
+      pairCount: params.pairCount,
+      rows: params.rows,
+      rowTagWidths: params.rowTagWidths,
+      targetWidth: params.targetWidth,
+    }));
+  }
   return {
-    eqnShift: adjustedEqnShift,
+    eqnShift,
     alignSep,
     pairCount: params.pairCount,
-    rowWidth: roundTexPt(adjustedEqnShift + totalFieldWidth + alignSepCount * alignSep),
+    rowWidth: roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep),
     targetWidth: params.targetWidth,
   };
+}
+
+function applyAmsmathCenteredRightTagClearance(params: {
+  readonly eqnShift: number;
+  readonly alignSep: number;
+  readonly pairCount: number;
+  readonly rows: readonly TexMathChildHListLayoutItem[];
+  readonly rowTagWidths: readonly number[];
+  readonly targetWidth: number;
+}): { readonly eqnShift: number; readonly alignSep: number } {
+  let eqnShift = params.eqnShift;
+  let alignSep = params.alignSep;
+  const maxColumnWidths = displayAlignmentMaxColumnWidths(params.rows);
+  const alignSepCount = Math.max(0, params.pairCount - 1);
+  for (let rowIndex = params.rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+    const tagWidth = params.rowTagWidths[rowIndex] ?? 0;
+    if (tagWidth <= 0) {
+      continue;
+    }
+    const fieldWidths = displayAlignmentFieldWidths(params.rows[rowIndex]?.items ?? []);
+    const rowPairIndex = Math.floor(Math.max(0, fieldWidths.length - 1) / 2);
+    const rowAlignSepCount = Math.min(alignSepCount, rowPairIndex);
+    const rowFlexibleSlotCount = params.pairCount + 1 - alignSepCount + rowAlignSepCount;
+    const rowWidthBeforeTag = amsmathRightTagRowWidth(fieldWidths, maxColumnWidths);
+    const equationAndTagWidth = roundTexPt(rowWidthBeforeTag + tagWidth);
+    const minimumClearanceWidth = roundTexPt(
+      equationAndTagWidth +
+      rowAlignSepCount * TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT +
+      2 * TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT
+    );
+    if (minimumClearanceWidth > params.targetWidth) {
+      continue;
+    }
+    const currentClearanceWidth = roundTexPt(
+      eqnShift +
+      equationAndTagWidth +
+      rowAlignSepCount * alignSep +
+      tagWidth
+    );
+    if (currentClearanceWidth <= params.targetWidth) {
+      continue;
+    }
+    const candidate = roundTexPt(
+      (params.targetWidth - equationAndTagWidth) / rowFlexibleSlotCount
+    );
+    if (candidate < TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT) {
+      alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
+      eqnShift = roundTexPt(Math.max(
+        0,
+        (params.targetWidth - equationAndTagWidth - rowAlignSepCount * alignSep) / 2
+      ));
+      continue;
+    }
+    if (candidate < eqnShift) {
+      eqnShift = Math.max(0, candidate);
+    }
+    if (candidate < alignSep) {
+      alignSep = candidate;
+    }
+  }
+  return { eqnShift, alignSep };
+}
+
+function displayAlignmentMaxColumnWidths(
+  rows: readonly TexMathChildHListLayoutItem[]
+): readonly number[] {
+  const maxWidths: number[] = [];
+  for (const row of rows) {
+    const widths = displayAlignmentFieldWidths(row.items);
+    for (let index = 0; index < widths.length; index += 1) {
+      maxWidths[index] = roundTexPt(Math.max(maxWidths[index] ?? 0, widths[index] ?? 0));
+    }
+  }
+  return maxWidths;
+}
+
+function displayAlignmentFieldWidths(
+  items: readonly TexMathHListItem[]
+): readonly number[] {
+  return items
+    .filter((item): item is TexMathChildHListLayoutItem =>
+      item.kind === "hlist" && item.role === "aligned-cell"
+    )
+    .map((item) => item.width);
+}
+
+function amsmathRightTagRowWidth(
+  fieldWidths: readonly number[],
+  maxColumnWidths: readonly number[]
+): number {
+  let carry = 0;
+  let width = 0;
+  for (let index = 0; index < fieldWidths.length; index += 1) {
+    const fieldWidth = fieldWidths[index] ?? 0;
+    const maxColumnWidth = maxColumnWidths[index] ?? 0;
+    if (fieldWidth > 0) {
+      width += carry;
+      if (index % 2 === 0) {
+        width += maxColumnWidth;
+        carry = 0;
+      } else {
+        width += fieldWidth;
+        carry = maxColumnWidth - fieldWidth;
+      }
+    } else {
+      carry += maxColumnWidth;
+    }
+  }
+  return roundTexPt(width);
 }
 
 function offsetMathHListItems(

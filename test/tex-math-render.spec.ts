@@ -1561,6 +1561,47 @@ unordered.`;
     expect(directAlignment?.rows[0]?.depth).toBeLessThan(4);
   });
 
+  it("applies TeX right-tag clearance to multi-pair centered alignments", () => {
+    const source = String.raw`Alpha \begin{align*}\text{for $n \ge 1$}&=\text{if}&\sqrt{n+y}&=\big[a+c\big] \tag{A}\\
+\overline{i+c}&=n&\Big\langle \frac{i}{\dots}\Big\rangle&=\tfrac{\ldots}{\ldots}\end{align*} Beta`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`\text{for $n \ge 1$}&=\text{if}&\sqrt{n+y}&=\big[a+c\big] \tag{A}\\
+\overline{i+c}&=n&\Big\langle \frac{i}{\dots}\Big\rangle&=\tfrac{\ldots}{\ldots}`,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{align*}`),
+      sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      contentStart: source.indexOf(String.raw`\text{for`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 220,
+    });
+    const firstRow = directAlignment?.rows.at(0);
+    const secondRow = directAlignment?.rows.at(1);
+    const firstRowCells = firstRow?.hlist?.items.filter((item) =>
+      item.kind === "hlist" && item.role === "aligned-cell"
+    ) ?? [];
+    const secondRowCells = secondRow?.hlist?.items.filter((item) =>
+      item.kind === "hlist" && item.role === "aligned-cell"
+    ) ?? [];
+
+    expect(firstRowCells).toHaveLength(4);
+    expect(secondRowCells).toHaveLength(4);
+    const firstRowCellXs = firstRowCells.map((cell) => cell.x);
+    const secondRowCellXs = secondRowCells.map((cell) => cell.x);
+    expect(firstRowCellXs).toEqual([
+      expect.closeTo(23.472146, 5),
+      expect.closeTo(63.117898, 5),
+      expect.closeTo(105.925776, 5),
+      expect.closeTo(137.745364, 5),
+    ]);
+    expect(secondRowCellXs).toEqual([
+      expect.closeTo(43.12294, 5),
+      expect.closeTo(63.117898, 5),
+      expect.closeTo(111.45639, 5),
+      expect.closeTo(137.745364, 5),
+    ]);
+  });
+
   it("does not insert aligned inter-pair gap for alignedat environments", () => {
     const aligned = layoutTexMathList(parseTexMath(
       String.raw`\begin{aligned}a&=b&c&=d\\e&=f&g&=h\end{aligned}`
