@@ -4535,7 +4535,7 @@ unordered.`;
   });
 
   it("fuzzes editor hit maps for mixed TeX-derived text and inline math", async () => {
-    const cases = Array.from({ length: 64 }, (_, index) => buildTexMathHitMapFuzzCase(index));
+    const cases = Array.from({ length: 96 }, (_, index) => buildTexMathHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
@@ -5188,7 +5188,7 @@ unordered.`;
   });
 
   it("fuzzes registered hit geometry for display alignment rows in mixed vlists", async () => {
-    const cases = Array.from({ length: 48 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
+    const cases = Array.from({ length: 64 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
@@ -5316,7 +5316,7 @@ unordered.`;
   });
 
   it("fuzzes registered document-level hit geometry for mixed inline and display math", async () => {
-    const cases = Array.from({ length: 36 }, (_, index) => buildTexDocumentMathHitMapFuzzCase(index));
+    const cases = Array.from({ length: 64 }, (_, index) => buildTexDocumentMathHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,

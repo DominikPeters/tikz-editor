@@ -22,6 +22,7 @@
     "test": "npm run generate:grammar && vitest run",
     "test:coverage": "npm run generate:grammar && vitest run --coverage",
     "test:capabilities": "npm run generate:grammar && vitest run test/capabilities.spec.ts",
+    "test:tex-math:hitmap": "npm run generate:grammar && vitest run test/tex-shaping.spec.ts -t \"inline math|display math|display alignment|document-level|multline\"",
     "test:watch": "npm run generate:grammar && vitest",
     "test:corpus": "npm run generate:grammar && vitest run test/corpus.spec.ts",
     "parse:corpus": "npm run test:corpus",
