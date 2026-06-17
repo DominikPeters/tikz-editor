@@ -290,9 +290,12 @@ export function layoutTexMathList(
 
   for (const item of spaced.items) {
     if (item.kind === "resolved-glue") {
-      const width = muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
-      const stretch = muToPt(fontProfile, currentStyle, baseAtPt, item.stretchMu);
-      const shrink = muToPt(fontProfile, currentStyle, baseAtPt, item.shrinkMu);
+      const textSpace = item.fixedTextSpace === true
+        ? texMathTextSpaceWidth(fontProfile, baseAtPt)
+        : null;
+      const width = textSpace ?? muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
+      const stretch = textSpace !== null ? 0 : muToPt(fontProfile, currentStyle, baseAtPt, item.stretchMu);
+      const shrink = textSpace !== null ? 0 : muToPt(fontProfile, currentStyle, baseAtPt, item.shrinkMu);
       items.push({
         kind: "glue",
         x: roundTexPt(cursor),
@@ -6179,6 +6182,18 @@ function muToPt(
     baseAtPt,
   });
   return roundTexPt((tfmToPt(symbols, symbols.data.fontdimen.quad) / 18) * mu);
+}
+
+function texMathTextSpaceWidth(
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): number {
+  const textFont = fontProfile.textFontProfile.resolveTextFont(
+    fontProfile.textFontProfile.defaultFontState,
+    baseAtPt,
+    fontProfile.metricProvider
+  );
+  return roundTexPt(tfmToPt(textFont, textFont.data.fontdimen.space));
 }
 
 function layoutScriptList(

@@ -152,6 +152,30 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out explicit TeX math spacing commands with TeX widths", () => {
+    const formulas = [
+      [String.raw`a\,b`, 1.666672],
+      [String.raw`a\:b`, 2.222229],
+      [String.raw`a\;b`, 2.777786],
+      [String.raw`a\!b`, -1.666672],
+      [String.raw`a\quad b`, 10.00003],
+      [String.raw`a\qquad b`, 20.00006],
+      [String.raw`a\ b`, 3.330002],
+      [String.raw`a\nobreakspace b`, 3.330002],
+    ] as const;
+
+    for (const [formula, width] of formulas) {
+      const result = layout(formula);
+      const glue = result.hlist?.items.find((item) => item.kind === "glue");
+      expect(result.supported).toBe(true);
+      expect(glue).toMatchObject({
+        kind: "glue",
+        source: "explicit",
+        width: expect.closeTo(width, 5),
+      });
+    }
+  });
+
   it("lays out named Greek and symbol commands through TeX math fonts", () => {
     const result = layout(String.raw`\alpha+\beta=\gamma+\Gamma+\Omega+x\leq y\neq z`);
 

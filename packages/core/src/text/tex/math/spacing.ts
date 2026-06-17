@@ -25,6 +25,7 @@ export interface TexMathResolvedGlue {
   readonly mu: number;
   readonly stretchMu: number;
   readonly shrinkMu: number;
+  readonly fixedTextSpace?: boolean;
   readonly sourceSpan: TexMathSourceSpan;
   readonly command?: TexMathGlue["command"];
   readonly explicitMu?: boolean;
@@ -435,7 +436,7 @@ function namedMuGlueDimensions(
 
 function explicitGlueDimensions(
   command: TexMathGlue["command"]
-): Pick<TexMathResolvedGlue, "mu" | "stretchMu" | "shrinkMu"> | null {
+): Pick<TexMathResolvedGlue, "mu" | "stretchMu" | "shrinkMu" | "fixedTextSpace"> | null {
   switch (command) {
     case ",":
       return namedMuGlueDimensions("thin");
@@ -446,7 +447,7 @@ function explicitGlueDimensions(
     case "!":
       return { mu: -3, stretchMu: 0, shrinkMu: 0 };
     case "nobreakspace":
-      return { mu: 18, stretchMu: 0, shrinkMu: 0 };
+      return { mu: 0, stretchMu: 0, shrinkMu: 0, fixedTextSpace: true };
     case "negmedspace":
       return { mu: -4, stretchMu: -2, shrinkMu: -4 };
     case "negthickspace":

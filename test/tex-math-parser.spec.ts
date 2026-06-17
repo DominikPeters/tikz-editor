@@ -3362,6 +3362,21 @@ describe("TeX math parser", () => {
     expect(result.list.items[3]).toMatchObject({ kind: "glue", command: "quad" });
   });
 
+  it("parses TeX math control-space commands as text-space glue", () => {
+    const result = parseTexMath(String.raw`x\ y\nobreakspace z`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) => item.kind)).toEqual([
+      "atom",
+      "glue",
+      "atom",
+      "glue",
+      "atom",
+    ]);
+    expect(result.list.items[1]).toMatchObject({ kind: "glue", command: "nobreakspace" });
+    expect(result.list.items[3]).toMatchObject({ kind: "glue", command: "nobreakspace" });
+  });
+
   it("parses TeX math kern primitives as source-spanned kern items", () => {
     const result = parseTexMath(String.raw`a\kern2pt b\mkern-1.5mu c`, { sourceOffset: 10 });
 
