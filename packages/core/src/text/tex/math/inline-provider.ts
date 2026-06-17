@@ -8,7 +8,13 @@ import type {
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { TexMathFontProfile } from "./font-profile.js";
-import type { TexMathAlignedNucleus, TexMathAlignedRowLabel, TexMathAtom, TexMathList } from "./ir.js";
+import type {
+  TexMathAlignedNucleus,
+  TexMathAlignedRowLabel,
+  TexMathAtom,
+  TexMathList,
+  TexMathSourceSpan,
+} from "./ir.js";
 import {
   layoutTexMathList,
   resolveDefaultTexMathFontProfileForList,
@@ -597,6 +603,12 @@ function getDisplayMathAlignment(
         ? layoutDisplayAlignmentTag(multlineLabel, row.sourceSpan.start, fontProfile, baseAtPt)
         : null;
       const shiftTag = tag !== null && multlineRightTagCollides(rowWidth, tag.width, params.targetWidth);
+      const rowSourceSpan = tag && multlineLabel
+        ? {
+          start: Math.min(row.sourceSpan.start, multlineLabel.sourceSpan.start),
+          end: Math.max(row.sourceSpan.end, multlineLabel.sourceSpan.end),
+        }
+        : row.sourceSpan;
       const rowOffset = multlineRowOffset(
         rowWidth,
         rowIndex,
@@ -628,7 +640,7 @@ function getDisplayMathAlignment(
         width: taggedRow.width,
         height: taggedRow.height,
         depth: taggedRow.depth,
-        sourceSpan: row.sourceSpan,
+        sourceSpan: rowSourceSpan,
         items: taggedRow.items,
       };
       return {
@@ -636,18 +648,18 @@ function getDisplayMathAlignment(
         x: 0,
         source: params.source,
         content: params.content,
-        sourceStart: row.sourceSpan.start,
-        sourceEnd: row.sourceSpan.end,
-        contentStart: row.sourceSpan.start,
-        contentEnd: row.sourceSpan.end,
+        sourceStart: rowSourceSpan.start,
+        sourceEnd: rowSourceSpan.end,
+        contentStart: rowSourceSpan.start,
+        contentEnd: rowSourceSpan.end,
         width: taggedRow.width,
         height: taggedRow.height,
         depth: taggedRow.depth,
         caretStops: buildInlineMathCaretStops(rowHList, {
-          sourceStart: row.sourceSpan.start,
-          sourceEnd: row.sourceSpan.end,
-          contentStart: row.sourceSpan.start,
-          contentEnd: row.sourceSpan.end,
+          sourceStart: rowSourceSpan.start,
+          sourceEnd: rowSourceSpan.end,
+          contentStart: rowSourceSpan.start,
+          contentEnd: rowSourceSpan.end,
         }),
         constructRanges: buildInlineMathConstructRanges(rowHList),
         breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
@@ -932,7 +944,49 @@ function layoutDisplayAlignmentTag(
     fontProfile,
     baseAtPt,
   });
-  return tag.supported ? tag.hlist : null;
+  return tag.supported ? remapMathHListSourceSpan(tag.hlist, label.sourceSpan) : null;
+}
+
+function remapMathHListSourceSpan(
+  hlist: TexMathHList,
+  sourceSpan: TexMathSourceSpan
+): TexMathHList {
+  return {
+    ...hlist,
+    sourceSpan,
+    items: hlist.items.map((item): TexMathHListItem => {
+      if (item.kind === "hlist") {
+        return {
+          ...item,
+          sourceSpan,
+          items: remapMathHListItemsSourceSpan(item.items, sourceSpan),
+        };
+      }
+      return {
+        ...item,
+        sourceSpan,
+      };
+    }),
+  };
+}
+
+function remapMathHListItemsSourceSpan(
+  items: readonly TexMathHListItem[],
+  sourceSpan: TexMathSourceSpan
+): readonly TexMathHListItem[] {
+  return items.map((item): TexMathHListItem => {
+    if (item.kind === "hlist") {
+      return {
+        ...item,
+        sourceSpan,
+        items: remapMathHListItemsSourceSpan(item.items, sourceSpan),
+      };
+    }
+    return {
+      ...item,
+      sourceSpan,
+    };
+  });
 }
 
 function addDisplayAlignmentTag(

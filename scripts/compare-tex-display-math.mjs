@@ -66,14 +66,29 @@ const cases = args.cases.length > 0
         width: 120,
       },
       {
+        id: "align-numbered-display",
+        source: String.raw`Alpha \begin{align}a&=b\\c&=d\notag\\e&=f\tag{A}\\g&=h\end{align} Beta`,
+        width: 180,
+      },
+      {
         id: "gather-star-display",
         source: String.raw`Alpha \begin{gather*}a=b\\c+d=e\end{gather*} Beta`,
         width: 140,
       },
       {
+        id: "gather-numbered-display",
+        source: String.raw`Alpha \begin{gather}a=b\\c=d\notag\\e=f\tag{A}\\g=h\end{gather} Beta`,
+        width: 180,
+      },
+      {
         id: "multline-star-display",
         source: String.raw`Alpha \begin{multline*}a=b\\c+d=e\\f=g\end{multline*} Beta`,
         width: 140,
+      },
+      {
+        id: "multline-numbered-display",
+        source: String.raw`Alpha \begin{multline}a\\b\end{multline} Beta \begin{multline}c\\d\notag\end{multline} Gamma \begin{multline}e\\f\tag{A}\end{multline} Delta`,
+        width: 180,
       },
     ];
 
@@ -610,8 +625,12 @@ function texSource(caseSpec) {
 
 function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
+    source.includes(String.raw`\begin{equation}`) ||
+    source.includes(String.raw`\begin{align}`) ||
     source.includes(String.raw`\begin{align*}`) ||
+    source.includes(String.raw`\begin{gather}`) ||
     source.includes(String.raw`\begin{gather*}`) ||
+    source.includes(String.raw`\begin{multline}`) ||
     source.includes(String.raw`\begin{multline*}`) ||
     source.includes(String.raw`\begin{aligned}`) ||
     source.includes(String.raw`\begin{alignedat}`) ||
@@ -1059,6 +1078,21 @@ function randomDocumentMathTerm(rng) {
 function alignMatrixCases() {
   return [
     {
+      id: "align-numbered-three-rows",
+      width: 180,
+      source: String.raw`Alpha \begin{align}a&=b\\c&=d\notag\\e&=f\tag{A}\\g&=h\end{align} Beta`,
+    },
+    {
+      id: "gather-numbered-three-rows",
+      width: 180,
+      source: String.raw`Alpha \begin{gather}a=b\\c=d\notag\\e=f\tag{A}\\g=h\end{gather} Beta`,
+    },
+    {
+      id: "multline-numbered-three-rows",
+      width: 180,
+      source: String.raw`Alpha \begin{multline}a\\b\end{multline} Beta \begin{multline}c\\d\notag\end{multline} Gamma \begin{multline}e\\f\tag{A}\end{multline} Delta`,
+    },
+    {
       id: "align-three-rows",
       width: 120,
       source: String.raw`Alpha \begin{align*}a&=b\\c&=d\\e&=f\end{align*} Beta`,
@@ -1255,7 +1289,7 @@ function generateDisplayFuzzCases(count, seed) {
   const rng = makeRng(seed);
   return Array.from({ length: count }, (_, index) => {
     const width = choice(rng, [100, 120, 140, 160, 180, 220]);
-    const displayKind = index % 4;
+    const displayKind = index % 7;
     return {
       id: `display-fuzz-${index + 1}`,
       width,
@@ -1273,6 +1307,15 @@ function randomGeneratedDisplaySource(rng, displayKind, index) {
   }
   if (displayKind === 3) {
     return `\\[${randomNestedAlignedatFormula(rng)}\\]`;
+  }
+  if (displayKind === 4) {
+    return randomNumberedAlignSource(rng, index % 3);
+  }
+  if (displayKind === 5) {
+    return randomNumberedGatherSource(rng, index % 3);
+  }
+  if (displayKind === 6) {
+    return randomNumberedMultlineSource(rng, index % 3);
   }
   return `\\[${randomDisplayFormula(rng)}\\]`;
 }
@@ -1415,6 +1458,43 @@ function randomAlignStarSource(rng, tagMode = 0) {
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
 }
 
+function randomNumberedAlignSource(rng, tagMode = 0) {
+  const rowCount = 2 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomAlignmentLeftCell(rng));
+      cells.push(`=${randomAlignmentRightCell(rng)}`);
+    }
+    rows.push(numberedRowWithGeneratedMetadata(cells.join("&"), rowIndex, tagMode));
+  }
+  return String.raw`\begin{align}` + rows.join(String.raw`\\`) + String.raw`\end{align}`;
+}
+
+function randomNumberedGatherSource(rng, tagMode = 0) {
+  const rowCount = 2 + randomInt(rng, 3);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = `${randomMathTerm(rng)}${choice(rng, ["+", "-", "="])}${randomMathTerm(rng)}`;
+    rows.push(numberedRowWithGeneratedMetadata(row, rowIndex, tagMode));
+  }
+  return String.raw`\begin{gather}` + rows.join(String.raw`\\`) + String.raw`\end{gather}`;
+}
+
+function randomNumberedMultlineSource(rng, tagMode = 0) {
+  const rowCount = 2 + randomInt(rng, 3);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = rowIndex === 0
+      ? `${randomMathTerm(rng)}${choice(rng, ["+", "-", "="])}${randomMathTerm(rng)}`
+      : randomMathTerm(rng);
+    rows.push(numberedRowWithGeneratedMetadata(row, rowIndex, tagMode));
+  }
+  return String.raw`\begin{multline}` + rows.join(String.raw`\\`) + String.raw`\end{multline}`;
+}
+
 function alignRowWithGeneratedTag(row, rowIndex, rowCount, tagMode) {
   if (rowIndex !== 0) {
     return row;
@@ -1424,6 +1504,16 @@ function alignRowWithGeneratedTag(row, rowIndex, rowCount, tagMode) {
   }
   if (tagMode === 2 && rowCount === 1) {
     return `${row}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \\tag{Long tag}`;
+  }
+  return row;
+}
+
+function numberedRowWithGeneratedMetadata(row, rowIndex, tagMode) {
+  if (rowIndex === 0 && tagMode === 1) {
+    return `${row} \\tag{A}`;
+  }
+  if (rowIndex === 1 && tagMode === 2) {
+    return `${row} \\notag`;
   }
   return row;
 }
