@@ -9,9 +9,19 @@ const DEFAULT_OUT = "artifacts/mathjax-tex-corpus/coverage-summary.json";
 const DEFAULT_SLICES = "scripts/mathjax-tex-corpus-slices.json";
 const DISPLAY_ALIGNMENT_ENVIRONMENTS = [
   {
+    delimiter: "align",
+    begin: String.raw`\begin{align}`,
+    end: String.raw`\end{align}`,
+  },
+  {
     delimiter: "align-star",
     begin: String.raw`\begin{align*}`,
     end: String.raw`\end{align*}`,
+  },
+  {
+    delimiter: "gather",
+    begin: String.raw`\begin{gather}`,
+    end: String.raw`\end{gather}`,
   },
   {
     delimiter: "gather-star",
@@ -19,9 +29,26 @@ const DISPLAY_ALIGNMENT_ENVIRONMENTS = [
     end: String.raw`\end{gather*}`,
   },
   {
+    delimiter: "multline",
+    begin: String.raw`\begin{multline}`,
+    end: String.raw`\end{multline}`,
+  },
+  {
     delimiter: "multline-star",
     begin: String.raw`\begin{multline*}`,
     end: String.raw`\end{multline*}`,
+  },
+];
+const SINGLE_DISPLAY_ENVIRONMENTS = [
+  {
+    delimiter: "equation",
+    begin: String.raw`\begin{equation}`,
+    end: String.raw`\end{equation}`,
+  },
+  {
+    delimiter: "equation-star",
+    begin: String.raw`\begin{equation*}`,
+    end: String.raw`\end{equation*}`,
   },
 ];
 const distEntry = resolve(process.cwd(), "packages/core/dist/text/tex/math/index.js");
@@ -34,6 +61,7 @@ const {
   createTexDerivedInlineMathBoxProvider,
   layoutTexMathList,
   parseTexMathAlignedBody,
+  parseTexMathDisplayBody,
   parseTexMath,
 } = await import(distEntry);
 
@@ -182,11 +210,11 @@ function checkEntry(entry, provider) {
     });
   }
 
-  const alignment = displayAlignmentContent(entry.source);
-  const providerKind = alignment ? "display-alignment" : entry.display === true ? "display-box" : "inline-box";
-  const content = alignment?.content ?? entry.source;
-  const contentStart = alignment?.contentStart ?? 0;
-  const delimiter = alignment?.delimiter ?? null;
+  const environment = displayEnvironmentContent(entry.source);
+  const providerKind = environment?.kind ?? (entry.display === true ? "display-box" : "inline-box");
+  const content = environment?.content ?? entry.source;
+  const contentStart = environment?.contentStart ?? 0;
+  const delimiter = environment?.delimiter ?? null;
   let parsed;
   try {
     parsed = parseProviderContent(providerKind, content, contentStart, delimiter);
@@ -283,6 +311,12 @@ function parseProviderContent(providerKind, content, contentStart, delimiter) {
       suppressTerminalEllipsisGlue: true,
     });
   }
+  if (providerKind === "display-box" && isSingleDisplayEnvironmentDelimiter(delimiter)) {
+    return parseTexMathDisplayBody(content, {
+      sourceOffset: contentStart,
+      suppressTerminalEllipsisGlue: true,
+    });
+  }
   return parseTexMath(content, {
     sourceOffset: contentStart,
     suppressTerminalEllipsisGlue: providerKind === "display-box",
@@ -306,7 +340,7 @@ function providerBox(provider, providerKind, source, content, contentStart, deli
     return provider.getDisplayMathBox?.({
       source,
       content,
-      delimiter: "bracket",
+      delimiter: delimiter ?? "bracket",
       sourceStart: 0,
       sourceEnd: source.length,
       contentStart,
@@ -325,8 +359,26 @@ function providerBox(provider, providerKind, source, content, contentStart, deli
   });
 }
 
-function displayAlignmentContent(source) {
-  for (const environment of DISPLAY_ALIGNMENT_ENVIRONMENTS) {
+function displayEnvironmentContent(source) {
+  const singleDisplay = displayEnvironmentContentFromList(source, SINGLE_DISPLAY_ENVIRONMENTS);
+  if (singleDisplay) {
+    return {
+      ...singleDisplay,
+      kind: "display-box",
+    };
+  }
+  const alignment = displayEnvironmentContentFromList(source, DISPLAY_ALIGNMENT_ENVIRONMENTS);
+  if (alignment) {
+    return {
+      ...alignment,
+      kind: "display-alignment",
+    };
+  }
+  return null;
+}
+
+function displayEnvironmentContentFromList(source, environments) {
+  for (const environment of environments) {
     const start = source.indexOf(environment.begin);
     const finish = source.lastIndexOf(environment.end);
     if (start < 0 || finish < start) {
@@ -342,11 +394,15 @@ function displayAlignmentContent(source) {
   return null;
 }
 
+function isSingleDisplayEnvironmentDelimiter(delimiter) {
+  return delimiter === "equation" || delimiter === "equation-star";
+}
+
 function displayAlignmentColumnSeparation(delimiter) {
-  if (delimiter === "gather-star") {
+  if (delimiter === "gather" || delimiter === "gather-star") {
     return "gather";
   }
-  if (delimiter === "multline-star") {
+  if (delimiter === "multline" || delimiter === "multline-star") {
     return "multline";
   }
   return "align";

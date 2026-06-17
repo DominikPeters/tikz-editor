@@ -53,17 +53,17 @@ The other slices are mainly roadmaps. They should not be treated as immediate ex
 
 ## Current Coverage Snapshot
 
-These counts come from `npm run check:mathjax-tex-corpus -- --slice <slice>` after the initial TeX math renderer implementation.
+These counts come from `npm run check:mathjax-tex-corpus -- --slice <slice>` after adding display-environment-aware corpus validation for supported `equation`, `align`, `gather`, and `multline` wrappers.
 
 | Slice | Entries | Supported | Supported % | Explicit unsupported | Parser error | Not applicable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `core-baseline` | 1,279 | 426 | 33.3% | 765 | 88 | 0 |
-| `latex-oracle-candidates` | 997 | 226 | 22.7% | 767 | 0 | 4 |
-| `extra-oracle-candidates` | 108 | 3 | 2.8% | 101 | 0 | 4 |
-| `display-environments` | 209 | 4 | 1.9% | 183 | 20 | 2 |
-| `font-symbol-text` | 295 | 6 | 2.0% | 275 | 14 | 0 |
-| `macro-diagnostics` | 244 | 1 | 0.4% | 176 | 60 | 7 |
-| `extension-inventory` | 821 | 1 | 0.1% | 800 | 20 | 0 |
+| `core-baseline` | 1,279 | 468 | 36.6% | 730 | 81 | 0 |
+| `latex-oracle-candidates` | 997 | 510 | 51.2% | 483 | 0 | 4 |
+| `extra-oracle-candidates` | 108 | 60 | 55.6% | 44 | 0 | 4 |
+| `display-environments` | 209 | 74 | 35.4% | 116 | 17 | 2 |
+| `font-symbol-text` | 295 | 7 | 2.4% | 274 | 14 | 0 |
+| `macro-diagnostics` | 244 | 9 | 3.7% | 166 | 62 | 7 |
+| `extension-inventory` | 821 | 59 | 7.2% | 742 | 20 | 0 |
 | `html-color-action` | 87 | 1 | 1.1% | 64 | 17 | 5 |
 
 The dominant current failure classes are:
@@ -73,4 +73,4 @@ The dominant current failure classes are:
 - Macro expansion and scoping, such as `\def`, `\let`, `\newcommand`, `\begingroup`, and `\endgroup`.
 - Diagnostic-policy gaps where MathJax expects an error but the current parser only reports unsupported-command warnings.
 
-After adding renderable Computer Modern symbol/operator mappings, TeX-like single-token arguments for `\frac`, `\binom`, and `\sqrt`, standalone delimiter commands, `\colon`, control-space, long-arrow macro composites, first-class parser/layout support for `align`/`gather` display environments, explicit amsmath-style diagnostics for invalid nested `align`/`gather` structures, TeX infix generalized fractions (`\over`, `\choose`, `\atop`, `\brack`, `\brace`, `\overwithdelims`, `\atopwithdelims`), absolute-dimension `\above`/`\abovewithdelims`, non-rendering alignment row metadata (`\label`, `\notag`, `\nonumber`), the first AMSa/AMSb glyph-family slice (`\digamma`, `\dotplus`, `\ulcorner`, `\urcorner`, `\lesssim`, `\gtrsim`, `\thickapprox`, `\Bbbk`, and related symbols), AMS multi-integral operators (`\iint`, `\iiint`, `\iiiint`, `\idotsint`), AMS multi-dot accents (`\dddot`, `\ddddot`), AMS extensible arrows (`\xleftarrow`, `\xrightarrow`), AMS prefix generalized fractions (`\genfrac`), AMS scriptstyle `subarray`, basic `\DeclareMathOperator`, TeX-like `xalignat` parser diagnostics, TeX-like `\genfrac` delimiter diagnostics, and display-alignment-aware corpus validation, `core-baseline` support rose from 232/1,279 to 426/1,279. Remaining high-frequency failures in that slice are now dominated by broader display/alignment behavior (`\\`, `\end`, `multline`, explicit tags), broader AMS/package macro coverage, and package-specific diagnostics rather than plain Computer Modern symbol declarations. Two remaining MathJax diagnostic expectations intentionally disagree with the installed AMSMath source: explicit `\cfrac[c]` still centers, and integer `\genfrac` style argument `4` maps to `\scriptscriptstyle` through `\@mathstyle`, rather than producing errors.
+After adding renderable Computer Modern symbol/operator mappings, TeX-like single-token arguments for `\frac`, `\binom`, and `\sqrt`, standalone delimiter commands, `\colon`, control-space, long-arrow macro composites, first-class parser/layout support for `align`/`gather`/`multline` display environments, explicit amsmath-style diagnostics for invalid nested `align`/`gather` structures, TeX infix generalized fractions (`\over`, `\choose`, `\atop`, `\brack`, `\brace`, `\overwithdelims`, `\atopwithdelims`), absolute-dimension `\above`/`\abovewithdelims`, non-rendering alignment row metadata (`\label`, `\notag`, `\nonumber`), the first AMSa/AMSb glyph-family slice (`\digamma`, `\dotplus`, `\ulcorner`, `\urcorner`, `\lesssim`, `\gtrsim`, `\thickapprox`, `\Bbbk`, and related symbols), AMS multi-integral operators (`\iint`, `\iiint`, `\iiiint`, `\idotsint`), AMS multi-dot accents (`\dddot`, `\ddddot`), AMS extensible arrows (`\xleftarrow`, `\xrightarrow`), AMS prefix generalized fractions (`\genfrac`), AMS scriptstyle `subarray`, basic `\DeclareMathOperator`, TeX-like `xalignat` parser diagnostics, TeX-like `\genfrac` delimiter diagnostics, and display-environment-aware corpus validation, `core-baseline` support rose from 232/1,279 to 468/1,279. Remaining high-frequency failures in that slice are now dominated by broader array/alignment environments (`array`, `eqnarray`, `flalign`, `xalignat`, matrix variants), broader AMS/package macro coverage, and package-specific diagnostics rather than plain Computer Modern symbol declarations. Two remaining MathJax diagnostic expectations intentionally disagree with the installed AMSMath source: explicit `\cfrac[c]` still centers, and integer `\genfrac` style argument `4` maps to `\scriptscriptstyle` through `\@mathstyle`, rather than producing errors.
