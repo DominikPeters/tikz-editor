@@ -5187,11 +5187,12 @@ unordered.`;
         },
       };
 
-      const alignRows = getKnuthPlassVListItemGeometry({
+      const snapshot = getKnuthPlassVListGeometrySnapshot({
         outputJax,
         paragraphId: testCase.id,
         containerElement: containerElement as any,
-      }).filter((item) => item.hboxRole === "display-align-row");
+      });
+      const alignRows = snapshot.items.filter((item) => item.hboxRole === "display-align-row");
       expect(alignRows.length, testCase.source).toBe(testCase.rows.length);
 
       for (const [rowIndex, row] of alignRows.entries()) {
@@ -5223,6 +5224,20 @@ unordered.`;
           displayAlignRowIndex: rowIndex,
           sourceStart: row.sourceStart,
           sourceEnd: row.sourceEnd,
+        });
+        const sourceHit = getKnuthPlassVListSourceHitFromSnapshot({
+          snapshot,
+          clientPoint: clientPoint(
+            px((row.clientLeft + row.clientRight) / 2),
+            px((row.clientTop + row.clientBottom) / 2)
+          ),
+        });
+        expect(sourceHit, `${testCase.id} row ${rowIndex}: ${testCase.source}`).toEqual({
+          offset: row.sourceStart,
+          selectionRange: {
+            start: row.sourceStart,
+            end: row.sourceEnd,
+          },
         });
       }
 
@@ -5364,6 +5379,20 @@ unordered.`;
           displayAlignRowIndex: rowIndex,
           sourceStart: row.sourceStart,
           sourceEnd: row.sourceEnd,
+        });
+        const sourceHit = getKnuthPlassVListSourceHitFromSnapshot({
+          snapshot,
+          clientPoint: clientPoint(
+            px((row.clientLeft + row.clientRight) / 2),
+            px((row.clientTop + row.clientBottom) / 2)
+          ),
+        });
+        expect(sourceHit, `${testCase.id} row ${rowIndex}: ${testCase.source}`).toEqual({
+          offset: row.sourceStart,
+          selectionRange: {
+            start: row.sourceStart,
+            end: row.sourceEnd,
+          },
         });
       }
     }
