@@ -413,6 +413,9 @@ class TexMathParser {
       if (commandName(token.text) === "boxed") {
         return this.parseBoxed(allowScripts);
       }
+      if (commandName(token.text) === "rule") {
+        return this.parseRule(allowScripts);
+      }
       const lineCommand = lineCommandName(token.text);
       if (lineCommand) {
         return this.parseLine(lineCommand, allowScripts);
@@ -915,6 +918,30 @@ class TexMathParser {
       nucleus: {
         kind: "boxed",
         body: body?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseRule(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const raise = this.parseOptionalBracketDimensionArgument(command.sourceSpan, `${command.text} raise`);
+    const width = this.parseRequiredDimensionArgument(command, "width");
+    const height = this.parseRequiredDimensionArgument(command, "height");
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      height?.sourceSpan ?? width?.sourceSpan ?? raise?.sourceSpan ?? command.sourceSpan
+    );
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "rule",
+        width: width?.valuePt ?? 0,
+        height: height?.valuePt ?? 0,
+        raise: raise?.valuePt ?? 0,
         commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },
@@ -3909,6 +3936,80 @@ class TexMathParser {
       return { sourceSpan: group.sourceSpan };
     }
     return { ruleThickness: dimension, sourceSpan: group.sourceSpan };
+  }
+
+  private parseOptionalBracketDimensionArgument(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { readonly valuePt: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const next = this.peek();
+    if (next?.kind !== "character" || next.text !== "[") {
+      return null;
+    }
+    const open = this.advance();
+    const tokens: TexMathToken[] = [];
+    let lastSpan: TexMathSourceSpan = open.sourceSpan;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (!token) {
+        break;
+      }
+      if (token.kind === "character" && token.text === "]") {
+        const close = this.advance();
+        const text = tokens.map((part) => part.text).join("").trim();
+        const sourceSpan = spanUnion(open.sourceSpan, close.sourceSpan);
+        const contentSourceSpan = {
+          start: open.sourceSpan.end,
+          end: Math.max(open.sourceSpan.end, close.sourceSpan.start),
+        };
+        const dimension = parseTexDimensionText(text);
+        if (dimension === null) {
+          this.addDiagnostic(
+            "error",
+            "invalid-tex-dimension",
+            `Unsupported or invalid TeX dimension for ${label}.`,
+            contentSourceSpan
+          );
+          return { valuePt: 0, sourceSpan };
+        }
+        return { valuePt: dimension, sourceSpan };
+      }
+      this.advance();
+      tokens.push(token);
+      lastSpan = token.sourceSpan;
+    }
+    this.addDiagnostic(
+      "error",
+      "missing-delimiter",
+      "Expected a closing bracket in optional dimension argument.",
+      next?.sourceSpan ?? fallbackSpan
+    );
+    return {
+      valuePt: 0,
+      sourceSpan: spanUnion(open.sourceSpan, lastSpan),
+    };
+  }
+
+  private parseRequiredDimensionArgument(
+    command: TexMathToken,
+    label: string
+  ): { readonly valuePt: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    const group = this.parseRequiredRawGroup(command.sourceSpan, `${command.text} ${label}`);
+    if (!group) {
+      return null;
+    }
+    const dimension = parseTexDimensionText(group.text.trim());
+    if (dimension === null) {
+      this.addDiagnostic(
+        "error",
+        "invalid-tex-dimension",
+        `Unsupported or invalid TeX dimension for ${command.text} ${label}.`,
+        group.contentSourceSpan
+      );
+      return { valuePt: 0, sourceSpan: group.sourceSpan };
+    }
+    return { valuePt: dimension, sourceSpan: group.sourceSpan };
   }
 
   private parseGenfracStyleArgument(

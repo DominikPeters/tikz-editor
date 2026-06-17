@@ -1002,6 +1002,48 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out LaTeX rule boxes with TeX raise-derived height and depth", () => {
+    const plain = layout(String.raw`\rule{2cm}{1cm}`);
+    expect(plain.supported).toBe(true);
+    expect(plain.hlist?.width).toBeCloseTo(56.905512, 6);
+    expect(plain.hlist?.height).toBeCloseTo(28.452756, 6);
+    expect(plain.hlist?.depth).toBeCloseTo(0, 6);
+    expect(plain.hlist?.items).toMatchObject([
+      {
+        kind: "rule",
+        role: "literal-rule",
+        x: 0,
+        y: expect.closeTo(-28.452756, 6),
+        width: expect.closeTo(56.905512, 6),
+        height: expect.closeTo(28.452756, 6),
+      },
+    ]);
+
+    const raised = layout(String.raw`\rule[3cm]{2cm}{1cm}`);
+    expect(raised.supported).toBe(true);
+    expect(raised.hlist?.width).toBeCloseTo(56.905512, 6);
+    expect(raised.hlist?.height).toBeCloseTo(113.811024, 6);
+    expect(raised.hlist?.depth).toBeCloseTo(0, 6);
+    expect(raised.hlist?.items[0]).toMatchObject({
+      kind: "rule",
+      role: "literal-rule",
+      y: expect.closeTo(-113.811024, 6),
+      height: expect.closeTo(28.452756, 6),
+    });
+
+    const lowered = layout(String.raw`\rule[-3cm]{2cm}{1cm}`);
+    expect(lowered.supported).toBe(true);
+    expect(lowered.hlist?.width).toBeCloseTo(56.905512, 6);
+    expect(lowered.hlist?.height).toBeCloseTo(0, 6);
+    expect(lowered.hlist?.depth).toBeCloseTo(85.358268, 6);
+    expect(lowered.hlist?.items[0]).toMatchObject({
+      kind: "rule",
+      role: "literal-rule",
+      y: expect.closeTo(56.905512, 6),
+      height: expect.closeTo(28.452756, 6),
+    });
+  });
+
   it("lays out amsmath cfrac with display style, numerator alignment, and trailing kern", () => {
     const centered = layout(String.raw`\cfrac{a}{bbb}`);
     const left = layout(String.raw`\cfrac[l]{a}{bbb}`);

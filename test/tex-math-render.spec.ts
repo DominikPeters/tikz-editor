@@ -273,6 +273,19 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('x="2959.9158" y="-923.334" width="40"');
   });
 
+  it("renders LaTeX rule boxes through SVG rects", () => {
+    const parsed = parseTexMath(String.raw`\rule[3cm]{2cm}{1cm}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-rule="literal-rule"');
+    expect(body).toContain('x="0" y="-11381.1024" width="5690.5512" height="2845.2756"');
+  });
+
   it("renders text command glyphs through the document text font", () => {
     const parsed = parseTexMath(String.raw`x+\text{if}`);
     const result = layoutTexMathList(parsed.list);

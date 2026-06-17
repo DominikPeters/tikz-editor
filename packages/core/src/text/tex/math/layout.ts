@@ -38,6 +38,7 @@ import type {
   TexMathOperatorCommand,
   TexMathOperatorLimits,
   TexMathOperatorNameNucleus,
+  TexMathRuleNucleus,
   TexMathSidesetNucleus,
   TexMathSmallMatrixNucleus,
   TexMathSmallMatrixEnvironment,
@@ -102,7 +103,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule" | "boxed-rule" | "var-limit-rule";
+  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule" | "boxed-rule" | "var-limit-rule" | "literal-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -794,6 +795,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "boxed") {
     return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "rule") {
+    return layoutRuleNucleus(nucleus);
   }
   if (nucleus.kind === "line") {
     return layoutLineNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -3477,6 +3481,30 @@ function layoutBoxedNucleus(
     width,
     height,
     depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutRuleNucleus(nucleus: TexMathRuleNucleus): TexMathAtomLayout {
+  const width = roundTexPt(nucleus.width);
+  const ruleHeight = roundTexPt(nucleus.height);
+  const raisedHeight = nucleus.height + nucleus.raise;
+  const rule = {
+    kind: "rule",
+    role: "literal-rule",
+    x: 0,
+    y: roundTexPt(-raisedHeight),
+    width,
+    height: ruleHeight,
+    sourceSpan: nucleus.sourceSpan,
+  } satisfies TexMathRuleLayoutItem;
+  return {
+    items: [rule],
+    width,
+    height: roundTexPt(Math.max(0, raisedHeight)),
+    depth: roundTexPt(Math.max(0, -nucleus.raise)),
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,

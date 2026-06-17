@@ -160,6 +160,25 @@ describe("TeX math parser", () => {
     expect(boxed.nucleus.kind === "boxed" ? boxed.nucleus.body.items : []).toHaveLength(3);
   });
 
+  it("parses LaTeX rule dimensions as a literal rule nucleus", () => {
+    const result = parseTexMath(String.raw`\rule[3cm]{2cm}{1cm}`, { sourceOffset: 5 });
+    const rule = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(rule).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 5, end: 25 },
+      nucleus: {
+        kind: "rule",
+        commandSourceSpan: { start: 5, end: 10 },
+        sourceSpan: { start: 5, end: 25 },
+        width: expect.closeTo(56.905512, 6),
+        height: expect.closeTo(28.452756, 6),
+        raise: expect.closeTo(85.358268, 6),
+      },
+    });
+  });
+
   it("parses dfrac and tfrac as style-forced generalized fractions", () => {
     const result = parseTexMath(String.raw`\dfrac{x}{y}+\tfrac{1}{2}`, { sourceOffset: 12 });
 
