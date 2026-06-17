@@ -2389,6 +2389,42 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out array cell template inserts inside column boxes", () => {
+    const prefixed = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{> {x} c}X\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(prefixed.supported).toBe(true);
+    expect(prefixed.hlist?.width).toBeCloseTo(24.784714, 4);
+    const prefixedRow = prefixed.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const prefixedCell = prefixedRow?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(prefixedCell).toMatchObject({
+      kind: "hlist",
+      role: "array-cell",
+      x: 5,
+      width: expect.closeTo(14.78473, 4),
+    });
+    expect(prefixedCell?.items).toMatchObject([
+      { kind: "hlist", role: "array-insert", x: 0, width: expect.closeTo(5.71528, 4) },
+      { kind: "hlist", role: "nucleus", x: expect.closeTo(5.71528, 4) },
+    ]);
+
+    const suffixed = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c<{A}}x\\y\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(suffixed.supported).toBe(true);
+    expect(suffixed.hlist?.width).toBeCloseTo(23.2153, 4);
+    const suffixedFirstRow = suffixed.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const suffixedFirstCell = suffixedFirstRow?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(suffixedFirstCell?.items).toMatchObject([
+      { kind: "hlist", role: "nucleus", x: 0 },
+      { kind: "hlist", role: "array-insert", x: expect.closeTo(5.71528, 4) },
+    ]);
+  });
+
   it("lays out cases as amsmath array with stretched struts, quad gap, and left brace", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{cases}a&b\\x&y\end{cases}`).list,

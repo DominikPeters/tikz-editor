@@ -398,12 +398,21 @@ export interface TexMathArrayPreambleInsert {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathArrayCellInsert {
+  readonly columnIndex: number;
+  readonly position: "before" | "after";
+  readonly list: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathArrayNucleus {
   readonly kind: "array";
   readonly rows: readonly TexMathAlignedRow[];
   readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
   readonly verticalRules?: readonly TexMathArrayVerticalRule[];
   readonly preambleItems?: readonly TexMathArrayPreambleItem[];
+  readonly cellInserts?: readonly TexMathArrayCellInsert[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;

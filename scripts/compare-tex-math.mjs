@@ -928,7 +928,7 @@ function hasArrayEnvironment(source) {
 }
 
 function hasArrayPackagePreambleExtension(source) {
-  return source.includes(String.raw`\begin{array}`) && source.includes("!{");
+  return source.includes(String.raw`\begin{array}`) && /[!<>]\s*\{/u.test(source);
 }
 
 function hasCasesEnvironment(source) {

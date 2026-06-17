@@ -19,6 +19,7 @@ import type {
   TexMathAlignedIntertext,
   TexMathAlignedNucleus,
   TexMathAlignedRow,
+  TexMathArrayCellInsert,
   TexMathArrayPreambleInsert,
   TexMathArrayPreambleItem,
   TexMathArrayColumnAlignment,
@@ -1979,8 +1980,12 @@ function layoutArrayNucleus(
   if (!insertLayouts) {
     return null;
   }
+  const cellInsertLayouts = layoutArrayCellInserts(nucleus.cellInserts ?? [], fontProfile, baseAtPt, alphabet);
+  if (!cellInsertLayouts) {
+    return null;
+  }
   const rows = nucleus.rows.map((row) =>
-    layoutMatrixRow(row, fontProfile, baseAtPt, alphabet)
+    layoutArrayRow(row, nucleus.cellInserts ?? [], cellInsertLayouts, fontProfile, baseAtPt, alphabet)
   );
   if (
     rows.some((row): row is null => row === null) ||
@@ -2079,6 +2084,96 @@ function arrayPreambleItems(nucleus: TexMathArrayNucleus): readonly TexMathArray
     beforeColumn: rule.beforeColumn,
     sourceSpan: rule.sourceSpan,
   }));
+}
+
+function layoutArrayRow(
+  row: TexMathAlignedRow,
+  cellInserts: readonly TexMathArrayCellInsert[],
+  cellInsertLayouts: ReadonlyMap<TexMathArrayCellInsert, TexMathHList>,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAlignedRowLayout | null {
+  const baseRow = layoutMatrixRow(row, fontProfile, baseAtPt, alphabet);
+  if (!baseRow) {
+    return null;
+  }
+  const cells = baseRow.cells.map((cell, columnIndex) => ({
+    hlist: wrapArrayCellWithInserts(cell.hlist, cell.sourceSpan, columnIndex, cellInserts, cellInsertLayouts),
+    sourceSpan: cell.sourceSpan,
+  }));
+  return {
+    cells,
+    sourceSpan: row.sourceSpan,
+    height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...cells.map((cell) => cell.hlist.height))),
+    depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...cells.map((cell) => cell.hlist.depth))),
+  };
+}
+
+function layoutArrayCellInserts(
+  inserts: readonly TexMathArrayCellInsert[],
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): ReadonlyMap<TexMathArrayCellInsert, TexMathHList> | null {
+  const layouts = new Map<TexMathArrayCellInsert, TexMathHList>();
+  for (const insert of inserts) {
+    const result = layoutTexMathList(insert.list, { fontProfile, style: "text", baseAtPt, alphabet });
+    if (!result.supported) {
+      return null;
+    }
+    layouts.set(insert, result.hlist);
+  }
+  return layouts;
+}
+
+function wrapArrayCellWithInserts(
+  hlist: TexMathHList,
+  sourceSpan: TexMathSourceSpan,
+  columnIndex: number,
+  inserts: readonly TexMathArrayCellInsert[],
+  layouts: ReadonlyMap<TexMathArrayCellInsert, TexMathHList>
+): TexMathHList {
+  const before = inserts.filter((insert) => insert.columnIndex === columnIndex && insert.position === "before");
+  const after = inserts.filter((insert) => insert.columnIndex === columnIndex && insert.position === "after");
+  if (before.length === 0 && after.length === 0) {
+    return hlist;
+  }
+  const items: TexMathHListItem[] = [];
+  let cursor = 0;
+  let height = hlist.height;
+  let depth = hlist.depth;
+  for (const insert of before) {
+    const insertHList = layouts.get(insert);
+    if (!insertHList) {
+      continue;
+    }
+    items.push(childHList("array-insert", cursor, 0, insertHList, insert.sourceSpan));
+    cursor = roundTexPt(cursor + insertHList.width);
+    height = Math.max(height, insertHList.height);
+    depth = Math.max(depth, insertHList.depth);
+  }
+  items.push(childHList("nucleus", cursor, 0, hlist, sourceSpan));
+  cursor = roundTexPt(cursor + hlist.width);
+  for (const insert of after) {
+    const insertHList = layouts.get(insert);
+    if (!insertHList) {
+      continue;
+    }
+    items.push(childHList("array-insert", cursor, 0, insertHList, insert.sourceSpan));
+    cursor = roundTexPt(cursor + insertHList.width);
+    height = Math.max(height, insertHList.height);
+    depth = Math.max(depth, insertHList.depth);
+  }
+  return {
+    kind: "math-hlist",
+    style: hlist.style,
+    width: roundTexPt(cursor),
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    sourceSpan,
+    items,
+  };
 }
 
 function layoutArrayPreambleInserts(

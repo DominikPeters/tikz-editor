@@ -2422,6 +2422,59 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses array cell template inserts as source-spanned math lists", () => {
+    const source = String.raw`\begin{array}{>{A}r<{B}c}a&b\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["right", "center"],
+      cellInserts: [
+        {
+          columnIndex: 0,
+          position: "before",
+          commandSourceSpan: { start: 14, end: 15 },
+          sourceSpan: { start: 14, end: 18 },
+        },
+        {
+          columnIndex: 0,
+          position: "after",
+          commandSourceSpan: { start: 19, end: 20 },
+          sourceSpan: { start: 19, end: 23 },
+        },
+      ],
+    });
+  });
+
+  it("allows spaces before array preamble insert arguments", () => {
+    const source = String.raw`\begin{array}{> {x} c}X\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["center"],
+      cellInserts: [
+        {
+          columnIndex: 0,
+          position: "before",
+          commandSourceSpan: { start: 14, end: 15 },
+          sourceSpan: { start: 14, end: 19 },
+          list: {
+            items: [
+              {
+                sourceSpan: { start: 17, end: 18 },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
   it("keeps unsupported array preamble extensions explicit", () => {
     const source = String.raw`\begin{array}{cp{1cm}c}a&b\end{array}`;
     const result = parseTexMath(source);

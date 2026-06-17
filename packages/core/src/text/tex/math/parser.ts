@@ -6,6 +6,7 @@ import type {
   TexMathAlignedCell,
   TexMathAlignedIntertext,
   TexMathAlignedRow,
+  TexMathArrayCellInsert,
   TexMathArrayColumnAlignment,
   TexMathArrayPreambleInsert,
   TexMathArrayPreambleItem,
@@ -64,6 +65,12 @@ type InfixFractionPrimitive =
 interface DeclaredMathOperator {
   readonly parts: readonly TexMathOperatorNamePart[];
   readonly limits: TexMathOperatorLimits;
+}
+
+interface PendingArrayCellInsert {
+  readonly list: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
 }
 
 export interface ParseTexMathOptions {
@@ -1732,6 +1739,7 @@ class TexMathParser {
       columnAlignments: preamble.alignments,
       verticalRules: preamble.verticalRules,
       preambleItems: preamble.preambleItems,
+      cellInserts: preamble.cellInserts,
       allowScripts,
     });
   }
@@ -2487,6 +2495,7 @@ class TexMathParser {
     readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
     readonly verticalRules: readonly TexMathArrayVerticalRule[];
     readonly preambleItems: readonly TexMathArrayPreambleItem[];
+    readonly cellInserts: readonly TexMathArrayCellInsert[];
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -2498,7 +2507,7 @@ class TexMathParser {
         endSourceSpan = this.consumeEnvironmentEnd("array");
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
+          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2550,7 +2559,7 @@ class TexMathParser {
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
         return this.maybeParseScripts(
-          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
+          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2569,7 +2578,7 @@ class TexMathParser {
       params.beginSourceSpan
     );
     return this.maybeParseScripts(
-      arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
+      arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
   }
@@ -2846,6 +2855,7 @@ class TexMathParser {
     readonly alignments: readonly TexMathArrayColumnAlignment[];
     readonly verticalRules: readonly TexMathArrayVerticalRule[];
     readonly preambleItems: readonly TexMathArrayPreambleItem[];
+    readonly cellInserts: readonly TexMathArrayCellInsert[];
     readonly sourceSpan: TexMathSourceSpan;
   } | null {
     const group = this.parseRequiredRawGroup(fallbackSpan, "\\begin{array} column preamble");
@@ -2854,12 +2864,13 @@ class TexMathParser {
     }
     const parsed = this.parseArrayPreambleTokens(group.tokens);
     if (parsed.unsupported) {
-      return { alignments: [], verticalRules: [], preambleItems: [], sourceSpan: group.sourceSpan };
+      return { alignments: [], verticalRules: [], preambleItems: [], cellInserts: [], sourceSpan: group.sourceSpan };
     }
     return {
       alignments: parsed.alignments,
       verticalRules: parsed.verticalRules,
       preambleItems: parsed.preambleItems,
+      cellInserts: parsed.cellInserts,
       sourceSpan: group.sourceSpan,
     };
   }
@@ -2870,15 +2881,18 @@ class TexMathParser {
     readonly alignments: readonly TexMathArrayColumnAlignment[];
     readonly verticalRules: readonly TexMathArrayVerticalRule[];
     readonly preambleItems: readonly TexMathArrayPreambleItem[];
+    readonly cellInserts: readonly TexMathArrayCellInsert[];
     readonly unsupported: boolean;
   } {
     const expanded = this.expandArrayPreambleRepeatTokens(tokens);
     if (expanded.unsupported) {
-      return { alignments: [], verticalRules: [], preambleItems: [], unsupported: true };
+      return { alignments: [], verticalRules: [], preambleItems: [], cellInserts: [], unsupported: true };
     }
     const alignments: TexMathArrayColumnAlignment[] = [];
     const verticalRules: TexMathArrayVerticalRule[] = [];
     const preambleItems: TexMathArrayPreambleItem[] = [];
+    const cellInserts: TexMathArrayCellInsert[] = [];
+    const pendingBeforeInserts: PendingArrayCellInsert[] = [];
     let unsupported = false;
     for (let index = 0; index < expanded.tokens.length; index += 1) {
       const token = expanded.tokens[index];
@@ -2890,7 +2904,16 @@ class TexMathParser {
       }
       const alignment = arrayPreambleAlignment(token);
       if (alignment) {
+        const columnIndex = alignments.length;
         alignments.push(alignment);
+        for (const insert of pendingBeforeInserts) {
+          cellInserts.push({
+            columnIndex,
+            position: "before",
+            ...insert,
+          });
+        }
+        pendingBeforeInserts.length = 0;
         continue;
       }
       if (token.kind === "character" && token.text === "|") {
@@ -2906,7 +2929,7 @@ class TexMathParser {
         continue;
       }
       if (token.kind === "character" && (token.text === "@" || token.text === "!")) {
-        const argument = readBalancedTokenGroup(expanded.tokens, index + 1);
+        const argument = readPreambleArgumentGroup(expanded.tokens, index + 1);
         if (!argument) {
           unsupported = true;
           this.addDiagnostic(
@@ -2926,6 +2949,41 @@ class TexMathParser {
         index = argument.nextIndex - 1;
         continue;
       }
+      if (token.kind === "character" && (token.text === ">" || token.text === "<")) {
+        const argument = readPreambleArgumentGroup(expanded.tokens, index + 1);
+        if (!argument) {
+          unsupported = true;
+          this.addDiagnostic(
+            "warning",
+            "unsupported-command",
+            `Unsupported array column specifier ${token.text}.`,
+            token.sourceSpan
+          );
+          continue;
+        }
+        const insert = this.parseArrayCellInsert(token, argument);
+        if (!insert) {
+          unsupported = true;
+        } else if (token.text === ">") {
+          pendingBeforeInserts.push(insert);
+        } else if (alignments.length > 0) {
+          cellInserts.push({
+            columnIndex: alignments.length - 1,
+            position: "after",
+            ...insert,
+          });
+        } else {
+          unsupported = true;
+          this.addDiagnostic(
+            "warning",
+            "unsupported-command",
+            "Unsupported array column suffix before a column.",
+            token.sourceSpan
+          );
+        }
+        index = argument.nextIndex - 1;
+        continue;
+      }
       unsupported = true;
       this.addDiagnostic(
         "warning",
@@ -2934,7 +2992,18 @@ class TexMathParser {
         token.sourceSpan
       );
     }
-    return { alignments, verticalRules, preambleItems, unsupported };
+    if (pendingBeforeInserts.length > 0) {
+      unsupported = true;
+      for (const insert of pendingBeforeInserts) {
+        this.addDiagnostic(
+          "warning",
+          "unsupported-command",
+          "Unsupported array column prefix without a following column.",
+          insert.commandSourceSpan
+        );
+      }
+    }
+    return { alignments, verticalRules, preambleItems, cellInserts, unsupported };
   }
 
   private parseArrayPreambleInsert(
@@ -2947,7 +3016,7 @@ class TexMathParser {
   ): TexMathArrayPreambleInsert | null {
     const text = argument.tokens.map((argumentToken) => argumentToken.text).join("");
     const parsed = parseTexMath(text, {
-      sourceOffset: token.sourceSpan.end + 1,
+      sourceOffset: argument.sourceSpan.start + 1,
       suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
     });
     this.diagnostics.push(...parsed.diagnostics);
@@ -2958,6 +3027,29 @@ class TexMathParser {
       kind: "insert",
       beforeColumn,
       mode: token.text === "@" ? "replace-spacing" : "add-spacing",
+      list: parsed.list,
+      commandSourceSpan: token.sourceSpan,
+      sourceSpan: spanUnion(token.sourceSpan, argument.sourceSpan),
+    };
+  }
+
+  private parseArrayCellInsert(
+    token: TexMathToken,
+    argument: {
+      readonly tokens: readonly TexMathToken[];
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  ): PendingArrayCellInsert | null {
+    const text = argument.tokens.map((argumentToken) => argumentToken.text).join("");
+    const parsed = parseTexMath(text, {
+      sourceOffset: argument.sourceSpan.start + 1,
+      suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
+    });
+    this.diagnostics.push(...parsed.diagnostics);
+    if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+      return null;
+    }
+    return {
       list: parsed.list,
       commandSourceSpan: token.sourceSpan,
       sourceSpan: spanUnion(token.sourceSpan, argument.sourceSpan),
@@ -4098,6 +4190,7 @@ function arrayAtom(
   columnAlignments: readonly TexMathArrayColumnAlignment[],
   verticalRules: readonly TexMathArrayVerticalRule[],
   preambleItems: readonly TexMathArrayPreambleItem[],
+  cellInserts: readonly TexMathArrayCellInsert[],
   beginSourceSpan: TexMathSourceSpan,
   preambleSourceSpan: TexMathSourceSpan,
   endSourceSpan: TexMathSourceSpan | undefined,
@@ -4112,6 +4205,7 @@ function arrayAtom(
       columnAlignments,
       ...(verticalRules.length > 0 ? { verticalRules } : {}),
       ...(preambleItems.length > 0 ? { preambleItems } : {}),
+      ...(cellInserts.length > 0 ? { cellInserts } : {}),
       beginSourceSpan,
       preambleSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),
@@ -4347,6 +4441,21 @@ function readArrayPreambleRepeatBody(
     sourceSpan: first.sourceSpan,
     nextIndex: index + 1,
   };
+}
+
+function readPreambleArgumentGroup(
+  tokens: readonly TexMathToken[],
+  startIndex: number
+): {
+  readonly tokens: readonly TexMathToken[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly nextIndex: number;
+} | null {
+  let index = startIndex;
+  while (tokens[index]?.kind === "space") {
+    index += 1;
+  }
+  return readBalancedTokenGroup(tokens, index);
 }
 
 function readBalancedTokenGroup(
