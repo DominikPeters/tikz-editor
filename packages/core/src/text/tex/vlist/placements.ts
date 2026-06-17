@@ -33,7 +33,9 @@ export function texVListLinePlacements(
         lineIndex: line.lineIndex,
         x: item.x,
         y: roundTexPt(item.y + line.y),
-        height: lineHeight,
+        height: line.metrics
+          ? roundTexPt(line.metrics.height + line.metrics.depth)
+          : lineHeight,
       });
     }
   }

@@ -2818,16 +2818,22 @@ class TexMathParser {
         const mathStart = openMath.sourceSpan.end;
         const mathTokens: TexMathToken[] = [];
         let closeMath: TexMathToken | undefined;
+        let mathDepth = 0;
         while (!this.isAtEnd()) {
           const mathToken = this.peek();
-          if (!mathToken || mathToken.kind === "group-close") {
+          if (!mathToken || (mathToken.kind === "group-close" && mathDepth === 0)) {
             break;
           }
           this.advance();
           lastSpan = mathToken.sourceSpan;
-          if (mathToken.kind === "character" && mathToken.text === "$") {
+          if (mathToken.kind === "character" && mathToken.text === "$" && mathDepth === 0) {
             closeMath = mathToken;
             break;
+          }
+          if (mathToken.kind === "group-open") {
+            mathDepth += 1;
+          } else if (mathToken.kind === "group-close") {
+            mathDepth = Math.max(0, mathDepth - 1);
           }
           mathTokens.push(mathToken);
         }

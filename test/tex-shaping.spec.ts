@@ -1864,7 +1864,7 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(lineTexts(result.report)).toEqual(["Alpha", "Beta", "Gamma"]);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19, 27.27]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19.33, 27.27]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
@@ -4713,7 +4713,12 @@ unordered.`;
     });
     expect(point.lineLocalX).toBeGreaterThan(47);
     expect(point.clientPoint?.x).toBeCloseTo(point.lineLocalX ?? 0, 6);
-    expect(point.clientPoint?.y).toBeCloseTo(16, 6);
+    const linePlacement = vlistLayout?.linePlacements.find((placement) => placement.lineIndex === 0);
+    expect(linePlacement).toBeDefined();
+    expect(point.clientPoint?.y).toBeCloseTo(
+      (linePlacement?.y ?? 0) + (linePlacement?.height ?? 0) / 2,
+      6
+    );
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
       paragraphId: "tex:nested-vlist-hitmap",

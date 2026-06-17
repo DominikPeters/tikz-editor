@@ -1524,14 +1524,7 @@ function randomIntertextContent(rng) {
 }
 
 function randomIntertextInlineFormula(rng) {
-  return choice(rng, [
-    "x_i=y^2",
-    "a+b",
-    "n^2",
-    "x-y",
-    "c_1",
-    "m_n=z",
-  ]);
+  return randomDocumentInlineFormula(rng);
 }
 
 function randomNumberedAlignSource(rng, tagMode = 0) {

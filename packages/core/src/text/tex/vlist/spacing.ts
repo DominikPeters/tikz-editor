@@ -839,6 +839,9 @@ function displayAlignmentPreviousDepth(
 function displayAlignmentIntertextLastLineDepth(
   paragraph: TexVListParagraphBoxMeasurement
 ): number {
+  if (paragraph.lastLineMetrics) {
+    return paragraph.lastLineMetrics.depth;
+  }
   const lastLineOffset = paragraph.lineOffsets.at(-1)?.y;
   if (lastLineOffset === undefined) {
     return paragraph.ruleLeadingMetrics.depth;

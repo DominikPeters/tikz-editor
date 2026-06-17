@@ -412,6 +412,7 @@ export interface TexVListParagraphLineAssignment {
 export interface TexVListParagraphLineOffset {
   readonly lineIndex: number;
   readonly y: number;
+  readonly metrics?: TexBoxMetrics;
 }
 
 export interface TexVListParagraphBoxMeasurement {
@@ -422,6 +423,7 @@ export interface TexVListParagraphBoxMeasurement {
   readonly lastLinePreDisplaySize?: number;
   readonly standardMetrics: TexBoxMetrics;
   readonly ruleLeadingMetrics: TexBoxMetrics;
+  readonly lastLineMetrics?: TexBoxMetrics;
   readonly standardAdvance: number;
   readonly ruleLeadingAdvance: number;
 }

@@ -15,6 +15,8 @@ import type {
 } from "./types.js";
 import { texVListParagraphEntries } from "./traversal.js";
 
+const latexNormalLineSkipPt = 1;
+
 export interface TexVListParagraphHorizontalLayouts {
   readonly report: ParagraphLayoutReport;
   readonly paragraphLayouts: readonly TexVListParagraphHorizontalLayout[];
@@ -103,7 +105,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
   const firstLine = lines[0];
   const lastLine = lines.at(-1);
   const ruleLeadingBottom = lastLine
-    ? roundTexPt(lastLine.y + (firstLine?.metrics.height ?? 0) + lastLine.metrics.depth)
+    ? roundTexPt(lastLine.y + lastLine.metrics.height + lastLine.metrics.depth)
     : 0;
   return {
     blockIndex: paragraph.blockIndex,
@@ -112,8 +114,10 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
     lineOffsets: lines.map((line) => ({
       lineIndex: line.lineIndex,
       y: line.y,
+      metrics: line.metrics,
     })),
     lastLinePreDisplaySize: lastLine?.preDisplaySize,
+    ...(lastLine ? { lastLineMetrics: lastLine.metrics } : {}),
     standardMetrics: paragraph.horizontal.metrics,
     ruleLeadingMetrics: paragraphBoxMetrics(
       paragraph.horizontal.metrics.width,
@@ -216,39 +220,63 @@ function texHorizontalLayoutForParagraphAssignment(
   lineBoxByIndex: ReadonlyMap<number, TexLineBox>,
   lineHeight: number
 ): TexHorizontalLayout {
-  let lineCursor = 0;
   const lines: TexLineBox[] = [];
+  let previousLine: TexLineBox | undefined;
   for (const lineIndex of assignment.lineIndices) {
     const line = lineBoxByIndex.get(lineIndex);
     if (!line) {
       throw new Error(`TeX horizontal paragraph block ${assignment.blockIndex} references missing line ${lineIndex}.`);
     }
-    lines.push({
+    const y = previousLine
+      ? roundTexPt(
+          previousLine.y +
+          previousLine.metrics.height +
+          previousLine.metrics.depth +
+          texParagraphInterlineGlueSize(
+            previousLine.metrics.depth,
+            line.metrics.height,
+            lineHeight
+          ) +
+          texLineLeadingPt(previousLine.lineLeading)
+        )
+      : 0;
+    const placedLine = {
       ...line,
-      y: roundTexPt(lineCursor),
-    });
-    lineCursor = roundTexPt(
-      lineCursor + lineHeight + texLineLeadingPt(line.lineLeading)
-    );
+      y,
+    };
+    lines.push(placedLine);
+    previousLine = placedLine;
   }
   return {
-    metrics: texHorizontalParagraphMetricsFromLineBoxes(lines, lineCursor),
+    metrics: texHorizontalParagraphMetricsFromLineBoxes(lines),
     lines,
     renderItems: [],
   };
 }
 
 function texHorizontalParagraphMetricsFromLineBoxes(
-  lines: readonly TexLineBox[],
-  bottom: number
+  lines: readonly TexLineBox[]
 ): TexHorizontalLayout["metrics"] {
   const firstLine = lines[0];
   const baselineY = firstLine?.metrics.height ?? 0;
+  const lastLine = lines.at(-1);
+  const bottom = lastLine
+    ? roundTexPt(lastLine.y + lastLine.metrics.height + lastLine.metrics.depth)
+    : 0;
   return paragraphBoxMetrics(
     Math.max(0, ...lines.map((line) => line.targetWidth)),
     baselineY,
     bottom
   );
+}
+
+function texParagraphInterlineGlueSize(
+  previousDepth: number,
+  nextHeight: number,
+  lineHeight: number
+): number {
+  const baselineGlue = roundTexPt(lineHeight - previousDepth - nextHeight);
+  return baselineGlue < 0 ? latexNormalLineSkipPt : baselineGlue;
 }
 
 function paragraphBoxMetrics(

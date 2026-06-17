@@ -1667,6 +1667,56 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("preserves braced inline math parts inside display alignment intertext", () => {
+    const source = String.raw`\begin{align*}a&=b\\\intertext{measured $\sqrt{\dots+b}$ first}c&=d\end{align*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus.kind).toBe("aligned");
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    const intertext = atom.nucleus.rows[1]?.intertextsBefore?.[0];
+    expect(intertext).toMatchObject({
+      text: "measured  first",
+      textSourceSpan: {
+        start: source.indexOf("{measured") + 1,
+        end: source.indexOf("}c&=d"),
+      },
+    });
+    expect(intertext?.parts).toEqual([
+      {
+        kind: "text",
+        text: "measured ",
+        sourceSpan: {
+          start: source.indexOf("{measured") + 1,
+          end: source.indexOf(String.raw`$\sqrt`),
+        },
+      },
+      expect.objectContaining({
+        kind: "math",
+        content: String.raw`\sqrt{\dots+b}`,
+        sourceSpan: {
+          start: source.indexOf(String.raw`$\sqrt`),
+          end: source.indexOf("$ first") + 1,
+        },
+        contentSourceSpan: {
+          start: source.indexOf(String.raw`\sqrt`),
+          end: source.indexOf("$ first"),
+        },
+      }),
+      {
+        kind: "text",
+        text: " first",
+        sourceSpan: {
+          start: source.indexOf("$ first") + 1,
+          end: source.indexOf("}c&=d"),
+        },
+      },
+    ]);
+  });
+
   it("keeps shortintertext explicitly unsupported until its compact spacing is modeled", () => {
     const source = String.raw`\begin{align*}a&=b\\\shortintertext{words}c&=d\end{align*}`;
     const result = parseTexMath(source);
