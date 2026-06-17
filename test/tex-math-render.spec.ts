@@ -37,6 +37,25 @@ function mathItemsRightEdge(items: readonly TexMathHListItem[], baseX = 0): numb
   return right;
 }
 
+function findChildHList(
+  items: readonly TexMathHListItem[],
+  role: Extract<TexMathHListItem, { readonly kind: "hlist" }>["role"]
+): Extract<TexMathHListItem, { readonly kind: "hlist" }> | null {
+  for (const item of items) {
+    if (item.kind !== "hlist") {
+      continue;
+    }
+    if (item.role === role) {
+      return item;
+    }
+    const nested = findChildHList(item.items, role);
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
 describe("TeX math SVG rendering", () => {
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
@@ -627,6 +646,64 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(0 -720.2774) scale(100)"');
     expect(body).toContain('x="833.336"');
     expect(body).toContain('y="-760.2764"');
+  });
+
+  it("renders indexed radicals with TeX scriptscript degree placement", () => {
+    const parsed = parseTexMath(String.raw`\sqrt[4]{x}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const degree = findChildHList(result.hlist.items, "radical-degree");
+    const radicalGlyph = result.hlist.items.find((item) =>
+      item.kind === "glyph" && item.fontId === "cmsy10" && item.code === 112
+    );
+    const rule = result.hlist.items.find((item) =>
+      item.kind === "rule" && item.role === "radical-rule"
+    );
+
+    expect(result.hlist.width).toBeCloseTo(14.673689, 6);
+    expect(degree?.x).toBeCloseTo(2.777786, 6);
+    expect(degree?.y).toBeCloseTo(-3.363311, 6);
+    expect(degree?.width).toBeCloseTo(3.402835, 6);
+    expect(radicalGlyph?.x).toBeCloseTo(0.625049, 6);
+    expect(radicalGlyph?.y).toBeCloseTo(-7.202774, 6);
+    expect(rule?.x).toBeCloseTo(8.958409, 6);
+    expect(rule?.width).toBeCloseTo(5.71528, 6);
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-math-role="radical-degree"');
+    expect(body).toContain('data-tex-font="cmr5" data-tex-glyph="52"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="112"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-rule="radical-rule"');
+  });
+
+  it("renders plain TeX roots with the same metrics as bracketed root degrees", () => {
+    const parsed = parseTexMath(String.raw`\root {n+1} \of {x+y}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const degree = findChildHList(result.hlist.items, "radical-degree");
+    const radicalGlyph = result.hlist.items.find((item) =>
+      item.kind === "glyph" && item.fontId === "cmsy10" && item.code === 112
+    );
+    const rule = result.hlist.items.find((item) =>
+      item.kind === "rule" && item.role === "radical-rule"
+    );
+
+    expect(result.hlist.width).toBeCloseTo(41.700552, 6);
+    expect(degree?.x).toBeCloseTo(2.777786, 6);
+    expect(degree?.y).toBeCloseTo(-3.113315, 6);
+    expect(radicalGlyph?.x).toBeCloseTo(10.168034, 6);
+    expect(radicalGlyph?.y).toBeCloseTo(-6.994444, 6);
+    expect(rule?.x).toBeCloseTo(18.501394, 6);
+    expect(rule?.width).toBeCloseTo(23.199158, 6);
   });
 
   it("renders taller radicals with TeX next-larger extension glyphs", () => {

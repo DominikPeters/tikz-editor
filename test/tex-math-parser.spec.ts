@@ -88,6 +88,60 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses indexed radicals and plain TeX roots into degree-bearing radical nuclei", () => {
+    const bracketed = atomAt(parseTexMath(String.raw`\sqrt[4]{x}`), 0);
+    const plainRoot = atomAt(parseTexMath(String.raw`\root 4 \of x`), 0);
+
+    expect(bracketed).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 11 },
+      nucleus: {
+        kind: "radical",
+        sourceSpan: { start: 0, end: 11 },
+        degree: {
+          sourceSpan: { start: 6, end: 7 },
+          items: [{ nucleus: { kind: "glyph", text: "4" } }],
+        },
+        radicand: {
+          sourceSpan: { start: 9, end: 10 },
+          items: [{ nucleus: { kind: "glyph", text: "x" } }],
+        },
+      },
+    });
+    expect(plainRoot).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 13 },
+      nucleus: {
+        kind: "radical",
+        sourceSpan: { start: 0, end: 13 },
+        degree: {
+          sourceSpan: { start: 6, end: 7 },
+          items: [{ nucleus: { kind: "glyph", text: "4" } }],
+        },
+        radicand: {
+          sourceSpan: { start: 12, end: 13 },
+          items: [{ nucleus: { kind: "glyph", text: "x" } }],
+        },
+      },
+    });
+  });
+
+  it("diagnoses plain TeX roots without a following of command", () => {
+    const result = parseTexMath(String.raw`\root 4 x`);
+
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "missing-command",
+      sourceSpan: { start: 6, end: 9 },
+    }));
+    expect(atomAt(result, 0)).toMatchObject({
+      nucleus: {
+        kind: "unsupported",
+        command: String.raw`\root`,
+      },
+    });
+  });
+
   it("parses amsmath boxed formulas as source-spanned boxed nuclei", () => {
     const result = parseTexMath(String.raw`\boxed{x+y}`, { sourceOffset: 11 });
     const boxed = atomAt(result, 0);

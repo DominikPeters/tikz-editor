@@ -126,6 +126,7 @@ export interface TexMathChildHListLayoutItem {
     | "subarray-cell"
     | "sideset-pre"
     | "sideset-base"
+    | "radical-degree"
     | "var-limit-row"
     | "boxed-body"
     | "array-row"
@@ -452,7 +453,8 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.numerator) || texMathListNeedsAmsMath(nucleus.denominator);
   }
   if (nucleus.kind === "radical") {
-    return texMathListNeedsAmsMath(nucleus.radicand);
+    return (nucleus.degree ? texMathListNeedsAmsMath(nucleus.degree) : false) ||
+      texMathListNeedsAmsMath(nucleus.radicand);
   }
   if (nucleus.kind === "line") {
     return texMathListNeedsAmsMath(nucleus.body);
@@ -3321,12 +3323,60 @@ function layoutRadicalNucleus(
     radicand.depth,
     ...radicalItems.map((item) => item.y + item.depth)
   );
-
-  return {
+  const squareRootLayout = {
     items: [...radicalItems, rule, radicandChild],
     width: roundTexPt(delimiter.width + radicand.width),
     height: roundTexPt(height),
     depth: roundTexPt(Math.max(0, depth)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  } satisfies TexMathAtomLayout;
+
+  if (!nucleus.degree) {
+    return squareRootLayout;
+  }
+
+  const degree = layoutTexMathList(nucleus.degree, {
+    fontProfile,
+    style: "scriptscript",
+    cramped: false,
+    baseAtPt,
+    alphabet,
+  });
+  if (!degree.supported) {
+    return null;
+  }
+
+  const degreeHList = omitSingleCharacterCleanBoxItalicCorrection(degree.hlist, nucleus.degree);
+  const leadKern = muToPt(fontProfile, style, baseAtPt, 5);
+  const backKern = muToPt(fontProfile, style, baseAtPt, -10);
+  const degreeRaise = roundTexPt(0.6 * (squareRootLayout.height - squareRootLayout.depth));
+  const radicalX = roundTexPt(leadKern + degreeHList.width + backKern);
+  const items = [
+    {
+      kind: "kern",
+      x: 0,
+      width: leadKern,
+      reason: "operator-kern",
+      sourceSpan: nucleus.degree.sourceSpan,
+    } satisfies TexMathKernLayoutItem,
+    childHList("radical-degree", leadKern, -degreeRaise, degreeHList, nucleus.degree.sourceSpan),
+    {
+      kind: "kern",
+      x: roundTexPt(leadKern + degreeHList.width),
+      width: backKern,
+      reason: "operator-kern",
+      sourceSpan: nucleus.degree.sourceSpan,
+    } satisfies TexMathKernLayoutItem,
+    ...squareRootLayout.items.map((item) => offsetMathLayoutItem(item, radicalX)),
+  ];
+
+  return {
+    items,
+    width: roundTexPt(radicalX + squareRootLayout.width),
+    height: roundTexPt(Math.max(squareRootLayout.height, degreeRaise + degreeHList.height)),
+    depth: roundTexPt(Math.max(squareRootLayout.depth, degreeHList.depth - degreeRaise, 0)),
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,

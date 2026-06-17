@@ -48,6 +48,7 @@ interface ParseListOptions {
   readonly stopAtAlignmentMetadata?: boolean;
   readonly stopAtEnvironmentEnd?: string;
   readonly stopAtOptionalBracketClose?: boolean;
+  readonly stopAtRootOf?: boolean;
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
@@ -281,6 +282,9 @@ class TexMathParser {
       if (token.kind === "character" && token.text === "]" && options.stopAtOptionalBracketClose) {
         break;
       }
+      if (token.kind === "command" && commandName(token.text) === "of" && options.stopAtRootOf) {
+        break;
+      }
       if (token.kind === "space") {
         this.advance();
         continue;
@@ -388,6 +392,9 @@ class TexMathParser {
       }
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
+      }
+      if (commandName(token.text) === "root") {
+        return this.parsePlainRoot(allowScripts);
       }
       if (commandName(token.text) === "boxed") {
         return this.parseBoxed(allowScripts);
@@ -717,14 +724,60 @@ class TexMathParser {
 
   private parseRadical(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
+    const degree = this.parseOptionalBracketMathArgument(command.sourceSpan);
     const radicand = this.parseRequiredMathArgument(command.sourceSpan, "\\sqrt radicand");
-    const sourceSpan = spanUnion(command.sourceSpan, radicand?.sourceSpan ?? command.sourceSpan);
+    const sourceSpan = spanUnion(command.sourceSpan, radicand?.sourceSpan ?? degree?.sourceSpan ?? command.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
       atomClass: "ord",
       nucleus: {
         kind: "radical",
+        ...(degree ? { degree: degree.list } : {}),
         radicand: radicand?.list ?? emptyList(command.sourceSpan.end),
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parsePlainRoot(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    this.skipSpaces();
+    const degree = this.parseList({
+      stopAtGroupClose: false,
+      stopAtRootOf: true,
+      allowInfixFraction: false,
+    });
+    const of = this.peek();
+    if (of?.kind !== "command" || commandName(of.text) !== "of") {
+      this.addDiagnostic(
+        "error",
+        "missing-command",
+        "Could not find \\of for \\root.",
+        degree.sourceSpan.end > degree.sourceSpan.start ? degree.sourceSpan : command.sourceSpan
+      );
+      const sourceSpan = spanUnion(command.sourceSpan, degree.sourceSpan);
+      return this.maybeParseScripts({
+        kind: "atom",
+        atomClass: "ord",
+        nucleus: {
+          kind: "unsupported",
+          command: "\\root",
+          sourceSpan,
+        },
+        sourceSpan,
+      }, allowScripts);
+    }
+    this.advance();
+    const radicand = this.parseRequiredMathArgument(of.sourceSpan, "\\root radicand");
+    const sourceSpan = spanUnion(command.sourceSpan, radicand?.sourceSpan ?? of.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "radical",
+        degree,
+        radicand: radicand?.list ?? emptyList(of.sourceSpan.end),
         sourceSpan,
       },
       sourceSpan,

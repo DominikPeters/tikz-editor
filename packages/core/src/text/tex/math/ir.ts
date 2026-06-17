@@ -21,6 +21,7 @@ export type TexMathDiagnosticCode =
   | "invalid-math-style"
   | "invalid-tex-dimension"
   | "missing-environment-end"
+  | "missing-command"
   | "missing-delimiter"
   | "missing-group"
   | "missing-right"
@@ -165,6 +166,7 @@ export interface TexMathFractionNucleus {
 
 export interface TexMathRadicalNucleus {
   readonly kind: "radical";
+  readonly degree?: TexMathList;
   readonly radicand: TexMathList;
   readonly sourceSpan: TexMathSourceSpan;
 }
