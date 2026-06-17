@@ -532,6 +532,7 @@ function parseMathBoxContent(params: {
     return parseTexMathAlignedBody(params.content, {
       sourceOffset: params.contentStart,
       columnSeparation: displayAlignmentColumnSeparation(params.delimiter),
+      allowDisplayBreak: style === "display",
       suppressTerminalEllipsisGlue: style === "display",
     });
   }
@@ -572,6 +573,7 @@ function getDisplayMathAlignment(
   const parsed = parseTexMathAlignedBody(params.content, {
     sourceOffset: params.contentStart,
     columnSeparation: displayAlignmentColumnSeparation(params.delimiter),
+    allowDisplayBreak: true,
     suppressTerminalEllipsisGlue: true,
   });
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {

@@ -67,6 +67,7 @@ export interface ParseTexMathOptions {
 
 interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
   readonly columnSeparation?: "align" | "none" | "gather" | "multline";
+  readonly allowDisplayBreak?: boolean;
 }
 
 export function parseTexMath(
@@ -96,6 +97,7 @@ export function parseTexMathAlignedBody(
     beginSourceSpan: { start: sourceOffset, end: sourceOffset },
     initialSourceSpan: { start: sourceOffset, end: sourceOffset },
     columnSeparation: options.columnSeparation,
+    allowDisplayBreak: options.allowDisplayBreak ?? false,
     allowScripts: false,
   });
   return {
@@ -316,7 +318,7 @@ class TexMathParser {
       stopAtAlignmentMetadata: true,
       suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue === true,
     });
-    const metadata = this.consumeAlignmentRowMetadata(true);
+    const metadata = this.consumeAlignmentRowMetadata(true, { allowDisplayBreak: false });
     return {
       ...list,
       sourceSpan: spanUnion(list.sourceSpan, metadata.sourceSpan ?? list.sourceSpan),
@@ -1330,7 +1332,7 @@ class TexMathParser {
       stopAtAlignmentMetadata: true,
       suppressTerminalEllipsisGlue: true,
     });
-    const metadata = this.consumeAlignmentRowMetadata(true);
+    const metadata = this.consumeAlignmentRowMetadata(true, { allowDisplayBreak: false });
     const endSourceSpan = this.isEnvironmentEnd(environmentName.name)
       ? this.consumeEnvironmentEnd(environmentName.name)
       : this.missingEnvironmentEnd(environmentName.name, metadata.sourceSpan ?? list.sourceSpan);
@@ -1369,6 +1371,7 @@ class TexMathParser {
           : "align",
       ...(multlineEnvironmentName(environmentName.name) ? { maxFields: 1 } : {}),
       allowAlignmentTags: displayAlignmentEnvironmentName(environmentName.name),
+      allowDisplayBreak: displayAlignmentEnvironmentName(environmentName.name),
       allowScripts,
     });
   }
@@ -1391,6 +1394,7 @@ class TexMathParser {
       columnSeparation: "none",
       maxFields: pairCount ? pairCount.value * 2 : undefined,
       allowAlignmentTags: true,
+      allowDisplayBreak: true,
       allowScripts,
     });
   }
@@ -1417,6 +1421,7 @@ class TexMathParser {
       columnSeparation: "none",
       maxFields: pairCount ? pairCount.value * 2 : undefined,
       allowAlignmentTags: false,
+      allowDisplayBreak: false,
       allowScripts,
     });
   }
@@ -1591,6 +1596,7 @@ class TexMathParser {
     readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
+    readonly allowDisplayBreak?: boolean;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     if (params.stopAtEnvironmentEnd) {
@@ -1613,6 +1619,7 @@ class TexMathParser {
     readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
+    readonly allowDisplayBreak?: boolean;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -1671,7 +1678,9 @@ class TexMathParser {
           pendingRowSourceSpan ?? cellList.sourceSpan,
           cellList.sourceSpan
         );
-        const metadata = this.consumeAlignmentRowMetadata(params.allowAlignmentTags ?? true);
+        const metadata = this.consumeAlignmentRowMetadata(params.allowAlignmentTags ?? true, {
+          allowDisplayBreak: params.allowDisplayBreak ?? false,
+        });
         if (metadata.sourceSpan) {
           sourceSpan = spanUnion(sourceSpan, metadata.sourceSpan);
           pendingRowSourceSpan = spanUnion(pendingRowSourceSpan ?? metadata.sourceSpan, metadata.sourceSpan);
@@ -1816,7 +1825,10 @@ class TexMathParser {
     };
   }
 
-  private consumeAlignmentRowMetadata(allowTags: boolean): {
+  private consumeAlignmentRowMetadata(
+    allowTags: boolean,
+    options: { readonly allowDisplayBreak?: boolean } = {}
+  ): {
     readonly suppressTag: boolean;
     readonly labels: readonly {
       readonly text: string;
@@ -1855,15 +1867,17 @@ class TexMathParser {
         );
         continue;
       }
-      if (metadata === "unsupported-optional") {
+      if (metadata === "displaybreak") {
         const optional = this.consumeOptionalBracketArgument();
         sourceSpan = spanUnion(sourceSpan, optional ?? command.sourceSpan);
-        this.addDiagnostic(
-          "error",
-          "unsupported-command",
-          `Unsupported alignment command ${command.text}.`,
-          spanUnion(command.sourceSpan, optional ?? command.sourceSpan)
-        );
+        if (!options.allowDisplayBreak) {
+          this.addDiagnostic(
+            "error",
+            "unsupported-command",
+            `Unsupported alignment command ${command.text}.`,
+            spanUnion(command.sourceSpan, optional ?? command.sourceSpan)
+          );
+        }
         continue;
       }
       if (metadata === "notag" || metadata === "nonumber") {
@@ -3704,7 +3718,7 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
 
 function alignmentMetadataCommand(
   command: string
-): "label" | "tag" | "notag" | "nonumber" | "unsupported-text" | "unsupported-optional" | null {
+): "label" | "tag" | "notag" | "nonumber" | "unsupported-text" | "displaybreak" | null {
   switch (commandName(command)) {
     case "label":
       return "label";
@@ -3718,7 +3732,7 @@ function alignmentMetadataCommand(
     case "shortintertext":
       return "unsupported-text";
     case "displaybreak":
-      return "unsupported-optional";
+      return "displaybreak";
     default:
       return null;
   }

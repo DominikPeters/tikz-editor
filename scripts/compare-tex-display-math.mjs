@@ -1278,6 +1278,11 @@ function constructMatrixCases() {
       source: String.raw`Alpha \begin{align*}a&=b \tag{A}\\c&=d\end{align*} Beta`,
     },
     {
+      id: "align-displaybreak",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`,
+    },
+    {
       id: "align-tag-collision",
       width: 300,
       source: String.raw`Alpha \begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\end{align*} Beta`,

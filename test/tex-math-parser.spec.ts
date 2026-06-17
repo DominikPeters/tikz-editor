@@ -1587,25 +1587,47 @@ describe("TeX math parser", () => {
     });
   });
 
-  it("reports displaybreak in alignment environments as explicitly unsupported", () => {
+  it("consumes displaybreak in alignment environments as page-break metadata", () => {
     const source = String.raw`\begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*}`;
     const result = parseTexMath(source);
     const atom = atomAt(result, 0);
 
-    expect(result.diagnostics).toEqual([
-      {
-        severity: "error",
-        code: "unsupported-command",
-        message: String.raw`Unsupported alignment command \displaybreak.`,
-        sourceSpan: {
-          start: source.indexOf(String.raw`\displaybreak`),
-          end: source.indexOf(String.raw`\\c&=d`),
-        },
-      },
-    ]);
+    expect(result.diagnostics).toEqual([]);
     expect(atom.nucleus).toMatchObject({
       kind: "aligned",
-      rows: expect.any(Array),
+      rows: [
+        {
+          sourceSpan: {
+            start: source.indexOf("a&=b"),
+            end: source.indexOf("c&=d"),
+          },
+          rowBreakSourceSpan: {
+            start: source.indexOf(String.raw`\\c&=d`),
+            end: source.indexOf(String.raw`\\c&=d`) + String.raw`\\`.length,
+          },
+        },
+        {
+          sourceSpan: {
+            start: source.indexOf("c&=d"),
+            end: source.indexOf("c&=d") + "c&=d".length,
+          },
+        },
+      ],
+    });
+  });
+
+  it("keeps displaybreak inside boxed alignments explicitly unsupported", () => {
+    const source = String.raw`\begin{aligned}a&=b\displaybreak[2]\\c&=d\end{aligned}`;
+    const result = parseTexMathDisplayBody(source);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "unsupported-command",
+      message: String.raw`Unsupported alignment command \displaybreak.`,
+      sourceSpan: {
+        start: source.indexOf(String.raw`\displaybreak`),
+        end: source.indexOf(String.raw`\\c&=d`),
+      },
     });
   });
 

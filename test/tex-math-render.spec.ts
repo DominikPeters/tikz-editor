@@ -1645,16 +1645,8 @@ unordered.`;
     expect(equationBox?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="50"');
   });
 
-  it.each([
-    {
-      id: "intertext",
-      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`,
-    },
-    {
-      id: "displaybreak",
-      source: String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`,
-    },
-  ])("uses explicit placeholders for unsupported $id in display alignments", ({ source }) => {
+  it("uses explicit placeholders for unsupported intertext in display alignments", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: `tex:unsupported-display-alignment-placeholder:${source.length}`,
       width: 160,
@@ -1676,6 +1668,37 @@ unordered.`;
         end: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       },
     });
+  });
+
+  it("renders displaybreak in alignments as a non-visual page-break directive", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:displaybreak-display-alignment",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.boxReport.items.some((item) => item.itemKind === "placeholder")).toBe(false);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => ({
+      rowIndex: row.hboxRole?.kind === "display-align-row" ? row.hboxRole.rowIndex : null,
+      source: source.slice(row.sourceSpan?.start ?? 0, row.sourceSpan?.end ?? 0),
+    }))).toEqual([
+      {
+        rowIndex: 0,
+        source: String.raw`a&=b\displaybreak[2]\\`,
+      },
+      {
+        rowIndex: 1,
+        source: "c&=d",
+      },
+    ]);
   });
 
   it("lets TeX paragraph layout carry equation-star display math as a vlist item", () => {
