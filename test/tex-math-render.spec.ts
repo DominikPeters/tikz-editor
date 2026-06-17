@@ -1645,10 +1645,10 @@ unordered.`;
     expect(equationBox?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="50"');
   });
 
-  it("uses explicit placeholders for unsupported intertext in display alignments", () => {
+  it("renders intertext in display alignments as a source-spanned paragraph between rows", () => {
     const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
-      paragraphId: `tex:unsupported-display-alignment-placeholder:${source.length}`,
+      paragraphId: "tex:display-alignment-intertext",
       width: 160,
       parindent: 0,
       hyphenator: { hyphenate: () => [] },
@@ -1656,18 +1656,25 @@ unordered.`;
     });
 
     expect(result.supported).toBe(true);
-    const placeholders = result.vlistLayout?.boxReport.items.filter((item) =>
-      item.itemKind === "placeholder"
+    expect(result.vlistLayout?.boxReport.items.some((item) => item.itemKind === "placeholder")).toBe(false);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
     ) ?? [];
-    expect(placeholders).toHaveLength(1);
-    expect(placeholders[0]).toMatchObject({
-      itemKind: "placeholder",
-      placeholderReason: "TeX display math rendering is not implemented for this formula.",
+    const intertextParagraphs = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.itemKind === "paragraph" &&
+      item.sourceSpan?.start === source.indexOf("{words}") + 1
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(intertextParagraphs).toHaveLength(1);
+    expect(intertextParagraphs[0]).toMatchObject({
+      itemKind: "paragraph",
       sourceSpan: {
-        start: source.indexOf(String.raw`\begin{align*}`),
-        end: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+        start: source.indexOf("{words}") + 1,
+        end: source.indexOf("{words}") + 1 + "words".length,
       },
     });
+    expect(intertextParagraphs[0]?.y ?? 0).toBeGreaterThan(rows[0]?.y ?? 0);
+    expect(intertextParagraphs[0]?.y ?? 0).toBeLessThan(rows[1]?.y ?? Number.POSITIVE_INFINITY);
   });
 
   it("renders displaybreak in alignments as a non-visual page-break directive", () => {

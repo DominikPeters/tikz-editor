@@ -4,6 +4,7 @@ import type {
   TexMathAccentCommand,
   TexMathAlphabetCommand,
   TexMathAlignedCell,
+  TexMathAlignedIntertext,
   TexMathAlignedRow,
   TexMathArrayColumnAlignment,
   TexMathDiagnostic,
@@ -68,6 +69,7 @@ export interface ParseTexMathOptions {
 interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
   readonly columnSeparation?: "align" | "none" | "gather" | "multline";
   readonly allowDisplayBreak?: boolean;
+  readonly allowIntertext?: boolean;
 }
 
 export function parseTexMath(
@@ -98,6 +100,7 @@ export function parseTexMathAlignedBody(
     initialSourceSpan: { start: sourceOffset, end: sourceOffset },
     columnSeparation: options.columnSeparation,
     allowDisplayBreak: options.allowDisplayBreak ?? false,
+    allowIntertext: options.allowIntertext ?? false,
     allowScripts: false,
   });
   return {
@@ -1372,6 +1375,7 @@ class TexMathParser {
       ...(multlineEnvironmentName(environmentName.name) ? { maxFields: 1 } : {}),
       allowAlignmentTags: displayAlignmentEnvironmentName(environmentName.name),
       allowDisplayBreak: displayAlignmentEnvironmentName(environmentName.name),
+      allowIntertext: alignEnvironmentName(environmentName.name) || gatherEnvironmentName(environmentName.name),
       allowScripts,
     });
   }
@@ -1395,6 +1399,7 @@ class TexMathParser {
       maxFields: pairCount ? pairCount.value * 2 : undefined,
       allowAlignmentTags: true,
       allowDisplayBreak: true,
+      allowIntertext: true,
       allowScripts,
     });
   }
@@ -1422,6 +1427,7 @@ class TexMathParser {
       maxFields: pairCount ? pairCount.value * 2 : undefined,
       allowAlignmentTags: false,
       allowDisplayBreak: false,
+      allowIntertext: false,
       allowScripts,
     });
   }
@@ -1597,6 +1603,7 @@ class TexMathParser {
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
+    readonly allowIntertext?: boolean;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     if (params.stopAtEnvironmentEnd) {
@@ -1620,6 +1627,7 @@ class TexMathParser {
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
+    readonly allowIntertext?: boolean;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -1646,6 +1654,12 @@ class TexMathParser {
         readonly sourceSpan: TexMathSourceSpan;
         readonly textSourceSpan: TexMathSourceSpan;
       }> = [];
+      const intertextsBefore = this.consumeLeadingAlignmentIntertexts(params.allowIntertext ?? false);
+      if (intertextsBefore.length > 0) {
+        for (const intertext of intertextsBefore) {
+          sourceSpan = spanUnion(sourceSpan, intertext.sourceSpan);
+        }
+      }
       let multlineShove: "left" | "right" | undefined;
       let pendingRowSourceSpan: TexMathSourceSpan | undefined;
       let alignmentTabsInRow = 0;
@@ -1720,6 +1734,7 @@ class TexMathParser {
           sourceSpan: spanUnion(pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
           rowBreakSourceSpan: rowBreak.sourceSpan,
           ...(suppressTag ? { suppressTag } : {}),
+          ...(intertextsBefore.length > 0 ? { intertextsBefore } : {}),
           ...(labels.length > 0 ? { labels } : {}),
           ...(multlineShove ? { multlineShove } : {}),
         });
@@ -1732,6 +1747,7 @@ class TexMathParser {
           cells,
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
           ...(suppressTag ? { suppressTag } : {}),
+          ...(intertextsBefore.length > 0 ? { intertextsBefore } : {}),
           ...(labels.length > 0 ? { labels } : {}),
           ...(multlineShove ? { multlineShove } : {}),
         });
@@ -1748,6 +1764,7 @@ class TexMathParser {
           cells,
           sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
           ...(suppressTag ? { suppressTag } : {}),
+          ...(intertextsBefore.length > 0 ? { intertextsBefore } : {}),
           ...(labels.length > 0 ? { labels } : {}),
           ...(multlineShove ? { multlineShove } : {}),
         });
@@ -1825,6 +1842,37 @@ class TexMathParser {
     };
   }
 
+  private consumeLeadingAlignmentIntertexts(
+    allowIntertext: boolean
+  ): readonly TexMathAlignedIntertext[] {
+    const intertexts: TexMathAlignedIntertext[] = [];
+    while (!this.isAtEnd()) {
+      this.skipSpaces();
+      const token = this.peek();
+      if (token?.kind !== "command" || alignmentMetadataCommand(token.text) !== "intertext") {
+        break;
+      }
+      const command = this.advance();
+      const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} text`);
+      const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+      if (!allowIntertext || !content || content.unsupported) {
+        this.addDiagnostic(
+          "error",
+          "unsupported-command",
+          `Unsupported alignment command ${command.text}.`,
+          sourceSpan
+        );
+        continue;
+      }
+      intertexts.push({
+        text: content.text,
+        sourceSpan,
+        textSourceSpan: content.textSourceSpan,
+      });
+    }
+    return intertexts;
+  }
+
   private consumeAlignmentRowMetadata(
     allowTags: boolean,
     options: { readonly allowDisplayBreak?: boolean } = {}
@@ -1856,7 +1904,7 @@ class TexMathParser {
       }
       const command = this.advance();
       sourceSpan = spanUnion(sourceSpan ?? command.sourceSpan, command.sourceSpan);
-      if (metadata === "unsupported-text") {
+      if (metadata === "intertext" || metadata === "unsupported-text") {
         const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} text`);
         sourceSpan = spanUnion(sourceSpan, content?.sourceSpan ?? command.sourceSpan);
         this.addDiagnostic(
@@ -3718,7 +3766,7 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
 
 function alignmentMetadataCommand(
   command: string
-): "label" | "tag" | "notag" | "nonumber" | "unsupported-text" | "displaybreak" | null {
+): "label" | "tag" | "notag" | "nonumber" | "intertext" | "unsupported-text" | "displaybreak" | null {
   switch (commandName(command)) {
     case "label":
       return "label";
@@ -3729,6 +3777,7 @@ function alignmentMetadataCommand(
     case "nonumber":
       return "nonumber";
     case "intertext":
+      return "intertext";
     case "shortintertext":
       return "unsupported-text";
     case "displaybreak":

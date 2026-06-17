@@ -107,6 +107,15 @@ export interface TexMathDisplayAlignmentRowBox extends TexMathBox {
   readonly x: number;
 }
 
+export interface TexMathDisplayAlignmentIntertext {
+  readonly beforeRowIndex: number;
+  readonly text: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+}
+
 export interface TexMathDisplayAlignment {
   readonly source: string;
   readonly content: string;
@@ -117,6 +126,7 @@ export interface TexMathDisplayAlignment {
   readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly width: number;
   readonly rows: readonly TexMathDisplayAlignmentRowBox[];
+  readonly intertexts?: readonly TexMathDisplayAlignmentIntertext[];
 }
 
 export interface TexMathBoxProvider {

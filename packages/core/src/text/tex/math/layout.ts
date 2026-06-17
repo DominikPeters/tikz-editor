@@ -16,6 +16,7 @@ import type {
   TexMathAccentCommand,
   TexMathAlphabetCommand,
   TexMathAlphabetNucleus,
+  TexMathAlignedIntertext,
   TexMathAlignedNucleus,
   TexMathAlignedRow,
   TexMathArrayColumnAlignment,
@@ -130,6 +131,7 @@ export interface TexMathChildHListLayoutItem {
   readonly sourceSpan: TexMathSourceSpan;
   readonly items: readonly TexMathHListItem[];
   readonly multlineShove?: "left" | "right";
+  readonly intertextsBefore?: readonly TexMathAlignedIntertext[];
 }
 
 export interface TexMathHList {
@@ -1104,6 +1106,7 @@ interface TexMathAlignedRowLayout {
   readonly sourceSpan: TexMathSourceSpan;
   readonly height: number;
   readonly depth: number;
+  readonly intertextsBefore?: readonly TexMathAlignedIntertext[];
   readonly multlineShove?: "left" | "right";
 }
 
@@ -1196,6 +1199,7 @@ function layoutAlignedNucleus(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
+      ...(row.intertextsBefore ? { intertextsBefore: row.intertextsBefore } : {}),
       ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
     });
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
@@ -1248,6 +1252,7 @@ function layoutAlignedRow(
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
+    ...(row.intertextsBefore ? { intertextsBefore: row.intertextsBefore } : {}),
     ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
   };
 }

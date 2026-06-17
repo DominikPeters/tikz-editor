@@ -457,6 +457,17 @@ export function parseSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
   return buildSimpleTexParagraphIr(text);
 }
 
+export function parseSimpleTexInlineNodes(
+  text: string,
+  sourceOffset = 0
+): { readonly nodes: readonly SimpleTexInlineNode[]; readonly unsupportedCommand: boolean } {
+  const scan = scanSimpleTexIrNodes(text, sourceOffset);
+  return {
+    nodes: scan.nodes.filter(isSimpleTexInlineNode),
+    unsupportedCommand: scan.unsupportedCommand || !scan.nodes.every(isSimpleTexInlineNode),
+  };
+}
+
 function buildSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
   const nodeScan = scanSimpleTexIrNodes(text);
   const blockScan = buildSimpleTexParagraphBlocksFromNodes(text, nodeScan.nodes);

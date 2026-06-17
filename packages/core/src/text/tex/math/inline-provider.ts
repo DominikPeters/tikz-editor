@@ -1,5 +1,6 @@
 import type {
   TexMathDisplayAlignment,
+  TexMathDisplayAlignmentIntertext,
   TexMathBox,
   TexMathBreakpoint,
   TexMathConstructRange,
@@ -533,6 +534,7 @@ function parseMathBoxContent(params: {
       sourceOffset: params.contentStart,
       columnSeparation: displayAlignmentColumnSeparation(params.delimiter),
       allowDisplayBreak: style === "display",
+      allowIntertext: style === "display",
       suppressTerminalEllipsisGlue: style === "display",
     });
   }
@@ -574,6 +576,7 @@ function getDisplayMathAlignment(
     sourceOffset: params.contentStart,
     columnSeparation: displayAlignmentColumnSeparation(params.delimiter),
     allowDisplayBreak: true,
+    allowIntertext: true,
     suppressTerminalEllipsisGlue: true,
   });
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
@@ -594,6 +597,7 @@ function getDisplayMathAlignment(
   if (alignedRows.length === 0) {
     return null;
   }
+  const intertexts = displayAlignmentIntertexts(alignedRows);
   if (params.delimiter === "multline" || params.delimiter === "multline-star") {
     const alignedNucleus = alignedNucleusFromList(parsed.list);
     const multlineLabel = params.delimiter === "multline"
@@ -681,6 +685,7 @@ function getDisplayMathAlignment(
       delimiter: params.delimiter,
       width: params.targetWidth,
       rows,
+      ...(intertexts.length > 0 ? { intertexts } : {}),
     };
   }
   if (params.delimiter === "gather" || params.delimiter === "gather-star") {
@@ -753,6 +758,7 @@ function getDisplayMathAlignment(
       delimiter: params.delimiter,
       width: params.targetWidth,
       rows,
+      ...(intertexts.length > 0 ? { intertexts } : {}),
     };
   }
   const alignedNucleus = alignedNucleusFromList(parsed.list);
@@ -835,7 +841,30 @@ function getDisplayMathAlignment(
       ...rows.map((row) => row.width)
     ),
     rows,
+    ...(intertexts.length > 0 ? { intertexts } : {}),
   };
+}
+
+function displayAlignmentIntertexts(
+  rows: readonly TexMathChildHListLayoutItem[]
+): NonNullable<TexMathDisplayAlignment["intertexts"]> {
+  const intertexts: TexMathDisplayAlignmentIntertext[] = [];
+  for (const [rowIndex, row] of rows.entries()) {
+    if (!row.intertextsBefore?.length) {
+      continue;
+    }
+    for (const intertext of row.intertextsBefore) {
+      intertexts.push({
+        beforeRowIndex: rowIndex,
+        text: intertext.text,
+        sourceStart: intertext.sourceSpan.start,
+        sourceEnd: intertext.sourceSpan.end,
+        contentStart: intertext.textSourceSpan.start,
+        contentEnd: intertext.textSourceSpan.end,
+      });
+    }
+  }
+  return intertexts;
 }
 
 function displayAlignmentRowLabel(

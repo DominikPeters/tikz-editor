@@ -1565,25 +1565,56 @@ describe("TeX math parser", () => {
     ]);
   });
 
-  it("reports intertext in alignment environments as explicitly unsupported", () => {
+  it("parses intertext in display alignment environments as source-spanned row text", () => {
     const source = String.raw`\begin{align*}a&=b\\\intertext{words}c&=d\end{align*}`;
     const result = parseTexMath(source);
     const atom = atomAt(result, 0);
 
-    expect(result.diagnostics).toEqual([
-      {
-        severity: "error",
-        code: "unsupported-command",
-        message: String.raw`Unsupported alignment command \intertext.`,
-        sourceSpan: {
-          start: source.indexOf(String.raw`\intertext`),
-          end: source.indexOf("c&=d"),
-        },
-      },
-    ]);
+    expect(result.diagnostics).toEqual([]);
     expect(atom.nucleus).toMatchObject({
       kind: "aligned",
-      rows: expect.any(Array),
+      rows: [
+        expect.objectContaining({
+          sourceSpan: {
+            start: source.indexOf("a&=b"),
+            end: source.indexOf(String.raw`\intertext`),
+          },
+        }),
+        expect.objectContaining({
+          intertextsBefore: [
+            {
+              text: "words",
+              sourceSpan: {
+                start: source.indexOf(String.raw`\intertext`),
+                end: source.indexOf("c&=d"),
+              },
+              textSourceSpan: {
+                start: source.indexOf("{words}") + 1,
+                end: source.indexOf("{words}") + 1 + "words".length,
+              },
+            },
+          ],
+          sourceSpan: {
+            start: source.indexOf("c&=d"),
+            end: source.indexOf("c&=d") + "c&=d".length,
+          },
+        }),
+      ],
+    });
+  });
+
+  it("keeps shortintertext explicitly unsupported until its compact spacing is modeled", () => {
+    const source = String.raw`\begin{align*}a&=b\\\shortintertext{words}c&=d\end{align*}`;
+    const result = parseTexMath(source);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "unsupported-command",
+      message: String.raw`Unsupported alignment command \shortintertext.`,
+      sourceSpan: {
+        start: source.indexOf(String.raw`\shortintertext`),
+        end: source.indexOf("c&=d"),
+      },
     });
   });
 

@@ -173,11 +173,7 @@ function isTeXMathGlyph(glyph) {
 }
 
 function compareTopLevelItems(mismatches, ours, tex, tolerance) {
-  const ourHlists = ours.filter((item) =>
-    item.kind === "paragraph" ||
-    item.kind === "display-math" ||
-    item.hboxRole?.kind === "display-align-row"
-  );
+  const ourHlists = comparableOurTopLevelHlists(ours);
   const texHlists = tex.filter((item) => item.kind === "hlist");
   compareItemLists(
     mismatches,
@@ -230,6 +226,18 @@ function semanticHlistItem(item) {
   };
 }
 
+function comparableOurTopLevelHlists(items) {
+  return items.filter((item) =>
+    (item.kind === "paragraph" && !isSyntheticIntertextParagraph(item)) ||
+    item.kind === "display-math" ||
+    item.hboxRole?.kind === "display-align-row"
+  );
+}
+
+function isSyntheticIntertextParagraph(item) {
+  return item.kind === "paragraph" && Number(item.blockIndex) <= -1_000_000;
+}
+
 function ourTrace(caseSpec) {
   const documentMathMode = caseSpec.compareMode === "document-math-glyphs";
   const result = layoutSimpleTexParagraph(caseSpec.source, {
@@ -269,6 +277,7 @@ function ourTrace(caseSpec) {
       glue: item.glue,
       displayMath: item.displayMath,
       hboxRole: item.hboxRole,
+      blockIndex: item.blockIndex,
       sourceSpan: item.sourceSpan,
     })),
     glyphs: glyphTrace.glyphs,
@@ -557,11 +566,7 @@ function compareDisplayMathGlyphs(mismatches, oursTopLevel, oursGlyphs, texTopLe
 
 function matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel) {
   const indices = new Set();
-  const ourHlists = oursTopLevel.filter((item) =>
-    item.kind === "paragraph" ||
-    item.kind === "display-math" ||
-    item.hboxRole?.kind === "display-align-row"
-  );
+  const ourHlists = comparableOurTopLevelHlists(oursTopLevel);
   const texHlists = texTopLevel.filter((item) => item.kind === "hlist");
   const count = Math.min(ourHlists.length, texHlists.length);
   for (let index = 0; index < count; index++) {
@@ -753,6 +758,7 @@ function walk_vlist(list, origin_x, top_y, height, level, parent_top_index, pare
       walk_hlist(n.list, origin_x + sp(n.shift or 0), baseline, top_index, n)
       y=y+node_height(n)+node_depth(n)
     elseif n.id==vlist_id then
+      walk_vlist(n.list, origin_x + sp(n.shift or 0), y, node_height(n), level+1, parent_top_index, n)
       y=y+node_height(n)+node_depth(n)
     elseif n.id==rule_id then
       y=y+node_height(n)+node_depth(n)
@@ -1281,6 +1287,11 @@ function constructMatrixCases() {
       id: "align-displaybreak",
       width: 180,
       source: String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-intertext",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`,
     },
     {
       id: "align-tag-collision",
