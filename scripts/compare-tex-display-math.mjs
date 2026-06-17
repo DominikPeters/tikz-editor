@@ -1315,7 +1315,7 @@ function generateDisplayFuzzCases(count, seed) {
   const rng = makeRng(seed);
   return Array.from({ length: count }, (_, index) => {
     const width = choice(rng, [100, 120, 140, 160, 180, 220]);
-    const displayKind = index % 7;
+    const displayKind = index % 8;
     return {
       id: `display-fuzz-${index + 1}`,
       width,
@@ -1342,6 +1342,9 @@ function randomGeneratedDisplaySource(rng, displayKind, index) {
   }
   if (displayKind === 6) {
     return randomNumberedMultlineSource(rng, index % 3);
+  }
+  if (displayKind === 7) {
+    return randomAlignStarIntertextSource(rng);
   }
   return `\\[${randomDisplayFormula(rng)}\\]`;
 }
@@ -1390,7 +1393,7 @@ function generateMixedVListFuzzCases(count, seed) {
     const context = contexts[index % contexts.length] ?? contexts[0];
     const before = choice(rng, ["Quoted", "Compact", "Measured", "Nested", "Aligned"]);
     const after = choice(rng, ["done", "tail", "after", "closing", "result"]);
-    const displayKind = index % 5;
+    const displayKind = index % 6;
     return {
       id: `mixed-vlist-fuzz-${index + 1}-${context.id}`,
       width: context.width,
@@ -1407,6 +1410,9 @@ function generateMixedVListFuzzCases(count, seed) {
 function randomMixedVListDisplaySource(rng, displayKind, index) {
   if (displayKind === 3) {
     return randomMixedVListAlignStarSource(rng, index % 3);
+  }
+  if (displayKind === 5) {
+    return randomAlignStarIntertextSource(rng);
   }
   if (displayKind === 1) {
     return `\\[${randomNestedAlignedFormula(rng)}\\]`;
@@ -1482,6 +1488,50 @@ function randomAlignStarSource(rng, tagMode = 0) {
     rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, tagMode));
   }
   return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomAlignStarIntertextSource(rng) {
+  const before = `${randomAlignmentLeftCell(rng)}&=${randomAlignmentRightCell(rng)}`;
+  const after = `${randomAlignmentLeftCell(rng)}&=${randomAlignmentRightCell(rng)}`;
+  return String.raw`\begin{align*}` +
+    before +
+    String.raw`\\\intertext{` +
+    randomIntertextContent(rng) +
+    `}` +
+    after +
+    String.raw`\end{align*}`;
+}
+
+function randomIntertextContent(rng) {
+  const words = [
+    "where",
+    "first",
+    "second",
+    "stable",
+    "compact",
+    "measured",
+    "condition",
+    "holds",
+  ];
+  const variant = randomInt(rng, 3);
+  if (variant === 0) {
+    return `${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)}`;
+  }
+  if (variant === 1) {
+    return `${choice(rng, words)} $${randomIntertextInlineFormula(rng)}$ ${choice(rng, words)}`;
+  }
+  return `${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)}`;
+}
+
+function randomIntertextInlineFormula(rng) {
+  return choice(rng, [
+    "x_i=y^2",
+    "a+b",
+    "n^2",
+    "x-y",
+    "c_1",
+    "m_n=z",
+  ]);
 }
 
 function randomNumberedAlignSource(rng, tagMode = 0) {

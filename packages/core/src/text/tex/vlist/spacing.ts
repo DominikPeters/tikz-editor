@@ -68,11 +68,6 @@ const latexAmsmathAlignTopCorrectionPt = -3;
 const latexAmsmathOpenBaselineSkipPt = 15;
 const latexAmsmathOpenLineSkipPt = 4;
 const latexAmsmathOpenLineSkipLimitPt = 3;
-const latexAmsmathIntertextMultiLineLeadingPt = 4;
-// amsmath \intertext uses \vbox{\normalbaselines ...}; in the default
-// article 10pt setup, TeX places the first intertext baseline 11.4pt from
-// the top of that nested vbox.
-const latexAmsmathIntertextFirstBaselinePt = 11.4;
 
 type DisplayAlignmentGluePurpose =
   | "align-top-correction"
@@ -613,7 +608,10 @@ function resolveDisplayMathVerticalGlueInItems(
       );
       items.push({
         ...item,
-        size: displayAlignmentIntertextLeadingSize(nextParagraph),
+        size: displayAlignmentIntertextLeadingSize(
+          previousDisplayMaterialMetrics?.depth ?? 0,
+          nextParagraph
+        ),
       });
       continue;
     }
@@ -680,7 +678,7 @@ function displayAlignmentMaterialItems(
     for (const intertext of item.alignment.intertexts?.filter((candidate) => candidate.beforeRowIndex === row.rowIndex) ?? []) {
       rows.push(displayAlignmentIntertextSkipItem(item, intertext, "below"));
       rows.push(displayAlignmentIntertextLeadingItem(item, intertext));
-      rows.push(displayAlignmentIntertextParagraph(intertext));
+      rows.push(displayAlignmentIntertextParagraph(item, intertext));
       rows.push(displayAlignmentIntertextSkipItem(item, intertext, "above"));
       rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
       rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
@@ -737,6 +735,7 @@ function displayAlignmentIntertextSkipItem(
 }
 
 function displayAlignmentIntertextParagraph(
+  item: TexDisplayAlignmentItem,
   intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number]
 ): TexParagraphItem {
   const blockIndex = displayAlignmentIntertextBlockIndex(intertext.sourceStart);
@@ -749,6 +748,7 @@ function displayAlignmentIntertextParagraph(
     start: intertext.contentStart,
     end: intertext.contentEnd,
   };
+  const scope = displayAlignmentIntertextScope(item.scopePath);
   return {
     kind: "paragraph",
     sourceSpan,
@@ -758,10 +758,53 @@ function displayAlignmentIntertextParagraph(
       sourceSpan,
       nodes,
       noIndent: true,
-      quoteDepth: 0,
+      quoteDepth: scope.quoteDepth,
+      ...(scope.listContext ? { listContext: scope.listContext } : {}),
       blockIndex,
     },
   };
+}
+
+function displayAlignmentIntertextScope(
+  scopePath: readonly TexVBoxRole[] | undefined
+): {
+  readonly quoteDepth: number;
+  readonly listContext?: SimpleTexListContext;
+} {
+  const quoteDepth = scopePath?.filter((role) => role.kind === "quote").length ?? 0;
+  const listRole = lastRoleOfKind(scopePath, "list");
+  if (!listRole) {
+    return { quoteDepth };
+  }
+  const itemRole = lastRoleOfKind(scopePath, "list-item");
+  return {
+    quoteDepth,
+    listContext: {
+      kind: listRole.listKind,
+      depth: listRole.depth,
+      labelDepth: listRole.labelDepth,
+      itemIndex: itemRole?.itemIndex ?? 0,
+      ownLeftMarginEm: listRole.ownLeftMarginEm,
+      totalLeftMarginEm: listRole.totalLeftMarginEm,
+      showLabel: false,
+    },
+  };
+}
+
+function lastRoleOfKind<K extends TexVBoxRole["kind"]>(
+  scopePath: readonly TexVBoxRole[] | undefined,
+  kind: K
+): Extract<TexVBoxRole, { kind: K }> | undefined {
+  if (!scopePath) {
+    return undefined;
+  }
+  for (let index = scopePath.length - 1; index >= 0; index -= 1) {
+    const role = scopePath[index];
+    if (role?.kind === kind) {
+      return role as Extract<TexVBoxRole, { kind: K }>;
+    }
+  }
+  return undefined;
 }
 
 function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
@@ -773,17 +816,16 @@ function isDisplayAlignmentIntertextBlockIndex(blockIndex: number): boolean {
 }
 
 function displayAlignmentIntertextLeadingSize(
+  previousDepth: number,
   paragraph: TexVListParagraphBoxMeasurement | undefined
 ): number {
   if (!paragraph) {
     return 0;
   }
-  if (paragraph.lineIndices.length > 1) {
-    return latexAmsmathIntertextMultiLineLeadingPt;
-  }
-  return Math.max(0, roundTexPt(
-    latexAmsmathIntertextFirstBaselinePt - paragraph.ruleLeadingMetrics.height
-  ));
+  const vboxHeight = paragraph.lineIndices.length > 1
+    ? paragraph.ruleLeadingAdvance
+    : paragraph.ruleLeadingMetrics.height;
+  return texOpenedInterlineGlueSize(previousDepth, vboxHeight);
 }
 
 function displayAlignmentPreviousDepth(

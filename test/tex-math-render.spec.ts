@@ -1719,6 +1719,36 @@ unordered.`;
     expect(intertextLine?.descent ?? 0).toBeGreaterThan(1);
   });
 
+  it("inherits list scope for display alignment intertext paragraphs", () => {
+    const source = String.raw`Alpha \begin{itemize}\item First.\item Compact \begin{align*}a&=b\\\intertext{where $x_i=y^2$ holds}c&=d\end{align*} done.\end{itemize} Beta`;
+    const intertextStart = source.indexOf("where");
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-list-scope",
+      width: 190,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const intertextParagraph = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "paragraph" &&
+      item.sourceSpan?.start === intertextStart
+    );
+    expect(intertextParagraph).toBeTruthy();
+    expect(intertextParagraph).toMatchObject({
+      x: 25,
+      sourceSpan: {
+        start: intertextStart,
+        end: source.indexOf(" holds") + " holds".length,
+      },
+    });
+    const labels = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "list-label"
+    ) ?? [];
+    expect(labels).toHaveLength(2);
+  });
+
   it("renders displaybreak in alignments as a non-visual page-break directive", () => {
     const source = String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
