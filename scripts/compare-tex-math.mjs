@@ -24,7 +24,14 @@ const accentCommands = [
   String.raw`\tilde`,
   String.raw`\vec`,
 ];
-const amsMathCommands = [String.raw`\boxed`, String.raw`\dddot`, String.raw`\ddddot`];
+const amsMathCommands = [
+  String.raw`\boxed`,
+  String.raw`\dddot`,
+  String.raw`\ddddot`,
+  String.raw`\implies`,
+  String.raw`\impliedby`,
+  ...texMathSymbolCommandNames({ requiredLatexPackage: "amsmath" }),
+];
 const amsMathDelimiterCommands = [
   String.raw`\lvert`,
   String.raw`\rvert`,
@@ -57,7 +64,7 @@ const amsSymbolCommands = [
   String.raw`\urcorner`,
   String.raw`\varnothing`,
   String.raw`\Vdash`,
-  ...texMathSymbolCommandNames(),
+  ...texMathSymbolCommandNames({ requiredLatexPackage: "amssymb" }),
 ];
 const mathtoolsColonRelationCommands = [
   String.raw`\dblcolon`,

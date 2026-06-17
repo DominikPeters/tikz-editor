@@ -471,7 +471,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
 
 function amsMathSymbolCommand(text: string): boolean {
   const command = text.startsWith("\\") ? text.slice(1) : text;
-  if (texMathSymbolDeclaration(command)?.requiresAmsPackage) {
+  if (texMathSymbolDeclaration(command)?.requiresAmsMathFontProfile) {
     return true;
   }
   switch (command) {
@@ -5350,6 +5350,7 @@ function defaultLuaLatexMathSymbols(
         { family: "symbols", code: 41 },
       ];
     case "Longleftarrow":
+    case "impliedby":
       return [
         { family: "symbols", code: 40 },
         { kind: "kern", width: -1.66667 },

@@ -408,6 +408,10 @@ class TexMathParser {
       if (commandName(token.text) === "models") {
         return this.parseModelsRelation(allowScripts);
       }
+      const amsImplication = amsImplicationCommandName(token.text);
+      if (amsImplication) {
+        return this.parseAmsImplication(amsImplication, allowScripts);
+      }
       const mathtoolsColonRelation = mathtoolsColonRelationCommandName(token.text);
       if (mathtoolsColonRelation) {
         return this.parseMathtoolsColonRelation(mathtoolsColonRelation, allowScripts);
@@ -1189,6 +1193,23 @@ class TexMathParser {
         generatedGlyphAtom("\\mid", "rel", command.sourceSpan),
         explicitMu(-3, command.sourceSpan),
         generatedGlyphAtom("=", "rel", command.sourceSpan),
+      ]
+    ), allowScripts);
+  }
+
+  private parseAmsImplication(
+    implication: "implies" | "impliedby",
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const arrow = implication === "implies" ? "\\Longrightarrow" : "\\Longleftarrow";
+    return this.maybeParseScripts(generatedListAtom(
+      "rel",
+      command.sourceSpan,
+      [
+        explicitMu(5, command.sourceSpan),
+        generatedGlyphAtom(arrow, "rel", command.sourceSpan),
+        explicitMu(5, command.sourceSpan),
       ]
     ), allowScripts);
   }
@@ -4698,6 +4719,17 @@ function modularArithmeticCommandName(command: string): "bmod" | "pmod" | "mod" 
   }
 }
 
+function amsImplicationCommandName(command: string): "implies" | "impliedby" | null {
+  switch (commandName(command)) {
+    case "implies":
+      return "implies";
+    case "impliedby":
+      return "impliedby";
+    default:
+      return null;
+  }
+}
+
 type MathtoolsColonRelationCommand =
   | "dblcolon"
   | "coloneq"
@@ -5263,7 +5295,7 @@ const relationNamedSymbolCommands = new Set([
   "le", "leq", "ll", "mapsto", "mid", "ne", "nearrow", "neq", "ni", "notin", "nwarrow",
   "owns", "parallel", "perp", "prec", "preceq", "propto", "rightarrow", "Rightarrow", "rightharpoondown",
   "rightharpoonup", "searrow", "sim", "simeq", "smile", "sqsubseteq", "sqsupseteq", "subset", "subseteq",
-  "iff", "implies", "longleftarrow", "longrightarrow", "Longleftarrow", "Longleftrightarrow", "Longrightarrow",
+  "iff", "impliedby", "implies", "longleftarrow", "longrightarrow", "Longleftarrow", "Longleftrightarrow", "Longrightarrow",
   "approxeq", "geqslant", "gtrsim", "leqslant", "lesssim", "ngeqslant", "nleqslant", "nVdash",
   "Subset", "Supset", "thickapprox", "thicksim", "Vdash",
   "succ", "succeq", "supset", "supseteq", "swarrow", "to", "uparrow", "Uparrow", "updownarrow", "Updownarrow",

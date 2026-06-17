@@ -67,14 +67,22 @@ const texMathSpacingTable =
   "12341011";
 
 export function normalizeTexMathAtomClasses(list: TexMathList): TexMathList {
-  const normalizedItems = list.items.map(normalizeNestedItem);
+  const nestedItems = list.items.map(normalizeNestedItem);
+  const normalizedItems: TexMathItem[] = [];
+  let previousAtom: TexMathAtom | null = null;
+  for (let index = 0; index < nestedItems.length; index += 1) {
+    const item = nestedItems[index];
+    const normalizedItem: TexMathItem = item.kind === "atom" && item.atomClass === "bin" && shouldReclassifyBin(nestedItems, index, previousAtom)
+      ? { ...item, atomClass: "ord" as const }
+      : item;
+    normalizedItems.push(normalizedItem);
+    if (normalizedItem.kind === "atom") {
+      previousAtom = normalizedItem;
+    }
+  }
   return {
     ...list,
-    items: normalizedItems.map((item, index) =>
-      item.kind === "atom" && item.atomClass === "bin" && shouldReclassifyBin(normalizedItems, index)
-        ? { ...item, atomClass: "ord" }
-        : item
-    ),
+    items: normalizedItems,
   };
 }
 
@@ -312,8 +320,11 @@ function normalizeScript(script: TexMathScript): TexMathScript {
   };
 }
 
-function shouldReclassifyBin(items: readonly TexMathItem[], index: number): boolean {
-  const previous = previousAtom(items, index);
+function shouldReclassifyBin(
+  items: readonly TexMathItem[],
+  index: number,
+  previous: TexMathAtom | null
+): boolean {
   if (
     !previous ||
     previous.atomClass === "bin" ||
@@ -331,19 +342,6 @@ function shouldReclassifyBin(items: readonly TexMathItem[], index: number): bool
     next.atomClass === "close" ||
     next.atomClass === "punct"
   );
-}
-
-function previousAtom(items: readonly TexMathItem[], index: number): TexMathAtom | null {
-  for (let cursor = index - 1; cursor >= 0; cursor--) {
-    const item = items[cursor];
-    if (item?.kind === "atom") {
-      return item;
-    }
-    if (item?.kind === "unsupported") {
-      return null;
-    }
-  }
-  return null;
 }
 
 function nextAtom(items: readonly TexMathItem[], index: number): TexMathAtom | null {

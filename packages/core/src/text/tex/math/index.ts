@@ -100,4 +100,5 @@ export {
   texMathSymbolCommandNames,
   texMathSymbolDeclaration,
   type TexMathSymbolDeclaration,
+  type TexMathSymbolLatexPackage,
 } from "./symbol-definitions.js";

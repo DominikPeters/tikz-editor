@@ -1,11 +1,14 @@
 import type { TexMathFontFamily } from "./font-profile.js";
 import type { TexMathAtomClass } from "./ir.js";
 
+export type TexMathSymbolLatexPackage = "amsmath" | "amssymb";
+
 export interface TexMathSymbolDeclaration {
   readonly atomClass: TexMathAtomClass;
   readonly family: TexMathFontFamily;
   readonly code: number;
-  readonly requiresAmsPackage: boolean;
+  readonly requiredLatexPackage: TexMathSymbolLatexPackage | null;
+  readonly requiresAmsMathFontProfile: boolean;
 }
 
 // TeX Live 2025 amssymb.sty / amsfonts.sty DeclareMathSymbol declarations.
@@ -75,6 +78,8 @@ const amsSymbolDeclarations = {
   Game: ams("ord", "amsSymbolsB", 0x61),
   geqq: ams("rel", "amsSymbolsA", 0x3d),
   geqslant: ams("rel", "amsSymbolsA", 0x3e),
+  ggg: ams("rel", "amsSymbolsA", 0x6f),
+  gggtr: ams("rel", "amsSymbolsA", 0x6f),
   gimel: ams("ord", "amsSymbolsB", 0x6a),
   gnapprox: ams("rel", "amsSymbolsB", 0x1b),
   gneq: ams("rel", "amsSymbolsB", 0x0d),
@@ -95,6 +100,7 @@ const amsSymbolDeclarations = {
   leftrightarrows: ams("rel", "amsSymbolsA", 0x1c),
   leftrightharpoons: ams("rel", "amsSymbolsA", 0x0b),
   leftrightsquigarrow: ams("rel", "amsSymbolsA", 0x21),
+  leftthreetimes: ams("bin", "amsSymbolsA", 0x68),
   leqq: ams("rel", "amsSymbolsA", 0x35),
   leqslant: ams("rel", "amsSymbolsA", 0x36),
   lesseqgtr: ams("rel", "amsSymbolsA", 0x51),
@@ -202,7 +208,10 @@ const amsSymbolDeclarations = {
   thicksim: ams("rel", "amsSymbolsB", 0x73),
   trianglelefteq: ams("rel", "amsSymbolsA", 0x45),
   triangleq: ams("rel", "amsSymbolsA", 0x2c),
+  triangledown: ams("ord", "amsSymbolsA", 0x4f),
   trianglerighteq: ams("rel", "amsSymbolsA", 0x44),
+  twoheadleftarrow: ams("rel", "amsSymbolsA", 0x11),
+  twoheadrightarrow: ams("rel", "amsSymbolsA", 0x10),
   ulcorner: ams("open", "amsSymbolsA", 0x70),
   unlhd: ams("bin", "amsSymbolsA", 0x45),
   unrhd: ams("bin", "amsSymbolsA", 0x44),
@@ -225,6 +234,21 @@ const amsSymbolDeclarations = {
   veebar: ams("bin", "amsSymbolsA", 0x59),
   Vvdash: ams("rel", "amsSymbolsA", 0x0e),
   yen: ams("ord", "amsSymbolsA", 0x55),
+  Box: ams("ord", "amsSymbolsA", 0x03),
+  Lsh: ams("rel", "amsSymbolsA", 0x1e),
+  nexists: ams("ord", "amsSymbolsB", 0x40),
+  rightthreetimes: ams("bin", "amsSymbolsA", 0x69),
+  varGamma: amsmath("ord", "letters", 0x00),
+  varDelta: amsmath("ord", "letters", 0x01),
+  varTheta: amsmath("ord", "letters", 0x02),
+  varLambda: amsmath("ord", "letters", 0x03),
+  varXi: amsmath("ord", "letters", 0x04),
+  varPi: amsmath("ord", "letters", 0x05),
+  varSigma: amsmath("ord", "letters", 0x06),
+  varUpsilon: amsmath("ord", "letters", 0x07),
+  varPhi: amsmath("ord", "letters", 0x08),
+  varPsi: amsmath("ord", "letters", 0x09),
+  varOmega: amsmath("ord", "letters", 0x0a),
 } as const satisfies Record<string, TexMathSymbolDeclaration>;
 
 export function texMathSymbolDeclaration(command: string): TexMathSymbolDeclaration | null {
@@ -232,8 +256,15 @@ export function texMathSymbolDeclaration(command: string): TexMathSymbolDeclarat
   return (amsSymbolDeclarations as Record<string, TexMathSymbolDeclaration>)[name] ?? null;
 }
 
-export function texMathSymbolCommandNames(): readonly string[] {
-  return Object.keys(amsSymbolDeclarations).map((name) => `\\${name}`);
+export function texMathSymbolCommandNames(options: {
+  readonly requiredLatexPackage?: TexMathSymbolLatexPackage;
+} = {}): readonly string[] {
+  return Object.entries(amsSymbolDeclarations)
+    .filter(([, declaration]) =>
+      options.requiredLatexPackage === undefined ||
+      declaration.requiredLatexPackage === options.requiredLatexPackage
+    )
+    .map(([name]) => `\\${name}`);
 }
 
 function ams(
@@ -245,6 +276,21 @@ function ams(
     atomClass,
     family,
     code,
-    requiresAmsPackage: true,
+    requiredLatexPackage: "amssymb",
+    requiresAmsMathFontProfile: true,
+  };
+}
+
+function amsmath(
+  atomClass: TexMathAtomClass,
+  family: TexMathFontFamily,
+  code: number
+): TexMathSymbolDeclaration {
+  return {
+    atomClass,
+    family,
+    code,
+    requiredLatexPackage: "amsmath",
+    requiresAmsMathFontProfile: false,
   };
 }

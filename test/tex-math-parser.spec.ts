@@ -1023,12 +1023,15 @@ describe("TeX math parser", () => {
   });
 
   it("parses additional plain-TeX symbols and named operators", () => {
-    const result = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+\Longrightarrow+\implies+\iff`);
+    const source = String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+\Longrightarrow+\implies+\impliedby+\iff`;
+    const result = parseTexMath(source);
 
     expect(result.diagnostics).toEqual([]);
     expect(result.list.items.map((item) =>
       item.kind === "atom" && item.nucleus.kind === "glyph"
         ? { atomClass: item.atomClass, text: item.nucleus.text }
+        : item.kind === "atom" && item.nucleus.kind === "list"
+          ? { atomClass: item.atomClass, text: source.slice(item.sourceSpan.start, item.sourceSpan.end) }
         : item.kind === "atom" && item.nucleus.kind === "operator-name"
           ? {
               atomClass: item.atomClass,
@@ -1060,6 +1063,8 @@ describe("TeX math parser", () => {
       { atomClass: "rel", text: String.raw`\Longrightarrow` },
       { atomClass: "bin", text: "+" },
       { atomClass: "rel", text: String.raw`\implies` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\impliedby` },
       { atomClass: "bin", text: "+" },
       { atomClass: "rel", text: String.raw`\iff` },
     ]);
@@ -1249,7 +1254,9 @@ describe("TeX math parser", () => {
   });
 
   it("parses shared AMS symbol declarations with TeX atom classes", () => {
-    const result = parseTexMath(String.raw`\lozenge+\leftrightharpoons+\varkappa+\nleq+\beth+\blacktriangle+\rightsquigarrow`);
+    const result = parseTexMath(
+      String.raw`\lozenge+\leftrightharpoons+\varkappa+\nleq+\beth+\blacktriangle+\rightsquigarrow+\Box+\nexists+\varGamma`,
+    );
 
     expect(result.diagnostics).toEqual([]);
     expect(result.list.items.map((item) =>
@@ -1270,6 +1277,12 @@ describe("TeX math parser", () => {
       { atomClass: "ord", text: String.raw`\blacktriangle` },
       { atomClass: "bin", text: "+" },
       { atomClass: "rel", text: String.raw`\rightsquigarrow` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\Box` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\nexists` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\varGamma` },
     ]);
   });
 

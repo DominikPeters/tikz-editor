@@ -335,7 +335,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders additional plain-TeX symbols and named operators through TeX glyph paths", () => {
-    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+x:y+\Longrightarrow+\implies+\iff+\smile+\frown`);
+    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+x:y+\Longrightarrow+\implies+\impliedby+\iff+\smile+\frown`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -409,7 +409,7 @@ describe("TeX math SVG rendering", () => {
 
   it("renders shared AMS symbol declarations through TeX glyph paths", () => {
     const parsed = parseTexMath(
-      String.raw`\lozenge+\leftrightharpoons+\varkappa+\nleq+\beth+\blacktriangle+\rightsquigarrow`,
+      String.raw`\lozenge+\leftrightharpoons+\varkappa+\nleq+\beth+\blacktriangle+\rightsquigarrow+\Box+\nexists+\varGamma`,
     );
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
@@ -426,6 +426,9 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="105"');
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="78"');
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="32"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="3"');
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="64"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="0"');
   });
 
   it("uses AMS script-size fonts for AMS glyphs in scripts", () => {
