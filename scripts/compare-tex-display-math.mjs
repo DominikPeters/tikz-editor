@@ -248,9 +248,9 @@ function ourTrace(caseSpec) {
       rightskipStretch: caseSpec.width,
       spaceGlueProfile: "font",
       tikzTextWidthNode: true,
+      hyphenator: { hyphenate: () => [] },
     } : {}),
     parindent: 0,
-    hyphenator: { hyphenate: () => [] },
     mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
   });
   if (!result.supported || !result.vlistLayout) {

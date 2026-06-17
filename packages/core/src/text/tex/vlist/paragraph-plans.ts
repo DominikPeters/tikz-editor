@@ -65,6 +65,7 @@ export interface TexLayoutParagraphPlan {
 export interface TexLayoutParagraphBreakContext {
   readonly blockIndex: number;
   readonly segmentIndex: number;
+  readonly width?: number;
   readonly firstLineIndentWidth?: number;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
 }
@@ -100,7 +101,19 @@ export function prepareTexLayoutParagraphsFromVList(
   for (const entry of paragraphEntries) {
     const paragraph = entry.item.paragraph;
     const scopeContext = texParagraphScopeContext(entry.ancestors);
-    const breakScopeContext = paragraph.ignoreAncestorBreakMargins === true
+    const suppressAncestorBreakMargins =
+      paragraph.ignoreAncestorBreakMargins === true ||
+      paragraph.useScopedLineWidth === true;
+    const scopedLineWidth = paragraph.useScopedLineWidth === true &&
+        params.options.width !== undefined
+      ? Math.max(
+          0,
+          params.options.width -
+            scopeContext.layout.leftMarginWidth -
+            scopeContext.layout.rightMarginWidth
+        )
+      : undefined;
+    const breakScopeContext = suppressAncestorBreakMargins
       ? texParagraphScopeContextWithoutBreakMargins(scopeContext)
       : scopeContext;
     const blockIndex = paragraph.blockIndex;
@@ -115,6 +128,7 @@ export function prepareTexLayoutParagraphsFromVList(
       paragraphStateResult.alignment,
       blockIndex
     );
+    const spaceGlueProfile = paragraph.spaceGlueProfile ?? paragraphStateResult.spaceGlueProfile;
     if (segments.some((segment) => segment.forcedBreakAfter)) {
       layoutMode = "wrapped-explicit";
     }
@@ -124,15 +138,15 @@ export function prepareTexLayoutParagraphsFromVList(
       const listAttachments = texListItemParagraphAttachments({
         blockIndex,
         segmentIndex,
-        listContext: paragraph.ignoreAncestorBreakMargins === true
+        listContext: suppressAncestorBreakMargins
           ? undefined
           : paragraph.listContext,
-        listItemLayout: paragraph.ignoreAncestorBreakMargins === true
+        listItemLayout: suppressAncestorBreakMargins
           ? undefined
           : scopeContext.listItemLayout,
         font: params.font,
         metricProvider: params.metricProvider,
-        spaceGlueProfile: paragraphStateResult.spaceGlueProfile,
+        spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
         textFontProfile: params.options.textFontProfile,
       });
@@ -151,7 +165,7 @@ export function prepareTexLayoutParagraphsFromVList(
         alignmentProfile: paragraphStateResult.alignmentProfile,
         inheritedAlignment: paragraphStateResult.inheritedAlignment,
         inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile,
-        spaceGlueProfile: paragraphStateResult.spaceGlueProfile,
+        spaceGlueProfile,
         inlinePrefixItems: listAttachments.inlineLabelItems,
         ...(paragraph.overfullSingleLineFallback === true
           ? { overfullSingleLineFallback: true }
@@ -159,6 +173,7 @@ export function prepareTexLayoutParagraphsFromVList(
         breakContext: {
           blockIndex,
           segmentIndex,
+          ...(scopedLineWidth !== undefined ? { width: scopedLineWidth } : {}),
           firstLineIndentWidth: listAttachments.firstLineIndentWidth,
           scopePolicy: texParagraphBreakScopePolicy(breakScopeContext),
         },

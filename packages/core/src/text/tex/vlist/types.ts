@@ -8,6 +8,7 @@ import type {
   SimpleTexVerticalGlueCommandName,
   TexAlignmentProfile,
   TexParagraphAlignment,
+  TexSpaceGlueProfile,
 } from "../ir.js";
 import type { TexMathBox } from "../layout-inline-items.js";
 import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
@@ -135,8 +136,10 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly blockIndex: number;
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
+  readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly listContext?: SimpleTexListContext;
   readonly ignoreAncestorBreakMargins?: boolean;
+  readonly useScopedLineWidth?: boolean;
   readonly overfullSingleLineFallback?: boolean;
 }
 

@@ -2255,6 +2255,33 @@ describe("TeX math SVG rendering", () => {
     expect(rows[1]?.y).toBeCloseTo(131.810277, 4);
   });
 
+  it("uses list-local width when deciding intertext overfull single-line fallback", () => {
+    const source = String.raw`Alpha \begin{itemize}\item First item.\item Quoted \begin{align*}\operatorname{arg\,max}&=\begin{matrix}2&\dfrac{\ldots}{z}&\ldots_n\end{matrix}\\\intertext{measured measured compact holds compact}\begin{cases}\dbinom{m}{1}&b_i^a\end{cases}&=\operatorname{arg\,max}\end{align*} closing.\end{itemize} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-list-overfull-fallback-width",
+      width: 190,
+      alignment: "ragged-right",
+      rightskipStretch: 190,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const lineTexts = result.report?.lines.map((line) =>
+      line.segments.map((segment) => segment.text).join("")
+    ) ?? [];
+    expect(lineTexts).toContain("measured measured compact holds");
+    expect(lineTexts).toContain("compact");
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.y).toBeCloseTo(124.239473, 4);
+  });
+
   it("uses normal TeX paragraph breaking for display alignment intertext", () => {
     const source = String.raw`Alpha \begin{align*}\text{min}&=z_j^z\\\intertext{where where measured holds holds}\begin{bmatrix}n^n&\ldots\end{bmatrix}&=a_x^2\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
@@ -2269,11 +2296,10 @@ describe("TeX math SVG rendering", () => {
     const paragraphReport = result.vlistLayout?.reports.find(
       (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
     );
-    const intertextLines = paragraphReport?.lines.filter((line) =>
-      line.segments.map((segment) => segment.text ?? "").join("") ===
-        "where where measured holds holds"
+    const lineTexts = paragraphReport?.lines.map((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("")
     ) ?? [];
-    expect(intertextLines).toHaveLength(1);
+    expect(lineTexts).toContain("where where measured holds holds");
     const rows = result.vlistLayout?.boxReport.items.filter((item) =>
       item.hboxRole?.kind === "display-align-row"
     ) ?? [];
