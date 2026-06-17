@@ -1731,6 +1731,24 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out amsmath named limit operators with TeX thin-space names", () => {
+    const injLim = layout(String.raw`\injlim`);
+    expect(injLim.supported).toBe(true);
+    expect(injLim.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 105, x: 0 },
+      { kind: "glyph", fontId: "cmr10", code: 110 },
+      { kind: "glyph", fontId: "cmr10", code: 106 },
+      { kind: "glue", width: expect.closeTo(1.666672, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 108 },
+      { kind: "glyph", fontId: "cmr10", code: 105 },
+      { kind: "glyph", fontId: "cmr10", code: 109 },
+    ]);
+
+    const projLim = layoutTexMathList(parseTexMath(String.raw`\projlim_{x}`).list, { style: "display" });
+    expect(projLim.supported).toBe(true);
+    expect(projLim.hlist?.items.some((item) => item.kind === "hlist" && item.role === "limit-subscript")).toBe(true);
+  });
+
   it("lays out operatorname as an AMS roman math operator", () => {
     const rank = layout(String.raw`\operatorname{rank}`);
     expect(rank.supported).toBe(true);

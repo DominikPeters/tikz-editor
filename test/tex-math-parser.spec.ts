@@ -1137,6 +1137,43 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses amsmath named limit operators through source-derived operator names", () => {
+    const result = parseTexMath(String.raw`\injlim+\projlim_{x}`);
+
+    expect(result.diagnostics).toEqual([]);
+    const atoms = result.list.items.filter((item) => item.kind === "atom");
+    expect(atoms[0]).toMatchObject({
+      atomClass: "op",
+      limits: "display",
+      nucleus: {
+        kind: "operator-name",
+      },
+    });
+    expect(atoms[0]?.nucleus.kind === "operator-name" ? atoms[0].nucleus.parts.map((part) =>
+      part.kind === "text" ? part.text : part.command
+    ) : []).toEqual(["i", "n", "j", ",", "l", "i", "m"]);
+    expect(atoms[2]).toMatchObject({
+      atomClass: "op",
+      limits: "display",
+      nucleus: {
+        kind: "operator-name",
+      },
+      subscript: {
+        list: {
+          items: [
+            {
+              kind: "atom",
+              nucleus: { kind: "glyph", text: "x" },
+            },
+          ],
+        },
+      },
+    });
+    expect(atoms[2]?.nucleus.kind === "operator-name" ? atoms[2].nucleus.parts.map((part) =>
+      part.kind === "text" ? part.text : part.command
+    ) : []).toEqual(["p", "r", "o", "j", ",", "l", "i", "m"]);
+  });
+
   it("lowers models through TeX joinrel relation pieces", () => {
     const result = parseTexMath(String.raw`x\models y`);
     const models = atomAt(result, 1);

@@ -435,6 +435,10 @@ class TexMathParser {
       if (declaredOperator) {
         return this.parseDeclaredMathOperator(declaredOperator, allowScripts);
       }
+      const amsNamedOperator = amsNamedOperatorDeclaration(token.text);
+      if (amsNamedOperator) {
+        return this.parseGeneratedOperatorName(amsNamedOperator, allowScripts);
+      }
       const namedOperator = namedOperatorCommandName(token.text);
       if (namedOperator) {
         return this.parseNamedOperator(namedOperator, allowScripts);
@@ -1073,6 +1077,32 @@ class TexMathParser {
   }
 
   private parseDeclaredMathOperator(
+    declaration: DeclaredMathOperator,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const parts = declaration.parts.map((part, index): TexMathOperatorNamePart => {
+      const sourceSpan = operatorPartUseSourceSpan(command.sourceSpan, index);
+      return part.kind === "text"
+        ? { kind: "text", text: part.text, sourceSpan }
+        : { kind: "spacing", command: part.command, sourceSpan };
+    });
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "operator-name",
+        parts,
+        commandSourceSpan: command.sourceSpan,
+        nameSourceSpan: command.sourceSpan,
+        sourceSpan: command.sourceSpan,
+      },
+      limits: declaration.limits,
+      sourceSpan: command.sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseGeneratedOperatorName(
     declaration: DeclaredMathOperator,
     allowScripts: boolean
   ): TexMathAtom {
@@ -3941,7 +3971,13 @@ class TexMathParser {
   }
 
   private maybeParseScripts(atom: TexMathAtom, allowScripts: boolean): TexMathAtom {
-    return allowScripts ? this.parseScripts(atom) : atom;
+    if (!allowScripts) {
+      return atom;
+    }
+    const switched = atom.atomClass === "op"
+      ? this.parseOperatorLimitSwitch(atom, true)
+      : atom;
+    return this.parseScripts(switched);
   }
 
   private parseScripts(atom: TexMathAtom): TexMathAtom {
@@ -5204,6 +5240,23 @@ function namedOperatorCommandName(command: string): string | null {
   }
 }
 
+function amsNamedOperatorDeclaration(command: string): DeclaredMathOperator | null {
+  switch (commandName(command)) {
+    case "injlim":
+      return {
+        parts: operatorNameParts(["i", "n", "j", ",", "l", "i", "m"]),
+        limits: "display",
+      };
+    case "projlim":
+      return {
+        parts: operatorNameParts(["p", "r", "o", "j", ",", "l", "i", "m"]),
+        limits: "display",
+      };
+    default:
+      return null;
+  }
+}
+
 function defaultNamedOperatorLimits(name: string): TexMathOperatorLimits {
   switch (name) {
     case "det":
@@ -5218,6 +5271,15 @@ function defaultNamedOperatorLimits(name: string): TexMathOperatorLimits {
     default:
       return "nolimits";
   }
+}
+
+function operatorNameParts(parts: readonly string[]): readonly TexMathOperatorNamePart[] {
+  return parts.map((part, index): TexMathOperatorNamePart => {
+    const sourceSpan = { start: index, end: index + 1 };
+    return part === ","
+      ? { kind: "spacing", command: ",", sourceSpan }
+      : { kind: "text", text: part, sourceSpan };
+  });
 }
 
 function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | null {

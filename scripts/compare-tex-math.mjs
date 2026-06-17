@@ -28,8 +28,10 @@ const amsMathCommands = [
   String.raw`\boxed`,
   String.raw`\dddot`,
   String.raw`\ddddot`,
+  String.raw`\injlim`,
   String.raw`\implies`,
   String.raw`\impliedby`,
+  String.raw`\projlim`,
   ...texMathSymbolCommandNames({ requiredLatexPackage: "amsmath" }),
 ];
 const amsMathDelimiterCommands = [

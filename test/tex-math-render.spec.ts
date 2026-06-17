@@ -508,6 +508,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(1572.2272 0) scale(100)"');
   });
 
+  it("renders amsmath named limit operators through roman operator glyphs", () => {
+    const parsed = parseTexMath(String.raw`\injlim+\projlim_{x}`);
+    const result = layoutTexMathList(parsed.list, { style: "display" });
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="106"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="112"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-math-role="limit-subscript"');
+  });
+
   it("renders substack limits recursively with scriptstyle CM glyphs", () => {
     const parsed = parseTexMath(String.raw`\sum_{\substack{i=1\\j=2}}^n`);
     const result = layoutTexMathList(parsed.list);
