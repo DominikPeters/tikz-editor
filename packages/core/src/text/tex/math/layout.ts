@@ -262,6 +262,8 @@ export function layoutTexMathList(
   const fontProfile = options.fontProfile ?? resolveDefaultTexMathFontProfileForList(list);
   const baseAtPt = options.baseAtPt ?? 10;
   const alphabet = options.alphabet;
+  let currentAlphabet = alphabet;
+  let sawMathitAlphabetDeclaration = false;
   const spaced = spaceTexMathList(list, { style });
   const items: TexMathHListItem[] = [];
   const errors: TexMathLayoutError[] = [];
@@ -292,6 +294,11 @@ export function layoutTexMathList(
       currentCramped = false;
       continue;
     }
+    if (item.kind === "alphabet-change") {
+      currentAlphabet = item.alphabet;
+      sawMathitAlphabetDeclaration ||= item.alphabet === "mathit";
+      continue;
+    }
     if (item.kind === "penalty") {
       continue;
     }
@@ -302,7 +309,7 @@ export function layoutTexMathList(
       });
       continue;
     }
-    const atomLayout = layoutAtom(item, fontProfile, currentStyle, currentCramped, baseAtPt, alphabet);
+    const atomLayout = layoutAtom(item, fontProfile, currentStyle, currentCramped, baseAtPt, currentAlphabet);
     if (!atomLayout) {
       errors.push({
         message: "Only simple glyph math atoms are supported by the initial math hlist layout.",
@@ -337,7 +344,7 @@ export function layoutTexMathList(
   } satisfies TexMathHList;
   return {
     supported: true,
-    hlist: alphabet ? normalizeAlphabetHList(hlist, alphabet) : hlist,
+    hlist: alphabet || sawMathitAlphabetDeclaration ? normalizeAlphabetHList(hlist, alphabet ?? "mathit") : hlist,
     errors: [],
   };
 }

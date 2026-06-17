@@ -1081,6 +1081,44 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses old-style math font declarations as alphabet changes", () => {
+    const result = parseTexMath(String.raw`\rm a+\it b+\bf c+\sf d+\tt e+\cal A`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.filter((item) => item.kind === "alphabet-change")).toEqual([
+      {
+        kind: "alphabet-change",
+        alphabet: "mathrm",
+        sourceSpan: { start: 0, end: 3 },
+      },
+      {
+        kind: "alphabet-change",
+        alphabet: "mathit",
+        sourceSpan: { start: 6, end: 9 },
+      },
+      {
+        kind: "alphabet-change",
+        alphabet: "mathbf",
+        sourceSpan: { start: 12, end: 15 },
+      },
+      {
+        kind: "alphabet-change",
+        alphabet: "mathsf",
+        sourceSpan: { start: 18, end: 21 },
+      },
+      {
+        kind: "alphabet-change",
+        alphabet: "mathtt",
+        sourceSpan: { start: 24, end: 27 },
+      },
+      {
+        kind: "alphabet-change",
+        alphabet: "mathcal",
+        sourceSpan: { start: 30, end: 34 },
+      },
+    ]);
+  });
+
   it("parses TeX macro arguments as single atoms when braces are omitted", () => {
     const fraction = atomAt(parseTexMath(String.raw`\frac1c+\sqrt x`), 0);
     const radical = atomAt(parseTexMath(String.raw`\frac1c+\sqrt x`), 2);

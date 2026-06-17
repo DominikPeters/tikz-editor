@@ -539,6 +539,12 @@ export interface TexMathStyleChange {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathAlphabetChange {
+  readonly kind: "alphabet-change";
+  readonly alphabet: TexMathAlphabetCommand;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathPenalty {
   readonly kind: "penalty";
   readonly command: "allowbreak" | "break" | "nobreak" | "penalty";
@@ -557,6 +563,7 @@ export type TexMathItem =
   | TexMathGlue
   | TexMathMuGlue
   | TexMathStyleChange
+  | TexMathAlphabetChange
   | TexMathPenalty
   | TexMathUnsupportedItem;
 

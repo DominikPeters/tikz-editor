@@ -731,6 +731,32 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out old-style math font declarations through the active alphabet state", () => {
+    const result = layout(String.raw`\rm a+\it b+\bf c+\sf d+\tt e+\cal A`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmr10", code: 97 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmti10", code: 98 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmbx10", code: 99 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmss10", code: 100 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmtt10", code: 101 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmsy10", code: 65 },
+    ]);
+
+    const italicRun = layout(String.raw`\it ABC`);
+    expect(italicRun.supported).toBe(true);
+    expect(italicRun.hlist?.width).toBeCloseTo(23.08042, 5);
+  });
+
   it("uses exact script variants for math alphabet commands", () => {
     const result = layout(String.raw`x_{y_{\mathbf{i}}}+x_{\mathsf{i}}`);
 

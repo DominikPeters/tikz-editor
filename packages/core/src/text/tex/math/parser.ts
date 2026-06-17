@@ -377,6 +377,15 @@ class TexMathParser {
           sourceSpan: token.sourceSpan,
         };
       }
+      const alphabetDeclaration = alphabetDeclarationCommandName(token.text);
+      if (alphabetDeclaration) {
+        this.advance();
+        return {
+          kind: "alphabet-change",
+          alphabet: alphabetDeclaration,
+          sourceSpan: token.sourceSpan,
+        };
+      }
       const penalty = this.parsePenaltyCommand();
       if (penalty) {
         return penalty;
@@ -5255,6 +5264,25 @@ function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
     case "mathsf":
       return "mathsf";
     case "mathtt":
+      return "mathtt";
+    default:
+      return null;
+  }
+}
+
+function alphabetDeclarationCommandName(command: string): TexMathAlphabetCommand | null {
+  switch (commandName(command)) {
+    case "bf":
+      return "mathbf";
+    case "cal":
+      return "mathcal";
+    case "it":
+      return "mathit";
+    case "rm":
+      return "mathrm";
+    case "sf":
+      return "mathsf";
+    case "tt":
       return "mathtt";
     default:
       return null;

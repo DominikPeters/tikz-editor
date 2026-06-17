@@ -304,6 +304,23 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="65"');
   });
 
+  it("renders old-style math font declarations through vendored CM font paths", () => {
+    const parsed = parseTexMath(String.raw`\rm a+\it b+\bf c+\sf d+\tt e+\cal A`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmti10" data-tex-glyph="98"');
+    expect(body).toContain('data-tex-font="cmbx10" data-tex-glyph="99"');
+    expect(body).toContain('data-tex-font="cmss10" data-tex-glyph="100"');
+    expect(body).toContain('data-tex-font="cmtt10" data-tex-glyph="101"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="65"');
+  });
+
   it("renders named Greek and relation symbols through TeX glyph paths", () => {
     const parsed = parseTexMath(String.raw`\alpha+\Omega+x\leq y\neq z`);
     const result = layoutTexMathList(parsed.list);
