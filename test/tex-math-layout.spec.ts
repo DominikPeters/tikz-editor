@@ -2951,13 +2951,17 @@ describe("TeX math hlist layout", () => {
       x: expect.closeTo(9.60418, 5),
     });
 
-    const delimiters = layout(String.raw`\left\lbrace x\right\rbrace\left|x\right|\left\Vert x\right\Vert\left\backslash x\right/`);
+    const delimiters = layout(String.raw`\left\lbrace x\right\rbrace\left|x\right|\left\lvert x\right\rvert\left\Vert x\right\Vert\left\lVert x\right\rVert\left\backslash x\right/`);
     expect(delimiters.supported).toBe(true);
     expect(delimiters.hlist?.items.filter((item) => item.kind === "glyph").map((item) => item.code)).toEqual([
       102,
       103,
       106,
       106,
+      106,
+      106,
+      107,
+      107,
       107,
       107,
       110,
@@ -2967,6 +2971,18 @@ describe("TeX math hlist layout", () => {
       kind: "hlist",
       items: [{ kind: "glyph", fontId: "cmmi10", code: 120 }],
     });
+
+    const corners = layout(String.raw`\left\ulcorner x\right\urcorner\left\llcorner x\right\lrcorner`);
+    expect(corners.supported).toBe(true);
+    expect(corners.hlist?.items.filter((item) => item.kind === "glyph").map((item) => ({
+      fontId: item.fontId,
+      code: item.code,
+    }))).toEqual([
+      { fontId: "msam10", code: 0x70 },
+      { fontId: "msam10", code: 0x71 },
+      { fontId: "msam10", code: 0x78 },
+      { fontId: "msam10", code: 0x79 },
+    ]);
   });
 
   it("uses extension-family chains for tall TeX delimiter commands", () => {

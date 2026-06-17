@@ -5107,11 +5107,11 @@ const relationNamedSymbolCommands = new Set([
 ]);
 
 const openNamedSymbolCommands = new Set([
-  "langle", "lbrace", "lceil", "lfloor", "lvert", "lVert", "ulcorner", "{",
+  "langle", "lbrace", "lceil", "lfloor", "lvert", "lVert", "ulcorner", "llcorner", "{",
 ]);
 
 const closeNamedSymbolCommands = new Set([
-  "rangle", "rbrace", "rceil", "rfloor", "rvert", "rVert", "urcorner", "}",
+  "rangle", "rbrace", "rceil", "rfloor", "rvert", "rVert", "urcorner", "lrcorner", "}",
 ]);
 
 const punctNamedSymbolCommands = new Set([
@@ -5189,9 +5189,13 @@ function delimiterForToken(token: TexMathToken): TexMathDelimiter | null {
       return "rbrace";
     case "|":
     case "Vert":
+    case "lVert":
+    case "rVert":
       return "Vert";
     case "vert":
     case "mid":
+    case "lvert":
+    case "rvert":
       return "vert";
     case "backslash":
       return "backslash";
@@ -5211,6 +5215,10 @@ function delimiterForToken(token: TexMathToken): TexMathDelimiter | null {
       return "ulcorner";
     case "urcorner":
       return "urcorner";
+    case "llcorner":
+      return "llcorner";
+    case "lrcorner":
+      return "lrcorner";
     default:
       return null;
   }
@@ -5225,6 +5233,7 @@ function atomClassForDelimiter(delimiter: TexMathDelimiter): TexMathAtomClass {
     case "lceil":
     case "lfloor":
     case "ulcorner":
+    case "llcorner":
       return "open";
     case ")":
     case "]":
@@ -5233,6 +5242,7 @@ function atomClassForDelimiter(delimiter: TexMathDelimiter): TexMathAtomClass {
     case "rceil":
     case "rfloor":
     case "urcorner":
+    case "lrcorner":
       return "close";
     case ".":
     case "vert":

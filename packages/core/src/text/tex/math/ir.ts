@@ -114,7 +114,9 @@ export type TexMathDelimiter =
   | "lceil"
   | "rceil"
   | "ulcorner"
-  | "urcorner";
+  | "urcorner"
+  | "llcorner"
+  | "lrcorner";
 
 export interface TexMathGlyphNucleus {
   readonly kind: "glyph";

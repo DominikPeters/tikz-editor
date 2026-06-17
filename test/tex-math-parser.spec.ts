@@ -2696,7 +2696,7 @@ describe("TeX math parser", () => {
   });
 
   it("maps TeX left-right delimiter commands to canonical delimiter ids", () => {
-    const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert \left\ulcorner w\right\urcorner`);
+    const result = parseTexMath(String.raw`\left\langle x\right\rangle \left\lbrace y\right\rbrace \left|z\right\Vert \left\lvert u\right\rvert \left\lVert v\right\rVert \left\ulcorner w\right\urcorner \left\llcorner q\right\lrcorner`);
     const groups = result.list.items.filter((item): item is ReturnType<typeof atomAt> => item.kind === "atom");
 
     expect(result.diagnostics).toEqual([]);
@@ -2706,7 +2706,10 @@ describe("TeX math parser", () => {
       ["langle", "rangle"],
       ["lbrace", "rbrace"],
       ["vert", "Vert"],
+      ["vert", "vert"],
+      ["Vert", "Vert"],
       ["ulcorner", "urcorner"],
+      ["llcorner", "lrcorner"],
     ]);
   });
 

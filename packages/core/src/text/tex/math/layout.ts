@@ -485,6 +485,8 @@ function amsMathSymbolCommand(text: string): boolean {
     case "thicksim":
     case "ulcorner":
     case "urcorner":
+    case "llcorner":
+    case "lrcorner":
     case "varnothing":
     case "Vdash":
       return true;
@@ -494,7 +496,10 @@ function amsMathSymbolCommand(text: string): boolean {
 }
 
 function amsMathDelimiter(delimiter: TexMathDelimiter | undefined): boolean {
-  return delimiter === "ulcorner" || delimiter === "urcorner";
+  return delimiter === "ulcorner" ||
+    delimiter === "urcorner" ||
+    delimiter === "llcorner" ||
+    delimiter === "lrcorner";
 }
 
 function layoutAtom(
@@ -4170,6 +4175,10 @@ function delimiterSpec(
       return { smallFamily: "amsSymbolsA", smallCode: 0x70, largeCode: null };
     case "urcorner":
       return { smallFamily: "amsSymbolsA", smallCode: 0x71, largeCode: null };
+    case "llcorner":
+      return { smallFamily: "amsSymbolsA", smallCode: 0x78, largeCode: null };
+    case "lrcorner":
+      return { smallFamily: "amsSymbolsA", smallCode: 0x79, largeCode: null };
     case "lbrace":
       return { smallFamily: "symbols", smallCode: 102, largeCode: 8 };
     case "rbrace":
@@ -5076,6 +5085,10 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "amsSymbolsA", code: 0x70 }];
     case "urcorner":
       return [{ family: "amsSymbolsA", code: 0x71 }];
+    case "llcorner":
+      return [{ family: "amsSymbolsA", code: 0x78 }];
+    case "lrcorner":
+      return [{ family: "amsSymbolsA", code: 0x79 }];
     case "square":
       return [{ family: "amsSymbolsA", code: 0x03 }];
     case "blacksquare":

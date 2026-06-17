@@ -565,7 +565,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders AMS left-right corner delimiters through fixed AMS glyphs", () => {
-    const parsed = parseTexMath(String.raw`\left\ulcorner A\right\urcorner`);
+    const parsed = parseTexMath(String.raw`\left\ulcorner A\right\urcorner+\left\llcorner B\right\lrcorner`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -576,6 +576,8 @@ describe("TeX math SVG rendering", () => {
     expect(resolveDefaultTexMathFontProfileForList(parsed.list).id).toBe("lualatex-ams-math");
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="112"');
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="113"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="121"');
   });
 
   it("renders extensible left-right delimiters as stacked glyph recipes", () => {

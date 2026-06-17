@@ -15,6 +15,39 @@ const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\t
 const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
+const amsMathDelimiterCommands = [
+  String.raw`\lvert`,
+  String.raw`\rvert`,
+  String.raw`\lVert`,
+  String.raw`\rVert`,
+];
+const amsSymbolCommands = [
+  String.raw`\approxeq`,
+  String.raw`\Bbbk`,
+  String.raw`\blacksquare`,
+  String.raw`\boxdot`,
+  String.raw`\circleddash`,
+  String.raw`\digamma`,
+  String.raw`\dotplus`,
+  String.raw`\geqslant`,
+  String.raw`\gtrsim`,
+  String.raw`\leqslant`,
+  String.raw`\lesssim`,
+  String.raw`\llcorner`,
+  String.raw`\lrcorner`,
+  String.raw`\ngeqslant`,
+  String.raw`\nleqslant`,
+  String.raw`\nVdash`,
+  String.raw`\square`,
+  String.raw`\Subset`,
+  String.raw`\Supset`,
+  String.raw`\thickapprox`,
+  String.raw`\thicksim`,
+  String.raw`\ulcorner`,
+  String.raw`\urcorner`,
+  String.raw`\varnothing`,
+  String.raw`\Vdash`,
+];
 
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
@@ -427,14 +460,18 @@ function texSource(formula) {
     hasSubarrayEnvironment(formula) ||
     hasSidesetCommand(formula) ||
     hasEllipsisCommand(formula) ||
+    hasAmsMathDelimiterCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
   const arrayPreamble = hasArrayPackagePreambleExtension(formula)
     ? String.raw`\usepackage{array}` + "\n"
     : "";
+  const amssymbPreamble = hasAmsSymbolCommand(formula)
+    ? String.raw`\usepackage{amssymb}` + "\n"
+    : "";
   return String.raw`\documentclass{article}
-` + amsmathPreamble + arrayPreamble + String.raw`
+` + amsmathPreamble + amssymbPreamble + arrayPreamble + String.raw`
 \newbox\m
 \begin{document}
 \setbox\m=\hbox{$` + formula + String.raw`$}
@@ -971,6 +1008,14 @@ function hasEllipsisCommand(source) {
   return source.includes(String.raw`\dots`) ||
     source.includes(String.raw`\ldots`) ||
     source.includes(String.raw`\cdots`);
+}
+
+function hasAmsMathDelimiterCommand(source) {
+  return amsMathDelimiterCommands.some((command) => source.includes(command));
+}
+
+function hasAmsSymbolCommand(source) {
+  return amsSymbolCommands.some((command) => source.includes(command));
 }
 
 function randomMatrixCell(rng) {
