@@ -726,7 +726,7 @@ export function getKnuthPlassVListSourceHit(
   }
 
   const item = params?.itemHit;
-  if (!item || item.kind === 'hbox' || item.kind === 'display-math') {
+  if (!item || (item.kind === 'hbox' && item.hboxRole !== 'display-align-row')) {
     return null;
   }
   const itemStart = sourceBackedStart(item.sourceStart, item.sourceEnd);

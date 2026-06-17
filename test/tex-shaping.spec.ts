@@ -13,6 +13,7 @@ import {
   getKnuthPlassVListLabelFromPoint,
   getKnuthPlassVListLabelGeometry,
   getKnuthPlassVListParagraphGeometry,
+  getKnuthPlassVListSourceHitFromSnapshot,
   getKnuthPlassVListTreeHitFromSnapshot,
 } from "../packages/core/src/text/knuth-plass/editor/hitmap.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
@@ -4800,6 +4801,26 @@ unordered.`;
       sourceStart: sourceText.indexOf("a&=b"),
       sourceEnd: sourceText.indexOf("a&=b") + "a&=b".length,
     });
+
+    const snapshot = getKnuthPlassVListGeometrySnapshot({
+      outputJax,
+      paragraphId: "tex:display-align-row-hitmap",
+      containerElement: containerElement as any,
+    });
+    const sourceHit = getKnuthPlassVListSourceHitFromSnapshot({
+      snapshot,
+      clientPoint: clientPoint(
+        px(((secondRow?.clientLeft ?? 0) + (secondRow?.clientRight ?? 0)) / 2),
+        px(((secondRow?.clientTop ?? 0) + (secondRow?.clientBottom ?? 0)) / 2)
+      ),
+    });
+    expect(sourceHit).toEqual({
+      offset: sourceText.indexOf("a&=b"),
+      selectionRange: {
+        start: sourceText.indexOf("a&=b"),
+        end: sourceText.indexOf("a&=b") + "a&=b".length,
+      },
+    });
   });
 
   it("maps editor carets inside display math boxes from registered vlist geometry", async () => {
@@ -4827,6 +4848,27 @@ unordered.`;
         throw new Error("display math caret mapping should use registered vlist geometry");
       },
     };
+    const snapshot = getKnuthPlassVListGeometrySnapshot({
+      outputJax,
+      paragraphId: "tex:display-math-caret",
+      containerElement: containerElement as any,
+    });
+    const displayItem = snapshot.items.find((item) => item.kind === "display-math");
+    expect(displayItem).toBeTruthy();
+    const displaySourceHit = getKnuthPlassVListSourceHitFromSnapshot({
+      snapshot,
+      clientPoint: clientPoint(
+        px(((displayItem?.clientLeft ?? 0) + (displayItem?.clientRight ?? 0)) / 2),
+        px(((displayItem?.clientTop ?? 0) + (displayItem?.clientBottom ?? 0)) / 2)
+      ),
+    });
+    expect(displaySourceHit).toEqual({
+      offset: sourceText.indexOf(String.raw`\[`),
+      selectionRange: {
+        start: sourceText.indexOf(String.raw`\[`),
+        end: sourceText.indexOf(String.raw`\]`) + String.raw`\]`.length,
+      },
+    });
 
     const offset = sourceText.indexOf("^");
     const point = await getKnuthPlassPointFromOffset(outputJax, {
