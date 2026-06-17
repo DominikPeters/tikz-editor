@@ -637,7 +637,11 @@ function getDisplayMathAlignment(
         tag?.width ?? 0,
         shiftTag
       );
-      const rowItems = offsetMathHListItems(row.items, rowOffset);
+      const packedRow = packMultlineRowToDisplayWidth(
+        row,
+        Math.max(0, params.targetWidth - rowOffset)
+      );
+      const rowItems = offsetMathHListItems(packedRow.items, rowOffset);
       const taggedRow = tag
         ? addMultlineDisplayTag(
           row,
@@ -889,6 +893,68 @@ function getDisplayMathAlignment(
     rows,
     ...(intertexts.length > 0 ? { intertexts } : {}),
   };
+}
+
+function packMultlineRowToDisplayWidth(
+  row: TexMathChildHListLayoutItem,
+  targetWidth: number
+): TexMathHList {
+  const rowWidth = mathItemsRightEdge(row.items);
+  const hlist: TexMathHList = {
+    kind: "math-hlist",
+    style: "display",
+    width: rowWidth,
+    height: row.height,
+    depth: row.depth,
+    sourceSpan: row.sourceSpan,
+    items: row.items,
+  };
+  if (rowWidth <= targetWidth) {
+    return hlist;
+  }
+  return packTexMathHListToWidthThroughSingleChild(hlist, targetWidth);
+}
+
+function packTexMathHListToWidthThroughSingleChild(
+  hlist: TexMathHList,
+  targetWidth: number
+): TexMathHList {
+  if (texMathHListHasGlueFlex(hlist)) {
+    return setTexMathHListWidth(hlist, targetWidth);
+  }
+  const child = hlist.items.length === 1 ? hlist.items[0] : null;
+  if (child?.kind !== "hlist") {
+    return setTexMathHListWidth(hlist, targetWidth);
+  }
+  const packedChild = packTexMathHListToWidthThroughSingleChild(
+    {
+      kind: "math-hlist",
+      style: hlist.style,
+      width: child.width,
+      height: child.height,
+      depth: child.depth,
+      sourceSpan: child.sourceSpan,
+      items: child.items,
+    },
+    Math.max(0, targetWidth - child.x)
+  );
+  return {
+    ...hlist,
+    width: roundTexPt(targetWidth),
+    items: [{
+      ...child,
+      width: packedChild.width,
+      height: packedChild.height,
+      depth: packedChild.depth,
+      items: packedChild.items,
+    }],
+  };
+}
+
+function texMathHListHasGlueFlex(hlist: TexMathHList): boolean {
+  return hlist.items.some((item) =>
+    item.kind === "glue" && (item.stretch > 0 || item.shrink > 0)
+  );
 }
 
 function displayAlignmentIntertexts(

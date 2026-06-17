@@ -762,7 +762,7 @@ function displayAlignmentIntertextParagraph(
       overfullSingleLineFallback: true,
       quoteDepth: scope.quoteDepth,
       ...(scope.listContext ? { listContext: scope.listContext } : {}),
-      ignoreAncestorBreakMargins: true,
+      ...(scope.listContext ? {} : { ignoreAncestorBreakMargins: true }),
       blockIndex,
     },
   };

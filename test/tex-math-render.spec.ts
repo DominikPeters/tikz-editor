@@ -66,6 +66,26 @@ function findGlyph(
   ) ?? null;
 }
 
+function findGlyphX(
+  items: readonly TexMathHListItem[],
+  fontId: string,
+  code: number,
+  baseX = 0
+): number | null {
+  for (const item of items) {
+    if (item.kind === "glyph" && item.fontId === fontId && item.code === code) {
+      return baseX + item.x;
+    }
+    if (item.kind === "hlist") {
+      const nested = findGlyphX(item.items, fontId, code, baseX + item.x);
+      if (nested !== null) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
 describe("TeX math SVG rendering", () => {
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
@@ -2195,11 +2215,44 @@ describe("TeX math SVG rendering", () => {
     });
 
     expect(result.supported).toBe(true);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    const intertextParagraph = result.vlistLayout?.boxReport.items.find((item) =>
+      item.itemKind === "paragraph" &&
+      item.sourceSpan?.start === source.indexOf("second condition")
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.x).toBeCloseTo(25, 4);
+    expect(rows[1]?.x).toBeCloseTo(25, 4);
+    expect(intertextParagraph?.x).toBeCloseTo(25, 4);
+  });
+
+  it("breaks display alignment intertext against the list item text width", () => {
+    const source = String.raw`Alpha \begin{itemize}\item First item.\item Measured \begin{align*}\dbinom{n}{\ldots}&=\overline{a+z}\\\intertext{measured where stable condition measured}\text{for $n \ge 1$}&=x\end{align*} result.\end{itemize} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-list-local-width",
+      width: 190,
+      alignment: "ragged-right",
+      rightskipStretch: 190,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
     const lineTexts = result.report?.lines.map((line) =>
       line.segments.map((segment) => segment.text).join("")
     ) ?? [];
-    expect(lineTexts).toContain("second condition measured second holds");
-    expect(lineTexts).not.toContain("holds");
+    expect(lineTexts).toContain("measured where stable condition");
+    expect(lineTexts).toContain("measured");
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.y).toBeCloseTo(131.810277, 4);
   });
 
   it("uses normal TeX paragraph breaking for display alignment intertext", () => {
@@ -2586,6 +2639,38 @@ describe("TeX math SVG rendering", () => {
 
     expect(directAlignment?.rows).toHaveLength(3);
     expect(firstGlyphX(directAlignment?.rows[0]?.hlist?.items ?? [])).toBeCloseTo(11.666672, 5);
+  });
+
+  it("shrinks overfull multline row math glue before applying row placement", () => {
+    const source = String.raw`\begin{multline}\begin{Bmatrix}\dbinom{y}{\dots}&x&\binom{n}{n}\end{Bmatrix}+\begin{array}{lrr}2&\frac{2}{m}&\tfrac{z}{n}\end{array} \tag{A}\\\bigg\langle a+1\bigg\rangle\\\underline{\ldots}\\\dfrac{c}{\dots}\end{multline}`;
+    const content = source.slice(
+      String.raw`\begin{multline}`.length,
+      source.indexOf(String.raw`\end{multline}`)
+    );
+    const contentStart = String.raw`\begin{multline}`.length;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "multline",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart,
+      contentEnd: contentStart + content.length,
+      targetWidth: 140,
+      displayLabels: [
+        null,
+        null,
+        null,
+        {
+          text: "1",
+          sourceSpan: { start: contentStart + content.length, end: contentStart + content.length },
+          textSourceSpan: { start: contentStart + content.length, end: contentStart + content.length },
+        },
+      ],
+    });
+
+    expect(directAlignment?.rows).toHaveLength(4);
+    expect(findGlyphX(directAlignment?.rows[0]?.hlist?.items ?? [], "cmr10", 43)).toBeCloseTo(92.880875, 3);
   });
 
   it("renders explicit align-star tags as right-aligned row labels", () => {
