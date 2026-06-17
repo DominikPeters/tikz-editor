@@ -109,6 +109,22 @@ export function parseTexMathAlignedBody(
   };
 }
 
+export function parseTexMathDisplayBody(
+  source: string,
+  options: ParseTexMathOptions = {}
+): TexMathParseResult {
+  const sourceOffset = options.sourceOffset ?? 0;
+  const tokens = tokenizeTexMath(source, sourceOffset);
+  const parser = new TexMathParser(tokens, sourceOffset, source.length, options);
+  const list = parser.parseDisplayBody();
+  parser.reportTopLevelTagDiagnostics();
+  return {
+    list,
+    tokens,
+    diagnostics: parser.diagnostics,
+  };
+}
+
 export function tokenizeTexMath(
   source: string,
   sourceOffset = 0
@@ -291,6 +307,21 @@ class TexMathParser {
         start,
         end: Math.max(start, end),
       },
+    };
+  }
+
+  parseDisplayBody(): TexMathList {
+    const list = this.parseList({
+      stopAtGroupClose: false,
+      stopAtAlignmentMetadata: true,
+      suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue === true,
+    });
+    const metadata = this.consumeAlignmentRowMetadata(true);
+    return {
+      ...list,
+      sourceSpan: spanUnion(list.sourceSpan, metadata.sourceSpan ?? list.sourceSpan),
+      ...(metadata.labels.length > 0 ? { displayLabels: metadata.labels } : {}),
+      ...(metadata.suppressTag ? { suppressDisplayTag: true } : {}),
     };
   }
 

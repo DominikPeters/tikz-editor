@@ -41,6 +41,7 @@ export type {
 } from "./ir.js";
 export {
   parseTexMathAlignedBody,
+  parseTexMathDisplayBody,
   parseTexMath,
   tokenizeTexMath,
   type ParseTexMathOptions,

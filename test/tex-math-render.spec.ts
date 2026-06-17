@@ -815,6 +815,48 @@ describe("TeX math SVG rendering", () => {
     )).toBe(true);
   });
 
+  it("lets display-body metadata override automatic equation labels", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const explicitTagSource = String.raw`a=b\tag{A}`;
+    const explicitTagBox = provider.getDisplayMathBox?.({
+      source: explicitTagSource,
+      content: explicitTagSource,
+      delimiter: "equation",
+      sourceStart: 0,
+      sourceEnd: explicitTagSource.length,
+      contentStart: 0,
+      contentEnd: explicitTagSource.length,
+      targetWidth: 120,
+      displayLabel: {
+        text: "1",
+        sourceSpan: { start: explicitTagSource.length, end: explicitTagSource.length },
+        textSourceSpan: { start: explicitTagSource.length, end: explicitTagSource.length },
+      },
+    });
+
+    expect(explicitTagBox?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="65"');
+    expect(explicitTagBox?.svgBody).not.toContain('data-tex-font="lmroman10-regular" data-tex-glyph="49"');
+
+    const suppressedSource = String.raw`a=b\notag`;
+    const suppressedBox = provider.getDisplayMathBox?.({
+      source: suppressedSource,
+      content: suppressedSource,
+      delimiter: "equation",
+      sourceStart: 0,
+      sourceEnd: suppressedSource.length,
+      contentStart: 0,
+      contentEnd: suppressedSource.length,
+      targetWidth: 120,
+      displayLabel: {
+        text: "1",
+        sourceSpan: { start: suppressedSource.length, end: suppressedSource.length },
+        textSourceSpan: { start: suppressedSource.length, end: suppressedSource.length },
+      },
+    });
+
+    expect(suppressedBox?.svgBody).not.toContain('data-tex-font="lmroman10-regular" data-tex-glyph="49"');
+  });
+
   it("uses display-style AMS terminal ellipsis spacing for display math boxes", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const inlineSource = String.raw`$\dots$`;
@@ -1431,7 +1473,35 @@ unordered.`;
     });
   });
 
-  it("uses explicit placeholders for numbered display math environments", () => {
+  it("renders numbered equation display math with automatic right-side tags", () => {
+    const source = String.raw`Alpha \begin{equation}x^2\end{equation} Beta \begin{equation}y^2\end{equation} Gamma`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:numbered-equation-display-math",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const displays = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.itemKind === "display-math"
+    ) ?? [];
+    expect(displays).toHaveLength(2);
+    expect(displays.map((item) => item.displayMath?.delimiter)).toEqual(["equation", "equation"]);
+
+    const displayItems = result.vlistLayout?.items.filter((item) =>
+      item.item.kind === "display-math"
+    ) ?? [];
+    const firstBox = displayItems[0]?.item.kind === "display-math" ? displayItems[0].item.box : null;
+    const secondBox = displayItems[1]?.item.kind === "display-math" ? displayItems[1].item.box : null;
+    expect(firstBox?.width).toBeCloseTo(160, 6);
+    expect(secondBox?.width).toBeCloseTo(160, 6);
+    expect(firstBox?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="49"');
+    expect(secondBox?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="50"');
+  });
+
+  it("uses explicit placeholders for numbered multi-row display math environments", () => {
     const source = String.raw`Alpha \begin{equation}x^2\end{equation} Beta \begin{align}a&=b\end{align} Gamma \begin{gather}c=d\\e=f\end{gather} Delta \begin{multline}x=y\\z=w\end{multline} Epsilon`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:numbered-display-math-placeholder",
@@ -1445,18 +1515,13 @@ unordered.`;
     const placeholders = result.vlistLayout?.boxReport.items.filter((item) =>
       item.itemKind === "placeholder"
     ) ?? [];
-    expect(placeholders).toHaveLength(4);
+    expect(placeholders).toHaveLength(3);
     expect(placeholders.map((item) => item.placeholderReason)).toEqual([
-      "Numbered TeX display math is not implemented yet.",
       "Numbered TeX display math is not implemented yet.",
       "Numbered TeX display math is not implemented yet.",
       "Numbered TeX display math is not implemented yet.",
     ]);
     expect(placeholders.map((item) => item.sourceSpan)).toEqual([
-      {
-        start: source.indexOf(String.raw`\begin{equation}`),
-        end: source.indexOf(String.raw`\end{equation}`) + String.raw`\end{equation}`.length,
-      },
       {
         start: source.indexOf(String.raw`\begin{align}`),
         end: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,

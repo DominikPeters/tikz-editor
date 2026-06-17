@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseTexMathDisplayBody,
   parseTexMath,
   tokenizeTexMath,
   type TexMathAtom,
@@ -1386,6 +1387,21 @@ describe("TeX math parser", () => {
         },
       },
     ]);
+  });
+
+  it("records explicit tags in lowered display bodies", () => {
+    const source = String.raw`a=b\tag{A}`;
+    const result = parseTexMathDisplayBody(source, { sourceOffset: 20 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.displayLabels).toEqual([
+      {
+        text: "A",
+        sourceSpan: { start: 23, end: 30 },
+        textSourceSpan: { start: 28, end: 29 },
+      },
+    ]);
+    expect(result.list.items).toHaveLength(3);
   });
 
   it("parses gather environments as aligned rows without requiring alignment tabs", () => {

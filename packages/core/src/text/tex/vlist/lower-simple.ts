@@ -25,7 +25,7 @@ import type {
   TexVListDocument,
   TexVListItem,
 } from "./types.js";
-import type { TexMathBoxProvider } from "../layout-inline-items.js";
+import type { TexMathBoxProvider, TexMathDisplayLabel } from "../layout-inline-items.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly font?: ResolvedTexFont;
@@ -48,29 +48,39 @@ export function lowerSimpleTexBlockItemsToVList(
   blockItems: readonly SimpleTexBlockItem[],
   options: LowerSimpleTexBlockItemsToVListOptions = {}
 ): TexVListDocument {
-  const items: TexVListItem[] = blockItems.map((item) => {
+  const items: TexVListItem[] = [];
+  let equationNumber = 0;
+  for (const item of blockItems) {
     if (item.kind === "vertical-glue") {
-      return glueItemFromSimpleTexVerticalGlue(item);
+      items.push(glueItemFromSimpleTexVerticalGlue(item));
+      continue;
     }
     if (item.kind === "vertical-rule") {
-      return ruleItemFromSimpleTexVerticalRule(item);
+      items.push(ruleItemFromSimpleTexVerticalRule(item));
+      continue;
     }
     if (item.kind === "penalty") {
-      return penaltyItemFromSimpleTexPenalty(item);
+      items.push(penaltyItemFromSimpleTexPenalty(item));
+      continue;
     }
     if (item.kind === "placeholder") {
-      return placeholderItemFromSimpleTexPlaceholder(item);
+      items.push(placeholderItemFromSimpleTexPlaceholder(item));
+      continue;
     }
     if (item.kind === "display-math") {
-      return displayMathItemFromSimpleTexDisplayMath(item, options);
+      const displayNumber = item.delimiter === "equation"
+        ? ++equationNumber
+        : undefined;
+      items.push(displayMathItemFromSimpleTexDisplayMath(item, options, displayNumber));
+      continue;
     }
-    return {
+    items.push({
       kind: "paragraph",
       sourceSpan: sourceSpanFromBlock(item.block),
       blockIndex: item.blockIndex,
       paragraph: paragraphInputFromSimpleTexBlock(item.block, item.blockIndex),
-    };
-  });
+    });
+  }
   return {
     kind: "vlist",
     sourceSpan: sourceSpanForVListItems(items),
@@ -80,7 +90,8 @@ export function lowerSimpleTexBlockItemsToVList(
 
 function displayMathItemFromSimpleTexDisplayMath(
   item: SimpleTexDisplayMathBlockItem,
-  options: LowerSimpleTexBlockItemsToVListOptions
+  options: LowerSimpleTexBlockItemsToVListOptions,
+  displayNumber?: number
 ): TexDisplayMathItem | TexDisplayAlignmentItem | TexPlaceholderItem {
   const sourceSpan = {
     start: item.sourceStart,
@@ -89,7 +100,6 @@ function displayMathItemFromSimpleTexDisplayMath(
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
   if (
-    item.delimiter === "equation" ||
     item.delimiter === "align" ||
     item.delimiter === "gather" ||
     item.delimiter === "multline"
@@ -136,6 +146,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     contentStart: item.contentStart,
     contentEnd: item.contentEnd,
     targetWidth,
+    ...(displayNumber !== undefined ? { displayLabel: displayLabelForEquationNumber(displayNumber, item) } : {}),
   }) ?? null;
   if (!box) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -151,6 +162,23 @@ function displayMathItemFromSimpleTexDisplayMath(
     contentEnd: item.contentEnd,
     targetWidth: targetWidth ?? box.width,
     box,
+  };
+}
+
+function displayLabelForEquationNumber(
+  number: number,
+  item: SimpleTexDisplayMathBlockItem
+): TexMathDisplayLabel {
+  return {
+    text: String(number),
+    sourceSpan: {
+      start: item.sourceEnd,
+      end: item.sourceEnd,
+    },
+    textSourceSpan: {
+      start: item.sourceEnd,
+      end: item.sourceEnd,
+    },
   };
 }
 

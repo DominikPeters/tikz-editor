@@ -4,6 +4,7 @@ import type {
   TexMathBreakpoint,
   TexMathConstructRange,
   TexMathBoxProvider,
+  TexMathDisplayLabel,
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
 import type { TexMathFontProfile } from "./font-profile.js";
@@ -20,6 +21,7 @@ import {
 import {
   parseTexMath,
   parseTexMathAlignedBody,
+  parseTexMathDisplayBody,
 } from "./parser.js";
 import {
   renderTexMathHListSvgBody,
@@ -71,13 +73,14 @@ function getMathBox(
     readonly contentStart: number;
     readonly contentEnd: number;
     readonly targetWidth?: number;
+    readonly displayLabel?: TexMathDisplayLabel;
   },
   style: "text" | "display",
   cache: Map<string, TexMathBox | null>,
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: number
 ): TexMathBox | null {
-  const key = `${style}:${params.delimiter}:${params.contentStart}:${params.targetWidth ?? "natural"}:${params.content}`;
+  const key = `${style}:${params.delimiter}:${params.contentStart}:${params.targetWidth ?? "natural"}:${params.displayLabel?.text ?? ""}:${params.content}`;
   const cached = cache.get(key);
   if (cached !== undefined) {
     return cached;
@@ -103,7 +106,7 @@ function getMathBox(
     ? setTexMathHListWidth(laidOut.hlist, params.targetWidth)
     : laidOut.hlist;
   const displayLabel = style === "display"
-    ? displayLabelForMathList(parsed.list)
+    ? displayLabelForMathList(parsed.list) ?? (displayTagSuppressedForMathList(parsed.list) ? null : params.displayLabel ?? null)
     : null;
   const hlist = displayLabel
     ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
@@ -131,9 +134,6 @@ function getMathBox(
 }
 
 function displayLabelForMathList(list: TexMathList): TexMathAlignedRowLabel | null {
-  if (list.suppressDisplayTag) {
-    return null;
-  }
   if (list.displayLabels?.length) {
     return list.displayLabels[0] ?? null;
   }
@@ -145,6 +145,19 @@ function displayLabelForMathList(list: TexMathList): TexMathAlignedRowLabel | nu
     return null;
   }
   return displayLabelForMathList(item.nucleus.list);
+}
+
+function displayTagSuppressedForMathList(list: TexMathList): boolean {
+  if (list.suppressDisplayTag) {
+    return true;
+  }
+  if (list.items.length !== 1) {
+    return false;
+  }
+  const item = list.items[0];
+  return item?.kind === "atom" &&
+    item.nucleus.kind === "list" &&
+    displayTagSuppressedForMathList(item.nucleus.list);
 }
 
 function addDisplayMathTag(
@@ -514,10 +527,20 @@ function parseMathBoxContent(params: {
       suppressTerminalEllipsisGlue: style === "display",
     });
   }
+  if (style === "display" && texMathSingleDisplayBodyDelimiter(params.delimiter)) {
+    return parseTexMathDisplayBody(params.content, {
+      sourceOffset: params.contentStart,
+      suppressTerminalEllipsisGlue: true,
+    });
+  }
   return parseTexMath(params.content, {
     sourceOffset: params.contentStart,
     suppressTerminalEllipsisGlue: style === "display",
   });
+}
+
+function texMathSingleDisplayBodyDelimiter(delimiter: string): boolean {
+  return delimiter === "equation" || delimiter === "equation-star";
 }
 
 function getDisplayMathAlignment(

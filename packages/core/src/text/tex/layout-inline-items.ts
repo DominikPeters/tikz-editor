@@ -69,6 +69,18 @@ export interface TexMathBox {
   readonly fontProfile?: TexMathFontProfile;
 }
 
+export interface TexMathDisplayLabel {
+  readonly text: string;
+  readonly sourceSpan: {
+    readonly start: number;
+    readonly end: number;
+  };
+  readonly textSourceSpan: {
+    readonly start: number;
+    readonly end: number;
+  };
+}
+
 export interface TexMathConstructRange {
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -126,6 +138,7 @@ export interface TexMathBoxProvider {
     readonly contentStart: number;
     readonly contentEnd: number;
     readonly targetWidth?: number;
+    readonly displayLabel?: TexMathDisplayLabel;
   }) => TexMathBox | null;
   readonly getDisplayMathAlignment?: (params: {
     readonly source: string;
