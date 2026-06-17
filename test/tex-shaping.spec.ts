@@ -708,12 +708,17 @@ function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
     trackedMathFormula("x^2", ["x", "^", "2"], { exactRoundTrip: false }),
     trackedMathFormula("a_b^c", ["a", "_", "b", "^", "c"], { exactRoundTrip: false }),
     trackedMathFormula("\\frac{1}{2}", ["\\frac", "1", "2"], { exactRoundTrip: false }),
+    trackedMathFormula("\\frac{x_i}{y^2}", ["\\frac", "x", "_", "i", "y", "^", "2"], { exactRoundTrip: false }),
     trackedMathFormula("\\sqrt{x}", ["\\sqrt", "x"], { exactRoundTrip: false }),
+    trackedMathFormula("\\sqrt{x_1+y^2}", ["\\sqrt", "x", "_", "1", "+", "y", "^", "2"], { exactRoundTrip: false }),
     trackedMathFormula("\\hat{x}^2", ["\\hat", "x", "^", "2"], { exactRoundTrip: false }),
     trackedMathFormula("\\vec{z}_y", ["\\vec", "z", "_", "y"], { exactRoundTrip: false }),
     trackedMathFormula("\\binom{n}{k}", ["\\binom", "n", "k"], { exactRoundTrip: false }),
+    trackedMathFormula("\\binom{n_1}{k^2}", ["\\binom", "n", "_", "1", "k", "^", "2"], { exactRoundTrip: false }),
     trackedMathFormula("\\sum_{i=1}^{n} i", ["\\sum", "i", "=", "1", "n"], { exactRoundTrip: false }),
+    trackedMathFormula("\\sum_{i=1}^{n}\\frac{i}{n}", ["\\sum", "i", "=", "1", "n", "\\frac", "i", "n"], { exactRoundTrip: false }),
     trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
+    trackedMathFormula("\\left(\\frac{x}{y}+z\\right)", ["\\left", "\\frac", "x", "y", "+", "z", "\\right"], { exactRoundTrip: false }),
   ];
 }
 
@@ -724,17 +729,35 @@ function documentHitMapDisplayRows(
   const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const rowCount = 1 + Math.floor(random() * 3);
   return Array.from({ length: rowCount }, () => {
-    const left = pickFuzzItem(identifiers, random);
-    const right = pickFuzzItem(identifiers, random);
+    const left = displayRowExpression(random);
+    const right = displayRowExpression(random);
     if (delimiter !== "align" && delimiter !== "align-star") {
       return random() < 0.4
-        ? String.raw`\frac{` + left + String.raw`}{` + right + String.raw`}+` + pickFuzzItem(identifiers, random)
+        ? String.raw`\frac{` + pickFuzzItem(identifiers, random) + String.raw`}{` + pickFuzzItem(identifiers, random) + String.raw`}+` + displayRowExpression(random)
         : `${left}=${right}`;
     }
     return random() < 0.4
-      ? String.raw`\frac{` + left + String.raw`}{` + right + String.raw`}&=` + pickFuzzItem(identifiers, random)
+      ? String.raw`\frac{` + pickFuzzItem(identifiers, random) + String.raw`}{` + pickFuzzItem(identifiers, random) + String.raw`}&=` + displayRowExpression(random)
       : `${left}&=${right}`;
   });
+}
+
+function displayRowExpression(random: () => number): string {
+  const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
+  const left = pickFuzzItem(identifiers, random);
+  const right = pickFuzzItem(identifiers, random);
+  switch (Math.floor(random() * 5)) {
+    case 0:
+      return `${left}_${right}`;
+    case 1:
+      return `${left}^2`;
+    case 2:
+      return String.raw`\sqrt{` + left + "+" + right + "}";
+    case 3:
+      return String.raw`\binom{` + left + "}{" + right + "}";
+    default:
+      return left;
+  }
 }
 
 function texDisplayRowFuzzKind(index: number): {
@@ -785,14 +808,13 @@ function texDisplayRowFuzzKind(index: number): {
 function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMapFuzzCase {
   const random = makeDeterministicRandom(0x414c4947 + index);
   const displayKind = texDisplayRowFuzzKind(index);
-  const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const operators = ["+", "-", "="] as const;
   const rowCount = 2 + Math.floor(random() * 2);
   const rowOffsets: TexMathHitMapFuzzOffset[] = [];
   const rows = Array.from({ length: rowCount }, (_, rowIndex) => {
-    const left = pickFuzzItem(identifiers, random);
-    const right = pickFuzzItem(identifiers, random);
-    const tail = pickFuzzItem(identifiers, random);
+    const left = displayRowExpression(random);
+    const right = displayRowExpression(random);
+    const tail = displayRowExpression(random);
     const operator = pickFuzzItem(operators, random);
     const row = displayKind.delimiter === "align" || displayKind.delimiter === "align-star"
       ? random() < 0.45
@@ -841,7 +863,7 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
   const alignContentStart = source.indexOf(displayKind.open) + displayKind.open.length;
   let rowStart = 0;
   for (const [rowIndex, row] of rows.entries()) {
-    for (const token of ["\\frac", "&", "=", "A", "Long tag"]) {
+    for (const token of ["\\frac", "\\sqrt", "\\binom", "_", "^", "&", "=", "A", "Long tag"]) {
       const tokenIndex = row.indexOf(token);
       if (tokenIndex >= 0) {
         rowOffsets.push({
@@ -5166,7 +5188,7 @@ unordered.`;
   });
 
   it("fuzzes registered hit geometry for display alignment rows in mixed vlists", async () => {
-    const cases = Array.from({ length: 36 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
+    const cases = Array.from({ length: 48 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
@@ -5294,7 +5316,7 @@ unordered.`;
   });
 
   it("fuzzes registered document-level hit geometry for mixed inline and display math", async () => {
-    const cases = Array.from({ length: 24 }, (_, index) => buildTexDocumentMathHitMapFuzzCase(index));
+    const cases = Array.from({ length: 36 }, (_, index) => buildTexDocumentMathHitMapFuzzCase(index));
     for (const testCase of cases) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
