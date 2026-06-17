@@ -176,6 +176,7 @@ function checkEntry(entry, provider) {
       topStatus: "not-applicable",
       detailStatus: "document-scope",
       providerKind: "none",
+      providerDelimiter: "none",
       diagnostics: [],
       layoutErrors: [],
     });
@@ -194,6 +195,7 @@ function checkEntry(entry, provider) {
       topStatus: "parser-error",
       detailStatus: "parser-crash",
       providerKind,
+      providerDelimiter: delimiter ?? "none",
       diagnostics: [],
       layoutErrors: [],
       error: errorMessage(error),
@@ -207,6 +209,7 @@ function checkEntry(entry, provider) {
       topStatus: errorDiagnostics.length > 0 ? "explicit-unsupported" : "parser-error",
       detailStatus: errorDiagnostics.length > 0 ? "expected-error-diagnostic" : "diagnostic-missing",
       providerKind,
+      providerDelimiter: delimiter ?? "none",
       diagnostics,
       layoutErrors: [],
     });
@@ -216,6 +219,7 @@ function checkEntry(entry, provider) {
       topStatus: "explicit-unsupported",
       detailStatus: "parser-diagnostic",
       providerKind,
+      providerDelimiter: delimiter ?? "none",
       diagnostics,
       layoutErrors: [],
     });
@@ -229,6 +233,7 @@ function checkEntry(entry, provider) {
       topStatus: "parser-error",
       detailStatus: "layout-crash",
       providerKind,
+      providerDelimiter: delimiter ?? "none",
       diagnostics,
       layoutErrors: [],
       error: errorMessage(error),
@@ -239,6 +244,7 @@ function checkEntry(entry, provider) {
       topStatus: "explicit-unsupported",
       detailStatus: "layout-unsupported",
       providerKind,
+      providerDelimiter: delimiter ?? "none",
       diagnostics,
       layoutErrors: layout.errors ?? [],
     });
@@ -252,6 +258,7 @@ function checkEntry(entry, provider) {
       topStatus: "parser-error",
       detailStatus: "provider-crash",
       providerKind,
+      providerDelimiter: delimiter ?? "none",
       diagnostics,
       layoutErrors: [],
       error: errorMessage(error),
@@ -262,6 +269,7 @@ function checkEntry(entry, provider) {
     topStatus: box ? "supported" : "explicit-unsupported",
     detailStatus: box ? "provider-supported" : "provider-null",
     providerKind,
+    providerDelimiter: delimiter ?? "none",
     diagnostics,
     layoutErrors: [],
   });
@@ -367,6 +375,7 @@ function buildSummary(results) {
     byTopStatus: objectFromMap(countBy(results, (result) => result.topStatus)),
     byDetailStatus: objectFromMap(countBy(results, (result) => result.detailStatus)),
     byProviderKind: objectFromMap(countBy(results, (result) => result.providerKind)),
+    byProviderDelimiter: objectFromMap(countBy(results, (result) => result.providerDelimiter ?? "none")),
     bySuggestedUse: objectFromMap(countBy(results, (result) => result.suggestedUse)),
     byCategory: objectFromMap(categoryCounts(results)),
     byCategoryTopStatus: objectFromMap(categoryStatusCounts(results)),
