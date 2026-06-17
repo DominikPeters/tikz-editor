@@ -30,6 +30,7 @@ import {
 
 const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
+const TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT = 5;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_METRIC_SHIFT_PT = 13;
 const TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT = 3.600037;
@@ -621,7 +622,7 @@ function addDisplayAlignmentTag(
   forcedRowWidth: number | null = null,
   rowCount = 1
 ): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
-  const rowItems = displayAlignmentRowItems(row.items, dimensions);
+  let rowItems = displayAlignmentRowItems(row.items, dimensions);
   const baseWidth = forcedRowWidth ?? dimensions.rowWidth;
   if (!label) {
     return {
@@ -639,6 +640,17 @@ function addDisplayAlignmentTag(
       depth: row.depth,
       items: rowItems,
     };
+  }
+  if (dimensions.pairCount === 1 && rowCount === 1) {
+    const rowFieldWidth = roundTexPt(Math.max(0, row.width - TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT));
+    const rowRequiresShiftedTag = rowFieldWidth + tag.width + 2 * TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT > dimensions.targetWidth;
+    const tagClearanceCollides = dimensions.eqnShift + rowFieldWidth + 2 * tag.width > dimensions.targetWidth;
+    const tagAdjustedEqnShift = !rowRequiresShiftedTag && tagClearanceCollides
+      ? roundTexPt(Math.max(0, (dimensions.targetWidth - rowFieldWidth - tag.width) / 2))
+      : null;
+    if (tagAdjustedEqnShift !== null && tagAdjustedEqnShift < dimensions.eqnShift) {
+      rowItems = offsetMathHListItems(rowItems, tagAdjustedEqnShift - dimensions.eqnShift);
+    }
   }
   const width = Math.max(baseWidth, dimensions.targetWidth);
   const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.width));
@@ -688,6 +700,7 @@ function displayAlignmentShiftedTagMetricShift(rowCount: number, rowDepth: numbe
 interface TexDisplayAlignmentDimensions {
   readonly eqnShift: number;
   readonly alignSep: number;
+  readonly pairCount: number;
   readonly rowWidth: number;
   readonly targetWidth: number;
 }
@@ -720,6 +733,7 @@ function displayAlignmentDimensions(params: {
       return {
         eqnShift: tagAdjustedEqnShift,
         alignSep: TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT,
+        pairCount: params.pairCount,
         rowWidth: roundTexPt(tagAdjustedEqnShift + totalFieldWidth + fixedPairGapWidth),
         targetWidth: params.targetWidth,
       };
@@ -727,6 +741,7 @@ function displayAlignmentDimensions(params: {
     return {
       eqnShift: flexible,
       alignSep: flexible,
+      pairCount: params.pairCount,
       rowWidth: roundTexPt(totalFieldWidth + params.pairCount * flexible),
       targetWidth: params.targetWidth,
     };
@@ -742,6 +757,7 @@ function displayAlignmentDimensions(params: {
   return {
     eqnShift: adjustedEqnShift,
     alignSep,
+    pairCount: params.pairCount,
     rowWidth: roundTexPt(adjustedEqnShift + totalFieldWidth + alignSepCount * alignSep),
     targetWidth: params.targetWidth,
   };
