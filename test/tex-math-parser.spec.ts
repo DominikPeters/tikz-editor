@@ -1343,6 +1343,23 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses multline environments as row lists with multline placement mode", () => {
+    const source = String.raw`\begin{multline*}a=b\\c+d=e\\f=g\end{multline*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "aligned",
+      columnSeparation: "multline",
+      rows: [
+        { cells: [{ sourceSpan: { start: source.indexOf("a=b"), end: source.indexOf("a=b") + 3 } }] },
+        { cells: [{ sourceSpan: { start: source.indexOf("c+d=e"), end: source.indexOf("c+d=e") + 5 } }] },
+        { cells: [{ sourceSpan: { start: source.indexOf("f=g"), end: source.indexOf("f=g") + 3 } }] },
+      ],
+    });
+  });
+
   it("reports TeX-like errors for invalid nested display alignment environments", () => {
     const cases = [
       {

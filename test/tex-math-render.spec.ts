@@ -1543,6 +1543,46 @@ unordered.`;
     )).toEqual(["Alpha", "Beta"]);
   });
 
+  it("lets TeX paragraph layout carry multline-star display math with row-specific placement", () => {
+    const source = String.raw`Alpha \begin{multline*}a=b\\c+d=e\\f=g\end{multline*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:multline-star-display-math-provider",
+      width: 140,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.hboxRole)).toEqual([
+      { kind: "display-align-row", delimiter: "multline-star", rowIndex: 0 },
+      { kind: "display-align-row", delimiter: "multline-star", rowIndex: 1 },
+      { kind: "display-align-row", delimiter: "multline-star", rowIndex: 2 },
+    ]);
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`a=b\\c+d=e\\f=g`,
+      delimiter: "multline-star",
+      sourceStart: source.indexOf(String.raw`\begin{multline*}`),
+      sourceEnd: source.indexOf(String.raw`\end{multline*}`) + String.raw`\end{multline*}`.length,
+      contentStart: source.indexOf("a=b"),
+      contentEnd: source.indexOf(String.raw`\end{multline*}`),
+      targetWidth: 140,
+    });
+    expect(directAlignment?.delimiter).toBe("multline-star");
+    expect(directAlignment?.rows).toHaveLength(3);
+    expect(directAlignment?.rows[0]?.svgBody).toContain(`data-source-start="${source.indexOf("a=b")}"`);
+    expect(directAlignment?.rows[1]?.svgBody).toContain(`data-source-start="${source.indexOf("c+d=e")}"`);
+    expect(directAlignment?.rows[2]?.svgBody).toContain(`data-source-start="${source.indexOf("f=g")}"`);
+    expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
+      source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
+    )).toEqual(["Alpha", "Beta"]);
+  });
+
   it("renders explicit align-star tags as right-aligned row labels", () => {
     const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
     const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({

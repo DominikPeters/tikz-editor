@@ -65,7 +65,7 @@ export interface ParseTexMathOptions {
 }
 
 interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
-  readonly columnSeparation?: "align" | "none" | "gather";
+  readonly columnSeparation?: "align" | "none" | "gather" | "multline";
 }
 
 export function parseTexMath(
@@ -1231,7 +1231,11 @@ class TexMathParser {
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
       stopAtEnvironmentEnd: environmentName.name,
-      columnSeparation: gatherEnvironmentName(environmentName.name) ? "gather" : "align",
+      columnSeparation: gatherEnvironmentName(environmentName.name)
+        ? "gather"
+        : multlineEnvironmentName(environmentName.name)
+          ? "multline"
+          : "align",
       allowScripts,
     });
   }
@@ -1449,7 +1453,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
     readonly allowScripts: boolean;
   }): TexMathAtom {
@@ -1470,7 +1474,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
     readonly allowScripts: boolean;
   }): TexMathAtom {
@@ -3219,7 +3223,7 @@ function alignedAtom(
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan,
   options: {
-    readonly columnSeparation?: "align" | "none" | "gather";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
   } = {}
 ): TexMathAtom {
@@ -3720,7 +3724,8 @@ function alignedEnvironmentName(name: string): boolean {
     name === "align" ||
     name === "align*" ||
     name === "gather" ||
-    name === "gather*";
+    name === "gather*" ||
+    multlineEnvironmentName(name);
 }
 
 function alignatEnvironmentName(name: string): boolean {
@@ -3732,7 +3737,7 @@ function xalignatEnvironmentName(name: string): boolean {
 }
 
 function displayAlignmentEnvironmentName(name: string): boolean {
-  return alignEnvironmentName(name) || gatherEnvironmentName(name);
+  return alignEnvironmentName(name) || gatherEnvironmentName(name) || multlineEnvironmentName(name);
 }
 
 function alignEnvironmentName(name: string): boolean {
@@ -3741,6 +3746,10 @@ function alignEnvironmentName(name: string): boolean {
 
 function gatherEnvironmentName(name: string): boolean {
   return name === "gather" || name === "gather*";
+}
+
+function multlineEnvironmentName(name: string): boolean {
+  return name === "multline" || name === "multline*";
 }
 
 function namedOperatorCommandName(command: string): string | null {

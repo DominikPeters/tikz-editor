@@ -70,6 +70,11 @@ const cases = args.cases.length > 0
         source: String.raw`Alpha \begin{gather*}a=b\\c+d=e\end{gather*} Beta`,
         width: 140,
       },
+      {
+        id: "multline-star-display",
+        source: String.raw`Alpha \begin{multline*}a=b\\c+d=e\\f=g\end{multline*} Beta`,
+        width: 140,
+      },
     ];
 
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
@@ -607,6 +612,7 @@ function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
     source.includes(String.raw`\begin{gather*}`) ||
+    source.includes(String.raw`\begin{multline*}`) ||
     source.includes(String.raw`\begin{aligned}`) ||
     source.includes(String.raw`\begin{alignedat}`) ||
     hasMatrixEnvironment(source) ||

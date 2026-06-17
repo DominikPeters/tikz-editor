@@ -1162,10 +1162,14 @@ function layoutAlignedNucleus(
         cursor = roundTexPt(cursor + columnWidth);
         continue;
       }
-      const alignRight = nucleus.columnSeparation !== "gather" && columnIndex % 2 === 0;
+      const alignRight = nucleus.columnSeparation !== "gather" &&
+        nucleus.columnSeparation !== "multline" &&
+        columnIndex % 2 === 0;
       rowChildren.push(childHList(
         "aligned-cell",
-        nucleus.columnSeparation === "gather"
+        nucleus.columnSeparation === "multline"
+          ? cursor
+          : nucleus.columnSeparation === "gather"
           ? roundTexPt(cursor + (columnWidth - cell.hlist.width) / 2)
           : alignRight
             ? roundTexPt(cursor + columnWidth - cell.hlist.width)
@@ -1273,7 +1277,7 @@ function shouldInsertAlignedPairGap(
   columnCount: number,
   columnSeparation: TexMathAlignedNucleus["columnSeparation"]
 ): boolean {
-  if (columnSeparation === "none") {
+  if (columnSeparation === "none" || columnSeparation === "multline") {
     return false;
   }
   return columnIndex % 2 === 1 && columnIndex < columnCount - 1;
@@ -1283,7 +1287,7 @@ function alignedPairGapCount(
   columnCount: number,
   columnSeparation: TexMathAlignedNucleus["columnSeparation"]
 ): number {
-  if (columnSeparation === "none") {
+  if (columnSeparation === "none" || columnSeparation === "multline") {
     return 0;
   }
   return Math.max(0, Math.ceil(columnCount / 2) - 1);
@@ -1293,7 +1297,7 @@ function alignedTrailingWidth(
   rowCount: number,
   columnSeparation: TexMathAlignedNucleus["columnSeparation"]
 ): number {
-  if (columnSeparation === "none") {
+  if (columnSeparation === "none" || columnSeparation === "multline") {
     return 0;
   }
   return rowCount === 1 ? TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT : 0;

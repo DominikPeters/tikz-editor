@@ -642,7 +642,7 @@ function displayAlignmentMaterialItems(
   item: TexDisplayAlignmentItem
 ): readonly TexVListItem[] {
   const rows: TexVListItem[] = [];
-  rows.push(displayAlignmentGlueItem(item, latexAmsmathAlignTopCorrectionPt, "align-top-correction"));
+  rows.push(displayAlignmentGlueItem(item, displayAlignmentTopCorrection(item), "align-top-correction"));
   rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
   rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
   for (const row of item.alignment.rows) {
@@ -654,6 +654,10 @@ function displayAlignmentMaterialItems(
   }
   rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
   return rows;
+}
+
+function displayAlignmentTopCorrection(item: TexDisplayAlignmentItem): number {
+  return item.delimiter === "multline-star" ? 0 : latexAmsmathAlignTopCorrectionPt;
 }
 
 function displayAlignmentGlueItem(

@@ -1724,13 +1724,17 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
-  it("lays out display align and gather environments through the aligned hlist model", () => {
+  it("lays out display align, gather, and multline environments through the aligned hlist model", () => {
     const align = layoutTexMathList(
       parseTexMath(String.raw`\begin{align}a&=b\\c&=d\end{align}`).list,
       { style: "display" }
     );
     const gather = layoutTexMathList(
       parseTexMath(String.raw`\begin{gather*}a=b\\c+d=e\end{gather*}`).list,
+      { style: "display" }
+    );
+    const multline = layoutTexMathList(
+      parseTexMath(String.raw`\begin{multline*}a=b\\c+d=e\\f=g\end{multline*}`).list,
       { style: "display" }
     );
 
@@ -1757,6 +1761,21 @@ describe("TeX math hlist layout", () => {
       kind: "hlist",
       role: "aligned-cell",
       x: expect.closeTo(8.416704, 5),
+    });
+
+    expect(multline.supported).toBe(true);
+    expect(multline.hlist?.width).toBeCloseTo(39.74436, 5);
+    expect(multline.hlist?.items.map((item) => item.kind === "hlist" ? item.role : null)).toEqual([
+      "aligned-row",
+      "aligned-row",
+      "aligned-row",
+    ]);
+    const multlineFirstRow = multline.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(multlineFirstRow?.items).toHaveLength(1);
+    expect(multlineFirstRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "aligned-cell",
+      x: 0,
     });
   });
 

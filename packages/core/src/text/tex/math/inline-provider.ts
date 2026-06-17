@@ -35,6 +35,7 @@ const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
 const TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT = 3.600037;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT = 8.4;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT = 1;
+const TEX_MULTLINE_GAP_PT = 10;
 
 export interface TexDerivedInlineMathBoxProviderOptions {
   readonly fontProfile?: TexMathFontProfile;
@@ -448,7 +449,7 @@ function parseMathBoxContent(params: {
   if (texMathDisplayAlignmentDelimiter(params.delimiter)) {
     return parseTexMathAlignedBody(params.content, {
       sourceOffset: params.contentStart,
-      columnSeparation: params.delimiter === "gather-star" ? "gather" : "align",
+      columnSeparation: displayAlignmentColumnSeparation(params.delimiter),
       suppressTerminalEllipsisGlue: style === "display",
     });
   }
@@ -477,7 +478,7 @@ function getDisplayMathAlignment(
   }
   const parsed = parseTexMathAlignedBody(params.content, {
     sourceOffset: params.contentStart,
-    columnSeparation: params.delimiter === "gather-star" ? "gather" : "align",
+    columnSeparation: displayAlignmentColumnSeparation(params.delimiter),
     suppressTerminalEllipsisGlue: true,
   });
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
@@ -497,6 +498,56 @@ function getDisplayMathAlignment(
   );
   if (alignedRows.length === 0) {
     return null;
+  }
+  if (params.delimiter === "multline-star") {
+    const rows = alignedRows.map((row, rowIndex) => {
+      const rowWidth = mathItemsRightEdge(row.items);
+      const rowOffset = multlineRowOffset(rowWidth, rowIndex, alignedRows.length, params.targetWidth);
+      const rowHList: TexMathHList = {
+        kind: "math-hlist",
+        style: laidOut.hlist.style,
+        width: params.targetWidth,
+        height: row.height,
+        depth: row.depth,
+        sourceSpan: row.sourceSpan,
+        items: offsetMathHListItems(row.items, rowOffset),
+      };
+      return {
+        rowIndex,
+        x: 0,
+        source: params.source,
+        content: params.content,
+        sourceStart: row.sourceSpan.start,
+        sourceEnd: row.sourceSpan.end,
+        contentStart: row.sourceSpan.start,
+        contentEnd: row.sourceSpan.end,
+        width: rowHList.width,
+        height: rowHList.height,
+        depth: rowHList.depth,
+        caretStops: buildInlineMathCaretStops(rowHList, {
+          sourceStart: row.sourceSpan.start,
+          sourceEnd: row.sourceSpan.end,
+          contentStart: row.sourceSpan.start,
+          contentEnd: row.sourceSpan.end,
+        }),
+        constructRanges: buildInlineMathConstructRanges(rowHList),
+        breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
+        svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
+        hlist: rowHList,
+        fontProfile,
+      };
+    });
+    return {
+      source: params.source,
+      content: params.content,
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      contentStart: params.contentStart,
+      contentEnd: params.contentEnd,
+      delimiter: params.delimiter,
+      width: params.targetWidth,
+      rows,
+    };
   }
   if (params.delimiter === "gather-star") {
     const rowOffset = roundTexPt(Math.max(0, (params.targetWidth - laidOut.hlist.width) / 2));
@@ -622,8 +673,41 @@ function getDisplayMathAlignment(
   };
 }
 
-function texMathDisplayAlignmentDelimiter(delimiter: string): delimiter is "align-star" | "gather-star" {
-  return delimiter === "align-star" || delimiter === "gather-star";
+function texMathDisplayAlignmentDelimiter(
+  delimiter: string
+): delimiter is "align-star" | "gather-star" | "multline-star" {
+  return delimiter === "align-star" ||
+    delimiter === "gather-star" ||
+    delimiter === "multline-star";
+}
+
+function displayAlignmentColumnSeparation(delimiter: "align-star" | "gather-star" | "multline-star"):
+  "align" | "gather" | "multline" {
+  if (delimiter === "gather-star") {
+    return "gather";
+  }
+  if (delimiter === "multline-star") {
+    return "multline";
+  }
+  return "align";
+}
+
+function multlineRowOffset(
+  rowWidth: number,
+  rowIndex: number,
+  rowCount: number,
+  targetWidth: number
+): number {
+  if (rowCount <= 1) {
+    return roundTexPt(Math.max(0, (targetWidth - rowWidth) / 2));
+  }
+  if (rowIndex === 0) {
+    return TEX_MULTLINE_GAP_PT;
+  }
+  if (rowIndex === rowCount - 1) {
+    return roundTexPt(Math.max(0, targetWidth - rowWidth - TEX_MULTLINE_GAP_PT));
+  }
+  return roundTexPt(Math.max(0, (targetWidth - rowWidth) / 2));
 }
 
 function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null {
