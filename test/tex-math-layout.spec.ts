@@ -353,7 +353,7 @@ describe("TeX math hlist layout", () => {
       width: expect.closeTo(6.666687, 5),
     });
 
-    const genericNot = layout(String.raw`x\not\leq y`);
+    const genericNot = layout(String.raw`x\not\leq y+x\not\rightarrow y+x\not\to y+x\not\longrightarrow y`);
     expect(genericNot.supported).toBe(true);
     const glyphs = flattenGlyphItems(genericNot.hlist?.items ?? []);
     expect(glyphs.map((glyph) => ({
@@ -365,7 +365,24 @@ describe("TeX math hlist layout", () => {
       { fontId: "cmsy10", code: 54, sourceSpan: { start: 1, end: 9 } },
       { fontId: "cmsy10", code: 20, sourceSpan: { start: 1, end: 9 } },
       { fontId: "cmmi10", code: 121, sourceSpan: { start: 10, end: 11 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 11, end: 12 } },
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 12, end: 13 } },
+      { fontId: "cmsy10", code: 54, sourceSpan: { start: 13, end: 28 } },
+      { fontId: "cmsy10", code: 33, sourceSpan: { start: 13, end: 28 } },
+      { fontId: "cmmi10", code: 121, sourceSpan: { start: 29, end: 30 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 30, end: 31 } },
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 31, end: 32 } },
+      { fontId: "cmsy10", code: 54, sourceSpan: { start: 32, end: 39 } },
+      { fontId: "cmsy10", code: 33, sourceSpan: { start: 32, end: 39 } },
+      { fontId: "cmmi10", code: 121, sourceSpan: { start: 40, end: 41 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 41, end: 42 } },
+      { fontId: "cmmi10", code: 120, sourceSpan: { start: 42, end: 43 } },
+      { fontId: "cmsy10", code: 54, sourceSpan: { start: 43, end: 62 } },
+      { fontId: "cmsy10", code: 0, sourceSpan: { start: 43, end: 62 } },
+      { fontId: "cmsy10", code: 33, sourceSpan: { start: 43, end: 62 } },
+      { fontId: "cmmi10", code: 121, sourceSpan: { start: 63, end: 64 } },
     ]);
+    expect(genericNot.hlist?.width).toBeCloseTo(146.68459, 2);
   });
 
   it("lays out models as a TeX joined relation", () => {

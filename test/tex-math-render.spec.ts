@@ -445,7 +445,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders negated relation composites through positioned TeX glyph paths", () => {
-    const parsed = parseTexMath(String.raw`x\notin A+x\not\leq y`);
+    const parsed = parseTexMath(String.raw`x\notin A+x\not\leq y+x\not\rightarrow y+x\not\longrightarrow y`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -457,6 +457,8 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="50"');
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="54"');
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="20"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="33"');
   });
 
   it("renders TeX operators through the selected math fonts", () => {

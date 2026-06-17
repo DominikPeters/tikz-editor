@@ -5317,6 +5317,15 @@ function defaultLuaLatexMathSymbols(
   if (declaration) {
     return [{ family: declaration.family, code: declaration.code }];
   }
+  if (command.startsWith("not\\")) {
+    const target = defaultLuaLatexMathSymbols(`\\${command.slice("not\\".length)}`);
+    if (target.length > 0) {
+      return [
+        { family: "symbols", code: 54 },
+        ...target,
+      ];
+    }
+  }
   switch (command) {
     case "Gamma":
       return [{ family: "operators", code: 0 }];

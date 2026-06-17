@@ -1450,7 +1450,7 @@ describe("TeX math parser", () => {
   });
 
   it("parses negated relation composites as source-spanned relation atoms", () => {
-    const result = parseTexMath(String.raw`x\not= y\not\in A\notin B`);
+    const result = parseTexMath(String.raw`x\not= y\not\in A\notin B\not\rightarrow C\not\longrightarrow D`);
 
     expect(result.diagnostics).toEqual([]);
     const relationAtoms = result.list.items
@@ -1463,6 +1463,8 @@ describe("TeX math parser", () => {
       { text: String.raw`\not=`, sourceSpan: { start: 1, end: 6 } },
       { text: String.raw`\not\in`, sourceSpan: { start: 8, end: 15 } },
       { text: String.raw`\notin`, sourceSpan: { start: 17, end: 23 } },
+      { text: String.raw`\not\rightarrow`, sourceSpan: { start: 25, end: 40 } },
+      { text: String.raw`\not\longrightarrow`, sourceSpan: { start: 42, end: 61 } },
     ]);
   });
 
