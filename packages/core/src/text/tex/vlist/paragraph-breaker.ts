@@ -93,6 +93,9 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       firstLineIndentWidth: breakContext.firstLineIndentWidth,
       scopePolicy: breakContext.scopePolicy,
     });
+    const broadOverfullTolerance = breakContext.width === undefined
+      ? intertextBroadOverfullTolerance(runs)
+      : 0;
     const overfullFallback = normalBreak && plan.overfullSingleLineFallback === true
       ? breakTexParagraphWithIntertextOverfullFallback({
           normalBreak,
@@ -101,8 +104,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
           measurement: runAdapter.measurement,
           width: breakOptions.width,
           scopePolicy: breakContext.scopePolicy,
-          allowBroadOverfullLines: breakContext.width === undefined &&
-            !runs.some((run) => run.kind === "math"),
+          broadOverfullTolerance,
         })
       : null;
     const broken = overfullFallback ?? normalBreak;
@@ -187,7 +189,7 @@ function breakTexParagraphWithIntertextOverfullFallback(params: {
   readonly measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"];
   readonly width: number;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
-  readonly allowBroadOverfullLines: boolean;
+  readonly broadOverfullTolerance: number;
 }): NonNullable<ReturnType<typeof breakTexParagraphRuns>> | null {
   if (shouldUseSingleLineOverfullFallback(
     params.normalBreak,
@@ -196,7 +198,7 @@ function breakTexParagraphWithIntertextOverfullFallback(params: {
   )) {
     return breakTexParagraphAsSingleLine(params);
   }
-  if (!params.allowBroadOverfullLines || params.normalBreak.lines.length <= 1) {
+  if (params.broadOverfullTolerance <= 0 || params.normalBreak.lines.length <= 1) {
     return null;
   }
   const greedy = breakTexParagraphAsGreedyOverfullLines({
@@ -204,7 +206,7 @@ function breakTexParagraphWithIntertextOverfullFallback(params: {
     shapedRuns: params.shapedRuns,
     measurement: params.measurement,
     width: params.width,
-    overfullTolerance: 15,
+    overfullTolerance: params.broadOverfullTolerance,
   });
   return greedy.lines.length < params.normalBreak.lines.length ? greedy : null;
 }
@@ -315,6 +317,25 @@ function nextNonSpaceRunIndex(runs: readonly ParagraphRun[], start: number): num
     index += 1;
   }
   return index;
+}
+
+function intertextBroadOverfullTolerance(runs: readonly ParagraphRun[]): number {
+  const mathRuns = runs.filter((run) => run.kind === "math");
+  if (mathRuns.length === 0) {
+    return 15;
+  }
+  return mathRuns.every(isTextHeightMathRun) ? 6 : 0;
+}
+
+function isTextHeightMathRun(run: ParagraphRun): boolean {
+  if (run.kind !== "math") {
+    return true;
+  }
+  const box = run.wrapper.getBBox?.();
+  if (!box) {
+    return false;
+  }
+  return (box.h ?? 0) <= 7.2 && (box.d ?? 0) <= 2.1;
 }
 
 function shouldUseSingleLineOverfullFallback(

@@ -2307,6 +2307,55 @@ describe("TeX math SVG rendering", () => {
     expect(rows[1]?.y).toBeCloseTo(70.519974, 4);
   });
 
+  it("keeps text-height inline math intertext on TeX's overfull line", () => {
+    const source = String.raw`Alpha \begin{align*}\ddot{m}&=\binom{1}{y}\\\intertext{measured $\operatorname{arg\,max}$ condition}\dot{\frac{\ldots}{j}}&=\sqrt{\dfrac{m}{c}}\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-text-height-math-overfull",
+      width: 120,
+      parindent: 0,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const paragraphReport = result.vlistLayout?.reports.find(
+      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+    );
+    const lineTexts = paragraphReport?.lines.map((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("")
+    ) ?? [];
+    expect(lineTexts).toContain(String.raw`measured \operatorname{arg\,max} condition`);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.y).toBeCloseTo(80.98468, 4);
+  });
+
+  it("keeps tall inline math intertext on the normal hyphenating path", () => {
+    const source = String.raw`Alpha \begin{align*}\tbinom{c}{a}&=2\\\intertext{second $\frac{2}{c}-\sqrt{i+m}$ stable}\begin{matrix}\dfrac{y}{n}&\frac{\ldots}{\cdots}\\\tfrac{\cdots}{a}&\tbinom{\dots}{\cdots}\end{matrix}&=\begin{smallmatrix}\binom{j}{m}&a_c^a&\dbinom{\ldots}{j}\\1&\tbinom{2}{a}&\tfrac{i}{x}\end{smallmatrix}\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-tall-math-hyphenates",
+      width: 100,
+      parindent: 0,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const paragraphReport = result.vlistLayout?.reports.find(
+      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+    );
+    const lineTexts = paragraphReport?.lines.map((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("")
+    ) ?? [];
+    expect(lineTexts).toContain(String.raw`second \frac{2}{c}-\sqrt{i+m} sta-`);
+    expect(lineTexts).toContain("ble");
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.y).toBeCloseTo(81.600952, 4);
+  });
+
   it("renders displaybreak in alignments as a non-visual page-break directive", () => {
     const source = String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
