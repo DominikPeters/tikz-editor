@@ -1360,6 +1360,28 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("reports intertext in alignment environments as explicitly unsupported", () => {
+    const source = String.raw`\begin{align*}a&=b\\\intertext{words}c&=d\end{align*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([
+      {
+        severity: "error",
+        code: "unsupported-command",
+        message: String.raw`Unsupported alignment command \intertext.`,
+        sourceSpan: {
+          start: source.indexOf(String.raw`\intertext`),
+          end: source.indexOf("c&=d"),
+        },
+      },
+    ]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "aligned",
+      rows: expect.any(Array),
+    });
+  });
+
   it("reports TeX-like errors for invalid nested display alignment environments", () => {
     const cases = [
       {

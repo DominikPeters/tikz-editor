@@ -1417,6 +1417,31 @@ unordered.`;
     ]);
   });
 
+  it("uses explicit placeholders for unsupported intertext in display alignments", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:intertext-display-math-placeholder",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const placeholders = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.itemKind === "placeholder"
+    ) ?? [];
+    expect(placeholders).toHaveLength(1);
+    expect(placeholders[0]).toMatchObject({
+      itemKind: "placeholder",
+      placeholderReason: "TeX display math rendering is not implemented for this formula.",
+      sourceSpan: {
+        start: source.indexOf(String.raw`\begin{align*}`),
+        end: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      },
+    });
+  });
+
   it("lets TeX paragraph layout carry equation-star display math as a vlist item", () => {
     const source = String.raw`Alpha \begin{equation*}y^2\end{equation*} Beta`;
     const result = layoutSimpleTexParagraph(source, {

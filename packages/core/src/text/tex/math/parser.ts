@@ -1691,6 +1691,17 @@ class TexMathParser {
       }
       const command = this.advance();
       sourceSpan = spanUnion(sourceSpan ?? command.sourceSpan, command.sourceSpan);
+      if (metadata === "unsupported") {
+        const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} text`);
+        sourceSpan = spanUnion(sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+        this.addDiagnostic(
+          "error",
+          "unsupported-command",
+          `Unsupported alignment command ${command.text}.`,
+          spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan)
+        );
+        continue;
+      }
       if (metadata === "notag" || metadata === "nonumber") {
         suppressTag = true;
         continue;
@@ -3490,7 +3501,7 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
   }
 }
 
-function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumber" | null {
+function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumber" | "unsupported" | null {
   switch (commandName(command)) {
     case "label":
     case "tag":
@@ -3499,6 +3510,9 @@ function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumbe
       return "notag";
     case "nonumber":
       return "nonumber";
+    case "intertext":
+    case "shortintertext":
+      return "unsupported";
     default:
       return null;
   }
