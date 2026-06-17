@@ -681,18 +681,23 @@ function getDisplayMathAlignment(
     };
   }
   if (params.delimiter === "gather" || params.delimiter === "gather-star") {
-    const rowOffset = roundTexPt(Math.max(0, (params.targetWidth - laidOut.hlist.width) / 2));
     const alignedNucleus = alignedNucleusFromList(parsed.list);
     const rows = alignedRows.map((row, rowIndex) => {
-      const rowItems = offsetMathHListItems(row.items, rowOffset);
+      const label = params.delimiter === "gather"
+        ? displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex)
+        : null;
+      const tag = label
+        ? layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt)
+        : null;
+      const tagPlacement = gatherRowPlacement(row.items, tag?.width ?? 0, params.targetWidth);
+      const rowItems = offsetMathHListItems(row.items, tagPlacement.rowOffset);
       const taggedRow = params.delimiter === "gather"
         ? addGatherDisplayTag(
           row,
           rowItems,
-          displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex),
+          tag,
+          tagPlacement?.shiftTag ?? null,
           params.targetWidth,
-          fontProfile,
-          baseAtPt,
           displayAlignmentRowLineDepth(alignedRows, rowIndex)
         )
         : {
@@ -895,6 +900,27 @@ function multlineDisplayLabel(
     null;
 }
 
+function gatherRowPlacement(
+  items: readonly TexMathHListItem[],
+  tagWidth: number,
+  targetWidth: number
+): {
+  readonly rowOffset: number;
+  readonly shiftTag: boolean;
+} {
+  const leftEdge = mathItemsLeftEdge(items);
+  const rowWidth = roundTexPt(Math.max(0, mathItemsRightEdge(items) - leftEdge));
+  const shiftTag = 2 * TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT + rowWidth + tagWidth > targetWidth;
+  let eqnShift = roundTexPt(Math.max(0, targetWidth - rowWidth));
+  if (!shiftTag && eqnShift < 4 * tagWidth) {
+    eqnShift = roundTexPt(Math.max(0, eqnShift - tagWidth));
+  }
+  return {
+    rowOffset: roundTexPt(Math.max(0, eqnShift / 2) - leftEdge),
+    shiftTag,
+  };
+}
+
 function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null {
   const item = list.items[0];
   if (item?.kind !== "atom" || item.nucleus.kind !== "aligned") {
@@ -1053,21 +1079,11 @@ function addDisplayAlignmentTag(
 function addGatherDisplayTag(
   row: TexMathChildHListLayoutItem,
   rowItems: readonly TexMathHListItem[],
-  label: TexMathAlignedRowLabel | null,
+  tag: TexMathHList | null,
+  shiftTag: boolean | null,
   targetWidth: number,
-  fontProfile: TexMathFontProfile,
-  baseAtPt: number,
   tagLineDepth = row.depth
 ): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
-  if (!label) {
-    return {
-      width: targetWidth,
-      height: row.height,
-      depth: row.depth,
-      items: rowItems,
-    };
-  }
-  const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
   if (!tag) {
     return {
       width: targetWidth,
@@ -1078,7 +1094,7 @@ function addGatherDisplayTag(
   }
   const tagX = Math.max(0, roundTexPt(targetWidth - tag.width));
   const rowRight = mathItemsRightEdge(rowItems);
-  const tagCollides = rowRight > tagX;
+  const tagCollides = shiftTag ?? rowRight > tagX;
   const tagRenderShiftY = tagCollides
     ? displayAlignmentShiftedTagRenderShift(tagLineDepth)
     : 0;
@@ -1360,6 +1376,17 @@ function mathItemsRightEdge(items: readonly TexMathHListItem[]): number {
     right = Math.max(right, item.x + item.width);
   }
   return roundTexPt(right);
+}
+
+function mathItemsLeftEdge(items: readonly TexMathHListItem[]): number {
+  if (items.length === 0) {
+    return 0;
+  }
+  let left = Number.POSITIVE_INFINITY;
+  for (const item of items) {
+    left = Math.min(left, item.x);
+  }
+  return roundTexPt(Number.isFinite(left) ? left : 0);
 }
 
 function displayAlignmentPairCount(

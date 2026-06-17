@@ -41,6 +41,7 @@ import type {
   TexMathTextNucleus,
 } from "./ir.js";
 import {
+  normalizeTexMathAtomClasses,
   resolveExplicitMathGlue,
   spaceTexMathList,
   texMathSpacingBetween,
@@ -1114,7 +1115,7 @@ function layoutAlignedNucleus(
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
-    layoutAlignedRow(row, fontProfile, style, baseAtPt, alphabet)
+    layoutAlignedRow(row, nucleus.columnSeparation, fontProfile, style, baseAtPt, alphabet)
   );
   if (rows.some((row): row is null => row === null)) {
     return null;
@@ -1213,6 +1214,7 @@ function layoutAlignedNucleus(
 
 function layoutAlignedRow(
   row: TexMathAlignedRow,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"],
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: number,
@@ -1224,7 +1226,9 @@ function layoutAlignedRow(
     return result.supported
       ? {
           hlist: alignCellHList(
-            result.hlist,
+            columnSeparation === "multline"
+              ? addMultlineLeadingEmptyOrdGlue(result.hlist, cell.list, fontProfile, cellStyle, baseAtPt)
+              : result.hlist,
             cell.list,
             columnIndex,
             fontProfile,
@@ -1245,6 +1249,49 @@ function layoutAlignedRow(
     height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
     ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
+  };
+}
+
+function addMultlineLeadingEmptyOrdGlue(
+  hlist: TexMathHList,
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathHList {
+  const firstItem = normalizeTexMathAtomClasses(list).items[0];
+  if (firstItem?.kind !== "atom") {
+    return hlist;
+  }
+  const leadingGlue = texMathSpacingBetween({
+    kind: "atom",
+    atomClass: "ord",
+    nucleus: { kind: "glyph", text: "", sourceSpan: { start: list.sourceSpan.start, end: list.sourceSpan.start } },
+    sourceSpan: { start: list.sourceSpan.start, end: list.sourceSpan.start },
+  }, firstItem, style);
+  if (!leadingGlue) {
+    return hlist;
+  }
+  const width = muToPt(fontProfile, style, baseAtPt, leadingGlue.mu);
+  if (Math.abs(width) < 1e-9) {
+    return hlist;
+  }
+  return {
+    ...hlist,
+    width: roundTexPt(hlist.width + width),
+    items: [
+      {
+        kind: "glue",
+        x: 0,
+        width,
+        mu: leadingGlue.mu,
+        stretch: muToPt(fontProfile, style, baseAtPt, leadingGlue.stretchMu),
+        shrink: muToPt(fontProfile, style, baseAtPt, leadingGlue.shrinkMu),
+        source: leadingGlue.source,
+        sourceSpan: leadingGlue.sourceSpan,
+      },
+      ...hlist.items.map((item) => offsetMathLayoutItem(item, width)),
+    ],
   };
 }
 

@@ -9,6 +9,21 @@ import {
   type TexMathHListItem,
 } from "../packages/core/src/text/tex/index.js";
 
+function firstGlyphX(items: readonly TexMathHListItem[], baseX = 0): number | null {
+  for (const item of items) {
+    if (item.kind === "glyph") {
+      return baseX + item.x;
+    }
+    if (item.kind === "hlist") {
+      const nested = firstGlyphX(item.items, baseX + item.x);
+      if (nested !== null) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
 describe("TeX math SVG rendering", () => {
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
@@ -1799,6 +1814,34 @@ unordered.`;
     )).toEqual(["Alpha", "Beta"]);
   });
 
+  it("uses TeX per-row gather tag clearance for numbered rows", () => {
+    const source = String.raw`Alpha \begin{gather}\overline{\dots}=\operatorname{proj\,lim}\\\Bigg(\tfrac{j}{\dots}\Bigg)-\left\langle\frac{x}{z}\right\rangle \notag\end{gather} Beta`;
+    const content = String.raw`\overline{\dots}=\operatorname{proj\,lim}\\\Bigg(\tfrac{j}{\dots}\Bigg)-\left\langle\frac{x}{z}\right\rangle \notag`;
+    const rowBreakEnd = source.indexOf(String.raw`\\`) + String.raw`\\`.length;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "gather",
+      sourceStart: source.indexOf(String.raw`\begin{gather}`),
+      sourceEnd: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
+      contentStart: source.indexOf(String.raw`\overline`),
+      contentEnd: source.indexOf(String.raw`\end{gather}`),
+      targetWidth: 100,
+      displayLabels: [
+        {
+          text: "1",
+          sourceSpan: { start: rowBreakEnd, end: rowBreakEnd },
+          textSourceSpan: { start: rowBreakEnd, end: rowBreakEnd },
+        },
+        null,
+      ],
+    });
+
+    expect(directAlignment?.rows).toHaveLength(2);
+    expect(firstGlyphX(directAlignment?.rows[0]?.hlist?.items ?? [])).toBeCloseTo(14.290451, 5);
+    expect(firstGlyphX(directAlignment?.rows[1]?.hlist?.items ?? [])).toBeCloseTo(21.040872, 5);
+  });
+
   it("lets TeX paragraph layout carry multline-star display math with row-specific placement", () => {
     const source = String.raw`Alpha \begin{multline*}a=b\\c+d=e\\f=g\end{multline*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
@@ -1837,6 +1880,34 @@ unordered.`;
     expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
       source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
     )).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("applies TeX multline preamble spacing before leading operators", () => {
+    const source = String.raw`\begin{multline}\operatorname{rank}-m\\x_x^n\\\underline{i+a}\end{multline}`;
+    const content = String.raw`\operatorname{rank}-m\\x_x^n\\\underline{i+a}`;
+    const contentEnd = source.indexOf(String.raw`\end{multline}`);
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "multline",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf(String.raw`\operatorname`),
+      contentEnd,
+      targetWidth: 140,
+      displayLabels: [
+        null,
+        null,
+        {
+          text: "1",
+          sourceSpan: { start: contentEnd, end: contentEnd },
+          textSourceSpan: { start: contentEnd, end: contentEnd },
+        },
+      ],
+    });
+
+    expect(directAlignment?.rows).toHaveLength(3);
+    expect(firstGlyphX(directAlignment?.rows[0]?.hlist?.items ?? [])).toBeCloseTo(11.666672, 5);
   });
 
   it("renders explicit align-star tags as right-aligned row labels", () => {
@@ -2096,20 +2167,6 @@ unordered.`;
     });
 
     expect(box?.rows).toHaveLength(3);
-    const firstGlyphX = (items: readonly TexMathHListItem[], baseX = 0): number | null => {
-      for (const item of items) {
-        if (item.kind === "glyph") {
-          return baseX + item.x;
-        }
-        if (item.kind === "hlist") {
-          const nested = firstGlyphX(item.items, baseX + item.x);
-          if (nested !== null) {
-            return nested;
-          }
-        }
-      }
-      return null;
-    };
     const rowLefts = box?.rows.map((row) => firstGlyphX(row.hlist?.items ?? []) ?? 0);
     expect(rowLefts?.[0]).toBeCloseTo(10, 6);
     expect(rowLefts?.[1]).toBeCloseTo(10, 6);
