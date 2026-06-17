@@ -981,6 +981,52 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses unbraced math alphabet commands as single-token math arguments", () => {
+    const result = parseTexMath(String.raw`\mathit a+\mathsf x+\mathtt 7+\mathcal A`);
+
+    expect(result.diagnostics).toEqual([]);
+    const alphabetAtoms = result.list.items.filter((item) =>
+      item.kind === "atom" && item.nucleus.kind === "alphabet"
+    );
+    expect(alphabetAtoms.map((item) => item.kind === "atom" && item.nucleus.kind === "alphabet"
+      ? {
+          alphabet: item.nucleus.alphabet,
+          sourceSpan: item.sourceSpan,
+          listSpan: item.nucleus.list.sourceSpan,
+          text: item.nucleus.list.items[0]?.kind === "atom" &&
+            item.nucleus.list.items[0].nucleus.kind === "glyph"
+            ? item.nucleus.list.items[0].nucleus.text
+            : null,
+        }
+      : null
+    )).toEqual([
+      {
+        alphabet: "mathit",
+        sourceSpan: { start: 0, end: 9 },
+        listSpan: { start: 8, end: 9 },
+        text: "a",
+      },
+      {
+        alphabet: "mathsf",
+        sourceSpan: { start: 10, end: 19 },
+        listSpan: { start: 18, end: 19 },
+        text: "x",
+      },
+      {
+        alphabet: "mathtt",
+        sourceSpan: { start: 20, end: 29 },
+        listSpan: { start: 28, end: 29 },
+        text: "7",
+      },
+      {
+        alphabet: "mathcal",
+        sourceSpan: { start: 30, end: 40 },
+        listSpan: { start: 39, end: 40 },
+        text: "A",
+      },
+    ]);
+  });
+
   it("parses TeX macro arguments as single atoms when braces are omitted", () => {
     const fraction = atomAt(parseTexMath(String.raw`\frac1c+\sqrt x`), 0);
     const radical = atomAt(parseTexMath(String.raw`\frac1c+\sqrt x`), 2);

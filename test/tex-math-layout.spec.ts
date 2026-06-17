@@ -669,6 +669,24 @@ describe("TeX math hlist layout", () => {
       .toEqual(["cmr10", "cmr10", "cmbx10", "cmr10", "cmss10"]);
   });
 
+  it("lays out unbraced math alphabet commands as TeX math arguments", () => {
+    const result = layout(String.raw`\mathit a+\mathsf x+\mathtt 7+\mathcal A`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => ({
+      fontId: glyph.fontId,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmti10", code: 97 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmss10", code: 120 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmtt10", code: 55 },
+      { fontId: "cmr10", code: 43 },
+      { fontId: "cmsy10", code: 65 },
+    ]);
+  });
+
   it("uses exact script variants for math alphabet commands", () => {
     const result = layout(String.raw`x_{y_{\mathbf{i}}}+x_{\mathsf{i}}`);
 

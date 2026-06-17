@@ -981,7 +981,7 @@ class TexMathParser {
     allowScripts: boolean
   ): TexMathAtom {
     const command = this.advance();
-    const content = this.parseRequiredGroup(command.sourceSpan, `${command.text} content`);
+    const content = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} content`);
     const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
