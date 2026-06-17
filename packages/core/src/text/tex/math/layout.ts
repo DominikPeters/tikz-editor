@@ -1089,6 +1089,7 @@ const TEX_ALIGNED_ROW_HEIGHT_PT = 8.399963;
 const TEX_ALIGNED_ROW_DEPTH_PT = 3.600037;
 const TEX_AMSMATH_JOT_PT = 3;
 const TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT = 10;
+const TEX_LATEX_EQNARRAY_COLUMN_GAP_PT = 10;
 const TEX_ALIGNED_BASELINE_SKIP_PT = 12;
 const TEX_ALIGNED_LINE_SKIP_LIMIT_PT = 0;
 const TEX_ALIGNED_LINE_SKIP_PT = 1;
@@ -1146,6 +1147,7 @@ function layoutAlignedNucleus(
   const width = roundTexPt(
     columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
     alignedPairGapCount(columnCount, nucleus.columnSeparation) * TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT +
+    eqnarrayColumnGapCount(columnCount, nucleus.columnSeparation) * TEX_LATEX_EQNARRAY_COLUMN_GAP_PT +
     alignedTrailingWidth(concreteRows.length, nucleus.columnSeparation)
   );
   const baselineOffsets = alignedRowBaselineOffsets(concreteRows);
@@ -1171,16 +1173,16 @@ function layoutAlignedNucleus(
         cursor = roundTexPt(cursor + columnWidth);
         continue;
       }
-      const alignRight = nucleus.columnSeparation !== "gather" &&
-        nucleus.columnSeparation !== "multline" &&
-        columnIndex % 2 === 0;
+      const columnAlignment = alignedColumnAlignment(columnIndex, nucleus.columnSeparation);
       rowChildren.push(childHList(
         "aligned-cell",
         nucleus.columnSeparation === "multline"
           ? cursor
           : nucleus.columnSeparation === "gather"
           ? roundTexPt(cursor + (columnWidth - cell.hlist.width) / 2)
-          : alignRight
+          : columnAlignment === "center"
+            ? roundTexPt(cursor + (columnWidth - cell.hlist.width) / 2)
+          : columnAlignment === "right"
             ? roundTexPt(cursor + columnWidth - cell.hlist.width)
             : cursor,
         0,
@@ -1190,6 +1192,9 @@ function layoutAlignedNucleus(
       cursor = roundTexPt(cursor + columnWidth);
       if (shouldInsertAlignedPairGap(columnIndex, columnCount, nucleus.columnSeparation)) {
         cursor = roundTexPt(cursor + TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT);
+      }
+      if (shouldInsertEqnarrayColumnGap(columnIndex, columnCount, nucleus.columnSeparation)) {
+        cursor = roundTexPt(cursor + TEX_LATEX_EQNARRAY_COLUMN_GAP_PT);
       }
     }
     rowItems.push({
@@ -1336,7 +1341,7 @@ function shouldInsertAlignedPairGap(
   columnCount: number,
   columnSeparation: TexMathAlignedNucleus["columnSeparation"]
 ): boolean {
-  if (columnSeparation === "none" || columnSeparation === "multline") {
+  if (columnSeparation === "none" || columnSeparation === "multline" || columnSeparation === "eqnarray") {
     return false;
   }
   return columnIndex % 2 === 1 && columnIndex < columnCount - 1;
@@ -1346,20 +1351,47 @@ function alignedPairGapCount(
   columnCount: number,
   columnSeparation: TexMathAlignedNucleus["columnSeparation"]
 ): number {
-  if (columnSeparation === "none" || columnSeparation === "multline") {
+  if (columnSeparation === "none" || columnSeparation === "multline" || columnSeparation === "eqnarray") {
     return 0;
   }
   return Math.max(0, Math.ceil(columnCount / 2) - 1);
+}
+
+function shouldInsertEqnarrayColumnGap(
+  columnIndex: number,
+  columnCount: number,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"]
+): boolean {
+  return columnSeparation === "eqnarray" && columnIndex < Math.min(2, columnCount - 1);
+}
+
+function eqnarrayColumnGapCount(
+  columnCount: number,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"]
+): number {
+  return columnSeparation === "eqnarray"
+    ? Math.min(2, Math.max(0, columnCount - 1))
+    : 0;
 }
 
 function alignedTrailingWidth(
   rowCount: number,
   columnSeparation: TexMathAlignedNucleus["columnSeparation"]
 ): number {
-  if (columnSeparation === "none" || columnSeparation === "multline") {
+  if (columnSeparation === "none" || columnSeparation === "multline" || columnSeparation === "eqnarray") {
     return 0;
   }
   return rowCount === 1 ? TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT : 0;
+}
+
+function alignedColumnAlignment(
+  columnIndex: number,
+  columnSeparation: TexMathAlignedNucleus["columnSeparation"]
+): "left" | "center" | "right" {
+  if (columnSeparation === "eqnarray") {
+    return columnIndex === 0 ? "right" : columnIndex === 1 ? "center" : "left";
+  }
+  return columnIndex % 2 === 0 ? "right" : "left";
 }
 
 function layoutSubstackNucleus(

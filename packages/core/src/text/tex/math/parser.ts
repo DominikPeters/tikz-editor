@@ -45,7 +45,7 @@ interface ParseListOptions {
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
-  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline";
+  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
 }
 
 type InfixFractionPrimitive =
@@ -70,7 +70,7 @@ export interface ParseTexMathOptions {
 }
 
 interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
-  readonly columnSeparation?: "align" | "none" | "gather" | "multline";
+  readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
   readonly allowDisplayBreak?: boolean;
   readonly allowIntertext?: boolean;
 }
@@ -1255,7 +1255,7 @@ class TexMathParser {
   }
 
   private parseMisplacedShoveCommand(
-    columnSeparation: "align" | "none" | "gather" | "multline" | undefined
+    columnSeparation: "align" | "none" | "gather" | "multline" | "eqnarray" | undefined
   ): TexMathAtom {
     const command = this.advance();
     this.addDiagnostic(
@@ -1462,6 +1462,9 @@ class TexMathParser {
     if (environmentName && xalignatEnvironmentName(environmentName.name)) {
       return this.parseUnsupportedXalignatEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
+    if (environmentName && eqnarrayEnvironmentName(environmentName.name)) {
+      return this.parseEqnarrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
+    }
     if (environmentName?.name === "equation*") {
       return this.parseSingleBodyDisplayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
@@ -1605,6 +1608,24 @@ class TexMathParser {
       columnSeparation: "none",
       maxFields: pairCount ? pairCount.value * 2 : undefined,
       allowAlignmentTags: false,
+      allowDisplayBreak: false,
+      allowIntertext: false,
+      allowScripts,
+    });
+  }
+
+  private parseEqnarrayEnvironment(
+    beginSourceSpan: TexMathSourceSpan,
+    environmentName: { name: string; sourceSpan: TexMathSourceSpan },
+    allowScripts: boolean
+  ): TexMathAtom {
+    return this.parseAlignedBody({
+      beginSourceSpan,
+      initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      stopAtEnvironmentEnd: environmentName.name,
+      columnSeparation: "eqnarray",
+      maxFields: 3,
+      allowAlignmentTags: true,
       allowDisplayBreak: false,
       allowIntertext: false,
       allowScripts,
@@ -1790,7 +1811,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
@@ -1814,7 +1835,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
@@ -3774,7 +3795,7 @@ function alignedAtom(
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan,
   options: {
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray";
     readonly maxFields?: number;
   } = {}
 ): TexMathAtom {
@@ -4063,6 +4084,10 @@ function matrixEnvironmentName(name: string | undefined): TexMathMatrixEnvironme
     default:
       return null;
   }
+}
+
+function eqnarrayEnvironmentName(name: string): boolean {
+  return name === "eqnarray" || name === "eqnarray*";
 }
 
 function smallMatrixEnvironmentName(name: string | undefined): TexMathSmallMatrixEnvironment | null {

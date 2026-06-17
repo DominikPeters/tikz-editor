@@ -1983,6 +1983,31 @@ describe("TeX math hlist layout", () => {
     expect(singleRow.hlist?.width).toBeCloseTo(33.880707, 3);
   });
 
+  it("lays out LaTeX eqnarray with r/c/l columns and arraycolsep gaps", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{eqnarray}a&=&bb\\ccc&=&d\end{eqnarray}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    const firstRow = result.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const secondRow = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
+    const firstCells = firstRow?.items as readonly TexMathChildHListLayoutItem[] | undefined;
+    const secondCells = secondRow?.items as readonly TexMathChildHListLayoutItem[] | undefined;
+    expect(firstCells).toHaveLength(3);
+    expect(secondCells).toHaveLength(3);
+    if (!firstCells || !secondCells) {
+      return;
+    }
+
+    expect(firstCells[0]?.x ?? 0).toBeGreaterThan(0);
+    expect(secondCells[0]?.x).toBe(0);
+    expect(firstCells[1]?.x).toBeCloseTo(secondCells[1]?.x ?? 0, 5);
+    expect(firstCells[2]?.x).toBeCloseTo(secondCells[2]?.x ?? 0, 5);
+    expect((firstCells[1]?.x ?? 0) - ((firstCells[0]?.x ?? 0) + (firstCells[0]?.width ?? 0))).toBeCloseTo(10, 5);
+    expect((firstCells[2]?.x ?? 0) - ((firstCells[1]?.x ?? 0) + (firstCells[1]?.width ?? 0))).toBeCloseTo(10, 5);
+  });
+
   it("lays out matrix environments with TeX array struts and centered columns", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{matrix}a&b\\c&d\end{matrix}`).list,

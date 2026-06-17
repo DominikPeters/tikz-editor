@@ -1963,6 +1963,42 @@ describe("TeX math parser", () => {
     expect(extraAlignmentTab.list.items).toHaveLength(1);
   });
 
+  it("parses LaTeX eqnarray environments as distinct three-column alignments", () => {
+    const source = String.raw`\begin{eqnarray}a&=&b\\c&=&d\end{eqnarray}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "aligned",
+        columnSeparation: "eqnarray",
+        maxFields: 3,
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{eqnarray}`),
+          end: source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) => row.cells.map((cell) => cell.sourceSpan))).toEqual([
+      [
+        { start: 16, end: 17 },
+        { start: 18, end: 19 },
+        { start: 20, end: 21 },
+      ],
+      [
+        { start: 23, end: 24 },
+        { start: 25, end: 26 },
+        { start: 27, end: 28 },
+      ],
+    ]);
+  });
+
   it("allows align inside gather like amsmath", () => {
     const source = String.raw`\begin{gather}\begin{align} a &= b \end{align}\end{gather}`;
     const result = parseTexMath(source);
