@@ -149,6 +149,7 @@ export interface TexMathBoxProvider {
     readonly contentStart: number;
     readonly contentEnd: number;
     readonly targetWidth: number;
+    readonly displayLabels?: readonly (TexMathDisplayLabel | null)[];
   }) => TexMathDisplayAlignment | null;
 }
 

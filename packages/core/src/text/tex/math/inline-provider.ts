@@ -553,6 +553,7 @@ function getDisplayMathAlignment(
     readonly contentStart: number;
     readonly contentEnd: number;
     readonly targetWidth: number;
+    readonly displayLabels?: readonly (TexMathDisplayLabel | null)[];
   },
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: number
@@ -684,7 +685,7 @@ function getDisplayMathAlignment(
   }
   const alignedNucleus = alignedNucleusFromList(parsed.list);
   const pairCount = displayAlignmentPairCount(alignedRows);
-  const rowTagWidths = displayAlignmentRowTagWidths(alignedNucleus, fontProfile, baseAtPt);
+  const rowTagWidths = displayAlignmentRowTagWidths(alignedNucleus, params.displayLabels, fontProfile, baseAtPt);
   const dimensions = displayAlignmentDimensions({
     measuredWidth: laidOut.hlist.width,
     pairCount,
@@ -693,7 +694,9 @@ function getDisplayMathAlignment(
     rowTagWidths,
     targetWidth: params.targetWidth,
   });
-  const hasAlignmentTags = alignedNucleus?.rows.some((row) => (row.labels?.length ?? 0) > 0) ?? false;
+  const hasAlignmentTags = alignedRows.some((_, rowIndex) =>
+    displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) !== null
+  );
   const forcedRowWidth = hasAlignmentTags
     ? alignedRows.length > 1
       ? Math.max(dimensions.rowWidth, dimensions.targetWidth)
@@ -702,7 +705,7 @@ function getDisplayMathAlignment(
   const rows = alignedRows.map((row, rowIndex) => {
     const taggedRow = addDisplayAlignmentTag(
       row,
-      alignedNucleus?.rows[rowIndex]?.labels?.[0] ?? null,
+      displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex),
       dimensions,
       fontProfile,
       baseAtPt,
@@ -757,15 +760,26 @@ function getDisplayMathAlignment(
   };
 }
 
+function displayAlignmentRowLabel(
+  alignedNucleus: TexMathAlignedNucleus | null,
+  displayLabels: readonly (TexMathDisplayLabel | null)[] | undefined,
+  rowIndex: number
+): TexMathAlignedRowLabel | null {
+  return alignedNucleus?.rows[rowIndex]?.labels?.[0] ??
+    displayLabels?.[rowIndex] ??
+    null;
+}
+
 function texMathDisplayAlignmentDelimiter(
   delimiter: string
-): delimiter is "align-star" | "gather-star" | "multline-star" {
-  return delimiter === "align-star" ||
+): delimiter is "align" | "align-star" | "gather-star" | "multline-star" {
+  return delimiter === "align" ||
+    delimiter === "align-star" ||
     delimiter === "gather-star" ||
     delimiter === "multline-star";
 }
 
-function displayAlignmentColumnSeparation(delimiter: "align-star" | "gather-star" | "multline-star"):
+function displayAlignmentColumnSeparation(delimiter: "align" | "align-star" | "gather-star" | "multline-star"):
   "align" | "gather" | "multline" {
   if (delimiter === "gather-star") {
     return "gather";
@@ -811,15 +825,23 @@ function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null
 
 function displayAlignmentRowTagWidths(
   alignedNucleus: TexMathAlignedNucleus | null,
+  displayLabels: readonly (TexMathDisplayLabel | null)[] | undefined,
   fontProfile: TexMathFontProfile,
   baseAtPt: number
 ): readonly number[] {
-  return (alignedNucleus?.rows ?? []).map((row) => {
-    const label = row.labels?.[0];
+  const rowCount = Math.max(alignedNucleus?.rows.length ?? 0, displayLabels?.length ?? 0);
+  return Array.from({ length: rowCount }, (_, rowIndex) => {
+    const row = alignedNucleus?.rows[rowIndex] ?? null;
+    const label = displayAlignmentRowLabel(alignedNucleus, displayLabels, rowIndex);
     if (!label) {
       return 0;
     }
-    const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
+    const tag = layoutDisplayAlignmentTag(
+      label,
+      row?.sourceSpan.start ?? label.sourceSpan.start,
+      fontProfile,
+      baseAtPt
+    );
     return tag ? roundTexPt(tag.width) : 0;
   });
 }

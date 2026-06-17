@@ -26,6 +26,7 @@ import type {
   TexVListItem,
 } from "./types.js";
 import type { TexMathBoxProvider, TexMathDisplayLabel } from "../layout-inline-items.js";
+import { parseTexMathAlignedBody } from "../math/index.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly font?: ResolvedTexFont;
@@ -68,10 +69,20 @@ export function lowerSimpleTexBlockItemsToVList(
       continue;
     }
     if (item.kind === "display-math") {
-      const displayNumber = item.delimiter === "equation"
-        ? ++equationNumber
-        : undefined;
-      items.push(displayMathItemFromSimpleTexDisplayMath(item, options, displayNumber));
+      if (item.delimiter === "equation") {
+        equationNumber += 1;
+        items.push(displayMathItemFromSimpleTexDisplayMath(item, options, [
+          displayLabelForEquationNumberAt(equationNumber, item.sourceEnd),
+        ]));
+        continue;
+      }
+      if (item.delimiter === "align") {
+        const numberedAlign = displayLabelsForNumberedAlign(item, equationNumber);
+        equationNumber = numberedAlign.nextEquationNumber;
+        items.push(displayMathItemFromSimpleTexDisplayMath(item, options, numberedAlign.displayLabels));
+        continue;
+      }
+      items.push(displayMathItemFromSimpleTexDisplayMath(item, options));
       continue;
     }
     items.push({
@@ -91,7 +102,7 @@ export function lowerSimpleTexBlockItemsToVList(
 function displayMathItemFromSimpleTexDisplayMath(
   item: SimpleTexDisplayMathBlockItem,
   options: LowerSimpleTexBlockItemsToVListOptions,
-  displayNumber?: number
+  displayLabels?: readonly (TexMathDisplayLabel | null)[]
 ): TexDisplayMathItem | TexDisplayAlignmentItem | TexPlaceholderItem {
   const sourceSpan = {
     start: item.sourceStart,
@@ -100,13 +111,13 @@ function displayMathItemFromSimpleTexDisplayMath(
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
   if (
-    item.delimiter === "align" ||
     item.delimiter === "gather" ||
     item.delimiter === "multline"
   ) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
   }
   if (
+    item.delimiter === "align" ||
     item.delimiter === "align-star" ||
     item.delimiter === "gather-star" ||
     item.delimiter === "multline-star"
@@ -120,6 +131,7 @@ function displayMathItemFromSimpleTexDisplayMath(
       contentStart: item.contentStart,
       contentEnd: item.contentEnd,
       targetWidth: targetWidth ?? 0,
+      ...(displayLabels ? { displayLabels } : {}),
     }) ?? null;
     if (!alignment) {
       return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -146,7 +158,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     contentStart: item.contentStart,
     contentEnd: item.contentEnd,
     targetWidth,
-    ...(displayNumber !== undefined ? { displayLabel: displayLabelForEquationNumber(displayNumber, item) } : {}),
+    ...(displayLabels?.[0] ? { displayLabel: displayLabels[0] } : {}),
   }) ?? null;
   if (!box) {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -165,19 +177,49 @@ function displayMathItemFromSimpleTexDisplayMath(
   };
 }
 
-function displayLabelForEquationNumber(
+function displayLabelsForNumberedAlign(
+  item: SimpleTexDisplayMathBlockItem,
+  previousEquationNumber: number
+): { readonly displayLabels: readonly (TexMathDisplayLabel | null)[]; readonly nextEquationNumber: number } {
+  const parsed = parseTexMathAlignedBody(item.content, {
+    sourceOffset: item.contentStart,
+    columnSeparation: "align",
+    suppressTerminalEllipsisGlue: true,
+  });
+  const aligned = parsed.list.items[0];
+  if (aligned?.kind !== "atom" || aligned.nucleus.kind !== "aligned") {
+    return {
+      displayLabels: [],
+      nextEquationNumber: previousEquationNumber,
+    };
+  }
+  let equationNumber = previousEquationNumber;
+  const displayLabels = aligned.nucleus.rows.map((row) => {
+    if (row.suppressTag || (row.labels?.length ?? 0) > 0) {
+      return null;
+    }
+    equationNumber += 1;
+    return displayLabelForEquationNumberAt(equationNumber, row.sourceSpan.end);
+  });
+  return {
+    displayLabels,
+    nextEquationNumber: equationNumber,
+  };
+}
+
+function displayLabelForEquationNumberAt(
   number: number,
-  item: SimpleTexDisplayMathBlockItem
+  sourceOffset: number
 ): TexMathDisplayLabel {
   return {
     text: String(number),
     sourceSpan: {
-      start: item.sourceEnd,
-      end: item.sourceEnd,
+      start: sourceOffset,
+      end: sourceOffset,
     },
     textSourceSpan: {
-      start: item.sourceEnd,
-      end: item.sourceEnd,
+      start: sourceOffset,
+      end: sourceOffset,
     },
   };
 }
