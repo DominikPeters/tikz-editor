@@ -64,6 +64,10 @@ export interface ParseTexMathOptions {
   readonly suppressTerminalEllipsisGlue?: boolean;
 }
 
+interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
+  readonly columnSeparation?: "align" | "none" | "gather";
+}
+
 export function parseTexMath(
   source: string,
   options: ParseTexMathOptions = {}
@@ -81,7 +85,7 @@ export function parseTexMath(
 
 export function parseTexMathAlignedBody(
   source: string,
-  options: ParseTexMathOptions = {}
+  options: ParseTexMathAlignedBodyOptions = {}
 ): TexMathParseResult {
   const sourceOffset = options.sourceOffset ?? 0;
   const tokens = tokenizeTexMath(source, sourceOffset);
@@ -89,6 +93,7 @@ export function parseTexMathAlignedBody(
   const atom = parser.parseAlignedBody({
     beginSourceSpan: { start: sourceOffset, end: sourceOffset },
     initialSourceSpan: { start: sourceOffset, end: sourceOffset },
+    columnSeparation: options.columnSeparation,
     allowScripts: false,
   });
   return {
@@ -1226,7 +1231,7 @@ class TexMathParser {
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
       stopAtEnvironmentEnd: environmentName.name,
-      columnSeparation: "align",
+      columnSeparation: gatherEnvironmentName(environmentName.name) ? "gather" : "align",
       allowScripts,
     });
   }
@@ -1444,7 +1449,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none";
+    readonly columnSeparation?: "align" | "none" | "gather";
     readonly maxFields?: number;
     readonly allowScripts: boolean;
   }): TexMathAtom {
@@ -1465,7 +1470,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none";
+    readonly columnSeparation?: "align" | "none" | "gather";
     readonly maxFields?: number;
     readonly allowScripts: boolean;
   }): TexMathAtom {
@@ -3214,7 +3219,7 @@ function alignedAtom(
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan,
   options: {
-    readonly columnSeparation?: "align" | "none";
+    readonly columnSeparation?: "align" | "none" | "gather";
     readonly maxFields?: number;
   } = {}
 ): TexMathAtom {

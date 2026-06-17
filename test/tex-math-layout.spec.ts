@@ -1730,7 +1730,7 @@ describe("TeX math hlist layout", () => {
       { style: "display" }
     );
     const gather = layoutTexMathList(
-      parseTexMath(String.raw`\begin{gather*}a=b\\c=d\end{gather*}`).list,
+      parseTexMath(String.raw`\begin{gather*}a=b\\c+d=e\end{gather*}`).list,
       { style: "display" }
     );
 
@@ -1746,12 +1746,18 @@ describe("TeX math hlist layout", () => {
     ]);
 
     expect(gather.supported).toBe(true);
+    expect(gather.hlist?.width).toBeCloseTo(39.74436, 5);
     expect(gather.hlist?.items.map((item) => item.kind === "hlist" ? item.role : null)).toEqual([
       "aligned-row",
       "aligned-row",
     ]);
     const gatherFirstRow = gather.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
     expect(gatherFirstRow?.items).toHaveLength(1);
+    expect(gatherFirstRow?.items[0]).toMatchObject({
+      kind: "hlist",
+      role: "aligned-cell",
+      x: expect.closeTo(8.416704, 5),
+    });
   });
 
   it("uses amsmath display-style cells, inter-pair gaps, and TeX interline glue in aligned environments", () => {

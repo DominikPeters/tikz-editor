@@ -1490,6 +1490,59 @@ unordered.`;
     )).toEqual(["Alpha", "Beta"]);
   });
 
+  it("lets TeX paragraph layout carry gather-star display math as centered display rows", () => {
+    const source = String.raw`Alpha \begin{gather*}a=b\\c+d=e\end{gather*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:gather-star-display-math-provider",
+      width: 120,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      itemKind: "hbox",
+      x: 0,
+      hboxRole: {
+        kind: "display-align-row",
+        delimiter: "gather-star",
+        rowIndex: 0,
+      },
+    });
+    expect(rows[1]).toMatchObject({
+      itemKind: "hbox",
+      x: 0,
+      hboxRole: {
+        kind: "display-align-row",
+        delimiter: "gather-star",
+        rowIndex: 1,
+      },
+    });
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`a=b\\c+d=e`,
+      delimiter: "gather-star",
+      sourceStart: source.indexOf(String.raw`\begin{gather*}`),
+      sourceEnd: source.indexOf(String.raw`\end{gather*}`) + String.raw`\end{gather*}`.length,
+      contentStart: source.indexOf("a=b"),
+      contentEnd: source.indexOf(String.raw`\end{gather*}`),
+      targetWidth: 120,
+    });
+    expect(directAlignment?.delimiter).toBe("gather-star");
+    expect(directAlignment?.rows).toHaveLength(2);
+    expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-math-hlist="true"');
+    expect(directAlignment?.rows[0]?.svgBody).toContain(`data-source-start="${source.indexOf("a=b")}"`);
+    expect(directAlignment?.rows[1]?.svgBody).toContain(`data-source-start="${source.indexOf("c+d=e")}"`);
+    expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
+      source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
+    )).toEqual(["Alpha", "Beta"]);
+  });
+
   it("renders explicit align-star tags as right-aligned row labels", () => {
     const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
     const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({

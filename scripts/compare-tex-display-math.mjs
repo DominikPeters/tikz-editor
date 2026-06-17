@@ -65,6 +65,11 @@ const cases = args.cases.length > 0
         source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
         width: 120,
       },
+      {
+        id: "gather-star-display",
+        source: String.raw`Alpha \begin{gather*}a=b\\c+d=e\end{gather*} Beta`,
+        width: 140,
+      },
     ];
 
 const results = cases.map((caseSpec) => compareCase(caseSpec, args));
@@ -601,6 +606,7 @@ function texSource(caseSpec) {
 function requiresAmsmath(source) {
   return source.includes(String.raw`\begin{equation*}`) ||
     source.includes(String.raw`\begin{align*}`) ||
+    source.includes(String.raw`\begin{gather*}`) ||
     source.includes(String.raw`\begin{aligned}`) ||
     source.includes(String.raw`\begin{alignedat}`) ||
     hasMatrixEnvironment(source) ||

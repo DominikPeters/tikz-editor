@@ -111,7 +111,7 @@ describe("TeX vlist lowering", () => {
   });
 
   it("parses and lowers display math as source-spanned vlist items", () => {
-    const source = String.raw`Alpha \[\sum_i^n\] Beta $$x^2$$ \begin{equation*}y^2\end{equation*} \begin{align*}a&=b\\c&=d\end{align*}`;
+    const source = String.raw`Alpha \[\sum_i^n\] Beta $$x^2$$ \begin{equation*}y^2\end{equation*} \begin{align*}a&=b\\c&=d\end{align*} \begin{gather*}e=f\\g=h\end{gather*}`;
     const parsed = parseSimpleTexParagraphIr(source);
 
     expect(parsed.nodes.map((node) => node.kind)).toEqual([
@@ -126,11 +126,14 @@ describe("TeX vlist lowering", () => {
       "display-math",
       "space",
       "display-math",
+      "space",
+      "display-math",
     ]);
     expect(parsed.items.map((item) => item.kind)).toEqual([
       "paragraph",
       "display-math",
       "paragraph",
+      "display-math",
       "display-math",
       "display-math",
       "display-math",
@@ -182,6 +185,24 @@ describe("TeX vlist lowering", () => {
       },
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
+      alignment: {
+        width: expect.any(Number),
+        rows: [
+          { rowIndex: 0, width: expect.any(Number) },
+          { rowIndex: 1, width: expect.any(Number) },
+        ],
+      },
+    });
+    expect(vlist.items[6]).toMatchObject({
+      kind: "display-alignment",
+      delimiter: "gather-star",
+      content: String.raw`e=f\\g=h`,
+      sourceSpan: {
+        start: source.indexOf(String.raw`\begin{gather*}`),
+        end: source.indexOf(String.raw`\end{gather*}`) + String.raw`\end{gather*}`.length,
+      },
+      contentStart: source.indexOf("e=f"),
+      contentEnd: source.indexOf(String.raw`\end{gather*}`),
       alignment: {
         width: expect.any(Number),
         rows: [

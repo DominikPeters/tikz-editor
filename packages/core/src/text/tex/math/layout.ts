@@ -1162,10 +1162,14 @@ function layoutAlignedNucleus(
         cursor = roundTexPt(cursor + columnWidth);
         continue;
       }
-      const alignRight = columnIndex % 2 === 0;
+      const alignRight = nucleus.columnSeparation !== "gather" && columnIndex % 2 === 0;
       rowChildren.push(childHList(
         "aligned-cell",
-        alignRight ? roundTexPt(cursor + columnWidth - cell.hlist.width) : cursor,
+        nucleus.columnSeparation === "gather"
+          ? roundTexPt(cursor + (columnWidth - cell.hlist.width) / 2)
+          : alignRight
+            ? roundTexPt(cursor + columnWidth - cell.hlist.width)
+            : cursor,
         0,
         cell.hlist,
         cell.sourceSpan

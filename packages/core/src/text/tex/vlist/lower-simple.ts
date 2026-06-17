@@ -91,7 +91,7 @@ function displayMathItemFromSimpleTexDisplayMath(
   if (item.delimiter === "equation" || item.delimiter === "align") {
     return unsupportedDisplayMathPlaceholder(item, sourceSpan);
   }
-  if (item.delimiter === "align-star") {
+  if (item.delimiter === "align-star" || item.delimiter === "gather-star") {
     const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
       source: item.text,
       content: item.content,

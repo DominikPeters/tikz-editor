@@ -445,9 +445,10 @@ function parseMathBoxContent(params: {
   readonly delimiter: string;
   readonly contentStart: number;
 }, style: "text" | "display") {
-  if (params.delimiter === "align-star") {
+  if (texMathDisplayAlignmentDelimiter(params.delimiter)) {
     return parseTexMathAlignedBody(params.content, {
       sourceOffset: params.contentStart,
+      columnSeparation: params.delimiter === "gather-star" ? "gather" : "align",
       suppressTerminalEllipsisGlue: style === "display",
     });
   }
@@ -471,11 +472,12 @@ function getDisplayMathAlignment(
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: number
 ): TexMathDisplayAlignment | null {
-  if (params.delimiter !== "align-star") {
+  if (!texMathDisplayAlignmentDelimiter(params.delimiter)) {
     return null;
   }
   const parsed = parseTexMathAlignedBody(params.content, {
     sourceOffset: params.contentStart,
+    columnSeparation: params.delimiter === "gather-star" ? "gather" : "align",
     suppressTerminalEllipsisGlue: true,
   });
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
@@ -495,6 +497,55 @@ function getDisplayMathAlignment(
   );
   if (alignedRows.length === 0) {
     return null;
+  }
+  if (params.delimiter === "gather-star") {
+    const rowOffset = roundTexPt(Math.max(0, (params.targetWidth - laidOut.hlist.width) / 2));
+    const rows = alignedRows.map((row, rowIndex) => {
+      const rowHList: TexMathHList = {
+        kind: "math-hlist",
+        style: laidOut.hlist.style,
+        width: params.targetWidth,
+        height: row.height,
+        depth: row.depth,
+        sourceSpan: row.sourceSpan,
+        items: offsetMathHListItems(row.items, rowOffset),
+      };
+      return {
+        rowIndex,
+        x: 0,
+        source: params.source,
+        content: params.content,
+        sourceStart: row.sourceSpan.start,
+        sourceEnd: row.sourceSpan.end,
+        contentStart: row.sourceSpan.start,
+        contentEnd: row.sourceSpan.end,
+        width: rowHList.width,
+        height: rowHList.height,
+        depth: rowHList.depth,
+        caretStops: buildInlineMathCaretStops(rowHList, {
+          sourceStart: row.sourceSpan.start,
+          sourceEnd: row.sourceSpan.end,
+          contentStart: row.sourceSpan.start,
+          contentEnd: row.sourceSpan.end,
+        }),
+        constructRanges: buildInlineMathConstructRanges(rowHList),
+        breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
+        svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
+        hlist: rowHList,
+        fontProfile,
+      };
+    });
+    return {
+      source: params.source,
+      content: params.content,
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      contentStart: params.contentStart,
+      contentEnd: params.contentEnd,
+      delimiter: params.delimiter,
+      width: params.targetWidth,
+      rows,
+    };
   }
   const alignedNucleus = alignedNucleusFromList(parsed.list);
   const pairCount = displayAlignmentPairCount(alignedRows);
@@ -565,10 +616,14 @@ function getDisplayMathAlignment(
     sourceEnd: params.sourceEnd,
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
-    delimiter: "align-star",
+    delimiter: params.delimiter,
     width: Math.max(dimensions.rowWidth, ...rows.map((row) => row.width)),
     rows,
   };
+}
+
+function texMathDisplayAlignmentDelimiter(delimiter: string): delimiter is "align-star" | "gather-star" {
+  return delimiter === "align-star" || delimiter === "gather-star";
 }
 
 function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null {

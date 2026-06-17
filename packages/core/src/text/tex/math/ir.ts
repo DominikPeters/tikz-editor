@@ -323,7 +323,7 @@ export interface TexMathAlignedRowLabel {
 export interface TexMathAlignedNucleus {
   readonly kind: "aligned";
   readonly rows: readonly TexMathAlignedRow[];
-  readonly columnSeparation?: "align" | "none";
+  readonly columnSeparation?: "align" | "none" | "gather";
   readonly maxFields?: number;
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan?: TexMathSourceSpan;

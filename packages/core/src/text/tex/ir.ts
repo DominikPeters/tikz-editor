@@ -82,7 +82,8 @@ export type SimpleTexDisplayMathDelimiter =
   | "equation"
   | "equation-star"
   | "align"
-  | "align-star";
+  | "align-star"
+  | "gather-star";
 
 export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
   readonly kind: "display-math";
@@ -835,6 +836,21 @@ function scanSimpleTexDisplayMath(
         contentStart,
         contentEnd,
         end: contentEnd + alignEnd.length,
+      };
+    }
+  }
+
+  const gatherStarBegin = String.raw`\begin{gather*}`;
+  if (text.startsWith(gatherStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const gatherStarEnd = String.raw`\end{gather*}`;
+    const contentStart = start + gatherStarBegin.length;
+    const contentEnd = text.indexOf(gatherStarEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "gather-star",
+        contentStart,
+        contentEnd,
+        end: contentEnd + gatherStarEnd.length,
       };
     }
   }
