@@ -4834,6 +4834,8 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "ddddot";
     case "hat":
       return "hat";
+    case "mathring":
+      return "mathring";
     case "tilde":
       return "tilde";
     case "vec":

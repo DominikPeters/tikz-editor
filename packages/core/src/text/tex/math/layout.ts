@@ -4903,6 +4903,8 @@ function defaultLuaLatexMathAccent(
       return null;
     case "hat":
       return { family: "operators", code: 94 };
+    case "mathring":
+      return { family: "operators", code: 23 };
     case "tilde":
       return { family: "operators", code: 126 };
     case "vec":

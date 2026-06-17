@@ -14,8 +14,16 @@ const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix"
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
-const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
-const amsMathCommands = [String.raw`\boxed`];
+const accentCommands = [
+  String.raw`\bar`,
+  String.raw`\dot`,
+  String.raw`\ddot`,
+  String.raw`\hat`,
+  String.raw`\mathring`,
+  String.raw`\tilde`,
+  String.raw`\vec`,
+];
+const amsMathCommands = [String.raw`\boxed`, String.raw`\dddot`, String.raw`\ddddot`];
 const amsMathDelimiterCommands = [
   String.raw`\lvert`,
   String.raw`\rvert`,
@@ -463,6 +471,7 @@ function texSource(formula) {
     hasSidesetCommand(formula) ||
     hasEllipsisCommand(formula) ||
     hasAmsMathCommand(formula) ||
+    hasAccentCommand(formula) ||
     hasAmsMathDelimiterCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
@@ -1015,6 +1024,10 @@ function hasEllipsisCommand(source) {
 
 function hasAmsMathCommand(source) {
   return amsMathCommands.some((command) => source.includes(command));
+}
+
+function hasAccentCommand(source) {
+  return accentCommands.some((command) => source.includes(command));
 }
 
 function hasAmsMathDelimiterCommand(source) {

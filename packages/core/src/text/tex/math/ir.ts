@@ -194,6 +194,7 @@ export type TexMathAccentCommand =
   | "dddot"
   | "ddddot"
   | "hat"
+  | "mathring"
   | "tilde"
   | "vec";
 

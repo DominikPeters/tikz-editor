@@ -205,7 +205,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders math accents through TeX glyph paths", () => {
-    const parsed = parseTexMath(String.raw`\vec{x}+\hat{\frac{1}{2}}`);
+    const parsed = parseTexMath(String.raw`\vec{x}+\hat{\frac{1}{2}}+\mathring A`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -215,8 +215,10 @@ describe("TeX math SVG rendering", () => {
     const body = renderTexMathHListSvgBody(result.hlist);
     expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="126"');
     expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="94"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="23"');
     expect(body).toContain('transform="translate(-13.3675 0) scale(100)"');
     expect(body).toContain('transform="translate(1863.0603 -414.2878) scale(100)"');
+    expect(body).toContain('transform="translate(3793.4875 -252.777) scale(100)"');
   });
 
   it("renders overline and underline rules with TeX coordinates", () => {

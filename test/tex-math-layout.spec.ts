@@ -1416,6 +1416,28 @@ describe("TeX math hlist layout", () => {
       x: expect.closeTo(-0.133675, 5),
     });
 
+    const ringX = layout(String.raw`\mathring{x}`);
+    expect(ringX.supported).toBe(true);
+    expect(ringX.hlist?.width).toBeCloseTo(5.71528, 5);
+    expect(ringX.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr10",
+      code: 23,
+      x: expect.closeTo(-0.61458, 5),
+      y: 0,
+    });
+
+    const ringA = layout(String.raw`\mathring A`);
+    expect(ringA.supported).toBe(true);
+    expect(ringA.hlist?.width).toBeCloseTo(7.50002, 5);
+    expect(ringA.hlist?.items[0]).toMatchObject({
+      kind: "glyph",
+      fontId: "cmr10",
+      code: 23,
+      x: expect.closeTo(1.38893, 5),
+      y: expect.closeTo(-2.52777, 5),
+    });
+
     const accentedSingleGlyphSup = layout(String.raw`\ddot{3}^2`);
     expect(accentedSingleGlyphSup.supported).toBe(true);
     expect(accentedSingleGlyphSup.hlist?.items.find((item) =>

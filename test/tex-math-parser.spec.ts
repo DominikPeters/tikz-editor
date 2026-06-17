@@ -433,11 +433,12 @@ describe("TeX math parser", () => {
   });
 
   it("parses math accents with braced and single-atom bases", () => {
-    const result = parseTexMath(String.raw`\hat{x}+\vec y+\dddot z+\ddddot{1}`);
+    const result = parseTexMath(String.raw`\hat{x}+\vec y+\dddot z+\ddddot{1}+\mathring A`);
     const hat = atomAt(result, 0);
     const vec = atomAt(result, 2);
     const tripleDot = atomAt(result, 4);
     const quadrupleDot = atomAt(result, 6);
+    const mathRing = atomAt(result, 8);
 
     expect(result.diagnostics).toEqual([]);
     expect(hat).toMatchObject({
@@ -478,6 +479,15 @@ describe("TeX math parser", () => {
       },
     });
     expect(quadrupleDot.nucleus.kind === "accent" ? quadrupleDot.nucleus.base.sourceSpan : null).toEqual({ start: 32, end: 33 });
+    expect(mathRing).toMatchObject({
+      sourceSpan: { start: 35, end: 46 },
+      nucleus: {
+        kind: "accent",
+        command: "mathring",
+        commandSourceSpan: { start: 35, end: 44 },
+      },
+    });
+    expect(mathRing.nucleus.kind === "accent" ? mathRing.nucleus.base.sourceSpan : null).toEqual({ start: 45, end: 46 });
   });
 
   it("parses overline and underline as structured line nuclei", () => {
