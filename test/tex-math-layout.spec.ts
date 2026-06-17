@@ -1451,9 +1451,19 @@ describe("TeX math hlist layout", () => {
     const multiDotAccents = layout(String.raw`\dddot{x}+\ddddot{1}`);
     expect(multiDotAccents.supported).toBe(true);
     const multiDotGlyphs = multiDotAccents.hlist?.items.filter((item) =>
-      item.kind === "glyph" && item.fontId === "cmr10" && item.code === 46
+      item.kind === "glyph" && item.fontId === "lmroman10-regular" && item.code === 46
     ) ?? [];
     expect(multiDotGlyphs).toHaveLength(7);
+    expect(multiDotGlyphs[0]).toMatchObject({
+      x: expect.closeTo(1.666667, 5),
+      y: expect.closeTo(-5.84555, 5),
+      width: expect.closeTo(2.78, 5),
+    });
+    expect(multiDotGlyphs[3]).toMatchObject({
+      x: expect.closeTo(23.895602, 5),
+      y: expect.closeTo(-7.98444, 5),
+      width: expect.closeTo(2.78, 5),
+    });
     expect(multiDotAccents.hlist?.items.filter((item) =>
       item.kind === "hlist" && item.role === "nucleus"
     )).toHaveLength(2);

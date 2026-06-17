@@ -218,6 +218,7 @@ const TEX_LATEX_ARRAY_RULE_WIDTH_PT = 0.4;
 const TEX_LATEX_DOUBLE_RULE_SEP_PT = 2;
 const TEX_LATEX_FBOX_RULE_PT = 0.4;
 const TEX_LATEX_FBOX_SEP_PT = 3;
+const TEX_AMSMATH_MULTIDOT_LIMIT_CORRECTION_PT = 0.014;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
@@ -3612,19 +3613,38 @@ function layoutMultiDotAccentNucleus(
   if (!base) {
     return null;
   }
-  const font = fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
-  const dotMetric = requiredCharMetric(font, 46);
-  const dotWidth = roundTexPt(tfmToPt(font, dotMetric.width));
-  const dotHeight = roundTexPt(tfmToPt(font, dotMetric.height));
-  const dotDepth = roundTexPt(tfmToPt(font, dotMetric.depth));
-  const leadingThinSpace = muToPt(fontProfile, style, baseAtPt, 3);
+  const font = fontProfile.textFontProfile.resolveTextFont(
+    fontProfile.textFontProfile.defaultFontState,
+    textStyleAtPt(style, baseAtPt),
+    fontProfile.metricProvider
+  );
+  let shapedDot: ReturnType<typeof fontProfile.metricProvider.shapeText>;
+  try {
+    shapedDot = fontProfile.metricProvider.shapeText(".", font, {
+      sourceStart: nucleus.commandSourceSpan.start,
+    });
+  } catch {
+    return null;
+  }
+  const dotItem = shapedDot.items.find((item): item is Extract<TexShapedItem, { readonly kind: "glyph" }> =>
+    item.kind === "glyph"
+  );
+  if (!dotItem) {
+    return null;
+  }
+  const dotWidth = dotItem.width;
+  const dotHeight = dotItem.height;
+  const dotDepth = dotItem.depth;
+  const leadingThinSpace = roundTexPt(font.atPt / 6);
   const dotCount = nucleus.command === "ddddot" ? 4 : 3;
   const accentWidth = roundTexPt(leadingThinSpace + dotWidth * dotCount);
-  const skew = accentBaseSkew(nucleus.base, fontProfile, style, baseAtPt, alphabet);
-  const singleGlyphBase = accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
-  const delta = Math.min(base.height, accentXHeight(font));
-  const accentX = roundTexPt(skew + (base.width - accentWidth) / 2);
-  const accentY = roundTexPt(delta - base.height);
+  const width = roundTexPt(Math.max(base.width, accentWidth));
+  const accentX = roundTexPt((width - accentWidth) / 2);
+  const textEx = roundTexPt(tfmToPt(font, font.data.fontdimen.xheight));
+  const accentY = roundTexPt(
+    -base.height - 0.6 * textEx + dotHeight - TEX_AMSMATH_MULTIDOT_LIMIT_CORRECTION_PT
+  );
+  const baseX = roundTexPt((width - base.width) / 2);
   const items: TexMathHListItem[] = [];
   items.push({
     kind: "kern",
@@ -3638,32 +3658,27 @@ function layoutMultiDotAccentNucleus(
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
-      family: "operators",
-      code: 46,
+      family: "text",
+      code: dotItem.code,
       text: `\\${nucleus.command}`,
       x: roundTexPt(accentX + leadingThinSpace + dotWidth * index),
       y: accentY,
       width: dotWidth,
       height: dotHeight,
       depth: dotDepth,
-      italicCorrection: roundTexPt(tfmToPt(font, dotMetric.italicCorrection)),
+      italicCorrection: dotItem.italicCorrection,
       sourceSpan: nucleus.commandSourceSpan,
     });
   }
-  const baseChild = childHList("nucleus", 0, 0, base, nucleus.base.sourceSpan);
+  const baseChild = childHList("nucleus", baseX, 0, base, nucleus.base.sourceSpan);
 
   return {
     items: [...items, baseChild],
-    width: base.width,
+    width,
     height: roundTexPt(Math.max(base.height, -accentY + dotHeight)),
     depth: base.depth,
-    italicCorrection: singleGlyphBase?.italicCorrection ?? 0,
+    italicCorrection: 0,
     isCharacterNucleus: false,
-    scriptShiftsAsCharacter: singleGlyphBase !== null,
-    ...(singleGlyphBase ? {
-      scriptBaseWidth: singleGlyphBase.width,
-      scriptSuperscriptOffset: singleGlyphBase.italicCorrection,
-    } : {}),
     sourceSpan: nucleus.sourceSpan,
   };
 }

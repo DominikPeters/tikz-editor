@@ -450,7 +450,7 @@ describe("TeX math SVG rendering", () => {
     const body = renderTexMathHListSvgBody(result.hlist);
     expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="82"');
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="1"');
-    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="46"');
+    expect(body).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="46"');
   });
 
   it("renders operatorname through roman operator glyphs", () => {
