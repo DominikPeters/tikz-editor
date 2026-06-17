@@ -1417,10 +1417,18 @@ unordered.`;
     ]);
   });
 
-  it("uses explicit placeholders for unsupported intertext in display alignments", () => {
-    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`;
+  it.each([
+    {
+      id: "intertext",
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`,
+    },
+    {
+      id: "displaybreak",
+      source: String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`,
+    },
+  ])("uses explicit placeholders for unsupported $id in display alignments", ({ source }) => {
     const result = layoutSimpleTexParagraph(source, {
-      paragraphId: "tex:intertext-display-math-placeholder",
+      paragraphId: `tex:unsupported-display-alignment-placeholder:${source.length}`,
       width: 160,
       parindent: 0,
       hyphenator: { hyphenate: () => [] },

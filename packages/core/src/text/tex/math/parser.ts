@@ -1691,7 +1691,7 @@ class TexMathParser {
       }
       const command = this.advance();
       sourceSpan = spanUnion(sourceSpan ?? command.sourceSpan, command.sourceSpan);
-      if (metadata === "unsupported") {
+      if (metadata === "unsupported-text") {
         const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} text`);
         sourceSpan = spanUnion(sourceSpan, content?.sourceSpan ?? command.sourceSpan);
         this.addDiagnostic(
@@ -1699,6 +1699,17 @@ class TexMathParser {
           "unsupported-command",
           `Unsupported alignment command ${command.text}.`,
           spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan)
+        );
+        continue;
+      }
+      if (metadata === "unsupported-optional") {
+        const optional = this.consumeOptionalBracketArgument();
+        sourceSpan = spanUnion(sourceSpan, optional ?? command.sourceSpan);
+        this.addDiagnostic(
+          "error",
+          "unsupported-command",
+          `Unsupported alignment command ${command.text}.`,
+          spanUnion(command.sourceSpan, optional ?? command.sourceSpan)
         );
         continue;
       }
@@ -2447,6 +2458,24 @@ class TexMathParser {
       alignment: trimmed === "l" ? "left" : trimmed === "r" ? "right" : "center",
       sourceSpan,
     };
+  }
+
+  private consumeOptionalBracketArgument(): TexMathSourceSpan | null {
+    this.skipSpaces();
+    const open = this.peek();
+    if (open?.kind !== "character" || open.text !== "[") {
+      return null;
+    }
+    this.advance();
+    let sourceSpan = open.sourceSpan;
+    while (!this.isAtEnd()) {
+      const token = this.advance();
+      sourceSpan = spanUnion(sourceSpan, token.sourceSpan);
+      if (token.kind === "character" && token.text === "]") {
+        break;
+      }
+    }
+    return sourceSpan;
   }
 
   private parseEnvironmentNameGroup(
@@ -3501,7 +3530,9 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
   }
 }
 
-function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumber" | "unsupported" | null {
+function alignmentMetadataCommand(
+  command: string
+): "label" | "notag" | "nonumber" | "unsupported-text" | "unsupported-optional" | null {
   switch (commandName(command)) {
     case "label":
     case "tag":
@@ -3512,7 +3543,9 @@ function alignmentMetadataCommand(command: string): "label" | "notag" | "nonumbe
       return "nonumber";
     case "intertext":
     case "shortintertext":
-      return "unsupported";
+      return "unsupported-text";
+    case "displaybreak":
+      return "unsupported-optional";
     default:
       return null;
   }
