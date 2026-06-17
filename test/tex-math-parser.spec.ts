@@ -1394,6 +1394,22 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses additional AMS relation symbols and composites with TeX atom classes", () => {
+    const result = parseTexMath(String.raw`\lnapprox+\ncong+\Join+\dashrightarrow+\dashleftarrow+\dasharrow`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.filter((item) => item.kind === "atom" && item.atomClass === "rel")
+      .map((item) => item.kind === "atom" && item.nucleus.kind === "glyph" ? item.nucleus.text : null))
+      .toEqual([
+        String.raw`\lnapprox`,
+        String.raw`\ncong`,
+        String.raw`\Join`,
+        String.raw`\dashrightarrow`,
+        String.raw`\dashleftarrow`,
+        String.raw`\dasharrow`,
+      ]);
+  });
+
   it("parses AMS extensible arrows with optional below and required above labels", () => {
     const result = parseTexMath(String.raw`\xrightarrow[xy]{abcd}+\xleftarrow{z}`);
 

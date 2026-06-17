@@ -185,6 +185,33 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out additional AMS relation symbols and composites through TeX glyph recipes", () => {
+    const result = layout(String.raw`\lnapprox+\ncong+\Join+\dashrightarrow+\dashleftarrow+\dasharrow`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.filter((glyph) => glyph.fontId.startsWith("msa") || glyph.fontId.startsWith("msb"))
+      .map((glyph) => ({ fontId: glyph.fontId, code: glyph.code })))
+      .toEqual([
+        { fontId: "msbm10", code: 0x1a },
+        { fontId: "msbm10", code: 0x1d },
+        { fontId: "msbm10", code: 0x6f },
+        { fontId: "msbm10", code: 0x6e },
+        { fontId: "msam10", code: 0x39 },
+        { fontId: "msam10", code: 0x39 },
+        { fontId: "msam10", code: 0x4b },
+        { fontId: "msam10", code: 0x4c },
+        { fontId: "msam10", code: 0x39 },
+        { fontId: "msam10", code: 0x39 },
+        { fontId: "msam10", code: 0x39 },
+        { fontId: "msam10", code: 0x39 },
+        { fontId: "msam10", code: 0x4b },
+      ]);
+    expect(result.hlist?.items.some((item) =>
+      item.kind === "kern" && item.width < -7.6 && item.width > -7.7
+    )).toBe(true);
+  });
+
   it("lays out arrow, set, and logic symbols through TeX math fonts", () => {
     const result = layout(String.raw`A\to B\mapsto C\wedge D\cup E\subseteq F\smile G\frown H`);
 

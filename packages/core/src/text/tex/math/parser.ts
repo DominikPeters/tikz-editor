@@ -5396,6 +5396,7 @@ const relationNamedSymbolCommands = new Set([
   "iff", "impliedby", "implies", "longleftarrow", "longrightarrow", "Longleftarrow", "Longleftrightarrow", "Longrightarrow",
   "approxeq", "geqslant", "gtrsim", "leqslant", "lesssim", "ngeqslant", "nleqslant", "nVdash",
   "Subset", "Supset", "thickapprox", "thicksim", "Vdash",
+  "dasharrow", "dashleftarrow", "dashrightarrow", "Join",
   "succ", "succeq", "supset", "supseteq", "swarrow", "to", "uparrow", "Uparrow", "updownarrow", "Updownarrow",
   "vdash",
 ]);

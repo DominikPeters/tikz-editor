@@ -483,10 +483,14 @@ function amsMathSymbolCommand(text: string): boolean {
     case "blacksquare":
     case "boxdot":
     case "circleddash":
+    case "dasharrow":
+    case "dashleftarrow":
+    case "dashrightarrow":
     case "digamma":
     case "dotplus":
     case "geqslant":
     case "gtrsim":
+    case "Join":
     case "leqslant":
     case "lesssim":
     case "ngeqslant":
@@ -5595,6 +5599,19 @@ function defaultLuaLatexMathSymbols(
         { kind: "kern", width: -1.66667 },
         { family: "symbols", code: 0 },
       ];
+    case "dasharrow":
+    case "dashrightarrow":
+      return [
+        { family: "amsSymbolsA", code: 0x39 },
+        { family: "amsSymbolsA", code: 0x39 },
+        { family: "amsSymbolsA", code: 0x4b },
+      ];
+    case "dashleftarrow":
+      return [
+        { family: "amsSymbolsA", code: 0x4c },
+        { family: "amsSymbolsA", code: 0x39 },
+        { family: "amsSymbolsA", code: 0x39 },
+      ];
     case "Uparrow":
       return [{ family: "symbols", code: 42 }];
     case "Downarrow":
@@ -5645,6 +5662,12 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "amsSymbolsB", code: 0x7c }];
     case "not":
       return [{ family: "symbols", code: 54 }];
+    case "Join":
+      return [
+        { family: "amsSymbolsB", code: 0x6f },
+        { kind: "kern", width: -7.66667 },
+        { family: "amsSymbolsB", code: 0x6e },
+      ];
     case "notin":
       return [
         { kind: "kern", xOffset: 0.555565, width: 0.555542 },
