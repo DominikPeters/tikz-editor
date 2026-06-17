@@ -356,6 +356,7 @@ function mathBoxFragment(
   }
   return {
     ...box,
+    rootBox: box.rootBox ?? box,
     content: box.source.slice(
       Math.max(0, sourceStart - box.sourceStart),
       Math.max(0, sourceEnd - box.sourceStart)

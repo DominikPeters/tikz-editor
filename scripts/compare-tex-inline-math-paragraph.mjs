@@ -700,12 +700,37 @@ function uniqueSortedInsertions(random, wordCount, count) {
 }
 
 function randomFormula(random, variables, formulaMode) {
+  if (formulaMode === "spacing") {
+    return randomSpacingFormula(random, variables);
+  }
   if (formulaMode === "mixed" && random() < 0.25) {
     return randomPairFormula(random, variables);
   }
   const lhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   const rhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   return random() < 0.7 ? `${lhs}=${rhs}` : lhs;
+}
+
+function randomSpacingFormula(random, variables) {
+  const variable = choice(random, variables);
+  const left = choice(random, [`${choice(random, variables)}+`, `${choice(random, variables)}=`]);
+  const explicitSpace = choice(random, [
+    String.raw`\:`,
+    String.raw`\;`,
+    String.raw`\!`,
+    String.raw`\quad`,
+    String.raw`\kern2pt`,
+    String.raw`\kern-1pt`,
+    String.raw`\mkern3mu`,
+    String.raw`\mkern-2mu`,
+    String.raw`\hskip2pt`,
+    String.raw`\hskip-1pt`,
+    String.raw`\mskip3mu`,
+    String.raw`\mskip-2mu`,
+    String.raw`\mskip3mu plus2mu minus1mu`,
+  ]);
+  const maybeRight = random() < 0.3 ? `+${choice(random, variables)}` : "";
+  return `${left}${explicitSpace}${variable}${maybeRight}`;
 }
 
 function randomPairFormula(random, variables) {
@@ -806,8 +831,8 @@ function readArgs() {
 }
 
 function readFormulaMode(value) {
-  if (value === "basic" || value === "scripts" || value === "mixed") {
+  if (value === "basic" || value === "scripts" || value === "mixed" || value === "spacing") {
     return value;
   }
-  throw new Error("--formula-mode must be one of: basic, scripts, mixed.");
+  throw new Error("--formula-mode must be one of: basic, scripts, mixed, spacing.");
 }

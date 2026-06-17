@@ -14,7 +14,10 @@ import type {
   TexMetricProvider,
 } from "./fonts/types.js";
 import type { TexParagraphAlignment } from "./ir.js";
-import type { TexLayoutLabelItem } from "./layout-inline-items.js";
+import type {
+  TexLayoutLabelItem,
+  TexMathBox,
+} from "./layout-inline-items.js";
 import {
   renderTexMathHListSvgBody,
 } from "./math/render-svg.js";
@@ -180,6 +183,15 @@ function buildTexLineReport(
     }
 
     if (run.kind === "math") {
+      const coalesced = coalescedSameLineMathSegment(runIndex, line, params, x);
+      if (coalesced) {
+        segments.push(coalesced.segment);
+        ascent = Math.max(ascent, coalesced.ascent);
+        descent = Math.max(descent, coalesced.descent);
+        x = roundTexPt(x + coalesced.segment.width);
+        runIndex = coalesced.endRunIndex;
+        continue;
+      }
       const naturalWidth = params.runWidths.get(run.runIndex) ?? 0;
       const width = adjustedTexGlueWidth(naturalWidth, run.texGlue, line.glueSetRatio ?? 0);
       const box = texMathBoxFromWrapper(run.wrapper);
@@ -329,6 +341,99 @@ function buildTexLineReport(
   };
 }
 
+function coalescedSameLineMathSegment(
+  startRunIndex: number,
+  line: GreedyLine,
+  params: {
+    runs: readonly ParagraphRun[];
+    runWidths: ReadonlyMap<number, number>;
+  },
+  x: number
+): {
+  readonly segment: LineReport["segments"][number];
+  readonly ascent: number;
+  readonly descent: number;
+  readonly endRunIndex: number;
+} | null {
+  const firstRun = params.runs[startRunIndex];
+  if (firstRun?.kind !== "math") {
+    return null;
+  }
+  const firstBox = texMathBoxFromWrapper(firstRun.wrapper);
+  const rootBox = firstBox?.rootBox ?? null;
+  if (rootBox === null) {
+    return null;
+  }
+  if (firstBox?.sourceStart !== rootBox.contentStart) {
+    return null;
+  }
+
+  let runIndex = startRunIndex;
+  let endRunIndex = startRunIndex;
+  let width = 0;
+  let sourceEnd = firstBox.sourceEnd;
+  while (runIndex <= line.endRun) {
+    const run = params.runs[runIndex];
+    if (!run) {
+      break;
+    }
+    if (run.kind === "penalty") {
+      endRunIndex = runIndex;
+      runIndex += 1;
+      continue;
+    }
+    if (run.kind === "space" && isTexMathGlueSpace(run.wrapper)) {
+      width = roundTexPt(width + adjustedTexGlueWidth(
+        params.runWidths.get(run.runIndex) ?? 0,
+        (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
+        line.glueSetRatio ?? 0
+      ));
+      endRunIndex = runIndex;
+      runIndex += 1;
+      continue;
+    }
+    if (run.kind !== "math") {
+      break;
+    }
+    const box = texMathBoxFromWrapper(run.wrapper);
+    if (box?.rootBox !== rootBox) {
+      break;
+    }
+    width = roundTexPt(width + adjustedTexGlueWidth(
+      params.runWidths.get(run.runIndex) ?? 0,
+      run.texGlue,
+      line.glueSetRatio ?? 0
+    ));
+    sourceEnd = Math.max(sourceEnd, box.sourceEnd);
+    endRunIndex = runIndex;
+    runIndex += 1;
+  }
+
+  if (sourceEnd !== rootBox.contentEnd) {
+    return null;
+  }
+  return {
+    segment: {
+      runIndex: firstRun.runIndex,
+      kind: "math",
+      role: firstRun.role,
+      text: rootBox.content,
+      sourceStartRaw: rootBox.contentStart,
+      sourceEndRaw: rootBox.contentEnd,
+      sourceKind: "math",
+      x,
+      width,
+      caretStops: texMathBoxCaretStops(rootBox, x, width),
+      mathConstructRanges: texMathBoxConstructRanges(rootBox, x, width),
+      mathBreakpoints: texMathBoxBreakpoints(rootBox, x, width),
+      mathSvgBody: texMathBoxSvgBody(rootBox, width),
+    },
+    ascent: rootBox.height,
+    descent: rootBox.depth,
+    endRunIndex,
+  };
+}
+
 function isTexMathGlueSpace(wrapper: unknown): boolean {
   return Boolean(
     wrapper &&
@@ -384,6 +489,10 @@ function texMathBoxFromWrapper(
   wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"]
 ): {
   readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
   readonly width: number;
   readonly height: number;
   readonly depth: number;
@@ -403,6 +512,7 @@ function texMathBoxFromWrapper(
   readonly svgBody?: string;
   readonly hlist?: TexMathHList;
   readonly fontProfile?: TexMathFontProfile;
+  readonly rootBox?: TexMathBox;
 } | null {
   if (!wrapper || typeof wrapper !== "object") {
     return null;
@@ -413,6 +523,10 @@ function texMathBoxFromWrapper(
   }
   const typedBox = box as {
     readonly content?: unknown;
+    readonly sourceStart?: unknown;
+    readonly sourceEnd?: unknown;
+    readonly contentStart?: unknown;
+    readonly contentEnd?: unknown;
     readonly width?: unknown;
     readonly height?: unknown;
     readonly depth?: unknown;
@@ -422,9 +536,14 @@ function texMathBoxFromWrapper(
     readonly svgBody?: unknown;
     readonly hlist?: unknown;
     readonly fontProfile?: unknown;
+    readonly rootBox?: unknown;
   };
   return {
     content: typeof typedBox.content === "string" ? typedBox.content : "",
+    sourceStart: Number(typedBox.sourceStart) || 0,
+    sourceEnd: Number(typedBox.sourceEnd) || 0,
+    contentStart: Number(typedBox.contentStart) || 0,
+    contentEnd: Number(typedBox.contentEnd) || 0,
     width: Number(typedBox.width) || 0,
     height: Number(typedBox.height) || 0,
     depth: Number(typedBox.depth) || 0,
@@ -439,6 +558,9 @@ function texMathBoxFromWrapper(
       : undefined,
     fontProfile: typeof typedBox.fontProfile === "object" && typedBox.fontProfile !== null
       ? typedBox.fontProfile as TexMathFontProfile
+      : undefined,
+    rootBox: typeof typedBox.rootBox === "object" && typedBox.rootBox !== null
+      ? typedBox.rootBox as TexMathBox
       : undefined,
   };
 }

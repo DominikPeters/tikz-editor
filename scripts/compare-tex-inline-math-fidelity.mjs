@@ -38,6 +38,10 @@ const runs = [
       id: `line-fuzz:scripts:${seed}`,
       args: [...common, "--fuzz", String(args.lineFuzzCases), "--seed", String(seed), "--formula-mode", "scripts"],
     },
+    {
+      id: `line-fuzz:spacing:${seed}`,
+      args: [...common, "--fuzz", String(args.spacingFuzzCases), "--seed", String(seed), "--formula-mode", "spacing"],
+    },
   ]),
   ...args.glyphSeeds.flatMap((seed) => [
     {
@@ -48,6 +52,10 @@ const runs = [
       id: `glyph-fuzz:scripts:${seed}`,
       args: [...common, "--compare-glyphs", "--fuzz", String(args.glyphFuzzCases), "--seed", String(seed), "--formula-mode", "scripts"],
     },
+    {
+      id: `glyph-fuzz:spacing:${seed}`,
+      args: [...common, "--compare-glyphs", "--fuzz", String(args.spacingGlyphFuzzCases), "--seed", String(seed), "--formula-mode", "spacing"],
+    },
   ]),
   ...args.absoluteSeeds.flatMap((seed) => [
     {
@@ -57,6 +65,10 @@ const runs = [
     {
       id: `absolute-glyph-fuzz:scripts:${seed}`,
       args: [...common, "--absolute-glyphs", "--fuzz", String(args.absoluteFuzzCases), "--seed", String(seed), "--formula-mode", "scripts"],
+    },
+    {
+      id: `absolute-glyph-fuzz:spacing:${seed}`,
+      args: [...common, "--absolute-glyphs", "--fuzz", String(args.spacingAbsoluteFuzzCases), "--seed", String(seed), "--formula-mode", "spacing"],
     },
   ]),
 ];
@@ -91,6 +103,9 @@ function readArgs() {
     lineSeeds: [20260615],
     oracleCacheDir: "artifacts/tex-inline-math-paragraph-oracle-cache",
     skipBuild: false,
+    spacingAbsoluteFuzzCases: 12,
+    spacingFuzzCases: 24,
+    spacingGlyphFuzzCases: 12,
     widths: "80,120,160",
   };
 
@@ -124,6 +139,18 @@ function readArgs() {
       parsed.lineSeeds = readSeedList(process.argv[++index] ?? "", "--line-seeds");
     } else if (arg.startsWith("--line-seeds=")) {
       parsed.lineSeeds = readSeedList(arg.slice("--line-seeds=".length), "--line-seeds");
+    } else if (arg === "--spacing-fuzz-cases") {
+      parsed.spacingFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--spacing-fuzz-cases");
+    } else if (arg.startsWith("--spacing-fuzz-cases=")) {
+      parsed.spacingFuzzCases = readPositiveInteger(arg.slice("--spacing-fuzz-cases=".length), "--spacing-fuzz-cases");
+    } else if (arg === "--spacing-glyph-fuzz-cases") {
+      parsed.spacingGlyphFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--spacing-glyph-fuzz-cases");
+    } else if (arg.startsWith("--spacing-glyph-fuzz-cases=")) {
+      parsed.spacingGlyphFuzzCases = readPositiveInteger(arg.slice("--spacing-glyph-fuzz-cases=".length), "--spacing-glyph-fuzz-cases");
+    } else if (arg === "--spacing-absolute-fuzz-cases") {
+      parsed.spacingAbsoluteFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--spacing-absolute-fuzz-cases");
+    } else if (arg.startsWith("--spacing-absolute-fuzz-cases=")) {
+      parsed.spacingAbsoluteFuzzCases = readPositiveInteger(arg.slice("--spacing-absolute-fuzz-cases=".length), "--spacing-absolute-fuzz-cases");
     } else if (arg === "--oracle-cache-dir") {
       parsed.oracleCacheDir = process.argv[++index] ?? parsed.oracleCacheDir;
     } else if (arg.startsWith("--oracle-cache-dir=")) {

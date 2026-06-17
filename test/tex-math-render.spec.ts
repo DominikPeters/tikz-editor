@@ -56,6 +56,16 @@ function findChildHList(
   return null;
 }
 
+function findGlyph(
+  items: readonly TexMathHListItem[],
+  fontId: string,
+  code: number
+): Extract<TexMathHListItem, { readonly kind: "glyph" }> | null {
+  return items.find((item): item is Extract<TexMathHListItem, { readonly kind: "glyph" }> =>
+    item.kind === "glyph" && item.fontId === fontId && item.code === code
+  ) ?? null;
+}
+
 describe("TeX math SVG rendering", () => {
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
@@ -764,9 +774,7 @@ describe("TeX math SVG rendering", () => {
     }
 
     const degree = findChildHList(result.hlist.items, "radical-degree");
-    const radicalGlyph = result.hlist.items.find((item) =>
-      item.kind === "glyph" && item.fontId === "cmsy10" && item.code === 112
-    );
+    const radicalGlyph = findGlyph(result.hlist.items, "cmsy10", 112);
     const rule = result.hlist.items.find((item) =>
       item.kind === "rule" && item.role === "radical-rule"
     );
@@ -797,9 +805,7 @@ describe("TeX math SVG rendering", () => {
     }
 
     const degree = findChildHList(result.hlist.items, "radical-degree");
-    const radicalGlyph = result.hlist.items.find((item) =>
-      item.kind === "glyph" && item.fontId === "cmsy10" && item.code === 112
-    );
+    const radicalGlyph = findGlyph(result.hlist.items, "cmsy10", 112);
     const rule = result.hlist.items.find((item) =>
       item.kind === "rule" && item.role === "radical-rule"
     );
@@ -1544,52 +1550,36 @@ describe("TeX math SVG rendering", () => {
     const mathAdvanceSegments = result.report?.lines
       .flatMap((line) => line.segments)
       .filter((segment) => segment.sourceKind === "math") ?? [];
-    expect(mathSegments).toHaveLength(2);
-    expect(mathAdvanceSegments).toHaveLength(3);
+    expect(mathSegments).toHaveLength(1);
+    expect(mathAdvanceSegments).toHaveLength(1);
     expect(mathSegments.map((segment) => source.slice(
       segment.sourceStartRaw ?? 0,
       segment.sourceEndRaw ?? 0
     )).join("")).toBe("x-y");
-    expect(mathAdvanceSegments[1]).toMatchObject({
-      kind: "space",
-      text: "",
-      sourceStartRaw: source.indexOf("-") + 1,
-      sourceEndRaw: source.indexOf("-") + 1,
-      sourceKind: "math",
-      width: 2.222229,
-    });
     expect(mathSegments[0]).toMatchObject({
       sourceStartRaw: source.indexOf("x-y"),
-      sourceEndRaw: source.indexOf("-") + 1,
-      sourceKind: "math",
-    });
-    expect(mathSegments[1]).toMatchObject({
-      sourceStartRaw: source.indexOf("-") + 1,
       sourceEndRaw: source.indexOf("x-y") + "x-y".length,
       sourceKind: "math",
     });
     expect(mathAdvanceSegments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(23.199158, 6);
     expect(mathSegments[0]?.caretStops?.[0]).toBeCloseTo(mathSegments[0]?.x ?? 0, 6);
-    expect(mathSegments[1]?.caretStops?.at(-1)).toBeCloseTo(
-      (mathSegments[1]?.x ?? 0) + (mathSegments[1]?.width ?? 0),
+    expect(mathSegments[0]?.caretStops?.at(-1)).toBeCloseTo(
+      (mathSegments[0]?.x ?? 0) + (mathSegments[0]?.width ?? 0),
       6
     );
     expect(mathSegments[0]?.mathSvgBody).not.toContain('data-tex-math-fragment="true"');
-    expect(mathSegments[1]?.mathSvgBody).not.toContain('data-tex-math-fragment="true"');
     expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
-    expect(mathSegments[1]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+    expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
   });
 
   it("renders split inline math fragments without repainting earlier formula glyphs", () => {
-    const source = String.raw`Where \(p_i=\{x,y\}\) is the unordered pair of alternatives swapped when going
-from \(R_{i-1}\) to \(R_i\).  We usually write \(p_i=(x,y)\), but the pair is
-unordered.`;
+    const source = String.raw`Alpha $a+b=c+d$ omega`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:math-fragment-no-overpaint",
-      width: 150,
+      width: 35,
       alignment: "ragged-right",
       parindent: 0,
-      rightskipStretch: 150,
+      rightskipStretch: 35,
       spaceGlueProfile: "font",
       tikzTextWidthNode: true,
       hyphenator: { hyphenate: () => [] },
@@ -1600,21 +1590,15 @@ unordered.`;
     const mathSegments = result.report?.lines
       .flatMap((line) => line.segments)
       .filter((segment) => segment.kind === "math") ?? [];
-    const pairTail = mathSegments.find((segment) => segment.text === "(x,y)");
-    const braceTail = mathSegments.find((segment) => segment.text === String.raw`\{x,y\}`);
-    const relationFragments = mathSegments.filter((segment) => segment.text === "p_i=");
-    expect(relationFragments).toHaveLength(2);
-    expect(relationFragments[0]?.width).toBeCloseTo(19.671275, 6);
-    expect(relationFragments[0]?.mathSvgBody).toContain('transform="translate(1189.3465 0) scale(100)"');
-    expect(relationFragments[1]?.width).toBeCloseTo(19.036204, 6);
-    expect(relationFragments[1]?.mathSvgBody).toContain('transform="translate(1125.8394 0) scale(100)"');
-    expect(pairTail?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="40"');
-    expect(pairTail?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
-    expect(pairTail?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="112"');
-    expect(pairTail?.mathSvgBody).not.toContain('data-tex-font="cmr10" data-tex-glyph="61"');
-    expect(braceTail?.mathSvgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="102"');
-    expect(braceTail?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="112"');
-    expect(braceTail?.mathSvgBody).not.toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+    expect(mathSegments.map((segment) => segment.text)).toEqual(["a+", "b=", "c+", "d"]);
+    expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+    expect(mathSegments[0]?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
+    expect(mathSegments[1]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
+    expect(mathSegments[1]?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+    expect(mathSegments[1]?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="99"');
+    expect(mathSegments[2]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="99"');
+    expect(mathSegments[2]?.mathSvgBody).not.toContain('data-tex-font="cmmi10" data-tex-glyph="100"');
+    expect(mathSegments[3]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="100"');
   });
 
   it("keeps relation breakpoints before following ellipsis glyphs", () => {
@@ -2116,22 +2100,16 @@ unordered.`;
       )
     );
     const mathSegments = intertextLine?.segments.filter((segment) => segment.kind === "math") ?? [];
-    expect(mathSegments).toHaveLength(2);
+    expect(mathSegments).toHaveLength(1);
     expect(mathSegments[0]).toMatchObject({
       kind: "math",
-      text: "x_i=",
+      text: "x_i=y^2",
       sourceStartRaw: source.indexOf("$x_i") + 1,
-      sourceEndRaw: source.indexOf("=y") + 1,
-      sourceKind: "math",
-    });
-    expect(mathSegments[1]).toMatchObject({
-      kind: "math",
-      text: "y^2",
-      sourceStartRaw: source.indexOf("y^2"),
       sourceEndRaw: source.indexOf("$ holds"),
       sourceKind: "math",
     });
     expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
     expect(intertextLine?.ascent ?? 0).toBeGreaterThan(7);
     expect(intertextLine?.descent ?? 0).toBeGreaterThan(1);
   });

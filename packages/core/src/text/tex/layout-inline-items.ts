@@ -68,6 +68,7 @@ export interface TexMathBox {
   readonly svgBody?: string;
   readonly hlist?: TexMathHList;
   readonly fontProfile?: TexMathFontProfile;
+  readonly rootBox?: TexMathBox;
 }
 
 export interface TexMathDisplayLabel {
