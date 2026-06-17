@@ -21,6 +21,7 @@ import type {
   TexMathAlignedRow,
   TexMathArrayColumnAlignment,
   TexMathArrayNucleus,
+  TexMathArrayVerticalRule,
   TexMathCasesNucleus,
   TexMathDelimiter,
   TexMathExtensibleArrowNucleus,
@@ -93,7 +94,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule";
+  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -203,6 +204,7 @@ const TEX_SCRIPT_SPACE_PT = 0.5;
 const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
 const TEX_LATEX_STRUT_HEIGHT_PT = 8.39996;
 const TEX_LATEX_STRUT_DEPTH_PT = 3.60004;
+const TEX_LATEX_ARRAY_RULE_WIDTH_PT = 0.4;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
@@ -1749,6 +1751,7 @@ function layoutArrayNucleus(
     for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
       const columnWidth = columnWidths[columnIndex] ?? 0;
       const cell = row.cells[columnIndex];
+      appendArrayVerticalRules(rowChildren, nucleus.verticalRules, columnIndex, cursor, row);
       cursor = roundTexPt(cursor + TEX_MATRIX_ARRAY_COL_SEP_PT);
       if (cell) {
         rowChildren.push(childHList(
@@ -1765,6 +1768,7 @@ function layoutArrayNucleus(
       }
       cursor = roundTexPt(cursor + columnWidth + TEX_MATRIX_ARRAY_COL_SEP_PT);
     }
+    appendArrayVerticalRules(rowChildren, nucleus.verticalRules, columnCount, cursor, row);
     rowItems.push({
       kind: "hlist",
       role: "array-row",
@@ -1788,6 +1792,29 @@ function layoutArrayNucleus(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function appendArrayVerticalRules(
+  items: TexMathHListItem[],
+  rules: readonly TexMathArrayVerticalRule[] | undefined,
+  beforeColumn: number,
+  boundaryX: number,
+  row: TexMathAlignedRowLayout
+): void {
+  for (const rule of rules ?? []) {
+    if (rule.beforeColumn !== beforeColumn) {
+      continue;
+    }
+    items.push({
+      kind: "rule",
+      role: "array-rule",
+      x: roundTexPt(boundaryX - TEX_LATEX_ARRAY_RULE_WIDTH_PT / 2),
+      y: roundTexPt(-row.height),
+      width: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
+      height: roundTexPt(row.height + row.depth),
+      sourceSpan: rule.sourceSpan,
+    });
+  }
 }
 
 function layoutSmallMatrixNucleus(

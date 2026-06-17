@@ -7,6 +7,7 @@ import type {
   TexMathAlignedIntertext,
   TexMathAlignedRow,
   TexMathArrayColumnAlignment,
+  TexMathArrayVerticalRule,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
   TexMathDelimiter,
@@ -1653,6 +1654,7 @@ class TexMathParser {
       initialSourceSpan,
       preambleSourceSpan: preamble.sourceSpan,
       columnAlignments: preamble.alignments,
+      verticalRules: preamble.verticalRules,
       allowScripts,
     });
   }
@@ -2392,6 +2394,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan: TexMathSourceSpan;
     readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
+    readonly verticalRules: readonly TexMathArrayVerticalRule[];
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -2403,7 +2406,7 @@ class TexMathParser {
         endSourceSpan = this.consumeEnvironmentEnd("array");
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          arrayAtom(rows, params.columnAlignments, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
+          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2455,7 +2458,7 @@ class TexMathParser {
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
         return this.maybeParseScripts(
-          arrayAtom(rows, params.columnAlignments, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
+          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2474,7 +2477,7 @@ class TexMathParser {
       params.beginSourceSpan
     );
     return this.maybeParseScripts(
-      arrayAtom(rows, params.columnAlignments, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
+      arrayAtom(rows, params.columnAlignments, params.verticalRules, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
   }
@@ -2744,7 +2747,11 @@ class TexMathParser {
 
   private parseArrayPreambleGroup(
     fallbackSpan: TexMathSourceSpan
-  ): { alignments: readonly TexMathArrayColumnAlignment[]; sourceSpan: TexMathSourceSpan } | null {
+  ): {
+    readonly alignments: readonly TexMathArrayColumnAlignment[];
+    readonly verticalRules: readonly TexMathArrayVerticalRule[];
+    readonly sourceSpan: TexMathSourceSpan;
+  } | null {
     this.skipSpaces();
     const next = this.peek();
     if (next?.kind !== "group-open") {
@@ -2759,6 +2766,7 @@ class TexMathParser {
 
     const open = this.expectGroupOpen();
     const alignments: TexMathArrayColumnAlignment[] = [];
+    const verticalRules: TexMathArrayVerticalRule[] = [];
     let lastSpan = open.sourceSpan;
     let unsupported = false;
     while (!this.isAtEnd()) {
@@ -2776,6 +2784,13 @@ class TexMathParser {
         alignments.push(alignment);
         continue;
       }
+      if (token.kind === "character" && token.text === "|") {
+        verticalRules.push({
+          beforeColumn: alignments.length,
+          sourceSpan: token.sourceSpan,
+        });
+        continue;
+      }
       unsupported = true;
       this.addDiagnostic(
         "warning",
@@ -2787,9 +2802,9 @@ class TexMathParser {
     const close = this.consumeGroupClose(open.sourceSpan);
     const sourceSpan = spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan);
     if (unsupported) {
-      return { alignments: [], sourceSpan };
+      return { alignments: [], verticalRules: [], sourceSpan };
     }
-    return { alignments, sourceSpan };
+    return { alignments, verticalRules, sourceSpan };
   }
 
   private parseSubarrayPreambleGroup(
@@ -3742,6 +3757,7 @@ function matrixAtom(
 function arrayAtom(
   rows: readonly TexMathAlignedRow[],
   columnAlignments: readonly TexMathArrayColumnAlignment[],
+  verticalRules: readonly TexMathArrayVerticalRule[],
   beginSourceSpan: TexMathSourceSpan,
   preambleSourceSpan: TexMathSourceSpan,
   endSourceSpan: TexMathSourceSpan | undefined,
@@ -3754,6 +3770,7 @@ function arrayAtom(
       kind: "array",
       rows,
       columnAlignments,
+      ...(verticalRules.length > 0 ? { verticalRules } : {}),
       beginSourceSpan,
       preambleSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),

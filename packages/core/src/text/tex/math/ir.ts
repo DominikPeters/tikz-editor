@@ -364,10 +364,16 @@ export type TexMathArrayColumnAlignment =
   | "center"
   | "right";
 
+export interface TexMathArrayVerticalRule {
+  readonly beforeColumn: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathArrayNucleus {
   readonly kind: "array";
   readonly rows: readonly TexMathAlignedRow[];
   readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
+  readonly verticalRules?: readonly TexMathArrayVerticalRule[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;

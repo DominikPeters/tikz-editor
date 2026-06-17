@@ -2089,6 +2089,42 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out array vertical rules without changing single-rule preamble width", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{|c|c|}a&b\\c&d\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(30.49078, 5);
+    const firstRow = result.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(firstRow?.items).toMatchObject([
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: expect.closeTo(-0.2, 5),
+        width: 0.4,
+        sourceSpan: { start: 14, end: 15 },
+      },
+      { kind: "hlist", role: "array-cell", x: 5 },
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: expect.closeTo(15.0859, 5),
+        width: 0.4,
+        sourceSpan: { start: 16, end: 17 },
+      },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(20.742493, 4) },
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: expect.closeTo(30.29078, 5),
+        width: 0.4,
+        sourceSpan: { start: 18, end: 19 },
+      },
+    ]);
+  });
+
   it("lays out cases as amsmath array with stretched struts, quad gap, and left brace", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{cases}a&b\\x&y\end{cases}`).list,

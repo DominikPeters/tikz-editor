@@ -2131,19 +2131,36 @@ describe("TeX math parser", () => {
     });
   });
 
-  it("keeps unsupported array preamble extensions explicit", () => {
-    const source = String.raw`\begin{array}{c|c}a&b\end{array}`;
+  it("parses array preamble vertical rules with source spans", () => {
+    const source = String.raw`\begin{array}{|c|c|}a&b\end{array}`;
     const result = parseTexMath(source);
     const atom = atomAt(result, 0);
 
-    expect(result.diagnostics).toEqual([
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["center", "center"],
+      verticalRules: [
+        { beforeColumn: 0, sourceSpan: { start: 14, end: 15 } },
+        { beforeColumn: 1, sourceSpan: { start: 16, end: 17 } },
+        { beforeColumn: 2, sourceSpan: { start: 18, end: 19 } },
+      ],
+    });
+  });
+
+  it("keeps unsupported array preamble extensions explicit", () => {
+    const source = String.raw`\begin{array}{c@{\quad}c}a&b\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual(expect.arrayContaining([
       {
         severity: "warning",
         code: "unsupported-command",
-        message: "Unsupported array column specifier |.",
+        message: "Unsupported array column specifier @.",
         sourceSpan: { start: 15, end: 16 },
       },
-    ]);
+    ]));
     expect(result.list.items).toHaveLength(1);
     expect(atom.nucleus).toMatchObject({
       kind: "unsupported",
