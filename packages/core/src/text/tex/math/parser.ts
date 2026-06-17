@@ -2843,30 +2843,36 @@ class TexMathParser {
     readonly verticalRules: readonly TexMathArrayVerticalRule[];
     readonly sourceSpan: TexMathSourceSpan;
   } | null {
-    this.skipSpaces();
-    const next = this.peek();
-    if (next?.kind !== "group-open") {
-      this.addDiagnostic(
-        "error",
-        "missing-group",
-        "Expected a braced \\begin{array} column preamble.",
-        next?.sourceSpan ?? fallbackSpan
-      );
+    const group = this.parseRequiredRawGroup(fallbackSpan, "\\begin{array} column preamble");
+    if (!group) {
       return null;
     }
+    const parsed = this.parseArrayPreambleTokens(group.tokens);
+    if (parsed.unsupported) {
+      return { alignments: [], verticalRules: [], sourceSpan: group.sourceSpan };
+    }
+    return {
+      alignments: parsed.alignments,
+      verticalRules: parsed.verticalRules,
+      sourceSpan: group.sourceSpan,
+    };
+  }
 
-    const open = this.expectGroupOpen();
+  private parseArrayPreambleTokens(
+    tokens: readonly TexMathToken[]
+  ): {
+    readonly alignments: readonly TexMathArrayColumnAlignment[];
+    readonly verticalRules: readonly TexMathArrayVerticalRule[];
+    readonly unsupported: boolean;
+  } {
+    const expanded = this.expandArrayPreambleRepeatTokens(tokens);
+    if (expanded.unsupported) {
+      return { alignments: [], verticalRules: [], unsupported: true };
+    }
     const alignments: TexMathArrayColumnAlignment[] = [];
     const verticalRules: TexMathArrayVerticalRule[] = [];
-    let lastSpan = open.sourceSpan;
     let unsupported = false;
-    while (!this.isAtEnd()) {
-      const token = this.peek();
-      if (!token || token.kind === "group-close") {
-        break;
-      }
-      this.advance();
-      lastSpan = token.sourceSpan;
+    for (const token of expanded.tokens) {
       if (token.kind === "space") {
         continue;
       }
@@ -2890,12 +2896,73 @@ class TexMathParser {
         token.sourceSpan
       );
     }
-    const close = this.consumeGroupClose(open.sourceSpan);
-    const sourceSpan = spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan);
-    if (unsupported) {
-      return { alignments: [], verticalRules: [], sourceSpan };
+    return { alignments, verticalRules, unsupported };
+  }
+
+  private expandArrayPreambleRepeatTokens(
+    tokens: readonly TexMathToken[]
+  ): {
+    readonly tokens: readonly TexMathToken[];
+    readonly unsupported: boolean;
+  } {
+    const expanded: TexMathToken[] = [];
+    let unsupported = false;
+    let index = 0;
+    while (index < tokens.length) {
+      const token = tokens[index];
+      if (!token) {
+        break;
+      }
+      if (token.kind === "character" && token.text === "*") {
+        const countGroup = readBalancedTokenGroup(tokens, index + 1);
+        if (!countGroup) {
+          unsupported = true;
+          this.addDiagnostic(
+            "warning",
+            "unsupported-command",
+            "Unsupported array column repeat without a braced count.",
+            token.sourceSpan
+          );
+          index += 1;
+          continue;
+        }
+        const countText = countGroup.tokens.map((countToken) => countToken.text).join("").trim();
+        const repeatCount = /^[0-9]+$/u.test(countText) ? Number(countText) : Number.NaN;
+        if (!Number.isSafeInteger(repeatCount)) {
+          unsupported = true;
+          this.addDiagnostic(
+            "warning",
+            "unsupported-command",
+            "Unsupported array column repeat count.",
+            countGroup.sourceSpan
+          );
+          index = countGroup.nextIndex;
+          continue;
+        }
+        const repeated = readArrayPreambleRepeatBody(tokens, countGroup.nextIndex);
+        if (!repeated) {
+          unsupported = true;
+          this.addDiagnostic(
+            "warning",
+            "unsupported-command",
+            "Unsupported array column repeat without a body.",
+            token.sourceSpan
+          );
+          index = countGroup.nextIndex;
+          continue;
+        }
+        const nested = this.expandArrayPreambleRepeatTokens(repeated.tokens);
+        unsupported ||= nested.unsupported;
+        for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex += 1) {
+          expanded.push(...nested.tokens);
+        }
+        index = repeated.nextIndex;
+        continue;
+      }
+      expanded.push(token);
+      index += 1;
     }
-    return { alignments, verticalRules, sourceSpan };
+    return { tokens: expanded, unsupported };
   }
 
   private parseSubarrayPreambleGroup(
@@ -4187,6 +4254,74 @@ function arrayPreambleAlignment(token: TexMathToken): TexMathArrayColumnAlignmen
     default:
       return null;
   }
+}
+
+function readArrayPreambleRepeatBody(
+  tokens: readonly TexMathToken[],
+  startIndex: number
+): {
+  readonly tokens: readonly TexMathToken[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly nextIndex: number;
+} | null {
+  let index = startIndex;
+  while (tokens[index]?.kind === "space") {
+    index += 1;
+  }
+  const first = tokens[index];
+  if (!first) {
+    return null;
+  }
+  if (first.kind === "group-open") {
+    return readBalancedTokenGroup(tokens, index);
+  }
+  return {
+    tokens: [first],
+    sourceSpan: first.sourceSpan,
+    nextIndex: index + 1,
+  };
+}
+
+function readBalancedTokenGroup(
+  tokens: readonly TexMathToken[],
+  startIndex: number
+): {
+  readonly tokens: readonly TexMathToken[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly nextIndex: number;
+} | null {
+  const open = tokens[startIndex];
+  if (open?.kind !== "group-open") {
+    return null;
+  }
+  const body: TexMathToken[] = [];
+  let depth = 0;
+  let lastSpan = open.sourceSpan;
+  for (let index = startIndex + 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token) {
+      break;
+    }
+    if (token.kind === "group-close" && depth === 0) {
+      return {
+        tokens: body,
+        sourceSpan: spanUnion(open.sourceSpan, token.sourceSpan),
+        nextIndex: index + 1,
+      };
+    }
+    body.push(token);
+    lastSpan = token.sourceSpan;
+    if (token.kind === "group-open") {
+      depth += 1;
+    } else if (token.kind === "group-close") {
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  return {
+    tokens: body,
+    sourceSpan: spanUnion(open.sourceSpan, lastSpan),
+    nextIndex: tokens.length,
+  };
 }
 
 function matrixEnvironmentName(name: string | undefined): TexMathMatrixEnvironment | null {

@@ -2358,6 +2358,42 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("expands LaTeX array preamble repeats", () => {
+    const singleToken = parseTexMath(String.raw`\begin{array}{*{2}rc}a&b&c\end{array}`);
+    const singleTokenAtom = atomAt(singleToken, 0);
+
+    expect(singleToken.diagnostics).toEqual([]);
+    expect(singleTokenAtom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["right", "right", "center"],
+    });
+
+    const grouped = parseTexMath(String.raw`\begin{array}{*{2}{rc}}a&b&c&d\end{array}`);
+    const groupedAtom = atomAt(grouped, 0);
+
+    expect(grouped.diagnostics).toEqual([]);
+    expect(groupedAtom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["right", "center", "right", "center"],
+    });
+  });
+
+  it("expands repeated array preamble vertical rules", () => {
+    const source = String.raw`\begin{array}{r*{2}|c}a&b\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["right", "center"],
+      verticalRules: [
+        { beforeColumn: 1 },
+        { beforeColumn: 1 },
+      ],
+    });
+  });
+
   it("keeps unsupported array preamble extensions explicit", () => {
     const source = String.raw`\begin{array}{c@{\quad}c}a&b\end{array}`;
     const result = parseTexMath(source);

@@ -231,9 +231,11 @@ function compareFormula(formula, tolerance) {
       compareNumber(mismatches, `kern ${index} width`, left.width, right.width, tolerance);
     } else if (left.kind === "rule" && right.kind === "rule") {
       compareNumber(mismatches, `rule ${index} x`, left.x, right.x, tolerance);
-      compareNumber(mismatches, `rule ${index} y`, left.y, right.y, tolerance);
       compareNumber(mismatches, `rule ${index} width`, left.width, right.width, tolerance);
-      compareNumber(mismatches, `rule ${index} height`, left.height, right.height, tolerance);
+      if (!isIndefiniteVerticalRuleTrace(right)) {
+        compareNumber(mismatches, `rule ${index} y`, left.y, right.y, tolerance);
+        compareNumber(mismatches, `rule ${index} height`, left.height, right.height, tolerance);
+      }
     }
   }
   compareNumber(mismatches, "total width", ours.width, tex.width, tolerance);
@@ -273,6 +275,10 @@ function visibleMathItems(items) {
     item.kind === "glyph" ||
     (item.kind === "rule" && item.width !== 0)
   );
+}
+
+function isIndefiniteVerticalRuleTrace(item) {
+  return item.kind === "rule" && item.height < 0;
 }
 
 function ourTrace(formula) {

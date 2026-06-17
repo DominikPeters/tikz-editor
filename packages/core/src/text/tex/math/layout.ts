@@ -209,6 +209,7 @@ const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
 const TEX_LATEX_STRUT_HEIGHT_PT = 8.39996;
 const TEX_LATEX_STRUT_DEPTH_PT = 3.60004;
 const TEX_LATEX_ARRAY_RULE_WIDTH_PT = 0.4;
+const TEX_LATEX_DOUBLE_RULE_SEP_PT = 2;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
@@ -1999,7 +2000,8 @@ function layoutArrayNucleus(
   ).map(roundTexPt);
   const width = roundTexPt(
     columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
-    columnCount * 2 * TEX_MATRIX_ARRAY_COL_SEP_PT
+    columnCount * 2 * TEX_MATRIX_ARRAY_COL_SEP_PT +
+    arrayVerticalRuleExtraWidth(nucleus.verticalRules, columnCount)
   );
   const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
   const lastRow = concreteRows[concreteRows.length - 1];
@@ -2021,6 +2023,7 @@ function layoutArrayNucleus(
       const columnWidth = columnWidths[columnIndex] ?? 0;
       const cell = row.cells[columnIndex];
       appendArrayVerticalRules(rowChildren, nucleus.verticalRules, columnIndex, cursor, row);
+      cursor = roundTexPt(cursor + arrayVerticalRuleBoundaryExtraWidth(nucleus.verticalRules, columnIndex));
       cursor = roundTexPt(cursor + TEX_MATRIX_ARRAY_COL_SEP_PT);
       if (cell) {
         rowChildren.push(childHList(
@@ -2070,6 +2073,7 @@ function appendArrayVerticalRules(
   boundaryX: number,
   row: TexMathAlignedRowLayout
 ): void {
+  let ruleIndex = 0;
   for (const rule of rules ?? []) {
     if (rule.beforeColumn !== beforeColumn) {
       continue;
@@ -2077,13 +2081,33 @@ function appendArrayVerticalRules(
     items.push({
       kind: "rule",
       role: "array-rule",
-      x: roundTexPt(boundaryX - TEX_LATEX_ARRAY_RULE_WIDTH_PT / 2),
+      x: roundTexPt(boundaryX + ruleIndex * TEX_LATEX_DOUBLE_RULE_SEP_PT - TEX_LATEX_ARRAY_RULE_WIDTH_PT / 2),
       y: roundTexPt(-row.height),
       width: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
       height: roundTexPt(row.height + row.depth),
       sourceSpan: rule.sourceSpan,
     });
+    ruleIndex += 1;
   }
+}
+
+function arrayVerticalRuleExtraWidth(
+  rules: readonly TexMathArrayVerticalRule[] | undefined,
+  columnCount: number
+): number {
+  let width = 0;
+  for (let beforeColumn = 0; beforeColumn <= columnCount; beforeColumn += 1) {
+    width += arrayVerticalRuleBoundaryExtraWidth(rules, beforeColumn);
+  }
+  return roundTexPt(width);
+}
+
+function arrayVerticalRuleBoundaryExtraWidth(
+  rules: readonly TexMathArrayVerticalRule[] | undefined,
+  beforeColumn: number
+): number {
+  const ruleCount = (rules ?? []).filter((rule) => rule.beforeColumn === beforeColumn).length;
+  return Math.max(0, ruleCount - 1) * TEX_LATEX_DOUBLE_RULE_SEP_PT;
 }
 
 function layoutSmallMatrixNucleus(

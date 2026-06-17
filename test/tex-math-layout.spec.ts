@@ -2273,6 +2273,61 @@ describe("TeX math hlist layout", () => {
         sourceSpan: { start: 18, end: 19 },
       },
     ]);
+
+    const doubleRule = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c||c}a&b\end{array}`).list,
+      { style: "display" }
+    );
+    expect(doubleRule.supported).toBe(true);
+    expect(doubleRule.hlist?.width).toBeCloseTo(31.57757, 5);
+    const doubleRuleRow = doubleRule.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(doubleRuleRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-cell", x: 5 },
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: expect.closeTo(15.0859, 5),
+        width: 0.4,
+      },
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: expect.closeTo(17.0859, 5),
+        width: 0.4,
+      },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(22.2859, 4) },
+    ]);
+  });
+
+  it("lays out repeated array preambles like their explicit expansion", () => {
+    const withoutSourceSpans = (value: unknown): unknown => {
+      if (Array.isArray(value)) {
+        return value.map(withoutSourceSpans);
+      }
+      if (value && typeof value === "object") {
+        return Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .filter(([key]) => key !== "sourceSpan")
+            .map(([key, entry]) => [key, withoutSourceSpans(entry)])
+        );
+      }
+      return value;
+    };
+    const repeated = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{*{2}{rc}}a&b&c&d\\e&f&g&h\end{array}`).list,
+      { style: "display" }
+    );
+    const explicit = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{rcrc}a&b&c&d\\e&f&g&h\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(repeated.supported).toBe(true);
+    expect(explicit.supported).toBe(true);
+    expect(repeated.hlist?.width).toBeCloseTo(explicit.hlist?.width ?? 0, 6);
+    expect(repeated.hlist?.height).toBeCloseTo(explicit.hlist?.height ?? 0, 6);
+    expect(repeated.hlist?.depth).toBeCloseTo(explicit.hlist?.depth ?? 0, 6);
+    expect(withoutSourceSpans(repeated.hlist?.items)).toEqual(withoutSourceSpans(explicit.hlist?.items));
   });
 
   it("lays out cases as amsmath array with stretched struts, quad gap, and left brace", () => {
