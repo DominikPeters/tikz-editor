@@ -55,6 +55,7 @@ import {
   texMathSpacingBetween,
   type TexMathResolvedGlue,
 } from "./spacing.js";
+import { texMathSymbolDeclaration } from "./symbol-definitions.js";
 
 export type TexMathHListItem =
   | TexMathGlyphLayoutItem
@@ -470,6 +471,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
 
 function amsMathSymbolCommand(text: string): boolean {
   const command = text.startsWith("\\") ? text.slice(1) : text;
+  if (texMathSymbolDeclaration(command)?.requiresAmsPackage) {
+    return true;
+  }
   switch (command) {
     case "approxeq":
     case "Bbbk":
@@ -5091,6 +5095,10 @@ function defaultLuaLatexMathSymbols(
     return [{ family: "operators", code: text.charCodeAt(0) }];
   }
   const command = text.startsWith("\\") ? text.slice(1) : text;
+  const declaration = texMathSymbolDeclaration(command);
+  if (declaration) {
+    return [{ family: declaration.family, code: declaration.code }];
+  }
   switch (command) {
     case "Gamma":
       return [{ family: "operators", code: 0 }];

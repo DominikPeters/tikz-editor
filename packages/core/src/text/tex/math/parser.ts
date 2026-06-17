@@ -37,6 +37,7 @@ import type {
   TexMathTokenKind,
   TexMathUnsupportedItem,
 } from "./ir.js";
+import { texMathSymbolDeclaration } from "./symbol-definitions.js";
 
 interface ParseListOptions {
   readonly stopAtGroupClose: boolean;
@@ -5189,6 +5190,10 @@ function defaultNamedOperatorLimits(name: string): TexMathOperatorLimits {
 
 function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | null {
   const name = commandName(command);
+  const declaration = texMathSymbolDeclaration(name);
+  if (declaration) {
+    return { atomClass: declaration.atomClass };
+  }
   if (openNamedSymbolCommands.has(name)) {
     return { atomClass: "open" };
   }

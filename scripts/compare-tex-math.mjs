@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   layoutTexMathList,
   parseTexMath,
+  texMathSymbolCommandNames,
 } from "../packages/core/dist/text/tex/math/index.js";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
@@ -56,6 +57,7 @@ const amsSymbolCommands = [
   String.raw`\urcorner`,
   String.raw`\varnothing`,
   String.raw`\Vdash`,
+  ...texMathSymbolCommandNames(),
 ];
 const mathtoolsColonRelationCommands = [
   String.raw`\dblcolon`,

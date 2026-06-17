@@ -407,6 +407,27 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="115"');
   });
 
+  it("renders shared AMS symbol declarations through TeX glyph paths", () => {
+    const parsed = parseTexMath(
+      String.raw`\lozenge+\leftrightharpoons+\varkappa+\nleq+\beth+\blacktriangle+\rightsquigarrow`,
+    );
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(resolveDefaultTexMathFontProfileForList(parsed.list).id).toBe("lualatex-ams-math");
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="6"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="11"');
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="123"');
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="2"');
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="78"');
+    expect(body).toContain('data-tex-font="msam10" data-tex-glyph="32"');
+  });
+
   it("uses AMS script-size fonts for AMS glyphs in scripts", () => {
     const parsed = parseTexMath(String.raw`x_{\dotplus}^{\digamma}`);
     const result = layoutTexMathList(parsed.list);

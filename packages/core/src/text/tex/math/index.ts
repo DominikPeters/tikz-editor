@@ -96,3 +96,8 @@ export {
   type TexMathFontRequest,
   type TexMathParameters,
 } from "./font-profile.js";
+export {
+  texMathSymbolCommandNames,
+  texMathSymbolDeclaration,
+  type TexMathSymbolDeclaration,
+} from "./symbol-definitions.js";

@@ -1248,6 +1248,31 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses shared AMS symbol declarations with TeX atom classes", () => {
+    const result = parseTexMath(String.raw`\lozenge+\leftrightharpoons+\varkappa+\nleq+\beth+\blacktriangle+\rightsquigarrow`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) =>
+      item.kind === "atom" && item.nucleus.kind === "glyph"
+        ? { atomClass: item.atomClass, text: item.nucleus.text }
+        : null
+    )).toEqual([
+      { atomClass: "ord", text: String.raw`\lozenge` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\leftrightharpoons` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\varkappa` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\nleq` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\beth` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "ord", text: String.raw`\blacktriangle` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\rightsquigarrow` },
+    ]);
+  });
+
   it("parses AMS extensible arrows with optional below and required above labels", () => {
     const result = parseTexMath(String.raw`\xrightarrow[xy]{abcd}+\xleftarrow{z}`);
 
