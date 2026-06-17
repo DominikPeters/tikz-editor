@@ -260,6 +260,7 @@ export type VListSourceHit = {
 export interface VListSourceHitParams {
   readonly labelHit?: VListLabelHitResult | null;
   readonly itemHit?: VListItemGeometry | null;
+  readonly paragraphHit?: VListParagraphGeometry | null;
 }
 
 export interface VListSourceHitFromSnapshotParams {
@@ -725,6 +726,16 @@ export function getKnuthPlassVListSourceHit(
     return { offset: params.labelHit.paragraph.sourceStart };
   }
 
+  if (params?.paragraphHit) {
+    return {
+      offset: params.paragraphHit.sourceStart,
+      selectionRange: {
+        start: params.paragraphHit.sourceStart,
+        end: params.paragraphHit.sourceEnd,
+      },
+    };
+  }
+
   const item = params?.itemHit;
   if (!item || (item.kind === 'hbox' && item.hboxRole !== 'display-align-row')) {
     return null;
@@ -765,6 +776,7 @@ export function getKnuthPlassVListSourceHitFromSnapshot(
         }
       : null,
     itemHit: hit.item,
+    paragraphHit: hit.paragraph,
   });
 }
 

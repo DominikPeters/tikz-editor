@@ -6,7 +6,9 @@ import {
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
   getKnuthPlassPointFromOffset,
-  getKnuthPlassSelectionRects
+  getKnuthPlassSelectionRects,
+  getKnuthPlassVListGeometrySnapshot,
+  getKnuthPlassVListSourceHitFromSnapshot
 } from "../packages/core/src/text/knuth-plass/editor/hitmap.js";
 import {
   getKnuthPlassReportsFromOutputJax,
@@ -28,6 +30,10 @@ import {
 } from "../packages/core/src/text/knuth-plass/editor/mathPrefix.js";
 import { parseSourceSpans } from "../packages/core/src/text/knuth-plass/editor/sourceParser.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
+import {
+  createTexDerivedInlineMathBoxProvider,
+  layoutSimpleTexParagraph
+} from "../packages/core/src/text/tex/index.js";
 import { registerTexVListLayoutsOnOutputJax, texVListBoxLayoutReport } from "../packages/core/src/text/tex/vlist/index.js";
 
 function makeLineElement(
@@ -1406,6 +1412,63 @@ describe("knuth-plass hitmap line ranges", () => {
       lineIndex: 1,
       offset: 13,
       kind: "text"
+    });
+  });
+
+  it("maps display alignment intertext paragraph hits back to the intertext source span", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`;
+    const paragraphId = "paragraph:intertext-hit";
+    const layout = layoutSimpleTexParagraph(source, {
+      paragraphId,
+      width: 180,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    expect(layout.supported).toBe(true);
+    expect(layout.vlistLayout).toBeTruthy();
+    if (!layout.vlistLayout) {
+      return;
+    }
+
+    const outputJax = {};
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId,
+      layout: layout.vlistLayout,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+    };
+
+    const intertextStart = source.indexOf("{words}") + 1;
+    const intertextEnd = intertextStart + "words".length;
+    const snapshot = getKnuthPlassVListGeometrySnapshot({
+      outputJax,
+      paragraphId,
+      containerElement: containerElement as any,
+    });
+    const intertextParagraph = snapshot.paragraphs.find((paragraph) =>
+      paragraph.sourceStart === intertextStart && paragraph.sourceEnd === intertextEnd
+    );
+    expect(intertextParagraph).toBeTruthy();
+    if (!intertextParagraph) {
+      return;
+    }
+
+    const hit = getKnuthPlassVListSourceHitFromSnapshot({
+      snapshot,
+      clientPoint: clientPoint(
+        px((intertextParagraph.clientLeft + intertextParagraph.clientRight) / 2),
+        px((intertextParagraph.clientTop + intertextParagraph.clientBottom) / 2)
+      ),
+    });
+
+    expect(hit).toEqual({
+      offset: intertextStart,
+      selectionRange: {
+        start: intertextStart,
+        end: intertextEnd,
+      },
     });
   });
 
