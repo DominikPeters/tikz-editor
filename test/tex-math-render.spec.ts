@@ -207,6 +207,22 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
   });
 
+  it("renders AMS stacking commands through positioned TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\overset{a}{b}+\underset{c}{d}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="99"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="100"');
+    expect(body).toContain('transform="translate(0 -894.445) scale(70)"');
+  });
+
   it("renders amsmath genfrac through TeX delimiter and fraction glyph paths", () => {
     const parsed = parseTexMath(String.raw`\genfrac{[}{]}{0pt}{3}{a}{b}`);
     const result = layoutTexMathList(parsed.list);

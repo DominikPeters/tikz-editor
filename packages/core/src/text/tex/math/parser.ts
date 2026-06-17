@@ -487,6 +487,10 @@ class TexMathParser {
       if (commandName(token.text) === "sideset") {
         return this.parseSideset(allowScripts);
       }
+      const stackCommand = stackingCommandName(token.text);
+      if (stackCommand) {
+        return this.parseStackingCommand(stackCommand, allowScripts);
+      }
       const alphabet = alphabetCommandName(token.text);
       if (alphabet) {
         return this.parseAlphabet(alphabet, allowScripts);
@@ -618,6 +622,38 @@ class TexMathParser {
         sourceSpan,
       },
       limits: "display",
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseStackingCommand(
+    stackCommand: "overset" | "underset" | "overunderset",
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const above = stackCommand === "underset"
+      ? null
+      : this.parseRequiredMathArgument(command.sourceSpan, `${command.text} superscript`);
+    const below = stackCommand === "overset"
+      ? null
+      : this.parseRequiredMathArgument(command.sourceSpan, `${command.text} subscript`);
+    const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`);
+    const sourceSpan = spanUnion(
+      command.sourceSpan,
+      base?.sourceSpan ?? below?.sourceSpan ?? above?.sourceSpan ?? command.sourceSpan
+    );
+    const baseList = base?.list ?? emptyList(command.sourceSpan.end);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: atomClassForStackingBase(baseList),
+      nucleus: {
+        kind: "list",
+        list: baseList,
+        sourceSpan: base?.sourceSpan ?? command.sourceSpan,
+      },
+      ...(below ? { subscript: { list: below.list, sourceSpan: below.sourceSpan } } : {}),
+      ...(above ? { superscript: { list: above.list, sourceSpan: above.sourceSpan } } : {}),
+      limits: "limits",
       sourceSpan,
     }, allowScripts);
   }
@@ -4750,6 +4786,15 @@ function generatedListAtom(
   };
 }
 
+function atomClassForStackingBase(base: TexMathList): TexMathAtomClass {
+  const atoms = base.items.filter((item): item is TexMathAtom => item.kind === "atom");
+  if (atoms.length !== 1) {
+    return "op";
+  }
+  const atomClass = atoms[0]?.atomClass;
+  return atomClass === "bin" || atomClass === "rel" ? atomClass : "op";
+}
+
 function generatedOperatorNameAtom(
   name: string,
   atomClass: TexMathAtomClass,
@@ -5347,6 +5392,19 @@ function ellipsisCommandName(command: string): "ldots" | "cdots" | "dots" | null
       return "ldots";
     case "cdots":
       return "cdots";
+    default:
+      return null;
+  }
+}
+
+function stackingCommandName(command: string): "overset" | "underset" | "overunderset" | null {
+  switch (commandName(command)) {
+    case "overset":
+      return "overset";
+    case "underset":
+      return "underset";
+    case "overunderset":
+      return "overunderset";
     default:
       return null;
   }

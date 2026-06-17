@@ -762,6 +762,44 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("lowers AMS stacking commands through source-spanned operator limits", () => {
+    const result = parseTexMath(String.raw`\overset{a}{=}\underset{b}{+}\overunderset{u}{d}{x}`, { sourceOffset: 3 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({
+      atomClass: "rel",
+      limits: "limits",
+      sourceSpan: { start: 3, end: 17 },
+      nucleus: {
+        kind: "list",
+        sourceSpan: { start: 14, end: 17 },
+        list: {
+          items: [{ kind: "atom", atomClass: "rel", nucleus: { kind: "glyph", text: "=" } }],
+        },
+      },
+      superscript: {
+        sourceSpan: { start: 11, end: 14 },
+        list: { items: [{ kind: "atom", nucleus: { kind: "glyph", text: "a" } }] },
+      },
+    });
+    expect(atomAt(result, 1)).toMatchObject({
+      atomClass: "bin",
+      limits: "limits",
+      sourceSpan: { start: 17, end: 32 },
+      subscript: {
+        sourceSpan: { start: 26, end: 29 },
+        list: { items: [{ kind: "atom", nucleus: { kind: "glyph", text: "b" } }] },
+      },
+    });
+    expect(atomAt(result, 2)).toMatchObject({
+      atomClass: "op",
+      limits: "limits",
+      sourceSpan: { start: 32, end: 54 },
+      superscript: { sourceSpan: { start: 45, end: 48 } },
+      subscript: { sourceSpan: { start: 48, end: 51 } },
+    });
+  });
+
   it("parses prime shorthand as a TeX superscript on ordinary atoms", () => {
     const result = parseTexMath("x''_i");
     const atom = atomAt(result, 0);

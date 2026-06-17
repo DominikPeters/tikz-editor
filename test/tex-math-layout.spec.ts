@@ -2124,6 +2124,70 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out AMS stacking commands through TeX operator limits", () => {
+    const overset = layout(String.raw`\overset{a}{b}`);
+    expect(overset.supported).toBe(true);
+    expect(overset.hlist?.width).toBeCloseTo(4.337648, 6);
+    expect(overset.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "limit-superscript",
+        x: 0,
+        y: expect.closeTo(-8.94445, 5),
+        items: [{ kind: "glyph", fontId: "cmmi7", code: 97 }],
+      },
+      {
+        kind: "glyph",
+        fontId: "cmmi10",
+        code: 98,
+        x: expect.closeTo(0.022989, 5),
+      },
+    ]);
+
+    const underset = layout(String.raw`\underset{a}{b}`);
+    expect(underset.supported).toBe(true);
+    expect(underset.hlist?.width).toBeCloseTo(4.337648, 6);
+    expect(underset.hlist?.items).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "cmmi10",
+        code: 98,
+        x: expect.closeTo(0.022989, 5),
+      },
+      {
+        kind: "hlist",
+        role: "limit-subscript",
+        x: 0,
+        y: 6,
+        items: [{ kind: "glyph", fontId: "cmmi7", code: 97 }],
+      },
+    ]);
+
+    const both = layout(String.raw`\overunderset{u}{d}{x}`);
+    expect(both.supported).toBe(true);
+    expect(both.hlist?.width).toBeCloseTo(5.71528, 6);
+    expect(both.hlist?.items).toMatchObject([
+      {
+        kind: "hlist",
+        role: "limit-superscript",
+        x: expect.closeTo(0.49361, 5),
+        y: expect.closeTo(-6.30555, 5),
+      },
+      {
+        kind: "glyph",
+        fontId: "cmmi10",
+        code: 120,
+        x: 0,
+      },
+      {
+        kind: "hlist",
+        role: "limit-subscript",
+        x: expect.closeTo(0.776204, 5),
+        y: expect.closeTo(6.527785, 5),
+      },
+    ]);
+  });
+
   it("uses TeX display-style operator limit defaults", () => {
     const parsed = parseTexMath(String.raw`\sum_i^n+\int_0^1+\lim_{x}`);
     const result = layoutTexMathList(parsed.list, { style: "display" });
