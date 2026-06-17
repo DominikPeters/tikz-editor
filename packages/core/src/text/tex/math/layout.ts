@@ -187,6 +187,7 @@ export interface ResolvedMathGlyph {
   readonly code: number;
   readonly text: string;
   readonly xOffset: number;
+  readonly yOffset: number;
   readonly advance: number;
   readonly sourceSpan: TexMathSourceSpan;
 }
@@ -196,6 +197,7 @@ type MathGlyphSpec = {
   readonly family: TexMathFontFamily;
   readonly code: number;
   readonly xOffset?: number;
+  readonly yOffset?: number;
   readonly advance?: number;
 } | {
   readonly kind: "kern";
@@ -4767,7 +4769,7 @@ function layoutGlyphNucleus(
       code: glyph.code,
       text: glyph.text,
       x: roundTexPt(cursor + glyph.xOffset),
-      y: 0,
+      y: glyph.yOffset,
       width,
       height: glyphHeight,
       depth: glyphDepth,
@@ -4775,8 +4777,8 @@ function layoutGlyphNucleus(
       sourceSpan: glyph.sourceSpan,
     });
     cursor = roundTexPt(cursor + glyph.advance);
-    height = Math.max(height, glyphHeight);
-    depth = Math.max(depth, glyphDepth);
+    height = Math.max(height, roundTexPt(-glyph.yOffset + glyphHeight));
+    depth = Math.max(depth, roundTexPt(glyph.yOffset + glyphDepth));
   }
   return {
     items,
@@ -4834,6 +4836,7 @@ function resolveMathSymbolParts(
       code: alphabetGlyph.code,
       text: nucleus.text,
       xOffset: 0,
+      yOffset: 0,
       advance: width,
       sourceSpan: nucleus.sourceSpan,
     }];
@@ -4868,6 +4871,9 @@ function resolveMathSymbolParts(
       xOffset: glyph.xOffset !== undefined
         ? roundTexPt(glyph.xOffset * (textStyleAtPt(style, baseAtPt) / 10))
         : 0,
+      yOffset: glyph.yOffset !== undefined
+        ? roundTexPt(glyph.yOffset * (textStyleAtPt(style, baseAtPt) / 10))
+        : 0,
       advance: glyph.advance !== undefined
         ? roundTexPt(glyph.advance * (textStyleAtPt(style, baseAtPt) / 10))
         : width,
@@ -4898,6 +4904,7 @@ function resolveMathAccent(
     code: resolved.code,
     text: `\\${command}`,
     xOffset: 0,
+    yOffset: 0,
     advance: 0,
     sourceSpan,
   };
@@ -5267,6 +5274,8 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 15 }];
     case "asymp":
       return [{ family: "symbols", code: 16 }];
+    case "vcentcolon":
+      return [{ family: "operators", code: 58, yOffset: -0.347229 }];
     case "colon":
       return [{ family: "operators", code: 58 }];
     case "equiv":

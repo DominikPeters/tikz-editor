@@ -360,6 +360,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="95"');
   });
 
+  it("renders Mathtools centered-colon relation macros through TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`\coloneq+\Coloneq+\eqqcolon+\Eqqcolon+\colonapprox+\simcolon`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="58"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="25"');
+    expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="24"');
+  });
+
   it("keeps automatic atom spacing around explicit math glue", () => {
     const parsed = parseTexMath(String.raw`= \: x`);
     const result = layoutTexMathList(parsed.list, { style: "display" });

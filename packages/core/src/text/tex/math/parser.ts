@@ -407,6 +407,10 @@ class TexMathParser {
       if (commandName(token.text) === "models") {
         return this.parseModelsRelation(allowScripts);
       }
+      const mathtoolsColonRelation = mathtoolsColonRelationCommandName(token.text);
+      if (mathtoolsColonRelation) {
+        return this.parseMathtoolsColonRelation(mathtoolsColonRelation, allowScripts);
+      }
       if (commandName(token.text) === "operatorname") {
         return this.parseOperatorName(allowScripts);
       }
@@ -1185,6 +1189,18 @@ class TexMathParser {
         explicitMu(-3, command.sourceSpan),
         generatedGlyphAtom("=", "rel", command.sourceSpan),
       ]
+    ), allowScripts);
+  }
+
+  private parseMathtoolsColonRelation(
+    relation: MathtoolsColonRelationCommand,
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    return this.maybeParseScripts(generatedListAtom(
+      "rel",
+      command.sourceSpan,
+      mathtoolsColonRelationItems(relation, command.sourceSpan)
     ), allowScripts);
   }
 
@@ -4336,6 +4352,63 @@ function modularArithmeticAtom(
   return generatedListAtom("ord", sourceSpan, items);
 }
 
+function mathtoolsColonRelationItems(
+  relation: MathtoolsColonRelationCommand,
+  sourceSpan: TexMathSourceSpan
+): readonly TexMathItem[] {
+  // Mirrors the default non-legacy centered-colon definitions in mathtools.sty.
+  switch (relation) {
+    case "dblcolon":
+      return doubleColonItems(sourceSpan);
+    case "coloneq":
+      return [...vcenterColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("=", "rel", sourceSpan)];
+    case "Coloneq":
+      return [...doubleColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("=", "rel", sourceSpan)];
+    case "eqqcolon":
+      return [generatedGlyphAtom("=", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...vcenterColonItems(sourceSpan)];
+    case "Eqqcolon":
+      return [generatedGlyphAtom("=", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...doubleColonItems(sourceSpan)];
+    case "colonapprox":
+      return [...vcenterColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("\\approx", "rel", sourceSpan)];
+    case "Colonapprox":
+      return [...doubleColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("\\approx", "rel", sourceSpan)];
+    case "approxcolon":
+      return [generatedGlyphAtom("\\approx", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...vcenterColonItems(sourceSpan)];
+    case "Approxcolon":
+      return [generatedGlyphAtom("\\approx", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...doubleColonItems(sourceSpan)];
+    case "colonsim":
+      return [...vcenterColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("\\sim", "rel", sourceSpan)];
+    case "Colonsim":
+      return [...doubleColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("\\sim", "rel", sourceSpan)];
+    case "simcolon":
+      return [generatedGlyphAtom("\\sim", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...vcenterColonItems(sourceSpan)];
+    case "Simcolon":
+      return [generatedGlyphAtom("\\sim", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...doubleColonItems(sourceSpan)];
+    case "colondash":
+      return [...vcenterColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("-", "rel", sourceSpan)];
+    case "Colondash":
+      return [...doubleColonItems(sourceSpan), explicitMu(-1.2, sourceSpan), generatedGlyphAtom("-", "rel", sourceSpan)];
+    case "dashcolon":
+      return [generatedGlyphAtom("-", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...vcenterColonItems(sourceSpan)];
+    case "Dashcolon":
+      return [generatedGlyphAtom("-", "rel", sourceSpan), explicitMu(-1.2, sourceSpan), ...doubleColonItems(sourceSpan)];
+  }
+}
+
+function doubleColonItems(sourceSpan: TexMathSourceSpan): readonly TexMathItem[] {
+  return [
+    ...vcenterColonItems(sourceSpan),
+    explicitMu(-0.9, sourceSpan),
+    ...vcenterColonItems(sourceSpan),
+  ];
+}
+
+function vcenterColonItems(sourceSpan: TexMathSourceSpan): readonly TexMathItem[] {
+  return [
+    generatedGlyphAtom("\\vcentcolon", "rel", sourceSpan),
+  ];
+}
+
 function generatedListAtom(
   atomClass: TexMathAtomClass,
   sourceSpan: TexMathSourceSpan,
@@ -4619,6 +4692,70 @@ function modularArithmeticCommandName(command: string): "bmod" | "pmod" | "mod" 
       return "pmod";
     case "mod":
       return "mod";
+    default:
+      return null;
+  }
+}
+
+type MathtoolsColonRelationCommand =
+  | "dblcolon"
+  | "coloneq"
+  | "Coloneq"
+  | "eqqcolon"
+  | "Eqqcolon"
+  | "colonapprox"
+  | "Colonapprox"
+  | "approxcolon"
+  | "Approxcolon"
+  | "colonsim"
+  | "Colonsim"
+  | "simcolon"
+  | "Simcolon"
+  | "colondash"
+  | "Colondash"
+  | "dashcolon"
+  | "Dashcolon";
+
+function mathtoolsColonRelationCommandName(command: string): MathtoolsColonRelationCommand | null {
+  switch (commandName(command)) {
+    case "dblcolon":
+      return "dblcolon";
+    case "coloneq":
+    case "coloneqq":
+      return "coloneq";
+    case "Coloneq":
+    case "Coloneqq":
+      return "Coloneq";
+    case "eqcolon":
+    case "eqqcolon":
+      return "eqqcolon";
+    case "Eqcolon":
+    case "Eqqcolon":
+      return "Eqqcolon";
+    case "colonapprox":
+      return "colonapprox";
+    case "Colonapprox":
+      return "Colonapprox";
+    case "approxcolon":
+      return "approxcolon";
+    case "Approxcolon":
+      return "Approxcolon";
+    case "colonsim":
+      return "colonsim";
+    case "Colonsim":
+      return "Colonsim";
+    case "simcolon":
+      return "simcolon";
+    case "Simcolon":
+      return "Simcolon";
+    case "colondash":
+      return "colondash";
+    case "Colondash":
+      return "Colondash";
+    case "dashcolon":
+      return "dashcolon";
+    case "Dashcolon":
+      return "Dashcolon";
     default:
       return null;
   }

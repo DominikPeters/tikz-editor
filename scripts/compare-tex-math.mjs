@@ -57,6 +57,29 @@ const amsSymbolCommands = [
   String.raw`\varnothing`,
   String.raw`\Vdash`,
 ];
+const mathtoolsColonRelationCommands = [
+  String.raw`\dblcolon`,
+  String.raw`\coloneq`,
+  String.raw`\coloneqq`,
+  String.raw`\Coloneq`,
+  String.raw`\Coloneqq`,
+  String.raw`\eqcolon`,
+  String.raw`\eqqcolon`,
+  String.raw`\Eqcolon`,
+  String.raw`\Eqqcolon`,
+  String.raw`\colonapprox`,
+  String.raw`\Colonapprox`,
+  String.raw`\approxcolon`,
+  String.raw`\Approxcolon`,
+  String.raw`\colonsim`,
+  String.raw`\Colonsim`,
+  String.raw`\simcolon`,
+  String.raw`\Simcolon`,
+  String.raw`\colondash`,
+  String.raw`\Colondash`,
+  String.raw`\dashcolon`,
+  String.raw`\Dashcolon`,
+];
 
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
@@ -305,6 +328,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     || hasSidesetCommand(formula)
     || hasAmsMathCommand(formula)
     || hasAccentCommand(formula)
+    || hasMathtoolsColonRelationCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -483,8 +507,11 @@ function texSource(formula) {
   const amssymbPreamble = hasAmsSymbolCommand(formula)
     ? String.raw`\usepackage{amssymb}` + "\n"
     : "";
+  const mathtoolsPreamble = hasMathtoolsColonRelationCommand(formula)
+    ? String.raw`\usepackage{mathtools}` + "\n"
+    : "";
   return String.raw`\documentclass{article}
-` + amsmathPreamble + amssymbPreamble + arrayPreamble + String.raw`
+` + amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble + String.raw`
 \newbox\m
 \begin{document}
 \setbox\m=\hbox{$` + formula + String.raw`$}
@@ -1037,6 +1064,10 @@ function hasAmsMathDelimiterCommand(source) {
 
 function hasAmsSymbolCommand(source) {
   return amsSymbolCommands.some((command) => source.includes(command));
+}
+
+function hasMathtoolsColonRelationCommand(source) {
+  return mathtoolsColonRelationCommands.some((command) => source.includes(command));
 }
 
 function randomMatrixCell(rng) {

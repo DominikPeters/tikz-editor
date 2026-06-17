@@ -1158,6 +1158,67 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("lowers Mathtools centered-colon relation macros through TeX pieces", () => {
+    const result = parseTexMath(String.raw`\coloneq+\Coloneq+\eqqcolon+\Eqqcolon+\dblcolon+\colonapprox+\simcolon`);
+
+    expect(result.diagnostics).toEqual([]);
+    const relationAtoms = result.list.items.filter((item): item is TexMathAtom =>
+      item.kind === "atom" && item.atomClass === "rel"
+    );
+    expect(relationAtoms).toHaveLength(7);
+    expect(relationAtoms.map((atom) =>
+      atom.nucleus.kind === "list"
+        ? atom.nucleus.list.items.map((item) =>
+            item.kind === "mu-glue"
+              ? { kind: item.kind, mu: item.mu }
+              : item.kind === "atom" && item.nucleus.kind === "glyph"
+                ? { kind: item.kind, atomClass: item.atomClass, text: item.nucleus.text }
+                : { kind: item.kind }
+          )
+        : []
+    )).toEqual([
+      [
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+        { kind: "mu-glue", mu: -1.2 },
+        { kind: "atom", atomClass: "rel", text: "=" },
+      ],
+      [
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+        { kind: "mu-glue", mu: -0.9 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+        { kind: "mu-glue", mu: -1.2 },
+        { kind: "atom", atomClass: "rel", text: "=" },
+      ],
+      [
+        { kind: "atom", atomClass: "rel", text: "=" },
+        { kind: "mu-glue", mu: -1.2 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+      ],
+      [
+        { kind: "atom", atomClass: "rel", text: "=" },
+        { kind: "mu-glue", mu: -1.2 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+        { kind: "mu-glue", mu: -0.9 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+      ],
+      [
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+        { kind: "mu-glue", mu: -0.9 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+      ],
+      [
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+        { kind: "mu-glue", mu: -1.2 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\approx` },
+      ],
+      [
+        { kind: "atom", atomClass: "rel", text: String.raw`\sim` },
+        { kind: "mu-glue", mu: -1.2 },
+        { kind: "atom", atomClass: "rel", text: String.raw`\vcentcolon` },
+      ],
+    ]);
+  });
+
   it("parses AMS font symbols with TeX atom classes", () => {
     const result = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thickapprox+\thicksim+\Bbbk`);
 

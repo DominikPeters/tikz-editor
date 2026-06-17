@@ -399,6 +399,31 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out Mathtools centered-colon relations as generated relation hlists", () => {
+    const result = layout(String.raw`x\Coloneq y`);
+
+    expect(result.supported).toBe(true);
+    const relation = result.hlist?.items.find((item): item is TexMathChildHListLayoutItem =>
+      item.kind === "hlist" && item.role === "nucleus"
+    );
+    expect(relation?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmr10", code: 58, x: 0 },
+      { kind: "glue", source: "explicit", mu: -0.9, width: expect.closeTo(-0.500002, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 58 },
+      { kind: "glue", source: "explicit", mu: -1.2, width: expect.closeTo(-0.666669, 5) },
+      { kind: "glyph", fontId: "cmr10", code: 61 },
+    ]);
+
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({ fontId: glyph.fontId, code: glyph.code }))).toEqual([
+      { fontId: "cmmi10", code: 120 },
+      { fontId: "cmr10", code: 58 },
+      { fontId: "cmr10", code: 58 },
+      { fontId: "cmr10", code: 61 },
+      { fontId: "cmmi10", code: 121 },
+    ]);
+  });
+
   it("adds math italic correction kerns after italic glyphs that need them", () => {
     const result = layout("xy");
 
