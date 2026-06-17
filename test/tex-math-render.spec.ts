@@ -1836,4 +1836,35 @@ unordered.`;
     expect(alignedat.hlist.width).toBeCloseTo(48.815004, 6);
     expect(aligned.hlist.width - alignedat.hlist.width).toBeCloseTo(10, 6);
   });
+
+  it("creates display alignment boxes with nested split and gathered rows", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const cases = [
+      {
+        source: String.raw`\begin{align*} a&=b \begin{split} r&=s\\ & =t \end{split} \\ c&=d \end{align*}`,
+        content: String.raw` a&=b \begin{split} r&=s\\ & =t \end{split} \\ c&=d `,
+      },
+      {
+        source: String.raw`\begin{align*} a&=b \begin{gathered} r=s\\  =t \end{gathered} \\ c&=d \end{align*}`,
+        content: String.raw` a&=b \begin{gathered} r=s\\  =t \end{gathered} \\ c&=d `,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const box = provider.getDisplayMathAlignment?.({
+        source: testCase.source,
+        content: testCase.content,
+        delimiter: "align-star",
+        sourceStart: 0,
+        sourceEnd: testCase.source.length,
+        contentStart: testCase.source.indexOf(testCase.content),
+        contentEnd: testCase.source.indexOf(testCase.content) + testCase.content.length,
+        targetWidth: 180,
+      });
+
+      expect(box, testCase.source).not.toBeNull();
+      expect(box?.rows, testCase.source).toHaveLength(2);
+      expect(box?.rows[0]?.svgBody, testCase.source).toContain('data-tex-math-role="aligned-row"');
+    }
+  });
 });

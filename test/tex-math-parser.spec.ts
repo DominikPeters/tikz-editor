@@ -1343,6 +1343,87 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses split and gathered as inner aligned-like environments", () => {
+    const splitSource = String.raw`\begin{align*}a&=b \begin{split}r&=s\\&=t\end{split}\\c&=d\end{align*}`;
+    const split = parseTexMath(splitSource);
+    const splitAtom = atomAt(split, 0);
+
+    expect(split.diagnostics).toEqual([]);
+    expect(splitAtom.nucleus.kind).toBe("aligned");
+    if (splitAtom.nucleus.kind !== "aligned") {
+      return;
+    }
+    const nestedSplit = splitAtom.nucleus.rows[0]?.cells[1]?.list.items.find((item) =>
+      item.kind === "atom" && item.nucleus.kind === "aligned"
+    );
+    expect(nestedSplit).toMatchObject({
+      sourceSpan: {
+        start: splitSource.indexOf(String.raw`\begin{split}`),
+        end: splitSource.indexOf(String.raw`\end{split}`) + String.raw`\end{split}`.length,
+      },
+      nucleus: {
+        kind: "aligned",
+        beginSourceSpan: {
+          start: splitSource.indexOf(String.raw`\begin{split}`),
+          end: splitSource.indexOf(String.raw`\begin{split}`) + String.raw`\begin`.length,
+        },
+      },
+    });
+    if (nestedSplit?.kind === "atom" && nestedSplit.nucleus.kind === "aligned") {
+      expect(nestedSplit.nucleus.rows.map((row) => row.cells.map((cell) => cell.sourceSpan))).toEqual([
+        [
+          { start: splitSource.indexOf("r&"), end: splitSource.indexOf("r&") + 1 },
+          { start: splitSource.indexOf("=s"), end: splitSource.indexOf("=s") + 2 },
+        ],
+        [
+          { start: splitSource.indexOf(String.raw`\\&`) + String.raw`\\`.length, end: splitSource.indexOf(String.raw`\\&`) + String.raw`\\`.length },
+          { start: splitSource.indexOf("=t"), end: splitSource.indexOf("=t") + 2 },
+        ],
+      ]);
+    }
+
+    const gatheredSource = String.raw`\begin{align*}a&=b \begin{gathered}r=s\\t=u\end{gathered}\\c&=d\end{align*}`;
+    const gathered = parseTexMath(gatheredSource);
+    const gatheredAtom = atomAt(gathered, 0);
+
+    expect(gathered.diagnostics).toEqual([]);
+    expect(gatheredAtom.nucleus.kind).toBe("aligned");
+    if (gatheredAtom.nucleus.kind !== "aligned") {
+      return;
+    }
+    const nestedGathered = gatheredAtom.nucleus.rows[0]?.cells[1]?.list.items.find((item) =>
+      item.kind === "atom" && item.nucleus.kind === "aligned"
+    );
+    expect(nestedGathered).toMatchObject({
+      nucleus: {
+        kind: "aligned",
+        columnSeparation: "gather",
+        rows: [
+          { cells: [{ sourceSpan: { start: gatheredSource.indexOf("r=s"), end: gatheredSource.indexOf("r=s") + 3 } }] },
+          { cells: [{ sourceSpan: { start: gatheredSource.indexOf("t=u"), end: gatheredSource.indexOf("t=u") + 3 } }] },
+        ],
+      },
+    });
+  });
+
+  it("reports tags inside split as invalid alignment metadata", () => {
+    const source = String.raw`\begin{split}a\tag{1}\end{split}`;
+    const result = parseTexMath(source);
+
+    expect(result.diagnostics).toContainEqual({
+      severity: "error",
+      code: "unsupported-command",
+      message: String.raw`Unsupported alignment command \tag.`,
+      sourceSpan: {
+        start: source.indexOf(String.raw`\tag`),
+        end: source.indexOf(String.raw`\end{split}`),
+      },
+    });
+    expect(atomAt(result, 0).nucleus).toMatchObject({
+      kind: "aligned",
+    });
+  });
+
   it("parses multline environments as row lists with multline placement mode", () => {
     const source = String.raw`\begin{multline*}a=b\\c+d=e\\f=g\end{multline*}`;
     const result = parseTexMath(source);

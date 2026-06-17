@@ -1779,6 +1779,41 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out split and gathered nested inside display alignments", () => {
+    const split = layoutTexMathList(
+      parseTexMath(String.raw`\begin{align*}a&=b \begin{split}r&=s\\&=t\end{split}\\c&=d\end{align*}`).list,
+      { style: "display" }
+    );
+    const gathered = layoutTexMathList(
+      parseTexMath(String.raw`\begin{align*}a&=b \begin{gathered}r=s\\t=u\end{gathered}\\c&=d\end{align*}`).list,
+      { style: "display" }
+    );
+
+    expect(split.supported).toBe(true);
+    expect(gathered.supported).toBe(true);
+    if (!split.supported || !gathered.supported) {
+      return;
+    }
+
+    const splitRows = split.hlist.items.filter((item): item is TexMathChildHListLayoutItem =>
+      item.kind === "hlist" && item.role === "aligned-row"
+    );
+    expect(splitRows).toHaveLength(2);
+    expect(splitRows[0]?.items.some((item) =>
+      item.kind === "hlist" &&
+      item.items.some((nested) => nested.kind === "hlist" && nested.role === "aligned-row")
+    )).toBe(true);
+
+    const gatheredRows = gathered.hlist.items.filter((item): item is TexMathChildHListLayoutItem =>
+      item.kind === "hlist" && item.role === "aligned-row"
+    );
+    expect(gatheredRows).toHaveLength(2);
+    expect(gatheredRows[0]?.items.some((item) =>
+      item.kind === "hlist" &&
+      item.items.some((nested) => nested.kind === "hlist" && nested.role === "aligned-row")
+    )).toBe(true);
+  });
+
   it("uses amsmath display-style cells, inter-pair gaps, and TeX interline glue in aligned environments", () => {
     const scriptFraction = layoutTexMathList(
       parseTexMath(String.raw`\begin{aligned}x_i&=y^2\\\frac{1}{2}&=z\end{aligned}`).list,

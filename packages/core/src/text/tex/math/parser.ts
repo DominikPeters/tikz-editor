@@ -1231,11 +1231,12 @@ class TexMathParser {
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
       stopAtEnvironmentEnd: environmentName.name,
-      columnSeparation: gatherEnvironmentName(environmentName.name)
+      columnSeparation: gatherEnvironmentName(environmentName.name) || gatheredEnvironmentName(environmentName.name)
         ? "gather"
         : multlineEnvironmentName(environmentName.name)
           ? "multline"
           : "align",
+      allowAlignmentTags: displayAlignmentEnvironmentName(environmentName.name),
       allowScripts,
     });
   }
@@ -1257,6 +1258,7 @@ class TexMathParser {
       stopAtEnvironmentEnd: environmentName.name,
       columnSeparation: "none",
       maxFields: pairCount ? pairCount.value * 2 : undefined,
+      allowAlignmentTags: true,
       allowScripts,
     });
   }
@@ -1282,6 +1284,7 @@ class TexMathParser {
       stopAtEnvironmentEnd: environmentName.name,
       columnSeparation: "none",
       maxFields: pairCount ? pairCount.value * 2 : undefined,
+      allowAlignmentTags: false,
       allowScripts,
     });
   }
@@ -1455,6 +1458,7 @@ class TexMathParser {
     readonly stopAtEnvironmentEnd?: string;
     readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
+    readonly allowAlignmentTags?: boolean;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     if (params.stopAtEnvironmentEnd) {
@@ -1476,6 +1480,7 @@ class TexMathParser {
     readonly stopAtEnvironmentEnd?: string;
     readonly columnSeparation?: "align" | "none" | "gather" | "multline";
     readonly maxFields?: number;
+    readonly allowAlignmentTags?: boolean;
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -1523,7 +1528,7 @@ class TexMathParser {
           pendingRowSourceSpan ?? cellList.sourceSpan,
           cellList.sourceSpan
         );
-        const metadata = this.consumeAlignmentRowMetadata();
+        const metadata = this.consumeAlignmentRowMetadata(params.allowAlignmentTags ?? true);
         if (metadata.sourceSpan) {
           sourceSpan = spanUnion(sourceSpan, metadata.sourceSpan);
           pendingRowSourceSpan = spanUnion(pendingRowSourceSpan ?? metadata.sourceSpan, metadata.sourceSpan);
@@ -1663,7 +1668,7 @@ class TexMathParser {
     };
   }
 
-  private consumeAlignmentRowMetadata(): {
+  private consumeAlignmentRowMetadata(allowTags: boolean): {
     readonly suppressTag: boolean;
     readonly labels: readonly {
       readonly text: string;
@@ -1719,6 +1724,15 @@ class TexMathParser {
       }
       const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} label`);
       sourceSpan = spanUnion(sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+      if (metadata === "tag" && !allowTags) {
+        this.addDiagnostic(
+          "error",
+          "unsupported-command",
+          `Unsupported alignment command ${command.text}.`,
+          spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan)
+        );
+        continue;
+      }
       if (content && !content.unsupported) {
         labels.push({
           text: content.text,
@@ -3532,11 +3546,12 @@ function infixFractionPrimitive(command: string): InfixFractionPrimitive | null 
 
 function alignmentMetadataCommand(
   command: string
-): "label" | "notag" | "nonumber" | "unsupported-text" | "unsupported-optional" | null {
+): "label" | "tag" | "notag" | "nonumber" | "unsupported-text" | "unsupported-optional" | null {
   switch (commandName(command)) {
     case "label":
-    case "tag":
       return "label";
+    case "tag":
+      return "tag";
     case "notag":
       return "notag";
     case "nonumber":
@@ -3768,6 +3783,8 @@ function extensibleArrowCommandName(command: string): TexMathExtensibleArrowComm
 
 function alignedEnvironmentName(name: string): boolean {
   return name === "aligned" ||
+    name === "split" ||
+    name === "gathered" ||
     name === "align" ||
     name === "align*" ||
     name === "gather" ||
@@ -3793,6 +3810,10 @@ function alignEnvironmentName(name: string): boolean {
 
 function gatherEnvironmentName(name: string): boolean {
   return name === "gather" || name === "gather*";
+}
+
+function gatheredEnvironmentName(name: string): boolean {
+  return name === "gathered";
 }
 
 function multlineEnvironmentName(name: string): boolean {
