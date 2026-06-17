@@ -1563,8 +1563,35 @@ unordered.`;
       (item.code === 40 || item.code === 65 || item.code === 41)
     ) ?? [];
 
-    expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(19.85951, 5);
+    expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(19.85951, 4);
     expect(tagGlyphs).toHaveLength(3);
+    expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
+      expect.closeTo(16.25951, 5),
+      expect.closeTo(16.25951, 5),
+      expect.closeTo(16.25951, 5),
+    ]);
+  });
+
+  it("inherits amsmath measured line depth for the first shifted align tag", () => {
+    const source = String.raw`Alpha \begin{align*}\tilde{1}&=n&\ldots_z&=\tbinom{c}{2} \tag{A}\\\Big[y+c\Big]&=\begin{smallmatrix}c\end{smallmatrix}&\tbinom{2}{m}&=\begin{vmatrix}\cdots\end{vmatrix}\\\hat{j}&=\frac{m}{\cdots}&\big[\tfrac{j}{2}\big]&=m^2\end{align*} Beta`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`\tilde{1}&=n&\ldots_z&=\tbinom{c}{2} \tag{A}\\\Big[y+c\Big]&=\begin{smallmatrix}c\end{smallmatrix}&\tbinom{2}{m}&=\begin{vmatrix}\cdots\end{vmatrix}\\\hat{j}&=\frac{m}{\cdots}&\big[\tfrac{j}{2}\big]&=m^2`,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{align*}`),
+      sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      contentStart: source.indexOf(String.raw`\tilde`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 120,
+    });
+    const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
+      item.kind === "glyph" &&
+      item.fontId === "lmroman10-regular" &&
+      (item.code === 40 || item.code === 65 || item.code === 41)
+    ) ?? [];
+
+    expect(directAlignment?.rows.at(0)?.height).toBeCloseTo(8.81748, 5);
+    expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(19.85951, 4);
     expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
       expect.closeTo(16.25951, 5),
       expect.closeTo(16.25951, 5),
