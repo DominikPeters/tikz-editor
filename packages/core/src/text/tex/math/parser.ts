@@ -19,6 +19,7 @@ import type {
   TexMathExtensibleArrowCommand,
   TexMathGlue,
   TexMathItem,
+  TexMathKern,
   TexMathLineCommand,
   TexMathList,
   TexMathMatrixEnvironment,
@@ -389,6 +390,10 @@ class TexMathParser {
           alphabet: alphabetDeclaration,
           sourceSpan: token.sourceSpan,
         };
+      }
+      const kern = this.parseKernCommand();
+      if (kern) {
+        return kern;
       }
       const penalty = this.parsePenaltyCommand();
       if (penalty) {
@@ -976,6 +981,46 @@ class TexMathParser {
       command: "penalty",
       penalty: Number.parseInt(`${sign}${digits}`, 10),
       sourceSpan,
+    };
+  }
+
+  private parseKernCommand(): TexMathKern | TexMathUnsupportedItem | null {
+    const token = this.peek();
+    if (token?.kind !== "command") {
+      return null;
+    }
+    const name = commandName(token.text);
+    if (name !== "kern" && name !== "mkern") {
+      return null;
+    }
+
+    const command = this.advance();
+    if (name === "kern") {
+      const amount = this.parseTexDimension(command.sourceSpan, "\\kern amount");
+      if (!amount) {
+        return makeUnsupportedItem(command.text, command.sourceSpan);
+      }
+      return {
+        kind: "kern",
+        command: "kern",
+        widthPt: amount.valuePt,
+        commandSourceSpan: command.sourceSpan,
+        amountSourceSpan: amount.sourceSpan,
+        sourceSpan: spanUnion(command.sourceSpan, amount.sourceSpan),
+      };
+    }
+
+    const amount = this.parseTexMuDimension(command.sourceSpan, "\\mkern amount");
+    if (!amount) {
+      return makeUnsupportedItem(command.text, command.sourceSpan);
+    }
+    return {
+      kind: "kern",
+      command: "mkern",
+      mu: amount.valueMu,
+      commandSourceSpan: command.sourceSpan,
+      amountSourceSpan: amount.sourceSpan,
+      sourceSpan: spanUnion(command.sourceSpan, amount.sourceSpan),
     };
   }
 
@@ -2890,6 +2935,70 @@ class TexMathParser {
     }
     return {
       valuePt: number * factor,
+      sourceSpan,
+    };
+  }
+
+  private parseTexMuDimension(
+    fallbackSpan: TexMathSourceSpan,
+    label: string
+  ): { readonly valueMu: number; readonly sourceSpan: TexMathSourceSpan } | null {
+    this.skipSpaces();
+    const start = this.peek()?.sourceSpan.start ?? fallbackSpan.end;
+    let text = "";
+    let lastSpan: TexMathSourceSpan | null = null;
+    const sign = this.peek();
+    if (sign?.kind === "character" && (sign.text === "+" || sign.text === "-")) {
+      text += sign.text;
+      lastSpan = this.advance().sourceSpan;
+    }
+
+    let sawDigit = false;
+    let sawDot = false;
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      if (token?.kind !== "character") {
+        break;
+      }
+      if (/[0-9]/.test(token.text)) {
+        sawDigit = true;
+        text += token.text;
+        lastSpan = this.advance().sourceSpan;
+        continue;
+      }
+      if (token.text === "." && !sawDot) {
+        sawDot = true;
+        text += token.text;
+        lastSpan = this.advance().sourceSpan;
+        continue;
+      }
+      break;
+    }
+
+    this.skipSpaces();
+    let unit = "";
+    while (!this.isAtEnd() && unit.length < 2) {
+      const token = this.peek();
+      if (token?.kind !== "character" || !/[A-Za-z]/.test(token.text)) {
+        break;
+      }
+      unit += token.text;
+      lastSpan = this.advance().sourceSpan;
+    }
+
+    const sourceSpan = lastSpan ? { start, end: lastSpan.end } : fallbackSpan;
+    const number = Number(text);
+    if (!sawDigit || !Number.isFinite(number) || unit !== "mu") {
+      this.addDiagnostic(
+        "error",
+        "invalid-tex-dimension",
+        `Unsupported or invalid TeX mu dimension for ${label}.`,
+        sourceSpan
+      );
+      return null;
+    }
+    return {
+      valueMu: number,
       sourceSpan,
     };
   }

@@ -3362,6 +3362,35 @@ describe("TeX math parser", () => {
     expect(result.list.items[3]).toMatchObject({ kind: "glue", command: "quad" });
   });
 
+  it("parses TeX math kern primitives as source-spanned kern items", () => {
+    const result = parseTexMath(String.raw`a\kern2pt b\mkern-1.5mu c`, { sourceOffset: 10 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) => item.kind)).toEqual([
+      "atom",
+      "kern",
+      "atom",
+      "kern",
+      "atom",
+    ]);
+    expect(result.list.items[1]).toMatchObject({
+      kind: "kern",
+      command: "kern",
+      widthPt: 2,
+      commandSourceSpan: { start: 11, end: 16 },
+      amountSourceSpan: { start: 16, end: 19 },
+      sourceSpan: { start: 11, end: 19 },
+    });
+    expect(result.list.items[3]).toMatchObject({
+      kind: "kern",
+      command: "mkern",
+      mu: -1.5,
+      commandSourceSpan: { start: 21, end: 27 },
+      amountSourceSpan: { start: 27, end: 33 },
+      sourceSpan: { start: 21, end: 33 },
+    });
+  });
+
   it("parses TeX math penalty commands as source-spanned penalty items", () => {
     const result = parseTexMath(String.raw`a\allowbreak b\break c\nobreak d\penalty -250 e`);
 

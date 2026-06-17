@@ -128,6 +128,30 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out explicit TeX math kern primitives as fixed hlist kerns", () => {
+    const result = layout(String.raw`a\kern2pt b\mkern3mu c\kern-1pt d`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.map((item) => item.kind)).toEqual([
+      "glyph",
+      "kern",
+      "glyph",
+      "kern",
+      "glyph",
+      "kern",
+      "glyph",
+    ]);
+    expect(result.hlist?.items).toMatchObject([
+      { kind: "glyph", fontId: "cmmi10", code: 97, x: 0 },
+      { kind: "kern", reason: "explicit-kern", x: expect.closeTo(5.2859, 5), width: 2 },
+      { kind: "glyph", fontId: "cmmi10", code: 98, x: expect.closeTo(7.2859, 5) },
+      { kind: "kern", reason: "explicit-kern", width: expect.closeTo(1.666672, 5) },
+      { kind: "glyph", fontId: "cmmi10", code: 99 },
+      { kind: "kern", reason: "explicit-kern", width: -1 },
+      { kind: "glyph", fontId: "cmmi10", code: 100 },
+    ]);
+  });
+
   it("lays out named Greek and symbol commands through TeX math fonts", () => {
     const result = layout(String.raw`\alpha+\beta=\gamma+\Gamma+\Omega+x\leq y\neq z`);
 

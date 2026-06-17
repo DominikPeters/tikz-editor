@@ -101,7 +101,7 @@ export interface TexMathKernLayoutItem {
   readonly kind: "kern";
   readonly x: number;
   readonly width: number;
-  readonly reason: "fraction-kern" | "italic-correction" | "operator-kern" | "text-kern";
+  readonly reason: "explicit-kern" | "fraction-kern" | "italic-correction" | "operator-kern" | "text-kern";
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -301,6 +301,20 @@ export function layoutTexMathList(
         stretch,
         shrink,
         source: item.source,
+        sourceSpan: item.sourceSpan,
+      });
+      cursor = roundTexPt(cursor + width);
+      continue;
+    }
+    if (item.kind === "kern") {
+      const width = item.command === "kern"
+        ? roundTexPt(item.widthPt)
+        : muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
+      items.push({
+        kind: "kern",
+        x: roundTexPt(cursor),
+        width,
+        reason: "explicit-kern",
         sourceSpan: item.sourceSpan,
       });
       cursor = roundTexPt(cursor + width);

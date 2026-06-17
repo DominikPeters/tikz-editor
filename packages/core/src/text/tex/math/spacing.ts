@@ -4,6 +4,7 @@ import type {
   TexMathAlphabetChange,
   TexMathGlue,
   TexMathItem,
+  TexMathKern,
   TexMathList,
   TexMathMiddleDelimiter,
   TexMathMuGlue,
@@ -37,6 +38,7 @@ export type TexMathSpacedItem =
   | TexMathAlphabetChange
   | TexMathMiddleDelimiter
   | TexMathPenalty
+  | TexMathKern
   | TexMathResolvedGlue
   | TexMathUnsupportedItem;
 
@@ -125,6 +127,7 @@ export function spaceTexMathList(
       if (resolved) {
         items.push(resolved);
       }
+      previousAtom = null;
       continue;
     }
     if (item.kind === "mu-glue") {
@@ -132,6 +135,12 @@ export function spaceTexMathList(
       if (resolved) {
         items.push(resolved);
       }
+      previousAtom = null;
+      continue;
+    }
+    if (item.kind === "kern") {
+      items.push(item);
+      previousAtom = null;
       continue;
     }
     if (item.kind === "unsupported") {

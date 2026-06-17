@@ -583,6 +583,24 @@ export interface TexMathMuGlue {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export type TexMathKern =
+  | {
+      readonly kind: "kern";
+      readonly command: "kern";
+      readonly widthPt: number;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "kern";
+      readonly command: "mkern";
+      readonly mu: number;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    };
+
 export interface TexMathStyleChange {
   readonly kind: "style-change";
   readonly style: TexMathStyle;
@@ -612,6 +630,7 @@ export type TexMathItem =
   | TexMathAtom
   | TexMathGlue
   | TexMathMuGlue
+  | TexMathKern
   | TexMathStyleChange
   | TexMathAlphabetChange
   | TexMathMiddleDelimiter
