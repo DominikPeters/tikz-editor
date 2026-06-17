@@ -2030,6 +2030,35 @@ describe("TeX math parser", () => {
     )).toEqual(["a", "b", "c", "d"]);
   });
 
+  it("parses flalign environments as edge-flush AMS alignments", () => {
+    const source = String.raw`\begin{flalign}a&=b&c&=d\\e&=f&g&=h\end{flalign}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "aligned",
+        columnSeparation: "flalign",
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{flalign}`),
+          end: source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) => row.cells.map((cell) =>
+      source.slice(cell.sourceSpan.start, cell.sourceSpan.end)
+    ))).toEqual([
+      ["a", "=b", "c", "=d"],
+      ["e", "=f", "g", "=h"],
+    ]);
+  });
+
   it("parses LaTeX eqnarray environments as distinct three-column alignments", () => {
     const source = String.raw`\begin{eqnarray}a&=&b\\c&=&d\end{eqnarray}`;
     const result = parseTexMath(source);

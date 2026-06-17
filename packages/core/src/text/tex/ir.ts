@@ -83,6 +83,8 @@ export type SimpleTexDisplayMathDelimiter =
   | "equation-star"
   | "align"
   | "align-star"
+  | "flalign"
+  | "flalign-star"
   | "gather"
   | "gather-star"
   | "multline"
@@ -850,6 +852,36 @@ function scanSimpleTexDisplayMath(
         contentStart,
         contentEnd,
         end: contentEnd + alignEnd.length,
+      };
+    }
+  }
+
+  const flalignStarBegin = String.raw`\begin{flalign*}`;
+  if (text.startsWith(flalignStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const flalignStarEnd = String.raw`\end{flalign*}`;
+    const contentStart = start + flalignStarBegin.length;
+    const contentEnd = text.indexOf(flalignStarEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "flalign-star",
+        contentStart,
+        contentEnd,
+        end: contentEnd + flalignStarEnd.length,
+      };
+    }
+  }
+
+  const flalignBegin = String.raw`\begin{flalign}`;
+  if (text.startsWith(flalignBegin, start) && !isEscapedSimpleTexChar(text, start)) {
+    const flalignEnd = String.raw`\end{flalign}`;
+    const contentStart = start + flalignBegin.length;
+    const contentEnd = text.indexOf(flalignEnd, contentStart);
+    if (contentEnd >= 0) {
+      return {
+        delimiter: "flalign",
+        contentStart,
+        contentEnd,
+        end: contentEnd + flalignEnd.length,
       };
     }
   }

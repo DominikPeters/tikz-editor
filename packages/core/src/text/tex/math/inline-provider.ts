@@ -766,6 +766,7 @@ function getDisplayMathAlignment(
   const rowTagWidths = displayAlignmentRowTagWidths(alignedNucleus, params.displayLabels, fontProfile, baseAtPt);
   const dimensions = displayAlignmentDimensions({
     measuredWidth: laidOut.hlist.width,
+    mode: displayAlignmentDimensionMode(params.delimiter),
     pairCount,
     rowCount: alignedRows.length,
     rows: alignedRows,
@@ -912,26 +913,45 @@ function displayAlignmentRowLabel(
     null;
 }
 
+type TexDisplayAlignmentDelimiter =
+  | "align"
+  | "align-star"
+  | "flalign"
+  | "flalign-star"
+  | "gather"
+  | "gather-star"
+  | "multline"
+  | "multline-star";
+
 function texMathDisplayAlignmentDelimiter(
   delimiter: string
-): delimiter is "align" | "align-star" | "gather" | "gather-star" | "multline" | "multline-star" {
+): delimiter is TexDisplayAlignmentDelimiter {
   return delimiter === "align" ||
     delimiter === "align-star" ||
+    delimiter === "flalign" ||
+    delimiter === "flalign-star" ||
     delimiter === "gather" ||
     delimiter === "gather-star" ||
     delimiter === "multline" ||
     delimiter === "multline-star";
 }
 
-function displayAlignmentColumnSeparation(delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline" | "multline-star"):
-  "align" | "gather" | "multline" {
+function displayAlignmentColumnSeparation(delimiter: TexDisplayAlignmentDelimiter):
+  "align" | "flalign" | "gather" | "multline" {
   if (delimiter === "gather" || delimiter === "gather-star") {
     return "gather";
   }
   if (delimiter === "multline" || delimiter === "multline-star") {
     return "multline";
   }
+  if (delimiter === "flalign" || delimiter === "flalign-star") {
+    return "flalign";
+  }
   return "align";
+}
+
+function displayAlignmentDimensionMode(delimiter: TexDisplayAlignmentDelimiter): "centered" | "flush" {
+  return delimiter === "flalign" || delimiter === "flalign-star" ? "flush" : "centered";
 }
 
 function multlineRowOffset(
@@ -1262,6 +1282,7 @@ interface TexDisplayAlignmentDimensions {
 
 function displayAlignmentDimensions(params: {
   readonly measuredWidth: number;
+  readonly mode: "centered" | "flush";
   readonly pairCount: number;
   readonly rowCount: number;
   readonly rows: readonly TexMathChildHListLayoutItem[];
@@ -1278,6 +1299,21 @@ function displayAlignmentDimensions(params: {
     0,
     params.measuredWidth - fixedPairGapWidth - trailingWidth
   ));
+  if (params.mode === "flush" && params.pairCount > 1) {
+    let alignSep = roundTexPt((params.targetWidth - totalFieldWidth) / alignSepCount);
+    if (alignSep < TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT) {
+      alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
+    }
+    return {
+      eqnShift: 0,
+      alignSep,
+      pairCount: params.pairCount,
+      maxColumnWidths,
+      rowWidth: roundTexPt(totalFieldWidth + alignSepCount * alignSep),
+      targetWidth: params.targetWidth,
+    };
+  }
+
   const flexible = roundTexPt((params.targetWidth - totalFieldWidth) / (params.pairCount + 1));
   let eqnShift: number;
   let alignSep: number;

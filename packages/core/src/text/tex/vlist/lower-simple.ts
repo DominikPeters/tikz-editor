@@ -123,6 +123,8 @@ function displayMathItemFromSimpleTexDisplayMath(
   if (
     item.delimiter === "align" ||
     item.delimiter === "align-star" ||
+    item.delimiter === "flalign" ||
+    item.delimiter === "flalign-star" ||
     item.delimiter === "gather" ||
     item.delimiter === "gather-star" ||
     item.delimiter === "multline" ||

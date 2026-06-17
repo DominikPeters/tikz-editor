@@ -19,6 +19,16 @@ const DISPLAY_ALIGNMENT_ENVIRONMENTS = [
     end: String.raw`\end{align*}`,
   },
   {
+    delimiter: "flalign",
+    begin: String.raw`\begin{flalign}`,
+    end: String.raw`\end{flalign}`,
+  },
+  {
+    delimiter: "flalign-star",
+    begin: String.raw`\begin{flalign*}`,
+    end: String.raw`\end{flalign*}`,
+  },
+  {
     delimiter: "gather",
     begin: String.raw`\begin{gather}`,
     end: String.raw`\end{gather}`,
@@ -404,6 +414,9 @@ function displayAlignmentColumnSeparation(delimiter) {
   }
   if (delimiter === "multline" || delimiter === "multline-star") {
     return "multline";
+  }
+  if (delimiter === "flalign" || delimiter === "flalign-star") {
+    return "flalign";
   }
   return "align";
 }

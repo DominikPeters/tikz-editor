@@ -45,7 +45,7 @@ interface ParseListOptions {
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
-  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat";
+  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign";
 }
 
 type InfixFractionPrimitive =
@@ -70,7 +70,7 @@ export interface ParseTexMathOptions {
 }
 
 interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
-  readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat";
+  readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign";
   readonly allowDisplayBreak?: boolean;
   readonly allowIntertext?: boolean;
 }
@@ -1255,7 +1255,7 @@ class TexMathParser {
   }
 
   private parseMisplacedShoveCommand(
-    columnSeparation: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | undefined
+    columnSeparation: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign" | undefined
   ): TexMathAtom {
     const command = this.advance();
     this.addDiagnostic(
@@ -1556,11 +1556,15 @@ class TexMathParser {
         ? "gather"
         : multlineEnvironmentName(environmentName.name)
           ? "multline"
+          : flalignEnvironmentName(environmentName.name)
+            ? "flalign"
           : "align",
       ...(multlineEnvironmentName(environmentName.name) ? { maxFields: 1 } : {}),
       allowAlignmentTags: displayAlignmentEnvironmentName(environmentName.name),
       allowDisplayBreak: displayAlignmentEnvironmentName(environmentName.name),
-      allowIntertext: alignEnvironmentName(environmentName.name) || gatherEnvironmentName(environmentName.name),
+      allowIntertext: alignEnvironmentName(environmentName.name) ||
+        flalignEnvironmentName(environmentName.name) ||
+        gatherEnvironmentName(environmentName.name),
       allowScripts,
     });
   }
@@ -1820,7 +1824,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
@@ -1844,7 +1848,7 @@ class TexMathParser {
     readonly initialSourceSpan: TexMathSourceSpan;
     readonly preambleSourceSpan?: TexMathSourceSpan;
     readonly stopAtEnvironmentEnd?: string;
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign";
     readonly maxFields?: number;
     readonly allowAlignmentTags?: boolean;
     readonly allowDisplayBreak?: boolean;
@@ -3804,7 +3808,7 @@ function alignedAtom(
   endSourceSpan: TexMathSourceSpan | undefined,
   sourceSpan: TexMathSourceSpan,
   options: {
-    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat";
+    readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign";
     readonly maxFields?: number;
   } = {}
 ): TexMathAtom {
@@ -4478,6 +4482,7 @@ function alignedEnvironmentName(name: string): boolean {
     name === "gathered" ||
     name === "align" ||
     name === "align*" ||
+    flalignEnvironmentName(name) ||
     name === "gather" ||
     name === "gather*" ||
     multlineEnvironmentName(name);
@@ -4495,11 +4500,16 @@ function xxalignatEnvironmentName(name: string): boolean {
   return name === "xxalignat";
 }
 
+function flalignEnvironmentName(name: string): boolean {
+  return name === "flalign" || name === "flalign*";
+}
+
 function displayAlignmentEnvironmentName(name: string): boolean {
   return alignEnvironmentName(name) ||
     alignatEnvironmentName(name) ||
     xalignatEnvironmentName(name) ||
     xxalignatEnvironmentName(name) ||
+    flalignEnvironmentName(name) ||
     gatherEnvironmentName(name) ||
     multlineEnvironmentName(name);
 }

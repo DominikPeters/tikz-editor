@@ -25,6 +25,18 @@ function firstGlyphX(items: readonly TexMathHListItem[], baseX = 0): number | nu
   return null;
 }
 
+function mathItemsRightEdge(items: readonly TexMathHListItem[], baseX = 0): number {
+  let right = 0;
+  for (const item of items) {
+    const itemRight = baseX + item.x + item.width;
+    right = Math.max(right, itemRight);
+    if (item.kind === "hlist") {
+      right = Math.max(right, mathItemsRightEdge(item.items, baseX + item.x));
+    }
+  }
+  return right;
+}
+
 describe("TeX math SVG rendering", () => {
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
@@ -1909,6 +1921,65 @@ unordered.`;
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-math-hlist="true"');
     expect(directAlignment?.rows[0]?.svgBody).toContain(`data-source-start="${source.indexOf("a&=b")}"`);
     expect(directAlignment?.rows[1]?.svgBody).toContain(`data-source-start="${source.indexOf("c&=d")}"`);
+    expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
+      source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
+    )).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("lets TeX paragraph layout carry flalign-star display math as edge-flush display rows", () => {
+    const source = String.raw`Alpha \begin{flalign*}a&=b&c&=d\\e&=f&g&=h\end{flalign*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:flalign-star-display-math-provider",
+      width: 120,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      itemKind: "hbox",
+      x: 0,
+      width: expect.closeTo(120, 5),
+      hboxRole: {
+        kind: "display-align-row",
+        delimiter: "flalign-star",
+        rowIndex: 0,
+      },
+    });
+
+    const content = String.raw`a&=b&c&=d\\e&=f&g&=h`;
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const flalign = provider.getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "flalign-star",
+      sourceStart: source.indexOf(String.raw`\begin{flalign*}`),
+      sourceEnd: source.indexOf(String.raw`\end{flalign*}`) + String.raw`\end{flalign*}`.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{flalign*}`),
+      targetWidth: 120,
+    });
+    const align = provider.getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{flalign*}`),
+      sourceEnd: source.indexOf(String.raw`\end{flalign*}`) + String.raw`\end{flalign*}`.length,
+      contentStart: source.indexOf("a&=b"),
+      contentEnd: source.indexOf(String.raw`\end{flalign*}`),
+      targetWidth: 120,
+    });
+
+    expect(flalign?.rows).toHaveLength(2);
+    expect(flalign?.rows[0]?.width).toBeCloseTo(120, 5);
+    expect(firstGlyphX(flalign?.rows[0]?.hlist?.items ?? [])).toBeCloseTo(0, 5);
+    expect(mathItemsRightEdge(flalign?.rows[0]?.hlist?.items ?? [])).toBeGreaterThan(119);
+    expect(firstGlyphX(align?.rows[0]?.hlist?.items ?? []) ?? 0).toBeGreaterThan(10);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) =>
       source.slice(placement.sourceSpan.start, placement.sourceSpan.end)
     )).toEqual(["Alpha", "Beta"]);
