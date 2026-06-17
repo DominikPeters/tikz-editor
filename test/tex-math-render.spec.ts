@@ -6,6 +6,7 @@ import {
   parseTexMath,
   renderTexMathHListSvgBody,
   resolveDefaultTexMathFontProfileForList,
+  type TexMathHListItem,
 } from "../packages/core/src/text/tex/index.js";
 
 describe("TeX math SVG rendering", () => {
@@ -1866,5 +1867,40 @@ unordered.`;
       expect(box?.rows, testCase.source).toHaveLength(2);
       expect(box?.rows[0]?.svgBody, testCase.source).toContain('data-tex-math-role="aligned-row"');
     }
+  });
+
+  it("applies multline shove commands to display row placement", () => {
+    const source = String.raw`\begin{multline*}a\\\shoveleft b\\\shoveright c\end{multline*}`;
+    const content = String.raw`a\\\shoveleft b\\\shoveright c`;
+    const box = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "multline-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("a"),
+      contentEnd: source.indexOf(String.raw`\end{multline*}`),
+      targetWidth: 120,
+    });
+
+    expect(box?.rows).toHaveLength(3);
+    const firstGlyphX = (items: readonly TexMathHListItem[], baseX = 0): number | null => {
+      for (const item of items) {
+        if (item.kind === "glyph") {
+          return baseX + item.x;
+        }
+        if (item.kind === "hlist") {
+          const nested = firstGlyphX(item.items, baseX + item.x);
+          if (nested !== null) {
+            return nested;
+          }
+        }
+      }
+      return null;
+    };
+    const rowLefts = box?.rows.map((row) => firstGlyphX(row.hlist?.items ?? []) ?? 0);
+    expect(rowLefts?.[0]).toBeCloseTo(10, 6);
+    expect(rowLefts?.[1]).toBeCloseTo(10, 6);
+    expect(rowLefts?.[2]).toBeGreaterThan(100);
   });
 });

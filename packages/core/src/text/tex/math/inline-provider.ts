@@ -502,7 +502,7 @@ function getDisplayMathAlignment(
   if (params.delimiter === "multline-star") {
     const rows = alignedRows.map((row, rowIndex) => {
       const rowWidth = mathItemsRightEdge(row.items);
-      const rowOffset = multlineRowOffset(rowWidth, rowIndex, alignedRows.length, params.targetWidth);
+      const rowOffset = multlineRowOffset(rowWidth, rowIndex, alignedRows.length, params.targetWidth, row.multlineShove);
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
@@ -696,8 +696,15 @@ function multlineRowOffset(
   rowWidth: number,
   rowIndex: number,
   rowCount: number,
-  targetWidth: number
+  targetWidth: number,
+  shove?: "left" | "right"
 ): number {
+  if (shove === "left") {
+    return TEX_MULTLINE_GAP_PT;
+  }
+  if (shove === "right") {
+    return roundTexPt(Math.max(0, targetWidth - rowWidth - TEX_MULTLINE_GAP_PT));
+  }
   if (rowCount <= 1) {
     return roundTexPt(Math.max(0, (targetWidth - rowWidth) / 2));
   }

@@ -1441,6 +1441,54 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("reports TeX-like multline row and shove command errors", () => {
+    const extraColumn = parseTexMath(String.raw`\begin{multline}a\\b&c\end{multline}`);
+    expect(extraColumn.diagnostics).toContainEqual({
+      severity: "error",
+      code: "extra-alignment-tab",
+      message: "The rows within the multline environment must have exactly one column.",
+      sourceSpan: { start: 20, end: 21 },
+    });
+
+    const misplacedSource = String.raw`\begin{multline}a \shoveleft\\ b\\ c\end{multline}`;
+    const misplaced = parseTexMath(misplacedSource);
+    expect(misplaced.diagnostics).toContainEqual({
+      severity: "error",
+      code: "unsupported-command",
+      message: String.raw`\shoveleft must come at the beginning of the line.`,
+      sourceSpan: {
+        start: misplacedSource.indexOf(String.raw`\shoveleft`),
+        end: misplacedSource.indexOf(String.raw`\shoveleft`) + String.raw`\shoveleft`.length,
+      },
+    });
+
+    const wrongEnvironment = parseTexMath(String.raw`\begin{align}\shoveleft a\end{align}`);
+    expect(wrongEnvironment.diagnostics).toContainEqual({
+      severity: "error",
+      code: "unsupported-command",
+      message: String.raw`\shoveleft only allowed in multline environment.`,
+      sourceSpan: { start: 13, end: 23 },
+    });
+  });
+
+  it("records leading multline shove commands as row placement metadata", () => {
+    const source = String.raw`\begin{multline}a\\\shoveleft b\\\shoveright c\\\shoveright\shoveleft d\end{multline}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus.kind).toBe("aligned");
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows.map((row) => row.multlineShove ?? null)).toEqual([
+      null,
+      "left",
+      "right",
+      "left",
+    ]);
+  });
+
   it("reports intertext in alignment environments as explicitly unsupported", () => {
     const source = String.raw`\begin{align*}a&=b\\\intertext{words}c&=d\end{align*}`;
     const result = parseTexMath(source);

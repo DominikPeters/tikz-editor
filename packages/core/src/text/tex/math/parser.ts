@@ -41,6 +41,7 @@ interface ParseListOptions {
   readonly allowInfixFraction?: boolean;
   readonly suppressEllipsisGlueBeforeAlignmentTab?: boolean;
   readonly suppressTerminalEllipsisGlue?: boolean;
+  readonly alignmentColumnSeparation?: "align" | "none" | "gather" | "multline";
 }
 
 type InfixFractionPrimitive =
@@ -377,6 +378,10 @@ class TexMathParser {
       }
       if (commandName(token.text) === "not") {
         return this.parseNot(allowScripts);
+      }
+      const shove = shoveCommandName(token.text);
+      if (shove) {
+        return this.parseMisplacedShoveCommand(listOptions.alignmentColumnSeparation);
       }
       const namedSymbol = namedSymbolCommand(token.text);
       if (namedSymbol) {
@@ -1002,6 +1007,47 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private consumeLeadingMultlineShove(): {
+    readonly alignment: "left" | "right";
+    readonly sourceSpan: TexMathSourceSpan;
+  } | null {
+    this.skipSpaces();
+    const token = this.peek();
+    const shove = token?.kind === "command" ? shoveCommandName(token.text) : null;
+    if (!token || !shove) {
+      return null;
+    }
+    this.advance();
+    return {
+      alignment: shove,
+      sourceSpan: token.sourceSpan,
+    };
+  }
+
+  private parseMisplacedShoveCommand(
+    columnSeparation: "align" | "none" | "gather" | "multline" | undefined
+  ): TexMathAtom {
+    const command = this.advance();
+    this.addDiagnostic(
+      "error",
+      "unsupported-command",
+      columnSeparation === "multline"
+        ? `${command.text} must come at the beginning of the line.`
+        : `${command.text} only allowed in multline environment.`,
+      command.sourceSpan
+    );
+    return {
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "unsupported",
+        command: command.text,
+        sourceSpan: command.sourceSpan,
+      },
+      sourceSpan: command.sourceSpan,
+    };
+  }
+
   private parseOperatorLimitSwitch(atom: TexMathAtom, allowLimits: boolean): TexMathAtom {
     if (!allowLimits) {
       return atom;
@@ -1236,6 +1282,7 @@ class TexMathParser {
         : multlineEnvironmentName(environmentName.name)
           ? "multline"
           : "align",
+      ...(multlineEnvironmentName(environmentName.name) ? { maxFields: 1 } : {}),
       allowAlignmentTags: displayAlignmentEnvironmentName(environmentName.name),
       allowScripts,
     });
@@ -1507,10 +1554,20 @@ class TexMathParser {
         readonly sourceSpan: TexMathSourceSpan;
         readonly textSourceSpan: TexMathSourceSpan;
       }> = [];
+      let multlineShove: "left" | "right" | undefined;
       let pendingRowSourceSpan: TexMathSourceSpan | undefined;
       let alignmentTabsInRow = 0;
       let extraAlignmentTabSourceSpan: TexMathSourceSpan | undefined;
       while (!this.isAtEnd()) {
+        if (cells.length === 0 && params.columnSeparation === "multline") {
+          let shove = this.consumeLeadingMultlineShove();
+          while (shove) {
+            multlineShove = shove.alignment;
+            sourceSpan = spanUnion(sourceSpan, shove.sourceSpan);
+            pendingRowSourceSpan = spanUnion(pendingRowSourceSpan ?? shove.sourceSpan, shove.sourceSpan);
+            shove = this.consumeLeadingMultlineShove();
+          }
+        }
         const cellList = this.parseList({
           stopAtGroupClose: false,
           stopAtAlignmentTab: true,
@@ -1518,6 +1575,7 @@ class TexMathParser {
           stopAtAlignmentMetadata: true,
           stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
           suppressEllipsisGlueBeforeAlignmentTab: true,
+          alignmentColumnSeparation: params.columnSeparation,
         });
         cells.push({
           list: cellList,
@@ -1552,7 +1610,9 @@ class TexMathParser {
         this.addDiagnostic(
           "error",
           "extra-alignment-tab",
-          "Extra & on this line.",
+          params.columnSeparation === "multline"
+            ? "The rows within the multline environment must have exactly one column."
+            : "Extra & on this line.",
           extraAlignmentTabSourceSpan
         );
       }
@@ -1563,10 +1623,11 @@ class TexMathParser {
         sourceSpan = spanUnion(sourceSpan, rowBreak.sourceSpan);
         rows.push({
           cells,
-          sourceSpan: spanUnion(cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
+          sourceSpan: spanUnion(pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? rowBreak.sourceSpan, rowBreak.sourceSpan),
           rowBreakSourceSpan: rowBreak.sourceSpan,
           ...(suppressTag ? { suppressTag } : {}),
           ...(labels.length > 0 ? { labels } : {}),
+          ...(multlineShove ? { multlineShove } : {}),
         });
         continue;
       }
@@ -1578,6 +1639,7 @@ class TexMathParser {
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
           ...(suppressTag ? { suppressTag } : {}),
           ...(labels.length > 0 ? { labels } : {}),
+          ...(multlineShove ? { multlineShove } : {}),
         });
         return this.maybeParseScripts(
           alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan, {
@@ -1593,6 +1655,7 @@ class TexMathParser {
           sourceSpan: pendingRowSourceSpan ?? cells[0]?.sourceSpan ?? sourceSpan,
           ...(suppressTag ? { suppressTag } : {}),
           ...(labels.length > 0 ? { labels } : {}),
+          ...(multlineShove ? { multlineShove } : {}),
         });
       }
     }
@@ -3561,6 +3624,17 @@ function alignmentMetadataCommand(
       return "unsupported-text";
     case "displaybreak":
       return "unsupported-optional";
+    default:
+      return null;
+  }
+}
+
+function shoveCommandName(command: string): "left" | "right" | null {
+  switch (commandName(command)) {
+    case "shoveleft":
+      return "left";
+    case "shoveright":
+      return "right";
     default:
       return null;
   }

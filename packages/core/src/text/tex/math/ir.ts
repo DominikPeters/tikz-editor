@@ -312,6 +312,7 @@ export interface TexMathAlignedRow {
   readonly rowBreakSourceSpan?: TexMathSourceSpan;
   readonly suppressTag?: boolean;
   readonly labels?: readonly TexMathAlignedRowLabel[];
+  readonly multlineShove?: "left" | "right";
 }
 
 export interface TexMathAlignedRowLabel {
