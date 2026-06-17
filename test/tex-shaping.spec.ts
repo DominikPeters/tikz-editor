@@ -349,6 +349,7 @@ type TexDisplayAlignHitMapFuzzCase = {
   readonly id: string;
   readonly source: string;
   readonly width: number;
+  readonly delimiter: "align-star" | "gather-star" | "multline-star";
   readonly rows: readonly string[];
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
 };
@@ -358,6 +359,7 @@ type TexDocumentMathHitMapFuzzCase = {
   readonly source: string;
   readonly width: number;
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
+  readonly delimiter: "align-star" | "gather-star" | "multline-star";
   readonly rows: readonly string[];
 };
 
@@ -631,34 +633,35 @@ function buildTexDocumentMathHitMapFuzzCase(index: number): TexDocumentMathHitMa
   body += ` ${pickFuzzItem(["middle", "after", "tail"], random)} `;
   appendInlineMath();
 
-  const rows = documentHitMapAlignRows(random);
+  const displayKind = texDisplayRowFuzzKind(index);
+  const rows = documentHitMapDisplayRows(random, displayKind.delimiter);
   body += " ";
-  const alignStart = body.length;
-  const alignOpen = String.raw`\begin{align*}`;
-  const alignContent = rows.join(String.raw`\\`);
-  body += alignOpen + alignContent + String.raw`\end{align*}`;
-  const alignContentStart = alignStart + alignOpen.length;
-  let alignRowOffset = 0;
+  const displayRowsStart = body.length;
+  const displayRowsOpen = displayKind.open;
+  const displayRowsContent = rows.join(String.raw`\\`);
+  body += displayRowsOpen + displayRowsContent + displayKind.close;
+  const displayRowsContentStart = displayRowsStart + displayRowsOpen.length;
+  let displayRowOffset = 0;
   for (const [rowIndex, row] of rows.entries()) {
     const firstToken = row.match(/[A-Za-z0-9\\]/);
     if (firstToken?.index !== undefined) {
       offsets.push({
-        offset: alignContentStart + alignRowOffset + firstToken.index,
+        offset: displayRowsContentStart + displayRowOffset + firstToken.index,
         kind: "math",
-        label: `align-row-${rowIndex}`,
+        label: `display-row-${rowIndex}`,
         exactRoundTrip: false,
       });
     }
     const relation = row.indexOf("=");
     if (relation >= 0) {
       offsets.push({
-        offset: alignContentStart + alignRowOffset + relation,
+        offset: displayRowsContentStart + displayRowOffset + relation,
         kind: "math",
-        label: `align-row-${rowIndex}:=`,
+        label: `display-row-${rowIndex}:=`,
         exactRoundTrip: false,
       });
     }
-    alignRowOffset += row.length + (rowIndex === rows.length - 1 ? 0 : String.raw`\\`.length);
+    displayRowOffset += row.length + (rowIndex === rows.length - 1 ? 0 : String.raw`\\`.length);
   }
   body += ` ${pickFuzzItem(["Done", "Close", "Finish"], random)} `;
   appendInlineMath();
@@ -693,6 +696,7 @@ function buildTexDocumentMathHitMapFuzzCase(index: number): TexDocumentMathHitMa
     source,
     width: pickFuzzItem([130, 160, 190, 220], random),
     offsets: shiftedOffsets,
+    delimiter: displayKind.delimiter,
     rows,
   };
 }
@@ -712,20 +716,56 @@ function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
   ];
 }
 
-function documentHitMapAlignRows(random: () => number): readonly string[] {
+function documentHitMapDisplayRows(
+  random: () => number,
+  delimiter: "align-star" | "gather-star" | "multline-star"
+): readonly string[] {
   const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const rowCount = 1 + Math.floor(random() * 3);
   return Array.from({ length: rowCount }, () => {
     const left = pickFuzzItem(identifiers, random);
     const right = pickFuzzItem(identifiers, random);
+    if (delimiter !== "align-star") {
+      return random() < 0.4
+        ? String.raw`\frac{` + left + String.raw`}{` + right + String.raw`}+` + pickFuzzItem(identifiers, random)
+        : `${left}=${right}`;
+    }
     return random() < 0.4
       ? String.raw`\frac{` + left + String.raw`}{` + right + String.raw`}&=` + pickFuzzItem(identifiers, random)
       : `${left}&=${right}`;
   });
 }
 
+function texDisplayRowFuzzKind(index: number): {
+  readonly delimiter: "align-star" | "gather-star" | "multline-star";
+  readonly open: string;
+  readonly close: string;
+} {
+  switch (index % 3) {
+    case 1:
+      return {
+        delimiter: "gather-star",
+        open: String.raw`\begin{gather*}`,
+        close: String.raw`\end{gather*}`,
+      };
+    case 2:
+      return {
+        delimiter: "multline-star",
+        open: String.raw`\begin{multline*}`,
+        close: String.raw`\end{multline*}`,
+      };
+    default:
+      return {
+        delimiter: "align-star",
+        open: String.raw`\begin{align*}`,
+        close: String.raw`\end{align*}`,
+      };
+  }
+}
+
 function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMapFuzzCase {
   const random = makeDeterministicRandom(0x414c4947 + index);
+  const displayKind = texDisplayRowFuzzKind(index);
   const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const operators = ["+", "-", "="] as const;
   const rowCount = 2 + Math.floor(random() * 2);
@@ -735,9 +775,16 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
     const right = pickFuzzItem(identifiers, random);
     const tail = pickFuzzItem(identifiers, random);
     const operator = pickFuzzItem(operators, random);
-    const row = random() < 0.45
-      ? String.raw`\frac{${left}}{${right}}&=${tail}`
-      : `${left}&${operator}${right}`;
+    const row = displayKind.delimiter === "align-star"
+      ? random() < 0.45
+        ? String.raw`\frac{${left}}{${right}}&=${tail}`
+        : `${left}&${operator}${right}`
+      : random() < 0.45
+        ? String.raw`\frac{${left}}{${right}}+${tail}`
+        : `${left}${operator}${right}`;
+    if (displayKind.delimiter !== "align-star") {
+      return row;
+    }
     return rowIndex === 0 && index % 3 === 0
       ? `${row} \\tag{A}`
       : rowIndex === 1 && index % 5 === 0
@@ -747,7 +794,7 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
   const content = rows.join(String.raw`\\`);
   const prefix = pickFuzzItem(["Intro", "Before", "Lead"], random);
   const suffix = pickFuzzItem(["Outro", "After", "Done"], random);
-  const body = `${prefix} \\begin{align*}${content}\\end{align*} ${suffix}`;
+  const body = `${prefix} ${displayKind.open}${content}${displayKind.close} ${suffix}`;
   const wrappers = [
     (inner: string) => String.raw`\begin{quote}` + inner + String.raw`\end{quote}`,
     (inner: string) => String.raw`\begin{itemize}\item ` + inner + String.raw`\end{itemize}`,
@@ -758,8 +805,7 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
   ] as const;
   const wrapper = wrappers[index % wrappers.length];
   const source = wrapper(body);
-  const alignOpen = String.raw`\begin{align*}`;
-  const alignContentStart = source.indexOf(alignOpen) + alignOpen.length;
+  const alignContentStart = source.indexOf(displayKind.open) + displayKind.open.length;
   let rowStart = 0;
   for (const [rowIndex, row] of rows.entries()) {
     for (const token of ["\\frac", "&", "=", "A", "Long tag"]) {
@@ -788,6 +834,7 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
     id: `tex-display-align-hitmap-fuzz-${index}`,
     source,
     width: pickFuzzItem([130, 160, 190, 220], random),
+    delimiter: displayKind.delimiter,
     rows,
     offsets: [...new Map(rowOffsets.map((entry) => [entry.offset, entry])).values()]
       .filter((entry) => entry.offset > 0 && entry.offset < source.length)
@@ -4961,7 +5008,7 @@ unordered.`;
         expect(row, testCase.source).toMatchObject({
           kind: "hbox",
           hboxRole: "display-align-row",
-          displayAlignDelimiter: "align-star",
+          displayAlignDelimiter: testCase.delimiter,
           displayAlignRowIndex: rowIndex,
         });
         expect(
@@ -4981,7 +5028,7 @@ unordered.`;
         expect(hit, `${testCase.id} row ${rowIndex}: ${testCase.source}`).toMatchObject({
           kind: "hbox",
           hboxRole: "display-align-row",
-          displayAlignDelimiter: "align-star",
+          displayAlignDelimiter: testCase.delimiter,
           displayAlignRowIndex: rowIndex,
           sourceStart: row.sourceStart,
           sourceEnd: row.sourceEnd,
@@ -5122,7 +5169,7 @@ unordered.`;
         expect(hit, `${testCase.id} row ${rowIndex}: ${testCase.source}`).toMatchObject({
           kind: "hbox",
           hboxRole: "display-align-row",
-          displayAlignDelimiter: "align-star",
+          displayAlignDelimiter: testCase.delimiter,
           displayAlignRowIndex: rowIndex,
           sourceStart: row.sourceStart,
           sourceEnd: row.sourceEnd,
