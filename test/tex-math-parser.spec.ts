@@ -2394,8 +2394,36 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses array preamble inserts as source-spanned math lists", () => {
+    const source = String.raw`\begin{array}{r@{\alpha}c!{h}l}a&b&c\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["right", "center", "left"],
+      preambleItems: [
+        {
+          kind: "insert",
+          beforeColumn: 1,
+          mode: "replace-spacing",
+          commandSourceSpan: { start: 15, end: 16 },
+          sourceSpan: { start: 15, end: 24 },
+        },
+        {
+          kind: "insert",
+          beforeColumn: 2,
+          mode: "add-spacing",
+          commandSourceSpan: { start: 25, end: 26 },
+          sourceSpan: { start: 25, end: 29 },
+        },
+      ],
+    });
+  });
+
   it("keeps unsupported array preamble extensions explicit", () => {
-    const source = String.raw`\begin{array}{c@{\quad}c}a&b\end{array}`;
+    const source = String.raw`\begin{array}{cp{1cm}c}a&b\end{array}`;
     const result = parseTexMath(source);
     const atom = atomAt(result, 0);
 
@@ -2403,7 +2431,7 @@ describe("TeX math parser", () => {
       {
         severity: "warning",
         code: "unsupported-command",
-        message: "Unsupported array column specifier @.",
+        message: "Unsupported array column specifier p.",
         sourceSpan: { start: 15, end: 16 },
       },
     ]));

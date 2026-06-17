@@ -2330,6 +2330,65 @@ describe("TeX math hlist layout", () => {
     expect(withoutSourceSpans(repeated.hlist?.items)).toEqual(withoutSourceSpans(explicit.hlist?.items));
   });
 
+  it("lays out array preamble inserts with TeX arraycolsep semantics", () => {
+    const defaultSpacing = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c}a\end{array}`).list,
+      { style: "display" }
+    );
+    const trimmedSpacing = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{@{}c@{}}a\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(defaultSpacing.supported).toBe(true);
+    expect(trimmedSpacing.supported).toBe(true);
+    expect((defaultSpacing.hlist?.width ?? 0) - (trimmedSpacing.hlist?.width ?? 0)).toBeCloseTo(10, 5);
+
+    const replacedSpacing = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c@{x}c}a&b\end{array}`).list,
+      { style: "display" }
+    );
+    const addedSpacing = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c!{x}c}a&b\end{array}`).list,
+      { style: "display" }
+    );
+
+    expect(replacedSpacing.supported).toBe(true);
+    expect(addedSpacing.supported).toBe(true);
+    expect((addedSpacing.hlist?.width ?? 0) - (replacedSpacing.hlist?.width ?? 0)).toBeCloseTo(10, 5);
+    const replacedRow = replacedSpacing.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(replacedRow?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "hlist", role: "array-insert" }),
+    ]));
+
+    const insertRuleMix = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{!{a}|@{b}c}X\end{array}`).list,
+      { style: "display" }
+    );
+    expect(insertRuleMix.supported).toBe(true);
+    expect(insertRuleMix.hlist?.width).toBeCloseTo(26.046982, 4);
+    const insertRuleRow = insertRuleMix.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(insertRuleRow?.items).toMatchObject([
+      { kind: "hlist", role: "array-insert", x: 0 },
+      { kind: "rule", role: "array-rule", x: expect.closeTo(7.2859, 4) },
+      { kind: "hlist", role: "array-insert", x: expect.closeTo(7.6859, 4) },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(11.9776, 4) },
+    ]);
+
+    const ruleInsertMix = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{|!{a}c}X\end{array}`).list,
+      { style: "display" }
+    );
+    expect(ruleInsertMix.supported).toBe(true);
+    expect(ruleInsertMix.hlist?.width).toBeCloseTo(26.755325, 4);
+    const ruleInsertRow = ruleInsertMix.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    expect(ruleInsertRow?.items).toMatchObject([
+      { kind: "rule", role: "array-rule", x: 0 },
+      { kind: "hlist", role: "array-insert", x: expect.closeTo(2.4, 4) },
+      { kind: "hlist", role: "array-cell", x: expect.closeTo(12.6859, 4) },
+    ]);
+  });
+
   it("lays out cases as amsmath array with stretched struts, quad gap, and left brace", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{cases}a&b\\x&y\end{cases}`).list,

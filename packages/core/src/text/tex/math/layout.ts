@@ -19,9 +19,10 @@ import type {
   TexMathAlignedIntertext,
   TexMathAlignedNucleus,
   TexMathAlignedRow,
+  TexMathArrayPreambleInsert,
+  TexMathArrayPreambleItem,
   TexMathArrayColumnAlignment,
   TexMathArrayNucleus,
-  TexMathArrayVerticalRule,
   TexMathCasesNucleus,
   TexMathDelimiter,
   TexMathExtensibleArrowNucleus,
@@ -122,6 +123,7 @@ export interface TexMathChildHListLayoutItem {
     | "sideset-base"
     | "array-row"
     | "array-cell"
+    | "array-insert"
     | "cases-row"
     | "cases-cell"
     | "matrix-row"
@@ -1972,6 +1974,11 @@ function layoutArrayNucleus(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
+  const preambleItems = arrayPreambleItems(nucleus);
+  const insertLayouts = layoutArrayPreambleInserts(preambleItems, fontProfile, baseAtPt, alphabet);
+  if (!insertLayouts) {
+    return null;
+  }
   const rows = nucleus.rows.map((row) =>
     layoutMatrixRow(row, fontProfile, baseAtPt, alphabet)
   );
@@ -1998,11 +2005,10 @@ function layoutArrayNucleus(
   const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
     Math.max(0, ...concreteRows.map((row) => row.cells[columnIndex]?.hlist.width ?? 0))
   ).map(roundTexPt);
-  const width = roundTexPt(
-    columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
-    columnCount * 2 * TEX_MATRIX_ARRAY_COL_SEP_PT +
-    arrayVerticalRuleExtraWidth(nucleus.verticalRules, columnCount)
-  );
+  const width = roundTexPt(columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
+    Array.from({ length: columnCount + 1 }, (_, boundaryIndex) =>
+      arrayBoundaryWidth(preambleItems, boundaryIndex, columnCount, insertLayouts)
+    ).reduce((sum, boundaryWidth) => sum + boundaryWidth, 0));
   const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
   const lastRow = concreteRows[concreteRows.length - 1];
   const naturalHeight = roundTexPt(
@@ -2022,9 +2028,7 @@ function layoutArrayNucleus(
     for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
       const columnWidth = columnWidths[columnIndex] ?? 0;
       const cell = row.cells[columnIndex];
-      appendArrayVerticalRules(rowChildren, nucleus.verticalRules, columnIndex, cursor, row);
-      cursor = roundTexPt(cursor + arrayVerticalRuleBoundaryExtraWidth(nucleus.verticalRules, columnIndex));
-      cursor = roundTexPt(cursor + TEX_MATRIX_ARRAY_COL_SEP_PT);
+      cursor = appendArrayBoundaryItems(rowChildren, preambleItems, columnIndex, columnCount, cursor, row, insertLayouts);
       if (cell) {
         rowChildren.push(childHList(
           "array-cell",
@@ -2038,9 +2042,9 @@ function layoutArrayNucleus(
           cell.sourceSpan
         ));
       }
-      cursor = roundTexPt(cursor + columnWidth + TEX_MATRIX_ARRAY_COL_SEP_PT);
+      cursor = roundTexPt(cursor + columnWidth);
     }
-    appendArrayVerticalRules(rowChildren, nucleus.verticalRules, columnCount, cursor, row);
+    appendArrayBoundaryItems(rowChildren, preambleItems, columnCount, columnCount, cursor, row, insertLayouts);
     rowItems.push({
       kind: "hlist",
       role: "array-row",
@@ -2066,48 +2070,129 @@ function layoutArrayNucleus(
   };
 }
 
-function appendArrayVerticalRules(
-  items: TexMathHListItem[],
-  rules: readonly TexMathArrayVerticalRule[] | undefined,
-  beforeColumn: number,
-  boundaryX: number,
-  row: TexMathAlignedRowLayout
-): void {
-  let ruleIndex = 0;
-  for (const rule of rules ?? []) {
-    if (rule.beforeColumn !== beforeColumn) {
+function arrayPreambleItems(nucleus: TexMathArrayNucleus): readonly TexMathArrayPreambleItem[] {
+  if (nucleus.preambleItems) {
+    return nucleus.preambleItems;
+  }
+  return (nucleus.verticalRules ?? []).map((rule) => ({
+    kind: "vertical-rule" as const,
+    beforeColumn: rule.beforeColumn,
+    sourceSpan: rule.sourceSpan,
+  }));
+}
+
+function layoutArrayPreambleInserts(
+  items: readonly TexMathArrayPreambleItem[],
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): ReadonlyMap<TexMathArrayPreambleInsert, TexMathHList> | null {
+  const layouts = new Map<TexMathArrayPreambleInsert, TexMathHList>();
+  for (const item of items) {
+    if (item.kind !== "insert") {
       continue;
     }
-    items.push({
-      kind: "rule",
-      role: "array-rule",
-      x: roundTexPt(boundaryX + ruleIndex * TEX_LATEX_DOUBLE_RULE_SEP_PT - TEX_LATEX_ARRAY_RULE_WIDTH_PT / 2),
-      y: roundTexPt(-row.height),
-      width: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
-      height: roundTexPt(row.height + row.depth),
-      sourceSpan: rule.sourceSpan,
-    });
-    ruleIndex += 1;
+    const result = layoutTexMathList(item.list, { fontProfile, style: "text", baseAtPt, alphabet });
+    if (!result.supported) {
+      return null;
+    }
+    layouts.set(item, result.hlist);
   }
+  return layouts;
 }
 
-function arrayVerticalRuleExtraWidth(
-  rules: readonly TexMathArrayVerticalRule[] | undefined,
-  columnCount: number
+function appendArrayBoundaryItems(
+  items: TexMathHListItem[],
+  preambleItems: readonly TexMathArrayPreambleItem[],
+  beforeColumn: number,
+  columnCount: number,
+  boundaryX: number,
+  row: TexMathAlignedRowLayout,
+  insertLayouts: ReadonlyMap<TexMathArrayPreambleInsert, TexMathHList>
 ): number {
-  let width = 0;
-  for (let beforeColumn = 0; beforeColumn <= columnCount; beforeColumn += 1) {
-    width += arrayVerticalRuleBoundaryExtraWidth(rules, beforeColumn);
+  const boundaryItems = preambleItems.filter((item) => item.beforeColumn === beforeColumn);
+  const replacesSpacing = boundaryItems.some((item) => item.kind === "insert" && item.mode === "replace-spacing");
+  let cursor = beforeColumn > 0 && !replacesSpacing
+    ? roundTexPt(boundaryX + TEX_MATRIX_ARRAY_COL_SEP_PT)
+    : boundaryX;
+  for (const [index, item] of boundaryItems.entries()) {
+    if (item.kind === "vertical-rule") {
+      const consumesRuleWidth = arrayBoundaryRuleConsumesWidth(boundaryItems[index - 1], item, boundaryItems[index + 1]);
+      items.push({
+        kind: "rule",
+        role: "array-rule",
+        x: roundTexPt(consumesRuleWidth ? cursor : cursor - TEX_LATEX_ARRAY_RULE_WIDTH_PT / 2),
+        y: roundTexPt(-row.height),
+        width: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
+        height: roundTexPt(row.height + row.depth),
+        sourceSpan: item.sourceSpan,
+      });
+      if (consumesRuleWidth) {
+        cursor = roundTexPt(cursor + TEX_LATEX_ARRAY_RULE_WIDTH_PT);
+      }
+      if (arrayBoundaryItemsNeedDoubleRuleSep(item, boundaryItems[index + 1])) {
+        cursor = roundTexPt(cursor + TEX_LATEX_DOUBLE_RULE_SEP_PT);
+      }
+      continue;
+    }
+    const hlist = insertLayouts.get(item);
+    if (!hlist) {
+      continue;
+    }
+    items.push(childHList("array-insert", cursor, 0, hlist, item.sourceSpan));
+    cursor = roundTexPt(cursor + hlist.width);
+    if (arrayBoundaryItemsNeedDoubleRuleSep(item, boundaryItems[index + 1])) {
+      cursor = roundTexPt(cursor + TEX_LATEX_DOUBLE_RULE_SEP_PT);
+    }
   }
-  return roundTexPt(width);
+  return beforeColumn < columnCount && !replacesSpacing
+    ? roundTexPt(cursor + TEX_MATRIX_ARRAY_COL_SEP_PT)
+    : cursor;
 }
 
-function arrayVerticalRuleBoundaryExtraWidth(
-  rules: readonly TexMathArrayVerticalRule[] | undefined,
-  beforeColumn: number
+function arrayBoundaryWidth(
+  preambleItems: readonly TexMathArrayPreambleItem[],
+  beforeColumn: number,
+  columnCount: number,
+  insertLayouts: ReadonlyMap<TexMathArrayPreambleInsert, TexMathHList>
 ): number {
-  const ruleCount = (rules ?? []).filter((rule) => rule.beforeColumn === beforeColumn).length;
-  return Math.max(0, ruleCount - 1) * TEX_LATEX_DOUBLE_RULE_SEP_PT;
+  const boundaryItems = preambleItems.filter((item) => item.beforeColumn === beforeColumn);
+  const replacesSpacing = boundaryItems.some((item) => item.kind === "insert" && item.mode === "replace-spacing");
+  const leftSpacing = beforeColumn > 0 && !replacesSpacing ? TEX_MATRIX_ARRAY_COL_SEP_PT : 0;
+  const rightSpacing = beforeColumn < columnCount && !replacesSpacing ? TEX_MATRIX_ARRAY_COL_SEP_PT : 0;
+  const itemWidth = boundaryItems.reduce((sum, item, index) => {
+    if (item.kind === "vertical-rule") {
+      return sum +
+        (arrayBoundaryRuleConsumesWidth(boundaryItems[index - 1], item, boundaryItems[index + 1]) ? TEX_LATEX_ARRAY_RULE_WIDTH_PT : 0) +
+        (arrayBoundaryItemsNeedDoubleRuleSep(item, boundaryItems[index + 1]) ? TEX_LATEX_DOUBLE_RULE_SEP_PT : 0);
+    }
+    return sum +
+      (insertLayouts.get(item)?.width ?? 0) +
+      (arrayBoundaryItemsNeedDoubleRuleSep(item, boundaryItems[index + 1]) ? TEX_LATEX_DOUBLE_RULE_SEP_PT : 0);
+  }, 0);
+  return roundTexPt(leftSpacing + itemWidth + rightSpacing);
+}
+
+function arrayBoundaryRuleConsumesWidth(
+  left: TexMathArrayPreambleItem | undefined,
+  rule: TexMathArrayPreambleItem | undefined,
+  right: TexMathArrayPreambleItem | undefined
+): boolean {
+  return rule?.kind === "vertical-rule" &&
+    ((left?.kind === "insert" && left.mode === "add-spacing") ||
+      (right?.kind === "insert" && right.mode === "add-spacing"));
+}
+
+function arrayBoundaryItemsNeedDoubleRuleSep(
+  left: TexMathArrayPreambleItem | undefined,
+  right: TexMathArrayPreambleItem | undefined
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  return (left.kind === "vertical-rule" && right.kind === "vertical-rule") ||
+    (left.kind === "insert" && left.mode === "add-spacing" && right.kind === "vertical-rule") ||
+    (left.kind === "vertical-rule" && right.kind === "insert" && right.mode === "add-spacing");
 }
 
 function layoutSmallMatrixNucleus(

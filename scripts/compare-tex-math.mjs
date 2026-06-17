@@ -430,8 +430,11 @@ function texSource(formula) {
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
+  const arrayPreamble = hasArrayPackagePreambleExtension(formula)
+    ? String.raw`\usepackage{array}` + "\n"
+    : "";
   return String.raw`\documentclass{article}
-` + amsmathPreamble + String.raw`
+` + amsmathPreamble + arrayPreamble + String.raw`
 \newbox\m
 \begin{document}
 \setbox\m=\hbox{$` + formula + String.raw`$}
@@ -922,6 +925,10 @@ function hasMatrixEnvironment(source) {
 
 function hasArrayEnvironment(source) {
   return source.includes(String.raw`\begin{array}`);
+}
+
+function hasArrayPackagePreambleExtension(source) {
+  return source.includes(String.raw`\begin{array}`) && source.includes("!{");
 }
 
 function hasCasesEnvironment(source) {

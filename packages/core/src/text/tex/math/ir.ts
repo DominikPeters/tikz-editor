@@ -379,11 +379,31 @@ export interface TexMathArrayVerticalRule {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export type TexMathArrayPreambleItem =
+  | TexMathArrayVerticalRuleItem
+  | TexMathArrayPreambleInsert;
+
+export interface TexMathArrayVerticalRuleItem {
+  readonly kind: "vertical-rule";
+  readonly beforeColumn: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathArrayPreambleInsert {
+  readonly kind: "insert";
+  readonly beforeColumn: number;
+  readonly mode: "replace-spacing" | "add-spacing";
+  readonly list: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathArrayNucleus {
   readonly kind: "array";
   readonly rows: readonly TexMathAlignedRow[];
   readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
   readonly verticalRules?: readonly TexMathArrayVerticalRule[];
+  readonly preambleItems?: readonly TexMathArrayPreambleItem[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
