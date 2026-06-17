@@ -58,6 +58,7 @@ export interface TexLayoutParagraphPlan {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
   readonly breakContext: TexLayoutParagraphBreakContext;
+  readonly overfullSingleLineFallback?: boolean;
   readonly lineLabel?: TexLayoutParagraphLineLabel;
 }
 
@@ -152,6 +153,9 @@ export function prepareTexLayoutParagraphsFromVList(
         inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile,
         spaceGlueProfile: paragraphStateResult.spaceGlueProfile,
         inlinePrefixItems: listAttachments.inlineLabelItems,
+        ...(paragraph.overfullSingleLineFallback === true
+          ? { overfullSingleLineFallback: true }
+          : {}),
         breakContext: {
           blockIndex,
           segmentIndex,

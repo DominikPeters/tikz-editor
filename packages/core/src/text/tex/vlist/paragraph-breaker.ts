@@ -3,6 +3,7 @@ import type {
   ResolvedTexFont,
   TexMetricProvider,
 } from "../fonts/types.js";
+import type { ParagraphRun } from "../../knuth-plass/paragraph/types.js";
 import { breakTexParagraphRuns, type TexParagraphBreakOptions } from "../paragraph-break.js";
 import { createTexParagraphRunAdapter } from "../paragraph-runs.js";
 import {
@@ -72,7 +73,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       continue;
     }
 
-    const broken = breakTexParagraphRuns({
+    const normalBreak = breakTexParagraphRuns({
       runs,
       shapedRuns: blockShapedRuns,
       measurement: runAdapter.measurement,
@@ -85,6 +86,16 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       firstLineIndentWidth: breakContext.firstLineIndentWidth,
       scopePolicy: breakContext.scopePolicy,
     });
+    const broken = normalBreak &&
+        plan.overfullSingleLineFallback === true &&
+        shouldUseSingleLineOverfullFallback(normalBreak, params.options)
+      ? breakTexParagraphAsSingleLine({
+          runs,
+          shapedRuns: blockShapedRuns,
+          measurement: runAdapter.measurement,
+          width: params.options.width,
+        })
+      : normalBreak;
     if (!broken) {
       return {
         status: "failed",
@@ -111,4 +122,74 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
     status: "broken",
     entries: brokenEntries,
   };
+}
+
+function breakTexParagraphAsSingleLine(params: {
+  readonly runs: ParagraphRun[];
+  readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
+  readonly measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"];
+  readonly width: number;
+}): NonNullable<ReturnType<typeof breakTexParagraphRuns>> {
+  params.measurement.primeRuns(params.runs);
+  const runWidths = new Map<number, number>();
+  let naturalWidth = 0;
+  for (const run of params.runs) {
+    const width = texParagraphRunWidth(run, params.measurement);
+    runWidths.set(run.runIndex, width);
+    naturalWidth += width;
+  }
+  const lastRun = params.runs.at(-1);
+  return {
+    lines: [{
+      lineIndex: 0,
+      startRun: params.runs[0]?.runIndex ?? 0,
+      startTextOffset: 0,
+      endRun: lastRun?.runIndex ?? 0,
+      endTextOffset: null,
+      width: params.width,
+      targetWidth: params.width,
+      lineNaturalWidth: naturalWidth,
+      glueSetRatio: 0,
+      badness: naturalWidth > params.width ? 10_000 : 0,
+      spaceCount: params.runs.filter((run) => run.kind === "space").length,
+      spaceDeltaPerGap: 0,
+      xOffset: 0,
+      break: null,
+    }],
+    runs: params.runs,
+    runWidths,
+    shapedRuns: params.shapedRuns,
+    errors: [],
+    linebreakingMode: naturalWidth > params.width ? "overfull" : "feasible",
+  };
+}
+
+function shouldUseSingleLineOverfullFallback(
+  broken: NonNullable<ReturnType<typeof breakTexParagraphRuns>>,
+  options: TexParagraphBreakOptions
+): boolean {
+  if (broken.lines.length <= 1) {
+    return false;
+  }
+  const naturalWidth = Array.from(broken.runWidths.values()).reduce(
+    (sum, width) => sum + width,
+    0
+  );
+  return naturalWidth > options.width && naturalWidth <= options.width + 15;
+}
+
+function texParagraphRunWidth(
+  run: ParagraphRun,
+  measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"]
+): number {
+  if (run.kind === "text") {
+    return measurement.measureText(run.text, run.wrapper);
+  }
+  if (run.kind === "math") {
+    return measurement.measureMath(run.wrapper);
+  }
+  if (run.kind === "space") {
+    return run.texGlue?.width ?? 0;
+  }
+  return 0;
 }

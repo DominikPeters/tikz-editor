@@ -779,6 +779,11 @@ function getDisplayMathAlignment(
   const hasExplicitAlignmentTags = alignedRows.some((_, rowIndex) =>
     displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex)?.explicit === true
   );
+  const explicitStarAlignmentTagsAffectWidth =
+    hasExplicitAlignmentTags && params.delimiter === "align-star";
+  const hasUntaggedAlignmentRows = alignedRows.some((_, rowIndex) =>
+    displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) === null
+  );
   const overfullBodyWidth = displayAlignmentOverfullBodyWidth(
     alignedRows,
     dimensions,
@@ -787,7 +792,19 @@ function getDisplayMathAlignment(
       if (label === null) {
         return true;
       }
-      if (hasExplicitAlignmentTags || label.explicit === true) {
+      if (label.explicit === true && explicitStarAlignmentTagsAffectWidth) {
+        const row = alignedRows[rowIndex];
+        const rowRightEdge = row
+          ? mathItemsRightEdge(displayAlignmentRowItems(row.items, dimensions))
+          : dimensions.targetWidth;
+        return rowRightEdge <= dimensions.targetWidth +
+          TEX_DISPLAY_ALIGNMENT_TAGGED_ROW_OVERFULL_TOLERANCE_PT;
+      }
+      if (
+        hasExplicitAlignmentTags ||
+        label.explicit === true ||
+        !hasUntaggedAlignmentRows
+      ) {
         return false;
       }
       const row = alignedRows[rowIndex];
@@ -1153,15 +1170,19 @@ function addGatherDisplayTag(
   const rowRight = mathItemsRightEdge(rowItems);
   const tagCollides = shiftTag ?? rowRight > tagX;
   const tagRenderShiftY = tagCollides
-    ? displayAlignmentShiftedTagRenderShift(tagLineDepth)
+    ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
     : 0;
-  const tagMetricShiftY = tagCollides
-    ? displayAlignmentShiftedTagMetricShift(row.depth, tagLineDepth)
-    : 0;
+  const depth = tagCollides
+    ? Math.max(
+        row.depth,
+        TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT +
+          TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT
+      )
+    : row.depth;
   return {
-    width: Math.max(targetWidth, rowRight, roundTexPt(tagX + tag.width)),
-    height: Math.max(row.height, tag.height),
-    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    width: targetWidth,
+    height: row.height,
+    depth: roundTexPt(depth),
     items: [
       ...rowItems,
       ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),

@@ -758,6 +758,8 @@ function displayAlignmentIntertextParagraph(
       sourceSpan,
       nodes,
       noIndent: true,
+      alignment: "justified",
+      overfullSingleLineFallback: true,
       quoteDepth: scope.quoteDepth,
       ...(scope.listContext ? { listContext: scope.listContext } : {}),
       ignoreAncestorBreakMargins: true,

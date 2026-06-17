@@ -1771,6 +1771,32 @@ unordered.`;
     expect(lineTexts).not.toContain("holds");
   });
 
+  it("uses normal TeX paragraph breaking for display alignment intertext", () => {
+    const source = String.raw`Alpha \begin{align*}\text{min}&=z_j^z\\\intertext{where where measured holds holds}\begin{bmatrix}n^n&\ldots\end{bmatrix}&=a_x^2\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-normal-breaking",
+      width: 140,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const paragraphReport = result.vlistLayout?.reports.find(
+      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+    );
+    const intertextLines = paragraphReport?.lines.filter((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("") ===
+        "where where measured holds holds"
+    ) ?? [];
+    expect(intertextLines).toHaveLength(1);
+    const rows = result.vlistLayout?.boxReport.items.filter((item) =>
+      item.hboxRole?.kind === "display-align-row"
+    ) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.y).toBeCloseTo(70.519974, 4);
+  });
+
   it("renders displaybreak in alignments as a non-visual page-break directive", () => {
     const source = String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
@@ -1966,6 +1992,44 @@ unordered.`;
     expect(firstGlyphX(directAlignment?.rows[1]?.hlist?.items ?? [])).toBeCloseTo(21.040872, 5);
   });
 
+  it("keeps shifted gather tags out of row hbox metrics", () => {
+    const source = String.raw`Alpha \begin{gather}\begin{matrix}\frac{2}{x}&\tfrac{n}{\ldots}&1\end{matrix}+\text{max}\\\begin{cases}a^2&\binom{m}{\dots}\\\ldots&\dots_b\end{cases}=\text{if $Ax \ge b$,}\end{gather} Beta`;
+    const content = source.slice(
+      source.indexOf(String.raw`\begin{matrix}`),
+      source.indexOf(String.raw`\end{gather}`)
+    );
+    const contentEnd = source.indexOf(String.raw`\end{gather}`);
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "gather",
+      sourceStart: source.indexOf(String.raw`\begin{gather}`),
+      sourceEnd: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
+      contentStart: source.indexOf(String.raw`\begin{matrix}`),
+      contentEnd,
+      targetWidth: 100,
+      displayLabels: [
+        {
+          text: "1",
+          sourceSpan: { start: contentEnd, end: contentEnd },
+          textSourceSpan: { start: contentEnd, end: contentEnd },
+        },
+        {
+          text: "2",
+          sourceSpan: { start: contentEnd, end: contentEnd },
+          textSourceSpan: { start: contentEnd, end: contentEnd },
+        },
+      ],
+    });
+
+    expect(directAlignment?.rows).toHaveLength(2);
+    expect(directAlignment?.rows[1]).toMatchObject({
+      width: 100,
+      height: expect.closeTo(17.50015, 5),
+      depth: expect.closeTo(15.600037, 5),
+    });
+  });
+
   it("lets TeX paragraph layout carry multline-star display math with row-specific placement", () => {
     const source = String.raw`Alpha \begin{multline*}a=b\\c+d=e\\f=g\end{multline*} Beta`;
     const result = layoutSimpleTexParagraph(source, {
@@ -2053,6 +2117,43 @@ unordered.`;
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="40"');
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="65"');
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="41"');
+  });
+
+  it("lets explicit align-star tags drive TeX overfull row metrics", () => {
+    const source = String.raw`\begin{align*}\cdots_i^z&=\begin{bmatrix}\ldots&z&\frac{y}{b}\end{bmatrix} \tag{A}\\\text{when $x_i=y$,}&=\text{if $Ax \ge b$,}\\\text{for $n \ge 1$}&=\begin{bmatrix}y\end{bmatrix}\end{align*}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`\cdots_i^z&=\begin{bmatrix}\ldots&z&\frac{y}{b}\end{bmatrix} \tag{A}\\\text{when $x_i=y$,}&=\text{if $Ax \ge b$,}\\\text{for $n \ge 1$}&=\begin{bmatrix}y\end{bmatrix}`,
+      delimiter: "align-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf(String.raw`\cdots`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 120,
+    });
+
+    expect(directAlignment?.rows).toHaveLength(3);
+    for (const row of directAlignment?.rows ?? []) {
+      expect(row.width).toBeCloseTo(121.659622, 3);
+    }
+  });
+
+  it("keeps far-overfull explicit align-star tag rows at TeX display width", () => {
+    const source = String.raw`\begin{align*}\sqrt{a+\ldots}&=\text{for $n \ge 1$}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \tag{Long tag}\end{align*}`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`\sqrt{a+\ldots}&=\text{for $n \ge 1$}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \tag{Long tag}`,
+      delimiter: "align-star",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf(String.raw`\sqrt`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 160,
+    });
+
+    expect(directAlignment?.rows).toHaveLength(1);
+    expect(directAlignment?.rows[0]?.width).toBeCloseTo(160, 6);
+    expect(directAlignment?.rows[0]?.depth).toBeCloseTo(15.600037, 5);
   });
 
   it("lowers align-star tags that collide with the equation body", () => {
