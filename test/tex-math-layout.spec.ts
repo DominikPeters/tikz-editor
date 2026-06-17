@@ -158,7 +158,7 @@ describe("TeX math hlist layout", () => {
   });
 
   it("lays out AMS font symbols through msam and msbm glyphs", () => {
-    const result = layout(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\thickapprox+\Bbbk`);
+    const result = layout(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\thickapprox+\thicksim+\Bbbk`);
 
     expect(result.supported).toBe(true);
     const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
@@ -179,12 +179,14 @@ describe("TeX math hlist layout", () => {
       { fontId: "cmr10", code: 43, sourceSpan: { start: 47, end: 48 } },
       { fontId: "msbm10", code: 0x74, sourceSpan: { start: 48, end: 60 } },
       { fontId: "cmr10", code: 43, sourceSpan: { start: 60, end: 61 } },
-      { fontId: "msbm10", code: 0x7c, sourceSpan: { start: 61, end: 66 } },
+      { fontId: "msbm10", code: 0x73, sourceSpan: { start: 61, end: 70 } },
+      { fontId: "cmr10", code: 43, sourceSpan: { start: 70, end: 71 } },
+      { fontId: "msbm10", code: 0x7c, sourceSpan: { start: 71, end: 76 } },
     ]);
   });
 
   it("lays out arrow, set, and logic symbols through TeX math fonts", () => {
-    const result = layout(String.raw`A\to B\mapsto C\wedge D\cup E\subseteq F`);
+    const result = layout(String.raw`A\to B\mapsto C\wedge D\cup E\subseteq F\smile G\frown H`);
 
     expect(result.supported).toBe(true);
     const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
@@ -205,6 +207,10 @@ describe("TeX math hlist layout", () => {
       { fontId: "cmmi10", code: 69, sourceSpan: { start: 28, end: 29 } },
       { fontId: "cmsy10", code: 18, sourceSpan: { start: 29, end: 38 } },
       { fontId: "cmmi10", code: 70, sourceSpan: { start: 39, end: 40 } },
+      { fontId: "cmmi10", code: 0x5e, sourceSpan: { start: 40, end: 46 } },
+      { fontId: "cmmi10", code: 71, sourceSpan: { start: 47, end: 48 } },
+      { fontId: "cmmi10", code: 0x5f, sourceSpan: { start: 48, end: 54 } },
+      { fontId: "cmmi10", code: 72, sourceSpan: { start: 55, end: 56 } },
     ]);
   });
 

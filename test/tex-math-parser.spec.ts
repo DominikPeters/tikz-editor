@@ -1074,7 +1074,7 @@ describe("TeX math parser", () => {
   });
 
   it("parses AMS font symbols with TeX atom classes", () => {
-    const result = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thickapprox+\Bbbk`);
+    const result = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thickapprox+\thicksim+\Bbbk`);
 
     expect(result.diagnostics).toEqual([]);
     expect(result.list.items.map((item) =>
@@ -1095,6 +1095,8 @@ describe("TeX math parser", () => {
       { atomClass: "rel", text: String.raw`\gtrsim` },
       { atomClass: "bin", text: "+" },
       { atomClass: "rel", text: String.raw`\thickapprox` },
+      { atomClass: "bin", text: "+" },
+      { atomClass: "rel", text: String.raw`\thicksim` },
       { atomClass: "bin", text: "+" },
       { atomClass: "ord", text: String.raw`\Bbbk` },
     ]);

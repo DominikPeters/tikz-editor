@@ -473,6 +473,7 @@ function amsMathSymbolCommand(text: string): boolean {
     case "Subset":
     case "Supset":
     case "thickapprox":
+    case "thicksim":
     case "ulcorner":
     case "urcorner":
     case "varnothing":
@@ -4736,6 +4737,10 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "symbols", code: 51 }];
     case "propto":
       return [{ family: "symbols", code: 47 }];
+    case "smile":
+      return [{ family: "letters", code: 0x5e }];
+    case "frown":
+      return [{ family: "letters", code: 0x5f }];
     case "nleqslant":
       return [{ family: "amsSymbolsB", code: 0x0a }];
     case "ngeqslant":
@@ -4746,6 +4751,8 @@ function defaultLuaLatexMathSymbols(
       return [{ family: "amsSymbolsB", code: 0x3f }];
     case "thickapprox":
       return [{ family: "amsSymbolsB", code: 0x74 }];
+    case "thicksim":
+      return [{ family: "amsSymbolsB", code: 0x73 }];
     case "approxeq":
       return [{ family: "amsSymbolsB", code: 0x75 }];
     case "digamma":

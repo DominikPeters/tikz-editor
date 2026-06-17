@@ -304,7 +304,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders additional plain-TeX symbols and named operators through TeX glyph paths", () => {
-    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+x:y+\Longrightarrow+\implies+\iff`);
+    const parsed = parseTexMath(String.raw`\partial f+\nabla g+\sin x+\bullet+\lvert x\rvert+\lfloor y\rfloor+\colon+x:y+\Longrightarrow+\implies+\iff+\smile+\frown`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -325,6 +325,8 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="61"');
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="40"');
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="41"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="94"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="95"');
   });
 
   it("keeps automatic atom spacing around explicit math glue", () => {
@@ -341,7 +343,7 @@ describe("TeX math SVG rendering", () => {
   });
 
   it("renders AMS font symbols through their TeX glyph paths", () => {
-    const parsed = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim`);
+    const parsed = parseTexMath(String.raw`\digamma+\dotplus+\ulcorner x\urcorner+\lesssim+\gtrsim+\thicksim`);
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
     if (!result.supported) {
@@ -356,6 +358,7 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="113"');
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="46"');
     expect(body).toContain('data-tex-font="msam10" data-tex-glyph="38"');
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="115"');
   });
 
   it("uses AMS script-size fonts for AMS glyphs in scripts", () => {
