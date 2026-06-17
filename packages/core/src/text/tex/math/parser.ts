@@ -1866,6 +1866,7 @@ class TexMathParser {
       }
       intertexts.push({
         text: content.text,
+        parts: content.parts,
         sourceSpan,
         textSourceSpan: content.textSourceSpan,
       });
@@ -2857,6 +2858,7 @@ class TexMathParser {
         }
         parts.push({
           kind: "math",
+          content: mathSource,
           list: parsed.list,
           sourceSpan: spanUnion(openMath.sourceSpan, closeMath.sourceSpan),
           contentSourceSpan: { start: mathStart, end: closeMath.sourceSpan.start },

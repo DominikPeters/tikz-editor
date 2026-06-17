@@ -218,6 +218,7 @@ export type TexMathTextPart =
     }
   | {
       readonly kind: "math";
+      readonly content: string;
       readonly list: TexMathList;
       readonly sourceSpan: TexMathSourceSpan;
       readonly contentSourceSpan: TexMathSourceSpan;
@@ -318,6 +319,7 @@ export interface TexMathAlignedRow {
 
 export interface TexMathAlignedIntertext {
   readonly text: string;
+  readonly parts: readonly TexMathTextPart[];
   readonly sourceSpan: TexMathSourceSpan;
   readonly textSourceSpan: TexMathSourceSpan;
 }

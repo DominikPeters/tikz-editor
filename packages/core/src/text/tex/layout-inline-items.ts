@@ -4,6 +4,7 @@ import {
 } from "./fonts/text-profile.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import type { TexMathFontProfile } from "./math/font-profile.js";
+import type { TexMathTextPart } from "./math/ir.js";
 import type { TexMathHList } from "./math/layout.js";
 import {
   simpleTexInlineNodesToTokens,
@@ -110,6 +111,7 @@ export interface TexMathDisplayAlignmentRowBox extends TexMathBox {
 export interface TexMathDisplayAlignmentIntertext {
   readonly beforeRowIndex: number;
   readonly text: string;
+  readonly parts: readonly TexMathTextPart[];
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly contentStart: number;

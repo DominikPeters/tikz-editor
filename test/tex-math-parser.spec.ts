@@ -1584,6 +1584,16 @@ describe("TeX math parser", () => {
           intertextsBefore: [
             {
               text: "words",
+              parts: [
+                {
+                  kind: "text",
+                  text: "words",
+                  sourceSpan: {
+                    start: source.indexOf("{words}") + 1,
+                    end: source.indexOf("{words}") + 1 + "words".length,
+                  },
+                },
+              ],
               sourceSpan: {
                 start: source.indexOf(String.raw`\intertext`),
                 end: source.indexOf("c&=d"),
@@ -1601,6 +1611,60 @@ describe("TeX math parser", () => {
         }),
       ],
     });
+  });
+
+  it("preserves inline math parts inside display alignment intertext", () => {
+    const source = String.raw`\begin{align*}a&=b\\\intertext{where $x_i=y^2$ holds}c&=d\end{align*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus.kind).toBe("aligned");
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    const intertext = atom.nucleus.rows[1]?.intertextsBefore?.[0];
+    expect(intertext).toMatchObject({
+      text: "where  holds",
+      sourceSpan: {
+        start: source.indexOf(String.raw`\intertext`),
+        end: source.indexOf("c&=d"),
+      },
+      textSourceSpan: {
+        start: source.indexOf("{where") + 1,
+        end: source.indexOf("}c&=d"),
+      },
+    });
+    expect(intertext?.parts).toEqual([
+      {
+        kind: "text",
+        text: "where ",
+        sourceSpan: {
+          start: source.indexOf("{where") + 1,
+          end: source.indexOf("$x_i"),
+        },
+      },
+      expect.objectContaining({
+        kind: "math",
+        content: "x_i=y^2",
+        sourceSpan: {
+          start: source.indexOf("$x_i"),
+          end: source.indexOf("$ holds") + 1,
+        },
+        contentSourceSpan: {
+          start: source.indexOf("$x_i") + 1,
+          end: source.indexOf("$ holds"),
+        },
+      }),
+      {
+        kind: "text",
+        text: " holds",
+        sourceSpan: {
+          start: source.indexOf("$ holds") + 1,
+          end: source.indexOf("}c&=d"),
+        },
+      },
+    ]);
   });
 
   it("keeps shortintertext explicitly unsupported until its compact spacing is modeled", () => {

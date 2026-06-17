@@ -5,6 +5,7 @@ import {
   type SimpleTexInlineNode,
   type SimpleTexListContext,
 } from "../ir.js";
+import type { TexMathTextPart } from "../math/ir.js";
 import { texVListPathKey } from "./paths.js";
 import { texVBoxRolePathForParagraph } from "./scope-roles.js";
 import type {
@@ -67,6 +68,7 @@ const latexAmsmathAlignTopCorrectionPt = -3;
 const latexAmsmathOpenBaselineSkipPt = 15;
 const latexAmsmathOpenLineSkipPt = 4;
 const latexAmsmathOpenLineSkipLimitPt = 3;
+const latexAmsmathIntertextMultiLineLeadingPt = 4;
 // amsmath \intertext uses \vbox{\normalbaselines ...}; in the default
 // article 10pt setup, TeX places the first intertext baseline 11.4pt from
 // the top of that nested vbox.
@@ -588,8 +590,9 @@ function resolveDisplayMathVerticalGlueInItems(
     ) {
       const nextRow = nextDisplayAlignmentRowHBox(sourceItems, index);
       if (nextRow) {
-        const previousDepth = previousParagraphMeasurement?.ruleLeadingMetrics.depth ??
-          previousDisplayMaterialMetrics?.depth ??
+        const previousDepth = previousParagraphMeasurement
+          ? displayAlignmentPreviousDepth(previousParagraphMeasurement)
+          : previousDisplayMaterialMetrics?.depth ??
           0;
         items.push({
           ...item,
@@ -608,10 +611,9 @@ function resolveDisplayMathVerticalGlueInItems(
         pathPrefix,
         paragraphMeasurements
       );
-      const nextHeight = nextParagraph?.ruleLeadingMetrics.height ?? 0;
       items.push({
         ...item,
-        size: Math.max(0, roundTexPt(latexAmsmathIntertextFirstBaselinePt - nextHeight)),
+        size: displayAlignmentIntertextLeadingSize(nextParagraph),
       });
       continue;
     }
@@ -738,9 +740,10 @@ function displayAlignmentIntertextParagraph(
   intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number]
 ): TexParagraphItem {
   const blockIndex = displayAlignmentIntertextBlockIndex(intertext.sourceStart);
-  const parsed = parseSimpleTexInlineNodes(intertext.text, intertext.contentStart);
-  const nodes = parsed.unsupportedCommand
-    ? displayAlignmentPlainTextNodes(intertext)
+  const parsed = displayAlignmentIntertextNodes(intertext.parts);
+  const rawText = displayAlignmentIntertextRawText(intertext.parts);
+  const nodes = parsed.unsupported
+    ? displayAlignmentPlainTextNodes(intertext, rawText)
     : parsed.nodes;
   const sourceSpan = {
     start: intertext.contentStart,
@@ -751,7 +754,7 @@ function displayAlignmentIntertextParagraph(
     sourceSpan,
     blockIndex,
     paragraph: {
-      text: intertext.text,
+      text: rawText,
       sourceSpan,
       nodes,
       noIndent: true,
@@ -765,17 +768,88 @@ function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
   return -1_000_000 - Math.max(0, sourceStart);
 }
 
+function isDisplayAlignmentIntertextBlockIndex(blockIndex: number): boolean {
+  return blockIndex <= -1_000_000;
+}
+
+function displayAlignmentIntertextLeadingSize(
+  paragraph: TexVListParagraphBoxMeasurement | undefined
+): number {
+  if (!paragraph) {
+    return 0;
+  }
+  if (paragraph.lineIndices.length > 1) {
+    return latexAmsmathIntertextMultiLineLeadingPt;
+  }
+  return Math.max(0, roundTexPt(
+    latexAmsmathIntertextFirstBaselinePt - paragraph.ruleLeadingMetrics.height
+  ));
+}
+
+function displayAlignmentPreviousDepth(
+  paragraph: TexVListParagraphBoxMeasurement
+): number {
+  return isDisplayAlignmentIntertextBlockIndex(paragraph.blockIndex)
+    ? displayAlignmentIntertextLastLineDepth(paragraph)
+    : paragraph.ruleLeadingMetrics.depth;
+}
+
+function displayAlignmentIntertextLastLineDepth(
+  paragraph: TexVListParagraphBoxMeasurement
+): number {
+  const lastLineOffset = paragraph.lineOffsets.at(-1)?.y;
+  if (lastLineOffset === undefined) {
+    return paragraph.ruleLeadingMetrics.depth;
+  }
+  return Math.max(0, roundTexPt(
+    paragraph.ruleLeadingAdvance - lastLineOffset - paragraph.ruleLeadingMetrics.height
+  ));
+}
+
 function displayAlignmentPlainTextNodes(
-  intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number]
+  intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number],
+  text: string
 ): readonly SimpleTexInlineNode[] {
-  return intertext.text.length > 0
+  return text.length > 0
     ? [{
         kind: "text",
-        text: intertext.text,
+        text,
         sourceStart: intertext.contentStart,
         sourceEnd: intertext.contentEnd,
       }]
     : [];
+}
+
+function displayAlignmentIntertextNodes(
+  parts: readonly TexMathTextPart[]
+): { readonly nodes: readonly SimpleTexInlineNode[]; readonly unsupported: boolean } {
+  const nodes: SimpleTexInlineNode[] = [];
+  let unsupported = false;
+  for (const part of parts) {
+    if (part.kind === "text") {
+      const parsed = parseSimpleTexInlineNodes(part.text, part.sourceSpan.start);
+      nodes.push(...parsed.nodes);
+      unsupported ||= parsed.unsupportedCommand;
+      continue;
+    }
+    nodes.push({
+      kind: "math",
+      text: `$${part.content}$`,
+      delimiter: "dollar",
+      content: part.content,
+      contentStart: part.contentSourceSpan.start,
+      contentEnd: part.contentSourceSpan.end,
+      sourceStart: part.sourceSpan.start,
+      sourceEnd: part.sourceSpan.end,
+    });
+  }
+  return { nodes, unsupported };
+}
+
+function displayAlignmentIntertextRawText(parts: readonly TexMathTextPart[]): string {
+  return parts.map((part) =>
+    part.kind === "text" ? part.text : `$${part.content}$`
+  ).join("");
 }
 
 function displayAlignmentTopCorrection(item: TexDisplayAlignmentItem): number {

@@ -857,6 +857,7 @@ function displayAlignmentIntertexts(
       intertexts.push({
         beforeRowIndex: rowIndex,
         text: intertext.text,
+        parts: intertext.parts,
         sourceStart: intertext.sourceSpan.start,
         sourceEnd: intertext.sourceSpan.end,
         contentStart: intertext.textSourceSpan.start,

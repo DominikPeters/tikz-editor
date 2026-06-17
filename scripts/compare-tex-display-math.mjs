@@ -1294,6 +1294,16 @@ function constructMatrixCases() {
       source: String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`,
     },
     {
+      id: "align-intertext-inline-math",
+      width: 220,
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x_i=y^2$ holds}c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-intertext-wrapped",
+      width: 90,
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{first second third fourth fifth}c&=d\end{align*} Beta`,
+    },
+    {
       id: "align-tag-collision",
       width: 300,
       source: String.raw`Alpha \begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\end{align*} Beta`,

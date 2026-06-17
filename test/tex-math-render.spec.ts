@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ParagraphLayoutReport } from "../packages/core/src/text/knuth-plass/paragraph/report.js";
 import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
@@ -1675,6 +1676,47 @@ unordered.`;
     });
     expect(intertextParagraphs[0]?.y ?? 0).toBeGreaterThan(rows[0]?.y ?? 0);
     expect(intertextParagraphs[0]?.y ?? 0).toBeLessThan(rows[1]?.y ?? Number.POSITIVE_INFINITY);
+  });
+
+  it("renders inline math inside display alignment intertext through paragraph math segments", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x_i=y^2$ holds}c&=d\end{align*} Beta`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:display-alignment-intertext-inline-math",
+      width: 220,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const paragraphReport = result.vlistLayout?.reports.find(
+      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+    );
+    const intertextLine = paragraphReport?.lines.find((line) =>
+      line.segments.some((segment) =>
+        segment.sourceStartRaw === source.indexOf("$x_i") + 1 &&
+        segment.sourceKind === "math"
+      )
+    );
+    const mathSegments = intertextLine?.segments.filter((segment) => segment.kind === "math") ?? [];
+    expect(mathSegments).toHaveLength(2);
+    expect(mathSegments[0]).toMatchObject({
+      kind: "math",
+      text: "x_i=",
+      sourceStartRaw: source.indexOf("$x_i") + 1,
+      sourceEndRaw: source.indexOf("=y") + 1,
+      sourceKind: "math",
+    });
+    expect(mathSegments[1]).toMatchObject({
+      kind: "math",
+      text: "y^2",
+      sourceStartRaw: source.indexOf("y^2"),
+      sourceEndRaw: source.indexOf("$ holds"),
+      sourceKind: "math",
+    });
+    expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(intertextLine?.ascent ?? 0).toBeGreaterThan(7);
+    expect(intertextLine?.descent ?? 0).toBeGreaterThan(1);
   });
 
   it("renders displaybreak in alignments as a non-visual page-break directive", () => {
