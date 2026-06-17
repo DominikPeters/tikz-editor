@@ -1301,13 +1301,14 @@ function renderTexReportLineSvg(
   const lineTop = texReportLineTop(report.paragraphId, line.lineIndex, options);
   const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
   const lineXOffset = texReportLineXOffset(line, lineLeft, options);
-  const baseline = lineTop + options.firstLineAscent;
+  const baseline = lineTop + line.ascent;
+  const lineBoxHeight = options.linePlacementByIndex?.get(line.lineIndex)?.height ?? options.lineHeightPt;
   const lineLeadingAttr = line.break?.lineLeading
     ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
     : "";
   const pieces = [
     `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineXOffset + lineLeft - (options.originX ?? 0))} ${formatPt(lineTop - (options.originY ?? 0))})">`,
-    `<rect x="${formatPt(-lineXOffset - lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(options.lineHeightPt)}" fill="transparent" />`,
+    `<rect x="${formatPt(-lineXOffset - lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
     if (options.skipListLabelSegments && segment.role === "list-label") {

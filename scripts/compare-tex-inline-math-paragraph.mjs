@@ -158,19 +158,6 @@ function lineSegmentText(segment) {
 
 function ourMathGlyphTrace(result, options) {
   const lines = result.report.lines;
-  const linesByIndex = new Map(lines.map((line) => [line.lineIndex, line]));
-  const paragraphBaselineHeightByLine = new Map();
-  if (options.absoluteGlyphs) {
-    for (const paragraph of result.vlistLayout?.paragraphPlacements ?? []) {
-      const firstLine = linesByIndex.get(paragraph.lineIndices[0]);
-      if (!firstLine) {
-        continue;
-      }
-      for (const lineIndex of paragraph.lineIndices) {
-        paragraphBaselineHeightByLine.set(lineIndex, firstLine.ascent);
-      }
-    }
-  }
   const linePlacements = new Map(
     (options.absoluteGlyphs ? result.vlistLayout?.linePlacements ?? [] : [])
       .map((placement) => [placement.lineIndex, placement])
@@ -181,7 +168,7 @@ function ourMathGlyphTrace(result, options) {
     const linePlacement = linePlacements.get(line.lineIndex);
     const lineX = linePlacement?.x ?? 0;
     const baselineY = linePlacement
-      ? linePlacement.y + (paragraphBaselineHeightByLine.get(line.lineIndex) ?? line.ascent)
+      ? linePlacement.y + line.ascent
       : 0;
     for (const segment of line.segments) {
       if (segment.kind !== "math" || !segment.mathSvgBody) {

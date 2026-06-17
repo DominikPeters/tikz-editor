@@ -706,8 +706,7 @@ function getDisplayMathAlignment(
           rowItems,
           tag,
           tagPlacement?.shiftTag ?? null,
-          params.targetWidth,
-          displayAlignmentRowLineDepth(alignedRows, rowIndex)
+          params.targetWidth
         )
         : {
           width: params.targetWidth,
@@ -1155,8 +1154,7 @@ function addGatherDisplayTag(
   rowItems: readonly TexMathHListItem[],
   tag: TexMathHList | null,
   shiftTag: boolean | null,
-  targetWidth: number,
-  tagLineDepth = row.depth
+  targetWidth: number
 ): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
   if (!tag) {
     return {

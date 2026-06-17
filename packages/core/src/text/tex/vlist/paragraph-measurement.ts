@@ -102,7 +102,6 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
   const standardBottom = roundTexPt(
     paragraph.horizontal.metrics.height + paragraph.horizontal.metrics.depth
   );
-  const firstLine = lines[0];
   const lastLine = lines.at(-1);
   const ruleLeadingBottom = lastLine
     ? roundTexPt(lastLine.y + lastLine.metrics.height + lastLine.metrics.depth)
