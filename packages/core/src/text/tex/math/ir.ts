@@ -406,6 +406,11 @@ export interface TexMathArrayCellInsert {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathArrayRowRule {
+  readonly beforeRow: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export interface TexMathArrayNucleus {
   readonly kind: "array";
   readonly rows: readonly TexMathAlignedRow[];
@@ -413,6 +418,7 @@ export interface TexMathArrayNucleus {
   readonly verticalRules?: readonly TexMathArrayVerticalRule[];
   readonly preambleItems?: readonly TexMathArrayPreambleItem[];
   readonly cellInserts?: readonly TexMathArrayCellInsert[];
+  readonly rowRules?: readonly TexMathArrayRowRule[];
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly preambleSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;

@@ -2299,6 +2299,74 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out array hline rules at TeX row boundaries", () => {
+    const topRule = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c}\hline a\end{array}`).list,
+      { style: "display" }
+    );
+    expect(topRule.supported).toBe(true);
+    expect(topRule.hlist?.items).toMatchObject([
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: 0,
+        y: expect.closeTo(-8.7, 5),
+        width: expect.closeTo(15.2859, 5),
+        height: 0.4,
+        sourceSpan: { start: 16, end: 22 },
+      },
+      { kind: "hlist", role: "array-row", y: expect.closeTo(0.099963, 5) },
+    ]);
+    expect(topRule.hlist?.height).toBeCloseTo(8.7, 5);
+    expect(topRule.hlist?.depth).toBeCloseTo(3.7, 5);
+
+    const middleRule = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c}a\\\hline b\end{array}`).list,
+      { style: "display" }
+    );
+    expect(middleRule.supported).toBe(true);
+    expect(middleRule.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "array-row", y: expect.closeTo(-6.300037, 5) },
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: 0,
+        y: expect.closeTo(-2.7, 5),
+        width: expect.closeTo(15.2859, 5),
+        height: 0.4,
+      },
+      { kind: "hlist", role: "array-row", y: expect.closeTo(6.099963, 5) },
+    ]);
+
+    const bottomRule = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{c}a\\\hline\end{array}`).list,
+      { style: "display" }
+    );
+    expect(bottomRule.supported).toBe(true);
+    expect(bottomRule.hlist?.items).toMatchObject([
+      { kind: "hlist", role: "array-row", y: expect.closeTo(-0.300037, 5) },
+      {
+        kind: "rule",
+        role: "array-rule",
+        x: 0,
+        y: expect.closeTo(3.3, 5),
+        width: expect.closeTo(15.2859, 5),
+        height: 0.4,
+      },
+    ]);
+
+    const withVerticalRules = layoutTexMathList(
+      parseTexMath(String.raw`\begin{array}{|c|}\hline a\\\hline\end{array}`).list,
+      { style: "display" }
+    );
+    expect(withVerticalRules.supported).toBe(true);
+    expect(withVerticalRules.hlist?.items).toMatchObject([
+      { kind: "rule", role: "array-rule", y: expect.closeTo(-8.9, 5) },
+      { kind: "hlist", role: "array-row", y: expect.closeTo(-0.100037, 5) },
+      { kind: "rule", role: "array-rule", y: expect.closeTo(3.5, 5) },
+    ]);
+  });
+
   it("lays out repeated array preambles like their explicit expansion", () => {
     const withoutSourceSpans = (value: unknown): unknown => {
       if (Array.isArray(value)) {

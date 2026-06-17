@@ -2358,6 +2358,26 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses array hline commands as row-boundary rules", () => {
+    const source = String.raw`\begin{array}{c}\hline a\\\hline b\\\hline\end{array}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+    const topRuleStart = source.indexOf(String.raw`\hline`);
+    const middleRuleStart = source.indexOf(String.raw`\hline`, topRuleStart + 1);
+    const bottomRuleStart = source.lastIndexOf(String.raw`\hline`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus).toMatchObject({
+      kind: "array",
+      columnAlignments: ["center"],
+      rowRules: [
+        { beforeRow: 0, sourceSpan: { start: topRuleStart, end: topRuleStart + 6 } },
+        { beforeRow: 1, sourceSpan: { start: middleRuleStart, end: middleRuleStart + 6 } },
+        { beforeRow: 2, sourceSpan: { start: bottomRuleStart, end: bottomRuleStart + 6 } },
+      ],
+    });
+  });
+
   it("expands LaTeX array preamble repeats", () => {
     const singleToken = parseTexMath(String.raw`\begin{array}{*{2}rc}a&b&c\end{array}`);
     const singleTokenAtom = atomAt(singleToken, 0);

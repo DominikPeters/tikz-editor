@@ -10,6 +10,7 @@ import type {
   TexMathArrayColumnAlignment,
   TexMathArrayPreambleInsert,
   TexMathArrayPreambleItem,
+  TexMathArrayRowRule,
   TexMathArrayVerticalRule,
   TexMathDiagnostic,
   TexMathDiagnosticCode,
@@ -2499,15 +2500,21 @@ class TexMathParser {
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
+    const rowRules: TexMathArrayRowRule[] = [];
     let endSourceSpan: TexMathSourceSpan | undefined;
     let sourceSpan = params.initialSourceSpan;
 
     while (!this.isAtEnd()) {
+      const rules = this.consumeArrayRowRules(rows.length);
+      if (rules.length > 0) {
+        rowRules.push(...rules);
+        sourceSpan = spanUnion(sourceSpan, rules[rules.length - 1]?.sourceSpan ?? sourceSpan);
+      }
       if (this.isEnvironmentEnd("array")) {
         endSourceSpan = this.consumeEnvironmentEnd("array");
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
+          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, rowRules, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2559,7 +2566,7 @@ class TexMathParser {
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
         return this.maybeParseScripts(
-          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
+          arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, rowRules, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan),
           params.allowScripts
         );
       }
@@ -2578,9 +2585,26 @@ class TexMathParser {
       params.beginSourceSpan
     );
     return this.maybeParseScripts(
-      arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
+      arrayAtom(rows, params.columnAlignments, params.verticalRules, params.preambleItems, params.cellInserts, rowRules, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan),
       params.allowScripts
     );
+  }
+
+  private consumeArrayRowRules(beforeRow: number): TexMathArrayRowRule[] {
+    const rules: TexMathArrayRowRule[] = [];
+    while (!this.isAtEnd()) {
+      this.skipSpaces();
+      const token = this.peek();
+      if (token?.kind !== "command" || commandName(token.text) !== "hline") {
+        break;
+      }
+      this.advance();
+      rules.push({
+        beforeRow,
+        sourceSpan: token.sourceSpan,
+      });
+    }
+    return rules;
   }
 
   private parseCasesBody(params: {
@@ -4191,6 +4215,7 @@ function arrayAtom(
   verticalRules: readonly TexMathArrayVerticalRule[],
   preambleItems: readonly TexMathArrayPreambleItem[],
   cellInserts: readonly TexMathArrayCellInsert[],
+  rowRules: readonly TexMathArrayRowRule[],
   beginSourceSpan: TexMathSourceSpan,
   preambleSourceSpan: TexMathSourceSpan,
   endSourceSpan: TexMathSourceSpan | undefined,
@@ -4206,6 +4231,7 @@ function arrayAtom(
       ...(verticalRules.length > 0 ? { verticalRules } : {}),
       ...(preambleItems.length > 0 ? { preambleItems } : {}),
       ...(cellInserts.length > 0 ? { cellInserts } : {}),
+      ...(rowRules.length > 0 ? { rowRules } : {}),
       beginSourceSpan,
       preambleSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),

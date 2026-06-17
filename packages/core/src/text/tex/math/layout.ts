@@ -22,6 +22,7 @@ import type {
   TexMathArrayCellInsert,
   TexMathArrayPreambleInsert,
   TexMathArrayPreambleItem,
+  TexMathArrayRowRule,
   TexMathArrayColumnAlignment,
   TexMathArrayNucleus,
   TexMathCasesNucleus,
@@ -2014,20 +2015,33 @@ function layoutArrayNucleus(
     Array.from({ length: columnCount + 1 }, (_, boundaryIndex) =>
       arrayBoundaryWidth(preambleItems, boundaryIndex, columnCount, insertLayouts)
     ).reduce((sum, boundaryWidth) => sum + boundaryWidth, 0));
-  const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
+  const rowRules = nucleus.rowRules ?? [];
+  const baselineOffsets = arrayRowBaselineOffsets(concreteRows, rowRules);
   const lastRow = concreteRows[concreteRows.length - 1];
+  const topRuleHeight = arrayRowRuleBoundaryHeight(rowRules, 0);
+  const bottomRuleHeight = arrayRowRuleBoundaryHeight(rowRules, concreteRows.length);
   const naturalHeight = roundTexPt(
+    topRuleHeight +
     concreteRows[0].height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
-    lastRow.depth
+    lastRow.depth +
+    bottomRuleHeight
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", "text", baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
-  const rowItems: TexMathChildHListLayoutItem[] = [];
+  const firstBaselineY = roundTexPt(-height + topRuleHeight + concreteRows[0].height);
+  const rowItems: TexMathHListItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
+    const baselineY = roundTexPt(firstBaselineY + (baselineOffsets[rowIndex] ?? 0));
+    appendArrayRowRules(
+      rowItems,
+      rowRules,
+      rowIndex,
+      width,
+      arrayRowRuleBoundaryStartY(concreteRows, baselineOffsets, rowRules, rowIndex, firstBaselineY),
+    );
     const rowChildren: TexMathHListItem[] = [];
     let cursor = 0;
     for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
@@ -2061,8 +2075,14 @@ function layoutArrayNucleus(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     });
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
+  appendArrayRowRules(
+    rowItems,
+    rowRules,
+    concreteRows.length,
+    width,
+    arrayRowRuleBoundaryStartY(concreteRows, baselineOffsets, rowRules, concreteRows.length, firstBaselineY),
+  );
 
   return {
     items: rowItems,
@@ -2073,6 +2093,71 @@ function layoutArrayNucleus(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+function arrayRowBaselineOffsets(
+  rows: readonly TexMathAlignedRowLayout[],
+  rowRules: readonly TexMathArrayRowRule[]
+): readonly number[] {
+  const offsets = [0];
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const previous = rows[rowIndex - 1];
+    const current = rows[rowIndex];
+    offsets.push(roundTexPt(
+      (offsets[rowIndex - 1] ?? 0) +
+      previous.depth +
+      arrayRowRuleBoundaryHeight(rowRules, rowIndex) +
+      current.height
+    ));
+  }
+  return offsets;
+}
+
+function arrayRowRuleBoundaryHeight(
+  rowRules: readonly TexMathArrayRowRule[],
+  beforeRow: number
+): number {
+  return rowRules.filter((rule) => rule.beforeRow === beforeRow).length * TEX_LATEX_ARRAY_RULE_WIDTH_PT;
+}
+
+function arrayRowRuleBoundaryStartY(
+  rows: readonly TexMathAlignedRowLayout[],
+  baselineOffsets: readonly number[],
+  rowRules: readonly TexMathArrayRowRule[],
+  beforeRow: number,
+  firstBaselineY: number
+): number {
+  if (beforeRow === 0) {
+    const firstRow = rows[0];
+    return roundTexPt(firstBaselineY - (firstRow?.height ?? 0) - arrayRowRuleBoundaryHeight(rowRules, 0));
+  }
+  const previousRow = rows[beforeRow - 1];
+  return roundTexPt(firstBaselineY + (baselineOffsets[beforeRow - 1] ?? 0) + (previousRow?.depth ?? 0));
+}
+
+function appendArrayRowRules(
+  items: TexMathHListItem[],
+  rowRules: readonly TexMathArrayRowRule[],
+  beforeRow: number,
+  width: number,
+  y: number
+): void {
+  let cursorY = y;
+  for (const rule of rowRules) {
+    if (rule.beforeRow !== beforeRow) {
+      continue;
+    }
+    items.push({
+      kind: "rule",
+      role: "array-rule",
+      x: 0,
+      y: cursorY,
+      width,
+      height: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
+      sourceSpan: rule.sourceSpan,
+    });
+    cursorY = roundTexPt(cursorY + TEX_LATEX_ARRAY_RULE_WIDTH_PT);
+  }
 }
 
 function arrayPreambleItems(nucleus: TexMathArrayNucleus): readonly TexMathArrayPreambleItem[] {
