@@ -349,7 +349,7 @@ type TexDisplayAlignHitMapFuzzCase = {
   readonly id: string;
   readonly source: string;
   readonly width: number;
-  readonly delimiter: "align-star" | "gather-star" | "multline-star";
+  readonly delimiter: "align" | "align-star" | "gather-star" | "multline-star";
   readonly rows: readonly string[];
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
 };
@@ -359,7 +359,7 @@ type TexDocumentMathHitMapFuzzCase = {
   readonly source: string;
   readonly width: number;
   readonly offsets: readonly TexMathHitMapFuzzOffset[];
-  readonly delimiter: "align-star" | "gather-star" | "multline-star";
+  readonly delimiter: "align" | "align-star" | "gather-star" | "multline-star";
   readonly rows: readonly string[];
 };
 
@@ -718,14 +718,14 @@ function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
 
 function documentHitMapDisplayRows(
   random: () => number,
-  delimiter: "align-star" | "gather-star" | "multline-star"
+  delimiter: "align" | "align-star" | "gather-star" | "multline-star"
 ): readonly string[] {
   const identifiers = ["a", "b", "c", "x", "y", "z", "m", "n"] as const;
   const rowCount = 1 + Math.floor(random() * 3);
   return Array.from({ length: rowCount }, () => {
     const left = pickFuzzItem(identifiers, random);
     const right = pickFuzzItem(identifiers, random);
-    if (delimiter !== "align-star") {
+    if (delimiter !== "align" && delimiter !== "align-star") {
       return random() < 0.4
         ? String.raw`\frac{` + left + String.raw`}{` + right + String.raw`}+` + pickFuzzItem(identifiers, random)
         : `${left}=${right}`;
@@ -737,11 +737,11 @@ function documentHitMapDisplayRows(
 }
 
 function texDisplayRowFuzzKind(index: number): {
-  readonly delimiter: "align-star" | "gather-star" | "multline-star";
+  readonly delimiter: "align" | "align-star" | "gather-star" | "multline-star";
   readonly open: string;
   readonly close: string;
 } {
-  switch (index % 3) {
+  switch (index % 4) {
     case 1:
       return {
         delimiter: "gather-star",
@@ -753,6 +753,12 @@ function texDisplayRowFuzzKind(index: number): {
         delimiter: "multline-star",
         open: String.raw`\begin{multline*}`,
         close: String.raw`\end{multline*}`,
+      };
+    case 3:
+      return {
+        delimiter: "align",
+        open: String.raw`\begin{align}`,
+        close: String.raw`\end{align}`,
       };
     default:
       return {
@@ -775,20 +781,22 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
     const right = pickFuzzItem(identifiers, random);
     const tail = pickFuzzItem(identifiers, random);
     const operator = pickFuzzItem(operators, random);
-    const row = displayKind.delimiter === "align-star"
+    const row = displayKind.delimiter === "align" || displayKind.delimiter === "align-star"
       ? random() < 0.45
         ? String.raw`\frac{${left}}{${right}}&=${tail}`
         : `${left}&${operator}${right}`
       : random() < 0.45
         ? String.raw`\frac{${left}}{${right}}+${tail}`
         : `${left}${operator}${right}`;
-    if (displayKind.delimiter !== "align-star") {
+    if (displayKind.delimiter !== "align" && displayKind.delimiter !== "align-star") {
       return row;
     }
     return rowIndex === 0 && index % 3 === 0
       ? `${row} \\tag{A}`
       : rowIndex === 1 && index % 5 === 0
         ? `${row}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \\tag{Long tag}`
+        : rowIndex === 1 && displayKind.delimiter === "align" && index % 7 === 0
+          ? `${row} \\notag`
         : row;
   });
   const content = rows.join(String.raw`\\`);
@@ -4913,10 +4921,10 @@ unordered.`;
     }
   });
 
-  it("maps editor carets inside display alignment rows from registered vlist geometry", async () => {
-    const sourceText = String.raw`Intro \begin{align*}x&=y\\a&=b\end{align*} Outro`;
+  it("maps editor carets inside numbered display alignment rows from registered vlist geometry", async () => {
+    const sourceText = String.raw`Intro \begin{align}x&=y\\a&=b\notag\\c&=d\tag{A}\end{align} Outro`;
     const result = layoutSimpleTexParagraph(sourceText, {
-      paragraphId: "tex:display-align-caret",
+      paragraphId: "tex:numbered-display-align-caret",
       width: 180,
       alignment: "ragged-right",
       hyphenator: { hyphenate: () => [] },
@@ -4928,7 +4936,7 @@ unordered.`;
 
     const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
     registerTexVListLayoutsOnOutputJax(outputJax, [{
-      paragraphId: "tex:display-align-caret",
+      paragraphId: "tex:numbered-display-align-caret",
       layout: result.vlistLayout!,
     }]);
     const containerElement = {
@@ -4939,9 +4947,36 @@ unordered.`;
       },
     };
 
+    const alignRows = getKnuthPlassVListItemGeometry({
+      outputJax,
+      paragraphId: "tex:numbered-display-align-caret",
+      containerElement: containerElement as any,
+    }).filter((item) => item.hboxRole === "display-align-row");
+    expect(alignRows.map((row) => ({
+      delimiter: row.displayAlignDelimiter,
+      rowIndex: row.displayAlignRowIndex,
+      source: sourceText.slice(row.sourceStart ?? 0, row.sourceEnd ?? 0),
+    }))).toEqual([
+      {
+        delimiter: "align",
+        rowIndex: 0,
+        source: String.raw`x&=y\\`,
+      },
+      {
+        delimiter: "align",
+        rowIndex: 1,
+        source: String.raw`a&=b\notag\\`,
+      },
+      {
+        delimiter: "align",
+        rowIndex: 2,
+        source: String.raw`c&=d\tag{A}`,
+      },
+    ]);
+
     const offset = sourceText.indexOf("&=b");
     const point = await getKnuthPlassPointFromOffset(outputJax, {
-      paragraphId: "tex:display-align-caret",
+      paragraphId: "tex:numbered-display-align-caret",
       sourceText,
       containerElement,
       offset,
@@ -4955,7 +4990,7 @@ unordered.`;
     });
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
-      paragraphId: "tex:display-align-caret",
+      paragraphId: "tex:numbered-display-align-caret",
       sourceText,
       containerElement,
       clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
