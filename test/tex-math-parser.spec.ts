@@ -1997,6 +1997,37 @@ describe("TeX math parser", () => {
     expect(extraAlignmentTab.list.items).toHaveLength(1);
   });
 
+  it("parses xxalignat as a no-tag fixed-field stretched alignment", () => {
+    const source = String.raw`\begin{xxalignat}{2}a&b&c&d\end{xxalignat}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom).toMatchObject({
+      atomClass: "inner",
+      sourceSpan: { start: 0, end: source.length },
+      nucleus: {
+        kind: "aligned",
+        columnSeparation: "xxalignat",
+        maxFields: 4,
+        preambleSourceSpan: {
+          start: source.indexOf("{2}"),
+          end: source.indexOf("{2}") + 3,
+        },
+        endSourceSpan: {
+          start: source.indexOf(String.raw`\end{xxalignat}`),
+          end: source.length,
+        },
+      },
+    });
+    if (atom.nucleus.kind !== "aligned") {
+      return;
+    }
+    expect(atom.nucleus.rows[0]?.cells.map((cell) =>
+      source.slice(cell.sourceSpan.start, cell.sourceSpan.end)
+    )).toEqual(["a", "b", "c", "d"]);
+  });
+
   it("parses LaTeX eqnarray environments as distinct three-column alignments", () => {
     const source = String.raw`\begin{eqnarray}a&=&b\\c&=&d\end{eqnarray}`;
     const result = parseTexMath(source);

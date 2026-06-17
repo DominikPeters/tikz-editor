@@ -2010,6 +2010,33 @@ describe("TeX math hlist layout", () => {
     expect(xalignatGap - alignatGap).toBeCloseTo(10, 5);
   });
 
+  it("lays out xxalignat environments with AMS minimum pair gaps in the natural hlist", () => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{xxalignat}{2}a&b&c&d\end{xxalignat}`).list,
+      { style: "display" }
+    );
+    const alignat = layoutTexMathList(
+      parseTexMath(String.raw`\begin{alignat}{2}a&b&c&d\end{alignat}`).list,
+      { style: "display" }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(alignat.supported).toBe(true);
+    const firstRow = result.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const alignatFirstRow = alignat.hlist?.items[0] as TexMathChildHListLayoutItem | undefined;
+    const firstCells = firstRow?.items as readonly TexMathChildHListLayoutItem[] | undefined;
+    const alignatFirstCells = alignatFirstRow?.items as readonly TexMathChildHListLayoutItem[] | undefined;
+    expect(firstCells).toHaveLength(4);
+    expect(alignatFirstCells).toHaveLength(4);
+    if (!firstCells || !alignatFirstCells) {
+      return;
+    }
+
+    const xxalignatGap = (firstCells[2]?.x ?? 0) - ((firstCells[1]?.x ?? 0) + (firstCells[1]?.width ?? 0));
+    const alignatGap = (alignatFirstCells[2]?.x ?? 0) - ((alignatFirstCells[1]?.x ?? 0) + (alignatFirstCells[1]?.width ?? 0));
+    expect(xxalignatGap - alignatGap).toBeCloseTo(10, 5);
+  });
+
   it("lays out LaTeX eqnarray with r/c/l columns and arraycolsep gaps", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\begin{eqnarray}a&=&bb\\ccc&=&d\end{eqnarray}`).list,
