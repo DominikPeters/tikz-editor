@@ -24,9 +24,25 @@ const runs = [
     id: "construct-matrix",
     args: ["--construct-matrix", "--summary-only", "--tolerance", args.tolerance],
   },
+  {
+    id: "document-math-matrix",
+    args: ["--document-math-matrix", "--summary-only", "--tolerance", args.tolerance],
+  },
+  {
+    id: "mixed-vlist-matrix",
+    args: ["--mixed-vlist-matrix", "--summary-only", "--tolerance", args.tolerance],
+  },
   ...args.seeds.map((seed) => ({
     id: `display-fuzz:${seed}`,
     args: ["--display-fuzz", String(args.fuzzCases), "--seed", String(seed), "--summary-only", "--tolerance", args.tolerance],
+  })),
+  ...args.documentSeeds.map((seed) => ({
+    id: `document-math-fuzz:${seed}`,
+    args: ["--document-math-fuzz", String(args.documentFuzzCases), "--seed", String(seed), "--summary-only", "--tolerance", args.tolerance],
+  })),
+  ...args.mixedVListSeeds.map((seed) => ({
+    id: `mixed-vlist-fuzz:${seed}`,
+    args: ["--mixed-vlist-fuzz", String(args.mixedVListFuzzCases), "--seed", String(seed), "--summary-only", "--tolerance", args.tolerance],
   })),
 ];
 
@@ -51,7 +67,11 @@ if (failures.length > 0) {
 
 function readArgs() {
   const parsed = {
+    documentFuzzCases: 24,
+    documentSeeds: [20260625],
     fuzzCases: 70,
+    mixedVListFuzzCases: 24,
+    mixedVListSeeds: [20260617],
     seeds: [20260615, 20260616],
     skipBuild: false,
     tolerance: "0.03",
@@ -63,10 +83,26 @@ function readArgs() {
       parsed.fuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--fuzz-cases");
     } else if (arg.startsWith("--fuzz-cases=")) {
       parsed.fuzzCases = readPositiveInteger(arg.slice("--fuzz-cases=".length), "--fuzz-cases");
+    } else if (arg === "--document-fuzz-cases") {
+      parsed.documentFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--document-fuzz-cases");
+    } else if (arg.startsWith("--document-fuzz-cases=")) {
+      parsed.documentFuzzCases = readPositiveInteger(arg.slice("--document-fuzz-cases=".length), "--document-fuzz-cases");
+    } else if (arg === "--mixed-vlist-fuzz-cases") {
+      parsed.mixedVListFuzzCases = readPositiveInteger(process.argv[++index] ?? "", "--mixed-vlist-fuzz-cases");
+    } else if (arg.startsWith("--mixed-vlist-fuzz-cases=")) {
+      parsed.mixedVListFuzzCases = readPositiveInteger(arg.slice("--mixed-vlist-fuzz-cases=".length), "--mixed-vlist-fuzz-cases");
     } else if (arg === "--seeds") {
       parsed.seeds = readSeedList(process.argv[++index] ?? "");
     } else if (arg.startsWith("--seeds=")) {
       parsed.seeds = readSeedList(arg.slice("--seeds=".length));
+    } else if (arg === "--document-seeds") {
+      parsed.documentSeeds = readSeedList(process.argv[++index] ?? "");
+    } else if (arg.startsWith("--document-seeds=")) {
+      parsed.documentSeeds = readSeedList(arg.slice("--document-seeds=".length));
+    } else if (arg === "--mixed-vlist-seeds") {
+      parsed.mixedVListSeeds = readSeedList(process.argv[++index] ?? "");
+    } else if (arg.startsWith("--mixed-vlist-seeds=")) {
+      parsed.mixedVListSeeds = readSeedList(arg.slice("--mixed-vlist-seeds=".length));
     } else if (arg === "--skip-build") {
       parsed.skipBuild = true;
     } else if (arg === "--tolerance") {

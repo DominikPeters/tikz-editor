@@ -70,7 +70,7 @@
     "compare:tex-display-math:mixed-vlist-fuzz:large": "node scripts/compare-tex-display-math.mjs --mixed-vlist-fuzz 96 --seed 20260624 --summary-only --tolerance 0.03",
     "compare:tex-display-math:fuzz": "node scripts/compare-tex-display-math.mjs --display-fuzz 64 --seed 20260615 --summary-only --tolerance 0.03",
     "compare:tex-display-math:fidelity": "node scripts/compare-tex-display-math-fidelity.mjs",
-    "compare:tex-display-math:fidelity:large": "node scripts/compare-tex-display-math-fidelity.mjs --fuzz-cases 192 --seeds 20260615,20260616",
+    "compare:tex-display-math:fidelity:large": "node scripts/compare-tex-display-math-fidelity.mjs --fuzz-cases 192 --seeds 20260615,20260616 --document-fuzz-cases 96 --document-seeds 20260626 --mixed-vlist-fuzz-cases 96 --mixed-vlist-seeds 20260624",
     "compare:tex-display-math:absolute-fuzz:large": "node scripts/compare-tex-display-math.mjs --display-fuzz 192 --seed 20260616 --summary-only --tolerance 0.03",
     "compare:tex-display-math:fuzz:large": "node scripts/compare-tex-display-math.mjs --display-fuzz 192 --seed 20260616 --summary-only --tolerance 0.03",
     "compare:arrows": "node scripts/compare-arrow-fixtures.mjs",
