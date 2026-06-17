@@ -2103,6 +2103,82 @@ unordered.`;
     ]);
   });
 
+  it("applies TeX right-tag clearance to single-pair multi-row alignments", () => {
+    const source = String.raw`Alpha \begin{align}y&=\text{for $n \ge 1$}\\\begin{cases}\tfrac{n}{z}&m\\b_c^y&\tfrac{j}{x}\end{cases}&=\bigg\langle a+y\bigg\rangle \notag\\\underline{\tfrac{j}{m}}&=\begin{cases}x_m&\binom{1}{a}\end{cases}\\\text{for $n \ge 1$}&=b_y^a\end{align} Beta`;
+    const content = String.raw`y&=\text{for $n \ge 1$}\\\begin{cases}\tfrac{n}{z}&m\\b_c^y&\tfrac{j}{x}\end{cases}&=\bigg\langle a+y\bigg\rangle \notag\\\underline{\tfrac{j}{m}}&=\begin{cases}x_m&\binom{1}{a}\end{cases}\\\text{for $n \ge 1$}&=b_y^a`;
+    const rowBreaks = [...source.matchAll(/\\\\/gu)].map((match) => (match.index ?? 0) + match[0].length);
+    const contentEnd = source.indexOf(String.raw`\end{align}`);
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "align",
+      sourceStart: source.indexOf(String.raw`\begin{align}`),
+      sourceEnd: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
+      contentStart: source.indexOf("y&="),
+      contentEnd,
+      targetWidth: 120,
+      displayLabels: [
+        {
+          text: "1",
+          sourceSpan: { start: rowBreaks[0] ?? contentEnd, end: rowBreaks[0] ?? contentEnd },
+          textSourceSpan: { start: rowBreaks[0] ?? contentEnd, end: rowBreaks[0] ?? contentEnd },
+        },
+        null,
+        {
+          text: "2",
+          sourceSpan: { start: rowBreaks[2] ?? contentEnd, end: rowBreaks[2] ?? contentEnd },
+          textSourceSpan: { start: rowBreaks[2] ?? contentEnd, end: rowBreaks[2] ?? contentEnd },
+        },
+        {
+          text: "3",
+          sourceSpan: { start: contentEnd, end: contentEnd },
+          textSourceSpan: { start: contentEnd, end: contentEnd },
+        },
+      ],
+    });
+
+    expect(directAlignment?.rows).toHaveLength(4);
+    expect(firstGlyphX(directAlignment?.rows[0]?.hlist?.items ?? [])).toBeCloseTo(41.681699, 5);
+    expect(firstGlyphX(directAlignment?.rows[3]?.hlist?.items ?? [])).toBeCloseTo(7.297557, 5);
+  });
+
+  it("keeps shifted tagged align rows at TeX display width", () => {
+    const source = String.raw`Alpha \begin{align}\tilde{\frac{m}{a}}&=\cdots_c^i&b_2^i&=\ldots \tag{A}\\\begin{smallmatrix}\binom{1}{1}\\c_n^i\end{smallmatrix}&=\begin{Vmatrix}\binom{2}{j}&a_c\end{Vmatrix}&\underline{\frac{x}{j}}&=z_j^m\\\Big[y+1\Big]&=\overline{j}&\bigcup_y^a&=\begin{array}{c}m_j\end{array}\end{align} Beta`;
+    const content = String.raw`\tilde{\frac{m}{a}}&=\cdots_c^i&b_2^i&=\ldots \tag{A}\\\begin{smallmatrix}\binom{1}{1}\\c_n^i\end{smallmatrix}&=\begin{Vmatrix}\binom{2}{j}&a_c\end{Vmatrix}&\underline{\frac{x}{j}}&=z_j^m\\\Big[y+1\Big]&=\overline{j}&\bigcup_y^a&=\begin{array}{c}m_j\end{array}`;
+    const rowBreaks = [...source.matchAll(/\\\\/gu)].map((match) => (match.index ?? 0) + match[0].length);
+    const contentEnd = source.indexOf(String.raw`\end{align}`);
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content,
+      delimiter: "align",
+      sourceStart: source.indexOf(String.raw`\begin{align}`),
+      sourceEnd: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
+      contentStart: source.indexOf(String.raw`\tilde`),
+      contentEnd,
+      targetWidth: 140,
+      displayLabels: [
+        null,
+        {
+          text: "1",
+          sourceSpan: { start: rowBreaks[1] ?? contentEnd, end: rowBreaks[1] ?? contentEnd },
+          textSourceSpan: { start: rowBreaks[1] ?? contentEnd, end: rowBreaks[1] ?? contentEnd },
+        },
+        {
+          text: "2",
+          sourceSpan: { start: contentEnd, end: contentEnd },
+          textSourceSpan: { start: contentEnd, end: contentEnd },
+        },
+      ],
+    });
+
+    expect(directAlignment?.rows).toHaveLength(3);
+    expect(directAlignment?.rows.map((row) => row.width)).toEqual([
+      expect.closeTo(140, 6),
+      expect.closeTo(140, 6),
+      expect.closeTo(140, 6),
+    ]);
+  });
+
   it("does not insert aligned inter-pair gap for alignedat environments", () => {
     const aligned = layoutTexMathList(parseTexMath(
       String.raw`\begin{aligned}a&=b&c&=d\\e&=f&g&=h\end{aligned}`

@@ -767,9 +767,7 @@ function getDisplayMathAlignment(
     displayAlignmentRowLabel(alignedNucleus, params.displayLabels, rowIndex) !== null
   );
   const forcedRowWidth = hasAlignmentTags
-    ? alignedRows.length > 1
-      ? Math.max(dimensions.rowWidth, dimensions.targetWidth)
-      : dimensions.targetWidth
+    ? dimensions.targetWidth
     : null;
   const rows = alignedRows.map((row, rowIndex) => {
     const taggedRow = addDisplayAlignmentTag(
@@ -824,7 +822,9 @@ function getDisplayMathAlignment(
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
     delimiter: params.delimiter,
-    width: Math.max(dimensions.rowWidth, ...rows.map((row) => row.width)),
+    width: hasAlignmentTags
+      ? dimensions.targetWidth
+      : Math.max(dimensions.rowWidth, ...rows.map((row) => row.width)),
     rows,
   };
 }
@@ -1058,7 +1058,7 @@ function addDisplayAlignmentTag(
   const width = Math.max(baseWidth, dimensions.targetWidth);
   const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.width));
   const rowRight = mathItemsRightEdge(rowItems);
-  const tagCollides = rowRight > tagX;
+  const tagCollides = displayAlignmentRightTagMustShift(row.items, tag.width, dimensions) || rowRight > tagX;
   const tagRenderShiftY = tagCollides
     ? displayAlignmentShiftedTagRenderShift(tagLineDepth)
     : 0;
@@ -1181,6 +1181,7 @@ interface TexDisplayAlignmentDimensions {
   readonly pairCount: number;
   readonly rowWidth: number;
   readonly targetWidth: number;
+  readonly maxColumnWidths: readonly number[];
 }
 
 function displayAlignmentDimensions(params: {
@@ -1192,6 +1193,7 @@ function displayAlignmentDimensions(params: {
   readonly targetWidth: number;
 }): TexDisplayAlignmentDimensions {
   const alignSepCount = Math.max(0, params.pairCount - 1);
+  const maxColumnWidths = displayAlignmentMaxColumnWidths(params.rows);
   const fixedPairGapWidth = alignSepCount * TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
   const trailingWidth = params.rowCount === 1
     ? TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT
@@ -1213,11 +1215,12 @@ function displayAlignmentDimensions(params: {
       roundTexPt((params.targetWidth - totalFieldWidth - alignSepCount * alignSep) / 2)
     );
   }
-  if (params.pairCount > 1 && params.rowTagWidths.some((width) => width > 0)) {
+  if (params.rowTagWidths.some((width) => width > 0)) {
     ({ eqnShift, alignSep } = applyAmsmathCenteredRightTagClearance({
       eqnShift,
       alignSep,
       pairCount: params.pairCount,
+      maxColumnWidths,
       rows: params.rows,
       rowTagWidths: params.rowTagWidths,
       targetWidth: params.targetWidth,
@@ -1227,6 +1230,7 @@ function displayAlignmentDimensions(params: {
     eqnShift,
     alignSep,
     pairCount: params.pairCount,
+    maxColumnWidths,
     rowWidth: roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep),
     targetWidth: params.targetWidth,
   };
@@ -1236,13 +1240,13 @@ function applyAmsmathCenteredRightTagClearance(params: {
   readonly eqnShift: number;
   readonly alignSep: number;
   readonly pairCount: number;
+  readonly maxColumnWidths: readonly number[];
   readonly rows: readonly TexMathChildHListLayoutItem[];
   readonly rowTagWidths: readonly number[];
   readonly targetWidth: number;
 }): { readonly eqnShift: number; readonly alignSep: number } {
   let eqnShift = params.eqnShift;
   let alignSep = params.alignSep;
-  const maxColumnWidths = displayAlignmentMaxColumnWidths(params.rows);
   const alignSepCount = Math.max(0, params.pairCount - 1);
   for (let rowIndex = params.rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
     const tagWidth = params.rowTagWidths[rowIndex] ?? 0;
@@ -1253,7 +1257,7 @@ function applyAmsmathCenteredRightTagClearance(params: {
     const rowPairIndex = Math.floor(Math.max(0, fieldWidths.length - 1) / 2);
     const rowAlignSepCount = Math.min(alignSepCount, rowPairIndex);
     const rowFlexibleSlotCount = params.pairCount + 1 - alignSepCount + rowAlignSepCount;
-    const rowWidthBeforeTag = amsmathRightTagRowWidth(fieldWidths, maxColumnWidths);
+    const rowWidthBeforeTag = amsmathRightTagRowWidth(fieldWidths, params.maxColumnWidths);
     const equationAndTagWidth = roundTexPt(rowWidthBeforeTag + tagWidth);
     const minimumClearanceWidth = roundTexPt(
       equationAndTagWidth +
@@ -1291,6 +1295,28 @@ function applyAmsmathCenteredRightTagClearance(params: {
     }
   }
   return { eqnShift, alignSep };
+}
+
+function displayAlignmentRightTagMustShift(
+  rowItems: readonly TexMathHListItem[],
+  tagWidth: number,
+  dimensions: TexDisplayAlignmentDimensions
+): boolean {
+  if (tagWidth <= 0) {
+    return false;
+  }
+  const alignSepCount = Math.max(0, dimensions.pairCount - 1);
+  const fieldWidths = displayAlignmentFieldWidths(rowItems);
+  const rowPairIndex = Math.floor(Math.max(0, fieldWidths.length - 1) / 2);
+  const rowAlignSepCount = Math.min(alignSepCount, rowPairIndex);
+  const rowWidthBeforeTag = amsmathRightTagRowWidth(fieldWidths, dimensions.maxColumnWidths);
+  const equationAndTagWidth = roundTexPt(rowWidthBeforeTag + tagWidth);
+  const minimumClearanceWidth = roundTexPt(
+    equationAndTagWidth +
+    rowAlignSepCount * TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT +
+    2 * TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT
+  );
+  return minimumClearanceWidth > dimensions.targetWidth;
 }
 
 function displayAlignmentMaxColumnWidths(
