@@ -77,6 +77,7 @@ export type TexMathNucleus =
   | TexMathListNucleus
   | TexMathFractionNucleus
   | TexMathRadicalNucleus
+  | TexMathBoxedNucleus
   | TexMathLineNucleus
   | TexMathAccentNucleus
   | TexMathAlphabetNucleus
@@ -164,6 +165,13 @@ export interface TexMathFractionNucleus {
 export interface TexMathRadicalNucleus {
   readonly kind: "radical";
   readonly radicand: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathBoxedNucleus {
+  readonly kind: "boxed";
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

@@ -823,6 +823,72 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out amsmath boxed formulas with TeX fbox rule and sep", () => {
+    const boxed = layout(String.raw`\boxed{x+y}`);
+
+    expect(boxed.supported).toBe(true);
+    expect(boxed.hlist?.width).toBeCloseTo(29.999158, 5);
+    expect(boxed.hlist?.height).toBeCloseTo(9.23334, 5);
+    expect(boxed.hlist?.depth).toBeCloseTo(5.34445, 5);
+    expect(boxed.hlist?.items).toMatchObject([
+      {
+        kind: "rule",
+        role: "boxed-rule",
+        x: 0,
+        y: expect.closeTo(-9.23334, 5),
+        width: expect.closeTo(29.999158, 5),
+        height: 0.4,
+      },
+      {
+        kind: "rule",
+        role: "boxed-rule",
+        x: 0,
+        y: expect.closeTo(-9.23334, 5),
+        width: 0.4,
+      },
+      {
+        kind: "hlist",
+        role: "boxed-body",
+        x: 3.4,
+        y: 0,
+        items: expect.arrayContaining([
+          expect.objectContaining({ kind: "glyph", fontId: "cmmi10", code: 120, x: 0 }),
+          expect.objectContaining({ kind: "glue", width: expect.closeTo(2.222229, 5) }),
+          expect.objectContaining({ kind: "glyph", fontId: "cmr10", code: 43, x: expect.closeTo(7.937509, 5) }),
+          expect.objectContaining({ kind: "glyph", fontId: "cmmi10", code: 121, x: expect.closeTo(17.937548, 5) }),
+          expect.objectContaining({ kind: "kern", reason: "italic-correction", width: expect.closeTo(0.35879, 5) }),
+        ]),
+      },
+      {
+        kind: "rule",
+        role: "boxed-rule",
+        x: expect.closeTo(29.599158, 5),
+        y: expect.closeTo(-9.23334, 5),
+        width: 0.4,
+      },
+      {
+        kind: "rule",
+        role: "boxed-rule",
+        x: 0,
+        y: expect.closeTo(4.94445, 5),
+        width: expect.closeTo(29.999158, 5),
+        height: 0.4,
+      },
+    ]);
+
+    const boxedFraction = layout(String.raw`\boxed{\frac{1}{2}}`);
+    expect(boxedFraction.supported).toBe(true);
+    expect(boxedFraction.hlist?.width).toBeCloseTo(14.20002, 5);
+    const boxedFractionBody = boxedFraction.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
+    expect(boxedFractionBody).toMatchObject({
+      kind: "hlist",
+      role: "boxed-body",
+      x: 3.4,
+      height: expect.closeTo(13.20952, 5),
+      depth: expect.closeTo(6.85951, 5),
+    });
+  });
+
   it("lays out amsmath cfrac with display style, numerator alignment, and trailing kern", () => {
     const centered = layout(String.raw`\cfrac{a}{bbb}`);
     const left = layout(String.raw`\cfrac[l]{a}{bbb}`);

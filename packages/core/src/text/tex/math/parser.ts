@@ -387,6 +387,9 @@ class TexMathParser {
       if (commandName(token.text) === "sqrt") {
         return this.parseRadical(allowScripts);
       }
+      if (commandName(token.text) === "boxed") {
+        return this.parseBoxed(allowScripts);
+      }
       const lineCommand = lineCommandName(token.text);
       if (lineCommand) {
         return this.parseLine(lineCommand, allowScripts);
@@ -720,6 +723,23 @@ class TexMathParser {
       nucleus: {
         kind: "line",
         command: commandNameValue,
+        body: body?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseBoxed(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const body = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} body`);
+    const sourceSpan = spanUnion(command.sourceSpan, body?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "boxed",
         body: body?.list ?? emptyList(command.sourceSpan.end),
         commandSourceSpan: command.sourceSpan,
         sourceSpan,

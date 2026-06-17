@@ -88,6 +88,24 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses amsmath boxed formulas as source-spanned boxed nuclei", () => {
+    const result = parseTexMath(String.raw`\boxed{x+y}`, { sourceOffset: 11 });
+    const boxed = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(boxed).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 11, end: 22 },
+      nucleus: {
+        kind: "boxed",
+        commandSourceSpan: { start: 11, end: 17 },
+        sourceSpan: { start: 11, end: 22 },
+        body: { sourceSpan: { start: 18, end: 21 } },
+      },
+    });
+    expect(boxed.nucleus.kind === "boxed" ? boxed.nucleus.body.items : []).toHaveLength(3);
+  });
+
   it("parses dfrac and tfrac as style-forced generalized fractions", () => {
     const result = parseTexMath(String.raw`\dfrac{x}{y}+\tfrac{1}{2}`, { sourceOffset: 12 });
 

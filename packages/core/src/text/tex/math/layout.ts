@@ -25,6 +25,7 @@ import type {
   TexMathArrayRowRule,
   TexMathArrayColumnAlignment,
   TexMathArrayNucleus,
+  TexMathBoxedNucleus,
   TexMathCasesNucleus,
   TexMathDelimiter,
   TexMathExtensibleArrowNucleus,
@@ -99,7 +100,7 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule";
+  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule" | "boxed-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -123,6 +124,7 @@ export interface TexMathChildHListLayoutItem {
     | "subarray-cell"
     | "sideset-pre"
     | "sideset-base"
+    | "boxed-body"
     | "array-row"
     | "array-cell"
     | "array-insert"
@@ -214,6 +216,8 @@ const TEX_LATEX_STRUT_HEIGHT_PT = 8.39996;
 const TEX_LATEX_STRUT_DEPTH_PT = 3.60004;
 const TEX_LATEX_ARRAY_RULE_WIDTH_PT = 0.4;
 const TEX_LATEX_DOUBLE_RULE_SEP_PT = 2;
+const TEX_LATEX_FBOX_RULE_PT = 0.4;
+const TEX_LATEX_FBOX_SEP_PT = 3;
 const TEX_DELIMITER_FACTOR = 901;
 const TEX_DELIMITER_SHORTFALL_PT = 5;
 const TEX_SP_PER_PT = 65536;
@@ -761,6 +765,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "radical") {
     return layoutRadicalNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "boxed") {
+    return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, alphabet);
   }
   if (nucleus.kind === "line") {
     return layoutLineNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -3319,6 +3326,84 @@ function layoutRadicandList(
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
+}
+
+function layoutBoxedNucleus(
+  nucleus: TexMathBoxedNucleus,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const body = layoutTexMathList(nucleus.body, {
+    fontProfile,
+    style: "display",
+    cramped: false,
+    baseAtPt,
+    alphabet,
+  });
+  if (!body.supported) {
+    return null;
+  }
+  const rule = TEX_LATEX_FBOX_RULE_PT;
+  const sep = TEX_LATEX_FBOX_SEP_PT;
+  const width = roundTexPt(body.hlist.width + 2 * (rule + sep));
+  const height = roundTexPt(body.hlist.height + sep + rule);
+  const depth = roundTexPt(body.hlist.depth + sep + rule);
+  const sideHeight = roundTexPt(height + depth);
+  const bodyChild = childHList(
+    "boxed-body",
+    roundTexPt(rule + sep),
+    0,
+    body.hlist,
+    nucleus.body.sourceSpan
+  );
+  const frameRules: TexMathRuleLayoutItem[] = [
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: 0,
+      y: -height,
+      width,
+      height: rule,
+      sourceSpan: nucleus.commandSourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: 0,
+      y: -height,
+      width: rule,
+      height: sideHeight,
+      sourceSpan: nucleus.commandSourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: roundTexPt(width - rule),
+      y: -height,
+      width: rule,
+      height: sideHeight,
+      sourceSpan: nucleus.commandSourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: 0,
+      y: roundTexPt(body.hlist.depth + sep),
+      width,
+      height: rule,
+      sourceSpan: nucleus.commandSourceSpan,
+    },
+  ];
+  return {
+    items: [frameRules[0], frameRules[1], bodyChild, frameRules[2], frameRules[3]],
+    width,
+    height,
+    depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
 }
 
 function layoutLineNucleus(

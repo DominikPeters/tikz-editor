@@ -15,6 +15,7 @@ const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\t
 const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
 const lineCommands = [String.raw`\overline`, String.raw`\underline`];
 const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
+const amsMathCommands = [String.raw`\boxed`];
 const amsMathDelimiterCommands = [
   String.raw`\lvert`,
   String.raw`\rvert`,
@@ -294,6 +295,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     || hasSubstackCommand(formula)
     || hasSubarrayEnvironment(formula)
     || hasSidesetCommand(formula)
+    || hasAmsMathCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),
@@ -460,6 +462,7 @@ function texSource(formula) {
     hasSubarrayEnvironment(formula) ||
     hasSidesetCommand(formula) ||
     hasEllipsisCommand(formula) ||
+    hasAmsMathCommand(formula) ||
     hasAmsMathDelimiterCommand(formula) ||
     formula.includes(String.raw`\text`)
     ? String.raw`\usepackage{amsmath}` + "\n"
@@ -1008,6 +1011,10 @@ function hasEllipsisCommand(source) {
   return source.includes(String.raw`\dots`) ||
     source.includes(String.raw`\ldots`) ||
     source.includes(String.raw`\cdots`);
+}
+
+function hasAmsMathCommand(source) {
+  return amsMathCommands.some((command) => source.includes(command));
 }
 
 function hasAmsMathDelimiterCommand(source) {

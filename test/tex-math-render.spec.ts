@@ -235,6 +235,23 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('width="503.474"');
   });
 
+  it("renders amsmath boxed frame rules through SVG rects", () => {
+    const parsed = parseTexMath(String.raw`\boxed{x+y}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body.match(/data-tex-rule="boxed-rule"/gu)).toHaveLength(4);
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="43"');
+    expect(body).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+    expect(body).toContain('x="0" y="-923.334" width="2999.9158" height="40"');
+    expect(body).toContain('x="2959.9158" y="-923.334" width="40"');
+  });
+
   it("renders text command glyphs through the document text font", () => {
     const parsed = parseTexMath(String.raw`x+\text{if}`);
     const result = layoutTexMathList(parsed.list);
