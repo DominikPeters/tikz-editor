@@ -4969,6 +4969,96 @@ unordered.`;
     });
   });
 
+  it("maps editor carets inside shoved multline rows from registered vlist geometry", async () => {
+    const sourceText = String.raw`Intro \begin{multline*}a+b\\\shoveleft c+d\\\shoveright e+f\end{multline*} Outro`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:display-multline-shove-caret",
+      width: 180,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    expect(result.supported, sourceText).toBe(true);
+    expect(result.report, sourceText).not.toBeNull();
+    expect(result.vlistLayout, sourceText).not.toBeNull();
+
+    const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:display-multline-shove-caret",
+      layout: result.vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: result.report?.width ?? 1 } },
+      querySelectorAll: () => {
+        throw new Error("shoved multline caret mapping should use registered vlist geometry");
+      },
+    };
+
+    const rows = getKnuthPlassVListItemGeometry({
+      outputJax,
+      paragraphId: "tex:display-multline-shove-caret",
+      containerElement: containerElement as any,
+    }).filter((item) => item.hboxRole === "display-align-row");
+    expect(rows.map((row) => sourceText.slice(row.sourceStart ?? 0, row.sourceEnd ?? 0))).toEqual([
+      String.raw`a+b\\`,
+      String.raw`\shoveleft c+d\\`,
+      String.raw`\shoveright e+f`,
+    ]);
+
+    const leftOffset = sourceText.indexOf("c+d");
+    const rightOffset = sourceText.indexOf("e+f");
+    const [leftPoint, rightPoint] = await Promise.all([leftOffset, rightOffset].map((offset) =>
+      getKnuthPlassPointFromOffset(outputJax, {
+        paragraphId: "tex:display-multline-shove-caret",
+        sourceText,
+        containerElement,
+        offset,
+      })
+    ));
+    expect(leftPoint.error?.message ?? null).toBeNull();
+    expect(rightPoint.error?.message ?? null).toBeNull();
+    expect(leftPoint).toMatchObject({
+      ok: true,
+      offset: leftOffset,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+    expect(rightPoint).toMatchObject({
+      ok: true,
+      offset: rightOffset,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+    expect(rightPoint.lineIndex).not.toBe(leftPoint.lineIndex);
+    expect(rightPoint.lineLocalX ?? 0).toBeGreaterThan((leftPoint.lineLocalX ?? 0) + 80);
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:display-multline-shove-caret",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(rightPoint.clientPoint?.x ?? 0), px(rightPoint.clientPoint?.y ?? 0)),
+    });
+    expect(caret.error?.message ?? null).toBeNull();
+    expect(caret).toMatchObject({
+      ok: true,
+      offset: rightOffset,
+      kind: "math",
+      snappedToMathPrefix: false,
+    });
+
+    const selection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:display-multline-shove-caret",
+      sourceText,
+      containerElement,
+      startOffset: leftOffset,
+      endOffset: rightOffset + 1,
+    });
+    expect(selection.error?.message ?? null).toBeNull();
+    expect(selection.ok).toBe(true);
+    expect(selection.rects.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("fuzzes registered hit geometry for display alignment rows in mixed vlists", async () => {
     const cases = Array.from({ length: 36 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
     for (const testCase of cases) {
