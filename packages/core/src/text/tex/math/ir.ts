@@ -446,6 +446,8 @@ export interface TexMathList {
   readonly kind: "math-list";
   readonly items: readonly TexMathItem[];
   readonly sourceSpan: TexMathSourceSpan;
+  readonly displayLabels?: readonly TexMathAlignedRowLabel[];
+  readonly suppressDisplayTag?: boolean;
 }
 
 export interface TexMathParseResult {

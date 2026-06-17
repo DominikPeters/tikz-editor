@@ -1296,18 +1296,26 @@ class TexMathParser {
     const list = this.parseList({
       stopAtGroupClose: false,
       stopAtEnvironmentEnd: environmentName.name,
+      stopAtAlignmentMetadata: true,
       suppressTerminalEllipsisGlue: true,
     });
+    const metadata = this.consumeAlignmentRowMetadata(true);
     const endSourceSpan = this.isEnvironmentEnd(environmentName.name)
       ? this.consumeEnvironmentEnd(environmentName.name)
-      : this.missingEnvironmentEnd(environmentName.name, list.sourceSpan);
-    const sourceSpan = spanUnion(spanUnion(initialSourceSpan, list.sourceSpan), endSourceSpan);
+      : this.missingEnvironmentEnd(environmentName.name, metadata.sourceSpan ?? list.sourceSpan);
+    const listSourceSpan = spanUnion(list.sourceSpan, metadata.sourceSpan ?? list.sourceSpan);
+    const sourceSpan = spanUnion(spanUnion(initialSourceSpan, listSourceSpan), endSourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
       atomClass: "inner",
       nucleus: {
         kind: "list",
-        list,
+        list: {
+          ...list,
+          sourceSpan: listSourceSpan,
+          ...(metadata.labels.length > 0 ? { displayLabels: metadata.labels } : {}),
+          ...(metadata.suppressTag ? { suppressDisplayTag: true } : {}),
+        },
         sourceSpan,
       },
       sourceSpan,

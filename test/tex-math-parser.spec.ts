@@ -1363,6 +1363,31 @@ describe("TeX math parser", () => {
     expect(atom.nucleus.list.items).toHaveLength(3);
   });
 
+  it("records explicit equation-star tags as display metadata", () => {
+    const source = String.raw`\begin{equation*}a=b\tag{A}\end{equation*}`;
+    const result = parseTexMath(source);
+    const atom = atomAt(result, 0);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atom.nucleus.kind).toBe("list");
+    if (atom.nucleus.kind !== "list") {
+      return;
+    }
+    expect(atom.nucleus.list.displayLabels).toEqual([
+      {
+        text: "A",
+        sourceSpan: {
+          start: source.indexOf(String.raw`\tag`),
+          end: source.indexOf(String.raw`\end{equation*}`),
+        },
+        textSourceSpan: {
+          start: source.indexOf("{A}") + 1,
+          end: source.indexOf("{A}") + 2,
+        },
+      },
+    ]);
+  });
+
   it("parses gather environments as aligned rows without requiring alignment tabs", () => {
     const source = String.raw`\begin{gather*}a=b\\c=d\end{gather*}`;
     const result = parseTexMath(source);

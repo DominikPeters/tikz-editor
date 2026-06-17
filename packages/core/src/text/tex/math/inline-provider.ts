@@ -97,11 +97,17 @@ function getMathBox(
     cache.set(key, null);
     return null;
   }
-  const hlist = style === "display" &&
+  const measuredHList = style === "display" &&
     params.targetWidth !== undefined &&
     laidOut.hlist.width > params.targetWidth
     ? setTexMathHListWidth(laidOut.hlist, params.targetWidth)
     : laidOut.hlist;
+  const displayLabel = style === "display"
+    ? displayLabelForMathList(parsed.list)
+    : null;
+  const hlist = displayLabel
+    ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
+    : measuredHList;
   const box = {
     source: params.source,
     content: params.content,
@@ -122,6 +128,61 @@ function getMathBox(
   } satisfies TexMathBox;
   cache.set(key, box);
   return box;
+}
+
+function displayLabelForMathList(list: TexMathList): TexMathAlignedRowLabel | null {
+  if (list.suppressDisplayTag) {
+    return null;
+  }
+  if (list.displayLabels?.length) {
+    return list.displayLabels[0] ?? null;
+  }
+  if (list.items.length !== 1) {
+    return null;
+  }
+  const item = list.items[0];
+  if (item?.kind !== "atom" || item.nucleus.kind !== "list") {
+    return null;
+  }
+  return displayLabelForMathList(item.nucleus.list);
+}
+
+function addDisplayMathTag(
+  hlist: TexMathHList,
+  label: TexMathAlignedRowLabel,
+  targetWidth: number,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number
+): TexMathHList {
+  const tag = layoutDisplayAlignmentTag(label, hlist.sourceSpan.start, fontProfile, baseAtPt);
+  if (!tag) {
+    return hlist;
+  }
+  const width = roundTexPt(Math.max(
+    targetWidth,
+    hlist.width + tag.width + 2 * TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT
+  ));
+  const mathX = roundTexPt(Math.max(0, (width - hlist.width) / 2));
+  const tagX = roundTexPt(Math.max(0, width - tag.width));
+  const mathItems = offsetMathHListItems(hlist.items, mathX);
+  const mathRight = mathItemsRightEdge(mathItems);
+  const tagCollides = mathRight + TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT > tagX;
+  const tagRenderShiftY = tagCollides
+    ? displayAlignmentShiftedTagRenderShift(hlist.depth)
+    : 0;
+  const tagMetricShiftY = tagCollides
+    ? displayAlignmentShiftedTagMetricShift(hlist.depth, hlist.depth)
+    : 0;
+  return {
+    ...hlist,
+    width,
+    height: Math.max(hlist.height, tag.height),
+    depth: Math.max(hlist.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    items: [
+      ...mathItems,
+      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+    ],
+  };
 }
 
 function mathHListFlex(

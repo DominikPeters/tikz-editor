@@ -788,6 +788,33 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="98"');
   });
 
+  it("places explicit equation-star tags at the display edge", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`\begin{equation*}a=b\tag{A}\end{equation*}`;
+    const box = provider.getDisplayMathBox?.({
+      source,
+      content: source,
+      delimiter: "bracket",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 0,
+      contentEnd: source.length,
+      targetWidth: 120,
+    });
+
+    expect(box?.width).toBeCloseTo(120, 6);
+    expect(box?.caretStops).toHaveLength(source.length + 1);
+    expect(box?.svgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="97"');
+    expect(box?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="40"');
+    expect(box?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="65"');
+    expect(box?.svgBody).toContain('data-tex-font="lmroman10-regular" data-tex-glyph="41"');
+    expect(box?.hlist?.items.some((item) =>
+      item.kind === "glyph" &&
+      item.sourceSpan.start >= source.indexOf(String.raw`\tag`) &&
+      item.x > 100
+    )).toBe(true);
+  });
+
   it("uses display-style AMS terminal ellipsis spacing for display math boxes", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const inlineSource = String.raw`$\dots$`;
