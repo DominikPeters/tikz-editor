@@ -1545,6 +1545,33 @@ unordered.`;
     expect(directAlignment?.rows[0]?.svgBody).toMatch(/translate\([0-9.]+ 1200\) scale\(100\)/u);
   });
 
+  it("uses TeX normal-baseline shifted-tag placement for deep multi-row alignments", () => {
+    const source = String.raw`Alpha \begin{align*}\dfrac{j}{\dots}&=\tilde{n+a} \tag{A}\\\begin{pmatrix}\dots_x&\cdots\end{pmatrix}&=j\\\operatorname*{span}&=\text{off}\end{align*} Beta`;
+    const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({
+      source,
+      content: String.raw`\dfrac{j}{\dots}&=\tilde{n+a} \tag{A}\\\begin{pmatrix}\dots_x&\cdots\end{pmatrix}&=j\\\operatorname*{span}&=\text{off}`,
+      delimiter: "align-star",
+      sourceStart: source.indexOf(String.raw`\begin{align*}`),
+      sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
+      contentStart: source.indexOf(String.raw`\dfrac`),
+      contentEnd: source.indexOf(String.raw`\end{align*}`),
+      targetWidth: 100,
+    });
+    const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
+      item.kind === "glyph" &&
+      item.fontId === "lmroman10-regular" &&
+      (item.code === 40 || item.code === 65 || item.code === 41)
+    ) ?? [];
+
+    expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(19.85951, 5);
+    expect(tagGlyphs).toHaveLength(3);
+    expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
+      expect.closeTo(16.25951, 5),
+      expect.closeTo(16.25951, 5),
+      expect.closeTo(16.25951, 5),
+    ]);
+  });
+
   it("keeps non-colliding align-star tags on the equation baseline", () => {
     const source = String.raw`\begin{align*}a&=b \tag{A}\end{align*}`;
     const directAlignment = createTexDerivedInlineMathBoxProvider().getDisplayMathAlignment?.({

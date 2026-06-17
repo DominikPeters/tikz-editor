@@ -34,7 +34,6 @@ const TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT = 5;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT = 12;
 const TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_METRIC_SHIFT_PT = 13;
 const TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT = 3.600037;
-const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT = 20;
 const TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_METRIC_SHIFT_PT = 13;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT = 8.4;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT = 1;
@@ -654,7 +653,7 @@ function addDisplayAlignmentTag(
   const rowRight = mathItemsRightEdge(rowItems);
   const tagCollides = rowRight > tagX;
   const tagRenderShiftY = tagCollides
-    ? displayAlignmentShiftedTagRenderShift(rowCount, row.depth)
+    ? displayAlignmentShiftedTagRenderShift(row.depth)
     : 0;
   const tagMetricShiftY = tagCollides
     ? displayAlignmentShiftedTagMetricShift(rowCount, row.depth)
@@ -670,16 +669,13 @@ function addDisplayAlignmentTag(
   };
 }
 
-function displayAlignmentShiftedTagRenderShift(rowCount: number, rowDepth: number): number {
-  const baseShift = rowCount <= 2
-    ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
-    : TEX_DISPLAY_ALIGNMENT_MULTI_ROW_COLLIDING_TAG_RENDER_SHIFT_PT;
+function displayAlignmentShiftedTagRenderShift(rowDepth: number): number {
   // amsmath's right-side \place@tag uses a vtop whose first null box depth is
   // \lineht@, the current row depth. The following tag box gets normal
   // baseline spacing when possible and falls back to \lineskip for deep rows.
   const depthPlusTagStrut = rowDepth + TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT;
-  return roundTexPt(depthPlusTagStrut <= baseShift + 0.001
-    ? baseShift
+  return roundTexPt(depthPlusTagStrut <= TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT + 0.001
+    ? TEX_DISPLAY_ALIGNMENT_COLLIDING_TAG_SHIFT_PT
     : depthPlusTagStrut + TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT);
 }
 
