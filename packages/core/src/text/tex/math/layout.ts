@@ -452,7 +452,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.body);
   }
   if (nucleus.kind === "accent") {
-    return texMathListNeedsAmsMath(nucleus.base);
+    return true;
   }
   if (nucleus.kind === "alphabet") {
     return texMathListNeedsAmsMath(nucleus.list);

@@ -304,6 +304,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     || hasSubarrayEnvironment(formula)
     || hasSidesetCommand(formula)
     || hasAmsMathCommand(formula)
+    || hasAccentCommand(formula)
   ) {
     return {
       ours: visibleMathItems(ours),

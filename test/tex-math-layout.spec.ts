@@ -1488,6 +1488,20 @@ describe("TeX math hlist layout", () => {
       y: expect.closeTo(-7.117905, 5),
     });
 
+    const accentedScriptFraction = layout(String.raw`\overline{\bar{y}}^{\frac{\gamma}{c}}`);
+    expect(accentedScriptFraction.supported).toBe(true);
+    const scriptFraction = accentedScriptFraction.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    ) as TexMathChildHListLayoutItem | undefined;
+    expect(scriptFraction?.items.find((item) =>
+      item.kind === "rule" && item.role === "fraction-rule"
+    )).toMatchObject({
+      kind: "rule",
+      role: "fraction-rule",
+      y: expect.closeTo(-1.919998, 5),
+      height: expect.closeTo(0.339997, 5),
+    });
+
     const vecSup = layout(String.raw`\vec{z}^y`);
     expect(vecSup.supported).toBe(true);
     expect(vecSup.hlist?.items.find((item) =>
