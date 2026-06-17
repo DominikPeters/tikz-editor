@@ -657,7 +657,9 @@ function displayAlignmentMaterialItems(
 }
 
 function displayAlignmentTopCorrection(item: TexDisplayAlignmentItem): number {
-  return item.delimiter === "multline-star" ? 0 : latexAmsmathAlignTopCorrectionPt;
+  return item.delimiter === "multline" || item.delimiter === "multline-star"
+    ? 0
+    : latexAmsmathAlignTopCorrectionPt;
 }
 
 function displayAlignmentGlueItem(

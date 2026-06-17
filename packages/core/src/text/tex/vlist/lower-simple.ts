@@ -86,6 +86,12 @@ export function lowerSimpleTexBlockItemsToVList(
         items.push(displayMathItemFromSimpleTexDisplayMath(item, options, numberedRows.displayLabels));
         continue;
       }
+      if (item.delimiter === "multline") {
+        const numberedMultline = displayLabelForNumberedMultline(item, equationNumber);
+        equationNumber = numberedMultline.nextEquationNumber;
+        items.push(displayMathItemFromSimpleTexDisplayMath(item, options, numberedMultline.displayLabels));
+        continue;
+      }
       items.push(displayMathItemFromSimpleTexDisplayMath(item, options));
       continue;
     }
@@ -115,15 +121,11 @@ function displayMathItemFromSimpleTexDisplayMath(
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
   if (
-    item.delimiter === "multline"
-  ) {
-    return unsupportedDisplayMathPlaceholder(item, sourceSpan);
-  }
-  if (
     item.delimiter === "align" ||
     item.delimiter === "align-star" ||
     item.delimiter === "gather" ||
     item.delimiter === "gather-star" ||
+    item.delimiter === "multline" ||
     item.delimiter === "multline-star"
   ) {
     const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
@@ -178,6 +180,45 @@ function displayMathItemFromSimpleTexDisplayMath(
     contentEnd: item.contentEnd,
     targetWidth: targetWidth ?? box.width,
     box,
+  };
+}
+
+function displayLabelForNumberedMultline(
+  item: SimpleTexDisplayMathBlockItem,
+  previousEquationNumber: number
+): { readonly displayLabels: readonly (TexMathDisplayLabel | null)[]; readonly nextEquationNumber: number } {
+  const parsed = parseTexMathAlignedBody(item.content, {
+    sourceOffset: item.contentStart,
+    columnSeparation: "multline",
+    suppressTerminalEllipsisGlue: true,
+  });
+  const aligned = parsed.list.items[0];
+  if (aligned?.kind !== "atom" || aligned.nucleus.kind !== "aligned") {
+    return {
+      displayLabels: [],
+      nextEquationNumber: previousEquationNumber,
+    };
+  }
+  const rows = aligned.nucleus.rows;
+  if (
+    rows.length === 0 ||
+    rows.some((row) => row.suppressTag) ||
+    rows.some((row) => (row.labels?.length ?? 0) > 0)
+  ) {
+    return {
+      displayLabels: [],
+      nextEquationNumber: previousEquationNumber,
+    };
+  }
+  const equationNumber = previousEquationNumber + 1;
+  const labels = rows.map((row, rowIndex) =>
+    rowIndex === rows.length - 1
+      ? displayLabelForEquationNumberAt(equationNumber, row.sourceSpan.end)
+      : null
+  );
+  return {
+    displayLabels: labels,
+    nextEquationNumber: equationNumber,
   };
 }
 
@@ -252,12 +293,7 @@ function unsupportedDisplayMathPlaceholder(
   item: SimpleTexDisplayMathBlockItem,
   sourceSpan: TexSourceSpan
 ): TexPlaceholderItem {
-  const reason = item.delimiter === "equation" ||
-    item.delimiter === "align" ||
-    item.delimiter === "gather" ||
-    item.delimiter === "multline"
-    ? "Numbered TeX display math is not implemented yet."
-    : "TeX display math rendering is not implemented for this formula.";
+  const reason = "TeX display math rendering is not implemented for this formula.";
   return {
     kind: "placeholder",
     sourceSpan,

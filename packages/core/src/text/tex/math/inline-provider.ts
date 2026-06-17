@@ -38,6 +38,7 @@ const TEX_DISPLAY_ALIGNMENT_STANDARD_ROW_DEPTH_PT = 3.600037;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_STRUT_HEIGHT_PT = 8.4;
 const TEX_DISPLAY_ALIGNMENT_SHIFTED_TAG_LINE_SKIP_PT = 1;
 const TEX_MULTLINE_GAP_PT = 10;
+const TEX_MULTLINE_TAG_GAP_PT = 10;
 
 export interface TexDerivedInlineMathBoxProviderOptions {
   readonly fontProfile?: TexMathFontProfile;
@@ -584,18 +585,51 @@ function getDisplayMathAlignment(
   if (alignedRows.length === 0) {
     return null;
   }
-  if (params.delimiter === "multline-star") {
+  if (params.delimiter === "multline" || params.delimiter === "multline-star") {
+    const alignedNucleus = alignedNucleusFromList(parsed.list);
+    const multlineLabel = params.delimiter === "multline"
+      ? multlineDisplayLabel(alignedNucleus, params.displayLabels)
+      : null;
     const rows = alignedRows.map((row, rowIndex) => {
       const rowWidth = mathItemsRightEdge(row.items);
-      const rowOffset = multlineRowOffset(rowWidth, rowIndex, alignedRows.length, params.targetWidth, row.multlineShove);
+      const isTaggedRow = rowIndex === alignedRows.length - 1 && multlineLabel !== null;
+      const tag = isTaggedRow
+        ? layoutDisplayAlignmentTag(multlineLabel, row.sourceSpan.start, fontProfile, baseAtPt)
+        : null;
+      const shiftTag = tag !== null && multlineRightTagCollides(rowWidth, tag.width, params.targetWidth);
+      const rowOffset = multlineRowOffset(
+        rowWidth,
+        rowIndex,
+        alignedRows.length,
+        params.targetWidth,
+        row.multlineShove,
+        tag?.width ?? 0,
+        shiftTag
+      );
+      const rowItems = offsetMathHListItems(row.items, rowOffset);
+      const taggedRow = tag
+        ? addMultlineDisplayTag(
+          row,
+          rowItems,
+          tag,
+          params.targetWidth,
+          shiftTag,
+          displayAlignmentRowLineDepth(alignedRows, rowIndex)
+        )
+        : {
+          width: params.targetWidth,
+          height: row.height,
+          depth: row.depth,
+          items: rowItems,
+        };
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
-        width: params.targetWidth,
-        height: row.height,
-        depth: row.depth,
+        width: taggedRow.width,
+        height: taggedRow.height,
+        depth: taggedRow.depth,
         sourceSpan: row.sourceSpan,
-        items: offsetMathHListItems(row.items, rowOffset),
+        items: taggedRow.items,
       };
       return {
         rowIndex,
@@ -606,9 +640,9 @@ function getDisplayMathAlignment(
         sourceEnd: row.sourceSpan.end,
         contentStart: row.sourceSpan.start,
         contentEnd: row.sourceSpan.end,
-        width: rowHList.width,
-        height: rowHList.height,
-        depth: rowHList.depth,
+        width: taggedRow.width,
+        height: taggedRow.height,
+        depth: taggedRow.depth,
         caretStops: buildInlineMathCaretStops(rowHList, {
           sourceStart: row.sourceSpan.start,
           sourceEnd: row.sourceSpan.end,
@@ -790,20 +824,21 @@ function displayAlignmentRowLabel(
 
 function texMathDisplayAlignmentDelimiter(
   delimiter: string
-): delimiter is "align" | "align-star" | "gather" | "gather-star" | "multline-star" {
+): delimiter is "align" | "align-star" | "gather" | "gather-star" | "multline" | "multline-star" {
   return delimiter === "align" ||
     delimiter === "align-star" ||
     delimiter === "gather" ||
     delimiter === "gather-star" ||
+    delimiter === "multline" ||
     delimiter === "multline-star";
 }
 
-function displayAlignmentColumnSeparation(delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline-star"):
+function displayAlignmentColumnSeparation(delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline" | "multline-star"):
   "align" | "gather" | "multline" {
   if (delimiter === "gather" || delimiter === "gather-star") {
     return "gather";
   }
-  if (delimiter === "multline-star") {
+  if (delimiter === "multline" || delimiter === "multline-star") {
     return "multline";
   }
   return "align";
@@ -814,7 +849,9 @@ function multlineRowOffset(
   rowIndex: number,
   rowCount: number,
   targetWidth: number,
-  shove?: "left" | "right"
+  shove?: "left" | "right",
+  rightTagWidth = 0,
+  shiftedRightTag = false
 ): number {
   if (shove === "left") {
     return TEX_MULTLINE_GAP_PT;
@@ -829,9 +866,21 @@ function multlineRowOffset(
     return TEX_MULTLINE_GAP_PT;
   }
   if (rowIndex === rowCount - 1) {
+    if (rightTagWidth > 0 && !shiftedRightTag) {
+      return roundTexPt(Math.max(0, targetWidth - rowWidth - rightTagWidth - TEX_MULTLINE_TAG_GAP_PT));
+    }
     return roundTexPt(Math.max(0, targetWidth - rowWidth - TEX_MULTLINE_GAP_PT));
   }
   return roundTexPt(Math.max(0, (targetWidth - rowWidth) / 2));
+}
+
+function multlineDisplayLabel(
+  alignedNucleus: TexMathAlignedNucleus | null,
+  displayLabels: readonly (TexMathDisplayLabel | null)[] | undefined
+): TexMathAlignedRowLabel | null {
+  return alignedNucleus?.rows.find((row) => (row.labels?.length ?? 0) > 0)?.labels?.[0] ??
+    displayLabels?.find((label): label is TexMathDisplayLabel => label !== null) ??
+    null;
 }
 
 function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null {
@@ -984,6 +1033,40 @@ function addGatherDisplayTag(
     : 0;
   return {
     width: Math.max(targetWidth, rowRight, roundTexPt(tagX + tag.width)),
+    height: Math.max(row.height, tag.height),
+    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    items: [
+      ...rowItems,
+      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+    ],
+  };
+}
+
+function multlineRightTagCollides(
+  rowWidth: number,
+  tagWidth: number,
+  targetWidth: number
+): boolean {
+  return rowWidth + tagWidth + TEX_MULTLINE_TAG_GAP_PT > targetWidth;
+}
+
+function addMultlineDisplayTag(
+  row: TexMathChildHListLayoutItem,
+  rowItems: readonly TexMathHListItem[],
+  tag: TexMathHList,
+  targetWidth: number,
+  shiftTag: boolean,
+  tagLineDepth = row.depth
+): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
+  const tagX = Math.max(0, roundTexPt(targetWidth - tag.width));
+  const tagRenderShiftY = shiftTag
+    ? displayAlignmentShiftedTagRenderShift(tagLineDepth)
+    : 0;
+  const tagMetricShiftY = shiftTag
+    ? displayAlignmentShiftedTagMetricShift(row.depth, tagLineDepth)
+    : 0;
+  return {
+    width: Math.max(targetWidth, mathItemsRightEdge(rowItems), roundTexPt(tagX + tag.width)),
     height: Math.max(row.height, tag.height),
     depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
     items: [
