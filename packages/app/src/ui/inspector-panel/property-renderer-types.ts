@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { InspectorProperty } from "tikz-editor/edit/inspector";
-import type { NamedColorSwatch } from "../../project-named-colors";
+import type { NamedColorSwatch } from "../../colors/project-named-colors";
 import type { InspectorPropertyProvenance, MultiInspectorProperty } from "./panel-helpers";
 
 export type RenderPropertyApi = {

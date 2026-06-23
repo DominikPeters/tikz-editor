@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parser } from "../../packages/core/src/syntax/grammar/tikz-parser";
-import { collectDeclaredColors } from "../../packages/app/src/source-color-detection";
-import { collectProjectNamedColorSwatches } from "../../packages/app/src/project-named-colors";
+import { collectDeclaredColors } from "../../packages/app/src/colors/source-color-detection";
+import { collectProjectNamedColorSwatches } from "../../packages/app/src/colors/project-named-colors";
 
 function collectFromSource(source: string) {
   const tree = parser.parse(source);

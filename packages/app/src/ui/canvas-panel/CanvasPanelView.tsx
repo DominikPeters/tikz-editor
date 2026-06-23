@@ -52,7 +52,7 @@ import type { GridLines } from "./useCanvasGuidesAndRulers";
 import type { GuideOrientation } from "./types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
-import css from "../CanvasPanel.module.css";
+import css from "./CanvasPanel.module.css";
 
 const MAGNIFIER_DIAMETER_PX = 300;
 const MAGNIFIER_SCALE = 2.25;

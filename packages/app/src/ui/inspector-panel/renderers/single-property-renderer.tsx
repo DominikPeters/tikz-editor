@@ -2,7 +2,7 @@ import { formatNumber } from "tikz-editor/edit/format";
 import type { InspectorProperty, NodeFontFamilyId, NodeFontSizePresetId } from "tikz-editor/edit/inspector";
 import { ColorPickerField } from "../../ColorPicker";
 import { CustomDropdown } from "../../CustomDropdown";
-import css from "../../InspectorPanel.module.css";
+import css from "../InspectorPanel.module.css";
 import { getInspectorPropertyCapabilityStatus } from "../../capabilities";
 import {
 LINE_WIDTH_CUSTOM_OPTION_VALUE,

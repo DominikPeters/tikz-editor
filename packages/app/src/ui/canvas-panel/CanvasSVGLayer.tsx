@@ -3,7 +3,7 @@ import { diffSvgModels, type SvgDiffHints, type SvgPatchOp, type SvgRenderModel 
 import { recordProfilingSvgPatchTiming } from "tikz-editor/profiling";
 
 import { SvgDomPatcher } from "./svg-dom-patcher";
-import css from "../CanvasPanel.module.css";
+import css from "./CanvasPanel.module.css";
 
 export function CanvasSVGLayer(params: {
   model: SvgRenderModel | null;

@@ -8,7 +8,7 @@ import {
   formatScrubNumber,
   fractionDigits,
   shouldStartScrub
-} from "./scrub-utils";
+} from "../../scrub-utils";
 
 interface NumberScrubberOptions {
   onScrubStateChange?: (state: { isActive: boolean; from: number | null; to: number | null }) => void;

@@ -18,17 +18,17 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from "react";
-import { getSharedEditAnalysisView } from "../edit-analysis-manager";
-import { useEditorStore } from "../store/store";
-import { SidePanel } from "./SidePanel";
+import { getSharedEditAnalysisView } from "../../edit-analysis-manager";
+import { useEditorStore } from "../../store/store";
+import { SidePanel } from "../SidePanel";
 import {
   actionAvailability,
   groupSelection,
   reorderSelection,
   ungroupSelection
-} from "./editor-commands";
-import { RenderedTooltip } from "./RenderedTooltip";
-import { buildObjectsPanelModel, type ObjectsPanelNode } from "./objects-panel/model";
+} from "../editor-commands";
+import { RenderedTooltip } from "../RenderedTooltip";
+import { buildObjectsPanelModel, type ObjectsPanelNode } from "./model";
 import css from "./ObjectsPanel.module.css";
 
 type DropPlacement = "before" | "after";

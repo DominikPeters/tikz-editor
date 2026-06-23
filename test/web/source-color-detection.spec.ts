@@ -5,7 +5,7 @@ import {
   collectDetectedColors,
   resolveDeclaredColorAnalysis,
   resolveDeclaredColors
-} from "../../packages/app/src/source-color-detection";
+} from "../../packages/app/src/colors/source-color-detection";
 
 function detect(source: string) {
   const tree = parser.parse(source);

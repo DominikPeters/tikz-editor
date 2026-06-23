@@ -16,7 +16,7 @@ import {
 import { NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "tikz-editor/semantic/style/constants";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../edit-analysis-manager";
-import { useProjectNamedColorSwatches } from "../project-named-colors";
+import { useProjectNamedColorSwatches } from "../colors/project-named-colors";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
 import { ColorPickerField } from "./ColorPicker";

@@ -1,29 +1,21 @@
-import {
-  APP_MENU_COMMAND_IDS,
-  applyWorkspace,
-  findActiveWorkspaceId,
-  listAllWorkspaces,
-  type AssistantAccountSnapshot,
-  type DesktopContextMenuItem,
-  type DesktopContextMenuPayload,
-  type AssistantDynamicToolResult,
-  type AssistantEvent,
-  type AssistantModelOption,
-  type AssistantThreadState,
-  type AssistantThreadSummary,
-  type AppMenuCommandId,
-  type AppMenuDefinition,
-  type AppMenuItem,
-  type ArxivSourcePayload,
-  type DocumentFileRef,
-  type EditorPlatform,
-  type FileRevision,
-  type LinkedTextReadResult,
-  type LinkedTextWriteResult,
-  type UpdateInfo,
-  type UpdateInstallProgress,
-  type MenuCommandHandler
-} from "@tikz-editor/app";
+import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuDefinition, type AppMenuItem } from "@tikz-editor/app/app-menu";
+import type { LinkedTextReadResult, LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
+import type {
+  AssistantAccountSnapshot,
+  DesktopContextMenuItem,
+  DesktopContextMenuPayload,
+  AssistantDynamicToolResult,
+  AssistantEvent,
+  AssistantModelOption,
+  AssistantThreadState,
+  AssistantThreadSummary,
+  ArxivSourcePayload,
+  EditorPlatform,
+  UpdateInfo,
+  UpdateInstallProgress,
+  MenuCommandHandler
+} from "@tikz-editor/app/platform/types";
+import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
 import type { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import type { Update } from "@tauri-apps/plugin-updater";
 
@@ -420,6 +412,7 @@ function createNativeDesktopMenuManager(options: {
 
   async function buildWorkspaceMenuItems(): Promise<NativeMenuNode[]> {
     const menuApi = await import("@tauri-apps/api/menu");
+    const { applyWorkspace, findActiveWorkspaceId, listAllWorkspaces } = await import("@tikz-editor/app/workspace");
     const entries = listAllWorkspaces();
     const activeId = findActiveWorkspaceId();
     const items: NativeMenuNode[] = [];

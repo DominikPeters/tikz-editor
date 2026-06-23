@@ -12,7 +12,7 @@ import {
   prioritizeDiagnosticsForDisplay,
   SourcePanel,
   type DiagnosticInput
-} from "../../packages/app/src/ui/SourcePanel.js";
+} from "../../packages/app/src/ui/source-panel/SourcePanel.js";
 
 describe("SourcePanel diagnostics", () => {
   let container: HTMLDivElement;

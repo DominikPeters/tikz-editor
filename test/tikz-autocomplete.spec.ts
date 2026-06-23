@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
-import { tikzCompletion } from "../packages/app/src/tikz-autocomplete";
+import { tikzCompletion } from "../packages/app/src/ui/source-panel/tikz-autocomplete";
 import type { DocumentSymbols } from "../packages/core/src/completion/index";
 
 const EMPTY_SYMBOLS: DocumentSymbols = {

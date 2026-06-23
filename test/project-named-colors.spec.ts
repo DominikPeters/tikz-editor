@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parser } from "../packages/core/src/syntax/grammar/tikz-parser.js";
-import * as sourceColorDetection from "../packages/app/src/source-color-detection.js";
+import * as sourceColorDetection from "../packages/app/src/colors/source-color-detection.js";
 import {
   collectProjectNamedColorSwatches,
   resolveProjectNamedColorSwatches
-} from "../packages/app/src/project-named-colors.js";
+} from "../packages/app/src/colors/project-named-colors.js";
 
 const SOURCE = String.raw`\begin{tikzpicture}
 \definecolor{myred}{RGB}{255,0,0}

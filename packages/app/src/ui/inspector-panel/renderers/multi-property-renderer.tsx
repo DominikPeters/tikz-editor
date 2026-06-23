@@ -2,7 +2,7 @@ import { formatNumber } from "tikz-editor/edit/format";
 import type { NodeFontFamilyId, NodeFontSizePresetId } from "tikz-editor/edit/inspector";
 import { ColorPickerField } from "../../ColorPicker";
 import { CustomDropdown } from "../../CustomDropdown";
-import css from "../../InspectorPanel.module.css";
+import css from "../InspectorPanel.module.css";
 import {
 ARROW_TIP_MIXED_OPTION_VALUE,
 DASH_STYLE_MIXED_OPTION_VALUE,

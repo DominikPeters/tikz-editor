@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { APP_MENU_COMMAND_IDS } from "@tikz-editor/app";
+import { APP_MENU_COMMAND_IDS } from "@tikz-editor/app/app-menu";
 import { createDesktopPlatformAdapter } from "../src/platform/desktop-platform";
 
 function makeMockBridge() {

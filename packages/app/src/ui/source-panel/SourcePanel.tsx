@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useSettingsStore } from "../settings/useSettingsStore";
-import { EDITOR_FONT_SIZE_MAX_PX, EDITOR_FONT_SIZE_MIN_PX } from "../settings/types";
+import { useSettingsStore } from "../../settings/useSettingsStore";
+import { EDITOR_FONT_SIZE_MAX_PX, EDITOR_FONT_SIZE_MIN_PX } from "../../settings/types";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import {
   Compartment,
@@ -61,18 +61,18 @@ import { recordProfilingSourcePanelSyncTiming } from "tikz-editor/profiling";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { NAMED_COLORS } from "tikz-editor/semantic/style/constants";
 import { patchesMatchSourceTransition } from "tikz-editor/edit/source-patches";
-import { tikzLanguage } from "../codemirror-tikz";
-import { tikzCompletion } from "../tikz-autocomplete";
-import { lookupTikzDocEntry } from "../tikz-docs";
-import { getActiveEditorPlatform } from "../platform/current";
-import { colorSwatches } from "../color-swatches";
-import { numberScrubber } from "../number-scrubber";
-import { useProjectNamedColorSwatches } from "../project-named-colors";
-import { useEditorStore } from "../store/store";
-import { ColorPicker } from "./ColorPicker";
+import { tikzLanguage } from "./codemirror-tikz";
+import { tikzCompletion } from "./tikz-autocomplete";
+import { lookupTikzDocEntry } from "./tikz-docs";
+import { getActiveEditorPlatform } from "../../platform/current";
+import { colorSwatches } from "./color-swatches";
+import { numberScrubber } from "./number-scrubber";
+import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
+import { useEditorStore } from "../../store/store";
+import { ColorPicker } from "../ColorPicker";
 import {
   SOURCE_FORMAT_REQUEST_EVENT
-} from "./source-sync";
+} from "../source-sync";
 import css from "./SourcePanel.module.css";
 import { formatTikzSource } from "tikz-editor/edit/source-format";
 

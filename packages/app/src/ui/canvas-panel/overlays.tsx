@@ -15,7 +15,7 @@ import type {
   SelectionBoxDisplay
 } from "./types";
 import { fmt, worldToSvgPoint } from "./geometry";
-import css from "../CanvasPanel.module.css";
+import css from "./CanvasPanel.module.css";
 
 const SNAP_GAP_ARROW_MARKER_ID = "snap-gap-arrow-marker";
 const TOOL_PREVIEW_NODE_RADIUS_PX = 12;

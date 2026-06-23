@@ -19,7 +19,7 @@ import { buildStylesCascadeModel } from "tikz-editor/edit/styles-cascade";
 import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
-import { useProjectNamedColorSwatches } from "../../project-named-colors";
+import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
 import { actionAvailability } from "../editor-commands";

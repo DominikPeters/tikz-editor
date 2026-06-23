@@ -1,5 +1,5 @@
 import { CustomDropdown } from "../CustomDropdown";
-import css from "../InspectorPanel.module.css";
+import css from "./InspectorPanel.module.css";
 import type {
   ArrowTipPresetId,
   ArrowTipSide,

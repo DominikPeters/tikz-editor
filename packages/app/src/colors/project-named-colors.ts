@@ -2,7 +2,7 @@ import type { Tree } from "@lezer/common";
 import { useEffect, useMemo, useState } from "react";
 import { BASIC_PICKER_COLOR_SET } from "./color-palette";
 import { resolveDeclaredColorAnalysis } from "./source-color-detection";
-import { useEditorStore } from "./store/store";
+import { useEditorStore } from "../store/store";
 
 export type NamedColorSwatch = {
   token: string;

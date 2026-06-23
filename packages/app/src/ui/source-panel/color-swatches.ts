@@ -7,7 +7,7 @@ import {
   resolveDeclaredColorAnalysis,
   type DetectedColorOccurrence,
   type SourceRange
-} from "./source-color-detection";
+} from "../../colors/source-color-detection";
 
 export type ColorSwatchPickRequest = {
   occurrence: DetectedColorOccurrence;

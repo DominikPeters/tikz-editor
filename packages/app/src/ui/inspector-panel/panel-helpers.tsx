@@ -36,7 +36,7 @@ import { renderArrowTipPreviewPaths } from "tikz-editor/svg/arrows/preview";
 import { renderPathMorphingDecorationPreviewSvg } from "tikz-editor/svg/decorations/preview";
 import { renderFillPatternPreviewSvg } from "tikz-editor/svg/patterns/preview";
 import type { CustomDropdownItem, CustomDropdownOption } from "../CustomDropdown";
-import css from "../InspectorPanel.module.css";
+import css from "./InspectorPanel.module.css";
 
 export type MultiInspectorNumberProperty = {
   kind: "number";

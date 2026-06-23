@@ -31,13 +31,13 @@ type NodeMinimumDimensionKey,
 type ShadowMutationContext
 } from "tikz-editor/edit/property-write-builders";
 import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
-import { BASIC_PICKER_COLORS } from "../color-palette";
-import { useProjectNamedColorSwatches } from "../project-named-colors";
-import { useEditorStore } from "../store/store";
-import { getInspectorPropertyCapabilityStatus } from "./capabilities";
-import { ColorPickerField } from "./ColorPicker";
-import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./inspector-panel/arrange-actions";
-import { InspectorMultiSection,InspectorSingleSection } from "./inspector-panel/InspectorSections";
+import { BASIC_PICKER_COLORS } from "../../colors/color-palette";
+import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
+import { useEditorStore } from "../../store/store";
+import { getInspectorPropertyCapabilityStatus } from "../capabilities";
+import { ColorPickerField } from "../ColorPicker";
+import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./arrange-actions";
+import { InspectorMultiSection,InspectorSingleSection } from "./InspectorSections";
 import {
 clampNumber,
 NODE_FONT_SIZE_MIXED_OPTION_VALUE,
@@ -45,27 +45,27 @@ nodeFontButtonClass,
 type InspectorPropertyProvenance,
 type MultiInspectorProperty,
 type NodeFontSizeDropdownValue
-} from "./inspector-panel/panel-helpers";
+} from "./panel-helpers";
 import {
 renderNodeFontSizeDropdown,
-} from "./inspector-panel/property-dropdowns";
+} from "./property-dropdowns";
 import {
 renderMultiInspectorProperty,
 renderSingleInspectorProperty
-} from "./inspector-panel/property-renderers";
-import { useInspectorModel } from "./inspector-panel/useInspectorModel";
-import { useInspectorMutations } from "./inspector-panel/useInspectorMutations";
-import { useInspectorPreviewScrub } from "./inspector-panel/useInspectorPreviewScrub";
+} from "./property-renderers";
+import { useInspectorModel } from "./useInspectorModel";
+import { useInspectorMutations } from "./useInspectorMutations";
+import { useInspectorPreviewScrub } from "./useInspectorPreviewScrub";
 import css from "./InspectorPanel.module.css";
-import { RenderedTooltip } from "./RenderedTooltip";
-import { SidePanel } from "./SidePanel";
+import { RenderedTooltip } from "../RenderedTooltip";
+import { SidePanel } from "../SidePanel";
 import {
 getToolLabel,
 isCreationToolMode,
 TOOL_HINTS,
 toolSupportsFill,
 toolSupportsStroke
-} from "./tool-config";
+} from "../tool-config";
 
 type NumberChangeOptions = {
   recordInHistory?: boolean;
