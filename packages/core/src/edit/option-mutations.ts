@@ -169,6 +169,10 @@ function optionEntryKey(entry: OptionEntry): string | null {
   if (entry.kind === "kv" || entry.kind === "flag") {
     return normalizeOptionKey(entry.key);
   }
+  if (entry.kind === "unknown") {
+    const rawKey = normalizeOptionKey(entry.raw);
+    return rawKey.length > 0 ? rawKey : null;
+  }
   return null;
 }
 

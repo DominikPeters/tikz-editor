@@ -9,9 +9,9 @@ import { normalizeOptionKey } from "./option-key.js";
 import type { SetPropertyAction } from "./actions/set-property.js";
 import { applySetPropertyActionRaw } from "./actions/set-property.js";
 import {
-  isDefaultOmissionEligible,
   propertyCleanupKinds,
-  propertyIdForWriteKey
+  propertyIdForWriteKey,
+  shouldOmitDefaultWhenEquivalent
 } from "./property-registry.js";
 
 type EditActionResultLike =
@@ -241,7 +241,7 @@ function buildDefaultOmissionCandidate(
   action: SetPropertyAction,
   parseOptions: EditParseOptions
 ): string | null {
-  if (action.value.trim().length === 0 || !isDefaultOmissionEligible(action.propertyId ?? propertyIdForWriteKey(action.key))) {
+  if (action.value.trim().length === 0 || !shouldOmitDefaultWhenEquivalent(action.propertyId ?? propertyIdForWriteKey(action.key))) {
     return null;
   }
   const result = applySetPropertyActionRaw(

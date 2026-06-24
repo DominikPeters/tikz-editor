@@ -9,10 +9,10 @@ import {
   conflictKeysForProperty,
   getPropertySemantics,
   isAddableProperty,
-  isDefaultOmissionEligible,
   propertyCleanupKinds,
   propertyIdForOptionEntry,
   propertyIdForStyleContribution,
+  shouldOmitDefaultWhenEquivalent,
   buildPropertyMutations,
   buildPropertyMutationsFromRequest
 } from "../packages/core/src/edit/property-registry.js";
@@ -49,12 +49,14 @@ describe("property registry", () => {
     expect(propertyIdForStyleContribution("fontSize", ["node-font"])).toBeNull();
   });
 
-  it("keeps cleanup and default omission gated by registered semantics", () => {
+  it("keeps cleanup and default reversion gated by registered semantics", () => {
     expect(propertyCleanupKinds("stroke-color")).toContain("paint-command");
     expect(propertyCleanupKinds("fill-color")).toContain("paint-command");
-    expect(isDefaultOmissionEligible("line-cap")).toBe(true);
-    expect(isDefaultOmissionEligible("stroke-color")).toBe(false);
-    expect(isDefaultOmissionEligible("foo")).toBe(false);
+    expect(shouldOmitDefaultWhenEquivalent("line-cap")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("arrow-tip")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("decorations.path-morphing")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("stroke-color")).toBe(false);
+    expect(shouldOmitDefaultWhenEquivalent("foo")).toBe(false);
   });
 
   it("identifies addable properties from registry metadata", () => {

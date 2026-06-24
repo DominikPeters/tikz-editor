@@ -116,7 +116,7 @@ export type PropertySemantics = {
   candidateKeys?: readonly string[];
   addable?: boolean;
   addableKind?: string;
-  defaultOmission?: "never" | "certified";
+  defaultReversion?: "explicit" | "omit-if-equivalent";
   cleanup?: readonly PropertyCleanupKind[];
   buildMutations?: (context: PropertyWriteContext) => readonly PropertyWriteMutation[];
 };
@@ -189,18 +189,18 @@ const PROPERTY_DEFINITIONS = [
     addableKind: "color",
     cleanup: ["paint-command"]
   }),
-  property("node-text-color", "Text color", "text", { candidateKeys: ["text", "text color"], addable: true, addableKind: "color", defaultOmission: "certified" }),
-  property("adornment-text-color", "Text color", "text", { candidateKeys: ["text"], addable: true, addableKind: "color", defaultOmission: "certified" }),
+  property("node-text-color", "Text color", "text", { candidateKeys: ["text", "text color"], addable: true, addableKind: "color", defaultReversion: "omit-if-equivalent" }),
+  property("adornment-text-color", "Text color", "text", { candidateKeys: ["text"], addable: true, addableKind: "color", defaultReversion: "omit-if-equivalent" }),
   property("line-width", "Line width", "line width", {
     candidateKeys: LINE_WIDTH_ALL_KEYS,
     addable: true,
     addableKind: "lineWidth",
-    defaultOmission: "certified",
+    defaultReversion: "omit-if-equivalent",
     buildMutations: buildLineWidthPropertyMutations
   }),
-  property("dash-style", "Dash style", "solid", { candidateKeys: DASH_STYLE_PRESET_CLEAR_KEYS, addable: true, addableKind: "dashStyle", defaultOmission: "certified" }),
-  property("line-cap", "Line cap", "line cap", { addable: true, addableKind: "lineCap", defaultOmission: "certified" }),
-  property("line-join", "Line join", "line join", { addable: true, addableKind: "lineJoin", defaultOmission: "certified" }),
+  property("dash-style", "Dash style", "solid", { candidateKeys: DASH_STYLE_PRESET_CLEAR_KEYS, addable: true, addableKind: "dashStyle", defaultReversion: "omit-if-equivalent" }),
+  property("line-cap", "Line cap", "line cap", { addable: true, addableKind: "lineCap", defaultReversion: "omit-if-equivalent" }),
+  property("line-join", "Line join", "line join", { addable: true, addableKind: "lineJoin", defaultReversion: "omit-if-equivalent" }),
   property("fill-mode", "Fill mode", "fill", {
     candidateKeys: ["fill", ...FILL_PATTERN_CLEAR_KEYS, ...FILL_SHADING_CLEAR_KEYS],
     addable: true,
@@ -219,26 +219,26 @@ const PROPERTY_DEFINITIONS = [
   property("fill-radial-inner-color", "Inner color", "inner color", { addable: true, addableKind: "color" }),
   property("fill-radial-outer-color", "Outer color", "outer color", { addable: true, addableKind: "color" }),
   property("fill-ball-color", "Ball color", "ball color", { addable: true, addableKind: "color" }),
-  property("rounded-corners", "Rounded corners", "rounded corners", { candidateKeys: ROUNDED_CORNERS_CLEAR_KEYS, addable: true, addableKind: "roundedCorners", defaultOmission: "certified" }),
-  property("arrow-tip", "Arrow tip", "arrows", { candidateKeys: ARROW_DEFAULT_CLEAR_KEYS }),
-  property("decorations.path-morphing", "Decoration", "decorate", { candidateKeys: PATH_MORPHING_DECORATION_CLEAR_KEYS }),
+  property("rounded-corners", "Rounded corners", "rounded corners", { candidateKeys: ROUNDED_CORNERS_CLEAR_KEYS, addable: true, addableKind: "roundedCorners", defaultReversion: "omit-if-equivalent" }),
+  property("arrow-tip", "Arrow tip", "arrows", { candidateKeys: ARROW_DEFAULT_CLEAR_KEYS, defaultReversion: "omit-if-equivalent" }),
+  property("decorations.path-morphing", "Decoration", "decorate", { candidateKeys: PATH_MORPHING_DECORATION_CLEAR_KEYS, defaultReversion: "omit-if-equivalent" }),
   property("shadow-preset", "Shadow", "drop shadow", { candidateKeys: SHADOW_ALL_KEYS }),
   property("node-shape", "Shape", "shape", { candidateKeys: NODE_SHAPE_KNOWN_KEYS, addable: true, addableKind: "nodeShape" }),
   property("node-inner-sep", "Inner sep", "inner sep", { conflictKeys: NODE_INNER_SEP_CLEAR_KEYS, addable: true, addableKind: "length" }),
   property("node-minimum-width", "Minimum width", "minimum width", { conflictKeys: NODE_MINIMUM_DIMENSION_CLEAR_KEYS }),
   property("node-minimum-height", "Minimum height", "minimum height", { conflictKeys: NODE_MINIMUM_DIMENSION_CLEAR_KEYS }),
   property("node-font", "Font", "font", { candidateKeys: ["font", "node font"] }),
-  property("node-text-align", "Align", "align", { conflictKeys: ["align"], defaultOmission: "certified" }),
+  property("node-text-align", "Align", "align", { conflictKeys: ["align"], defaultReversion: "omit-if-equivalent" }),
   property("node-text-width", "Text width", "text width", { conflictKeys: ["text width"] }),
-  property("stroke-opacity", "Stroke opacity", "draw opacity", { defaultOmission: "certified" }),
-  property("fill-opacity", "Fill opacity", "fill opacity", { defaultOmission: "certified" }),
-  property("text-opacity", "Text opacity", "text opacity", { defaultOmission: "certified" }),
+  property("stroke-opacity", "Stroke opacity", "draw opacity", { defaultReversion: "omit-if-equivalent" }),
+  property("fill-opacity", "Fill opacity", "fill opacity", { defaultReversion: "omit-if-equivalent" }),
+  property("text-opacity", "Text opacity", "text opacity", { defaultReversion: "omit-if-equivalent" }),
   property("text", "Text", "text"),
-  property("transform.xshift", "X shift", "xshift", { candidateKeys: ["xshift", ...SHIFT_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.xshift"]], addable: true, addableKind: "number", defaultOmission: "certified" }),
-  property("transform.yshift", "Y shift", "yshift", { candidateKeys: ["yshift", ...SHIFT_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.yshift"]], addable: true, addableKind: "number", defaultOmission: "certified" }),
-  property("transform.xscale", "X scale", "xscale", { candidateKeys: ["xscale", ...SCALE_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.xscale"]], addable: true, addableKind: "number", defaultOmission: "certified" }),
-  property("transform.yscale", "Y scale", "yscale", { candidateKeys: ["yscale", ...SCALE_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.yscale"]], addable: true, addableKind: "number", defaultOmission: "certified" }),
-  property("transform.rotate", "Rotate", "rotate", { candidateKeys: ["rotate", ...ROTATE_CLEAR_KEYS], addable: true, addableKind: "number", defaultOmission: "certified" }),
+  property("transform.xshift", "X shift", "xshift", { candidateKeys: ["xshift", ...SHIFT_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.xshift"]], addable: true, addableKind: "number", defaultReversion: "omit-if-equivalent" }),
+  property("transform.yshift", "Y shift", "yshift", { candidateKeys: ["yshift", ...SHIFT_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.yshift"]], addable: true, addableKind: "number", defaultReversion: "omit-if-equivalent" }),
+  property("transform.xscale", "X scale", "xscale", { candidateKeys: ["xscale", ...SCALE_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.xscale"]], addable: true, addableKind: "number", defaultReversion: "omit-if-equivalent" }),
+  property("transform.yscale", "Y scale", "yscale", { candidateKeys: ["yscale", ...SCALE_CLEAR_KEYS, ...TRANSFORM_ALIAS_KEYS["transform.yscale"]], addable: true, addableKind: "number", defaultReversion: "omit-if-equivalent" }),
+  property("transform.rotate", "Rotate", "rotate", { candidateKeys: ["rotate", ...ROTATE_CLEAR_KEYS], addable: true, addableKind: "number", defaultReversion: "omit-if-equivalent" }),
   property("grid-step", "Step", "step", { candidateKeys: GRID_STEP_CLEAR_KEYS }),
   property("grid-xstep", "X step", "xstep", { candidateKeys: ["xstep", ...GRID_XSTEP_CLEAR_KEYS] }),
   property("grid-ystep", "Y step", "ystep", { candidateKeys: ["ystep", ...GRID_YSTEP_CLEAR_KEYS] }),
@@ -299,8 +299,8 @@ export function conflictKeysForProperty(propertyId: string | null | undefined): 
   return semantics ? uniqueStrings([...(semantics.conflictKeys ?? []), ...(semantics.candidateKeys ?? [])]) : [];
 }
 
-export function isDefaultOmissionEligible(propertyId: string | null | undefined): boolean {
-  return resolvePropertySemantics(propertyId)?.defaultOmission === "certified";
+export function shouldOmitDefaultWhenEquivalent(propertyId: string | null | undefined): boolean {
+  return resolvePropertySemantics(propertyId)?.defaultReversion === "omit-if-equivalent";
 }
 
 export function propertyCleanupKinds(propertyId: string | null | undefined): readonly PropertyCleanupKind[] {
@@ -572,7 +572,7 @@ function property(
     id,
     label,
     primaryKey,
-    defaultOmission: "never",
+    defaultReversion: "explicit",
     ...options
   };
 }

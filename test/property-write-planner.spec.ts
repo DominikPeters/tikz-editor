@@ -5,6 +5,21 @@ import {
   planPropertyWrite,
   PROPERTY_WRITE_CLEANUP_NOOP_REASON
 } from "../packages/core/src/edit/property-write-planner.js";
+import {
+  buildArrowTipSetPropertyMutation,
+  buildPathMorphingDecorationSetPropertyMutations
+} from "../packages/core/src/edit/property-write-builders.js";
+
+function expectSuccessSource(
+  result: ReturnType<typeof applyPlannedSetPropertyAction>,
+  expectedSource: string
+): void {
+  expect(result.kind).toBe("success");
+  if (result.kind !== "success") {
+    return;
+  }
+  expect(result.newSource).toBe(expectedSource);
+}
 
 describe("property write planner", () => {
   it("keeps unsupported conservative writes as the selected result", () => {
@@ -100,6 +115,113 @@ describe("property write planner", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain("\\path (0,0) -- (1,0);");
     expect(result.changedSourceIds).toEqual(["path:0"]);
+  });
+
+  it("omits explicit no-arrow defaults when omission is render-equivalent", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red, thick, ->] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const mutation = buildArrowTipSetPropertyMutation(
+      { startRaw: "", endRaw: ">", clearKeys: ["arrows", "-", "->", "<-", "<->"] },
+      "end",
+      "none"
+    );
+
+    expectSuccessSource(
+      applyPlannedSetPropertyAction(source, {
+        elementId: "path:0",
+        ...mutation
+      }),
+      String.raw`\begin{tikzpicture}
+  \draw[red, thick] (0,0) -- (1,0);
+\end{tikzpicture}`
+    );
+  });
+
+  it("keeps explicit no-arrow overrides when inherited arrows would reappear", () => {
+    const source = String.raw`\begin{tikzpicture}[->]
+  \draw[->] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const mutation = buildArrowTipSetPropertyMutation(
+      { startRaw: "", endRaw: ">", clearKeys: ["arrows", "-", "->", "<-", "<->"] },
+      "end",
+      "none"
+    );
+
+    expectSuccessSource(
+      applyPlannedSetPropertyAction(source, {
+        elementId: "path:0",
+        ...mutation
+      }),
+      String.raw`\begin{tikzpicture}[->]
+  \draw[-] (0,0) -- (1,0);
+\end{tikzpicture}`
+    );
+  });
+
+  it("does not omit arrow options when only one side returns to default", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[<->] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const mutation = buildArrowTipSetPropertyMutation(
+      { startRaw: "<", endRaw: ">", clearKeys: ["arrows", "-", "->", "<-", "<->"] },
+      "start",
+      "none"
+    );
+
+    expectSuccessSource(
+      applyPlannedSetPropertyAction(source, {
+        elementId: "path:0",
+        ...mutation
+      }),
+      String.raw`\begin{tikzpicture}
+  \draw[->] (0,0) -- (1,0);
+\end{tikzpicture}`
+    );
+  });
+
+  it("omits explicit disabled decorations when omission is render-equivalent", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red, thick, decorate, decoration=snake] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const [mutation] = buildPathMorphingDecorationSetPropertyMutations("none");
+
+    expect(mutation).toBeDefined();
+    if (!mutation) {
+      return;
+    }
+
+    expectSuccessSource(
+      applyPlannedSetPropertyAction(source, {
+        elementId: "path:0",
+        ...mutation
+      }),
+      String.raw`\begin{tikzpicture}
+  \draw[red, thick] (0,0) -- (1,0);
+\end{tikzpicture}`
+    );
+  });
+
+  it("keeps explicit disabled decorations when inherited decorations would reappear", () => {
+    const source = String.raw`\begin{tikzpicture}[decorate, decoration=snake]
+  \draw[decorate, decoration=coil] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const [mutation] = buildPathMorphingDecorationSetPropertyMutations("none");
+
+    expect(mutation).toBeDefined();
+    if (!mutation) {
+      return;
+    }
+
+    expectSuccessSource(
+      applyPlannedSetPropertyAction(source, {
+        elementId: "path:0",
+        ...mutation
+      }),
+      String.raw`\begin{tikzpicture}[decorate, decoration=snake]
+  \draw[decorate=false] (0,0) -- (1,0);
+\end{tikzpicture}`
+    );
   });
 
   it("exercises disabled draw/fill cleanup rewrites for each paint command target", () => {
