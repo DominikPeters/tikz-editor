@@ -55,7 +55,15 @@ describe("property registry", () => {
     expect(shouldOmitDefaultWhenEquivalent("line-cap")).toBe(true);
     expect(shouldOmitDefaultWhenEquivalent("arrow-tip")).toBe(true);
     expect(shouldOmitDefaultWhenEquivalent("decorations.path-morphing")).toBe(true);
-    expect(shouldOmitDefaultWhenEquivalent("stroke-color")).toBe(false);
+    expect(shouldOmitDefaultWhenEquivalent("stroke-color")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("fill-color")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("grid-step")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("grid-xstep")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("grid-ystep")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("node-shape")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("node-inner-sep")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("node-minimum-width")).toBe(true);
+    expect(shouldOmitDefaultWhenEquivalent("node-minimum-height")).toBe(true);
     expect(shouldOmitDefaultWhenEquivalent("foo")).toBe(false);
   });
 

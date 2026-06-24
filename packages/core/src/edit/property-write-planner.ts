@@ -1,6 +1,7 @@
 import type { Span, Statement } from "../ast/types.js";
 import { renderTikzToSvg } from "../render/index.js";
 import type { SceneElement } from "../semantic/types.js";
+import { normalizeColor } from "../semantic/style/colors.js";
 import { replaceSpan } from "./patch.js";
 import { parseTikzForEdit, type EditParseOptions, type PropertyWriteInteractionMode } from "./parse-options.js";
 import { resolvePropertyTarget } from "./property-target.js";
@@ -514,7 +515,7 @@ function certifyEquivalentSource(leftSource: string, rightSource: string, parseO
     return (
       diagnosticsSignature(left.parse.diagnostics) === diagnosticsSignature(right.parse.diagnostics) &&
       semanticSignature(left.semantic.scene.elements) === semanticSignature(right.semantic.scene.elements) &&
-      left.svg.svg === right.svg.svg
+      svgSignature(left.svg.svg) === svgSignature(right.svg.svg)
     );
   } catch {
     return false;
@@ -529,6 +530,9 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
   if (Array.isArray(value)) {
     return value.filter((entry) => !isInvisibleSceneElement(entry)).map((entry) => sanitizeSemanticValue(entry));
   }
+  if (typeof value === "number") {
+    return normalizeSignatureNumber(value);
+  }
   if (!value || typeof value !== "object") {
     return value;
   }
@@ -541,6 +545,7 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
       key === "id" ||
       key === "runtimeId" ||
       key === "sourceSpan" ||
+      key === "textSourceSpan" ||
       key === "sourceFingerprint" ||
       key === "styleChain" ||
       key === "rawOptions" ||
@@ -548,9 +553,61 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
     ) {
       continue;
     }
-    output[key] = sanitizeSemanticValue(entryValue, isGeometricElement && key === "style");
+    output[key] = sanitizeStyleValueForSignature(key, entryValue, geometricStyle);
+    if (output[key] === entryValue) {
+      output[key] = sanitizeSemanticValue(entryValue, isGeometricElement && key === "style");
+    }
   }
   return output;
+}
+
+function sanitizeStyleValueForSignature(key: string, value: unknown, geometricStyle: boolean): unknown {
+  if (!geometricStyle) {
+    return value;
+  }
+  if (key === "stroke" || key === "fill") {
+    return normalizePaintColorForSignature(value);
+  }
+  return value;
+}
+
+function normalizePaintColorForSignature(value: unknown): unknown {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
+    return null;
+  }
+  return normalizeColor(trimmed);
+}
+
+function svgSignature(svg: string): string {
+  return svg.replace(/\b(stroke|fill|stop-color)="([^"]*)"/gu, (_match, attribute: string, value: string) =>
+    `${attribute}="${normalizeSvgPaintForSignature(value)}"`
+  );
+}
+
+function normalizeSvgPaintForSignature(value: string): string {
+  const trimmed = value.trim();
+  if (/^url\(/iu.test(trimmed)) {
+    return value;
+  }
+  if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
+    return "none";
+  }
+  return normalizeColor(trimmed);
+}
+
+function normalizeSignatureNumber(value: number): number {
+  if (!Number.isFinite(value)) {
+    return value;
+  }
+  const rounded = Math.round(value * 1e9) / 1e9;
+  return Math.abs(rounded) < 1e-12 ? 0 : rounded;
 }
 
 function isInvisibleSceneElement(value: unknown): boolean {

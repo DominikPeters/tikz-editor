@@ -509,9 +509,12 @@ export function buildNodeShapeSetPropertyMutation(
 
 export function buildNodeInnerSepSetPropertyMutation(value: number): NodeInnerSepSetPropertyMutation {
   const safe = Number.isFinite(value) && value >= 0 ? value : NODE_INNER_SEP_DEFAULT;
+  const formatted = Math.abs(safe - NODE_INNER_SEP_DEFAULT) <= 1e-6
+    ? ".3333em"
+    : `${formatInspectorLength(safe)}pt`;
   return {
     key: "inner sep",
-    value: `${formatInspectorLength(safe)}pt`,
+    value: formatted,
     clearKeys: uniqueStrings([...NODE_INNER_SEP_CLEAR_KEYS])
   };
 }

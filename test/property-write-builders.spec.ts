@@ -112,7 +112,7 @@ describe("property write builders", () => {
       value: "true"
     });
 
-    expect(buildNodeInnerSepSetPropertyMutation(-1).value).toBe("3.33pt");
+    expect(buildNodeInnerSepSetPropertyMutation(-1).value).toBe(".3333em");
     expect(buildNodeMinimumDimensionSetPropertyMutations({ minimumWidth: 12, minimumHeight: 8 }, "minimum width", Number.NaN)).toEqual([]);
     expect(buildNodeMinimumDimensionSetPropertyMutations({ minimumWidth: Number.NaN, minimumHeight: 8 }, "minimum width", 10)).toEqual([
       expect.objectContaining({ key: "minimum width", value: "10pt" }),
