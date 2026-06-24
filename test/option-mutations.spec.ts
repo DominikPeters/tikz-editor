@@ -14,7 +14,7 @@ describe("option mutation serialization", () => {
     expect(rewriteOptionListMutations(parseOptionListRaw("[draw]"), mutations, undefined, "bare")).toBe("");
   });
 
-  it("can remove exact unknown raw entries such as the no-arrow shorthand", () => {
+  it("can remove the no-arrow shorthand flag", () => {
     const mutations = new Map([["-", { kind: "remove" } as const]]);
 
     expect(rewriteOptionListMutations(parseOptionListRaw("[red, -]"), mutations)).toBe("[red]");
