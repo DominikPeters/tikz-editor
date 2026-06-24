@@ -33,6 +33,7 @@ import { normalizeColor } from "../semantic/style/colors.js";
 import { SHADOW_INHERIT_FILL, SHADOW_INHERIT_STROKE } from "../semantic/types.js";
 import {
   cloneTransformInspectorValues,
+  DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContext,
   transformPropertyCandidateKeys,
   type ArrowTipWriteContext,
@@ -446,6 +447,7 @@ export function buildMatrixInspectorDescriptor(
             value: transformValues.xshift,
             step: 0.1,
             unit: "pt",
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xshift,
             write: {
               mode: "setProperty",
               elementId: matrixId,
@@ -467,6 +469,7 @@ export function buildMatrixInspectorDescriptor(
             value: transformValues.yshift,
             step: 0.1,
             unit: "pt",
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
             write: {
               mode: "setProperty",
               elementId: matrixId,
@@ -487,6 +490,7 @@ export function buildMatrixInspectorDescriptor(
             label: "X scale",
             value: transformValues.xscale,
             step: 0.1,
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
             write: {
               mode: "setProperty",
               elementId: matrixId,
@@ -507,6 +511,7 @@ export function buildMatrixInspectorDescriptor(
             label: "Y scale",
             value: transformValues.yscale,
             step: 0.1,
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
             write: {
               mode: "setProperty",
               elementId: matrixId,
@@ -528,6 +533,7 @@ export function buildMatrixInspectorDescriptor(
             value: transformValues.rotate,
             step: 1,
             unit: "deg",
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
             write: {
               mode: "setProperty",
               elementId: matrixId,
@@ -695,6 +701,7 @@ export function buildTreeInspectorDescriptor(
             value: transformValues.xshift,
             step: 0.1,
             unit: "pt",
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xshift,
             write: {
               mode: "setProperty",
               elementId: sourceId,
@@ -716,6 +723,7 @@ export function buildTreeInspectorDescriptor(
             value: transformValues.yshift,
             step: 0.1,
             unit: "pt",
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
             write: {
               mode: "setProperty",
               elementId: sourceId,
@@ -736,6 +744,7 @@ export function buildTreeInspectorDescriptor(
             label: "X scale",
             value: transformValues.xscale,
             step: 0.1,
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
             write: {
               mode: "setProperty",
               elementId: sourceId,
@@ -756,6 +765,7 @@ export function buildTreeInspectorDescriptor(
             label: "Y scale",
             value: transformValues.yscale,
             step: 0.1,
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
             write: {
               mode: "setProperty",
               elementId: sourceId,
@@ -777,6 +787,7 @@ export function buildTreeInspectorDescriptor(
             value: transformValues.rotate,
             step: 1,
             unit: "deg",
+            defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
             write: {
               mode: "setProperty",
               elementId: sourceId,
@@ -1102,6 +1113,7 @@ export function getInspectorDescriptor(
           value: transformValues.xshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xshift,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "xshift", transformContext)
         },
         {
@@ -1111,6 +1123,7 @@ export function getInspectorDescriptor(
           value: transformValues.yshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "yshift", transformContext)
         },
         {
@@ -1119,6 +1132,7 @@ export function getInspectorDescriptor(
           label: "X scale",
           value: transformValues.xscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "xscale", transformContext)
         },
         {
@@ -1127,6 +1141,7 @@ export function getInspectorDescriptor(
           label: "Y scale",
           value: transformValues.yscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "yscale", transformContext)
         },
         {
@@ -1136,6 +1151,7 @@ export function getInspectorDescriptor(
           value: transformValues.rotate,
           step: 1,
           unit: "deg",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "rotate", transformContext)
         }
       ]
@@ -1253,6 +1269,7 @@ export function getInspectorDescriptor(
           value: nodeInspectorState.innerSep,
           step: 0.1,
           unit: "pt",
+          defaultValue: NODE_INNER_SEP_DEFAULT,
           note: nodeInspectorState.innerSepNote,
           write: makeSetPropertyWriteTarget(inlineTarget, "inner sep")
         },
@@ -1263,6 +1280,7 @@ export function getInspectorDescriptor(
           value: nodeInspectorState.minimumWidth,
           step: 0.1,
           unit: "pt",
+          defaultValue: NODE_MINIMUM_DIMENSION_DEFAULT,
           note: nodeInspectorState.minimumWidthNote,
           minimumDimensionsContext: {
             minimumWidth: nodeInspectorState.minimumWidth,
@@ -1277,6 +1295,7 @@ export function getInspectorDescriptor(
           value: nodeInspectorState.minimumHeight,
           step: 0.1,
           unit: "pt",
+          defaultValue: NODE_MINIMUM_DIMENSION_DEFAULT,
           note: nodeInspectorState.minimumHeightNote,
           minimumDimensionsContext: {
             minimumWidth: nodeInspectorState.minimumWidth,
@@ -1641,6 +1660,7 @@ export function getInspectorDescriptor(
       step: 0.05,
       min: 0,
       max: 1,
+      defaultValue: 1,
       write: makeSetPropertyWriteTarget(inlineTarget, "fill opacity")
     });
     sections.push({
@@ -1683,6 +1703,7 @@ export function getInspectorDescriptor(
       step: 0.05,
       min: 0,
       max: 1,
+      defaultValue: 1,
       write: makeSetPropertyWriteTarget(inlineTarget, "draw opacity")
     });
   }
@@ -1787,6 +1808,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.step,
             step: 0.1,
             unit: "cm",
+            defaultValue: 1,
             clearKeys: uniqueStrings(GRID_STEP_CLEAR_KEYS),
             write: gridWriteTarget
           },
@@ -1797,6 +1819,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.xstep,
             step: 0.1,
             unit: "cm",
+            defaultValue: 1,
             clearKeys: uniqueStrings(GRID_XSTEP_CLEAR_KEYS),
             write: makeSetPropertyWriteTargetForElementId(inlineTarget, gridInspectorState.keywordId, "xstep")
           },
@@ -1807,6 +1830,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.ystep,
             step: 0.1,
             unit: "cm",
+            defaultValue: 1,
             clearKeys: uniqueStrings(GRID_YSTEP_CLEAR_KEYS),
             write: makeSetPropertyWriteTargetForElementId(inlineTarget, gridInspectorState.keywordId, "ystep")
           }

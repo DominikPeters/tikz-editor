@@ -9,7 +9,7 @@ RiFontSansSerif,
 RiFontSerif,
 RiItalic
 } from "@remixicon/react";
-import { useCallback,useEffect,useMemo,useState,type JSX } from "react";
+import { useCallback,useEffect,useMemo,useState,type FocusEvent,type JSX } from "react";
 import { CM_PER_PT, formatNumber } from "tikz-editor/edit/format";
 import {
 getInspectorDescriptor,
@@ -71,6 +71,10 @@ type NumberChangeOptions = {
   recordInHistory?: boolean;
 };
 
+type ScalarInspectorProperty =
+  | Extract<InspectorProperty, { kind: "number" | "length" }>
+  | Extract<MultiInspectorProperty, { kind: "number" | "length" }>;
+
 type NumberLabelScrubBinding = {
   writable: boolean;
   value: number;
@@ -116,6 +120,8 @@ export function InspectorPanel() {
   const [manualLineWidthCustomKeys, setManualLineWidthCustomKeys] = useState<Set<string>>(
     () => new Set()
   );
+  const [scalarDrafts, setScalarDrafts] = useState<Record<string, string>>({});
+  const [scalarProvenanceLocks, setScalarProvenanceLocks] = useState<Record<string, InspectorPropertyProvenance>>({});
   const [optionalLengthDrafts, setOptionalLengthDrafts] = useState<Record<string, string>>({});
   const [strokeMoreOptionsOpen, setStrokeMoreOptionsOpen] = useState(false);
   const [fillMoreOptionsOpen, setFillMoreOptionsOpen] = useState(false);
@@ -163,6 +169,8 @@ export function InspectorPanel() {
     applyRoundedCornersValueMany,
     applyNodeShapeValue,
     applyNodeShapeValueMany,
+    applyNodeInnerSepValue,
+    applyNodeInnerSepValueMany,
     applyNodeFontValue,
     applyNodeFontValueMany
   } = useInspectorMutations(dispatch);
@@ -170,6 +178,8 @@ export function InspectorPanel() {
   useEffect(() => {
     setStrokeMoreOptionsOpen(false);
     setFillAdvancedOptionsOpen(false);
+    setScalarDrafts({});
+    setScalarProvenanceLocks({});
     setOptionalLengthDrafts({});
   }, [selectedIds]);
 
@@ -331,6 +341,179 @@ export function InspectorPanel() {
     return formatted;
   }
 
+  function singleScalarDraftKey(
+    property: Extract<InspectorProperty, { kind: "number" }> | Extract<InspectorProperty, { kind: "length" }>
+  ): string {
+    const elementId = property.kind === "number" ? (property.write?.elementId ?? "") : property.write.elementId;
+    return `single:${property.kind}:${property.id}:${elementId}`;
+  }
+
+  function multiScalarDraftKey(
+    property: Extract<MultiInspectorProperty, { kind: "number" }> | Extract<MultiInspectorProperty, { kind: "length" }>
+  ): string {
+    const elementIds = property.writes
+      .map((write) => write.elementId)
+      .filter((id) => id.length > 0)
+      .sort();
+    return `multi:${property.kind}:${property.id}:${elementIds.join("|")}`;
+  }
+
+  function setScalarDraft(key: string, value: string): void {
+    setScalarDrafts((current) => {
+      if (current[key] === value) {
+        return current;
+      }
+      return { ...current, [key]: value };
+    });
+  }
+
+  function clearScalarDraft(key: string): void {
+    setScalarDrafts((current) => {
+      if (!(key in current)) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function scalarProvenanceForDraft(
+    key: string,
+    provenance: InspectorPropertyProvenance | null
+  ): InspectorPropertyProvenance | null {
+    return scalarProvenanceLocks[key] ?? provenance;
+  }
+
+  function setScalarProvenanceLock(
+    key: string,
+    provenance: InspectorPropertyProvenance | null
+  ): void {
+    setScalarProvenanceLocks((current) => {
+      if (!provenance) {
+        if (!(key in current)) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      if (current[key] === provenance) {
+        return current;
+      }
+      return { ...current, [key]: provenance };
+    });
+  }
+
+  function clearScalarProvenanceLock(key: string): void {
+    setScalarProvenanceLocks((current) => {
+      if (!(key in current)) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function selectInputOnNextFrame(input: HTMLInputElement): void {
+    const selectIfFocused = () => {
+      if (typeof document !== "undefined" && document.activeElement === input) {
+        input.select();
+      }
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(selectIfFocused);
+      return;
+    }
+    setTimeout(selectIfFocused, 0);
+  }
+
+  function handleScalarInputFocus(
+    event: FocusEvent<HTMLInputElement>,
+    draftKey: string,
+    property: ScalarInspectorProperty,
+    provenance: InspectorPropertyProvenance | null
+  ): void {
+    setScalarProvenanceLock(draftKey, provenance);
+    if (property.defaultValue == null || provenance?.kind !== "default") {
+      return;
+    }
+    selectInputOnNextFrame(event.currentTarget);
+  }
+
+  function resetSingleNumberToDefault(property: Extract<InspectorProperty, { kind: "number" }>): void {
+    if (property.defaultValue == null) {
+      return;
+    }
+    handleNumberChange(property, String(property.defaultValue));
+  }
+
+  function resetMultiNumberToDefault(property: Extract<MultiInspectorProperty, { kind: "number" }>): void {
+    if (property.defaultValue == null) {
+      return;
+    }
+    handleMultiNumberChange(property, String(property.defaultValue));
+  }
+
+  function resetSingleLengthToDefault(property: Extract<InspectorProperty, { kind: "length" }>): void {
+    if (property.defaultValue == null) {
+      return;
+    }
+    applySingleLengthValue(property, property.defaultValue);
+  }
+
+  function resetMultiLengthToDefault(property: Extract<MultiInspectorProperty, { kind: "length" }>): void {
+    if (property.defaultValue == null) {
+      return;
+    }
+    applyMultiLengthValue(property, property.defaultValue);
+  }
+
+  function commitSingleNumberDraft(property: Extract<InspectorProperty, { kind: "number" }>, raw: string): void {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      resetSingleNumberToDefault(property);
+      return;
+    }
+    handleNumberChange(property, trimmed);
+  }
+
+  function commitMultiNumberDraft(property: Extract<MultiInspectorProperty, { kind: "number" }>, raw: string): void {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      resetMultiNumberToDefault(property);
+      return;
+    }
+    handleMultiNumberChange(property, trimmed);
+  }
+
+  function commitSingleLengthDraft(property: Extract<InspectorProperty, { kind: "length" }>, raw: string): void {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      resetSingleLengthToDefault(property);
+      return;
+    }
+    const next = Number(trimmed);
+    if (!Number.isFinite(next)) {
+      return;
+    }
+    applySingleLengthValue(property, next);
+  }
+
+  function commitMultiLengthDraft(property: Extract<MultiInspectorProperty, { kind: "length" }>, raw: string): void {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      resetMultiLengthToDefault(property);
+      return;
+    }
+    const next = Number(trimmed);
+    if (!Number.isFinite(next)) {
+      return;
+    }
+    applyMultiLengthValue(property, next);
+  }
+
   function withValueProvenanceClass(
     className: string | undefined,
     provenance: InspectorPropertyProvenance | null
@@ -386,6 +569,10 @@ export function InspectorPanel() {
     value: number,
     options: NumberChangeOptions = {}
   ): void {
+    if (property.id === "node-inner-sep") {
+      applyNodeInnerSepValue(property.write, value, options);
+      return;
+    }
     if (
       (property.id === "node-minimum-width" || property.id === "node-minimum-height")
       && property.minimumDimensionsContext
@@ -505,6 +692,10 @@ export function InspectorPanel() {
     value: number,
     options: NumberChangeOptions = {}
   ): void {
+    if (property.id === "node-inner-sep") {
+      applyNodeInnerSepValueMany(property.writes, value, options);
+      return;
+    }
     if (
       (property.id === "node-minimum-width" || property.id === "node-minimum-height")
       && property.minimumDimensionsContexts
@@ -684,16 +875,50 @@ export function InspectorPanel() {
     provenance: InspectorPropertyProvenance | null = null
   ): JSX.Element {
     const { writable, readOnlyReason } = getSingleNumberPropertyState(property);
+    const draftKey = singleScalarDraftKey(property);
+    const draftValue = scalarDrafts[draftKey];
+    const effectiveProvenance = scalarProvenanceForDraft(draftKey, provenance);
+    const valueProvenance = draftValue === undefined ? effectiveProvenance : null;
     const input = (
       <input
-        className={withValueProvenanceClass(css.numberInput, provenance)}
+        className={withValueProvenanceClass(css.numberInput, valueProvenance)}
         type="number"
         step={property.step}
         min={property.min}
         max={property.max}
-        value={formatNumber(property.value)}
+        value={draftValue ?? formatNumber(property.value)}
+        placeholder={property.defaultValue != null ? "Default" : undefined}
         disabled={!writable}
-        onChange={(event) => { handleNumberChange(property, event.currentTarget.value); }}
+        onFocus={(event) => { handleScalarInputFocus(event, draftKey, property, provenance); }}
+        onChange={(event) => {
+          const raw = event.currentTarget.value;
+          setScalarDraft(draftKey, raw);
+          if (raw.trim().length === 0) {
+            return;
+          }
+          handleNumberChange(property, raw);
+        }}
+        onBlur={(event) => {
+          if (draftValue !== undefined) {
+            commitSingleNumberDraft(property, event.currentTarget.value);
+            clearScalarDraft(draftKey);
+          }
+          clearScalarProvenanceLock(draftKey);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (draftValue !== undefined) {
+              commitSingleNumberDraft(property, event.currentTarget.value);
+              clearScalarDraft(draftKey);
+            }
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            clearScalarDraft(draftKey);
+            event.currentTarget.blur();
+          }
+        }}
       />
     );
     return (
@@ -708,7 +933,7 @@ export function InspectorPanel() {
           onCommit: (next) => { handleNumberChange(property, String(next)); }
         })}
         <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(provenance, input, true)}
+          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
           {property.unit ? <span className={css.unitLabel}>{property.unit}</span> : null}
         </div>
         {renderReadOnlyReasonNote(readOnlyReason)}
@@ -722,16 +947,50 @@ export function InspectorPanel() {
     provenance: InspectorPropertyProvenance | null = null
   ): JSX.Element {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
+    const draftKey = multiScalarDraftKey(property);
+    const draftValue = scalarDrafts[draftKey];
+    const effectiveProvenance = scalarProvenanceForDraft(draftKey, provenance);
+    const valueProvenance = draftValue === undefined ? effectiveProvenance : null;
     const input = (
       <input
-        className={withValueProvenanceClass(css.numberInput, provenance)}
+        className={withValueProvenanceClass(css.numberInput, valueProvenance)}
         type="number"
         step={property.step}
         min={property.min}
         max={property.max}
-        value={property.mixed ? "" : formatNumber(property.value)}
+        value={draftValue ?? (property.mixed ? "" : formatNumber(property.value))}
+        placeholder={property.mixed ? "Mixed" : property.defaultValue != null ? "Default" : undefined}
         disabled={!writable}
-        onChange={(event) => { handleMultiNumberChange(property, event.currentTarget.value); }}
+        onFocus={(event) => { handleScalarInputFocus(event, draftKey, property, provenance); }}
+        onChange={(event) => {
+          const raw = event.currentTarget.value;
+          setScalarDraft(draftKey, raw);
+          if (raw.trim().length === 0) {
+            return;
+          }
+          handleMultiNumberChange(property, raw);
+        }}
+        onBlur={(event) => {
+          if (draftValue !== undefined) {
+            commitMultiNumberDraft(property, event.currentTarget.value);
+            clearScalarDraft(draftKey);
+          }
+          clearScalarProvenanceLock(draftKey);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (draftValue !== undefined) {
+              commitMultiNumberDraft(property, event.currentTarget.value);
+              clearScalarDraft(draftKey);
+            }
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            clearScalarDraft(draftKey);
+            event.currentTarget.blur();
+          }
+        }}
       />
     );
     return (
@@ -746,7 +1005,7 @@ export function InspectorPanel() {
           onCommit: (next) => { handleMultiNumberChange(property, String(next)); }
         })}
         <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(provenance, input, true)}
+          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
           {property.unit ? <span className={css.unitLabel}>{property.unit}</span> : null}
         </div>
         {renderReadOnlyReasonNote(property.readOnlyReason)}
@@ -764,19 +1023,51 @@ export function InspectorPanel() {
       capability.status === "unsupported" ? capability.reason : null;
     const readOnlyReason = property.readOnlyReason ?? property.write.reason ?? capabilityReadOnlyReason;
     const writable = property.write.writable && capability.status !== "unsupported";
+    const draftKey = singleScalarDraftKey(property);
+    const draftValue = scalarDrafts[draftKey];
+    const effectiveProvenance = scalarProvenanceForDraft(draftKey, provenance);
+    const valueProvenance = draftValue === undefined ? effectiveProvenance : null;
     const input = (
       <input
-        className={withValueProvenanceClass(css.numberInput, provenance)}
+        className={withValueProvenanceClass(css.numberInput, valueProvenance)}
         type="number"
         step={property.step}
-        value={formatNumber(property.value)}
+        value={draftValue ?? formatNumber(property.value)}
+        placeholder={property.defaultValue != null ? "Default" : undefined}
         disabled={!writable}
+        onFocus={(event) => { handleScalarInputFocus(event, draftKey, property, provenance); }}
         onChange={(event) => {
-          const next = Number(event.currentTarget.value);
+          const raw = event.currentTarget.value;
+          setScalarDraft(draftKey, raw);
+          if (raw.trim().length === 0) {
+            return;
+          }
+          const next = Number(raw);
           if (!Number.isFinite(next)) {
             return;
           }
           applySingleLengthValue(property, next);
+        }}
+        onBlur={(event) => {
+          if (draftValue !== undefined) {
+            commitSingleLengthDraft(property, event.currentTarget.value);
+            clearScalarDraft(draftKey);
+          }
+          clearScalarProvenanceLock(draftKey);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (draftValue !== undefined) {
+              commitSingleLengthDraft(property, event.currentTarget.value);
+              clearScalarDraft(draftKey);
+            }
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            clearScalarDraft(draftKey);
+            event.currentTarget.blur();
+          }
         }}
       />
     );
@@ -790,7 +1081,7 @@ export function InspectorPanel() {
           onCommit: (next) => { applySingleLengthValue(property, next); }
         })}
         <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(provenance, input, true)}
+          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
           <span className={css.unitLabel}>{property.unit}</span>
         </div>
         {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
@@ -805,19 +1096,51 @@ export function InspectorPanel() {
     provenance: InspectorPropertyProvenance | null = null
   ): JSX.Element {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
+    const draftKey = multiScalarDraftKey(property);
+    const draftValue = scalarDrafts[draftKey];
+    const effectiveProvenance = scalarProvenanceForDraft(draftKey, provenance);
+    const valueProvenance = draftValue === undefined ? effectiveProvenance : null;
     const input = (
       <input
-        className={withValueProvenanceClass(css.numberInput, provenance)}
+        className={withValueProvenanceClass(css.numberInput, valueProvenance)}
         type="number"
         step={property.step}
-        value={property.mixed ? "" : formatNumber(property.value)}
+        value={draftValue ?? (property.mixed ? "" : formatNumber(property.value))}
+        placeholder={property.mixed ? "Mixed" : property.defaultValue != null ? "Default" : undefined}
         disabled={!writable}
+        onFocus={(event) => { handleScalarInputFocus(event, draftKey, property, provenance); }}
         onChange={(event) => {
-          const next = Number(event.currentTarget.value);
+          const raw = event.currentTarget.value;
+          setScalarDraft(draftKey, raw);
+          if (raw.trim().length === 0) {
+            return;
+          }
+          const next = Number(raw);
           if (!Number.isFinite(next)) {
             return;
           }
           applyMultiLengthValue(property, next);
+        }}
+        onBlur={(event) => {
+          if (draftValue !== undefined) {
+            commitMultiLengthDraft(property, event.currentTarget.value);
+            clearScalarDraft(draftKey);
+          }
+          clearScalarProvenanceLock(draftKey);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (draftValue !== undefined) {
+              commitMultiLengthDraft(property, event.currentTarget.value);
+              clearScalarDraft(draftKey);
+            }
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            clearScalarDraft(draftKey);
+            event.currentTarget.blur();
+          }
         }}
       />
     );
@@ -831,7 +1154,7 @@ export function InspectorPanel() {
           onCommit: (next) => { applyMultiLengthValue(property, next); }
         })}
         <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(provenance, input, true)}
+          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
           <span className={css.unitLabel}>{property.unit}</span>
         </div>
         {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
@@ -1220,8 +1543,10 @@ export function InspectorPanel() {
     renderReadOnlyReasonNote,
     renderSingleTextField,
     renderSingleNumberField,
+    renderSingleLengthField,
     renderSingleOptionalLengthField,
     renderMultiNumberField,
+    renderMultiLengthField,
     renderMultiOptionalLengthField,
     renderNodeTextAlignToolbar,
     renderScrubbableNumberLabel,

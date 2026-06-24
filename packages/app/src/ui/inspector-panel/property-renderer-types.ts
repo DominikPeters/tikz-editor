@@ -16,8 +16,10 @@ export type RenderPropertyApi = {
 
   renderSingleTextField(this: void, property: Extract<InspectorProperty, { kind: "text" }>, provenance: InspectorPropertyProvenance | null): JSX.Element;
   renderSingleNumberField(this: void, property: Extract<InspectorProperty, { kind: "number" }>, compact: boolean, provenance: InspectorPropertyProvenance | null): JSX.Element;
+  renderSingleLengthField(this: void, property: Extract<InspectorProperty, { kind: "length" }>, compact: boolean, provenance: InspectorPropertyProvenance | null): JSX.Element;
   renderSingleOptionalLengthField(this: void, property: Extract<InspectorProperty, { kind: "optionalLength" }>, showLabel: boolean, provenance: InspectorPropertyProvenance | null): JSX.Element;
   renderMultiNumberField(this: void, property: Extract<MultiInspectorProperty, { kind: "number" }>, compact: boolean, provenance: InspectorPropertyProvenance | null): JSX.Element;
+  renderMultiLengthField(this: void, property: Extract<MultiInspectorProperty, { kind: "length" }>, compact: boolean, provenance: InspectorPropertyProvenance | null): JSX.Element;
   renderMultiOptionalLengthField(this: void, property: Extract<MultiInspectorProperty, { kind: "optionalLength" }>, showLabel: boolean, provenance: InspectorPropertyProvenance | null): JSX.Element;
   renderNodeTextAlignToolbar(this: void, ...args: unknown[]): JSX.Element;
   renderScrubbableNumberLabel(this: void, ...args: unknown[]): JSX.Element;

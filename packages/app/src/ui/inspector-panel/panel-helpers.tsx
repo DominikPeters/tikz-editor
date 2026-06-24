@@ -48,6 +48,7 @@ export type MultiInspectorNumberProperty = {
   min?: number;
   max?: number;
   unit?: string;
+  defaultValue?: number;
   clearKeys?: string[];
   writes: SetPropertyWriteTarget[];
   readOnlyReason?: string;
@@ -61,6 +62,7 @@ export type MultiInspectorLengthProperty = {
   mixed: boolean;
   step: number;
   unit: "pt";
+  defaultValue?: number;
   clearKeys?: string[];
   writes: SetPropertyWriteTarget[];
   note?: string;
@@ -793,6 +795,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
         ? Math.min(...numberProperties.map((property) => property.max as number))
         : undefined,
       unit: base.unit,
+      defaultValue: consensusDefaultValue(numberProperties),
       clearKeys,
       writes,
       readOnlyReason: deriveReadOnlyReason(writes)
@@ -818,6 +821,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !numbersAreEqual(values),
       step: base.step,
       unit: base.unit,
+      defaultValue: consensusDefaultValue(lengthProperties),
       clearKeys,
       writes,
       note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
@@ -1241,6 +1245,15 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
   }
 
   return null;
+}
+
+function consensusDefaultValue(properties: ReadonlyArray<{ defaultValue?: number }>): number | undefined {
+  const values = properties.map((property) => property.defaultValue);
+  if (values.some((value) => value == null)) {
+    return undefined;
+  }
+  const numericValues = values as number[];
+  return numbersAreEqual(numericValues) ? numericValues[0] : undefined;
 }
 
 export function deriveReadOnlyReason(

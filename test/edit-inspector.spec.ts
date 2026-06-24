@@ -350,11 +350,13 @@ describe("getInspectorDescriptor", () => {
     }
 
     const values = new Map<string, number>();
+    const defaultValues = new Map<string, number | undefined>();
     for (const property of transformSection.properties) {
       if (property.kind !== "number") {
         continue;
       }
       values.set(property.id, property.value);
+      defaultValues.set(property.id, property.defaultValue);
     }
 
     expect(values.get("xscale")).toBeCloseTo(2, 6);
@@ -362,6 +364,11 @@ describe("getInspectorDescriptor", () => {
     expect(values.get("xshift")).toBeCloseTo(2, 6);
     expect(values.get("yshift")).toBeCloseTo(3, 6);
     expect(values.get("rotate")).toBeCloseTo(15, 6);
+    expect(defaultValues.get("xshift")).toBe(0);
+    expect(defaultValues.get("yshift")).toBe(0);
+    expect(defaultValues.get("xscale")).toBe(1);
+    expect(defaultValues.get("yscale")).toBe(1);
+    expect(defaultValues.get("rotate")).toBe(0);
   });
 
   it("resolves global tikzpicture transform values for inspector empty state", () => {
@@ -621,6 +628,9 @@ describe("getInspectorDescriptor", () => {
     expect(step.value).toBeCloseTo(1, 6);
     expect(xstep.value).toBeCloseTo(1, 6);
     expect(ystep.value).toBeCloseTo(1, 6);
+    expect(step.defaultValue).toBe(1);
+    expect(xstep.defaultValue).toBe(1);
+    expect(ystep.defaultValue).toBe(1);
     expect(step.unit).toBe("cm");
     expect(xstep.unit).toBe("cm");
     expect(ystep.unit).toBe("cm");
@@ -3910,6 +3920,39 @@ describe("getInspectorDescriptor", () => {
     expect(textWidth.mixed).toBe(true);
   });
 
+  it("carries scalar default reset values through multi-selection models", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node[inner sep=2pt,minimum width=4pt] at (0,0) {A};
+  \node[inner sep=6pt,minimum width=8pt] at (2,0) {B};
+\end{tikzpicture}`;
+    const texts = renderTikzToSvg(source).semantic.scene.elements.filter((entry) => entry.kind === "Text");
+    expect(texts).toHaveLength(2);
+    if (texts.length !== 2) {
+      throw new Error("Expected two text elements");
+    }
+
+    const descriptors = texts.map((entry) => getInspectorDescriptor(entry, { source }));
+    const multi = buildMultiInspectorModel(descriptors, descriptors.length);
+    const nodeSection = multi.sections.find((section) => section.id === "node");
+    expect(nodeSection).toBeDefined();
+    if (!nodeSection) {
+      throw new Error("Expected node section");
+    }
+
+    const innerSep = nodeSection.properties.find((property) => property.id === "node-inner-sep");
+    const minimumWidth = nodeSection.properties.find((property) => property.id === "node-minimum-width");
+    expect(innerSep?.kind).toBe("length");
+    expect(minimumWidth?.kind).toBe("length");
+    if (!innerSep || innerSep.kind !== "length" || !minimumWidth || minimumWidth.kind !== "length") {
+      throw new Error("Expected node length properties in multi model");
+    }
+
+    expect(innerSep.mixed).toBe(true);
+    expect(innerSep.defaultValue).toBeCloseTo(3.333, 6);
+    expect(minimumWidth.mixed).toBe(true);
+    expect(minimumWidth.defaultValue).toBe(1);
+  });
+
   it("builds node shape mutations that normalize existing shape flags", () => {
     const mutation = buildNodeShapeSetPropertyMutation("circle");
     expect(mutation).toMatchObject({
@@ -3967,6 +4010,7 @@ describe("getInspectorDescriptor", () => {
     const conflictInnerSep = getNodeInnerSepProperty(getInspectorDescriptor(conflictElement, { source: conflictSource }));
     expect(defaultInnerSep.value).toBeGreaterThan(3);
     expect(defaultInnerSep.value).toBeLessThan(3.5);
+    expect(defaultInnerSep.defaultValue).toBeCloseTo(3.333, 6);
     expect(conflictInnerSep.value).toBeCloseTo(4, 6);
     expect(conflictInnerSep.note).toContain("inner xsep/inner ysep");
 
@@ -4004,6 +4048,8 @@ describe("getInspectorDescriptor", () => {
     const defaultMinimumHeight = getNodeLengthProperty(getInspectorDescriptor(defaultElement, { source: defaultSource }), "node-minimum-height");
     expect(defaultMinimumWidth.value).toBeCloseTo(1, 6);
     expect(defaultMinimumHeight.value).toBeCloseTo(1, 6);
+    expect(defaultMinimumWidth.defaultValue).toBe(1);
+    expect(defaultMinimumHeight.defaultValue).toBe(1);
 
     const sharedMinimumWidth = getNodeLengthProperty(getInspectorDescriptor(sharedElement, { source: sharedSource }), "node-minimum-width");
     const sharedMinimumHeight = getNodeLengthProperty(getInspectorDescriptor(sharedElement, { source: sharedSource }), "node-minimum-height");

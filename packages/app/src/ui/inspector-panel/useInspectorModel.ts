@@ -9,6 +9,7 @@ import {
   type InspectorSnapshot
 } from "tikz-editor/edit/inspector";
 import {
+  DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContextFromOptionEntries,
   resolveTransformInspectorValues,
   type TransformInspectorKey,
@@ -100,6 +101,7 @@ function buildScopeInspectorDescriptor(
           value: transformValues.xshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xshift,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "xshift", transformContext)
         },
         {
@@ -109,6 +111,7 @@ function buildScopeInspectorDescriptor(
           value: transformValues.yshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "yshift", transformContext)
         },
         {
@@ -117,6 +120,7 @@ function buildScopeInspectorDescriptor(
           label: "X scale",
           value: transformValues.xscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "xscale", transformContext)
         },
         {
@@ -125,6 +129,7 @@ function buildScopeInspectorDescriptor(
           label: "Y scale",
           value: transformValues.yscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "yscale", transformContext)
         },
         {
@@ -134,6 +139,7 @@ function buildScopeInspectorDescriptor(
           value: transformValues.rotate,
           step: 1,
           unit: "deg",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "rotate", transformContext)
         }
       ]

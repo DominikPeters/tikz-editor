@@ -55,11 +55,11 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     implicitDefaultProvenance,
     withValueProvenanceClass,
     renderMultiNumberField,
+    renderMultiLengthField,
     renderMultiOptionalLengthField,
     renderReadOnlyReasonNote,
     renderNodeTextAlignToolbar,
     renderScrubbableNumberLabel,
-    applyMultiLengthValue,
     maybeWrapWithProvenanceTooltip,
     commitAfterHoverPreview,
     applyNodeShapeValueMany,
@@ -167,39 +167,9 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     }
 
     if (property.kind === "length") {
-      const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
       return (
         <div key={property.id} className={propertyClassName}>
-          {renderScrubbableNumberLabel(property.label, {
-            writable,
-            value: property.value,
-            step: property.step,
-            onPreview: (next: number) => { applyMultiLengthValue(property, next, { recordInHistory: false }); },
-            onCommit: (next: number) => { applyMultiLengthValue(property, next); }
-          })}
-          <div className={css.controlRow}>
-            {maybeWrapWithProvenanceTooltip(
-              provenance,
-              <input
-                className={withValueProvenanceClass(css.numberInput, provenance)}
-                type="number"
-                step={property.step}
-                value={property.mixed ? "" : formatNumber(property.value)}
-                disabled={!writable}
-                onChange={(event) => {
-                  const next = Number(event.currentTarget.value);
-                  if (!Number.isFinite(next)) {
-                    return;
-                  }
-                  applyMultiLengthValue(property, next);
-                }}
-              />,
-              true
-            )}
-            <span className={css.unitLabel}>{property.unit}</span>
-          </div>
-          {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
-          {renderReadOnlyReasonNote(property.readOnlyReason)}
+          {renderMultiLengthField(property, false, provenance)}
         </div>
       );
     }
