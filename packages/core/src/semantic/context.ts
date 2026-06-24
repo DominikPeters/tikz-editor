@@ -63,6 +63,7 @@ export type NodeDistanceSpec =
 export type NodeQuotesMode = "label" | "pin";
 
 export type NamedNodeGeometry = {
+  sourceId?: string;
   shape:
     | "rectangle"
     | "rounded rectangle"

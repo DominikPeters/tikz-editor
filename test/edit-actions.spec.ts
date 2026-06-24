@@ -36,6 +36,7 @@ import { computeSourceFingerprint } from "../packages/core/src/utils/source-fing
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
+import { createMathJaxNodeTextEngine } from "../packages/core/src/text/mathjax-engine.js";
 import { collectSourceWorldBounds } from "../packages/core/src/edit/snapping/geometry.js";
 import { applySourcePatches } from "../packages/core/src/edit/source-patches.js";
 import { renameSnippetDeclaredNames } from "../packages/core/src/edit/name-conflicts.js";
@@ -1740,6 +1741,234 @@ describe("applyEditAction – moveElement with positioning", () => {
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
     expect(result.newSource).toContain("above right={-0.23cm and 1cm} of A");
+  });
+});
+
+describe("applyEditAction – node relative positioning conversions", () => {
+  function pathStatementIds(source: string): string[] {
+    const parsed = parseTikz(source, { recover: true });
+    return parsed.figure.body
+      .filter((statement) => statement.kind === "Path")
+      .map((statement) => statement.id);
+  }
+
+  function nodeCenter(source: string, sourceId: string, evaluateOptions?: Parameters<typeof evaluateTikzFigure>[2]): WorldPoint {
+    const parsed = parseTikz(source, { recover: true });
+    const evaluated = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+    const handle = evaluated.editHandles.find(
+      (candidate) => candidate.sourceRef.sourceId === sourceId && candidate.kind === "node-position"
+    );
+    expect(handle).toBeDefined();
+    return handle!.world;
+  }
+
+  function expectPointClose(actual: WorldPoint, expected: WorldPoint): void {
+    expect(Math.abs(actual.x - expected.x)).toBeLessThan(0.15);
+    expect(Math.abs(actual.y - expected.y)).toBeLessThan(0.15);
+  }
+
+  function expectAbsoluteRelativeAbsoluteRoundTrip(
+    source: string,
+    options: {
+      targetNodeName?: string;
+      evaluateOptions?: Parameters<typeof evaluateTikzFigure>[2];
+    } = {}
+  ): void {
+    const [targetId, nodeId] = pathStatementIds(source);
+    const targetNodeName = options.targetNodeName ?? "A";
+    const before = nodeCenter(source, nodeId!, options.evaluateOptions);
+
+    const relative = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName,
+      targetNodeSourceId: targetId!
+    }, {
+      evaluateOptions: options.evaluateOptions
+    });
+
+    expect(relative.kind).toBe("success");
+    if (relative.kind !== "success") return;
+    expect(relative.newSource).toContain(`of ${targetNodeName}`);
+    expectPatchesReconstructSource(source, relative);
+
+    const [, relativeNodeId] = pathStatementIds(relative.newSource);
+    const absolute = applyEditAction(relative.newSource, [], {
+      kind: "convertNodePositionToAbsolute",
+      nodeId: relativeNodeId!
+    }, {
+      evaluateOptions: options.evaluateOptions
+    });
+
+    expect(absolute.kind).toBe("success");
+    if (absolute.kind !== "success") return;
+    expect(absolute.newSource).toContain(" at (");
+    expect(absolute.newSource).not.toContain(`of ${targetNodeName}`);
+    expectPointClose(nodeCenter(absolute.newSource, pathStatementIds(absolute.newSource)[1]!, options.evaluateOptions), before);
+    expectPatchesReconstructSource(relative.newSource, absolute);
+  }
+
+  it("converts an absolute node to modern right-of positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+    const before = nodeCenter(source, nodeId!);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId!
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("right=");
+    expect(result.newSource).toContain("of A");
+    expect(result.newSource).not.toContain("at (2,0)");
+    expectPointClose(nodeCenter(result.newSource, nodeId!), before);
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("preserves shaped node placement when converting to relative positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw,circle,minimum size=1cm] (A) at (0,0) {A};
+\node[draw,diamond,minimum size=1cm] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+    const before = nodeCenter(source, nodeId!);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId!
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("right=");
+    expect(result.newSource).toContain("of A");
+    expectPointClose(nodeCenter(result.newSource, nodeId!), before);
+  });
+
+  it("serializes diagonal relative positioning with vertical and horizontal distances", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node (A) at (0,0) {A};
+\node (B) at (2,2) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId!
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("above right={");
+    expect(result.newSource).toContain("} of A");
+  });
+
+  it("converts a relatively positioned node back to absolute positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node (A) at (0,0) {A};
+\node[right=1cm of A] (B) {B};
+\end{tikzpicture}`;
+    const [, nodeId] = pathStatementIds(source);
+    const before = nodeCenter(source, nodeId!);
+
+    const result = applyEditAction(source, [], {
+      kind: "convertNodePositionToAbsolute",
+      nodeId: nodeId!
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain(" at (");
+    expect(result.newSource).not.toContain("right=1cm of A");
+    expectPointClose(nodeCenter(result.newSource, nodeId!), before);
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("round trips cardinal absolute positioning through relative positioning", () => {
+    expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (2,0) {B};
+\end{tikzpicture}`);
+  });
+
+  it("round trips diagonal absolute positioning through relative positioning", () => {
+    expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (2,2) {B};
+\end{tikzpicture}`);
+  });
+
+  it("round trips shaped absolute positioning through relative positioning", () => {
+    expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
+\node[draw,circle,minimum size=1cm] (A) at (0,0) {A};
+\node[draw,diamond,minimum size=1cm] (B) at (2.6,1.8) {B};
+\end{tikzpicture}`);
+  });
+
+  it("round trips text nodes with different inner sep through diagonal relative positioning", async () => {
+    const textEngine = await createMathJaxNodeTextEngine();
+    expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
+  \node[draw, inner sep=4pt] (a) at (-0.2,2.66) {node a};
+  \node[draw, inner sep=1pt] (b) at (1.35,1.8) {node b};
+\end{tikzpicture}`, {
+      targetNodeName: "a",
+      evaluateOptions: { textEngine }
+    });
+  });
+
+  it("rejects relative positioning that would need a negative distance", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (0,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId!
+    });
+
+    expect(result.kind).toBe("unsupported");
+    if (result.kind !== "unsupported") return;
+    expect(result.reason).toContain("negative positioning distance");
+  });
+
+  it("rejects path-attached target nodes", () => {
+    const source = String.raw`\begin{tikzpicture}
+\draw (0,0) -- (1,0) node[midway] (A) {A};
+\node (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const parsed = parseTikz(source, { recover: true });
+    const evaluated = evaluateTikzFigure(parsed.figure, source);
+    const targetSourceId = evaluated.nodeAnchorTargets.find(
+      (target) => target.nodeName === "A" && target.anchor === "center"
+    )?.nodeSourceId;
+    const [, nodeId] = pathStatementIds(source);
+
+    expect(targetSourceId).toBeDefined();
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName: "A",
+      targetNodeSourceId: targetSourceId!
+    });
+
+    expect(result.kind).toBe("unsupported");
+    if (result.kind !== "unsupported") return;
+    expect(result.reason).toContain("Path-attached target nodes");
   });
 });
 

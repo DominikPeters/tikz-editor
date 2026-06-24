@@ -122,6 +122,7 @@ type CanvasPanelViewProps = {
   hoveredElementId: string | null;
   editableTextRegionKeys: ReadonlySet<string>;
   draggableSourceIds: ReadonlySet<string>;
+  hitRegionCursorByTargetId?: ReadonlyMap<string, string>;
   onElementPointerDown: (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onElementContextMenu: (event: ReactMouseEvent<SVGElement>, sourceId: string, region?: HitRegion, handleId?: string | null) => void;
   onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
@@ -137,6 +138,10 @@ type CanvasPanelViewProps = {
   curveControlLines: readonly CurveControlLine[];
   curveControlStrokeWidth: number;
   nodeAnchorOverlay: NodeAnchorOverlayState | null;
+  onNodeAnchorPointerDown?: (event: ReactPointerEvent<SVGCircleElement>, targetId: string) => void;
+  onNodeAnchorClick?: (event: ReactMouseEvent<SVGCircleElement>, targetId: string) => void;
+  onNodeAnchorHoverChange?: (targetId: string | null) => void;
+  nodePositionTargetTooltip: { content: string; anchor: { x: number; y: number } } | null;
   handleHalfSize: number;
   handleDisplays: readonly HandleDisplay[];
   onHandlePointerDown: (event: ReactPointerEvent<SVGElement>, handle: EditHandle) => void;
@@ -240,6 +245,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     hoveredElementId,
     editableTextRegionKeys,
     draggableSourceIds,
+    hitRegionCursorByTargetId,
     onElementPointerDown,
     onElementContextMenu,
     onElementDoubleClick,
@@ -255,6 +261,10 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     curveControlLines,
     curveControlStrokeWidth,
     nodeAnchorOverlay,
+    onNodeAnchorPointerDown,
+    onNodeAnchorClick,
+    onNodeAnchorHoverChange,
+    nodePositionTargetTooltip,
     handleHalfSize,
     handleDisplays,
     onHandlePointerDown,
@@ -659,6 +669,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   toolMode={toolMode}
                   editableTextRegionKeys={editableTextRegionKeys}
                   draggableSourceIds={draggableSourceIds}
+                  cursorByTargetId={hitRegionCursorByTargetId}
                   onElementPointerDown={onElementPointerDown}
                   onElementContextMenu={onElementContextMenu}
                   onElementDoubleClick={onElementDoubleClick}
@@ -694,6 +705,29 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   viewBox={svgResult.viewBox}
                   strokeWidth={handleStrokeWidth}
                   radius={handleHalfSize}
+                  onAnchorPointerDown={
+                    onNodeAnchorPointerDown
+                      ? (event, anchor) => {
+                          if (anchor.nodeSourceId) {
+                            onNodeAnchorPointerDown(event, anchor.nodeSourceId);
+                          }
+                        }
+                      : undefined
+                  }
+                  onAnchorClick={
+                    onNodeAnchorClick
+                      ? (event, anchor) => {
+                          if (anchor.nodeSourceId) {
+                            onNodeAnchorClick(event, anchor.nodeSourceId);
+                          }
+                        }
+                      : undefined
+                  }
+                  onAnchorHoverChange={
+                    onNodeAnchorHoverChange
+                      ? (anchor) => { onNodeAnchorHoverChange(anchor?.nodeSourceId ?? null); }
+                      : undefined
+                  }
                 />
 
                 {toolMode === "select" && (
@@ -910,6 +944,15 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             />
           ) : null}
 
+          {nodePositionTargetTooltip ? (
+            <RenderedTooltip
+              content={nodePositionTargetTooltip.content}
+              open
+              anchor={nodePositionTargetTooltip.anchor}
+              data-testid="node-position-target-tooltip"
+            />
+          ) : null}
+
           {warning && (
             <RenderedTooltip content="Click to copy message" block>
               <div
@@ -926,7 +969,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               </div>
             </RenderedTooltip>
           )}
-          {selectionHint ? (
+          {selectionHint && !warning ? (
             <div className={css.selectionHint} data-testid="canvas-selection-hint" data-select="text">
               {selectionHint}
             </div>

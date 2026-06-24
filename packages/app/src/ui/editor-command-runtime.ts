@@ -69,6 +69,7 @@ import {
 
 import { requestSourceFormat } from "./source-sync";
 import { resolveOpenedFileForDocument, resolveOpenedPowerPointForDocument } from "./svg-import";
+import { resolveNodePositioningContextMenuAction } from "./canvas-panel/node-positioning-context-action";
 
 export type CommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
 
@@ -125,6 +126,8 @@ type RuntimeInput = {
   onRequestCloseAllDocuments?: () => void;
   onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
   onAddNodeAdornment?: (kind: "label" | "pin") => void;
+  onPositionNodeRelativeTo?: () => void;
+  onConvertNodePositionToAbsolute?: () => void;
   onShowCompiledPicture?: () => void;
   onOpenSettings?: () => void;
   onFocusAssistant?: () => void;
@@ -191,6 +194,8 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onRequestCloseAllDocuments,
     onRequestSaveDocument,
     onAddNodeAdornment,
+    onPositionNodeRelativeTo,
+    onConvertNodePositionToAbsolute,
     onShowCompiledPicture,
     onOpenSettings,
     onFocusAssistant,
@@ -356,6 +361,14 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           (resolved.target.kind === "path-statement" && resolved.target.pathCommand === "node"))
       );
     })();
+  const nodePositioningAction = singleSelectedId
+    ? resolveNodePositioningContextMenuAction({
+        source,
+        sourceId: singleSelectedId,
+        snapshot,
+        parseOptions
+      })
+    : null;
   const equationTarget = resolveEquationNodeTargetFromSelection(source, selectedElementIds, parseOptions);
   const canTreeAddChild = canAddTreeChild(commandContext);
   const canTreeAddSibling = canAddTreeSibling(commandContext);
@@ -849,6 +862,14 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       enabled: canAddAdornment && onAddNodeAdornment != null,
       run: () => onAddNodeAdornment?.("pin")
     },
+    [APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO]: {
+      enabled: nodePositioningAction === "position-relative" && onPositionNodeRelativeTo != null,
+      run: () => onPositionNodeRelativeTo?.()
+    },
+    [APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE]: {
+      enabled: nodePositioningAction === "convert-absolute" && onConvertNodePositionToAbsolute != null,
+      run: () => onConvertNodePositionToAbsolute?.()
+    },
     [APP_MENU_COMMAND_IDS.FIT_TO_CONTENT]: {
       enabled: snapshot.svg != null,
       checked: fitToContentModeActive,
@@ -1059,9 +1080,11 @@ export function useEditorCommandRuntime(
     onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
     onOpenPngExport?: (svgResult: EmitSvgResult) => void;
   onRequestCloseDocument?: (documentId: string) => void;
-  onRequestCloseAllDocuments?: () => void;
-  onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
+    onRequestCloseAllDocuments?: () => void;
+    onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
     onAddNodeAdornment?: (kind: "label" | "pin") => void;
+    onPositionNodeRelativeTo?: () => void;
+    onConvertNodePositionToAbsolute?: () => void;
     onShowCompiledPicture?: () => void;
     onOpenSettings?: () => void;
     onFocusAssistant?: () => void;
@@ -1195,6 +1218,8 @@ export function useEditorCommandRuntime(
         onRequestCloseAllDocuments: options.onRequestCloseAllDocuments,
         onRequestSaveDocument: options.onRequestSaveDocument,
         onAddNodeAdornment: options.onAddNodeAdornment,
+        onPositionNodeRelativeTo: options.onPositionNodeRelativeTo,
+        onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute,
         onShowCompiledPicture: options.onShowCompiledPicture,
         onOpenSettings: options.onOpenSettings,
         onCheckForUpdates: options.onCheckForUpdates,
@@ -1245,6 +1270,8 @@ export function useEditorCommandRuntime(
       options.onRequestCloseAllDocuments,
       options.onRequestSaveDocument,
       options.onAddNodeAdornment,
+      options.onPositionNodeRelativeTo,
+      options.onConvertNodePositionToAbsolute,
       options.onShowCompiledPicture,
       options.onOpenSettings,
       options.onCheckForUpdates,

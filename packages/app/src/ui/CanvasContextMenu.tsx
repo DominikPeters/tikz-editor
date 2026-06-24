@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import {
   CANVAS_CONTEXT_MENU_DEFINITION,
   type CanvasContextMenuDefinition,
   type CanvasContextMenuTarget
 } from "../context-menu";
-import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuItem } from "../app-menu";
+import type { AppMenuCommandId, AppMenuItem } from "../app-menu";
 import type { CommandOrigin, CommandBindings } from "./editor-command-runtime";
 import { clampContextMenuAnchor, type ContextMenuAnchor } from "./canvas-panel/context-menu-target";
 import css from "./CanvasContextMenu.module.css";
@@ -12,6 +13,11 @@ import css from "./CanvasContextMenu.module.css";
 const IS_MAC_PLATFORM =
   typeof navigator !== "undefined" &&
   /(mac|iphone|ipad)/i.test(navigator.platform);
+
+type ContextMenuInheritedStyle = CSSProperties & {
+  "--app-ui-font-size"?: string;
+  "--app-ui-scale"?: string;
+};
 
 function formatAccelerator(accelerator: string | undefined): string {
   if (!accelerator) {
@@ -86,9 +92,6 @@ function ContextMenuPopup({
         }
 
         const binding = bindings[item.commandId];
-        if (item.commandId === APP_MENU_COMMAND_IDS.FLATTEN_FOREACH && !binding.enabled) {
-          return null;
-        }
         const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
@@ -139,6 +142,7 @@ export function CanvasContextMenu({
 }) {
   const menuRootRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<ContextMenuAnchor>(anchor);
+  const [inheritedStyle, setInheritedStyle] = useState<ContextMenuInheritedStyle>({});
 
   useEffect(() => {
     if (!open) {
@@ -176,6 +180,18 @@ export function CanvasContextMenu({
       current.x === nextPosition.x && current.y === nextPosition.y
         ? current
         : nextPosition
+    );
+
+    const computedStyle = getComputedStyle(container);
+    const nextInheritedStyle: ContextMenuInheritedStyle = {
+      "--app-ui-font-size": computedStyle.getPropertyValue("--app-ui-font-size").trim() || undefined,
+      "--app-ui-scale": computedStyle.getPropertyValue("--app-ui-scale").trim() || undefined
+    };
+    setInheritedStyle((current) =>
+      current["--app-ui-font-size"] === nextInheritedStyle["--app-ui-font-size"] &&
+      current["--app-ui-scale"] === nextInheritedStyle["--app-ui-scale"]
+        ? current
+        : nextInheritedStyle
     );
   }, [anchor, containerRef, open, target]);
 
@@ -219,11 +235,22 @@ export function CanvasContextMenu({
 
   const items = definition[target];
 
-  return (
+  const containerRect = containerRef.current?.getBoundingClientRect();
+  const viewportPosition = containerRect
+    ? {
+        x: containerRect.left + position.x,
+        y: containerRect.top + position.y
+      }
+    : position;
+  const menu = (
     <div
       ref={menuRootRef}
       className={css.root}
-      style={{ left: `${position.x}px`, top: `${position.y}px` }}
+      style={{
+        ...inheritedStyle,
+        left: `${viewportPosition.x}px`,
+        top: `${viewportPosition.y}px`
+      }}
       role="menu"
       data-testid="canvas-context-menu"
     >
@@ -239,4 +266,6 @@ export function CanvasContextMenu({
       />
     </div>
   );
+
+  return typeof document === "undefined" ? menu : createPortal(menu, document.body);
 }

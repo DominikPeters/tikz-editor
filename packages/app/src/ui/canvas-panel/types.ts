@@ -43,6 +43,9 @@ export type CanvasContextMenuState = {
   anchor: ViewportPoint;
   handleIdOverride?: string | null;
   includeEditEquationForSingleNode?: boolean;
+  nodePositioningAction?: "position-relative" | "convert-absolute" | null;
+  includePathSubmenuForSingleSelection?: boolean;
+  includeFlattenForeach?: boolean;
   includeMatrixMultiRemoveRow?: boolean;
   includeMatrixMultiRemoveColumn?: boolean;
   includeMatrixMultiInsertRowAbove?: boolean;
@@ -307,6 +310,8 @@ export type TextEditingSession = {
 export type NodeAnchorOverlayState = {
   visibleAnchors: NodeAnchorTarget[];
   snappedAnchor: NodeAnchorTarget | null;
+  anchorStateBySourceId?: ReadonlyMap<string, { disabled?: boolean }>;
+  radiusScale?: number;
 };
 
 export type EditableTextTarget = {

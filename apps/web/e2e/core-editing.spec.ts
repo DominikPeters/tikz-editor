@@ -147,6 +147,96 @@ test("foreach element click remains selected after mouseup", async ({ page }) =>
   await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["foreach:0"]);
 });
 
+test("node context menu can position a node relative to an earlier named node", async ({ page }) => {
+  await gotoApp(page);
+  const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (2,0) {B};
+\end{tikzpicture}`;
+  await setSource(page, source);
+
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await expect(page.getByTestId("canvas-context-menu")).toBeVisible();
+  await expect(page.getByTestId("canvas-context-cmd-node.position-relative-to")).toBeVisible();
+  await expect(page.getByTestId("canvas-context-cmd-node.convert-to-absolute")).toHaveCount(0);
+
+  await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
+  await expect(page.getByTestId("canvas-selection-hint")).toHaveText(
+    "Select a named node to position relative to. Esc cancels."
+  );
+  const targetDot = page.getByTestId("node-anchor-dot");
+  await expect(targetDot).toHaveCount(1);
+  await targetDot.hover();
+  await expect(targetDot).toHaveAttribute("data-anchor-snapped", "true");
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("canvas-selection-hint")).toHaveCount(0);
+  await expect.poll(async () => readSource(page)).toBe(source);
+
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
+  await targetDot.click();
+
+  await expect.poll(async () => readSource(page)).toContain("right=");
+  const rewritten = await readSource(page);
+  expect(rewritten).toContain("of A");
+  expect(rewritten).not.toContain("at (2,0)");
+});
+
+test("node relative positioning target reports negative spacing when visual placement cannot be preserved", async ({ page }) => {
+  await gotoApp(page);
+  const source = String.raw`\begin{tikzpicture}
+  \node[draw, inner sep=4pt] (a) at (-0.2,2.66) {node a};
+  \node[draw, inner sep=1pt] (b) at (1.2,2.43) {node b};
+\end{tikzpicture}`;
+  await setSource(page, source);
+
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
+  const targetDot = page.getByTestId("node-anchor-dot");
+  await expect(targetDot).toHaveAttribute("data-anchor-disabled", "true");
+  await expect(targetDot.locator("title")).toHaveCount(0);
+  await expect(page.locator("[data-hit-region-target-id='path:0'] title")).toHaveCount(0);
+  await targetDot.hover();
+
+  await expect.poll(async () => targetDot.evaluate((el) => getComputedStyle(el).cursor)).toBe("not-allowed");
+  await expect(page.getByTestId("node-position-target-tooltip")).toContainText("overlap vertically");
+  await expect(page.getByTestId("canvas-selection-hint")).toHaveText(
+    "Select a named node to position relative to. Esc cancels."
+  );
+
+  await targetDot.click();
+
+  await expect(page.getByTestId("canvas-warning-message")).toHaveCount(0);
+  await expect(page.getByTestId("canvas-selection-hint")).toHaveText(
+    "Select a named node to position relative to. Esc cancels."
+  );
+  await expect.poll(async () => readSource(page)).toBe(source);
+});
+
+test("node relative positioning preserves app text metrics when converted back to absolute", async ({ page }) => {
+  await gotoApp(page);
+  const source = String.raw`\begin{tikzpicture}
+  \node[draw, inner sep=4pt] (a) at (-0.2,2.66) {node a};
+  \node[draw, inner sep=1pt] (b) at (1.35,1.8) {node b};
+\end{tikzpicture}`;
+  await setSource(page, source);
+
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
+  await page.getByTestId("node-anchor-dot").click();
+
+  await expect.poll(async () => readSource(page)).toContain("below right=");
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await expect(page.getByTestId("canvas-context-cmd-node.convert-to-absolute")).toBeVisible();
+  await page.getByTestId("canvas-context-cmd-node.convert-to-absolute").click();
+
+  await expect.poll(async () => readSource(page)).toContain("at (1.35,1.8)");
+  const rewritten = await readSource(page);
+  expect(rewritten).not.toContain("of a");
+  expect(rewritten).not.toContain("at (1.35,1.7)");
+});
+
 test("clipped geometry only targets the visible clipped area on canvas", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}

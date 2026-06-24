@@ -54,21 +54,29 @@ describe("canvas context menu definition", () => {
     expect(commandIds).toContain(APP_MENU_COMMAND_IDS.TOGGLE_GUIDES);
   });
 
-  it("defines selection-single with reorder submenu", () => {
+  it("defines selection-single with transform and reorder submenus", () => {
     const items = CANVAS_CONTEXT_MENU_DEFINITION["selection-single"];
     const reorder = items.find((item) => item.kind === "submenu" && item.label === "Reorder");
     const path = items.find((item) => item.kind === "submenu" && item.label === "Path");
 
     expect(reorder).toBeDefined();
-    expect(path).toBeDefined();
+    expect(path).toBeUndefined();
     expect(items.some((item) => item.kind === "submenu" && (item.label) === "Align")).toBe(false);
     expect(items.some((item) => item.kind === "submenu" && (item.label) === "Distribute")).toBe(false);
-    if (!path || path.kind !== "submenu") {
-      throw new Error("Expected Path submenu on single selection context menu.");
-    }
     expect(collectCommandIds(items)).not.toContain(APP_MENU_COMMAND_IDS.TREE_ADD_CHILD);
     expect(collectCommandIds(items)).not.toContain(APP_MENU_COMMAND_IDS.TREE_ADD_SIBLING_BEFORE);
     expect(collectCommandIds(items)).not.toContain(APP_MENU_COMMAND_IDS.TREE_ADD_SIBLING_AFTER);
+  });
+
+  it("adds the Path submenu to selection-single only when opted in", () => {
+    const definition = buildCanvasContextMenuDefinition({ includePathSubmenuForSingleSelection: true });
+    const items = definition["selection-single"];
+    const path = items.find((item) => item.kind === "submenu" && item.label === "Path");
+
+    expect(path).toBeDefined();
+    if (!path || path.kind !== "submenu") {
+      throw new Error("Expected Path submenu on single selection context menu.");
+    }
     expect(collectCommandIds(path.items)).toContain(APP_MENU_COMMAND_IDS.PATH_REVERSE);
   });
 
@@ -88,6 +96,8 @@ describe("canvas context menu definition", () => {
 
     expect(commandIds).toContain(APP_MENU_COMMAND_IDS.ADD_LABEL);
     expect(commandIds).toContain(APP_MENU_COMMAND_IDS.ADD_PIN);
+    expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO);
+    expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE);
     expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.EDIT_EQUATION);
     expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.TREE_ADD_CHILD);
     expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.TREE_ADD_SIBLING_BEFORE);
@@ -97,6 +107,38 @@ describe("canvas context menu definition", () => {
       APP_MENU_COMMAND_IDS.ADD_PIN
     ]);
     expect(items[2]).toEqual({ kind: "separator" });
+  });
+
+  it("places Position Relative To below Add Label and Add Pin when requested", () => {
+    const definition = buildCanvasContextMenuDefinition({ nodePositioningAction: "position-relative" });
+    const items = definition["selection-single-node"];
+    const commandIds = collectCommandIds(items);
+
+    expect(commandIds).toContain(APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO);
+    expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE);
+    expect(items.slice(0, 5).map((item) => item.kind === "command" ? item.commandId : "separator")).toEqual([
+      APP_MENU_COMMAND_IDS.ADD_LABEL,
+      APP_MENU_COMMAND_IDS.ADD_PIN,
+      "separator",
+      APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO,
+      "separator"
+    ]);
+  });
+
+  it("places Convert to Absolute Position below Add Label and Add Pin when requested", () => {
+    const definition = buildCanvasContextMenuDefinition({ nodePositioningAction: "convert-absolute" });
+    const items = definition["selection-single-node"];
+    const commandIds = collectCommandIds(items);
+
+    expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO);
+    expect(commandIds).toContain(APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE);
+    expect(items.slice(0, 5).map((item) => item.kind === "command" ? item.commandId : "separator")).toEqual([
+      APP_MENU_COMMAND_IDS.ADD_LABEL,
+      APP_MENU_COMMAND_IDS.ADD_PIN,
+      "separator",
+      APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE,
+      "separator"
+    ]);
   });
 
   it("defines selection-single-node-tree with tree actions above node actions", () => {
@@ -193,11 +235,14 @@ describe("canvas context menu definition", () => {
 
   it("defines selection-multi with align, distribute, and reorder submenus", () => {
     const items = CANVAS_CONTEXT_MENU_DEFINITION["selection-multi"];
+    const commandIds = collectCommandIds(items);
 
     expect(items.some((item) => item.kind === "submenu" && item.label === "Align")).toBe(true);
     expect(items.some((item) => item.kind === "submenu" && item.label === "Transform")).toBe(true);
     expect(items.some((item) => item.kind === "submenu" && item.label === "Distribute")).toBe(true);
     expect(items.some((item) => item.kind === "submenu" && item.label === "Reorder")).toBe(true);
+    expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO);
+    expect(commandIds).not.toContain(APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE);
   });
 
   it("prepends row insertion/removal items to selection-multi when matrix row actions are enabled", () => {
@@ -331,9 +376,23 @@ describe("canvas context menu definition", () => {
       expect(ungroupIndex).toBe(groupIndex + 1);
       expect(items[ungroupIndex + 1]).toEqual({ kind: "separator" });
       expect(repeatIndex).toBe(ungroupIndex + 2);
-      expect(flattenIndex).toBe(repeatIndex + 1);
-      expect(items[flattenIndex + 1]).toEqual({ kind: "separator" });
+      expect(flattenIndex).toBe(-1);
+      expect(items[repeatIndex + 1]).toEqual({ kind: "separator" });
     }
+  });
+
+  it("adds Flatten foreach below Repeat only when opted in", () => {
+    const definition = buildCanvasContextMenuDefinition({ includeFlattenForeach: true });
+    const items = definition["selection-single"];
+    const repeatIndex = items.findIndex(
+      (item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.REPEAT
+    );
+    const flattenIndex = items.findIndex(
+      (item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.FLATTEN_FOREACH
+    );
+
+    expect(flattenIndex).toBe(repeatIndex + 1);
+    expect(items[flattenIndex + 1]).toEqual({ kind: "separator" });
   });
 
   it("groups selection-multi transform with align, distribute, and reorder without separators", () => {

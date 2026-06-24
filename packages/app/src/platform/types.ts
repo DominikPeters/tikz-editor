@@ -79,6 +79,7 @@ export type PlatformMenu = {
   showNativeContextMenu?: (payload: {
     items: readonly AppMenuItem[];
     commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
 };
 

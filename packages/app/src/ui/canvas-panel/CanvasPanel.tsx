@@ -11,6 +11,7 @@ useState,
 type ClipboardEvent as ReactClipboardEvent,
 type DragEvent as ReactDragEvent,
 type KeyboardEvent as ReactKeyboardEvent,
+type MouseEvent as ReactMouseEvent,
 type PointerEvent as ReactPointerEvent,
 type SyntheticEvent as ReactSyntheticEvent
 } from "react";
@@ -20,7 +21,8 @@ ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
 PROPERTY_WRITE_CLEANUP_NOOP_REASON,
 applyEditAction,
-type EditAction
+type EditAction,
+type EditActionResult
 } from "tikz-editor/edit/actions";
 import { PT_PER_CM,formatNumber } from "tikz-editor/edit/format";
 import {
@@ -30,6 +32,7 @@ resolvePropertyTargetFromParseResult
 import type { SnapLine } from "tikz-editor/edit/snapping";
 import { renderTikzToSvg } from "tikz-editor/render/index";
 import type {
+NodeAnchorTarget,
 SceneElement
 } from "tikz-editor/semantic/types";
 import type { SvgRenderModel } from "tikz-editor/svg";
@@ -76,6 +79,7 @@ import {
 pickClosestSourceId
 } from "./interaction-helpers";
 import { resolveNodeAdornmentContextAction } from "./node-adornment-context-action";
+import { collectRelativePositionTargetAnchors } from "./node-positioning-context-action";
 import {
 canvasDragKindFromDragState,
 collectNewSourceIds,
@@ -112,6 +116,7 @@ import { createSourceRenderOffsetMap } from "./text-offset-map";
 import { applyTextMeasureFont,collectLogicalLineRanges,createVisualTextLayout,resolveVisualLineLeft } from "./text-visual-layout";
 import type {
 ApplyActionFeedback,
+CanvasSnapshot,
 DragState,
 DragTooltipState,
 EditableTextTarget,
@@ -220,6 +225,86 @@ const DESKTOP_TIKZ_CLIPBOARD_FORMATS = [
   "application/x-tikz-editor+json",
   "com.tikzeditor.tikz-json"
 ] as const;
+
+type NodePositionTargetStatus = {
+  anchor: NodeAnchorTarget;
+  action: EditAction;
+  result: EditActionResult;
+  usable: boolean;
+  reason: string | null;
+};
+
+function formatNodePositionTargetFailureReason(input: {
+  rawReason: string;
+  currentNodeSourceId: string;
+  target: NodeAnchorTarget;
+  snapshot: CanvasSnapshot;
+}): string {
+  if (!input.rawReason.toLowerCase().includes("negative positioning distance")) {
+    return `Cannot position relative to ${input.target.nodeName}: ${input.rawReason}`;
+  }
+
+  const currentAnchors = collectBasicNodeAnchors(input.snapshot, input.currentNodeSourceId);
+  const targetAnchors = input.target.nodeSourceId
+    ? collectBasicNodeAnchors(input.snapshot, input.target.nodeSourceId)
+    : null;
+  if (!currentAnchors || !targetAnchors) {
+    return `Cannot position relative to ${input.target.nodeName}: this placement would require a negative positioning distance.`;
+  }
+
+  const horizontalOverlap = intervalsOverlap(
+    currentAnchors.west.world.x,
+    currentAnchors.east.world.x,
+    targetAnchors.west.world.x,
+    targetAnchors.east.world.x
+  );
+  const verticalOverlap = intervalsOverlap(
+    currentAnchors.south.world.y,
+    currentAnchors.north.world.y,
+    targetAnchors.south.world.y,
+    targetAnchors.north.world.y
+  );
+
+  if (horizontalOverlap && verticalOverlap) {
+    return `Cannot position relative to ${input.target.nodeName}: the node boxes overlap, so a one-option relative placement would need a negative distance.`;
+  }
+  if (verticalOverlap) {
+    return `Cannot position relative to ${input.target.nodeName}: the nodes overlap vertically, so a diagonal placement would need a negative vertical distance.`;
+  }
+  if (horizontalOverlap) {
+    return `Cannot position relative to ${input.target.nodeName}: the nodes overlap horizontally, so a diagonal placement would need a negative horizontal distance.`;
+  }
+
+  return `Cannot position relative to ${input.target.nodeName}: this placement would require a negative positioning distance.`;
+}
+
+function collectBasicNodeAnchors(snapshot: CanvasSnapshot, sourceId: string): {
+  north: NodeAnchorTarget;
+  south: NodeAnchorTarget;
+  east: NodeAnchorTarget;
+  west: NodeAnchorTarget;
+} | null {
+  const anchors = new Map<string, NodeAnchorTarget>();
+  for (const anchor of snapshot.semanticResult?.nodeAnchorTargets ?? []) {
+    if (anchor.nodeSourceId === sourceId) {
+      anchors.set(anchor.anchor, anchor);
+    }
+  }
+  const north = anchors.get("north");
+  const south = anchors.get("south");
+  const east = anchors.get("east");
+  const west = anchors.get("west");
+  return north && south && east && west ? { north, south, east, west } : null;
+}
+
+function intervalsOverlap(a0: number, a1: number, b0: number, b1: number): boolean {
+  const leftMin = Math.min(a0, a1);
+  const leftMax = Math.max(a0, a1);
+  const rightMin = Math.min(b0, b1);
+  const rightMax = Math.max(b0, b1);
+  return leftMin < rightMax && rightMin < leftMax;
+}
+
 const DOCUMENT_BOUNDS_OFF_MIN_PADDING_WORLD = 200;
 const TEXT_CARET_OVERLAY_EPSILON_PX = 0.25;
 const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
@@ -791,6 +876,10 @@ export const CanvasPanel = memo(function CanvasPanel({
   const textEditingSession = canvasTextEditState.session;
   const textSelectionOverlay = canvasTextEditState.selectionOverlay;
   const [pendingAdornmentTextEditTargetId, setPendingAdornmentTextEditTargetId] = useState<string | null>(null);
+  const [pendingNodePositionTargetPick, setPendingNodePositionTargetPick] = useState<{ nodeSourceId: string } | null>(null);
+  const suppressNodeAnchorClickRef = useRef(false);
+  const [pendingNodePositionAnchorHoverSourceId, setPendingNodePositionAnchorHoverSourceId] = useState<string | null>(null);
+  const [activeTextEngine, setActiveTextEngine] = useState<NodeTextEngine | null>(null);
   const [pathAttachedNodePreview, setPathAttachedNodePreview] = useState<{ sourceId: string; dx: number; dy: number } | null>(null);
   const [dragPatchMode, setDragPatchMode] = useState<"partial" | "full">("partial");
   const contextMenus = useCanvasContextMenuState();
@@ -798,6 +887,12 @@ export const CanvasPanel = memo(function CanvasPanel({
   const [equationModalTarget, setEquationModalTarget] = useState<EquationNodeTarget | null>(null);
   const [expandedDensePathSourceId, setExpandedDensePathSourceId] = useState<string | null>(null);
   const fitToContentModeActiveRef = useRef(fitToContentModeActive);
+  const clearPendingNodePositionTargetPick = useCallback(() => {
+    suppressNodeAnchorClickRef.current = false;
+    setPendingNodePositionTargetPick(null);
+    setPendingNodePositionAnchorHoverSourceId(null);
+    setNodeAnchorOverlay(null);
+  }, []);
   const setFitToContentModeActive = useCallback(
     (active: boolean) => {
       fitToContentModeActiveRef.current = active;
@@ -935,6 +1030,26 @@ export const CanvasPanel = memo(function CanvasPanel({
         action: result.action
       });
       setPendingAdornmentTextEditTargetId(result.pendingTextTargetId);
+    },
+    onPositionNodeRelativeTo: () => {
+      const selectedSourceId = selectedElementIds.size === 1 ? [...selectedElementIds][0] ?? null : null;
+      if (!selectedSourceId) {
+        return;
+      }
+      closeTextEditingSession();
+      clearPendingNodePositionTargetPick();
+      setPendingNodePositionTargetPick({ nodeSourceId: selectedSourceId });
+    },
+    onConvertNodePositionToAbsolute: () => {
+      const selectedSourceId = selectedElementIds.size === 1 ? [...selectedElementIds][0] ?? null : null;
+      if (!selectedSourceId) {
+        return;
+      }
+      applyActionWithFeedback({
+        kind: "convertNodePositionToAbsolute",
+        nodeId: selectedSourceId
+      });
+      clearPendingNodePositionTargetPick();
     },
     onOpenEditEquation: (target) => {
       setEquationModalTarget(target);
@@ -1177,11 +1292,13 @@ export const CanvasPanel = memo(function CanvasPanel({
       .then((engine) => {
         if (!cancelled) {
           textEngineRef.current = engine;
+          setActiveTextEngine(engine);
         }
       })
       .catch(() => {
         if (!cancelled) {
           textEngineRef.current = null;
+          setActiveTextEngine(null);
         }
       });
     return () => {
@@ -1309,9 +1426,164 @@ export const CanvasPanel = memo(function CanvasPanel({
     warning
   ]);
 
+  const pendingNodePositionTargetAnchors = useMemo(
+    () =>
+      collectRelativePositionTargetAnchors({
+        snapshot,
+        sourceId: pendingNodePositionTargetPick?.nodeSourceId ?? null
+      }),
+    [pendingNodePositionTargetPick?.nodeSourceId, snapshot]
+  );
+  const pendingNodePositionTargetStatusBySourceId = useMemo(() => {
+    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
+    if (!pendingNodePositionTargetPick || pendingNodePositionTargetAnchors.length === 0) {
+      return statusBySourceId;
+    }
+    const sourceFingerprint = buildSnapshotEditSourceFingerprint({
+      documentId: activeDocumentId,
+      sourceRevision,
+      sourceLength: source.length,
+      sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
+    });
+    for (const anchor of pendingNodePositionTargetAnchors) {
+      const targetSourceId = anchor.nodeSourceId?.trim();
+      if (!targetSourceId) {
+        continue;
+      }
+      const action: EditAction = {
+        kind: "positionNodeRelativeTo",
+        nodeId: pendingNodePositionTargetPick.nodeSourceId,
+        targetNodeName: anchor.nodeName,
+        targetNodeSourceId: targetSourceId
+      };
+      const result = applyEditAction(source, snapshot.editHandles, action, {
+        evaluateOptions: { sourceFingerprint, textEngine: activeTextEngine },
+        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
+      });
+      if (result.kind === "success" || result.kind === "partial") {
+        statusBySourceId.set(targetSourceId, { anchor, action, result, usable: true, reason: null });
+        continue;
+      }
+      const rawReason = result.kind === "unsupported" ? result.reason : result.message;
+      statusBySourceId.set(targetSourceId, {
+        anchor,
+        action,
+        result,
+        usable: false,
+        reason: formatNodePositionTargetFailureReason({
+          rawReason,
+          currentNodeSourceId: pendingNodePositionTargetPick.nodeSourceId,
+          target: anchor,
+          snapshot
+        })
+      });
+    }
+    return statusBySourceId;
+  }, [
+    activeDocumentId,
+    activeTextEngine,
+    editParseOptions,
+    pendingNodePositionTargetAnchors,
+    pendingNodePositionTargetPick,
+    snapshot,
+    source,
+    sourceRevision
+  ]);
+
+  const pendingNodePositionHitRegionCursorByTargetId = useMemo(() => {
+    if (!pendingNodePositionTargetPick) {
+      return;
+    }
+    const cursorByTargetId = new Map<string, string>();
+    for (const [sourceId, status] of pendingNodePositionTargetStatusBySourceId) {
+      cursorByTargetId.set(sourceId, status.usable ? "pointer" : "not-allowed");
+    }
+    return cursorByTargetId;
+  }, [pendingNodePositionTargetPick, pendingNodePositionTargetStatusBySourceId]);
+
+  const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
+    ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
+    : null;
+
+  const pendingNodePositionAnchorOverlay = useMemo<NodeAnchorOverlayState | null>(() => {
+    if (!pendingNodePositionTargetPick || pendingNodePositionTargetAnchors.length === 0) {
+      return null;
+    }
+    const hoveredStatus = pendingNodePositionEffectiveHoverSourceId
+      ? pendingNodePositionTargetStatusBySourceId.get(pendingNodePositionEffectiveHoverSourceId)
+      : null;
+    const anchorStateBySourceId = new Map<string, { disabled?: boolean }>();
+    for (const [sourceId, status] of pendingNodePositionTargetStatusBySourceId) {
+      anchorStateBySourceId.set(sourceId, {
+        disabled: !status.usable
+      });
+    }
+    return {
+      visibleAnchors: pendingNodePositionTargetAnchors,
+      snappedAnchor: hoveredStatus?.usable ? hoveredStatus.anchor : null,
+      anchorStateBySourceId,
+      radiusScale: 1.45
+    };
+  }, [
+    pendingNodePositionEffectiveHoverSourceId,
+    pendingNodePositionTargetAnchors,
+    pendingNodePositionTargetPick,
+    pendingNodePositionTargetStatusBySourceId
+  ]);
+
+  const nodePositionTargetTooltip = useMemo(() => {
+    if (!pendingNodePositionTargetPick || !pendingNodePositionEffectiveHoverSourceId || !svgResult) {
+      return null;
+    }
+    const status = pendingNodePositionTargetStatusBySourceId.get(pendingNodePositionEffectiveHoverSourceId);
+    if (!status || status.usable || !status.reason) {
+      return null;
+    }
+    const viewportRect = viewportRef.current?.getBoundingClientRect();
+    if (!viewportRect) {
+      return null;
+    }
+    const svg = worldToSvgPoint(status.anchor.world, svgResult.viewBox);
+    return {
+      content: status.reason,
+      anchor: {
+        x: viewportRect.left + canvasTransform.translateX + (svg.x - svgResult.viewBox.x) * canvasTransform.scale,
+        y: viewportRect.top + canvasTransform.translateY + (svg.y - svgResult.viewBox.y) * canvasTransform.scale
+      }
+    };
+  }, [
+    canvasTransform.scale,
+    canvasTransform.translateX,
+    canvasTransform.translateY,
+    pendingNodePositionEffectiveHoverSourceId,
+    pendingNodePositionTargetPick,
+    pendingNodePositionTargetStatusBySourceId,
+    svgResult
+  ]);
+
+  const nodePositionSelectionHint = pendingNodePositionTargetPick
+    ? "Select a named node to position relative to. Esc cancels."
+    : null;
+  const canvasSelectionHint = nodePositionSelectionHint ?? pathSelectionHint;
+
   useEffect(() => {
-    dispatch({ type: "SET_CANVAS_STATUS_HINT", hint: pathSelectionHint });
-  }, [dispatch, pathSelectionHint]);
+    if (!pendingNodePositionTargetPick) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      clearPendingNodePositionTargetPick();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => { window.removeEventListener("keydown", handleKeyDown); };
+  }, [clearPendingNodePositionTargetPick, pendingNodePositionTargetPick]);
+
+  useEffect(() => {
+    dispatch({ type: "SET_CANVAS_STATUS_HINT", hint: canvasSelectionHint });
+  }, [canvasSelectionHint, dispatch]);
 
   useEffect(() => {
     return () => {
@@ -2399,6 +2671,89 @@ export const CanvasPanel = memo(function CanvasPanel({
     return () => { window.removeEventListener("pointerdown", handleGlobalPointerDown, true); };
   }, [dispatchCanvasTextEditAction, textEditingSession]);
 
+  const handleNodePositionTargetPick = useCallback(
+    (targetId: string): boolean => {
+      if (!pendingNodePositionTargetPick) {
+        return false;
+      }
+      const target = pendingNodePositionTargetAnchors.find((anchor) => anchor.nodeSourceId === targetId);
+      if (!target?.nodeSourceId) {
+        return true;
+      }
+      const status = pendingNodePositionTargetStatusBySourceId.get(target.nodeSourceId);
+      if (status && !status.usable) {
+        return true;
+      }
+      const action: EditAction = status?.action ?? {
+        kind: "positionNodeRelativeTo",
+        nodeId: pendingNodePositionTargetPick.nodeSourceId,
+        targetNodeName: target.nodeName,
+        targetNodeSourceId: target.nodeSourceId
+      };
+      if (status?.result.kind === "success" || status?.result.kind === "partial") {
+        if (status.result.kind === "partial") {
+          const skippedCount = status.result.skippedHandles.length;
+          setWarning(`${status.result.reason} (${skippedCount} handle${skippedCount === 1 ? "" : "s"} skipped)`);
+        }
+        dispatch({
+          type: "APPLY_EDIT_ACTION",
+          action,
+          precomputedSource: source,
+          precomputedResult: status.result
+        });
+      } else {
+        applyActionWithFeedback(action);
+      }
+      clearPendingNodePositionTargetPick();
+      return true;
+    },
+    [
+      applyActionWithFeedback,
+      clearPendingNodePositionTargetPick,
+      dispatch,
+      pendingNodePositionTargetAnchors,
+      pendingNodePositionTargetPick,
+      pendingNodePositionTargetStatusBySourceId,
+      source
+    ]
+  );
+
+  const handleNodeAnchorPointerDown = useCallback(
+    (event: ReactPointerEvent<SVGCircleElement>, targetId: string) => {
+      if (!handleNodePositionTargetPick(targetId)) {
+        return;
+      }
+      suppressNodeAnchorClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNodeAnchorClickRef.current = false;
+      }, 0);
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextBackgroundClickRef.current = true;
+    },
+    [handleNodePositionTargetPick, suppressNextBackgroundClickRef]
+  );
+
+  // Tauri/macOS can drop the first pointerdown after a native context menu closes.
+  // Keep click as a fallback, but suppress it when pointerdown already handled the pick.
+  const handleNodeAnchorClick = useCallback(
+    (event: ReactMouseEvent<SVGCircleElement>, targetId: string) => {
+      if (suppressNodeAnchorClickRef.current) {
+        suppressNodeAnchorClickRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (!handleNodePositionTargetPick(targetId)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextBackgroundClickRef.current = true;
+    },
+    [handleNodePositionTargetPick, suppressNextBackgroundClickRef]
+  );
+
   const { onElementPointerDown, onElementDoubleClick } = useCanvasElementInteractions({
     svgResult,
     toolMode,
@@ -2460,7 +2815,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     focusedScopeId,
     applyActionWithFeedback,
     activeFigureId,
-    parseOptions: editParseOptions
+    parseOptions: editParseOptions,
+    onNodePositionTargetPick: handleNodePositionTargetPick
   });
 
   const {
@@ -2568,6 +2924,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     platform,
     commandBindings: commandRuntime.bindings,
     source,
+    snapshot,
     toolMode,
     selectedElementIds,
     focusedScopeId,
@@ -2653,6 +3010,18 @@ export const CanvasPanel = memo(function CanvasPanel({
     parseOptions: editParseOptions,
     magnifierState
   });
+
+  const handleBackgroundClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement | SVGSVGElement>) => {
+      if (pendingNodePositionTargetPick && event.target === event.currentTarget) {
+        event.preventDefault();
+        clearPendingNodePositionTargetPick();
+        return;
+      }
+      onBackgroundClick(event);
+    },
+    [clearPendingNodePositionTargetPick, onBackgroundClick, pendingNodePositionTargetPick]
+  );
 
   const {
     onViewportKeyDown,
@@ -3175,6 +3544,9 @@ export const CanvasPanel = memo(function CanvasPanel({
     () =>
       buildCanvasContextMenuDefinition({
         includeEditEquationForSingleNode: contextMenuState?.includeEditEquationForSingleNode ?? false,
+        nodePositioningAction: contextMenuState?.nodePositioningAction ?? null,
+        includePathSubmenuForSingleSelection: contextMenuState?.includePathSubmenuForSingleSelection ?? false,
+        includeFlattenForeach: contextMenuState?.includeFlattenForeach ?? false,
         includeMatrixMultiInsertRowAbove: contextMenuState?.includeMatrixMultiInsertRowAbove ?? false,
         includeMatrixMultiInsertRowBelow: contextMenuState?.includeMatrixMultiInsertRowBelow ?? false,
         includeMatrixMultiRemoveRow: contextMenuState?.includeMatrixMultiRemoveRow ?? false,
@@ -3184,6 +3556,9 @@ export const CanvasPanel = memo(function CanvasPanel({
       }),
     [
       contextMenuState?.includeEditEquationForSingleNode,
+      contextMenuState?.nodePositioningAction,
+      contextMenuState?.includePathSubmenuForSingleSelection,
+      contextMenuState?.includeFlattenForeach,
       contextMenuState?.includeMatrixMultiInsertRowAbove,
       contextMenuState?.includeMatrixMultiInsertRowBelow,
       contextMenuState?.includeMatrixMultiRemoveRow,
@@ -3214,7 +3589,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         onViewportPaste={onViewportPaste}
         onViewportDragOver={onViewportDragOver}
         onViewportDrop={onViewportDrop}
-        onBackgroundClick={onBackgroundClick}
+        onBackgroundClick={handleBackgroundClick}
         onViewportPointerDown={onViewportPointerDown}
         onViewportPointerUp={onViewportPointerUp}
         svgResult={svgResult}
@@ -3257,6 +3632,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         hoveredElementId={hoveredElementId}
         editableTextRegionKeys={editableTextRegionKeys}
         draggableSourceIds={draggableSourceIds}
+        hitRegionCursorByTargetId={pendingNodePositionHitRegionCursorByTargetId}
         onElementPointerDown={onElementPointerDown}
         onElementContextMenu={onElementContextMenu}
         onElementDoubleClick={onElementDoubleClick}
@@ -3271,7 +3647,15 @@ export const CanvasPanel = memo(function CanvasPanel({
         matrixSelectionSourceIds={matrixSelectionSourceIds}
         curveControlLines={curveControlLines}
         curveControlStrokeWidth={curveControlStrokeWidth}
-        nodeAnchorOverlay={nodeAnchorOverlay}
+        nodeAnchorOverlay={pendingNodePositionAnchorOverlay ?? nodeAnchorOverlay}
+        onNodeAnchorPointerDown={pendingNodePositionTargetPick ? handleNodeAnchorPointerDown : undefined}
+        onNodeAnchorClick={pendingNodePositionTargetPick ? handleNodeAnchorClick : undefined}
+        onNodeAnchorHoverChange={
+          pendingNodePositionTargetPick
+            ? setPendingNodePositionAnchorHoverSourceId
+            : undefined
+        }
+        nodePositionTargetTooltip={nodePositionTargetTooltip}
         handleHalfSize={handleHalfSize}
         handleDisplays={handleDisplays}
         onHandlePointerDown={onHandlePointerDown}
@@ -3306,7 +3690,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         onTextEditTextareaPaste={handleTextEditTextareaPaste}
         onTextEditTextareaDrop={handleTextEditTextareaDrop}
         onTextEditTextareaKeyDown={handleTextEditTextareaKeyDown}
-        selectionHint={pathSelectionHint}
+        selectionHint={canvasSelectionHint}
         showDevPanel={false}
         snapDebugRect={snapDebugRect}
         onSnapDebugMovePointerDown={onSnapDebugMovePointerDown}

@@ -1049,6 +1049,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
   let bridgeOverride: DesktopBridge | null = null;
   const getBridge = () => bridgeOverride ?? readInjectedTestEnvironment().bridge ?? mergedEnv.bridge ?? defaultBridge;
   let menuHandler: MenuCommandHandler | null = null;
+  const contextMenuHandlersByRequestId = new Map<string, MenuCommandHandler>();
   let openRequestHandler: ((opened: { source: string; fileRef: DocumentFileRef | null }) => void) | null = null;
   let closeRequestHandler: (() => void) | null = null;
   const pendingOpenedBuffer: Array<{ source: string; fileRef: DocumentFileRef | null }> = [];
@@ -1154,6 +1155,12 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         return null;
       });
     contextMenuCommandUnlistenPromise ??= getBridge().onContextMenuCommand((payload) => {
+        const contextMenuHandler = contextMenuHandlersByRequestId.get(payload.requestId);
+        if (contextMenuHandler) {
+          contextMenuHandlersByRequestId.delete(payload.requestId);
+          contextMenuHandler(payload.commandId, "context-menu");
+          return;
+        }
         menuHandler?.(payload.commandId, "context-menu");
       }).catch((error: unknown) => {
         logDesktopPlatformDebug("Failed to register native context menu hook.", error);
@@ -1237,10 +1244,25 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       showNativeContextMenu: async (payload) => {
         nextContextMenuRequestId += 1;
         const requestId = `ctx-${Date.now()}-${nextContextMenuRequestId}`;
-        await getBridge().showContextMenu({
-          requestId,
-          items: serializeDesktopContextMenuItems(payload.items, payload.commandStates)
-        });
+        let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
+        if (payload.onCommandRun) {
+          contextMenuHandlersByRequestId.set(requestId, payload.onCommandRun);
+          cleanupTimeout = setTimeout(() => {
+            contextMenuHandlersByRequestId.delete(requestId);
+          }, 30_000);
+        }
+        try {
+          await getBridge().showContextMenu({
+            requestId,
+            items: serializeDesktopContextMenuItems(payload.items, payload.commandStates)
+          });
+        } catch (error) {
+          contextMenuHandlersByRequestId.delete(requestId);
+          if (cleanupTimeout != null) {
+            clearTimeout(cleanupTimeout);
+          }
+          throw error;
+        }
       }
     },
     window: {

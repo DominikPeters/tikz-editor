@@ -2531,6 +2531,9 @@ pub fn run() {
                 };
 
                 if let Some(window) = handle.get_webview_window("main") {
+                    // Native context menu dismissal can leave the WKWebView in a state where
+                    // the first mouse-down after this command is consumed by focus restoration.
+                    let _ = window.set_focus();
                     let _ = window.emit(
                         "desktop-context-menu-command",
                         DesktopContextMenuCommandEvent {

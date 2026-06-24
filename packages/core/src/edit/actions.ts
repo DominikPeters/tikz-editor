@@ -71,6 +71,12 @@ import {
   applyRemoveMatrixRowAction,
   applyTransposeMatrixAction
 } from "./actions/matrix-structure-actions.js";
+import {
+  applyConvertNodePositionToAbsoluteAction,
+  applyPositionNodeRelativeToAction,
+  type ConvertNodePositionToAbsoluteAction,
+  type PositionNodeRelativeToAction
+} from "./actions/node-positioning-actions.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "./parse-options.js";
 import { patchesMatchSourceTransition } from "./source-patches.js";
 import type { SemanticPropertyId } from "./property-registry.js";
@@ -141,6 +147,8 @@ export type EditAction =
     }
   | MovePathAttachedNodeAction
   | { kind: "addNodeAdornment"; nodeId: string; adornmentKind: "label" | "pin"; angle: string; text: string }
+  | PositionNodeRelativeToAction
+  | ConvertNodePositionToAbsoluteAction
   | { kind: "reorderElements"; elementIds: string[]; direction: ReorderDirection }
   | { kind: "groupElements"; elementIds: string[] }
   | { kind: "ungroupElements"; elementIds: string[] }
@@ -273,6 +281,10 @@ export function applyEditAction(
         return applyMovePathAttachedNodeAction(source, action, parseOptions);
       case "addNodeAdornment":
         return applyAddNodeAdornmentAction(source, action, parseOptions);
+      case "positionNodeRelativeTo":
+        return applyPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions);
+      case "convertNodePositionToAbsolute":
+        return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions);
       case "reorderElements":
         return applyReorderElementsAction(source, action.elementIds, action.direction, parseOptions);
       case "groupElements":

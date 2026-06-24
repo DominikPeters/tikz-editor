@@ -769,6 +769,7 @@ export function collectNodeAnchorTargets(context: SemanticContext): NodeAnchorTa
       seen.add(key);
       targets.push({
         nodeName,
+        nodeSourceId: geometry.sourceId,
         anchor: normalizedAnchor,
         world: worldPoint(pt(world.x), pt(world.y)),
         tier: BASIC_ANCHORS.has(normalizedAnchor) ? "basic" : "special"
