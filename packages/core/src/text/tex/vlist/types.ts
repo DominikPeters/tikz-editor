@@ -137,6 +137,7 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
+  readonly sourceHitPolicy?: "caret" | "source-range";
   readonly listContext?: SimpleTexListContext;
   readonly ignoreAncestorBreakMargins?: boolean;
   readonly useScopedLineWidth?: boolean;
@@ -437,6 +438,7 @@ export interface TexVListParagraphPlacement {
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
   readonly sourceSpan: TexSourceSpan;
+  readonly sourceHitPolicy: "caret" | "source-range";
   readonly lineIndices: readonly number[];
   readonly x: number;
   readonly y: number;

@@ -1346,7 +1346,7 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
     if (!report) {
-      return;
+      throw new Error("expected TeX-derived paragraph report");
     }
     const mathSegment = report.lines[0]?.segments.find((segment) => segment.kind === "math");
     expect(mathSegment?.caretStops).toBeTruthy();
@@ -1414,6 +1414,7 @@ describe("knuth-plass hitmap line ranges", () => {
             blockIndex: 0,
             vlistPath: [0],
             sourceSpan: { start: 0, end: 17 },
+            sourceHitPolicy: "caret",
             lineIndices: [0, 1],
             x: 0,
             y: 0,
@@ -1478,7 +1479,7 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(layout.supported).toBe(true);
     expect(layout.vlistLayout).toBeTruthy();
     if (!layout.vlistLayout) {
-      return;
+      throw new Error("expected intertext vlist layout");
     }
 
     const outputJax = {};
@@ -1502,7 +1503,7 @@ describe("knuth-plass hitmap line ranges", () => {
     );
     expect(intertextParagraph).toBeTruthy();
     if (!intertextParagraph) {
-      return;
+      throw new Error("expected registered intertext paragraph geometry");
     }
 
     const hit = getKnuthPlassVListSourceHitFromSnapshot({

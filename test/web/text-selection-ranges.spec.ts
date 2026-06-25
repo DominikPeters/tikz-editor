@@ -27,4 +27,13 @@ describe("canvas text selection ranges", () => {
       end: text.indexOf("y") + 1,
     });
   });
+
+  it("does not expand selections for incomplete inline math delimiters", () => {
+    const text = String.raw`node $x=y`;
+
+    expect(expandSelectionToMathDelimiters(text, { start: 0, end: text.length })).toEqual({
+      start: 0,
+      end: text.length,
+    });
+  });
 });

@@ -68,6 +68,7 @@ export function texVListParagraphPlacements(
       blockIndex: item.item.paragraph.blockIndex,
       vlistPath: item.path,
       sourceSpan: item.item.sourceSpan,
+      sourceHitPolicy: item.item.paragraph.sourceHitPolicy ?? "caret",
       lineIndices: measurement.lineIndices,
       x: item.x,
       y: item.y,

@@ -97,6 +97,7 @@ function labelHit(params: {
           localTop: 0,
           localBottom: 8,
           lineIndices: [0],
+          sourceHitPolicy: "caret",
           sourceStart: params.paragraphStart,
           sourceEnd: params.paragraphStart + 10,
           clientLeft: 10,
@@ -212,8 +213,7 @@ describe("TeX vlist hit target source offsets", () => {
   });
 
   it("leaves paragraph body hits for caret geometry instead of selecting the paragraph", () => {
-    expect(getKnuthPlassVListSourceHit({
-      paragraphHit: {
+    const paragraphHit = {
         blockIndex: 0,
         vlistPath: [0],
         localLeft: 0,
@@ -221,14 +221,29 @@ describe("TeX vlist hit target source offsets", () => {
         localTop: 0,
         localBottom: 12,
         lineIndices: [0],
+        sourceHitPolicy: "caret",
         sourceStart: 0,
         sourceEnd: 13,
         clientLeft: 0,
         clientRight: 100,
         clientTop: 0,
         clientBottom: 12,
+    };
+    expect(getKnuthPlassVListSourceHit({
+      paragraphHit: {
+        ...paragraphHit,
+        sourceHitPolicy: "caret",
       },
     })).toBeNull();
+    expect(getKnuthPlassVListSourceHit({
+      paragraphHit: {
+        ...paragraphHit,
+        sourceHitPolicy: "source-range",
+      },
+    })).toEqual({
+      offset: 0,
+      selectionRange: { start: 0, end: 13 },
+    });
   });
 
   it("maps source-backed non-text vlist items to source ranges", () => {

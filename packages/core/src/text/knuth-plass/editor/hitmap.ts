@@ -291,6 +291,7 @@ export interface VListParagraphGeometry {
   localTop: number;
   localBottom: number;
   lineIndices: readonly number[];
+  sourceHitPolicy: 'caret' | 'source-range';
   sourceStart: number;
   sourceEnd: number;
   clientLeft: number;
@@ -726,7 +727,7 @@ export function getKnuthPlassVListSourceHit(
     return { offset: params.labelHit.paragraph.sourceStart };
   }
 
-  if (params?.paragraphHit && params.paragraphHit.sourceStart > 0) {
+  if (params?.paragraphHit?.sourceHitPolicy === 'source-range') {
     return {
       offset: params.paragraphHit.sourceStart,
       selectionRange: {
@@ -950,6 +951,7 @@ function registeredVListParagraphGeometry(
       localTop: placement.y,
       localBottom: placement.y + placement.metrics.height + placement.metrics.depth,
       lineIndices: placement.lineIndices,
+      sourceHitPolicy: placement.sourceHitPolicy,
       sourceStart: placement.sourceSpan.start,
       sourceEnd: placement.sourceSpan.end,
       ...bounds,
