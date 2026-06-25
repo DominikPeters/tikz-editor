@@ -21,6 +21,7 @@ ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
 PROPERTY_WRITE_CLEANUP_NOOP_REASON,
 applyEditAction,
+preflightPositionNodeRelativeToAction,
 type EditAction,
 type EditActionResult
 } from "tikz-editor/edit/actions";
@@ -32,6 +33,7 @@ resolvePropertyTargetFromParseResult
 import type { SnapLine } from "tikz-editor/edit/snapping";
 import { renderTikzToSvg } from "tikz-editor/render/index";
 import type {
+EditHandlePositioningContext,
 NodeAnchorTarget,
 SceneElement
 } from "tikz-editor/semantic/types";
@@ -126,6 +128,7 @@ GuidePreview,
 GuidesState,
 MagnifierState,
 NodeAnchorOverlayState,
+NodePositionLinkDisplay,
 PathToolDraft,
 PendingAddedSelection,
 PendingBezier,
@@ -230,6 +233,7 @@ type NodePositionTargetStatus = {
   anchor: NodeAnchorTarget;
   action: EditAction;
   result: EditActionResult;
+  preview: { currentAnchor: WorldPoint; targetAnchor: WorldPoint } | null;
   usable: boolean;
   reason: string | null;
 };
@@ -295,6 +299,24 @@ function collectBasicNodeAnchors(snapshot: CanvasSnapshot, sourceId: string): {
   const east = anchors.get("east");
   const west = anchors.get("west");
   return north && south && east && west ? { north, south, east, west } : null;
+}
+
+function resolveNodePositionLinkEndpoints(
+  context: EditHandlePositioningContext,
+  direction: string
+): { from: WorldPoint; to: WorldPoint } {
+  const anchors = context.anchorOffsetsByDirection?.[direction];
+  if (!anchors) {
+    return { from: context.currentCenter, to: context.targetCenter };
+  }
+  return {
+    from: worldPointWithOffset(context.currentCenter, anchors.currentAnchor),
+    to: worldPointWithOffset(context.targetCenter, anchors.targetAnchor)
+  };
+}
+
+function worldPointWithOffset(center: WorldPoint, offset: WorldPoint): WorldPoint {
+  return makeWorldPoint(pt(center.x + offset.x), pt(center.y + offset.y));
 }
 
 function intervalsOverlap(a0: number, a1: number, b0: number, b1: number): boolean {
@@ -1456,12 +1478,20 @@ export const CanvasPanel = memo(function CanvasPanel({
         targetNodeName: anchor.nodeName,
         targetNodeSourceId: targetSourceId
       };
-      const result = applyEditAction(source, snapshot.editHandles, action, {
+      const preflight = preflightPositionNodeRelativeToAction(source, action, {
         evaluateOptions: { sourceFingerprint, textEngine: activeTextEngine },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
+      const { result } = preflight;
       if (result.kind === "success" || result.kind === "partial") {
-        statusBySourceId.set(targetSourceId, { anchor, action, result, usable: true, reason: null });
+        statusBySourceId.set(targetSourceId, {
+          anchor,
+          action,
+          result,
+          preview: preflight.preview,
+          usable: true,
+          reason: null
+        });
         continue;
       }
       const rawReason = result.kind === "unsupported" ? result.reason : result.message;
@@ -1469,6 +1499,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         anchor,
         action,
         result,
+        preview: null,
         usable: false,
         reason: formatNodePositionTargetFailureReason({
           rawReason,
@@ -1559,6 +1590,55 @@ export const CanvasPanel = memo(function CanvasPanel({
     pendingNodePositionTargetPick,
     pendingNodePositionTargetStatusBySourceId,
     svgResult
+  ]);
+
+  const nodePositionLinks = useMemo<NodePositionLinkDisplay[]>(() => {
+    const links: NodePositionLinkDisplay[] = [];
+    for (const handle of snapshot.editHandles) {
+      if (
+        handle.handleType !== "node-positioning" ||
+        !selectedElementIds.has(handle.sourceRef.sourceId)
+      ) {
+        continue;
+      }
+      const targetCenterAnchor = snapshot.semanticResult?.nodeAnchorTargets.find(
+        (anchor) =>
+          anchor.anchor === "center" &&
+          anchor.nodeName === handle.positioningContext.targetNodeName
+      );
+      const endpoints = resolveNodePositionLinkEndpoints(
+        handle.positioningContext,
+        handle.positioningContext.direction
+      );
+      links.push({
+        key: `selected:${handle.id}`,
+        sourceId: handle.sourceRef.sourceId,
+        targetSourceId: targetCenterAnchor?.nodeSourceId,
+        from: endpoints.from,
+        to: endpoints.to
+      });
+    }
+
+    if (pendingNodePositionTargetPick && pendingNodePositionEffectiveHoverSourceId) {
+      const status = pendingNodePositionTargetStatusBySourceId.get(pendingNodePositionEffectiveHoverSourceId);
+      if (status?.usable && status.preview) {
+        links.push({
+          key: `pending:${pendingNodePositionTargetPick.nodeSourceId}:${status.anchor.nodeSourceId ?? status.anchor.nodeName}`,
+          sourceId: pendingNodePositionTargetPick.nodeSourceId,
+          targetSourceId: status.anchor.nodeSourceId,
+          from: status.preview.currentAnchor,
+          to: status.preview.targetAnchor
+        });
+      }
+    }
+
+    return links;
+  }, [
+    pendingNodePositionEffectiveHoverSourceId,
+    pendingNodePositionTargetPick,
+    pendingNodePositionTargetStatusBySourceId,
+    selectedElementIds,
+    snapshot
   ]);
 
   const nodePositionSelectionHint = pendingNodePositionTargetPick
@@ -3637,6 +3717,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         onElementContextMenu={onElementContextMenu}
         onElementDoubleClick={onElementDoubleClick}
         onHoverChange={(id: string | null) => { dispatch({ type: "SET_HOVERED_ELEMENT", id }); }}
+        nodePositionLinks={nodePositionLinks}
         marqueeBounds={marqueeBounds}
         selectionBoxes={selectionBoxes}
         adornmentHighlightBoxes={adornmentHighlightBoxes}

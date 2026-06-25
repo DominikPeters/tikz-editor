@@ -30,6 +30,17 @@ export type ConvertNodePositionToAbsoluteAction = {
   nodeId: string;
 };
 
+export type PositionNodeRelativeToPreview = {
+  direction: string;
+  currentAnchor: WorldPoint;
+  targetAnchor: WorldPoint;
+};
+
+export type PositionNodeRelativeToPreflight = {
+  result: EditActionResult;
+  preview: PositionNodeRelativeToPreview | null;
+};
+
 const POSITIONING_DIRECTIONS = [
   "above",
   "below",
@@ -83,23 +94,32 @@ export function applyPositionNodeRelativeToAction(
   evaluateOptions: EvaluateOptions | undefined,
   parseOptions: EditParseOptions
 ): EditActionResult {
+  return preflightPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions).result;
+}
+
+export function preflightPositionNodeRelativeToAction(
+  source: string,
+  action: PositionNodeRelativeToAction,
+  evaluateOptions: EvaluateOptions | undefined,
+  parseOptions: EditParseOptions
+): PositionNodeRelativeToPreflight {
   const nodeResolution = resolveEditableNodeRef(source, action.nodeId, parseOptions);
   if (nodeResolution.kind !== "found") {
-    return { kind: "unsupported", reason: nodeResolution.reason };
+    return unsupportedPreflight(nodeResolution.reason);
   }
 
   const targetResolution = resolveEditableNodeRef(source, action.targetNodeSourceId, parseOptions);
   if (targetResolution.kind !== "found") {
-    return { kind: "unsupported", reason: "Relative positioning target must be a named node." };
+    return unsupportedPreflight("Relative positioning target must be a named node.");
   }
   if (targetResolution.nodeRef.nodeSourceId === nodeResolution.nodeRef.nodeSourceId) {
-    return { kind: "unsupported", reason: "Cannot position a node relative to itself." };
+    return unsupportedPreflight("Cannot position a node relative to itself.");
   }
   if (targetResolution.nodeRef.node.span.from >= nodeResolution.nodeRef.node.span.from) {
-    return { kind: "unsupported", reason: "Relative positioning target must appear before the selected node." };
+    return unsupportedPreflight("Relative positioning target must appear before the selected node.");
   }
   if ((targetResolution.nodeRef.node.name ?? "").trim() !== action.targetNodeName.trim()) {
-    return { kind: "unsupported", reason: "Relative positioning target name no longer matches the source." };
+    return unsupportedPreflight("Relative positioning target name no longer matches the source.");
   }
 
   const parsed = parseTikzForEdit(source, parseOptions);
@@ -112,15 +132,15 @@ export function applyPositionNodeRelativeToAction(
     explicitAnchor: resolveExplicitAnchor(nodeResolution.nodeRef.node.options)
   });
   if (placement.kind !== "found") {
-    return { kind: "unsupported", reason: placement.reason };
+    return unsupportedPreflight(placement.reason);
   }
 
   const positioningEntry = rewritePositioningFromContext(placement.currentCenter, placement.context);
   if (!positioningEntry) {
-    return { kind: "unsupported", reason: "Could not serialize relative positioning option." };
+    return unsupportedPreflight("Could not serialize relative positioning option.");
   }
   if (hasNegativePositioningDistance(positioningEntry)) {
-    return { kind: "unsupported", reason: "Selected target would require a negative positioning distance." };
+    return unsupportedPreflight("Selected target would require a negative positioning distance.");
   }
 
   const rewritten = rewriteNodePlacementSource({
@@ -132,14 +152,42 @@ export function applyPositionNodeRelativeToAction(
     removeInlineAt: true
   });
   if (!rewritten) {
-    return { kind: "unsupported", reason: "Relative positioning would not change the source." };
+    return unsupportedPreflight("Relative positioning would not change the source.");
   }
-  return {
+  const result: EditActionResult = {
     kind: "success",
     newSource: rewritten.source,
     patches: rewritten.patches,
     selectedSourceIds: [nodeResolution.nodeRef.nodeSourceId],
     changedSourceIds: [nodeResolution.nodeRef.nodeSourceId]
+  };
+  return {
+    result,
+    preview: positionNodeRelativeToPreview(placement.context, positioningEntry)
+  };
+}
+
+function unsupportedPreflight(reason: string): PositionNodeRelativeToPreflight {
+  return {
+    result: { kind: "unsupported", reason },
+    preview: null
+  };
+}
+
+function positionNodeRelativeToPreview(
+  context: EditHandlePositioningContext,
+  positioningEntry: string
+): PositionNodeRelativeToPreview | null {
+  const key = positioningEntry.slice(0, Math.max(0, positioningEntry.indexOf("="))).trim();
+  const direction = parseDirectionalKey(key)?.direction ?? context.direction;
+  const anchors = context.anchorOffsetsByDirection?.[direction];
+  if (!anchors) {
+    return null;
+  }
+  return {
+    direction,
+    currentAnchor: anchorFromCenter(context.currentCenter, anchors.currentAnchor),
+    targetAnchor: anchorFromCenter(context.targetCenter, anchors.targetAnchor)
   };
 }
 
@@ -588,6 +636,10 @@ function anchorOffset(anchors: AnchorMap, anchor: string, center: WorldPoint): W
     return null;
   }
   return worldPoint(pt(point.x - center.x), pt(point.y - center.y));
+}
+
+function anchorFromCenter(center: WorldPoint, offset: WorldPoint): WorldPoint {
+  return worldPoint(pt(center.x + offset.x), pt(center.y + offset.y));
 }
 
 function halfWidth(anchors: AnchorMap, center: WorldPoint): number {

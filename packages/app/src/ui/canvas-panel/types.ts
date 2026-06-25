@@ -314,6 +314,14 @@ export type NodeAnchorOverlayState = {
   radiusScale?: number;
 };
 
+export type NodePositionLinkDisplay = {
+  key: string;
+  from: WorldPoint;
+  to: WorldPoint;
+  sourceId: string;
+  targetSourceId?: string;
+};
+
 export type EditableTextTarget = {
   sourceId: string;
   sceneTextId: string;

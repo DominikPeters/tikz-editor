@@ -74,7 +74,9 @@ import {
 import {
   applyConvertNodePositionToAbsoluteAction,
   applyPositionNodeRelativeToAction,
+  preflightPositionNodeRelativeToAction as preflightPositionNodeRelativeToActionRaw,
   type ConvertNodePositionToAbsoluteAction,
+  type PositionNodeRelativeToPreflight,
   type PositionNodeRelativeToAction
 } from "./actions/node-positioning-actions.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "./parse-options.js";
@@ -203,10 +205,27 @@ export type EditActionResult =
 const DEFAULT_DUPLICATE_OFFSET_PT = 0.25 * PT_PER_CM;
 const GENERATED_NODE_NAME_RE = /(?:^|[^A-Za-z0-9_-])(node\d+)(?![A-Za-z0-9_-])/g;
 
-type EditActionApplyOptions = {
+export type EditActionApplyOptions = {
   evaluateOptions?: EvaluateOptions;
   parseOptions?: EditParseOptions;
 };
+
+export function preflightPositionNodeRelativeToAction(
+  source: string,
+  action: PositionNodeRelativeToAction,
+  options: EditActionApplyOptions = {}
+): PositionNodeRelativeToPreflight {
+  const preflight = preflightPositionNodeRelativeToActionRaw(
+    source,
+    action,
+    options.evaluateOptions,
+    options.parseOptions ?? {}
+  );
+  return {
+    ...preflight,
+    result: normalizeResultPatches(source, preflight.result)
+  };
+}
 
 type AnchorNameResolution = {
   source: string;

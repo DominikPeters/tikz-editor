@@ -12,6 +12,7 @@ import type {
   AdornmentHighlightBox,
   HandleDisplay,
   NodeAnchorOverlayState,
+  NodePositionLinkDisplay,
   SelectionBoxDisplay
 } from "./types";
 import { fmt, worldToSvgPoint } from "./geometry";
@@ -469,6 +470,40 @@ export function CurveControlOverlay({
             x2={to.x}
             y2={to.y}
             strokeWidth={strokeWidth}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+export function NodePositionLinkOverlay({
+  links,
+  viewBox
+}: {
+  links: readonly NodePositionLinkDisplay[];
+  viewBox: SvgViewBox;
+}) {
+  if (links.length === 0) {
+    return null;
+  }
+
+  return (
+    <g className={css.nodePositionLinkOverlay}>
+      {links.map((link) => {
+        const from = worldToSvgPoint(link.from, viewBox);
+        const to = worldToSvgPoint(link.to, viewBox);
+        return (
+          <line
+            key={link.key}
+            className={css.nodePositionLinkLine}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            data-testid="node-position-link"
+            data-node-position-link-source-id={link.sourceId}
+            data-node-position-link-target-source-id={link.targetSourceId}
           />
         );
       })}

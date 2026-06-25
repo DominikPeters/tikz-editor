@@ -540,6 +540,18 @@
   vector-effect: non-scaling-stroke;
 }
 
+.nodePositionLinkOverlay {
+  pointer-events: none;
+}
+
+.nodePositionLinkLine {
+  stroke: rgba(34, 162, 69, 0.88);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-dasharray: 1 4;
+  vector-effect: non-scaling-stroke;
+}
+
 .handleOverlay {
   pointer-events: none;
 }

@@ -7,6 +7,7 @@ import { identityMatrix, scaleMatrix } from "../packages/core/src/semantic/trans
 import {
   applyEditAction,
   PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
+  preflightPositionNodeRelativeToAction,
   PROPERTY_WRITE_CLEANUP_NOOP_REASON
 } from "../packages/core/src/edit/actions.js";
 import { isUngroupableScopeStatement } from "../packages/core/src/edit/actions/group-ungroup-actions.js";
@@ -1830,6 +1831,32 @@ describe("applyEditAction – node relative positioning conversions", () => {
     expect(result.newSource).not.toContain("at (2,0)");
     expectPointClose(nodeCenter(result.newSource, nodeId!), before);
     expectPatchesReconstructSource(source, result);
+  });
+
+  it("previews relative positioning links with the chosen anchors", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+    const targetCenter = nodeCenter(source, targetId!);
+    const currentCenter = nodeCenter(source, nodeId!);
+
+    const preflight = preflightPositionNodeRelativeToAction(source, {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId!,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId!
+    });
+
+    expect(preflight.result.kind).toBe("success");
+    expect(preflight.preview).toBeDefined();
+    if (!preflight.preview) return;
+    expect(preflight.preview.direction).toBe("right");
+    expect(preflight.preview.targetAnchor.x).toBeGreaterThan(targetCenter.x);
+    expect(preflight.preview.currentAnchor.x).toBeLessThan(currentCenter.x);
+    expect(preflight.preview.targetAnchor.y).toBeCloseTo(targetCenter.y);
+    expect(preflight.preview.currentAnchor.y).toBeCloseTo(currentCenter.y);
   });
 
   it("preserves shaped node placement when converting to relative positioning", () => {

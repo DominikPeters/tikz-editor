@@ -166,11 +166,20 @@ test("node context menu can position a node relative to an earlier named node", 
   );
   const targetDot = page.getByTestId("node-anchor-dot");
   await expect(targetDot).toHaveCount(1);
+  await expect(page.getByTestId("node-position-link")).toHaveCount(0);
   await targetDot.hover();
   await expect(targetDot).toHaveAttribute("data-anchor-snapped", "true");
+  const previewLink = page.getByTestId("node-position-link");
+  await expect(previewLink).toHaveCount(1);
+  await expect(previewLink).toHaveAttribute("data-node-position-link-source-id", "path:1");
+  await expect(previewLink).toHaveAttribute("data-node-position-link-target-source-id", "path:0");
+  const targetCenterX = Number(await targetDot.getAttribute("cx"));
+  const previewTargetX = Number(await previewLink.getAttribute("x2"));
+  expect(previewTargetX).toBeGreaterThan(targetCenterX);
 
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("canvas-selection-hint")).toHaveCount(0);
+  await expect(page.getByTestId("node-position-link")).toHaveCount(0);
   await expect.poll(async () => readSource(page)).toBe(source);
 
   await clickHitRegionByTargetId(page, "path:1", { button: "right" });
@@ -181,6 +190,13 @@ test("node context menu can position a node relative to an earlier named node", 
   const rewritten = await readSource(page);
   expect(rewritten).toContain("of A");
   expect(rewritten).not.toContain("at (2,0)");
+  const selectedLink = page.getByTestId("node-position-link");
+  await expect(selectedLink).toHaveCount(1);
+  await expect(selectedLink).toHaveAttribute("data-node-position-link-source-id", "path:1");
+  await expect(selectedLink).toHaveAttribute("data-node-position-link-target-source-id", "path:0");
+
+  await clickHitRegionByTargetId(page, "path:0");
+  await expect(page.getByTestId("node-position-link")).toHaveCount(0);
 });
 
 test("node relative positioning target reports negative spacing when visual placement cannot be preserved", async ({ page }) => {

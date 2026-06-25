@@ -23,6 +23,7 @@ import {
   HandleOverlay,
   HitRegionLayer,
   NodeAnchorOverlay,
+  NodePositionLinkOverlay,
   SelectionDragLayer,
   SelectionOverlay,
   SnapOverlay,
@@ -38,6 +39,7 @@ import type {
   HandleDisplay,
   MagnifierState,
   NodeAnchorOverlayState,
+  NodePositionLinkDisplay,
   SelectionBoxDisplay,
   TextEditingSession,
   TextSelectionOverlay,
@@ -127,6 +129,7 @@ type CanvasPanelViewProps = {
   onElementContextMenu: (event: ReactMouseEvent<SVGElement>, sourceId: string, region?: HitRegion, handleId?: string | null) => void;
   onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onHoverChange: (id: string | null) => void;
+  nodePositionLinks: readonly NodePositionLinkDisplay[];
   marqueeBounds: SvgBounds | null;
   selectionBoxes: readonly SelectionBoxDisplay[];
   adornmentHighlightBoxes: readonly AdornmentHighlightBox[];
@@ -250,6 +253,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     onElementContextMenu,
     onElementDoubleClick,
     onHoverChange,
+    nodePositionLinks,
     marqueeBounds,
     selectionBoxes,
     adornmentHighlightBoxes,
@@ -674,6 +678,11 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   onElementContextMenu={onElementContextMenu}
                   onElementDoubleClick={onElementDoubleClick}
                   onHoverChange={onHoverChange}
+                />
+
+                <NodePositionLinkOverlay
+                  links={nodePositionLinks}
+                  viewBox={svgResult.viewBox}
                 />
 
                 <SelectionOverlay
