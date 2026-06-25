@@ -403,9 +403,13 @@ function paragraphInputFromSimpleTexBlock(
     sourceSpan: sourceSpanFromBlock(block),
     nodes: block.nodes,
     noIndent: block.noIndent,
+    ...(block.firstLineIndentEm !== undefined
+      ? { firstLineIndentEm: block.firstLineIndentEm }
+      : {}),
     alignment: block.alignment,
     alignmentProfile: block.alignmentProfile,
     quoteDepth: block.quoteDepth,
+    quotationDepth: block.quotationDepth,
     listContext: block.listContext,
   };
 }

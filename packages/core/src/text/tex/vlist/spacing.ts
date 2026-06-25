@@ -31,6 +31,7 @@ const articleQuoteSpacingEm = {
 const articleListSpacingEm = {
   topsep: 0.8,
   partopsep: 0.2,
+  initialItemBaselineAdjustment: 0.3,
   nestedTopsepByDepth: [0.8, 0.4, 0.2],
   itemsepByDepth: [0.4, 0.2, 0.2],
   parsepByDepth: [0.4, 0.2, 0],
@@ -93,6 +94,7 @@ export function planSimpleTexParagraphVerticalSkips(
     font,
     {
       previousEmittedQuoteDepth: 0,
+      previousEmittedQuotationDepth: 0,
       previousEmittedListContext: undefined,
       previousEmittedContentKind: undefined,
       emittedListItemKeys: new Set(),
@@ -108,6 +110,7 @@ export function planSimpleTexParagraphVerticalSkips(
 
 interface SimpleTexParagraphVerticalSkipState {
   previousEmittedQuoteDepth: number;
+  previousEmittedQuotationDepth: number;
   previousEmittedListContext: SimpleTexListContext | undefined;
   previousEmittedContentKind: "paragraph" | "display" | undefined;
   readonly emittedListItemKeys: Set<string>;
@@ -163,7 +166,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       ? 0
       : texArticleQuoteVerticalSkipBefore(
           state.previousEmittedQuoteDepth,
+          state.previousEmittedQuotationDepth,
           scope.quoteDepth,
+          scope.quotationDepth,
           hasPreviousEmittedParagraph,
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
@@ -179,6 +184,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     });
 
     state.previousEmittedQuoteDepth = scope.quoteDepth;
+    state.previousEmittedQuotationDepth = scope.quotationDepth;
     state.previousEmittedListContext = scope.listContext;
     if (scope.listItemKey) {
       state.emittedListItemKeys.add(scope.listItemKey);
@@ -194,6 +200,7 @@ function paragraphScopeFromVListAncestors(
   state: SimpleTexParagraphVerticalSkipState
 ): {
   readonly quoteDepth: number;
+  readonly quotationDepth: number;
   readonly listContext: SimpleTexListContext | undefined;
   readonly listItemKey?: string;
 } {
@@ -204,6 +211,7 @@ function paragraphScopeFromVListAncestors(
     const listItemKey = texListItemScopeKey(listItemRole);
     return {
       quoteDepth: quoteDepthFromAncestors,
+      quotationDepth: item.paragraph.quotationDepth ?? 0,
       listItemKey,
       listContext: {
         kind: listRole.listKind,
@@ -220,6 +228,7 @@ function paragraphScopeFromVListAncestors(
   }
   return {
     quoteDepth: quoteDepthFromAncestors > 0 ? quoteDepthFromAncestors : item.paragraph.quoteDepth,
+    quotationDepth: item.paragraph.quotationDepth ?? 0,
     listContext: item.paragraph.listContext,
   };
 }
@@ -483,7 +492,7 @@ function resolveDisplayMathVerticalGlueInItems(
         items.push(plainParagraphBoundaryInterlineGlueItem(
           item,
           texInterlineGlueSize(
-            previousParagraphMeasurement.ruleLeadingMetrics.depth,
+            texParagraphLastLineDepth(previousParagraphMeasurement),
             paragraphMeasurement.ruleLeadingMetrics.height,
             options.lineHeight
           )
@@ -515,7 +524,7 @@ function resolveDisplayMathVerticalGlueInItems(
           item,
           "above",
           texInterlineGlueSize(
-            previousParagraphMeasurement.ruleLeadingMetrics.depth,
+            texParagraphLastLineDepth(previousParagraphMeasurement),
             displayItem.box.height,
             options.lineHeight
           )
@@ -558,7 +567,7 @@ function resolveDisplayMathVerticalGlueInItems(
           items.push(paragraphBoundaryInterlineGlueItem(
             item,
             texInterlineGlueSize(
-              previousParagraphMeasurement.ruleLeadingMetrics.depth,
+              texParagraphLastLineDepth(previousParagraphMeasurement),
               nextParagraph.ruleLeadingMetrics.height,
               options.lineHeight
             )
@@ -595,6 +604,44 @@ function resolveDisplayMathVerticalGlueInItems(
         });
         continue;
       }
+    }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "explicit-command"
+    ) {
+      items.push(item);
+      plainParagraphInterlinePending = false;
+      if (shouldInsertExplicitVerticalInterlineGlue(sourceItems, index)) {
+        const nextParagraph = nextParagraphMeasurement(
+          sourceItems,
+          index,
+          pathPrefix,
+          paragraphMeasurements
+        );
+        const previousDepth = explicitVerticalPreviousDepth(
+          previousParagraphMeasurement,
+          previousDisplayMaterialMetrics
+        );
+        if (previousDepth !== undefined && nextParagraph) {
+          items.push(plainVerticalInterlineGlueItem(
+            item,
+            texInterlineGlueSize(
+              previousDepth,
+              nextParagraph.ruleLeadingMetrics.height,
+              options.lineHeight
+            )
+          ));
+          paragraphBoundaryInterlineAlreadyInserted = true;
+        }
+      }
+      continue;
+    }
+    if (item.kind === "rule") {
+      items.push(item);
+      plainParagraphInterlinePending = false;
+      previousParagraphMeasurement = undefined;
+      previousDisplayMaterialMetrics = undefined;
+      continue;
     }
     if (
       item.kind === "glue" &&
@@ -661,6 +708,40 @@ function shouldInsertParagraphBoundaryInterlineGlue(
     return item.kind === "paragraph";
   }
   return false;
+}
+
+function shouldInsertExplicitVerticalInterlineGlue(
+  items: readonly TexVListItem[],
+  index: number
+): boolean {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) {
+      continue;
+    }
+    if (item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
+      continue;
+    }
+    if (isExplicitVerticalSeparator(item)) {
+      return false;
+    }
+    return item.kind === "paragraph";
+  }
+  return false;
+}
+
+function isExplicitVerticalSeparator(item: TexVListItem): boolean {
+  return item.kind === "rule" ||
+    (item.kind === "glue" && item.origin?.kind === "explicit-command");
+}
+
+function explicitVerticalPreviousDepth(
+  previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined,
+  previousDisplayMaterialMetrics: TexBoxMetrics | undefined
+): number | undefined {
+  return previousParagraphMeasurement
+    ? texParagraphLastLineDepth(previousParagraphMeasurement)
+    : previousDisplayMaterialMetrics?.depth;
 }
 
 function displayAlignmentMaterialItems(
@@ -817,10 +898,6 @@ function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
   return -1_000_000 - Math.max(0, sourceStart);
 }
 
-function isDisplayAlignmentIntertextBlockIndex(blockIndex: number): boolean {
-  return blockIndex <= -1_000_000;
-}
-
 function displayAlignmentIntertextLeadingSize(
   previousDepth: number,
   paragraph: TexVListParagraphBoxMeasurement | undefined
@@ -837,23 +914,24 @@ function displayAlignmentIntertextLeadingSize(
 function displayAlignmentPreviousDepth(
   paragraph: TexVListParagraphBoxMeasurement
 ): number {
-  return isDisplayAlignmentIntertextBlockIndex(paragraph.blockIndex)
-    ? displayAlignmentIntertextLastLineDepth(paragraph)
-    : paragraph.ruleLeadingMetrics.depth;
+  return texParagraphLastLineDepth(paragraph);
 }
 
-function displayAlignmentIntertextLastLineDepth(
+function texParagraphLastLineDepth(
   paragraph: TexVListParagraphBoxMeasurement
 ): number {
   if (paragraph.lastLineMetrics) {
     return paragraph.lastLineMetrics.depth;
   }
-  const lastLineOffset = paragraph.lineOffsets.at(-1)?.y;
-  if (lastLineOffset === undefined) {
+  const lastLine = paragraph.lineOffsets.at(-1);
+  if (lastLine?.metrics) {
+    return lastLine.metrics.depth;
+  }
+  if (lastLine?.y === undefined) {
     return paragraph.ruleLeadingMetrics.depth;
   }
   return Math.max(0, roundTexPt(
-    paragraph.ruleLeadingAdvance - lastLineOffset - paragraph.ruleLeadingMetrics.height
+    paragraph.ruleLeadingAdvance - lastLine.y - paragraph.ruleLeadingMetrics.height
   ));
 }
 
@@ -1094,6 +1172,24 @@ function plainParagraphBoundaryInterlineGlueItem(
   };
 }
 
+function plainVerticalInterlineGlueItem(
+  item: TexGlueItem,
+  size: number
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "paragraph-boundary-interline",
+      boundary: "plain",
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
 function nextParagraphMeasurement(
   items: readonly TexVListItem[],
   index: number,
@@ -1141,7 +1237,9 @@ function texOpenedInterlineGlueSize(
 
 function texArticleQuoteVerticalSkipBefore(
   previousQuoteDepth: number,
+  previousQuotationDepth: number,
   quoteDepth: number,
+  quotationDepth: number,
   hasPreviousEmittedParagraph: boolean,
   listTransitionActive = false,
   font: ResolvedTexFont
@@ -1150,19 +1248,24 @@ function texArticleQuoteVerticalSkipBefore(
     return 0;
   }
   if (previousQuoteDepth === quoteDepth) {
-    return quoteDepth > 0 ? texEmSkip(articleQuoteSpacingEm.parsep, font) : 0;
+    if (quoteDepth <= 0) {
+      return 0;
+    }
+    return previousQuotationDepth > 0 && quotationDepth > 0
+      ? 0
+      : texEmSkip(articleQuoteSpacingEm.parsep, font);
   }
   if (quoteDepth > previousQuoteDepth) {
     return texEmSkip(
       articleQuoteSpacingEm.topsep +
-        (previousQuoteDepth === 0 && !hasPreviousEmittedParagraph
+        (previousQuoteDepth === 0
           ? articleQuoteSpacingEm.partopsep
           : 0),
       font
     );
   }
   if (previousQuoteDepth > quoteDepth) {
-    return texEmSkip(articleQuoteSpacingEm.topsep, font);
+    return texEmSkip(articleQuoteSpacingEm.topsep + articleQuoteSpacingEm.partopsep, font);
   }
   return 0;
 }
@@ -1189,10 +1292,10 @@ function texArticleListVerticalSkipBefore(
     return 0;
   }
   if (current.depth > previous.depth) {
-    return texArticleNestedListBoundarySkip(current.depth, font);
+    return texArticleNestedListBoundarySkip(previous.depth, current.depth, font);
   }
   if (current.depth < previous.depth) {
-    return texArticleNestedListBoundarySkip(previous.depth, font);
+    return texArticleNestedListBoundarySkip(previous.depth, current.depth, font);
   }
   if (
     current.kind === previous.kind &&
@@ -1205,16 +1308,28 @@ function texArticleListVerticalSkipBefore(
 }
 
 function texArticleInitialListSkip(font: ResolvedTexFont): number {
-  return texEmSkip(articleListSpacingEm.topsep + articleListSpacingEm.partopsep, font);
+  return texEmSkip(
+    articleListSpacingEm.topsep +
+      articleListSpacingEm.partopsep +
+      articleListSpacingEm.initialItemBaselineAdjustment,
+    font
+  );
 }
 
 function texArticleOutsideListBoundarySkip(font: ResolvedTexFont): number {
-  return texEmSkip(articleListSpacingEm.topsep, font);
+  return texEmSkip(articleListSpacingEm.topsep + articleListSpacingEm.partopsep, font);
 }
 
-function texArticleNestedListBoundarySkip(depth: number, font: ResolvedTexFont): number {
+function texArticleNestedListBoundarySkip(
+  previousDepth: number,
+  currentDepth: number,
+  font: ResolvedTexFont
+): number {
   return texEmSkip(
-    texDepthIndexedEm(articleListSpacingEm.nestedTopsepByDepth, depth),
+    texDepthIndexedEm(
+      articleListSpacingEm.nestedTopsepByDepth,
+      Math.min(previousDepth, currentDepth)
+    ),
     font
   );
 }

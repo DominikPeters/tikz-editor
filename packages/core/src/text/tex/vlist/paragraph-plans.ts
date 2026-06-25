@@ -174,7 +174,9 @@ export function prepareTexLayoutParagraphsFromVList(
           blockIndex,
           segmentIndex,
           ...(scopedLineWidth !== undefined ? { width: scopedLineWidth } : {}),
-          firstLineIndentWidth: listAttachments.firstLineIndentWidth,
+          firstLineIndentWidth:
+            listAttachments.firstLineIndentWidth ??
+            texQuotationFirstLineIndentWidth(segment, params.font),
           scopePolicy: texParagraphBreakScopePolicy(breakScopeContext),
         },
         ...(listAttachments.marginLabel
@@ -203,6 +205,15 @@ export function prepareTexLayoutParagraphsFromVList(
       attachmentResult.paragraphPathRemaps
     ),
   };
+}
+
+function texQuotationFirstLineIndentWidth(
+  segment: SimpleTexParagraphSegment,
+  font: ResolvedTexFont
+): number | undefined {
+  return segment.firstLineIndentEm === undefined
+    ? undefined
+    : segment.firstLineIndentEm * font.atPt;
 }
 
 function texParagraphScopeContextWithoutBreakMargins(

@@ -30,7 +30,12 @@ export type SimpleTexFontDeclarationName =
   | "upshape"
   | "scshape"
   | "normalfont";
-export type SimpleTexEnvironmentName = "quote" | "itemize" | "enumerate" | "description";
+export type SimpleTexQuoteEnvironmentName = "quote" | "quotation";
+export type SimpleTexEnvironmentName =
+  | SimpleTexQuoteEnvironmentName
+  | "itemize"
+  | "enumerate"
+  | "description";
 export type SimpleTexListKind = "itemize" | "enumerate" | "description";
 export type SimpleTexVerticalGlueCommandName =
   | "vspace"
@@ -228,9 +233,11 @@ export interface SimpleTexParagraphBlock {
   readonly sourceEnd: number;
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
+  readonly firstLineIndentEm?: number;
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly quoteDepth: number;
+  readonly quotationDepth: number;
   readonly listContext?: SimpleTexListContext;
 }
 
@@ -330,6 +337,7 @@ export interface SimpleTexParagraphSegment {
   readonly sourceEnd: number;
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
+  readonly firstLineIndentEm?: number;
   readonly forcedBreakAfter?: {
     readonly sourceOffset: number;
     readonly lineLeading?: string;
@@ -344,7 +352,9 @@ export interface SimpleTexSegmentInput {
   };
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
+  readonly firstLineIndentEm?: number;
   readonly quoteDepth: number;
+  readonly quotationDepth?: number;
 }
 
 export interface SimpleTexParagraphBlockScanResult {
@@ -384,6 +394,7 @@ const vskipGluePattern = new RegExp(
   String.raw`^\\vskip\s*(${texLengthPattern})(?:\s+plus\s+(${texLengthPattern}))?(?:\s+minus\s+(${texLengthPattern}))?`,
   "i"
 );
+export const latexArticleQuotationFirstLineIndentEm = 1.5;
 const defaultSimpleTexFontState: SimpleTexFontState = {
   family: "roman",
   series: "medium",
@@ -1264,7 +1275,12 @@ function scanSimpleTexEnvironmentBoundary(
       return null;
     }
     const name = text.slice(nameStart, nameEnd);
-    if (name === "quote" || name === "itemize" || name === "enumerate" || name === "description") {
+    if (
+      isSimpleTexQuoteEnvironmentName(name) ||
+      name === "itemize" ||
+      name === "enumerate" ||
+      name === "description"
+    ) {
       return {
         boundary,
         name,
@@ -1273,6 +1289,10 @@ function scanSimpleTexEnvironmentBoundary(
     }
   }
   return null;
+}
+
+function isSimpleTexQuoteEnvironmentName(name: string): name is SimpleTexQuoteEnvironmentName {
+  return name === "quote" || name === "quotation";
 }
 
 function scanSimpleTexItemCommand(
@@ -1780,7 +1800,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
     rawStart: number,
     rawEnd: number,
     noIndent: boolean,
+    firstLineIndentEm: number | undefined,
     quoteDepth: number,
+    quotationDepth: number,
     alignment?: TexParagraphAlignment,
     alignmentProfile?: TexAlignmentProfile
   ) => {
@@ -1805,9 +1827,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceEnd: end,
         nodes: simpleTexInlineNodesForRange(sourceNodes, start, end),
         noIndent,
+        ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
         alignment,
         alignmentProfile,
         quoteDepth,
+        quotationDepth,
         listContext,
       };
       blocks.push(block);
@@ -1858,7 +1882,24 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let blockStart = sourceStartForNodeIndex(prefix.start);
   let currentNoIndent = prefix.noIndent;
   let currentQuoteDepth = 0;
+  let currentNonQuotationQuoteDepth = 0;
+  let currentQuotationDepth = 0;
   let index = prefix.start;
+
+  const environmentSuppressesParagraphIndent = (): boolean =>
+    currentNonQuotationQuoteDepth > 0 || listStack.length > 0;
+
+  const quotationFirstLineIndentEm = (
+    noIndent: boolean
+  ): number | undefined =>
+    currentQuotationDepth > 0 && listStack.length === 0 && !noIndent
+      ? latexArticleQuotationFirstLineIndentEm
+      : undefined;
+
+  const noIndentForCurrentScope = (
+    prefixNoIndent: boolean
+  ): boolean => prefixNoIndent || environmentSuppressesParagraphIndent();
+
   while (index < sourceNodes.length) {
     const node = sourceNodes[index];
     if (!node) {
@@ -1885,7 +1926,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       unsupportedCommand = true;
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
       index = prefix.start;
       continue;
     }
@@ -1895,7 +1936,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockStart,
         node.sourceStart,
         currentNoIndent,
+        quotationFirstLineIndentEm(currentNoIndent),
         currentQuoteDepth,
+        currentQuotationDepth,
         prefix.alignment,
         prefix.alignmentProfile
       );
@@ -1926,13 +1969,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockStart,
         node.sourceStart,
         currentNoIndent,
+        quotationFirstLineIndentEm(currentNoIndent),
         currentQuoteDepth,
+        currentQuotationDepth,
         prefix.alignment,
         prefix.alignmentProfile
       );
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
       index = prefix.start;
       continue;
     }
@@ -1941,8 +1986,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       pushBlock(
         blockStart,
         node.sourceStart,
-        currentNoIndent || currentQuoteDepth > 0 || listStack.length > 0,
+        currentNoIndent || environmentSuppressesParagraphIndent(),
+        quotationFirstLineIndentEm(currentNoIndent),
         currentQuoteDepth,
+        currentQuotationDepth,
         prefix.alignment,
         prefix.alignmentProfile
       );
@@ -1951,8 +1998,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       if (node.boundary === "begin") {
         environmentStack.push(node.name);
-        if (node.name === "quote") {
+        if (isSimpleTexQuoteEnvironmentName(node.name)) {
           currentQuoteDepth += 1;
+          if (node.name === "quotation") {
+            currentQuotationDepth += 1;
+          } else {
+            currentNonQuotationQuoteDepth += 1;
+          }
         } else {
           beginList(node.name);
         }
@@ -1963,8 +2015,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
           abortScan = true;
           break;
         }
-        if (node.name === "quote") {
+        if (isSimpleTexQuoteEnvironmentName(node.name)) {
           currentQuoteDepth -= 1;
+          if (node.name === "quotation") {
+            currentQuotationDepth -= 1;
+          } else {
+            currentNonQuotationQuoteDepth -= 1;
+          }
           if (currentQuoteDepth < 0) {
             unsupportedCommand = true;
             abortScan = true;
@@ -1978,7 +2035,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
       index = prefix.start;
       continue;
     }
@@ -1987,8 +2044,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       pushBlock(
         blockStart,
         node.sourceStart,
-        currentNoIndent || currentQuoteDepth > 0 || listStack.length > 0,
+        currentNoIndent || environmentSuppressesParagraphIndent(),
+        quotationFirstLineIndentEm(currentNoIndent),
         currentQuoteDepth,
+        currentQuotationDepth,
         prefix.alignment,
         prefix.alignmentProfile
       );
@@ -2039,7 +2098,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
       index = prefix.start;
       continue;
     }
@@ -2063,7 +2122,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
       index = prefix.start;
       continue;
     }
@@ -2085,7 +2144,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
-      currentNoIndent = prefix.noIndent || currentQuoteDepth > 0 || listStack.length > 0;
+      currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
       index = prefix.start;
       continue;
     }
@@ -2108,8 +2167,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
     pushBlock(
       blockStart,
       text.length,
-      currentNoIndent || currentQuoteDepth > 0 || listStack.length > 0,
+      currentNoIndent || environmentSuppressesParagraphIndent(),
+      quotationFirstLineIndentEm(currentNoIndent),
       currentQuoteDepth,
+      currentQuotationDepth,
       prefix.alignment,
       prefix.alignmentProfile
     );
@@ -2146,6 +2207,9 @@ export function splitSimpleTexParagraphSegments(
       sourceEnd: block.sourceSpan.end,
       nodes: block.nodes,
       noIndent: initialNoIndent,
+      ...(block.firstLineIndentEm !== undefined
+        ? { firstLineIndentEm: block.firstLineIndentEm }
+        : {}),
     }];
   }
 
@@ -2159,6 +2223,7 @@ export function splitSimpleTexParagraphSegments(
     rawEnd: number,
     rawNodes: readonly SimpleTexInlineNode[],
     segmentNoIndent: boolean,
+    firstLineIndentEm: number | undefined,
     forcedBreakAfter?: SimpleTexParagraphSegment["forcedBreakAfter"]
   ) => {
     let start = rawStart;
@@ -2179,6 +2244,7 @@ export function splitSimpleTexParagraphSegments(
           node.sourceEnd <= end
         ),
         noIndent: segmentNoIndent,
+        ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
         forcedBreakAfter,
       });
     }
@@ -2190,10 +2256,17 @@ export function splitSimpleTexParagraphSegments(
       continue;
     }
 
-    pushSegment(segmentStart, node.sourceStart, block.nodes.slice(nodeStart, index), noIndent, {
-      sourceOffset: node.sourceStart,
-      lineLeading: node.lineLeading,
-    });
+    pushSegment(
+      segmentStart,
+      node.sourceStart,
+      block.nodes.slice(nodeStart, index),
+      noIndent,
+      block.firstLineIndentEm,
+      {
+        sourceOffset: node.sourceStart,
+        lineLeading: node.lineLeading,
+      }
+    );
     index += 1;
     while (block.nodes[index]?.kind === "space") {
       index += 1;
@@ -2204,7 +2277,13 @@ export function splitSimpleTexParagraphSegments(
     index -= 1;
   }
 
-  pushSegment(segmentStart, block.sourceSpan.end, block.nodes.slice(nodeStart), noIndent);
+  pushSegment(
+    segmentStart,
+    block.sourceSpan.end,
+    block.nodes.slice(nodeStart),
+    noIndent,
+    block.firstLineIndentEm
+  );
   return segments;
 }
 

@@ -9,7 +9,10 @@ if (!existsSync(distEntry)) {
   throw new Error("Missing packages/core/dist/text/tex/index.js. Run `npm run -w @tikz-editor/core build` first.");
 }
 
-const { layoutSimpleTexParagraph } = await import(distEntry);
+const {
+  classicComputerModernTextFontProfile,
+  layoutSimpleTexParagraph,
+} = await import(distEntry);
 
 // Oracle/regeneration helper for TeX paragraph layout fixtures in
 // test/tex-shaping.spec.ts. Run via `npm run compare:tex-paragraph`.
@@ -33,6 +36,7 @@ const fixtures = [
   { text: String.raw`\begin{quote} Alpha \par \vspace{7pt} Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
   { text: String.raw`\begin{quote} Alpha \par \vskip -2pt Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
   { text: String.raw`\begin{quote} Alpha \par \hrule width 24pt height 2pt depth 1pt Beta \end{quote}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
+  { text: String.raw`\begin{quotation} Alpha \par Beta \end{quotation}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
   { text: String.raw`\begin{itemize}\item Alpha\item Beta\end{itemize}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
   { text: String.raw`Before \par \begin{itemize}\item Alpha\item Beta\end{itemize} \par After`, width: 150, parindent: 0, texSyntax: true, compareY: true },
   { text: String.raw`\begin{itemize}\item Alpha \par \vspace{7pt} More\item Beta\end{itemize}`, width: 150, parindent: 0, texSyntax: true, compareY: true },
@@ -180,17 +184,9 @@ function reportLines(report, layout) {
   const placementByLineIndex = new Map(
     (layout?.linePlacements ?? []).map((placement) => [placement.lineIndex, placement])
   );
-  const firstLineTop = layout?.linePlacements[0]?.y ?? 0;
-  const defaultAscent = layout?.baseline?.kind === "explicit"
-    ? layout.baseline.y - firstLineTop
-    : (report.lines[0]?.ascent ?? 0);
   return report.lines.map((line, index) => ({
     y: (placementByLineIndex.get(line.lineIndex ?? index)?.y ?? line.y ?? 0) +
-      (lineStartsAfterVListRule(layout, line.lineIndex)
-        || lineEndsBeforeVListRule(layout, line.lineIndex)
-        || lineHasPriorVListRule(layout, line.lineIndex)
-        ? (line.ascent ?? defaultAscent)
-        : defaultAscent),
+      (line.ascent ?? 0),
     text: line.segments
       // The Lua oracle collector reads paragraph body hlists; list labels live
       // in nested label boxes, so compare body text here and validate labels in
@@ -200,81 +196,6 @@ function reportLines(report, layout) {
       .join("")
       .trimEnd(),
   }));
-}
-
-function lineStartsAfterVListRule(layout, lineIndex) {
-  const paragraph = layout?.paragraphPlacements?.find((placement) =>
-    placement.lineIndices?.[0] === lineIndex
-  );
-  if (!paragraph?.vlistPath?.length) {
-    return false;
-  }
-  const siblingIndex = paragraph.vlistPath.at(-1);
-  if (typeof siblingIndex !== "number" || siblingIndex <= 0) {
-    return false;
-  }
-  const parentPath = paragraph.vlistPath.slice(0, -1);
-  for (let index = siblingIndex - 1; index >= 0; index -= 1) {
-    const previousPath = [...parentPath, index];
-    const previous = layout?.boxReport?.items?.find((item) =>
-      samePath(item.path, previousPath)
-    );
-    if (!previous || previous.itemKind === "glue" || previous.itemKind === "penalty") {
-      continue;
-    }
-    return previous.itemKind === "rule";
-  }
-  return false;
-}
-
-function lineEndsBeforeVListRule(layout, lineIndex) {
-  const paragraph = layout?.paragraphPlacements?.find((placement) =>
-    placement.lineIndices?.at(-1) === lineIndex
-  );
-  if (!paragraph?.vlistPath?.length) {
-    return false;
-  }
-  const siblingIndex = paragraph.vlistPath.at(-1);
-  if (typeof siblingIndex !== "number") {
-    return false;
-  }
-  const parentPath = paragraph.vlistPath.slice(0, -1);
-  for (let index = siblingIndex + 1; ; index += 1) {
-    const nextPath = [...parentPath, index];
-    const next = layout?.boxReport?.items?.find((item) =>
-      samePath(item.path, nextPath)
-    );
-    if (!next) {
-      return false;
-    }
-    if (next.itemKind === "glue" || next.itemKind === "penalty") {
-      continue;
-    }
-    return next.itemKind === "rule";
-  }
-}
-
-function lineHasPriorVListRule(layout, lineIndex) {
-  const paragraph = layout?.paragraphPlacements?.find((placement) =>
-    placement.lineIndices?.includes(lineIndex)
-  );
-  if (!paragraph?.vlistPath?.length) {
-    return false;
-  }
-  const items = layout?.boxReport?.items ?? [];
-  const paragraphIndex = items.findIndex((item) =>
-    samePath(item.path, paragraph.vlistPath)
-  );
-  if (paragraphIndex < 0) {
-    return false;
-  }
-  return items.slice(0, paragraphIndex).some((item) => item.itemKind === "rule");
-}
-
-function samePath(left, right) {
-  return Array.isArray(left) &&
-    left.length === right.length &&
-    left.every((value, index) => value === right[index]);
 }
 
 function lineTexts(lines) {
@@ -312,6 +233,7 @@ for (const fixture of fixtures) {
     parindent: fixture.parindent,
     tolerance: 200,
     hyphenator: { hyphenate: () => [] },
+    textFontProfile: classicComputerModernTextFontProfile,
   });
   const actual = actualResult.report
     ? reportLines(actualResult.report, actualResult.vlistLayout)

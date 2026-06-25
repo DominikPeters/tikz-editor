@@ -316,20 +316,21 @@ function generateQuoteCase(index, random) {
   const widths = [100, 120, 150, 200, 240, 320];
   const width = choice(random, widths);
   const parindent = choice(random, [0, 10, 15]);
-  const feature = index % 4;
+  const environmentName = index % 2 === 0 ? "quote" : "quotation";
+  const feature = Math.floor(index / 2) % 4;
   let text;
   if (feature === 0) {
-    text = `\\begin{quote} ${paragraph(random, 1 + Math.floor(random() * 2))} \\end{quote}`;
+    text = `\\begin{${environmentName}} ${paragraph(random, 1 + Math.floor(random() * 2))} \\end{${environmentName}}`;
   } else if (feature === 1) {
-    text = `${paragraph(random, 1)} \\par \\begin{quote} ${paragraph(random, 1 + Math.floor(random() * 2))} \\end{quote} \\par ${paragraph(random, 1)}`;
+    text = `${paragraph(random, 1)} \\par \\begin{${environmentName}} ${paragraph(random, 1 + Math.floor(random() * 2))} \\end{${environmentName}} \\par ${paragraph(random, 1)}`;
   } else if (feature === 2) {
-    text = `\\begin{quote} ${sentence(random, 5, 9)} \\\\[${choice(random, [4, 7])}pt] ${paragraph(random, 1)} \\end{quote}`;
+    text = `\\begin{${environmentName}} ${sentence(random, 5, 9)} \\\\[${choice(random, [4, 7])}pt] ${paragraph(random, 1)} \\end{${environmentName}}`;
   } else {
-    text = `${paragraph(random, 1)} \\par \\begin{quote} ${paragraph(random, 1)} \\par ${paragraph(random, 1)} \\end{quote}`;
+    text = `${paragraph(random, 1)} \\par \\begin{${environmentName}} ${paragraph(random, 1)} \\par ${paragraph(random, 1)} \\end{${environmentName}}`;
   }
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
-    feature: "quote",
+    feature: environmentName,
     text,
     width,
     parindent,
@@ -708,6 +709,10 @@ function computeLineTops(layout, parseLength) {
   return computeReportLineTops(layout.report, parseLength);
 }
 
+function reportLineBaselineY(line, lineTops) {
+  return (lineTops[line.lineIndex] ?? 0) + (Number(line.ascent) || firstLineAscentPt);
+}
+
 function reportLineText(line) {
   return line.segments.map((segment) => segment.text ?? "").join("").trimEnd();
 }
@@ -723,6 +728,7 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
   pieces.push(...renderVListRules(layout.vlistLayout?.items));
   for (const line of layout.report.lines) {
     const top = lineTops[line.lineIndex] ?? 0;
+    const baseline = reportLineBaselineY(line, lineTops) - top;
     const left = Number.isFinite(line.xStart) ? line.xStart : 0;
     pieces.push(`<g transform="translate(${formatPt(left)} ${formatPt(top)})">`);
     for (const segment of line.segments) {
@@ -740,7 +746,7 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
           segment.glyphCode,
           segmentFont,
           segment.x - left,
-          firstLineAscentPt
+          baseline
         ));
       } else {
         pieces.push(
@@ -748,7 +754,7 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
             segment.text ?? "",
             segmentFont,
             segment.x - left,
-            firstLineAscentPt,
+            baseline,
             deps.computerModernTexMetricProvider
           )
         );
@@ -765,7 +771,7 @@ function buildOursTrace(layout, deps) {
   const lineTops = computeLineTops(layout, deps.parseLength);
   return {
     lines: layout.report.lines.map((line) => {
-      const baselineY = (lineTops[line.lineIndex] ?? 0) + firstLineAscentPt;
+      const baselineY = reportLineBaselineY(line, lineTops);
       const glyphs = [];
       for (const segment of line.segments) {
         if (segment.kind !== "text") {

@@ -219,14 +219,16 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
           ? options.parindent
           : 0,
     forcedBreakIndentWidth:
-      options.tikzTextWidthNode === true &&
-      alignment !== "justified" &&
-      scopePolicy.allowForcedBreakIndent &&
-      Number.isFinite(options.parindent) &&
-      options.parindent &&
-      options.parindent > 0
-        ? options.parindent
-        : 0,
+      Number.isFinite(firstLineIndentWidth) && scopePolicy.allowForcedBreakIndent
+        ? firstLineIndentWidth
+        : options.tikzTextWidthNode === true &&
+              alignment !== "justified" &&
+              scopePolicy.allowForcedBreakIndent &&
+              Number.isFinite(options.parindent) &&
+              options.parindent &&
+              options.parindent > 0
+            ? options.parindent
+            : 0,
     forcedBreakUsesParfill: true,
     forcedBreakTerminalDemerits: true,
     parfillskipWidth: 0,

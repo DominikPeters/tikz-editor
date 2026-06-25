@@ -1808,6 +1808,46 @@ describe("simple TeX paragraph layout", () => {
     }
   });
 
+  it("lays out LaTeX quotation blocks with article-class paragraph indentation", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quotation} Alpha \par Beta \end{quotation}`,
+      {
+        paragraphId: "tex:quotation-block",
+        width: 120,
+        alignment: "ragged-right",
+        parindent: 0,
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(40, 5),
+      expect.closeTo(40, 5),
+    ]);
+  });
+
+  it("keeps LaTeX quotation paragraph indentation after forced breaks", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quotation} Alpha \\[7pt] Beta \end{quotation}`,
+      {
+        paragraphId: "tex:quotation-forced-break-indent",
+        width: 120,
+        alignment: "ragged-right",
+        parindent: 0,
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
+    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+      expect.closeTo(40, 5),
+      expect.closeTo(40, 5),
+    ]);
+  });
+
   it("positions LaTeX quote list vertical skips across paragraph boundaries", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`,
@@ -1822,9 +1862,9 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      20.33,
-      36.11,
-      56.22,
+      22.33,
+      38.11,
+      60.22,
     ]);
   });
 
@@ -1845,18 +1885,18 @@ describe("simple TeX paragraph layout", () => {
     expect(result.vlistLayout?.metrics).toEqual({
       width: 150,
       height: 8.5,
-      depth: 54.77,
+      depth: 58.77,
     });
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 20.33, 36.11, 56.22]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 22.33, 38.11, 60.22]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
       lineIndices: placement.lineIndices,
       y: placement.y,
     }))).toEqual([
       { blockIndex: 0, lineIndices: [0], y: 0 },
-      { blockIndex: 1, lineIndices: [1], y: 20.33 },
-      { blockIndex: 2, lineIndices: [2], y: 36.11 },
-      { blockIndex: 3, lineIndices: [3], y: 56.22 },
+      { blockIndex: 1, lineIndices: [1], y: 22.33 },
+      { blockIndex: 2, lineIndices: [2], y: 38.11 },
+      { blockIndex: 3, lineIndices: [3], y: 60.22 },
     ]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
@@ -1865,10 +1905,10 @@ describe("simple TeX paragraph layout", () => {
       height: item.metrics.height,
     }))).toEqual([
       { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(7.16, 2) },
-      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(18.06, 2) },
-      { kind: "glue", role: undefined, y: 43.38, height: 8 },
-      { kind: "glue", role: undefined, y: 51.38, height: 4.84 },
-      { kind: "paragraph", role: undefined, y: 56.22, height: expect.closeTo(6.94, 2) },
+      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(20.06, 2) },
+      { kind: "glue", role: undefined, y: 45.38, height: 10 },
+      { kind: "glue", role: undefined, y: 55.38, height: 4.84 },
+      { kind: "paragraph", role: undefined, y: 60.22, height: expect.closeTo(6.94, 2) },
     ]);
     expect(result.vlistLayout?.reports).toEqual([result.report]);
 
@@ -1886,7 +1926,7 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(lineTexts(result.report)).toEqual(["Alpha", "Beta", "Gamma"]);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19.33, 27.27]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 19.33, 31.11]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
@@ -1897,7 +1937,7 @@ describe("simple TeX paragraph layout", () => {
     }))).toEqual([
       { kind: "paragraph", y: 0, depth: expect.closeTo(19.11, 2), interlineBoundary: undefined },
       { kind: "glue", y: 26.27, depth: 0, interlineBoundary: "plain" },
-      { kind: "paragraph", y: 27.27, depth: expect.closeTo(0.22, 2), interlineBoundary: undefined },
+      { kind: "paragraph", y: 31.11, depth: expect.closeTo(0.22, 2), interlineBoundary: undefined },
     ]);
   });
 
@@ -1912,19 +1952,24 @@ describe("simple TeX paragraph layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 12.1, 26.04]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 15.33, 34.11]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
       height: item.item.kind === "glue" ? item.metrics.height : undefined,
       text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
       stretch: item.item.kind === "glue" ? item.item.stretch : undefined,
+      interlineBoundary: item.item.kind === "glue" && item.item.origin?.kind === "paragraph-boundary-interline"
+        ? item.item.origin.boundary
+        : undefined,
     }))).toEqual([
-      { kind: "paragraph", y: 0, height: undefined, text: "Alpha", stretch: undefined },
-      { kind: "glue", y: 9.1, height: 3, text: undefined, stretch: 1 },
-      { kind: "paragraph", y: 12.1, height: undefined, text: "Beta", stretch: undefined },
-      { kind: "glue", y: 19.04, height: 7, text: undefined, stretch: undefined },
-      { kind: "paragraph", y: 26.04, height: undefined, text: "Gamma", stretch: undefined },
+      { kind: "paragraph", y: 0, height: undefined, text: "Alpha", stretch: undefined, interlineBoundary: undefined },
+      { kind: "glue", y: 9.1, height: 3, text: undefined, stretch: 1, interlineBoundary: undefined },
+      { kind: "glue", y: 12.1, height: 3.23, text: undefined, stretch: undefined, interlineBoundary: "plain" },
+      { kind: "paragraph", y: 15.33, height: undefined, text: "Beta", stretch: undefined, interlineBoundary: undefined },
+      { kind: "glue", y: 22.27, height: 7, text: undefined, stretch: undefined, interlineBoundary: undefined },
+      { kind: "glue", y: 29.27, height: 4.84, text: undefined, stretch: undefined, interlineBoundary: "plain" },
+      { kind: "paragraph", y: 34.11, height: undefined, text: "Gamma", stretch: undefined, interlineBoundary: undefined },
     ]);
   });
 
@@ -1995,19 +2040,24 @@ describe("simple TeX paragraph layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 5.1, 10.04]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 8.33, 18.11]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
       y: item.y,
       height: item.item.kind === "glue" ? item.metrics.height : undefined,
       text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
       size: item.item.kind === "glue" ? item.item.size : undefined,
+      interlineBoundary: item.item.kind === "glue" && item.item.origin?.kind === "paragraph-boundary-interline"
+        ? item.item.origin.boundary
+        : undefined,
     }))).toEqual([
-      { kind: "paragraph", y: 0, height: undefined, text: "Alpha", size: undefined },
-      { kind: "glue", y: 9.1, height: 0, text: undefined, size: -4 },
-      { kind: "paragraph", y: 5.1, height: undefined, text: "Beta", size: undefined },
-      { kind: "glue", y: 12.04, height: 0, text: undefined, size: -2 },
-      { kind: "paragraph", y: 10.04, height: undefined, text: "Gamma", size: undefined },
+      { kind: "paragraph", y: 0, height: undefined, text: "Alpha", size: undefined, interlineBoundary: undefined },
+      { kind: "glue", y: 9.1, height: 0, text: undefined, size: -4, interlineBoundary: undefined },
+      { kind: "glue", y: 5.1, height: 3.23, text: undefined, size: 3.23, interlineBoundary: "plain" },
+      { kind: "paragraph", y: 8.33, height: undefined, text: "Beta", size: undefined, interlineBoundary: undefined },
+      { kind: "glue", y: 15.27, height: 0, text: undefined, size: -2, interlineBoundary: undefined },
+      { kind: "glue", y: 13.27, height: 4.84, text: undefined, size: 4.84, interlineBoundary: "plain" },
+      { kind: "paragraph", y: 18.11, height: undefined, text: "Gamma", size: undefined, interlineBoundary: undefined },
     ]);
   });
 
@@ -2056,7 +2106,7 @@ describe("simple TeX paragraph layout", () => {
     });
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 12.1]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 15.33]);
 
     const constrained = relayoutFromExistingVListLayout(
       layoutIr.vlist,
@@ -2109,7 +2159,7 @@ describe("simple TeX paragraph layout", () => {
     });
 
     expect(result.supported).toBe(true);
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 15.1]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 18.33]);
 
     const stretched = relayoutFromExistingVListLayout(
       layoutIr.vlist,
@@ -3873,11 +3923,11 @@ describe("simple TeX paragraph layout", () => {
     ]);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      19.89,
-      36.22,
-      56.22,
-      72.11,
-      91.89,
+      21.89,
+      38.22,
+      58.22,
+      78.11,
+      99.89,
     ]);
   });
 
@@ -4704,13 +4754,13 @@ unordered.`;
     expect(vlistLayout?.paragraphPlacements[0]).toMatchObject({
       blockIndex: 0,
       x: 47,
-      y: 10,
+      y: 13,
       vlistPath: [0, 0, 0, 2],
     });
     expect(vlistLayout?.linePlacements[0]).toMatchObject({
       lineIndex: 0,
       x: 47,
-      y: 10,
+      y: 13,
     });
     expect(report?.lines[0]).toMatchObject({
       lineIndex: 0,

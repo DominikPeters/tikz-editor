@@ -499,11 +499,37 @@ describe("simple TeX paragraph IR", () => {
     expect(ir.blocks.map((block) => ({
       text: block.text,
       quoteDepth: block.quoteDepth,
+      quotationDepth: block.quotationDepth,
       noIndent: block.noIndent,
+      firstLineIndentEm: block.firstLineIndentEm,
     }))).toEqual([
-      { text: "Alpha", quoteDepth: 0, noIndent: false },
-      { text: "Beta", quoteDepth: 1, noIndent: true },
-      { text: "Gamma", quoteDepth: 0, noIndent: false },
+      { text: "Alpha", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+      { text: "Beta", quoteDepth: 1, quotationDepth: 0, noIndent: true, firstLineIndentEm: undefined },
+      { text: "Gamma", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+    ]);
+  });
+
+  it("records quotation environment boundaries with quote layout depth", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \begin{quotation} Beta \end{quotation} Gamma`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "quotation" }),
+        expect.objectContaining({ boundary: "end", name: "quotation" }),
+      ]);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      quoteDepth: block.quoteDepth,
+      quotationDepth: block.quotationDepth,
+      noIndent: block.noIndent,
+      firstLineIndentEm: block.firstLineIndentEm,
+    }))).toEqual([
+      { text: "Alpha", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+      { text: "Beta", quoteDepth: 1, quotationDepth: 1, noIndent: false, firstLineIndentEm: 1.5 },
+      { text: "Gamma", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
     ]);
   });
 
@@ -772,6 +798,51 @@ describe("simple TeX paragraph IR", () => {
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "glue:10",
       "paragraph:Alpha Beta",
+    ]);
+  });
+
+  it("materializes LaTeX article quotation margins and paragraph indentation in layout metadata", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quotation} Alpha Beta \par Gamma Delta \end{quotation}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(2);
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      noIndent: plan.segment.noIndent,
+      firstLineIndentEm: plan.segment.firstLineIndentEm,
+      firstLineIndentWidth: plan.breakContext.firstLineIndentWidth,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
+      rightMarginWidth: plan.breakContext.scopePolicy.rightMarginWidth,
+    }))).toEqual([
+      {
+        text: "Alpha Beta",
+        noIndent: false,
+        firstLineIndentEm: 1.5,
+        firstLineIndentWidth: 1.5 * font.atPt,
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 2.5 * font.atPt,
+      },
+      {
+        text: "Gamma Delta",
+        noIndent: false,
+        firstLineIndentEm: 1.5,
+        firstLineIndentWidth: 1.5 * font.atPt,
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 2.5 * font.atPt,
+      },
+    ]);
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "glue:10",
+      "paragraph:Alpha Beta",
+      "paragraph:Gamma Delta",
     ]);
   });
 

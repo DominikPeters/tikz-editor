@@ -1002,7 +1002,7 @@ describe("TeX vlist scopes", () => {
           },
         },
         children: [
-          { kind: "glue", size: 10 },
+          { kind: "glue", size: 13 },
           { kind: "hbox", size: undefined },
           { kind: "paragraph", text: "Alpha" },
         ],
@@ -1037,6 +1037,39 @@ describe("TeX vlist scopes", () => {
       },
     ]);
     expect(flattenVListLeaves(grouped.items)).toEqual(flattenVListLeaves(layout.vlist.items));
+  });
+
+  it("groups quotation paragraph ranges as quote structural vboxes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quotation}Alpha\par Beta\end{quotation}`
+    );
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      computerModernTexMetricProvider.resolveFont()
+    );
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(grouped.items).toHaveLength(1);
+    const quoteBox = grouped.items[0];
+    expect(quoteBox).toMatchObject({
+      kind: "vbox",
+      role: { kind: "quote", depth: 1 },
+      sourceSpan: {
+        start: parsed.blocks[0]?.sourceStart,
+        end: parsed.blocks[1]?.sourceEnd,
+      },
+    });
+    if (quoteBox?.kind !== "vbox") {
+      throw new Error("expected quotation vbox");
+    }
+    expect(quoteBox.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
+        : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      { kind: "paragraph", text: "Beta" },
+    ]);
   });
 
   it("records list item label source metadata on list-item vboxes", () => {
@@ -1230,7 +1263,7 @@ describe("TeX vlist scopes", () => {
       },
     });
     expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
-      "glue:10",
+      "glue:13",
       "hbox",
       "paragraph:Alpha",
     ]);
@@ -1319,7 +1352,7 @@ describe("TeX vlist scopes", () => {
     ]);
     expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
       "paragraph:Alpha",
-      "glue:8",
+      "glue:10",
       "hbox",
       "paragraph:Beta",
     ]);
@@ -1438,9 +1471,9 @@ describe("TeX vlist spacing", () => {
 
     expect(skips).toEqual([
       { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
-      { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 8, listSize: 0, size: 8 },
+      { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
       { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 4, listSize: 0, size: 4 },
-      { blockIndex: 3, vlistPath: [3], segmentIndex: 0, quoteSize: 8, listSize: 0, size: 8 },
+      { blockIndex: 3, vlistPath: [3], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
     ]);
   });
 
@@ -1506,7 +1539,8 @@ describe("TeX vlist spacing", () => {
       depth: item.metrics.depth,
     }))).toEqual([
       { kind: "paragraph", y: 0, height: 7, depth: 3 },
-      { kind: "glue", y: 10, height: 20, depth: 0 },
+      { kind: "glue", y: 10, height: 18, depth: 0 },
+      { kind: "glue", y: 28, height: 2, depth: 0 },
       { kind: "paragraph", y: 30, height: 7, depth: 3 },
     ]);
     expect(layout.linePlacements).toEqual([
@@ -1544,7 +1578,7 @@ describe("TeX vlist spacing", () => {
       { kind: "paragraph", text: "Alpha" },
       {
         kind: "glue",
-        size: 8,
+        size: 10,
         origin: {
           kind: "quote-boundary",
           beforeBlockIndex: 1,
@@ -1554,7 +1588,7 @@ describe("TeX vlist spacing", () => {
       { kind: "paragraph", text: "Beta" },
       {
         kind: "glue",
-        size: 8,
+        size: 10,
         origin: {
           kind: "list-boundary",
           beforeBlockIndex: 2,
@@ -1586,9 +1620,9 @@ describe("TeX vlist spacing", () => {
       listSize: skip.listSize,
     }))).toEqual([
       { blockIndex: 0, size: 0, quoteSize: 0, listSize: 0 },
-      { blockIndex: 1, size: 8, quoteSize: 8, listSize: 0 },
+      { blockIndex: 1, size: 10, quoteSize: 10, listSize: 0 },
       { blockIndex: 2, size: 4, quoteSize: 4, listSize: 0 },
-      { blockIndex: 3, size: 8, quoteSize: 8, listSize: 0 },
+      { blockIndex: 3, size: 10, quoteSize: 10, listSize: 0 },
     ]);
     expect(materialized.items.map((item) => item.kind)).toEqual([
       "paragraph",
@@ -1597,18 +1631,18 @@ describe("TeX vlist spacing", () => {
       "paragraph",
     ]);
     expect(quote?.kind === "vbox" ? flattenVListLeaves(quote.items) : null).toEqual([
-      "glue:8",
+      "glue:10",
       "paragraph:Beta",
       "glue:4",
       "paragraph:Gamma",
     ]);
     expect(flattenVListLeaves(materialized.items)).toEqual([
       "paragraph:Alpha",
-      "glue:8",
+      "glue:10",
       "paragraph:Beta",
       "glue:4",
       "paragraph:Gamma",
-      "glue:8",
+      "glue:10",
       "paragraph:Delta",
     ]);
   });
@@ -1635,17 +1669,17 @@ describe("TeX vlist spacing", () => {
       size: skip.size,
     }))).toEqual([
       { blockIndex: 0, vlistPath: [0], quoteSize: 0, listSize: 0, size: 0 },
-      { blockIndex: 1, vlistPath: [1, 0], quoteSize: 8, listSize: 0, size: 8 },
-      { blockIndex: 2, vlistPath: [1, 1, 0, 0], quoteSize: 0, listSize: 8, size: 8 },
+      { blockIndex: 1, vlistPath: [1, 0], quoteSize: 10, listSize: 0, size: 10 },
+      { blockIndex: 2, vlistPath: [1, 1, 0, 0], quoteSize: 0, listSize: 10, size: 10 },
       { blockIndex: 3, vlistPath: [1, 1, 0, 1], quoteSize: 0, listSize: 2, size: 2 },
       { blockIndex: 4, vlistPath: [1, 1, 1, 0], quoteSize: 0, listSize: 4, size: 4 },
     ]);
 
     expect(flattenVListLeaves(materializeParagraphVerticalGlueInVList(scrubbed, font).items)).toEqual([
       "paragraph:Alpha",
-      "glue:8",
+      "glue:10",
       "paragraph:Beta",
-      "glue:8",
+      "glue:10",
       "paragraph:Gamma",
       "glue:2",
       "paragraph:More",
@@ -1665,9 +1699,9 @@ describe("TeX vlist spacing", () => {
 
     expect(flattenVListLeaves(prepared.materialized.items)).toEqual([
       "paragraph:Alpha",
-      "glue:8",
+      "glue:10",
       "paragraph:Beta",
-      "glue:8",
+      "glue:10",
       "paragraph:Gamma",
     ]);
     expect(prepared.normalized).toEqual(normalized);
@@ -1702,7 +1736,7 @@ describe("TeX vlist spacing", () => {
       layout: item.kind === "vbox" ? item.layout : undefined,
       size: item.kind === "glue" ? item.size : undefined,
     })) : null).toEqual([
-      { kind: "glue", role: undefined, layout: undefined, size: 8 },
+      { kind: "glue", role: undefined, layout: undefined, size: 10 },
       { kind: "paragraph", role: undefined, layout: undefined, size: undefined },
       {
         kind: "vbox",
@@ -1725,9 +1759,9 @@ describe("TeX vlist spacing", () => {
     ]);
     expect(flattenVListLeaves(normalized.items)).toEqual([
       "paragraph:Alpha",
-      "glue:8",
+      "glue:10",
       "paragraph:Beta",
-      "glue:8",
+      "glue:10",
       "paragraph:Gamma",
     ]);
     expect(texVListParagraphItems(normalized.items).map((item) => item.paragraph.text)).toEqual([
@@ -2429,8 +2463,8 @@ describe("TeX vlist report assembly", () => {
 
     expect(layout.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      20,
-      40,
+      22,
+      44,
     ]);
     expect(layout.items.map((item) => item.item.kind)).toEqual([
       "paragraph",
