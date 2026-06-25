@@ -12,8 +12,10 @@ import type { NodeItem } from "tikz-editor/ast/types";
 import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToWorldPoint } from "./geometry";
+import { isAdditiveSelectionModifier, isResizeHandleAdditiveSelectionModifier } from "./selection-modifiers";
 import { resolveResizeFrameForSource, type ResizeFrame } from "./resize-frames";
 import { angleDeg } from "./rotate-handle";
+import { resolveFrameBasis } from "./interaction-helpers";
 import {
   ellipseAspectRatioForSource,
   findPathStatementById,
@@ -62,6 +64,13 @@ export type UseCanvasHandleInteractionsArgs = {
 
 function isCornerResizeRole(role: ResizeRole): role is Extract<ResizeRole, "top-left" | "top-right" | "bottom-left" | "bottom-right"> {
   return role === "top-left" || role === "top-right" || role === "bottom-left" || role === "bottom-right";
+}
+
+function aspectRatioForResizeFrame(frame: ResizeFrame): number | null {
+  const basis = resolveFrameBasis(frame);
+  return basis.width > 1e-6 && basis.height > 1e-6
+    ? basis.height / basis.width
+    : null;
 }
 
 function normalizeResizeRoleForNodeShapeFrame(role: ResizeRole, frame: ResizeFrame, enabled: boolean): ResizeRole {
@@ -120,7 +129,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
   const onHandlePointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, handle: EditHandle) => {
       if (!svgResult || toolMode !== "select" || event.button !== 0) return;
-      const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+      const additiveSelection = isAdditiveSelectionModifier(event);
 
       viewportRef.current?.focus({ preventScroll: true });
       event.preventDefault();
@@ -248,7 +257,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         // but resize drag is not enabled yet.
         return;
       }
-      const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+      const additiveSelection = isResizeHandleAdditiveSelectionModifier(event);
 
       viewportRef.current?.focus({ preventScroll: true });
       event.preventDefault();
@@ -311,6 +320,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         initialFrame,
         pathElement != null && pathShapeHint == null
       );
+      const frameAspectRatio = aspectRatioForResizeFrame(initialFrame);
 
       setSnapLines([]);
       setDragState({
@@ -319,7 +329,9 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         elementId: sourceId,
         role: normalizedRole,
         cursor: cursor || resizeCursorForRole(normalizedRole),
-        preserveAspectRatio: isCircleResizeSource ? 1 : ellipseAspectRatioForSource(snapshot.scene?.elements ?? [], sourceId),
+        preserveAspectRatio: isCircleResizeSource
+          ? 1
+          : ellipseAspectRatioForSource(snapshot.scene?.elements ?? [], sourceId) ?? frameAspectRatio,
         initialFrame,
         initialScopeTransform,
         measurementMode: pathShapeHint === "rectangle" || sourceId.startsWith("scope:") ? "opposite-corner" : "center",

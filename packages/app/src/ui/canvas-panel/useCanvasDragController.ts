@@ -516,7 +516,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const dimensions = liveDimensions
           ? { width: liveDimensions.width, height: liveDimensions.height }
           : drag.measurementMode === "opposite-corner"
-            ? projectResizeDimensionsFromOppositeCorner(world, drag.initialFrame, drag.role)
+            ? projectResizeDimensionsFromOppositeCorner(
+              world,
+              drag.initialFrame,
+              drag.role,
+              drag.preserveAspectRatio,
+              drag.preserveAspectDuringResize || event.shiftKey
+            )
             : projectResizeDimensionsFromCenter(
               world,
               drag.initialFrame,

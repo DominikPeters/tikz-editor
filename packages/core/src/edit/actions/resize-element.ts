@@ -838,10 +838,32 @@ function applyResizePathRectangle(
 
   if (isRectangleCornerRole(action.role)) {
     const fixedLocal = roleCorners[oppositeRectangleCornerRole(action.role)];
-    minX = Math.min(fixedLocal.x, localPointer.x);
-    maxX = Math.max(fixedLocal.x, localPointer.x);
-    minY = Math.min(fixedLocal.y, localPointer.y);
-    maxY = Math.max(fixedLocal.y, localPointer.y);
+    let movingLocal = localPointer;
+    if (action.preserveAspect) {
+      const currentWidth = currentMaxX - currentMinX;
+      const currentHeight = currentMaxY - currentMinY;
+      const fixedAspectRatio =
+        Number.isFinite(action.preserveAspectRatio) && action.preserveAspectRatio! > RESIZE_EPSILON
+          ? action.preserveAspectRatio!
+          : currentWidth > RESIZE_EPSILON && currentHeight > RESIZE_EPSILON
+            ? currentHeight / currentWidth
+            : null;
+      if (fixedAspectRatio && fixedAspectRatio > RESIZE_EPSILON) {
+        const nextWidth = Math.abs(localPointer.x - fixedLocal.x);
+        const nextHeight = Math.abs(localPointer.y - fixedLocal.y);
+        const preservedWidth = Math.max(nextWidth, nextHeight / fixedAspectRatio);
+        const preservedHeight = preservedWidth * fixedAspectRatio;
+        const roleDirection = rectangleCornerDirection(action.role);
+        movingLocal = frameLocalPoint(
+          pt(fixedLocal.x + roleDirection.x * preservedWidth),
+          pt(fixedLocal.y + roleDirection.y * preservedHeight)
+        );
+      }
+    }
+    minX = Math.min(fixedLocal.x, movingLocal.x);
+    maxX = Math.max(fixedLocal.x, movingLocal.x);
+    minY = Math.min(fixedLocal.y, movingLocal.y);
+    maxY = Math.max(fixedLocal.y, movingLocal.y);
   } else if (action.role === "left" || action.role === "right") {
     const fixedX = action.role === "left"
       ? (roleCorners["top-right"].x + roleCorners["bottom-right"].x) / 2
@@ -1505,6 +1527,19 @@ function oppositeRectangleCornerRole(role: RectangleCornerRole): RectangleCorner
       return "top-right";
     case "bottom-right":
       return "top-left";
+  }
+}
+
+function rectangleCornerDirection(role: RectangleCornerRole): { x: -1 | 1; y: -1 | 1 } {
+  switch (role) {
+    case "top-left":
+      return { x: -1, y: 1 };
+    case "top-right":
+      return { x: 1, y: 1 };
+    case "bottom-left":
+      return { x: -1, y: -1 };
+    case "bottom-right":
+      return { x: 1, y: -1 };
   }
 }
 

@@ -1407,6 +1407,43 @@ describe("applyEditAction – resizeElement", () => {
     expect(result.newSource).toContain("\\draw (0,-1) rectangle (3,1);");
   });
 
+  it("preserves rectangle proportions during corner resize when preserveAspect is enabled", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (2,1);
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "resizeElement",
+      elementId: "path:0",
+      role: "top-left",
+      newWorld: wp(cm(-1), cm(2)),
+      preserveAspect: true
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("\\draw (-2,0) rectangle (2,2);");
+  });
+
+  it("uses the provided rectangle aspect ratio when preserving proportions", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (3,1);
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "resizeElement",
+      elementId: "path:0",
+      role: "top-left",
+      newWorld: wp(cm(-1), cm(2)),
+      preserveAspect: true,
+      preserveAspectRatio: 0.5
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("\\draw (-1,0) rectangle (3,2);");
+  });
+
   it("rejects invalid and no-op rectangle resizes", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) rectangle (2,1);

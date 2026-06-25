@@ -451,14 +451,30 @@ export function projectResizeDimensionsFromCenter(
 export function projectResizeDimensionsFromOppositeCorner(
   pointerWorld: WorldPoint,
   frame: ResizeFrame,
-  role: Extract<DragState, { kind: "resize" }>["role"]
+  role: Extract<DragState, { kind: "resize" }>["role"],
+  preserveAspectRatio: number | null = null,
+  preserveAspectDuringResize = false
 ): { width: number; height: number } {
   const basis = resolveFrameBasis(frame);
   const fixed = oppositeCornerWorld(frame, role);
   const delta = worldVector(pt(pointerWorld.x - fixed.x), pt(pointerWorld.y - fixed.y));
+  let width = Math.abs(dotPoint(delta, basis.widthUnit));
+  let height = Math.abs(dotPoint(delta, basis.heightUnit));
+  const aspectRatio =
+    preserveAspectRatio && preserveAspectRatio > TOOLTIP_ZERO_EPSILON
+      ? preserveAspectRatio
+      : null;
+
+  if (preserveAspectDuringResize && aspectRatio) {
+    if (width > TOOLTIP_ZERO_EPSILON || height > TOOLTIP_ZERO_EPSILON) {
+      width = Math.max(width, height / aspectRatio);
+      height = width * aspectRatio;
+    }
+  }
+
   return {
-    width: clampTooltipScalar(Math.abs(dotPoint(delta, basis.widthUnit))),
-    height: clampTooltipScalar(Math.abs(dotPoint(delta, basis.heightUnit)))
+    width: clampTooltipScalar(width),
+    height: clampTooltipScalar(height)
   };
 }
 
