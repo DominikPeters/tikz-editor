@@ -21,12 +21,22 @@ export default defineConfig({
         "**/vite-env.d.ts",
         "**/generated/**",
         "**/generated-*.ts",
-        "packages/core/src/syntax/grammar/**"
+        "packages/lezer-tikz/src/grammar/**"
       ]
     }
   },
   resolve: {
     alias: {
+      "@tikz-editor/lang-tikz": path.resolve(rootDir, "./packages/lang-tikz/src/index.ts"),
+      "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": path.resolve(
+        rootDir,
+        "./packages/lezer-tikz/src/grammar/tikz-parser.terms.ts"
+      ),
+      "@tikz-editor/lezer-tikz/grammar/tikz-parser": path.resolve(
+        rootDir,
+        "./packages/lezer-tikz/src/grammar/tikz-parser.ts"
+      ),
+      "@tikz-editor/lezer-tikz": path.resolve(rootDir, "./packages/lezer-tikz/src/index.ts"),
       // Mirror the Vite alias so tests can import from "tikz-editor/..."
       "tikz-editor": path.resolve(rootDir, "./packages/core/src")
     }
