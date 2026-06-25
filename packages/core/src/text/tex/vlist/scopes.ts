@@ -31,10 +31,11 @@ export function groupSimpleTexVListScopes(
   const stack: ScopeFrame[] = [];
 
   for (let index = 0; index < vlist.items.length; index += 1) {
-    const item = vlist.items[index];
-    if (!item) {
+    const rawItem = vlist.items[index];
+    if (!rawItem) {
       continue;
     }
+    const item = normalizeExistingVBoxScopes(rawItem, font);
     const path = scopePathForItem(item, vlist.items[index + 1]);
     const commonPrefixLength = commonScopePrefixLength(stack, path);
     stack.length = commonPrefixLength;
@@ -63,6 +64,23 @@ export function groupSimpleTexVListScopes(
   };
 }
 
+function normalizeExistingVBoxScopes(
+  item: TexVListItem,
+  font: ResolvedTexFont
+): TexVListItem {
+  if (item.kind !== "vbox" || item.role) {
+    return item;
+  }
+  return {
+    ...item,
+    items: groupSimpleTexVListScopes({
+      kind: "vlist",
+      sourceSpan: item.sourceSpan,
+      items: item.items,
+    }, font).items,
+  };
+}
+
 function scopePathForItem(
   item: TexVListItem,
   nextItem: TexVListItem | undefined
@@ -76,6 +94,7 @@ function scopePathForItem(
       item.kind === "penalty" ||
       item.kind === "rule" ||
       item.kind === "hbox" ||
+      item.kind === "vbox" ||
       item.kind === "display-math" ||
       item.kind === "display-alignment" ||
       item.kind === "placeholder"

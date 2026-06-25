@@ -104,17 +104,19 @@ export function prepareTexLayoutParagraphsFromVList(
     const suppressAncestorBreakMargins =
       paragraph.ignoreAncestorBreakMargins === true ||
       paragraph.useScopedLineWidth === true;
-    const scopedLineWidth = paragraph.useScopedLineWidth === true &&
-        params.options.width !== undefined
-      ? Math.max(
-          0,
-          params.options.width -
-            scopeContext.layout.leftMarginWidth -
-            scopeContext.layout.rightMarginWidth
-        )
-      : undefined;
+    const scopedLineWidth = texParagraphScopedLineWidth(
+      scopeContext,
+      params.options.width,
+      paragraph.useScopedLineWidth === true
+    );
     const breakScopeContext = suppressAncestorBreakMargins
       ? texParagraphScopeContextWithoutBreakMargins(scopeContext)
+      : scopedLineWidth !== undefined && scopeContext.layout.scopedLineWidth !== undefined
+        ? texParagraphScopeContextWithBreakMargins(
+            scopeContext,
+            scopeContext.layout.scopedLeftMarginWidth ?? 0,
+            scopeContext.layout.scopedRightMarginWidth ?? 0
+          )
       : scopeContext;
     const blockIndex = paragraph.blockIndex;
     const paragraphStateResult = paragraphState.resolveParagraph({
@@ -207,6 +209,24 @@ export function prepareTexLayoutParagraphsFromVList(
   };
 }
 
+function texParagraphScopedLineWidth(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>,
+  rootWidth: number | undefined,
+  useScopedLineWidth: boolean
+): number | undefined {
+  if (useScopedLineWidth) {
+    return rootWidth === undefined
+      ? undefined
+      : Math.max(
+          0,
+          rootWidth -
+            scopeContext.layout.leftMarginWidth -
+            scopeContext.layout.rightMarginWidth
+        );
+  }
+  return scopeContext.layout.scopedLineWidth;
+}
+
 function texQuotationFirstLineIndentWidth(
   segment: SimpleTexParagraphSegment,
   font: ResolvedTexFont
@@ -228,6 +248,20 @@ function texParagraphScopeContextWithoutBreakMargins(
     quoteContextActive: false,
     listContextActive: false,
     listItemLayout: undefined,
+  };
+}
+
+function texParagraphScopeContextWithBreakMargins(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>,
+  leftMarginWidth: number,
+  rightMarginWidth: number
+): ReturnType<typeof texParagraphScopeContext> {
+  return {
+    ...scopeContext,
+    layout: {
+      leftMarginWidth,
+      rightMarginWidth,
+    },
   };
 }
 

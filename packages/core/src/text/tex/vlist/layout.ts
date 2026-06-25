@@ -118,6 +118,7 @@ function layoutTexVBoxItem(
 } {
   const leftMarginWidth = item.layout?.leftMarginWidth ?? 0;
   const rightMarginWidth = item.layout?.rightMarginWidth ?? 0;
+  const targetWidth = finiteTexDimen(item.width);
   const childXOffset = roundTexPt(xOffset + leftMarginWidth);
   const natural = layoutTexVListItems(
     item.items,
@@ -154,7 +155,15 @@ function layoutTexVBoxItem(
   const baselineY = baselineYForVBox(children, top);
   return {
     children,
-    metrics: metricsForVBox(children, top, cursor, xOffset, leftMarginWidth, rightMarginWidth),
+    metrics: metricsForVBox(
+      children,
+      top,
+      cursor,
+      xOffset,
+      leftMarginWidth,
+      rightMarginWidth,
+      targetWidth
+    ),
     baseline: baselineY === null
       ? { kind: "none" }
       : { kind: "explicit", y: roundTexPt(baselineY - top) },
@@ -360,14 +369,16 @@ function metricsForVBox(
   bottom: number,
   xOffset = 0,
   leftMarginWidth = 0,
-  rightMarginWidth = 0
+  rightMarginWidth = 0,
+  targetWidth: number | undefined = undefined
 ): TexBoxMetrics {
   const baselineY = baselineYForVBox(positioned, top) ?? top;
   const contentRight = Math.max(
     leftMarginWidth,
     ...positioned.map((item) => item.x - xOffset + item.metrics.width)
   );
-  const width = roundTexPt(contentRight + rightMarginWidth);
+  const naturalWidth = roundTexPt(contentRight + rightMarginWidth);
+  const width = targetWidth ?? naturalWidth;
   return {
     width,
     height: roundTexPt(Math.max(0, baselineY - top)),

@@ -18,6 +18,9 @@ export interface TexParagraphScopePolicy {
 export interface TexParagraphScopeLayout {
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
+  readonly scopedLineWidth?: number;
+  readonly scopedLeftMarginWidth?: number;
+  readonly scopedRightMarginWidth?: number;
 }
 
 export interface TexParagraphScopeContext {
@@ -107,15 +110,44 @@ function texParagraphScopeLayout(
 ): TexParagraphScopeLayout {
   let leftMarginWidth = 0;
   let rightMarginWidth = 0;
+  let scopedWidth: number | undefined;
+  let scopedLeftMarginWidth = 0;
+  let scopedRightMarginWidth = 0;
   for (const ancestor of ancestors) {
-    if (!ancestor.layout) {
+    const left = ancestor.layout?.leftMarginWidth ?? 0;
+    const right = ancestor.layout?.rightMarginWidth ?? 0;
+    leftMarginWidth += left;
+    rightMarginWidth += right;
+    const width = finiteTexScopeWidth(ancestor.width);
+    if (width !== undefined) {
+      scopedWidth = width;
+      scopedLeftMarginWidth = left;
+      scopedRightMarginWidth = right;
       continue;
     }
-    leftMarginWidth += ancestor.layout.leftMarginWidth;
-    rightMarginWidth += ancestor.layout.rightMarginWidth;
+    if (scopedWidth !== undefined) {
+      scopedLeftMarginWidth += left;
+      scopedRightMarginWidth += right;
+    }
   }
+  const scopedLineWidth = scopedWidth === undefined
+    ? undefined
+    : Math.max(0, scopedWidth - scopedLeftMarginWidth - scopedRightMarginWidth);
   return {
     leftMarginWidth,
     rightMarginWidth,
+    ...(scopedLineWidth !== undefined
+      ? {
+          scopedLineWidth,
+          scopedLeftMarginWidth,
+          scopedRightMarginWidth,
+        }
+      : {}),
   };
+}
+
+function finiteTexScopeWidth(value: TexVBoxItem["width"]): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }

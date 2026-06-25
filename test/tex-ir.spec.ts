@@ -269,6 +269,50 @@ describe("simple TeX paragraph IR", () => {
 
   });
 
+  it("parses parbox commands as nested block items", () => {
+    const source = String.raw`\parbox[t][24pt][b]{40pt}{Alpha \par \begin{quote}Beta\end{quote}}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({
+      kind: "box",
+      command: "parbox",
+      width: 40,
+      height: 24,
+      alignment: "bottom",
+      content: String.raw`Alpha \par \begin{quote}Beta\end{quote}`,
+    });
+    expect(parsed.blocks.map((block) => ({
+      text: block.text,
+      quoteDepth: block.quoteDepth,
+    }))).toEqual([
+      { text: "Alpha", quoteDepth: 0 },
+      { text: "Beta", quoteDepth: 1 },
+    ]);
+    expect(parsed.items.map((item) =>
+      item.kind === "box"
+        ? {
+            kind: item.kind,
+            command: item.command,
+            width: item.width,
+            height: item.height,
+            alignment: item.alignment,
+            bodyKinds: item.items.map((child) => child.kind),
+          }
+        : { kind: item.kind }
+    )).toEqual([
+      {
+        kind: "box",
+        command: "parbox",
+        width: 40,
+        height: 24,
+        alignment: "bottom",
+        bodyKinds: ["paragraph", "paragraph"],
+      },
+    ]);
+  });
+
   it("preserves block-position unsupported commands as placeholder block items", () => {
     const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);

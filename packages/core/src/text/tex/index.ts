@@ -26,6 +26,10 @@ export {
 export {
   parseSimpleTexParagraphIr,
   type SimpleTexAlignmentNode,
+  type SimpleTexBoxAlignment,
+  type SimpleTexBoxBlockItem,
+  type SimpleTexBoxCommandName,
+  type SimpleTexBoxNode,
   type SimpleTexBlockItem,
   type SimpleTexControlNode,
   type SimpleTexDisplayMathBlockItem,

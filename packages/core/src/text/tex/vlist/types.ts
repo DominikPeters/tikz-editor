@@ -252,6 +252,7 @@ export interface TexVBoxParagraphPolicy {
 export interface TexVBoxItem {
   readonly kind: "vbox";
   readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
   readonly role?: TexVBoxRole;
   readonly layout?: TexVBoxLayout;
   readonly width?: TexDimenExpr;

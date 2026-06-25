@@ -1,4 +1,5 @@
 import type {
+  SimpleTexBoxBlockItem,
   SimpleTexBlockItem,
   SimpleTexDisplayMathBlockItem,
   SimpleTexParagraphBlock,
@@ -21,6 +22,7 @@ import type {
   TexPlaceholderItem,
   TexRuleItem,
   TexSourceSpan,
+  TexVBoxItem,
   TexVBoxRole,
   TexVListDocument,
   TexVListItem,
@@ -62,6 +64,10 @@ export function lowerSimpleTexBlockItemsToVList(
     }
     if (item.kind === "penalty") {
       items.push(penaltyItemFromSimpleTexPenalty(item));
+      continue;
+    }
+    if (item.kind === "box") {
+      items.push(vboxItemFromSimpleTexBox(item, options));
       continue;
     }
     if (item.kind === "placeholder") {
@@ -106,6 +112,36 @@ export function lowerSimpleTexBlockItemsToVList(
     kind: "vlist",
     sourceSpan: sourceSpanForVListItems(items),
     items,
+  };
+}
+
+function vboxItemFromSimpleTexBox(
+  item: SimpleTexBoxBlockItem,
+  options: LowerSimpleTexBlockItemsToVListOptions
+): TexVBoxItem {
+  const nested = lowerSimpleTexBlockItemsToVList(item.items, {
+    ...options,
+    width: item.width,
+  });
+  return {
+    kind: "vbox",
+    sourceSpan: {
+      start: item.sourceStart,
+      end: item.sourceEnd,
+    },
+    scopePath: scopePathForVerticalBlockItem(item),
+    width: item.width,
+    ...(item.height !== undefined ? { height: item.height } : {}),
+    alignment: item.alignment,
+    layout: {
+      leftMarginWidth: 0,
+      rightMarginWidth: 0,
+      paragraphPolicy: {
+        resetInheritedAlignment: true,
+        resetSpaceGlueProfile: true,
+      },
+    },
+    items: nested.items,
   };
 }
 
@@ -380,6 +416,7 @@ function scopePathForVerticalBlockItem(
     | SimpleTexVerticalRuleBlockItem
     | SimpleTexPenaltyBlockItem
     | SimpleTexDisplayMathBlockItem
+    | SimpleTexBoxBlockItem
     | SimpleTexPlaceholderBlockItem
 ): readonly TexVBoxRole[] | undefined {
   const path = texVBoxRolePathForScope(item);

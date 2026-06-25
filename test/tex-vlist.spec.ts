@@ -3,6 +3,7 @@ import {
   computerModernTexMetricProvider,
   createTexDerivedInlineMathBoxProvider,
   createSimpleTexLayoutDocumentIr,
+  layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
 } from "../packages/core/src/text/tex/index.js";
 import {
@@ -694,6 +695,74 @@ describe("TeX vlist lowering", () => {
       },
       { kind: "paragraph", text: "Beta" },
     ]);
+  });
+
+  it("lowers parbox commands into explicit-width nested vboxes", () => {
+    const source = String.raw`\parbox[t]{40pt}{Alpha \par \begin{quote}Beta\end{quote}}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
+
+    expect(vlist.items).toHaveLength(1);
+    expect(vlist.items[0]).toMatchObject({
+      kind: "vbox",
+      width: 40,
+      alignment: "top",
+      sourceSpan: {
+        start: 0,
+        end: source.length,
+      },
+    });
+    const prepared = prepareSimpleTexVList(
+      vlist,
+      computerModernTexMetricProvider.resolveFont()
+    );
+    const parbox = prepared.normalized.items[0];
+    if (parbox?.kind !== "vbox") {
+      throw new Error("expected parbox vbox");
+    }
+    expect(parbox.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
+        : item.kind === "vbox"
+          ? { kind: item.kind, role: item.role }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      { kind: "vbox", role: { kind: "quote", depth: 1 } },
+    ]);
+  });
+
+  it("uses parbox width as the descendant paragraph line width", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\parbox{55pt}{Alpha Beta Gamma Delta}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: { width: 200 },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0]?.breakContext.width).toBe(55);
+    expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.leftMarginWidth).toBe(0);
+    expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.rightMarginWidth).toBe(0);
+  });
+
+  it("lays out parbox content through the public simple TeX layout path", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\parbox{55pt}{Alpha Beta Gamma Delta}`,
+      { width: 200 }
+    );
+
+    expect(result.supported).toBe(true);
+    const parbox = result.vlistLayout?.items[0];
+    expect(parbox).toMatchObject({
+      item: { kind: "vbox" },
+      metrics: { width: 55 },
+    });
+    expect(result.vlistLayout?.linePlacements.length).toBeGreaterThan(1);
   });
 
   it("preserves block-position unsupported commands as vlist placeholders", () => {
