@@ -752,6 +752,32 @@ describe("TeX vlist lowering", () => {
     expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.allowForcedBreakIndent).toBe(false);
   });
 
+  it("restores material box paragraph alignment from the current TeX scope", () => {
+    const rightParsed = parseSimpleTexParagraphIr(
+      String.raw`\parbox{55pt}{Alpha Beta Gamma Delta}`
+    );
+    const rightLayout = createSimpleTexLayoutDocumentIr({
+      blocks: rightParsed.blocks,
+      items: rightParsed.items,
+      defaultAlignment: "ragged-left",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: { width: 200 },
+    });
+    expect(rightLayout.paragraphPlans[0]?.alignment).toBe("ragged-right");
+
+    const justifiedParsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{minipage}{55pt}Alpha Beta Gamma Delta\end{minipage}`
+    );
+    const justifiedLayout = createSimpleTexLayoutDocumentIr({
+      blocks: justifiedParsed.blocks,
+      items: justifiedParsed.items,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: { width: 200 },
+    });
+    expect(justifiedLayout.paragraphPlans[0]?.alignment).toBe("justified");
+  });
+
   it("lays out parbox content through the public simple TeX layout path", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`\parbox{55pt}{Alpha Beta Gamma Delta}`,

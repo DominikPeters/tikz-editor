@@ -38,8 +38,12 @@ export class TexParagraphLayoutState {
     readonly scopePolicy: TexParagraphScopePolicy;
     readonly finalParagraphInNode: boolean;
   }): TexParagraphLayoutStateResult {
+    const resetAlignment = params.scopePolicy.resetAlignment ??
+      (params.scopePolicy.resetAlignmentSource === "restored-current"
+        ? texRestoredScopeAlignment(this.activeAlignment)
+        : this.defaultAlignment);
     const inheritedAlignment = params.scopePolicy.resetInheritedAlignment
-      ? this.defaultAlignment
+      ? resetAlignment
       : this.activeAlignment;
     const inheritedAlignmentProfile = params.scopePolicy.resetInheritedAlignment
       ? undefined
@@ -52,10 +56,10 @@ export class TexParagraphLayoutState {
     const blockAlignmentProfile = blockAlignment
       ? params.paragraph.alignmentProfile
       : undefined;
-    const alignment = blockAlignment ?? this.activeAlignment;
+    const alignment = blockAlignment ?? inheritedAlignment;
     const alignmentProfile = blockAlignment
       ? blockAlignmentProfile
-      : this.activeAlignmentProfile;
+      : inheritedAlignmentProfile;
 
     if (blockAlignment) {
       this.activeAlignment = blockAlignment;
@@ -85,10 +89,20 @@ export class TexParagraphLayoutState {
         }
       : {}),
       spaceGlueProfile: params.scopePolicy.resetSpaceGlueProfile
-        ? this.options.spaceGlueProfile ?? texInitialSpaceGlueProfile(this.defaultAlignment)
+        ? params.scopePolicy.resetSpaceGlueProfileTo ??
+          this.options.spaceGlueProfile ??
+          texInitialSpaceGlueProfile(resetAlignment)
         : this.activeSpaceGlueProfile,
     };
   }
+}
+
+function texRestoredScopeAlignment(
+  alignment: TexParagraphAlignment
+): TexParagraphAlignment {
+  return alignment === "ragged-left" || alignment === "center"
+    ? "ragged-right"
+    : alignment;
 }
 
 export function texInitialReportAlignment(

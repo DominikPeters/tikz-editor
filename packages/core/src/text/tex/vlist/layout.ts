@@ -1,4 +1,5 @@
 import { roundTexPt } from "../fonts/units.js";
+import type { TexParagraphAlignment } from "../ir.js";
 import type {
   PositionedTexVListItem,
   TexBoxMetrics,
@@ -31,6 +32,11 @@ export type TexVListItemMeasurer = (
   path: readonly number[]
 ) => MeasuredTexVListItem | null;
 
+interface TexVListLayoutContext {
+  readonly inlineScopeWidth?: number;
+  readonly paragraphAlignment?: TexParagraphAlignment;
+}
+
 export function computeTexVListNaturalTotalHeight(
   items: readonly TexVListItem[],
   measureItem: TexVListItemMeasurer
@@ -44,7 +50,8 @@ export function layoutTexVListItems(
   glueSet: TexVListGlueSet | null,
   startCursor: number,
   pathPrefix: readonly number[] = [],
-  xOffset = 0
+  xOffset = 0,
+  context: TexVListLayoutContext = {}
 ): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: number } {
   const positioned: PositionedTexVListItem[] = [];
   let cursor = startCursor;
@@ -88,11 +95,19 @@ export function layoutTexVListItems(
 
     if (item.kind === "vbox") {
       const top = cursor;
-      const nested = layoutTexVBoxItem(item, measureItem, top, path, xOffset);
+      const itemX = materialVBoxInlineX(item, context);
+      const nested = layoutTexVBoxItem(
+        item,
+        measureItem,
+        top,
+        path,
+        roundTexPt(xOffset + itemX),
+        context
+      );
       positioned.push({
         item,
         path,
-        x: xOffset,
+        x: roundTexPt(xOffset + itemX),
         y: top,
         metrics: nested.metrics,
         baseline: nested.baseline,
@@ -109,7 +124,8 @@ function layoutTexVBoxItem(
   measureItem: TexVListItemMeasurer,
   top: number,
   path: readonly number[],
-  xOffset: number
+  xOffset: number,
+  context: TexVListLayoutContext
 ): {
   readonly children: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
@@ -120,13 +136,23 @@ function layoutTexVBoxItem(
   const rightMarginWidth = item.layout?.rightMarginWidth ?? 0;
   const targetWidth = finiteTexDimen(item.width);
   const childXOffset = roundTexPt(xOffset + leftMarginWidth);
+  const childScopeWidth = texVListChildInlineScopeWidth(
+    context.inlineScopeWidth,
+    targetWidth,
+    leftMarginWidth,
+    rightMarginWidth
+  );
   const natural = layoutTexVListItems(
     item.items,
     measureItem,
     null,
     top,
     path,
-    childXOffset
+    childXOffset,
+    {
+      ...context,
+      ...(childScopeWidth !== undefined ? { inlineScopeWidth: childScopeWidth } : {}),
+    }
   );
   const naturalHeight = roundTexPt(natural.cursor - top);
   const targetHeight = finiteTexDimen(item.height);
@@ -142,7 +168,11 @@ function layoutTexVBoxItem(
         glueSet,
         top,
         path,
-        childXOffset
+        childXOffset,
+        {
+          ...context,
+          ...(childScopeWidth !== undefined ? { inlineScopeWidth: childScopeWidth } : {}),
+        }
       )
     : natural;
   const laidOutHeight = roundTexPt(laidOut.cursor - top);
@@ -169,6 +199,41 @@ function layoutTexVBoxItem(
       : { kind: "explicit", y: roundTexPt(baselineY - top) },
     cursor,
   };
+}
+
+function materialVBoxInlineX(
+  item: TexVBoxItem,
+  context: TexVListLayoutContext
+): number {
+  if (!item.material) {
+    return 0;
+  }
+  const scopeWidth = context.inlineScopeWidth;
+  const boxWidth = finiteTexDimen(item.width);
+  if (scopeWidth === undefined || boxWidth === undefined) {
+    return 0;
+  }
+  const available = Math.max(0, scopeWidth - boxWidth);
+  const alignment = context.paragraphAlignment;
+  if (alignment === "ragged-left") {
+    return roundTexPt(available);
+  }
+  if (alignment === "center") {
+    return roundTexPt(available / 2);
+  }
+  return 0;
+}
+
+function texVListChildInlineScopeWidth(
+  inheritedWidth: number | undefined,
+  targetWidth: number | undefined,
+  leftMarginWidth: number,
+  rightMarginWidth: number
+): number | undefined {
+  const outerWidth = targetWidth ?? inheritedWidth;
+  return outerWidth === undefined
+    ? undefined
+    : Math.max(0, outerWidth - leftMarginWidth - rightMarginWidth);
 }
 
 export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexVListItem | null {

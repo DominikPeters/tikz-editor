@@ -3,6 +3,7 @@ import type {
   SimpleTexListKind,
   SimpleTexListContext,
   SimpleTexFontState,
+  SimpleTexBoxCommandName,
   SimpleTexDisplayMathDelimiter,
   SimpleTexSegmentInput,
   SimpleTexVerticalGlueCommandName,
@@ -243,6 +244,9 @@ export interface TexVBoxListItemLayout {
 
 export interface TexVBoxParagraphPolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
+  readonly resetAlignment?: TexParagraphAlignment;
+  readonly resetAlignmentSource?: "restored-current";
+  readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
   readonly preserveRaggedRight?: boolean;
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment?: boolean;
@@ -256,6 +260,9 @@ export interface TexVBoxItem {
   readonly sourceSpan?: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];
   readonly role?: TexVBoxRole;
+  readonly material?: {
+    readonly command: SimpleTexBoxCommandName;
+  };
   readonly layout?: TexVBoxLayout;
   readonly width?: TexDimenExpr;
   readonly height?: TexDimenExpr;
@@ -410,6 +417,7 @@ export interface TexVListLayoutOptions {
   readonly width: number;
   readonly height?: number;
   readonly verticalAlign?: "top" | "center" | "bottom";
+  readonly paragraphAlignment?: TexParagraphAlignment;
 }
 
 export interface TexVListParagraphLineAssignment {

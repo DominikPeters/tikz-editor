@@ -6,6 +6,8 @@ import {
   type SimpleTexListContext,
 } from "../ir.js";
 import type { TexMathTextPart } from "../math/ir.js";
+import { layoutTexVListItems } from "./layout.js";
+import { createMeasuredParagraphVListMeasurer } from "./paragraph-measurement.js";
 import { texVListPathKey } from "./paths.js";
 import { texVBoxRolePathForParagraph } from "./scope-roles.js";
 import type {
@@ -17,6 +19,7 @@ import type {
   TexParagraphItem,
   TexBoxMetrics,
   TexVBoxRole,
+  TexVBoxItem,
   TexVListDocument,
   TexVListItem,
   TexVListParagraphBoxMeasurement,
@@ -92,14 +95,7 @@ export function planSimpleTexParagraphVerticalSkips(
   planSimpleTexParagraphVerticalSkipsInto(
     items,
     font,
-    {
-      previousEmittedQuoteDepth: 0,
-      previousEmittedQuotationDepth: 0,
-      previousEmittedListContext: undefined,
-      previousEmittedContentKind: undefined,
-      emittedListItemKeys: new Set(),
-      emittedParagraphCount: 0,
-    },
+    createInitialSimpleTexParagraphVerticalSkipState(),
     skips,
     [],
     []
@@ -132,6 +128,22 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
+      if (isMaterialTexVBoxItem(item)) {
+        planSimpleTexParagraphVerticalSkipsInto(
+          item.items,
+          font,
+          createInitialSimpleTexParagraphVerticalSkipState(),
+          skips,
+          item.role ? [...ancestors, item.role] : ancestors,
+          path
+        );
+        state.previousEmittedQuoteDepth = 0;
+        state.previousEmittedQuotationDepth = 0;
+        state.previousEmittedListContext = undefined;
+        state.previousEmittedContentKind = "paragraph";
+        state.emittedParagraphCount += 1;
+        continue;
+      }
       planSimpleTexParagraphVerticalSkipsInto(
         item.items,
         font,
@@ -192,6 +204,17 @@ function planSimpleTexParagraphVerticalSkipsInto(
     state.emittedParagraphCount += 1;
     state.previousEmittedContentKind = "paragraph";
   }
+}
+
+function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphVerticalSkipState {
+  return {
+    previousEmittedQuoteDepth: 0,
+    previousEmittedQuotationDepth: 0,
+    previousEmittedListContext: undefined,
+    previousEmittedContentKind: undefined,
+    emittedListItemKeys: new Set(),
+    emittedParagraphCount: 0,
+  };
 }
 
 function paragraphScopeFromVListAncestors(
@@ -461,6 +484,47 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
+      if (isMaterialTexVBoxItem(item)) {
+        const nested = resolveDisplayMathVerticalGlueInItems(
+          item.items,
+          paragraphMeasurements,
+          options,
+          path
+        );
+        const materialItem = {
+          ...item,
+          items: nested.items,
+        };
+        const materialMetrics = materialVBoxMetrics(
+          materialItem,
+          paragraphMeasurements
+        );
+        if (
+          materialMetrics &&
+          plainParagraphInterlinePending &&
+          !paragraphBoundaryInterlineAlreadyInserted
+        ) {
+          const previousDepth = previousParagraphMeasurement
+            ? texParagraphLastLineDepth(previousParagraphMeasurement)
+            : previousDisplayMaterialMetrics?.depth;
+          if (previousDepth !== undefined) {
+            items.push(plainParagraphBoundaryInterlineGlueItem(
+              item,
+              texInterlineGlueSize(
+                previousDepth,
+                materialMetrics.height,
+                options.lineHeight
+              )
+            ));
+          }
+        }
+        items.push(materialItem);
+        previousParagraphMeasurement = undefined;
+        previousDisplayMaterialMetrics = materialMetrics;
+        plainParagraphInterlinePending = materialMetrics !== undefined;
+        paragraphBoundaryInterlineAlreadyInserted = false;
+        continue;
+      }
       const nested = resolveDisplayMathVerticalGlueInItems(
         item.items,
         paragraphMeasurements,
@@ -483,8 +547,11 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (item.kind === "paragraph") {
       const paragraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
+      const previousDepth = previousParagraphMeasurement
+        ? texParagraphLastLineDepth(previousParagraphMeasurement)
+        : previousDisplayMaterialMetrics?.depth;
       if (
-        previousParagraphMeasurement &&
+        previousDepth !== undefined &&
         paragraphMeasurement &&
         plainParagraphInterlinePending &&
         !paragraphBoundaryInterlineAlreadyInserted
@@ -492,13 +559,14 @@ function resolveDisplayMathVerticalGlueInItems(
         items.push(plainParagraphBoundaryInterlineGlueItem(
           item,
           texInterlineGlueSize(
-            texParagraphLastLineDepth(previousParagraphMeasurement),
+            previousDepth,
             paragraphMeasurement.ruleLeadingMetrics.height,
             options.lineHeight
           )
         ));
       }
       previousParagraphMeasurement = paragraphMeasurement;
+      previousDisplayMaterialMetrics = undefined;
       plainParagraphInterlinePending = true;
       paragraphBoundaryInterlineAlreadyInserted = false;
       items.push(item);
@@ -708,6 +776,26 @@ function shouldInsertParagraphBoundaryInterlineGlue(
     return item.kind === "paragraph";
   }
   return false;
+}
+
+function materialVBoxMetrics(
+  item: TexVBoxItem,
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): TexBoxMetrics | undefined {
+  if (!isMaterialTexVBoxItem(item)) {
+    return undefined;
+  }
+  const laidOut = layoutTexVListItems(
+    [item],
+    createMeasuredParagraphVListMeasurer(paragraphMeasurements),
+    null,
+    0
+  );
+  return laidOut.positioned[0]?.metrics;
+}
+
+function isMaterialTexVBoxItem(item: TexVBoxItem): boolean {
+  return item.material !== undefined;
 }
 
 function shouldInsertExplicitVerticalInterlineGlue(
@@ -1154,10 +1242,12 @@ function paragraphBoundaryInterlineGlueItem(
 }
 
 function plainParagraphBoundaryInterlineGlueItem(
-  item: TexParagraphItem,
+  item: TexParagraphItem | TexVBoxItem,
   size: number
 ): TexGlueItem {
-  const scopePath = texVBoxRolePathForParagraph(item.paragraph);
+  const scopePath = item.kind === "paragraph"
+    ? texVBoxRolePathForParagraph(item.paragraph)
+    : item.scopePath ?? [];
   return {
     kind: "glue",
     sourceSpan: item.sourceSpan,

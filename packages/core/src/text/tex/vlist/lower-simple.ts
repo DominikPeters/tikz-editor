@@ -130,6 +130,9 @@ function vboxItemFromSimpleTexBox(
       end: item.sourceEnd,
     },
     scopePath: scopePathForVerticalBlockItem(item),
+    material: {
+      command: item.command,
+    },
     width: item.width,
     ...(item.height !== undefined ? { height: item.height } : {}),
     alignment: item.alignment,
@@ -138,6 +141,7 @@ function vboxItemFromSimpleTexBox(
       rightMarginWidth: 0,
       paragraphPolicy: {
         resetInheritedAlignment: true,
+        resetAlignmentSource: "restored-current",
         resetSpaceGlueProfile: true,
         allowParagraphIndent: false,
         allowForcedBreakIndent: false,

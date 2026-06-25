@@ -1,6 +1,7 @@
 import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
+  TexSpaceGlueProfile,
 } from "../ir.js";
 import type {
   TexVBoxItem,
@@ -9,6 +10,9 @@ import type {
 
 export interface TexParagraphScopePolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
+  readonly resetAlignment?: TexParagraphAlignment;
+  readonly resetAlignmentSource?: "restored-current";
+  readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
   readonly preserveRaggedRight?: boolean;
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment: boolean;
@@ -81,6 +85,9 @@ function texParagraphScopePolicy(
     fallbackAlignment?: TexParagraphAlignment;
     preserveRaggedRight?: boolean;
     raggedRightProfile?: TexAlignmentProfile;
+    resetAlignment?: TexParagraphAlignment;
+    resetAlignmentSource?: "restored-current";
+    resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
     resetInheritedAlignment: boolean;
     resetSpaceGlueProfile: boolean;
     allowParagraphIndent?: boolean;
@@ -96,6 +103,15 @@ function texParagraphScopePolicy(
     }
     if (paragraphPolicy.fallbackAlignment) {
       policy.fallbackAlignment = paragraphPolicy.fallbackAlignment;
+    }
+    if (paragraphPolicy.resetAlignment) {
+      policy.resetAlignment = paragraphPolicy.resetAlignment;
+    }
+    if (paragraphPolicy.resetAlignmentSource) {
+      policy.resetAlignmentSource = paragraphPolicy.resetAlignmentSource;
+    }
+    if (paragraphPolicy.resetSpaceGlueProfileTo) {
+      policy.resetSpaceGlueProfileTo = paragraphPolicy.resetSpaceGlueProfileTo;
     }
     if (paragraphPolicy.preserveRaggedRight !== undefined) {
       policy.preserveRaggedRight = paragraphPolicy.preserveRaggedRight;

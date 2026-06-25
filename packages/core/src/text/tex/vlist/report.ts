@@ -191,6 +191,7 @@ export function layoutTexVListFromCombinedParagraphReport(
     width: options.width,
     height: options.height,
     verticalAlign: options.verticalAlign,
+    paragraphAlignment: options.alignment,
     lineHeight: texLatexNormalParagraphLineHeight(options.font),
     firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
     firstLineAscent: texLatexNormalFirstLineAscent(
@@ -269,7 +270,15 @@ export function layoutTexVListFromMeasuredParagraphs(
     resolvedDocument.items,
     measurer,
     glueSet,
-    0
+    0,
+    [],
+    0,
+    {
+      inlineScopeWidth: options.width,
+      ...(options.paragraphAlignment
+        ? { paragraphAlignment: options.paragraphAlignment }
+        : {}),
+    }
   );
 
   const naturalLaidOutHeight = laidOut.cursor;
