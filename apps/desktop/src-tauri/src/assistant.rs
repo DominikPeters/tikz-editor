@@ -463,13 +463,14 @@ impl AssistantState {
             *process_slot = Some(process);
         }
 
+        let app_version = self.inner.app.package_info().version.to_string();
         let initialize_result = self.request(
             "initialize",
             json!({
               "clientInfo": {
                 "name": "tikz_editor_desktop",
                 "title": "TikZ Editor Desktop",
-                "version": "0.1.0"
+                "version": app_version
               },
               "capabilities": {
                 "experimentalApi": true
