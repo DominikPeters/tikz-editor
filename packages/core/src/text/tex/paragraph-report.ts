@@ -659,6 +659,9 @@ function buildTexLineLabelSegments(
       x = roundTexPt(x + mathWidth);
       continue;
     }
+    if (item.kind === "penalty") {
+      continue;
+    }
 
     const glue = texInterwordGlueForSpaceFactor(
       item.font,
@@ -995,6 +998,9 @@ function texLayoutItemsNaturalWidth(
     }
     if (item.kind === "math") {
       width += texLayoutMathItemWidth(item);
+      continue;
+    }
+    if (item.kind === "penalty") {
       continue;
     }
     width += texInterwordGlueForSpaceFactor(

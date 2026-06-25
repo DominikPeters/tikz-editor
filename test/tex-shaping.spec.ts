@@ -254,6 +254,28 @@ function lineTexts(report: ParagraphLayoutReport | null | undefined): string[] {
   return report?.lines.map((line) => line.segments.map((segment) => segment.text ?? "").join("")) ?? [];
 }
 
+function visibleLineTexts(report: ParagraphLayoutReport | null | undefined): string[] {
+  return lineTexts(report).filter((text) => text.length > 0);
+}
+
+function firstVisibleTextX(
+  line: ParagraphLayoutReport["lines"][number] | undefined
+): number | undefined {
+  return line?.segments.find((segment) =>
+    segment.kind === "text" && (segment.text ?? "").length > 0
+  )?.x;
+}
+
+function visibleLines(
+  report: ParagraphLayoutReport | null | undefined
+): ParagraphLayoutReport["lines"] {
+  return report?.lines.filter((line) =>
+    line.segments.some((segment) =>
+      segment.kind === "text" && (segment.text ?? "").length > 0
+    )
+  ) ?? [];
+}
+
 function firstLineSpaceWidths(
   text: string,
   options: Parameters<typeof layoutSimpleTexParagraph>[1]
@@ -1822,10 +1844,120 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
-    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+    expect(result.report?.lines.map((line) => firstVisibleTextX(line))).toEqual([
       expect.closeTo(40, 5),
       expect.closeTo(40, 5),
     ]);
+  });
+
+  it("matches TeX's tiny-minipage quotation first-item label break", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{minipage}{90pt}\begin{quotation}Normal document \par Figure natural.\end{quotation}\end{minipage}`,
+      {
+        paragraphId: "tex:quotation-minipage-tiny-indent",
+        width: 240,
+        alignment: "justified",
+        parindent: 0,
+        tikzTextWidthNode: true,
+        textFontProfile: classicComputerModernTextFontProfile,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)[0]).toBe("");
+    expect(visibleLineTexts(result.report)).toEqual([
+      "Normal",
+      "docu-",
+      "ment",
+      "Fig-",
+      "ure",
+      "natural.",
+    ]);
+    expect(visibleLines(result.report).map((line) => firstVisibleTextX(line))).toEqual([
+      expect.closeTo(25, 5),
+      expect.closeTo(25, 5),
+      expect.closeTo(25, 5),
+      expect.closeTo(40, 5),
+      expect.closeTo(25, 5),
+      expect.closeTo(25, 5),
+    ]);
+  });
+
+  it("matches TeX when the first quotation item label stays with a hyphenated word", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{minipage}{90pt}\begin{quotation}Position actual logic final logic output. \par Narrow basic source sentence semantic editor document.\end{quotation}\end{minipage}`,
+      {
+        paragraphId: "tex:quotation-minipage-position-label",
+        width: 160,
+        alignment: "justified",
+        parindent: 0,
+        tikzTextWidthNode: true,
+        textFontProfile: classicComputerModernTextFontProfile,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(visibleLineTexts(result.report)).toEqual([
+      "Po-",
+      "sition",
+      "actual",
+      "logic fi-",
+      "nal logic",
+      "output.",
+      "Nar-",
+      "row basic",
+      "source",
+      "sentence",
+      "semantic",
+      "editor",
+      "docu-",
+      "ment.",
+    ]);
+    const lines = visibleLines(result.report);
+    expect(firstVisibleTextX(lines[0])).toBeCloseTo(40, 5);
+    expect(firstVisibleTextX(lines[1])).toBeCloseTo(25, 5);
+    expect(firstVisibleTextX(lines[6])).toBeCloseTo(40, 5);
+  });
+
+  it("can keep the first quotation item label on the first visible line", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{minipage}{100pt}\begin{quotation}Alignment double alpha screen screen document chapter gamma, control. \par Initial classic control chapter spacing, wide careful.\end{quotation}\end{minipage}`,
+      {
+        paragraphId: "tex:quotation-minipage-indented",
+        width: 240,
+        alignment: "ragged-left",
+        parindent: 0,
+        tikzTextWidthNode: true,
+        textFontProfile: classicComputerModernTextFontProfile,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(visibleLineTexts(result.report)).toEqual([
+      "Align-",
+      "ment",
+      "double al-",
+      "pha screen",
+      "screen",
+      "document",
+      "chapter",
+      "gamma,",
+      "control.",
+      "Initial",
+      "classic",
+      "control",
+      "chapter",
+      "spacing,",
+      "wide care-",
+      "ful.",
+    ]);
+    const lines = visibleLines(result.report);
+    expect(firstVisibleTextX(lines[0])).toBeCloseTo(40, 5);
+    expect(firstVisibleTextX(lines[1])).toBeCloseTo(25, 5);
+    expect(firstVisibleTextX(lines[9])).toBeCloseTo(40, 5);
   });
 
   it("keeps LaTeX quotation paragraph indentation after forced breaks", () => {
@@ -1842,7 +1974,7 @@ describe("simple TeX paragraph layout", () => {
 
     expect(result.supported).toBe(true);
     expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
-    expect(result.report?.lines.map((line) => line.xStart)).toEqual([
+    expect(result.report?.lines.map((line) => firstVisibleTextX(line))).toEqual([
       expect.closeTo(40, 5),
       expect.closeTo(40, 5),
     ]);

@@ -324,6 +324,9 @@ function texLayoutLabelHBoxContent(
       depth = Math.max(depth, item.box.depth);
       continue;
     }
+    if (item.kind === "penalty") {
+      continue;
+    }
     width += texLayoutSpaceItemWidth(item);
   }
   const baseline = roundTexPt(height);

@@ -141,9 +141,10 @@ function vboxItemFromSimpleTexBox(
       rightMarginWidth: 0,
       paragraphPolicy: {
         resetInheritedAlignment: true,
-        resetAlignmentSource: "restored-current",
+        resetAlignment: "justified",
         resetSpaceGlueProfile: true,
-        ...(item.command === "parbox" ? { automaticHyphenPenalty: 500 } : {}),
+        preserveSpaceGlueProfile: true,
+        resetFinalHyphenDemeritsFromAlignment: true,
         allowParagraphIndent: false,
         allowForcedBreakIndent: false,
       },
@@ -449,6 +450,9 @@ function paragraphInputFromSimpleTexBlock(
     noIndent: block.noIndent,
     ...(block.firstLineIndentEm !== undefined
       ? { firstLineIndentEm: block.firstLineIndentEm }
+      : {}),
+    ...(block.quotationItemFirstParagraph === true
+      ? { quotationItemFirstParagraph: true }
       : {}),
     alignment: block.alignment,
     alignmentProfile: block.alignmentProfile,

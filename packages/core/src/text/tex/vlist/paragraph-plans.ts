@@ -161,6 +161,10 @@ export function prepareTexLayoutParagraphsFromVList(
           hbox: listAttachments.marginLabelHBox,
         });
       }
+      const quotationPrefix = texQuotationFirstLinePrefix({
+        segment,
+        font: params.font,
+      });
       paragraphPlans.push({
         blockIndex,
         vlistPath: entry.path,
@@ -171,7 +175,10 @@ export function prepareTexLayoutParagraphsFromVList(
         inheritedAlignment: paragraphStateResult.inheritedAlignment,
         inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile,
         spaceGlueProfile,
-        inlinePrefixItems: listAttachments.inlineLabelItems,
+        inlinePrefixItems: [
+          ...listAttachments.inlineLabelItems,
+          ...quotationPrefix.inlinePrefixItems,
+        ],
         ...(paragraph.overfullSingleLineFallback === true
           ? { overfullSingleLineFallback: true }
           : {}),
@@ -179,10 +186,12 @@ export function prepareTexLayoutParagraphsFromVList(
           blockIndex,
           segmentIndex,
           ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
-          firstLineIndentWidth:
-            listAttachments.firstLineIndentWidth ??
-            texQuotationFirstLineIndentWidth(segment, params.font),
-          scopePolicy: texParagraphBreakScopePolicy(breakScopeContext),
+          firstLineIndentWidth: listAttachments.firstLineIndentWidth ??
+            quotationPrefix.firstLineIndentWidth,
+          scopePolicy: texParagraphBreakScopePolicy(
+            breakScopeContext,
+            paragraphStateResult.finalHyphenDemerits
+          ),
         },
         ...(listAttachments.marginLabel
           ? {
@@ -230,13 +239,60 @@ function texParagraphScopedLineWidth(
   return scopeContext.layout.scopedLineWidth;
 }
 
-function texQuotationFirstLineIndentWidth(
-  segment: SimpleTexParagraphSegment,
-  font: ResolvedTexFont
-): number | undefined {
-  return segment.firstLineIndentEm === undefined
+function texQuotationFirstLinePrefix(params: {
+  readonly segment: SimpleTexParagraphSegment;
+  readonly font: ResolvedTexFont;
+}): {
+  readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
+  readonly firstLineIndentWidth?: number;
+} {
+  const indentWidth = params.segment.firstLineIndentEm === undefined
     ? undefined
-    : segment.firstLineIndentEm * font.atPt;
+    : params.segment.firstLineIndentEm * params.font.atPt;
+  if (indentWidth === undefined) {
+    return { inlinePrefixItems: [] };
+  }
+  if (params.segment.quotationItemFirstParagraph === true) {
+    const sourceStart = params.segment.sourceStart;
+    return {
+      inlinePrefixItems: [
+        {
+          kind: "math",
+          role: "list-label",
+          text: "",
+          content: "",
+          delimiter: "dollar",
+          sourceStart,
+          sourceEnd: sourceStart,
+          contentStart: sourceStart,
+          contentEnd: sourceStart,
+          box: {
+            source: "",
+            content: "",
+            sourceStart,
+            sourceEnd: sourceStart,
+            contentStart: sourceStart,
+            contentEnd: sourceStart,
+            width: indentWidth,
+            height: 0,
+            depth: 0,
+            caretStops: [0, indentWidth],
+          },
+        },
+        {
+          kind: "penalty",
+          role: "list-label",
+          sourceStart,
+          sourceEnd: sourceStart,
+          penalty: 0,
+        },
+      ],
+    };
+  }
+  return {
+    inlinePrefixItems: [],
+    firstLineIndentWidth: indentWidth,
+  };
 }
 
 function texParagraphScopeContextWithoutBreakMargins(
@@ -298,7 +354,8 @@ function remapParagraphPlanPaths(
 }
 
 function texParagraphBreakScopePolicy(
-  scopeContext: ReturnType<typeof texParagraphScopeContext>
+  scopeContext: ReturnType<typeof texParagraphScopeContext>,
+  finalHyphenDemerits?: number
 ): TexParagraphBreakScopePolicy {
   const inList = scopeContext.listContextActive;
   const inQuote = scopeContext.quoteContextActive;
@@ -313,9 +370,7 @@ function texParagraphBreakScopePolicy(
   return {
     leftMarginWidth: scopeContext.layout.leftMarginWidth,
     rightMarginWidth: scopeContext.layout.rightMarginWidth,
-    ...(scopeContext.policy.automaticHyphenPenalty !== undefined && !inList
-      ? { automaticHyphenPenalty: scopeContext.policy.automaticHyphenPenalty }
-      : {}),
+    ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits } : {}),
     allowParagraphIndent: scopeContext.policy.allowParagraphIndent !== false && !inList,
     allowForcedBreakIndent: scopeContext.policy.allowForcedBreakIndent !== false && !inList,
     forceParfillStretch: inQuote || inList,

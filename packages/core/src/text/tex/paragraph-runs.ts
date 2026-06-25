@@ -164,6 +164,19 @@ function layoutItemsToRuns(
       continue;
     }
 
+    if (item.kind === "penalty") {
+      pendingItalicCorrection = 0;
+      runs.push({
+        kind: "penalty",
+        runIndex,
+        role: item.role,
+        sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
+        penalty: item.penalty,
+      } satisfies PenaltyRun);
+      continue;
+    }
+
     const forced = item.kind === "forced-break";
     const baseGlue = forced
       ? { width: 0, stretch: 0, shrink: 0 }

@@ -898,6 +898,11 @@ describe("simple TeX paragraph IR", () => {
       text: plan.segment.text,
       noIndent: plan.segment.noIndent,
       firstLineIndentEm: plan.segment.firstLineIndentEm,
+      quotationItemFirstParagraph: plan.segment.quotationItemFirstParagraph,
+      inlinePrefixKinds: plan.inlinePrefixItems.map((item) => item.kind),
+      inlinePrefixWidths: plan.inlinePrefixItems.map((item) =>
+        item.kind === "math" ? item.box.width : undefined
+      ),
       firstLineIndentWidth: plan.breakContext.firstLineIndentWidth,
       leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
       rightMarginWidth: plan.breakContext.scopePolicy.rightMarginWidth,
@@ -906,7 +911,10 @@ describe("simple TeX paragraph IR", () => {
         text: "Alpha Beta",
         noIndent: false,
         firstLineIndentEm: 1.5,
-        firstLineIndentWidth: 1.5 * font.atPt,
+        quotationItemFirstParagraph: true,
+        inlinePrefixKinds: ["math", "penalty"],
+        inlinePrefixWidths: [1.5 * font.atPt, undefined],
+        firstLineIndentWidth: undefined,
         leftMarginWidth: 2.5 * font.atPt,
         rightMarginWidth: 2.5 * font.atPt,
       },
@@ -914,6 +922,9 @@ describe("simple TeX paragraph IR", () => {
         text: "Gamma Delta",
         noIndent: false,
         firstLineIndentEm: 1.5,
+        quotationItemFirstParagraph: undefined,
+        inlinePrefixKinds: [],
+        inlinePrefixWidths: [],
         firstLineIndentWidth: 1.5 * font.atPt,
         leftMarginWidth: 2.5 * font.atPt,
         rightMarginWidth: 2.5 * font.atPt,
@@ -923,6 +934,55 @@ describe("simple TeX paragraph IR", () => {
       "glue:10",
       "paragraph:Alpha Beta",
       "paragraph:Gamma Delta",
+    ]);
+  });
+
+  it("models the first TikZ text-width quotation paragraph with a breakable item-label prefix", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quotation}Normal document \par Figure natural\end{quotation}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: {
+        parindent: 0,
+        textFontProfile: classicComputerModernTextFontProfile,
+        tikzTextWidthNode: true,
+        width: 90,
+      },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      noIndent: plan.segment.noIndent,
+      quotationItemFirstParagraph: plan.segment.quotationItemFirstParagraph,
+      inlinePrefixKinds: plan.inlinePrefixItems.map((item) => item.kind),
+      inlinePrefixRoles: plan.inlinePrefixItems.map((item) => item.role),
+      inlinePrefixWidths: plan.inlinePrefixItems.map((item) =>
+        item.kind === "math" ? item.box.width : undefined
+      ),
+      firstLineIndentWidth: plan.breakContext.firstLineIndentWidth,
+    }))).toEqual([
+      {
+        text: "Normal document",
+        noIndent: true,
+        quotationItemFirstParagraph: true,
+        inlinePrefixKinds: ["math", "penalty"],
+        inlinePrefixRoles: ["list-label", "list-label"],
+        inlinePrefixWidths: [1.5 * font.atPt, undefined],
+        firstLineIndentWidth: undefined,
+      },
+      {
+        text: "Figure natural",
+        noIndent: false,
+        quotationItemFirstParagraph: undefined,
+        inlinePrefixKinds: [],
+        inlinePrefixRoles: [],
+        inlinePrefixWidths: [],
+        firstLineIndentWidth: 1.5 * font.atPt,
+      },
     ]);
   });
 

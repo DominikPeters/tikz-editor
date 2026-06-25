@@ -13,7 +13,8 @@ export interface TexParagraphScopePolicy {
   readonly resetAlignment?: TexParagraphAlignment;
   readonly resetAlignmentSource?: "restored-current";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
-  readonly automaticHyphenPenalty?: number;
+  readonly preserveSpaceGlueProfile?: boolean;
+  readonly resetFinalHyphenDemeritsFromAlignment?: boolean;
   readonly preserveRaggedRight?: boolean;
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment: boolean;
@@ -92,7 +93,8 @@ function texParagraphScopePolicy(
     resetAlignment?: TexParagraphAlignment;
     resetAlignmentSource?: "restored-current";
     resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
-    automaticHyphenPenalty?: number;
+    preserveSpaceGlueProfile?: boolean;
+    resetFinalHyphenDemeritsFromAlignment?: boolean;
     resetInheritedAlignment: boolean;
     resetSpaceGlueProfile: boolean;
     allowParagraphIndent?: boolean;
@@ -118,8 +120,12 @@ function texParagraphScopePolicy(
     if (paragraphPolicy.resetSpaceGlueProfileTo) {
       policy.resetSpaceGlueProfileTo = paragraphPolicy.resetSpaceGlueProfileTo;
     }
-    if (paragraphPolicy.automaticHyphenPenalty !== undefined) {
-      policy.automaticHyphenPenalty = paragraphPolicy.automaticHyphenPenalty;
+    if (paragraphPolicy.preserveSpaceGlueProfile !== undefined) {
+      policy.preserveSpaceGlueProfile = paragraphPolicy.preserveSpaceGlueProfile;
+    }
+    if (paragraphPolicy.resetFinalHyphenDemeritsFromAlignment !== undefined) {
+      policy.resetFinalHyphenDemeritsFromAlignment =
+        paragraphPolicy.resetFinalHyphenDemeritsFromAlignment;
     }
     if (paragraphPolicy.preserveRaggedRight !== undefined) {
       policy.preserveRaggedRight = paragraphPolicy.preserveRaggedRight;

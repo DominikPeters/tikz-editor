@@ -752,7 +752,7 @@ describe("TeX vlist lowering", () => {
     expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.allowForcedBreakIndent).toBe(false);
   });
 
-  it("restores material box paragraph alignment from the current TeX scope", () => {
+  it("restores material box paragraph parameters from the current TeX scope", () => {
     const rightParsed = parseSimpleTexParagraphIr(
       String.raw`\parbox{55pt}{Alpha Beta Gamma Delta}`
     );
@@ -763,7 +763,15 @@ describe("TeX vlist lowering", () => {
       font: computerModernTexMetricProvider.resolveFont(),
       options: { width: 200 },
     });
-    expect(rightLayout.paragraphPlans[0]?.alignment).toBe("ragged-right");
+    expect(rightLayout.paragraphPlans[0]).toMatchObject({
+      alignment: "justified",
+      spaceGlueProfile: "tikz-fixed",
+      breakContext: {
+        scopePolicy: {
+          finalHyphenDemerits: 0,
+        },
+      },
+    });
 
     const justifiedParsed = parseSimpleTexParagraphIr(
       String.raw`\begin{minipage}{55pt}Alpha Beta Gamma Delta\end{minipage}`
@@ -775,7 +783,15 @@ describe("TeX vlist lowering", () => {
       font: computerModernTexMetricProvider.resolveFont(),
       options: { width: 200 },
     });
-    expect(justifiedLayout.paragraphPlans[0]?.alignment).toBe("justified");
+    expect(justifiedLayout.paragraphPlans[0]).toMatchObject({
+      alignment: "justified",
+      spaceGlueProfile: "font",
+      breakContext: {
+        scopePolicy: {
+          finalHyphenDemerits: 5000,
+        },
+      },
+    });
   });
 
   it("lays out parbox content through the public simple TeX layout path", () => {

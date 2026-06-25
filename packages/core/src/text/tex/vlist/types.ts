@@ -247,7 +247,8 @@ export interface TexVBoxParagraphPolicy {
   readonly resetAlignment?: TexParagraphAlignment;
   readonly resetAlignmentSource?: "restored-current";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
-  readonly automaticHyphenPenalty?: number;
+  readonly preserveSpaceGlueProfile?: boolean;
+  readonly resetFinalHyphenDemeritsFromAlignment?: boolean;
   readonly preserveRaggedRight?: boolean;
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment?: boolean;

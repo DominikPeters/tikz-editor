@@ -845,56 +845,57 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
 function buildOursTrace(layout, deps) {
   const font = deps.computerModernTexMetricProvider.resolveFont({ atPt: defaultTextFontSize });
   const lineTops = computeLineTops(layout, deps.parseLength);
-  return {
-    lines: layout.report.lines.map((line) => {
-      const baselineY = reportLineBaselineY(line, lineTops);
-      const glyphs = [];
-      for (const segment of line.segments) {
-        if (segment.kind !== "text") {
-          continue;
-        }
-        const segmentFont = segment.fontId
-          ? deps.computerModernTexMetricProvider.resolveFont({
-            fontId: segment.fontId,
-            atPt: defaultTextFontSize,
-          })
-          : font;
-        if (typeof segment.glyphCode === "number") {
-          glyphs.push({
-            code: traceGlyphTextCode(segment.text, segment.glyphCode),
-            fontId: segmentFont.id,
-            x: Number(svgX(segment.x).toFixed(6)),
-            y: Number(baselineY.toFixed(6)),
-            width: Number(svgX(segment.width).toFixed(6)),
-          });
-          continue;
-        }
-        const shaped = deps.computerModernTexMetricProvider.shapeText(segment.text ?? "", segmentFont);
-        let cursor = svgX(segment.x);
-        for (const item of shaped.items) {
-          if (item.kind === "kern") {
-            cursor += item.width;
-            continue;
-          }
-          if (item.code !== 32) {
-            glyphs.push({
-              code: item.code,
-              fontId: segmentFont.id,
-              x: Number(cursor.toFixed(6)),
-              y: Number(baselineY.toFixed(6)),
-              width: Number(item.width.toFixed(6)),
-            });
-          }
-          cursor += item.width;
-        }
+  const lines = layout.report.lines.map((line) => {
+    const baselineY = reportLineBaselineY(line, lineTops);
+    const glyphs = [];
+    for (const segment of line.segments) {
+      if (segment.kind !== "text") {
+        continue;
       }
-      return {
-        text: reportLineText(line),
-        width: line.width,
-        baselineY,
-        glyphs,
-      };
-    }),
+      const segmentFont = segment.fontId
+        ? deps.computerModernTexMetricProvider.resolveFont({
+          fontId: segment.fontId,
+          atPt: defaultTextFontSize,
+        })
+        : font;
+      if (typeof segment.glyphCode === "number") {
+        glyphs.push({
+          code: traceGlyphTextCode(segment.text, segment.glyphCode),
+          fontId: segmentFont.id,
+          x: Number(svgX(segment.x).toFixed(6)),
+          y: Number(baselineY.toFixed(6)),
+          width: Number(svgX(segment.width).toFixed(6)),
+        });
+        continue;
+      }
+      const shaped = deps.computerModernTexMetricProvider.shapeText(segment.text ?? "", segmentFont);
+      let cursor = svgX(segment.x);
+      for (const item of shaped.items) {
+        if (item.kind === "kern") {
+          cursor += item.width;
+          continue;
+        }
+        if (item.code !== 32) {
+          glyphs.push({
+            code: item.code,
+            fontId: segmentFont.id,
+            x: Number(cursor.toFixed(6)),
+            y: Number(baselineY.toFixed(6)),
+            width: Number(item.width.toFixed(6)),
+          });
+        }
+        cursor += item.width;
+      }
+    }
+    return {
+      text: reportLineText(line),
+      width: line.width,
+      baselineY,
+      glyphs,
+    };
+  });
+  return {
+    lines: lines.filter((line) => line.glyphs.length > 0),
   };
 }
 

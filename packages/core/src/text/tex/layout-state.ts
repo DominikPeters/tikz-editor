@@ -11,12 +11,16 @@ import {
   type TexParagraphScopePolicy,
 } from "./vlist/paragraph-scope.js";
 
+const TEX_DEFAULT_FINAL_HYPHEN_DEMERITS = 5000;
+const TEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
+
 export interface TexParagraphLayoutStateResult {
   readonly inheritedAlignment: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly alignment: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly finalHyphenDemerits?: number;
 }
 
 export class TexParagraphLayoutState {
@@ -38,6 +42,12 @@ export class TexParagraphLayoutState {
     readonly scopePolicy: TexParagraphScopePolicy;
     readonly finalParagraphInNode: boolean;
   }): TexParagraphLayoutStateResult {
+    const finalHyphenDemerits = params.scopePolicy.resetFinalHyphenDemeritsFromAlignment
+      ? texFinalHyphenDemeritsForAlignment(
+          this.activeAlignment,
+          this.activeAlignmentProfile
+        )
+      : undefined;
     const resetAlignment = params.scopePolicy.resetAlignment ??
       (params.scopePolicy.resetAlignmentSource === "restored-current"
         ? texRestoredScopeAlignment(this.activeAlignment)
@@ -89,10 +99,13 @@ export class TexParagraphLayoutState {
         }
       : {}),
       spaceGlueProfile: params.scopePolicy.resetSpaceGlueProfile
-        ? params.scopePolicy.resetSpaceGlueProfileTo ??
-          this.options.spaceGlueProfile ??
-          texInitialSpaceGlueProfile(resetAlignment)
+        ? params.scopePolicy.preserveSpaceGlueProfile
+          ? this.activeSpaceGlueProfile
+          : params.scopePolicy.resetSpaceGlueProfileTo ??
+            this.options.spaceGlueProfile ??
+            texInitialSpaceGlueProfile(resetAlignment)
         : this.activeSpaceGlueProfile,
+      ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits } : {}),
     };
   }
 }
@@ -135,4 +148,15 @@ function texInitialSpaceGlueProfile(
   alignment: TexParagraphAlignment
 ): TexSpaceGlueProfile {
   return alignment === "justified" ? "font" : "tikz-fixed";
+}
+
+function texFinalHyphenDemeritsForAlignment(
+  alignment: TexParagraphAlignment,
+  alignmentProfile: TexAlignmentProfile | undefined
+): number {
+  return alignment === "ragged-left" ||
+    alignment === "ragged-right" ||
+    (alignmentProfile === "latex-declaration" && alignment !== "center")
+    ? TEX_RAGGED_FINAL_HYPHEN_DEMERITS
+    : TEX_DEFAULT_FINAL_HYPHEN_DEMERITS;
 }

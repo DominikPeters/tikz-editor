@@ -250,6 +250,7 @@ export interface SimpleTexParagraphBlock {
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
   readonly firstLineIndentEm?: number;
+  readonly quotationItemFirstParagraph?: boolean;
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly quoteDepth: number;
@@ -369,6 +370,7 @@ export interface SimpleTexParagraphSegment {
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
   readonly firstLineIndentEm?: number;
+  readonly quotationItemFirstParagraph?: boolean;
   readonly forcedBreakAfter?: {
     readonly sourceOffset: number;
     readonly lineLeading?: string;
@@ -384,6 +386,7 @@ export interface SimpleTexSegmentInput {
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
   readonly firstLineIndentEm?: number;
+  readonly quotationItemFirstParagraph?: boolean;
   readonly quoteDepth: number;
   readonly quotationDepth?: number;
 }
@@ -2142,6 +2145,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         nodes: simpleTexInlineNodesForRange(sourceNodes, start, end),
         noIndent,
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
+        ...(quotationItemLabelPendingStack.at(-1) === true
+          ? { quotationItemFirstParagraph: true }
+          : {}),
         alignment,
         alignmentProfile,
         quoteDepth,
@@ -2154,6 +2160,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockIndex: blocks.length - 1,
         block,
       });
+      if (quotationItemLabelPendingStack.at(-1) === true) {
+        quotationItemLabelPendingStack[quotationItemLabelPendingStack.length - 1] = false;
+      }
       pendingListLabel = undefined;
       pendingListShowLabel = false;
     }
@@ -2198,6 +2207,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let currentQuoteDepth = 0;
   let currentNonQuotationQuoteDepth = 0;
   let currentQuotationDepth = 0;
+  const quotationItemLabelPendingStack: boolean[] = [];
   let index = prefix.start;
 
   const environmentSuppressesParagraphIndent = (): boolean =>
@@ -2316,6 +2326,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           currentQuoteDepth += 1;
           if (node.name === "quotation") {
             currentQuotationDepth += 1;
+            quotationItemLabelPendingStack.push(true);
           } else {
             currentNonQuotationQuoteDepth += 1;
           }
@@ -2333,6 +2344,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           currentQuoteDepth -= 1;
           if (node.name === "quotation") {
             currentQuotationDepth -= 1;
+            quotationItemLabelPendingStack.pop();
           } else {
             currentNonQuotationQuoteDepth -= 1;
           }
@@ -2603,6 +2615,9 @@ export function splitSimpleTexParagraphSegments(
       ...(block.firstLineIndentEm !== undefined
         ? { firstLineIndentEm: block.firstLineIndentEm }
         : {}),
+      ...(block.quotationItemFirstParagraph === true
+        ? { quotationItemFirstParagraph: true }
+        : {}),
     }];
   }
 
@@ -2638,6 +2653,9 @@ export function splitSimpleTexParagraphSegments(
         ),
         noIndent: segmentNoIndent,
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
+        ...(block.quotationItemFirstParagraph === true && segments.length === 0
+          ? { quotationItemFirstParagraph: true }
+          : {}),
         forcedBreakAfter,
       });
     }

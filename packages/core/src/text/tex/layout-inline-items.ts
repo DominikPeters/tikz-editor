@@ -180,11 +180,20 @@ export interface TexLayoutMathItem {
   readonly box: TexMathBox;
 }
 
+export interface TexLayoutPenaltyItem {
+  readonly kind: "penalty";
+  readonly role?: "list-label";
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly penalty: number;
+}
+
 export type TexLayoutInlineItem =
   | TexLayoutTextItem
   | TexLayoutSpaceItem
   | TexLayoutForcedBreakItem
-  | TexLayoutMathItem;
+  | TexLayoutMathItem
+  | TexLayoutPenaltyItem;
 
 export interface TexLayoutGlyphItem {
   readonly kind: "glyph";

@@ -31,6 +31,7 @@ export interface TexParagraphBreakScopePolicy {
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
   readonly automaticHyphenPenalty?: number;
+  readonly finalHyphenDemerits?: number;
   readonly allowParagraphIndent: boolean;
   readonly allowForcedBreakIndent: boolean;
   readonly forceParfillStretch: boolean;
@@ -95,8 +96,8 @@ export function breakTexParagraphRuns(params: {
   });
 
   let selectedModel = pass1Model;
-  let selectedPass = pass1;
-  if (!dpPassHasLines(selectedPass)) {
+  let selectedPass = pass1.canProceed && pass1.lines.length > 0 ? pass1 : null;
+  if (selectedPass === null) {
     const pass2Model = runsToItems(params.runs, params.measurement, {
       hyphenator: params.options.hyphenator ?? createEnglishHyphenator(),
       enableAutomaticHyphenation: true,
@@ -107,27 +108,30 @@ export function breakTexParagraphRuns(params: {
     selectedModel = pass2Model;
     const tolerance = params.options.tolerance ?? texParagraphTolerance();
     const emergencyStretch = texParagraphEmergencyStretch(params.options);
-    const passConfigs: Array<DpOptions & { readonly tolerance: number }> = [
-      { ...dpOptions, tolerance },
+    const passConfigs: Array<Partial<DpOptions> & { readonly tolerance: number }> = [
+      { tolerance },
     ];
     if (emergencyStretch > 0) {
-      passConfigs.push({ ...dpOptions, tolerance, emergencyStretch });
+      passConfigs.push({ tolerance, emergencyStretch });
     }
     passConfigs.push({
-      ...dpOptions,
       tolerance,
       emergencyStretch,
       allowLastResortOverfull: true,
     });
     for (const passOptions of passConfigs) {
-      selectedPass = breakWithDp(pass2Model, params.options.width, passOptions);
-      if (dpPassHasLines(selectedPass)) {
+      const pass = breakWithDp(pass2Model, params.options.width, {
+        ...dpOptions,
+        ...passOptions,
+      });
+      if (pass.canProceed && pass.lines.length > 0) {
+        selectedPass = pass;
         break;
       }
     }
   }
 
-  if (!dpPassHasLines(selectedPass)) {
+  if (!selectedPass) {
     return null;
   }
 
@@ -139,12 +143,6 @@ export function breakTexParagraphRuns(params: {
     errors: [...selectedModel.errors, ...selectedPass.errors],
     linebreakingMode: selectedPass.mode,
   };
-}
-
-function dpPassHasLines(
-  pass: ReturnType<typeof breakWithDp>
-): pass is ReturnType<typeof breakWithDp> & { readonly canProceed: true } {
-  return pass.canProceed && pass.lines.length > 0;
 }
 
 interface TexParagraphDpOptionParams {
@@ -187,9 +185,10 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     linepenalty: englishDefaults.linepenalty,
     adjdemerits: englishDefaults.adjdemerits,
     doublehyphendemerits: englishDefaults.doublehyphendemerits,
-    finalhyphendemerits: latexDeclaration || latexRagged || inheritedLatexRagged
-      ? LATEX_RAGGED_FINAL_HYPHEN_DEMERITS
-      : englishDefaults.finalhyphendemerits,
+    finalhyphendemerits: scopePolicy.finalHyphenDemerits ??
+      (latexDeclaration || latexRagged || inheritedLatexRagged
+        ? LATEX_RAGGED_FINAL_HYPHEN_DEMERITS
+        : englishDefaults.finalhyphendemerits),
     leftskipWidth: scopePolicy.leftMarginWidth,
     leftskipStretch:
       texDeclarationLeftskipStretch(
