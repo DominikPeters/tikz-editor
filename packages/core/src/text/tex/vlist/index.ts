@@ -110,10 +110,16 @@ export {
 export {
   createSimpleTexLayoutDocumentIr,
   createSimpleTexLayoutDocumentIrFromPreparation,
+  createSimpleTexLayoutScopeIr,
+  createSimpleTexLayoutScopeIrFromPreparation,
   prepareSimpleTexLayoutDocument,
+  prepareSimpleTexLayoutScope,
   type SimpleTexLayoutDocumentIr,
   type SimpleTexLayoutDocumentPreparation,
   type SimpleTexLayoutDocumentPreparationParams,
+  type SimpleTexLayoutScopeIr,
+  type SimpleTexLayoutScopePreparation,
+  type SimpleTexLayoutScopePreparationParams,
 } from "./document.js";
 export {
   getTexVListLayoutFromOutputJax,

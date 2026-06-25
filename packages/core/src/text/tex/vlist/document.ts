@@ -26,7 +26,7 @@ import {
 } from "./prepare-simple.js";
 import type { TexVListDocument } from "./types.js";
 
-export interface SimpleTexLayoutDocumentPreparation {
+export interface SimpleTexLayoutScopePreparation {
   readonly kind: "simple-tex-layout-document-preparation";
   readonly rawVList: TexVListDocument;
   readonly materializedVList: TexVListDocument;
@@ -36,7 +36,7 @@ export interface SimpleTexLayoutDocumentPreparation {
   readonly paragraphPreparation: TexLayoutParagraphPreparation;
 }
 
-export interface SimpleTexLayoutDocumentIr {
+export interface SimpleTexLayoutScopeIr {
   readonly kind: "simple-tex-layout-document";
   readonly rawVList: TexVListDocument;
   readonly materializedVList: TexVListDocument;
@@ -47,7 +47,7 @@ export interface SimpleTexLayoutDocumentIr {
   readonly paragraphPlans: readonly TexLayoutParagraphPlan[];
 }
 
-export interface SimpleTexLayoutDocumentPreparationParams {
+export interface SimpleTexLayoutScopePreparationParams {
   readonly blocks: readonly SimpleTexParagraphBlock[];
   readonly items?: readonly SimpleTexBlockItem[];
   readonly defaultAlignment: TexParagraphAlignment;
@@ -56,9 +56,13 @@ export interface SimpleTexLayoutDocumentPreparationParams {
   readonly options: TexLayoutIrOptions;
 }
 
-export function prepareSimpleTexLayoutDocument(
-  params: SimpleTexLayoutDocumentPreparationParams
-): SimpleTexLayoutDocumentPreparation {
+export type SimpleTexLayoutDocumentPreparation = SimpleTexLayoutScopePreparation;
+export type SimpleTexLayoutDocumentIr = SimpleTexLayoutScopeIr;
+export type SimpleTexLayoutDocumentPreparationParams = SimpleTexLayoutScopePreparationParams;
+
+export function prepareSimpleTexLayoutScope(
+  params: SimpleTexLayoutScopePreparationParams
+): SimpleTexLayoutScopePreparation {
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const baseVList = params.items
     ? lowerSimpleTexBlockItemsToVList(params.items, {
@@ -94,16 +98,28 @@ export function prepareSimpleTexLayoutDocument(
   };
 }
 
+export function prepareSimpleTexLayoutDocument(
+  params: SimpleTexLayoutDocumentPreparationParams
+): SimpleTexLayoutDocumentPreparation {
+  return prepareSimpleTexLayoutScope(params);
+}
+
+export function createSimpleTexLayoutScopeIr(
+  params: SimpleTexLayoutScopePreparationParams
+): SimpleTexLayoutScopeIr {
+  const preparation = prepareSimpleTexLayoutScope(params);
+  return createSimpleTexLayoutScopeIrFromPreparation(preparation);
+}
+
 export function createSimpleTexLayoutDocumentIr(
   params: SimpleTexLayoutDocumentPreparationParams
 ): SimpleTexLayoutDocumentIr {
-  const preparation = prepareSimpleTexLayoutDocument(params);
-  return createSimpleTexLayoutDocumentIrFromPreparation(preparation);
+  return createSimpleTexLayoutScopeIr(params);
 }
 
-export function createSimpleTexLayoutDocumentIrFromPreparation(
-  preparation: SimpleTexLayoutDocumentPreparation
-): SimpleTexLayoutDocumentIr {
+export function createSimpleTexLayoutScopeIrFromPreparation(
+  preparation: SimpleTexLayoutScopePreparation
+): SimpleTexLayoutScopeIr {
   return {
     kind: "simple-tex-layout-document",
     rawVList: preparation.rawVList,
@@ -114,4 +130,10 @@ export function createSimpleTexLayoutDocumentIrFromPreparation(
     layoutMode: preparation.paragraphPreparation.layoutMode,
     paragraphPlans: preparation.paragraphPreparation.paragraphPlans,
   };
+}
+
+export function createSimpleTexLayoutDocumentIrFromPreparation(
+  preparation: SimpleTexLayoutDocumentPreparation
+): SimpleTexLayoutDocumentIr {
+  return createSimpleTexLayoutScopeIrFromPreparation(preparation);
 }

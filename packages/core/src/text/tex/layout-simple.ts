@@ -20,9 +20,9 @@ import {
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import {
   breakSimpleTexLayoutDocumentParagraphs,
-  createSimpleTexLayoutDocumentIrFromPreparation,
+  createSimpleTexLayoutScopeIrFromPreparation,
   layoutTexVListFromBrokenParagraphs,
-  prepareSimpleTexLayoutDocument,
+  prepareSimpleTexLayoutScope,
   type TexVListLayout,
 } from "./vlist/index.js";
 
@@ -107,7 +107,7 @@ export function layoutSimpleTexParagraph(
     };
   }
 
-  const layoutPreparation = prepareSimpleTexLayoutDocument({
+  const layoutPreparation = prepareSimpleTexLayoutScope({
     blocks,
     items: analysis.ir?.items,
     defaultAlignment,
@@ -115,7 +115,7 @@ export function layoutSimpleTexParagraph(
     metricProvider,
     options: layoutOptions,
   });
-  const layoutIr = createSimpleTexLayoutDocumentIrFromPreparation(layoutPreparation);
+  const layoutIr = createSimpleTexLayoutScopeIrFromPreparation(layoutPreparation);
   const errors: string[] = usePlaceholderFallback && fallbackReason
     ? [fallbackReason]
     : [];
