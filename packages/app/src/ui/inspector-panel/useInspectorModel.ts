@@ -12,6 +12,7 @@ import {
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContextFromOptionEntries,
   resolveTransformInspectorValues,
+  transformRotateInspectorLabel,
   type TransformInspectorKey,
   type TransformInspectorMutationContext
 } from "tikz-editor/edit/property-write-builders";
@@ -135,7 +136,7 @@ function buildScopeInspectorDescriptor(
         {
           kind: "number",
           id: "rotate",
-          label: "Rotate",
+          label: transformRotateInspectorLabel(transformContext),
           value: transformValues.rotate,
           step: 1,
           unit: "deg",

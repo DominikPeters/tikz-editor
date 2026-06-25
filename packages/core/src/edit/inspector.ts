@@ -35,6 +35,7 @@ import {
   cloneTransformInspectorValues,
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContext,
+  transformRotateInspectorLabel,
   transformPropertyCandidateKeys,
   type ArrowTipWriteContext,
   type FillPatternOptionMutationContext,
@@ -529,7 +530,7 @@ export function buildMatrixInspectorDescriptor(
           {
             kind: "number",
             id: "rotate",
-            label: "Rotate",
+            label: transformRotateInspectorLabel(transformContext),
             value: transformValues.rotate,
             step: 1,
             unit: "deg",
@@ -783,7 +784,7 @@ export function buildTreeInspectorDescriptor(
           {
             kind: "number",
             id: "rotate",
-            label: "Rotate",
+            label: transformRotateInspectorLabel(transformContext),
             value: transformValues.rotate,
             step: 1,
             unit: "deg",
@@ -1147,7 +1148,7 @@ export function getInspectorDescriptor(
         {
           kind: "number",
           id: "rotate",
-          label: "Rotate",
+          label: transformRotateInspectorLabel(transformContext),
           value: transformValues.rotate,
           step: 1,
           unit: "deg",

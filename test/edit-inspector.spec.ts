@@ -371,6 +371,57 @@ describe("getInspectorDescriptor", () => {
     expect(defaultValues.get("rotate")).toBe(0);
   });
 
+  it("edits rotate around through the canonical rotate inspector field", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[rotate around={32:(3.09,0.79)}] (2.85,1.03) rectangle (3.33,0.55);
+\end{tikzpicture}`;
+    const rendered = renderTikzToSvg(source);
+    const element = rendered.semantic.scene.elements.find((entry) => entry.kind === "Path");
+    expect(element).toBeDefined();
+    if (!element) {
+      throw new Error("Expected a path element");
+    }
+
+    const descriptor = getInspectorDescriptor(element, {
+      source,
+      editHandles: rendered.semantic.editHandles
+    });
+    const transformSection = descriptor.sections.find((section) => section.id === "transform");
+    expect(transformSection).toBeDefined();
+    if (!transformSection) {
+      throw new Error("Expected transform section");
+    }
+
+    const rotate = transformSection.properties.find((property) => property.id === "rotate");
+    if (!rotate || rotate.kind !== "number" || !rotate.write?.transformContext) {
+      throw new Error("Expected rotate number property with transform context");
+    }
+    expect(rotate.label).toBe("Rotate around (3.09, 0.79)");
+    expect(rotate.value).toBe(32);
+
+    const [mutation] = buildTransformSetPropertyMutations(rotate.write.transformContext, "rotate", 10);
+    expect(mutation).toBeDefined();
+    if (!mutation) {
+      throw new Error("Expected rotate around mutation");
+    }
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: rotate.write.elementId,
+      level: rotate.write.level,
+      key: mutation.key,
+      value: mutation.value,
+      clearKeys: mutation.clearKeys
+    });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected successful rotate around mutation");
+    }
+
+    expect(result.newSource).toContain("rotate around={10:(3.09,0.79)}");
+    expect(result.newSource).not.toMatch(/,\s*rotate\s*=/);
+  });
+
   it("resolves global tikzpicture transform values for inspector empty state", () => {
     const source = String.raw`\begin{tikzpicture}[scale=2, yscale=3]
   \draw (0,0) -- (1,0);

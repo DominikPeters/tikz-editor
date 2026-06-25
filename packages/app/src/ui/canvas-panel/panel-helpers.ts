@@ -2,6 +2,7 @@ import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from
 import type { ResizeRole } from "tikz-editor/edit/actions";
 import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "tikz-editor/coords/index";
 import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
+import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
 import type { OptionListAst } from "tikz-editor/options/types";
 import {
   isFrameLocalCoordinateEditHandle,
@@ -878,26 +879,7 @@ export function resolveStatementRotateDegrees(statement: Statement | null | unde
 }
 
 export function resolveRotateDegreesFromOptions(options: OptionListAst | undefined): number {
-  const entries = options?.entries ?? [];
-  let rotate = 0;
-  for (const entry of entries) {
-    if (entry.kind !== "kv") {
-      continue;
-    }
-    if (entry.key !== "rotate" && entry.key !== "/tikz/rotate") {
-      continue;
-    }
-    const normalizedRaw = entry.valueRaw.trim();
-    const unwrapped =
-      normalizedRaw.startsWith("{") && normalizedRaw.endsWith("}")
-        ? normalizedRaw.slice(1, -1).trim()
-        : normalizedRaw;
-    const parsed = Number(unwrapped);
-    if (Number.isFinite(parsed)) {
-      rotate = parsed;
-    }
-  }
-  return rotate;
+  return resolveTransformInspectorMutationContextFromOptionEntries(options?.entries).values.rotate;
 }
 
 export function resolveScenePathShapeHint(

@@ -14,6 +14,7 @@ import {
 import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
 import { formatNumber } from "tikz-editor/edit/format";
 import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+import { buildTransformSetPropertyMutations } from "tikz-editor/edit/property-write-builders";
 import { worldToLocal } from "tikz-editor/edit/coords";
 import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
 import { parseLength } from "tikz-editor/semantic/coords/parse-length";
@@ -510,19 +511,24 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           return;
         }
 
-        const ok = applyActionWithFeedback(
-          {
-            kind: "setProperty",
-            elementId: drag.elementId,
-            level: "command",
-            key: "rotate",
-            value: Math.abs(nextRotate) <= 1e-6 ? "" : formatNumber(nextRotate),
-            propertyId: propertyIdForWriteKey("rotate") ?? undefined,
-            clearKeys: ["/tikz/rotate"]
-          },
-          drag.historyMergeKey
-        );
-        if (ok.sourceChanged) {
+        const mutations = buildTransformSetPropertyMutations(drag.transformContext, "rotate", nextRotate);
+        let sourceChanged = false;
+        for (const mutation of mutations) {
+          const ok = applyActionWithFeedback(
+            {
+              kind: "setProperty",
+              elementId: drag.elementId,
+              level: "command",
+              key: mutation.key,
+              value: mutation.value,
+              propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+              clearKeys: mutation.clearKeys
+            },
+            drag.historyMergeKey
+          );
+          sourceChanged = sourceChanged || ok.sourceChanged;
+        }
+        if (sourceChanged) {
           drag.lastAppliedRotateDeg = nextRotate;
         }
         return;

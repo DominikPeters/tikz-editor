@@ -2,6 +2,7 @@ import type { AdornmentOwnerGeometry, Span, Statement } from "tikz-editor/ast/ty
 import type { ComplexPathSegment } from "tikz-editor/edit/element-templates";
 import type { EditAction, ResizeRole } from "tikz-editor/edit/actions";
 import type { EditParseOptions } from "tikz-editor/edit/parse-options";
+import type { TransformInspectorMutationContext } from "tikz-editor/edit/property-write-builders";
 import type { SelectionGeometry, SnapContext, SnapLine } from "tikz-editor/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement, SceneText } from "tikz-editor/semantic/types";
 import type { SvgViewBox } from "tikz-editor/svg/index";
@@ -179,6 +180,7 @@ export type DragState =
       startPointerAngleDeg: number;
       baseRotateDeg: number;
       lastAppliedRotateDeg: number;
+      transformContext: TransformInspectorMutationContext;
       historyMergeKey: string;
     }
   | {

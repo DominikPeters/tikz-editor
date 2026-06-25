@@ -160,7 +160,7 @@ export type PropertyMutationRequest =
 
 const SHIFT_CLEAR_KEYS = ["shift", "/tikz/shift"] as const;
 const SCALE_CLEAR_KEYS = ["scale", "/tikz/scale"] as const;
-const ROTATE_CLEAR_KEYS = ["/tikz/rotate"] as const;
+const ROTATE_CLEAR_KEYS = ["/tikz/rotate", "rotate around", "/tikz/rotate around"] as const;
 const GRID_STEP_CLEAR_KEYS = ["xstep", "x step", "ystep", "y step"] as const;
 const GRID_XSTEP_CLEAR_KEYS = ["x step"] as const;
 const GRID_YSTEP_CLEAR_KEYS = ["y step"] as const;
@@ -349,6 +349,8 @@ export function propertyIdForOptionEntry(
       return firstAvailable("transform.yscale");
     case "rotate":
     case "/tikz/rotate":
+    case "rotate around":
+    case "/tikz/rotate around":
       return firstAvailable("transform.rotate");
     case "draw":
     case "color":

@@ -17,6 +17,7 @@ import {
   buildShadowSetPropertyMutations,
   buildTransformSetPropertyMutations,
   resolveTransformInspectorMutationContextFromOptionEntries,
+  transformRotateInspectorLabel,
   transformPropertyCandidateKeys,
   uniqueStrings
 } from "../packages/core/src/edit/property-write-builders.js";
@@ -145,8 +146,26 @@ describe("property write builders", () => {
       scale: true,
       shift: true,
       xshift: true,
-      yscale: true
+      yscale: true,
+      rotate: true
     });
+
+    const rotateAround = resolveTransformInspectorMutationContextFromOptionEntries(
+      parseOptionListRaw("rotate around={32:(3.09,0.79)}").entries
+    );
+    expect(rotateAround.values.rotate).toBe(32);
+    expect(rotateAround.values.rotateAround).toEqual({
+      pivotRaw: "(3.09,0.79)",
+      pivotLabel: "(3.09, 0.79)"
+    });
+    expect(transformRotateInspectorLabel(rotateAround)).toBe("Rotate around (3.09, 0.79)");
+    expect(buildTransformSetPropertyMutations(rotateAround, "rotate", 10)).toEqual([
+      {
+        key: "rotate around",
+        value: "{10:(3.09,0.79)}",
+        clearKeys: ["rotate", "/tikz/rotate", "rotate around", "/tikz/rotate around"]
+      }
+    ]);
 
     expect(buildTransformSetPropertyMutations(DEFAULT_TRANSFORM_INSPECTOR_VALUES, "rotate", Number.NaN)).toEqual([]);
     expect(buildTransformSetPropertyMutations({
@@ -172,7 +191,7 @@ describe("property write builders", () => {
     }, "yscale", 0)).toEqual([
       expect.objectContaining({ key: "yscale", value: "0" })
     ]);
-    expect(transformPropertyCandidateKeys("rotate")).toEqual(["rotate", "/tikz/rotate"]);
+    expect(transformPropertyCandidateKeys("rotate")).toEqual(["rotate", "/tikz/rotate", "rotate around", "/tikz/rotate around"]);
   });
 
   it("serializes shadow contexts and unique key lists", () => {

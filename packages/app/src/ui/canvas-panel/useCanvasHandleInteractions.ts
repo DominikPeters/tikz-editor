@@ -1,6 +1,9 @@
 import { useCallback, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clientPoint as makeClientPoint, px } from "tikz-editor/coords/index";
-import { resolveTransformInspectorMutationContext } from "tikz-editor/edit/property-write-builders";
+import {
+  resolveTransformInspectorMutationContext,
+  resolveTransformInspectorMutationContextFromOptionEntries
+} from "tikz-editor/edit/property-write-builders";
 import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "tikz-editor/edit/snapping";
 import type { ResizeRole } from "tikz-editor/edit/actions";
 import type { EditHandle, SceneElement, ScenePath } from "tikz-editor/semantic/types";
@@ -17,7 +20,6 @@ import {
   getHandleCursor,
   makeMergeKey,
   resolveGridResizeSnapForHandleDrag,
-  resolveRotateDegreesFromOptions,
   resolveScenePathShapeHint,
   resizeCursorForRole
 } from "./panel-helpers";
@@ -439,10 +441,11 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
 
       const rotateTargetId = resolveRotateWriteTargetIdInternal(sourceId);
       const resolvedRotateTarget = resolvePropertyTarget(source, rotateTargetId, parseOptions);
-      const baseRotateDeg =
+      const transformContext =
         resolvedRotateTarget.kind === "found"
-          ? resolveRotateDegreesFromOptions(resolvedRotateTarget.target.options)
-          : 0;
+          ? resolveTransformInspectorMutationContextFromOptionEntries(resolvedRotateTarget.target.options?.entries)
+          : resolveTransformInspectorMutationContextFromOptionEntries(null);
+      const baseRotateDeg = transformContext.values.rotate;
 
       setSnapLines([]);
       setDragState({
@@ -454,6 +457,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         startPointerAngleDeg: angleDeg(centerWorld, world),
         baseRotateDeg,
         lastAppliedRotateDeg: baseRotateDeg,
+        transformContext,
         historyMergeKey: makeMergeKey("drag-rotate", sourceId, event.pointerId)
       });
       logSnapDebug({
