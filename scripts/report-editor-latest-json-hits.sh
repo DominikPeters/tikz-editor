@@ -5,13 +5,13 @@ set -o pipefail
 
 HOST="kas"
 REMOTE_DIR="/www/htdocs/w008ef9a/logs"
-REQUEST_PATH="/latest.json"
+REQUEST_PATH="/editor/latest.json"
 OUT_DIR="artifacts/editor-latest-json-hits"
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/report-editor-latest-json-hits.sh [--host kas] [--remote-dir /www/htdocs/w008ef9a/logs] [--path /latest.json] [--out-dir artifacts/editor-latest-json-hits]
+  scripts/report-editor-latest-json-hits.sh [--host kas] [--remote-dir /www/htdocs/w008ef9a/logs] [--path /editor/latest.json] [--out-dir artifacts/editor-latest-json-hits]
 
 Fetches tikz.dev access-log counts over SSH and writes a timestamped report.
 Outputs:
@@ -101,7 +101,7 @@ printf 'Local: received %s total hits from %s unique IPs\n' "$total_hits" "$uniq
 printf 'Local: writing report files under %s\n' "$run_dir" >&2
 
 {
-  printf '# tikz.dev /latest.json hits\n\n'
+  printf '# tikz.dev /editor/latest.json hits\n\n'
   printf -- '- Generated at: %s\n' "$timestamp"
   printf -- '- Host: %s\n' "$HOST"
   printf -- '- Remote log dir: %s\n' "$REMOTE_DIR"
