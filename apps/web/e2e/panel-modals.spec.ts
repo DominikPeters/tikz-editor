@@ -24,13 +24,15 @@ test.beforeEach(async ({ page }) => {
 
 test("panel modal closes on Escape even when focus is outside the panel", async ({ page }) => {
   await openMenuCommand(page, "insert", "insert.equation");
-  await expect(page.getByTestId("equation-modal")).toBeVisible();
+  const modal = page.getByTestId("equation-modal");
+  await expect(modal).toBeVisible();
+  await expect(modal.locator("math-field")).toBeVisible();
 
   await page.getByTestId("menu-section-file").focus();
   await expect(page.getByTestId("menu-section-file")).toBeFocused();
 
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("equation-modal")).toHaveCount(0);
+  await expect(modal).toHaveCount(0);
 });
 
 test("help menu opens the web about modal", async ({ page }) => {
