@@ -1,7 +1,7 @@
 {
   "name": "@tikz-editor/landing",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "generate:build-info": "node --import tsx scripts/generate-build-info.mts",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@remixicon/react": "^4.9.0",
-    "@tikz-editor/app": "0.4.0",
+    "@tikz-editor/app": "0.5.0",
     "gsap": "^3.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
