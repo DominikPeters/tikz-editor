@@ -247,6 +247,8 @@ export interface TexVBoxParagraphPolicy {
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment?: boolean;
   readonly resetSpaceGlueProfile?: boolean;
+  readonly allowParagraphIndent?: boolean;
+  readonly allowForcedBreakIndent?: boolean;
 }
 
 export interface TexVBoxItem {

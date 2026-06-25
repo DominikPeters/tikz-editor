@@ -139,6 +139,8 @@ function vboxItemFromSimpleTexBox(
       paragraphPolicy: {
         resetInheritedAlignment: true,
         resetSpaceGlueProfile: true,
+        allowParagraphIndent: false,
+        allowForcedBreakIndent: false,
       },
     },
     items: nested.items,

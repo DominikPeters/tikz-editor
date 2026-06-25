@@ -313,6 +313,42 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("parses minipage environments as nested block items", () => {
+    const source = String.raw`\begin{minipage}[b]{50pt}Alpha \par \begin{minipage}{20pt}Inner\end{minipage}\par Tail\end{minipage}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({
+      kind: "box",
+      command: "minipage",
+      width: 50,
+      alignment: "bottom",
+    });
+    expect(parsed.blocks.map((block) => block.text)).toEqual([
+      "Alpha",
+      "Inner",
+      "Tail",
+    ]);
+    expect(parsed.items.map((item) =>
+      item.kind === "box"
+        ? {
+            kind: item.kind,
+            command: item.command,
+            width: item.width,
+            bodyKinds: item.items.map((child) => child.kind),
+          }
+        : { kind: item.kind }
+    )).toEqual([
+      {
+        kind: "box",
+        command: "minipage",
+        width: 50,
+        bodyKinds: ["paragraph", "box", "paragraph"],
+      },
+    ]);
+  });
+
   it("preserves block-position unsupported commands as placeholder block items", () => {
     const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);

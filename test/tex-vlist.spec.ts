@@ -748,6 +748,8 @@ describe("TeX vlist lowering", () => {
     expect(layout.paragraphPlans[0]?.breakContext.width).toBe(55);
     expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.leftMarginWidth).toBe(0);
     expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.rightMarginWidth).toBe(0);
+    expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.allowParagraphIndent).toBe(false);
+    expect(layout.paragraphPlans[0]?.breakContext.scopePolicy.allowForcedBreakIndent).toBe(false);
   });
 
   it("lays out parbox content through the public simple TeX layout path", () => {
@@ -759,6 +761,47 @@ describe("TeX vlist lowering", () => {
     expect(result.supported).toBe(true);
     const parbox = result.vlistLayout?.items[0];
     expect(parbox).toMatchObject({
+      item: { kind: "vbox" },
+      metrics: { width: 55 },
+    });
+    expect(result.vlistLayout?.linePlacements.length).toBeGreaterThan(1);
+  });
+
+  it("lowers minipage environments through the same explicit-width vbox path", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{minipage}[t]{100pt}Alpha \par \begin{quote}Beta\end{quote}\end{minipage}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: { width: 200 },
+    });
+
+    expect(layout.vlist.items).toHaveLength(1);
+    expect(layout.vlist.items[0]).toMatchObject({
+      kind: "vbox",
+      width: 100,
+      alignment: "top",
+    });
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      width: plan.breakContext.width,
+    }))).toEqual([
+      { text: "Alpha", width: 100 },
+      { text: "Beta", width: 50 },
+    ]);
+  });
+
+  it("lays out minipage content through the public simple TeX layout path", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{minipage}{55pt}Alpha Beta Gamma Delta\end{minipage}`,
+      { width: 200 }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.items[0]).toMatchObject({
       item: { kind: "vbox" },
       metrics: { width: 55 },
     });

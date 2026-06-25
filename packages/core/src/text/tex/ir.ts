@@ -44,7 +44,7 @@ export type SimpleTexVerticalGlueCommandName =
   | "medskip"
   | "bigskip"
   | "vfill";
-export type SimpleTexBoxCommandName = "parbox";
+export type SimpleTexBoxCommandName = "parbox" | "minipage";
 export type SimpleTexBoxAlignment = "top" | "center" | "bottom";
 
 export interface SimpleTexFontState {
@@ -536,7 +536,6 @@ function buildSimpleTexParagraphIrForRange(
     text,
     nodeScan.nodes,
     sourceOffset,
-    sourceOffset + start,
     sourceOffset + end
   );
   return {
@@ -616,8 +615,15 @@ function scanSimpleTexIrNodes(
       const verticalRule = scanSimpleTexVerticalRuleCommand(text, index, sourceOffset);
       const penalty = scanSimpleTexPenaltyCommand(text, index, sourceOffset);
       const boxCommand = scanSimpleTexBoxCommand(text, index, sourceOffset);
+      const boxEnvironment = scanSimpleTexBoxEnvironment(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
+      if (boxEnvironment) {
+        nodes.push(boxEnvironment.node);
+        unsupportedCommand ||= boxEnvironment.unsupportedCommand;
+        index = boxEnvironment.end;
+        continue;
+      }
       if (environmentBoundary) {
         nodes.push({
           kind: "environment-boundary",
@@ -1417,6 +1423,132 @@ function scanSimpleTexBoxCommand(
   };
 }
 
+function scanSimpleTexBoxEnvironment(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexBoxNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const beginPrefix = String.raw`\begin{minipage}`;
+  if (!text.startsWith(beginPrefix, start)) {
+    return null;
+  }
+
+  let cursor = skipSimpleTexControlWordSpaces(text, start + beginPrefix.length);
+  let alignment: SimpleTexBoxAlignment = "center";
+  if (text[cursor] === "[") {
+    const optionEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
+    if (optionEnd === null) {
+      return null;
+    }
+    alignment = parseSimpleTexBoxAlignment(text.slice(cursor + 1, optionEnd - 1));
+    cursor = skipSimpleTexControlWordSpaces(text, optionEnd);
+  }
+
+  let height: number | undefined;
+  let unsupportedCommand = false;
+  if (text[cursor] === "[") {
+    const heightEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
+    if (heightEnd === null) {
+      return null;
+    }
+    const parsedHeight = parseLength(text.slice(cursor + 1, heightEnd - 1), "pt");
+    height = parsedHeight ?? undefined;
+    unsupportedCommand ||= parsedHeight === null;
+    cursor = skipSimpleTexControlWordSpaces(text, heightEnd);
+
+    if (text[cursor] === "[") {
+      const innerPositionEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
+      if (innerPositionEnd === null) {
+        return null;
+      }
+      alignment = parseSimpleTexBoxAlignment(text.slice(cursor + 1, innerPositionEnd - 1));
+      cursor = skipSimpleTexControlWordSpaces(text, innerPositionEnd);
+    }
+  }
+
+  if (text[cursor] !== "{") {
+    return null;
+  }
+  const widthGroupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
+  if (widthGroupEnd === null) {
+    return null;
+  }
+  const parsedWidth = parseLength(text.slice(cursor + 1, widthGroupEnd - 1), "pt");
+  unsupportedCommand ||= parsedWidth === null;
+
+  const contentStart = widthGroupEnd;
+  const environmentEnd = findMatchingSimpleTexEnvironmentEnd(
+    text,
+    contentStart,
+    "minipage"
+  );
+  if (!environmentEnd) {
+    return null;
+  }
+  const body = buildSimpleTexParagraphIrForRange(
+    text,
+    contentStart,
+    environmentEnd.contentEnd,
+    sourceOffset
+  );
+  unsupportedCommand ||= body.unsupportedCommand;
+
+  return {
+    node: {
+      kind: "box",
+      text: text.slice(start, environmentEnd.end),
+      command: "minipage",
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + environmentEnd.end,
+      width: parsedWidth ?? 0,
+      ...(height !== undefined ? { height } : {}),
+      alignment,
+      content: text.slice(contentStart, environmentEnd.contentEnd),
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + environmentEnd.contentEnd,
+      body,
+    },
+    end: environmentEnd.end,
+    unsupportedCommand,
+  };
+}
+
+function findMatchingSimpleTexEnvironmentEnd(
+  text: string,
+  start: number,
+  name: string
+): { readonly contentEnd: number; readonly end: number } | null {
+  const beginPrefix = `\\begin{${name}}`;
+  const endPrefix = `\\end{${name}}`;
+  let depth = 1;
+  let index = start;
+  while (index < text.length) {
+    const nextBegin = text.indexOf(beginPrefix, index);
+    const nextEnd = text.indexOf(endPrefix, index);
+    if (nextEnd < 0) {
+      return null;
+    }
+    if (nextBegin >= 0 && nextBegin < nextEnd) {
+      depth += 1;
+      index = nextBegin + beginPrefix.length;
+      continue;
+    }
+    depth -= 1;
+    if (depth === 0) {
+      return {
+        contentEnd: nextEnd,
+        end: nextEnd + endPrefix.length,
+      };
+    }
+    index = nextEnd + endPrefix.length;
+  }
+  return null;
+}
+
 function parseSimpleTexBoxAlignment(raw: string): SimpleTexBoxAlignment {
   const value = raw.trim().toLowerCase();
   if (value === "t") {
@@ -1885,7 +2017,6 @@ function buildSimpleTexParagraphBlocksFromNodes(
   text: string,
   sourceNodes: readonly SimpleTexNode[],
   sourceOffset = 0,
-  sourceStart = sourceOffset,
   sourceEnd = sourceOffset + text.length
 ): SimpleTexParagraphBlockScanResult {
   const blocks: SimpleTexParagraphBlock[] = [];

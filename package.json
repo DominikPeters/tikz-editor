@@ -39,6 +39,7 @@
     "compare:tex-text-visual-fuzz:quote": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode quote --cases 32 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-quote --cache-dir artifacts/tex-text-svgtrace-cache-quote",
     "compare:tex-text-visual-fuzz:style": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode style --cases 40 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-style --cache-dir artifacts/tex-text-svgtrace-cache-style",
     "compare:tex-text-visual-fuzz:list": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode list --cases 40 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-list --cache-dir artifacts/tex-text-svgtrace-cache-list",
+    "compare:tex-text-visual-fuzz:box": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode box --cases 24 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-box --cache-dir artifacts/tex-text-svgtrace-cache-box",
     "compare:tex-text-visual-fuzz:mixed": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode mixed --cases 60 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-mixed --cache-dir artifacts/tex-text-svgtrace-cache-mixed",
     "compare:tex-text-visual-fuzz:large": "node scripts/compare-tex-text-visual-fuzz.mjs --cases 200 --seed 20260608 --scale 8 --out-dir artifacts/tex-text-svgtrace-fuzz-large --cache-dir artifacts/tex-text-svgtrace-cache",
     "compare:tex-math": "node scripts/compare-tex-math.mjs",

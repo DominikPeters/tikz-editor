@@ -308,8 +308,8 @@ function texParagraphBreakScopePolicy(
   return {
     leftMarginWidth: scopeContext.layout.leftMarginWidth,
     rightMarginWidth: scopeContext.layout.rightMarginWidth,
-    allowParagraphIndent: !inList,
-    allowForcedBreakIndent: !inList,
+    allowParagraphIndent: scopeContext.policy.allowParagraphIndent !== false && !inList,
+    allowForcedBreakIndent: scopeContext.policy.allowForcedBreakIndent !== false && !inList,
     forceParfillStretch: inQuote || inList,
     suppressRaggedLeftCenterLeftskipStretch: inQuote || inList,
     rightskipStretchMode,

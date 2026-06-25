@@ -13,6 +13,8 @@ export interface TexParagraphScopePolicy {
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment: boolean;
   readonly resetSpaceGlueProfile: boolean;
+  readonly allowParagraphIndent?: boolean;
+  readonly allowForcedBreakIndent?: boolean;
 }
 
 export interface TexParagraphScopeLayout {
@@ -81,6 +83,8 @@ function texParagraphScopePolicy(
     raggedRightProfile?: TexAlignmentProfile;
     resetInheritedAlignment: boolean;
     resetSpaceGlueProfile: boolean;
+    allowParagraphIndent?: boolean;
+    allowForcedBreakIndent?: boolean;
   } = {
     resetInheritedAlignment: false,
     resetSpaceGlueProfile: false,
@@ -101,6 +105,12 @@ function texParagraphScopePolicy(
     }
     policy.resetInheritedAlignment ||= paragraphPolicy.resetInheritedAlignment === true;
     policy.resetSpaceGlueProfile ||= paragraphPolicy.resetSpaceGlueProfile === true;
+    if (paragraphPolicy.allowParagraphIndent !== undefined) {
+      policy.allowParagraphIndent = paragraphPolicy.allowParagraphIndent;
+    }
+    if (paragraphPolicy.allowForcedBreakIndent !== undefined) {
+      policy.allowForcedBreakIndent = paragraphPolicy.allowForcedBreakIndent;
+    }
   }
   return policy;
 }

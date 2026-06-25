@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, vertical-glue, rule, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, vertical-glue, rule, box, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -177,8 +177,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures", "quote", "style", "list", "vertical-glue", "rule", "mixed"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, style, list, vertical-glue, rule, or mixed.");
+  if (!["broad", "ligatures", "quote", "style", "list", "vertical-glue", "rule", "box", "mixed"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, quote, style, list, vertical-glue, rule, box, or mixed.");
   }
   return options;
 }
@@ -543,6 +543,34 @@ function generateRuleCase(index, random) {
   };
 }
 
+function generateBoxCase(index, random) {
+  const boxAlignments = [alignments[0], alignments[3]];
+  const alignment = boxAlignments[index % boxAlignments.length] ?? alignments[0];
+  const widths = [140, 170, 200, 240, 300, 340];
+  const width = choice(random, widths);
+  const parindent = 0;
+  const boxWidth = Math.min(width - 20, choice(random, [70, 85, 100, 120, 140]));
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = `\\parbox{${boxWidth}pt}{${paragraph(random, 1)}}`;
+  } else if (feature === 1) {
+    text = `\\parbox[t]{${boxWidth}pt}{${paragraph(random, 1)} \\par ${sentence(random, 4, 8)}}`;
+  } else if (feature === 2) {
+    text = `\\begin{minipage}{${boxWidth}pt}${paragraph(random, 1)}\\end{minipage}`;
+  } else {
+    text = `\\begin{minipage}[t]{${boxWidth}pt}${paragraph(random, 1)} \\par ${sentence(random, 4, 8)}\\end{minipage}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "box",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateMixedFeatureCase(index, random) {
   const feature = index % 6;
   if (feature === 0) {
@@ -614,6 +642,9 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "rule") {
     return generateRuleCase(index, random);
+  }
+  if (mode === "box") {
+    return generateBoxCase(index, random);
   }
   if (mode === "mixed") {
     return generateMixedFeatureCase(index, random);
