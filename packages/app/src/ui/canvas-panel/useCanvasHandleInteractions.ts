@@ -398,7 +398,13 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
   );
 
   const onRotateHandlePointerDown = useCallback(
-    (event: ReactPointerEvent<SVGElement>, sourceId: string, centerWorld: WorldPoint, cursor: string) => {
+    (
+      event: ReactPointerEvent<SVGElement>,
+      sourceId: string,
+      centerWorld: WorldPoint,
+      centerPivotWorld: WorldPoint,
+      cursor: string
+    ) => {
       if (!svgResult || toolMode !== "select" || event.button !== 0) return;
       if (cursor === "not-allowed") {
         const reason = directManipulationDisabledReasonBySourceId?.get(sourceId);
@@ -446,18 +452,28 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
           ? resolveTransformInspectorMutationContextFromOptionEntries(resolvedRotateTarget.target.options?.entries)
           : resolveTransformInspectorMutationContextFromOptionEntries(null);
       const baseRotateDeg = transformContext.values.rotate;
+      const startPointerAngleDeg = angleDeg(centerWorld, world);
+      const startCenterPivotPointerAngleDeg = angleDeg(centerPivotWorld, world);
 
       setSnapLines([]);
       setDragState({
         kind: "rotate",
         pointerId: event.pointerId,
         elementId: rotateTargetId,
+        sourceId,
         cursor: cursor === "not-allowed" ? "not-allowed" : "grabbing",
         centerWorld,
-        startPointerAngleDeg: angleDeg(centerWorld, world),
+        startPointerAngleDeg,
+        centerPivotWorld,
+        startCenterPivotPointerAngleDeg,
         baseRotateDeg,
         lastAppliedRotateDeg: baseRotateDeg,
-        transformContext,
+        lastAppliedRotateMode: "property",
+        activeRotateMode: "property",
+        lastPointerClient: makeClientPoint(px(event.clientX), px(event.clientY)),
+        lastPointerWorld: world,
+        preEditBaselineSource: source,
+        latestSource: source,
         historyMergeKey: makeMergeKey("drag-rotate", sourceId, event.pointerId)
       });
       logSnapDebug({

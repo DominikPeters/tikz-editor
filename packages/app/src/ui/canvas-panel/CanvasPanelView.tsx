@@ -149,7 +149,13 @@ type CanvasPanelViewProps = {
   handleDisplays: readonly HandleDisplay[];
   onHandlePointerDown: (event: ReactPointerEvent<SVGElement>, handle: EditHandle) => void;
   onResizeHandlePointerDown: (event: ReactPointerEvent<SVGElement>, sourceId: string, role: ResizeRole, cursor: string) => void;
-  onRotateHandlePointerDown: (event: ReactPointerEvent<SVGElement>, sourceId: string, centerWorld: WorldPoint, cursor: string) => void;
+  onRotateHandlePointerDown: (
+    event: ReactPointerEvent<SVGElement>,
+    sourceId: string,
+    centerWorld: WorldPoint,
+    centerPivotWorld: WorldPoint,
+    cursor: string
+  ) => void;
   platform: EditorPlatform;
   contextMenuState: CanvasContextMenuState | null;
   commandRuntimeBindings: CommandBindings;

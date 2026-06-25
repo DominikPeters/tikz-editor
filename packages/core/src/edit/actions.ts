@@ -53,6 +53,10 @@ import {
 import { applyReorderElementsAction, buildParentReorderReplacement } from "./actions/reorder-elements.js";
 import { applyResizeElementAction } from "./actions/resize-element.js";
 import {
+  applyRotateElementAction,
+  type RotateElementAction
+} from "./actions/rotate-element.js";
+import {
   applyPlannedSetPropertyAction,
   cleanupIdiomaticPropertyWrites,
   PROPERTY_WRITE_CLEANUP_NOOP_REASON
@@ -128,6 +132,7 @@ export type EditAction =
       commentMode?: "disable" | "enable";
       commentSourceText?: string;
     }
+  | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
   | { kind: "cleanupPropertyWrites"; elementIds?: string[] }
@@ -274,6 +279,8 @@ export function applyEditAction(
         return applyDistributeElements(source, action, parseOptions);
       case "setProperty":
         return applySetProperty(source, action, parseOptions);
+      case "rotateElement":
+        return applyRotateElementAction(source, action, evaluateOptions, parseOptions);
       case "updateNodeText":
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":

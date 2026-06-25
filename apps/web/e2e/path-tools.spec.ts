@@ -126,6 +126,33 @@ async function readResizeRoles(page: import("@playwright/test").Page): Promise<s
   );
 }
 
+async function worldCmToClientPoint(
+  page: import("@playwright/test").Page,
+  point: { xCm: number; yCm: number }
+): Promise<{ x: number; y: number }> {
+  return await page.evaluate(({ xCm, yCm, cmPerPt }) => {
+    const svgs = Array.from(document.querySelectorAll("[data-canvas-viewport='true'] svg"));
+    const svg = svgs[svgs.length - 1] as SVGSVGElement | undefined;
+    if (!svg) {
+      throw new Error("No canvas SVG was found.");
+    }
+    const rect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    if (rect.width <= 0 || rect.height <= 0 || viewBox.width <= 0 || viewBox.height <= 0) {
+      throw new Error("Canvas SVG has invalid bounds.");
+    }
+    const ptPerCm = 1 / cmPerPt;
+    const worldX = xCm * ptPerCm;
+    const worldY = yCm * ptPerCm;
+    const svgX = worldX;
+    const svgY = viewBox.y + viewBox.height - (worldY - viewBox.y);
+    return {
+      x: rect.left + ((svgX - viewBox.x) / viewBox.width) * rect.width,
+      y: rect.top + ((svgY - viewBox.y) / viewBox.height) * rect.height
+    };
+  }, { ...point, cmPerPt: CM_PER_PT });
+}
+
 async function doubleClickHitRegionByTargetId(
   page: import("@playwright/test").Page,
   targetId: string
@@ -296,6 +323,129 @@ test("rotate drag shows degree tooltip", async ({ page }) => {
 
   await page.mouse.up();
   await expect(page.getByTestId("canvas-drag-tooltip-shell")).toHaveCount(0);
+});
+
+test("rotate handle follows authored rotate-around pivot", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+  \draw[rotate around=30:(2,1)] (0,0) rectangle (1,1);
+  \draw (-1,2) rectangle (2,-2);
+\end{tikzpicture}`);
+  await page.getByRole("button", { name: "Select" }).click();
+
+  await clickHitRegion(page, 0);
+  const rotateHandle = page.getByTestId("canvas-rotate-handle");
+  await expect(rotateHandle).toBeVisible();
+  const box = await rotateHandle.boundingBox();
+  if (!box) {
+    throw new Error("Missing rotate handle bounds.");
+  }
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const pivot = await worldCmToClientPoint(page, { xCm: 2, yCm: 1 });
+  const vx = start.x - pivot.x;
+  const vy = start.y - pivot.y;
+  const radians = (-20 * Math.PI) / 180;
+  const end = {
+    x: pivot.x + vx * Math.cos(radians) - vy * Math.sin(radians),
+    y: pivot.y + vx * Math.sin(radians) + vy * Math.cos(radians)
+  };
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 5 });
+  await page.mouse.up();
+
+  await expect.poll(async () => normalizeSourceWhitespace(await readSource(page))).toContain(
+    "rotatearound={50:(2,1)}"
+  );
+});
+
+test("Alt during rotate drag switches between center-pivot and origin rotation", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\draw[rotate=10] (0,0) rectangle (2,1);
+\end{tikzpicture}`);
+  await page.getByRole("button", { name: "Select" }).click();
+
+  await clickHitRegion(page, 0);
+  const rotateHandle = page.getByTestId("canvas-rotate-handle");
+  await expect(rotateHandle).toBeVisible();
+  const box = await rotateHandle.boundingBox();
+  if (!box) {
+    throw new Error("Missing rotate handle bounds.");
+  }
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+
+  await page.keyboard.down("Alt");
+  await expect.poll(async () => readSource(page)).toContain("rotate around=");
+
+  const centerPivotSource = await readSource(page);
+  await page.keyboard.up("Alt");
+  await page.mouse.move(start.x + 10, start.y + 8, { steps: 2 });
+  await expect.poll(async () => readSource(page)).not.toContain("rotate around=");
+  expect(await readSource(page)).not.toBe(centerPivotSource);
+  await page.mouse.up();
+});
+
+test("Alt-held rotate commits center-pivot rotation", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\draw[rotate=10] (0,0) rectangle (2,1);
+\end{tikzpicture}`);
+  await page.getByRole("button", { name: "Select" }).click();
+
+  await clickHitRegion(page, 0);
+  const rotateHandle = page.getByTestId("canvas-rotate-handle");
+  await expect(rotateHandle).toBeVisible();
+  const box = await rotateHandle.boundingBox();
+  if (!box) {
+    throw new Error("Missing rotate handle bounds.");
+  }
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+  await page.keyboard.down("Alt");
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 44, start.y + 36, { steps: 4 });
+  await expect.poll(async () => readSource(page)).toContain("rotate around=");
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+
+  const source = await readSource(page);
+  expect(source).toContain("rotate around=");
+  expect(source).not.toContain("rotate=10");
+});
+
+test("unsupported Alt center-pivot rotate warns and normal rotation still works after release", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\draw[xshift=1cm, rotate=10] (0,0) rectangle (2,1);
+\end{tikzpicture}`);
+  await page.getByRole("button", { name: "Select" }).click();
+
+  await clickHitRegion(page, 0);
+  const rotateHandle = page.getByTestId("canvas-rotate-handle");
+  await expect(rotateHandle).toBeVisible();
+  const box = await rotateHandle.boundingBox();
+  if (!box) {
+    throw new Error("Missing rotate handle bounds.");
+  }
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+  await page.keyboard.down("Alt");
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 44, start.y + 36, { steps: 4 });
+  await expect(page.getByTestId("canvas-warning-message")).toContainText("Center-pivot rotate currently supports");
+  expect(await readSource(page)).not.toContain("rotate around=");
+
+  await page.keyboard.up("Alt");
+  await page.mouse.move(start.x + 66, start.y + 44, { steps: 3 });
+  await expect.poll(async () => readSource(page)).toMatch(/rotate=-?\d/);
+  await page.mouse.up();
 });
 
 test("rectangle and grid creation show tooltips and keep tooltip in viewport bounds", async ({ page }) => {

@@ -13,8 +13,6 @@ import {
 } from "tikz-editor/coords/index";
 import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
 import { formatNumber } from "tikz-editor/edit/format";
-import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
-import { buildTransformSetPropertyMutations } from "tikz-editor/edit/property-write-builders";
 import { worldToLocal } from "tikz-editor/edit/coords";
 import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
 import { parseLength } from "tikz-editor/semantic/coords/parse-length";
@@ -185,6 +183,85 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
 
     function resetSnapFeedbackState() {
       wasSnappedRef.current = false;
+    }
+
+    function applyRotateDragUpdate(
+      drag: Extract<DragState, { kind: "rotate" }>,
+      input: {
+        phase: string;
+        shiftKey: boolean;
+        ctrlOrMetaKey: boolean;
+        altKey: boolean;
+        tooltipAnchor: ClientPoint;
+        rawPoint: WorldPoint;
+      }
+    ) {
+      setNodeAnchorOverlay(null);
+      setSnapLines([]);
+      maybeTriggerSnapFeedback(false);
+      const rotateMode: "property" | "origin" | "center-pivot" = input.altKey
+        ? "center-pivot"
+        : drag.activeRotateMode === "center-pivot"
+          ? "origin"
+          : drag.activeRotateMode;
+      const useCenterPivotAngle = rotateMode === "center-pivot";
+      const currentPointerAngleDeg = angleDeg(
+        useCenterPivotAngle ? drag.centerPivotWorld : drag.centerWorld,
+        input.rawPoint
+      );
+      const nextRotate = resolveDraggedRotateDeg({
+        baseRotateDeg: drag.baseRotateDeg,
+        startPointerAngleDeg: useCenterPivotAngle
+          ? drag.startCenterPivotPointerAngleDeg
+          : drag.startPointerAngleDeg,
+        currentPointerAngleDeg,
+        shiftKey: input.shiftKey,
+        ctrlOrMetaKey: input.ctrlOrMetaKey,
+        shiftSnapStepDeg: ROTATE_SHIFT_SNAP_STEP_DEG,
+        magneticSnapStepDeg: ROTATE_SOFT_SNAP_STEP_DEG,
+        magneticSnapThresholdDeg: ROTATE_SOFT_SNAP_THRESHOLD_DEG,
+        roundToInteger: true
+      });
+      logSnapDebug({
+        phase: input.phase,
+        snapshotMatchesSource: true,
+        dragKind: "rotate",
+        rawPoint: input.rawPoint,
+        lines: []
+      });
+      setDragTooltip({
+        kind: "rotate",
+        anchor: input.tooltipAnchor,
+        rows: [formatTooltipAngleRow(nextRotate)]
+      });
+
+      if (
+        Math.abs(normalizeSignedDeg(nextRotate - drag.lastAppliedRotateDeg)) <= 1e-6 &&
+        rotateMode === drag.lastAppliedRotateMode
+      ) {
+        return;
+      }
+
+      const ok = applyActionWithFeedback(
+        {
+          kind: "rotateElement",
+          elementId: drag.sourceId,
+          targetId: rotateMode === "property" ? drag.elementId : drag.sourceId,
+          angleDeg: nextRotate,
+          mode: rotateMode,
+          baselineSource: drag.preEditBaselineSource
+        },
+        drag.historyMergeKey,
+        drag.latestSource
+      );
+      if (ok.sourceChanged) {
+        drag.lastAppliedRotateDeg = nextRotate;
+        drag.lastAppliedRotateMode = rotateMode;
+        drag.activeRotateMode = rotateMode === "center-pivot" ? "center-pivot" : rotateMode;
+        if (ok.newSource) {
+          drag.latestSource = ok.newSource;
+        }
+      }
     }
 
     function pointChanged(a: WorldPoint, b: WorldPoint): boolean {
@@ -479,58 +556,17 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       }
 
       if (drag.kind === "rotate") {
-        setNodeAnchorOverlay(null);
-        setSnapLines([]);
-        maybeTriggerSnapFeedback(false);
-        const currentPointerAngleDeg = angleDeg(drag.centerWorld, world);
-        const nextRotate = resolveDraggedRotateDeg({
-          baseRotateDeg: drag.baseRotateDeg,
-          startPointerAngleDeg: drag.startPointerAngleDeg,
-          currentPointerAngleDeg,
+        const pointerClient = clientPointFromEvent(event);
+        drag.lastPointerClient = pointerClient;
+        drag.lastPointerWorld = world;
+        applyRotateDragUpdate(drag, {
+          phase: "drag-rotate-move",
           shiftKey: event.shiftKey,
           ctrlOrMetaKey: ctrlOrMeta,
-          shiftSnapStepDeg: ROTATE_SHIFT_SNAP_STEP_DEG,
-          magneticSnapStepDeg: ROTATE_SOFT_SNAP_STEP_DEG,
-          magneticSnapThresholdDeg: ROTATE_SOFT_SNAP_THRESHOLD_DEG,
-          roundToInteger: true
+          altKey: event.altKey,
+          tooltipAnchor: pointerClient,
+          rawPoint: world
         });
-        logSnapDebug({
-          phase: "drag-rotate-move",
-          snapshotMatchesSource: true,
-          dragKind: "rotate",
-          rawPoint: world,
-          lines: []
-        });
-        setDragTooltip({
-          kind: "rotate",
-          anchor: clientPointFromEvent(event),
-          rows: [formatTooltipAngleRow(nextRotate)]
-        });
-
-        if (Math.abs(normalizeSignedDeg(nextRotate - drag.lastAppliedRotateDeg)) <= 1e-6) {
-          return;
-        }
-
-        const mutations = buildTransformSetPropertyMutations(drag.transformContext, "rotate", nextRotate);
-        let sourceChanged = false;
-        for (const mutation of mutations) {
-          const ok = applyActionWithFeedback(
-            {
-              kind: "setProperty",
-              elementId: drag.elementId,
-              level: "command",
-              key: mutation.key,
-              value: mutation.value,
-              propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-              clearKeys: mutation.clearKeys
-            },
-            drag.historyMergeKey
-          );
-          sourceChanged = sourceChanged || ok.sourceChanged;
-        }
-        if (sourceChanged) {
-          drag.lastAppliedRotateDeg = nextRotate;
-        }
         return;
       }
 
@@ -1165,14 +1201,55 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       setDragState(null);
     }
 
+    function isAltModifierEvent(event: KeyboardEvent): boolean {
+      return event.key === "Alt" || event.key === "AltGraph" || event.code === "AltLeft" || event.code === "AltRight";
+    }
+
+    function applyRotateModifierKeyTransition(event: KeyboardEvent, altKey: boolean) {
+      const drag = dragRef.current;
+      if (drag?.kind !== "rotate") {
+        return;
+      }
+      const altEvent = isAltModifierEvent(event);
+      const exitingCenterPivot = !altKey && !event.altKey && drag.activeRotateMode === "center-pivot";
+      const enteringCenterPivot = altKey && event.altKey && drag.activeRotateMode !== "center-pivot";
+      if (!altEvent && !exitingCenterPivot && !enteringCenterPivot) {
+        return;
+      }
+      event.preventDefault();
+      applyRotateDragUpdate(drag, {
+        phase: "drag-rotate-modifier",
+        shiftKey: event.shiftKey,
+        ctrlOrMetaKey: event.ctrlKey || event.metaKey,
+        altKey,
+        tooltipAnchor: drag.lastPointerClient,
+        rawPoint: drag.lastPointerWorld
+      });
+    }
+
+    function onWorldKeyDown(event: KeyboardEvent) {
+      if (event.repeat) {
+        return;
+      }
+      applyRotateModifierKeyTransition(event, true);
+    }
+
+    function onWorldKeyUp(event: KeyboardEvent) {
+      applyRotateModifierKeyTransition(event, false);
+    }
+
     window.addEventListener("pointermove", onWorldPointerMove);
     window.addEventListener("pointerup", onWorldPointerUp);
     window.addEventListener("pointercancel", onWorldPointerUp);
+    window.addEventListener("keydown", onWorldKeyDown, true);
+    window.addEventListener("keyup", onWorldKeyUp, true);
 
     return () => {
       window.removeEventListener("pointermove", onWorldPointerMove);
       window.removeEventListener("pointerup", onWorldPointerUp);
       window.removeEventListener("pointercancel", onWorldPointerUp);
+      window.removeEventListener("keydown", onWorldKeyDown, true);
+      window.removeEventListener("keyup", onWorldKeyUp, true);
     };
   }, [
     applyActionWithFeedback,

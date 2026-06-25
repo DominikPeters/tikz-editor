@@ -2,7 +2,6 @@ import type { AdornmentOwnerGeometry, Span, Statement } from "tikz-editor/ast/ty
 import type { ComplexPathSegment } from "tikz-editor/edit/element-templates";
 import type { EditAction, ResizeRole } from "tikz-editor/edit/actions";
 import type { EditParseOptions } from "tikz-editor/edit/parse-options";
-import type { TransformInspectorMutationContext } from "tikz-editor/edit/property-write-builders";
 import type { SelectionGeometry, SnapContext, SnapLine } from "tikz-editor/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement, SceneText } from "tikz-editor/semantic/types";
 import type { SvgViewBox } from "tikz-editor/svg/index";
@@ -36,7 +35,8 @@ export type CanvasEditParseOptions = EditParseOptions;
 
 export type ApplyActionWithFeedbackFn = (
   action: EditAction,
-  historyMergeKey?: string
+  historyMergeKey?: string,
+  sourceOverride?: string
 ) => ApplyActionFeedback;
 
 export type CanvasContextMenuState = {
@@ -175,12 +175,20 @@ export type DragState =
       kind: "rotate";
       pointerId: number;
       elementId: string;
+      sourceId: string;
       cursor: string;
       centerWorld: WorldPoint;
       startPointerAngleDeg: number;
+      centerPivotWorld: WorldPoint;
+      startCenterPivotPointerAngleDeg: number;
       baseRotateDeg: number;
       lastAppliedRotateDeg: number;
-      transformContext: TransformInspectorMutationContext;
+      lastAppliedRotateMode: "property" | "origin" | "center-pivot";
+      activeRotateMode: "property" | "origin" | "center-pivot";
+      lastPointerClient: ClientPoint;
+      lastPointerWorld: WorldPoint;
+      preEditBaselineSource: string;
+      latestSource: string;
       historyMergeKey: string;
     }
   | {
@@ -356,6 +364,7 @@ export type SnapDebugLogInput = {
 
 export type ApplyActionFeedback = {
   sourceChanged: boolean;
+  newSource?: string;
 };
 
 export type SelectionBounds = {
@@ -429,6 +438,7 @@ export type HandleDisplay =
       point: SvgPoint;
       anchor: SvgPoint;
       centerWorld: WorldPoint;
+      centerPivotWorld: WorldPoint;
       cursor: string;
       kind: "rotate-element";
       elementId: string;

@@ -942,6 +942,7 @@ export function HandleOverlay({
     event: ReactPointerEvent<SVGElement>,
     sourceId: string,
     centerWorld: WorldPoint,
+    centerPivotWorld: WorldPoint,
     cursor: string
   ) => void;
 }) {
@@ -961,7 +962,7 @@ export function HandleOverlay({
             onResizeHandlePointerDown(event, display.elementId, display.role, display.cursor);
             return;
           }
-          onRotateHandlePointerDown(event, display.elementId, display.centerWorld, display.cursor);
+          onRotateHandlePointerDown(event, display.elementId, display.centerWorld, display.centerPivotWorld, display.cursor);
         };
         const onContextMenu = (event: ReactMouseEvent<SVGElement>) =>
           { onElementContextMenu(

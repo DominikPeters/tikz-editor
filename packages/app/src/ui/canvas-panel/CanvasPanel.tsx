@@ -1805,14 +1805,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const applyActionWithFeedback = useCallback(
-    (action: EditAction, historyMergeKey?: string): ApplyActionFeedback => {
+    (action: EditAction, historyMergeKey?: string, sourceOverride?: string): ApplyActionFeedback => {
+      const sourceForEdit = sourceOverride ?? source;
       const sourceFingerprint = buildSnapshotEditSourceFingerprint({
         documentId: activeDocumentId,
         sourceRevision,
-        sourceLength: source.length,
+        sourceLength: sourceForEdit.length,
         sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
       });
-      const result = applyEditAction(source, snapshot.editHandles, action, {
+      const result = applyEditAction(sourceForEdit, snapshot.editHandles, action, {
         evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
@@ -1823,17 +1824,17 @@ export const CanvasPanel = memo(function CanvasPanel({
           setWarning(`${result.reason} (${skippedCount} handle${skippedCount === 1 ? "" : "s"} skipped)`);
         }
 
-        const sourceChanged = result.newSource !== source;
+        const sourceChanged = result.newSource !== sourceForEdit;
         if (sourceChanged) {
           dispatch({
             type: "APPLY_EDIT_ACTION",
             action,
             historyMergeKey,
-            precomputedSource: source,
+            precomputedSource: sourceForEdit,
             precomputedResult: result
           });
         }
-        return { sourceChanged };
+        return { sourceChanged, newSource: sourceChanged ? result.newSource : undefined };
       }
 
       if (result.kind === "unsupported") {
