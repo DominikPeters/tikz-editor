@@ -91,15 +91,13 @@ try {
 
 function resolveAppBinary() {
   const root = process.cwd();
-  const plain = path.resolve(root, "src-tauri/target/release/app");
+  const binaryName = process.platform === "win32" ? "tikz-editor.exe" : "tikz-editor";
+  const plain = path.resolve(root, "src-tauri/target/release", binaryName);
   if (fs.existsSync(plain)) {
     return plain;
   }
   if (process.platform === "darwin") {
-    return path.resolve(root, "src-tauri/target/release/app.app/Contents/MacOS/app");
-  }
-  if (process.platform === "win32") {
-    return path.resolve(root, "src-tauri/target/release/app.exe");
+    return path.resolve(root, "src-tauri/target/release/bundle/macos/TikZ Editor.app/Contents/MacOS/tikz-editor");
   }
   return plain;
 }
