@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parser } from "../packages/core/src/syntax/grammar/tikz-parser.js";
+import { parser } from "@tikz-editor/lezer-tikz";
 import * as sourceColorDetection from "../packages/app/src/colors/source-color-detection.js";
 import {
   collectProjectNamedColorSwatches,

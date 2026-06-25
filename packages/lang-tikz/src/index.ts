@@ -1,6 +1,6 @@
 import { LRLanguage, LanguageSupport, foldNodeProp, foldInside, foldService, syntaxTree } from "@codemirror/language";
 import { styleTags, tags as t } from "@lezer/highlight";
-import { parser } from "tikz-editor/syntax/grammar/tikz-parser";
+import { parser } from "@tikz-editor/lezer-tikz";
 
 const tikzHighlighting = styleTags({
   Comment: t.lineComment,
@@ -149,7 +149,7 @@ const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
   return null;
 });
 
-const tikzLRLanguage = LRLanguage.define({
+export const tikzLanguage = LRLanguage.define({
   parser: parser.configure({
     props: [
       tikzHighlighting,
@@ -165,6 +165,6 @@ const tikzLRLanguage = LRLanguage.define({
   },
 });
 
-export function tikzLanguage(): LanguageSupport {
-  return new LanguageSupport(tikzLRLanguage, [tikzEnvironmentFolding]);
+export function tikz(): LanguageSupport {
+  return new LanguageSupport(tikzLanguage, [tikzEnvironmentFolding]);
 }

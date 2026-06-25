@@ -16,6 +16,10 @@
         "@tikz-editor/app/platform/types": ["../../packages/app/src/platform/types.ts"],
         "@tikz-editor/app/store/types": ["../../packages/app/src/store/types.ts"],
         "@tikz-editor/app/workspace": ["../../packages/app/src/ui/workspace-apply.ts"],
+        "@tikz-editor/lang-tikz": ["../../packages/lang-tikz/src/index.ts"],
+        "@tikz-editor/lezer-tikz": ["../../packages/lezer-tikz/src/index.ts"],
+        "@tikz-editor/lezer-tikz/grammar/tikz-parser": ["../../packages/lezer-tikz/src/grammar/tikz-parser.ts"],
+        "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": ["../../packages/lezer-tikz/src/grammar/tikz-parser.terms.ts"],
         "tikz-editor/*": ["../../packages/core/src/*"]
       }
   },

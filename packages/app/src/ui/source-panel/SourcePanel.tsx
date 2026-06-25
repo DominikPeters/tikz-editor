@@ -61,7 +61,7 @@ import { recordProfilingSourcePanelSyncTiming } from "tikz-editor/profiling";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { NAMED_COLORS } from "tikz-editor/semantic/style/constants";
 import { patchesMatchSourceTransition } from "tikz-editor/edit/source-patches";
-import { tikzLanguage } from "./codemirror-tikz";
+import { tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
 import { getActiveEditorPlatform } from "../../platform/current";
@@ -964,7 +964,7 @@ export function SourcePanel() {
           ...lintKeymap,
         ]),
         editorKeymap,
-        tikzLanguage(),
+        tikz(),
         wordWrapCompartment.of(editorWordWrap ? EditorView.lineWrapping : []),
         fontSizeCompartment.of(EditorView.theme({ "& .cm-scroller": { fontSize: `${editorFontSize}px` } })),
         tabSizeCompartment.of(CMState.tabSize.of(editorIndentSize)),

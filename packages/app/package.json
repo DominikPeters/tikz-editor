@@ -50,6 +50,7 @@
     "@lezer/lr": "^1.4.8",
     "@remixicon/react": "^4.9.0",
     "@tikz-editor/core": "0.5.0",
+    "@tikz-editor/lang-tikz": "0.5.0",
     "codemirror": "^6.0.2",
     "flexlayout-react": "^0.8.19",
     "ipe2tikz": "^1.0.0",

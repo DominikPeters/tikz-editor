@@ -9,6 +9,8 @@ export default defineConfig({
   publicDir: path.resolve(__dirname, "../../packages/app/public"),
   resolve: {
     alias: {
+      "@tikz-editor/lang-tikz": path.resolve(__dirname, "../../packages/lang-tikz/src/index.ts"),
+      "@tikz-editor/lezer-tikz": path.resolve(__dirname, "../../packages/lezer-tikz/src/index.ts"),
       "tikz-editor": path.resolve(__dirname, "../../packages/core/src")
     }
   },

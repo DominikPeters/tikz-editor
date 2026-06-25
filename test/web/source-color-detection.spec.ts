@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parser } from "tikz-editor/syntax/parse";
+import { parser } from "@tikz-editor/lezer-tikz";
 import {
   collectDeclaredColors,
   collectDetectedColors,
