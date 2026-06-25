@@ -28,8 +28,11 @@ test("panel modal closes on Escape even when focus is outside the panel", async 
   await expect(modal).toBeVisible();
   await expect(modal.locator("math-field")).toBeVisible();
 
-  await page.getByTestId("menu-section-file").focus();
-  await expect(page.getByTestId("menu-section-file")).toBeFocused();
+  const fileMenuTrigger = page.getByTestId("menu-section-file");
+  await fileMenuTrigger.focus();
+  await expect.poll(
+    () => fileMenuTrigger.evaluate((element) => element.ownerDocument.activeElement === element)
+  ).toBe(true);
 
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
