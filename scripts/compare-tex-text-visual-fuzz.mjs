@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, vertical-glue, rule, box, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, vertical-glue, rule, box, box-hard, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -177,8 +177,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures", "quote", "style", "list", "vertical-glue", "rule", "box", "mixed"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, style, list, vertical-glue, rule, box, or mixed.");
+  if (!["broad", "ligatures", "quote", "style", "list", "vertical-glue", "rule", "box", "box-hard", "mixed"].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, quote, style, list, vertical-glue, rule, box, box-hard, or mixed.");
   }
   return options;
 }
@@ -571,6 +571,48 @@ function generateBoxCase(index, random) {
   };
 }
 
+function generateBoxHardCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [160, 200, 240, 300, 340];
+  const width = choice(random, widths);
+  const parindent = 0;
+  const boxWidth = Math.min(width - 20, choice(random, [90, 100, 120, 140]));
+  const featureIndex = index % 6;
+  let feature;
+  let text;
+  if (featureIndex === 0) {
+    feature = "box-hard-multi-paragraph";
+    text = `\\parbox[t]{${boxWidth}pt}{${sentence(random, 6, 10)} \\par ${sentence(random, 5, 8)}}`;
+  } else if (featureIndex === 1) {
+    feature = "box-hard-minipage-multi-paragraph";
+    text = `\\begin{minipage}[t]{${boxWidth}pt}${sentence(random, 6, 10)} \\par ${sentence(random, 5, 8)}\\end{minipage}`;
+  } else if (featureIndex === 2) {
+    feature = "box-hard-quote";
+    text = `\\parbox{${boxWidth}pt}{\\begin{quote}${sentence(random, 5, 9)} \\par ${sentence(random, 4, 7)}\\end{quote}}`;
+  } else if (featureIndex === 3) {
+    feature = "box-hard-minipage-quote";
+    text = `\\begin{minipage}{${boxWidth}pt}\\begin{quotation}${sentence(random, 5, 9)} \\par ${sentence(random, 4, 7)}\\end{quotation}\\end{minipage}`;
+  } else if (featureIndex === 4) {
+    feature = "box-hard-list";
+    text = `\\parbox{${boxWidth}pt}{${listEnvironment("itemize", [
+      listItemText(random, index),
+      listItemText(random, index + 1),
+    ])}}`;
+  } else {
+    feature = "box-hard-nested";
+    const nestedWidth = Math.max(55, Math.min(boxWidth - 20, 80));
+    text = `\\begin{minipage}{${boxWidth}pt}${sentence(random, 4, 7)} \\par \\parbox{${nestedWidth}pt}{${sentence(random, 4, 7)} \\par ${sentence(random, 3, 6)}}\\end{minipage}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature,
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateMixedFeatureCase(index, random) {
   const feature = index % 6;
   if (feature === 0) {
@@ -645,6 +687,9 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "box") {
     return generateBoxCase(index, random);
+  }
+  if (mode === "box-hard") {
+    return generateBoxHardCase(index, random);
   }
   if (mode === "mixed") {
     return generateMixedFeatureCase(index, random);
@@ -1753,7 +1798,7 @@ async function main() {
       // The Lua node trace descends into parbox/minipage vlists before TikZ's
       // outer hlist shift is visible, so box mode checks line-relative geometry
       // and leaves absolute x as a diagnostic.
-      const ignoreAbsoluteTraceX = options.caseMode === "box";
+      const ignoreAbsoluteTraceX = options.caseMode === "box" || options.caseMode === "box-hard";
       const traceFlagged =
         !traceComparison.lineTextMatch ||
         !traceComparison.glyphCodeMatch ||

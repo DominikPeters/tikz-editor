@@ -814,9 +814,47 @@ describe("TeX vlist lowering", () => {
     expect(layout.paragraphPlans.map((plan) => ({
       text: plan.segment.text,
       width: plan.breakContext.width,
+      left: plan.breakContext.scopePolicy.leftMarginWidth,
+      right: plan.breakContext.scopePolicy.rightMarginWidth,
     }))).toEqual([
-      { text: "Alpha", width: 100 },
-      { text: "Beta", width: 50 },
+      { text: "Alpha", width: 100, left: 0, right: 0 },
+      { text: "Beta", width: 100, left: 25, right: 25 },
+    ]);
+  });
+
+  it("uses material box width once for quote and list paragraph skips", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\parbox{140pt}{\begin{quote}Alpha Beta\end{quote}\par\begin{itemize}\item Gamma Delta\end{itemize}}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: { width: 240 },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      width: plan.breakContext.width,
+      left: plan.breakContext.scopePolicy.leftMarginWidth,
+      right: plan.breakContext.scopePolicy.rightMarginWidth,
+      rightskipMode: plan.breakContext.scopePolicy.rightskipStretchMode,
+    }))).toEqual([
+      {
+        text: "Alpha Beta",
+        width: 140,
+        left: 25,
+        right: 25,
+        rightskipMode: "ragged-right-infinite-otherwise-zero",
+      },
+      {
+        text: "Gamma Delta",
+        width: 140,
+        left: 25,
+        right: 0,
+        rightskipMode: "default",
+      },
     ]);
   });
 
@@ -2543,6 +2581,97 @@ describe("TeX vlist layout", () => {
       depth: item.metrics.depth,
     }))).toEqual([
       { kind: "rule", y: 7, height: 2, depth: 1 },
+    ]);
+  });
+
+  it("uses strut-like previous depth before material vboxes", () => {
+    const document = {
+      kind: "vlist",
+      items: [{
+        kind: "vbox",
+        material: { command: "minipage" },
+        width: 90,
+        items: [
+          {
+            kind: "paragraph",
+            sourceSpan: { start: 0, end: 5 },
+            blockIndex: 0,
+            paragraph: {
+              blockIndex: 0,
+              text: "Alpha",
+              sourceSpan: { start: 0, end: 5 },
+              nodes: [],
+              noIndent: false,
+              quoteDepth: 0,
+              quotationDepth: 0,
+            },
+          },
+          {
+            kind: "vbox",
+            material: { command: "parbox" },
+            width: 70,
+            items: [{
+              kind: "paragraph",
+              sourceSpan: { start: 6, end: 10 },
+              blockIndex: 1,
+              paragraph: {
+                blockIndex: 1,
+                text: "Beta",
+                sourceSpan: { start: 6, end: 10 },
+                nodes: [],
+                noIndent: false,
+                quoteDepth: 0,
+                quotationDepth: 0,
+              },
+            }],
+          },
+        ],
+      }],
+    } as const;
+
+    const layout = layoutTexVListFromMeasuredParagraphs(document, {
+      width: 120,
+      lineHeight: 12,
+      paragraphMeasurements: [
+        {
+          blockIndex: 0,
+          vlistPath: [0, 0],
+          lineIndices: [0, 1, 2],
+          lineOffsets: [
+            { lineIndex: 0, y: 0, metrics: { width: 90, height: 7, depth: 0.1 } },
+            { lineIndex: 1, y: 12, metrics: { width: 90, height: 7, depth: 0.1 } },
+            { lineIndex: 2, y: 24, metrics: { width: 90, height: 7, depth: 0.1 } },
+          ],
+          lastLineMetrics: { width: 90, height: 7, depth: 0.1 },
+          standardMetrics: { width: 90, height: 7, depth: 24.1 },
+          ruleLeadingMetrics: { width: 90, height: 7, depth: 24.1 },
+          standardAdvance: 31.1,
+          ruleLeadingAdvance: 31.1,
+        },
+        {
+          blockIndex: 1,
+          vlistPath: [0, 1, 0],
+          lineIndices: [3],
+          lineOffsets: [
+            { lineIndex: 3, y: 0, metrics: { width: 70, height: 7, depth: 3 } },
+          ],
+          lastLineMetrics: { width: 70, height: 7, depth: 3 },
+          standardMetrics: { width: 70, height: 7, depth: 3 },
+          ruleLeadingMetrics: { width: 70, height: 7, depth: 3 },
+          standardAdvance: 10,
+          ruleLeadingAdvance: 10,
+        },
+      ],
+    });
+
+    expect(layout.linePlacements.map((line) => ({
+      lineIndex: line.lineIndex,
+      y: line.y,
+    }))).toEqual([
+      { lineIndex: 0, y: 0 },
+      { lineIndex: 1, y: 12 },
+      { lineIndex: 2, y: 24 },
+      { lineIndex: 3, y: 32.1 },
     ]);
   });
 });

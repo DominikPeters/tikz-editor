@@ -143,6 +143,7 @@ function vboxItemFromSimpleTexBox(
         resetInheritedAlignment: true,
         resetAlignmentSource: "restored-current",
         resetSpaceGlueProfile: true,
+        ...(item.command === "parbox" ? { automaticHyphenPenalty: 500 } : {}),
         allowParagraphIndent: false,
         allowForcedBreakIndent: false,
       },

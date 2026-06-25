@@ -109,9 +109,12 @@ export function prepareTexLayoutParagraphsFromVList(
       params.options.width,
       paragraph.useScopedLineWidth === true
     );
+    const scopedBreakWidth = paragraph.useScopedLineWidth === true
+      ? scopedLineWidth
+      : scopeContext.layout.scopedWidth;
     const breakScopeContext = suppressAncestorBreakMargins
       ? texParagraphScopeContextWithoutBreakMargins(scopeContext)
-      : scopedLineWidth !== undefined && scopeContext.layout.scopedLineWidth !== undefined
+      : scopedBreakWidth !== undefined && scopeContext.layout.scopedWidth !== undefined
         ? texParagraphScopeContextWithBreakMargins(
             scopeContext,
             scopeContext.layout.scopedLeftMarginWidth ?? 0,
@@ -175,7 +178,7 @@ export function prepareTexLayoutParagraphsFromVList(
         breakContext: {
           blockIndex,
           segmentIndex,
-          ...(scopedLineWidth !== undefined ? { width: scopedLineWidth } : {}),
+          ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
           firstLineIndentWidth:
             listAttachments.firstLineIndentWidth ??
             texQuotationFirstLineIndentWidth(segment, params.font),
@@ -302,12 +305,17 @@ function texParagraphBreakScopePolicy(
   const rightskipStretchMode: TexParagraphRightskipStretchMode = inQuote
     ? "ragged-right-infinite-otherwise-zero"
     : inList
-      ? "ragged-right-infinite-center-zero"
+      ? scopeContext.materialContextActive
+        ? "default"
+        : "ragged-right-infinite-center-zero"
       : "default";
 
   return {
     leftMarginWidth: scopeContext.layout.leftMarginWidth,
     rightMarginWidth: scopeContext.layout.rightMarginWidth,
+    ...(scopeContext.policy.automaticHyphenPenalty !== undefined && !inList
+      ? { automaticHyphenPenalty: scopeContext.policy.automaticHyphenPenalty }
+      : {}),
     allowParagraphIndent: scopeContext.policy.allowParagraphIndent !== false && !inList,
     allowForcedBreakIndent: scopeContext.policy.allowForcedBreakIndent !== false && !inList,
     forceParfillStretch: inQuote || inList,

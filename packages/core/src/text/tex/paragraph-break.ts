@@ -30,6 +30,7 @@ export type TexParagraphRightskipStretchMode =
 export interface TexParagraphBreakScopePolicy {
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
+  readonly automaticHyphenPenalty?: number;
   readonly allowParagraphIndent: boolean;
   readonly allowForcedBreakIndent: boolean;
   readonly forceParfillStretch: boolean;
@@ -99,7 +100,8 @@ export function breakTexParagraphRuns(params: {
     const pass2Model = runsToItems(params.runs, params.measurement, {
       hyphenator: params.options.hyphenator ?? createEnglishHyphenator(),
       enableAutomaticHyphenation: true,
-      hyphenpenalty: englishDefaults.hyphenpenalty,
+      hyphenpenalty: params.scopePolicy.automaticHyphenPenalty ??
+        englishDefaults.hyphenpenalty,
       exhyphenpenalty: englishDefaults.exhyphenpenalty,
     });
     selectedModel = pass2Model;

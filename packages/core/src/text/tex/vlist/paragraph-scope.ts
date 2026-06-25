@@ -13,6 +13,7 @@ export interface TexParagraphScopePolicy {
   readonly resetAlignment?: TexParagraphAlignment;
   readonly resetAlignmentSource?: "restored-current";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
+  readonly automaticHyphenPenalty?: number;
   readonly preserveRaggedRight?: boolean;
   readonly raggedRightProfile?: TexAlignmentProfile;
   readonly resetInheritedAlignment: boolean;
@@ -24,6 +25,7 @@ export interface TexParagraphScopePolicy {
 export interface TexParagraphScopeLayout {
   readonly leftMarginWidth: number;
   readonly rightMarginWidth: number;
+  readonly scopedWidth?: number;
   readonly scopedLineWidth?: number;
   readonly scopedLeftMarginWidth?: number;
   readonly scopedRightMarginWidth?: number;
@@ -32,6 +34,7 @@ export interface TexParagraphScopeLayout {
 export interface TexParagraphScopeContext {
   readonly policy: TexParagraphScopePolicy;
   readonly layout: TexParagraphScopeLayout;
+  readonly materialContextActive: boolean;
   readonly quoteContextActive: boolean;
   readonly listContextActive: boolean;
   readonly listItemLayout?: TexVBoxListItemLayout;
@@ -43,6 +46,7 @@ export function texParagraphScopeContext(
   return {
     policy: texParagraphScopePolicy(ancestors),
     layout: texParagraphScopeLayout(ancestors),
+    materialContextActive: ancestors.some((ancestor) => ancestor.material !== undefined),
     quoteContextActive: ancestors.some((ancestor) => ancestor.role?.kind === "quote"),
     listContextActive: ancestors.some((ancestor) =>
       ancestor.role?.kind === "list" || ancestor.role?.kind === "list-item"
@@ -88,6 +92,7 @@ function texParagraphScopePolicy(
     resetAlignment?: TexParagraphAlignment;
     resetAlignmentSource?: "restored-current";
     resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
+    automaticHyphenPenalty?: number;
     resetInheritedAlignment: boolean;
     resetSpaceGlueProfile: boolean;
     allowParagraphIndent?: boolean;
@@ -112,6 +117,9 @@ function texParagraphScopePolicy(
     }
     if (paragraphPolicy.resetSpaceGlueProfileTo) {
       policy.resetSpaceGlueProfileTo = paragraphPolicy.resetSpaceGlueProfileTo;
+    }
+    if (paragraphPolicy.automaticHyphenPenalty !== undefined) {
+      policy.automaticHyphenPenalty = paragraphPolicy.automaticHyphenPenalty;
     }
     if (paragraphPolicy.preserveRaggedRight !== undefined) {
       policy.preserveRaggedRight = paragraphPolicy.preserveRaggedRight;
@@ -164,6 +172,7 @@ function texParagraphScopeLayout(
     rightMarginWidth,
     ...(scopedLineWidth !== undefined
       ? {
+          scopedWidth,
           scopedLineWidth,
           scopedLeftMarginWidth,
           scopedRightMarginWidth,

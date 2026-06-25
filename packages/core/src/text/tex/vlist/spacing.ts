@@ -505,7 +505,10 @@ function resolveDisplayMathVerticalGlueInItems(
           !paragraphBoundaryInterlineAlreadyInserted
         ) {
           const previousDepth = previousParagraphMeasurement
-            ? texParagraphLastLineDepth(previousParagraphMeasurement)
+            ? texMaterialBoundaryPreviousDepth(
+                previousParagraphMeasurement,
+                options.lineHeight
+              )
             : previousDisplayMaterialMetrics?.depth;
           if (previousDepth !== undefined) {
             items.push(plainParagraphBoundaryInterlineGlueItem(
@@ -1021,6 +1024,16 @@ function texParagraphLastLineDepth(
   return Math.max(0, roundTexPt(
     paragraph.ruleLeadingAdvance - lastLine.y - paragraph.ruleLeadingMetrics.height
   ));
+}
+
+function texMaterialBoundaryPreviousDepth(
+  paragraph: TexVListParagraphBoxMeasurement,
+  lineHeight: number
+): number {
+  return Math.max(
+    texParagraphLastLineDepth(paragraph),
+    lineHeight / 3
+  );
 }
 
 function displayAlignmentPlainTextNodes(
