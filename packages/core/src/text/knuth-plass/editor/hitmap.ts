@@ -726,6 +726,16 @@ export function getKnuthPlassVListSourceHit(
     return { offset: params.labelHit.paragraph.sourceStart };
   }
 
+  if (params?.paragraphHit && params.paragraphHit.sourceStart > 0) {
+    return {
+      offset: params.paragraphHit.sourceStart,
+      selectionRange: {
+        start: params.paragraphHit.sourceStart,
+        end: params.paragraphHit.sourceEnd,
+      },
+    };
+  }
+
   const item = params?.itemHit;
   if (!item || (item.kind === 'hbox' && item.hboxRole !== 'display-align-row')) {
     return null;
@@ -2408,6 +2418,23 @@ async function buildStopsByLine(
         for (let i = 0; i <= rawLength; i++) {
           addStop(aligned.lineIndex, {
             offset: aligned.rawStart + i,
+            x: providedStops[i],
+            kind: 'math',
+            snappedToMathPrefix: false,
+            lineStart: false,
+            lineEnd: false,
+          });
+        }
+        continue;
+      }
+      const spanRawLength = Math.max(0, span.rawEnd - span.rawStart);
+      if (
+        providedStops.length === spanRawLength + 1 &&
+        providedStops.every((value) => Number.isFinite(value))
+      ) {
+        for (let i = 0; i <= spanRawLength; i++) {
+          addStop(aligned.lineIndex, {
+            offset: span.rawStart + i,
             x: providedStops[i],
             kind: 'math',
             snappedToMathPrefix: false,

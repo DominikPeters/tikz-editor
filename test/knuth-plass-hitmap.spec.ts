@@ -1333,6 +1333,56 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(__getKnuthPlassCaretMappingCacheSize(outputJax)).toBe(0);
   });
 
+  it("uses TeX-provided inline math stops for source carets inside delimiter spans", async () => {
+    const sourceText = String.raw`node $x=y$`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-source-caret",
+      width: 100,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+    if (!report) {
+      return;
+    }
+    const mathSegment = report.lines[0]?.segments.find((segment) => segment.kind === "math");
+    expect(mathSegment?.caretStops).toBeTruthy();
+    const outputJax = {
+      tex2svg: () => {
+        throw new Error("MathJax prefix measurement should not be used for TeX-derived math.");
+      },
+      linebreaks: {
+        getReports: () => [report]
+      }
+    };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report.width, bottom: 10 }, report.width)
+      ]
+    };
+    const offsetBeforeY = sourceText.indexOf("y");
+    const fullMathStart = sourceText.indexOf("$");
+    const expectedStop = mathSegment?.caretStops?.[offsetBeforeY - fullMathStart];
+
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: report.paragraphId,
+      sourceText,
+      containerElement,
+      offset: offsetBeforeY
+    });
+
+    expect(point).toMatchObject({
+      ok: true,
+      offset: offsetBeforeY,
+      kind: "math",
+      snappedToMathPrefix: false
+    });
+    expect(point.lineLocalX).toBeCloseTo(expectedStop ?? 0, 6);
+  });
+
   it("uses registered TeX vlist line placements for caret geometry without linebox DOM", async () => {
     const report = makeTwoLineReport();
     const shiftedLine = report.lines[1];

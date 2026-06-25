@@ -112,6 +112,7 @@ type SnapDebugOverlayRect,
 type SnapDebugPoint
 } from "./canvas-panel/snap-debug";
 import { createSourceRenderOffsetMap } from "./canvas-panel/text-offset-map";
+import { expandSelectionToMathDelimiters } from "./canvas-panel/text-selection-ranges";
 import { applyTextMeasureFont,collectLogicalLineRanges,createVisualTextLayout,resolveVisualLineLeft } from "./canvas-panel/text-visual-layout";
 import type {
 ApplyActionFeedback,
@@ -2095,6 +2096,7 @@ export const CanvasPanel = memo(function CanvasPanel({
               resolvedOffset,
               resolvedLineRange
             );
+        const expandedSelection = expandSelectionToMathDelimiters(target.text, selection);
         dispatchCanvasTextEditAction({
           type: "pointer_resolved",
           requestRevision,
@@ -2102,8 +2104,8 @@ export const CanvasPanel = memo(function CanvasPanel({
           sourceId: target.sourceId,
           sceneTextId: target.sceneTextId,
           pointerId: event.pointerId,
-          selectionStart: selection.start,
-          selectionEnd: selection.end,
+          selectionStart: expandedSelection.start,
+          selectionEnd: expandedSelection.end,
           anchorOffset: resolvedOffset,
           anchorLineRange: resolvedLineRange
         });
@@ -2418,14 +2420,14 @@ export const CanvasPanel = memo(function CanvasPanel({
         : Promise.resolve<TextLineRange | null>(null);
       void Promise.all([offsetPromise, lineRangePromise]).then(([offset, focusLineRange]) => {
         const resolvedOffset = offset == null ? drag.anchorOffset : clamp(offset, 0, target.text.length);
-        const selection = resolveTextSelectionRangeForDrag(
+        const selection = expandSelectionToMathDelimiters(target.text, resolveTextSelectionRangeForDrag(
           target.text,
           drag.mode,
           drag.anchorOffset,
           resolvedOffset,
           drag.anchorLineRange,
           focusLineRange
-        );
+        ));
         dispatchCanvasTextEditAction({
           type: "drag_resolved",
           requestRevision,

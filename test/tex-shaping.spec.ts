@@ -4306,11 +4306,14 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
     const mathSegments = report?.lines[0]?.segments.filter((segment) => segment.kind === "math") ?? [];
+    const mathSourceStart = sourceText.indexOf(String.raw`$x-y$`);
     const mathContentStart = sourceText.indexOf("x-y");
     const mathContentEnd = mathContentStart + "x-y".length;
     const mathCaretStops = new Map<number, number>();
     for (const segment of mathSegments) {
-      const rawStart = segment.sourceStartRaw ?? mathContentStart;
+      const rawStart = segment.caretStops?.length === String.raw`$x-y$`.length + 1
+        ? mathSourceStart
+        : (segment.sourceStartRaw ?? mathContentStart);
       for (const [index, stop] of (segment.caretStops ?? []).entries()) {
         const rawOffset = rawStart + index;
         if (rawOffset >= mathContentStart && rawOffset <= mathContentEnd) {
