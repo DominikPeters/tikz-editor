@@ -21,7 +21,9 @@ import {
 } from "./tex/index.js";
 import type {
   ResolvedTexFont,
+  SimpleTexFontState,
   TexMetricProvider,
+  TexTextFontProfile,
   TexShapedItem,
 } from "./tex/index.js";
 import {
@@ -105,6 +107,7 @@ const TEX_TEXT_BASE_FONT_SIZE = 10;
 const MATHJAX_PARAGRAPH_PT_PER_WIDTH_UNIT = 10;
 const MATHJAX_PARAGRAPH_WIDTH_UNIT_STEP = 0.001;
 const SINGLE_LINE_WIDTH_EPSILON_PT = 1e-4;
+const TEX_NATURAL_TEXT_LAYOUT_WIDTH_PT = 16384;
 const LATEX_NORMAL_BASELINESKIP_EM = 1.2;
 const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
 const BROWSER_STARTUP_COMPONENT_URL = "https://cdn.jsdelivr.net/npm/mathjax@4/startup.js";
@@ -233,11 +236,23 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
         fontWeight: "normal",
         fontFamily: "serif"
       });
-      if (canValidateWithSimpleTexText(prepared)) {
+      const defaultMeasureKey = measurementKey("text", prepared.text, null, prepared.font, null);
+      const simpleTexEntry = buildSimpleTexTextCacheEntry({
+        runtime,
+        cacheKey: defaultMeasureKey,
+        sourceText: prepared.text,
+        textWidthPt: null,
+        font: prepared.font,
+        alignment: null,
+        requestedAlignment: null,
+        eligible: prepared.simpleTexEligible,
+        mode: "text"
+      });
+      if (simpleTexEntry) {
+        cache.set(defaultMeasureKey, simpleTexEntry);
         validationCache.set(text, null);
         return null;
       }
-      const defaultMeasureKey = measurementKey("text", prepared.text, null, prepared.font, null);
 
       try {
         if (!cache.has(defaultMeasureKey)) {
@@ -1003,9 +1018,12 @@ function buildSimpleTexTextCacheEntry(params: {
   if (!isSimpleTexTextEligible(params)) {
     return null;
   }
+  const isNaturalWidthLayout = params.textWidthPt == null;
+  const layoutWidthPt = params.textWidthPt ?? TEX_NATURAL_TEXT_LAYOUT_WIDTH_PT;
   const metricProvider = computerModernTexMetricProvider;
-  const renderFont = luaLatexDefaultTextFontProfile.resolveTextFont(
-    luaLatexDefaultTextFontProfile.defaultFontState,
+  const textFontProfile = texTextFontProfileForNodeFont(params.font);
+  const renderFont = textFontProfile.resolveTextFont(
+    textFontProfile.defaultFontState,
     TEX_TEXT_BASE_FONT_SIZE,
     metricProvider
   );
@@ -1014,11 +1032,11 @@ function buildSimpleTexTextCacheEntry(params: {
   try {
     layout = layoutSimpleTexParagraph(params.sourceText, {
       paragraphId,
-      width: params.textWidthPt,
+      width: layoutWidthPt,
       alignment: params.alignment ?? "ragged-right",
       font: renderFont,
       metricProvider,
-      textFontProfile: luaLatexDefaultTextFontProfile,
+      textFontProfile,
       tikzTextWidthNode: true,
       mathBoxProvider: createTexDerivedInlineMathBoxProvider({
         baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
@@ -1030,31 +1048,44 @@ function buildSimpleTexTextCacheEntry(params: {
   if (!layout.supported || !layout.report || !layout.vlistLayout) {
     return null;
   }
+  const contentWidthPt = isNaturalWidthLayout
+    ? texParagraphNaturalContentWidth(layout.report)
+    : layoutWidthPt;
+  const report = isNaturalWidthLayout
+    ? shrinkTexParagraphReportToWidth(
+        layout.report,
+        contentWidthPt,
+        hasExplicitMultilineBreaks(params.sourceText) ? "fixed-lines" : undefined
+      )
+    : layout.report;
+  const vlistLayout = isNaturalWidthLayout
+    ? shrinkTexVListLayoutToWidth(layout.vlistLayout, contentWidthPt, report)
+    : layout.vlistLayout;
   const outputJax = getRuntimeOutputJax(params.runtime);
-  registerKnuthPlassReportsOnOutputJax(outputJax, [layout.report]);
+  registerKnuthPlassReportsOnOutputJax(outputJax, [report]);
   registerTexVListLayoutsOnOutputJax(outputJax, [{
     paragraphId,
-    layout: layout.vlistLayout,
+    layout: vlistLayout,
   }]);
 
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
   const firstLineTop = texVListPlacedLineTop(
-    layout.vlistLayout,
-    layout.report.lines[0]?.lineIndex ?? 0
+    vlistLayout,
+    report.lines[0]?.lineIndex ?? 0
   );
-  const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
-    ? layout.vlistLayout.baseline.y - firstLineTop
+  const firstLineAscent = vlistLayout.baseline.kind === "explicit"
+    ? vlistLayout.baseline.y - firstLineTop
     : baselineMetrics.strutHeight;
   const heightPt = Math.max(
     lineHeightPt,
-    layout.vlistLayout.metrics.height + layout.vlistLayout.metrics.depth
+    vlistLayout.metrics.height + vlistLayout.metrics.depth
   );
-  const widthPt = params.textWidthPt;
-  const body = renderSimpleTexSvgBody(layout.report, {
+  const widthPt = contentWidthPt;
+  const body = renderSimpleTexSvgBody(report, {
     lineHeightPt,
     firstLineAscent,
-    vlistLayout: layout.vlistLayout,
+    vlistLayout,
     metricProvider,
     requestedAlignment: params.requestedAlignment,
   });
@@ -1087,24 +1118,17 @@ function isSimpleTexTextEligible(params: {
   requestedAlignment?: NodeTextParagraphAlignment | null;
   eligible?: boolean;
   mode?: "text" | "math";
-}): params is typeof params & { textWidthPt: number } {
+}): boolean {
   if (params.eligible === false) {
     return false;
   }
   if (params.mode !== "text") {
     return false;
   }
-  if (params.requestedAlignment == null) {
+  if (params.textWidthPt != null && !(Number.isFinite(params.textWidthPt) && params.textWidthPt > 0)) {
     return false;
   }
-  if (params.textWidthPt == null || !(Number.isFinite(params.textWidthPt) && params.textWidthPt > 0)) {
-    return false;
-  }
-  if (
-    params.font.fontFamily !== "serif" ||
-    params.font.fontStyle !== "normal" ||
-    params.font.fontWeight !== "normal"
-  ) {
+  if (params.font.fontFamily === "monospace") {
     return false;
   }
   const wordCount = params.sourceText.trim().split(/\s+/).filter(Boolean).length;
@@ -1118,6 +1142,63 @@ function isSimpleTexTextEligible(params: {
     params.alignment === "center" ||
     params.alignment === "justified"
   );
+}
+
+function texTextFontProfileForNodeFont(font: TextFontOptions): TexTextFontProfile {
+  const defaultFontState: SimpleTexFontState = {
+    family: font.fontFamily === "sans" ? "sans" : "normal",
+    series: font.fontWeight === "bold" ? "bold" : "medium",
+    shape: font.fontStyle === "italic" ? "italic" : "upright",
+  };
+  return {
+    ...luaLatexDefaultTextFontProfile,
+    defaultFontState,
+  };
+}
+
+function texParagraphNaturalContentWidth(report: ParagraphLayoutReport): number {
+  let width = 0;
+  for (const line of report.lines) {
+    const lineRight = Math.max(
+      line.xEnd,
+      ...line.segments.map((segment) => segment.x + segment.width)
+    );
+    width = Math.max(width, lineRight - Math.min(0, line.xStart));
+  }
+  return Math.max(SINGLE_LINE_WIDTH_EPSILON_PT, width);
+}
+
+function shrinkTexParagraphReportToWidth(
+  report: ParagraphLayoutReport,
+  width: number,
+  layoutMode?: KnuthPlassLayoutMode
+): ParagraphLayoutReport {
+  return {
+    ...report,
+    width,
+    layoutMode: layoutMode ?? report.layoutMode,
+    lines: report.lines.map((line) => ({
+      ...line,
+      targetWidth: Math.min(line.targetWidth, width)
+    }))
+  };
+}
+
+function shrinkTexVListLayoutToWidth(
+  layout: TexVListLayout,
+  width: number,
+  report: ParagraphLayoutReport
+): TexVListLayout {
+  return {
+    ...layout,
+    metrics: {
+      ...layout.metrics,
+      width
+    },
+    reports: layout.reports.map((candidate) =>
+      "paragraphId" in candidate && candidate.paragraphId === report.paragraphId ? report : candidate
+    )
+  };
 }
 
 function renderSimpleTexSvgBody(
@@ -2535,43 +2616,6 @@ function buildWrappedTeX(
     return `\\mbox{${styledText}}`;
   }
   return `\\parbox[t]{${formatPt(textWidthPt)}pt}{${styledText}}`;
-}
-
-
-function canValidateWithSimpleTexText(prepared: {
-  readonly text: string;
-  readonly simpleTexEligible: boolean;
-}): boolean {
-  if (!prepared.simpleTexEligible || !hasSimpleTexDisplayMath(prepared.text)) {
-    return false;
-  }
-  const metricProvider = computerModernTexMetricProvider;
-  const renderFont = luaLatexDefaultTextFontProfile.resolveTextFont(
-    luaLatexDefaultTextFontProfile.defaultFontState,
-    TEX_TEXT_BASE_FONT_SIZE,
-    metricProvider
-  );
-  try {
-    const layout = layoutSimpleTexParagraph(prepared.text, {
-      paragraphId: "tex:validation",
-      width: 120,
-      alignment: "ragged-right",
-      font: renderFont,
-      metricProvider,
-      textFontProfile: luaLatexDefaultTextFontProfile,
-      tikzTextWidthNode: true,
-      mathBoxProvider: createTexDerivedInlineMathBoxProvider({
-        baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
-      }),
-    });
-    return layout.supported;
-  } catch {
-    return false;
-  }
-}
-
-function hasSimpleTexDisplayMath(text: string): boolean {
-  return /(?:\$\$|\\\[|\\begin\{(?:equation\*?|align\*?)\})/.test(text);
 }
 
 function normalizeMathJaxTextInput(

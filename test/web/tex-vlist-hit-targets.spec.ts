@@ -211,6 +211,26 @@ describe("TeX vlist hit target source offsets", () => {
     })?.offset).toBe(20);
   });
 
+  it("leaves paragraph body hits for caret geometry instead of selecting the paragraph", () => {
+    expect(getKnuthPlassVListSourceHit({
+      paragraphHit: {
+        blockIndex: 0,
+        vlistPath: [0],
+        localLeft: 0,
+        localRight: 100,
+        localTop: 0,
+        localBottom: 12,
+        lineIndices: [0],
+        sourceStart: 5,
+        sourceEnd: 18,
+        clientLeft: 0,
+        clientRight: 100,
+        clientTop: 0,
+        clientBottom: 12,
+      },
+    })).toBeNull();
+  });
+
   it("maps source-backed non-text vlist items to source ranges", () => {
     expect(getKnuthPlassVListSourceHit({
       itemHit: itemHit("placeholder", 30, 40),

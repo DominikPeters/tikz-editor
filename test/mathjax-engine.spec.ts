@@ -185,7 +185,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    const issue = engine.validate(String.raw`$\ell^2$`);
+    const issue = engine.validate(String.raw`\unsupported{$\ell^2$}`);
 
     expect(issue).toBeNull();
     expect(tex2svgPromise.mock.calls.length).toBeGreaterThan(6);
@@ -283,7 +283,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     });
     expect(measured).toBeNull();
@@ -346,7 +346,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    expect(engine.validate(String.raw`Alpha \\ Beta`)).toBeNull();
+    expect(engine.validate(String.raw`Alpha \unsupported \\ Beta`)).toBeNull();
     const changedKeys = await engine.flushPending?.();
 
     expect(changedKeys?.length).toBe(1);
@@ -514,6 +514,85 @@ describe("mathjax node text engine", () => {
     expect(groupedBody).not.toContain('data-tex-vbox="true"');
     expect(groupedBody).toContain('data-mjx-linebox="true"');
     expect(texCalls).toHaveLength(callsBeforeMeasure);
+  });
+
+  it("routes simple natural-width node text through the TeX paragraph path", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
+    const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
+
+    const measured = engine.measure({
+      text: "Alpha Beta",
+      textWidthPt: null,
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    expect(texCalls).toHaveLength(callsBeforeMeasure);
+    const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+    const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
+    expect(report?.layoutMode).toBe("wrap");
+    expect(measured?.width).toBeGreaterThan(0);
+    expect(report?.width).toBeGreaterThan(0);
+    expect(report?.width).toBeLessThan(100);
+    expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
+    expect(engine.renderFromCache(measured?.cacheKey ?? "")?.body).toContain('data-mjx-linebox="true"');
+  });
+
+  it("keeps validated natural-width inline math on the TeX paragraph path", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeValidate = texCalls.length;
+
+    expect(engine.validate(String.raw`node $x=y$`)).toBeNull();
+    const measured = engine.measure({
+      text: String.raw`node $x=y$`,
+      textWidthPt: null,
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    expect(texCalls).toHaveLength(callsBeforeValidate);
+    const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
+    expect(body).toContain('data-tex-inline-math="true"');
+    expect(body).toContain('data-tex-glyph="61"');
+  });
+
+  it("routes supported styled sans and bold node text through the TeX paragraph path", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
+
+    const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
+    const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
+
+    const measured = engine.measure({
+      text: "Alpha",
+      textWidthPt: null,
+      fontStyle: "normal",
+      fontWeight: "bold",
+      fontFamily: "sans",
+      fontSizePt: 10
+    });
+
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    expect(texCalls).toHaveLength(callsBeforeMeasure);
+    const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+    const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
+    expect(report?.runs.some((run) => run.kind === "text" && run.text === "Alpha")).toBe(true);
+    const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
+    expect(body).toContain('data-tex-font="lmsans10-bold"');
   });
 
   it("routes supported simple inline math through the TeX paragraph path", async () => {
@@ -806,7 +885,7 @@ describe("mathjax node text engine", () => {
     expect(firstLine).not.toBeNull();
     expect(secondLine).not.toBeNull();
     expect(Number(firstLine?.[2])).toBeCloseTo(0, 4);
-    expect(Number(secondLine?.[2])).toBeCloseTo(19, 4);
+    expect(Number(secondLine?.[2])).toBeCloseTo(19.33, 4);
     expect(Number(secondLine?.[2])).not.toBeCloseTo(12, 4);
   });
 
@@ -1006,7 +1085,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: 40,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     });
 
@@ -1119,7 +1198,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: 20,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     })?.paragraphId).toBe("loaded-marker");
   });
@@ -1165,7 +1244,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     })?.paragraphId).toBe("preloaded-promise");
   });
@@ -1226,7 +1305,7 @@ describe("mathjax node text engine", () => {
       alignment: "ragged-left",
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "sans",
+      fontFamily: "monospace",
       fontSizePt: 10
     })?.paragraphId).toBe("existing-script");
     expect(outputJax.knuthPlassOptions).toMatchObject({
@@ -1276,7 +1355,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     })).toBeNull();
 
@@ -1298,7 +1377,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     })).toThrow("Multiline MathJax render did not produce a paragraph report");
 
@@ -1322,7 +1401,7 @@ describe("mathjax node text engine", () => {
       alignment: "center",
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "sans",
+      fontFamily: "monospace",
       fontSizePt: 10
     })?.paragraphId).toBe("fallback-options");
     expect(KnuthPlassVisitor.getConfiguredOptions()).toMatchObject({
@@ -1523,7 +1602,7 @@ describe("mathjax node text engine", () => {
         textWidthPt: null,
         fontStyle: "normal",
         fontWeight: "normal",
-        fontFamily: "serif",
+        fontFamily: "monospace",
         fontSizePt: 10
       });
     }
@@ -1573,7 +1652,7 @@ describe("mathjax node text engine", () => {
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     })).toBeNull();
 
@@ -1663,7 +1742,7 @@ describe("mathjax node text engine", () => {
       alignment: undefined,
       fontStyle: "normal",
       fontWeight: "normal",
-      fontFamily: "serif",
+      fontFamily: "monospace",
       fontSizePt: 10
     })).toThrow("Multiline MathJax measurement did not produce paragraph geometry.");
   });

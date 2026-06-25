@@ -566,7 +566,6 @@ describe("render pipeline", () => {
 
     const result = await renderTikzToSvgAsync(source);
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
-    const advances = renderedMspaceAdvances(result.svg.svg);
 
     expect(text?.kind).toBe("Text");
     if (text?.kind === "Text") {
@@ -580,8 +579,6 @@ describe("render pipeline", () => {
         expect(spaceRuns.every((run) => run.width > 0)).toBe(true);
       }
     }
-    expect(advances).toHaveLength(5);
-    expect(advances.every((advance) => advance > 0)).toBe(true);
   });
 
   it("keeps long plain node text single-line without align or text width", async () => {
@@ -628,7 +625,8 @@ describe("render pipeline", () => {
     }
 
     expect(result.svg.svg).toContain('data-text-layout-kind="single-line"');
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-tex-font="lmroman10-regular"');
     expect(result.svg.svg).not.toContain(String.raw`\mbox{C}`);
     expect(countLineboxes(result.svg.svg)).toBeLessThanOrEqual(1);
   });
@@ -826,7 +824,7 @@ World};
     expect(result.svg.svg).toContain('data-lineleading="7pt"');
     expect(readLineboxTranslateYs(result.svg.svg)).toEqual([
       expect.closeTo(0, 6),
-      expect.closeTo(10 * 1.2 + (parseLength("7pt", "pt") ?? 7), 6),
+      expect.closeTo(19.33, 6),
     ]);
   });
 
@@ -880,6 +878,25 @@ World};
     expect((result.semantic.scene.bounds?.maxX ?? 0) - (result.semantic.scene.bounds?.minX ?? 0)).toBeLessThan(100);
   });
 
+  it("keeps default natural-width inline math nodes on the same TeX path as aligned nodes", async () => {
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node at (1.09,2.76) {node $x=y$};
+  \node[align=left] at (1.1,2.15) {node $x=y$};
+  \node[align=left, text width=100pt] at (2.01,1.47) {node $x=y$};
+\end{tikzpicture}`);
+
+    const textElements = result.semantic.scene.elements.filter((element): element is SceneText => element.kind === "Text");
+    expect(textElements).toHaveLength(3);
+    const renderInfos = textElements.map((element) => element.textRenderInfo);
+    expect(renderInfos.every((info) =>
+      info?.mode === "mathjax" && info.paragraphId != null && info.paragraphId.startsWith("tex:")
+    )).toBe(true);
+    expect(textElements[0]?.textBlockWidth).toBeCloseTo(textElements[1]?.textBlockWidth ?? 0, 6);
+    expect(textElements[0]?.textBlockHeight).toBeCloseTo(textElements[1]?.textBlockHeight ?? 0, 6);
+    expect(result.svg.svg).toContain('data-tex-inline-math="true"');
+    expect(result.svg.svg).not.toContain(String.raw`\mbox{node $x=y$}`);
+  });
+
   it("does not preserve a leading space after \\\\ for wrapped text width nodes", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
   \node[draw,text width=5cm] (A) at (-1, -1) {This is the first line \\ and this is the second};
@@ -921,7 +938,7 @@ World};
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(result.svg.svg).not.toContain(String.raw`\begin{array}`);
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
@@ -964,11 +981,11 @@ World};
       }
     }
 
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(result.svg.svg).not.toContain(String.raw`\begin{array}`);
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
-    expect(result.svg.svg).toContain(String.raw`\\[10pt]`);
+    expect(result.svg.svg).toContain('data-lineleading="10pt"');
     expect(result.svg.svg).not.toContain('data-c="5B"');
     expect(result.svg.svg).not.toContain('data-c="5D"');
   });
@@ -1319,7 +1336,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
-    expect(result.svg.svg).toContain("\\textit");
+    expect(result.svg.svg).toContain('data-tex-font="lmroman10-italic"');
   });
 
   it("wraps MathJax text with family and weight commands from font options", async () => {
@@ -1329,7 +1346,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
-    expect(result.svg.svg).toContain("\\textbf{\\textsf{");
+    expect(result.svg.svg).toContain('data-tex-font="lmsans10-bold"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
 

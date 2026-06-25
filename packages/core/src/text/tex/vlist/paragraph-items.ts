@@ -24,7 +24,7 @@ export function texLayoutItemsForParagraphPlan(
       params.metricProvider,
       plan.spaceGlueProfile,
       params.mathBoxProvider,
-      undefined,
+      params.textFontProfile?.defaultFontState,
       params.textFontProfile
     ),
   ];

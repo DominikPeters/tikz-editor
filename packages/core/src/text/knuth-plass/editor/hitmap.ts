@@ -726,16 +726,6 @@ export function getKnuthPlassVListSourceHit(
     return { offset: params.labelHit.paragraph.sourceStart };
   }
 
-  if (params?.paragraphHit) {
-    return {
-      offset: params.paragraphHit.sourceStart,
-      selectionRange: {
-        start: params.paragraphHit.sourceStart,
-        end: params.paragraphHit.sourceEnd,
-      },
-    };
-  }
-
   const item = params?.itemHit;
   if (!item || (item.kind === 'hbox' && item.hboxRole !== 'display-align-row')) {
     return null;
