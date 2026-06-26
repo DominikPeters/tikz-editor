@@ -5,6 +5,7 @@ import type {
   NodeTextParagraphAlignment,
   NodeTextRenderInfo
 } from "../../text/types.js";
+import { mapTransformedTextWithFallback, type TextSourceMap } from "../../text/source-map.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { ResolvedStyle } from "../types.js";
 import type { NodeLayout, NodeShape } from "./types.js";
@@ -32,7 +33,8 @@ export function resolveNodeLayout(
   style: ResolvedStyle,
   _transformScale = 1,
   textEngine: NodeTextEngine | null = null,
-  textMode: "text" | "math" = "text"
+  textMode: "text" | "math" = "text",
+  textSourceMap?: TextSourceMap
 ): NodeLayout {
   void _transformScale;
   const fontSize = style.fontSize;
@@ -141,6 +143,13 @@ export function resolveNodeLayout(
   const noWidthHalignEnabled = (explicitAlign != null && explicitAlign !== "none") || hasNoWidthHalignHeader;
   const explicitLineBreaksActive = textWidth != null || noWidthHalignEnabled;
   const normalizedText = normalizeTextForLineBreakPolicy(text, explicitLineBreaksActive);
+  const normalizedTextSourceMap = textSourceMap
+    ? mapTransformedTextWithFallback(
+        { text, sourceMap: textSourceMap },
+        normalizedText,
+        "node line-break policy normalization"
+      ).sourceMap
+    : undefined;
 
   let textRenderInfo: NodeTextRenderInfo = { mode: "plain" };
   let textLines = computeNodeTextLines(normalizedText, textWidth, charWidth);
@@ -161,7 +170,8 @@ export function resolveNodeLayout(
         fontStyle: style.fontStyle,
         fontWeight: style.fontWeight,
         fontFamily: style.fontFamily,
-        fontSizePt: style.fontSize
+        fontSizePt: style.fontSize,
+        ...(normalizedTextSourceMap ? { sourceMap: normalizedTextSourceMap } : {})
       }) ?? null;
     } catch {
       return null;

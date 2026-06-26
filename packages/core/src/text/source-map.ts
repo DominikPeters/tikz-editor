@@ -162,6 +162,25 @@ export function concatMappedText(parts: readonly MappedText[]): MappedText {
   return createMappedText(text, charOrigins, boundaryOrigins);
 }
 
+export function mapTransformedTextWithFallback(
+  mapped: MappedText,
+  transformedText: string,
+  reason: string
+): MappedText {
+  if (transformedText === mapped.text) {
+    return mapped;
+  }
+
+  const hit = projectInputRange(mapped.sourceMap, 0, mapped.text.length);
+  if (hit.kind === "source-offset") {
+    return createGeneratedMappedText(transformedText, reason, { from: hit.offset, to: hit.offset });
+  }
+  if (hit.kind === "source-range") {
+    return createGeneratedMappedText(transformedText, reason, { from: hit.from, to: hit.to });
+  }
+  return createGeneratedMappedText(transformedText, reason);
+}
+
 export function projectInputOffset(sourceMap: TextSourceMap | undefined, inputOffset: number): TextSourceHit {
   if (!sourceMap) {
     return { kind: "source-offset", offset: inputOffset };

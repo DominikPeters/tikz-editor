@@ -1,7 +1,8 @@
 import type { NodeItem, PathStatement, Span } from "../../ast/types.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, expandMacroBindingsMapped } from "../../macros/index.js";
 import { parseOptionListRaw, splitTopLevel } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
+import { mapTransformedTextWithFallback } from "../../text/source-map.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { SemanticContext } from "../context.js";
 import type { NodePositioningResolution } from "../path/node-positioning.js";
@@ -187,16 +188,26 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       const cellOptionScale = resolveNodeOptionScale(combinedCellOptions, params.style, params.context);
       const cellTransformScale = params.inheritedTransformScale * cellOptionScale;
       const cellStyle = resolveNodeStyle(combinedCellOptions, params.style, params.context, cellTransformScale);
-      const expandedCellText = expandMacroBindings(
+      const expandedCellText = expandMacroBindingsMapped(
         parsedCell.text,
         params.context.stack[params.context.stack.length - 1].macroBindings,
         {
           maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-          trace: params.context.macroTraceCollector ?? undefined
+          trace: params.context.macroTraceCollector ?? undefined,
+          sourceOffset: parsedCell.textSpan.from
         }
       );
-      const resolvedCellText = normalizeEscapedTextSpaces(expandedCellText);
-      const normalizedCellText = normalizeNodeTextFontSize(resolvedCellText, cellStyle.fontSize);
+      const resolvedCellText = mapTransformedTextWithFallback(
+        expandedCellText,
+        normalizeEscapedTextSpaces(expandedCellText.text),
+        "escaped text space normalization"
+      );
+      const normalizedCellText = normalizeNodeTextFontSize(resolvedCellText.text, cellStyle.fontSize);
+      const normalizedMappedCellText = mapTransformedTextWithFallback(
+        resolvedCellText,
+        normalizedCellText.text,
+        "node font size normalization"
+      );
       const cellTextStyle = normalizedCellText.fontSizePt === cellStyle.fontSize
         ? cellStyle
         : { ...cellStyle, fontSize: normalizedCellText.fontSizePt };
@@ -206,7 +217,8 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         cellTextStyle,
         cellTransformScale,
         params.context.textEngine,
-        params.matrixMode.textMode
+        params.matrixMode.textMode,
+        normalizedMappedCellText.sourceMap
       );
 
       cellGrid[row][column] = {

@@ -3,9 +3,10 @@ import { pt } from "../../coords/scalars.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { worldPoint } from "../../coords/points.js";
 import { worldTransform } from "../../coords/transforms.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, expandMacroBindingsMapped } from "../../macros/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
+import { mapTransformedTextWithFallback, type MappedText } from "../../text/source-map.js";
 import { stripWrappingBraces } from "../../utils/braces.js";
 import {
   readNamedNodeGeometry,
@@ -269,12 +270,27 @@ export function measureNodeAnchorExtents(
   };
   const nodeLocalStyle = resolveNodeStyle(expandedNodeLocalOptions, nodeDecorationBaseStyle, context, 1);
   const nodeShape = resolveNodeShape(expandedNodeOptions);
-  const expandedNodeText = expandMacroBindings(item.text, frame.macroBindings, {
+  const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    trace: context.macroTraceCollector ?? undefined,
+    sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = normalizeEscapedTextSpaces(resolveTextColorAliases(expandedNodeText, context, statement.id));
-  const normalizedText = normalizeNodeTextFontSize(resolvedNodeText, nodeLocalStyle.fontSize);
+  const colorResolvedNodeText = mapTransformedTextWithFallback(
+    expandedNodeText,
+    resolveTextColorAliases(expandedNodeText.text, context, statement.id),
+    "text color alias resolution"
+  );
+  const resolvedNodeText = mapTransformedTextWithFallback(
+    colorResolvedNodeText,
+    normalizeEscapedTextSpaces(colorResolvedNodeText.text),
+    "escaped text space normalization"
+  );
+  const normalizedText = normalizeNodeTextFontSize(resolvedNodeText.text, nodeLocalStyle.fontSize);
+  const normalizedMappedText = mapTransformedTextWithFallback(
+    resolvedNodeText,
+    normalizedText.text,
+    "node font size normalization"
+  );
   const nodeTextStyle = normalizedText.fontSizePt === nodeLocalStyle.fontSize
     ? nodeLocalStyle
     : { ...nodeLocalStyle, fontSize: normalizedText.fontSizePt };
@@ -284,7 +300,8 @@ export function measureNodeAnchorExtents(
     nodeTextStyle,
     1,
     context.textEngine,
-    "text"
+    "text",
+    normalizedMappedText.sourceMap
   );
   const nodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const anchor = resolveNodeAnchor(expandedNodeOptions);
@@ -545,28 +562,49 @@ export function evaluateNodeItem(
     pushDiagnostic(code, `Node positioning issue: ${code}`, item.span.from, item.span.to);
   }
 
-  const expandedNodeText = expandMacroBindings(item.text, frame.macroBindings, {
+  const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    trace: context.macroTraceCollector ?? undefined,
+    sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = normalizeEscapedTextSpaces(resolveTextColorAliases(expandedNodeText, context, statement.id));
-  const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText) : [{ name: "text", text: resolvedNodeText }];
+  const colorResolvedNodeText = mapTransformedTextWithFallback(
+    expandedNodeText,
+    resolveTextColorAliases(expandedNodeText.text, context, statement.id),
+    "text color alias resolution"
+  );
+  const resolvedNodeText = mapTransformedTextWithFallback(
+    colorResolvedNodeText,
+    normalizeEscapedTextSpaces(colorResolvedNodeText.text),
+    "escaped text space normalization"
+  );
+  const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText.text) : [{ name: "text", text: resolvedNodeText.text }];
   const mainNodeText = rawNodeParts.find((part) => part.name === "text")?.text ?? "";
+  const mainNodeMappedText = rawNodeParts.length === 1 && mainNodeText === resolvedNodeText.text
+    ? resolvedNodeText
+    : mapTransformedTextWithFallback(resolvedNodeText, mainNodeText, "node part extraction");
   const normalizedNodeText = normalizeNodeTextFontSize(mainNodeText, nodeStyle.fontSize);
-  let layoutNodeText = normalizedNodeText.text;
+  let layoutNodeMappedText: MappedText = mapTransformedTextWithFallback(
+    mainNodeMappedText,
+    normalizedNodeText.text,
+    "node font size normalization"
+  );
+  let layoutNodeText = layoutNodeMappedText.text;
   if (nodeShape === "circle split" || nodeShape === "ellipse split" || nodeShape === "diamond split") {
     const lower = rawNodeParts.find((part) => part.name === "lower") ?? rawNodeParts.find((part) => part.name !== "text");
     if (lower && lower.text.length > 0) {
       const normalizedLower = normalizeNodeTextFontSize(lower.text, nodeStyle.fontSize);
       layoutNodeText = `${normalizedNodeText.text}\\\\${normalizedLower.text}`;
+      layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
     }
   } else if (nodeShape === "circle solidus") {
     const lower = rawNodeParts.find((part) => part.name === "lower") ?? rawNodeParts.find((part) => part.name !== "text");
     if (lower && lower.text.length > 0) {
       const normalizedLower = normalizeNodeTextFontSize(lower.text, nodeStyle.fontSize);
       layoutNodeText = `${normalizedNodeText.text}\\\\${normalizedLower.text}`;
+      layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
     } else {
       layoutNodeText = normalizedNodeText.text;
+      layoutNodeMappedText = mapTransformedTextWithFallback(mainNodeMappedText, layoutNodeText, "node font size normalization");
     }
   } else if (nodeShape === "rectangle split") {
     const partCount = Math.max(1, resolveRectangleSplitParts(rectangleSplitOptions));
@@ -577,6 +615,7 @@ export function evaluateNodeItem(
       (partText) => normalizeNodeTextFontSize(partText, nodeStyle.fontSize).text
     );
     layoutNodeText = partTexts.join(horizontal ? " " : "\\\\");
+    layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
   }
   const nodeTextStyle = normalizedNodeText.fontSizePt === nodeStyle.fontSize
     ? nodeStyle
@@ -625,7 +664,8 @@ export function evaluateNodeItem(
     nodeTextStyle,
     1,
     context.textEngine,
-    placementOptions.textMode ?? "text"
+    placementOptions.textMode ?? "text",
+    layoutNodeMappedText.sourceMap
   );
   const adjustedNodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const shapeGeometry = resolveNodeShapeGeometryParams(expandedNodeOptions, () => context.mathRandom.nextRaw());

@@ -6,6 +6,7 @@ import type { SceneCircle, ScenePath, SceneText } from "../packages/core/src/sem
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
 import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
+import { projectInputRange } from "../packages/core/src/text/source-map.js";
 import type { NodeTextEngine, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
 
 function readLineboxTranslateXs(svg: string): number[] {
@@ -393,6 +394,41 @@ describe("render pipeline", () => {
     expect(result.renderDiagnostics).toEqual([]);
     expect(result.svg.svg).toContain("<text");
     expect(result.svg.svg).not.toContain('data-text-renderer="mathjax"');
+  });
+
+  it("passes macro-expanded node text source maps to the text engine", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \newcommand{\wrap}[1]{\textbf{#1}}
+  \node at (0,0) {\wrap{Alpha}};
+\end{tikzpicture}`;
+    const requests: NodeTextMeasureRequest[] = [];
+    const textEngine: NodeTextEngine = {
+      validate: () => null,
+      measure: (request) => {
+        requests.push(request);
+        return null;
+      },
+      renderFromCache: () => null
+    };
+
+    await renderTikzToSvgAsync(source, { textEngine });
+
+    const request = requests.find((candidate) => candidate.text.includes("Alpha"));
+    expect(request?.text).toBe(String.raw`\textbf{Alpha}`);
+    expect(request?.sourceMap?.inputText).toBe(String.raw`\textbf{Alpha}`);
+    expect(projectInputRange(request?.sourceMap, "\\textbf{".length, "\\textbf{Alpha".length)).toEqual({
+      kind: "source-range",
+      from: source.indexOf("Alpha"),
+      to: source.indexOf("Alpha") + "Alpha".length,
+      policy: "caret"
+    });
+    expect(projectInputRange(request?.sourceMap, 0, "\\textbf{".length)).toEqual({
+      kind: "source-range",
+      from: source.indexOf(String.raw`\wrap{Alpha}`),
+      to: source.indexOf(String.raw`\wrap{Alpha}`) + String.raw`\wrap{Alpha}`.length,
+      policy: "macro",
+      macroName: "\\wrap"
+    });
   });
 
   it("uses custom validators for node text but skips matrices and user macro sources", async () => {

@@ -1,3 +1,5 @@
+import type { TextSourceMap } from "./source-map.js";
+
 export type NodeTextFontStyle = "normal" | "italic";
 export type NodeTextFontWeight = "normal" | "bold";
 export type NodeTextFontFamily = "serif" | "sans" | "monospace";
@@ -17,6 +19,7 @@ export type NodeTextMeasureRequest = {
   fontWeight: NodeTextFontWeight;
   fontFamily: NodeTextFontFamily;
   fontSizePt: number;
+  sourceMap?: TextSourceMap;
 };
 
 export type NodeTextMetrics = {
