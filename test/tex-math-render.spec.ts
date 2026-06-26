@@ -7,6 +7,7 @@ import {
   parseTexMath,
   renderTexMathHListSvgBody,
   resolveDefaultTexMathFontProfileForList,
+  type TexMathCaretMap,
   type TexMathHListItem,
 } from "../packages/core/src/text/tex/index.js";
 
@@ -87,6 +88,54 @@ function findGlyphX(
 }
 
 describe("TeX math SVG rendering", () => {
+  it("defines canonical 2-D caret map entries for TeX-derived math", () => {
+    const caretMap = {
+      sourceStart: 0,
+      sourceEnd: 5,
+      contentStart: 1,
+      contentEnd: 4,
+      entries: [
+        {
+          sourceOffset: 2,
+          x: 3,
+          y: -4,
+          height: 5,
+          depth: 1,
+          hitBounds: {
+            xStart: 2,
+            xEnd: 4,
+            yStart: -9,
+            yEnd: 1,
+          },
+          kind: "glyph-boundary",
+          sourceSpan: {
+            start: 1,
+            end: 3,
+          },
+          priority: 1,
+        },
+      ],
+      diagnostics: [
+        {
+          code: "unsupported-math-caret-geometry",
+          message: "Example diagnostic.",
+          sourceSpan: {
+            start: 1,
+            end: 4,
+          },
+        },
+      ],
+    } satisfies TexMathCaretMap;
+
+    expect(caretMap.entries[0]).toMatchObject({
+      sourceOffset: 2,
+      x: 3,
+      y: -4,
+      kind: "glyph-boundary",
+    });
+    expect(caretMap.diagnostics?.[0]?.code).toBe("unsupported-math-caret-geometry");
+  });
+
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
     const result = layoutTexMathList(parsed.list);

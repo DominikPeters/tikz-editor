@@ -62,6 +62,7 @@ export interface TexMathBox {
   readonly depth: number;
   readonly stretch?: number;
   readonly shrink?: number;
+  readonly caretMap?: TexMathCaretMap;
   readonly caretStops?: readonly number[];
   readonly constructRanges?: readonly TexMathConstructRange[];
   readonly breakpoints?: readonly TexMathBreakpoint[];
@@ -69,6 +70,58 @@ export interface TexMathBox {
   readonly hlist?: TexMathHList;
   readonly fontProfile?: TexMathFontProfile;
   readonly rootBox?: TexMathBox;
+}
+
+export type TexMathCaretEntryKind =
+  | "math-boundary"
+  | "construct-boundary"
+  | "command"
+  | "group-boundary"
+  | "glyph-boundary"
+  | "synthetic-boundary";
+
+export interface TexMathCaretBounds {
+  readonly xStart: number;
+  readonly xEnd: number;
+  readonly yStart: number;
+  readonly yEnd: number;
+}
+
+export interface TexMathCaretEntry {
+  readonly sourceOffset: number;
+  readonly x: number;
+  readonly y: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly hitBounds: TexMathCaretBounds;
+  readonly kind: TexMathCaretEntryKind;
+  readonly sourceSpan?: {
+    readonly start: number;
+    readonly end: number;
+  };
+  readonly priority?: number;
+}
+
+export type TexMathCaretDiagnosticCode =
+  | "unsupported-math-caret-geometry"
+  | "incomplete-math-caret-geometry";
+
+export interface TexMathCaretDiagnostic {
+  readonly code: TexMathCaretDiagnosticCode;
+  readonly message: string;
+  readonly sourceSpan: {
+    readonly start: number;
+    readonly end: number;
+  };
+}
+
+export interface TexMathCaretMap {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly entries: readonly TexMathCaretEntry[];
+  readonly diagnostics?: readonly TexMathCaretDiagnostic[];
 }
 
 export interface TexMathDisplayLabel {

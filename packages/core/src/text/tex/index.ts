@@ -108,6 +108,12 @@ export {
   type TexMathBreakpoint,
   type TexMathBox,
   type TexMathBoxProvider,
+  type TexMathCaretBounds,
+  type TexMathCaretDiagnostic,
+  type TexMathCaretDiagnosticCode,
+  type TexMathCaretEntry,
+  type TexMathCaretEntryKind,
+  type TexMathCaretMap,
   type TexLayoutSpaceItem,
   type TexLayoutTextItem,
 } from "./layout-inline-items.js";
