@@ -2203,7 +2203,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         itemIndex: activeList.itemIndex,
       });
     }
-    return path;
+    return path.length > 0 ? path : undefined;
   };
 
   const pushBlock = (
@@ -2380,6 +2380,20 @@ function buildSimpleTexParagraphBlocksFromNodes(
     prefixNoIndent: boolean
   ): boolean => prefixNoIndent || environmentSuppressesParagraphIndent();
 
+  const currentSimpleTexBlockItemScope = (): {
+    readonly quoteDepth: number;
+    readonly listScope?: SimpleTexListScope;
+    readonly scopePath?: readonly SimpleTexScopePathRole[];
+  } => {
+    const listScope = currentSimpleTexListScope();
+    const scopePath = currentSimpleTexScopePath();
+    return {
+      quoteDepth: currentQuoteDepth,
+      ...(listScope ? { listScope } : {}),
+      ...(scopePath ? { scopePath } : {}),
+    };
+  };
+
   while (index < sourceNodes.length) {
     const node = sourceNodes[index];
     if (!node) {
@@ -2400,9 +2414,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         reason: "Unsupported TeX command in vertical mode.",
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
-        quoteDepth: currentQuoteDepth,
-        listScope: currentSimpleTexListScope(),
-        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
+        ...currentSimpleTexBlockItemScope(),
       });
       unsupportedCommand = true;
       prefix = consumeParagraphPrefix(index + 1);
@@ -2435,9 +2447,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         contentEnd: node.contentEnd,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
-        quoteDepth: currentQuoteDepth,
-        listScope: currentSimpleTexListScope(),
-        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
+        ...currentSimpleTexBlockItemScope(),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2583,9 +2593,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         shrink: node.shrink,
         stretchOrder: node.stretchOrder,
         shrinkOrder: node.shrinkOrder,
-        quoteDepth: currentQuoteDepth,
-        listScope: currentSimpleTexListScope(),
-        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
+        ...currentSimpleTexBlockItemScope(),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2608,9 +2616,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         width: node.width,
         height: node.height,
         depth: node.depth,
-        quoteDepth: currentQuoteDepth,
-        listScope: currentSimpleTexListScope(),
-        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
+        ...currentSimpleTexBlockItemScope(),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2631,9 +2637,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         penalty: node.penalty,
-        quoteDepth: currentQuoteDepth,
-        listScope: currentSimpleTexListScope(),
-        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
+        ...currentSimpleTexBlockItemScope(),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2661,9 +2665,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         alignment: node.alignment,
         contentStart: node.contentStart,
         contentEnd: node.contentEnd,
-        quoteDepth: currentQuoteDepth,
-        listScope: currentSimpleTexListScope(),
-        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
+        ...currentSimpleTexBlockItemScope(),
         items: body.items,
       });
       unsupportedCommand ||= node.body.unsupportedCommand;

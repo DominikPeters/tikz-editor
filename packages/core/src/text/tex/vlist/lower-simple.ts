@@ -440,21 +440,7 @@ function scopePathForVerticalBlockItem(
 function texVBoxRolePathFromSimpleTexScopePath(
   scopePath: readonly SimpleTexScopePathRole[]
 ): readonly TexVBoxRole[] | undefined {
-  if (scopePath.length === 0) {
-    return undefined;
-  }
-  return scopePath.map((role): TexVBoxRole => {
-    if (role.kind === "quote") {
-      return role;
-    }
-    if (role.kind === "trivlist") {
-      return role;
-    }
-    if (role.kind === "list-item") {
-      return role;
-    }
-    return role;
-  });
+  return scopePath.length > 0 ? scopePath : undefined;
 }
 
 function sourceSpanFromBlock(block: SimpleTexParagraphBlock): TexSourceSpan {

@@ -535,6 +535,25 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("does not emit empty scope paths for vertical material before list items", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\smallskip\item Alpha\end{itemize}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.items.map((item) => ({
+      kind: item.kind,
+      scopeKinds: "scopePath" in item
+        ? item.scopePath?.map((role) => role.kind)
+        : item.kind === "paragraph"
+          ? item.block.scopePath?.map((role) => role.kind)
+          : undefined,
+    }))).toEqual([
+      { kind: "vertical-glue", scopeKinds: ["list"] },
+      { kind: "paragraph", scopeKinds: ["list", "list-item"] },
+    ]);
+  });
+
   it("records nested inline font commands in source IR", () => {
     const ir = parseSimpleTexParagraphIr(
       String.raw`Alpha \textbf{Beta \textit{Gamma}} \textsf{\textsc{Delta}}`
