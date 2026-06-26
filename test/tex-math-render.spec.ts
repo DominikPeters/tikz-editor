@@ -1226,6 +1226,43 @@ describe("TeX math SVG rendering", () => {
     }
   });
 
+  it("projects inline fraction caret stops from the 2-D caret map", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`$\frac{1}{2}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content: source.slice(1, -1),
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).not.toBeNull();
+    if (!box) {
+      return;
+    }
+
+    const stops = box.caretStops ?? [];
+    const transitionOffset = source.indexOf("}{") + 1;
+    const transition = findCaretEntry(box.caretMap?.entries, transitionOffset, "group-boundary");
+    const numeratorStart = source.indexOf("1");
+    const numeratorEnd = numeratorStart + 1;
+    const denominatorStart = source.indexOf("2");
+    const denominatorEnd = denominatorStart + 1;
+    expect(stops).toHaveLength(source.length + 1);
+    expect(transition).toBeTruthy();
+    expect(stops[numeratorStart]).toBeCloseTo(transition?.hitBounds.xStart ?? 0, 6);
+    expect(stops[numeratorEnd]).toBeCloseTo(transition?.x ?? 0, 6);
+    expect(stops[denominatorStart]).toBeCloseTo(transition?.x ?? 0, 6);
+    expect(stops[denominatorEnd]).toBeCloseTo(transition?.hitBounds.xEnd ?? 0, 6);
+    expect(stops[source.length - 1]).toBeCloseTo(box.width, 6);
+    for (let index = 1; index < stops.length; index += 1) {
+      expect(stops[index]).toBeGreaterThanOrEqual((stops[index - 1] ?? 0) - 1e-6);
+    }
+  });
+
   it("exposes TeX inline math glue shrink to paragraph breaking", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({

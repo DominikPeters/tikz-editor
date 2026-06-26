@@ -123,6 +123,7 @@ function getMathBox(
   const hlist = displayLabel
     ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
     : measuredHList;
+  const caretMap = buildInlineMathCaretMap(hlist, params);
   const box = {
     source: params.source,
     content: params.content,
@@ -134,8 +135,8 @@ function getMathBox(
     height: hlist.height,
     depth: hlist.depth,
     ...mathHListFlex(hlist.items, 0, hlist.width),
-    caretMap: buildInlineMathCaretMap(hlist, params),
-    caretStops: buildInlineMathCaretStops(hlist, params),
+    caretMap,
+    caretStops: projectInlineMathCaretStops(caretMap, hlist.width),
     constructRanges: buildInlineMathConstructRanges(hlist),
     breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
     svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
@@ -842,85 +843,82 @@ function dedupeMathCaretEntries(entries: readonly TexMathCaretEntry[]): readonly
   );
 }
 
-function buildInlineMathCaretStops(
-  hlist: TexMathHList,
-  params: {
-    readonly sourceStart: number;
-    readonly sourceEnd: number;
-    readonly contentStart: number;
-    readonly contentEnd: number;
-  }
+function projectInlineMathCaretStops(
+  caretMap: TexMathCaretMap,
+  width: number
 ): readonly number[] {
-  const rawLength = Math.max(0, params.sourceEnd - params.sourceStart);
+  const rawLength = Math.max(0, caretMap.sourceEnd - caretMap.sourceStart);
   const stops = Array.from({ length: rawLength + 1 }, () => Number.NaN);
-  const setStop = (rawOffset: number, x: number) => {
-    const index = rawOffset - params.sourceStart;
-    if (index < 0 || index >= stops.length || !Number.isFinite(x)) {
-      return;
+  const entriesByOffset = new Map<number, TexMathCaretEntry[]>();
+  for (const entry of caretMap.entries) {
+    const entries = entriesByOffset.get(entry.sourceOffset) ?? [];
+    entries.push(entry);
+    entriesByOffset.set(entry.sourceOffset, entries);
+  }
+
+  for (let rawOffset = caretMap.sourceStart; rawOffset <= caretMap.sourceEnd; rawOffset += 1) {
+    const entry = projectedMathCaretEntry(entriesByOffset.get(rawOffset) ?? [], caretMap);
+    if (!entry) {
+      continue;
     }
-    const clamped = roundTexPt(Math.max(0, Math.min(hlist.width, x)));
-    stops[index] = Number.isFinite(stops[index])
-      ? Math.max(stops[index], clamped)
-      : clamped;
-  };
-
-  for (let rawOffset = params.sourceStart; rawOffset <= params.contentStart; rawOffset += 1) {
-    setStop(rawOffset, 0);
-  }
-  for (let rawOffset = params.contentEnd; rawOffset <= params.sourceEnd; rawOffset += 1) {
-    setStop(rawOffset, hlist.width);
+    const index = rawOffset - caretMap.sourceStart;
+    stops[index] = roundTexPt(Math.max(0, Math.min(width, entry.x)));
   }
 
-  addMathItemCaretStops(hlist.items, 0, setStop);
-  interpolateMissingCaretStops(stops, hlist.width);
-  enforceMonotoneCaretStops(stops, hlist.width);
+  interpolateProjectedCaretStops(stops, width);
+  enforceMonotoneProjectedCaretStops(stops, width);
   return stops.map((stop) => roundTexPt(stop));
 }
 
-function addMathItemCaretStops(
-  items: readonly TexMathHListItem[],
-  originX: number,
-  setStop: (rawOffset: number, x: number) => void
-): void {
-  for (const item of items) {
-    const x = roundTexPt(originX + item.x);
-    if (item.kind === "hlist") {
-      addMathItemCaretStops(item.items, x, setStop);
-      continue;
-    }
-    if (item.kind === "rule") {
-      continue;
-    }
-    if (item.kind === "glyph" && mathGlyphCoversConstructSpan(item)) {
-      continue;
-    }
-    addMathSourceSpanCaretStops(item.sourceSpan.start, item.sourceSpan.end, x, item.width, setStop);
+function projectedMathCaretEntry(
+  entries: readonly TexMathCaretEntry[],
+  caretMap: TexMathCaretMap
+): TexMathCaretEntry | null {
+  if (entries.length === 0) {
+    return null;
+  }
+  return [...entries].sort((left, right) =>
+    projectedMathCaretEntryScore(right, caretMap) - projectedMathCaretEntryScore(left, caretMap) ||
+    left.x - right.x ||
+    left.y - right.y
+  )[0] ?? null;
+}
+
+function projectedMathCaretEntryScore(
+  entry: TexMathCaretEntry,
+  caretMap: TexMathCaretMap
+): number {
+  if (
+    entry.kind === "math-boundary" &&
+    (entry.sourceOffset <= caretMap.sourceStart || entry.sourceOffset >= caretMap.contentEnd)
+  ) {
+    return 10_000;
+  }
+  if (entry.kind === "math-boundary") {
+    return 0;
+  }
+  const spanLength = Math.max(0, (entry.sourceSpan?.end ?? entry.sourceOffset) - (entry.sourceSpan?.start ?? entry.sourceOffset));
+  return spanLength * 100 + projectedMathCaretKindScore(entry.kind) + (entry.priority ?? 0) / 100;
+}
+
+function projectedMathCaretKindScore(kind: TexMathCaretEntry["kind"]): number {
+  switch (kind) {
+    case "construct-boundary":
+      return 60;
+    case "group-boundary":
+      return 50;
+    case "command":
+      return 40;
+    case "glyph-boundary":
+      return 30;
+    case "synthetic-boundary":
+      return 10;
+    case "math-boundary":
+      return 0;
   }
 }
 
-function mathGlyphCoversConstructSpan(item: Extract<TexMathHListItem, { readonly kind: "glyph" }>): boolean {
-  return item.sourceSpan.end - item.sourceSpan.start > Math.max(1, item.text.length);
-}
-
-function addMathSourceSpanCaretStops(
-  start: number,
-  end: number,
-  x: number,
-  width: number,
-  setStop: (rawOffset: number, x: number) => void
-): void {
-  const spanLength = Math.max(0, end - start);
-  if (spanLength === 0) {
-    setStop(start, x);
-    return;
-  }
-  for (let rawOffset = start; rawOffset <= end; rawOffset += 1) {
-    const t = (rawOffset - start) / spanLength;
-    setStop(rawOffset, roundTexPt(x + width * t));
-  }
-}
-
-function interpolateMissingCaretStops(stops: number[], width: number): void {
+function interpolateProjectedCaretStops(stops: number[], width: number): void {
   if (stops.length === 0) {
     return;
   }
@@ -945,7 +943,7 @@ function interpolateMissingCaretStops(stops: number[], width: number): void {
   }
 }
 
-function enforceMonotoneCaretStops(stops: number[], width: number): void {
+function enforceMonotoneProjectedCaretStops(stops: number[], width: number): void {
   let previous = 0;
   for (let index = 0; index < stops.length; index += 1) {
     const value = Number.isFinite(stops[index]) ? stops[index] : previous;
@@ -955,6 +953,10 @@ function enforceMonotoneCaretStops(stops: number[], width: number): void {
   if (stops.length > 0) {
     stops[stops.length - 1] = roundTexPt(width);
   }
+}
+
+function mathGlyphCoversConstructSpan(item: Extract<TexMathHListItem, { readonly kind: "glyph" }>): boolean {
+  return item.sourceSpan.end - item.sourceSpan.start > Math.max(1, item.text.length);
 }
 
 function parseMathBoxContent(params: {
@@ -1087,6 +1089,12 @@ function getDisplayMathAlignment(
         sourceSpan: rowSourceSpan,
         items: taggedRow.items,
       };
+      const caretMap = buildInlineMathCaretMap(rowHList, {
+        sourceStart: rowSourceSpan.start,
+        sourceEnd: rowSourceSpan.end,
+        contentStart: rowSourceSpan.start,
+        contentEnd: rowSourceSpan.end,
+      });
       return {
         rowIndex,
         x: 0,
@@ -1099,18 +1107,8 @@ function getDisplayMathAlignment(
         width: taggedRow.width,
         height: taggedRow.height,
         depth: taggedRow.depth,
-        caretMap: buildInlineMathCaretMap(rowHList, {
-          sourceStart: rowSourceSpan.start,
-          sourceEnd: rowSourceSpan.end,
-          contentStart: rowSourceSpan.start,
-          contentEnd: rowSourceSpan.end,
-        }),
-        caretStops: buildInlineMathCaretStops(rowHList, {
-          sourceStart: rowSourceSpan.start,
-          sourceEnd: rowSourceSpan.end,
-          contentStart: rowSourceSpan.start,
-          contentEnd: rowSourceSpan.end,
-        }),
+        caretMap,
+        caretStops: projectInlineMathCaretStops(caretMap, rowHList.width),
         constructRanges: buildInlineMathConstructRanges(rowHList),
         breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
         svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
@@ -1165,6 +1163,12 @@ function getDisplayMathAlignment(
         sourceSpan: row.sourceSpan,
         items: taggedRow.items,
       };
+      const caretMap = buildInlineMathCaretMap(rowHList, {
+        sourceStart: row.sourceSpan.start,
+        sourceEnd: row.sourceSpan.end,
+        contentStart: row.sourceSpan.start,
+        contentEnd: row.sourceSpan.end,
+      });
       return {
         rowIndex,
         x: 0,
@@ -1177,18 +1181,8 @@ function getDisplayMathAlignment(
         width: taggedRow.width,
         height: taggedRow.height,
         depth: taggedRow.depth,
-        caretMap: buildInlineMathCaretMap(rowHList, {
-          sourceStart: row.sourceSpan.start,
-          sourceEnd: row.sourceSpan.end,
-          contentStart: row.sourceSpan.start,
-          contentEnd: row.sourceSpan.end,
-        }),
-        caretStops: buildInlineMathCaretStops(rowHList, {
-          sourceStart: row.sourceSpan.start,
-          sourceEnd: row.sourceSpan.end,
-          contentStart: row.sourceSpan.start,
-          contentEnd: row.sourceSpan.end,
-        }),
+        caretMap,
+        caretStops: projectInlineMathCaretStops(caretMap, rowHList.width),
         constructRanges: buildInlineMathConstructRanges(rowHList),
         breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
         svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
@@ -1286,6 +1280,12 @@ function getDisplayMathAlignment(
       sourceSpan: row.sourceSpan,
       items: taggedRow.items,
     };
+    const caretMap = buildInlineMathCaretMap(rowHList, {
+      sourceStart: row.sourceSpan.start,
+      sourceEnd: row.sourceSpan.end,
+      contentStart: row.sourceSpan.start,
+      contentEnd: row.sourceSpan.end,
+    });
     return {
       rowIndex,
       x: 0,
@@ -1298,18 +1298,8 @@ function getDisplayMathAlignment(
       width: taggedRow.width,
       height: taggedRow.height,
       depth: taggedRow.depth,
-      caretMap: buildInlineMathCaretMap(rowHList, {
-        sourceStart: row.sourceSpan.start,
-        sourceEnd: row.sourceSpan.end,
-        contentStart: row.sourceSpan.start,
-        contentEnd: row.sourceSpan.end,
-      }),
-      caretStops: buildInlineMathCaretStops(rowHList, {
-        sourceStart: row.sourceSpan.start,
-        sourceEnd: row.sourceSpan.end,
-        contentStart: row.sourceSpan.start,
-        contentEnd: row.sourceSpan.end,
-      }),
+      caretMap,
+      caretStops: projectInlineMathCaretStops(caretMap, rowHList.width),
       constructRanges: buildInlineMathConstructRanges(rowHList),
       breakpoints: buildInlineMathBreakpoints(parsed.list, rowHList),
       svgBody: renderTexMathHListSvgBody(rowHList, { fontProfile }),
