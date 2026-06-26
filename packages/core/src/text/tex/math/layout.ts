@@ -509,8 +509,10 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
   if (nucleus.kind === "glyph" && amsMathSymbolCommand(nucleus.text)) {
     return true;
   }
+  if (nucleus.kind === "text") {
+    return nucleus.command === "text";
+  }
   if (
-    nucleus.kind === "text" ||
     nucleus.kind === "aligned" ||
     nucleus.kind === "matrix" ||
     nucleus.kind === "substack" ||
@@ -1148,17 +1150,30 @@ function textShapedItemToMathLayoutItem(
   font: ResolvedTexFont,
   x: number,
   family: TexMathGlyphLayoutItem["family"] = "text"
-): TexMathGlyphLayoutItem | TexMathKernLayoutItem {
+): TexMathGlyphLayoutItem | TexMathGlueLayoutItem | TexMathKernLayoutItem {
+  const sourceSpan = {
+    start: item.sourceStart,
+    end: item.sourceEnd,
+  };
   if (item.kind === "kern") {
     return {
       kind: "kern",
       x,
       width: item.width,
       reason: "text-kern",
-      sourceSpan: {
-        start: item.sourceStart,
-        end: item.sourceEnd,
-      },
+      sourceSpan,
+    };
+  }
+  if (item.code === 32) {
+    return {
+      kind: "glue",
+      x,
+      width: item.width,
+      mu: 0,
+      stretch: 0,
+      shrink: 0,
+      source: "explicit",
+      sourceSpan,
     };
   }
   return {
@@ -1174,10 +1189,7 @@ function textShapedItemToMathLayoutItem(
     height: item.height,
     depth: item.depth,
     italicCorrection: item.italicCorrection,
-    sourceSpan: {
-      start: item.sourceStart,
-      end: item.sourceEnd,
-    },
+    sourceSpan,
   };
 }
 

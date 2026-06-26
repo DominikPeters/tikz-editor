@@ -8,6 +8,7 @@ import {
   type TexMathChildHListLayoutItem,
   type TexMathGlyphLayoutItem,
   type TexMathHListItem,
+  type TexMathRuleLayoutItem,
 } from "../packages/core/src/text/tex/index.js";
 
 function layout(source: string) {
@@ -32,6 +33,14 @@ function flattenGlyphItems(items: readonly TexMathHListItem[]): readonly TexMath
     }
     return [];
   });
+}
+
+function flattenMathItems(items: readonly TexMathHListItem[]): readonly TexMathHListItem[] {
+  return items.flatMap((item) =>
+    item.kind === "hlist"
+      ? [item, ...flattenMathItems(item.items)]
+      : [item]
+  );
 }
 
 describe("TeX math hlist layout", () => {
@@ -730,7 +739,6 @@ describe("TeX math hlist layout", () => {
     expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
       "lmroman10-regular/105",
       "lmroman10-regular/102",
-      "lmroman10-regular/32",
       "cmmi10/65",
       "cmmi10/120",
       "cmsy10/21",
@@ -767,9 +775,14 @@ describe("TeX math hlist layout", () => {
       sourceSpan: glyph.sourceSpan,
     }))).toEqual([
       { fontId: "lmroman10-regular", code: 120, sourceSpan: { start: 6, end: 7 } },
-      { fontId: "lmroman10-regular", code: 32, sourceSpan: { start: 7, end: 8 } },
       { fontId: "cmmi10", code: 121, sourceSpan: { start: 9, end: 10 } },
     ]);
+    expect(flattenMathItems(result.hlist?.items ?? [])).toContainEqual(
+      expect.objectContaining({
+        kind: "glue",
+        sourceSpan: { start: 7, end: 8 },
+      })
+    );
   });
 
   it("scales text command nuclei in script style", () => {
@@ -802,6 +815,40 @@ describe("TeX math hlist layout", () => {
       { fontId: "lmroman10-regular", atPt: 10, code: 105 },
       { fontId: "lmroman10-regular", atPt: 10, code: 102 },
     ]);
+  });
+
+  it("represents math-mode mbox spaces as hbox glue, not glyphs", () => {
+    const result = layout(String.raw`\mbox{ node }`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => glyph.code)).toEqual([
+      110,
+      111,
+      100,
+      101,
+    ]);
+    expect(flattenMathItems(result.hlist?.items ?? []).filter((item) => item.kind === "glue")).toEqual([
+      expect.objectContaining({ width: 3.33, sourceSpan: { start: 6, end: 7 } }),
+      expect.objectContaining({ width: 3.33, sourceSpan: { start: 11, end: 12 } }),
+    ]);
+  });
+
+  it("keeps mbox and hbox on the default math font profile for following scripts", () => {
+    const mbox = layout(String.raw`\mbox{ node }^{\frac{x}{z}}`);
+    const hbox = layout(String.raw`\hbox{ node }^{\frac{x}{z}}`);
+    const text = layout(String.raw`\text{ node }^{\frac{x}{z}}`);
+
+    const ruleHeight = (result: ReturnType<typeof layout>) =>
+      flattenMathItems(result.hlist?.items ?? []).find((item): item is TexMathRuleLayoutItem =>
+        item.kind === "rule" && item.role === "fraction-rule"
+      )?.height;
+
+    expect(mbox.supported).toBe(true);
+    expect(hbox.supported).toBe(true);
+    expect(text.supported).toBe(true);
+    expect(ruleHeight(mbox)).toBeCloseTo(0.39999, 5);
+    expect(ruleHeight(hbox)).toBeCloseTo(0.39999, 5);
+    expect(ruleHeight(text)).toBeCloseTo(0.339997, 5);
   });
 
   it("lays out math alphabet commands with LuaLaTeX CM alphabet fonts", () => {
