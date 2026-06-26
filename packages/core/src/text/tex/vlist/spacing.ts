@@ -85,6 +85,7 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly size: number;
   readonly quoteSize: number;
   readonly listSize: number;
+  readonly trivlistSize?: number;
 }
 
 export function planSimpleTexParagraphVerticalSkips(
@@ -107,13 +108,17 @@ export function planSimpleTexParagraphVerticalSkips(
 interface SimpleTexParagraphVerticalSkipState {
   previousEmittedQuoteDepth: number;
   previousEmittedQuotationDepth: number;
+  previousEmittedTrivlistScopes: readonly TexTrivlistScopeRole[];
   previousEmittedListContext: SimpleTexListContext | undefined;
   previousEmittedContentKind: "paragraph" | "display" | undefined;
   readonly quotePartopsepByDepth: Map<number, boolean>;
+  readonly trivlistPartopsepByScope: Map<TexTrivlistScopeRole, boolean>;
   readonly listPartopsepByDepth: Map<number, boolean>;
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
 }
+
+type TexTrivlistScopeRole = Extract<TexVBoxRole, { readonly kind: "trivlist" }>;
 
 function planSimpleTexParagraphVerticalSkipsInto(
   items: readonly TexVListItem[],
@@ -141,6 +146,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         );
         state.previousEmittedQuoteDepth = 0;
         state.previousEmittedQuotationDepth = 0;
+        state.previousEmittedTrivlistScopes = [];
         state.previousEmittedListContext = undefined;
         state.previousEmittedContentKind = "paragraph";
         state.emittedParagraphCount += 1;
@@ -193,6 +199,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
+    const trivlistVerticalSkipBefore = followsDisplay
+      ? 0
+      : texArticleTrivlistVerticalSkipBefore(
+          state,
+          state.previousEmittedTrivlistScopes,
+          scope.trivlistScopes,
+          startsListInVerticalMode,
+          font
+        );
 
     skips.push({
       blockIndex: paragraph.blockIndex,
@@ -200,11 +215,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
       segmentIndex: 0,
       quoteSize: quoteVerticalSkipBefore,
       listSize: listVerticalSkipBefore,
-      size: quoteVerticalSkipBefore + listVerticalSkipBefore,
+      ...(trivlistVerticalSkipBefore > 0
+        ? { trivlistSize: trivlistVerticalSkipBefore }
+        : {}),
+      size: quoteVerticalSkipBefore + listVerticalSkipBefore + trivlistVerticalSkipBefore,
     });
 
     state.previousEmittedQuoteDepth = scope.quoteDepth;
     state.previousEmittedQuotationDepth = scope.quotationDepth;
+    state.previousEmittedTrivlistScopes = scope.trivlistScopes;
     state.previousEmittedListContext = scope.listContext;
     if (scope.listItemKey) {
       state.emittedListItemKeys.add(scope.listItemKey);
@@ -218,9 +237,11 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
   return {
     previousEmittedQuoteDepth: 0,
     previousEmittedQuotationDepth: 0,
+    previousEmittedTrivlistScopes: [],
     previousEmittedListContext: undefined,
     previousEmittedContentKind: undefined,
     quotePartopsepByDepth: new Map(),
+    trivlistPartopsepByScope: new Map(),
     listPartopsepByDepth: new Map(),
     emittedListItemKeys: new Set(),
     emittedParagraphCount: 0,
@@ -234,17 +255,25 @@ function paragraphScopeFromVListAncestors(
 ): {
   readonly quoteDepth: number;
   readonly quotationDepth: number;
+  readonly trivlistScopes: readonly TexTrivlistScopeRole[];
   readonly listContext: SimpleTexListContext | undefined;
   readonly listItemKey?: string;
 } {
-  const quoteDepthFromAncestors = ancestors.filter((role) => role.kind === "quote").length;
-  const listRole = lastVListAncestorRole(ancestors, "list");
-  const listItemRole = lastVListAncestorRole(ancestors, "list-item");
+  const scopeRoles = ancestors.length > 0
+    ? ancestors
+    : item.paragraph.scopePath ?? [];
+  const quoteDepthFromAncestors = scopeRoles.filter((role) => role.kind === "quote").length;
+  const trivlistScopes = scopeRoles.filter(
+    (role): role is TexTrivlistScopeRole => role.kind === "trivlist"
+  );
+  const listRole = lastVListAncestorRole(scopeRoles, "list");
+  const listItemRole = lastVListAncestorRole(scopeRoles, "list-item");
   if (listRole && listItemRole) {
     const listItemKey = texListItemScopeKey(listItemRole);
     return {
       quoteDepth: quoteDepthFromAncestors,
       quotationDepth: item.paragraph.quotationDepth ?? 0,
+      trivlistScopes,
       listItemKey,
       listContext: {
         kind: listRole.listKind,
@@ -262,6 +291,7 @@ function paragraphScopeFromVListAncestors(
   return {
     quoteDepth: quoteDepthFromAncestors > 0 ? quoteDepthFromAncestors : item.paragraph.quoteDepth,
     quotationDepth: item.paragraph.quotationDepth ?? 0,
+    trivlistScopes,
     listContext: item.paragraph.listContext,
   };
 }
@@ -369,6 +399,17 @@ function paragraphBoundaryGlueItems(
         beforeBlockIndex: item.paragraph.blockIndex,
       },
       size: skip.listSize,
+    });
+  }
+  if ((skip.trivlistSize ?? 0) > 0) {
+    glues.push({
+      kind: "glue",
+      ...shared,
+      origin: {
+        kind: "trivlist-boundary",
+        beforeBlockIndex: item.paragraph.blockIndex,
+      },
+      size: skip.trivlistSize ?? 0,
     });
   }
   return glues;
@@ -633,7 +674,7 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (
       item.kind === "glue" &&
-      (item.origin?.kind === "quote-boundary" || item.origin?.kind === "list-boundary")
+      isParagraphBoundaryGlueOrigin(item.origin)
     ) {
       items.push(item);
       plainParagraphInterlinePending = false;
@@ -782,13 +823,19 @@ function shouldInsertParagraphBoundaryInterlineGlue(
     }
     if (
       item.kind === "glue" &&
-      (item.origin?.kind === "quote-boundary" || item.origin?.kind === "list-boundary")
+      isParagraphBoundaryGlueOrigin(item.origin)
     ) {
       return false;
     }
     return item.kind === "paragraph";
   }
   return false;
+}
+
+function isParagraphBoundaryGlueOrigin(origin: TexGlueItem["origin"]): boolean {
+  return origin?.kind === "quote-boundary" ||
+    origin?.kind === "list-boundary" ||
+    origin?.kind === "trivlist-boundary";
 }
 
 function materialVBoxMetrics(
@@ -945,6 +992,7 @@ function displayAlignmentIntertextParagraph(
       sourceHitPolicy: "source-range",
       overfullSingleLineFallback: true,
       quoteDepth: scope.quoteDepth,
+      ...(item.scopePath ? { scopePath: item.scopePath } : {}),
       ...(scope.listContext ? { listContext: scope.listContext } : {}),
       ...(scope.quoteDepth > 0 || scope.listContext ? { useScopedLineWidth: true } : {}),
       ...(scope.listContext ? {} : { ignoreAncestorBreakMargins: true }),
@@ -1256,12 +1304,24 @@ function paragraphBoundaryInterlineGlueItem(
     ...(item.scopePath ? { scopePath: item.scopePath } : {}),
     origin: {
       kind: "paragraph-boundary-interline",
-      boundary: item.origin?.kind === "quote-boundary" ? "quote" : "list",
+      boundary: paragraphBoundaryInterlineKind(item.origin),
     },
     size,
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
+}
+
+function paragraphBoundaryInterlineKind(
+  origin: TexGlueItem["origin"]
+): "quote" | "list" | "trivlist" {
+  if (origin?.kind === "quote-boundary") {
+    return "quote";
+  }
+  if (origin?.kind === "trivlist-boundary") {
+    return "trivlist";
+  }
+  return "list";
 }
 
 function plainParagraphBoundaryInterlineGlueItem(
@@ -1394,6 +1454,49 @@ function texArticleQuoteVerticalSkipBefore(
   return 0;
 }
 
+function texArticleTrivlistVerticalSkipBefore(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousScopes: readonly TexTrivlistScopeRole[],
+  currentScopes: readonly TexTrivlistScopeRole[],
+  startsListInVerticalMode: boolean,
+  font: ResolvedTexFont
+): number {
+  const commonPrefixLength = commonTrivlistScopePrefixLength(
+    previousScopes,
+    currentScopes
+  );
+  if (
+    commonPrefixLength === previousScopes.length &&
+    commonPrefixLength === currentScopes.length
+  ) {
+    return 0;
+  }
+  let size = texArticleTrivlistExitBoundarySkip(
+    state,
+    previousScopes,
+    commonPrefixLength,
+    font
+  );
+  for (let index = commonPrefixLength; index < currentScopes.length; index += 1) {
+    const scope = currentScopes[index];
+    if (!scope) {
+      continue;
+    }
+    const usesPartopsep =
+      index === 0 && previousScopes.length === 0 && startsListInVerticalMode;
+    state.trivlistPartopsepByScope.set(scope, usesPartopsep);
+    size = Math.max(
+      size,
+      texEmSkip(
+        articleListSpacingEm.topsep +
+          (usesPartopsep ? articleListSpacingEm.partopsep : 0),
+        font
+      )
+    );
+  }
+  return size;
+}
+
 function texArticleListVerticalSkipBefore(
   state: SimpleTexParagraphVerticalSkipState,
   previous: SimpleTexListContext | undefined,
@@ -1437,6 +1540,43 @@ function texArticleListVerticalSkipBefore(
     return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth, font);
   }
   return texArticleListItemBoundarySkip(current.depth, font);
+}
+
+function texArticleTrivlistExitBoundarySkip(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousScopes: readonly TexTrivlistScopeRole[],
+  commonPrefixLength: number,
+  font: ResolvedTexFont
+): number {
+  let size = 0;
+  for (let index = previousScopes.length - 1; index >= commonPrefixLength; index -= 1) {
+    const scope = previousScopes[index];
+    if (!scope) {
+      continue;
+    }
+    const usesPartopsep = state.trivlistPartopsepByScope.get(scope) ?? false;
+    state.trivlistPartopsepByScope.delete(scope);
+    const depthSize = texEmSkip(
+      articleListSpacingEm.topsep +
+        (usesPartopsep ? articleListSpacingEm.partopsep : 0),
+      font
+    );
+    size = Math.max(size, depthSize);
+  }
+  return size;
+}
+
+function commonTrivlistScopePrefixLength(
+  previousScopes: readonly TexTrivlistScopeRole[],
+  currentScopes: readonly TexTrivlistScopeRole[]
+): number {
+  const max = Math.min(previousScopes.length, currentScopes.length);
+  for (let index = 0; index < max; index += 1) {
+    if (previousScopes[index] !== currentScopes[index]) {
+      return index;
+    }
+  }
+  return max;
 }
 
 function texArticleInitialListSkip(

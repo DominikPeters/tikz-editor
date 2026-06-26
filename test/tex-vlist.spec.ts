@@ -111,6 +111,94 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("lowers center and flush environments as scoped trivlist paragraphs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{center}Beta\end{center} \par \begin{flushleft}Gamma\end{flushleft} \par \begin{flushright}Delta\end{flushright} \par Epsilon`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "ragged-right",
+      font,
+      options: { width: 120 },
+    });
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      alignmentProfile: plan.alignmentProfile,
+      allowParagraphIndent: plan.breakContext.scopePolicy.allowParagraphIndent,
+    }))).toEqual([
+      {
+        text: "Alpha",
+        alignment: "ragged-right",
+        alignmentProfile: undefined,
+        allowParagraphIndent: true,
+      },
+      {
+        text: "Beta",
+        alignment: "center",
+        alignmentProfile: "latex-declaration",
+        allowParagraphIndent: false,
+      },
+      {
+        text: "Gamma",
+        alignment: "ragged-right",
+        alignmentProfile: "latex-declaration",
+        allowParagraphIndent: false,
+      },
+      {
+        text: "Delta",
+        alignment: "ragged-left",
+        alignmentProfile: "latex-declaration",
+        allowParagraphIndent: false,
+      },
+      {
+        text: "Epsilon",
+        alignment: "ragged-right",
+        alignmentProfile: undefined,
+        allowParagraphIndent: true,
+      },
+    ]);
+    expect(grouped.items.map((item) =>
+      item.kind === "vbox"
+        ? {
+            kind: item.kind,
+            role: item.role,
+            children: item.items.map((child) =>
+              child.kind === "paragraph" ? child.paragraph.text : child.kind
+            ),
+          }
+        : item.kind === "paragraph"
+          ? { kind: item.kind, text: item.paragraph.text }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "vbox",
+        role: { kind: "trivlist", envName: "center", depth: 1, alignment: "center" },
+        children: ["Beta"],
+      },
+      {
+        kind: "vbox",
+        role: { kind: "trivlist", envName: "flushleft", depth: 1, alignment: "ragged-right" },
+        children: ["Gamma"],
+      },
+      {
+        kind: "vbox",
+        role: { kind: "trivlist", envName: "flushright", depth: 1, alignment: "ragged-left" },
+        children: ["Delta"],
+      },
+      { kind: "paragraph", text: "Epsilon" },
+    ]);
+  });
+
   it("parses and lowers display math as source-spanned vlist items", () => {
     const source = String.raw`Alpha \[\sum_i^n\] Beta $$x^2$$ \begin{equation*}y^2\end{equation*} \begin{align*}a&=b\\c&=d\end{align*} \begin{gather*}e=f\\g=h\end{gather*} \begin{multline*}i=j\\k+l=m\\n=o\end{multline*}`;
     const parsed = parseSimpleTexParagraphIr(source);
@@ -1666,6 +1754,115 @@ describe("TeX vlist spacing", () => {
       { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
       { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 4, listSize: 0, size: 4 },
       { blockIndex: 3, vlistPath: [3], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+    ]);
+  });
+
+  it("plans LaTeX trivlist vertical skips for center environments", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{center} Beta \par Gamma \end{center} \par Delta`
+    );
+    const replacementParsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{center} Alpha \end{center} \par \begin{flushleft} Beta \end{flushleft}`
+    );
+    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const replacementVList = lowerSimpleTexBlocksToVList(replacementParsed.blocks);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const skips = planSimpleTexParagraphVerticalSkips(vlist.items, font);
+    const replacementSkips = planSimpleTexParagraphVerticalSkips(replacementVList.items, font);
+    const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
+
+    expect(skips.map((skip) => ({
+      blockIndex: skip.blockIndex,
+      vlistPath: skip.vlistPath,
+      quoteSize: skip.quoteSize,
+      listSize: skip.listSize,
+      trivlistSize: skip.trivlistSize ?? 0,
+      size: skip.size,
+    }))).toEqual([
+      { blockIndex: 0, vlistPath: [0], quoteSize: 0, listSize: 0, trivlistSize: 0, size: 0 },
+      { blockIndex: 1, vlistPath: [1], quoteSize: 0, listSize: 0, trivlistSize: 10, size: 10 },
+      { blockIndex: 2, vlistPath: [2], quoteSize: 0, listSize: 0, trivlistSize: 0, size: 0 },
+      { blockIndex: 3, vlistPath: [3], quoteSize: 0, listSize: 0, trivlistSize: 10, size: 10 },
+    ]);
+    expect(replacementSkips.map((skip) => ({
+      blockIndex: skip.blockIndex,
+      trivlistSize: skip.trivlistSize ?? 0,
+      size: skip.size,
+    }))).toEqual([
+      { blockIndex: 0, trivlistSize: 10, size: 10 },
+      { blockIndex: 1, trivlistSize: 10, size: 10 },
+    ]);
+    expect(materialized.items.map((item) =>
+      item.kind === "glue"
+        ? {
+            kind: item.kind,
+            size: item.size,
+            origin: item.origin,
+            scopeKinds: item.scopePath?.map((role) => role.kind),
+          }
+        : item.kind === "paragraph"
+          ? { kind: item.kind, text: item.paragraph.text }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "glue",
+        size: 10,
+        origin: {
+          kind: "trivlist-boundary",
+          beforeBlockIndex: 1,
+        },
+        scopeKinds: ["trivlist"],
+      },
+      { kind: "paragraph", text: "Beta" },
+      { kind: "paragraph", text: "Gamma" },
+      {
+        kind: "glue",
+        size: 10,
+        origin: {
+          kind: "trivlist-boundary",
+          beforeBlockIndex: 3,
+        },
+        scopeKinds: undefined,
+      },
+      { kind: "paragraph", text: "Delta" },
+    ]);
+  });
+
+  it("keeps named skip commands inside centered trivlist scopes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\smallskip Alpha \par \medskip Beta \par \bigskip Gamma\end{center}`
+    );
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlockItemsToVList(parsed.items),
+      computerModernTexMetricProvider.resolveFont()
+    );
+    const center = grouped.items[0];
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(center).toMatchObject({
+      kind: "vbox",
+      role: { kind: "trivlist", envName: "center", alignment: "center" },
+    });
+    expect(center?.kind === "vbox" ? center.items.map((item) =>
+      item.kind === "glue"
+        ? {
+            kind: item.kind,
+            command: item.origin?.kind === "explicit-command"
+              ? item.origin.command
+              : undefined,
+            size: item.size,
+          }
+        : item.kind === "paragraph"
+          ? { kind: item.kind, text: item.paragraph.text }
+          : { kind: item.kind }
+    ) : []).toEqual([
+      { kind: "glue", command: "smallskip", size: 3 },
+      { kind: "paragraph", text: "Alpha" },
+      { kind: "glue", command: "medskip", size: 6 },
+      { kind: "paragraph", text: "Beta" },
+      { kind: "glue", command: "bigskip", size: 12 },
+      { kind: "paragraph", text: "Gamma" },
     ]);
   });
 

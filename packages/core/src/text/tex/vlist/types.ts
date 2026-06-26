@@ -2,6 +2,7 @@ import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.j
 import type {
   SimpleTexListKind,
   SimpleTexListContext,
+  SimpleTexTrivlistEnvironmentName,
   SimpleTexFontState,
   SimpleTexBoxCommandName,
   SimpleTexDisplayMathDelimiter,
@@ -49,8 +50,12 @@ export type TexGlueOrigin =
       readonly beforeBlockIndex: number;
     }
   | {
+      readonly kind: "trivlist-boundary";
+      readonly beforeBlockIndex: number;
+    }
+  | {
       readonly kind: "paragraph-boundary-interline";
-      readonly boundary: "plain" | "quote" | "list";
+      readonly boundary: "plain" | "quote" | "list" | "trivlist";
     }
   | {
       readonly kind: "display-math-boundary";
@@ -141,6 +146,7 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly tikzTextWidthNode?: boolean;
   readonly sourceHitPolicy?: "caret" | "source-range";
   readonly listContext?: SimpleTexListContext;
+  readonly scopePath?: readonly TexVBoxRole[];
   readonly ignoreAncestorBreakMargins?: boolean;
   readonly useScopedLineWidth?: boolean;
   readonly overfullSingleLineFallback?: boolean;
@@ -181,6 +187,12 @@ export interface TexHBoxItem {
 
 export type TexVBoxRole =
   | { readonly kind: "quote"; readonly depth: number }
+  | {
+      readonly kind: "trivlist";
+      readonly envName: SimpleTexTrivlistEnvironmentName;
+      readonly depth: number;
+      readonly alignment: TexParagraphAlignment;
+    }
   | {
       readonly kind: "list";
       readonly listKind: SimpleTexListKind;
@@ -246,6 +258,7 @@ export interface TexVBoxListItemLayout {
 export interface TexVBoxParagraphPolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
   readonly resetAlignment?: TexParagraphAlignment;
+  readonly resetAlignmentProfile?: TexAlignmentProfile;
   readonly resetAlignmentSource?: "restored-current";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
   readonly preserveSpaceGlueProfile?: boolean;

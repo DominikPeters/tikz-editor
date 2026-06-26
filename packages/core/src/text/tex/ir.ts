@@ -31,8 +31,10 @@ export type SimpleTexFontDeclarationName =
   | "scshape"
   | "normalfont";
 export type SimpleTexQuoteEnvironmentName = "quote" | "quotation";
+export type SimpleTexTrivlistEnvironmentName = "center" | "flushleft" | "flushright";
 export type SimpleTexEnvironmentName =
   | SimpleTexQuoteEnvironmentName
+  | SimpleTexTrivlistEnvironmentName
   | "itemize"
   | "enumerate"
   | "description";
@@ -46,6 +48,30 @@ export type SimpleTexVerticalGlueCommandName =
   | "vfill";
 export type SimpleTexBoxCommandName = "parbox" | "minipage";
 export type SimpleTexBoxAlignment = "top" | "center" | "bottom";
+
+export type SimpleTexScopePathRole =
+  | { readonly kind: "quote"; readonly depth: number }
+  | {
+      readonly kind: "trivlist";
+      readonly envName: SimpleTexTrivlistEnvironmentName;
+      readonly depth: number;
+      readonly alignment: TexParagraphAlignment;
+    }
+  | {
+      readonly kind: "list";
+      readonly listKind: SimpleTexListKind;
+      readonly depth: number;
+      readonly labelDepth: number;
+      readonly ownLeftMarginEm: number;
+      readonly totalLeftMarginEm: number;
+    }
+  | {
+      readonly kind: "list-item";
+      readonly listKind: SimpleTexListKind;
+      readonly depth: number;
+      readonly labelDepth: number;
+      readonly itemIndex: number;
+    };
 
 export interface SimpleTexFontState {
   readonly family: TexFontFamily;
@@ -257,6 +283,7 @@ export interface SimpleTexParagraphBlock {
   readonly quoteDepth: number;
   readonly quotationDepth: number;
   readonly listContext?: SimpleTexListContext;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexParagraphBlockItem {
@@ -276,6 +303,7 @@ export interface SimpleTexVerticalGlueBlockItem extends SimpleTexSourceRange {
   readonly shrinkOrder?: "normal" | "fil" | "fill" | "filll";
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexVerticalRuleBlockItem extends SimpleTexSourceRange {
@@ -286,6 +314,7 @@ export interface SimpleTexVerticalRuleBlockItem extends SimpleTexSourceRange {
   readonly depth: number;
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexPenaltyBlockItem extends SimpleTexSourceRange {
@@ -294,6 +323,7 @@ export interface SimpleTexPenaltyBlockItem extends SimpleTexSourceRange {
   readonly penalty: number;
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
@@ -302,6 +332,7 @@ export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
   readonly reason: string;
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange {
@@ -313,6 +344,7 @@ export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange {
   readonly contentEnd: number;
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
@@ -326,6 +358,7 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   readonly contentEnd: number;
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
   readonly items: readonly SimpleTexBlockItem[];
 }
 
@@ -391,6 +424,7 @@ export interface SimpleTexSegmentInput {
   readonly quotationItemFirstParagraph?: boolean;
   readonly quoteDepth: number;
   readonly quotationDepth?: number;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
 export interface SimpleTexParagraphBlockScanResult {
@@ -1582,6 +1616,7 @@ function scanSimpleTexEnvironmentBoundary(
     const name = text.slice(nameStart, nameEnd);
     if (
       isSimpleTexQuoteEnvironmentName(name) ||
+      isSimpleTexTrivlistEnvironmentName(name) ||
       name === "itemize" ||
       name === "enumerate" ||
       name === "description"
@@ -1598,6 +1633,28 @@ function scanSimpleTexEnvironmentBoundary(
 
 function isSimpleTexQuoteEnvironmentName(name: string): name is SimpleTexQuoteEnvironmentName {
   return name === "quote" || name === "quotation";
+}
+
+function isSimpleTexTrivlistEnvironmentName(
+  name: string
+): name is SimpleTexTrivlistEnvironmentName {
+  return name === "center" || name === "flushleft" || name === "flushright";
+}
+
+function isSimpleTexListEnvironmentName(name: string): name is SimpleTexListKind {
+  return name === "itemize" || name === "enumerate" || name === "description";
+}
+
+function simpleTexTrivlistAlignment(
+  name: SimpleTexTrivlistEnvironmentName
+): TexParagraphAlignment {
+  if (name === "flushright") {
+    return "ragged-left";
+  }
+  if (name === "flushleft") {
+    return "ragged-right";
+  }
+  return "center";
 }
 
 function scanSimpleTexItemCommand(
@@ -2035,9 +2092,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
     itemIndex: number;
     readonly ownLeftMarginEm: number;
     readonly totalLeftMarginEm: number;
+    readonly scopeRole: Extract<SimpleTexScopePathRole, { readonly kind: "list" }>;
+  }
+  interface ActiveSimpleTexEnvironment {
+    readonly name: SimpleTexEnvironmentName;
+    readonly scopeRole: Exclude<SimpleTexScopePathRole, { readonly kind: "list-item" }>;
   }
   const listStack: ActiveSimpleTexList[] = [];
-  const environmentStack: SimpleTexEnvironmentName[] = [];
+  const environmentStack: ActiveSimpleTexEnvironment[] = [];
+  const scopeStack: Exclude<SimpleTexScopePathRole, { readonly kind: "list-item" }>[] = [];
   let pendingListLabel: SimpleTexListLabel | undefined;
   let pendingListShowLabel = false;
 
@@ -2114,6 +2177,35 @@ function buildSimpleTexParagraphBlocksFromNodes(
     };
   };
 
+  const currentSimpleTexScopePath = (): readonly SimpleTexScopePathRole[] | undefined => {
+    if (scopeStack.length === 0) {
+      return undefined;
+    }
+    const activeList = listStack.at(-1);
+    const path: SimpleTexScopePathRole[] = [];
+    for (const role of scopeStack) {
+      if (role.kind !== "list") {
+        path.push(role);
+        continue;
+      }
+      if (activeList?.scopeRole !== role) {
+        continue;
+      }
+      path.push(role);
+      if (activeList.itemIndex <= 0) {
+        continue;
+      }
+      path.push({
+        kind: "list-item",
+        listKind: activeList.kind,
+        depth: activeList.depth,
+        labelDepth: activeList.labelDepth,
+        itemIndex: activeList.itemIndex,
+      });
+    }
+    return path;
+  };
+
   const pushBlock = (
     rawStart: number,
     rawEnd: number,
@@ -2147,6 +2239,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
+      const scopePath = currentSimpleTexScopePath();
       const block: SimpleTexParagraphBlock = {
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
@@ -2163,6 +2256,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         quoteDepth,
         quotationDepth,
         listContext,
+        ...(scopePath ? { scopePath } : {}),
       };
       blocks.push(block);
       items.push({
@@ -2202,14 +2296,62 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const ownMargin = articleListLeftMarginEmByDepth[
       Math.min(depth - 1, articleListLeftMarginEmByDepth.length - 1)
     ] ?? 1;
+    const scopeRole = {
+      kind: "list",
+      listKind: kind,
+      depth,
+      labelDepth,
+      ownLeftMarginEm: ownMargin,
+      totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
+    } as const;
     listStack.push({
       kind,
       depth,
       labelDepth,
       itemIndex: 0,
       ownLeftMarginEm: ownMargin,
-      totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
+      totalLeftMarginEm: scopeRole.totalLeftMarginEm,
+      scopeRole,
     });
+    return scopeRole;
+  };
+
+  const beginQuote = (
+    name: SimpleTexQuoteEnvironmentName
+  ): Extract<SimpleTexScopePathRole, { readonly kind: "quote" }> => {
+    currentQuoteDepth += 1;
+    if (name === "quotation") {
+      currentQuotationDepth += 1;
+      quotationItemLabelPendingStack.push(true);
+    } else {
+      currentNonQuotationQuoteDepth += 1;
+    }
+    return {
+      kind: "quote",
+      depth: currentQuoteDepth,
+    };
+  };
+
+  const endQuote = (name: SimpleTexQuoteEnvironmentName) => {
+    currentQuoteDepth -= 1;
+    if (name === "quotation") {
+      currentQuotationDepth -= 1;
+      quotationItemLabelPendingStack.pop();
+    } else {
+      currentNonQuotationQuoteDepth -= 1;
+    }
+  };
+
+  const beginTrivlist = (
+    name: SimpleTexTrivlistEnvironmentName
+  ): Extract<SimpleTexScopePathRole, { readonly kind: "trivlist" }> => {
+    const depth = scopeStack.filter((role) => role.kind === "trivlist").length + 1;
+    return {
+      kind: "trivlist",
+      envName: name,
+      depth,
+      alignment: simpleTexTrivlistAlignment(name),
+    };
   };
 
   let prefix = consumeParagraphPrefix(0);
@@ -2223,7 +2365,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let index = prefix.start;
 
   const environmentSuppressesParagraphIndent = (): boolean =>
-    currentNonQuotationQuoteDepth > 0 || listStack.length > 0;
+    currentNonQuotationQuoteDepth > 0 ||
+    listStack.length > 0 ||
+    scopeStack.some((role) => role.kind === "trivlist");
 
   const quotationFirstLineIndentEm = (
     noIndent: boolean
@@ -2258,6 +2402,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceEnd: node.sourceEnd,
         quoteDepth: currentQuoteDepth,
         listScope: currentSimpleTexListScope(),
+        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
       });
       unsupportedCommand = true;
       prefix = consumeParagraphPrefix(index + 1);
@@ -2292,6 +2437,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceEnd: node.sourceEnd,
         quoteDepth: currentQuoteDepth,
         listScope: currentSimpleTexListScope(),
+        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2333,42 +2479,48 @@ function buildSimpleTexParagraphBlocksFromNodes(
         break;
       }
       if (node.boundary === "begin") {
-        environmentStack.push(node.name);
+        let scopeRole: ActiveSimpleTexEnvironment["scopeRole"];
         if (isSimpleTexQuoteEnvironmentName(node.name)) {
-          currentQuoteDepth += 1;
-          if (node.name === "quotation") {
-            currentQuotationDepth += 1;
-            quotationItemLabelPendingStack.push(true);
-          } else {
-            currentNonQuotationQuoteDepth += 1;
-          }
+          scopeRole = beginQuote(node.name);
+        } else if (isSimpleTexTrivlistEnvironmentName(node.name)) {
+          scopeRole = beginTrivlist(node.name);
+        } else if (isSimpleTexListEnvironmentName(node.name)) {
+          scopeRole = beginList(node.name);
         } else {
-          beginList(node.name);
+          unsupportedCommand = true;
+          abortScan = true;
+          break;
         }
+        environmentStack.push({ name: node.name, scopeRole });
+        scopeStack.push(scopeRole);
       } else {
-        const openName = environmentStack.pop();
-        if (openName !== node.name) {
+        const openEnvironment = environmentStack.pop();
+        if (openEnvironment?.name !== node.name) {
+          unsupportedCommand = true;
+          abortScan = true;
+          break;
+        }
+        const openScope = scopeStack.pop();
+        if (openScope !== openEnvironment.scopeRole) {
           unsupportedCommand = true;
           abortScan = true;
           break;
         }
         if (isSimpleTexQuoteEnvironmentName(node.name)) {
-          currentQuoteDepth -= 1;
-          if (node.name === "quotation") {
-            currentQuotationDepth -= 1;
-            quotationItemLabelPendingStack.pop();
-          } else {
-            currentNonQuotationQuoteDepth -= 1;
-          }
+          endQuote(node.name);
           if (currentQuoteDepth < 0) {
             unsupportedCommand = true;
             abortScan = true;
             break;
           }
-        } else {
+        } else if (isSimpleTexListEnvironmentName(node.name)) {
           listStack.pop();
           pendingListLabel = undefined;
           pendingListShowLabel = false;
+        } else if (!isSimpleTexTrivlistEnvironmentName(node.name)) {
+          unsupportedCommand = true;
+          abortScan = true;
+          break;
         }
       }
       prefix = consumeParagraphPrefix(index + 1);
@@ -2433,6 +2585,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         shrinkOrder: node.shrinkOrder,
         quoteDepth: currentQuoteDepth,
         listScope: currentSimpleTexListScope(),
+        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2457,6 +2610,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         depth: node.depth,
         quoteDepth: currentQuoteDepth,
         listScope: currentSimpleTexListScope(),
+        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2479,6 +2633,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         penalty: node.penalty,
         quoteDepth: currentQuoteDepth,
         listScope: currentSimpleTexListScope(),
+        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
       });
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -2508,6 +2663,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         contentEnd: node.contentEnd,
         quoteDepth: currentQuoteDepth,
         listScope: currentSimpleTexListScope(),
+        ...(currentSimpleTexScopePath() ? { scopePath: currentSimpleTexScopePath() } : {}),
         items: body.items,
       });
       unsupportedCommand ||= node.body.unsupportedCommand;
@@ -2527,7 +2683,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
     index += 1;
   }
   if (!abortScan) {
-    if (currentQuoteDepth !== 0 || listStack.length !== 0 || environmentStack.length !== 0) {
+    if (
+      currentQuoteDepth !== 0 ||
+      listStack.length !== 0 ||
+      environmentStack.length !== 0 ||
+      scopeStack.length !== 0
+    ) {
       unsupportedCommand = true;
       abortScan = true;
     }

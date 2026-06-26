@@ -5,6 +5,7 @@ import type {
   SimpleTexParagraphBlock,
   SimpleTexPenaltyBlockItem,
   SimpleTexPlaceholderBlockItem,
+  SimpleTexScopePathRole,
   SimpleTexVerticalGlueBlockItem,
   SimpleTexVerticalRuleBlockItem,
 } from "../ir.js";
@@ -429,8 +430,31 @@ function scopePathForVerticalBlockItem(
     | SimpleTexBoxBlockItem
     | SimpleTexPlaceholderBlockItem
 ): readonly TexVBoxRole[] | undefined {
+  if (item.scopePath) {
+    return texVBoxRolePathFromSimpleTexScopePath(item.scopePath);
+  }
   const path = texVBoxRolePathForScope(item);
   return path.length > 0 ? path : undefined;
+}
+
+function texVBoxRolePathFromSimpleTexScopePath(
+  scopePath: readonly SimpleTexScopePathRole[]
+): readonly TexVBoxRole[] | undefined {
+  if (scopePath.length === 0) {
+    return undefined;
+  }
+  return scopePath.map((role): TexVBoxRole => {
+    if (role.kind === "quote") {
+      return role;
+    }
+    if (role.kind === "trivlist") {
+      return role;
+    }
+    if (role.kind === "list-item") {
+      return role;
+    }
+    return role;
+  });
 }
 
 function sourceSpanFromBlock(block: SimpleTexParagraphBlock): TexSourceSpan {
@@ -468,6 +492,9 @@ function paragraphInputFromSimpleTexBlock(
     quoteDepth: block.quoteDepth,
     quotationDepth: block.quotationDepth,
     listContext: block.listContext,
+    ...(block.scopePath
+      ? { scopePath: texVBoxRolePathFromSimpleTexScopePath(block.scopePath) }
+      : {}),
   };
 }
 

@@ -49,6 +49,20 @@ export function texVBoxLayoutForScopeRole(
     };
   }
 
+  if (role.kind === "trivlist") {
+    return {
+      leftMarginWidth: 0,
+      rightMarginWidth: 0,
+      paragraphPolicy: {
+        resetInheritedAlignment: true,
+        resetAlignment: role.alignment,
+        resetAlignmentProfile: "latex-declaration",
+        allowParagraphIndent: false,
+        allowForcedBreakIndent: false,
+      },
+    };
+  }
+
   const leftMarginWidth = role.totalLeftMarginEm * font.atPt;
   return {
     leftMarginWidth,
@@ -68,10 +82,16 @@ export function texVBoxLayoutForScopeRole(
 export function texVBoxScopePathForParagraph(
   paragraph: TexParagraphInput
 ): readonly TexVBoxScope[] {
+  return texVBoxRolePathForParagraph(paragraph).map(texVBoxScopeForRole);
+}
+
+function texVBoxFallbackRolePathForParagraph(
+  paragraph: TexParagraphInput
+): readonly TexVBoxRole[] {
   return texVBoxRolePathForScope({
     quoteDepth: paragraph.quoteDepth,
     listScope: paragraph.listContext,
-  }).map(texVBoxScopeForRole);
+  });
 }
 
 export function texVBoxRolePathForScope(
@@ -113,10 +133,7 @@ export function texVBoxScopePathForScope(
 export function texVBoxRolePathForParagraph(
   paragraph: TexParagraphInput
 ): readonly TexVBoxRole[] {
-  return texVBoxRolePathForScope({
-    quoteDepth: paragraph.quoteDepth,
-    listScope: paragraph.listContext,
-  });
+  return paragraph.scopePath ?? texVBoxFallbackRolePathForParagraph(paragraph);
 }
 
 export function texVBoxScopeForRole(role: TexVBoxRole): TexVBoxScope {
@@ -129,6 +146,14 @@ export function texVBoxScopeForRole(role: TexVBoxRole): TexVBoxScope {
 export function texVBoxScopeKeyForRole(role: TexVBoxRole): string {
   if (role.kind === "quote") {
     return `quote:${role.depth}`;
+  }
+  if (role.kind === "trivlist") {
+    return [
+      "trivlist",
+      role.envName,
+      role.depth,
+      role.alignment,
+    ].join(":");
   }
   if (role.kind === "list-item") {
     return [

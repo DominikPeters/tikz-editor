@@ -4379,6 +4379,42 @@ describe("simple TeX paragraph layout", () => {
     expect(raggedRight.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
   });
 
+  it("honors scoped center and flush environments without leaking alignment", () => {
+    const scopedCenter = layoutSimpleTexParagraph(
+      String.raw`Alpha \par \begin{center} Beta \end{center} \par Delta`,
+      {
+        paragraphId: "tex:center-environment-scope",
+        width: 120,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+    const flushLeft = layoutSimpleTexParagraph(String.raw`\begin{flushleft}Alpha Beta\end{flushleft}`, {
+      paragraphId: "tex:flushleft-environment",
+      width: 120,
+      alignment: "center",
+      hyphenator: { hyphenate: () => [] },
+    });
+    const flushRight = layoutSimpleTexParagraph(String.raw`\begin{flushright}Alpha Beta\end{flushright}`, {
+      paragraphId: "tex:flushright-environment",
+      width: 120,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(scopedCenter.supported).toBe(true);
+    expect(lineTexts(scopedCenter.report)).toEqual(["Alpha", "Beta", "Delta"]);
+    expect(scopedCenter.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
+    expect(scopedCenter.report?.lines[1]?.xStart).toBeGreaterThan(0);
+    expect(scopedCenter.report?.lines[1]?.xEnd).toBeLessThan(120);
+    expect(scopedCenter.report?.lines[2]?.xStart).toBeCloseTo(0, 6);
+
+    expect(flushLeft.supported).toBe(true);
+    expect(flushLeft.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
+    expect(flushRight.supported).toBe(true);
+    expect(flushRight.report?.lines[0]?.xEnd).toBeCloseTo(120, 5);
+  });
+
   it("allows paragraph alignment declarations after TeX paragraph boundaries", () => {
     const result = layoutSimpleTexParagraph(String.raw`Alpha Beta \par \centering Gamma Delta`, {
       paragraphId: "tex:paragraph-centering",

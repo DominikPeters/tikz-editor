@@ -56,7 +56,7 @@ export class TexParagraphLayoutState {
       ? resetAlignment
       : this.activeAlignment;
     const inheritedAlignmentProfile = params.scopePolicy.resetInheritedAlignment
-      ? undefined
+      ? params.scopePolicy.resetAlignmentProfile
       : this.activeAlignmentProfile;
     const blockAlignment = texHonoredBlockAlignment(
       params.paragraph,

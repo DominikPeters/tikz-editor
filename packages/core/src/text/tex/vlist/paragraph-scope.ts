@@ -11,6 +11,7 @@ import type {
 export interface TexParagraphScopePolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
   readonly resetAlignment?: TexParagraphAlignment;
+  readonly resetAlignmentProfile?: TexAlignmentProfile;
   readonly resetAlignmentSource?: "restored-current";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
   readonly preserveSpaceGlueProfile?: boolean;
@@ -91,6 +92,7 @@ function texParagraphScopePolicy(
     preserveRaggedRight?: boolean;
     raggedRightProfile?: TexAlignmentProfile;
     resetAlignment?: TexParagraphAlignment;
+    resetAlignmentProfile?: TexAlignmentProfile;
     resetAlignmentSource?: "restored-current";
     resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
     preserveSpaceGlueProfile?: boolean;
@@ -113,6 +115,9 @@ function texParagraphScopePolicy(
     }
     if (paragraphPolicy.resetAlignment) {
       policy.resetAlignment = paragraphPolicy.resetAlignment;
+    }
+    if (paragraphPolicy.resetAlignmentProfile) {
+      policy.resetAlignmentProfile = paragraphPolicy.resetAlignmentProfile;
     }
     if (paragraphPolicy.resetAlignmentSource) {
       policy.resetAlignmentSource = paragraphPolicy.resetAlignmentSource;

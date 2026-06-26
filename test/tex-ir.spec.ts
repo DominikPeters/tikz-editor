@@ -455,6 +455,86 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
+  it("records LaTeX trivlist alignment environments as scoped paragraphs", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{center} Beta \par Gamma \end{center} \par Delta`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "center" }),
+        expect.objectContaining({ boundary: "end", name: "center" }),
+      ]);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      noIndent: block.noIndent,
+      alignment: block.alignment,
+      alignmentProfile: block.alignmentProfile,
+      scopePath: block.scopePath?.map((role) =>
+        role.kind === "trivlist"
+          ? {
+              kind: role.kind,
+              envName: role.envName,
+              depth: role.depth,
+              alignment: role.alignment,
+            }
+          : { kind: role.kind }
+      ),
+    }))).toEqual([
+      {
+        text: "Alpha",
+        noIndent: false,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: undefined,
+      },
+      {
+        text: "Beta",
+        noIndent: true,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: [{ kind: "trivlist", envName: "center", depth: 1, alignment: "center" }],
+      },
+      {
+        text: "Gamma",
+        noIndent: true,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: [{ kind: "trivlist", envName: "center", depth: 1, alignment: "center" }],
+      },
+      {
+        text: "Delta",
+        noIndent: false,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: undefined,
+      },
+    ]);
+  });
+
+  it("keeps list-item and trivlist scope order from source nesting", () => {
+    const listInsideCenter = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\begin{itemize}\item Alpha\end{itemize}\end{center}`
+    );
+    const centerInsideList = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item \begin{flushright}Alpha\end{flushright}\end{itemize}`
+    );
+
+    expect(listInsideCenter.unsupportedCommand).toBe(false);
+    expect(centerInsideList.unsupportedCommand).toBe(false);
+    expect(listInsideCenter.blocks[0]?.scopePath?.map((role) => role.kind)).toEqual([
+      "trivlist",
+      "list",
+      "list-item",
+    ]);
+    expect(centerInsideList.blocks[0]?.scopePath?.map((role) => role.kind)).toEqual([
+      "list",
+      "list-item",
+      "trivlist",
+    ]);
+  });
+
   it("records nested inline font commands in source IR", () => {
     const ir = parseSimpleTexParagraphIr(
       String.raw`Alpha \textbf{Beta \textit{Gamma}} \textsf{\textsc{Delta}}`
