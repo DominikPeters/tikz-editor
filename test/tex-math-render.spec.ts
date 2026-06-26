@@ -205,7 +205,7 @@ describe("TeX math SVG rendering", () => {
 
   it("reports incomplete 2-D caret coverage instead of interpolating unknown math geometry", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
-    const source = String.raw`$\sqrt{x}$`;
+    const source = String.raw`$\left( x \right)$`;
     const box = provider.getInlineMathBox({
       source,
       content: source.slice(1, -1),
@@ -221,16 +221,48 @@ describe("TeX math SVG rendering", () => {
     );
     expect(diagnostic).toMatchObject({
       sourceSpan: {
-        start: source.indexOf("s"),
-        end: source.indexOf("{") + 1,
+        start: source.indexOf("l"),
+        end: source.indexOf("("),
       },
     });
 
-    const commandStart = source.indexOf(String.raw`\sqrt`);
-    const commandInterior = source.indexOf("s");
-    const radicandStart = source.indexOf("x");
+    const commandStart = source.indexOf(String.raw`\left`);
+    const commandInterior = source.indexOf("l");
+    const bodyStart = source.indexOf("x");
     expect(box?.caretStops?.[commandInterior]).toBeCloseTo(box?.caretStops?.[commandStart] ?? -1, 6);
-    expect(box?.caretStops?.[radicandStart]).toBeGreaterThan(box?.caretStops?.[commandInterior] ?? 0);
+    expect(box?.caretStops?.[bodyStart]).toBeGreaterThan(box?.caretStops?.[commandInterior] ?? 0);
+  });
+
+  it("generates complete 2-D caret coverage for enclosure construct commands", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    for (const source of [
+      String.raw`$\sqrt{x}$`,
+      String.raw`$\overline{x}$`,
+      String.raw`$\underline{x}$`,
+      String.raw`$\boxed{x}$`,
+    ]) {
+      const box = provider.getInlineMathBox({
+        source,
+        content: source.slice(1, -1),
+        delimiter: "dollar",
+        sourceStart: 0,
+        sourceEnd: source.length,
+        contentStart: 1,
+        contentEnd: source.length - 1,
+      });
+
+      expect(box?.caretMap?.diagnostics, source).toBeUndefined();
+      const commandStart = source.indexOf("\\");
+      const bodyStart = source.indexOf("x");
+      const commandEntry = box?.caretMap?.entries.find((entry) =>
+        entry.sourceOffset === commandStart + 1 &&
+        entry.kind === "command"
+      );
+      expect(commandEntry, source).toBeTruthy();
+      expect(box?.caretStops?.[bodyStart], source).toBeGreaterThanOrEqual(
+        box?.caretStops?.[commandStart] ?? 0
+      );
+    }
   });
 
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {

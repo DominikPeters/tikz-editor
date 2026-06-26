@@ -497,6 +497,7 @@ function addMathItemCaretMapEntries(
   originY: number,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
+  addEnclosureConstructCaretMapEntries(items, originX, originY, addEntry);
   addFractionCaretMapEntries(items, originX, originY, addEntry);
   for (const item of items) {
     const x = roundTexPt(originX + item.x);
@@ -586,6 +587,126 @@ function addMathItemCaretMapEntries(
       addEntry,
     });
   }
+}
+
+function addEnclosureConstructCaretMapEntries(
+  items: readonly TexMathHListItem[],
+  originX: number,
+  originY: number,
+  addEntry: (entry: TexMathCaretEntry) => void
+): void {
+  const added = new Set<string>();
+  for (const item of items) {
+    if (item.kind !== "rule" || !mathEnclosureRuleRoles.has(item.role)) {
+      continue;
+    }
+    const body = enclosureConstructBody(items, item);
+    if (!body) {
+      continue;
+    }
+    const commandEnd = body.sourceSpan.start;
+    if (commandEnd <= item.sourceSpan.start) {
+      continue;
+    }
+    const key = `${item.sourceSpan.start}:${commandEnd}`;
+    if (added.has(key)) {
+      continue;
+    }
+    added.add(key);
+    const constructBounds = enclosureConstructHitBounds(items, item, body, originX, originY);
+    const y = originY;
+    addLinearMathCaretMapEntries({
+      sourceStart: item.sourceSpan.start,
+      sourceEnd: commandEnd,
+      xStart: constructBounds.xStart,
+      xEnd: roundTexPt(originX + body.x),
+      y,
+      height: Math.max(0, y - constructBounds.yStart),
+      depth: Math.max(0, constructBounds.yEnd - y),
+      hitBounds: constructBounds,
+      kind: "command",
+      sourceSpan: {
+        start: item.sourceSpan.start,
+        end: commandEnd,
+      },
+      priority: 45,
+      addEntry,
+    });
+  }
+}
+
+const mathEnclosureRuleRoles: ReadonlySet<Extract<TexMathHListItem, { readonly kind: "rule" }>["role"]> = new Set([
+  "radical-rule",
+  "overline-rule",
+  "underline-rule",
+  "boxed-rule",
+]);
+
+function enclosureConstructBody(
+  items: readonly TexMathHListItem[],
+  rule: Extract<TexMathHListItem, { readonly kind: "rule" }>
+): TexMathChildHListLayoutItem | null {
+  const candidates = items.filter((item): item is TexMathChildHListLayoutItem =>
+    item.kind === "hlist" &&
+    item.sourceSpan.start > rule.sourceSpan.start &&
+    item.sourceSpan.end > item.sourceSpan.start
+  );
+  if (rule.role === "boxed-rule") {
+    return candidates.find((item) => item.role === "boxed-body") ?? null;
+  }
+  return candidates.find((item) =>
+    item.role === "nucleus" &&
+    rangesOverlapOrTouch(item.sourceSpan.start, item.sourceSpan.end, rule.sourceSpan.start, rule.sourceSpan.end + 1)
+  ) ?? null;
+}
+
+function rangesOverlapOrTouch(
+  leftStart: number,
+  leftEnd: number,
+  rightStart: number,
+  rightEnd: number
+): boolean {
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function enclosureConstructHitBounds(
+  items: readonly TexMathHListItem[],
+  rule: Extract<TexMathHListItem, { readonly kind: "rule" }>,
+  body: TexMathChildHListLayoutItem,
+  originX: number,
+  originY: number
+): TexMathCaretEntry["hitBounds"] {
+  const bounds: TexMathCaretEntry["hitBounds"][] = [];
+  for (const item of items) {
+    if (
+      item === body ||
+      (
+        item.sourceSpan.start === rule.sourceSpan.start &&
+        item.sourceSpan.end === rule.sourceSpan.end
+      )
+    ) {
+      bounds.push(mathItemCaretHitBounds(item, originX, originY));
+    }
+  }
+  if (bounds.length === 0) {
+    return mathItemCaretHitBounds(body, originX, originY);
+  }
+  return unionCaretHitBounds(...bounds);
+}
+
+function mathItemCaretHitBounds(
+  item: TexMathHListItem,
+  originX: number,
+  originY: number
+): TexMathCaretEntry["hitBounds"] {
+  const x = originX + item.x;
+  if (item.kind === "rule") {
+    return ruleCaretHitBounds(x, originY + item.y, item.width, item.height);
+  }
+  if (item.kind === "hlist" || item.kind === "glyph") {
+    return boxCaretHitBounds(x, originY + item.y, item.width, item.height, item.depth);
+  }
+  return boxCaretHitBounds(x, originY, item.width, 0, 0);
 }
 
 function addFractionCaretMapEntries(
