@@ -7,6 +7,7 @@ import {
   parseTexMath,
   renderTexMathHListSvgBody,
   resolveDefaultTexMathFontProfileForList,
+  type TexMathCaretEntry,
   type TexMathCaretMap,
   type TexMathHListItem,
 } from "../packages/core/src/text/tex/index.js";
@@ -87,6 +88,17 @@ function findGlyphX(
   return null;
 }
 
+function findCaretEntry(
+  entries: readonly TexMathCaretEntry[] | undefined,
+  sourceOffset: number,
+  kind: TexMathCaretEntry["kind"]
+): TexMathCaretEntry | null {
+  return entries?.find((entry) =>
+    entry.sourceOffset === sourceOffset &&
+    entry.kind === kind
+  ) ?? null;
+}
+
 describe("TeX math SVG rendering", () => {
   it("defines canonical 2-D caret map entries for TeX-derived math", () => {
     const caretMap = {
@@ -134,6 +146,60 @@ describe("TeX math SVG rendering", () => {
       kind: "glyph-boundary",
     });
     expect(caretMap.diagnostics?.[0]?.code).toBe("unsupported-math-caret-geometry");
+  });
+
+  it("generates 2-D caret map entries for script layout", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`$x^2$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content: source.slice(1, -1),
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box?.caretMap).toMatchObject({
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+    const base = findCaretEntry(box?.caretMap?.entries, source.indexOf("x"), "glyph-boundary");
+    const superscript = findCaretEntry(box?.caretMap?.entries, source.indexOf("2"), "glyph-boundary");
+    expect(base).toBeTruthy();
+    expect(superscript).toBeTruthy();
+    expect(base?.y).toBeCloseTo(0, 6);
+    expect(superscript?.y).toBeLessThan(base?.y ?? 0);
+    expect(superscript?.hitBounds.yEnd).toBeLessThanOrEqual(base?.hitBounds.yEnd ?? 0);
+  });
+
+  it("generates distinct 2-D caret map entries for fraction numerator and denominator", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`$\frac{1}{2}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content: source.slice(1, -1),
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    const numerator = findCaretEntry(box?.caretMap?.entries, source.indexOf("1"), "glyph-boundary");
+    const denominator = findCaretEntry(box?.caretMap?.entries, source.indexOf("2"), "glyph-boundary");
+    const transition = findCaretEntry(box?.caretMap?.entries, source.indexOf("}{") + 1, "group-boundary");
+    expect(numerator).toBeTruthy();
+    expect(denominator).toBeTruthy();
+    expect(transition).toBeTruthy();
+    expect(numerator?.y).toBeLessThan(0);
+    expect(denominator?.y).toBeGreaterThan(0);
+    expect(transition?.y).toBeCloseTo(0, 6);
+    expect(numerator?.hitBounds.yEnd).toBeLessThan(transition?.hitBounds.yEnd ?? 0);
+    expect(denominator?.hitBounds.yStart).toBeGreaterThan(transition?.hitBounds.yStart ?? 0);
   });
 
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {

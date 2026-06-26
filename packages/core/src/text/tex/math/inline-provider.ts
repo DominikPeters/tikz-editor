@@ -3,6 +3,8 @@ import type {
   TexMathDisplayAlignmentIntertext,
   TexMathBox,
   TexMathBreakpoint,
+  TexMathCaretEntry,
+  TexMathCaretMap,
   TexMathConstructRange,
   TexMathBoxProvider,
   TexMathDisplayLabel,
@@ -132,6 +134,7 @@ function getMathBox(
     height: hlist.height,
     depth: hlist.depth,
     ...mathHListFlex(hlist.items, 0, hlist.width),
+    caretMap: buildInlineMathCaretMap(hlist, params),
     caretStops: buildInlineMathCaretStops(hlist, params),
     constructRanges: buildInlineMathConstructRanges(hlist),
     breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
@@ -421,6 +424,424 @@ function collectMathItemExtents(
   return extents;
 }
 
+function buildInlineMathCaretMap(
+  hlist: TexMathHList,
+  params: {
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  }
+): TexMathCaretMap {
+  const entries: TexMathCaretEntry[] = [];
+  const addEntry = (entry: TexMathCaretEntry) => {
+    if (!Number.isFinite(entry.sourceOffset) || !Number.isFinite(entry.x) || !Number.isFinite(entry.y)) {
+      return;
+    }
+    entries.push({
+      ...entry,
+      sourceOffset: Math.max(params.sourceStart, Math.min(params.sourceEnd, Math.floor(entry.sourceOffset))),
+      x: roundTexPt(Math.max(0, Math.min(hlist.width, entry.x))),
+      y: roundTexPt(entry.y),
+      height: roundTexPt(Math.max(0, entry.height)),
+      depth: roundTexPt(Math.max(0, entry.depth)),
+      hitBounds: normalizeCaretHitBounds(entry.hitBounds, hlist.width),
+    });
+  };
+
+  addLinearMathCaretMapEntries({
+    sourceStart: params.sourceStart,
+    sourceEnd: params.contentStart,
+    xStart: 0,
+    xEnd: 0,
+    y: 0,
+    height: hlist.height,
+    depth: hlist.depth,
+    hitBounds: boxCaretHitBounds(0, 0, hlist.width, hlist.height, hlist.depth),
+    kind: "math-boundary",
+    priority: 0,
+    addEntry,
+  });
+  addLinearMathCaretMapEntries({
+    sourceStart: params.contentEnd,
+    sourceEnd: params.sourceEnd,
+    xStart: hlist.width,
+    xEnd: hlist.width,
+    y: 0,
+    height: hlist.height,
+    depth: hlist.depth,
+    hitBounds: boxCaretHitBounds(0, 0, hlist.width, hlist.height, hlist.depth),
+    kind: "math-boundary",
+    priority: 0,
+    addEntry,
+  });
+  addMathItemCaretMapEntries(hlist.items, 0, 0, addEntry);
+
+  return {
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+    contentStart: params.contentStart,
+    contentEnd: params.contentEnd,
+    entries: dedupeMathCaretEntries(entries),
+  };
+}
+
+function addMathItemCaretMapEntries(
+  items: readonly TexMathHListItem[],
+  originX: number,
+  originY: number,
+  addEntry: (entry: TexMathCaretEntry) => void
+): void {
+  addFractionCaretMapEntries(items, originX, originY, addEntry);
+  for (const item of items) {
+    const x = roundTexPt(originX + item.x);
+    if (item.kind === "hlist") {
+      const y = roundTexPt(originY + item.y);
+      const kind = mathCaretEntryKindForHListRole(item.role);
+      const hitBounds = boxCaretHitBounds(x, y, item.width, item.height, item.depth);
+      addEntry(mathCaretEntry(item.sourceSpan.start, x, y, item.height, item.depth, hitBounds, kind, item.sourceSpan, 50));
+      addEntry(mathCaretEntry(
+        item.sourceSpan.end,
+        roundTexPt(x + item.width),
+        y,
+        item.height,
+        item.depth,
+        hitBounds,
+        kind,
+        item.sourceSpan,
+        50
+      ));
+      addMathItemCaretMapEntries(item.items, x, y, addEntry);
+      continue;
+    }
+    if (item.kind === "glyph") {
+      if (mathGlyphCoversConstructSpan(item)) {
+        continue;
+      }
+      const y = roundTexPt(originY + item.y);
+      addLinearMathCaretMapEntries({
+        sourceStart: item.sourceSpan.start,
+        sourceEnd: item.sourceSpan.end,
+        xStart: x,
+        xEnd: roundTexPt(x + item.width),
+        y,
+        height: item.height,
+        depth: item.depth,
+        hitBounds: boxCaretHitBounds(x, y, item.width, item.height, item.depth),
+        kind: "glyph-boundary",
+        sourceSpan: item.sourceSpan,
+        priority: 100,
+        addEntry,
+      });
+      continue;
+    }
+    if (item.kind === "rule") {
+      continue;
+    }
+    if (item.kind === "middle-delimiter") {
+      const hitBounds = boxCaretHitBounds(x, originY, 0, 0, 0);
+      addEntry(mathCaretEntry(
+        item.commandSourceSpan.start,
+        x,
+        originY,
+        0,
+        0,
+        hitBounds,
+        "command",
+        item.commandSourceSpan,
+        40
+      ));
+      addEntry(mathCaretEntry(
+        item.delimiterSourceSpan.end,
+        x,
+        originY,
+        0,
+        0,
+        hitBounds,
+        "command",
+        item.delimiterSourceSpan,
+        40
+      ));
+      continue;
+    }
+
+    const kind = item.sourceSpan.end > item.sourceSpan.start + 1 ? "command" : "synthetic-boundary";
+    addLinearMathCaretMapEntries({
+      sourceStart: item.sourceSpan.start,
+      sourceEnd: item.sourceSpan.end,
+      xStart: x,
+      xEnd: roundTexPt(x + item.width),
+      y: originY,
+      height: 0,
+      depth: 0,
+      hitBounds: boxCaretHitBounds(x, originY, item.width, 0, 0),
+      kind,
+      sourceSpan: item.sourceSpan,
+      priority: kind === "command" ? 40 : 10,
+      addEntry,
+    });
+  }
+}
+
+function addFractionCaretMapEntries(
+  items: readonly TexMathHListItem[],
+  originX: number,
+  originY: number,
+  addEntry: (entry: TexMathCaretEntry) => void
+): void {
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item?.kind !== "rule" || item.role !== "fraction-rule") {
+      continue;
+    }
+    const numerator = adjacentFractionCaretChild(items, index, -1, item.sourceSpan);
+    const denominator = adjacentFractionCaretChild(items, index, 1, item.sourceSpan);
+    if (!numerator || !denominator) {
+      continue;
+    }
+    const xStart = roundTexPt(originX + item.x);
+    const xEnd = roundTexPt(xStart + item.width);
+    const y = roundTexPt(originY + item.y);
+    const hitBounds = unionCaretHitBounds(
+      boxCaretHitBounds(originX + numerator.x, originY + numerator.y, numerator.width, numerator.height, numerator.depth),
+      ruleCaretHitBounds(xStart, y, item.width, item.height),
+      boxCaretHitBounds(originX + denominator.x, originY + denominator.y, denominator.width, denominator.height, denominator.depth)
+    );
+    for (let rawOffset = item.sourceSpan.start; rawOffset <= numerator.sourceSpan.start; rawOffset += 1) {
+      addEntry(mathCaretEntry(
+        rawOffset,
+        xStart,
+        originY,
+        originY - hitBounds.yStart,
+        hitBounds.yEnd - originY,
+        hitBounds,
+        "command",
+        item.sourceSpan,
+        40
+      ));
+    }
+    for (let rawOffset = numerator.sourceSpan.end; rawOffset <= denominator.sourceSpan.start; rawOffset += 1) {
+      const x = roundTexPt((xStart + xEnd) / 2);
+      addEntry(mathCaretEntry(
+        rawOffset,
+        x,
+        originY,
+        originY - hitBounds.yStart,
+        hitBounds.yEnd - originY,
+        hitBounds,
+        "group-boundary",
+        item.sourceSpan,
+        45
+      ));
+    }
+    for (let rawOffset = denominator.sourceSpan.end; rawOffset <= item.sourceSpan.end; rawOffset += 1) {
+      addEntry(mathCaretEntry(
+        rawOffset,
+        xEnd,
+        originY,
+        originY - hitBounds.yStart,
+        hitBounds.yEnd - originY,
+        hitBounds,
+        "construct-boundary",
+        item.sourceSpan,
+        45
+      ));
+    }
+  }
+}
+
+function adjacentFractionCaretChild(
+  items: readonly TexMathHListItem[],
+  ruleIndex: number,
+  direction: -1 | 1,
+  fractionSpan: TexMathSourceSpan
+): TexMathChildHListLayoutItem | null {
+  for (let index = ruleIndex + direction; index >= 0 && index < items.length; index += direction) {
+    const item = items[index];
+    if (!item) {
+      continue;
+    }
+    if (item.kind !== "hlist") {
+      if (item.kind === "kern" && item.reason === "fraction-kern") {
+        continue;
+      }
+      return null;
+    }
+    return item.sourceSpan.start >= fractionSpan.start &&
+      item.sourceSpan.end <= fractionSpan.end
+      ? item
+      : null;
+  }
+  return null;
+}
+
+function addLinearMathCaretMapEntries(params: {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly xStart: number;
+  readonly xEnd: number;
+  readonly y: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly hitBounds: TexMathCaretEntry["hitBounds"];
+  readonly kind: TexMathCaretEntry["kind"];
+  readonly sourceSpan?: TexMathSourceSpan;
+  readonly priority: number;
+  readonly addEntry: (entry: TexMathCaretEntry) => void;
+}): void {
+  const spanLength = Math.max(0, params.sourceEnd - params.sourceStart);
+  if (spanLength === 0) {
+    params.addEntry(mathCaretEntry(
+      params.sourceStart,
+      params.xStart,
+      params.y,
+      params.height,
+      params.depth,
+      params.hitBounds,
+      params.kind,
+      params.sourceSpan,
+      params.priority
+    ));
+    return;
+  }
+  for (let rawOffset = params.sourceStart; rawOffset <= params.sourceEnd; rawOffset += 1) {
+    const t = (rawOffset - params.sourceStart) / spanLength;
+    params.addEntry(mathCaretEntry(
+      rawOffset,
+      roundTexPt(params.xStart + (params.xEnd - params.xStart) * t),
+      params.y,
+      params.height,
+      params.depth,
+      params.hitBounds,
+      params.kind,
+      params.sourceSpan,
+      params.priority
+    ));
+  }
+}
+
+function mathCaretEntry(
+  sourceOffset: number,
+  x: number,
+  y: number,
+  height: number,
+  depth: number,
+  hitBounds: TexMathCaretEntry["hitBounds"],
+  kind: TexMathCaretEntry["kind"],
+  sourceSpan: TexMathSourceSpan | undefined,
+  priority: number
+): TexMathCaretEntry {
+  return {
+    sourceOffset,
+    x,
+    y,
+    height,
+    depth,
+    hitBounds,
+    kind,
+    ...(sourceSpan ? { sourceSpan } : {}),
+    priority,
+  };
+}
+
+function mathCaretEntryKindForHListRole(
+  role: TexMathChildHListLayoutItem["role"]
+): TexMathCaretEntry["kind"] {
+  return mathConstructBoundaryHListRoles.has(role)
+    ? "construct-boundary"
+    : "group-boundary";
+}
+
+const mathConstructBoundaryHListRoles: ReadonlySet<TexMathChildHListLayoutItem["role"]> = new Set([
+  "superscript",
+  "subscript",
+  "limit-superscript",
+  "limit-subscript",
+  "radical-degree",
+  "var-limit-row",
+]);
+
+function boxCaretHitBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  depth: number
+): TexMathCaretEntry["hitBounds"] {
+  return {
+    xStart: roundTexPt(x),
+    xEnd: roundTexPt(x + Math.max(0, width)),
+    yStart: roundTexPt(y - Math.max(0, height)),
+    yEnd: roundTexPt(y + Math.max(0, depth)),
+  };
+}
+
+function ruleCaretHitBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): TexMathCaretEntry["hitBounds"] {
+  return {
+    xStart: roundTexPt(x),
+    xEnd: roundTexPt(x + Math.max(0, width)),
+    yStart: roundTexPt(y),
+    yEnd: roundTexPt(y + Math.max(0, height)),
+  };
+}
+
+function unionCaretHitBounds(
+  ...bounds: readonly TexMathCaretEntry["hitBounds"][]
+): TexMathCaretEntry["hitBounds"] {
+  return {
+    xStart: roundTexPt(Math.min(...bounds.map((bound) => bound.xStart))),
+    xEnd: roundTexPt(Math.max(...bounds.map((bound) => bound.xEnd))),
+    yStart: roundTexPt(Math.min(...bounds.map((bound) => bound.yStart))),
+    yEnd: roundTexPt(Math.max(...bounds.map((bound) => bound.yEnd))),
+  };
+}
+
+function normalizeCaretHitBounds(
+  bounds: TexMathCaretEntry["hitBounds"],
+  hlistWidth: number
+): TexMathCaretEntry["hitBounds"] {
+  const xStart = Math.max(0, Math.min(hlistWidth, bounds.xStart));
+  const xEnd = Math.max(xStart, Math.min(hlistWidth, bounds.xEnd));
+  const yStart = Math.min(bounds.yStart, bounds.yEnd);
+  const yEnd = Math.max(bounds.yStart, bounds.yEnd);
+  return {
+    xStart: roundTexPt(xStart),
+    xEnd: roundTexPt(xEnd),
+    yStart: roundTexPt(yStart),
+    yEnd: roundTexPt(yEnd),
+  };
+}
+
+function dedupeMathCaretEntries(entries: readonly TexMathCaretEntry[]): readonly TexMathCaretEntry[] {
+  const sorted = [...entries].sort((left, right) =>
+    left.sourceOffset === right.sourceOffset
+      ? (right.priority ?? 0) - (left.priority ?? 0) ||
+        left.y - right.y ||
+        left.x - right.x ||
+        left.kind.localeCompare(right.kind)
+      : left.sourceOffset - right.sourceOffset
+  );
+  return sorted.filter((entry, index, allEntries) =>
+    allEntries.findIndex((candidate) =>
+      candidate.sourceOffset === entry.sourceOffset &&
+      candidate.x === entry.x &&
+      candidate.y === entry.y &&
+      candidate.height === entry.height &&
+      candidate.depth === entry.depth &&
+      candidate.kind === entry.kind &&
+      candidate.hitBounds.xStart === entry.hitBounds.xStart &&
+      candidate.hitBounds.xEnd === entry.hitBounds.xEnd &&
+      candidate.hitBounds.yStart === entry.hitBounds.yStart &&
+      candidate.hitBounds.yEnd === entry.hitBounds.yEnd
+    ) === index
+  );
+}
+
 function buildInlineMathCaretStops(
   hlist: TexMathHList,
   params: {
@@ -678,6 +1099,12 @@ function getDisplayMathAlignment(
         width: taggedRow.width,
         height: taggedRow.height,
         depth: taggedRow.depth,
+        caretMap: buildInlineMathCaretMap(rowHList, {
+          sourceStart: rowSourceSpan.start,
+          sourceEnd: rowSourceSpan.end,
+          contentStart: rowSourceSpan.start,
+          contentEnd: rowSourceSpan.end,
+        }),
         caretStops: buildInlineMathCaretStops(rowHList, {
           sourceStart: rowSourceSpan.start,
           sourceEnd: rowSourceSpan.end,
@@ -750,6 +1177,12 @@ function getDisplayMathAlignment(
         width: taggedRow.width,
         height: taggedRow.height,
         depth: taggedRow.depth,
+        caretMap: buildInlineMathCaretMap(rowHList, {
+          sourceStart: row.sourceSpan.start,
+          sourceEnd: row.sourceSpan.end,
+          contentStart: row.sourceSpan.start,
+          contentEnd: row.sourceSpan.end,
+        }),
         caretStops: buildInlineMathCaretStops(rowHList, {
           sourceStart: row.sourceSpan.start,
           sourceEnd: row.sourceSpan.end,
@@ -865,6 +1298,12 @@ function getDisplayMathAlignment(
       width: taggedRow.width,
       height: taggedRow.height,
       depth: taggedRow.depth,
+      caretMap: buildInlineMathCaretMap(rowHList, {
+        sourceStart: row.sourceSpan.start,
+        sourceEnd: row.sourceSpan.end,
+        contentStart: row.sourceSpan.start,
+        contentEnd: row.sourceSpan.end,
+      }),
       caretStops: buildInlineMathCaretStops(rowHList, {
         sourceStart: row.sourceSpan.start,
         sourceEnd: row.sourceSpan.end,
