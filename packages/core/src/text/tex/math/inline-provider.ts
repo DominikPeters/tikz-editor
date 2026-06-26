@@ -35,6 +35,7 @@ import {
 } from "./parser.js";
 import {
   renderTexMathHListSvgBody,
+  texMathGlyphVisualBounds,
 } from "./render-svg.js";
 import {
   normalizeTexMathAtomClasses,
@@ -124,7 +125,7 @@ function getMathBox(
   const hlist = displayLabel
     ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
     : measuredHList;
-  const caretMap = buildInlineMathCaretMap(hlist, params);
+  const caretMap = buildInlineMathCaretMap(hlist, params, fontProfile);
   const box = {
     source: params.source,
     content: params.content,
@@ -433,7 +434,8 @@ function buildInlineMathCaretMap(
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
-  }
+  },
+  fontProfile: TexMathFontProfile
 ): TexMathCaretMap {
   const entries: TexMathCaretEntry[] = [];
   const addEntry = (entry: TexMathCaretEntry) => {
@@ -477,7 +479,7 @@ function buildInlineMathCaretMap(
     priority: 0,
     addEntry,
   });
-  addMathItemCaretMapEntries(hlist.items, 0, 0, addEntry);
+  addMathItemCaretMapEntries(hlist.items, 0, 0, fontProfile, addEntry);
 
   const dedupedEntries = dedupeMathCaretEntries(entries);
   const diagnostics = mathCaretMapCoverageDiagnostics(dedupedEntries, params);
@@ -495,16 +497,17 @@ function addMathItemCaretMapEntries(
   items: readonly TexMathHListItem[],
   originX: number,
   originY: number,
+  fontProfile: TexMathFontProfile,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
-  addEnclosureConstructCaretMapEntries(items, originX, originY, addEntry);
+  addEnclosureConstructCaretMapEntries(items, originX, originY, fontProfile, addEntry);
   addFractionCaretMapEntries(items, originX, originY, addEntry);
   for (const item of items) {
     const x = roundTexPt(originX + item.x);
     if (item.kind === "hlist") {
       const y = roundTexPt(originY + item.y);
       const kind = mathCaretEntryKindForHListRole(item.role);
-      const hitBounds = boxCaretHitBounds(x, y, item.width, item.height, item.depth);
+      const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       addEntry(mathCaretEntry(item.sourceSpan.start, x, y, item.height, item.depth, hitBounds, kind, item.sourceSpan, 50));
       addEntry(mathCaretEntry(
         item.sourceSpan.end,
@@ -517,7 +520,7 @@ function addMathItemCaretMapEntries(
         item.sourceSpan,
         50
       ));
-      addMathItemCaretMapEntries(item.items, x, y, addEntry);
+      addMathItemCaretMapEntries(item.items, x, y, fontProfile, addEntry);
       continue;
     }
     if (item.kind === "glyph") {
@@ -525,15 +528,17 @@ function addMathItemCaretMapEntries(
         continue;
       }
       const y = roundTexPt(originY + item.y);
+      const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
+      const caretY = roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd));
       addLinearMathCaretMapEntries({
         sourceStart: item.sourceSpan.start,
         sourceEnd: item.sourceSpan.end,
         xStart: x,
         xEnd: roundTexPt(x + item.width),
-        y,
-        height: item.height,
-        depth: item.depth,
-        hitBounds: boxCaretHitBounds(x, y, item.width, item.height, item.depth),
+        y: caretY,
+        height: Math.max(0, caretY - hitBounds.yStart),
+        depth: Math.max(0, hitBounds.yEnd - caretY),
+        hitBounds,
         kind: "glyph-boundary",
         sourceSpan: item.sourceSpan,
         priority: 100,
@@ -593,6 +598,7 @@ function addEnclosureConstructCaretMapEntries(
   items: readonly TexMathHListItem[],
   originX: number,
   originY: number,
+  fontProfile: TexMathFontProfile,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
   const added = new Set<string>();
@@ -613,7 +619,7 @@ function addEnclosureConstructCaretMapEntries(
       continue;
     }
     added.add(key);
-    const constructBounds = enclosureConstructHitBounds(items, item, body, originX, originY);
+    const constructBounds = enclosureConstructHitBounds(items, item, body, originX, originY, fontProfile);
     const y = originY;
     addLinearMathCaretMapEntries({
       sourceStart: item.sourceSpan.start,
@@ -674,7 +680,8 @@ function enclosureConstructHitBounds(
   rule: Extract<TexMathHListItem, { readonly kind: "rule" }>,
   body: TexMathChildHListLayoutItem,
   originX: number,
-  originY: number
+  originY: number,
+  fontProfile: TexMathFontProfile
 ): TexMathCaretEntry["hitBounds"] {
   const bounds: TexMathCaretEntry["hitBounds"][] = [];
   for (const item of items) {
@@ -685,11 +692,11 @@ function enclosureConstructHitBounds(
         item.sourceSpan.end === rule.sourceSpan.end
       )
     ) {
-      bounds.push(mathItemCaretHitBounds(item, originX, originY));
+      bounds.push(mathItemCaretHitBounds(item, originX, originY, fontProfile));
     }
   }
   if (bounds.length === 0) {
-    return mathItemCaretHitBounds(body, originX, originY);
+    return mathItemCaretHitBounds(body, originX, originY, fontProfile);
   }
   return unionCaretHitBounds(...bounds);
 }
@@ -697,13 +704,25 @@ function enclosureConstructHitBounds(
 function mathItemCaretHitBounds(
   item: TexMathHListItem,
   originX: number,
-  originY: number
+  originY: number,
+  fontProfile: TexMathFontProfile
 ): TexMathCaretEntry["hitBounds"] {
   const x = originX + item.x;
   if (item.kind === "rule") {
     return ruleCaretHitBounds(x, originY + item.y, item.width, item.height);
   }
-  if (item.kind === "hlist" || item.kind === "glyph") {
+  if (item.kind === "glyph") {
+    const visualBounds = texMathGlyphVisualBounds(item, fontProfile, originX, originY);
+    return visualBounds
+      ? {
+        xStart: roundTexPt(Math.min(x, visualBounds.xStart)),
+        xEnd: roundTexPt(Math.max(x + item.width, visualBounds.xEnd)),
+        yStart: roundTexPt(visualBounds.yStart),
+        yEnd: roundTexPt(visualBounds.yEnd),
+      }
+      : boxCaretHitBounds(x, originY + item.y, item.width, item.height, item.depth);
+  }
+  if (item.kind === "hlist") {
     return boxCaretHitBounds(x, originY + item.y, item.width, item.height, item.depth);
   }
   return boxCaretHitBounds(x, originY, item.width, 0, 0);
@@ -1234,7 +1253,7 @@ function getDisplayMathAlignment(
         sourceEnd: rowSourceSpan.end,
         contentStart: rowSourceSpan.start,
         contentEnd: rowSourceSpan.end,
-      });
+      }, fontProfile);
       return {
         rowIndex,
         x: 0,
@@ -1308,7 +1327,7 @@ function getDisplayMathAlignment(
         sourceEnd: row.sourceSpan.end,
         contentStart: row.sourceSpan.start,
         contentEnd: row.sourceSpan.end,
-      });
+      }, fontProfile);
       return {
         rowIndex,
         x: 0,
@@ -1425,7 +1444,7 @@ function getDisplayMathAlignment(
       sourceEnd: row.sourceSpan.end,
       contentStart: row.sourceSpan.start,
       contentEnd: row.sourceSpan.end,
-    });
+    }, fontProfile);
     return {
       rowIndex,
       x: 0,

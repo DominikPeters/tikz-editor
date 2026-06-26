@@ -119,44 +119,71 @@ function expectMathSegmentGlyphsWithinSourceSpans(
   }
 }
 
-function mathGlyphBoundsForText(
+interface LocalBounds {
+  readonly xStart: number;
+  readonly xEnd: number;
+  readonly yStart: number;
+  readonly yEnd: number;
+}
+
+interface PathPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+function renderedMathGlyphBoundsForText(
   segment: ParagraphLayoutReport["lines"][number]["segments"][number],
+  line: ParagraphLayoutReport["lines"][number],
   sourceText: string,
   selectedText: string
-): { readonly xStart: number; readonly xEnd: number; readonly yStart: number; readonly yEnd: number } {
+): LocalBounds {
   const selectedStart = sourceText.indexOf(selectedText);
   const selectedEnd = selectedStart + selectedText.length;
   expect(selectedStart).toBeGreaterThanOrEqual(0);
-  const entriesByGlyphSpan = new Map<string, NonNullable<typeof segment.mathCaretEntries>[number]>();
-  for (const entry of segment.mathCaretEntries ?? []) {
-    const sourceStart = entry.sourceStartRaw;
-    const sourceEnd = entry.sourceEndRaw;
+  expect(segment.kind).toBe("math");
+  expect(segment.mathSvgBody).toBeTruthy();
+  const glyphBounds: LocalBounds[] = [];
+  for (const pathTagMatch of segment.mathSvgBody?.matchAll(/<path\b[^>]*>/g) ?? []) {
+    const attrs = parseSvgAttributes(pathTagMatch[0]);
+    const sourceStart = Number(attrs.get("data-source-start"));
+    const sourceEnd = Number(attrs.get("data-source-end"));
     if (
-      entry.kind !== "glyph-boundary" ||
-      sourceStart === undefined ||
-      sourceEnd === undefined ||
+      !Number.isFinite(sourceStart) ||
+      !Number.isFinite(sourceEnd) ||
       sourceStart < selectedStart ||
       sourceEnd > selectedEnd ||
       sourceEnd <= sourceStart
     ) {
       continue;
     }
-    entriesByGlyphSpan.set(`${sourceStart}:${sourceEnd}`, entry);
+    const transform = parseMathGlyphTransform(attrs.get("transform") ?? "");
+    expect(transform).not.toBeNull();
+    const points = svgPathControlPoints(attrs.get("d") ?? "");
+    expect(points.length).toBeGreaterThan(0);
+    const transformed = points.map((point) => ({
+      x: Number(segment.x) + (transform!.translateX + point.x * transform!.scale) / 100,
+      y: Number(line.ascent) + (transform!.translateY + point.y * transform!.scale) / 100,
+    }));
+    glyphBounds.push({
+      xStart: Math.min(...transformed.map((point) => point.x)),
+      xEnd: Math.max(...transformed.map((point) => point.x)),
+      yStart: Math.min(...transformed.map((point) => point.y)),
+      yEnd: Math.max(...transformed.map((point) => point.y)),
+    });
   }
-  expect(entriesByGlyphSpan.size).toBe(selectedText.length);
-  const entries = [...entriesByGlyphSpan.values()];
+  expect(glyphBounds.length).toBe(selectedText.length);
   return {
-    xStart: Math.min(...entries.map((entry) => entry.hitBounds.xStart)),
-    xEnd: Math.max(...entries.map((entry) => entry.hitBounds.xEnd)),
-    yStart: Math.min(...entries.map((entry) => entry.hitBounds.yStart)),
-    yEnd: Math.max(...entries.map((entry) => entry.hitBounds.yEnd)),
+    xStart: Math.min(...glyphBounds.map((bounds) => bounds.xStart)),
+    xEnd: Math.max(...glyphBounds.map((bounds) => bounds.xEnd)),
+    yStart: Math.min(...glyphBounds.map((bounds) => bounds.yStart)),
+    yEnd: Math.max(...glyphBounds.map((bounds) => bounds.yEnd)),
   };
 }
 
 function expectSelectionContainsLineLocalBounds(
   selection: Awaited<ReturnType<typeof getKnuthPlassSelectionRects>>,
   line: ParagraphLayoutReport["lines"][number],
-  bounds: { readonly xStart: number; readonly xEnd: number; readonly yStart: number; readonly yEnd: number }
+  bounds: LocalBounds
 ): void {
   const rect = selection.rects[0];
   expect(rect).toBeTruthy();
@@ -166,6 +193,131 @@ function expectSelectionContainsLineLocalBounds(
   expect(Number(rect?.bounds.maxX)).toBeGreaterThanOrEqual(bounds.xEnd - lineStart - epsilon);
   expect(Number(rect?.bounds.minY)).toBeLessThanOrEqual(bounds.yStart + epsilon);
   expect(Number(rect?.bounds.maxY)).toBeGreaterThanOrEqual(bounds.yEnd - epsilon);
+}
+
+function parseSvgAttributes(tag: string): Map<string, string> {
+  return new Map(
+    [...tag.matchAll(/\s([-\w:]+)="([^"]*)"/g)].map((match) => [match[1] ?? "", match[2] ?? ""])
+  );
+}
+
+function parseMathGlyphTransform(transform: string): { readonly translateX: number; readonly translateY: number; readonly scale: number } | null {
+  const match = /translate\(\s*([^\s,)]+)[,\s]+([^\s,)]+)\s*\)\s*scale\(\s*([^\s,)]+)\s*\)/.exec(transform);
+  if (!match) {
+    return null;
+  }
+  const translateX = Number(match[1]);
+  const translateY = Number(match[2]);
+  const scale = Number(match[3]);
+  return Number.isFinite(translateX) && Number.isFinite(translateY) && Number.isFinite(scale)
+    ? { translateX, translateY, scale }
+    : null;
+}
+
+function svgPathControlPoints(d: string): PathPoint[] {
+  const tokens = [...d.matchAll(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/gi)].map((match) => match[0] ?? "");
+  const points: PathPoint[] = [];
+  let index = 0;
+  let command = "";
+  let current: PathPoint = { x: 0, y: 0 };
+  let subpathStart: PathPoint = current;
+  const isCommand = (token: string | undefined) => Boolean(token && /^[a-zA-Z]$/.test(token));
+  const hasNumber = () => index < tokens.length && !isCommand(tokens[index]);
+  const readNumber = () => Number(tokens[index++]);
+  const addPoint = (x: number, y: number) => {
+    current = { x, y };
+    points.push(current);
+  };
+  while (index < tokens.length) {
+    if (isCommand(tokens[index])) {
+      command = tokens[index++] ?? "";
+    }
+    const relative = command === command.toLowerCase();
+    switch (command.toUpperCase()) {
+      case "M": {
+        let first = true;
+        while (hasNumber()) {
+          const x = readNumber();
+          const y = readNumber();
+          addPoint(relative ? current.x + x : x, relative ? current.y + y : y);
+          if (first) {
+            subpathStart = current;
+            first = false;
+          }
+        }
+        break;
+      }
+      case "L":
+      case "T": {
+        while (hasNumber()) {
+          const x = readNumber();
+          const y = readNumber();
+          addPoint(relative ? current.x + x : x, relative ? current.y + y : y);
+        }
+        break;
+      }
+      case "H": {
+        while (hasNumber()) {
+          const x = readNumber();
+          addPoint(relative ? current.x + x : x, current.y);
+        }
+        break;
+      }
+      case "V": {
+        while (hasNumber()) {
+          const y = readNumber();
+          addPoint(current.x, relative ? current.y + y : y);
+        }
+        break;
+      }
+      case "C": {
+        while (hasNumber()) {
+          const coords = [readNumber(), readNumber(), readNumber(), readNumber(), readNumber(), readNumber()];
+          for (let coordIndex = 0; coordIndex < coords.length; coordIndex += 2) {
+            addPoint(
+              relative ? current.x + (coords[coordIndex] ?? 0) : (coords[coordIndex] ?? 0),
+              relative ? current.y + (coords[coordIndex + 1] ?? 0) : (coords[coordIndex + 1] ?? 0)
+            );
+          }
+        }
+        break;
+      }
+      case "S":
+      case "Q": {
+        while (hasNumber()) {
+          const coords = [readNumber(), readNumber(), readNumber(), readNumber()];
+          for (let coordIndex = 0; coordIndex < coords.length; coordIndex += 2) {
+            addPoint(
+              relative ? current.x + (coords[coordIndex] ?? 0) : (coords[coordIndex] ?? 0),
+              relative ? current.y + (coords[coordIndex + 1] ?? 0) : (coords[coordIndex + 1] ?? 0)
+            );
+          }
+        }
+        break;
+      }
+      case "A": {
+        while (hasNumber()) {
+          readNumber();
+          readNumber();
+          readNumber();
+          readNumber();
+          readNumber();
+          const x = readNumber();
+          const y = readNumber();
+          addPoint(relative ? current.x + x : x, relative ? current.y + y : y);
+        }
+        break;
+      }
+      case "Z": {
+        current = subpathStart;
+        points.push(current);
+        break;
+      }
+      default:
+        index += 1;
+    }
+  }
+  return points;
 }
 
 function registeredLayoutWithBoxReport<T extends {
@@ -4811,7 +4963,7 @@ describe("simple TeX paragraph layout", () => {
     expectSelectionContainsLineLocalBounds(
       numeratorSelection,
       report!.lines[0]!,
-      mathGlyphBoundsForText(mathSegment!, sourceText, "1234")
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "1234")
     );
 
     const denominatorSelection = await getKnuthPlassSelectionRects(outputJax, {
@@ -4830,7 +4982,7 @@ describe("simple TeX paragraph layout", () => {
     expectSelectionContainsLineLocalBounds(
       denominatorSelection,
       report!.lines[0]!,
-      mathGlyphBoundsForText(mathSegment!, sourceText, "98765")
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "98765")
     );
 
     const caretOffsetBetweenTwoAndThree = sourceText.indexOf("3");

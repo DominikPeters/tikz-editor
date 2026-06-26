@@ -60,12 +60,14 @@ type Element = {
 };
 type LineDirectionUnit = Readonly<{ x: number; y: number }>;
 type LineReportCoord = CoordinateBrand<'KnuthPlassLineReportCoord'>;
+type MathBaselineCoord = CoordinateBrand<'KnuthPlassMathBaselineCoord'>;
 type LineReportPoint = Readonly<{ x: LineReportCoord; y: LineReportCoord }>;
-type LineReportBounds = Readonly<{
+type MathBaselinePoint = Readonly<{ x: LineReportCoord; y: MathBaselineCoord }>;
+type MathCaretBounds = Readonly<{
   xStart: LineReportCoord;
   xEnd: LineReportCoord;
-  yStart: LineReportCoord;
-  yEnd: LineReportCoord;
+  yStart: MathBaselineCoord;
+  yEnd: MathBaselineCoord;
 }>;
 
 function lineDirectionUnit(x: number, y: number): LineDirectionUnit {
@@ -74,6 +76,10 @@ function lineDirectionUnit(x: number, y: number): LineDirectionUnit {
 
 function lineReportCoord(value: number): LineReportCoord {
   return value as LineReportCoord;
+}
+
+function mathBaselineCoord(value: number): MathBaselineCoord {
+  return value as MathBaselineCoord;
 }
 
 export interface CaretBaseParams {
@@ -357,7 +363,7 @@ export interface SelectionRectsResult extends ResultBase {
 interface Stop {
   offset: number;
   x: LineReportCoord;
-  y?: LineReportCoord;
+  y?: MathBaselineCoord;
   kind: 'text' | 'space' | 'math';
   snappedToMathPrefix: boolean;
   lineStart: boolean;
@@ -425,12 +431,12 @@ interface MathCaretEntry {
   sourceStartRaw?: number;
   sourceEndRaw?: number;
   x: LineReportCoord;
-  y: LineReportCoord;
-  height: LineReportCoord;
-  depth: LineReportCoord;
+  y: MathBaselineCoord;
+  height: MathBaselineCoord;
+  depth: MathBaselineCoord;
   kind: NonNullable<LineSegmentReport['mathCaretEntries']>[number]['kind'];
   priority?: number;
-  hitBounds: LineReportBounds;
+  hitBounds: MathCaretBounds;
 }
 
 interface CachedParagraphEntry {
@@ -1618,6 +1624,28 @@ function lineBaselineOriginPoint(
   return lineLocalClientPoint(line, reportLine, lineReportCoord(lineStart));
 }
 
+function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): LineReportCoord {
+  const ascent = Number(reportLine.ascent);
+  return lineReportCoord(Number.isFinite(ascent) ? ascent : 0);
+}
+
+function mathBaselineYToLineY(
+  reportLine: ParagraphLayoutReport['lines'][number],
+  y: MathBaselineCoord
+): LineReportCoord {
+  return lineReportCoord(lineBaselineY(reportLine) + y);
+}
+
+function linePointToMathBaselinePoint(
+  reportLine: ParagraphLayoutReport['lines'][number],
+  point: LineReportPoint
+): MathBaselinePoint {
+  return {
+    x: point.x,
+    y: mathBaselineCoord(point.y - lineBaselineY(reportLine)),
+  };
+}
+
 function lineBoxNormalOffset(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number]
@@ -1779,16 +1807,16 @@ function normalizeMathCaretEntries(
       ...(Number.isFinite(Number(entry.sourceStartRaw)) ? { sourceStartRaw: Number(entry.sourceStartRaw) } : {}),
       ...(Number.isFinite(Number(entry.sourceEndRaw)) ? { sourceEndRaw: Number(entry.sourceEndRaw) } : {}),
       x: lineReportCoord(x),
-      y: lineReportCoord(y),
-      height: lineReportCoord(height),
-      depth: lineReportCoord(depth),
+      y: mathBaselineCoord(y),
+      height: mathBaselineCoord(height),
+      depth: mathBaselineCoord(depth),
       kind: entry.kind,
       ...(Number.isFinite(Number(entry.priority)) ? { priority: Number(entry.priority) } : {}),
       hitBounds: {
         xStart: lineReportCoord(Math.min(xStart, xEnd)),
         xEnd: lineReportCoord(Math.max(xStart, xEnd)),
-        yStart: lineReportCoord(Math.min(yStart, yEnd)),
-        yEnd: lineReportCoord(Math.max(yStart, yEnd)),
+        yStart: mathBaselineCoord(Math.min(yStart, yEnd)),
+        yEnd: mathBaselineCoord(Math.max(yStart, yEnd)),
       },
     }];
   });
@@ -3151,7 +3179,7 @@ function nearestStopByX(stops: Stop[], x: number): Stop {
 
 function nearestMathCaretEntryByPoint(
   entries: readonly MathCaretEntry[],
-  point: LineReportPoint
+  point: MathBaselinePoint
 ): MathCaretEntry | null {
   const containing = entries.filter((entry) =>
     point.x >= entry.hitBounds.xStart - EPSILON &&
@@ -3192,7 +3220,7 @@ function nearestMathCaretEntryByPoint(
 
 function mathCaretEntryDistance(
   entry: MathCaretEntry,
-  point: LineReportPoint
+  point: MathBaselinePoint
 ): number {
   const dx = point.x - entry.x;
   const dy = point.y - mathCaretEntryCenterY(entry);
@@ -3211,8 +3239,8 @@ function stopFromMathCaretEntry(entry: MathCaretEntry): Stop {
   };
 }
 
-function mathCaretEntryCenterY(entry: MathCaretEntry): LineReportCoord {
-  return lineReportCoord(entry.y + (entry.depth - entry.height) / 2);
+function mathCaretEntryCenterY(entry: MathCaretEntry): MathBaselineCoord {
+  return mathBaselineCoord(entry.y + (entry.depth - entry.height) / 2);
 }
 
 function bestMathCaretEntryForOffset(
@@ -3244,8 +3272,8 @@ function mathCaretOffsetAnchorScore(entry: MathCaretEntry, offset: number): numb
 interface MathSelectionLocalBox {
   xStart: LineReportCoord;
   xEnd: LineReportCoord;
-  yStart: LineReportCoord;
-  yEnd: LineReportCoord;
+  yStart: MathBaselineCoord;
+  yEnd: MathBaselineCoord;
 }
 
 function mathSelectionLocalBoxForRange(
@@ -3280,8 +3308,8 @@ function mathSelectionLocalBoxForRange(
       endEntry?.x ?? endStop.x,
       ...selectedEntries.map((entry) => entry.hitBounds.xEnd)
     )),
-    yStart: lineReportCoord(Math.min(...selectedEntries.map((entry) => entry.hitBounds.yStart))),
-    yEnd: lineReportCoord(Math.max(...selectedEntries.map((entry) => entry.hitBounds.yEnd))),
+    yStart: mathBaselineCoord(Math.min(...selectedEntries.map((entry) => entry.hitBounds.yStart))),
+    yEnd: mathBaselineCoord(Math.max(...selectedEntries.map((entry) => entry.hitBounds.yEnd))),
   };
 }
 
@@ -3309,8 +3337,8 @@ function mathSelectionClientHeight(
   localX: LineReportCoord,
   box: MathSelectionLocalBox
 ): Px {
-  const top = lineLocalClientPoint(line, reportLine, localX, box.yStart);
-  const bottom = lineLocalClientPoint(line, reportLine, localX, box.yEnd);
+  const top = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yStart));
+  const bottom = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yEnd));
   return px(Math.max(1, Math.hypot(bottom.x - top.x, bottom.y - top.y)));
 }
 
@@ -3505,11 +3533,12 @@ function inferLineByClientPoint(
     }
     let fallbackDistance = Math.abs(clientPoint.y - line.clientCenterY);
     const mathLinePoint = clientToLineLocalPoint(line, reportLine, clientPoint);
-    const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathLinePoint);
+    const mathPoint = linePointToMathBaselinePoint(reportLine, mathLinePoint);
+    const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathPoint);
     if (mathEntry) {
       normalDistance = 0;
       outsideDistance = 0;
-      fallbackDistance = Math.sqrt(mathCaretEntryDistance(mathEntry, mathLinePoint));
+      fallbackDistance = Math.sqrt(mathCaretEntryDistance(mathEntry, mathPoint));
     }
 
     const betterNormal = normalDistance < bestNormalDistance - EPSILON;
@@ -3596,7 +3625,8 @@ export async function getKnuthPlassCaretFromPoint(
   const reportLine = line.reportLine;
 
   const linePoint = clientToLineLocalPoint(line, reportLine, params.clientPoint);
-  const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, linePoint);
+  const mathPoint = linePointToMathBaselinePoint(reportLine, linePoint);
+  const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathPoint);
   const stop = mathEntry ? stopFromMathCaretEntry(mathEntry) : nearestStopByX(line.stopsByX, linePoint.x);
   if (stop.offset < 0 || stop.offset > params.sourceText.length) {
     return errorResult<CaretHitResult>(
@@ -3726,7 +3756,10 @@ export async function getKnuthPlassPointFromOffset(
       ? selected.stop.y
       : null;
   const pointX = mathPointEntry?.x ?? selected.stop.x;
-  const localPoint = lineLocalClientPoint(selected.line, reportLine, pointX, mathLocalY ?? lineReportCoord(0));
+  const pointY = mathLocalY === null
+    ? lineReportCoord(0)
+    : mathBaselineYToLineY(reportLine, mathLocalY);
+  const localPoint = lineLocalClientPoint(selected.line, reportLine, pointX, pointY);
   const normal = lineNormalUnit(selected.line);
   const normalOffset = mathLocalY === null ? lineBoxNormalOffset(selected.line, reportLine) : px(0);
   const clientPoint = makeClientPoint(
@@ -3855,7 +3888,10 @@ export async function getKnuthPlassSelectionRects(
       ...selectedMathConstructs.map((range) => range.xEnd)
     ));
     const localCenterY = mathSelectionBox
-      ? lineReportCoord((mathSelectionBox.yStart + mathSelectionBox.yEnd) / 2)
+      ? mathBaselineYToLineY(
+        reportLine,
+        mathBaselineCoord((mathSelectionBox.yStart + mathSelectionBox.yEnd) / 2)
+      )
       : lineReportCoord(0);
 
     const startPoint = lineLocalClientPoint(line, reportLine, localStartX, localCenterY);
