@@ -119,6 +119,55 @@ function expectMathSegmentGlyphsWithinSourceSpans(
   }
 }
 
+function mathGlyphBoundsForText(
+  segment: ParagraphLayoutReport["lines"][number]["segments"][number],
+  sourceText: string,
+  selectedText: string
+): { readonly xStart: number; readonly xEnd: number; readonly yStart: number; readonly yEnd: number } {
+  const selectedStart = sourceText.indexOf(selectedText);
+  const selectedEnd = selectedStart + selectedText.length;
+  expect(selectedStart).toBeGreaterThanOrEqual(0);
+  const entriesByGlyphSpan = new Map<string, NonNullable<typeof segment.mathCaretEntries>[number]>();
+  for (const entry of segment.mathCaretEntries ?? []) {
+    const sourceStart = entry.sourceStartRaw;
+    const sourceEnd = entry.sourceEndRaw;
+    if (
+      entry.kind !== "glyph-boundary" ||
+      sourceStart === undefined ||
+      sourceEnd === undefined ||
+      sourceStart < selectedStart ||
+      sourceEnd > selectedEnd ||
+      sourceEnd <= sourceStart
+    ) {
+      continue;
+    }
+    entriesByGlyphSpan.set(`${sourceStart}:${sourceEnd}`, entry);
+  }
+  expect(entriesByGlyphSpan.size).toBe(selectedText.length);
+  const entries = [...entriesByGlyphSpan.values()];
+  return {
+    xStart: Math.min(...entries.map((entry) => entry.hitBounds.xStart)),
+    xEnd: Math.max(...entries.map((entry) => entry.hitBounds.xEnd)),
+    yStart: Math.min(...entries.map((entry) => entry.hitBounds.yStart)),
+    yEnd: Math.max(...entries.map((entry) => entry.hitBounds.yEnd)),
+  };
+}
+
+function expectSelectionContainsLineLocalBounds(
+  selection: Awaited<ReturnType<typeof getKnuthPlassSelectionRects>>,
+  line: ParagraphLayoutReport["lines"][number],
+  bounds: { readonly xStart: number; readonly xEnd: number; readonly yStart: number; readonly yEnd: number }
+): void {
+  const rect = selection.rects[0];
+  expect(rect).toBeTruthy();
+  const lineStart = Number(line.xStart);
+  const epsilon = 1e-6;
+  expect(Number(rect?.bounds.minX)).toBeLessThanOrEqual(bounds.xStart - lineStart + epsilon);
+  expect(Number(rect?.bounds.maxX)).toBeGreaterThanOrEqual(bounds.xEnd - lineStart - epsilon);
+  expect(Number(rect?.bounds.minY)).toBeLessThanOrEqual(bounds.yStart + epsilon);
+  expect(Number(rect?.bounds.maxY)).toBeGreaterThanOrEqual(bounds.yEnd - epsilon);
+}
+
 function registeredLayoutWithBoxReport<T extends {
   readonly items: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
@@ -4759,6 +4808,11 @@ describe("simple TeX paragraph layout", () => {
     expect(numeratorSelection.rects).toHaveLength(1);
     expect(Number(numeratorSelection.rects[0]?.bounds.minX)).toBeGreaterThan(fractionConstruct?.xStart ?? 0);
     expect(Number(numeratorSelection.rects[0]?.bounds.maxX)).toBeLessThan(fractionConstruct?.xEnd ?? Number.POSITIVE_INFINITY);
+    expectSelectionContainsLineLocalBounds(
+      numeratorSelection,
+      report!.lines[0]!,
+      mathGlyphBoundsForText(mathSegment!, sourceText, "1234")
+    );
 
     const denominatorSelection = await getKnuthPlassSelectionRects(outputJax, {
       paragraphId: "tex:inline-math-fraction-row-selection",
@@ -4772,6 +4826,11 @@ describe("simple TeX paragraph layout", () => {
     expect(denominatorSelection.rects).toHaveLength(1);
     expect(Number(numeratorSelection.rects[0]?.bounds.maxY)).toBeLessThan(
       Number(denominatorSelection.rects[0]?.bounds.minY)
+    );
+    expectSelectionContainsLineLocalBounds(
+      denominatorSelection,
+      report!.lines[0]!,
+      mathGlyphBoundsForText(mathSegment!, sourceText, "98765")
     );
 
     const caretOffsetBetweenTwoAndThree = sourceText.indexOf("3");
