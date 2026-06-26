@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
   expandMacroBindings,
+  expandMacroBindingsMapped,
   isControlSequenceToken,
   type MacroBinding,
   type MacroExpansionTraceEvent,
   type MacroOriginFrame
 } from "../packages/core/src/macros/index.js";
+import { projectInputRange } from "../packages/core/src/text/source-map.js";
 
 function makeOrigin(
   macroName: string,
@@ -175,5 +177,66 @@ describe("macro expansion", () => {
     expect(expandMacroBindings(String.raw`\opt[[a[b]]]{R}`, bindings)).toBe("[a[b]]/R");
     expect(expandMacroBindings(String.raw`\opt[unterminated{R}`, bindings)).toBe(String.raw`\opt[unterminated{R}`);
     expect(expandMacroBindings(String.raw`\hash{Z}`, bindings)).toBe("#/Z/#3/#x");
+  });
+
+  it("maps macro-generated text to invocations and arguments to original argument source", () => {
+    const bindings = new Map<string, MacroBinding>([
+      ["\\wrap", callableBinding(String.raw`\textbf{#1}`, 1, "\\wrap", "macro:wrap")]
+    ]);
+
+    const expanded = expandMacroBindingsMapped(String.raw`\wrap{Alpha}`, bindings, { sourceOffset: 20 });
+
+    expect(expanded.text).toBe(String.raw`\textbf{Alpha}`);
+    expect(projectInputRange(expanded.sourceMap, 0, "\\textbf{".length)).toEqual({
+      kind: "source-range",
+      from: 20,
+      to: 32,
+      policy: "macro",
+      macroName: "\\wrap"
+    });
+    expect(projectInputRange(expanded.sourceMap, "\\textbf{".length, "\\textbf{Alpha".length)).toEqual({
+      kind: "source-range",
+      from: 26,
+      to: 31,
+      policy: "caret"
+    });
+    expect(expanded.sourceMap.charOrigins["\\textbf{".length]).toMatchObject({
+      kind: "macro-argument",
+      from: 26,
+      to: 27,
+      macroName: "\\wrap"
+    });
+  });
+
+  it("maps optional default arguments as generated text owned by the invocation", () => {
+    const bindings = new Map<string, MacroBinding>([
+      [
+        "\\pair",
+        {
+          kind: "callable",
+          body: "#1/#2",
+          parameterCount: 2,
+          optionalFirstArgDefault: "left",
+          provenance: [makeOrigin("\\pair", "macro:pair", "\\newcommand")]
+        }
+      ]
+    ]);
+
+    const expanded = expandMacroBindingsMapped(String.raw`\pair{R}`, bindings, { sourceOffset: 10 });
+
+    expect(expanded.text).toBe("left/R");
+    expect(projectInputRange(expanded.sourceMap, 0, 4)).toEqual({
+      kind: "source-range",
+      from: 10,
+      to: 18,
+      policy: "generated",
+      reason: "macro optional default"
+    });
+    expect(projectInputRange(expanded.sourceMap, 5, 6)).toEqual({
+      kind: "source-range",
+      from: 16,
+      to: 17,
+      policy: "caret"
+    });
   });
 });
