@@ -48,15 +48,17 @@ export class TexParagraphLayoutState {
           this.activeAlignmentProfile
         )
       : undefined;
-    const resetAlignment = params.scopePolicy.resetAlignment ??
-      (params.scopePolicy.resetAlignmentSource === "restored-current"
-        ? texRestoredScopeAlignment(this.activeAlignment)
-        : this.defaultAlignment);
+    const sourceReset = texSourceResetAlignment(
+      params.scopePolicy.resetAlignmentSource,
+      this.activeAlignment,
+      this.defaultAlignment
+    );
+    const resetAlignment = params.scopePolicy.resetAlignment ?? sourceReset.alignment;
     const inheritedAlignment = params.scopePolicy.resetInheritedAlignment
       ? resetAlignment
       : this.activeAlignment;
     const inheritedAlignmentProfile = params.scopePolicy.resetInheritedAlignment
-      ? params.scopePolicy.resetAlignmentProfile
+      ? params.scopePolicy.resetAlignmentProfile ?? sourceReset.alignmentProfile
       : this.activeAlignmentProfile;
     const blockAlignment = texHonoredBlockAlignment(
       params.paragraph,
@@ -116,6 +118,25 @@ function texRestoredScopeAlignment(
   return alignment === "ragged-left" || alignment === "center"
     ? "ragged-right"
     : alignment;
+}
+
+function texSourceResetAlignment(
+  source: TexParagraphScopePolicy["resetAlignmentSource"] | undefined,
+  activeAlignment: TexParagraphAlignment,
+  defaultAlignment: TexParagraphAlignment
+): {
+  readonly alignment: TexParagraphAlignment;
+  readonly alignmentProfile?: TexAlignmentProfile;
+} {
+  if (source === "restored-current") {
+    return { alignment: texRestoredScopeAlignment(activeAlignment) };
+  }
+  if (source === "latex-list") {
+    return activeAlignment === "ragged-right"
+      ? { alignment: "ragged-right" }
+      : { alignment: defaultAlignment };
+  }
+  return { alignment: defaultAlignment };
 }
 
 export function texInitialReportAlignment(

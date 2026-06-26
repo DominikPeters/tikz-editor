@@ -74,6 +74,7 @@ export function texVBoxLayoutForScopeRole(
     },
     paragraphPolicy: {
       resetInheritedAlignment: true,
+      resetAlignmentSource: "latex-list",
       resetSpaceGlueProfile: true,
     },
   };

@@ -535,6 +535,67 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("applies LaTeX list alignment resets in source scope order", () => {
+    const font = computerModernTexMetricProvider.resolveFont();
+    const listInsideCenter = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\begin{itemize}\item Alpha Beta\end{itemize}\end{center}`
+    );
+    const centerInsideList = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item Alpha \begin{center}Beta Gamma\end{center}\end{itemize}`
+    );
+    const listInsideCenterLayout = createSimpleTexLayoutDocumentIr({
+      blocks: listInsideCenter.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { width: 120 },
+    });
+    const centerInsideListLayout = createSimpleTexLayoutDocumentIr({
+      blocks: centerInsideList.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { width: 120 },
+    });
+
+    expect(listInsideCenterLayout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      alignmentProfile: plan.alignmentProfile,
+    }))).toEqual([
+      { text: "Alpha Beta", alignment: "justified", alignmentProfile: undefined },
+    ]);
+    expect(centerInsideListLayout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      alignmentProfile: plan.alignmentProfile,
+    }))).toEqual([
+      { text: "Alpha", alignment: "justified", alignmentProfile: undefined },
+      { text: "Beta Gamma", alignment: "center", alignmentProfile: "latex-declaration" },
+    ]);
+  });
+
+  it("keeps quotation item indentation inside alignment environments", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\begin{quotation}Alpha Beta\end{quotation}\end{center}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      noIndent: block.noIndent,
+      firstLineIndentEm: block.firstLineIndentEm,
+      quotationItemFirstParagraph: block.quotationItemFirstParagraph,
+      scopePath: block.scopePath?.map((role) => role.kind),
+    }))).toEqual([
+      {
+        text: "Alpha Beta",
+        noIndent: true,
+        firstLineIndentEm: 1.5,
+        quotationItemFirstParagraph: true,
+        scopePath: ["trivlist", "quote"],
+      },
+    ]);
+  });
+
   it("does not emit empty scope paths for vertical material before list items", () => {
     const ir = parseSimpleTexParagraphIr(
       String.raw`\begin{itemize}\smallskip\item Alpha\end{itemize}`

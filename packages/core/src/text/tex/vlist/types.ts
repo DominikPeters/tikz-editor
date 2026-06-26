@@ -259,7 +259,7 @@ export interface TexVBoxParagraphPolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
   readonly resetAlignment?: TexParagraphAlignment;
   readonly resetAlignmentProfile?: TexAlignmentProfile;
-  readonly resetAlignmentSource?: "restored-current";
+  readonly resetAlignmentSource?: "restored-current" | "latex-list";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
   readonly preserveSpaceGlueProfile?: boolean;
   readonly resetFinalHyphenDemeritsFromAlignment?: boolean;

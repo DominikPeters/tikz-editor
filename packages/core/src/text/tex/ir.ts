@@ -2369,10 +2369,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     listStack.length > 0 ||
     scopeStack.some((role) => role.kind === "trivlist");
 
-  const quotationFirstLineIndentEm = (
-    noIndent: boolean
-  ): number | undefined =>
-    currentQuotationDepth > 0 && listStack.length === 0 && !noIndent
+  const quotationFirstLineIndentEm = (): number | undefined =>
+    currentQuotationDepth > 0 && listStack.length === 0
       ? latexArticleQuotationFirstLineIndentEm
       : undefined;
 
@@ -2429,7 +2427,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockStart,
         node.sourceStart,
         currentNoIndent,
-        quotationFirstLineIndentEm(currentNoIndent),
+        quotationFirstLineIndentEm(),
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
@@ -2461,7 +2459,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockStart,
         node.sourceStart,
         currentNoIndent,
-        quotationFirstLineIndentEm(currentNoIndent),
+        quotationFirstLineIndentEm(),
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
@@ -2479,7 +2477,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockStart,
         node.sourceStart,
         currentNoIndent || environmentSuppressesParagraphIndent(),
-        quotationFirstLineIndentEm(currentNoIndent),
+        quotationFirstLineIndentEm(),
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
@@ -2545,7 +2543,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         blockStart,
         node.sourceStart,
         currentNoIndent || environmentSuppressesParagraphIndent(),
-        quotationFirstLineIndentEm(currentNoIndent),
+        quotationFirstLineIndentEm(),
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
@@ -2700,7 +2698,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       blockStart,
       sourceEnd,
       currentNoIndent || environmentSuppressesParagraphIndent(),
-      quotationFirstLineIndentEm(currentNoIndent),
+      quotationFirstLineIndentEm(),
       currentQuoteDepth,
       currentQuotationDepth,
       prefix.alignment,

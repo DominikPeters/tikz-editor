@@ -177,6 +177,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const startsListInVerticalMode = startsAfterExplicitPar ||
       (!hasPreviousEmittedParagraph && item.paragraph.tikzTextWidthNode !== true);
     const followsDisplay = state.previousEmittedContentKind === "display";
+    const exitsTrivlistScope =
+      state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
     const listVerticalSkipBefore = followsDisplay
       ? 0
       : texArticleListVerticalSkipBefore(
@@ -185,6 +187,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           scope.listContext,
           hasPreviousEmittedParagraph,
           startsListInVerticalMode,
+          exitsTrivlistScope,
           font
         );
     const quoteVerticalSkipBefore = followsDisplay
@@ -1483,7 +1486,7 @@ function texArticleTrivlistVerticalSkipBefore(
       continue;
     }
     const usesPartopsep =
-      index === 0 && previousScopes.length === 0 && startsListInVerticalMode;
+      index === 0 && commonPrefixLength === 0 && startsListInVerticalMode;
     state.trivlistPartopsepByScope.set(scope, usesPartopsep);
     size = Math.max(
       size,
@@ -1503,6 +1506,7 @@ function texArticleListVerticalSkipBefore(
   current: SimpleTexListContext | undefined,
   hasPreviousEmittedParagraph: boolean,
   startsListInVerticalMode: boolean,
+  exitsTrivlistScope: boolean,
   font: ResolvedTexFont
 ): number {
   if (!previous && !current) {
@@ -1538,6 +1542,9 @@ function texArticleListVerticalSkipBefore(
     current.itemIndex === previous.itemIndex
   ) {
     return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth, font);
+  }
+  if (exitsTrivlistScope && current.depth === previous.depth) {
+    return texArticleListItemSepSkip(current.depth, font);
   }
   return texArticleListItemBoundarySkip(current.depth, font);
 }
@@ -1642,6 +1649,10 @@ function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): n
       texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth),
     font
   );
+}
+
+function texArticleListItemSepSkip(depth: number, font: ResolvedTexFont): number {
+  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth), font);
 }
 
 function texArticleListParagraphSkip(depth: number, font: ResolvedTexFont): number {

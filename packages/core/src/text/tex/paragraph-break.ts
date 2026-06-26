@@ -308,6 +308,7 @@ function texDeclarationLeftskipStretch(
 ): number {
   if (
     scopePolicy.suppressRaggedLeftCenterLeftskipStretch &&
+    !latexDeclaration &&
     (alignment === "ragged-left" || alignment === "center")
   ) {
     return 0;
@@ -332,7 +333,7 @@ function texDeclarationRightskipStretch(
     if (alignment === "ragged-right") {
       return Number.POSITIVE_INFINITY;
     }
-    if (alignment === "center") {
+    if (alignment === "center" && !latexDeclaration) {
       return 0;
     }
   }
@@ -352,9 +353,6 @@ function texParfillStretchForAlignment(
   inheritedParfillStretch = Number.POSITIVE_INFINITY,
   scopePolicy: TexParagraphBreakScopePolicy = DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY
 ): number {
-  if (scopePolicy.forceParfillStretch) {
-    return Number.POSITIVE_INFINITY;
-  }
   if (alignmentProfile === "latex-declaration") {
     if (alignment === "center" || alignment === "ragged-left") {
       return 0;
@@ -365,6 +363,9 @@ function texParfillStretchForAlignment(
       }
       return inheritedParfillStretch;
     }
+  }
+  if (scopePolicy.forceParfillStretch) {
+    return Number.POSITIVE_INFINITY;
   }
   return alignment === "ragged-right" || alignment === "justified"
     ? Number.POSITIVE_INFINITY

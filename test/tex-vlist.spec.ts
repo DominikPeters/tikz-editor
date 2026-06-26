@@ -1766,9 +1766,16 @@ describe("TeX vlist spacing", () => {
     );
     const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
     const replacementVList = lowerSimpleTexBlocksToVList(replacementParsed.blocks);
+    const replacementTikzNodeVList = lowerSimpleTexBlocksToVList(replacementParsed.blocks, {
+      tikzTextWidthNode: true,
+    });
     const font = computerModernTexMetricProvider.resolveFont();
     const skips = planSimpleTexParagraphVerticalSkips(vlist.items, font);
     const replacementSkips = planSimpleTexParagraphVerticalSkips(replacementVList.items, font);
+    const replacementTikzNodeSkips = planSimpleTexParagraphVerticalSkips(
+      replacementTikzNodeVList.items,
+      font
+    );
     const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
 
     expect(skips.map((skip) => ({
@@ -1790,6 +1797,14 @@ describe("TeX vlist spacing", () => {
       size: skip.size,
     }))).toEqual([
       { blockIndex: 0, trivlistSize: 10, size: 10 },
+      { blockIndex: 1, trivlistSize: 10, size: 10 },
+    ]);
+    expect(replacementTikzNodeSkips.map((skip) => ({
+      blockIndex: skip.blockIndex,
+      trivlistSize: skip.trivlistSize ?? 0,
+      size: skip.size,
+    }))).toEqual([
+      { blockIndex: 0, trivlistSize: 8, size: 8 },
       { blockIndex: 1, trivlistSize: 10, size: 10 },
     ]);
     expect(materialized.items.map((item) =>
@@ -1826,6 +1841,29 @@ describe("TeX vlist spacing", () => {
         scopeKinds: undefined,
       },
       { kind: "paragraph", text: "Delta" },
+    ]);
+  });
+
+  it("uses itemsep only for a list item following a nested trivlist", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{enumerate}\item Alpha \begin{center}Beta \par Gamma\end{center}\item Delta\end{enumerate}`
+    );
+    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks, {
+      tikzTextWidthNode: true,
+    });
+    const font = computerModernTexMetricProvider.resolveFont();
+    const skips = planSimpleTexParagraphVerticalSkips(vlist.items, font);
+
+    expect(skips.map((skip) => ({
+      blockIndex: skip.blockIndex,
+      listSize: skip.listSize,
+      trivlistSize: skip.trivlistSize ?? 0,
+      size: skip.size,
+    }))).toEqual([
+      { blockIndex: 0, listSize: 11, trivlistSize: 0, size: 11 },
+      { blockIndex: 1, listSize: 4, trivlistSize: 8, size: 12 },
+      { blockIndex: 2, listSize: 4, trivlistSize: 0, size: 4 },
+      { blockIndex: 3, listSize: 4, trivlistSize: 8, size: 12 },
     ]);
   });
 
@@ -2158,6 +2196,7 @@ describe("TeX vlist spacing", () => {
           },
           paragraphPolicy: {
             resetInheritedAlignment: true,
+            resetAlignmentSource: "latex-list",
             resetSpaceGlueProfile: true,
           },
         },

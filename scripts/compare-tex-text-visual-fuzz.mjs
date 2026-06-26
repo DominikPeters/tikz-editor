@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, style, list, vertical-glue, rule, box, box-hard, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, box, box-hard, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -177,8 +177,20 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
   }
-  if (!["broad", "ligatures", "quote", "style", "list", "vertical-glue", "rule", "box", "box-hard", "mixed"].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, style, list, vertical-glue, rule, box, box-hard, or mixed.");
+  if (![
+    "broad",
+    "ligatures",
+    "quote",
+    "alignment-env",
+    "style",
+    "list",
+    "vertical-glue",
+    "rule",
+    "box",
+    "box-hard",
+    "mixed",
+  ].includes(options.caseMode)) {
+    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, box, box-hard, or mixed.");
   }
   return options;
 }
@@ -331,6 +343,67 @@ function generateQuoteCase(index, random) {
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
     feature: environmentName,
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
+function alignmentEnvironmentName(index) {
+  return ["center", "flushleft", "flushright"][index % 3];
+}
+
+function wrapAlignmentEnvironment(environmentName, body) {
+  return `\\begin{${environmentName}}${body}\\end{${environmentName}}`;
+}
+
+function generateAlignmentEnvironmentCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const widths = [100, 120, 150, 180, 220, 260, 320];
+  const width = choice(random, widths);
+  const parindent = choice(random, [0, 10, 15]);
+  const environmentName = alignmentEnvironmentName(index);
+  const nextEnvironmentName = alignmentEnvironmentName(index + 1);
+  const boxWidth = Math.min(width - 20, choice(random, [90, 100, 120, 140]));
+  const featureIndex = Math.floor(index / 3) % 8;
+  let feature;
+  let text;
+  if (featureIndex === 0) {
+    feature = `alignment-env-${environmentName}`;
+    text = wrapAlignmentEnvironment(environmentName, ` ${paragraph(random, 1 + Math.floor(random() * 2))} `);
+  } else if (featureIndex === 1) {
+    feature = "alignment-env-multi-paragraph";
+    text = `${paragraph(random, 1)} \\par ${wrapAlignmentEnvironment(environmentName, ` ${paragraph(random, 1)} \\par ${paragraph(random, 1)} `)} \\par ${paragraph(random, 1)}`;
+  } else if (featureIndex === 2) {
+    feature = "alignment-env-consecutive";
+    text = `${wrapAlignmentEnvironment(environmentName, ` ${sentence(random, 5, 9)} `)} \\par ${wrapAlignmentEnvironment(nextEnvironmentName, ` ${sentence(random, 5, 9)} `)}`;
+  } else if (featureIndex === 3) {
+    feature = "alignment-env-box";
+    text = `\\parbox{${boxWidth}pt}{${wrapAlignmentEnvironment(environmentName, ` ${sentence(random, 5, 9)} \\par ${sentence(random, 4, 7)} `)}}`;
+  } else if (featureIndex === 4) {
+    feature = "alignment-env-minipage";
+    text = `\\begin{minipage}{${boxWidth}pt}${wrapAlignmentEnvironment(environmentName, ` ${sentence(random, 5, 9)} \\par ${sentence(random, 4, 7)} `)}\\end{minipage}`;
+  } else if (featureIndex === 5) {
+    feature = "alignment-env-list-inside";
+    text = wrapAlignmentEnvironment(environmentName, ` ${listEnvironment("itemize", [
+      listItemText(random, index),
+      listItemText(random, index + 1),
+    ])} `);
+  } else if (featureIndex === 6) {
+    feature = "alignment-env-inside-list";
+    text = listEnvironment("enumerate", [
+      `${sentence(random, 3, 6)} ${wrapAlignmentEnvironment(environmentName, ` ${sentence(random, 4, 8)} \\par ${sentence(random, 4, 7)} `)}`,
+      listItemText(random, index + 1),
+    ]);
+  } else {
+    const quoteEnvironmentName = index % 2 === 0 ? "quote" : "quotation";
+    feature = "alignment-env-quote";
+    text = wrapAlignmentEnvironment(environmentName, ` \\begin{${quoteEnvironmentName}}${sentence(random, 5, 9)} \\par ${sentence(random, 4, 7)}\\end{${quoteEnvironmentName}} `);
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature,
     text,
     width,
     parindent,
@@ -614,7 +687,7 @@ function generateBoxHardCase(index, random) {
 }
 
 function generateMixedFeatureCase(index, random) {
-  const feature = index % 6;
+  const feature = index % 7;
   if (feature === 0) {
     const generated = generateListCase(index, random);
     return {
@@ -660,6 +733,13 @@ function generateMixedFeatureCase(index, random) {
       feature: "mixed-vertical-glue",
     };
   }
+  if (feature === 5) {
+    const generated = generateAlignmentEnvironmentCase(index, random);
+    return {
+      ...generated,
+      feature: `mixed-${generated.feature}`,
+    };
+  }
   return {
     ...generateCase(index, random),
     feature: "mixed-basic",
@@ -672,6 +752,9 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "quote") {
     return generateQuoteCase(index, random);
+  }
+  if (mode === "alignment-env") {
+    return generateAlignmentEnvironmentCase(index, random);
   }
   if (mode === "style") {
     return generateStyleCase(index, random);
@@ -1821,9 +1904,13 @@ async function main() {
         : null;
       const texRows = extractSvgRows(readFileSync(texPdfToCairoSvgPath, "utf8"));
       // The Lua node trace descends into parbox/minipage vlists before TikZ's
-      // outer hlist shift is visible, so box mode checks line-relative geometry
-      // and leaves absolute x as a diagnostic.
-      const ignoreAbsoluteTraceX = options.caseMode === "box" || options.caseMode === "box-hard";
+      // outer hlist shift is visible, so generated box cases check
+      // line-relative geometry and leave absolute x as a diagnostic.
+      const ignoreAbsoluteTraceX =
+        options.caseMode === "box" ||
+        options.caseMode === "box-hard" ||
+        caseData.feature.includes("box") ||
+        caseData.feature.includes("minipage");
       const traceFlagged =
         !traceComparison.lineTextMatch ||
         !traceComparison.glyphCodeMatch ||

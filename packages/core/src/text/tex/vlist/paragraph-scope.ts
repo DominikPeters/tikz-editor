@@ -12,7 +12,7 @@ export interface TexParagraphScopePolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
   readonly resetAlignment?: TexParagraphAlignment;
   readonly resetAlignmentProfile?: TexAlignmentProfile;
-  readonly resetAlignmentSource?: "restored-current";
+  readonly resetAlignmentSource?: "restored-current" | "latex-list";
   readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
   readonly preserveSpaceGlueProfile?: boolean;
   readonly resetFinalHyphenDemeritsFromAlignment?: boolean;
@@ -93,7 +93,7 @@ function texParagraphScopePolicy(
     raggedRightProfile?: TexAlignmentProfile;
     resetAlignment?: TexParagraphAlignment;
     resetAlignmentProfile?: TexAlignmentProfile;
-    resetAlignmentSource?: "restored-current";
+    resetAlignmentSource?: "restored-current" | "latex-list";
     resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
     preserveSpaceGlueProfile?: boolean;
     resetFinalHyphenDemeritsFromAlignment?: boolean;
@@ -119,7 +119,13 @@ function texParagraphScopePolicy(
     if (paragraphPolicy.resetAlignmentProfile) {
       policy.resetAlignmentProfile = paragraphPolicy.resetAlignmentProfile;
     }
-    if (paragraphPolicy.resetAlignmentSource) {
+    if (paragraphPolicy.resetAlignmentSource === "latex-list") {
+      if (policy.resetAlignment !== "ragged-right") {
+        delete policy.resetAlignment;
+        delete policy.resetAlignmentProfile;
+      }
+      policy.resetAlignmentSource = paragraphPolicy.resetAlignmentSource;
+    } else if (paragraphPolicy.resetAlignmentSource) {
       policy.resetAlignmentSource = paragraphPolicy.resetAlignmentSource;
     }
     if (paragraphPolicy.resetSpaceGlueProfileTo) {
