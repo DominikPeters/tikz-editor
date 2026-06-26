@@ -345,6 +345,7 @@ export interface SelectionRectsResult extends ResultBase {
 interface Stop {
   offset: number;
   x: number;
+  y?: number;
   kind: 'text' | 'space' | 'math';
   snappedToMathPrefix: boolean;
   lineStart: boolean;
@@ -369,6 +370,7 @@ interface LineHitMap extends LineGeometry {
   stopsByOffset: Stop[];
   stopsByOffsetExact: Map<number, Stop[]>;
   mathConstructRanges: MathConstructRange[];
+  mathCaretEntries: MathCaretEntry[];
   minOffset: number;
   maxOffset: number;
   breakInfo: ParagraphLayoutReport['lines'][number]['break'];
@@ -396,6 +398,7 @@ interface AlignedSegment {
   sourceKind: 'text' | 'math';
   mathSpan?: MathSourceSpan;
   mathConstructRanges?: MathConstructRange[];
+  mathCaretEntries?: MathCaretEntry[];
 }
 
 interface MathConstructRange {
@@ -403,6 +406,24 @@ interface MathConstructRange {
   sourceEndRaw: number;
   xStart: number;
   xEnd: number;
+}
+
+interface MathCaretEntry {
+  sourceOffsetRaw: number;
+  sourceStartRaw?: number;
+  sourceEndRaw?: number;
+  x: number;
+  y: number;
+  height: number;
+  depth: number;
+  kind: NonNullable<LineSegmentReport['mathCaretEntries']>[number]['kind'];
+  priority?: number;
+  hitBounds: {
+    xStart: number;
+    xEnd: number;
+    yStart: number;
+    yEnd: number;
+  };
 }
 
 interface CachedParagraphEntry {
@@ -1556,14 +1577,16 @@ function inverseScreenMatrixForLine(
 function lineLocalClientPoint(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number],
-  x: number
+  x: number,
+  y = 0
 ): ClientPoint {
   const lineStart = Number(reportLine.xStart);
   const localReportX = x - lineStart;
   const svgX = localReportX * line.reportToSvgScaleX;
+  const svgY = y * line.reportToSvgScaleX;
   return makeClientPoint(
-    px(line.screenMatrix.a * svgX + line.screenMatrix.c * 0 + line.screenMatrix.e),
-    px(line.screenMatrix.b * svgX + line.screenMatrix.d * 0 + line.screenMatrix.f)
+    px(line.screenMatrix.a * svgX + line.screenMatrix.c * svgY + line.screenMatrix.e),
+    px(line.screenMatrix.b * svgX + line.screenMatrix.d * svgY + line.screenMatrix.f)
   );
 }
 
@@ -1629,18 +1652,24 @@ function lineClientHeight(
   return Math.max(1, Math.min(fallback, inferredHeight));
 }
 
-function clientToLineLocalX(
+function clientToLineLocalPoint(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number],
   clientPoint: ClientPoint
-): number {
+): { readonly x: number; readonly y: number } {
   const lineStart = Number(reportLine.xStart);
   const localX =
     line.inverseScreenMatrix.a * clientPoint.x +
     line.inverseScreenMatrix.c * clientPoint.y +
     line.inverseScreenMatrix.e;
-  const reportX = localX / line.reportToSvgScaleX + lineStart;
-  return reportX;
+  const localY =
+    line.inverseScreenMatrix.b * clientPoint.x +
+    line.inverseScreenMatrix.d * clientPoint.y +
+    line.inverseScreenMatrix.f;
+  return {
+    x: localX / line.reportToSvgScaleX + lineStart,
+    y: localY / line.reportToSvgScaleX,
+  };
 }
 
 function annotateSegmentSource(
@@ -1700,6 +1729,56 @@ function normalizeMathConstructRanges(
       xEnd > xStart
       ? [{ sourceStartRaw, sourceEndRaw, xStart, xEnd }]
       : [];
+  });
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeMathCaretEntries(
+  entries: LineSegmentReport['mathCaretEntries']
+): MathCaretEntry[] | undefined {
+  if (!Array.isArray(entries)) {
+    return undefined;
+  }
+  const normalized = entries.flatMap((entry) => {
+    const sourceOffsetRaw = Number(entry.sourceOffsetRaw);
+    const x = Number(entry.x);
+    const y = Number(entry.y);
+    const height = Number(entry.height);
+    const depth = Number(entry.depth);
+    const xStart = Number(entry.hitBounds.xStart);
+    const xEnd = Number(entry.hitBounds.xEnd);
+    const yStart = Number(entry.hitBounds.yStart);
+    const yEnd = Number(entry.hitBounds.yEnd);
+    if (
+      !Number.isFinite(sourceOffsetRaw) ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(height) ||
+      !Number.isFinite(depth) ||
+      !Number.isFinite(xStart) ||
+      !Number.isFinite(xEnd) ||
+      !Number.isFinite(yStart) ||
+      !Number.isFinite(yEnd)
+    ) {
+      return [];
+    }
+    return [{
+      sourceOffsetRaw,
+      ...(Number.isFinite(Number(entry.sourceStartRaw)) ? { sourceStartRaw: Number(entry.sourceStartRaw) } : {}),
+      ...(Number.isFinite(Number(entry.sourceEndRaw)) ? { sourceEndRaw: Number(entry.sourceEndRaw) } : {}),
+      x,
+      y,
+      height,
+      depth,
+      kind: entry.kind,
+      ...(Number.isFinite(Number(entry.priority)) ? { priority: Number(entry.priority) } : {}),
+      hitBounds: {
+        xStart: Math.min(xStart, xEnd),
+        xEnd: Math.max(xStart, xEnd),
+        yStart: Math.min(yStart, yEnd),
+        yEnd: Math.max(yStart, yEnd),
+      },
+    }];
   });
   return normalized.length > 0 ? normalized : undefined;
 }
@@ -2027,6 +2106,7 @@ function alignSegmentsToSource(
                 sourceKind: 'math',
                 mathSpan: containingMathSpan,
                 mathConstructRanges: normalizeMathConstructRanges(segment.mathConstructRanges),
+                mathCaretEntries: normalizeMathCaretEntries(segment.mathCaretEntries),
               });
               continue;
             }
@@ -2053,6 +2133,9 @@ function alignSegmentsToSource(
           mathSpan,
           mathConstructRanges: explicitRange.sourceKind === 'math'
             ? normalizeMathConstructRanges(segment.mathConstructRanges)
+            : undefined,
+          mathCaretEntries: explicitRange.sourceKind === 'math'
+            ? normalizeMathCaretEntries(segment.mathCaretEntries)
             : undefined,
         });
         continue;
@@ -2120,6 +2203,9 @@ function alignSegmentsToSource(
         const groupConstructRanges = mathGroupStartIndex === segmentIndex
           ? normalizeMathConstructRanges(segment.mathConstructRanges)
           : undefined;
+        const groupCaretEntries = mathGroupStartIndex === segmentIndex
+          ? normalizeMathCaretEntries(segment.mathCaretEntries)
+          : undefined;
 
         aligned.push({
           lineIndex: line.lineIndex,
@@ -2136,6 +2222,7 @@ function alignSegmentsToSource(
           sourceKind: 'math',
           mathSpan,
           mathConstructRanges: groupConstructRanges,
+          mathCaretEntries: groupCaretEntries,
         });
         continue;
       }
@@ -2272,6 +2359,7 @@ function alignExplicitMathSegmentGroup(
     groupEndX
   );
   const mathConstructRanges = combineExplicitMathConstructRanges(segments);
+  const mathCaretEntries = combineExplicitMathCaretEntries(segments);
 
   for (const groupedSegment of segments) {
     annotateSegmentSource(groupedSegment, groupRawStart, groupRawEnd, 'math');
@@ -2294,6 +2382,7 @@ function alignExplicitMathSegmentGroup(
       sourceKind: 'math',
       mathSpan,
       mathConstructRanges,
+      mathCaretEntries,
     },
   };
 }
@@ -2372,6 +2461,13 @@ function combineExplicitMathConstructRanges(
   return ranges.length > 0 ? ranges : undefined;
 }
 
+function combineExplicitMathCaretEntries(
+  segments: readonly LineSegmentReport[]
+): MathCaretEntry[] | undefined {
+  const entries = segments.flatMap((segment) => normalizeMathCaretEntries(segment.mathCaretEntries) ?? []);
+  return entries.length > 0 ? entries : undefined;
+}
+
 function markLineEndpoints(stops: Stop[]): Stop[] {
   if (!stops.length) {
     return stops;
@@ -2418,9 +2514,12 @@ async function buildStopsByLine(
         providedStops.every((value) => Number.isFinite(value))
       ) {
         for (let i = 0; i <= rawLength; i++) {
+          const offset = aligned.rawStart + i;
+          const mathEntry = bestMathCaretEntryForOffset(aligned.mathCaretEntries, offset);
           addStop(aligned.lineIndex, {
-            offset: aligned.rawStart + i,
+            offset,
             x: providedStops[i],
+            ...(mathEntry ? { y: mathEntry.y } : {}),
             kind: 'math',
             snappedToMathPrefix: false,
             lineStart: false,
@@ -2435,9 +2534,12 @@ async function buildStopsByLine(
         providedStops.every((value) => Number.isFinite(value))
       ) {
         for (let i = 0; i <= spanRawLength; i++) {
+          const offset = span.rawStart + i;
+          const mathEntry = bestMathCaretEntryForOffset(aligned.mathCaretEntries, offset);
           addStop(aligned.lineIndex, {
-            offset: span.rawStart + i,
+            offset,
             x: providedStops[i],
+            ...(mathEntry ? { y: mathEntry.y } : {}),
             kind: 'math',
             snappedToMathPrefix: false,
             lineStart: false,
@@ -2523,7 +2625,8 @@ function buildLineHitMaps(
   geometryByLineIndex: Map<number, LineGeometry>,
   sourceLength: number,
   visibleHyphenBreakOffsetByLine: Map<number, number>,
-  mathConstructRangesByLine: Map<number, MathConstructRange[]>
+  mathConstructRangesByLine: Map<number, MathConstructRange[]>,
+  mathCaretEntriesByLine: Map<number, MathCaretEntry[]>
 ): LineHitMap[] {
   const lines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
   return lines.map((line) => {
@@ -2557,6 +2660,7 @@ function buildLineHitMaps(
       stopsByOffset: byOffset,
       stopsByOffsetExact: exact,
       mathConstructRanges: mathConstructRangesByLine.get(line.lineIndex) ?? [],
+      mathCaretEntries: mathCaretEntriesByLine.get(line.lineIndex) ?? [],
       minOffset,
       maxOffset,
       breakInfo: line.break,
@@ -2631,11 +2735,11 @@ function displayMathLineHitMapFromPositionedItem(params: {
     return [];
   }
   const xEnd = xStart + width;
-  const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y);
+  const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y + metrics.height);
   const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, params.lineIndex);
   const bounds = clientRectForLocalBox(
     0,
-    0,
+    -metrics.height,
     width,
     totalHeight,
     lineMatrix
@@ -2659,6 +2763,7 @@ function displayMathLineHitMapFromPositionedItem(params: {
     exact.set(stop.offset, list);
   }
   const constructRanges = displayMathConstructRangesForBox(source, xStart, width) ?? [];
+  const mathCaretEntries = displayMathCaretEntriesForBox(source, xStart, width) ?? [];
   return [{
     lineIndex: params.lineIndex,
     clientLeft: bounds.clientLeft,
@@ -2679,6 +2784,7 @@ function displayMathLineHitMapFromPositionedItem(params: {
     }),
     stopsByOffsetExact: exact,
     mathConstructRanges: constructRanges,
+    mathCaretEntries,
     minOffset: sourceStart,
     maxOffset: sourceEnd,
     breakInfo: null,
@@ -2721,6 +2827,7 @@ function displayMathSyntheticReportLine(params: {
       width,
       caretStops: displayMathCaretStopsForBox(params.source, params.xStart, width),
       mathConstructRanges: displayMathConstructRangesForBox(params.source, params.xStart, width),
+      mathCaretEntries: displayMathCaretEntriesForBox(params.source, params.xStart, width),
       mathBreakpoints: displayMathBreakpointsForBox(params.source, params.xStart, width),
       mathSvgBody: params.source.svgBody,
     }],
@@ -2824,6 +2931,36 @@ function displayMathConstructRangesForBox(
   }));
 }
 
+function displayMathCaretEntriesForBox(
+  box: Pick<TexMathBox, 'caretMap'>,
+  x: number,
+  width: number
+): LineSegmentReport['mathCaretEntries'] {
+  const entries = box.caretMap?.entries;
+  if (!entries?.length) {
+    return undefined;
+  }
+  return entries.map((entry) => ({
+    sourceOffsetRaw: entry.sourceOffset,
+    ...(entry.sourceSpan ? {
+      sourceStartRaw: entry.sourceSpan.start,
+      sourceEndRaw: entry.sourceSpan.end,
+    } : {}),
+    x: x + Math.max(0, Math.min(width, entry.x)),
+    y: entry.y,
+    height: entry.height,
+    depth: entry.depth,
+    kind: entry.kind,
+    ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
+    hitBounds: {
+      xStart: x + Math.max(0, Math.min(width, entry.hitBounds.xStart)),
+      xEnd: x + Math.max(0, Math.min(width, entry.hitBounds.xEnd)),
+      yStart: entry.hitBounds.yStart,
+      yEnd: entry.hitBounds.yEnd,
+    },
+  }));
+}
+
 function displayMathBreakpointsForBox(
   box: Pick<TexMathBox, 'breakpoints'>,
   x: number,
@@ -2852,6 +2989,21 @@ function buildMathConstructRangesByLine(
     const ranges = byLine.get(segment.lineIndex) ?? [];
     ranges.push(...segment.mathConstructRanges);
     byLine.set(segment.lineIndex, ranges);
+  }
+  return byLine;
+}
+
+function buildMathCaretEntriesByLine(
+  alignedSegments: readonly AlignedSegment[]
+): Map<number, MathCaretEntry[]> {
+  const byLine = new Map<number, MathCaretEntry[]>();
+  for (const segment of alignedSegments) {
+    if (segment.sourceKind !== 'math' || !segment.mathCaretEntries?.length) {
+      continue;
+    }
+    const entries = byLine.get(segment.lineIndex) ?? [];
+    entries.push(...segment.mathCaretEntries);
+    byLine.set(segment.lineIndex, entries);
   }
   return byLine;
 }
@@ -2900,13 +3052,15 @@ async function buildParagraphHitMap(
   const stopsByLine = await buildStopsByLine(outputJax, aligned.aligned);
   const visibleHyphenBreakOffsetByLine = buildVisibleHyphenBreakOffsetByLine(report, aligned.aligned);
   const mathConstructRangesByLine = buildMathConstructRangesByLine(aligned.aligned);
+  const mathCaretEntriesByLine = buildMathCaretEntriesByLine(aligned.aligned);
   const lines = buildLineHitMaps(
     report,
     stopsByLine,
     geometryByLineIndex,
     sourceText.length,
     visibleHyphenBreakOffsetByLine,
-    mathConstructRangesByLine
+    mathConstructRangesByLine,
+    mathCaretEntriesByLine
   );
   const displayLines = buildDisplayMathLineHitMaps(outputJax, report, containerElement);
 
@@ -2979,6 +3133,76 @@ function nearestStopByX(stops: Stop[], x: number): Stop {
     }
   }
   return best;
+}
+
+function nearestMathCaretEntryByPoint(
+  entries: readonly MathCaretEntry[],
+  point: { readonly x: number; readonly y: number }
+): MathCaretEntry | null {
+  const containing = entries.filter((entry) =>
+    point.x >= entry.hitBounds.xStart - EPSILON &&
+    point.x <= entry.hitBounds.xEnd + EPSILON &&
+    point.y >= entry.hitBounds.yStart - EPSILON &&
+    point.y <= entry.hitBounds.yEnd + EPSILON
+  );
+  if (!containing.length) {
+    return null;
+  }
+  let best = containing[0];
+  let bestDistance = mathCaretEntryDistance(best, point);
+  for (let index = 1; index < containing.length; index += 1) {
+    const candidate = containing[index];
+    const distance = mathCaretEntryDistance(candidate, point);
+    if (distance < bestDistance - EPSILON) {
+      best = candidate;
+      bestDistance = distance;
+      continue;
+    }
+    if (
+      Math.abs(distance - bestDistance) <= EPSILON &&
+      ((candidate.priority ?? 0) > (best.priority ?? 0) ||
+        ((candidate.priority ?? 0) === (best.priority ?? 0) && candidate.sourceOffsetRaw < best.sourceOffsetRaw))
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function mathCaretEntryDistance(
+  entry: MathCaretEntry,
+  point: { readonly x: number; readonly y: number }
+): number {
+  const dx = point.x - entry.x;
+  const dy = point.y - entry.y;
+  return dx * dx + dy * dy;
+}
+
+function stopFromMathCaretEntry(entry: MathCaretEntry): Stop {
+  return {
+    offset: entry.sourceOffsetRaw,
+    x: entry.x,
+    y: entry.y,
+    kind: 'math',
+    snappedToMathPrefix: false,
+    lineStart: false,
+    lineEnd: false,
+  };
+}
+
+function bestMathCaretEntryForOffset(
+  entries: readonly MathCaretEntry[] | undefined,
+  offset: number
+): MathCaretEntry | null {
+  const exact = entries?.filter((entry) => entry.sourceOffsetRaw === offset) ?? [];
+  if (!exact.length) {
+    return null;
+  }
+  return exact.sort((left, right) =>
+    (right.priority ?? 0) - (left.priority ?? 0) ||
+    left.y - right.y ||
+    left.x - right.x
+  )[0] ?? null;
 }
 
 function stopForOffset(line: LineHitMap, offset: number, preferLineStart: boolean): Stop | null {
@@ -3138,7 +3362,16 @@ function inferLineByClientPoint(
     const normal = lineNormalUnit(line);
     const dx = clientPoint.x - origin.x;
     const dy = clientPoint.y - origin.y;
-    const normalDistance = Math.abs(dx * normal.x + dy * normal.y);
+    const normalPosition = dx * normal.x + dy * normal.y;
+    const normalOffset = lineBoxNormalOffset(line, reportLine);
+    const normalHalfHeight = lineClientHeight(line, reportLine) / 2;
+    const normalMin = normalOffset - normalHalfHeight;
+    const normalMax = normalOffset + normalHalfHeight;
+    const normalDistance = normalPosition < normalMin
+      ? normalMin - normalPosition
+      : normalPosition > normalMax
+        ? normalPosition - normalMax
+        : 0;
     const tangentPosition = dx * tangent.x + dy * tangent.y;
     const lineLength = Math.max(0, Math.hypot(end.x - origin.x, end.y - origin.y));
     let outsideDistance = 0;
@@ -3232,8 +3465,9 @@ export async function getKnuthPlassCaretFromPoint(
   const line = inferLineByClientPoint(hitMap, params.clientPoint);
   const reportLine = line.reportLine;
 
-  const lineX = clientToLineLocalX(line, reportLine, params.clientPoint);
-  const stop = nearestStopByX(line.stopsByX, lineX);
+  const linePoint = clientToLineLocalPoint(line, reportLine, params.clientPoint);
+  const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, linePoint);
+  const stop = mathEntry ? stopFromMathCaretEntry(mathEntry) : nearestStopByX(line.stopsByX, linePoint.x);
   if (stop.offset < 0 || stop.offset > params.sourceText.length) {
     return errorResult<CaretHitResult>(
       paragraphId,
@@ -3353,9 +3587,18 @@ export async function getKnuthPlassPointFromOffset(
 
   const reportLine = selected.line.reportLine;
 
-  const baselinePoint = lineLocalClientPoint(selected.line, reportLine, selected.stop.x);
+  const mathPointEntry = selected.stop.kind === 'math'
+    ? bestMathCaretEntryForOffset(selected.line.mathCaretEntries, selected.stop.offset)
+    : null;
+  const mathLocalY = mathPointEntry
+    ? mathPointEntry.y
+    : selected.stop.kind === 'math' && Number.isFinite(Number(selected.stop.y))
+      ? Number(selected.stop.y)
+      : null;
+  const pointX = mathPointEntry?.x ?? selected.stop.x;
+  const baselinePoint = lineLocalClientPoint(selected.line, reportLine, pointX, mathLocalY ?? 0);
   const normal = lineNormalUnit(selected.line);
-  const normalOffset = lineBoxNormalOffset(selected.line, reportLine);
+  const normalOffset = mathLocalY === null ? lineBoxNormalOffset(selected.line, reportLine) : 0;
   const clientPoint = makeClientPoint(
     px(baselinePoint.x + normal.x * normalOffset),
     px(baselinePoint.y + normal.y * normalOffset)
@@ -3366,7 +3609,7 @@ export async function getKnuthPlassPointFromOffset(
     paragraphId,
     offset: selected.stop.offset,
     lineIndex: selected.line.lineIndex,
-    lineLocalX: selected.stop.x,
+    lineLocalX: pointX,
     clientPoint,
     rotationDeg: (Math.atan2(selected.line.screenMatrix.b, selected.line.screenMatrix.a) * 180) / Math.PI,
     kind: selected.stop.kind,

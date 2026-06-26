@@ -32,10 +32,37 @@ export interface LineSegmentReport {
   glyphCode?: number;
   mathSvgBody?: string;
   mathConstructRanges?: LineMathConstructRangeReport[];
+  mathCaretEntries?: LineMathCaretEntryReport[];
   mathBreakpoints?: LineMathBreakpointReport[];
   x: number;
   width: number;
   caretStops?: number[];
+}
+
+export type LineMathCaretEntryKind =
+  | 'math-boundary'
+  | 'construct-boundary'
+  | 'command'
+  | 'group-boundary'
+  | 'glyph-boundary'
+  | 'synthetic-boundary';
+
+export interface LineMathCaretEntryReport {
+  sourceOffsetRaw: number;
+  sourceStartRaw?: number;
+  sourceEndRaw?: number;
+  x: number;
+  y: number;
+  height: number;
+  depth: number;
+  kind: LineMathCaretEntryKind;
+  priority?: number;
+  hitBounds: {
+    xStart: number;
+    xEnd: number;
+    yStart: number;
+    yEnd: number;
+  };
 }
 
 export interface LineMathConstructRangeReport {

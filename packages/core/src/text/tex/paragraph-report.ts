@@ -211,6 +211,7 @@ function buildTexLineReport(
         width,
         caretStops: texMathBoxCaretStops(box, x, width),
         mathConstructRanges: texMathBoxConstructRanges(box, x, width),
+        mathCaretEntries: texMathBoxCaretEntries(box, x, width),
         mathBreakpoints: texMathBoxBreakpoints(box, x, width),
         mathSvgBody: texMathBoxSvgBody(box, width, {
           omitLineInitialOperator: continuationLineStart && box?.sourceStart === box?.contentStart,
@@ -430,6 +431,7 @@ function coalescedSameLineMathSegment(
       width,
       caretStops: texMathBoxCaretStops(rootBox, x, width),
       mathConstructRanges: texMathBoxConstructRanges(rootBox, x, width),
+      mathCaretEntries: texMathBoxCaretEntries(rootBox, x, width),
       mathBreakpoints: texMathBoxBreakpoints(rootBox, x, width),
       mathSvgBody: texMathBoxSvgBody(rootBox, width, { omitLineInitialOperator }),
     },
@@ -511,6 +513,7 @@ function texMathBoxFromWrapper(
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+  readonly caretMap?: TexMathBox["caretMap"];
   readonly caretStops?: readonly number[];
   readonly constructRanges?: readonly {
     readonly sourceStart: number;
@@ -545,6 +548,7 @@ function texMathBoxFromWrapper(
     readonly width?: unknown;
     readonly height?: unknown;
     readonly depth?: unknown;
+    readonly caretMap?: unknown;
     readonly caretStops?: unknown;
     readonly constructRanges?: unknown;
     readonly breakpoints?: unknown;
@@ -562,6 +566,9 @@ function texMathBoxFromWrapper(
     width: Number(typedBox.width) || 0,
     height: Number(typedBox.height) || 0,
     depth: Number(typedBox.depth) || 0,
+    caretMap: typeof typedBox.caretMap === "object" && typedBox.caretMap !== null
+      ? typedBox.caretMap as TexMathBox["caretMap"]
+      : undefined,
     caretStops: Array.isArray(typedBox.caretStops)
       ? typedBox.caretStops.filter((stop): stop is number => Number.isFinite(stop))
       : undefined,
@@ -653,6 +660,7 @@ function buildTexLineLabelSegments(
         width: mathWidth,
         caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
         mathConstructRanges: texMathBoxConstructRanges(item.box, x, mathWidth),
+        mathCaretEntries: texMathBoxCaretEntries(item.box, x, mathWidth),
         mathBreakpoints: texMathBoxBreakpoints(item.box, x, mathWidth),
         mathSvgBody: texMathBoxSvgBody(item.box, mathWidth),
       });
@@ -845,6 +853,38 @@ function texMathBoxConstructRanges(
     sourceEndRaw: range.sourceEnd,
     xStart: roundTexPt(x + Math.max(0, Math.min(width, range.xStart))),
     xEnd: roundTexPt(x + Math.max(0, Math.min(width, range.xEnd))),
+  }));
+}
+
+function texMathBoxCaretEntries(
+  box: {
+    readonly caretMap?: TexMathBox["caretMap"];
+  } | null | undefined,
+  x: number,
+  width: number
+): LineReport["segments"][number]["mathCaretEntries"] {
+  const entries = box?.caretMap?.entries;
+  if (!entries?.length) {
+    return undefined;
+  }
+  return entries.map((entry) => ({
+    sourceOffsetRaw: entry.sourceOffset,
+    ...(entry.sourceSpan ? {
+      sourceStartRaw: entry.sourceSpan.start,
+      sourceEndRaw: entry.sourceSpan.end,
+    } : {}),
+    x: roundTexPt(x + Math.max(0, Math.min(width, entry.x))),
+    y: roundTexPt(entry.y),
+    height: roundTexPt(entry.height),
+    depth: roundTexPt(entry.depth),
+    kind: entry.kind,
+    ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
+    hitBounds: {
+      xStart: roundTexPt(x + Math.max(0, Math.min(width, entry.hitBounds.xStart))),
+      xEnd: roundTexPt(x + Math.max(0, Math.min(width, entry.hitBounds.xEnd))),
+      yStart: roundTexPt(entry.hitBounds.yStart),
+      yEnd: roundTexPt(entry.hitBounds.yEnd),
+    },
   }));
 }
 

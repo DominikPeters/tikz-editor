@@ -4781,6 +4781,66 @@ describe("simple TeX paragraph layout", () => {
     expect(Number(radicandSelection.rects[0]?.bounds.maxX)).toBeCloseTo(radicalConstruct?.xEnd ?? 0, 6);
   });
 
+  it("uses 2-D TeX math caret geometry for fraction hit testing", async () => {
+    const sourceText = String.raw`$\frac{1}{2}$`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-fraction-2d-hitmap",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+
+    const outputJax = {
+      tex2svg: () => {
+        throw new Error("MathJax prefix measurement should not be used for TeX-derived fraction hit testing.");
+      },
+      linebreaks: { getReports: () => report ? [report] : [] },
+    };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: -12, right: report?.width ?? 160, bottom: 12 }, report?.width ?? 160),
+      ],
+    };
+    const numeratorOffset = sourceText.indexOf("1");
+    const denominatorOffset = sourceText.indexOf("2");
+    const numeratorPoint = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:inline-math-fraction-2d-hitmap",
+      sourceText,
+      containerElement,
+      offset: numeratorOffset,
+    });
+    const denominatorPoint = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:inline-math-fraction-2d-hitmap",
+      sourceText,
+      containerElement,
+      offset: denominatorOffset,
+    });
+    expect(numeratorPoint.error?.message ?? null).toBeNull();
+    expect(denominatorPoint.error?.message ?? null).toBeNull();
+    expect(numeratorPoint.clientPoint?.y).toBeLessThan(denominatorPoint.clientPoint?.y ?? 0);
+
+    const numeratorCaret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:inline-math-fraction-2d-hitmap",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(numeratorPoint.clientPoint?.x ?? 0), px(numeratorPoint.clientPoint?.y ?? 0)),
+    });
+    const denominatorCaret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:inline-math-fraction-2d-hitmap",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(px(denominatorPoint.clientPoint?.x ?? 0), px(denominatorPoint.clientPoint?.y ?? 0)),
+    });
+    expect(numeratorCaret.error?.message ?? null).toBeNull();
+    expect(denominatorCaret.error?.message ?? null).toBeNull();
+    expect(numeratorCaret).toMatchObject({ ok: true, offset: numeratorOffset, kind: "math" });
+    expect(denominatorCaret).toMatchObject({ ok: true, offset: denominatorOffset, kind: "math" });
+  });
+
   it("keeps hit testing coherent for inline math fragmented across line breaks", async () => {
     const sourceText = String.raw`Alpha $x+y=z+m+n$ beta`;
     const result = layoutSimpleTexParagraph(sourceText, {
