@@ -1,5 +1,6 @@
 import type { Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
+import type { TextSourceMap } from "../source-map.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import {
   defaultTexTextFontProfile,
@@ -18,6 +19,7 @@ import {
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
+import { remapParagraphLayoutReportSourceMap, remapTexVListLayoutSourceMap } from "./source-map-report.js";
 import {
   breakSimpleTexLayoutDocumentParagraphs,
   createSimpleTexLayoutScopeIrFromPreparation,
@@ -42,6 +44,7 @@ export interface TexParagraphLayoutOptions {
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile?: TexTextFontProfile;
+  readonly sourceMap?: TextSourceMap;
 }
 
 export interface TexParagraphLayoutResult {
@@ -172,10 +175,12 @@ export function layoutSimpleTexParagraph(
     };
   }
 
+  const report = remapParagraphLayoutReportSourceMap(reportAssembly.report, options.sourceMap);
+  const vlistLayout = remapTexVListLayoutSourceMap(reportAssembly.layout, options.sourceMap);
   return {
     supported: true,
-    report: reportAssembly.report,
-    vlistLayout: reportAssembly.layout,
+    report,
+    vlistLayout,
     fallbackReason: null,
     shapedRuns: reportAssembly.combined.shapedRuns,
     errors: reportAssembly.combined.errors,

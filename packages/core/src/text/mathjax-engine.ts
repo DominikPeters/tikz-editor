@@ -19,6 +19,7 @@ import {
   layoutSimpleTexParagraph,
   luaLatexDefaultTextFontProfile,
 } from "./tex/index.js";
+import { textSourceMapCacheKey } from "./tex/source-map-report.js";
 import type {
   ResolvedTexFont,
   SimpleTexFontState,
@@ -42,6 +43,7 @@ import type {
   NodeTextRenderPayload,
   NodeTextValidationIssue
 } from "./types.js";
+import type { TextSourceMap } from "./source-map.js";
 
 type MathJaxAdaptor = {
   firstChild(node: unknown): unknown;
@@ -305,7 +307,8 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const alignment = resolveParagraphAlignment(request.textWidthPt, request.alignment);
       const requiresParagraphGeometry =
         normalizedWidth != null || hasExplicitMultilineBreaks(prepared.text);
-      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment);
+      const sourceMapKey = textSourceMapCacheKey(request.sourceMap);
+      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, sourceMapKey);
 
       let entry: CachedRenderEntry | null = cache.get(cacheKey) ?? null;
       if (!entry) {
@@ -318,7 +321,8 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
           alignment,
           requestedAlignment: request.alignment ?? null,
           eligible: prepared.simpleTexEligible,
-          mode
+          mode,
+          sourceMap: request.sourceMap
         });
         if (entry) {
           cache.set(cacheKey, entry);
@@ -1014,6 +1018,7 @@ function buildSimpleTexTextCacheEntry(params: {
   requestedAlignment: NodeTextParagraphAlignment | null;
   eligible: boolean;
   mode: "text" | "math";
+  sourceMap?: TextSourceMap;
 }): CachedRenderEntry | null {
   if (!isSimpleTexTextEligible(params)) {
     return null;
@@ -1041,6 +1046,7 @@ function buildSimpleTexTextCacheEntry(params: {
       mathBoxProvider: createTexDerivedInlineMathBoxProvider({
         baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
       }),
+      ...(params.sourceMap ? { sourceMap: params.sourceMap } : {}),
     });
   } catch {
     return null;
@@ -2322,7 +2328,8 @@ function measurementKey(
   text: string,
   textWidthPt: number | null,
   font: TextFontOptions,
-  alignment: NodeTextParagraphAlignment | null
+  alignment: NodeTextParagraphAlignment | null,
+  sourceMapKey: string | null = null
 ): string {
   return JSON.stringify({
     mode,
@@ -2331,7 +2338,8 @@ function measurementKey(
     alignment,
     fontStyle: font.fontStyle,
     fontWeight: font.fontWeight,
-    fontFamily: font.fontFamily
+    fontFamily: font.fontFamily,
+    sourceMapKey
   });
 }
 
