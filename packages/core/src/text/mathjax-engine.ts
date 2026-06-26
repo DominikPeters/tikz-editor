@@ -1074,6 +1074,12 @@ function buildSimpleTexTextCacheEntry(params: {
 
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
+  const singleNaturalLine =
+    isNaturalWidthLayout &&
+    !hasExplicitMultilineBreaks(params.sourceText) &&
+    report.lines.length === 1
+      ? report.lines[0]
+      : undefined;
   const firstLineTop = texVListPlacedLineTop(
     vlistLayout,
     report.lines[0]?.lineIndex ?? 0
@@ -1081,14 +1087,17 @@ function buildSimpleTexTextCacheEntry(params: {
   const firstLineAscent = vlistLayout.baseline.kind === "explicit"
     ? vlistLayout.baseline.y - firstLineTop
     : baselineMetrics.strutHeight;
-  const heightPt = Math.max(
-    lineHeightPt,
-    vlistLayout.metrics.height + vlistLayout.metrics.depth
-  );
+  const measuredFirstLineAscent = singleNaturalLine?.ascent ?? firstLineAscent;
+  const heightPt = singleNaturalLine
+    ? Math.max(0, singleNaturalLine.ascent + singleNaturalLine.descent)
+    : Math.max(
+        lineHeightPt,
+        vlistLayout.metrics.height + vlistLayout.metrics.depth
+      );
   const widthPt = contentWidthPt;
   const body = renderSimpleTexSvgBody(report, {
     lineHeightPt,
-    firstLineAscent,
+    firstLineAscent: measuredFirstLineAscent,
     vlistLayout,
     metricProvider,
     requestedAlignment: params.requestedAlignment,
@@ -1107,7 +1116,7 @@ function buildSimpleTexTextCacheEntry(params: {
     },
     baseWidthPt: widthPt,
     baseHeightPt: heightPt,
-    baseLineYPt: heightPt / 2 - firstLineAscent,
+    baseLineYPt: heightPt / 2 - measuredFirstLineAscent,
     midLineYPt: 0,
     paragraphId,
     renderSourceText: params.sourceText,
