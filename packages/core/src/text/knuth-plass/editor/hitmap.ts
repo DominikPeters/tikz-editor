@@ -3276,41 +3276,85 @@ interface MathSelectionLocalBox {
   yEnd: MathBaselineCoord;
 }
 
-function mathSelectionLocalBoxForRange(
+function mathSelectionLocalBoxesForRange(
   line: LineHitMap,
   rangeStart: number,
   rangeEnd: number,
   startStop: Stop,
   endStop: Stop
-): MathSelectionLocalBox | null {
+): MathSelectionLocalBox[] {
   if (
     startStop.kind !== 'math' ||
     endStop.kind !== 'math' ||
     !line.mathCaretEntries.length ||
     !mathSelectionContainedBySingleSegment(line, rangeStart, rangeEnd)
   ) {
-    return null;
+    return [];
   }
   const selectedEntries = line.mathCaretEntries.filter((entry) =>
     mathCaretEntryContainedByRange(entry, rangeStart, rangeEnd)
   );
   if (!selectedEntries.length) {
-    return null;
+    return [];
+  }
+  const visibleEntries = selectedEntries.filter((entry) =>
+    entry.hitBounds.yEnd - entry.hitBounds.yStart > EPSILON
+  );
+  if (!visibleEntries.length) {
+    return [];
   }
   const startEntry = bestMathCaretEntryForOffset(line.mathCaretEntries, startStop.offset);
   const endEntry = bestMathCaretEntryForOffset(line.mathCaretEntries, endStop.offset);
-  return {
-    xStart: lineReportCoord(Math.min(
-      startEntry?.x ?? startStop.x,
-      ...selectedEntries.map((entry) => entry.hitBounds.xStart)
-    )),
-    xEnd: lineReportCoord(Math.max(
-      endEntry?.x ?? endStop.x,
-      ...selectedEntries.map((entry) => entry.hitBounds.xEnd)
-    )),
-    yStart: mathBaselineCoord(Math.min(...selectedEntries.map((entry) => entry.hitBounds.yStart))),
-    yEnd: mathBaselineCoord(Math.max(...selectedEntries.map((entry) => entry.hitBounds.yEnd))),
-  };
+  return mathSelectionEntryRowGroups(visibleEntries).map((group) => {
+    const rowEntries = [
+      ...group.entries,
+      ...(startEntry && mathCaretEntryOverlapsRow(startEntry, group) ? [startEntry] : []),
+      ...(endEntry && mathCaretEntryOverlapsRow(endEntry, group) ? [endEntry] : []),
+    ];
+    return {
+      xStart: lineReportCoord(Math.min(...rowEntries.map((entry) => entry.hitBounds.xStart))),
+      xEnd: lineReportCoord(Math.max(...rowEntries.map((entry) => entry.hitBounds.xEnd))),
+      yStart: group.yStart,
+      yEnd: group.yEnd,
+    };
+  });
+}
+
+interface MathSelectionEntryRowGroup {
+  entries: MathCaretEntry[];
+  yStart: MathBaselineCoord;
+  yEnd: MathBaselineCoord;
+}
+
+function mathSelectionEntryRowGroups(entries: readonly MathCaretEntry[]): MathSelectionEntryRowGroup[] {
+  const groups: MathSelectionEntryRowGroup[] = [];
+  for (const entry of [...entries].sort((left, right) =>
+    left.hitBounds.yStart - right.hitBounds.yStart ||
+    left.hitBounds.yEnd - right.hitBounds.yEnd ||
+    left.hitBounds.xStart - right.hitBounds.xStart
+  )) {
+    const group = groups.find((candidate) => mathCaretEntryOverlapsRow(entry, candidate));
+    if (!group) {
+      groups.push({
+        entries: [entry],
+        yStart: entry.hitBounds.yStart,
+        yEnd: entry.hitBounds.yEnd,
+      });
+      continue;
+    }
+    group.entries.push(entry);
+    group.yStart = mathBaselineCoord(Math.min(group.yStart, entry.hitBounds.yStart));
+    group.yEnd = mathBaselineCoord(Math.max(group.yEnd, entry.hitBounds.yEnd));
+  }
+  return groups;
+}
+
+function mathCaretEntryOverlapsRow(
+  entry: MathCaretEntry,
+  row: Pick<MathSelectionEntryRowGroup, 'yStart' | 'yEnd'>
+): boolean {
+  return entry.hitBounds.yStart <= row.yEnd + EPSILON &&
+    entry.hitBounds.yEnd >= row.yStart - EPSILON;
 }
 
 function mathSelectionContainedBySingleSegment(
@@ -3340,6 +3384,45 @@ function mathSelectionClientHeight(
   const top = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yStart));
   const bottom = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yEnd));
   return px(Math.max(1, Math.hypot(bottom.x - top.x, bottom.y - top.y)));
+}
+
+function selectionRectForLineLocalSpan(
+  line: LineHitMap,
+  reportLine: ParagraphLayoutReport['lines'][number],
+  startOffset: number,
+  endOffset: number,
+  localStartX: LineReportCoord,
+  localEndX: LineReportCoord,
+  localCenterY: LineReportCoord,
+  height: Px,
+  normalOffset: Px
+): SelectionRect | null {
+  const startPoint = lineLocalClientPoint(line, reportLine, localStartX, localCenterY);
+  const endPoint = lineLocalClientPoint(line, reportLine, localEndX, localCenterY);
+  const segmentWidth = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+  if (segmentWidth <= EPSILON) {
+    return null;
+  }
+  const baselineCenterX = (startPoint.x + endPoint.x) / 2;
+  const baselineCenterY = (startPoint.y + endPoint.y) / 2;
+  const normal = lineNormalUnit(line);
+  const centerX = baselineCenterX + normal.x * normalOffset;
+  const centerY = baselineCenterY + normal.y * normalOffset;
+  const left = centerX - segmentWidth / 2;
+
+  return {
+    lineIndex: line.lineIndex,
+    startOffset,
+    endOffset,
+    bounds: clientBounds(
+      px(left),
+      px(centerY - height / 2),
+      px(left + Math.max(1, segmentWidth)),
+      px(centerY + height / 2)
+    ),
+    center: makeClientPoint(px(centerX), px(centerY)),
+    rotationDeg: (Math.atan2(line.screenMatrix.b, line.screenMatrix.a) * 180) / Math.PI,
+  };
 }
 
 function mathCaretEntryContainedByRange(
@@ -3873,57 +3956,55 @@ export async function getKnuthPlassSelectionRects(
       continue;
     }
     const reportLine = line.reportLine;
-    const mathSelectionBox = mathSelectionLocalBoxForRange(line, rangeStart, rangeEnd, startStop, endStop);
-    const selectedMathConstructs = mathSelectionBox
-      ? []
-      : line.mathConstructRanges.filter((range) =>
-        rangeEnd > range.sourceStartRaw && rangeStart < range.sourceEndRaw
-      );
-    const localStartX = mathSelectionBox?.xStart ?? lineReportCoord(Math.min(
+    const mathSelectionBoxes = mathSelectionLocalBoxesForRange(line, rangeStart, rangeEnd, startStop, endStop);
+    if (mathSelectionBoxes.length) {
+      for (const mathSelectionBox of mathSelectionBoxes) {
+        const rect = selectionRectForLineLocalSpan(
+          line,
+          reportLine,
+          startStop.offset,
+          endStop.offset,
+          mathSelectionBox.xStart,
+          mathSelectionBox.xEnd,
+          mathBaselineYToLineY(
+            reportLine,
+            mathBaselineCoord((mathSelectionBox.yStart + mathSelectionBox.yEnd) / 2)
+          ),
+          mathSelectionClientHeight(line, reportLine, mathSelectionBox.xStart, mathSelectionBox),
+          px(0)
+        );
+        if (rect) {
+          rects.push(rect);
+        }
+      }
+      continue;
+    }
+
+    const selectedMathConstructs = line.mathConstructRanges.filter((range) =>
+      rangeEnd > range.sourceStartRaw && rangeStart < range.sourceEndRaw
+    );
+    const localStartX = lineReportCoord(Math.min(
       startStop.x,
       ...selectedMathConstructs.map((range) => range.xStart)
     ));
-    const localEndX = mathSelectionBox?.xEnd ?? lineReportCoord(Math.max(
+    const localEndX = lineReportCoord(Math.max(
       endStop.x,
       ...selectedMathConstructs.map((range) => range.xEnd)
     ));
-    const localCenterY = mathSelectionBox
-      ? mathBaselineYToLineY(
-        reportLine,
-        mathBaselineCoord((mathSelectionBox.yStart + mathSelectionBox.yEnd) / 2)
-      )
-      : lineReportCoord(0);
-
-    const startPoint = lineLocalClientPoint(line, reportLine, localStartX, localCenterY);
-    const endPoint = lineLocalClientPoint(line, reportLine, localEndX, localCenterY);
-    const segmentWidth = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
-    if (segmentWidth <= EPSILON) {
-      continue;
+    const rect = selectionRectForLineLocalSpan(
+      line,
+      reportLine,
+      startStop.offset,
+      endStop.offset,
+      localStartX,
+      localEndX,
+      lineReportCoord(0),
+      lineClientHeight(line, reportLine),
+      lineBoxNormalOffset(line, reportLine)
+    );
+    if (rect) {
+      rects.push(rect);
     }
-    const baselineCenterX = (startPoint.x + endPoint.x) / 2;
-    const baselineCenterY = (startPoint.y + endPoint.y) / 2;
-    const normal = lineNormalUnit(line);
-    const normalOffset = mathSelectionBox ? 0 : lineBoxNormalOffset(line, reportLine);
-    const centerX = baselineCenterX + normal.x * normalOffset;
-    const centerY = baselineCenterY + normal.y * normalOffset;
-    const height = mathSelectionBox
-      ? mathSelectionClientHeight(line, reportLine, localStartX, mathSelectionBox)
-      : lineClientHeight(line, reportLine);
-    const left = centerX - segmentWidth / 2;
-
-    rects.push({
-      lineIndex: line.lineIndex,
-      startOffset: startStop.offset,
-      endOffset: endStop.offset,
-      bounds: clientBounds(
-        px(left),
-        px(centerY - height / 2),
-        px(left + Math.max(1, segmentWidth)),
-        px(centerY + height / 2)
-      ),
-      center: makeClientPoint(px(centerX), px(centerY)),
-      rotationDeg: (Math.atan2(line.screenMatrix.b, line.screenMatrix.a) * 180) / Math.PI,
-    });
   }
 
   return {

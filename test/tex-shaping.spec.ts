@@ -185,14 +185,15 @@ function expectSelectionContainsLineLocalBounds(
   line: ParagraphLayoutReport["lines"][number],
   bounds: LocalBounds
 ): void {
-  const rect = selection.rects[0];
-  expect(rect).toBeTruthy();
   const lineStart = Number(line.xStart);
   const epsilon = 1e-6;
-  expect(Number(rect?.bounds.minX)).toBeLessThanOrEqual(bounds.xStart - lineStart + epsilon);
-  expect(Number(rect?.bounds.maxX)).toBeGreaterThanOrEqual(bounds.xEnd - lineStart - epsilon);
-  expect(Number(rect?.bounds.minY)).toBeLessThanOrEqual(bounds.yStart + epsilon);
-  expect(Number(rect?.bounds.maxY)).toBeGreaterThanOrEqual(bounds.yEnd - epsilon);
+  const rect = selection.rects.find((candidate) =>
+    Number(candidate.bounds.minX) <= bounds.xStart - lineStart + epsilon &&
+    Number(candidate.bounds.maxX) >= bounds.xEnd - lineStart - epsilon &&
+    Number(candidate.bounds.minY) <= bounds.yStart + epsilon &&
+    Number(candidate.bounds.maxY) >= bounds.yEnd - epsilon
+  );
+  expect(rect).toBeTruthy();
 }
 
 function parseSvgAttributes(tag: string): Map<string, string> {
@@ -4985,6 +4986,30 @@ describe("simple TeX paragraph layout", () => {
       renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "98765")
     );
 
+    const crossRowSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-fraction-row-selection",
+      sourceText,
+      containerElement,
+      startOffset: sourceText.indexOf("34"),
+      endOffset: sourceText.indexOf("98") + "98".length,
+    });
+    expect(crossRowSelection.error?.message ?? null).toBeNull();
+    expect(crossRowSelection.ok).toBe(true);
+    expect(crossRowSelection.rects).toHaveLength(2);
+    expectSelectionContainsLineLocalBounds(
+      crossRowSelection,
+      report!.lines[0]!,
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "34")
+    );
+    expectSelectionContainsLineLocalBounds(
+      crossRowSelection,
+      report!.lines[0]!,
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "98")
+    );
+    expect(Math.min(...crossRowSelection.rects.map((rect) => Number(rect.bounds.maxY)))).toBeLessThan(
+      Math.max(...crossRowSelection.rects.map((rect) => Number(rect.bounds.minY)))
+    );
+
     const caretOffsetBetweenTwoAndThree = sourceText.indexOf("3");
     const caretPoint = await getKnuthPlassPointFromOffset(outputJax, {
       paragraphId: "tex:inline-math-fraction-row-selection",
@@ -5005,6 +5030,48 @@ describe("simple TeX paragraph layout", () => {
       (Number(threeSelection.rects[0]?.bounds.minY) + Number(threeSelection.rects[0]?.bounds.maxY)) / 2,
       6
     );
+  });
+
+  it("uses line-height selection fallback for source-only TeX math gaps", async () => {
+    const sourceText = String.raw`$x^2 = y$`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:inline-math-source-gap-selection",
+      width: 160,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(result.supported).toBe(true);
+    expect(report).toBeTruthy();
+
+    const outputJax = {
+      tex2svg: () => {
+        throw new Error("MathJax prefix measurement should not be used for TeX-derived math selections.");
+      },
+      linebreaks: { getReports: () => report ? [report] : [] },
+    };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report?.width ?? 160, bottom: 10 }, report?.width ?? 160),
+      ],
+    };
+
+    const sourceSpaceAfterSuperscript = sourceText.indexOf(" =");
+    const sourceGapSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-source-gap-selection",
+      sourceText,
+      containerElement,
+      startOffset: sourceSpaceAfterSuperscript,
+      endOffset: sourceSpaceAfterSuperscript + 1,
+    });
+
+    expect(sourceGapSelection.error?.message ?? null).toBeNull();
+    expect(sourceGapSelection.ok).toBe(true);
+    expect(sourceGapSelection.rects).toHaveLength(1);
+    expect(
+      Number(sourceGapSelection.rects[0]!.bounds.maxY) - Number(sourceGapSelection.rects[0]!.bounds.minY)
+    ).toBeGreaterThan(4);
   });
 
   it("uses 2-D TeX math caret geometry for fraction hit testing", async () => {
