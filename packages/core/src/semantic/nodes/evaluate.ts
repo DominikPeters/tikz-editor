@@ -3,7 +3,7 @@ import { pt } from "../../coords/scalars.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { worldPoint } from "../../coords/points.js";
 import { worldTransform } from "../../coords/transforms.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, expandMacroBindingsMapped } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindingsMapped } from "../../macros/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { mapTransformedTextWithFallback, type MappedText } from "../../text/source-map.js";

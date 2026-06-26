@@ -1523,6 +1523,38 @@ World};
     }
   });
 
+  it("maps rendered macro argument glyphs to argument source and generated glyphs to invocation source", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \newcommand{\pair}[2]{#1/#2}
+  \node[text width=100pt,align=left] at (0,0) {\pair{Left}{Right}};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const invocationStart = source.indexOf(String.raw`\pair{Left}{Right}`);
+    const invocationEnd = invocationStart + String.raw`\pair{Left}{Right}`.length;
+    const leftStart = source.indexOf("Left");
+    const rightStart = source.indexOf("Right");
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+    expect(result.svg.svg).toContain(`data-tex-glyph="76" data-source-start="${leftStart}" data-source-end="${leftStart + 1}"`);
+    expect(result.svg.svg).toContain(`data-tex-glyph="47" data-source-start="${invocationStart}" data-source-end="${invocationEnd}"`);
+    expect(result.svg.svg).toContain(`data-tex-glyph="82" data-source-start="${rightStart}" data-source-end="${rightStart + 1}"`);
+  });
+
+  it("maps rendered optional default macro text to the macro invocation source", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \newcommand{\tagged}[2][Default]{#1:#2}
+  \node[text width=120pt,align=left] at (0,0) {\tagged{Value}};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const invocationStart = source.indexOf(String.raw`\tagged{Value}`);
+    const invocationEnd = invocationStart + String.raw`\tagged{Value}`.length;
+    const valueStart = source.indexOf("Value");
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+    expect(result.svg.svg).toContain(`data-tex-glyph="68" data-source-start="${invocationStart}" data-source-end="${invocationEnd}"`);
+    expect(result.svg.svg).toContain(`data-tex-glyph="86" data-source-start="${valueStart}" data-source-end="${valueStart + 1}"`);
+  });
+
   it("expands DeclareMathOperator macros before MathJax rendering in async mode", async () => {
     const source = String.raw`\DeclareMathOperator{\cone}{cone}
 \DeclareMathOperator*{\argmax}{argmax}

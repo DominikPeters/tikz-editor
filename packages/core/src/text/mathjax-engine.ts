@@ -19,7 +19,6 @@ import {
   layoutSimpleTexParagraph,
   luaLatexDefaultTextFontProfile,
 } from "./tex/index.js";
-import { textSourceMapCacheKey } from "./tex/source-map-report.js";
 import type {
   ResolvedTexFont,
   SimpleTexFontState,
@@ -307,8 +306,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const alignment = resolveParagraphAlignment(request.textWidthPt, request.alignment);
       const requiresParagraphGeometry =
         normalizedWidth != null || hasExplicitMultilineBreaks(prepared.text);
-      const sourceMapKey = textSourceMapCacheKey(request.sourceMap);
-      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, sourceMapKey);
+      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment);
 
       let entry: CachedRenderEntry | null = cache.get(cacheKey) ?? null;
       if (!entry) {
@@ -1441,7 +1439,9 @@ function renderTexReportLineSvg(
         segment.x - lineLeft,
         baseline - lineTop,
         options.metricProvider,
-        segment.sourceStartRaw
+        typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
+          ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
+          : undefined
       ));
     }
   }
@@ -1718,12 +1718,12 @@ function renderTexGlyphRun(
   x: number,
   baseline: number,
   metricProvider: TexMetricProvider,
-  sourceStart?: number
+  sourceSpan?: { readonly start: number; readonly end: number }
 ): string {
   const shaped = metricProvider.shapeText(
     text,
     font,
-    typeof sourceStart === "number" ? { sourceStart } : undefined
+    sourceSpan ? { sourceStart: sourceSpan.start } : undefined
   );
   const pieces: string[] = [];
   let cursor = x;
@@ -1732,12 +1732,15 @@ function renderTexGlyphRun(
       cursor += item.width;
       continue;
     }
+    const glyphItem = sourceSpan && text.length === 1
+      ? { ...item, sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end }
+      : item;
     pieces.push(renderTexGlyphPath(
-      item,
+      glyphItem,
       font,
       cursor,
       baseline,
-      typeof sourceStart === "number"
+      Boolean(sourceSpan)
     ));
     cursor += item.width;
   }
@@ -2328,8 +2331,7 @@ function measurementKey(
   text: string,
   textWidthPt: number | null,
   font: TextFontOptions,
-  alignment: NodeTextParagraphAlignment | null,
-  sourceMapKey: string | null = null
+  alignment: NodeTextParagraphAlignment | null
 ): string {
   return JSON.stringify({
     mode,
@@ -2338,8 +2340,7 @@ function measurementKey(
     alignment,
     fontStyle: font.fontStyle,
     fontWeight: font.fontWeight,
-    fontFamily: font.fontFamily,
-    sourceMapKey
+    fontFamily: font.fontFamily
   });
 }
 

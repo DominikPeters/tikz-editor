@@ -493,9 +493,8 @@ function applyMappedMacroArguments(params: {
 
     if (DIGIT_REGEX.test(next)) {
       const argIndex = Number.parseInt(next, 10) - 1;
-      const arg = params.args[argIndex];
-      parts.push(arg
-        ? mappedMacroArgument(params.input, arg, params.invocation, params.macroName, params.provenance)
+      parts.push(argIndex >= 0 && argIndex < params.args.length
+        ? mappedMacroArgument(params.input, params.args[argIndex], params.invocation, params.macroName, params.provenance)
         : createMacroGeneratedText(`#${next}`, params.macroName, params.provenance, params.invocation));
       index += 1;
       literalStart = index + 1;
@@ -598,8 +597,11 @@ function sourceOffsetForInputOffset(input: MappedText, offset: number): number {
 }
 
 function definitionRangeFromProvenance(provenance: MacroOriginFrame[]): TextSourceRange | undefined {
-  const definitionSpan = provenance[0]?.definitionSpan;
-  return definitionSpan ? { from: definitionSpan.from, to: definitionSpan.to } : undefined;
+  if (provenance.length === 0) {
+    return undefined;
+  }
+  const first = provenance[0];
+  return { from: first.definitionSpan.from, to: first.definitionSpan.to };
 }
 
 function recordTrace(trace: MacroExpansionTraceEvent[] | undefined, macroName: string, provenance: MacroOriginFrame[]): void {

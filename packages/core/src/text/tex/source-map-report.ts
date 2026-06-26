@@ -10,8 +10,7 @@ import type {
 import {
   projectInputOffset,
   projectInputRange,
-  type TextSourceMap,
-  type TextSourceProjection
+  type TextSourceMap
 } from "../source-map.js";
 import type { TexMathBox } from "./layout-inline-items.js";
 import type {
@@ -40,7 +39,7 @@ export function remapParagraphLayoutReportSourceMap(
     lines: report.lines.map((line) => ({
       ...line,
       break: remapBreakReport(line.break, sourceMap),
-      segments: line.segments.map((segment) => remapLineSegmentReport(segment, sourceMap))
+      segments: line.segments.flatMap((segment) => remapLineSegmentReport(segment, sourceMap))
     }))
   };
 }
@@ -72,25 +71,6 @@ export function remapTexVListLayoutSourceMap(
   };
 }
 
-export function textSourceMapCacheKey(sourceMap: TextSourceMap | undefined): string | null {
-  if (!sourceMap) {
-    return null;
-  }
-  return JSON.stringify({
-    inputText: sourceMap.inputText,
-    chars: sourceMap.charOrigins.map(sourceProjectionCacheKey),
-    boundaries: sourceMap.boundaryOrigins.map((anchor) => {
-      if (anchor.kind === "offset") {
-        return ["o", anchor.offset];
-      }
-      if (anchor.kind === "range") {
-        return ["r", anchor.from, anchor.to, anchor.policy];
-      }
-      return ["u", anchor.reason];
-    })
-  });
-}
-
 function remapRunReport(run: RunReport, sourceMap: TextSourceMap): RunReport {
   const sourceSpan = run.sourceStart == null || run.sourceEnd == null
     ? null
@@ -104,11 +84,15 @@ function remapRunReport(run: RunReport, sourceMap: TextSourceMap): RunReport {
 function remapLineSegmentReport(
   segment: LineSegmentReport,
   sourceMap: TextSourceMap
-): LineSegmentReport {
+): readonly LineSegmentReport[] {
+  const split = splitRemappedTextSegmentReport(segment, sourceMap);
+  if (split) {
+    return split;
+  }
   const sourceSpan = segment.sourceStartRaw == null || segment.sourceEndRaw == null
     ? null
     : mapInputSpan(sourceMap, segment.sourceStartRaw, segment.sourceEndRaw);
-  return {
+  return [{
     ...segment,
     ...(sourceSpan ? { sourceStartRaw: sourceSpan.start, sourceEndRaw: sourceSpan.end } : {}),
     mathConstructRanges: segment.mathConstructRanges?.map((range) =>
@@ -123,7 +107,67 @@ function remapLineSegmentReport(
     mathSvgBody: segment.mathSvgBody
       ? remapSvgSourceDataAttributes(segment.mathSvgBody, sourceMap)
       : undefined
-  };
+  }];
+}
+
+function splitRemappedTextSegmentReport(
+  segment: LineSegmentReport,
+  sourceMap: TextSourceMap
+): readonly LineSegmentReport[] | null {
+  const text = segment.text;
+  if (
+    (segment.kind !== "text" && segment.kind !== "space") ||
+    !text ||
+    segment.sourceStartRaw == null ||
+    segment.sourceEndRaw == null ||
+    !Array.isArray(segment.caretStops) ||
+    segment.caretStops.length < text.length + 1
+  ) {
+    return null;
+  }
+
+  const groups: Array<{ start: number; end: number }> = [];
+  let groupStart = 0;
+  for (let index = 1; index <= text.length; index += 1) {
+    if (index === text.length || !canMergeProjectedTextChars(sourceMap, segment.sourceStartRaw, groupStart, index)) {
+      groups.push({ start: groupStart, end: index });
+      groupStart = index;
+    }
+  }
+
+  return groups.map(({ start, end }) => {
+    const sourceSpan = mapInputSpan(sourceMap, segment.sourceStartRaw! + start, segment.sourceStartRaw! + end);
+    const xStart = segment.caretStops?.[start] ?? segment.x;
+    const xEnd = segment.caretStops?.[end] ?? xStart;
+    return {
+      ...segment,
+      text: text.slice(start, end),
+      startOffset: segment.startOffset == null ? undefined : segment.startOffset + start,
+      endOffset: segment.startOffset == null ? undefined : segment.startOffset + end,
+      sourceStartRaw: sourceSpan.start,
+      sourceEndRaw: sourceSpan.end,
+      x: xStart,
+      width: xEnd - xStart,
+      caretStops: segment.caretStops?.slice(start, end + 1)
+    };
+  });
+}
+
+function canMergeProjectedTextChars(
+  sourceMap: TextSourceMap,
+  inputBase: number,
+  groupStart: number,
+  nextIndex: number
+): boolean {
+  const previous = projectInputRange(sourceMap, inputBase + nextIndex - 1, inputBase + nextIndex);
+  const next = projectInputRange(sourceMap, inputBase + nextIndex, inputBase + nextIndex + 1);
+  if (previous.kind !== "source-range" || next.kind !== "source-range") {
+    return false;
+  }
+  return previous.policy === "caret" &&
+    next.policy === "caret" &&
+    previous.to === next.from &&
+    projectInputRange(sourceMap, inputBase + groupStart, inputBase + nextIndex + 1).kind === "source-range";
 }
 
 function remapLineMathConstructRangeReport(
@@ -387,22 +431,6 @@ function mapInputOffset(sourceMap: TextSourceMap, offset: number): number {
     return hit.from;
   }
   return offset;
-}
-
-function sourceProjectionCacheKey(projection: TextSourceProjection): readonly unknown[] {
-  if (projection.kind === "direct") {
-    return ["d", projection.from, projection.to];
-  }
-  if (projection.kind === "macro-argument") {
-    return ["a", projection.from, projection.to, projection.invocation.from, projection.invocation.to, projection.macroName];
-  }
-  if (projection.kind === "macro-generated") {
-    return ["m", projection.invocation.from, projection.invocation.to, projection.macroName];
-  }
-  if (projection.kind === "generated") {
-    return ["g", projection.reason, projection.owner?.from, projection.owner?.to];
-  }
-  return ["u", projection.reason];
 }
 
 function remapSvgSourceDataAttributes(svgBody: string, sourceMap: TextSourceMap): string {

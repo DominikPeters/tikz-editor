@@ -432,7 +432,7 @@ function sharedMacroGeneratedRange(
   origins: readonly TextSourceProjection[]
 ): Extract<TextSourceProjection, { kind: "macro-generated" }> | null {
   const first = origins[0];
-  if (!first || first.kind !== "macro-generated") {
+  if (first?.kind !== "macro-generated") {
     return null;
   }
   return origins.every((origin) =>
@@ -449,7 +449,7 @@ function sharedGeneratedRange(
   origins: readonly TextSourceProjection[]
 ): Extract<TextSourceProjection, { kind: "generated" }> | null {
   const first = origins[0];
-  if (!first || first.kind !== "generated") {
+  if (first?.kind !== "generated") {
     return null;
   }
   return origins.every((origin) =>
