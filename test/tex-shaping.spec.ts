@@ -1994,9 +1994,9 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      22.33,
-      38.11,
-      60.22,
+      20.33,
+      36.11,
+      56.22,
     ]);
   });
 
@@ -2017,18 +2017,18 @@ describe("simple TeX paragraph layout", () => {
     expect(result.vlistLayout?.metrics).toEqual({
       width: 150,
       height: 8.5,
-      depth: 58.77,
+      depth: 54.77,
     });
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 22.33, 38.11, 60.22]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 20.33, 36.11, 56.22]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
       lineIndices: placement.lineIndices,
       y: placement.y,
     }))).toEqual([
       { blockIndex: 0, lineIndices: [0], y: 0 },
-      { blockIndex: 1, lineIndices: [1], y: 22.33 },
-      { blockIndex: 2, lineIndices: [2], y: 38.11 },
-      { blockIndex: 3, lineIndices: [3], y: 60.22 },
+      { blockIndex: 1, lineIndices: [1], y: 20.33 },
+      { blockIndex: 2, lineIndices: [2], y: 36.11 },
+      { blockIndex: 3, lineIndices: [3], y: 56.22 },
     ]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
@@ -2037,10 +2037,10 @@ describe("simple TeX paragraph layout", () => {
       height: item.metrics.height,
     }))).toEqual([
       { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(7.16, 2) },
-      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(20.06, 2) },
-      { kind: "glue", role: undefined, y: 45.38, height: 10 },
-      { kind: "glue", role: undefined, y: 55.38, height: 4.84 },
-      { kind: "paragraph", role: undefined, y: 60.22, height: expect.closeTo(6.94, 2) },
+      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(18.06, 2) },
+      { kind: "glue", role: undefined, y: 43.38, height: 8 },
+      { kind: "glue", role: undefined, y: 51.38, height: 4.84 },
+      { kind: "paragraph", role: undefined, y: 56.22, height: expect.closeTo(6.94, 2) },
     ]);
     expect(result.vlistLayout?.reports).toEqual([result.report]);
 
@@ -4055,11 +4055,11 @@ describe("simple TeX paragraph layout", () => {
     ]);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      21.89,
-      38.22,
-      58.22,
-      78.11,
-      99.89,
+      19.89,
+      36.22,
+      56.22,
+      76.11,
+      95.89,
     ]);
   });
 

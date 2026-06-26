@@ -1361,14 +1361,18 @@ function texArticleQuoteVerticalSkipBefore(
   if (quoteDepth > previousQuoteDepth) {
     return texEmSkip(
       articleQuoteSpacingEm.topsep +
-        (previousQuoteDepth === 0
+        (previousQuoteDepth === 0 && !hasPreviousEmittedParagraph
           ? articleQuoteSpacingEm.partopsep
           : 0),
       font
     );
   }
   if (previousQuoteDepth > quoteDepth) {
-    return texEmSkip(articleQuoteSpacingEm.topsep + articleQuoteSpacingEm.partopsep, font);
+    return texEmSkip(
+      articleQuoteSpacingEm.topsep +
+        (!hasPreviousEmittedParagraph ? articleQuoteSpacingEm.partopsep : 0),
+      font
+    );
   }
   return 0;
 }
@@ -1386,10 +1390,10 @@ function texArticleListVerticalSkipBefore(
     return texArticleInitialListSkip(font);
   }
   if (!previous && current) {
-    return texArticleOutsideListBoundarySkip(font);
+    return texArticleOutsideListBoundarySkip(hasPreviousEmittedParagraph, font);
   }
   if (previous && !current) {
-    return texArticleOutsideListBoundarySkip(font);
+    return texArticleOutsideListBoundarySkip(hasPreviousEmittedParagraph, font);
   }
   if (!previous || !current) {
     return 0;
@@ -1419,8 +1423,15 @@ function texArticleInitialListSkip(font: ResolvedTexFont): number {
   );
 }
 
-function texArticleOutsideListBoundarySkip(font: ResolvedTexFont): number {
-  return texEmSkip(articleListSpacingEm.topsep + articleListSpacingEm.partopsep, font);
+function texArticleOutsideListBoundarySkip(
+  hasPreviousEmittedParagraph: boolean,
+  font: ResolvedTexFont
+): number {
+  return texEmSkip(
+    articleListSpacingEm.topsep +
+      (!hasPreviousEmittedParagraph ? articleListSpacingEm.partopsep : 0),
+    font
+  );
 }
 
 function texArticleNestedListBoundarySkip(

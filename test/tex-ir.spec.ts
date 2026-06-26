@@ -1140,7 +1140,7 @@ describe("simple TeX paragraph IR", () => {
 
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "paragraph:Before",
-      "glue:10",
+      "glue:8",
       "hbox",
       "paragraph:Alpha",
       "glue:4",
@@ -1151,7 +1151,7 @@ describe("simple TeX paragraph IR", () => {
       "glue:8",
       "hbox",
       "paragraph:Nested",
-      "glue:10",
+      "glue:8",
       "paragraph:After",
     ]);
   });
@@ -1211,11 +1211,11 @@ describe("simple TeX paragraph IR", () => {
     ]);
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "paragraph:Alpha",
-      "glue:10",
+      "glue:8",
       "paragraph:Beta",
       "glue:4",
       "paragraph:Gamma",
-      "glue:10",
+      "glue:8",
       "paragraph:Delta",
     ]);
   });
@@ -1233,11 +1233,11 @@ describe("simple TeX paragraph IR", () => {
 
     expect(flattenVListLeaves(layout.vlist.items)).toEqual([
       "paragraph:Alpha",
-      "glue:10",
+      "glue:8",
       "paragraph:Beta",
       "glue:4",
       "paragraph:Gamma",
-      "glue:10",
+      "glue:8",
       "paragraph:Delta",
     ]);
   });
@@ -1292,7 +1292,7 @@ describe("simple TeX paragraph IR", () => {
     ]);
     expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
       "paragraph:Alpha",
-      "glue:10",
+      "glue:8",
       "hbox",
       "paragraph:Beta",
     ]);
