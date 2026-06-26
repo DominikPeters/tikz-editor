@@ -34,6 +34,7 @@ export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly font?: ResolvedTexFont;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly width?: number;
+  readonly tikzTextWidthNode?: boolean;
 }
 
 export function lowerSimpleTexBlocksToVList(
@@ -105,7 +106,7 @@ export function lowerSimpleTexBlockItemsToVList(
       kind: "paragraph",
       sourceSpan: sourceSpanFromBlock(item.block),
       blockIndex: item.blockIndex,
-      paragraph: paragraphInputFromSimpleTexBlock(item.block, item.blockIndex),
+      paragraph: paragraphInputFromSimpleTexBlock(item.block, item.blockIndex, options),
     });
   }
   return {
@@ -122,6 +123,7 @@ function vboxItemFromSimpleTexBox(
   const nested = lowerSimpleTexBlockItemsToVList(item.items, {
     ...options,
     width: item.width,
+    tikzTextWidthNode: false,
   });
   return {
     kind: "vbox",
@@ -440,7 +442,8 @@ function sourceSpanFromBlock(block: SimpleTexParagraphBlock): TexSourceSpan {
 
 function paragraphInputFromSimpleTexBlock(
   block: SimpleTexParagraphBlock,
-  blockIndex: number
+  blockIndex: number,
+  options: LowerSimpleTexBlockItemsToVListOptions
 ): TexParagraphInput {
   return {
     blockIndex,
@@ -448,11 +451,17 @@ function paragraphInputFromSimpleTexBlock(
     sourceSpan: sourceSpanFromBlock(block),
     nodes: block.nodes,
     noIndent: block.noIndent,
+    ...(block.startsAfterExplicitPar === true
+      ? { startsAfterExplicitPar: true }
+      : {}),
     ...(block.firstLineIndentEm !== undefined
       ? { firstLineIndentEm: block.firstLineIndentEm }
       : {}),
     ...(block.quotationItemFirstParagraph === true
       ? { quotationItemFirstParagraph: true }
+      : {}),
+    ...(options.tikzTextWidthNode === true
+      ? { tikzTextWidthNode: true }
       : {}),
     alignment: block.alignment,
     alignmentProfile: block.alignmentProfile,

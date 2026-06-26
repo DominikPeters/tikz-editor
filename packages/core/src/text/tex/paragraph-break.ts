@@ -3,7 +3,7 @@ import { breakWithDp, type DpOptions } from "../knuth-plass/paragraph/dp.js";
 import { createEnglishHyphenator, type Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import { runsToItems } from "../knuth-plass/paragraph/items.js";
 import type { MeasurementService } from "../knuth-plass/paragraph/measure.js";
-import type { ParagraphRun } from "../knuth-plass/paragraph/types.js";
+import type { GreedyLine, ParagraphRun } from "../knuth-plass/paragraph/types.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import type {
   ResolvedTexFont,
@@ -74,6 +74,7 @@ export function breakTexParagraphRuns(params: {
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly noIndent: boolean;
   readonly firstLineIndentWidth?: number;
+  readonly forcedBreakIndentWidth?: number;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
 }): TexParagraphBreakResult | null {
   const pass1Model = runsToItems(params.runs, params.measurement, {
@@ -89,6 +90,7 @@ export function breakTexParagraphRuns(params: {
     inheritedAlignmentProfile: params.inheritedAlignmentProfile,
     scopePolicy: params.scopePolicy,
     firstLineIndentWidth: params.firstLineIndentWidth,
+    forcedBreakIndentWidth: params.forcedBreakIndentWidth,
   });
   const pass1 = breakWithDp(pass1Model, params.options.width, {
     ...dpOptions,
@@ -97,6 +99,9 @@ export function breakTexParagraphRuns(params: {
 
   let selectedModel = pass1Model;
   let selectedPass = pass1.canProceed && pass1.lines.length > 0 ? pass1 : null;
+  let selectedDpPassOptions: Partial<DpOptions> & { readonly tolerance: number } = {
+    tolerance: params.options.pretolerance ?? englishDefaults.pretolerance,
+  };
   if (selectedPass === null) {
     const pass2Model = runsToItems(params.runs, params.measurement, {
       hyphenator: params.options.hyphenator ?? createEnglishHyphenator(),
@@ -126,6 +131,7 @@ export function breakTexParagraphRuns(params: {
       });
       if (pass.canProceed && pass.lines.length > 0) {
         selectedPass = pass;
+        selectedDpPassOptions = passOptions;
         break;
       }
     }
@@ -135,8 +141,27 @@ export function breakTexParagraphRuns(params: {
     return null;
   }
 
+  let lines: readonly GreedyLine[] = selectedPass.lines;
+  if (
+    Number.isFinite(params.forcedBreakIndentWidth) &&
+    params.forcedBreakIndentWidth !== undefined &&
+    params.forcedBreakIndentWidth > 0
+  ) {
+    const unindentedPass = breakWithDp(selectedModel, params.options.width, {
+      ...dpOptions,
+      ...selectedDpPassOptions,
+      forcedBreakIndentWidth: 0,
+    });
+    if (unindentedPass.canProceed && unindentedPass.lines.length > 0) {
+      lines = mergeForcedBreakIndentedSuffixLines(
+        unindentedPass.lines,
+        selectedPass.lines
+      ) ?? lines;
+    }
+  }
+
   return {
-    lines: selectedPass.lines,
+    lines,
     runs: params.runs,
     runWidths: selectedModel.runWidths,
     shapedRuns: params.shapedRuns,
@@ -145,11 +170,38 @@ export function breakTexParagraphRuns(params: {
   };
 }
 
+function mergeForcedBreakIndentedSuffixLines(
+  unindentedLines: readonly GreedyLine[],
+  indentedLines: readonly GreedyLine[]
+): readonly GreedyLine[] | null {
+  const forcedLineIndex = unindentedLines.findIndex((line) =>
+    line.break?.kind === "forced"
+  );
+  const forcedRunIndex = unindentedLines[forcedLineIndex]?.break?.runIndex;
+  if (forcedLineIndex < 0 || forcedRunIndex === undefined) {
+    return null;
+  }
+  const suffixStart = indentedLines.findIndex((line) =>
+    line.startRun > forcedRunIndex
+  );
+  if (suffixStart < 0) {
+    return null;
+  }
+  return [
+    ...unindentedLines.slice(0, forcedLineIndex + 1),
+    ...indentedLines.slice(suffixStart),
+  ].map((line, lineIndex) => ({
+    ...line,
+    lineIndex,
+  }));
+}
+
 interface TexParagraphDpOptionParams {
   readonly options: TexParagraphBreakOptions;
   readonly alignment: TexParagraphAlignment;
   readonly noIndent: boolean;
   readonly firstLineIndentWidth?: number;
+  readonly forcedBreakIndentWidth?: number;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly inheritedAlignment?: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
@@ -162,6 +214,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     alignment,
     noIndent,
     firstLineIndentWidth,
+    forcedBreakIndentWidth,
     alignmentProfile,
     inheritedAlignment,
     inheritedAlignmentProfile,
@@ -220,7 +273,9 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
           ? options.parindent
           : 0,
     forcedBreakIndentWidth:
-      Number.isFinite(firstLineIndentWidth) && scopePolicy.allowForcedBreakIndent
+      Number.isFinite(forcedBreakIndentWidth) && scopePolicy.allowForcedBreakIndent
+        ? forcedBreakIndentWidth
+        : Number.isFinite(firstLineIndentWidth) && scopePolicy.allowForcedBreakIndent
         ? firstLineIndentWidth
         : options.tikzTextWidthNode === true &&
               alignment !== "justified" &&

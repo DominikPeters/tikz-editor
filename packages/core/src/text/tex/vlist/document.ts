@@ -69,11 +69,13 @@ export function prepareSimpleTexLayoutScope(
         font: params.font,
         mathBoxProvider: params.options.mathBoxProvider,
         width: params.options.width,
+        tikzTextWidthNode: params.options.tikzTextWidthNode,
       })
     : lowerSimpleTexBlocksToVList(params.blocks, {
         font: params.font,
         mathBoxProvider: params.options.mathBoxProvider,
         width: params.options.width,
+        tikzTextWidthNode: params.options.tikzTextWidthNode,
       });
   const preparedVList = prepareSimpleTexVList(baseVList, params.font);
   const paragraphPreparation = prepareTexLayoutParagraphsFromVList({

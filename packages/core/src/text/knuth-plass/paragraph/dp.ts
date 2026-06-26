@@ -799,9 +799,19 @@ function scoreCandidate(
     if (infiniteStretch > 0 && infiniteLeftskip > 0) {
       xOffset += delta / infiniteStretch;
     }
-  } else if (outputRatio > 0 && Number.isFinite(options.leftskipStretch)) {
+  } else if (
+    outputRatio > 0 &&
+    Number.isFinite(outputRatio) &&
+    Number.isFinite(options.leftskipStretch) &&
+    options.leftskipStretch !== 0
+  ) {
     xOffset += outputRatio * options.leftskipStretch;
-  } else if (outputRatio < 0 && Number.isFinite(options.leftskipShrink)) {
+  } else if (
+    outputRatio < 0 &&
+    Number.isFinite(outputRatio) &&
+    Number.isFinite(options.leftskipShrink) &&
+    options.leftskipShrink !== 0
+  ) {
     xOffset += outputRatio * options.leftskipShrink;
   }
 
@@ -1008,7 +1018,12 @@ function artificialOverfullScore(
     ? delta / totalShrink
     : Number.NEGATIVE_INFINITY;
   let xOffset = options.leftskipWidth + indentWidth;
-  if (ratio < 0 && Number.isFinite(options.leftskipShrink)) {
+  if (
+    ratio < 0 &&
+    Number.isFinite(ratio) &&
+    Number.isFinite(options.leftskipShrink) &&
+    options.leftskipShrink !== 0
+  ) {
     xOffset += ratio * options.leftskipShrink;
   }
 
@@ -1266,7 +1281,15 @@ export function breakWithDp(
         resolvedOptions,
         isLastLine
       );
-      if (isLastLine) {
+      const candidateNextCursor = normalizeCursor(
+        model,
+        candidate.nextCursor,
+        forcedPenalties
+      );
+      const isTerminalForcedBreak =
+        breakpoint.kind === 'forced' &&
+        candidateNextCursor.runIndex >= model.runs.length;
+      if (isLastLine || isTerminalForcedBreak) {
         if (
           bestFinal === null ||
           totalCost < bestFinal.cost ||

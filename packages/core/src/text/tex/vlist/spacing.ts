@@ -109,6 +109,8 @@ interface SimpleTexParagraphVerticalSkipState {
   previousEmittedQuotationDepth: number;
   previousEmittedListContext: SimpleTexListContext | undefined;
   previousEmittedContentKind: "paragraph" | "display" | undefined;
+  readonly quotePartopsepByDepth: Map<number, boolean>;
+  readonly listPartopsepByDepth: Map<number, boolean>;
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
 }
@@ -165,23 +167,29 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const paragraph = item.paragraph;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
     const hasPreviousEmittedParagraph = state.emittedParagraphCount > 0;
+    const startsAfterExplicitPar = item.paragraph.startsAfterExplicitPar === true;
+    const startsListInVerticalMode = startsAfterExplicitPar ||
+      (!hasPreviousEmittedParagraph && item.paragraph.tikzTextWidthNode !== true);
     const followsDisplay = state.previousEmittedContentKind === "display";
     const listVerticalSkipBefore = followsDisplay
       ? 0
       : texArticleListVerticalSkipBefore(
+          state,
           state.previousEmittedListContext,
           scope.listContext,
           hasPreviousEmittedParagraph,
+          startsListInVerticalMode,
           font
         );
     const quoteVerticalSkipBefore = followsDisplay
       ? 0
       : texArticleQuoteVerticalSkipBefore(
+          state,
           state.previousEmittedQuoteDepth,
           state.previousEmittedQuotationDepth,
           scope.quoteDepth,
           scope.quotationDepth,
-          hasPreviousEmittedParagraph,
+          startsListInVerticalMode,
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
@@ -212,6 +220,8 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     previousEmittedQuotationDepth: 0,
     previousEmittedListContext: undefined,
     previousEmittedContentKind: undefined,
+    quotePartopsepByDepth: new Map(),
+    listPartopsepByDepth: new Map(),
     emittedListItemKeys: new Set(),
     emittedParagraphCount: 0,
   };
@@ -1339,11 +1349,12 @@ function texOpenedInterlineGlueSize(
 }
 
 function texArticleQuoteVerticalSkipBefore(
+  state: SimpleTexParagraphVerticalSkipState,
   previousQuoteDepth: number,
   previousQuotationDepth: number,
   quoteDepth: number,
   quotationDepth: number,
-  hasPreviousEmittedParagraph: boolean,
+  startsListInVerticalMode: boolean,
   listTransitionActive = false,
   font: ResolvedTexFont
 ): number {
@@ -1359,18 +1370,24 @@ function texArticleQuoteVerticalSkipBefore(
       : texEmSkip(articleQuoteSpacingEm.parsep, font);
   }
   if (quoteDepth > previousQuoteDepth) {
+    const usesPartopsep = previousQuoteDepth === 0 && startsListInVerticalMode;
+    state.quotePartopsepByDepth.set(quoteDepth, usesPartopsep);
     return texEmSkip(
       articleQuoteSpacingEm.topsep +
-        (previousQuoteDepth === 0 && !hasPreviousEmittedParagraph
+        (previousQuoteDepth === 0 && usesPartopsep
           ? articleQuoteSpacingEm.partopsep
           : 0),
       font
     );
   }
   if (previousQuoteDepth > quoteDepth) {
+    const usesPartopsep = state.quotePartopsepByDepth.get(previousQuoteDepth) ?? false;
+    state.quotePartopsepByDepth.delete(previousQuoteDepth);
     return texEmSkip(
       articleQuoteSpacingEm.topsep +
-        (!hasPreviousEmittedParagraph ? articleQuoteSpacingEm.partopsep : 0),
+        (usesPartopsep
+          ? articleQuoteSpacingEm.partopsep
+          : 0),
       font
     );
   }
@@ -1378,31 +1395,39 @@ function texArticleQuoteVerticalSkipBefore(
 }
 
 function texArticleListVerticalSkipBefore(
+  state: SimpleTexParagraphVerticalSkipState,
   previous: SimpleTexListContext | undefined,
   current: SimpleTexListContext | undefined,
   hasPreviousEmittedParagraph: boolean,
+  startsListInVerticalMode: boolean,
   font: ResolvedTexFont
 ): number {
   if (!previous && !current) {
     return 0;
   }
   if (!hasPreviousEmittedParagraph && current) {
-    return texArticleInitialListSkip(font);
+    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    return texArticleInitialListSkip(startsListInVerticalMode, font);
   }
   if (!previous && current) {
-    return texArticleOutsideListBoundarySkip(hasPreviousEmittedParagraph, font);
+    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    return texArticleOutsideListBoundarySkip(
+      startsListInVerticalMode,
+      font
+    );
   }
   if (previous && !current) {
-    return texArticleOutsideListBoundarySkip(hasPreviousEmittedParagraph, font);
+    return texArticleListExitBoundarySkip(state, previous.depth, 0, font);
   }
   if (!previous || !current) {
     return 0;
   }
   if (current.depth > previous.depth) {
+    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
     return texArticleNestedListBoundarySkip(previous.depth, current.depth, font);
   }
   if (current.depth < previous.depth) {
-    return texArticleNestedListBoundarySkip(previous.depth, current.depth, font);
+    return texArticleListExitBoundarySkip(state, previous.depth, current.depth, font);
   }
   if (
     current.kind === previous.kind &&
@@ -1414,24 +1439,47 @@ function texArticleListVerticalSkipBefore(
   return texArticleListItemBoundarySkip(current.depth, font);
 }
 
-function texArticleInitialListSkip(font: ResolvedTexFont): number {
+function texArticleInitialListSkip(
+  startsListInVerticalMode: boolean,
+  font: ResolvedTexFont
+): number {
   return texEmSkip(
     articleListSpacingEm.topsep +
-      articleListSpacingEm.partopsep +
+      (startsListInVerticalMode ? articleListSpacingEm.partopsep : 0) +
       articleListSpacingEm.initialItemBaselineAdjustment,
     font
   );
 }
 
 function texArticleOutsideListBoundarySkip(
-  hasPreviousEmittedParagraph: boolean,
+  usesPartopsep: boolean,
   font: ResolvedTexFont
 ): number {
   return texEmSkip(
     articleListSpacingEm.topsep +
-      (!hasPreviousEmittedParagraph ? articleListSpacingEm.partopsep : 0),
+      (usesPartopsep
+        ? articleListSpacingEm.partopsep
+        : 0),
     font
   );
+}
+
+function texArticleListExitBoundarySkip(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousDepth: number,
+  currentDepth: number,
+  font: ResolvedTexFont
+): number {
+  let size = 0;
+  for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
+    const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
+    state.listPartopsepByDepth.delete(depth);
+    const depthSize = depth <= 1
+      ? texArticleOutsideListBoundarySkip(usesPartopsep, font)
+      : texArticleNestedListBoundarySkip(depth, depth - 1, font);
+    size = Math.max(size, depthSize);
+  }
+  return size;
 }
 
 function texArticleNestedListBoundarySkip(

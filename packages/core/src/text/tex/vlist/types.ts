@@ -138,6 +138,7 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
+  readonly tikzTextWidthNode?: boolean;
   readonly sourceHitPolicy?: "caret" | "source-range";
   readonly listContext?: SimpleTexListContext;
   readonly ignoreAncestorBreakMargins?: boolean;

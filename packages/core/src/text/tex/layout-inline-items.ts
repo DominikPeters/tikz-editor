@@ -336,7 +336,10 @@ export function simpleTexSegmentToLayoutItems(
     });
   }
 
-  while (items.at(-1)?.kind === "space" || items.at(-1)?.kind === "forced-break") {
+  while (
+    items.at(-1)?.kind === "space" ||
+    (items.at(-1)?.kind === "forced-break" && segment.forcedBreakAfter === undefined)
+  ) {
     items.pop();
   }
   return items;

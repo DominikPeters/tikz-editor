@@ -793,6 +793,25 @@ function reportLineText(line) {
   return line.segments.map((segment) => segment.text ?? "").join("").trimEnd();
 }
 
+function isGlyphlessListLabelLine(line) {
+  return line.segments.length > 0 &&
+    line.segments.every((segment) => segment.role === "list-label") &&
+    reportLineText(line).trim().length === 0;
+}
+
+function glyphlessListLabelLineFixtures(report) {
+  return report.lines
+    .map((line, index) => ({
+      reportLineIndex: index,
+      lineIndex: line.lineIndex,
+      xStart: line.xStart,
+      width: line.width,
+      roles: [...new Set(line.segments.map((segment) => segment.role).filter(Boolean))],
+      segmentKinds: [...new Set(line.segments.map((segment) => segment.kind))],
+    }))
+    .filter((line, index) => isGlyphlessListLabelLine(report.lines[index]));
+}
+
 function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
   const font = deps.computerModernTexMetricProvider.resolveFont({ atPt: defaultTextFontSize });
   const lineTops = computeLineTops(layout, deps.parseLength);
@@ -1619,6 +1638,8 @@ function writeCsv(rows, path) {
     "width",
     "parindent",
     "oursLines",
+    "oursReportLines",
+    "glyphlessListLabelLines",
     "texRows",
     "texNoiseAeNorm",
     "oursAeNorm",
@@ -1725,6 +1746,7 @@ async function main() {
     const oursTrace = buildOursTrace(layout, deps);
 
     const lineTops = computeLineTops(layout, deps.parseLength);
+    const glyphlessListLabelLines = glyphlessListLabelLineFixtures(layout.report);
     const pageWidth = Math.max(360, caseData.width + 20);
     const pageHeight = Math.max(180, (lineTops.at(-1) ?? 0) + lineHeightPt + 20);
     const widthPx = Math.ceil(pageWidth * options.scale);
@@ -1749,6 +1771,8 @@ async function main() {
       ...caseData,
       alignment: caseData.alignment.label,
       oursLines: layout.report.lines.map(reportLineText),
+      oursGlyphTraceLines: oursTrace.lines.map((line) => line.text),
+      glyphlessListLabelLines,
       pageWidth,
       pageHeight,
       scale: options.scale,
@@ -1834,7 +1858,9 @@ async function main() {
         alignment: caseData.alignment.label,
         width: caseData.width,
         parindent: caseData.parindent,
-        oursLines: layout.report.lines.length,
+        oursLines: oursTrace.lines.length,
+        oursReportLines: layout.report.lines.length,
+        glyphlessListLabelLines: glyphlessListLabelLines.length,
         texRows: texRows.length,
         texNoiseAeNorm: texNoiseAe.normalized,
         oursAeNorm: oursAe.normalized,
@@ -1860,7 +1886,9 @@ async function main() {
       rows.push(row);
       console.log(
         `${row.flagged ? "FLAG" : "ok"} ${row.id} ${row.alignment}/${row.feature} ` +
-        `lines=${row.oursLines}/${row.texRows} AE=${row.oursAeNorm?.toFixed(4)} ` +
+        `lines=${row.oursLines}/${row.texRows}` +
+        (row.glyphlessListLabelLines > 0 ? ` reportLines=${row.oursReportLines}` : "") +
+        ` AE=${row.oursAeNorm?.toFixed(4)} ` +
         `noise=${row.texNoiseAeNorm?.toFixed(4)} ratio=${row.ratio?.toFixed(2)} ` +
         `text=${row.lineTextMatch ? "ok" : "diff"} glyphs=${row.glyphCodeMatch ? "ok" : "diff"} ` +
         `fonts=${row.fontMatch ? "ok" : "diff"} ` +

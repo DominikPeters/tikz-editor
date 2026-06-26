@@ -249,6 +249,7 @@ export interface SimpleTexParagraphBlock {
   readonly sourceEnd: number;
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
+  readonly startsAfterExplicitPar?: boolean;
   readonly firstLineIndentEm?: number;
   readonly quotationItemFirstParagraph?: boolean;
   readonly alignment?: TexParagraphAlignment;
@@ -385,6 +386,7 @@ export interface SimpleTexSegmentInput {
   };
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
+  readonly startsAfterExplicitPar?: boolean;
   readonly firstLineIndentEm?: number;
   readonly quotationItemFirstParagraph?: boolean;
   readonly quoteDepth: number;
@@ -2089,6 +2091,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const textSliceAtSourceOffsets = (start: number, end: number): string =>
     text.slice(start - sourceOffset, end - sourceOffset);
 
+  const hasExplicitParagraphBoundaryBetween = (start: number, end: number): boolean => {
+    const gap = textSliceAtSourceOffsets(start, end);
+    return /\\par\b|\n\s*\n/u.test(gap);
+  };
+
   const sourceStartForNodeIndex = (index: number): number =>
     sourceNodes[index]?.sourceStart ?? sourceEnd;
 
@@ -2138,12 +2145,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
         abortScan = true;
         return;
       }
+      const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
+        hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
       const block: SimpleTexParagraphBlock = {
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
         sourceEnd: end,
         nodes: simpleTexInlineNodesForRange(sourceNodes, start, end),
         noIndent,
+        ...(startsAfterExplicitPar ? { startsAfterExplicitPar: true } : {}),
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
         ...(quotationItemLabelPendingStack.at(-1) === true
           ? { quotationItemFirstParagraph: true }
@@ -2163,6 +2173,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       if (quotationItemLabelPendingStack.at(-1) === true) {
         quotationItemLabelPendingStack[quotationItemLabelPendingStack.length - 1] = false;
       }
+      previousParagraphBlockEnd = end;
       pendingListLabel = undefined;
       pendingListShowLabel = false;
     }
@@ -2208,6 +2219,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let currentNonQuotationQuoteDepth = 0;
   let currentQuotationDepth = 0;
   const quotationItemLabelPendingStack: boolean[] = [];
+  let previousParagraphBlockEnd: number | undefined;
   let index = prefix.start;
 
   const environmentSuppressesParagraphIndent = (): boolean =>
@@ -2604,7 +2616,10 @@ export function splitSimpleTexParagraphSegments(
   alignment: TexParagraphAlignment,
   blockIndex: number
 ): SimpleTexParagraphSegment[] {
-  const initialNoIndent = block.noIndent || (options.tikzTextWidthNode === true && blockIndex === 0);
+  const initialNoIndent =
+    block.noIndent ||
+    block.quotationItemFirstParagraph === true ||
+    (options.tikzTextWidthNode === true && blockIndex === 0);
   if (alignment === "justified") {
     return [{
       text: block.text,

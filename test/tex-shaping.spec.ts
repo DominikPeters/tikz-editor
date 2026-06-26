@@ -1980,6 +1980,58 @@ describe("simple TeX paragraph layout", () => {
     ]);
   });
 
+  it("keeps first quotation item indentation after justified forced breaks", async () => {
+    await preloadEnglishHyphenator();
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quotation} Future local precise nested table analysis, option initial document. \\[7pt] Option chapter method layout analysis, affinity, paper. \end{quotation}`,
+      {
+        paragraphId: "tex:quotation-justified-forced-break-indent",
+        width: 240,
+        alignment: "ragged-left",
+        parindent: 15,
+        tikzTextWidthNode: true,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Future local precise nested table analy-",
+      "sis, option initial document.",
+      "Option chapter method layout analysis,",
+      "affinity, paper.",
+    ]);
+    const lines = visibleLines(result.report);
+    expect(firstVisibleTextX(lines[0])).toBeCloseTo(40, 5);
+    expect(firstVisibleTextX(lines[1])).toBeCloseTo(25, 5);
+    expect(firstVisibleTextX(lines[2])).toBeCloseTo(40, 5);
+    expect(firstVisibleTextX(lines[3])).toBeCloseTo(25, 5);
+  });
+
+  it("does not double-indent the first quotation item after an outer paragraph", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Chapter default default rendering semantic output layout affinity. \par \begin{quotation} Spacing office anchor default compact, anchor. \par Pattern sample semantic option natural initial. \end{quotation}`,
+      {
+        paragraphId: "tex:quotation-first-item-after-par",
+        width: 320,
+        alignment: "justified",
+        parindent: 10,
+        tikzTextWidthNode: true,
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Chapter default default rendering semantic output layout affinity.",
+      "Spacing office anchor default compact, anchor.",
+      "Pattern sample semantic option natural initial.",
+    ]);
+    const lines = visibleLines(result.report);
+    expect(firstVisibleTextX(lines[0])).toBeCloseTo(0, 5);
+    expect(firstVisibleTextX(lines[1])).toBeCloseTo(40, 5);
+    expect(firstVisibleTextX(lines[2])).toBeCloseTo(40, 5);
+  });
+
   it("positions LaTeX quote list vertical skips across paragraph boundaries", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`,
@@ -1994,9 +2046,28 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      20.33,
-      36.11,
-      56.22,
+      22.33,
+      38.11,
+      60.22,
+    ]);
+  });
+
+  it("uses TikZ node topsep when a leading quote is followed by another paragraph", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{quote} Beta \end{quote} \par Delta`,
+      {
+        paragraphId: "tex:tikz-node-leading-quote-vertical-skips",
+        width: 150,
+        alignment: "justified",
+        tikzTextWidthNode: true,
+        hyphenator: { hyphenate: () => [] },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
+      8,
+      27.89,
     ]);
   });
 
@@ -2017,18 +2088,18 @@ describe("simple TeX paragraph layout", () => {
     expect(result.vlistLayout?.metrics).toEqual({
       width: 150,
       height: 8.5,
-      depth: 54.77,
+      depth: 58.77,
     });
-    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 20.33, 36.11, 56.22]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 22.33, 38.11, 60.22]);
     expect(result.vlistLayout?.paragraphPlacements.map((placement) => ({
       blockIndex: placement.blockIndex,
       lineIndices: placement.lineIndices,
       y: placement.y,
     }))).toEqual([
       { blockIndex: 0, lineIndices: [0], y: 0 },
-      { blockIndex: 1, lineIndices: [1], y: 20.33 },
-      { blockIndex: 2, lineIndices: [2], y: 36.11 },
-      { blockIndex: 3, lineIndices: [3], y: 56.22 },
+      { blockIndex: 1, lineIndices: [1], y: 22.33 },
+      { blockIndex: 2, lineIndices: [2], y: 38.11 },
+      { blockIndex: 3, lineIndices: [3], y: 60.22 },
     ]);
     expect(result.vlistLayout?.items.map((item) => ({
       kind: item.item.kind,
@@ -2037,10 +2108,10 @@ describe("simple TeX paragraph layout", () => {
       height: item.metrics.height,
     }))).toEqual([
       { kind: "paragraph", role: undefined, y: 0, height: expect.closeTo(7.16, 2) },
-      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(18.06, 2) },
-      { kind: "glue", role: undefined, y: 43.38, height: 8 },
-      { kind: "glue", role: undefined, y: 51.38, height: 4.84 },
-      { kind: "paragraph", role: undefined, y: 56.22, height: expect.closeTo(6.94, 2) },
+      { kind: "vbox", role: { kind: "quote", depth: 1 }, y: 9.1, height: expect.closeTo(20.06, 2) },
+      { kind: "glue", role: undefined, y: 45.38, height: 10 },
+      { kind: "glue", role: undefined, y: 55.38, height: 4.84 },
+      { kind: "paragraph", role: undefined, y: 60.22, height: expect.closeTo(6.94, 2) },
     ]);
     expect(result.vlistLayout?.reports).toEqual([result.report]);
 
@@ -3741,6 +3812,68 @@ describe("simple TeX paragraph layout", () => {
     });
   });
 
+  it("keeps glyphless list-label lines explicit for TeX oracle comparisons", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{minipage}{90pt}\begin{quotation}Stable gamma vector faithful modern lattice, quoted single lattice. \par Reader local lattice actual spacing double manual,.\end{quotation}\end{minipage}`,
+      {
+        paragraphId: "tex:glyphless-list-label-oracle-fixture",
+        width: 160,
+        alignment: "ragged-left",
+        parindent: 0,
+        tikzTextWidthNode: true,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    const reportLines = result.report?.lines ?? [];
+    const glyphlessListLabelLines = reportLines.filter((line) =>
+      line.segments.length > 0 &&
+      line.segments.every((segment) => segment.role === "list-label") &&
+      line.segments.map((segment) => segment.text ?? "").join("").length === 0
+    );
+
+    expect(glyphlessListLabelLines.map((line) => ({
+      text: line.segments.map((segment) => segment.text ?? "").join(""),
+      ascent: line.ascent,
+      descent: line.descent,
+      segmentKinds: line.segments.map((segment) => segment.kind),
+      segmentRoles: line.segments.map((segment) => segment.role),
+    }))).toEqual([
+      {
+        text: "",
+        ascent: 0,
+        descent: 0,
+        segmentKinds: ["math"],
+        segmentRoles: ["list-label"],
+      },
+    ]);
+    expect(lineTexts(result.report)[0]).toBe("");
+    expect(reportLines.find((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("") === "Reader"
+    )?.xStart).toBeCloseTo(40, 6);
+    expect(reportLines
+      .filter((line) => !glyphlessListLabelLines.includes(line))
+      .map((line) => line.segments.map((segment) => segment.text ?? "").join("")))
+      .toEqual([
+        "Stable",
+        "gamma",
+        "vector",
+        "faithful",
+        "modern",
+        "lattice,",
+        "quoted",
+        "single",
+        "lattice.",
+        "Reader",
+        "local lat-",
+        "tice",
+        "actual",
+        "spacing",
+        "double",
+        "manual,.",
+      ]);
+  });
+
   it("represents multi-paragraph list item bodies as nested vboxes", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`\begin{enumerate}\item Alpha \par Beta\item Gamma\end{enumerate}`,
@@ -4055,11 +4188,11 @@ describe("simple TeX paragraph layout", () => {
     ]);
     expect(result.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([
       0,
-      19.89,
-      36.22,
-      56.22,
-      76.11,
-      95.89,
+      21.89,
+      38.22,
+      58.22,
+      78.11,
+      99.89,
     ]);
   });
 

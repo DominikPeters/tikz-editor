@@ -91,6 +91,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       inheritedAlignmentProfile: plan.inheritedAlignmentProfile,
       noIndent: plan.segment.noIndent,
       firstLineIndentWidth: breakContext.firstLineIndentWidth,
+      forcedBreakIndentWidth: breakContext.forcedBreakIndentWidth,
       scopePolicy: breakContext.scopePolicy,
     });
     const broadOverfullTolerance = breakContext.width === undefined

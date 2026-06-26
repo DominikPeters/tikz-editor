@@ -67,6 +67,7 @@ export interface TexLayoutParagraphBreakContext {
   readonly segmentIndex: number;
   readonly width?: number;
   readonly firstLineIndentWidth?: number;
+  readonly forcedBreakIndentWidth?: number;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
 }
 
@@ -188,6 +189,9 @@ export function prepareTexLayoutParagraphsFromVList(
           ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
           firstLineIndentWidth: listAttachments.firstLineIndentWidth ??
             quotationPrefix.firstLineIndentWidth,
+          ...(quotationPrefix.forcedBreakIndentWidth !== undefined
+            ? { forcedBreakIndentWidth: quotationPrefix.forcedBreakIndentWidth }
+            : {}),
           scopePolicy: texParagraphBreakScopePolicy(
             breakScopeContext,
             paragraphStateResult.finalHyphenDemerits
@@ -245,6 +249,7 @@ function texQuotationFirstLinePrefix(params: {
 }): {
   readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
   readonly firstLineIndentWidth?: number;
+  readonly forcedBreakIndentWidth?: number;
 } {
   const indentWidth = params.segment.firstLineIndentEm === undefined
     ? undefined
@@ -287,6 +292,7 @@ function texQuotationFirstLinePrefix(params: {
           penalty: 0,
         },
       ],
+      forcedBreakIndentWidth: indentWidth,
     };
   }
   return {
