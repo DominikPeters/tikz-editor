@@ -4,11 +4,13 @@ import {
   createTexDerivedInlineMathBoxProvider,
   createSimpleTexLayoutDocumentIr,
   layoutSimpleTexParagraph,
+  luaLatexDefaultTextFontProfile,
   parseSimpleTexParagraphIr,
 } from "../packages/core/src/text/tex/index.js";
 import {
   simpleTexInlineNodesToLayoutItems,
 } from "../packages/core/src/text/tex/layout-inline-items.js";
+import { texInterwordGlueForSpaceFactor } from "../packages/core/src/text/tex/space-glue.js";
 import {
   addParagraphVerticalGlueToVList,
   attachTexHBoxesBeforeVListParagraphs,
@@ -974,6 +976,70 @@ describe("TeX vlist lowering", () => {
       metrics: { width: 55 },
     });
     expect(result.vlistLayout?.linePlacements.length).toBeGreaterThan(1);
+  });
+
+  it("lays out text-mode mbox as one unbreakable inline hbox", () => {
+    const plain = layoutSimpleTexParagraph(String.raw`A\mbox{b}Z`, {
+      width: 200,
+      parindent: 0,
+    });
+    const spaced = layoutSimpleTexParagraph(String.raw`A\mbox{ b }Z`, {
+      width: 200,
+      parindent: 0,
+    });
+
+    expect(plain.supported).toBe(true);
+    expect(spaced.supported).toBe(true);
+    const plainBox = plain.report?.lines.flatMap((line) => line.segments).find((segment) =>
+      segment.kind === "math" && segment.sourceKind === "text"
+    );
+    const spacedBox = spaced.report?.lines.flatMap((line) => line.segments).find((segment) =>
+      segment.kind === "math" && segment.sourceKind === "text"
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      10,
+      computerModernTexMetricProvider
+    );
+    const spaceWidth = texInterwordGlueForSpaceFactor(font, 1000, "font").width;
+
+    expect(plainBox).toMatchObject({
+      kind: "math",
+      text: "b",
+      sourceStartRaw: 1,
+      sourceEndRaw: 9,
+      sourceKind: "text",
+    });
+    expect(spacedBox).toMatchObject({
+      kind: "math",
+      text: " b ",
+      sourceStartRaw: 1,
+      sourceEndRaw: 11,
+      sourceKind: "text",
+    });
+    expect(spacedBox?.width ?? 0).toBeCloseTo((plainBox?.width ?? 0) + 2 * spaceWidth, 1);
+    expect(spacedBox?.mathSvgBody).toContain("data-tex-math-hlist");
+  });
+
+  it("lays out inline math inside text-mode mbox content", () => {
+    const source = String.raw`Alpha \mbox{node $x$} Omega`;
+    const result = layoutSimpleTexParagraph(source, {
+      width: 200,
+      parindent: 0,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+
+    expect(result.supported).toBe(true);
+    const box = result.report?.lines.flatMap((line) => line.segments).find((segment) =>
+      segment.kind === "math" && segment.sourceKind === "text"
+    );
+    expect(box).toMatchObject({
+      text: "node $x$",
+      sourceStartRaw: source.indexOf(String.raw`\mbox`),
+      sourceEndRaw: source.indexOf(" Omega"),
+      sourceKind: "text",
+    });
+    expect(box?.mathSvgBody).toContain('data-tex-font="cmmi10"');
   });
 
   it("preserves block-position unsupported commands as vlist placeholders", () => {

@@ -661,6 +661,16 @@ function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
     }
     source += "}";
   };
+  const appendMBox = () => {
+    appendSeparator();
+    source += "\\mbox{";
+    source += random() < 0.5 ? " " : "";
+    source += pickFuzzItem(words, random);
+    source += " ";
+    source += pickFuzzItem(words, random);
+    source += random() < 0.5 ? " " : "";
+    source += "}";
+  };
   const appendForcedBreak = () => {
     appendSeparator();
     source += random() < 0.5 ? String.raw`\\` : String.raw`\\[7pt]`;
@@ -678,10 +688,12 @@ function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
       appendPlainWord();
     } else if (variant < 0.62) {
       appendCommand();
-    } else if (variant < 0.84) {
+    } else if (variant < 0.78) {
       appendNestedCommand();
-    } else {
+    } else if (variant < 0.92) {
       appendDeclarationGroup();
+    } else {
+      appendMBox();
     }
   }
 
@@ -943,6 +955,8 @@ function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
     trackedMathFormula("\\sum_{i=1}^{n}\\frac{i}{n}", ["\\sum", "i", "=", "1", "n", "\\frac", "i", "n"], { exactRoundTrip: false }),
     trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
     trackedMathFormula("\\left(\\frac{x}{y}+z\\right)", ["\\left", "\\frac", "x", "y", "+", "z", "\\right"], { exactRoundTrip: false }),
+    trackedMathFormula("\\mbox{if}", ["\\mbox", "if"], { exactRoundTrip: false }),
+    trackedMathFormula("x_{\\mbox{ node }}", ["x", "_", "\\mbox", "node"], { exactRoundTrip: false }),
   ];
 }
 

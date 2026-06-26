@@ -155,6 +155,15 @@ export interface SimpleTexGroupNode extends SimpleTexSourceRange {
   readonly children: readonly SimpleTexInlineNode[];
 }
 
+export interface SimpleTexMBoxNode extends SimpleTexSourceRange {
+  readonly kind: "mbox";
+  readonly text: string;
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+}
+
 export interface SimpleTexParagraphBreakNode extends SimpleTexSourceRange {
   readonly kind: "paragraph-break";
   readonly text: string;
@@ -238,7 +247,8 @@ export type SimpleTexInlineNode =
   | SimpleTexMathNode
   | SimpleTexFontCommandNode
   | SimpleTexFontDeclarationNode
-  | SimpleTexGroupNode;
+  | SimpleTexGroupNode
+  | SimpleTexMBoxNode;
 
 export type SimpleTexControlNode =
   | SimpleTexParagraphBreakNode
@@ -256,7 +266,7 @@ export type SimpleTexControlNode =
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "math";
+  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -264,6 +274,7 @@ export interface SimpleTexToken {
   readonly content?: string;
   readonly contentStart?: number;
   readonly contentEnd?: number;
+  readonly children?: readonly SimpleTexInlineNode[];
   readonly lineLeading?: string;
   readonly fontState: SimpleTexFontState;
   readonly italicCorrectionAfter?: boolean;
@@ -520,7 +531,7 @@ function simpleTexIrHasUnsupportedDirectTextChar(nodes: readonly SimpleTexNode[]
       return true;
     }
     if (
-      (node.kind === "font-command" || node.kind === "group") &&
+      (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") &&
       simpleTexIrHasUnsupportedDirectTextChar(node.children)
     ) {
       return true;
@@ -655,6 +666,7 @@ function scanSimpleTexIrNodes(
       const penalty = scanSimpleTexPenaltyCommand(text, index, sourceOffset);
       const boxCommand = scanSimpleTexBoxCommand(text, index, sourceOffset);
       const boxEnvironment = scanSimpleTexBoxEnvironment(text, index, sourceOffset);
+      const mboxCommand = scanSimpleTexMBoxCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (boxEnvironment) {
@@ -703,6 +715,12 @@ function scanSimpleTexIrNodes(
         nodes.push(boxCommand.node);
         unsupportedCommand ||= boxCommand.unsupportedCommand;
         index = boxCommand.end;
+        continue;
+      }
+      if (mboxCommand) {
+        nodes.push(mboxCommand.node);
+        unsupportedCommand ||= mboxCommand.unsupportedCommand;
+        index = mboxCommand.end;
         continue;
       }
 
@@ -1763,6 +1781,58 @@ function scanSimpleTexFontCommand(
   };
 }
 
+function scanSimpleTexMBoxCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexMBoxNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "mbox");
+  if (commandEnd === null) {
+    return null;
+  }
+
+  let groupStart = commandEnd;
+  while (text[groupStart] === " " || text[groupStart] === "\n") {
+    groupStart += 1;
+  }
+  if (text[groupStart] !== "{") {
+    return null;
+  }
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
+  if (groupEnd === null) {
+    return null;
+  }
+
+  const contentStart = groupStart + 1;
+  const contentEnd = groupEnd - 1;
+  const childScan = scanSimpleTexIrNodes(
+    text.slice(contentStart, contentEnd),
+    sourceOffset + contentStart
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
+  return {
+    node: {
+      kind: "mbox",
+      text: text.slice(start, groupEnd),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+      content: text.slice(contentStart, contentEnd),
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + contentEnd,
+      children: childrenAreInline
+        ? childScan.nodes.filter(isSimpleTexInlineNode)
+        : [],
+    },
+    end: groupEnd,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+  };
+}
+
 function scanSimpleTexFontCommandName(
   text: string,
   start: number
@@ -2059,7 +2129,8 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "math" ||
     node.kind === "font-command" ||
     node.kind === "font-declaration" ||
-    node.kind === "group"
+    node.kind === "group" ||
+    node.kind === "mbox"
   );
 }
 
@@ -2949,6 +3020,22 @@ export function simpleTexInlineNodesToTokens(
         content: node.content,
         contentStart: node.contentStart,
         contentEnd: node.contentEnd,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+      });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
+
+    if (node.kind === "mbox") {
+      tokens.push({
+        kind: "mbox",
+        text: node.text,
+        content: node.content,
+        contentStart: node.contentStart,
+        contentEnd: node.contentEnd,
+        children: node.children,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,

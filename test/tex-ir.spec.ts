@@ -31,6 +31,38 @@ describe("simple TeX paragraph IR", () => {
     expect(inlineMath.fallbackReason).toBeNull();
   });
 
+  it("parses mbox as an inline text hbox node", () => {
+    const source = String.raw`Alpha \mbox{ beta \textit{gamma} $x$ } Omega`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const mbox = parsed.nodes.find((node) => node.kind === "mbox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(mbox).toMatchObject({
+      kind: "mbox",
+      text: String.raw`\mbox{ beta \textit{gamma} $x$ }`,
+      content: String.raw` beta \textit{gamma} $x$ `,
+      contentStart: 12,
+      contentEnd: 37,
+      children: [
+        { kind: "space" },
+        { kind: "text", text: "beta" },
+        { kind: "space" },
+        { kind: "font-command", command: "textit" },
+        { kind: "space" },
+        { kind: "math", content: "x" },
+        { kind: "space" },
+      ],
+    });
+    expect(parsed.blocks[0]?.nodes.some((node) => node.kind === "mbox")).toBe(true);
+  });
+
+  it("rejects vertical material inside inline mbox nodes", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \mbox{\par Beta}`, 120);
+
+    expect(analysis.ir?.unsupportedCommand).toBe(true);
+    expect(analysis.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+  });
+
   it("parses display math delimiters as vertical block items", () => {
     const source = String.raw`Alpha $$x^2$$ \[y^2\] \begin{equation}z^2\end{equation} \begin{align}a&=b\end{align}`;
     const parsed = parseSimpleTexParagraphIr(source);

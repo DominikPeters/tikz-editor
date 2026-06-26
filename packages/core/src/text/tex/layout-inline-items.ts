@@ -3,9 +3,22 @@ import {
   type TexTextFontProfile,
 } from "./fonts/text-profile.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
-import type { TexMathFontProfile } from "./math/font-profile.js";
-import type { TexMathTextPart } from "./math/ir.js";
-import type { TexMathHList } from "./math/layout.js";
+import {
+  defaultTexMathFontProfile,
+  type TexMathFontFamily,
+  type TexMathFontProfile,
+} from "./math/font-profile.js";
+import type {
+  TexMathStyle,
+  TexMathTextPart,
+} from "./math/ir.js";
+import type {
+  TexMathChildHListLayoutItem,
+  TexMathGlyphLayoutItem,
+  TexMathHList,
+  TexMathHListItem,
+  TexMathKernLayoutItem,
+} from "./math/layout.js";
 import {
   simpleTexInlineNodesToTokens,
   type SimpleTexDisplayMathDelimiter,
@@ -14,6 +27,8 @@ import {
   type SimpleTexParagraphSegment,
   type TexSpaceGlueProfile,
 } from "./ir.js";
+import { roundTexPt } from "./fonts/units.js";
+import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
 export interface TexLayoutTextItem {
   readonly kind: "text";
@@ -53,6 +68,7 @@ export interface TexLayoutForcedBreakItem {
 export interface TexMathBox {
   readonly source: string;
   readonly content: string;
+  readonly sourceKind?: "text" | "math";
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly contentStart: number;
@@ -233,6 +249,19 @@ export interface TexLayoutMathItem {
   readonly box: TexMathBox;
 }
 
+export interface TexLayoutTextBoxItem {
+  readonly kind: "text-box";
+  readonly role?: "list-label";
+  readonly command: "mbox";
+  readonly text: string;
+  readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly box: TexMathBox;
+}
+
 export interface TexLayoutPenaltyItem {
   readonly kind: "penalty";
   readonly role?: "list-label";
@@ -246,6 +275,7 @@ export type TexLayoutInlineItem =
   | TexLayoutSpaceItem
   | TexLayoutForcedBreakItem
   | TexLayoutMathItem
+  | TexLayoutTextBoxItem
   | TexLayoutPenaltyItem;
 
 export interface TexLayoutGlyphItem {
@@ -362,6 +392,41 @@ export function simpleTexSegmentToLayoutItems(
       continue;
     }
 
+    if (token.kind === "mbox") {
+      const box = texMBoxFromInlineNodes({
+        source: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        children: token.children ?? [],
+        fontState: token.fontState,
+        atPt,
+        metricProvider,
+        spaceGlueProfile,
+        mathBoxProvider,
+        textFontProfile,
+      });
+      if (!box) {
+        throw new Error(`Failed to lay out TeX \\mbox for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "text-box",
+        command: "mbox",
+        text: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
     if (token.kind === "forced-break") {
       const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
       items.push({
@@ -396,6 +461,426 @@ export function simpleTexSegmentToLayoutItems(
     items.pop();
   }
   return items;
+}
+
+function texMBoxFromInlineNodes(params: {
+  readonly source: string;
+  readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+  readonly fontState: SimpleTexFontState;
+  readonly atPt: number;
+  readonly metricProvider: TexMetricProvider;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly textFontProfile: TexTextFontProfile;
+}): TexMathBox | null {
+  const innerItems = simpleTexInlineTokensToLayoutItems({
+    tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
+    atPt: params.atPt,
+    metricProvider: params.metricProvider,
+    spaceGlueProfile: params.spaceGlueProfile,
+    mathBoxProvider: params.mathBoxProvider,
+    textFontProfile: params.textFontProfile,
+    trimEdges: false,
+  });
+  const hlist = texMBoxHListFromLayoutItems({
+    items: innerItems,
+    sourceSpan: {
+      start: params.sourceStart,
+      end: params.sourceEnd,
+    },
+    metricProvider: params.metricProvider,
+  });
+  if (!hlist) {
+    return null;
+  }
+  return {
+    source: params.source,
+    content: params.content,
+    sourceKind: "text",
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+    contentStart: params.contentStart,
+    contentEnd: params.contentEnd,
+    width: hlist.width,
+    height: hlist.height,
+    depth: hlist.depth,
+    caretStops: texMBoxCaretStops(
+      params.sourceStart,
+      params.sourceEnd,
+      params.contentStart,
+      params.contentEnd,
+      hlist.width
+    ),
+    constructRanges: [{
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      xStart: 0,
+      xEnd: hlist.width,
+    }],
+    hlist,
+    fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
+  };
+}
+
+function texMBoxFontProfile(
+  metricProvider: TexMetricProvider,
+  textFontProfile: TexTextFontProfile
+): TexMathFontProfile {
+  return {
+    ...defaultTexMathFontProfile,
+    textFontProfile,
+    metricProvider,
+    resolveMathFont: ({ family, style, baseAtPt = 10 }) => {
+      const fontId = defaultTexMathFontProfile.resolveMathFontId(family, style);
+      return metricProvider.resolveFont({
+        fontId,
+        atPt: texMBoxMathFontAtPt(family, fontId, style, baseAtPt),
+      });
+    },
+  };
+}
+
+function texMBoxMathFontAtPt(
+  family: TexMathFontFamily,
+  fontId: string,
+  style: TexMathStyle,
+  baseAtPt: number
+): number {
+  if (family === "extension" && fontId === "cmex10") {
+    return baseAtPt;
+  }
+  if (style === "script") {
+    return baseAtPt * 0.7;
+  }
+  if (style === "scriptscript") {
+    return baseAtPt * 0.5;
+  }
+  return baseAtPt;
+}
+
+function texMBoxCaretStops(
+  sourceStart: number,
+  sourceEnd: number,
+  contentStart: number,
+  contentEnd: number,
+  width: number
+): readonly number[] {
+  const length = Math.max(0, sourceEnd - sourceStart);
+  const contentLength = Math.max(1, contentEnd - contentStart);
+  return Array.from({ length: length + 1 }, (_, index) => {
+    const sourceOffset = sourceStart + index;
+    if (sourceOffset <= contentStart) {
+      return 0;
+    }
+    if (sourceOffset >= contentEnd) {
+      return roundTexPt(width);
+    }
+    return roundTexPt(((sourceOffset - contentStart) / contentLength) * width);
+  });
+}
+
+function simpleTexInlineTokensToLayoutItems(params: {
+  readonly tokens: ReturnType<typeof simpleTexInlineNodesToTokens>;
+  readonly atPt: number;
+  readonly metricProvider: TexMetricProvider;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly textFontProfile: TexTextFontProfile;
+  readonly trimEdges: boolean;
+}): TexLayoutInlineItem[] {
+  const items: TexLayoutInlineItem[] = [];
+  let spaceFactor = 1000;
+  let hasSeenText = false;
+
+  for (let tokenIndex = 0; tokenIndex < params.tokens.length; tokenIndex += 1) {
+    const token = params.tokens[tokenIndex];
+    if (params.trimEdges && token.kind === "space" && !hasSeenText) {
+      continue;
+    }
+
+    if (token.kind === "text") {
+      const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
+      const italicCorrectionAfter =
+        token.italicCorrectionAfter === true &&
+        !texItalicCorrectionSuppressedByNextToken(params.tokens[tokenIndex + 1]);
+      const spaceFactorBefore = spaceFactor;
+      spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
+      items.push({
+        kind: "text",
+        text: token.text,
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        font,
+        italicCorrectionAfter,
+        spaceFactorBefore,
+        spaceFactorAfter: spaceFactor,
+      });
+      hasSeenText = true;
+      continue;
+    }
+
+    if (token.kind === "math") {
+      const box = params.mathBoxProvider?.getInlineMathBox({
+        source: token.text,
+        content: token.content ?? "",
+        delimiter: token.delimiter ?? "dollar",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+      }) ?? null;
+      if (!box) {
+        throw new Error(`Missing TeX inline math box for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "math",
+        text: token.text,
+        content: token.content ?? "",
+        delimiter: token.delimiter ?? "dollar",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "mbox") {
+      const box = texMBoxFromInlineNodes({
+        source: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        children: token.children ?? [],
+        fontState: token.fontState,
+        atPt: params.atPt,
+        metricProvider: params.metricProvider,
+        spaceGlueProfile: params.spaceGlueProfile,
+        mathBoxProvider: params.mathBoxProvider,
+        textFontProfile: params.textFontProfile,
+      });
+      if (!box) {
+        throw new Error(`Failed to lay out TeX \\mbox for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "text-box",
+        command: "mbox",
+        text: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "forced-break") {
+      const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
+      items.push({
+        kind: "forced-break",
+        text: " ",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        font,
+        lineLeading: token.lineLeading,
+        spaceFactor,
+        spaceGlueProfile: params.spaceGlueProfile,
+      });
+      continue;
+    }
+
+    const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
+    items.push({
+      kind: "space",
+      text: " ",
+      sourceStart: token.sourceStart,
+      sourceEnd: token.sourceEnd,
+      font,
+      spaceFactor,
+      spaceGlueProfile: params.spaceGlueProfile,
+    });
+  }
+
+  if (params.trimEdges) {
+    while (items.at(-1)?.kind === "space" || items.at(-1)?.kind === "forced-break") {
+      items.pop();
+    }
+  }
+  return items;
+}
+
+function texMBoxHListFromLayoutItems(params: {
+  readonly items: readonly TexLayoutInlineItem[];
+  readonly sourceSpan: { readonly start: number; readonly end: number };
+  readonly metricProvider: TexMetricProvider;
+}): TexMathHList | null {
+  const items: TexMathHListItem[] = [];
+  let cursor = 0;
+  let height = 0;
+  let depth = 0;
+
+  for (const item of params.items) {
+    if (item.kind === "text") {
+      const shaped = params.metricProvider.shapeText(item.text, item.font, {
+        sourceStart: item.sourceStart,
+      });
+      for (const shapedItem of shaped.items) {
+        const layoutItem = texTextShapedItemToMBoxItem(shapedItem, item.font, cursor);
+        items.push(layoutItem);
+        cursor = roundTexPt(cursor + layoutItem.width);
+        if (layoutItem.kind === "glyph") {
+          height = Math.max(height, layoutItem.height);
+          depth = Math.max(depth, layoutItem.depth);
+        }
+      }
+      const correction = item.italicCorrectionAfter
+        ? texMBoxTrailingItalicCorrectionWidth(shaped.items)
+        : 0;
+      if (correction > 0) {
+        const kern = texMBoxKernItem(cursor, correction, item.sourceEnd, item.sourceEnd);
+        items.push(kern);
+        cursor = roundTexPt(cursor + kern.width);
+      }
+      continue;
+    }
+
+    if (item.kind === "space") {
+      const glue = texInterwordGlueForSpaceFactor(
+        item.font,
+        item.spaceFactor,
+        item.spaceGlueProfile
+      );
+      const kern = texMBoxKernItem(cursor, glue.width, item.sourceStart, item.sourceEnd);
+      items.push(kern);
+      cursor = roundTexPt(cursor + kern.width);
+      continue;
+    }
+
+    if (item.kind === "math" || item.kind === "text-box") {
+      const child = texMBoxChildHListItem(item.box, cursor, item.sourceStart, item.sourceEnd);
+      if (!child) {
+        return null;
+      }
+      items.push(child);
+      cursor = roundTexPt(cursor + child.width);
+      height = Math.max(height, child.height);
+      depth = Math.max(depth, child.depth);
+      continue;
+    }
+
+    if (item.kind === "penalty") {
+      continue;
+    }
+
+    return null;
+  }
+
+  return {
+    kind: "math-hlist",
+    style: "text",
+    width: roundTexPt(cursor),
+    height: roundTexPt(height),
+    depth: roundTexPt(depth),
+    sourceSpan: params.sourceSpan,
+    items,
+  };
+}
+
+function texTextShapedItemToMBoxItem(
+  item: ReturnType<TexMetricProvider["shapeText"]>["items"][number],
+  font: ResolvedTexFont,
+  x: number
+): TexMathGlyphLayoutItem | TexMathKernLayoutItem {
+  if (item.kind === "kern") {
+    return texMBoxKernItem(x, item.width, item.sourceStart, item.sourceEnd);
+  }
+  return {
+    kind: "glyph",
+    fontId: font.id,
+    atPt: font.atPt,
+    family: "text",
+    code: item.code,
+    text: String.fromCharCode(item.code),
+    x,
+    y: 0,
+    width: item.width,
+    height: item.height,
+    depth: item.depth,
+    italicCorrection: item.italicCorrection,
+    sourceSpan: {
+      start: item.sourceStart,
+      end: item.sourceEnd,
+    },
+  };
+}
+
+function texMBoxKernItem(
+  x: number,
+  width: number,
+  sourceStart: number,
+  sourceEnd: number
+): TexMathKernLayoutItem {
+  return {
+    kind: "kern",
+    x,
+    width: roundTexPt(width),
+    reason: "text-kern",
+    sourceSpan: {
+      start: sourceStart,
+      end: sourceEnd,
+    },
+  };
+}
+
+function texMBoxTrailingItalicCorrectionWidth(
+  items: ReturnType<TexMetricProvider["shapeText"]>["items"]
+): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.kind === "glyph") {
+      return item.italicCorrection;
+    }
+  }
+  return 0;
+}
+
+function texMBoxChildHListItem(
+  box: TexMathBox,
+  x: number,
+  sourceStart: number,
+  sourceEnd: number
+): TexMathChildHListLayoutItem | null {
+  if (!box.hlist) {
+    return null;
+  }
+  return {
+    kind: "hlist",
+    role: "nucleus",
+    x,
+    y: 0,
+    width: roundTexPt(box.width),
+    height: roundTexPt(box.height),
+    depth: roundTexPt(box.depth),
+    sourceSpan: {
+      start: sourceStart,
+      end: sourceEnd,
+    },
+    items: box.hlist.items,
+  };
 }
 
 function texItalicCorrectionSuppressedByNextToken(

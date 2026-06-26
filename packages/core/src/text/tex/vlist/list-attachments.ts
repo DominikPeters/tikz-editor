@@ -13,8 +13,11 @@ import type {
   TexLayoutLabel,
   TexLayoutMathItem,
   TexLayoutSpaceItem,
+  TexLayoutTextBoxItem,
+  TexMathBox,
   TexMathBoxProvider,
 } from "../layout-inline-items.js";
+import { renderTexMathHListSvgBody } from "../math/render-svg.js";
 import type {
   TexBoxMetrics,
   TexHBoxItem,
@@ -279,6 +282,7 @@ function texLayoutLabelHBoxContent(
   const pendingItems: Array<
     | Omit<Extract<TexRenderItem, { kind: "tex-glyph-run" }>, "baseline">
     | Omit<Extract<TexRenderItem, { kind: "tex-glyph" }>, "baseline">
+    | Omit<Extract<TexRenderItem, { kind: "tex-math-svg" }>, "baseline">
   > = [];
   for (const item of label.items) {
     if (item.kind === "glyph") {
@@ -319,7 +323,31 @@ function texLayoutLabelHBoxContent(
       continue;
     }
     if (item.kind === "math") {
-      width += item.box.width;
+      const mathWidth = texLayoutMathItemWidth(item);
+      const svgBody = texLayoutBoxSvgBody(item.box);
+      if (svgBody) {
+        pendingItems.push({
+          kind: "tex-math-svg",
+          svgBody,
+          x: roundTexPt(width),
+        });
+      }
+      width += mathWidth;
+      height = Math.max(height, item.box.height);
+      depth = Math.max(depth, item.box.depth);
+      continue;
+    }
+    if (item.kind === "text-box") {
+      const boxWidth = texLayoutTextBoxItemWidth(item);
+      const svgBody = texLayoutBoxSvgBody(item.box);
+      if (svgBody) {
+        pendingItems.push({
+          kind: "tex-math-svg",
+          svgBody,
+          x: roundTexPt(width),
+        });
+      }
+      width += boxWidth;
       height = Math.max(height, item.box.height);
       depth = Math.max(depth, item.box.depth);
       continue;
@@ -357,6 +385,19 @@ function texLayoutSpaceItemWidth(item: TexLayoutSpaceItem): number {
 
 export function texLayoutMathItemWidth(item: TexLayoutMathItem): number {
   return roundTexPt(item.box.width);
+}
+
+export function texLayoutTextBoxItemWidth(item: TexLayoutTextBoxItem): number {
+  return roundTexPt(item.box.width);
+}
+
+function texLayoutBoxSvgBody(box: TexMathBox): string | undefined {
+  if (box.hlist && box.fontProfile) {
+    return renderTexMathHListSvgBody(box.hlist, {
+      fontProfile: box.fontProfile,
+    });
+  }
+  return box.svgBody;
 }
 
 export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): number {

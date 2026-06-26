@@ -32,6 +32,7 @@ import {
   texLayoutGlyphItemHeight,
   texLayoutGlyphItemWidth,
   texLayoutMathItemWidth,
+  texLayoutTextBoxItemWidth,
 } from "./vlist/list-attachments.js";
 import type { TexLineLabel } from "./vlist/index.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
@@ -206,7 +207,7 @@ function buildTexLineReport(
         text: box?.content ?? "",
         sourceStartRaw: run.sourceStart,
         sourceEndRaw: run.sourceEnd,
-        sourceKind: "math",
+        sourceKind: box?.sourceKind ?? "math",
         x,
         width,
         caretStops: texMathBoxCaretStops(box, x, width),
@@ -426,7 +427,7 @@ function coalescedSameLineMathSegment(
       text: rootBox.content,
       sourceStartRaw: rootBox.contentStart,
       sourceEndRaw: rootBox.contentEnd,
-      sourceKind: "math",
+      sourceKind: rootBox.sourceKind ?? "math",
       x,
       width,
       caretStops: texMathBoxCaretStops(rootBox, x, width),
@@ -510,6 +511,7 @@ function texMathBoxFromWrapper(
   readonly sourceEnd: number;
   readonly contentStart: number;
   readonly contentEnd: number;
+  readonly sourceKind?: "text" | "math";
   readonly width: number;
   readonly height: number;
   readonly depth: number;
@@ -545,6 +547,7 @@ function texMathBoxFromWrapper(
     readonly sourceEnd?: unknown;
     readonly contentStart?: unknown;
     readonly contentEnd?: unknown;
+    readonly sourceKind?: unknown;
     readonly width?: unknown;
     readonly height?: unknown;
     readonly depth?: unknown;
@@ -563,6 +566,9 @@ function texMathBoxFromWrapper(
     sourceEnd: Number(typedBox.sourceEnd) || 0,
     contentStart: Number(typedBox.contentStart) || 0,
     contentEnd: Number(typedBox.contentEnd) || 0,
+    sourceKind: typedBox.sourceKind === "text" || typedBox.sourceKind === "math"
+      ? typedBox.sourceKind
+      : undefined,
     width: Number(typedBox.width) || 0,
     height: Number(typedBox.height) || 0,
     depth: Number(typedBox.depth) || 0,
@@ -655,7 +661,7 @@ function buildTexLineLabelSegments(
         text: item.content,
         sourceStartRaw: item.sourceStart,
         sourceEndRaw: item.sourceEnd,
-        sourceKind: "math",
+        sourceKind: item.box.sourceKind ?? "math",
         x,
         width: mathWidth,
         caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
@@ -665,6 +671,29 @@ function buildTexLineLabelSegments(
         mathSvgBody: texMathBoxSvgBody(item.box, mathWidth),
       });
       x = roundTexPt(x + mathWidth);
+      continue;
+    }
+    if (item.kind === "text-box") {
+      const boxWidth = texLayoutTextBoxItemWidth(item);
+      ascent = Math.max(ascent, item.box.height);
+      descent = Math.max(descent, item.box.depth);
+      segments.push({
+        runIndex: label.lineRunIndex,
+        kind: "math",
+        role: "list-label",
+        text: item.content,
+        sourceStartRaw: item.sourceStart,
+        sourceEndRaw: item.sourceEnd,
+        sourceKind: item.box.sourceKind ?? "text",
+        x,
+        width: boxWidth,
+        caretStops: texMathBoxCaretStops(item.box, x, boxWidth),
+        mathConstructRanges: texMathBoxConstructRanges(item.box, x, boxWidth),
+        mathCaretEntries: texMathBoxCaretEntries(item.box, x, boxWidth),
+        mathBreakpoints: texMathBoxBreakpoints(item.box, x, boxWidth),
+        mathSvgBody: texMathBoxSvgBody(item.box, boxWidth),
+      });
+      x = roundTexPt(x + boxWidth);
       continue;
     }
     if (item.kind === "penalty") {
@@ -1038,6 +1067,10 @@ function texLayoutItemsNaturalWidth(
     }
     if (item.kind === "math") {
       width += texLayoutMathItemWidth(item);
+      continue;
+    }
+    if (item.kind === "text-box") {
+      width += texLayoutTextBoxItemWidth(item);
       continue;
     }
     if (item.kind === "penalty") {

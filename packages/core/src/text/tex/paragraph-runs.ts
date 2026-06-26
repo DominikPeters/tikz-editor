@@ -164,6 +164,18 @@ function layoutItemsToRuns(
       continue;
     }
 
+    if (item.kind === "text-box") {
+      pendingItalicCorrection = 0;
+      runs.push(mathRunForBox(
+        item.box,
+        runIndex,
+        item.role,
+        item.sourceStart,
+        item.sourceEnd
+      ));
+      continue;
+    }
+
     if (item.kind === "penalty") {
       pendingItalicCorrection = 0;
       runs.push({

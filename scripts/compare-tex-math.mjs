@@ -768,7 +768,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group", "accent"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack", "mbox"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -798,6 +798,8 @@ function randomMathTerm(rng, depth) {
     term = randomOperatorNameFormula(rng);
   } else if (choice === "substack") {
     term = randomSubstackFormula(rng);
+  } else if (choice === "mbox") {
+    term = randomMBoxMathFormula(rng);
   } else if (choice === "group") {
     term = "{" + randomSimpleExpression(rng) + "}";
   } else {
@@ -818,7 +820,18 @@ function isScriptableGeneratedTerm(choice) {
     "line",
     "left-right",
     "operatorname",
+    "mbox",
   ].includes(choice);
+}
+
+function randomMBoxMathFormula(rng) {
+  const content = [
+    "if",
+    "for all",
+    " node ",
+    "case A",
+  ][randomInt(rng, 4)] ?? "if";
+  return String.raw`\mbox{` + content + "}";
 }
 
 function randomFractionFormula(rng, numerator, denominator) {

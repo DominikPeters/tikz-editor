@@ -700,6 +700,9 @@ function uniqueSortedInsertions(random, wordCount, count) {
 }
 
 function randomFormula(random, variables, formulaMode) {
+  if ((formulaMode === "mixed" || formulaMode === "scripts") && random() < 0.16) {
+    return randomMBoxFormula(random, variables);
+  }
   if (formulaMode === "constructs") {
     return randomConstructFormula(random, variables);
   }
@@ -712,6 +715,20 @@ function randomFormula(random, variables, formulaMode) {
   const lhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   const rhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
   return random() < 0.7 ? `${lhs}=${rhs}` : lhs;
+}
+
+function randomMBoxFormula(random, variables) {
+  const variable = choice(random, variables);
+  const content = choice(random, [
+    "if",
+    "for all",
+    " node ",
+    "case A",
+  ]);
+  if (random() < 0.5) {
+    return `${variable}_{\\mbox{${content}}}`;
+  }
+  return `${variable}+\\mbox{${content}}`;
 }
 
 function randomSpacingFormula(random, variables) {

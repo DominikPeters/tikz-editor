@@ -271,7 +271,7 @@ function generateCase(index, random) {
   const widths = [80, 100, 120, 150, 200, 240, 320];
   const width = choice(random, widths);
   const parindent = choice(random, [0, 10, 15]);
-  const feature = index % 6;
+  const feature = index % 7;
   let text;
   if (feature === 0) {
     text = paragraph(random, 2 + Math.floor(random() * 3));
@@ -283,13 +283,15 @@ function generateCase(index, random) {
     text = `${sentence(random, 5, 9)} \\\\[${choice(random, [4, 7, 10])}pt] ${paragraph(random, 2)}`;
   } else if (feature === 4) {
     text = `${paragraph(random, 1)} \\par \\noindent ${sentence(random, 4, 8)} \\\\[7pt] ${paragraph(random, 1)}`;
-  } else {
+  } else if (feature === 5) {
     const declaration = choice(random, ["\\raggedright", "\\centering", "\\raggedleft"]);
     text = `${paragraph(random, 1)} \\par ${declaration} ${paragraph(random, 1 + Math.floor(random() * 2))}`;
+  } else {
+    text = `${sentence(random, 3, 6)} ${inlineMBox(random)} ${sentence(random, 3, 6)}`;
   }
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
-    feature: ["plain", "multi-par", "noindent", "forced-break", "mixed", "declaration"][feature],
+    feature: ["plain", "multi-par", "noindent", "forced-break", "mixed", "declaration", "mbox"][feature],
     text,
     width,
     parindent,
@@ -627,12 +629,16 @@ function generateBoxCase(index, random) {
     "Office figure final logic.",
     "Reader layout source model.",
   ]);
-  const feature = index % 2;
+  const feature = index % 4;
   let text;
   if (feature === 0) {
     text = `\\parbox{${boxWidth}pt}{${body}}`;
-  } else {
+  } else if (feature === 1) {
     text = `\\begin{minipage}{${boxWidth}pt}${body}\\end{minipage}`;
+  } else if (feature === 2) {
+    text = `${sentence(random, 3, 6)} ${inlineMBox(random)} ${sentence(random, 3, 6)}`;
+  } else {
+    text = `${inlineMBox(random)} ${sentence(random, 5, 9)} ${inlineMBox(random)}`;
   }
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
@@ -734,6 +740,16 @@ function generateMixedFeatureCase(index, random) {
     };
   }
   if (feature === 5) {
+    return {
+      id: `case-${String(index + 1).padStart(3, "0")}`,
+      feature: "mixed-mbox",
+      text: `${sentence(random, 5, 9)} \\par ${inlineMBox(random)} ${sentence(random, 3, 6)}`,
+      width: choice(random, [150, 200, 240, 320]),
+      parindent: choice(random, [0, 10, 15]),
+      alignment: alignments[index % alignments.length],
+    };
+  }
+  if (feature === 6) {
     const generated = generateAlignmentEnvironmentCase(index, random);
     return {
       ...generated,
@@ -744,6 +760,15 @@ function generateMixedFeatureCase(index, random) {
     ...generateCase(index, random),
     feature: "mixed-basic",
   };
+}
+
+function inlineMBox(random) {
+  const content = choice(random, [
+    styledPhrase(random, 2, 4),
+    `${choice(random, words)} ${choice(random, words)}`,
+    ` ${choice(random, words)} `,
+  ]);
+  return `\\mbox{${content}}`;
 }
 
 function generateCaseForMode(index, random, mode) {
@@ -822,6 +847,10 @@ function renderGlyphCode(code, font, x, baseline) {
     return "";
   }
   return `<path d="${escapeXml(path)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})" />`;
+}
+
+function renderInlineMathSvgBody(body, x, baseline) {
+  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(defaultTextFontSize / 1000)})">${body}</g>`;
 }
 
 function renderVListRules(items) {
@@ -910,6 +939,16 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
     const left = Number.isFinite(line.xStart) ? line.xStart : 0;
     pieces.push(`<g transform="translate(${formatPt(left)} ${formatPt(top)})">`);
     for (const segment of line.segments) {
+      if (segment.kind === "math") {
+        if (segment.mathSvgBody) {
+          pieces.push(renderInlineMathSvgBody(
+            segment.mathSvgBody,
+            segment.x - left,
+            baseline
+          ));
+        }
+        continue;
+      }
       if (segment.kind !== "text") {
         continue;
       }
@@ -951,6 +990,14 @@ function buildOursTrace(layout, deps) {
     const baselineY = reportLineBaselineY(line, lineTops);
     const glyphs = [];
     for (const segment of line.segments) {
+      if (segment.kind === "math") {
+        glyphs.push(...traceMathSvgBodyGlyphs(
+          segment,
+          baselineY,
+          deps.computerModernTexMetricProvider
+        ));
+        continue;
+      }
       if (segment.kind !== "text") {
         continue;
       }
@@ -999,6 +1046,53 @@ function buildOursTrace(layout, deps) {
   return {
     lines: lines.filter((line) => line.glyphs.length > 0),
   };
+}
+
+function traceMathSvgBodyGlyphs(segment, baselineY, computerModernTexMetricProvider) {
+  if (!segment.mathSvgBody) {
+    return [];
+  }
+  const glyphs = [];
+  for (const pathTagMatch of segment.mathSvgBody.matchAll(/<path\b[^>]*>/g)) {
+    const attrs = parseSvgAttributes(pathTagMatch[0]);
+    const code = Number(attrs.get("data-tex-glyph"));
+    const fontId = attrs.get("data-tex-font");
+    const transform = parseMathGlyphTransform(attrs.get("transform") ?? "");
+    if (!Number.isFinite(code) || !fontId || !transform) {
+      continue;
+    }
+    const atPt = transform.scale / 10;
+    const font = computerModernTexMetricProvider.resolveFont({ fontId, atPt });
+    const metric = font.data.chars[String(code)];
+    glyphs.push({
+      code,
+      fontId: font.id,
+      x: Number((svgX(segment.x) + transform.translateX * (defaultTextFontSize / 1000)).toFixed(6)),
+      y: Number((baselineY + transform.translateY * (defaultTextFontSize / 1000)).toFixed(6)),
+      width: Number(((metric?.width ?? 0) * font.atPt).toFixed(6)),
+    });
+  }
+  return glyphs;
+}
+
+function parseSvgAttributes(tag) {
+  return new Map(
+    [...tag.matchAll(/\s([-\w:]+)="([^"]*)"/g)].map((match) => [match[1] ?? "", match[2] ?? ""])
+  );
+}
+
+function parseMathGlyphTransform(transform) {
+  const match = /translate\(\s*([^\s,)]+)[,\s]+([^\s,)]+)\s*\)\s*scale\(\s*([^\s,)]+)\s*\)/.exec(transform);
+  if (!match) {
+    return null;
+  }
+  const translateX = Number(match[1]);
+  const translateY = Number(match[2]);
+  const scale = Number(match[3]);
+  if (!Number.isFinite(translateX) || !Number.isFinite(translateY) || !Number.isFinite(scale)) {
+    return null;
+  }
+  return { translateX, translateY, scale };
 }
 
 function traceGlyphTextCode(text, fallbackCode) {

@@ -1075,9 +1075,12 @@ function layoutTextNucleus(
   style: TexMathStyle,
   baseAtPt: number
 ): TexMathAtomLayout | null {
+  const atPt = nucleus.command === "mbox" || nucleus.command === "hbox"
+    ? baseAtPt
+    : textStyleAtPt(style, baseAtPt);
   const font = fontProfile.textFontProfile.resolveTextFont(
     fontProfile.textFontProfile.defaultFontState,
-    textStyleAtPt(style, baseAtPt),
+    atPt,
     fontProfile.metricProvider
   );
   const items: TexMathHListItem[] = [];

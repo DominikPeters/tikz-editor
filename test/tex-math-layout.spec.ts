@@ -788,6 +788,22 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("keeps mbox command nuclei at text size in script style", () => {
+    const result = layout(String.raw`x_{\mbox{if}}`);
+
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => ({
+      fontId: glyph.fontId,
+      atPt: glyph.atPt,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "lmroman10-regular", atPt: 10, code: 105 },
+      { fontId: "lmroman10-regular", atPt: 10, code: 102 },
+    ]);
+  });
+
   it("lays out math alphabet commands with LuaLaTeX CM alphabet fonts", () => {
     const italic = layout(String.raw`\mathit{ABC123}`);
     expect(italic.supported).toBe(true);
