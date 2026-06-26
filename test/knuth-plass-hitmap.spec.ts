@@ -1364,8 +1364,11 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
     const offsetBeforeY = sourceText.indexOf("y");
-    const fullMathStart = sourceText.indexOf("$");
-    const expectedStop = mathSegment?.caretStops?.[offsetBeforeY - fullMathStart];
+    const expectedEntry = mathSegment?.mathCaretEntries?.find((entry) =>
+      entry.sourceOffsetRaw === offsetBeforeY &&
+      entry.sourceStartRaw === offsetBeforeY
+    );
+    expect(expectedEntry).toBeTruthy();
 
     const point = await getKnuthPlassPointFromOffset(outputJax, {
       paragraphId: report.paragraphId,
@@ -1380,7 +1383,7 @@ describe("knuth-plass hitmap line ranges", () => {
       kind: "math",
       snappedToMathPrefix: false
     });
-    expect(point.lineLocalX).toBeCloseTo(expectedStop ?? 0, 6);
+    expect(point.lineLocalX).toBeCloseTo(expectedEntry?.x ?? 0, 6);
   });
 
   it("uses registered TeX vlist line placements for caret geometry without linebox DOM", async () => {

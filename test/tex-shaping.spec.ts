@@ -4663,23 +4663,11 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
     const mathSegments = report?.lines[0]?.segments.filter((segment) => segment.kind === "math") ?? [];
-    const mathSourceStart = sourceText.indexOf(String.raw`$x-y$`);
     const mathContentStart = sourceText.indexOf("x-y");
     const mathContentEnd = mathContentStart + "x-y".length;
-    const mathCaretStops = new Map<number, number>();
-    for (const segment of mathSegments) {
-      const rawStart = segment.caretStops?.length === String.raw`$x-y$`.length + 1
-        ? mathSourceStart
-        : (segment.sourceStartRaw ?? mathContentStart);
-      for (const [index, stop] of (segment.caretStops ?? []).entries()) {
-        const rawOffset = rawStart + index;
-        if (rawOffset >= mathContentStart && rawOffset <= mathContentEnd) {
-          mathCaretStops.set(rawOffset, stop);
-        }
-      }
-    }
+    const mathCaretEntries = mathSegments.flatMap((segment) => segment.mathCaretEntries ?? []);
     for (let offset = mathContentStart; offset <= mathContentEnd; offset += 1) {
-      expect(Number.isFinite(mathCaretStops.get(offset))).toBe(true);
+      expect(mathCaretEntries.some((entry) => entry.sourceOffsetRaw === offset)).toBe(true);
     }
 
     const outputJax = {
@@ -4701,13 +4689,18 @@ describe("simple TeX paragraph layout", () => {
       offset: offsetBeforeMinus,
     });
     expect(point.error?.message ?? null).toBeNull();
+    const expectedMinusEntry = mathCaretEntries.find((entry) =>
+      entry.sourceOffsetRaw === offsetBeforeMinus &&
+      entry.sourceStartRaw === offsetBeforeMinus
+    );
+    expect(expectedMinusEntry).toBeTruthy();
     expect(point).toMatchObject({
       ok: true,
       offset: offsetBeforeMinus,
       kind: "math",
       snappedToMathPrefix: false,
     });
-    expect(point.lineLocalX).toBeCloseTo(mathCaretStops.get(offsetBeforeMinus) ?? 0, 6);
+    expect(point.lineLocalX).toBeCloseTo(expectedMinusEntry?.x ?? 0, 6);
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
       paragraphId: "tex:inline-math-real-hitmap",
@@ -4724,10 +4717,10 @@ describe("simple TeX paragraph layout", () => {
     });
   });
 
-  it("expands selections inside non-linear TeX-derived math to whole construct bounds", async () => {
-    const sourceText = String.raw`$\frac{1}{2}$ and $\sqrt{x}$`;
+  it("uses row-local selections and caret centers inside TeX-derived fractions", async () => {
+    const sourceText = String.raw`A fraction: $\frac{1234}{98765}$`;
     const result = layoutSimpleTexParagraph(sourceText, {
-      paragraphId: "tex:inline-math-construct-selection",
+      paragraphId: "tex:inline-math-fraction-row-selection",
       width: 160,
       parindent: 0,
       hyphenator: { hyphenate: () => [] },
@@ -4736,11 +4729,11 @@ describe("simple TeX paragraph layout", () => {
     const report = result.report;
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
-    const mathSegments = report?.lines[0]?.segments.filter((segment) => segment.kind === "math") ?? [];
-    const fractionConstruct = mathSegments[0]?.mathConstructRanges?.[0];
-    const radicalConstruct = mathSegments[1]?.mathConstructRanges?.[0];
+    const mathSegment = report?.lines[0]?.segments.find((segment) => segment.kind === "math");
+    const fractionConstruct = mathSegment?.mathConstructRanges?.[0];
+    const fractionCaretEntries = mathSegment?.mathCaretEntries ?? [];
     expect(fractionConstruct).toBeTruthy();
-    expect(radicalConstruct).toBeTruthy();
+    expect(fractionCaretEntries.length).toBeGreaterThan(0);
 
     const outputJax = {
       tex2svg: () => {
@@ -4755,30 +4748,52 @@ describe("simple TeX paragraph layout", () => {
     };
 
     const numeratorSelection = await getKnuthPlassSelectionRects(outputJax, {
-      paragraphId: "tex:inline-math-construct-selection",
+      paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
-      startOffset: sourceText.indexOf("1"),
-      endOffset: sourceText.indexOf("1") + 1,
+      startOffset: sourceText.indexOf("1234"),
+      endOffset: sourceText.indexOf("1234") + "1234".length,
     });
     expect(numeratorSelection.error?.message ?? null).toBeNull();
     expect(numeratorSelection.ok).toBe(true);
     expect(numeratorSelection.rects).toHaveLength(1);
-    expect(Number(numeratorSelection.rects[0]?.bounds.minX)).toBeCloseTo(fractionConstruct?.xStart ?? 0, 6);
-    expect(Number(numeratorSelection.rects[0]?.bounds.maxX)).toBeCloseTo(fractionConstruct?.xEnd ?? 0, 6);
+    expect(Number(numeratorSelection.rects[0]?.bounds.minX)).toBeGreaterThan(fractionConstruct?.xStart ?? 0);
+    expect(Number(numeratorSelection.rects[0]?.bounds.maxX)).toBeLessThan(fractionConstruct?.xEnd ?? Number.POSITIVE_INFINITY);
 
-    const radicandSelection = await getKnuthPlassSelectionRects(outputJax, {
-      paragraphId: "tex:inline-math-construct-selection",
+    const denominatorSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
-      startOffset: sourceText.lastIndexOf("x"),
-      endOffset: sourceText.lastIndexOf("x") + 1,
+      startOffset: sourceText.indexOf("98765"),
+      endOffset: sourceText.indexOf("98765") + "98765".length,
     });
-    expect(radicandSelection.error?.message ?? null).toBeNull();
-    expect(radicandSelection.ok).toBe(true);
-    expect(radicandSelection.rects).toHaveLength(1);
-    expect(Number(radicandSelection.rects[0]?.bounds.minX)).toBeCloseTo(radicalConstruct?.xStart ?? 0, 6);
-    expect(Number(radicandSelection.rects[0]?.bounds.maxX)).toBeCloseTo(radicalConstruct?.xEnd ?? 0, 6);
+    expect(denominatorSelection.error?.message ?? null).toBeNull();
+    expect(denominatorSelection.ok).toBe(true);
+    expect(denominatorSelection.rects).toHaveLength(1);
+    expect(Number(numeratorSelection.rects[0]?.bounds.maxY)).toBeLessThan(
+      Number(denominatorSelection.rects[0]?.bounds.minY)
+    );
+
+    const caretOffsetBetweenTwoAndThree = sourceText.indexOf("3");
+    const caretPoint = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:inline-math-fraction-row-selection",
+      sourceText,
+      containerElement,
+      offset: caretOffsetBetweenTwoAndThree,
+    });
+    const threeSelection = await getKnuthPlassSelectionRects(outputJax, {
+      paragraphId: "tex:inline-math-fraction-row-selection",
+      sourceText,
+      containerElement,
+      startOffset: caretOffsetBetweenTwoAndThree,
+      endOffset: caretOffsetBetweenTwoAndThree + 1,
+    });
+    expect(caretPoint.error?.message ?? null).toBeNull();
+    expect(threeSelection.error?.message ?? null).toBeNull();
+    expect(caretPoint.clientPoint?.y).toBeCloseTo(
+      (Number(threeSelection.rects[0]?.bounds.minY) + Number(threeSelection.rects[0]?.bounds.maxY)) / 2,
+      6
+    );
   });
 
   it("uses 2-D TeX math caret geometry for fraction hit testing", async () => {
@@ -4878,6 +4893,7 @@ describe("simple TeX paragraph layout", () => {
       sourceText.indexOf("m"),
       sourceText.indexOf("n"),
     ];
+    const seenVisualCaretPoints = new Set<string>();
 
     for (const offset of sampledOffsets) {
       const point = await getKnuthPlassPointFromOffset(outputJax, {
@@ -4901,12 +4917,27 @@ describe("simple TeX paragraph layout", () => {
         clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
       });
       expect(caret.error?.message ?? null, `${sourceText} @ ${offset}`).toBeNull();
-      expect(caret).toMatchObject({
-        ok: true,
-        offset,
-        kind: "math",
-        snappedToMathPrefix: false,
-      });
+      const visualPointKey = [
+        point.lineIndex,
+        (point.clientPoint?.x ?? Number.NaN).toFixed(6),
+        (point.clientPoint?.y ?? Number.NaN).toFixed(6),
+      ].join(":");
+      if (seenVisualCaretPoints.has(visualPointKey)) {
+        expect(caret).toMatchObject({
+          ok: true,
+          lineIndex: point.lineIndex,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+      } else {
+        expect(caret).toMatchObject({
+          ok: true,
+          offset,
+          kind: "math",
+          snappedToMathPrefix: false,
+        });
+      }
+      seenVisualCaretPoints.add(visualPointKey);
     }
 
     const crossFragmentSelection = await getKnuthPlassSelectionRects(outputJax, {
