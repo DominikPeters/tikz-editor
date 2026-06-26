@@ -3,6 +3,7 @@ import type {
   TexMathDisplayAlignmentIntertext,
   TexMathBox,
   TexMathBreakpoint,
+  TexMathCaretDiagnostic,
   TexMathCaretEntry,
   TexMathCaretMap,
   TexMathConstructRange,
@@ -478,12 +479,15 @@ function buildInlineMathCaretMap(
   });
   addMathItemCaretMapEntries(hlist.items, 0, 0, addEntry);
 
+  const dedupedEntries = dedupeMathCaretEntries(entries);
+  const diagnostics = mathCaretMapCoverageDiagnostics(dedupedEntries, params);
   return {
     sourceStart: params.sourceStart,
     sourceEnd: params.sourceEnd,
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
-    entries: dedupeMathCaretEntries(entries),
+    entries: dedupedEntries,
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
   };
 }
 
@@ -843,6 +847,47 @@ function dedupeMathCaretEntries(entries: readonly TexMathCaretEntry[]): readonly
   );
 }
 
+function mathCaretMapCoverageDiagnostics(
+  entries: readonly TexMathCaretEntry[],
+  params: {
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+  }
+): readonly TexMathCaretDiagnostic[] {
+  const coveredOffsets = new Set(entries.map((entry) => entry.sourceOffset));
+  const diagnostics: TexMathCaretDiagnostic[] = [];
+  let rangeStart: number | null = null;
+  let rangeEnd: number | null = null;
+  const flushRange = () => {
+    if (rangeStart === null || rangeEnd === null) {
+      return;
+    }
+    diagnostics.push({
+      code: "incomplete-math-caret-geometry",
+      message: `No 2-D math caret entry was generated for source offset${rangeStart === rangeEnd ? "" : "s"} ${
+        rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart}-${rangeEnd}`
+      }.`,
+      sourceSpan: {
+        start: Math.max(params.sourceStart, Math.min(params.sourceEnd, rangeStart)),
+        end: Math.max(params.sourceStart, Math.min(params.sourceEnd, rangeEnd + 1)),
+      },
+    });
+    rangeStart = null;
+    rangeEnd = null;
+  };
+
+  for (let sourceOffset = params.sourceStart; sourceOffset <= params.sourceEnd; sourceOffset += 1) {
+    if (coveredOffsets.has(sourceOffset)) {
+      flushRange();
+      continue;
+    }
+    rangeStart ??= sourceOffset;
+    rangeEnd = sourceOffset;
+  }
+  flushRange();
+  return diagnostics;
+}
+
 function projectInlineMathCaretStops(
   caretMap: TexMathCaretMap,
   width: number
@@ -865,7 +910,6 @@ function projectInlineMathCaretStops(
     stops[index] = roundTexPt(Math.max(0, Math.min(width, entry.x)));
   }
 
-  interpolateProjectedCaretStops(stops, width);
   enforceMonotoneProjectedCaretStops(stops, width);
   return stops.map((stop) => roundTexPt(stop));
 }
@@ -915,31 +959,6 @@ function projectedMathCaretKindScore(kind: TexMathCaretEntry["kind"]): number {
       return 10;
     case "math-boundary":
       return 0;
-  }
-}
-
-function interpolateProjectedCaretStops(stops: number[], width: number): void {
-  if (stops.length === 0) {
-    return;
-  }
-  if (!Number.isFinite(stops[0])) {
-    stops[0] = 0;
-  }
-  if (!Number.isFinite(stops[stops.length - 1])) {
-    stops[stops.length - 1] = width;
-  }
-  let lastKnown = 0;
-  for (let index = 1; index < stops.length; index += 1) {
-    if (Number.isFinite(stops[index])) {
-      const start = stops[lastKnown] ?? 0;
-      const end = stops[index] ?? start;
-      const gap = index - lastKnown;
-      for (let fill = lastKnown + 1; fill < index; fill += 1) {
-        const t = (fill - lastKnown) / gap;
-        stops[fill] = roundTexPt(start + (end - start) * t);
-      }
-      lastKnown = index;
-    }
   }
 }
 

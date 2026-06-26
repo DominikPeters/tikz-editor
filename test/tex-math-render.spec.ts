@@ -200,6 +200,37 @@ describe("TeX math SVG rendering", () => {
     expect(transition?.y).toBeCloseTo(0, 6);
     expect(numerator?.hitBounds.yEnd).toBeLessThan(transition?.hitBounds.yEnd ?? 0);
     expect(denominator?.hitBounds.yStart).toBeGreaterThan(transition?.hitBounds.yStart ?? 0);
+    expect(box?.caretMap?.diagnostics).toBeUndefined();
+  });
+
+  it("reports incomplete 2-D caret coverage instead of interpolating unknown math geometry", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const source = String.raw`$\sqrt{x}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content: source.slice(1, -1),
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    const diagnostic = box?.caretMap?.diagnostics?.find((entry) =>
+      entry.code === "incomplete-math-caret-geometry"
+    );
+    expect(diagnostic).toMatchObject({
+      sourceSpan: {
+        start: source.indexOf("s"),
+        end: source.indexOf("{") + 1,
+      },
+    });
+
+    const commandStart = source.indexOf(String.raw`\sqrt`);
+    const commandInterior = source.indexOf("s");
+    const radicandStart = source.indexOf("x");
+    expect(box?.caretStops?.[commandInterior]).toBeCloseTo(box?.caretStops?.[commandStart] ?? -1, 6);
+    expect(box?.caretStops?.[radicandStart]).toBeGreaterThan(box?.caretStops?.[commandInterior] ?? 0);
   });
 
   it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
