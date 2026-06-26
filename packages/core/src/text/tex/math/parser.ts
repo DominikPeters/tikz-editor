@@ -42,6 +42,11 @@ import type {
   TexMathVarLimitCommand,
 } from "./ir.js";
 import { texMathSymbolDeclaration } from "./symbol-definitions.js";
+import {
+  parseSimpleTexInlineNodes,
+  type SimpleTexFontCommandName,
+  type SimpleTexInlineNode,
+} from "../ir.js";
 
 interface ParseListOptions {
   readonly stopAtGroupClose: boolean;
@@ -447,7 +452,7 @@ class TexMathParser {
       if (varLimit) {
         return this.parseVarLimit(varLimit, allowScripts);
       }
-      if (commandName(token.text) === "text" || commandName(token.text) === "mbox" || commandName(token.text) === "hbox") {
+      if (mathTextCommandName(token.text)) {
         return this.parseText(allowScripts);
       }
       if (commandName(token.text) === "cases") {
@@ -1250,7 +1255,7 @@ class TexMathParser {
 
   private parseText(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
-    const name = commandName(command.text);
+    const name = mathTextCommandName(command.text) ?? "text";
     const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} content`);
     const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
     if (!content || content.unsupported) {
@@ -1270,8 +1275,9 @@ class TexMathParser {
       atomClass: "ord",
       nucleus: {
         kind: "text",
-        ...(name === "hbox" || name === "mbox" || name === "text" ? { command: name } : {}),
+        command: name,
         text: content.text,
+        nodes: content.nodes,
         parts: content.parts,
         textSourceSpan: content.textSourceSpan,
         sourceSpan,
@@ -4071,6 +4077,7 @@ class TexMathParser {
     label: string
   ): {
     text: string;
+    nodes: readonly SimpleTexInlineNode[];
     parts: readonly TexMathTextPart[];
     sourceSpan: TexMathSourceSpan;
     textSourceSpan: TexMathSourceSpan;
@@ -4088,26 +4095,9 @@ class TexMathParser {
       return null;
     }
     const open = this.expectGroupOpen();
-    let text = "";
-    let textRun = "";
-    let textRunSourceStart = open.sourceSpan.end;
-    const parts: TexMathTextPart[] = [];
     let lastSpan: TexMathSourceSpan = open.sourceSpan;
-    let unsupported = false;
     let depth = 0;
-    const flushTextRun = (sourceEnd: number): void => {
-      if (!textRun) {
-        textRunSourceStart = sourceEnd;
-        return;
-      }
-      parts.push({
-        kind: "text",
-        text: textRun,
-        sourceSpan: { start: textRunSourceStart, end: sourceEnd },
-      });
-      textRun = "";
-      textRunSourceStart = sourceEnd;
-    };
+    let raw = "";
     while (!this.isAtEnd()) {
       const token = this.peek();
       if (!token) {
@@ -4116,104 +4106,89 @@ class TexMathParser {
       if (token.kind === "group-close" && depth === 0) {
         break;
       }
-      if (depth === 0 && token.kind === "character" && token.text === "$") {
-        flushTextRun(token.sourceSpan.start);
-        const openMath = this.advance();
-        lastSpan = openMath.sourceSpan;
-        const mathStart = openMath.sourceSpan.end;
-        const mathTokens: TexMathToken[] = [];
-        let closeMath: TexMathToken | undefined;
-        let mathDepth = 0;
-        while (!this.isAtEnd()) {
-          const mathToken = this.peek();
-          if (!mathToken || (mathToken.kind === "group-close" && mathDepth === 0)) {
-            break;
-          }
-          this.advance();
-          lastSpan = mathToken.sourceSpan;
-          if (mathToken.kind === "character" && mathToken.text === "$" && mathDepth === 0) {
-            closeMath = mathToken;
-            break;
-          }
-          if (mathToken.kind === "group-open") {
-            mathDepth += 1;
-          } else if (mathToken.kind === "group-close") {
-            mathDepth = Math.max(0, mathDepth - 1);
-          }
-          mathTokens.push(mathToken);
-        }
-        if (!closeMath) {
-          unsupported = true;
-          text += "$";
-          if (!textRun) {
-            textRunSourceStart = openMath.sourceSpan.start;
-          }
-          textRun += "$";
-          this.addDiagnostic(
-            "warning",
-            "unsupported-command",
-            "Unsupported unterminated math shift in \\text.",
-            openMath.sourceSpan
-          );
-          continue;
-        }
-        const mathSource = mathTokens.map((mathToken) => mathToken.text).join("");
-        const parsed = parseTexMath(mathSource, {
-          sourceOffset: mathStart,
-          suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
-        });
-        this.diagnostics.push(...parsed.diagnostics);
-        if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-          unsupported = true;
-          continue;
-        }
-        parts.push({
-          kind: "math",
-          content: mathSource,
-          list: parsed.list,
-          sourceSpan: spanUnion(openMath.sourceSpan, closeMath.sourceSpan),
-          contentSourceSpan: { start: mathStart, end: closeMath.sourceSpan.start },
-        });
-        textRunSourceStart = closeMath.sourceSpan.end;
-        continue;
-      }
       this.advance();
       lastSpan = token.sourceSpan;
       if (token.kind === "group-open") {
         depth += 1;
-        continue;
-      }
-      if (token.kind === "group-close") {
+      } else if (token.kind === "group-close") {
         depth = Math.max(0, depth - 1);
-        continue;
       }
-      if (token.kind === "character" || token.kind === "space") {
-        text += token.text;
-        if (!textRun) {
-          textRunSourceStart = token.sourceSpan.start;
-        }
-        textRun += token.text;
-        continue;
-      }
-      unsupported = true;
-      this.addDiagnostic(
-        "warning",
-        "unsupported-command",
-        `Unsupported content in \\text: ${token.text}.`,
-        token.sourceSpan
-      );
+      raw += token.text;
     }
     const close = this.consumeGroupClose(open.sourceSpan);
     const contentStart = open.sourceSpan.end;
     const contentEnd = close?.sourceSpan.start ?? lastSpan.end;
-    flushTextRun(contentEnd);
+    const parsedInline = parseSimpleTexInlineNodes(raw, contentStart);
+    const parts = this.mathTextPartsFromInlineNodes(parsedInline.nodes);
+    const hasForcedBreak = parsedInline.nodes.some((node) => node.kind === "line-break");
     return {
-      text,
+      text: mathTextPlainText(parsedInline.nodes),
+      nodes: parsedInline.nodes,
       parts,
       sourceSpan: spanUnion(open.sourceSpan, close?.sourceSpan ?? lastSpan),
       textSourceSpan: { start: contentStart, end: Math.max(contentStart, contentEnd) },
-      unsupported,
+      unsupported: parsedInline.unsupportedCommand || hasForcedBreak,
     };
+  }
+
+  private mathTextPartsFromInlineNodes(nodes: readonly SimpleTexInlineNode[]): readonly TexMathTextPart[] {
+    const parts: TexMathTextPart[] = [];
+    let textRun = "";
+    let textRunStart = 0;
+    const flushTextRun = (sourceEnd: number): void => {
+      if (!textRun) {
+        textRunStart = sourceEnd;
+        return;
+      }
+      parts.push({
+        kind: "text",
+        text: textRun,
+        sourceSpan: { start: textRunStart, end: sourceEnd },
+      });
+      textRun = "";
+      textRunStart = sourceEnd;
+    };
+
+    const appendText = (text: string, sourceStart: number): void => {
+      if (!text) {
+        return;
+      }
+      if (!textRun) {
+        textRunStart = sourceStart;
+      }
+      textRun += text;
+    };
+
+    for (const node of nodes) {
+      if (node.kind === "text" || node.kind === "space") {
+        appendText(node.text, node.sourceStart);
+        continue;
+      }
+      if (node.kind === "math") {
+        flushTextRun(node.sourceStart);
+        const parsed = parseTexMath(node.content, {
+          sourceOffset: node.contentStart,
+          suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
+        });
+        this.diagnostics.push(...parsed.diagnostics);
+        parts.push({
+          kind: "math",
+          content: node.content,
+          list: parsed.list,
+          sourceSpan: { start: node.sourceStart, end: node.sourceEnd },
+          contentSourceSpan: { start: node.contentStart, end: node.contentEnd },
+        });
+        textRunStart = node.sourceEnd;
+        continue;
+      }
+      if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") {
+        flushTextRun(node.sourceStart);
+        parts.push(...this.mathTextPartsFromInlineNodes(node.children));
+        textRunStart = node.sourceEnd;
+      }
+    }
+    flushTextRun(nodes.at(-1)?.sourceEnd ?? 0);
+    return parts;
   }
 
   private parseRequiredOperatorNameGroup(
@@ -6088,6 +6063,46 @@ function operatorNameParts(parts: readonly string[]): readonly TexMathOperatorNa
       ? { kind: "spacing", command: ",", sourceSpan }
       : { kind: "text", text: part, sourceSpan };
   });
+}
+
+function mathTextCommandName(text: string): "text" | "mbox" | "hbox" | SimpleTexFontCommandName | null {
+  const name = commandName(text);
+  if (name === "text" || name === "mbox" || name === "hbox" || isSimpleTexFontCommandName(name)) {
+    return name;
+  }
+  return null;
+}
+
+const simpleTexFontCommandNames = new Set<SimpleTexFontCommandName>([
+  "textit",
+  "textbf",
+  "textmd",
+  "textsl",
+  "texttt",
+  "textup",
+  "emph",
+  "textrm",
+  "textsf",
+  "textsc",
+  "textnormal",
+] satisfies readonly SimpleTexFontCommandName[]);
+
+function isSimpleTexFontCommandName(name: string): name is SimpleTexFontCommandName {
+  return simpleTexFontCommandNames.has(name as SimpleTexFontCommandName);
+}
+
+function mathTextPlainText(nodes: readonly SimpleTexInlineNode[]): string {
+  let text = "";
+  for (const node of nodes) {
+    if (node.kind === "text" || node.kind === "space") {
+      text += node.text;
+      continue;
+    }
+    if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") {
+      text += mathTextPlainText(node.children);
+    }
+  }
+  return text;
 }
 
 function namedSymbolCommand(command: string): { atomClass: TexMathAtomClass } | null {

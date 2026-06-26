@@ -212,7 +212,7 @@ export function runsToItems(
 
       addExplicitHyphenPenaltiesForTextRun(run, items, exhyphenpenalty);
 
-      if (enableAutomaticHyphenation) {
+      if (enableAutomaticHyphenation && run.allowAutomaticHyphenation !== false) {
         if (!hyphenator) {
           errors.push(
             'Automatic hyphenation requested but no hyphenator instance is configured.'

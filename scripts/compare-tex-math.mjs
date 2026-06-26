@@ -104,6 +104,20 @@ const mathtoolsColonRelationCommands = [
   String.raw`\Dashcolon`,
 ];
 
+const kernelMathTextCommands = [
+  String.raw`\textrm`,
+  String.raw`\textsf`,
+  String.raw`\texttt`,
+  String.raw`\textnormal`,
+  String.raw`\textbf`,
+  String.raw`\textmd`,
+  String.raw`\textit`,
+  String.raw`\textsl`,
+  String.raw`\textsc`,
+  String.raw`\textup`,
+  String.raw`\emph`,
+];
+
 const args = readArgs();
 const generatedAlignedFormulas = args.alignedFuzzCases > 0
   ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
@@ -170,6 +184,23 @@ const formulas = args.formulas.length > 0
       "\\text{if}",
       "x+\\text{if}",
       "\\text{office}",
+      "\\textrm{if}",
+      "\\textsf{if}",
+      "\\texttt{if}",
+      "\\textnormal{if}",
+      "\\textbf{if}",
+      "\\textbf{\\textmd{if}}",
+      "\\textit{if}",
+      "\\textit{\\textup{if}}",
+      "\\textsl{if}",
+      "\\textsc{if}",
+      "\\emph{if}",
+      "\\mbox{\\textbf{Bold} text}",
+      "\\mbox{\\texttt{if}}",
+      "x_{\\text{if}}",
+      "x_{y_{\\textbf{if}}}",
+      "x_{\\mbox{$y$}}",
+      "x_{\\text{$y$}}",
       "\\mathrm{ABC123}",
       "\\mathit{ABC123}",
       "\\mathbf{ABC123}",
@@ -768,7 +799,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group", "accent"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack", "mbox"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack", "mbox", "text-command"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -800,6 +831,8 @@ function randomMathTerm(rng, depth) {
     term = randomSubstackFormula(rng);
   } else if (choice === "mbox") {
     term = randomMBoxMathFormula(rng);
+  } else if (choice === "text-command") {
+    term = randomTextCommandMathFormula(rng);
   } else if (choice === "group") {
     term = "{" + randomSimpleExpression(rng) + "}";
   } else {
@@ -821,7 +854,29 @@ function isScriptableGeneratedTerm(choice) {
     "left-right",
     "operatorname",
     "mbox",
+    "text-command",
   ].includes(choice);
+}
+
+function randomTextCommandContent(rng) {
+  const plain = [
+    "if",
+    "case A",
+    "node",
+  ][randomInt(rng, 3)] ?? "if";
+  const nested = [
+    String.raw`\textbf{Bold}`,
+    String.raw`\textbf{\textmd{Medium}}`,
+    String.raw`\textit{\textup{Up}}`,
+    String.raw`\texttt{Type}`,
+    String.raw`\textsl{Slant}`,
+  ][randomInt(rng, 5)] ?? String.raw`\textbf{Bold}`;
+  return randomInt(rng, 3) === 0 ? nested : plain;
+}
+
+function randomTextCommandMathFormula(rng) {
+  const command = kernelMathTextCommands[randomInt(rng, kernelMathTextCommands.length)] ?? String.raw`\textrm`;
+  return command + "{" + randomTextCommandContent(rng) + "}";
 }
 
 function randomMBoxMathFormula(rng) {
@@ -830,7 +885,11 @@ function randomMBoxMathFormula(rng) {
     "for all",
     " node ",
     "case A",
-  ][randomInt(rng, 4)] ?? "if";
+    String.raw`\textbf{Bold} text`,
+    String.raw`\texttt{if}`,
+    String.raw`\textit{\textup{if}}`,
+    String.raw`$x+y$ text`,
+  ][randomInt(rng, 8)] ?? "if";
   return String.raw`\mbox{` + content + "}";
 }
 

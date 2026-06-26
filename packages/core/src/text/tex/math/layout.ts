@@ -1,4 +1,15 @@
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
+import {
+  simpleTexInlineTokensToLayoutItems,
+  texMBoxHListFromLayoutItems,
+  type TexMathBox,
+  type TexMathBoxProvider,
+} from "../layout-inline-items.js";
+import {
+  simpleTexFontStateForCommand,
+  simpleTexInlineNodesToTokens,
+  type SimpleTexFontState,
+} from "../ir.js";
 import type {
   GeneratedTexExtensibleRecipe,
   GeneratedTexCharMetric,
@@ -60,6 +71,7 @@ import {
   texMathSpacingBetween,
   type TexMathResolvedGlue,
 } from "./spacing.js";
+import { parseTexMath } from "./parser.js";
 import { texMathSymbolDeclaration } from "./symbol-definitions.js";
 
 export type TexMathHListItem =
@@ -510,7 +522,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return true;
   }
   if (nucleus.kind === "text") {
-    return nucleus.command === "text";
+    return nucleus.command !== "mbox" && nucleus.command !== "hbox";
   }
   if (
     nucleus.kind === "aligned" ||
@@ -1080,6 +1092,42 @@ function layoutTextNucleus(
   const atPt = nucleus.command === "mbox" || nucleus.command === "hbox"
     ? baseAtPt
     : textStyleAtPt(style, baseAtPt);
+  if (nucleus.nodes) {
+    const initialFontState = textNucleusInitialFontState(nucleus, fontProfile);
+    const tokens = textNucleusInlineTokens(nucleus, initialFontState);
+    const nestedMathStyle = nucleus.command === "mbox" || nucleus.command === "hbox" ? "text" : style;
+    const nestedMathProvider = textNucleusMathBoxProvider(
+      fontProfile,
+      nestedMathStyle,
+      baseAtPt
+    );
+    const layoutItems = simpleTexInlineTokensToLayoutItems({
+      tokens,
+      atPt,
+      metricProvider: fontProfile.metricProvider,
+      spaceGlueProfile: "font",
+      mathBoxProvider: nestedMathProvider,
+      textFontProfile: fontProfile.textFontProfile,
+      trimEdges: false,
+    });
+    const hlist = texMBoxHListFromLayoutItems({
+      items: layoutItems,
+      sourceSpan: nucleus.sourceSpan,
+      metricProvider: fontProfile.metricProvider,
+    });
+    if (!hlist) {
+      return null;
+    }
+    return {
+      items: hlist.items,
+      width: hlist.width,
+      height: hlist.height,
+      depth: hlist.depth,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
   const font = fontProfile.textFontProfile.resolveTextFont(
     fontProfile.textFontProfile.defaultFontState,
     atPt,
@@ -1142,6 +1190,103 @@ function layoutTextNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function textNucleusInitialFontState(
+  nucleus: TexMathTextNucleus,
+  fontProfile: TexMathFontProfile
+): SimpleTexFontState {
+  const state = fontProfile.textFontProfile.defaultFontState;
+  if (
+    nucleus.command === "textit" ||
+    nucleus.command === "textbf" ||
+    nucleus.command === "textmd" ||
+    nucleus.command === "textsl" ||
+    nucleus.command === "texttt" ||
+    nucleus.command === "textup" ||
+    nucleus.command === "emph" ||
+    nucleus.command === "textrm" ||
+    nucleus.command === "textsf" ||
+    nucleus.command === "textsc" ||
+    nucleus.command === "textnormal"
+  ) {
+    return simpleTexFontStateForCommand(state, nucleus.command);
+  }
+  return state;
+}
+
+function textNucleusInlineTokens(
+  nucleus: TexMathTextNucleus,
+  initialFontState: SimpleTexFontState
+): ReturnType<typeof simpleTexInlineNodesToTokens> {
+  const tokens = simpleTexInlineNodesToTokens(nucleus.nodes ?? [], initialFontState);
+  if (
+    nucleus.command === "text" ||
+    nucleus.command === "mbox" ||
+    nucleus.command === "hbox" ||
+    !simpleTexFontStateMayHaveItalicCorrection(initialFontState)
+  ) {
+    return tokens;
+  }
+  const lastToken = tokens.at(-1);
+  if (
+    lastToken?.kind !== "text" ||
+    lastToken.italicCorrectionAfter !== true
+  ) {
+    return tokens;
+  }
+  return [
+    ...tokens.slice(0, -1),
+    {
+      ...lastToken,
+      italicCorrectionAfter: false,
+    },
+  ];
+}
+
+function simpleTexFontStateMayHaveItalicCorrection(
+  state: SimpleTexFontState
+): boolean {
+  return state.shape === "italic" || state.shape === "slanted";
+}
+
+function textNucleusMathBoxProvider(
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathBoxProvider {
+  return {
+    getInlineMathBox: (params): TexMathBox | null => {
+      const parsed = parseTexMath(params.content, {
+        sourceOffset: params.contentStart,
+      });
+      if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+        return null;
+      }
+      const laidOut = layoutTexMathList(parsed.list, {
+        fontProfile,
+        style,
+        baseAtPt,
+      });
+      if (!laidOut.supported || !laidOut.hlist) {
+        return null;
+      }
+      return {
+        source: params.source,
+        content: params.content,
+        sourceKind: "math",
+        sourceStart: params.sourceStart,
+        sourceEnd: params.sourceEnd,
+        contentStart: params.contentStart,
+        contentEnd: params.contentEnd,
+        width: laidOut.hlist.width,
+        height: laidOut.hlist.height,
+        depth: laidOut.hlist.depth,
+        hlist: laidOut.hlist,
+        fontProfile,
+      };
+    },
   };
 }
 

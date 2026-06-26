@@ -14,6 +14,7 @@ import type {
 } from "./math/ir.js";
 import type {
   TexMathChildHListLayoutItem,
+  TexMathGlueLayoutItem,
   TexMathGlyphLayoutItem,
   TexMathHList,
   TexMathHListItem,
@@ -584,7 +585,7 @@ function texMBoxCaretStops(
   });
 }
 
-function simpleTexInlineTokensToLayoutItems(params: {
+export function simpleTexInlineTokensToLayoutItems(params: {
   readonly tokens: ReturnType<typeof simpleTexInlineNodesToTokens>;
   readonly atPt: number;
   readonly metricProvider: TexMetricProvider;
@@ -723,7 +724,7 @@ function simpleTexInlineTokensToLayoutItems(params: {
   return items;
 }
 
-function texMBoxHListFromLayoutItems(params: {
+export function texMBoxHListFromLayoutItems(params: {
   readonly items: readonly TexLayoutInlineItem[];
   readonly sourceSpan: { readonly start: number; readonly end: number };
   readonly metricProvider: TexMetricProvider;
@@ -750,7 +751,7 @@ function texMBoxHListFromLayoutItems(params: {
       const correction = item.italicCorrectionAfter
         ? texMBoxTrailingItalicCorrectionWidth(shaped.items)
         : 0;
-      if (correction > 0) {
+      if (item.italicCorrectionAfter) {
         const kern = texMBoxKernItem(cursor, correction, item.sourceEnd, item.sourceEnd);
         items.push(kern);
         cursor = roundTexPt(cursor + kern.width);
@@ -764,9 +765,9 @@ function texMBoxHListFromLayoutItems(params: {
         item.spaceFactor,
         item.spaceGlueProfile
       );
-      const kern = texMBoxKernItem(cursor, glue.width, item.sourceStart, item.sourceEnd);
-      items.push(kern);
-      cursor = roundTexPt(cursor + kern.width);
+      const layoutGlue = texMBoxGlueItem(cursor, glue, item.sourceStart, item.sourceEnd);
+      items.push(layoutGlue);
+      cursor = roundTexPt(cursor + layoutGlue.width);
       continue;
     }
 
@@ -839,6 +840,27 @@ function texMBoxKernItem(
     x,
     width: roundTexPt(width),
     reason: "text-kern",
+    sourceSpan: {
+      start: sourceStart,
+      end: sourceEnd,
+    },
+  };
+}
+
+function texMBoxGlueItem(
+  x: number,
+  glue: { readonly width: number; readonly stretch: number; readonly shrink: number },
+  sourceStart: number,
+  sourceEnd: number
+): TexMathGlueLayoutItem {
+  return {
+    kind: "glue",
+    x,
+    width: roundTexPt(glue.width),
+    mu: 0,
+    stretch: roundTexPt(glue.stretch),
+    shrink: roundTexPt(glue.shrink),
+    source: "explicit",
     sourceSpan: {
       start: sourceStart,
       end: sourceEnd,

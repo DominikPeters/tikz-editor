@@ -683,6 +683,34 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
+  it("records remaining kernel inline font commands in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\texttt{Type} \textbf{\textmd{Medium}} \textsl{Slant} \textit{\textup{Upright}}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes
+      .filter((node) => node.kind === "font-command")
+      .map((node) => node.kind === "font-command" ? node.command : null)).toEqual([
+        "texttt",
+        "textbf",
+        "textsl",
+        "textit",
+      ]);
+    const bold = ir.nodes[2];
+    expect(bold).toMatchObject({
+      kind: "font-command",
+      command: "textbf",
+      children: [{ kind: "font-command", command: "textmd" }],
+    });
+    const italic = ir.nodes[6];
+    expect(italic).toMatchObject({
+      kind: "font-command",
+      command: "textit",
+      children: [{ kind: "font-command", command: "textup" }],
+    });
+  });
+
   it("records inline math delimiters and source spans in source IR", () => {
     const source = String.raw`Alpha $x^2_y$ and \(z+1\).`;
     const ir = parseSimpleTexParagraphIr(source);
@@ -755,6 +783,22 @@ describe("simple TeX paragraph IR", () => {
     expect(italicGroup.children[3]).toMatchObject({
       kind: "group",
     });
+  });
+
+  it("records typewriter and slanted font declarations in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha {\tt Typewriter} {\ttfamily Family} {\sl Slanted} {\slshape Shape}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes
+      .filter((node) => node.kind === "group")
+      .map((node) => node.kind === "group" ? node.children[0] : null)).toEqual([
+        expect.objectContaining({ kind: "font-declaration", command: "tt" }),
+        expect.objectContaining({ kind: "font-declaration", command: "ttfamily" }),
+        expect.objectContaining({ kind: "font-declaration", command: "sl" }),
+        expect.objectContaining({ kind: "font-declaration", command: "slshape" }),
+      ]);
   });
 
   it("records quote environment boundaries and paragraph quote depth", () => {
@@ -1000,6 +1044,43 @@ describe("simple TeX paragraph IR", () => {
       ]);
   });
 
+  it("materializes remaining kernel inline font commands through the LuaLaTeX default text profile", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A \texttt{B} \textsl{C} \textbf{\textmd{D}} \textit{\textup{E}} \textsf{\textsl{F}} \texttt{\textit{G}} \texttt{\textsl{H}} \texttt{\textbf{I}} \texttt{\textsc{J}}`
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      10,
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmmono10-regular" },
+        { text: "C", font: "lmromanslant10-regular" },
+        { text: "D", font: "lmroman10-regular" },
+        { text: "E", font: "lmroman10-regular" },
+        { text: "F", font: "lmsans10-oblique" },
+        { text: "G", font: "lmmono10-italic" },
+        { text: "H", font: "lmmonoslant10-regular" },
+        { text: "I", font: "lmmonolt10-bold" },
+        { text: "J", font: "lmmonocaps10-regular" },
+      ]);
+  });
+
   it("materializes scoped font declarations as local Computer Modern font runs", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`A {\it B {\bf C} D} {\itshape E {\bfseries F}} {\sf G {\bf H} {\bfseries I} {\sc J}} {\scshape K {\sffamily L} {\bfseries M}} {\em N {\em O} P} Q`
@@ -1037,6 +1118,44 @@ describe("simple TeX paragraph IR", () => {
         { text: "O", font: "cmr10" },
         { text: "P", font: "cmti10" },
         { text: "Q", font: "cmr10" },
+      ]);
+  });
+
+  it("materializes typewriter and slanted declarations as local LuaLaTeX font runs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A {\tt B {\bf C} D} {\ttfamily E {\itshape F}} {\sl G {\bfseries H}} {\slshape I {\upshape J}} K`
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      10,
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmmono10-regular" },
+        { text: "C", font: "lmroman10-bold" },
+        { text: "D", font: "lmmono10-regular" },
+        { text: "E", font: "lmmono10-regular" },
+        { text: "F", font: "lmmono10-italic" },
+        { text: "G", font: "lmromanslant10-regular" },
+        { text: "H", font: "lmromanslant10-bold" },
+        { text: "I", font: "lmromanslant10-regular" },
+        { text: "J", font: "lmroman10-regular" },
+        { text: "K", font: "lmroman10-regular" },
       ]);
   });
 

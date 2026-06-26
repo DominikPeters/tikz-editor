@@ -1,3 +1,8 @@
+import type {
+  SimpleTexFontCommandName,
+  SimpleTexInlineNode,
+} from "../ir.js";
+
 export interface TexMathSourceSpan {
   readonly start: number;
   readonly end: number;
@@ -295,8 +300,9 @@ export type TexMathTextPart =
 
 export interface TexMathTextNucleus {
   readonly kind: "text";
-  readonly command?: "text" | "mbox" | "hbox";
+  readonly command?: "text" | "mbox" | "hbox" | SimpleTexFontCommandName;
   readonly text: string;
+  readonly nodes?: readonly SimpleTexInlineNode[];
   readonly parts?: readonly TexMathTextPart[];
   readonly textSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;

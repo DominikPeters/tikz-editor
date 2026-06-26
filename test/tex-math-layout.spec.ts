@@ -796,9 +796,86 @@ describe("TeX math hlist layout", () => {
       code: glyph.code,
     }))).toEqual([
       { fontId: "cmmi10", atPt: 10, code: 120 },
-      { fontId: "lmroman10-regular", atPt: 7, code: 105 },
-      { fontId: "lmroman10-regular", atPt: 7, code: 102 },
+      { fontId: "lmroman7-regular", atPt: 7, code: 105 },
+      { fontId: "lmroman7-regular", atPt: 7, code: 102 },
     ]);
+  });
+
+  it("lays out direct text font commands as text boxes in math mode", () => {
+    const result = layout(
+      String.raw`\textrm{a}+\textsf{b}+\texttt{c}+\textnormal{d}+\textbf{e}+\textbf{\textmd{f}}+\textit{g}+\textsl{h}+\textsc{i}+\textit{\textup{j}}+\emph{k}`
+    );
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])
+      .filter((glyph) => glyph.code >= 97 && glyph.code <= 122)
+      .map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
+        "lmroman10-regular/97",
+        "lmsans10-regular/98",
+        "lmmono10-regular/99",
+        "lmroman10-regular/100",
+        "lmroman10-bold/101",
+        "lmroman10-regular/102",
+        "lmroman10-italic/103",
+        "lmromanslant10-regular/104",
+        "lmromancaps10-regular/105",
+        "lmroman10-regular/106",
+        "lmroman10-italic/107",
+      ]);
+  });
+
+  it("uses exact text design fonts in nested script text boxes", () => {
+    const result = layout(String.raw`x_{\text{if}}+x_{y_{\textbf{if}}}+x_{\textsf{if}}+x_{y_{\texttt{if}}}+x_{\textsl{if}}`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])
+      .filter((glyph) => glyph.code === 105 || glyph.code === 102)
+      .map((glyph) => `${glyph.fontId}/${glyph.atPt}/${glyph.code}`)).toEqual([
+        "lmroman7-regular/7/105",
+        "lmroman7-regular/7/102",
+        "lmroman5-bold/5/105",
+        "lmroman5-bold/5/102",
+        "lmsans8-regular/7/105",
+        "lmsans8-regular/7/102",
+        "lmmono8-regular/5/105",
+        "lmmono8-regular/5/102",
+        "lmromanslant8-regular/7/105",
+        "lmromanslant8-regular/7/102",
+      ]);
+  });
+
+  it("matches direct math text command terminal reset kerns", () => {
+    const medium = layout(String.raw`\textbf{\textmd{if}}`);
+    const upright = layout(String.raw`\textit{a\textup{if}}`);
+
+    expect(medium.supported).toBe(true);
+    expect(upright.supported).toBe(true);
+    expect(flattenMathItems(medium.hlist?.items ?? []).filter((item) => item.kind === "kern"))
+      .toEqual([
+        expect.objectContaining({ width: 0, sourceSpan: { start: 18, end: 18 } }),
+      ]);
+    expect(flattenMathItems(upright.hlist?.items ?? []).filter((item) => item.kind === "kern"))
+      .toEqual([
+        expect.objectContaining({ width: 0.34, sourceSpan: { start: 9, end: 9 } }),
+      ]);
+  });
+
+  it("keeps mbox nested math in text style while text follows current math style", () => {
+    const mbox = layout(String.raw`x_{\mbox{$y$}}`);
+    const text = layout(String.raw`x_{\text{$y$}}`);
+
+    expect(mbox.supported).toBe(true);
+    expect(text.supported).toBe(true);
+    expect(flattenGlyphItems(mbox.hlist?.items ?? []).map((glyph) => `${glyph.fontId}/${glyph.atPt}/${glyph.code}`))
+      .toEqual([
+        "cmmi10/10/120",
+        "cmmi10/10/121",
+      ]);
+    expect(flattenGlyphItems(text.hlist?.items ?? []).map((glyph) => `${glyph.fontId}/${glyph.atPt}/${glyph.code}`))
+      .toEqual([
+        "cmmi10/10/120",
+        "cmmi7/7/121",
+      ]);
   });
 
   it("keeps mbox command nuclei at text size in script style", () => {
@@ -831,6 +908,23 @@ describe("TeX math hlist layout", () => {
       expect.objectContaining({ width: 3.33, sourceSpan: { start: 6, end: 7 } }),
       expect.objectContaining({ width: 3.33, sourceSpan: { start: 11, end: 12 } }),
     ]);
+  });
+
+  it("preserves text font command italic-correction kerns inside mbox", () => {
+    const typewriter = layout(String.raw`\mbox{\texttt{if}}`);
+    const slanted = layout(String.raw`\mbox{\textsl{if}}`);
+
+    expect(typewriter.supported).toBe(true);
+    expect(slanted.supported).toBe(true);
+    expect(flattenMathItems(typewriter.hlist?.items ?? []).filter((item) => item.kind === "kern"))
+      .toEqual([
+        expect.objectContaining({ width: 0, sourceSpan: { start: 16, end: 16 } }),
+      ]);
+    expect(flattenMathItems(slanted.hlist?.items ?? []).filter((item) => item.kind === "kern"))
+      .toEqual([
+        expect.objectContaining({ width: 1.83, sourceSpan: { start: 16, end: 16 } }),
+      ]);
+    expect(slanted.hlist?.width).toBeCloseTo(7.67, 2);
   });
 
   it("keeps mbox and hbox on the default math font profile for following scripts", () => {

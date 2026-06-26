@@ -703,6 +703,9 @@ function randomFormula(random, variables, formulaMode) {
   if ((formulaMode === "mixed" || formulaMode === "scripts") && random() < 0.16) {
     return randomMBoxFormula(random, variables);
   }
+  if ((formulaMode === "mixed" || formulaMode === "scripts") && random() < 0.12) {
+    return randomTextCommandFormula(random, variables);
+  }
   if (formulaMode === "constructs") {
     return randomConstructFormula(random, variables);
   }
@@ -724,11 +727,41 @@ function randomMBoxFormula(random, variables) {
     "for all",
     " node ",
     "case A",
+    String.raw`\textbf{Bold} text`,
+    String.raw`\texttt{if}`,
+    String.raw`\textit{\textup{if}}`,
   ]);
   if (random() < 0.5) {
     return `${variable}_{\\mbox{${content}}}`;
   }
   return `${variable}+\\mbox{${content}}`;
+}
+
+function randomTextCommandFormula(random, variables) {
+  const variable = choice(random, variables);
+  const command = choice(random, [
+    String.raw`\textrm`,
+    String.raw`\textsf`,
+    String.raw`\texttt`,
+    String.raw`\textnormal`,
+    String.raw`\textbf`,
+    String.raw`\textmd`,
+    String.raw`\textit`,
+    String.raw`\textsl`,
+    String.raw`\textsc`,
+    String.raw`\textup`,
+    String.raw`\emph`,
+  ]);
+  const content = choice(random, [
+    "if",
+    "case A",
+    String.raw`\textbf{\textmd{if}}`,
+    String.raw`\textit{\textup{if}}`,
+    String.raw`\texttt{if}`,
+  ]);
+  return random() < 0.5
+    ? `${variable}_{${command}{${content}}}`
+    : `${variable}+${command}{${content}}`;
 }
 
 function randomSpacingFormula(random, variables) {

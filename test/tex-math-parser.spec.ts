@@ -980,6 +980,31 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses kernel text font commands as text-in-math nuclei", () => {
+    const result = parseTexMath(
+      String.raw`\textrm{a}+\textsf{b}+\texttt{c}+\textnormal{d}+\textbf{e}+\textmd{f}+\textit{g}+\textsl{h}+\textsc{i}+\textup{j}+\emph{k}`
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items
+      .filter((item) => item.kind === "atom" && item.nucleus.kind === "text")
+      .map((item) => item.kind === "atom" && item.nucleus.kind === "text"
+        ? { command: item.nucleus.command, text: item.nucleus.text }
+        : null)).toEqual([
+          { command: "textrm", text: "a" },
+          { command: "textsf", text: "b" },
+          { command: "texttt", text: "c" },
+          { command: "textnormal", text: "d" },
+          { command: "textbf", text: "e" },
+          { command: "textmd", text: "f" },
+          { command: "textit", text: "g" },
+          { command: "textsl", text: "h" },
+          { command: "textsc", text: "i" },
+          { command: "textup", text: "j" },
+          { command: "emph", text: "k" },
+        ]);
+  });
+
   it("parses hbox commands through the text-in-math nucleus", () => {
     const result = parseTexMath(String.raw`\hbox{label $x$}`);
     const text = atomAt(result, 0);
@@ -1077,23 +1102,20 @@ describe("TeX math parser", () => {
     });
   });
 
-  it("keeps unsupported commands inside text explicit", () => {
+  it("parses font commands inside text groups as text-box content", () => {
     const result = parseTexMath(String.raw`\text{\emph{x}}`);
     const text = atomAt(result, 0);
 
-    expect(result.diagnostics).toEqual([
-      {
-        severity: "warning",
-        code: "unsupported-command",
-        message: String.raw`Unsupported content in \text: \emph.`,
-        sourceSpan: { start: 6, end: 11 },
-      },
-    ]);
+    expect(result.diagnostics).toEqual([]);
     expect(text).toMatchObject({
       atomClass: "ord",
       nucleus: {
-        kind: "unsupported",
-        command: String.raw`\text`,
+        kind: "text",
+        command: "text",
+        text: "x",
+        parts: [
+          { kind: "text", text: "x", sourceSpan: { start: 12, end: 13 } },
+        ],
       },
     });
   });

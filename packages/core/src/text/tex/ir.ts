@@ -4,12 +4,16 @@ import { parseLength } from "../../semantic/coords/parse-length.js";
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
 export type TexSpaceGlueProfile = "font" | "tikz-fixed";
-export type TexFontFamily = "roman" | "sans" | "normal";
+export type TexFontFamily = "roman" | "sans" | "typewriter" | "normal";
 export type TexFontSeries = "medium" | "bold";
-export type TexFontShape = "upright" | "italic" | "small-caps";
+export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
 export type SimpleTexFontCommandName =
   | "textit"
   | "textbf"
+  | "textmd"
+  | "textsl"
+  | "texttt"
+  | "textup"
   | "emph"
   | "textrm"
   | "textsf"
@@ -20,13 +24,17 @@ export type SimpleTexFontDeclarationName =
   | "bf"
   | "rm"
   | "sf"
+  | "sl"
   | "sc"
+  | "tt"
   | "em"
   | "itshape"
   | "bfseries"
   | "mdseries"
   | "rmfamily"
   | "sffamily"
+  | "ttfamily"
+  | "slshape"
   | "upshape"
   | "scshape"
   | "normalfont";
@@ -1837,7 +1845,19 @@ function scanSimpleTexFontCommandName(
   text: string,
   start: number
 ): { name: SimpleTexFontCommandName; end: number } | null {
-  for (const name of ["textnormal", "textit", "textbf", "textrm", "textsf", "textsc", "emph"] as const) {
+  for (const name of [
+    "textnormal",
+    "textit",
+    "textbf",
+    "textmd",
+    "textsl",
+    "texttt",
+    "textup",
+    "textrm",
+    "textsf",
+    "textsc",
+    "emph",
+  ] as const) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
@@ -1880,14 +1900,18 @@ function scanSimpleTexFontDeclarationName(
     "mdseries",
     "rmfamily",
     "sffamily",
+    "ttfamily",
     "itshape",
+    "slshape",
     "upshape",
     "scshape",
     "it",
     "bf",
     "rm",
     "sf",
+    "sl",
     "sc",
+    "tt",
     "em",
   ] as const) {
     const end = scanSimpleTexControlWord(text, start, name);
@@ -3000,9 +3024,7 @@ export function simpleTexInlineNodesToTokens(
         node.children,
         childFontState
       );
-      if (simpleTexFontStateHasItalicCorrection(childTokens[0]?.fontState)) {
-        markLastTextTokenItalicCorrection(childTokens);
-      }
+      markLastTextTokenItalicCorrection(childTokens);
       if (skipPostLineBreakSpace && childTokens[0]?.kind === "space") {
         tokens.push(...childTokens.slice(1));
       } else {
@@ -3095,7 +3117,7 @@ export function simpleTexInlineNodesToTokens(
 function simpleTexFontStateHasItalicCorrection(
   state: SimpleTexFontState | undefined
 ): boolean {
-  return state?.shape === "italic";
+  return state?.shape === "italic" || state?.shape === "slanted";
 }
 
 function markLastTextTokenItalicCorrection(tokens: SimpleTexToken[]): void {
@@ -3112,15 +3134,27 @@ function markLastTextTokenItalicCorrection(tokens: SimpleTexToken[]): void {
   }
 }
 
-function simpleTexFontStateForCommand(
+export function simpleTexFontStateForCommand(
   current: SimpleTexFontState,
   command: SimpleTexFontCommandName
 ): SimpleTexFontState {
   if (command === "textit") {
     return { ...current, shape: "italic" };
   }
+  if (command === "textsl") {
+    return { ...current, shape: "slanted" };
+  }
+  if (command === "textup") {
+    return { ...current, shape: "upright" };
+  }
   if (command === "textbf") {
     return { ...current, series: "bold" };
+  }
+  if (command === "textmd") {
+    return { ...current, series: "medium" };
+  }
+  if (command === "texttt") {
+    return { ...current, family: "typewriter" };
   }
   if (command === "emph") {
     return {
@@ -3156,8 +3190,14 @@ function simpleTexFontStateForDeclaration(
   if (command === "sf") {
     return { ...defaultSimpleTexFontState, family: "sans" };
   }
+  if (command === "sl") {
+    return { ...defaultSimpleTexFontState, shape: "slanted" };
+  }
   if (command === "sc") {
     return { ...defaultSimpleTexFontState, shape: "small-caps" };
+  }
+  if (command === "tt") {
+    return { ...defaultSimpleTexFontState, family: "typewriter" };
   }
   if (command === "em") {
     return {
@@ -3170,6 +3210,9 @@ function simpleTexFontStateForDeclaration(
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };
+  }
+  if (command === "slshape") {
+    return { ...current, shape: "slanted" };
   }
   if (command === "upshape") {
     return { ...current, shape: "upright" };
@@ -3185,6 +3228,9 @@ function simpleTexFontStateForDeclaration(
   }
   if (command === "sffamily") {
     return { ...current, family: "sans" };
+  }
+  if (command === "ttfamily") {
+    return { ...current, family: "typewriter" };
   }
   return { ...current, family: "roman" };
 }

@@ -94,6 +94,7 @@ function layoutItemsToRuns(
         wrapper,
         childIndex: runIndex,
         wordIndex: 0,
+        allowAutomaticHyphenation: texTextFontAllowsAutomaticHyphenation(item.font),
       } satisfies TextRun);
       continue;
     }
@@ -604,6 +605,14 @@ function formatMathSvgNumber(value: number): string {
     return "0";
   }
   return Number(value.toFixed(6)).toString();
+}
+
+function texTextFontAllowsAutomaticHyphenation(font: ResolvedTexFont): boolean {
+  return !(
+    font.id.startsWith("cmtt") ||
+    font.id.startsWith("lmmono") ||
+    font.id.startsWith("lmmonolt")
+  );
 }
 
 function withTrailingItalicCorrection(

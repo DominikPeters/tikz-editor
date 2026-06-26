@@ -91,6 +91,7 @@ export interface TextRun extends BaseRun {
   wrapper: AnyWrapper;
   childIndex: number;
   wordIndex: number;
+  allowAutomaticHyphenation?: boolean;
 }
 
 export interface SpaceRun extends BaseRun {

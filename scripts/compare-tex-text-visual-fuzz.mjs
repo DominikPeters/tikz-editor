@@ -424,7 +424,7 @@ function styledSentence(random, index) {
   const phraseA = styledPhrase(random);
   const phraseB = styledPhrase(random);
   const phraseC = styledPhrase(random, 1, 3);
-  switch (index % 6) {
+  switch (index % 10) {
     case 0:
       return `${lead} \\textit{${phraseA}} ${tail}`;
     case 1:
@@ -435,8 +435,16 @@ function styledSentence(random, index) {
       return `${lead} \\textbf{${phraseA} \\textit{${phraseB}}} ${tail}`;
     case 4:
       return `${lead} \\textit{${phraseA} \\textbf{${phraseB}}} \\textnormal{${phraseC}}.`;
-    default:
+    case 5:
       return `${lead} \\textbf{${phraseA} \\emph{${phraseB}} \\textnormal{${phraseC}}}.`;
+    case 6:
+      return `${lead} \\texttt{${phraseA}} \\textsf{${phraseB}}.`;
+    case 7:
+      return `${lead} \\textbf{${phraseA} \\textmd{${phraseB}}} ${tail}`;
+    case 8:
+      return `${lead} \\textit{${phraseA} \\textup{${phraseB}}} \\textsl{${phraseC}}.`;
+    default:
+      return `${lead} \\texttt{${phraseA} \\textsl{${phraseB}} \\textsc{${phraseC}}}.`;
   }
 }
 
@@ -1439,11 +1447,28 @@ function texFontNameToMetricFontId(fontName) {
     ["lmroman10-bold", "lmroman10-bold"],
     ["lmroman10-italic", "lmroman10-italic"],
     ["lmroman10-bolditalic", "lmroman10-bolditalic"],
+    ["lmroman7-regular", "lmroman7-regular"],
+    ["lmroman7-bold", "lmroman7-bold"],
+    ["lmroman7-italic", "lmroman7-italic"],
+    ["lmroman5-regular", "lmroman5-regular"],
+    ["lmroman5-bold", "lmroman5-bold"],
     ["lmromancaps10-regular", "lmromancaps10-regular"],
+    ["lmromanslant10-regular", "lmromanslant10-regular"],
+    ["lmromanslant10-bold", "lmromanslant10-bold"],
+    ["lmromanslant8-regular", "lmromanslant8-regular"],
     ["lmsans10-regular", "lmsans10-regular"],
     ["lmsans10-bold", "lmsans10-bold"],
     ["lmsans10-oblique", "lmsans10-oblique"],
     ["lmsans10-boldoblique", "lmsans10-boldoblique"],
+    ["lmsans8-regular", "lmsans8-regular"],
+    ["lmsans8-oblique", "lmsans8-oblique"],
+    ["lmmono10-regular", "lmmono10-regular"],
+    ["lmmono10-italic", "lmmono10-italic"],
+    ["lmmono8-regular", "lmmono8-regular"],
+    ["lmmonoslant10-regular", "lmmonoslant10-regular"],
+    ["lmmonocaps10-regular", "lmmonocaps10-regular"],
+    ["lmmonolt10-bold", "lmmonolt10-bold"],
+    ["lmmonolt10-boldoblique", "lmmonolt10-boldoblique"],
   ]);
   if (latinModernNames.has(normalized)) {
     return latinModernNames.get(normalized);

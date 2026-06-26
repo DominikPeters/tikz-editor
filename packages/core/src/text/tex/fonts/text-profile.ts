@@ -15,7 +15,7 @@ export interface TexTextFontProfile {
   readonly encoding: "OT1" | "TU";
   readonly metricProvider: TexMetricProvider;
   readonly defaultFontState: SimpleTexFontState;
-  readonly resolveTextFontId: (state: SimpleTexFontState) => DefaultComputerModernTextFont;
+  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: number) => DefaultComputerModernTextFont;
   readonly resolveTextFont: (
     state: SimpleTexFontState,
     atPt: number,
@@ -41,14 +41,14 @@ function makeTextFontProfile(params: {
   readonly engine: TexTextFontProfile["engine"];
   readonly encoding: TexTextFontProfile["encoding"];
   readonly defaultFontState: SimpleTexFontState;
-  readonly resolveTextFontId: (state: SimpleTexFontState) => DefaultComputerModernTextFont;
+  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: number) => DefaultComputerModernTextFont;
 }): TexTextFontProfile {
   return {
     ...params,
     metricProvider: computerModernTexMetricProvider,
     resolveTextFont: (state, atPt, metricProvider = computerModernTexMetricProvider) =>
       metricProvider.resolveFont({
-        fontId: params.resolveTextFontId(state),
+        fontId: params.resolveTextFontId(state, atPt),
         atPt,
       }),
   };
@@ -75,7 +75,8 @@ export const luaLatexDefaultTextFontProfile = makeTextFontProfile({
 export const defaultTexTextFontProfile = luaLatexDefaultTextFontProfile;
 
 export function classicComputerModernFontIdForState(
-  state: SimpleTexFontState
+  state: SimpleTexFontState,
+  _atPt = 10
 ): DefaultComputerModernTextFont {
   if (
     state.family === "normal" &&
@@ -94,7 +95,13 @@ export function classicComputerModernFontIdForState(
     if (state.shape === "italic") {
       return "cmssi10";
     }
+    if (state.shape === "slanted") {
+      return "cmssi10";
+    }
     return "cmss10";
+  }
+  if (state.family === "typewriter") {
+    return "cmtt10";
   }
   if (state.series === "bold" && state.shape === "small-caps") {
     return "cmbx10";
@@ -111,35 +118,81 @@ export function classicComputerModernFontIdForState(
   if (state.shape === "italic") {
     return "cmti10";
   }
+  if (state.shape === "slanted") {
+    return "cmti10";
+  }
   return "cmr10";
 }
 
 export function luaLatexDefaultFontIdForState(
-  state: SimpleTexFontState
+  state: SimpleTexFontState,
+  atPt = 10
 ): DefaultComputerModernTextFont {
   if (state.shape === "small-caps") {
-    return "lmromancaps10-regular";
+    return state.family === "typewriter" ? "lmmonocaps10-regular" : "lmromancaps10-regular";
+  }
+  if (state.family === "typewriter") {
+    if (state.series === "bold" && (state.shape === "italic" || state.shape === "slanted")) {
+      return "lmmonolt10-boldoblique";
+    }
+    if (state.series === "bold") {
+      return "lmmonolt10-bold";
+    }
+    if (state.shape === "italic") {
+      return "lmmono10-italic";
+    }
+    if (state.shape === "slanted") {
+      return "lmmonoslant10-regular";
+    }
+    return atPt <= 8 ? "lmmono8-regular" : "lmmono10-regular";
   }
   if (state.family === "sans") {
     if (state.series === "bold" && state.shape === "italic") {
+      return "lmsans10-boldoblique";
+    }
+    if (state.series === "bold" && state.shape === "slanted") {
       return "lmsans10-boldoblique";
     }
     if (state.series === "bold") {
       return "lmsans10-bold";
     }
     if (state.shape === "italic") {
-      return "lmsans10-oblique";
+      return atPt <= 8 ? "lmsans8-oblique" : "lmsans10-oblique";
     }
-    return "lmsans10-regular";
+    if (state.shape === "slanted") {
+      return atPt <= 8 ? "lmsans8-oblique" : "lmsans10-oblique";
+    }
+    return atPt <= 8 ? "lmsans8-regular" : "lmsans10-regular";
   }
   if (state.series === "bold" && state.shape === "italic") {
     return "lmroman10-bolditalic";
   }
+  if (state.series === "bold" && state.shape === "slanted") {
+    return "lmromanslant10-bold";
+  }
   if (state.series === "bold") {
+    if (atPt <= 5) {
+      return "lmroman5-bold";
+    }
+    if (atPt <= 7) {
+      return "lmroman7-bold";
+    }
     return "lmroman10-bold";
   }
   if (state.shape === "italic") {
+    if (atPt <= 7) {
+      return "lmroman7-italic";
+    }
     return "lmroman10-italic";
+  }
+  if (state.shape === "slanted") {
+    return atPt <= 8 ? "lmromanslant8-regular" : "lmromanslant10-regular";
+  }
+  if (atPt <= 5) {
+    return "lmroman5-regular";
+  }
+  if (atPt <= 7) {
+    return "lmroman7-regular";
   }
   return "lmroman10-regular";
 }
