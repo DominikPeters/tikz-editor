@@ -3,9 +3,13 @@ import type { WorldPoint, WorldBounds } from "../coords/points.js";
 import type { OptionListAst } from "../options/types.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { MacroBinding, MacroExpansionTraceEvent } from "../macros/index.js";
-import type { EditHandle, ResolvedStyle, SceneClipPath, SceneElement } from "./types.js";
+import { parseLength } from "./coords/parse-length.js";
+import type { EditHandle, ResolvedStyle, SceneClipPath, SceneElement, SceneLayer } from "./types.js";
+import { BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER } from "./types.js";
 import type { CustomStyleRegistry } from "./style/custom-styles.js";
 import { createDefaultCustomStyleRegistry } from "./style/custom-styles.js";
+import type { PicDefinitionRegistry } from "./pics/registry.js";
+import { createDefaultPicDefinitionRegistry } from "./pics/registry.js";
 import { computeSourceFingerprint } from "../utils/source-fingerprint.js";
 import type { StyleChainEntry, StyleSourceRef } from "./style-chain.js";
 import { cloneResolvedStyle } from "./style-chain.js";
@@ -59,6 +63,7 @@ export type NodeDistanceSpec =
 export type NodeQuotesMode = "label" | "pin";
 
 export type NamedNodeGeometry = {
+  sourceId?: string;
   shape:
     | "rectangle"
     | "rounded rectangle"
@@ -116,9 +121,11 @@ export type SemanticContextFrame = {
   style: ResolvedStyle;
   styleChain: StyleChainEntry[];
   transform: WorldTransform;
+  layer: string;
   clipChain: SceneClipPath[];
   pictureSizeRelevant: boolean;
   customStyles: CustomStyleRegistry;
+  picDefinitions: PicDefinitionRegistry;
   colorAliases: Map<string, string>;
   macroBindings: Map<string, MacroBinding>;
   namePrefix: string;
@@ -136,6 +143,7 @@ export type SemanticContextFrame = {
   everyNodeStyles: ProvenanceOptionList[];
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
+  everyPicStyles: ProvenanceOptionList[];
   everyRectangleNodeStyles: ProvenanceOptionList[];
   everyCircleNodeStyles: ProvenanceOptionList[];
   everyDiamondNodeStyles: ProvenanceOptionList[];
@@ -177,6 +185,8 @@ export type SemanticContext = {
   stack: SemanticContextFrame[];
   source: string;
   sourceFingerprint: string;
+  layers: Map<string, SceneLayer>;
+  backgroundState: SemanticBackgroundState;
   pictureBounds: WorldBounds | null;
   namedCoordinates: PersistentMap<string, WorldPoint>;
   namedNodeSets: PersistentMap<string, Set<string>>;
@@ -187,12 +197,31 @@ export type SemanticContext = {
   pathStartPoint: WorldPoint | null;
   textEngine: NodeTextEngine | null;
   macroTraceCollector: MacroExpansionTraceEvent[] | null;
+  picEvaluationStack: string[];
   editHandles: EditHandle[];
   dependencyBuilder: SemanticDependencyGraphBuilder;
   dependencyActiveSourceId: string | null;
   statementEffectTracker: SemanticStatementEffectTracker | null;
   symbolResolver: SemanticSymbolResolver;
   mathRandom: PgfRandom;
+};
+
+export type SemanticBackgroundHookKind = "rectangle" | "grid" | "top" | "bottom" | "left" | "right";
+
+export type SemanticBackgroundHook = {
+  kind: SemanticBackgroundHookKind;
+  sourceRef: StyleSourceRef;
+  sequence: number;
+};
+
+export type SemanticBackgroundState = {
+  used: boolean;
+  innerFrameXSep: number;
+  innerFrameYSep: number;
+  outerFrameXSep: number;
+  outerFrameYSep: number;
+  hooks: SemanticBackgroundHook[];
+  nextHookSequence: number;
 };
 
 export type SemanticStatementConsumedResource = {
@@ -223,6 +252,8 @@ export type SemanticStatementEffectSummary = {
 
 export type SemanticContextSnapshot = {
   stack: SemanticContextFrame[];
+  layers: SceneLayer[];
+  backgroundState: SemanticBackgroundState;
   pictureBounds: WorldBounds | null;
   namedCoordinatesState: PersistentMapSnapshot<string, WorldPoint>;
   namedNodeSetsState: PersistentMapSnapshot<string, Set<string>>;
@@ -265,6 +296,7 @@ export function createSemanticContext(
   const defaultNodeDistance = 28.4527559055;
   const defaultTreeDistance = 15 * 2.84527559055;
   const clonedStyle = cloneResolvedStyle(initialStyle);
+  const defaultBackgroundState = createDefaultSemanticBackgroundState();
   const defaultGlobalSource: StyleSourceRef = {
     sourceId: "__global__",
     sourceKind: "global-default",
@@ -285,9 +317,11 @@ export function createSemanticContext(
           }
         ],
         transform: initialTransform,
+        layer: MAIN_SCENE_LAYER,
         clipChain: [],
         pictureSizeRelevant: true,
         customStyles: createDefaultCustomStyleRegistry(),
+        picDefinitions: createDefaultPicDefinitionRegistry(),
         colorAliases: new Map(),
         macroBindings: new Map(),
         namePrefix: "",
@@ -309,6 +343,7 @@ export function createSemanticContext(
         everyNodeStyles: [],
         everyTextNodePartStyles: [],
         everyFitStyles: [],
+        everyPicStyles: [],
         everyRectangleNodeStyles: [],
         everyCircleNodeStyles: [],
         everyDiamondNodeStyles: [],
@@ -348,6 +383,8 @@ export function createSemanticContext(
     ],
     source,
     sourceFingerprint,
+    layers: createDefaultSceneLayerMap(),
+    backgroundState: defaultBackgroundState,
     pictureBounds: null,
     namedCoordinates: new PersistentMap<string, WorldPoint>(),
     namedNodeSets: new PersistentMap<string, Set<string>>(),
@@ -358,6 +395,7 @@ export function createSemanticContext(
     pathStartPoint: null,
     textEngine,
     macroTraceCollector: null,
+    picEvaluationStack: [],
     editHandles: [],
     dependencyBuilder: new SemanticDependencyGraphBuilder(),
     dependencyActiveSourceId: null,
@@ -365,6 +403,37 @@ export function createSemanticContext(
     symbolResolver: createSemanticSymbolResolver(),
     mathRandom: createPgfRandom(1)
   };
+}
+
+export function createDefaultSemanticBackgroundState(): SemanticBackgroundState {
+  return {
+    used: false,
+    innerFrameXSep: parseLength("1ex", "pt") ?? 4.3,
+    innerFrameYSep: parseLength("1ex", "pt") ?? 4.3,
+    outerFrameXSep: 0,
+    outerFrameYSep: 0,
+    hooks: [],
+    nextHookSequence: 0
+  };
+}
+
+function createDefaultSceneLayerMap(): Map<string, SceneLayer> {
+  return new Map([[MAIN_SCENE_LAYER, { name: MAIN_SCENE_LAYER, order: 0 }]]);
+}
+
+export function markBackgroundLayerUsed(context: SemanticContext): void {
+  context.backgroundState.used = true;
+  context.layers.set(BACKGROUND_SCENE_LAYER, { name: BACKGROUND_SCENE_LAYER, order: 0 });
+  context.layers.set(MAIN_SCENE_LAYER, { name: MAIN_SCENE_LAYER, order: 1 });
+}
+
+export function listContextSceneLayers(context: SemanticContext): SceneLayer[] {
+  return [...context.layers.values()].sort((left, right) => {
+    if (left.order !== right.order) {
+      return left.order - right.order;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
 export function currentFrame(context: SemanticContext): SemanticContextFrame {
@@ -390,6 +459,8 @@ export function snapshotSemanticContext(
   const editHandlesMode = options.editHandlesMode ?? "clone";
   return {
     stack: structuredClone(context.stack),
+    layers: listContextSceneLayers(context),
+    backgroundState: structuredClone(context.backgroundState),
     pictureBounds: context.pictureBounds ? { ...context.pictureBounds } : null,
     namedCoordinatesState: context.namedCoordinates.snapshot(),
     namedNodeSetsState: context.namedNodeSets.snapshot(),
@@ -414,6 +485,8 @@ export function restoreSemanticContext(
   options: RestoreSemanticContextOptions = {}
 ): void {
   context.stack = structuredClone(snapshot.stack);
+  context.layers = new Map(snapshot.layers.map((layer) => [layer.name, { ...layer }]));
+  context.backgroundState = structuredClone(snapshot.backgroundState);
   context.pictureBounds = snapshot.pictureBounds ? { ...snapshot.pictureBounds } : null;
   context.namedCoordinates.restore(snapshot.namedCoordinatesState);
   context.namedNodeSets.restore(snapshot.namedNodeSetsState);

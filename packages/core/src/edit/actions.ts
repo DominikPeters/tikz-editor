@@ -53,6 +53,10 @@ import {
 import { applyReorderElementsAction, buildParentReorderReplacement } from "./actions/reorder-elements.js";
 import { applyResizeElementAction } from "./actions/resize-element.js";
 import {
+  applyRotateElementAction,
+  type RotateElementAction
+} from "./actions/rotate-element.js";
+import {
   applyPlannedSetPropertyAction,
   cleanupIdiomaticPropertyWrites,
   PROPERTY_WRITE_CLEANUP_NOOP_REASON
@@ -71,6 +75,14 @@ import {
   applyRemoveMatrixRowAction,
   applyTransposeMatrixAction
 } from "./actions/matrix-structure-actions.js";
+import {
+  applyConvertNodePositionToAbsoluteAction,
+  applyPositionNodeRelativeToAction,
+  preflightPositionNodeRelativeToAction as preflightPositionNodeRelativeToActionRaw,
+  type ConvertNodePositionToAbsoluteAction,
+  type PositionNodeRelativeToPreflight,
+  type PositionNodeRelativeToAction
+} from "./actions/node-positioning-actions.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "./parse-options.js";
 import { patchesMatchSourceTransition } from "./source-patches.js";
 import type { SemanticPropertyId } from "./property-registry.js";
@@ -120,6 +132,7 @@ export type EditAction =
       commentMode?: "disable" | "enable";
       commentSourceText?: string;
     }
+  | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
   | { kind: "cleanupPropertyWrites"; elementIds?: string[] }
@@ -141,6 +154,8 @@ export type EditAction =
     }
   | MovePathAttachedNodeAction
   | { kind: "addNodeAdornment"; nodeId: string; adornmentKind: "label" | "pin"; angle: string; text: string }
+  | PositionNodeRelativeToAction
+  | ConvertNodePositionToAbsoluteAction
   | { kind: "reorderElements"; elementIds: string[]; direction: ReorderDirection }
   | { kind: "groupElements"; elementIds: string[] }
   | { kind: "ungroupElements"; elementIds: string[] }
@@ -195,10 +210,27 @@ export type EditActionResult =
 const DEFAULT_DUPLICATE_OFFSET_PT = 0.25 * PT_PER_CM;
 const GENERATED_NODE_NAME_RE = /(?:^|[^A-Za-z0-9_-])(node\d+)(?![A-Za-z0-9_-])/g;
 
-type EditActionApplyOptions = {
+export type EditActionApplyOptions = {
   evaluateOptions?: EvaluateOptions;
   parseOptions?: EditParseOptions;
 };
+
+export function preflightPositionNodeRelativeToAction(
+  source: string,
+  action: PositionNodeRelativeToAction,
+  options: EditActionApplyOptions = {}
+): PositionNodeRelativeToPreflight {
+  const preflight = preflightPositionNodeRelativeToActionRaw(
+    source,
+    action,
+    options.evaluateOptions,
+    options.parseOptions ?? {}
+  );
+  return {
+    ...preflight,
+    result: normalizeResultPatches(source, preflight.result)
+  };
+}
 
 type AnchorNameResolution = {
   source: string;
@@ -247,6 +279,8 @@ export function applyEditAction(
         return applyDistributeElements(source, action, parseOptions);
       case "setProperty":
         return applySetProperty(source, action, parseOptions);
+      case "rotateElement":
+        return applyRotateElementAction(source, action, evaluateOptions, parseOptions);
       case "updateNodeText":
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":
@@ -273,6 +307,10 @@ export function applyEditAction(
         return applyMovePathAttachedNodeAction(source, action, parseOptions);
       case "addNodeAdornment":
         return applyAddNodeAdornmentAction(source, action, parseOptions);
+      case "positionNodeRelativeTo":
+        return applyPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions);
+      case "convertNodePositionToAbsolute":
+        return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions);
       case "reorderElements":
         return applyReorderElementsAction(source, action.elementIds, action.direction, parseOptions);
       case "groupElements":

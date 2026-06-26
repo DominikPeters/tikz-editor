@@ -1541,6 +1541,58 @@ describe("parseTikz", () => {
     expect(modes).toEqual(expect.arrayContaining(["function", "file"]));
   });
 
+  it("maps top-level and path pic syntax to PicOperation items", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pic at (1,0) {foo};
+  \path (0,0) pic {foo};
+  \path pic [rotate=30] at (1,0) {foo};
+  \pic [pic type=foo];
+  \path (0,0) pic [pic type=foo] (1,0);
+  \path pic foreach \x in {1,2} at (\x,0) {foo};
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
+    const paths = result.figure.body.filter((statement) => statement.kind === "Path");
+    expect(paths).toHaveLength(6);
+    const pics = paths.flatMap((statement) =>
+      statement.kind === "Path" ? statement.items.filter((item) => item.kind === "PicOperation") : []
+    );
+    expect(pics).toHaveLength(6);
+
+    const [topLevel, pathPlaced, rotated, typeFromOption, pathTypeFromOption, foreachPic] = pics;
+    expect(topLevel?.kind).toBe("PicOperation");
+    if (topLevel?.kind === "PicOperation") {
+      expect(topLevel.atRaw).toBe("(1,0)");
+      expect(topLevel.typeRaw).toBe("foo");
+    }
+    expect(pathPlaced?.kind).toBe("PicOperation");
+    if (pathPlaced?.kind === "PicOperation") {
+      expect(pathPlaced.typeSource).toBe("group");
+      expect(pathPlaced.typeRaw).toBe("foo");
+    }
+    expect(rotated?.kind).toBe("PicOperation");
+    if (rotated?.kind === "PicOperation") {
+      expect(rotated.options?.entries.some((entry) => entry.kind === "kv" && entry.key === "rotate")).toBe(true);
+      expect(rotated.atRaw).toBe("(1,0)");
+    }
+    expect(typeFromOption?.kind).toBe("PicOperation");
+    if (typeFromOption?.kind === "PicOperation") {
+      expect(typeFromOption.typeSource).toBe("option");
+      expect(typeFromOption.typeRaw).toBe("foo");
+    }
+    expect(pathTypeFromOption?.kind).toBe("PicOperation");
+    if (pathTypeFromOption?.kind === "PicOperation") {
+      expect(pathTypeFromOption.typeSource).toBe("option");
+      expect(pathTypeFromOption.typeRaw).toBe("foo");
+    }
+    expect(foreachPic?.kind).toBe("PicOperation");
+    if (foreachPic?.kind === "PicOperation") {
+      expect(foreachPic.foreachClauses).toHaveLength(1);
+      expect(foreachPic.atRaw).toBe("(\\x,0)");
+    }
+  });
+
   it("parses to, edge, svg, let, decorate, and coordinate operations with typed IR items", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) to [edge label=x, edge label'=y] node [above] {t} (3,2);

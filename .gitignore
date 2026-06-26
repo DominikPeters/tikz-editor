@@ -168,3 +168,4 @@ MATRIX_PLAN.md
 /apps/ipad/src-tauri/gen/apple/build
 /apps/ipad/src-tauri/gen/apple/Externals/arm64/debug
 /apps/ipad/src-tauri/gen/apple/tikz-editor-ipad.xcodeproj
+scripts/report-editor-latest-json-hits.sh

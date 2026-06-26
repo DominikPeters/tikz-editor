@@ -86,6 +86,14 @@ export function pathForeachItemId(statementIndex: number, itemIndex: number): st
   return `path-foreach:${statementIndex}:${itemIndex}`;
 }
 
+export function picOperationItemId(statementIndex: number, itemIndex: number): string {
+  return `pic-operation:${statementIndex}:${itemIndex}`;
+}
+
+export function picForeachClauseId(statementIndex: number, itemIndex: number, clauseIndex: number): string {
+  return `pic-foreach-clause:${statementIndex}:${itemIndex}:${clauseIndex}`;
+}
+
 export function toOperationItemId(statementIndex: number, itemIndex: number): string {
   return `to-operation:${statementIndex}:${itemIndex}`;
 }

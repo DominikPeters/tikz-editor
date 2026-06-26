@@ -150,8 +150,8 @@ function ModalPanel({
         onClose();
       }
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => { window.removeEventListener("keydown", onKeyDown, { capture: true }); };
   }, [closeOnEscape, onClose]);
 
   useEffect(() => {

@@ -1,19 +1,20 @@
 {
   "name": "@tikz-editor/web",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
-    "generate:example-previews": "node --import tsx scripts/generate-open-example-previews.ts",
-    "debug:multiline": "node --import tsx scripts/capture-multiline-debug.ts",
+    "build:package-deps": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build",
+    "generate:example-previews": "npm run build:package-deps && node --import tsx scripts/generate-open-example-previews.ts",
+    "debug:multiline": "npm run build:package-deps && node --import tsx scripts/capture-multiline-debug.ts",
     "dev": "npm run generate:example-previews && vite",
     "build": "npm run generate:example-previews && vite build",
-    "test:e2e": "env -u NO_COLOR FORCE_COLOR=0 playwright test",
-    "test:e2e:firefox": "env -u NO_COLOR FORCE_COLOR=0 PLAYWRIGHT_BROWSERS=firefox playwright test",
-    "test:e2e:webkit": "env -u NO_COLOR FORCE_COLOR=0 PLAYWRIGHT_BROWSERS=webkit playwright test",
-    "test:e2e:all-browsers": "env -u NO_COLOR FORCE_COLOR=0 PLAYWRIGHT_BROWSERS=chromium,firefox,webkit playwright test",
-    "test:e2e:headed": "env -u NO_COLOR FORCE_COLOR=0 playwright test --headed",
-    "test:e2e:ci": "env -u NO_COLOR FORCE_COLOR=0 playwright test --reporter=line",
+    "test:e2e": "npm run build:package-deps && env -u NO_COLOR FORCE_COLOR=0 playwright test",
+    "test:e2e:firefox": "npm run build:package-deps && env -u NO_COLOR FORCE_COLOR=0 PLAYWRIGHT_BROWSERS=firefox playwright test",
+    "test:e2e:webkit": "npm run build:package-deps && env -u NO_COLOR FORCE_COLOR=0 PLAYWRIGHT_BROWSERS=webkit playwright test",
+    "test:e2e:all-browsers": "npm run build:package-deps && env -u NO_COLOR FORCE_COLOR=0 PLAYWRIGHT_BROWSERS=chromium,firefox,webkit playwright test",
+    "test:e2e:headed": "npm run build:package-deps && env -u NO_COLOR FORCE_COLOR=0 playwright test --headed",
+    "test:e2e:ci": "npm run build:package-deps && env -u NO_COLOR FORCE_COLOR=0 playwright test --reporter=line",
     "profile": "node --import tsx scripts/run-profiling.ts --all",
     "profile:landing": "env -u NO_COLOR FORCE_COLOR=0 playwright test --config profiling/playwright.landing.config.ts profiling/profile-landing.spec.ts",
     "profile:analyze": "node ../../scripts/analyze-cpuprofile.mjs",
@@ -21,7 +22,7 @@
     "profile:compare-report": "node ../../scripts/analyze-cpuprofile.mjs compare-report"
   },
   "dependencies": {
-    "@tikz-editor/app": "0.3.0",
+    "@tikz-editor/app": "0.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

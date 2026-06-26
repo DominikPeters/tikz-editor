@@ -44,6 +44,14 @@ async function waitForViewportEffects(page: Page): Promise<void> {
   }));
 }
 
+async function readCanvasSvgViewBoxWidth(page: Page): Promise<number | null> {
+  return await page.evaluate(() => {
+    const rootSvg = document.querySelector("[data-testid='canvas-svg-layer'] svg");
+    const width = Number(rootSvg?.getAttribute("viewBox")?.split(/\s+/)[2] ?? "");
+    return Number.isFinite(width) ? width : null;
+  });
+}
+
 test("view menu toggles source and inspector panels", async ({ page }) => {
   await gotoApp(page);
   await expect(page.locator(".cm-editor").first()).toBeVisible();
@@ -250,28 +258,20 @@ test("use as bounding box keeps fit-to-content anchored to explicit picture boun
 
   await expect(page.getByTestId("canvas-svg-layer")).toBeVisible();
 
-  const boundedViewBox = await page.evaluate(() => {
-    const rootSvg = document.querySelector("[data-testid='canvas-svg-layer'] svg");
-    return rootSvg?.getAttribute("viewBox") ?? null;
-  });
-  expect(boundedViewBox).not.toBeNull();
-  if (!boundedViewBox) {
+  await expect.poll(async () => {
+    return (await readCanvasSvgViewBoxWidth(page)) ?? Number.POSITIVE_INFINITY;
+  }).toBeLessThan(100);
+
+  const boundedWidth = await readCanvasSvgViewBoxWidth(page);
+  expect(boundedWidth).not.toBeNull();
+  if (boundedWidth == null) {
     return;
   }
-  const boundedWidth = Number(boundedViewBox.split(/\s+/)[2] ?? "0");
-  expect(boundedWidth).toBeLessThan(100);
 
   await openMenuCommand(page, "view", "view.toggle-infinite-canvas");
   await expect(page.getByTestId("canvas-svg-layer")).toHaveAttribute("data-show-document-bounds", "false");
 
-  const expandedViewBox = await page.evaluate(() => {
-    const rootSvg = document.querySelector("[data-testid='canvas-svg-layer'] svg");
-    return rootSvg?.getAttribute("viewBox") ?? null;
-  });
-  expect(expandedViewBox).not.toBeNull();
-  if (!expandedViewBox) {
-    return;
-  }
-  const expandedWidth = Number(expandedViewBox.split(/\s+/)[2] ?? "0");
-  expect(expandedWidth).toBeGreaterThan(boundedWidth);
+  await expect.poll(async () => {
+    return (await readCanvasSvgViewBoxWidth(page)) ?? 0;
+  }).toBeGreaterThan(boundedWidth);
 });

@@ -62,6 +62,20 @@ describe("freehand-tool", () => {
     expect(source).toContain(".. controls");
   });
 
+  it("applies creation stroke color to generated freehand paths", () => {
+    const draft = [
+      wp(cm(0), cm(0)),
+      wp(cm(1), cm(0.5)),
+      wp(cm(2), cm(0))
+    ].reduce((currentDraft, point, index) => {
+      return index === 0 ? currentDraft : appendFreehandToolPoint(currentDraft, point);
+    }, createFreehandToolDraft(wp(cm(0), cm(0)), 1));
+
+    const source = generateFreehandToolSource(draft, 1, 16, { strokeColor: "red" });
+    expect(source).not.toBeNull();
+    expect(source).toContain("\\draw[draw=red]");
+  });
+
   it("uses smoothing tolerance when generating source output", () => {
     const points = [
       wp(cm(0), cm(0)),

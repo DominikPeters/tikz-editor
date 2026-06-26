@@ -294,7 +294,7 @@ function TikzDevFooter() {
   return (
     <footer className="landingTikzDevFooter">
       <div className="landingFooterLinks">
-        <a href="https://tikz.dev/license">License</a>
+        <a href="https://github.com/DominikPeters/tikz-editor/blob/master/LICENSE">License</a>
         <span aria-hidden="true">·</span>
         <a href="https://github.com/DominikPeters/tikz-editor">GitHub</a>
         <span aria-hidden="true">·</span>

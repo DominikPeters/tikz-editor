@@ -232,6 +232,13 @@ select {
 
 .sourceToken {
   white-space: pre;
+  border-radius: 2px;
+  transition: background-color 0.5s ease;
+}
+
+.sourceToken--changed {
+  background-color: #fde68a;
+  transition: none;
 }
 
 .sourceToken--keyword {
@@ -632,6 +639,7 @@ select {
 
 .landingCodePanel {
   position: relative;
+  top: auto;
   overflow: hidden;
   border: 1px solid var(--landing-line);
   background: var(--landing-code);

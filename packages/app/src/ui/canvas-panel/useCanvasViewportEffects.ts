@@ -119,7 +119,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     return () => { observer.disconnect(); };
   }, [setViewportSize, viewportRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
   }, [canvasTransform, canvasTransformRef]);
 
@@ -131,7 +131,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     svgResultRef.current = svgResult;
   }, [svgResult, svgResultRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     fitToContentModeActiveRef.current = fitToContentModeActive;
   }, [fitToContentModeActive, fitToContentModeActiveRef]);
 

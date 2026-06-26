@@ -1,5 +1,7 @@
 import type { Span, Statement } from "../ast/types.js";
 import { renderTikzToSvg } from "../render/index.js";
+import type { SceneElement } from "../semantic/types.js";
+import { normalizeColor } from "../semantic/style/colors.js";
 import { replaceSpan } from "./patch.js";
 import { parseTikzForEdit, type EditParseOptions, type PropertyWriteInteractionMode } from "./parse-options.js";
 import { resolvePropertyTarget } from "./property-target.js";
@@ -8,9 +10,9 @@ import { normalizeOptionKey } from "./option-key.js";
 import type { SetPropertyAction } from "./actions/set-property.js";
 import { applySetPropertyActionRaw } from "./actions/set-property.js";
 import {
-  isDefaultOmissionEligible,
   propertyCleanupKinds,
-  propertyIdForWriteKey
+  propertyIdForWriteKey,
+  shouldOmitDefaultWhenEquivalent
 } from "./property-registry.js";
 
 type EditActionResultLike =
@@ -240,7 +242,7 @@ function buildDefaultOmissionCandidate(
   action: SetPropertyAction,
   parseOptions: EditParseOptions
 ): string | null {
-  if (action.value.trim().length === 0 || !isDefaultOmissionEligible(action.propertyId ?? propertyIdForWriteKey(action.key))) {
+  if (action.value.trim().length === 0 || !shouldOmitDefaultWhenEquivalent(action.propertyId ?? propertyIdForWriteKey(action.key))) {
     return null;
   }
   const result = applySetPropertyActionRaw(
@@ -273,9 +275,14 @@ function buildPaintCommandCleanupCandidates(
   }
 
   const paint = resolvePaintOptions(source, action.elementId, parseOptions);
+  const shouldPreserveInheritedDrawSuppression = paint.drawDisabled
+    && hasInheritedRenderableDrawBeforeCommand(source, action.elementId, parseOptions);
   const commands = chooseCandidateCommands(paint);
   const candidates: CleanupCandidate[] = [];
   for (const nextCommand of commands) {
+    if (shouldPreserveInheritedDrawSuppression && commandRemovesExplicitDrawSuppression(nextCommand)) {
+      continue;
+    }
     const candidate = rewritePaintCommand(source, action.elementId, nextCommand, paint, parseOptions);
     if (candidate && candidate !== source) {
       candidates.push({
@@ -301,6 +308,10 @@ function chooseCandidateCommands(paint: PaintOptions): Array<"path" | "draw" | "
     candidates.push("draw");
   }
   return candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+}
+
+function commandRemovesExplicitDrawSuppression(command: "path" | "draw" | "fill"): boolean {
+  return command === "path" || command === "fill";
 }
 
 function normalizedPaintCommand(command: string | undefined): "path" | "draw" | "fill" | "filldraw" | null {
@@ -453,6 +464,38 @@ function isDisabledPaintValue(value: string | null): boolean {
   return normalized === "none" || normalized === "false";
 }
 
+function hasInheritedRenderableDrawBeforeCommand(
+  source: string,
+  elementId: string,
+  parseOptions: EditParseOptions
+): boolean {
+  try {
+    const rendered = renderTikzToSvg(source, {
+      parse: {
+        recover: true,
+        activeFigureId: parseOptions.activeFigureId,
+        includeContextDefinitions: true
+      }
+    });
+    const element = rendered.semantic.scene.elements.find((candidate) => sceneElementMatchesSourceId(candidate, elementId));
+    const commandDefault = element?.styleChain.find(
+      (entry) => entry.sourceRef?.sourceKind === "command-default" && styleSourceRefMatches(entry.sourceRef.sourceId, elementId)
+    );
+    return commandDefault?.before.drawExplicit === true
+      && hasRenderableStroke(commandDefault.before);
+  } catch {
+    return false;
+  }
+}
+
+function sceneElementMatchesSourceId(element: SceneElement, sourceId: string): boolean {
+  return element.sourceRef.sourceId === sourceId || element.identityRef?.sourceId === sourceId;
+}
+
+function styleSourceRefMatches(sourceId: string, targetSourceId: string): boolean {
+  return sourceId === targetSourceId;
+}
+
 function certifyEquivalentSource(leftSource: string, rightSource: string, parseOptions: EditParseOptions): boolean {
   try {
     const left = renderTikzToSvg(leftSource, {
@@ -472,7 +515,7 @@ function certifyEquivalentSource(leftSource: string, rightSource: string, parseO
     return (
       diagnosticsSignature(left.parse.diagnostics) === diagnosticsSignature(right.parse.diagnostics) &&
       semanticSignature(left.semantic.scene.elements) === semanticSignature(right.semantic.scene.elements) &&
-      left.svg.svg === right.svg.svg
+      svgSignature(left.svg.svg) === svgSignature(right.svg.svg)
     );
   } catch {
     return false;
@@ -487,6 +530,9 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
   if (Array.isArray(value)) {
     return value.filter((entry) => !isInvisibleSceneElement(entry)).map((entry) => sanitizeSemanticValue(entry));
   }
+  if (typeof value === "number") {
+    return normalizeSignatureNumber(value);
+  }
   if (!value || typeof value !== "object") {
     return value;
   }
@@ -499,6 +545,7 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
       key === "id" ||
       key === "runtimeId" ||
       key === "sourceSpan" ||
+      key === "textSourceSpan" ||
       key === "sourceFingerprint" ||
       key === "styleChain" ||
       key === "rawOptions" ||
@@ -506,9 +553,61 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
     ) {
       continue;
     }
-    output[key] = sanitizeSemanticValue(entryValue, isGeometricElement && key === "style");
+    output[key] = sanitizeStyleValueForSignature(key, entryValue, geometricStyle);
+    if (output[key] === entryValue) {
+      output[key] = sanitizeSemanticValue(entryValue, isGeometricElement && key === "style");
+    }
   }
   return output;
+}
+
+function sanitizeStyleValueForSignature(key: string, value: unknown, geometricStyle: boolean): unknown {
+  if (!geometricStyle) {
+    return value;
+  }
+  if (key === "stroke" || key === "fill") {
+    return normalizePaintColorForSignature(value);
+  }
+  return value;
+}
+
+function normalizePaintColorForSignature(value: unknown): unknown {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
+    return null;
+  }
+  return normalizeColor(trimmed);
+}
+
+function svgSignature(svg: string): string {
+  return svg.replace(/\b(stroke|fill|stop-color)="([^"]*)"/gu, (_match, attribute: string, value: string) =>
+    `${attribute}="${normalizeSvgPaintForSignature(value)}"`
+  );
+}
+
+function normalizeSvgPaintForSignature(value: string): string {
+  const trimmed = value.trim();
+  if (/^url\(/iu.test(trimmed)) {
+    return value;
+  }
+  if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
+    return "none";
+  }
+  return normalizeColor(trimmed);
+}
+
+function normalizeSignatureNumber(value: number): number {
+  if (!Number.isFinite(value)) {
+    return value;
+  }
+  const rounded = Math.round(value * 1e9) / 1e9;
+  return Math.abs(rounded) < 1e-12 ? 0 : rounded;
 }
 
 function isInvisibleSceneElement(value: unknown): boolean {

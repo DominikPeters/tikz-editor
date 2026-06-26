@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { APP_MENU_COMMAND_IDS } from "@tikz-editor/app";
+import { APP_MENU_COMMAND_IDS } from "@tikz-editor/app/app-menu";
 import { createDesktopPlatformAdapter } from "../src/platform/desktop-platform";
 
 function makeMockBridge() {
@@ -284,6 +284,46 @@ describe("desktop shell flows", () => {
         expect.objectContaining({ commandId: APP_MENU_COMMAND_IDS.UNDO, enabled: false })
       ]
     }));
+  });
+
+  it("routes native context menu commands to the request-local handler", async () => {
+    const mock = makeMockBridge();
+    const platform = createDesktopPlatformAdapter({
+      storage: { getItem: () => null, setItem: () => undefined },
+      bridge: mock.bridge
+    });
+
+    let appMenuCommand: string | null = null;
+    let contextMenuCommand: string | null = null;
+    platform.menu?.bindCommandHandler?.((commandId) => {
+      appMenuCommand = commandId;
+    });
+
+    await platform.menu?.showNativeContextMenu?.({
+      items: [
+        {
+          kind: "command",
+          commandId: APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO,
+          label: "Position Relative To..."
+        }
+      ],
+      commandStates: {
+        [APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO]: { enabled: true }
+      } as Record<string, { enabled: boolean; checked?: boolean }>,
+      onCommandRun: (commandId) => {
+        contextMenuCommand = commandId;
+      }
+    });
+
+    const payload = mock.contextMenuPayloads.at(-1) as { requestId: string };
+    mock.emitContextMenuCommand({
+      requestId: payload.requestId,
+      commandId: APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO
+    });
+
+    await Promise.resolve();
+    expect(contextMenuCommand).toBe(APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO);
+    expect(appMenuCommand).toBeNull();
   });
 
   it("exposes update checks through the desktop platform", async () => {

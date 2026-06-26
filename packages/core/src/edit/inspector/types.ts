@@ -108,6 +108,7 @@ export type InspectorProperty =
       min?: number;
       max?: number;
       unit?: string;
+      defaultValue?: number;
       clearKeys?: string[];
       write?: SetPropertyWriteTarget;
       readOnlyReason?: string;
@@ -119,6 +120,7 @@ export type InspectorProperty =
       value: number;
       step: number;
       unit: "pt";
+      defaultValue?: number;
       clearKeys?: string[];
       write: SetPropertyWriteTarget;
       note?: string;

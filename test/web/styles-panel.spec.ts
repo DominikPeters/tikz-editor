@@ -60,7 +60,7 @@ vi.mock("../../packages/app/src/edit-analysis-manager", () => ({
   getSharedEditAnalysisSession: () => null
 }));
 
-vi.mock("../../packages/app/src/project-named-colors", () => ({
+vi.mock("../../packages/app/src/colors/project-named-colors", () => ({
   useProjectNamedColorSwatches: () => []
 }));
 

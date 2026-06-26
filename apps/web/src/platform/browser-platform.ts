@@ -1,13 +1,10 @@
 import type {
-  DocumentFileRef,
   EditorPlatform,
-  FileRevision,
-  LinkedTextReadResult,
-  LinkedTextWriteResult,
   MenuCommandHandler,
   PlatformUpdateApi
-} from "@tikz-editor/app";
-import { revisionForText } from "@tikz-editor/app/src/linked-file-sync";
+} from "@tikz-editor/app/platform/types";
+import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
+import { revisionForText, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
 
 type StorageLike = {
   getItem: (key: string) => string | null;

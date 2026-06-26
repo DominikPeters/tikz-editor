@@ -1,5 +1,5 @@
 import React from "react";
-import { BASIC_PICKER_COLORS } from "../color-palette";
+import { BASIC_PICKER_COLORS } from "../colors/color-palette";
 import type { SnapToolPointerKind } from "tikz-editor/edit/snapping";
 import type { ToolMode } from "../store/types";
 

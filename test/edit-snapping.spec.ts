@@ -40,6 +40,7 @@ function makeCircle(sourceId: string, centerX: number, centerY: number, radius: 
     kind: "Circle",
     id: `circle:${sourceId}`,
     runtimeId: `runtime:circle:${sourceId}`,
+    layer: "main",
     sourceRef: {
       sourceId,
       sourceSpan: { from: 0, to: 0 },
@@ -59,6 +60,7 @@ function makePath(sourceId: string, commands: ScenePathCommand[]): SceneElement 
     kind: "Path",
     id: `path:${sourceId}`,
     runtimeId: `runtime:path:${sourceId}`,
+    layer: "main",
     sourceRef: {
       sourceId,
       sourceSpan: { from: 0, to: 0 },
@@ -77,6 +79,7 @@ function makeEllipse(sourceId: string, centerX: number, centerY: number, rx: num
     kind: "Ellipse",
     id: `ellipse:${sourceId}`,
     runtimeId: `runtime:ellipse:${sourceId}`,
+    layer: "main",
     sourceRef: {
       sourceId,
       sourceSpan: { from: 0, to: 0 },
@@ -98,6 +101,7 @@ function makeText(sourceId: string, text: string, x: number, y: number): SceneTe
     kind: "Text",
     id: `text:${sourceId}`,
     runtimeId: `runtime:text:${sourceId}`,
+    layer: "main",
     sourceRef: {
       sourceId,
       sourceSpan: { from: 0, to: 0 },

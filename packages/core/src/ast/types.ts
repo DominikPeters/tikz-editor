@@ -253,6 +253,7 @@ export type PathItem =
   | PathKeywordItem
   | GraphOperationItem
   | PlotOperationItem
+  | PicOperationItem
   | ToOperationItem
   | EdgeOperationItem
   | ChildOperationItem
@@ -431,6 +432,37 @@ export type PathForeachItem = {
   bodyRaw: string;
 };
 
+export type PicForeachClause = {
+  kind: "PicForeachClause";
+  id: string;
+  span: Span;
+  raw: string;
+  headerRaw: string;
+  variablesRaw?: string;
+  listRaw?: string;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+};
+
+export type PicOperationItem = {
+  kind: "PicOperation";
+  id: string;
+  span: Span;
+  raw: string;
+  templateRaw: string;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  foreachClauses?: PicForeachClause[];
+  name?: string;
+  nameSpan?: Span;
+  atSpan?: Span;
+  atRaw?: string;
+  atRelativePrefix?: RelativeCoordinatePrefix;
+  typeSource: "group" | "option";
+  typeSpan?: Span;
+  typeRaw: string;
+};
+
 export type ToOperationItem = {
   kind: "ToOperation";
   id: string;
@@ -438,6 +470,7 @@ export type ToOperationItem = {
   optionsSpan?: Span;
   options?: OptionListAst;
   nodes?: NodeItem[];
+  pics?: PicOperationItem[];
   target?: ToOperationTarget;
   raw: string;
 };
@@ -449,6 +482,7 @@ export type EdgeOperationItem = {
   optionsSpan?: Span;
   options?: OptionListAst;
   nodes?: NodeItem[];
+  pics?: PicOperationItem[];
   target?: ToOperationTarget;
   raw: string;
 };

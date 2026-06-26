@@ -2,6 +2,7 @@ import type { WorldTransform } from "../coords/transforms.js";
 import type { Span } from "../ast/types.js";
 import type { OptionListAst } from "../options/types.js";
 import type { GeneratedSourceRef, ResolvedStyle } from "./types.js";
+import type { StyleDiagnostic } from "./style/diagnostics.js";
 
 export type StyleChainKind = "global" | "named-style" | "every-node" | "every-shape" | "scope" | "command";
 
@@ -57,7 +58,7 @@ export type StyleTraceLayerInput =
 export type ResolvedStyleTrace = {
   style: ResolvedStyle;
   transform: WorldTransform;
-  diagnostics: string[];
+  diagnostics: StyleDiagnostic[];
   expandedOptionLists: OptionListAst[];
   chain: StyleChainEntry[];
 };

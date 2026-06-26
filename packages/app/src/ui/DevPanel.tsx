@@ -4,7 +4,7 @@ import type { Diagnostic } from "tikz-editor/diagnostics/types";
 import type { SemanticDependencyGraph } from "tikz-editor/semantic";
 import type { EditHandle, FeatureUsage, SceneElement } from "tikz-editor/semantic/types";
 import { useEditorStore } from "../store/store";
-import { TreeView } from "../TreeView";
+import { TreeView } from "./TreeView";
 import { Modal } from "./Modal";
 import css from "./DevPanel.module.css";
 

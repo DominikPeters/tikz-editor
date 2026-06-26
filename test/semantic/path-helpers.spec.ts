@@ -153,6 +153,7 @@ function scenePath(sourceId: string, commands: ScenePathCommand[]): ScenePath {
     kind: "Path",
     id: `path:${sourceId}`,
     runtimeId: `runtime:path:${sourceId}`,
+    layer: "main",
     sourceRef: sourceRef(sourceId),
     style: {} as ScenePath["style"],
     styleChain: [],
@@ -165,6 +166,7 @@ function sceneCircle(sourceId: string, centerX: number, centerY: number, radius:
     kind: "Circle",
     id: `circle:${sourceId}`,
     runtimeId: `runtime:circle:${sourceId}`,
+    layer: "main",
     sourceRef: sourceRef(sourceId),
     style: {} as SceneCircle["style"],
     styleChain: [],
@@ -178,6 +180,7 @@ function sceneEllipse(sourceId: string, centerX: number, centerY: number, rx: nu
     kind: "Ellipse",
     id: `ellipse:${sourceId}`,
     runtimeId: `runtime:ellipse:${sourceId}`,
+    layer: "main",
     sourceRef: sourceRef(sourceId),
     style: {} as SceneEllipse["style"],
     styleChain: [],
@@ -745,6 +748,7 @@ describe("semantic path intersection directives", () => {
       kind: "Text",
       id: "text:ignored",
       runtimeId: "runtime:text:ignored",
+      layer: "main",
       sourceRef: sourceRef("text"),
       style: {} as Extract<SceneElement, { kind: "Text" }>["style"],
       styleChain: [],
@@ -1388,6 +1392,26 @@ describe("semantic grid helpers", () => {
     const paths = makeGridElements("source", "grid", p(0, 0), p(20, 20), -1, -1, style, [], span, singular);
     expect(paths.some((path) => path.id.includes("scene-grid-x:"))).toBe(true);
     expect(paths.some((path) => path.id.includes("scene-grid-y:"))).toBe(true);
+  });
+
+  it("anchors grid lines to step multiples rather than the lower corner", () => {
+    const style = defaultStyle();
+    const paths = makeGridElements("source", "grid", p(-4.3, -4.3), p(32.7528, 4.3), 28.4527559055, 28.4527559055, style, [], span);
+    const verticalXs = paths
+      .filter((path) => path.id.includes("scene-grid-x:"))
+      .map((path) => path.commands[0])
+      .filter((command): command is Extract<ScenePathCommand, { kind: "M" }> => command?.kind === "M")
+      .map((command) => command.to.x);
+    const horizontalYs = paths
+      .filter((path) => path.id.includes("scene-grid-y:"))
+      .map((path) => path.commands[0])
+      .filter((command): command is Extract<ScenePathCommand, { kind: "M" }> => command?.kind === "M")
+      .map((command) => command.to.y);
+
+    expect(verticalXs).toHaveLength(2);
+    expect(verticalXs[0]).toBeCloseTo(0);
+    expect(verticalXs[1]).toBeCloseTo(28.4528, 3);
+    expect(horizontalYs).toEqual([0]);
   });
 
   it("builds transformed affine grid lines with cloned styles", () => {

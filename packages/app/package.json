@@ -1,10 +1,44 @@
 {
   "name": "@tikz-editor/app",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./app-menu": {
+      "types": "./src/app-menu/index.ts",
+      "import": "./src/app-menu/index.ts"
+    },
+    "./landing-assets": {
+      "types": "./src/landing-assets.ts",
+      "import": "./src/landing-assets.ts"
+    },
+    "./linked-file-sync": {
+      "types": "./src/linked-file-sync.ts",
+      "import": "./src/linked-file-sync.ts"
+    },
+    "./platform/current": {
+      "types": "./src/platform/current.ts",
+      "import": "./src/platform/current.ts"
+    },
+    "./platform/types": {
+      "types": "./src/platform/types.ts",
+      "import": "./src/platform/types.ts"
+    },
+    "./store/types": {
+      "types": "./src/store/types.ts",
+      "import": "./src/store/types.ts"
+    },
+    "./workspace": {
+      "types": "./src/ui/workspace-apply.ts",
+      "import": "./src/ui/workspace-apply.ts"
+    }
+  },
   "dependencies": {
     "@codemirror/commands": "^6.10.2",
     "@codemirror/lang-xml": "^6.1.0",
@@ -15,7 +49,8 @@
     "@lezer/highlight": "^1.2.3",
     "@lezer/lr": "^1.4.8",
     "@remixicon/react": "^4.9.0",
-    "@tikz-editor/core": "0.3.0",
+    "@tikz-editor/core": "0.5.0",
+    "@tikz-editor/lang-tikz": "0.5.0",
     "codemirror": "^6.0.2",
     "flexlayout-react": "^0.8.19",
     "ipe2tikz": "^1.0.0",

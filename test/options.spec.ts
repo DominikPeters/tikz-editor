@@ -36,8 +36,10 @@ describe("options parser", () => {
   });
 
   it("classifies arrow shorthand specifications as flags", () => {
-    const parsed = parseOptionListRaw("[Stealth-Stealth, -{Latex[open]}, |<->|]");
+    const parsed = parseOptionListRaw("[-, ->, Stealth-Stealth, -{Latex[open]}, |<->|]");
 
+    expect(parsed.entries.some((entry) => entry.kind === "flag" && entry.key === "-")).toBe(true);
+    expect(parsed.entries.some((entry) => entry.kind === "flag" && entry.key === "->")).toBe(true);
     expect(parsed.entries.some((entry) => entry.kind === "flag" && entry.raw.trim() === "Stealth-Stealth")).toBe(true);
     expect(parsed.entries.some((entry) => entry.kind === "flag" && entry.raw.trim() === "-{Latex[open]}")).toBe(true);
     expect(parsed.entries.some((entry) => entry.kind === "flag" && entry.raw.trim() === "|<->|")).toBe(true);

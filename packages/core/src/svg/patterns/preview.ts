@@ -3,6 +3,7 @@ import { pt } from "../../coords/scalars.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { defaultStyle } from "../../semantic/style/defaults.js";
 import type { LegacyPatternName, ResolvedPattern, SceneFigure, ScenePath } from "../../semantic/types.js";
+import { MAIN_SCENE_LAYER } from "../../semantic/types.js";
 import { emitSvg } from "../emit.js";
 
 type PreviewPatternPreset = LegacyPatternName | "Lines" | "Hatch" | "Dots" | "Stars";
@@ -32,6 +33,7 @@ export function renderFillPatternPreviewSvg(pattern: PreviewPatternPreset): stri
     kind: "Path",
     id: `preview:pattern:${pattern}`,
     runtimeId: `preview:pattern:${pattern}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId: `preview:pattern:${pattern}`, sourceSpan: PREVIEW_SOURCE_SPAN, sourceFingerprint: "" },
     style,
     styleChain: [],
@@ -47,6 +49,7 @@ export function renderFillPatternPreviewSvg(pattern: PreviewPatternPreset): stri
     kind: "SceneFigure",
     span: PREVIEW_SOURCE_SPAN,
     requiredTikzLibraries: [],
+    layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements: [path],
     bounds: worldBounds(pt(4), pt(3), pt(52), pt(13))
   };

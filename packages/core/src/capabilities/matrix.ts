@@ -37,6 +37,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["foreach_node_basic"]
   },
+  pic_operation: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["pic_inline_code", "pic_simple_definition", "pic_path_placement", "pic_template_editing"],
+    notes:
+      "Supports inline pics/code, simple .pic and pics/name/.style={code=...} definitions, placement, simple transforms, and template-based inspector edits. Parameterized and built-in library pics are deferred."
+  },
   unknown_statement: {
     parser: "stable",
     semantic: "partial",
@@ -117,6 +126,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "stable",
     edit: "none",
     fixtures: ["use_as_bounding_box"]
+  },
+  backgrounds_library: {
+    parser: "stable",
+    semantic: "stable",
+    svg: "stable",
+    edit: "none",
+    fixtures: ["backgrounds_library"],
+    notes:
+      "V1 supports background scopes and documented end-picture background rectangle/grid/side hooks via semantic scene layers."
   },
   arrow_tips: {
     parser: "stable",

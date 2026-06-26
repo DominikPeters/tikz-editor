@@ -356,6 +356,7 @@ function describePathItem(item: PathItem): string {
     case "DecorateOperation": return "decorate operations";
     case "CoordinateOperation": return "coordinate operations";
     case "PathForeach": return "foreach operations";
+    case "PicOperation": return "pic operations";
     case "Coordinate": return "coordinates";
     case "PathKeyword": return "path keywords";
     case "UnknownPathItem": return "unsupported syntax";

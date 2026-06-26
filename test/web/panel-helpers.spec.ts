@@ -91,6 +91,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Text",
       id: "scene-text:adornment",
       runtimeId: "runtime:scene-text:adornment",
+      layer: "main",
       sourceRef: {
         sourceId: "path:0",
         sourceSpan: { from: 0, to: 0 },
@@ -142,6 +143,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Text",
       id: "scene-text:scope-member",
       runtimeId: "runtime:scene-text:scope-member",
+      layer: "main",
       sourceRef: {
         sourceId: "path:1",
         sourceSpan: { from: 0, to: 0 },
@@ -200,6 +202,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Path",
       id: "scene-path:visible",
       runtimeId: "runtime:scene-path:visible",
+      layer: "main",
       sourceRef: {
         sourceId: "path:visible",
         sourceSpan: { from: 0, to: 0 },
@@ -226,6 +229,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Path",
       id: "scene-path:clip-only",
       runtimeId: "runtime:scene-path:clip-only",
+      layer: "main",
       sourceRef: {
         sourceId: "path:clip-only",
         sourceSpan: { from: 0, to: 0 },
@@ -310,6 +314,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Text",
       id: "scene-text:pin",
       runtimeId: "runtime:scene-text:pin",
+      layer: "main",
       sourceRef: {
         sourceId: "path:0",
         sourceSpan: { from: 0, to: 0 },
@@ -342,6 +347,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Path",
       id: "scene-path:pin-edge",
       runtimeId: "runtime:scene-path:pin-edge",
+      layer: "main",
       sourceRef: {
         sourceId: "path:0",
         sourceSpan: { from: 0, to: 0 },
@@ -460,6 +466,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Path",
       id: "scene-path:partially-clipped",
       runtimeId: "runtime:scene-path:partially-clipped",
+      layer: "main",
       sourceRef: {
         sourceId: "path:visible",
         sourceSpan: { from: 0, to: 0 },
@@ -486,6 +493,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Path",
       id: "scene-path:fully-clipped",
       runtimeId: "runtime:scene-path:fully-clipped",
+      layer: "main",
       sourceRef: {
         sourceId: "path:hidden",
         sourceSpan: { from: 0, to: 0 },
@@ -531,6 +539,7 @@ describe("rectHitRegionsForTargetId", () => {
       kind: "Path",
       id: "scene-node-box:test",
       runtimeId: "runtime:scene-node-box:test",
+      layer: "main",
       sourceRef: {
         sourceId: "path:visible",
         sourceSpan: { from: 0, to: 0 },

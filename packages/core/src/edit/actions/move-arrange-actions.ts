@@ -1,10 +1,12 @@
-import type { CoordinateItem, NodeItem, PathStatement, Span, Statement } from "../../ast/types.js";
+import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import type { OptionEntry } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { EditHandle } from "../../semantic/types.js";
+import type { ScenePathShapeHint } from "../../semantic/types.js";
+import { parseCoordinateLike, parseLength } from "../../semantic/coords/parse-length.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { localToSourceUnits, worldToLocal } from "../coords.js";
 import { CM_PER_PT, formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
@@ -24,6 +26,7 @@ import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
 
 const ARRANGE_EPSILON = 1e-6;
+const CENTER_PIVOT_EPSILON = 1e-3;
 
 type EditActionResultLike =
   | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
@@ -102,6 +105,7 @@ export function applyMoveElementsAction(
   const skippedHandles: string[] = [];
   const reasons: string[] = [];
   let movedAny = false;
+  const movedPathShapeDeltas = new Map<string, WorldPoint>();
 
   if (nonMatrixElementIds.length > 0) {
     const byHandles = applyMoveElementsUsingHandleRewrites(currentSource, editHandles, nonMatrixElementIds, delta, parseOptions);
@@ -112,6 +116,9 @@ export function applyMoveElementsAction(
       currentSource = byHandles.newSource;
       patches.push(...byHandles.patches);
       movedAny = true;
+      for (const elementId of nonMatrixElementIds) {
+        movedPathShapeDeltas.set(elementId, delta);
+      }
       if (byHandles.kind === "partial") {
         skippedHandles.push(...byHandles.skippedHandles);
         reasons.push(byHandles.reason);
@@ -186,6 +193,15 @@ export function applyMoveElementsAction(
       reason: reasons[0] ?? "No coordinate rewrites succeeded"
     };
   }
+
+  const pivotUpdates = applyCenterRotateAroundPivotTranslations(
+    currentSource,
+    editHandles,
+    movedPathShapeDeltas,
+    parseOptions
+  );
+  currentSource = pivotUpdates.source;
+  patches.push(...pivotUpdates.patches);
 
   const uniqueReasons = uniqueStrings(reasons);
   if (uniqueReasons.length > 0 || skippedHandles.length > 0) {
@@ -1035,12 +1051,163 @@ function applyElementDeltaMapStrict(
     currentSource = updated.source;
   }
 
+  const pivotUpdates = applyCenterRotateAroundPivotTranslations(
+    currentSource,
+    editHandles,
+    deltasBySource,
+    {}
+  );
+  currentSource = pivotUpdates.source;
+  patches.push(...pivotUpdates.patches);
+
   return {
     kind: "success",
     newSource: currentSource,
     patches,
     changedSourceIds: normalizedIds
   };
+}
+
+function applyCenterRotateAroundPivotTranslations(
+  source: string,
+  editHandles: readonly EditHandle[],
+  deltasBySource: ReadonlyMap<string, WorldPoint>,
+  parseOptions: EditParseOptions
+): { source: string; patches: SourcePatch[] } {
+  if (deltasBySource.size === 0) {
+    return { source, patches: [] };
+  }
+
+  let currentSource = source;
+  const patches: SourcePatch[] = [];
+  for (const [sourceId, delta] of deltasBySource.entries()) {
+    if (Math.abs(delta.x) <= ARRANGE_EPSILON && Math.abs(delta.y) <= ARRANGE_EPSILON) {
+      continue;
+    }
+
+    const parsed = parseTikzForEdit(currentSource, { ...parseOptions });
+    const statement = findPathStatementById(parsed.figure.body, sourceId);
+    if (!statement) {
+      continue;
+    }
+    const center = resolveExplicitPathShapeCenter(statement, editHandles, sourceId);
+    if (!center) {
+      continue;
+    }
+
+    const resolvedTarget = resolvePropertyTarget(currentSource, sourceId, parseOptions);
+    if (resolvedTarget.kind !== "found") {
+      continue;
+    }
+    const transformContext = resolveTransformInspectorMutationContextFromOptionEntries(
+      resolvedTarget.target.options?.entries
+    );
+    const rotateAround = transformContext.values.rotateAround;
+    if (!rotateAround) {
+      continue;
+    }
+    const pivot = parseRotateAroundPivotRaw(rotateAround.pivotRaw);
+    if (!pivot || !pointsApproximatelyEqual(pivot, center, CENTER_PIVOT_EPSILON)) {
+      continue;
+    }
+
+    const nextPivot = worldPoint(pt(pivot.x + delta.x), pt(pivot.y + delta.y));
+    const mutations = new Map<string, OptionMutation>();
+    mutations.set("/tikz/rotate", { kind: "remove" });
+    mutations.set("rotate", { kind: "remove" });
+    mutations.set("/tikz/rotate around", { kind: "remove" });
+    mutations.set("rotate around", {
+      kind: "set",
+      value: `{${formatNumber(transformContext.values.rotate)}:${formatWorldPointCoordinateRaw(nextPivot)}}`
+    });
+    const applied = applyOptionMutationsToTarget(currentSource, resolvedTarget.target, mutations);
+    if (!applied) {
+      continue;
+    }
+    currentSource = applied.source;
+    patches.push(applied.patch);
+  }
+
+  return { source: currentSource, patches };
+}
+
+function resolveExplicitPathShapeCenter(
+  statement: PathStatement,
+  editHandles: readonly EditHandle[],
+  sourceId: string
+): WorldPoint | null {
+  const shapeHint = resolvePathShapeHintFromItems(statement.items);
+  if (!shapeHint) {
+    return null;
+  }
+  const pathPointHandles = editHandles.filter(
+    (handle) => handle.sourceRef.sourceId === sourceId && handle.kind === "path-point"
+  );
+  if (shapeHint === "rectangle") {
+    if (pathPointHandles.length !== 2) {
+      return null;
+    }
+    const first = pathPointHandles[0];
+    const second = pathPointHandles[1];
+    if (!first || !second) {
+      return null;
+    }
+    return worldPoint(
+      pt((first.world.x + second.world.x) / 2),
+      pt((first.world.y + second.world.y) / 2)
+    );
+  }
+  if (shapeHint === "circle" || shapeHint === "ellipse") {
+    if (pathPointHandles.length !== 1) {
+      return null;
+    }
+    return pathPointHandles[0]?.world ?? null;
+  }
+  return null;
+}
+
+function resolvePathShapeHintFromItems(items: readonly PathItem[]): ScenePathShapeHint | null {
+  const hints = new Set<ScenePathShapeHint>();
+  collectPathShapeHints(items, hints);
+  if (hints.size !== 1) {
+    return null;
+  }
+  return [...hints][0] ?? null;
+}
+
+function collectPathShapeHints(items: readonly PathItem[], hints: Set<ScenePathShapeHint>): void {
+  for (const item of items) {
+    if (item.kind === "PathKeyword") {
+      if (item.keyword === "rectangle" || item.keyword === "circle" || item.keyword === "ellipse") {
+        hints.add(item.keyword);
+      }
+      continue;
+    }
+    if (item.kind === "ChildOperation") {
+      collectPathShapeHints(item.body, hints);
+    }
+  }
+}
+
+function parseRotateAroundPivotRaw(raw: string): WorldPoint | null {
+  const coordinate = parseCoordinateLike(raw);
+  if (!coordinate) {
+    return null;
+  }
+  const x = parseLength(coordinate.x, "cm");
+  const y = parseLength(coordinate.y, "cm");
+  if (x == null || y == null) {
+    return null;
+  }
+  return worldPoint(pt(x), pt(y));
+}
+
+function pointsApproximatelyEqual(left: WorldPoint, right: WorldPoint, epsilon: number): boolean {
+  return Math.abs(left.x - right.x) <= epsilon && Math.abs(left.y - right.y) <= epsilon;
+}
+
+function formatWorldPointCoordinateRaw(point: WorldPoint): string {
+  return `(${formatNumber(point.x * CM_PER_PT)},${formatNumber(point.y * CM_PER_PT)})`;
 }
 
 function replaceSourceSpan(

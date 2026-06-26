@@ -96,6 +96,18 @@ describe("path-tool state machine", () => {
     expect(snippet).toBe("\\draw (A.west) -- (B.east);");
   });
 
+  it("applies creation stroke color when finalizing new paths", () => {
+    const base = createPathToolDraft(wp(cm(0), cm(0)));
+    const withSegment = appendPathToolSegmentFromGesture(base, {
+      endWorld: wp(cm(1), cm(0)),
+      bendWorld: wp(cm(0.5), cm(0)),
+      asBezier: false
+    });
+
+    const snippet = generatePathToolSource(withSegment, { closed: false, strokeColor: "red" });
+    expect(snippet).toBe("\\draw[draw=red] (0,0) -- (1,0);");
+  });
+
   it("does not finalize degenerate drafts with no segments", () => {
     const draft = createPathToolDraft(wp(cm(0), cm(0)));
     expect(generatePathToolSource(draft, { closed: false })).toBeNull();

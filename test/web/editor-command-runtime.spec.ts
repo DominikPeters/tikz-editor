@@ -227,7 +227,7 @@ describe("editor-command-runtime", () => {
         key: "rotate",
         value: "180",
         propertyId: "transform.rotate",
-        clearKeys: ["/tikz/rotate"]
+        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
       }
     }));
   });

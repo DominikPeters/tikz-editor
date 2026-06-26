@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import type { ScannedFigure } from "../packages/core/src/parser/figure-scan.js";
-import { parseSyntax } from "../packages/core/src/syntax/parse.js";
+import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import { collectContextDefinitions, fromCst } from "../packages/core/src/transform/cst-to-ast.js";
 
 describe("CST to AST transform edge cases", () => {

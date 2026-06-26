@@ -6,6 +6,8 @@ import type {
   MacroDefinitionStatement,
   PgfkeysStatement,
   PathItem,
+  PicOperationItem,
+  Span,
   TikzLibraryStatement,
   TikzSetStatement,
   TikzStyleStatement,
@@ -30,6 +32,7 @@ import type {
   ForeachOriginFrame as ExpansionForeachOriginFrame,
   ForeachStatementAttribution
 } from "../foreach/types.js";
+import { parseStatementsFromBodyWithMapping } from "../foreach/snippet-parse.js";
 import {
   finalizeExpandedStatementElements,
   finalizeExpandedStatementHandles,
@@ -45,9 +48,11 @@ import {
   createSemanticContext,
   currentFrame,
   endStatementEffectTracking,
+  listContextSceneLayers,
   listContextRequiredLibraries,
   listContextSymbolDependencyEdges,
   listContextUnresolvedSymbols,
+  markBackgroundLayerUsed,
   markDependencyOpaque,
   popFrame,
   pushFrame,
@@ -63,19 +68,35 @@ import {
   type NodeDistanceSpec,
   type NodeQuotesMode
 } from "./context.js";
+import {
+  collectBackgroundOptionEffects,
+  extractOnBackgroundLayerOptionLayers,
+  generateBackgroundHookElements,
+  makeEveryOnBackgroundLayerOptionLayer
+} from "./backgrounds.js";
 import type { SemanticDependencyGraph } from "./dependencies.js";
 import { evaluateRawCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
+import type { PlacementSegment } from "./path/types.js";
+import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
 import { parseNodeDistance } from "./path/node-positioning.js";
 import { DEFAULT_TEXT_FONT_SIZE, defaultStyle, commandDefaultStyle, parseStyleValueAsOptionList, resolveContextDelta } from "./style/resolve.js";
+import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "./style/diagnostics.js";
 import { applyCustomStyleDefinition, cloneCustomStyleRegistry } from "./style/custom-styles.js";
+import {
+  applyPicDefinitionsFromOptionLists,
+  clonePicDefinitionRegistry,
+  resolvePicCode,
+  type ResolvedPicCode
+} from "./pics/registry.js";
 import { expandOptionListMacros } from "./style/macro-options.js";
 import { FONT_SIZE_COMMAND_FACTORS } from "./style/constants.js";
 import { resolveDefineColorModel } from "./style/colors.js";
-import { applyMatrix, identityMatrix } from "./transform.js";
-import { cloneResolvedStyle, cloneStyleChain, diffResolvedStyle, type StyleSourceRef } from "./style-chain.js";
+import { applyMatrix, identityMatrix, multiplyMatrix, rotationMatrix, translationMatrix } from "./transform.js";
+import { worldTransform, type WorldTransform } from "../coords/transforms.js";
+import { cloneResolvedStyle, cloneStyleChain, diffResolvedStyle, type StyleChainEntry, type StyleSourceRef, type StyleTraceLayerInput } from "./style-chain.js";
 import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
 import { parseBooleanishNormalized } from "../utils/booleanish.js";
 import { stripWrappingBraces } from "../utils/braces.js";
@@ -83,6 +104,7 @@ import { evaluatePgfMathExpression, formatPgfMathNumber } from "./pgfmath/evalua
 import { withPgfMathRuntime } from "./pgfmath/runtime.js";
 import { worldPoint, worldBounds } from "../coords/points.js";
 import type { WorldBounds, WorldPoint } from "../coords/points.js";
+import { resolveNodePositionFraction } from "./nodes/placement.js";
 import type {
   EditHandle,
   EvaluateOptions,
@@ -90,8 +112,11 @@ import type {
   NodeAnchorTarget,
   SceneElement,
   SceneFigure,
-  ScenePathCommand
+  ScenePathCommand,
+  SceneLayer,
+  PicOriginFrame
 } from "./types.js";
+import { BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER } from "./types.js";
 import type { SemanticSymbolDependencyEdge, SemanticUnresolvedSymbol } from "./symbol-resolver.js";
 
 export type EvaluateTikzResult = {
@@ -139,6 +164,23 @@ export type SemanticEvaluationRun = {
   baseDiagnosticsCount: number;
 };
 
+function pushStyleDiagnostics(
+  diagnostics: Diagnostic[],
+  styleDiagnostics: readonly StyleDiagnostic[],
+  messagePrefix: string,
+  fallbackSpan: Span
+): void {
+  for (const styleDiagnostic of styleDiagnostics) {
+    const code = styleDiagnosticCode(styleDiagnostic);
+    diagnostics.push({
+      severity: "warning",
+      code,
+      message: `${messagePrefix}: ${code}`,
+      span: styleDiagnosticSpan(styleDiagnostic, fallbackSpan)
+    });
+  }
+}
+
 export function evaluateTikzFigure(figure: TikzFigure, source: string, opts: EvaluateOptions = {}): EvaluateTikzResult {
   const run = createSemanticEvaluationRun(figure, source, opts);
   const elementsByStatement: SceneElement[][] = [];
@@ -164,10 +206,21 @@ export function createSemanticEvaluationRun(
     source,
     opts.sourceFingerprint
   );
+  const prePictureContextStatements = figure.body.filter((statement) => isPrePictureContextStatement(statement, figure));
+  const prePictureMacroAttribution = new WeakMap<Statement, MacroOriginFrame[]>();
+  for (const statement of prePictureContextStatements) {
+    withDependencySource(context, statement.id, () =>
+      withPgfMathRuntime(
+        { rng: context.mathRandom },
+        () => evaluateStatement(statement, context, diagnostics, featureUsage, prePictureMacroAttribution)
+      )
+    );
+  }
   const expanded = withPgfMathRuntime(
     { rng: context.mathRandom },
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
   );
+  const activeExpandedFigureBody = expanded.figureBody.filter((statement) => !isPrePictureContextStatement(statement, figure));
   for (const diagnostic of expanded.diagnostics) {
     diagnostics.push({
       severity: diagnostic.severity,
@@ -176,48 +229,49 @@ export function createSemanticEvaluationRun(
       span: diagnostic.span
     });
   }
-  const rootFramePushed = figure.options != null;
-  if (figure.options) {
+  const parent = currentFrame(context);
+  const rootCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
+  const figureSourceRef: StyleSourceRef = {
+    sourceId: `figure:${figure.span.from}:${figure.span.to}`,
+    sourceSpan: figure.options?.span ?? figure.span,
+    sourceKind: "figure-options",
+    label: "figure"
+  };
+  const rootOptionLayers = buildRootPictureOptionLayers(figure, parent, context, figureSourceRef);
+  const rootFramePushed = rootOptionLayers.length > 0;
+  if (rootFramePushed) {
     markFeature(featureUsage, "options_structured", "supported");
-    const parent = currentFrame(context);
-    const rootCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
-    const rootOptionLists = expandOptionListMacros(
-      [figure.options],
-      parent.macroBindings,
-      context.macroTraceCollector ?? undefined
+    const rootPicDefinitions = clonePicDefinitionRegistry(parent.picDefinitions);
+    applyPicDefinitionsFromOptionLists(
+      rootPicDefinitions,
+      rootOptionLayers.flatMap((layer) => layer.rawOptions),
+      figureSourceRef
     );
-    if (containsCmOption(rootOptionLists)) {
-      markFeature(featureUsage, "transform_cm", "supported");
-    }
-    const figureSourceRef: StyleSourceRef = {
-      sourceId: `figure:${figure.span.from}:${figure.span.to}`,
-      sourceSpan: figure.options.span,
-      sourceKind: "figure-options",
-      label: "figure"
-    };
     const rootDelta = resolveContextDelta(
       parent.style,
       parent.transform,
-      [
-        {
-          kind: "scope",
-          sourceRef: figureSourceRef,
-          rawOptions: rootOptionLists
-        }
-      ],
+      rootOptionLayers,
       rootCustomStyles,
       (raw) => evaluateRawCoordinate(raw, context).world,
       parent.styleChain,
       (raw) => resolveContextColorAliasValue(context, raw)
     );
+    if (containsCmOption(rootDelta.expandedOptionLists)) {
+      markFeature(featureUsage, "transform_cm", "supported");
+    }
     const rootMeta = resolveFrameMeta(parent, rootDelta.expandedOptionLists, figureSourceRef);
+    if (collectBackgroundOptionEffects(context, rootDelta.expandedOptionLists, figureSourceRef)) {
+      markFeature(featureUsage, "backgrounds_library", "supported");
+    }
     pushFrame(context, {
       style: rootDelta.style,
       styleChain: rootDelta.chain,
       transform: rootDelta.transform,
+      layer: parent.layer,
       clipChain: [...parent.clipChain],
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: rootCustomStyles,
+      picDefinitions: rootPicDefinitions,
       colorAliases: new Map(parent.colorAliases),
       macroBindings: new Map(parent.macroBindings),
       namePrefix: rootMeta.namePrefix,
@@ -235,6 +289,7 @@ export function createSemanticEvaluationRun(
       everyNodeStyles: rootMeta.everyNodeStyles,
       everyTextNodePartStyles: rootMeta.everyTextNodePartStyles,
       everyFitStyles: rootMeta.everyFitStyles,
+      everyPicStyles: rootMeta.everyPicStyles,
       everyRectangleNodeStyles: rootMeta.everyRectangleNodeStyles,
       everyCircleNodeStyles: rootMeta.everyCircleNodeStyles,
       everyDiamondNodeStyles: rootMeta.everyDiamondNodeStyles,
@@ -274,14 +329,7 @@ export function createSemanticEvaluationRun(
       treeDeferredEdgeFromParentPath: rootMeta.treeDeferredEdgeFromParentPath,
       treeDeferredEdgeFromParentMacro: rootMeta.treeDeferredEdgeFromParentMacro
     });
-    for (const code of rootDelta.diagnostics) {
-      diagnostics.push({
-        severity: "warning",
-        code,
-        message: `Figure option issue: ${code}`,
-        span: figure.options.span
-      });
-    }
+    pushStyleDiagnostics(diagnostics, rootDelta.diagnostics, "Figure option issue", figureSourceRef.sourceSpan ?? figure.span);
   }
 
   return {
@@ -290,7 +338,7 @@ export function createSemanticEvaluationRun(
     context,
     diagnostics,
     featureUsage,
-    expandedFigureBody: expanded.figureBody,
+    expandedFigureBody: activeExpandedFigureBody,
     sourceStatementSpanById: buildSourceStatementSpanById(figure.body),
     statementAttribution: expanded.statementAttribution,
     statementSourceMaps: expanded.statementSourceMaps,
@@ -359,6 +407,7 @@ export function evaluateSemanticStatementByIndex(
   }
   remapDiagnostics(run.diagnostics, diagnosticsStart, statementSourceMap, {
     statement,
+    elements,
     pathItemSourceMaps: run.pathItemSourceMaps
   });
   const diagnostics = run.diagnostics.slice(diagnosticsStart);
@@ -404,6 +453,18 @@ export function finalizeSemanticEvaluationRun(
   }
 
   const colorAliases = new Map(currentFrame(run.context).colorAliases);
+  const contentBounds = run.context.pictureBounds ?? computeBounds(elements) ?? null;
+  const generatedBackground = generateBackgroundHookElements(
+    run.context,
+    contentBounds,
+    run.context.sourceFingerprint
+  );
+  if (generatedBackground.elements.length > 0) {
+    elements.push(...generatedBackground.elements);
+  }
+  if (generatedBackground.diagnostics.length > 0) {
+    run.diagnostics.push(...generatedBackground.diagnostics);
+  }
 
   if (run.rootFramePushed) {
     popFrame(run.context);
@@ -413,6 +474,7 @@ export function finalizeSemanticEvaluationRun(
     const element = elements[index];
     elements[index] = {
       ...element,
+      layer: element.layer || MAIN_SCENE_LAYER,
       runtimeId: element.runtimeId ?? element.id,
       sourceRef: {
         ...element.sourceRef,
@@ -433,9 +495,11 @@ export function finalizeSemanticEvaluationRun(
   }
 
   markOpaqueDependencySources(elements, run.context);
+  const layers = listContextSceneLayers(run.context);
+  const orderedElements = orderSceneElementsByLayer(elements, layers);
   const inferredRequiredLibraries = inferRequiredTikzLibraries({
     featureUsage: run.featureUsage,
-    elements
+    elements: orderedElements
   });
   for (const libraryName of inferredRequiredLibraries) {
     requireContextLibrary(run.context, libraryName, null);
@@ -447,10 +511,17 @@ export function finalizeSemanticEvaluationRun(
       kind: "SceneFigure",
       span: run.figure.span,
       requiredTikzLibraries,
-      elements,
-      bounds: run.context.pictureBounds ?? computeBounds(elements),
+      layers,
+      elements: orderedElements,
+      bounds:
+        generatedBackground.elements.length > 0
+          ? computeBounds(orderedElements) ?? run.context.pictureBounds ?? undefined
+          : run.context.pictureBounds ?? computeBounds(orderedElements),
       hasStatefulGraphicsState:
-        run.featureUsage.path_clipping === "used-supported" || run.featureUsage.use_as_bounding_box === "used-supported"
+        run.featureUsage.path_clipping === "used-supported" ||
+        run.featureUsage.use_as_bounding_box === "used-supported" ||
+        run.featureUsage.backgrounds_library === "used-supported" ||
+        run.context.backgroundState.used
     },
     diagnostics: run.diagnostics,
     featureUsage: run.featureUsage,
@@ -478,6 +549,47 @@ function buildSourceStatementFirstIndexBySourceId(run: SemanticEvaluationRun): R
   return Object.fromEntries([...bySourceId.entries()].sort((a, b) => a[0].localeCompare(b[0])));
 }
 
+function buildRootPictureOptionLayers(
+  figure: TikzFigure,
+  parent: ReturnType<typeof currentFrame>,
+  context: SemanticContext,
+  figureSourceRef: StyleSourceRef
+): StyleTraceLayerInput[] {
+  const layers: StyleTraceLayerInput[] = [];
+  if (parent.customStyles.has("every picture")) {
+    const everyPictureOptions = parseStyleValueAsOptionList("every picture");
+    if (everyPictureOptions) {
+      layers.push({
+        kind: "scope",
+        sourceRef: {
+          sourceId: figureSourceRef.sourceId,
+          sourceSpan: figure.span,
+          sourceKind: "figure-options",
+          label: "every picture"
+        },
+        rawOptions: [everyPictureOptions]
+      });
+    }
+  }
+
+  if (figure.options) {
+    layers.push({
+      kind: "scope",
+      sourceRef: figureSourceRef,
+      rawOptions: expandOptionListMacros(
+        [figure.options],
+        parent.macroBindings,
+        context.macroTraceCollector ?? undefined
+      )
+    });
+  }
+  return layers;
+}
+
+function isPrePictureContextStatement(statement: Statement, figure: TikzFigure): boolean {
+  return statement.span.to <= figure.span.from;
+}
+
 function buildSourceStatementSpanById(
   statements: readonly Statement[]
 ): Map<string, { from: number; to: number }> {
@@ -502,12 +614,38 @@ function finalizeStatementElements(
 ): SceneElement[] {
   return elements.map((element) => ({
     ...element,
+    layer: element.layer || MAIN_SCENE_LAYER,
     runtimeId: element.runtimeId ?? element.id,
     sourceRef: {
       ...element.sourceRef,
       sourceFingerprint
     }
   }));
+}
+
+function assignSceneElementLayer(elements: SceneElement[], layer: string): SceneElement[] {
+  return elements.map((element) => ({
+    ...element,
+    layer
+  }));
+}
+
+function orderSceneElementsByLayer(elements: SceneElement[], layers: readonly SceneLayer[]): SceneElement[] {
+  const layerOrder = new Map(layers.map((layer) => [layer.name, layer.order]));
+  const fallbackOrder = layerOrder.get(MAIN_SCENE_LAYER) ?? Number.MAX_SAFE_INTEGER;
+  return elements
+    .map((element, index) => ({
+      element,
+      index,
+      order: layerOrder.get(element.layer || MAIN_SCENE_LAYER) ?? fallbackOrder
+    }))
+    .sort((left, right) => {
+      if (left.order !== right.order) {
+        return left.order - right.order;
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.element);
 }
 
 function finalizeStatementEditHandles(
@@ -631,6 +769,7 @@ export function collectNodeAnchorTargets(context: SemanticContext): NodeAnchorTa
       seen.add(key);
       targets.push({
         nodeName,
+        nodeSourceId: geometry.sourceId,
         anchor: normalizedAnchor,
         world: worldPoint(pt(world.x), pt(world.y)),
         tier: BASIC_ANCHORS.has(normalizedAnchor) ? "basic" : "special"
@@ -728,6 +867,8 @@ function evaluateStatement(
       }
     }
     const scopedCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
+    const scopedPicDefinitions = clonePicDefinitionRegistry(parent.picDefinitions);
+    applyPicDefinitionsFromOptionLists(scopedPicDefinitions, expandedOptionLists, commandSourceRef);
     const resolved = resolveContextDelta(
       baseStyle,
       parent.transform,
@@ -748,7 +889,9 @@ function evaluateStatement(
     if (statement.command === "shade" || statement.command === "shadedraw" || resolved.style.shadeEnabled) {
       markFeature(featureUsage, "path_shading", "supported");
     }
-    const hasUnsupportedPattern = resolved.diagnostics.some((code) => code.startsWith("unsupported-pattern:"));
+    const hasUnsupportedPattern = resolved.diagnostics.some((diagnostic) =>
+      styleDiagnosticCode(diagnostic).startsWith("unsupported-pattern:")
+    );
     if (statement.command === "pattern" || resolved.style.fillPattern || hasUnsupportedPattern) {
       markFeature(featureUsage, "path_patterns", hasUnsupportedPattern ? "unsupported" : "supported");
     }
@@ -756,14 +899,7 @@ function evaluateStatement(
       markFeature(featureUsage, "path_shadows", "supported");
     }
 
-    for (const code of resolved.diagnostics) {
-      diagnostics.push({
-        severity: "warning",
-        code,
-        message: `Path option issue: ${code}`,
-        span: statement.span
-      });
-    }
+    pushStyleDiagnostics(diagnostics, resolved.diagnostics, "Path option issue", statement.span);
     if (resolved.style.markerStart || resolved.style.markerEnd) {
       markFeature(featureUsage, "arrow_tips", "supported");
     }
@@ -784,9 +920,11 @@ function evaluateStatement(
       style: resolved.style,
       styleChain: resolved.chain,
       transform: resolved.transform,
+      layer: parent.layer,
       clipChain: [...parent.clipChain],
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: scopedCustomStyles,
+      picDefinitions: scopedPicDefinitions,
       colorAliases: new Map(parent.colorAliases),
       macroBindings: new Map(parent.macroBindings),
       namePrefix: frameMeta.namePrefix,
@@ -804,6 +942,7 @@ function evaluateStatement(
       everyNodeStyles: frameMeta.everyNodeStyles,
       everyTextNodePartStyles: frameMeta.everyTextNodePartStyles,
       everyFitStyles: frameMeta.everyFitStyles,
+      everyPicStyles: frameMeta.everyPicStyles,
       everyRectangleNodeStyles: frameMeta.everyRectangleNodeStyles,
       everyCircleNodeStyles: frameMeta.everyCircleNodeStyles,
       everyDiamondNodeStyles: frameMeta.everyDiamondNodeStyles,
@@ -859,7 +998,8 @@ function evaluateStatement(
         }
       }
 
-      const elements = evaluatePathStatement(
+      const elements = assignSceneElementLayer(
+        evaluatePathStatement(
         statement,
         context,
         resolved.style,
@@ -871,7 +1011,13 @@ function evaluateStatement(
             message,
             span: { from, to }
           });
+        },
+        {
+          evaluatePicOperation: (item, placement, segment) =>
+            evaluatePicOperationInStatement(item, placement, segment, context, diagnostics, featureUsage, statementMacroAttribution)
         }
+        ),
+        currentFrame(context).layer
       );
       parent.clipChain = currentFrame(context).clipChain.map((clipPath) => ({
         ...clipPath,
@@ -946,6 +1092,8 @@ function evaluateStatement(
       }
     }
     const scopedCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
+    const scopedPicDefinitions = clonePicDefinitionRegistry(parent.picDefinitions);
+    applyPicDefinitionsFromOptionLists(scopedPicDefinitions, expandedOptionLists, scopeSourceRef);
     const resolved = resolveContextDelta(
       parent.style,
       parent.transform,
@@ -961,14 +1109,41 @@ function evaluateStatement(
       parent.styleChain,
       (raw) => resolveContextColorAliasValue(context, raw)
     );
-    const frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, scopeSourceRef);
+    let scopeResolved = resolved;
+    let frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, scopeSourceRef);
+    let scopeLayer = parent.layer;
+    const backgroundLayerOptionLayers = extractOnBackgroundLayerOptionLayers(resolved.expandedOptionLists, scopeSourceRef);
+    const backgroundDiagnostics: StyleDiagnostic[] = [];
+    if (backgroundLayerOptionLayers.length > 0) {
+      markFeature(featureUsage, "backgrounds_library", "supported");
+      markBackgroundLayerUsed(context);
+      scopeLayer = BACKGROUND_SCENE_LAYER;
+      const everyLayer = makeEveryOnBackgroundLayerOptionLayer(scopeSourceRef);
+      scopeResolved = resolveContextDelta(
+        resolved.style,
+        resolved.transform,
+        [everyLayer, ...backgroundLayerOptionLayers].map((layer) => ({
+          kind: "scope" as const,
+          sourceRef: layer.sourceRef,
+          rawOptions: layer.rawOptions
+        })),
+        scopedCustomStyles,
+        (raw) => evaluateRawCoordinate(raw, context).world,
+        resolved.chain,
+        (raw) => resolveContextColorAliasValue(context, raw)
+      );
+      frameMeta = resolveFrameMeta(frameMeta, scopeResolved.expandedOptionLists, scopeSourceRef);
+      backgroundDiagnostics.push(...scopeResolved.diagnostics);
+    }
     pushFrame(context, {
-      style: resolved.style,
-      styleChain: resolved.chain,
-      transform: resolved.transform,
+      style: scopeResolved.style,
+      styleChain: scopeResolved.chain,
+      transform: scopeResolved.transform,
+      layer: scopeLayer,
       clipChain: [...parent.clipChain],
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: scopedCustomStyles,
+      picDefinitions: scopedPicDefinitions,
       colorAliases: new Map(parent.colorAliases),
       macroBindings: new Map(parent.macroBindings),
       namePrefix: frameMeta.namePrefix,
@@ -986,6 +1161,7 @@ function evaluateStatement(
       everyNodeStyles: frameMeta.everyNodeStyles,
       everyTextNodePartStyles: frameMeta.everyTextNodePartStyles,
       everyFitStyles: frameMeta.everyFitStyles,
+      everyPicStyles: frameMeta.everyPicStyles,
       everyRectangleNodeStyles: frameMeta.everyRectangleNodeStyles,
       everyCircleNodeStyles: frameMeta.everyCircleNodeStyles,
       everyDiamondNodeStyles: frameMeta.everyDiamondNodeStyles,
@@ -1025,14 +1201,8 @@ function evaluateStatement(
       treeDeferredEdgeFromParentPath: frameMeta.treeDeferredEdgeFromParentPath,
       treeDeferredEdgeFromParentMacro: frameMeta.treeDeferredEdgeFromParentMacro
     });
-    for (const code of resolved.diagnostics) {
-      diagnostics.push({
-        severity: "warning",
-        code,
-        message: `Scope option issue: ${code}`,
-        span: statement.span
-      });
-    }
+    pushStyleDiagnostics(diagnostics, resolved.diagnostics, "Scope option issue", statement.span);
+    pushStyleDiagnostics(diagnostics, backgroundDiagnostics, "Scope background option issue", statement.span);
     const nested = statement.body.flatMap((entry) =>
       evaluateStatement(entry, context, diagnostics, featureUsage, statementMacroAttribution)
     );
@@ -1064,7 +1234,7 @@ function evaluateStatement(
   }
 
   if (statement.kind === "TikzSet") {
-    applyTikzSetStatement(statement, context, diagnostics);
+    applyTikzSetStatement(statement, context, diagnostics, featureUsage);
     markFeature(featureUsage, "unknown_statement", "supported");
     return [];
   }
@@ -1076,7 +1246,7 @@ function evaluateStatement(
   }
 
   if (statement.kind === "Pgfkeys") {
-    applyPgfkeysStatement(statement, context, diagnostics);
+    applyPgfkeysStatement(statement, context, diagnostics, featureUsage);
     markFeature(featureUsage, "unknown_statement", "supported");
     return [];
   }
@@ -1115,6 +1285,305 @@ function evaluateStatement(
     span: statement.span
   });
   return [];
+}
+
+function evaluatePicOperationInStatement(
+  item: PicOperationItem,
+  placement: WorldPoint,
+  segment: PlacementSegment | null,
+  context: ReturnType<typeof createSemanticContext>,
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage,
+  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>
+): { behindElements: SceneElement[]; frontElements: SceneElement[] } {
+  const parent = currentFrame(context);
+  const resolvedCode = resolvePicCode(item, parent.picDefinitions);
+  if (resolvedCode.kind === "not-found") {
+    markFeature(featureUsage, "pic_operation", "unsupported");
+    diagnostics.push({
+      severity: "warning",
+      code: "unsupported-pic-operation",
+      message: resolvedCode.reason,
+      span: item.typeSpan ?? item.span
+    });
+    return { behindElements: [], frontElements: [] };
+  }
+
+  if (resolvedCode.unresolvedParameters) {
+    markFeature(featureUsage, "pic_operation", "unsupported");
+    diagnostics.push({
+      severity: "warning",
+      code: "unsupported-parameterized-pic",
+      message: "Parameterized pic definitions are not supported yet.",
+      span: resolvedCode.codeSpan ?? item.typeSpan ?? item.span
+    });
+    return { behindElements: [], frontElements: [] };
+  }
+
+  const recursionKey = makePicRecursionKey(item, resolvedCode);
+  if (context.picEvaluationStack.includes(recursionKey) || context.picEvaluationStack.length >= 32) {
+    markFeature(featureUsage, "pic_operation", "unsupported");
+    diagnostics.push({
+      severity: "warning",
+      code: "recursive-pic-operation",
+      message: `Pic '${item.typeRaw.trim() || "unnamed"}' appears to expand recursively.`,
+      span: item.typeSpan ?? item.span
+    });
+    return { behindElements: [], frontElements: [] };
+  }
+
+  const picSourceRef: StyleSourceRef = {
+    sourceId: item.id,
+    sourceSpan: item.optionsSpan ?? item.span,
+    sourceKind: "pic-operation",
+    label: "pic"
+  };
+  const expandedItemOptions = item.options
+    ? expandOptionListMacros([item.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
+    : [];
+  const picStyleLayers: StyleTraceLayerInput[] = [
+    ...parent.everyPicStyles.map((layer): StyleTraceLayerInput => ({
+      kind: "scope",
+      sourceRef: layer.sourceRef,
+      rawOptions: expandOptionListMacros([layer.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
+    })),
+    ...(expandedItemOptions.length > 0
+      ? [
+          {
+            kind: "command" as const,
+            sourceRef: picSourceRef,
+            rawOptions: expandedItemOptions
+          }
+        ]
+      : [])
+  ];
+
+  const noParentShapeTransform = resolvePicPlacementTransform(
+    translationMatrix(placement.x, placement.y),
+    item,
+    segment,
+    parent.styleChain
+  );
+  const picCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
+  const picDefinitions = clonePicDefinitionRegistry(parent.picDefinitions);
+  applyPicDefinitionsFromOptionLists(
+    picDefinitions,
+    picStyleLayers.flatMap((layer) => layer.rawOptions),
+    picSourceRef
+  );
+  let resolvedPicStyle = resolveContextDelta(
+    parent.style,
+    noParentShapeTransform,
+    picStyleLayers,
+    picCustomStyles,
+    (raw) => evaluateRawCoordinate(raw, context).world,
+    parent.styleChain,
+    (raw) => resolveContextColorAliasValue(context, raw)
+  );
+  let frameMeta = resolveFrameMeta(parent, resolvedPicStyle.expandedOptionLists, picSourceRef);
+
+  if (frameMeta.transformShape) {
+    resolvedPicStyle = resolveContextDelta(
+      parent.style,
+      resolvePicPlacementTransform(
+        worldTransform(parent.transform.a, parent.transform.b, parent.transform.c, parent.transform.d, placement.x, placement.y),
+        item,
+        segment,
+        parent.styleChain
+      ),
+      picStyleLayers,
+      picCustomStyles,
+      (raw) => evaluateRawCoordinate(raw, context).world,
+      parent.styleChain,
+      (raw) => resolveContextColorAliasValue(context, raw)
+    );
+    frameMeta = resolveFrameMeta(parent, resolvedPicStyle.expandedOptionLists, picSourceRef);
+  }
+  if (resolvedCode.codeLayer === "background" && resolvedPicStyle.style.fill == null) {
+    const inheritedFill = recoverInheritedFillColor(parent.styleChain);
+    if (inheritedFill != null) {
+      resolvedPicStyle = {
+        ...resolvedPicStyle,
+        style: {
+          ...resolvedPicStyle.style,
+          fill: inheritedFill
+        }
+      };
+    }
+  }
+
+  pushStyleDiagnostics(diagnostics, resolvedPicStyle.diagnostics, "Pic option issue", item.optionsSpan ?? item.span);
+  if (containsCmOption(resolvedPicStyle.expandedOptionLists)) {
+    markFeature(featureUsage, "transform_cm", "supported");
+  }
+
+  const parsed = parseStatementsFromBodyWithMapping(
+    resolvedCode.codeRaw,
+    resolvedCode.codeSpan ?? { from: 0, to: resolvedCode.codeRaw.length }
+  );
+  for (const diagnostic of parsed.parseResult.diagnostics) {
+    if (diagnostic.severity !== "error") {
+      continue;
+    }
+    diagnostics.push({
+      severity: "warning",
+      code: diagnostic.code ?? "pic-code-parse-error",
+      message: `Pic code parse issue: ${diagnostic.message}`,
+      span: parsed.sourceMapper.mapSpan(diagnostic.span) ?? resolvedCode.codeSpan ?? item.span
+    });
+  }
+
+  const picFrame = {
+    ...parent,
+    ...frameMeta,
+    style: resolvedPicStyle.style,
+    styleChain: resolvedPicStyle.chain,
+    transform: resolvedPicStyle.transform,
+    clipChain: [...parent.clipChain],
+    customStyles: picCustomStyles,
+    picDefinitions,
+    colorAliases: new Map(parent.colorAliases),
+    macroBindings: new Map(parent.macroBindings),
+    namePrefix: item.name ? `${frameMeta.namePrefix}${item.name}` : frameMeta.namePrefix,
+    nameSuffix: frameMeta.nameSuffix,
+    treeLevelStyleLayers: frameMeta.treeLevelStyleLayers.map((entry) => ({
+      level: entry.level,
+      layers: [...entry.layers]
+    }))
+  };
+
+  const handleStart = context.editHandles.length;
+  const previousCurrentPoint = context.currentPoint;
+  const previousPathStartPoint = context.pathStartPoint;
+  const elements: SceneElement[] = [];
+  const picOrigin = makePicOriginFrame(item, resolvedCode);
+  context.picEvaluationStack.push(recursionKey);
+  pushFrame(context, picFrame);
+  try {
+    context.currentPoint = placement;
+    context.pathStartPoint = placement;
+    for (const statement of parsed.parseResult.figure.body) {
+      elements.push(
+        ...withDependencySource(context, item.id, () =>
+          withPgfMathRuntime(
+            { rng: context.mathRandom },
+            () => evaluateStatement(statement, context, diagnostics, featureUsage, statementMacroAttribution)
+          )
+        )
+      );
+    }
+  } finally {
+    popFrame(context);
+    context.picEvaluationStack.pop();
+    context.currentPoint = previousCurrentPoint;
+    context.pathStartPoint = previousPathStartPoint;
+    context.editHandles.splice(handleStart);
+  }
+
+  const stamped = elements.map((element, index) =>
+    stampPicElement(element, index, item, picOrigin, parsed.sourceMapper, resolvedCode.codeSpan)
+  );
+  if (frameMeta.nodeLayerMode === "behind" || resolvedCode.codeLayer === "background") {
+    return { behindElements: stamped, frontElements: [] };
+  }
+  void segment;
+  return { behindElements: [], frontElements: stamped };
+}
+
+function resolvePicPlacementTransform(
+  base: WorldTransform,
+  item: PicOperationItem,
+  segment: PlacementSegment | null,
+  styleChain: readonly StyleChainEntry[]
+): WorldTransform {
+  if (!segment || !resolvePathAttachedNodeSloped(item.options, styleChain)) {
+    return base;
+  }
+
+  const fraction = resolveNodePositionFraction(item.options) ?? 0.5;
+  const tangent = tangentAtPlacementSegment(segment, fraction);
+  if (!Number.isFinite(tangent.x) || !Number.isFinite(tangent.y) || Math.hypot(tangent.x, tangent.y) <= 1e-9) {
+    return base;
+  }
+  return multiplyMatrix(base, rotationMatrix((Math.atan2(tangent.y, tangent.x) * 180) / Math.PI));
+}
+
+function recoverInheritedFillColor(styleChain: readonly StyleChainEntry[]): string | null {
+  for (let index = styleChain.length - 1; index >= 0; index -= 1) {
+    const entry = styleChain[index];
+    if (entry?.after.fill != null) {
+      return entry.after.fill;
+    }
+    if (entry?.before.fill != null) {
+      return entry.before.fill;
+    }
+  }
+  return null;
+}
+
+function makePicRecursionKey(item: PicOperationItem, resolvedCode: ResolvedPicCode & { kind: "found" }): string {
+  return [
+    item.typeRaw.trim(),
+    resolvedCode.sourceRef.sourceId,
+    resolvedCode.codeSpan?.from ?? "?",
+    resolvedCode.codeSpan?.to ?? "?"
+  ].join(":");
+}
+
+function makePicOriginFrame(item: PicOperationItem, resolvedCode: ResolvedPicCode & { kind: "found" }): PicOriginFrame {
+  return {
+    invocationId: item.id,
+    invocationSpan: { ...item.span },
+    picType: item.typeRaw.trim(),
+    codeSpan: resolvedCode.codeSpan ? { ...resolvedCode.codeSpan } : undefined,
+    codeSource: resolvedCode.source,
+    parameterized: resolvedCode.parameterized
+  };
+}
+
+function stampPicElement(
+  element: SceneElement,
+  index: number,
+  item: PicOperationItem,
+  picOrigin: PicOriginFrame,
+  sourceMapper: { mapSpan: (span: { from: number; to: number }) => { from: number; to: number } | null },
+  codeSpan: { from: number; to: number } | undefined
+): SceneElement {
+  const localTargetId = element.origin?.picTemplateLocalTargetId ?? element.identityRef?.sourceId ?? element.sourceRef.sourceId;
+  const identitySpan = element.identityRef?.sourceSpan ?? element.sourceRef.sourceSpan;
+  const mappedIdentitySpan = sourceMapper.mapSpan(identitySpan) ?? codeSpan ?? item.span;
+  const sourceRef = {
+    ...element.sourceRef,
+    sourceId: item.id,
+    sourceSpan: item.span
+  };
+  const origin = {
+    foreachStack: element.origin?.foreachStack ?? [],
+    foreachTemplateLocalTargetId: element.origin?.foreachTemplateLocalTargetId,
+    picStack: [...(element.origin?.picStack ?? []), picOrigin],
+    picTemplateLocalTargetId: localTargetId,
+    macroStack: element.origin?.macroStack
+  };
+  const base = {
+    ...element,
+    id: `scene-pic:${item.id}:${index}:${element.id}`,
+    runtimeId: `scene-pic:${item.id}:${index}:${element.runtimeId ?? element.id}`,
+    sourceRef,
+    identityRef: {
+      sourceId: localTargetId,
+      sourceSpan: mappedIdentitySpan,
+      sourceKind: "pic-expanded-element"
+    },
+    origin
+  };
+
+  if (base.kind === "Text" && base.textSourceSpan) {
+    return {
+      ...base,
+      textSourceSpan: sourceMapper.mapSpan(base.textSourceSpan) ?? base.textSourceSpan
+    };
+  }
+  return base;
 }
 
 function describeUnsupportedStatement(raw: string): string {
@@ -1252,18 +1721,20 @@ function applyStandaloneCommandStatement(
 function applyTikzSetStatement(
   statement: TikzSetStatement,
   context: ReturnType<typeof createSemanticContext>,
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage
 ): void {
-  applyOptionListsToCurrentFrame([statement.optionList], context, diagnostics, statement.span, statement.commandRaw, statement.id);
+  applyOptionListsToCurrentFrame([statement.optionList], context, diagnostics, statement.span, statement.commandRaw, statement.id, featureUsage);
 }
 
 function applyPgfkeysStatement(
   statement: PgfkeysStatement,
   context: ReturnType<typeof createSemanticContext>,
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage
 ): void {
   const normalized = normalizePgfkeysOptionList(statement.optionList);
-  applyOptionListsToCurrentFrame([normalized], context, diagnostics, statement.span, statement.commandRaw, statement.id);
+  applyOptionListsToCurrentFrame([normalized], context, diagnostics, statement.span, statement.commandRaw, statement.id, featureUsage);
 }
 
 function applyTikzStyleStatement(
@@ -1468,7 +1939,8 @@ function applyOptionListsToCurrentFrame(
   diagnostics: Diagnostic[],
   span: { from: number; to: number },
   sourceLabel: string,
-  sourceId = `standalone:${span.from}:${span.to}`
+  sourceId = `standalone:${span.from}:${span.to}`,
+  featureUsage?: FeatureUsage
 ): void {
   const frame = currentFrame(context);
   const expandedOptionLists = expandOptionListMacros(optionLists, frame.macroBindings, context.macroTraceCollector ?? undefined);
@@ -1496,6 +1968,10 @@ function applyOptionListsToCurrentFrame(
   frame.style = resolved.style;
   frame.styleChain = resolved.chain;
   frame.transform = resolved.transform;
+  applyPicDefinitionsFromOptionLists(frame.picDefinitions, expandedOptionLists, sourceRef);
+  if (featureUsage && collectBackgroundOptionEffects(context, resolved.expandedOptionLists, sourceRef)) {
+    markFeature(featureUsage, "backgrounds_library", "supported");
+  }
 
   const frameMeta = resolveFrameMeta(frame, resolved.expandedOptionLists, sourceRef);
   frame.namePrefix = frameMeta.namePrefix;
@@ -1513,6 +1989,7 @@ function applyOptionListsToCurrentFrame(
   frame.everyNodeStyles = frameMeta.everyNodeStyles;
   frame.everyTextNodePartStyles = frameMeta.everyTextNodePartStyles;
   frame.everyFitStyles = frameMeta.everyFitStyles;
+  frame.everyPicStyles = frameMeta.everyPicStyles;
   frame.everyRectangleNodeStyles = frameMeta.everyRectangleNodeStyles;
   frame.everyCircleNodeStyles = frameMeta.everyCircleNodeStyles;
   frame.everyDiamondNodeStyles = frameMeta.everyDiamondNodeStyles;
@@ -1552,14 +2029,7 @@ function applyOptionListsToCurrentFrame(
   frame.treeDeferredEdgeFromParentPath = frameMeta.treeDeferredEdgeFromParentPath;
   frame.treeDeferredEdgeFromParentMacro = frameMeta.treeDeferredEdgeFromParentMacro;
 
-  for (const code of resolved.diagnostics) {
-    diagnostics.push({
-      severity: "warning",
-      code,
-      message: `${sourceLabel} option issue: ${code}`,
-      span
-    });
-  }
+  pushStyleDiagnostics(diagnostics, resolved.diagnostics, `${sourceLabel} option issue`, span);
 }
 
 function applyMacroDefinitionStatement(
@@ -2385,6 +2855,7 @@ type FrameStyleBuckets = {
   everyNodeStyles: ProvenanceOptionList[];
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
+  everyPicStyles: ProvenanceOptionList[];
   everyRectangleNodeStyles: ProvenanceOptionList[];
   everyCircleNodeStyles: ProvenanceOptionList[];
   everyDiamondNodeStyles: ProvenanceOptionList[];
@@ -2409,6 +2880,7 @@ const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, keyof FrameStyleBuckets> =
   "every node/.style": "everyNodeStyles",
   "every text node part/.style": "everyTextNodePartStyles",
   "every fit/.style": "everyFitStyles",
+  "every pic/.style": "everyPicStyles",
   "every rectangle node/.style": "everyRectangleNodeStyles",
   "every circle node/.style": "everyCircleNodeStyles",
   "every diamond node/.style": "everyDiamondNodeStyles",
@@ -2433,6 +2905,7 @@ const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof FrameStyleBuckets> 
   "every node/.append style": "everyNodeStyles",
   "every text node part/.append style": "everyTextNodePartStyles",
   "every fit/.append style": "everyFitStyles",
+  "every pic/.append style": "everyPicStyles",
   "every rectangle node/.append style": "everyRectangleNodeStyles",
   "every circle node/.append style": "everyCircleNodeStyles",
   "every diamond node/.append style": "everyDiamondNodeStyles",
@@ -2457,6 +2930,7 @@ const LEGACY_TIKZSTYLE_BUCKET_BY_NAME: Record<string, keyof FrameStyleBuckets> =
   "every node": "everyNodeStyles",
   "every text node part": "everyTextNodePartStyles",
   "every fit": "everyFitStyles",
+  "every pic": "everyPicStyles",
   "every rectangle node": "everyRectangleNodeStyles",
   "every circle node": "everyCircleNodeStyles",
   "every diamond node": "everyDiamondNodeStyles",
@@ -2597,6 +3071,7 @@ export function resolveFrameMeta(
     everyNodeStyles: [...base.everyNodeStyles],
     everyTextNodePartStyles: [...base.everyTextNodePartStyles],
     everyFitStyles: [...base.everyFitStyles],
+    everyPicStyles: [...base.everyPicStyles],
     everyRectangleNodeStyles: [...base.everyRectangleNodeStyles],
     everyCircleNodeStyles: [...base.everyCircleNodeStyles],
     everyDiamondNodeStyles: [...base.everyDiamondNodeStyles],

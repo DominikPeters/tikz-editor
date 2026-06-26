@@ -46,7 +46,8 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
       const namePart = formatNodeName(template.name);
       if (template.shape) {
         const hasExplicitShapeSize = template.minimumWidthPt != null || template.minimumHeightPt != null;
-        const optionParts = ["draw", `shape=${template.shape}`];
+        const optionParts = buildNodeOptions(template.strokeColor, template.fillColor, true);
+        optionParts.push(`shape=${template.shape}`);
         if (hasExplicitShapeSize) {
           if (template.minimumWidthPt != null) {
             optionParts.push(`minimum width=${formatNumber(template.minimumWidthPt * CM_PER_PT)}cm`);
@@ -60,7 +61,9 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
         }
         return `\\node[${optionParts.join(", ")}]${namePart} at ${atCoord} {${text}};`;
       }
-      return `\\node${namePart} at ${atCoord} {${text}};`;
+      const nodeOptions = buildNodeOptions(template.strokeColor, template.fillColor, false);
+      const optionText = nodeOptions.length > 0 ? `[${nodeOptions.join(", ")}]` : "";
+      return `\\node${optionText}${namePart} at ${atCoord} {${text}};`;
     }
 
     case "matrix": {
@@ -166,7 +169,7 @@ export function insertElementIntoSource(source: string, snippet: string): string
 export function generateComplexPathSource(
   start: WorldPoint,
   segments: readonly ComplexPathSegment[],
-  options: { closed?: boolean; startAnchor?: AnchorReference } = {}
+  options: { closed?: boolean; startAnchor?: AnchorReference; strokeColor?: string } = {}
 ): string | null {
   if (segments.length === 0) {
     return null;
@@ -188,7 +191,8 @@ export function generateComplexPathSource(
     parts.push("-- cycle");
   }
 
-  return `\\draw ${parts.join(" ")};`;
+  const drawOptions = buildDrawOptions(options.strokeColor, undefined, false);
+  return `\\draw${drawOptions} ${parts.join(" ")};`;
 }
 
 /**
@@ -399,7 +403,7 @@ function resolveBezierControls(
   };
 }
 
-function buildDrawOptions(
+export function buildDrawOptions(
   strokeColor: string | undefined,
   fillColor: string | undefined,
   hasArrow: boolean
@@ -419,4 +423,24 @@ function buildDrawOptions(
   }
 
   return parts.length > 0 ? `[${parts.join(", ")}]` : "";
+}
+
+function buildNodeOptions(
+  strokeColor: string | undefined,
+  fillColor: string | undefined,
+  defaultDraw: boolean
+): string[] {
+  const parts: string[] = [];
+
+  if (strokeColor) {
+    parts.push(strokeColor === "black" ? "draw" : `draw=${strokeColor}`);
+  } else if (defaultDraw) {
+    parts.push("draw");
+  }
+
+  if (fillColor && fillColor !== "none") {
+    parts.push(`fill=${fillColor}`);
+  }
+
+  return parts;
 }

@@ -1,12 +1,13 @@
-import { parseTikz } from "../../packages/core/src/parser/index.js";
+import { parseTikz, type ParseTikzOptions } from "../../packages/core/src/parser/index.js";
 import { evaluateTikzFigure, type EvaluateTikzResult } from "../../packages/core/src/semantic/evaluate.js";
 import type { SceneElement } from "../../packages/core/src/semantic/types.js";
 
 export function evaluateSemantic(
   source: string,
-  options?: Parameters<typeof evaluateTikzFigure>[2]
+  options?: Parameters<typeof evaluateTikzFigure>[2],
+  parseOptions?: ParseTikzOptions
 ): EvaluateTikzResult {
-  const parsed = parseTikz(source);
+  const parsed = parseTikz(source, parseOptions);
   return evaluateTikzFigure(parsed.figure, source, options);
 }
 

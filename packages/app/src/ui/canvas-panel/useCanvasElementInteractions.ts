@@ -60,6 +60,7 @@ export type UseCanvasElementInteractionsArgs = {
   applyActionWithFeedback: ApplyActionWithFeedbackFn;
   activeFigureId: string | null;
   parseOptions: CanvasEditParseOptions;
+  onNodePositionTargetPick?: (targetId: string) => boolean;
 };
 
 function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGElement> | ReactMouseEvent<SVGElement>, "clientX" | "clientY">): ClientPoint {
@@ -98,7 +99,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     focusedScopeId,
     applyActionWithFeedback,
     activeFigureId,
-    parseOptions
+    parseOptions,
+    onNodePositionTargetPick
   } = args;
 
   const pendingScopeDrillRef = useRef<{
@@ -420,6 +422,13 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         return;
       }
 
+      if (onNodePositionTargetPick?.(resolvedTargetId)) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressNextBackgroundClickRef.current = true;
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
       suppressNextBackgroundClickRef.current = true;
@@ -549,6 +558,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       focusedScopeId,
       interactionSvgRef,
       onBucketFillRegion,
+      onNodePositionTargetPick,
       expandedDensePathSourceId,
       resolveEditableTextTarget,
       selectedElementIds,

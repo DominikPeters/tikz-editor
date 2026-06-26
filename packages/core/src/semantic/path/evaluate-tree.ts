@@ -1,5 +1,5 @@
 import type { WorldPoint } from "../../coords/points.js";
-import type { EdgeOperationItem, PathStatement } from "../../ast/types.js";
+import type { EdgeOperationItem, PathStatement, Span } from "../../ast/types.js";
 import {
   readNamedCoordinate,
   resolveContextColorAliasValue,
@@ -25,9 +25,22 @@ import {
 } from "./tree.js";
 import { applyNameScope } from "../nodes/evaluate.js";
 import { cloneCustomStyleRegistry } from "../style/custom-styles.js";
+import { applyPicDefinitionsFromOptionLists, clonePicDefinitionRegistry } from "../pics/registry.js";
 import { resolveContextDelta, type parseStyleValueAsOptionList } from "../style/resolve.js";
+import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "../style/diagnostics.js";
 import { resolveFrameMeta } from "../evaluate.js";
 import type { DiagnosticPushFn, FeatureMarkFn } from "./types.js";
+
+function pushStyleDiagnostic(
+  pushDiagnostic: DiagnosticPushFn,
+  diagnostic: StyleDiagnostic,
+  messagePrefix: string,
+  fallbackSpan: Span
+): void {
+  const code = styleDiagnosticCode(diagnostic);
+  const span = styleDiagnosticSpan(diagnostic, fallbackSpan);
+  pushDiagnostic(code, `${messagePrefix}: ${code}`, span.from, span.to);
+}
 
 function extractTreeRootSourceId(statementId: string): string {
   const idx = statementId.indexOf(":tree-child:");
@@ -181,6 +194,12 @@ export function handleChildOperationCluster(params: {
         rawOptions: [child.options]
       });
     }
+    const childPicDefinitions = clonePicDefinitionRegistry(parentFrame.picDefinitions);
+    applyPicDefinitionsFromOptionLists(
+      childPicDefinitions,
+      styleLayers.flatMap((layer) => layer.rawOptions),
+      childSourceRef
+    );
 
     const resolvedChildStyle = resolveContextDelta(
       parentFrame.style,
@@ -191,8 +210,8 @@ export function handleChildOperationCluster(params: {
       parentFrame.styleChain,
       (raw) => resolveContextColorAliasValue(context, raw)
     );
-    for (const code of resolvedChildStyle.diagnostics) {
-      pushDiagnostic(code, `Tree child option issue: ${code}`, child.span.from, child.span.to);
+    for (const diagnostic of resolvedChildStyle.diagnostics) {
+      pushStyleDiagnostic(pushDiagnostic, diagnostic, "Tree child option issue", child.span);
     }
 
     const childMetaBase = {
@@ -282,6 +301,7 @@ export function handleChildOperationCluster(params: {
       styleChain: resolvedChildStyle.chain,
       transform: resolvedChildStyle.transform,
       customStyles: childCustomStyles,
+      picDefinitions: childPicDefinitions,
       colorAliases: new Map(parentFrame.colorAliases),
       macroBindings: new Map(parentFrame.macroBindings),
       namePrefix: childFrameMeta.namePrefix,
@@ -297,7 +317,9 @@ export function handleChildOperationCluster(params: {
       pinEdgeRaw: childFrameMeta.pinEdgeRaw,
       transformShape: childFrameMeta.transformShape,
       everyNodeStyles: childFrameMeta.everyNodeStyles,
+      everyTextNodePartStyles: childFrameMeta.everyTextNodePartStyles,
       everyFitStyles: childFrameMeta.everyFitStyles,
+      everyPicStyles: childFrameMeta.everyPicStyles,
       everyRectangleNodeStyles: childFrameMeta.everyRectangleNodeStyles,
       everyCircleNodeStyles: childFrameMeta.everyCircleNodeStyles,
       everyDiamondNodeStyles: childFrameMeta.everyDiamondNodeStyles,
@@ -482,11 +504,12 @@ export function handleChildOperationCluster(params: {
         activeTreeFrame.styleChain,
         (raw) => resolveContextColorAliasValue(context, raw)
       );
-      for (const code of resolvedTreeEdgeStyle.diagnostics) {
+      for (const diagnostic of resolvedTreeEdgeStyle.diagnostics) {
+        const code = styleDiagnosticCode(diagnostic);
         if (code === "unsupported-option-flag:edge from parent") {
           continue;
         }
-        pushDiagnostic(code, `Tree edge option issue: ${code}`, materializedEdge.span.from, materializedEdge.span.to);
+        pushStyleDiagnostic(pushDiagnostic, diagnostic, "Tree edge option issue", materializedEdge.span);
       }
 
       const edgeHandlesStart = context.editHandles.length;

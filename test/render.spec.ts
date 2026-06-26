@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderTikzToSvg, renderTikzToSvgAsync } from "../packages/core/src/render/index.js";
 import { parseLength } from "../packages/core/src/semantic/coords/parse-length.js";
-import type { SceneCircle, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
+import type { SceneCircle, SceneEllipse, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
 import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
@@ -234,6 +234,54 @@ describe("render pipeline", () => {
     );
     expect(fitPath?.style.fill).toBe("#ff0000");
     expect(nonFitPath?.style.fill).not.toBe("#ff0000");
+  });
+
+  it("applies every fit shape and spacing styles after fit sizing", () => {
+    const fitEllipseWithInnerSep = (innerSep: string): SceneEllipse => {
+      const source = String.raw`\begin{tikzpicture}[every fit/.style={ellipse,draw,inner sep=${innerSep}}]
+  \node (a) at (0,0) {};
+  \node (b) at (2,1) {};
+  \node[fit=(a) (b)] {};
+\end{tikzpicture}`;
+      const result = renderTikzToSvg(source);
+      const fitEllipse = result.semantic.scene.elements.find(
+        (element): element is SceneEllipse => element.kind === "Ellipse" && element.sourceRef.sourceId === "path:2"
+      );
+      expect(fitEllipse).toBeDefined();
+      if (!fitEllipse) {
+        throw new Error("Expected every-fit ellipse element.");
+      }
+      return fitEllipse;
+    };
+
+    const fitEllipse = fitEllipseWithInnerSep("-2pt");
+    const zeroSepFitEllipse = fitEllipseWithInnerSep("0pt");
+    expect(fitEllipse.style.stroke).toBe("black");
+    expect(fitEllipse.rx).toBeLessThan(zeroSepFitEllipse.rx);
+    expect(fitEllipse.ry).toBeLessThan(zeroSepFitEllipse.ry);
+  });
+
+  it("resolves fit targets from named labels introduced by styles", () => {
+    const source = String.raw`\begin{tikzpicture}[
+  every fit/.style={ellipse,draw,inner sep=-2pt},
+  leaf/.style={label={[name=#1]below:$#1$}}
+]
+  \node[leaf=a] at (0,0) {};
+  \node[leaf=b] at (2,0) {};
+  \node[fit=(a) (b)] {};
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+    const fitEllipse = result.semantic.scene.elements.find(
+      (element): element is SceneEllipse => element.kind === "Ellipse" && element.sourceRef.sourceId === "path:2"
+    );
+
+    expect(result.semantic.diagnostics.some((diagnostic) => diagnostic.code === "unsupported-fit-targets")).toBe(false);
+    expect(fitEllipse).toBeDefined();
+    if (!fitEllipse) {
+      throw new Error("Expected fit ellipse around styled labels.");
+    }
+    expect(fitEllipse.style.stroke).toBe("black");
+    expect(fitEllipse.rx).toBeGreaterThan(parseLength("1cm", "pt") ?? 28);
   });
 
   it("supports fit references to node names with apostrophes and spaces", () => {

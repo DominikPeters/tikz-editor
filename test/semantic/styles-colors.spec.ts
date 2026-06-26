@@ -51,6 +51,21 @@ describe("semantic evaluator / styles and colors", () => {
       }
     });
 
+    it("resolves pre-picture styles before tikzpicture options", () => {
+      const source = String.raw`\tikzset{wide lines/.style={line width=1ex}}
+\begin{tikzpicture}[wide lines]
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`;
+      const result = evaluateSemantic(source, undefined, { includeContextDefinitions: true });
+
+      const path = firstElementOfKind(result.scene.elements, "Path");
+      expect(path?.kind).toBe("Path");
+      if (path?.kind === "Path") {
+        expect(path.style.lineWidth).toBeCloseTo(4.3);
+      }
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain("unsupported-option-flag:wide lines");
+    });
+
     it("uses black stroke as default for draw command", () => {
       const source = String.raw`\begin{tikzpicture}
     \draw (0,0) -- (1,0);
@@ -74,6 +89,22 @@ describe("semantic evaluator / styles and colors", () => {
       expect(path?.kind).toBe("Path");
       if (path?.kind === "Path") {
         expect(path.style.fill).toBe("#00ff00");
+        expect(path.style.stroke).toBeNull();
+      }
+    });
+
+    it("uses inherited color as the default fill paint for fill commands", () => {
+      const source = String.raw`\begin{tikzpicture}
+    \begin{scope}[color=yellow]
+      \fill (0,0) rectangle (1,1);
+    \end{scope}
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+
+      const path = firstElementOfKind(result.scene.elements, "Path");
+      expect(path?.kind).toBe("Path");
+      if (path?.kind === "Path") {
+        expect(path.style.fill).toBe("#ffff00");
         expect(path.style.stroke).toBeNull();
       }
     });
@@ -829,7 +860,7 @@ describe("semantic evaluator / styles and colors", () => {
       const fillPath = paths[2];
       expect(fillPath?.kind).toBe("Path");
       if (fillPath?.kind === "Path") {
-        expect(fillPath.style.fill).toBe("black");
+        expect(fillPath.style.fill).toBe("#0000ff");
         expect(fillPath.style.stroke).toBeNull();
       }
     });

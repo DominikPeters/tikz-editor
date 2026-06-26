@@ -324,6 +324,7 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
         kind: "Text",
         id: `${path.id}:decorated:${sanitizeDecorationName(seedRaw)}:text-along-path:${subpathIndex}:${characterIndex}`,
         runtimeId: `${path.runtimeId}:decorated:${sanitizeDecorationName(seedRaw)}:text-along-path:${subpathIndex}:${characterIndex}`,
+        layer: path.layer,
         sourceRef: {
           sourceId: path.sourceRef.sourceId,
           sourceSpan: path.sourceRef.sourceSpan,

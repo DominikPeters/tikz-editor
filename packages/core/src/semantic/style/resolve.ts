@@ -1,4 +1,5 @@
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
+import type { Span } from "../../ast/types.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { WorldTransform } from "../../coords/transforms.js";
 import type { ResolvedStyle } from "../types.js";
@@ -18,6 +19,12 @@ import type { ApplyOutcome } from "./apply-types.js";
 import { applyKvEntry } from "./apply-kv.js";
 import type { ColorAliasResolver } from "./colors.js";
 import type { CustomStyleRegistry } from "./custom-styles.js";
+import {
+  normalizeStyleDiagnostic,
+  styleDiagnosticCode,
+  type StyleDiagnostic,
+  type StyleDiagnosticInput
+} from "./diagnostics.js";
 import {
   applyCustomStyleDefinition,
   parseCustomStyleDefinition,
@@ -40,7 +47,7 @@ export function resolveContextDelta(
   baseChain: StyleChainEntry[] = [],
   resolveColorAliasValue?: ColorAliasResolver
 ): ResolvedContextDelta {
-  const diagnostics: string[] = [];
+  const diagnostics: StyleDiagnostic[] = [];
   let style = cloneResolvedStyle(baseStyle);
   let transform = baseTransform;
   const chain = cloneStyleChain(baseChain);
@@ -79,7 +86,10 @@ export function resolveContextDelta(
         const valueStart = resolveValueStartOffset(entry);
         const nested = parseStyleValueAsOptionList(entry.valueRaw, valueStart);
         if (!nested) {
-          diagnostics.push(`invalid-style-value:${entry.valueRaw}`);
+          diagnostics.push({
+            code: `invalid-style-value:${entry.valueRaw}`,
+            span: entry.valueSpan ?? entry.span
+          });
           return;
         }
         applyCustomStyleDefinition(
@@ -96,7 +106,10 @@ export function resolveContextDelta(
     const invocation = resolveCustomStyleInvocation(entry, customStyles);
     if (invocation) {
       if (activeStyles.has(invocation.name)) {
-        diagnostics.push(`custom-style-recursion:${invocation.name}`);
+        diagnostics.push({
+          code: `custom-style-recursion:${invocation.name}`,
+          span: entry.kind === "unknown" ? entry.span : entry.keySpan ?? entry.span
+        });
         return;
       }
 
@@ -120,7 +133,11 @@ export function resolveContextDelta(
     const outcome = applyOptionEntry(entry, style, transform, resolveCoordinate, resolveColorAlias);
     style = outcome.style;
     transform = outcome.transform;
-    diagnostics.push(...outcome.diagnostics);
+    diagnostics.push(
+      ...outcome.diagnostics.map((diagnostic) =>
+        normalizeStyleDiagnostic(diagnostic, diagnosticFallbackSpanForEntry(entry, styleDiagnosticCode(diagnostic)))
+      )
+    );
   };
 
   for (const layer of topLevelLayers) {
@@ -215,7 +232,7 @@ function applyOptionEntry(
     if (entry.key === "every shadow") {
       let nextStyle = style;
       let nextTransform = transform;
-      const diagnostics: string[] = [];
+      const diagnostics: StyleDiagnosticInput[] = [];
       for (const list of style.everyShadowStyles) {
         for (const nestedEntry of list.entries) {
           const outcome = applyOptionEntry(nestedEntry, nextStyle, nextTransform, resolveCoordinate, resolveColorAlias);
@@ -235,13 +252,41 @@ function applyOptionEntry(
       entry.key === "circular drop shadow" ||
       entry.key === "circular glow"
     ) {
-      return applyKvEntry(entry.key, "", style, transform, applyOptionEntry, resolveCoordinate, resolveColorAlias);
+      return withEntryDiagnosticSpans(
+        applyKvEntry(entry.key, "", style, transform, applyOptionEntry, resolveCoordinate, resolveColorAlias),
+        entry
+      );
     }
 
-    return applyFlagEntry(entry.key, entry.raw, style, transform, resolveColorAlias);
+    return withEntryDiagnosticSpans(applyFlagEntry(entry.key, entry.raw, style, transform, resolveColorAlias), entry);
   }
 
-  return applyKvEntry(entry.key, entry.valueRaw, style, transform, applyOptionEntry, resolveCoordinate, resolveColorAlias);
+  return withEntryDiagnosticSpans(
+    applyKvEntry(entry.key, entry.valueRaw, style, transform, applyOptionEntry, resolveCoordinate, resolveColorAlias),
+    entry
+  );
+}
+
+function withEntryDiagnosticSpans(outcome: ApplyOutcome, entry: OptionEntry): ApplyOutcome {
+  return {
+    ...outcome,
+    diagnostics: outcome.diagnostics.map((diagnostic) =>
+      normalizeStyleDiagnostic(diagnostic, diagnosticFallbackSpanForEntry(entry, styleDiagnosticCode(diagnostic)))
+    )
+  };
+}
+
+function diagnosticFallbackSpanForEntry(entry: OptionEntry, code: string): Span {
+  if (entry.kind === "unknown") {
+    return entry.span;
+  }
+  if (code.startsWith("unsupported-option-key:") || code.startsWith("unsupported-option-flag:")) {
+    return entry.keySpan ?? entry.span;
+  }
+  if (entry.kind === "kv" && entry.valueSpan) {
+    return entry.valueSpan;
+  }
+  return entry.keySpan ?? entry.span;
 }
 
 function buildExpandedOptionLists(optionLists: OptionListAst[], entries: OptionEntry[]): OptionListAst[] {

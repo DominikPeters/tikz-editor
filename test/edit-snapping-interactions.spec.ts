@@ -14,6 +14,7 @@ function makeCircle(sourceId: string, centerX: number, centerY: number, radius: 
     kind: "Circle",
     id: `circle:${sourceId}`,
     runtimeId: `runtime:circle:${sourceId}`,
+    layer: "main",
     sourceRef: {
       sourceId,
       sourceSpan: { from: 0, to: 0 },

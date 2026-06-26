@@ -30,6 +30,7 @@ import type {
   SceneElement,
   SceneFigure
 } from "./types.js";
+import { MAIN_SCENE_LAYER } from "./types.js";
 
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
 export type IncrementalSemanticReplayMode = "full" | "suffix" | "selective";
@@ -617,6 +618,7 @@ function assembleSelectiveSemanticResult(args: {
       featureUsage: finalFeatureUsage,
       elements
     }),
+    layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements,
     bounds: computeBounds(elements),
     hasStatefulGraphicsState:
@@ -749,7 +751,11 @@ function containsStatefulGraphicsState(source: string): boolean {
     /\\clip\b/.test(source) ||
     /\\useasboundingbox\b/.test(source) ||
     /\[\s*clip(?:[\],])/m.test(source) ||
-    /use as bounding box/.test(source)
+    /use as bounding box/.test(source) ||
+    /on background layer/.test(source) ||
+    /show background (?:rectangle|grid|top|bottom|left|right)/.test(source) ||
+    /\b(?:framed|gridded|tight background|loose background)\b/.test(source) ||
+    /\b(?:inner|outer) frame (?:xsep|ysep|sep)\b/.test(source)
   );
 }
 
@@ -953,6 +959,7 @@ function retargetElementsSourceFingerprint(
     }
     elements[index] = {
       ...element,
+      layer: element.layer || MAIN_SCENE_LAYER,
       sourceRef: {
         ...element.sourceRef,
         sourceFingerprint

@@ -16,6 +16,20 @@ function expectDiagnostic(diagnostics: readonly Diagnostic[], expected: Expected
   ]));
 }
 
+function expectDiagnosticSourceSlice(
+  source: string,
+  diagnostics: readonly Diagnostic[],
+  code: string,
+  expectedSlice: string
+): void {
+  const diagnostic = diagnostics.find((item) => item.code === code);
+  expect(diagnostic).toBeDefined();
+  if (!diagnostic) {
+    return;
+  }
+  expect(source.slice(diagnostic.span.from, diagnostic.span.to)).toBe(expectedSlice);
+}
+
 describe("parser diagnostics for common user mistakes", () => {
   it("explains that bare TikZ code needs a tikzpicture environment", () => {
     const source = String.raw`\draw (0,0) -- (1,0);`;
@@ -189,5 +203,38 @@ describe("parser diagnostics for common user mistakes", () => {
       severity: "warning",
       message: "Unknown or unsupported command `\\drwa`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
     });
+  });
+
+  it("points unsupported figure option keys at the key instead of the whole option list", () => {
+    const source = String.raw`\begin{tikzpicture}[draw,definitely unsupported key=1,fill=red]
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+
+    expectDiagnosticSourceSlice(
+      source,
+      result.semantic.diagnostics,
+      "unsupported-option-key:definitely unsupported key",
+      "definitely unsupported key"
+    );
+  });
+
+  it("points invalid option values at the value token", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[xshift=bad,draw] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+
+    expectDiagnosticSourceSlice(source, result.semantic.diagnostics, "invalid-xshift:bad", "bad");
+  });
+
+  it("does not report handled frame style buckets as unsupported option keys", () => {
+    const source = String.raw`\begin{tikzpicture}[every fit/.style={fill=red}]
+  \node (a) at (0,0) {};
+  \node[draw,fit=(a)] {};
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+
+    expect(result.semantic.diagnostics.some((diagnostic) => diagnostic.code === "unsupported-option-key:every fit/.style")).toBe(false);
   });
 });

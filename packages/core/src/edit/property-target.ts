@@ -25,6 +25,7 @@ export type PropertyTargetKind =
   | "matrix-cell"
   | "tree-child"
   | "foreach-template"
+  | "pic-template"
   | "node-adornment"
   | "to-operation"
   | "edge-operation"
@@ -34,6 +35,7 @@ export type PropertyTargetKind =
 export const TIKZPICTURE_GLOBAL_TARGET_ID = "__tikzpicture__";
 export const STYLE_SOURCE_TARGET_PREFIX = "__style_source__:";
 export const FOREACH_TEMPLATE_TARGET_PREFIX = "__foreach_template__:";
+export const PIC_TEMPLATE_TARGET_PREFIX = "__pic_template__:";
 
 export type PropertyTargetOptionsFormat = "bracketed" | "bare" | "braced";
 
@@ -84,6 +86,8 @@ export type PropertyTarget = {
   treeChildNodeSpanFallbackUsed?: boolean;
   foreachLoopId?: string;
   foreachLocalTargetId?: string;
+  picCodeSpan?: Span;
+  picLocalTargetId?: string;
 };
 
 export type PropertyTargetResolution =
@@ -114,6 +118,10 @@ export function resolvePropertyTarget(source: string, elementId: string, parseOp
   const parseResult = parseTikzForEdit(source, {
     ...parseOptions,
   });
+  const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
+  if (picTemplateTarget) {
+    return { kind: "found", target: picTemplateTarget };
+  }
   const foreachTemplateTarget = resolveForeachTemplateTargetFromParseResult(parseResult, normalizedId);
   if (foreachTemplateTarget) {
     return { kind: "found", target: foreachTemplateTarget };
@@ -151,6 +159,11 @@ export function resolvePropertyTargetFromParseResult(
 
   if (normalizedId.startsWith(STYLE_SOURCE_TARGET_PREFIX)) {
     return resolveStyleSourceTarget(parseSource, normalizedId);
+  }
+
+  const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
+  if (picTemplateTarget) {
+    return { kind: "found", target: picTemplateTarget };
   }
 
   const foreachTemplateTarget = resolveForeachTemplateTargetFromParseResult(parseResult, normalizedId);
@@ -459,6 +472,76 @@ export function makeForeachTemplateTargetId(
 ): string {
   const loopPath = [loopId, ...nestedLoopLocalIds].join("/");
   return `${FOREACH_TEMPLATE_TARGET_PREFIX}${loopPath}::${localTargetId}`;
+}
+
+export function makePicTemplateTargetId(codeSpan: Span, localTargetId: string): string {
+  return `${PIC_TEMPLATE_TARGET_PREFIX}${codeSpan.from}:${codeSpan.to}::${localTargetId}`;
+}
+
+function parsePicTemplateTargetId(
+  targetId: string
+): { codeSpan: Span; localTargetId: string } | null {
+  if (!targetId.startsWith(PIC_TEMPLATE_TARGET_PREFIX)) {
+    return null;
+  }
+  const payload = targetId.slice(PIC_TEMPLATE_TARGET_PREFIX.length);
+  const separator = payload.indexOf("::");
+  if (separator <= 0 || separator >= payload.length - 2) {
+    return null;
+  }
+  const spanRaw = payload.slice(0, separator);
+  const localTargetId = payload.slice(separator + 2).trim();
+  const [fromRaw, toRaw] = spanRaw.split(":");
+  const from = Number(fromRaw);
+  const to = Number(toRaw);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to <= from || localTargetId.length === 0) {
+    return null;
+  }
+  return {
+    codeSpan: { from, to },
+    localTargetId
+  };
+}
+
+function resolvePicTemplateTargetFromParseResult(
+  parseResult: ParseTikzResult,
+  targetId: string
+): PropertyTarget | null {
+  const parsed = parsePicTemplateTargetId(targetId);
+  if (!parsed) {
+    return null;
+  }
+  const source = parseResult.source;
+  if (parsed.codeSpan.to > source.length) {
+    return null;
+  }
+
+  const codeRaw = source.slice(parsed.codeSpan.from, parsed.codeSpan.to);
+  const reparsedBody = parseStatementsFromBodyWithMapping(codeRaw, parsed.codeSpan);
+  const resolved = resolvePropertyTargetFromParseResult(
+    reparsedBody.parseResult.source,
+    reparsedBody.parseResult,
+    parsed.localTargetId
+  );
+  if (resolved.kind !== "found") {
+    return null;
+  }
+
+  const remapped = remapPropertyTargetToOriginalSource(resolved.target, reparsedBody.sourceMapper);
+  if (!remapped) {
+    return null;
+  }
+  const templateNodeTextSpan = resolvePathStatementNodeTextSpan(reparsedBody.parseResult.figure.body, parsed.localTargetId);
+  const remappedTemplateNodeTextSpan = templateNodeTextSpan ? reparsedBody.sourceMapper.mapSpan(templateNodeTextSpan) : null;
+
+  return {
+    ...remapped,
+    id: targetId,
+    kind: "pic-template",
+    textSpan: remapped.textSpan ?? remappedTemplateNodeTextSpan ?? undefined,
+    picCodeSpan: parsed.codeSpan,
+    picLocalTargetId: parsed.localTargetId
+  };
 }
 
 function parseForeachTemplateTargetId(

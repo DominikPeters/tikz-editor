@@ -7,10 +7,28 @@ import type {
 } from "../foreach/types.js";
 import type { MacroOriginFrame } from "../macros/index.js";
 import type { StyleChainEntry } from "./style-chain.js";
-import type { EditHandle, SceneElement } from "./types.js";
+import type { EditHandle, PicOriginFrame, SceneElement } from "./types.js";
 
 export function mapExpansionSpan(sourceMap: ExpansionSourceMap, span: Span): Span {
   return sourceMap.mapSpan(span) ?? sourceMap.sourceSpan;
+}
+
+function mapDiagnosticExpansionSpan(
+  sourceMap: ExpansionSourceMap,
+  diagnostic: Diagnostic,
+  ownerSpan?: Span,
+  mappedElementSpan?: Span
+): Span {
+  if (shouldUseExpansionSourceSpan(diagnostic)) {
+    return mappedElementSpan
+      ?? (ownerSpan ? sourceMap.mapSpan(ownerSpan) ?? sourceMap.sourceSpan : sourceMap.sourceSpan);
+  }
+  return mapExpansionSpan(sourceMap, diagnostic.span);
+}
+
+function shouldUseExpansionSourceSpan(diagnostic: Diagnostic): boolean {
+  return diagnostic.code?.startsWith("unsupported-option-key:") === true
+    || diagnostic.code?.startsWith("unsupported-option-flag:") === true;
 }
 
 export function remapDiagnostics(
@@ -19,6 +37,7 @@ export function remapDiagnostics(
   sourceMap: ExpansionSourceMap | undefined,
   args: {
     statement?: Statement;
+    elements?: readonly SceneElement[];
     pathItemSourceMaps?: WeakMap<PathItem, ExpansionSourceMap>;
   } = {}
 ): void {
@@ -42,11 +61,38 @@ export function remapDiagnostics(
     if (!effectiveSourceMap) {
       continue;
     }
+    const mappedElementSpan = shouldUseExpansionSourceSpan(diagnostic)
+      ? findMappedElementDiagnosticSpan(args.elements, diagnostic)
+      : undefined;
     diagnostics[index] = {
       ...diagnostic,
-      span: mapExpansionSpan(effectiveSourceMap, diagnostic.span)
+      span: mapDiagnosticExpansionSpan(
+        effectiveSourceMap,
+        diagnostic,
+        itemSourceMap?.span ?? args.statement?.span,
+        mappedElementSpan
+      )
     };
   }
+}
+
+function findMappedElementDiagnosticSpan(
+  elements: readonly SceneElement[] | undefined,
+  diagnostic: Diagnostic
+): Span | undefined {
+  if (!elements || elements.length === 0) {
+    return undefined;
+  }
+  const exactOwner = elements.find((element) =>
+    element.identityRef?.sourceSpan && spanContains(element.identityRef.sourceSpan, diagnostic.span)
+  );
+  if (exactOwner) {
+    return exactOwner.sourceRef.sourceSpan;
+  }
+  const overlappingOwner = elements.find((element) =>
+    element.identityRef?.sourceSpan && spansOverlap(element.identityRef.sourceSpan, diagnostic.span)
+  );
+  return overlappingOwner?.sourceRef.sourceSpan ?? elements[0]?.sourceRef.sourceSpan;
 }
 
 export function finalizeExpandedStatementElements(args: {
@@ -115,11 +161,19 @@ export function finalizeExpandedStatementElements(args: {
       attribution != null && attribution.sourceId !== statement.id
         ? templateLocalIdByExpandedId.get(element.sourceRef.sourceId) ?? element.sourceRef.sourceId
         : element.origin?.foreachTemplateLocalTargetId;
+    const picStack = element.origin?.picStack ? clonePicStack(element.origin.picStack) : undefined;
+    const picTemplateLocalTargetId = element.origin?.picTemplateLocalTargetId;
     const nextOrigin =
-      foreachStack.length > 0 || foreachTemplateLocalTargetId != null || (macroStack != null && macroStack.length > 0)
+      foreachStack.length > 0
+      || foreachTemplateLocalTargetId != null
+      || picTemplateLocalTargetId != null
+      || (picStack != null && picStack.length > 0)
+      || (macroStack != null && macroStack.length > 0)
         ? {
             foreachStack,
             foreachTemplateLocalTargetId,
+            picStack,
+            picTemplateLocalTargetId,
             macroStack
           }
         : undefined;
@@ -378,6 +432,14 @@ function spansEqual(left: Span, right: Span): boolean {
   return left.from === right.from && left.to === right.to;
 }
 
+function spanContains(outer: Span, inner: Span): boolean {
+  return outer.from <= inner.from && outer.to >= inner.to;
+}
+
+function spansOverlap(left: Span, right: Span): boolean {
+  return left.from < right.to && right.from < left.to;
+}
+
 function extractElementItemPayload(elementId: string, sourceId: string): string | undefined {
   const prefixes = [
     "scene-path:",
@@ -421,5 +483,24 @@ function cloneMacroOriginStack(stack: MacroOriginFrame[]): MacroOriginFrame[] {
       to: origin.definitionSpan.to
     },
     commandRaw: origin.commandRaw
+  }));
+}
+
+function clonePicStack(stack: PicOriginFrame[]): PicOriginFrame[] {
+  return stack.map((origin) => ({
+    invocationId: origin.invocationId,
+    invocationSpan: {
+      from: origin.invocationSpan.from,
+      to: origin.invocationSpan.to
+    },
+    picType: origin.picType,
+    codeSpan: origin.codeSpan
+      ? {
+          from: origin.codeSpan.from,
+          to: origin.codeSpan.to
+        }
+      : undefined,
+    codeSource: origin.codeSource,
+    parameterized: origin.parameterized
   }));
 }

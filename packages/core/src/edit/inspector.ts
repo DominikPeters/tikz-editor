@@ -1,7 +1,7 @@
-import { TREE_CHILD_NODE_READONLY_KEYS, TREE_ROOT_LAYOUT_KEYS } from "./tree-editing.js";
+import { TREE_CHILD_NODE_READONLY_KEYS } from "./tree-editing.js";
 import {
   makeForeachTemplateTargetId,
-  resolvePropertyTarget,
+  makePicTemplateTargetId,
   type PropertyTargetResolution
 } from "./property-target.js";
 import type { EditParseOptions } from "./parse-options.js";
@@ -18,8 +18,8 @@ import {
   normalizeRoundedCornersMax,
   pathHasRoundableCorner
 } from "./inspector/rounded-corners.js";
-import type { PathItem, Span } from "../ast/types.js";
-import type { OptionEntry, OptionListAst } from "../options/types.js";
+import type { Span } from "../ast/types.js";
+import type { OptionListAst } from "../options/types.js";
 import {
   findTopLevelCharacter,
   parseFontStyle,
@@ -32,7 +32,9 @@ import { normalizeColor } from "../semantic/style/colors.js";
 import { SHADOW_INHERIT_FILL, SHADOW_INHERIT_STROKE } from "../semantic/types.js";
 import {
   cloneTransformInspectorValues,
+  DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContext,
+  transformRotateInspectorLabel,
   transformPropertyCandidateKeys,
   type ArrowTipWriteContext,
   type FillPatternOptionMutationContext,
@@ -48,7 +50,6 @@ import {
   AXIS_SHADING_CONFLICT_CLEAR_KEYS,
   BALL_SHADING_CONFLICT_CLEAR_KEYS,
   CURATED_NODE_SHAPE_SET,
-  DASH_PATTERN_EPSILON,
   DASH_STYLE_OPTIONS,
   DASH_STYLE_PRESET_CLEAR_KEYS,
   DEFAULT_META_PATTERN_DISTANCE,
@@ -58,15 +59,11 @@ import {
   FILL_MODE_OPTIONS,
   FILL_PATTERN_CLEAR_KEYS,
   FILL_PATTERN_OPTIONS,
-  FILL_PATTERN_PRESET_BY_LOWER,
   FILL_SHADING_CLEAR_KEYS,
   FILL_SHADING_OPTIONS,
   FILL_STYLE_CUSTOM_NOTE,
   LINE_CAP_OPTIONS,
   LINE_JOIN_OPTIONS,
-  LINE_WIDTH_PRESETS,
-  META_FILL_PATTERN_PRESET_BY_KIND,
-  META_FILL_PATTERN_PRESET_BY_LOWER,
   NODE_FONT_CUSTOM_NOTE,
   NODE_FONT_SIZE_EPSILON,
   NODE_FONT_SIZE_PRESETS,
@@ -112,8 +109,6 @@ import type {
   FillPatternMetaValues,
   FillPatternPresetId,
   FillShadingPresetId,
-  LineCapPresetId,
-  LineJoinPresetId,
   NodeFontFamilyId,
   NodeFontSizePresetId,
   NodeShapePresetId,
@@ -139,7 +134,21 @@ import {
   resolveNodeShapeAdaptiveControls,
   type ShapeAdaptiveControl
 } from "./inspector/shape-adaptive-controls.js";
-import { findPathStatementInSource, resolveGridInspectorState } from "./inspector/grid-state.js";
+import { resolveGridInspectorState } from "./inspector/grid-state.js";
+import {
+  dashStylePresetFromStyle,
+  fillPatternPresetFromRaw,
+  fillPatternPresetFromResolvedPattern,
+  fillShadingPresetFromStyleName,
+  lineCapPresetFromStyle,
+  lineJoinPresetFromStyle,
+  lineWidthPresetLabel
+} from "./inspector/preset-values.js";
+import {
+  buildMatrixInspectorDescriptor as buildMatrixInspectorDescriptorBase,
+  buildTreeInspectorDescriptor as buildTreeInspectorDescriptorBase
+} from "./inspector/matrix-tree-descriptors.js";
+import { createInspectorTargetResolver, type InspectorTargetResolver } from "./inspector/target-resolver.js";
 import type {
   ArrowTipWriteTarget,
   InspectorDescriptor,
@@ -202,30 +211,23 @@ export {
   SHADOW_PRESET_DEFAULTS,
   SHADOW_PRESET_OPTIONS
 } from "./inspector/presets.js";
-
-type InspectorTargetResolver = (targetId: string) => PropertyTargetResolution;
-
-function createInspectorTargetResolver(
-  source: string,
-  parseOptions: EditParseOptions = {}
-): InspectorTargetResolver {
-  const cache = new Map<string, PropertyTargetResolution>();
-  return (targetId: string) => {
-    const cached = cache.get(targetId);
-    if (cached) {
-      return cached;
-    }
-    const resolved = resolvePropertyTarget(source, targetId, parseOptions);
-    cache.set(targetId, resolved);
-    return resolved;
-  };
-}
+export {
+  dashStylePresetFromStyle,
+  fillPatternPresetFromRaw,
+  fillPatternPresetFromResolvedPattern,
+  fillShadingPresetFromStyleName,
+  lineCapPresetFromStyle,
+  lineJoinPresetFromStyle,
+  lineWidthPresetLabel
+} from "./inspector/preset-values.js";
 
 const ROUNDED_CORNERS_MIN = 0.1;
 const GRID_STEP_CLEAR_KEYS = ["xstep", "x step", "ystep", "y step"] as const;
 const GRID_XSTEP_CLEAR_KEYS = ["x step"] as const;
 const GRID_YSTEP_CLEAR_KEYS = ["y step"] as const;
 const FOREACH_TEMPLATE_INFO_NOTE = "Editing the foreach template. Changes apply to all iterations.";
+const PIC_INLINE_TEMPLATE_INFO_NOTE = "Editing this inline pic code. Changes apply to this invocation.";
+const PIC_SHARED_TEMPLATE_INFO_NOTE = "Editing this shared pic template. Changes apply to all uses.";
 const FOREACH_VARIABLE_READONLY_REASON = "This property depends on foreach iteration variables and is read-only.";
 const NODE_TARGET_KINDS = new Set(["node-item", "matrix-cell", "tree-child"]);
 const NODE_PAINT_STYLE_KINDS = new Set<StyleChainEntry["kind"]>(["every-node", "every-shape"]);
@@ -335,265 +337,14 @@ function orderInspectorSections(
   });
 }
 
-function resolveMatrixSpacingPt(options: OptionListAst | undefined, key: "row sep" | "column sep"): number {
-  const entry = options?.entries.find(
-    (candidate): candidate is Extract<OptionEntry, { kind: "kv" }> => candidate.kind === "kv" && candidate.key === key
-  );
-  if (!entry) {
-    return 0;
-  }
-  const tokens = entry.valueRaw
-    .split(",")
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
-  let sum = 0;
-  for (const token of tokens) {
-    const parsed = parseLength(token, "pt");
-    if (parsed != null) {
-      sum += parsed;
-    }
-  }
-  return sum;
-}
-
-function resolveMatrixColorOption(options: OptionListAst | undefined, key: "draw" | "fill"): string | null {
-  const entry = options?.entries.find(
-    (candidate): candidate is Extract<OptionEntry, { kind: "kv" }> => candidate.kind === "kv" && candidate.key === key
-  );
-  if (!entry) {
-    return null;
-  }
-  const normalized = entry.valueRaw.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function optionHasNormalizedKey(options: OptionListAst | undefined, key: string): boolean {
-  const normalizedKey = normalizeOptionKey(key);
-  return (
-    options?.entries.some(
-      (entry) =>
-        (entry.kind === "flag" || entry.kind === "kv")
-        && normalizeOptionKey(entry.key) === normalizedKey
-    ) ?? false
-  );
-}
-
-function resolveTreeLengthOptionPt(options: OptionListAst | undefined, key: "level distance" | "sibling distance"): number {
-  const normalizedKey = normalizeOptionKey(key);
-  const entry = options?.entries.find(
-    (candidate): candidate is Extract<OptionEntry, { kind: "kv" }> =>
-      candidate.kind === "kv"
-      && normalizeOptionKey(candidate.key) === normalizedKey
-  );
-  if (!entry) {
-    return 0;
-  }
-  const parsed = parseLength(entry.valueRaw, "pt");
-  return parsed != null && Number.isFinite(parsed) ? parsed : 0;
-}
-
-function resolveTreeGrowOption(options: OptionListAst | undefined): string {
-  const growEntry = options?.entries.find(
-    (candidate) =>
-      candidate.kind === "kv"
-      && normalizeOptionKey(candidate.key) === "grow"
-  );
-  if (growEntry?.kind !== "kv") {
-    return "down";
-  }
-  const normalized = growEntry.valueRaw.trim();
-  return normalized.length > 0 ? normalized : "down";
-}
-
 export function buildMatrixInspectorDescriptor(
   source: string,
   matrixId: string,
   parseOptions: EditParseOptions = {},
   resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
 ): InspectorDescriptor | null {
-  const resolved = resolveTarget(matrixId);
-  if (resolved.kind === "not-found" || resolved.target.kind !== "matrix-statement") {
-    return null;
-  }
-
-  const writable = true;
-  const readOnlyReason = undefined;
-  const transformContext = resolveTransformInspectorMutationContext(source, matrixId, parseOptions, resolveTarget);
-  const transformValues = transformContext.values;
-  const rowSepPt = resolveMatrixSpacingPt(resolved.target.options, "row sep");
-  const columnSepPt = resolveMatrixSpacingPt(resolved.target.options, "column sep");
-  const drawColor = resolveMatrixColorOption(resolved.target.options, "draw");
-  const fillColor = resolveMatrixColorOption(resolved.target.options, "fill");
-
-  return {
-    elementKind: "path",
-    elementId: matrixId,
-    writeTargetId: matrixId,
-    readOnlyReason,
-    sections: [
-      {
-        id: "transform",
-        title: "Transform",
-        sourceLevel: "command",
-        properties: [
-          {
-            kind: "number",
-            id: "xshift",
-            label: "X shift",
-            value: transformValues.xshift,
-            step: 0.1,
-            unit: "pt",
-            write: {
-              mode: "setProperty",
-              elementId: matrixId,
-              level: "command",
-              key: "xshift",
-              transformContext: {
-                key: "xshift",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "yshift",
-            label: "Y shift",
-            value: transformValues.yshift,
-            step: 0.1,
-            unit: "pt",
-            write: {
-              mode: "setProperty",
-              elementId: matrixId,
-              level: "command",
-              key: "yshift",
-              transformContext: {
-                key: "yshift",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "xscale",
-            label: "X scale",
-            value: transformValues.xscale,
-            step: 0.1,
-            write: {
-              mode: "setProperty",
-              elementId: matrixId,
-              level: "command",
-              key: "xscale",
-              transformContext: {
-                key: "xscale",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "yscale",
-            label: "Y scale",
-            value: transformValues.yscale,
-            step: 0.1,
-            write: {
-              mode: "setProperty",
-              elementId: matrixId,
-              level: "command",
-              key: "yscale",
-              transformContext: {
-                key: "yscale",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "rotate",
-            label: "Rotate",
-            value: transformValues.rotate,
-            step: 1,
-            unit: "deg",
-            write: {
-              mode: "setProperty",
-              elementId: matrixId,
-              level: "command",
-              key: "rotate",
-              transformContext: {
-                key: "rotate",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          }
-        ]
-      },
-      {
-        id: "matrix",
-        title: "Matrix",
-        sourceLevel: "command",
-        properties: [
-          {
-            kind: "length",
-            id: "matrix-row-sep",
-            label: "Row sep",
-            value: rowSepPt,
-            step: 0.1,
-            unit: "pt",
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "row sep", writable, reason: readOnlyReason }
-          },
-          {
-            kind: "length",
-            id: "matrix-column-sep",
-            label: "Column sep",
-            value: columnSepPt,
-            step: 0.1,
-            unit: "pt",
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "column sep", writable, reason: readOnlyReason }
-          },
-          {
-            kind: "color",
-            id: "matrix-draw",
-            label: "Draw",
-            value: drawColor,
-            syntaxValue: drawColor,
-            options: colorOptionsForValue(drawColor),
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "draw", writable, reason: readOnlyReason }
-          },
-          {
-            kind: "color",
-            id: "matrix-fill",
-            label: "Fill",
-            value: fillColor,
-            syntaxValue: fillColor,
-            options: colorOptionsForValue(fillColor),
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "fill", writable, reason: readOnlyReason }
-          }
-        ]
-      }
-    ]
-  };
+  return buildMatrixInspectorDescriptorBase(source, matrixId, parseOptions, resolveTarget);
 }
-
-const TREE_GROW_DIRECTION_OPTIONS = [
-  { value: "down", label: "Down" },
-  { value: "up", label: "Up" },
-  { value: "left", label: "Left" },
-  { value: "right", label: "Right" }
-];
 
 export function buildTreeInspectorDescriptor(
   source: string,
@@ -602,251 +353,7 @@ export function buildTreeInspectorDescriptor(
   parseOptions: EditParseOptions = {},
   resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
 ): InspectorDescriptor | null {
-  const resolvedRootTarget = resolveTarget(sourceId);
-  if (resolvedRootTarget.kind === "not-found" || resolvedRootTarget.target.kind !== "path-statement") {
-    return null;
-  }
-
-  const rootStatement =
-    parseOptions.analysisView?.source === source &&
-    parseOptions.analysisView.activeFigureId === parseOptions.activeFigureId
-      ? parseOptions.analysisView.findPathStatement(sourceId)
-      : findPathStatementInSource(source, sourceId, parseOptions);
-  if (!rootStatement) {
-    return null;
-  }
-  const hasChildren = rootStatement.items.some((item) => item.kind === "ChildOperation");
-  if (!hasChildren) {
-    return null;
-  }
-
-  const rootNode = rootStatement.items.find((item): item is Extract<PathItem, { kind: "Node" }> => item.kind === "Node");
-  if (!rootNode) {
-    return null;
-  }
-
-  const rootNodeElement = element
-    ? ({
-        ...element,
-        sourceRef: {
-          ...element.sourceRef,
-          sourceId: rootNode.id
-        }
-      })
-    : null;
-  const rootNodeDescriptor = rootNodeElement
-    ? getInspectorDescriptor(rootNodeElement, {
-        source,
-        parseOptions
-      }, resolveTarget)
-    : null;
-  const nodeSections = rootNodeDescriptor
-    ? rootNodeDescriptor.sections.filter((section) => section.id !== "transform")
-    : [];
-
-  const writable = true;
-  const readOnlyReason = undefined;
-  const transformContext = resolveTransformInspectorMutationContext(source, sourceId, parseOptions, resolveTarget);
-  const transformValues = transformContext.values;
-
-  const resolveRootLayoutWriteTargetId = (key: string): string => {
-    if (!TREE_ROOT_LAYOUT_KEYS.has(normalizeOptionKey(key))) {
-      return sourceId;
-    }
-    if (optionHasNormalizedKey(resolvedRootTarget.target.options, key)) {
-      return sourceId;
-    }
-    if (optionHasNormalizedKey(rootNode.options, key)) {
-      return rootNode.id;
-    }
-    return sourceId;
-  };
-  const resolveRootLayoutValue = (key: "level distance" | "sibling distance"): number => {
-    if (optionHasNormalizedKey(resolvedRootTarget.target.options, key)) {
-      return resolveTreeLengthOptionPt(resolvedRootTarget.target.options, key);
-    }
-    if (optionHasNormalizedKey(rootNode.options, key)) {
-      return resolveTreeLengthOptionPt(rootNode.options, key);
-    }
-    return 0;
-  };
-  const growValue = optionHasNormalizedKey(resolvedRootTarget.target.options, "grow")
-    ? resolveTreeGrowOption(resolvedRootTarget.target.options)
-    : resolveTreeGrowOption(rootNode.options);
-
-  return {
-    elementKind: "path",
-    elementId: sourceId,
-    writeTargetId: sourceId,
-    readOnlyReason,
-    sections: [
-      {
-        id: "transform",
-        title: "Transform",
-        sourceLevel: "command",
-        properties: [
-          {
-            kind: "number",
-            id: "xshift",
-            label: "X shift",
-            value: transformValues.xshift,
-            step: 0.1,
-            unit: "pt",
-            write: {
-              mode: "setProperty",
-              elementId: sourceId,
-              level: "command",
-              key: "xshift",
-              transformContext: {
-                key: "xshift",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "yshift",
-            label: "Y shift",
-            value: transformValues.yshift,
-            step: 0.1,
-            unit: "pt",
-            write: {
-              mode: "setProperty",
-              elementId: sourceId,
-              level: "command",
-              key: "yshift",
-              transformContext: {
-                key: "yshift",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "xscale",
-            label: "X scale",
-            value: transformValues.xscale,
-            step: 0.1,
-            write: {
-              mode: "setProperty",
-              elementId: sourceId,
-              level: "command",
-              key: "xscale",
-              transformContext: {
-                key: "xscale",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "yscale",
-            label: "Y scale",
-            value: transformValues.yscale,
-            step: 0.1,
-            write: {
-              mode: "setProperty",
-              elementId: sourceId,
-              level: "command",
-              key: "yscale",
-              transformContext: {
-                key: "yscale",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "number",
-            id: "rotate",
-            label: "Rotate",
-            value: transformValues.rotate,
-            step: 1,
-            unit: "deg",
-            write: {
-              mode: "setProperty",
-              elementId: sourceId,
-              level: "command",
-              key: "rotate",
-              transformContext: {
-                key: "rotate",
-                values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
-              },
-              writable,
-              reason: readOnlyReason
-            }
-          }
-        ]
-      },
-      {
-        id: "tree-layout",
-        title: "Tree Layout",
-        sourceLevel: "command",
-        properties: [
-          {
-            kind: "enum",
-            id: "tree-grow",
-            label: "Grow",
-            value: growValue,
-            options: TREE_GROW_DIRECTION_OPTIONS,
-            write: {
-              mode: "setProperty",
-              elementId: resolveRootLayoutWriteTargetId("grow"),
-              level: "command",
-              key: "grow",
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "length",
-            id: "tree-level-distance",
-            label: "Level distance",
-            value: resolveRootLayoutValue("level distance"),
-            step: 0.1,
-            unit: "pt",
-            write: {
-              mode: "setProperty",
-              elementId: resolveRootLayoutWriteTargetId("level distance"),
-              level: "command",
-              key: "level distance",
-              writable,
-              reason: readOnlyReason
-            }
-          },
-          {
-            kind: "length",
-            id: "tree-sibling-distance",
-            label: "Sibling distance",
-            value: resolveRootLayoutValue("sibling distance"),
-            step: 0.1,
-            unit: "pt",
-            write: {
-              mode: "setProperty",
-              elementId: resolveRootLayoutWriteTargetId("sibling distance"),
-              level: "command",
-              key: "sibling distance",
-              writable,
-              reason: readOnlyReason
-            }
-          }
-        ]
-      },
-      ...nodeSections
-    ]
-  };
+  return buildTreeInspectorDescriptorBase(source, sourceId, element, parseOptions, resolveTarget, getInspectorDescriptor);
 }
 
 export function getInspectorDescriptor(
@@ -1099,6 +606,7 @@ export function getInspectorDescriptor(
           value: transformValues.xshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xshift,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "xshift", transformContext)
         },
         {
@@ -1108,6 +616,7 @@ export function getInspectorDescriptor(
           value: transformValues.yshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "yshift", transformContext)
         },
         {
@@ -1116,6 +625,7 @@ export function getInspectorDescriptor(
           label: "X scale",
           value: transformValues.xscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "xscale", transformContext)
         },
         {
@@ -1124,15 +634,17 @@ export function getInspectorDescriptor(
           label: "Y scale",
           value: transformValues.yscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "yscale", transformContext)
         },
         {
           kind: "number",
           id: "rotate",
-          label: "Rotate",
+          label: transformRotateInspectorLabel(transformContext),
           value: transformValues.rotate,
           step: 1,
           unit: "deg",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
           write: makeTransformSetPropertyWriteTarget(inlineTarget, "rotate", transformContext)
         }
       ]
@@ -1250,6 +762,7 @@ export function getInspectorDescriptor(
           value: nodeInspectorState.innerSep,
           step: 0.1,
           unit: "pt",
+          defaultValue: NODE_INNER_SEP_DEFAULT,
           note: nodeInspectorState.innerSepNote,
           write: makeSetPropertyWriteTarget(inlineTarget, "inner sep")
         },
@@ -1260,6 +773,7 @@ export function getInspectorDescriptor(
           value: nodeInspectorState.minimumWidth,
           step: 0.1,
           unit: "pt",
+          defaultValue: NODE_MINIMUM_DIMENSION_DEFAULT,
           note: nodeInspectorState.minimumWidthNote,
           minimumDimensionsContext: {
             minimumWidth: nodeInspectorState.minimumWidth,
@@ -1274,6 +788,7 @@ export function getInspectorDescriptor(
           value: nodeInspectorState.minimumHeight,
           step: 0.1,
           unit: "pt",
+          defaultValue: NODE_MINIMUM_DIMENSION_DEFAULT,
           note: nodeInspectorState.minimumHeightNote,
           minimumDimensionsContext: {
             minimumWidth: nodeInspectorState.minimumWidth,
@@ -1638,6 +1153,7 @@ export function getInspectorDescriptor(
       step: 0.05,
       min: 0,
       max: 1,
+      defaultValue: 1,
       write: makeSetPropertyWriteTarget(inlineTarget, "fill opacity")
     });
     sections.push({
@@ -1680,6 +1196,7 @@ export function getInspectorDescriptor(
       step: 0.05,
       min: 0,
       max: 1,
+      defaultValue: 1,
       write: makeSetPropertyWriteTarget(inlineTarget, "draw opacity")
     });
   }
@@ -1784,6 +1301,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.step,
             step: 0.1,
             unit: "cm",
+            defaultValue: 1,
             clearKeys: uniqueStrings(GRID_STEP_CLEAR_KEYS),
             write: gridWriteTarget
           },
@@ -1794,6 +1312,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.xstep,
             step: 0.1,
             unit: "cm",
+            defaultValue: 1,
             clearKeys: uniqueStrings(GRID_XSTEP_CLEAR_KEYS),
             write: makeSetPropertyWriteTargetForElementId(inlineTarget, gridInspectorState.keywordId, "xstep")
           },
@@ -1804,6 +1323,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.ystep,
             step: 0.1,
             unit: "cm",
+            defaultValue: 1,
             clearKeys: uniqueStrings(GRID_YSTEP_CLEAR_KEYS),
             write: makeSetPropertyWriteTargetForElementId(inlineTarget, gridInspectorState.keywordId, "ystep")
           }
@@ -2371,44 +1891,6 @@ function resolveFillPaintState(
   return { mode: "solid", shading, pattern };
 }
 
-export function fillShadingPresetFromStyleName(raw: string): FillShadingPresetId {
-  const normalized = stripEnclosingBraces(raw).trim().toLowerCase().replace(/\s+/g, " ");
-  if (normalized === "axis") {
-    return "axis";
-  }
-  if (normalized === "radial") {
-    return "radial";
-  }
-  if (normalized === "ball") {
-    return "ball";
-  }
-  return "custom";
-}
-
-export function fillPatternPresetFromResolvedPattern(pattern: ResolvedPattern | null): FillPatternPresetId {
-  if (!pattern) {
-    return "dots";
-  }
-  if (pattern.kind === "legacy") {
-    const resolved = FILL_PATTERN_PRESET_BY_LOWER.get(pattern.name.toLowerCase());
-    return resolved ?? "custom";
-  }
-  return META_FILL_PATTERN_PRESET_BY_KIND[pattern.kind] ?? "custom";
-}
-
-export function fillPatternPresetFromRaw(raw: string): FillPatternPresetId {
-  const name = extractPatternName(raw);
-  if (!name) {
-    return "dots";
-  }
-  const metaMatch = META_FILL_PATTERN_PRESET_BY_LOWER.get(name.toLowerCase()) ?? null;
-  if (metaMatch) {
-    return metaMatch;
-  }
-  const match = FILL_PATTERN_PRESET_BY_LOWER.get(name.toLowerCase());
-  return match ?? "custom";
-}
-
 function resolveFillPatternOptionMutationContext(
   pattern: ResolvedPattern | null,
   fallbackPatternPreset: FillPatternPresetId,
@@ -2479,60 +1961,6 @@ function resolveFillPatternOptionMutationContext(
     family: fallbackFamily,
     values: defaultFillPatternMetaValues(fallbackFamily, fallbackLineWidth)
   };
-}
-
-function extractPatternName(raw: string): string | null {
-  const normalized = stripEnclosingBraces(raw).trim();
-  if (normalized.length === 0) {
-    return null;
-  }
-
-  const bracketIndex = findTopLevelOpenBracket(normalized);
-  const name = bracketIndex >= 0 ? normalized.slice(0, bracketIndex).trim() : normalized;
-  return name.length > 0 ? name : null;
-}
-
-function findTopLevelOpenBracket(input: string): number {
-  let parenDepth = 0;
-  let braceDepth = 0;
-  let bracketDepth = 0;
-
-  for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-    if (char === "(") {
-      parenDepth += 1;
-      continue;
-    }
-    if (char === ")") {
-      parenDepth = Math.max(0, parenDepth - 1);
-      continue;
-    }
-    if (char === "{") {
-      braceDepth += 1;
-      continue;
-    }
-    if (char === "}") {
-      braceDepth = Math.max(0, braceDepth - 1);
-      continue;
-    }
-    if (char === "[") {
-      if (parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
-        return index;
-      }
-      bracketDepth += 1;
-      continue;
-    }
-    if (char === "]") {
-      bracketDepth = Math.max(0, bracketDepth - 1);
-      continue;
-    }
-  }
-
-  return -1;
 }
 
 function parseInspectorBoolean(raw: string): boolean | null {
@@ -3422,6 +2850,51 @@ function resolveInlineWriteTarget(
     };
   }
 
+  const picStack = element.origin?.picStack ?? [];
+  if (picStack.length > 0) {
+    const picOrigin = picStack[picStack.length - 1];
+    if (!picOrigin) {
+      return {
+        targetId: null,
+        targetKind: null,
+        writable: false,
+        reason: "This pic expansion cannot be edited from the inspector."
+      };
+    }
+    if (picOrigin.parameterized) {
+      return {
+        targetId: null,
+        targetKind: null,
+        writable: false,
+        reason: "Parameterized pic templates are read-only."
+      };
+    }
+    if (!picOrigin.codeSpan || !element.origin?.picTemplateLocalTargetId) {
+      return {
+        targetId: null,
+        targetKind: null,
+        writable: false,
+        reason: "This pic template target could not be mapped back to source."
+      };
+    }
+    const targetId = makePicTemplateTargetId(picOrigin.codeSpan, element.origin.picTemplateLocalTargetId);
+    const resolved = resolveTarget(targetId);
+    if (resolved.kind === "found") {
+      return {
+        targetId,
+        targetKind: resolved.target.kind,
+        writable: true,
+        infoNote: picOrigin.codeSource === "inline" ? PIC_INLINE_TEMPLATE_INFO_NOTE : PIC_SHARED_TEMPLATE_INFO_NOTE
+      };
+    }
+    return {
+      targetId: null,
+      targetKind: null,
+      writable: false,
+      reason: "This pic template target could not be mapped back to source."
+    };
+  }
+
   const foreachStack = element.origin?.foreachStack ?? [];
   const foreachVariableNames = collectForeachVariableNames(foreachStack);
   if (foreachStack.length > 0) {
@@ -3778,63 +3251,6 @@ function polygonSignedArea(points: ReadonlyArray<{ x: number; y: number }>): num
     area += current.x * next.y - next.x * current.y;
   }
   return area / 2;
-}
-
-export function lineWidthPresetLabel(value: number): string | null {
-  for (const preset of LINE_WIDTH_PRESETS) {
-    if (Math.abs(preset.value - value) <= 0.02) {
-      return preset.label;
-    }
-  }
-  return null;
-}
-
-export function dashStylePresetFromStyle(dashArray: number[] | null, lineWidth: number): DashStylePresetId {
-  if (!dashArray || dashArray.length === 0) {
-    return "solid";
-  }
-  if (dashArray.length !== 2) {
-    return "custom";
-  }
-  const first = dashArray[0];
-  const second = dashArray[1];
-  if (closeEnough(first, 3) && closeEnough(second, 3)) {
-    return "dashed";
-  }
-  if (closeEnough(first, 4) && closeEnough(second, 2)) {
-    return "densely dashed";
-  }
-  if (closeEnough(first, 6) && closeEnough(second, 4)) {
-    return "loosely dashed";
-  }
-  if (closeEnough(first, lineWidth) && closeEnough(second, 2)) {
-    return "dotted";
-  }
-  if (closeEnough(first, lineWidth) && closeEnough(second, 1)) {
-    return "densely dotted";
-  }
-  if (closeEnough(first, lineWidth) && closeEnough(second, 4)) {
-    return "loosely dotted";
-  }
-  return "custom";
-}
-
-function closeEnough(a: number, b: number): boolean {
-  return Math.abs(a - b) <= DASH_PATTERN_EPSILON;
-}
-
-export function lineCapPresetFromStyle(value: "butt" | "round" | "square"): LineCapPresetId {
-  if (value === "butt" || value === "round" || value === "square") {
-    return value;
-  }
-  return "custom";
-}
-
-export function lineJoinPresetFromStyle(value: "miter" | "round" | "bevel"): LineJoinPresetId {
-  if (value === "miter" || value === "round" || value === "bevel") {
-    return value;
-  }
-  return "custom";
 }
 
 function pathMorphingDecorationPresetFromStyle(style: {

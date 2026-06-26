@@ -110,6 +110,27 @@ describe("semantic incremental evaluation", () => {
     });
   });
 
+  it("keeps backgrounds library sources on the full-evaluation path", () => {
+    const source = String.raw`\begin{tikzpicture}[framed]
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const parsed = parseTikz(source, { recover: true });
+    const result = createIncrementalSemanticSession().evaluate({
+      figure: parsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: ["path:0"],
+        sourcePatches: [{ replacement: "framed" }]
+      }
+    });
+
+    expect(result.stats).toMatchObject({
+      strategy: "full",
+      fallbackReason: "stateful-graphics-state"
+    });
+  });
+
   it("matches full evaluation for repeated move-element drag updates", () => {
     const session = createIncrementalSemanticSession();
     let source = STARTUP_SOURCE;

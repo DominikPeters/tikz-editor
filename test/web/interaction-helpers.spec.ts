@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pt, worldPoint } from "../../packages/core/src/coords/index.js";
+import { pt, svgBounds, svgPoint, worldPoint } from "../../packages/core/src/coords/index.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import type { EditHandle } from "../../packages/core/src/semantic/types.js";
 import { identityMatrix } from "../../packages/core/src/semantic/transform.js";
@@ -7,8 +7,10 @@ import {
   createBezierTemplateFromBend,
   resolveHandleIdForDrag,
   resolveBezierControlsFromBend,
+  projectResizeDimensionsFromOppositeCorner,
   snapPointDeltaToAxisStepMultiples
 } from "../../packages/app/src/ui/canvas-panel/interaction-helpers.js";
+import type { ResizeFrame } from "../../packages/app/src/ui/canvas-panel/resize-frames.js";
 
 const cm = (value: number): number => value * PT_PER_CM;
 const wp = (x: number, y: number) => worldPoint(pt(x), pt(y));
@@ -42,6 +44,29 @@ function makePathPointHandle(
     coordinateForm: "cartesian",
     rewriteMode: "direct"
   } as EditHandle;
+}
+
+function makeResizeFrame(width: number, height: number): ResizeFrame {
+  const sp = (x: number, y: number) => svgPoint(pt(x), pt(y));
+  const point = (x: number, y: number) => ({ world: wp(x, y), svg: sp(x, y) });
+  return {
+    sourceId: "path:0",
+    centerWorld: wp(width / 2, height / 2),
+    centerSvg: sp(width / 2, height / 2),
+    cornersByRole: {
+      "top-left": point(0, height),
+      "top-right": point(width, height),
+      "bottom-left": point(0, 0),
+      "bottom-right": point(width, 0)
+    },
+    polygonSvg: [
+      sp(0, height),
+      sp(width, height),
+      sp(width, 0),
+      sp(0, 0)
+    ],
+    boundsSvg: svgBounds(pt(0), pt(0), pt(width), pt(height))
+  };
 }
 
 describe("interaction-helpers bezier math", () => {
@@ -99,6 +124,17 @@ describe("interaction-helpers bezier math", () => {
     expect(template.control2).toBeDefined();
     expect(template.to).toBeDefined();
   });
+
+  it("preserves creation stroke color on bezier templates", () => {
+    const template = createBezierTemplateFromBend(
+      wp(cm(0), cm(0)),
+      wp(cm(3), cm(0)),
+      wp(cm(1.5), cm(1)),
+      { strokeColor: "red" }
+    );
+
+    expect(template.strokeColor).toBe("red");
+  });
 });
 
 describe("interaction-helpers step snapping", () => {
@@ -122,6 +158,22 @@ describe("interaction-helpers step snapping", () => {
     );
     expect(snapped.x).toBe(13.2);
     expect(snapped.y).toBe(26.1);
+  });
+});
+
+describe("interaction-helpers resize projection", () => {
+  it("preserves opposite-corner resize dimensions when requested", () => {
+    const frame = makeResizeFrame(cm(2), cm(1));
+    const dimensions = projectResizeDimensionsFromOppositeCorner(
+      wp(cm(-1), cm(2)),
+      frame,
+      "top-left",
+      0.5,
+      true
+    );
+
+    expect(dimensions.width).toBeCloseTo(cm(4), 6);
+    expect(dimensions.height).toBeCloseTo(cm(2), 6);
   });
 });
 

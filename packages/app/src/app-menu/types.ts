@@ -79,6 +79,8 @@ export const APP_MENU_COMMAND_IDS = {
   EDIT_EQUATION: "edit.equation",
   ADD_LABEL: "insert.add-label",
   ADD_PIN: "insert.add-pin",
+  NODE_POSITION_RELATIVE_TO: "node.position-relative-to",
+  NODE_CONVERT_TO_ABSOLUTE: "node.convert-to-absolute",
   FIT_TO_CONTENT: "view.fit-to-content",
   ZOOM_IN: "view.zoom-in",
   ZOOM_OUT: "view.zoom-out",

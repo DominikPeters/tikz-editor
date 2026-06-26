@@ -845,7 +845,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         action.action.kind === "moveHandle" || action.action.kind === "connectHandle" || action.action.kind === "moveAdornment" ? "move-handle" :
         action.action.kind === "splitPath" || action.action.kind === "joinPaths" || action.action.kind === "toggleClosedPath" ||
         action.action.kind === "deletePathPoint" || action.action.kind === "setPathPointKind" ? "path-edit" :
-        action.action.kind === "setProperty" || action.action.kind === "updateNodeText" || action.action.kind === "cleanupPropertyWrites" ? "set-property" :
+        action.action.kind === "setProperty" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" || action.action.kind === "cleanupPropertyWrites" ||
+        action.action.kind === "positionNodeRelativeTo" || action.action.kind === "convertNodePositionToAbsolute" ? "set-property" :
         action.action.kind === "alignElements" ? "align" :
         action.action.kind === "distributeElements" ? "distribute" :
         action.action.kind === "reorderElements" ? "reorder" :

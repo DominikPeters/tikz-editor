@@ -53,11 +53,20 @@ function getTokenClassName(token: SourceToken): string {
 }
 
 export function renderSourcePreview(target: HTMLElement, lines: readonly SourceLine[]): void {
-  const signature = sourceStructureSignature(lines);
+  const lineSignatures = lines.map(sourceLineSignature);
+  const signature = lineSignatures.join("|");
   const previous = LAST_RENDERED_SOURCE.get(target);
 
   if (previous?.signature !== signature) {
-    LAST_RENDERED_SOURCE.set(target, mountSourcePreview(target, lines, signature));
+    const mounted = mountSourcePreview(target, lines, signature, lineSignatures);
+    if (previous) {
+      mounted.lineElements.forEach((lineElement, lineIndex) => {
+        if (previous.lineSignatures[lineIndex] !== lineSignatures[lineIndex]) {
+          flashLineTokens(lineElement);
+        }
+      });
+    }
+    LAST_RENDERED_SOURCE.set(target, mounted);
     return;
   }
 
@@ -67,6 +76,9 @@ export function renderSourcePreview(target: HTMLElement, lines: readonly SourceL
       const textNode = previous.textNodes[tokenIndex];
       if (textNode && textNode.nodeValue !== token.text) {
         textNode.nodeValue = token.text;
+        if (textNode.parentElement) {
+          flashChangedToken(textNode.parentElement);
+        }
       }
       tokenIndex += 1;
     });
@@ -75,24 +87,52 @@ export function renderSourcePreview(target: HTMLElement, lines: readonly SourceL
 
 type RenderedSourcePreview = {
   signature: string;
+  lineSignatures: string[];
   textNodes: Text[];
+  lineElements: HTMLElement[];
 };
 
 const LAST_RENDERED_SOURCE = new WeakMap<HTMLElement, RenderedSourcePreview>();
 
-function sourceStructureSignature(lines: readonly SourceLine[]): string {
-  return lines
-    .map((line) => line.map((token) => `${token.kind}:${token.className ?? ""}`).join(","))
-    .join("|");
+const FLASH_DURATION_MS = 600;
+const FLASH_TIMERS = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+function flashChangedToken(tokenElement: HTMLElement): void {
+  tokenElement.classList.add("sourceToken--changed");
+  const pending = FLASH_TIMERS.get(tokenElement);
+  if (pending !== undefined) {
+    clearTimeout(pending);
+  }
+  FLASH_TIMERS.set(
+    tokenElement,
+    setTimeout(() => {
+      tokenElement.classList.remove("sourceToken--changed");
+      FLASH_TIMERS.delete(tokenElement);
+    }, FLASH_DURATION_MS)
+  );
+}
+
+function flashLineTokens(lineElement: HTMLElement): void {
+  lineElement.querySelectorAll<HTMLElement>(".sourceToken").forEach((tokenElement) => {
+    if (tokenElement.textContent?.trim()) {
+      flashChangedToken(tokenElement);
+    }
+  });
+}
+
+function sourceLineSignature(line: SourceLine): string {
+  return line.map((token) => `${token.kind}:${token.className ?? ""}`).join(",");
 }
 
 function mountSourcePreview(
   target: HTMLElement,
   lines: readonly SourceLine[],
-  signature: string
+  signature: string,
+  lineSignatures: string[]
 ): RenderedSourcePreview {
   const fragment = document.createDocumentFragment();
   const textNodes: Text[] = [];
+  const lineElements: HTMLElement[] = [];
 
   lines.forEach((line) => {
     const lineElement = document.createElement("span");
@@ -106,10 +146,11 @@ function mountSourcePreview(
       lineElement.append(tokenElement);
     });
     fragment.append(lineElement);
+    lineElements.push(lineElement);
   });
 
   target.replaceChildren(fragment);
-  return { signature, textNodes };
+  return { signature, lineSignatures, textNodes, lineElements };
 }
 
 export const SourcePreview = forwardRef<HTMLElement, SourcePreviewProps>(function SourcePreview(

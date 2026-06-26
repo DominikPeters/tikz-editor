@@ -112,6 +112,9 @@ function buildNode(
 
 function deriveStatementLabel(statement: PathStatement | ScopeStatement, elements: readonly SceneElement[]): string {
   if (statement.kind === "Scope") {
+    if (hasOptionFlag(statement.options, "on background layer")) {
+      return "Background Layer";
+    }
     return "Scope";
   }
 

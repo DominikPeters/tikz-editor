@@ -1,23 +1,21 @@
 {
   "name": "@tikz-editor/core",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "Reusable TikZ parser/semantic/SVG engine",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "generate:grammar": "lezer-generator src/syntax/grammar/tikz.grammar -o src/syntax/grammar/tikz-parser.ts",
-    "build": "npm run generate:grammar && tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@lezer/common": "^1.3.0",
-    "@lezer/lr": "^1.4.3",
     "@mathjax/src": "^4.1.1",
+    "@lezer/common": "^1.5.1",
+    "@tikz-editor/lezer-tikz": "0.5.0",
     "mathjax": "^4.1.1",
     "xml-formatter": "^3.6.7"
   },
   "devDependencies": {
-    "@lezer/generator": "^1.8.0",
     "@types/node": "^22.13.0",
     "typescript": "^5.7.3"
   }

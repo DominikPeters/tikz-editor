@@ -1,5 +1,6 @@
 import { CM_PER_PT, formatNumber } from "tikz-editor/edit/format";
 import { pt, worldPoint } from "tikz-editor/coords/index";
+import { buildDrawOptions } from "tikz-editor/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
 
 const MIN_WORLD_DISTANCE_PT = 1e-3;
@@ -135,7 +136,8 @@ export function resolveFreehandPreviewSegments(
 export function generateFreehandToolSource(
   draft: FreehandToolDraft,
   zoom: number,
-  smoothingTolerancePx = FREEHAND_SMOOTHING_DEFAULT_PX
+  smoothingTolerancePx = FREEHAND_SMOOTHING_DEFAULT_PX,
+  options: { strokeColor?: string } = {}
 ): string | null {
   const toleranceWorld = clampSmoothingTolerancePx(smoothingTolerancePx) / Math.max(zoom, 1e-3);
   const simplified = simplifyFreehandPoints(draft.points, toleranceWorld);
@@ -158,7 +160,8 @@ export function generateFreehandToolSource(
       `.. controls ${formatPointCm(segment.control1)} and ${formatPointCm(segment.control2)} .. ${formatPointCm(segment.to)}`
     );
   }
-  return `\\draw ${parts.join(" ")};`;
+  const drawOptions = buildDrawOptions(options.strokeColor, undefined, false);
+  return `\\draw${drawOptions} ${parts.join(" ")};`;
 }
 
 function polylineLength(points: readonly WorldPoint[]): number {

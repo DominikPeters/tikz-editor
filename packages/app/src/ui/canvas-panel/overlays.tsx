@@ -1,5 +1,5 @@
 import { Fragment, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import type { EditHandle } from "tikz-editor/semantic/types";
+import type { EditHandle, NodeAnchorTarget } from "tikz-editor/semantic/types";
 import type { WorldPoint } from "../coords/types";
 import type { ResizeRole } from "tikz-editor/edit/actions";
 import type { SnapLine } from "tikz-editor/edit/snapping";
@@ -12,10 +12,11 @@ import type {
   AdornmentHighlightBox,
   HandleDisplay,
   NodeAnchorOverlayState,
+  NodePositionLinkDisplay,
   SelectionBoxDisplay
 } from "./types";
 import { fmt, worldToSvgPoint } from "./geometry";
-import css from "../CanvasPanel.module.css";
+import css from "./CanvasPanel.module.css";
 
 const SNAP_GAP_ARROW_MARKER_ID = "snap-gap-arrow-marker";
 const TOOL_PREVIEW_NODE_RADIUS_PX = 12;
@@ -476,6 +477,40 @@ export function CurveControlOverlay({
   );
 }
 
+export function NodePositionLinkOverlay({
+  links,
+  viewBox
+}: {
+  links: readonly NodePositionLinkDisplay[];
+  viewBox: SvgViewBox;
+}) {
+  if (links.length === 0) {
+    return null;
+  }
+
+  return (
+    <g className={css.nodePositionLinkOverlay}>
+      {links.map((link) => {
+        const from = worldToSvgPoint(link.from, viewBox);
+        const to = worldToSvgPoint(link.to, viewBox);
+        return (
+          <line
+            key={link.key}
+            className={css.nodePositionLinkLine}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            data-testid="node-position-link"
+            data-node-position-link-source-id={link.sourceId}
+            data-node-position-link-target-source-id={link.targetSourceId}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 export function HitRegionLayer({
   hitRegions,
   hoveredElementId,
@@ -485,7 +520,8 @@ export function HitRegionLayer({
   onElementPointerDown,
   onElementContextMenu,
   onElementDoubleClick,
-  onHoverChange
+  onHoverChange,
+  cursorByTargetId
 }: {
   hitRegions: readonly HitRegion[];
   hoveredElementId: string | null;
@@ -496,6 +532,7 @@ export function HitRegionLayer({
   onElementContextMenu: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onHoverChange: (targetId: string | null) => void;
+  cursorByTargetId?: ReadonlyMap<string, string>;
 }) {
   const clipSvgIdBySceneId = new Map<string, string>();
   const clipDefs: Array<{ sceneId: string; svgId: string; d: string; fillRule: "nonzero" | "evenodd" }> = [];
@@ -540,8 +577,11 @@ export function HitRegionLayer({
       ) : null}
       {hitRegions.map((region) => {
         const isHovered = hoveredElementId === (toolMode === "addBucket" ? region.sourceId : region.targetId);
+        const cursorOverride = cursorByTargetId?.get(region.targetId);
         const cursor =
-          toolMode === "select"
+          cursorByTargetId
+            ? cursorOverride ?? "default"
+          : toolMode === "select"
             ? region.shape === "rect" && region.matrixEdgeSelection
               ? region.matrixEdgeSelection.cursor
               : region.shape === "rect" && region.interactionMode === "move"
@@ -902,6 +942,7 @@ export function HandleOverlay({
     event: ReactPointerEvent<SVGElement>,
     sourceId: string,
     centerWorld: WorldPoint,
+    centerPivotWorld: WorldPoint,
     cursor: string
   ) => void;
 }) {
@@ -921,7 +962,7 @@ export function HandleOverlay({
             onResizeHandlePointerDown(event, display.elementId, display.role, display.cursor);
             return;
           }
-          onRotateHandlePointerDown(event, display.elementId, display.centerWorld, display.cursor);
+          onRotateHandlePointerDown(event, display.elementId, display.centerWorld, display.centerPivotWorld, display.cursor);
         };
         const onContextMenu = (event: ReactMouseEvent<SVGElement>) =>
           { onElementContextMenu(
@@ -1026,12 +1067,18 @@ export function NodeAnchorOverlay({
   anchorOverlay,
   viewBox,
   strokeWidth,
-  radius
+  radius,
+  onAnchorPointerDown,
+  onAnchorClick,
+  onAnchorHoverChange
 }: {
   anchorOverlay: NodeAnchorOverlayState | null;
   viewBox: SvgViewBox;
   strokeWidth: number;
   radius: number;
+  onAnchorPointerDown?: (event: ReactPointerEvent<SVGCircleElement>, anchor: NodeAnchorTarget) => void;
+  onAnchorClick?: (event: ReactMouseEvent<SVGCircleElement>, anchor: NodeAnchorTarget) => void;
+  onAnchorHoverChange?: (anchor: NodeAnchorTarget | null) => void;
 }) {
   if (!anchorOverlay || anchorOverlay.visibleAnchors.length === 0) {
     return null;
@@ -1041,6 +1088,10 @@ export function NodeAnchorOverlay({
     <g className={css.nodeAnchorOverlay}>
       {anchorOverlay.visibleAnchors.map((anchor) => {
         const point = worldToSvgPoint(anchor.world, viewBox);
+        const anchorSourceId = anchor.nodeSourceId?.trim() ?? "";
+        const anchorState = anchorSourceId ? anchorOverlay.anchorStateBySourceId?.get(anchorSourceId) : undefined;
+        const disabled = anchorState?.disabled === true;
+        const radiusScale = anchorOverlay.radiusScale ?? 1;
         const snapped =
           anchorOverlay.snappedAnchor?.nodeName === anchor.nodeName &&
           anchorOverlay.snappedAnchor?.nodeSourceId === anchor.nodeSourceId &&
@@ -1048,16 +1099,37 @@ export function NodeAnchorOverlay({
         return (
           <circle
             key={`${anchor.nodeName || anchor.nodeSourceId}:${anchor.anchor}`}
-            className={`${css.nodeAnchorPoint} ${snapped ? css.nodeAnchorPointSnapped : ""}`}
+            className={`${css.nodeAnchorPoint} ${snapped ? css.nodeAnchorPointSnapped : ""} ${onAnchorPointerDown || onAnchorClick ? css.nodeAnchorPointInteractive : ""} ${disabled ? css.nodeAnchorPointDisabled : ""}`}
             cx={point.x}
             cy={point.y}
-            r={snapped ? radius * 1.1 : radius * 0.85}
+            r={(snapped ? radius * 1.1 : radius * 0.85) * radiusScale}
             strokeWidth={strokeWidth}
+            onPointerDown={
+              onAnchorPointerDown
+                ? (event) => { onAnchorPointerDown(event, anchor); }
+                : undefined
+            }
+            onClick={
+              onAnchorClick
+                ? (event) => { onAnchorClick(event, anchor); }
+                : undefined
+            }
+            onPointerEnter={
+              onAnchorHoverChange
+                ? () => { onAnchorHoverChange(anchor); }
+                : undefined
+            }
+            onPointerLeave={
+              onAnchorHoverChange
+                ? () => { onAnchorHoverChange(null); }
+                : undefined
+            }
             data-testid="node-anchor-dot"
             data-anchor-node={anchor.nodeName}
             data-anchor-source-id={anchor.nodeSourceId}
             data-anchor-name={anchor.anchor}
             data-anchor-snapped={snapped ? "true" : undefined}
+            data-anchor-disabled={disabled ? "true" : undefined}
           />
         );
       })}

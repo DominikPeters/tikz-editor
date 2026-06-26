@@ -38,6 +38,9 @@ const RESERVED_STYLE_DEFINITION_KEYS = new Set([
   "every fit/.style",
   "every fit/.append style",
   "every fit/.prefix style",
+  "every pic/.style",
+  "every pic/.append style",
+  "every pic/.prefix style",
   "every child/.style",
   "every child/.append style",
   "every child/.prefix style",
@@ -105,7 +108,17 @@ const RESERVED_STYLE_DEFINITION_KEYS = new Set([
 
 const BUILTIN_CUSTOM_STYLE_DEFINITIONS: Array<{ name: string; source: string }> = [
   { name: "help lines", source: "color=gray,very thin" },
-  { name: "every edge quotes", source: "auto" }
+  { name: "every edge quotes", source: "auto" },
+  { name: "background rectangle", source: "draw" },
+  { name: "background top", source: "draw" },
+  { name: "background bottom", source: "draw" },
+  { name: "background left", source: "draw" },
+  { name: "background right", source: "draw" },
+  { name: "background grid", source: "help lines,draw" },
+  { name: "framed", source: "show background rectangle" },
+  { name: "gridded", source: "show background grid" },
+  { name: "tight background", source: "inner frame sep=0pt" },
+  { name: "loose background", source: "inner frame sep=2ex" }
 ];
 
 const BUILTIN_CUSTOM_STYLE_REGISTRY_ENTRIES: Array<[string, CustomStyleLayer[]]> = BUILTIN_CUSTOM_STYLE_DEFINITIONS.flatMap(

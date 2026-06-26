@@ -5,6 +5,7 @@ import type { NodeTextRenderInfo } from "../../text/types.js";
 import { appendPathPoint, roundClosedPathStartCorner } from "../path/segments.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { ResolvedStyle, SceneAdornment, SceneCircle, SceneEllipse, ScenePath, ScenePathCommand, SceneText } from "../types.js";
+import { MAIN_SCENE_LAYER } from "../types.js";
 import type { StyleChainEntry } from "../style-chain.js";
 import { cloneStyleChain } from "../style-chain.js";
 import {
@@ -63,6 +64,7 @@ export function makeCircleElement(
     kind: "Circle",
     id: `scene-circle:${sourceId}:${span.from}`,
     runtimeId: `scene-circle:${sourceId}:${span.from}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     adornment,
     style: { ...style },
@@ -95,6 +97,7 @@ export function makeTextElement(
     kind: "Text",
     id: `scene-text:${sourceId}:${itemId}`,
     runtimeId: `scene-text:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     adornment,
     textSourceSpan,
@@ -238,6 +241,7 @@ export function makeNodeBoxElement(
     kind: "Path",
     id: `scene-node-box:${sourceId}:${itemId}`,
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     adornment,
     style: { ...style },
@@ -262,6 +266,7 @@ export function makeNodeEllipseElement(
     kind: "Ellipse",
     id: `scene-node-ellipse:${sourceId}:${itemId}`,
     runtimeId: `scene-node-ellipse:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     adornment,
     style: { ...style },
@@ -417,6 +422,7 @@ export function makeNodeLineElement(
     kind: "Path",
     id: `scene-node-line:${sourceId}:${itemId}`,
     runtimeId: `scene-node-line:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
@@ -1051,6 +1057,7 @@ function makeNodePolygonElement(
     kind: "Path",
     id: `scene-node-box:${sourceId}:${itemId}`,
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
@@ -1117,6 +1124,7 @@ function makeNodePathElement(
     kind: "Path",
     id: `scene-node-box:${sourceId}:${itemId}`,
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
