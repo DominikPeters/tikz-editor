@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, box, box-hard, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, box, box-hard, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -187,11 +187,12 @@ function parseArgs(argv) {
     "vertical-glue",
     "rule",
     "inline-rule",
+    "mask-box",
     "box",
     "box-hard",
     "mixed",
   ].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, box, box-hard, or mixed.");
+    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, box, box-hard, or mixed.");
   }
   return options;
 }
@@ -660,6 +661,31 @@ function generateInlineRuleCase(index, random) {
   };
 }
 
+function generateMaskBoxCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const width = choice(random, [120, 150, 180, 220, 260, 320]);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = `${sentence(random, 4, 7)} ${inlineMaskBox(random)} ${sentence(random, 4, 7)}`;
+  } else if (feature === 1) {
+    text = `${inlineMaskBox(random)} ${sentence(random, 5, 9)} \\par ${sentence(random, 3, 6)}`;
+  } else if (feature === 2) {
+    text = `${sentence(random, 3, 6)} ${inlineMaskBox(random)} ${inlineMaskBox(random)} ${sentence(random, 3, 6)}`;
+  } else {
+    text = `\\begin{quote}${sentence(random, 3, 6)} ${inlineMaskBox(random)} ${sentence(random, 3, 6)}\\end{quote}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "mask-box",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateBoxCase(index, random) {
   const alignment = alignments[index % alignments.length];
   const widths = [140, 170, 200, 240, 300, 340];
@@ -735,7 +761,7 @@ function generateBoxHardCase(index, random) {
 }
 
 function generateMixedFeatureCase(index, random) {
-  const feature = index % 8;
+  const feature = index % 9;
   if (feature === 0) {
     const generated = generateListCase(index, random);
     return {
@@ -802,6 +828,16 @@ function generateMixedFeatureCase(index, random) {
     };
   }
   if (feature === 7) {
+    return {
+      id: `case-${String(index + 1).padStart(3, "0")}`,
+      feature: "mixed-mask-box",
+      text: `${sentence(random, 4, 8)} \\par ${inlineMaskBox(random)} ${sentence(random, 4, 8)}`,
+      width: choice(random, [150, 200, 240, 320]),
+      parindent: choice(random, [0, 10, 15]),
+      alignment: alignments[index % alignments.length],
+    };
+  }
+  if (feature === 8) {
     const generated = generateAlignmentEnvironmentCase(index, random);
     return {
       ...generated,
@@ -873,6 +909,16 @@ function inlineRuleOrRaiseBox(random) {
   return random() < 0.5 ? inlineRule(random) : inlineRaiseBox(random);
 }
 
+function inlineMaskBox(random) {
+  const command = choice(random, ["phantom", "hphantom", "vphantom", "smash"]);
+  const content = choice(random, [
+    choice(random, words),
+    styledPhrase(random, 2, 3),
+    `${choice(random, words)} ${choice(random, words)}`,
+  ]);
+  return `\\${command}{${content}}`;
+}
+
 function generateCaseForMode(index, random, mode) {
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
@@ -897,6 +943,9 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "inline-rule") {
     return generateInlineRuleCase(index, random);
+  }
+  if (mode === "mask-box") {
+    return generateMaskBoxCase(index, random);
   }
   if (mode === "box") {
     return generateBoxCase(index, random);
@@ -1003,7 +1052,9 @@ function computeLineTops(layout, parseLength) {
 }
 
 function reportLineBaselineY(line, lineTops) {
-  return (lineTops[line.lineIndex] ?? 0) + (Number(line.ascent) || firstLineAscentPt);
+  const ascent = Number(line.ascent);
+  return (lineTops[line.lineIndex] ?? 0) +
+    (Number.isFinite(ascent) ? ascent : firstLineAscentPt);
 }
 
 function reportLineText(line) {

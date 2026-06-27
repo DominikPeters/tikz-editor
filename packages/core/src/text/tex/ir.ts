@@ -10,6 +10,7 @@ export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
 export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap";
 export type SimpleTexTextBoxAlignment = "natural" | "left" | "center" | "right" | "stretch";
+export type SimpleTexDimensionBoxCommandName = "phantom" | "hphantom" | "vphantom" | "smash";
 export type SimpleTexFontCommandName =
   | "textit"
   | "textbf"
@@ -198,6 +199,16 @@ export interface SimpleTexRaiseBoxNode extends SimpleTexSourceRange {
   readonly children: readonly SimpleTexInlineNode[];
 }
 
+export interface SimpleTexDimensionBoxNode extends SimpleTexSourceRange {
+  readonly kind: "dimension-box";
+  readonly command: SimpleTexDimensionBoxCommandName;
+  readonly text: string;
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+}
+
 export interface SimpleTexParagraphBreakNode extends SimpleTexSourceRange {
   readonly kind: "paragraph-break";
   readonly text: string;
@@ -284,7 +295,8 @@ export type SimpleTexInlineNode =
   | SimpleTexGroupNode
   | SimpleTexMBoxNode
   | SimpleTexRuleNode
-  | SimpleTexRaiseBoxNode;
+  | SimpleTexRaiseBoxNode
+  | SimpleTexDimensionBoxNode;
 
 export type SimpleTexControlNode =
   | SimpleTexParagraphBreakNode
@@ -302,7 +314,7 @@ export type SimpleTexControlNode =
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox" | "rule" | "raisebox";
+  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox" | "rule" | "raisebox" | "dimension-box";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -312,6 +324,7 @@ export interface SimpleTexToken {
   readonly contentEnd?: number;
   readonly children?: readonly SimpleTexInlineNode[];
   readonly command?: SimpleTexTextBoxCommandName;
+  readonly dimensionCommand?: SimpleTexDimensionBoxCommandName;
   readonly boxWidth?: number;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly ruleRaise?: number;
@@ -580,7 +593,8 @@ function simpleTexIrHasUnsupportedDirectTextChar(nodes: readonly SimpleTexNode[]
         node.kind === "font-command" ||
         node.kind === "group" ||
         node.kind === "mbox" ||
-        node.kind === "raisebox"
+        node.kind === "raisebox" ||
+        node.kind === "dimension-box"
       ) &&
       simpleTexIrHasUnsupportedDirectTextChar(node.children)
     ) {
@@ -719,6 +733,7 @@ function scanSimpleTexIrNodes(
       const mboxCommand = scanSimpleTexMBoxCommand(text, index, sourceOffset);
       const ruleCommand = scanSimpleTexRuleCommand(text, index, sourceOffset);
       const raiseBoxCommand = scanSimpleTexRaiseBoxCommand(text, index, sourceOffset);
+      const dimensionBoxCommand = scanSimpleTexDimensionBoxCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (boxEnvironment) {
@@ -785,6 +800,12 @@ function scanSimpleTexIrNodes(
         nodes.push(raiseBoxCommand.node);
         unsupportedCommand ||= raiseBoxCommand.unsupportedCommand;
         index = raiseBoxCommand.end;
+        continue;
+      }
+      if (dimensionBoxCommand) {
+        nodes.push(dimensionBoxCommand.node);
+        unsupportedCommand ||= dimensionBoxCommand.unsupportedCommand;
+        index = dimensionBoxCommand.end;
         continue;
       }
 
@@ -2095,6 +2116,69 @@ function scanSimpleTexRaiseBoxCommand(
   };
 }
 
+function scanSimpleTexDimensionBoxCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexDimensionBoxNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const command = scanSimpleTexDimensionBoxCommandName(text, start);
+  if (!command) {
+    return null;
+  }
+
+  const groupStart = skipSimpleTexControlWordSpaces(text, command.end);
+  if (text[groupStart] !== "{") {
+    return null;
+  }
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
+  if (groupEnd === null) {
+    return null;
+  }
+
+  const contentStart = groupStart + 1;
+  const contentEnd = groupEnd - 1;
+  const childScan = scanSimpleTexIrNodes(
+    text.slice(contentStart, contentEnd),
+    sourceOffset + contentStart
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
+  return {
+    node: {
+      kind: "dimension-box",
+      command: command.name,
+      text: text.slice(start, groupEnd),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+      content: text.slice(contentStart, contentEnd),
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + contentEnd,
+      children: childrenAreInline
+        ? childScan.nodes.filter(isSimpleTexInlineNode)
+        : [],
+    },
+    end: groupEnd,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+  };
+}
+
+function scanSimpleTexDimensionBoxCommandName(
+  text: string,
+  start: number
+): { readonly name: SimpleTexDimensionBoxCommandName; readonly end: number } | null {
+  for (const name of ["hphantom", "vphantom", "phantom", "smash"] satisfies readonly SimpleTexDimensionBoxCommandName[]) {
+    const end = scanSimpleTexControlWord(text, start, name);
+    if (end !== null) {
+      return { name, end };
+    }
+  }
+  return null;
+}
+
 function scanSimpleTexTextBoxCommandName(
   text: string,
   start: number
@@ -2470,7 +2554,8 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "group" ||
     node.kind === "mbox" ||
     node.kind === "rule" ||
-    node.kind === "raisebox"
+    node.kind === "raisebox" ||
+    node.kind === "dimension-box"
   );
 }
 
@@ -3420,6 +3505,23 @@ export function simpleTexInlineNodesToTokens(
         lift: node.lift,
         boxHeight: node.boxHeight,
         boxDepth: node.boxDepth,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+      });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
+
+    if (node.kind === "dimension-box") {
+      tokens.push({
+        kind: "dimension-box",
+        text: node.text,
+        content: node.content,
+        contentStart: node.contentStart,
+        contentEnd: node.contentEnd,
+        children: node.children,
+        dimensionCommand: node.command,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,

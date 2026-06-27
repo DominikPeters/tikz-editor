@@ -50,6 +50,7 @@ import type {
   TexMathOperatorCommand,
   TexMathOperatorLimits,
   TexMathOperatorNameNucleus,
+  TexMathPhantomNucleus,
   TexMathRuleNucleus,
   TexMathShiftBoxNucleus,
   TexMathSmashNucleus,
@@ -570,6 +571,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
   if (nucleus.kind === "smash") {
     return texMathListNeedsAmsMath(nucleus.body);
   }
+  if (nucleus.kind === "phantom") {
+    return texMathListNeedsAmsMath(nucleus.body);
+  }
   if (nucleus.kind === "shift-box") {
     return texMathListNeedsAmsMath(nucleus.body);
   }
@@ -935,6 +939,9 @@ function layoutNucleus(
   }
   if (nucleus.kind === "smash") {
     return layoutSmashNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "phantom") {
+    return layoutPhantomNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "shift-box") {
     return layoutShiftBoxNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -3807,6 +3814,35 @@ function layoutSmashNucleus(
     width: body.hlist.width,
     height: nucleus.smashHeight ? 0 : body.hlist.height,
     depth: nucleus.smashDepth ? 0 : body.hlist.depth,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutPhantomNucleus(
+  nucleus: TexMathPhantomNucleus,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  cramped: boolean,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  const body = layoutTexMathList(nucleus.body, {
+    fontProfile,
+    style,
+    cramped,
+    baseAtPt,
+    alphabet,
+  });
+  if (!body.supported) {
+    return null;
+  }
+  return {
+    items: [],
+    width: nucleus.preserveWidth ? body.hlist.width : 0,
+    height: nucleus.preserveVertical ? body.hlist.height : 0,
+    depth: nucleus.preserveVertical ? body.hlist.depth : 0,
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,

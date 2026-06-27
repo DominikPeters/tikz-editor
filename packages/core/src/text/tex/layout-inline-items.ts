@@ -23,6 +23,7 @@ import type {
 } from "./math/layout.js";
 import {
   simpleTexInlineNodesToTokens,
+  type SimpleTexDimensionBoxCommandName,
   type SimpleTexDisplayMathDelimiter,
   type SimpleTexFontState,
   type SimpleTexInlineNode,
@@ -253,7 +254,11 @@ export interface TexLayoutMathItem {
   readonly box: TexMathBox;
 }
 
-export type TexLayoutTextBoxCommandName = SimpleTexTextBoxCommandName | "rule" | "raisebox";
+export type TexLayoutTextBoxCommandName =
+  | SimpleTexTextBoxCommandName
+  | SimpleTexDimensionBoxCommandName
+  | "rule"
+  | "raisebox";
 
 export interface TexLayoutTextBoxItem {
   readonly kind: "text-box";
@@ -497,6 +502,43 @@ export function simpleTexSegmentToLayoutItems(
       items.push({
         kind: "text-box",
         command: "raisebox",
+        text: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "dimension-box") {
+      const command = token.dimensionCommand ?? "phantom";
+      const box = texDimensionBoxFromInlineNodes({
+        command,
+        source: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        children: token.children ?? [],
+        fontState: token.fontState,
+        atPt,
+        metricProvider,
+        spaceGlueProfile,
+        mathBoxProvider,
+        textFontProfile,
+      });
+      if (!box) {
+        throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "text-box",
+        command,
         text: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,
@@ -774,6 +816,89 @@ function texRaiseBoxFromInlineNodes(params: {
   };
 }
 
+function texDimensionBoxFromInlineNodes(params: {
+  readonly command: SimpleTexDimensionBoxCommandName;
+  readonly source: string;
+  readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+  readonly fontState: SimpleTexFontState;
+  readonly atPt: number;
+  readonly metricProvider: TexMetricProvider;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly textFontProfile: TexTextFontProfile;
+}): TexMathBox | null {
+  const innerItems = simpleTexInlineTokensToLayoutItems({
+    tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
+    atPt: params.atPt,
+    metricProvider: params.metricProvider,
+    spaceGlueProfile: params.spaceGlueProfile,
+    mathBoxProvider: params.mathBoxProvider,
+    textFontProfile: params.textFontProfile,
+    trimEdges: false,
+  });
+  const body = texMBoxHListFromLayoutItems({
+    items: innerItems,
+    sourceSpan: {
+      start: params.contentStart,
+      end: params.contentEnd,
+    },
+    metricProvider: params.metricProvider,
+  });
+  if (!body) {
+    return null;
+  }
+  const preserveWidth = params.command === "phantom" ||
+    params.command === "hphantom" ||
+    params.command === "smash";
+  const preserveVertical = params.command === "phantom" || params.command === "vphantom";
+  const renderBody = params.command === "smash";
+  const width = preserveWidth ? body.width : 0;
+  const height = preserveVertical ? body.height : 0;
+  const depth = preserveVertical ? body.depth : 0;
+  const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
+  const hlist: TexMathHList = {
+    kind: "math-hlist",
+    style: "text",
+    width,
+    height,
+    depth,
+    sourceSpan,
+    items: renderBody ? body.items : [],
+  };
+  return {
+    source: params.source,
+    content: params.content,
+    sourceKind: "text",
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+    contentStart: params.contentStart,
+    contentEnd: params.contentEnd,
+    width,
+    height,
+    depth,
+    caretStops: texMBoxCaretStops(
+      params.sourceStart,
+      params.sourceEnd,
+      params.contentStart,
+      params.contentEnd,
+      width
+    ),
+    constructRanges: [{
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      xStart: 0,
+      xEnd: width,
+    }],
+    hlist,
+    fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
+  };
+}
+
 function texMBoxFontProfile(
   metricProvider: TexMetricProvider,
   textFontProfile: TexTextFontProfile
@@ -989,6 +1114,43 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       items.push({
         kind: "text-box",
         command: "raisebox",
+        text: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "dimension-box") {
+      const command = token.dimensionCommand ?? "phantom";
+      const box = texDimensionBoxFromInlineNodes({
+        command,
+        source: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        children: token.children ?? [],
+        fontState: token.fontState,
+        atPt: params.atPt,
+        metricProvider: params.metricProvider,
+        spaceGlueProfile: params.spaceGlueProfile,
+        mathBoxProvider: params.mathBoxProvider,
+        textFontProfile: params.textFontProfile,
+      });
+      if (!box) {
+        throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "text-box",
+        command,
         text: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,

@@ -34,7 +34,6 @@ const amsMathCommands = [
   String.raw`\overunderset`,
   String.raw`\overset`,
   String.raw`\projlim`,
-  String.raw`\smash`,
   String.raw`\underset`,
   String.raw`\varinjlim`,
   String.raw`\varliminf`,
@@ -204,6 +203,11 @@ const formulas = args.formulas.length > 0
       "\\makebox[24pt][s]{a b}",
       "\\llap{if}",
       "\\rlap{if}",
+      "\\phantom{x}+y",
+      "\\hphantom{x}+y",
+      "\\vphantom{\\frac{1}{2}}+y",
+      "\\mbox{a\\phantom{b}c}",
+      "\\mbox{a\\smash{g}c}",
       "x_{\\text{if}}",
       "x_{y_{\\textbf{if}}}",
       "x_{\\mbox{$y$}}",
@@ -806,7 +810,7 @@ function randomMathFormula(rng) {
 function randomMathTerm(rng, depth) {
   const choices = depth > 0
     ? ["atom", "group", "accent"]
-    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack", "mbox", "text-command"];
+    : ["atom", "group", "fraction", "binomial", "radical", "line", "accent", "left-right", "array", "cases", "smallmatrix", "matrix", "operatorname", "substack", "mbox", "text-command", "phantom"];
   const choice = choices[randomInt(rng, choices.length)] ?? "atom";
   let term;
   if (choice === "fraction") {
@@ -840,6 +844,8 @@ function randomMathTerm(rng, depth) {
     term = randomMBoxMathFormula(rng);
   } else if (choice === "text-command") {
     term = randomTextCommandMathFormula(rng);
+  } else if (choice === "phantom") {
+    term = randomPhantomMathFormula(rng);
   } else if (choice === "group") {
     term = "{" + randomSimpleExpression(rng) + "}";
   } else {
@@ -898,7 +904,11 @@ function randomMBoxMathFormula(rng) {
     String.raw`$x+y$ text`,
     String.raw`\rule[1pt]{8pt}{0.8pt}`,
     String.raw`\raisebox{2pt}{up}`,
-  ][randomInt(rng, 10)] ?? "if";
+    String.raw`a\phantom{b}c`,
+    String.raw`a\hphantom{b}c`,
+    String.raw`a\vphantom{g}c`,
+    String.raw`a\smash{g}c`,
+  ][randomInt(rng, 14)] ?? "if";
   const variant = randomInt(rng, 6);
   if (variant === 0) {
     return String.raw`\makebox{` + content + "}";
@@ -918,6 +928,21 @@ function randomMBoxMathFormula(rng) {
     return String.raw`\rlap{` + content + "}";
   }
   return String.raw`\mbox{` + content + "}";
+}
+
+function randomPhantomMathFormula(rng) {
+  const command = [
+    String.raw`\phantom`,
+    String.raw`\hphantom`,
+    String.raw`\vphantom`,
+  ][randomInt(rng, 3)] ?? String.raw`\phantom`;
+  const body = [
+    "x",
+    String.raw`\frac{1}{2}`,
+    String.raw`\sqrt{x}`,
+    "x+y",
+  ][randomInt(rng, 4)] ?? "x";
+  return command + "{" + body + "}";
 }
 
 function randomFractionFormula(rng, numerator, denominator) {

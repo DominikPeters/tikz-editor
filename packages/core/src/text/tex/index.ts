@@ -32,6 +32,8 @@ export {
   type SimpleTexBoxNode,
   type SimpleTexBlockItem,
   type SimpleTexControlNode,
+  type SimpleTexDimensionBoxCommandName,
+  type SimpleTexDimensionBoxNode,
   type SimpleTexDisplayMathBlockItem,
   type SimpleTexDisplayMathNode,
   type SimpleTexEnvironmentBoundaryNode,

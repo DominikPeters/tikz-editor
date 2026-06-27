@@ -128,6 +128,42 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
+  it("parses phantom and smash commands as inline dimension boxes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\phantom{b}B\hphantom{c}C\vphantom{g}D\smash{\textit{x}}E`
+    );
+    const boxes = parsed.nodes.filter((node) => node.kind === "dimension-box");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(boxes).toMatchObject([
+      {
+        kind: "dimension-box",
+        command: "phantom",
+        text: String.raw`\phantom{b}`,
+        content: "b",
+      },
+      {
+        kind: "dimension-box",
+        command: "hphantom",
+        text: String.raw`\hphantom{c}`,
+        content: "c",
+      },
+      {
+        kind: "dimension-box",
+        command: "vphantom",
+        text: String.raw`\vphantom{g}`,
+        content: "g",
+      },
+      {
+        kind: "dimension-box",
+        command: "smash",
+        text: String.raw`\smash{\textit{x}}`,
+        content: String.raw`\textit{x}`,
+        children: [{ kind: "font-command", command: "textit" }],
+      },
+    ]);
+  });
+
   it("rejects vertical material inside inline mbox nodes", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \mbox{\par Beta}`, 120);
 

@@ -262,6 +262,12 @@ function normalizeNucleus(nucleus: TexMathNucleus): TexMathNucleus {
       body: normalizeTexMathAtomClasses(nucleus.body),
     };
   }
+  if (nucleus.kind === "smash" || nucleus.kind === "phantom") {
+    return {
+      ...nucleus,
+      body: normalizeTexMathAtomClasses(nucleus.body),
+    };
+  }
   if (nucleus.kind === "accent") {
     return {
       ...nucleus,

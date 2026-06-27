@@ -179,6 +179,43 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses phantom commands as dimension-masking nuclei", () => {
+    const result = parseTexMath(String.raw`\phantom{x}+\hphantom{y}+\vphantom{z}`, { sourceOffset: 3 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 3, end: 14 },
+      nucleus: {
+        kind: "phantom",
+        command: "phantom",
+        preserveWidth: true,
+        preserveVertical: true,
+        commandSourceSpan: { start: 3, end: 11 },
+        sourceSpan: { start: 3, end: 14 },
+        body: { sourceSpan: { start: 12, end: 13 } },
+      },
+    });
+    expect(atomAt(result, 2)).toMatchObject({
+      sourceSpan: { start: 15, end: 27 },
+      nucleus: {
+        kind: "phantom",
+        command: "hphantom",
+        preserveWidth: true,
+        preserveVertical: false,
+      },
+    });
+    expect(atomAt(result, 4)).toMatchObject({
+      sourceSpan: { start: 28, end: 40 },
+      nucleus: {
+        kind: "phantom",
+        command: "vphantom",
+        preserveWidth: false,
+        preserveVertical: true,
+      },
+    });
+  });
+
   it("parses smash boxes with AMS top and bottom options", () => {
     const result = parseTexMath(String.raw`\smash{x}+\smash[t]{y}+\smash[b]{z}`, { sourceOffset: 4 });
 

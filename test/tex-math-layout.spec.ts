@@ -1371,6 +1371,32 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out phantom boxes by preserving only requested dimensions", () => {
+    const natural = layout(String.raw`\frac{1}{2}`);
+    const phantom = layout(String.raw`\phantom{\frac{1}{2}}`);
+    const hphantom = layout(String.raw`\hphantom{\frac{1}{2}}`);
+    const vphantom = layout(String.raw`\vphantom{\frac{1}{2}}`);
+
+    expect(natural.supported).toBe(true);
+    expect(phantom.supported).toBe(true);
+    expect(hphantom.supported).toBe(true);
+    expect(vphantom.supported).toBe(true);
+    expect(phantom.hlist?.width).toBeCloseTo(natural.hlist?.width ?? 0, 6);
+    expect(phantom.hlist?.height).toBeCloseTo(natural.hlist?.height ?? 0, 6);
+    expect(phantom.hlist?.depth).toBeCloseTo(natural.hlist?.depth ?? 0, 6);
+    expect(phantom.hlist?.items).toEqual([]);
+
+    expect(hphantom.hlist?.width).toBeCloseTo(natural.hlist?.width ?? 0, 6);
+    expect(hphantom.hlist?.height).toBe(0);
+    expect(hphantom.hlist?.depth).toBe(0);
+    expect(hphantom.hlist?.items).toEqual([]);
+
+    expect(vphantom.hlist?.width).toBe(0);
+    expect(vphantom.hlist?.height).toBeCloseTo(natural.hlist?.height ?? 0, 6);
+    expect(vphantom.hlist?.depth).toBeCloseTo(natural.hlist?.depth ?? 0, 6);
+    expect(vphantom.hlist?.items).toEqual([]);
+  });
+
   it("lays out TeX raise and lower primitives by shifting hboxes", () => {
     const raised = layout(String.raw`\raise2pt\hbox{$x$}`);
     const lowered = layout(String.raw`\lower2pt\hbox{$x$}`);

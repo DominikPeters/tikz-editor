@@ -1183,6 +1183,93 @@ describe("TeX vlist lowering", () => {
     expect(raiseboxEmptyHeightWithDepth.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
   });
 
+  it("lays out text-mode phantom and smash dimension boxes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\mbox{g}\phantom{g}\hphantom{g}\vphantom{g}\smash{g}`
+    );
+    const block = parsed.blocks[0];
+
+    expect(block).toBeDefined();
+    const boxes = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile
+        ).filter((item) => item.kind === "text-box")
+      : [];
+    const natural = boxes[0]?.box;
+    const phantom = boxes[1]?.box;
+    const hphantom = boxes[2]?.box;
+    const vphantom = boxes[3]?.box;
+    const smash = boxes[4]?.box;
+
+    expect(boxes).toHaveLength(5);
+    expect(natural?.hlist?.items.length).toBeGreaterThan(0);
+    expect(phantom).toMatchObject({
+      width: natural?.width,
+      height: natural?.height,
+      depth: natural?.depth,
+    });
+    expect(phantom?.hlist?.items).toEqual([]);
+    expect(hphantom).toMatchObject({
+      width: natural?.width,
+      height: 0,
+      depth: 0,
+    });
+    expect(hphantom?.hlist?.items).toEqual([]);
+    expect(vphantom).toMatchObject({
+      width: 0,
+      height: natural?.height,
+      depth: natural?.depth,
+    });
+    expect(vphantom?.hlist?.items).toEqual([]);
+    expect(smash).toMatchObject({
+      width: natural?.width,
+      height: 0,
+      depth: 0,
+    });
+    expect(smash?.hlist?.items.length).toBe(natural?.hlist?.items.length);
+  });
+
+  it("keeps smashed-only paragraph lines at zero height and depth", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Editor model chapter future. \smash{actual alignment} \smash{document} Layout compact document.`,
+      {
+        width: 150,
+        alignment: "center",
+        parindent: 15,
+        mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+        textFontProfile: luaLatexDefaultTextFontProfile,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    const smashedLine = result.report?.lines[1];
+    expect(smashedLine).toMatchObject({
+      ascent: 0,
+      descent: 0,
+    });
+    expect(smashedLine?.segments.map((segment) => segment.kind)).toEqual([
+      "math",
+      "space",
+      "math",
+    ]);
+    expect(result.vlistLayout?.linePlacements.map((placement) => ({
+      y: placement.y,
+      height: placement.height,
+    }))).toEqual([
+      { y: 0, height: 8.99 },
+      { y: 19.05, height: 0 },
+      { y: 24.11, height: 8.99 },
+    ]);
+  });
+
   it("lays out inline math inside text-mode mbox content", () => {
     const source = String.raw`Alpha \mbox{node $x$} Omega`;
     const result = layoutSimpleTexParagraph(source, {

@@ -87,6 +87,7 @@ export type TexMathNucleus =
   | TexMathRadicalNucleus
   | TexMathBoxedNucleus
   | TexMathSmashNucleus
+  | TexMathPhantomNucleus
   | TexMathShiftBoxNucleus
   | TexMathVCenterNucleus
   | TexMathRuleNucleus
@@ -197,6 +198,16 @@ export interface TexMathSmashNucleus {
   readonly smashDepth: boolean;
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly optionSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathPhantomNucleus {
+  readonly kind: "phantom";
+  readonly body: TexMathList;
+  readonly preserveWidth: boolean;
+  readonly preserveVertical: boolean;
+  readonly command: "phantom" | "hphantom" | "vphantom";
+  readonly commandSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

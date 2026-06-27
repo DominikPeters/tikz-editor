@@ -436,6 +436,10 @@ class TexMathParser {
       if (commandName(token.text) === "boxed") {
         return this.parseBoxed(allowScripts);
       }
+      const phantomCommand = phantomCommandName(token.text);
+      if (phantomCommand) {
+        return this.parsePhantom(phantomCommand, allowScripts);
+      }
       if (commandName(token.text) === "smash") {
         return this.parseSmash(allowScripts);
       }
@@ -1166,6 +1170,29 @@ class TexMathParser {
         smashDepth: !option || smashDepth,
         commandSourceSpan: command.sourceSpan,
         ...(option ? { optionSourceSpan: option.sourceSpan } : {}),
+        sourceSpan,
+      },
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parsePhantom(
+    commandNameValue: "phantom" | "hphantom" | "vphantom",
+    allowScripts: boolean
+  ): TexMathAtom {
+    const command = this.advance();
+    const body = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} body`);
+    const sourceSpan = spanUnion(command.sourceSpan, body?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "ord",
+      nucleus: {
+        kind: "phantom",
+        body: body?.list ?? emptyList(command.sourceSpan.end),
+        preserveWidth: commandNameValue === "phantom" || commandNameValue === "hphantom",
+        preserveVertical: commandNameValue === "phantom" || commandNameValue === "vphantom",
+        command: commandNameValue,
+        commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },
       sourceSpan,
@@ -4215,7 +4242,13 @@ class TexMathParser {
         textRunStart = node.sourceEnd;
         continue;
       }
-      if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox" || node.kind === "raisebox") {
+      if (
+        node.kind === "font-command" ||
+        node.kind === "group" ||
+        node.kind === "mbox" ||
+        node.kind === "raisebox" ||
+        node.kind === "dimension-box"
+      ) {
         flushTextRun(node.sourceStart);
         parts.push(...this.mathTextPartsFromInlineNodes(node.children));
         textRunStart = node.sourceEnd;
@@ -6085,6 +6118,13 @@ function mathTextCommandName(text: string): "text" | "hbox" | SimpleTexTextBoxCo
   return null;
 }
 
+function phantomCommandName(text: string): "phantom" | "hphantom" | "vphantom" | null {
+  const name = commandName(text);
+  return name === "phantom" || name === "hphantom" || name === "vphantom"
+    ? name
+    : null;
+}
+
 const simpleTexFontCommandNames = new Set<SimpleTexFontCommandName>([
   "textit",
   "textbf",
@@ -6110,7 +6150,13 @@ function mathTextPlainText(nodes: readonly SimpleTexInlineNode[]): string {
       text += node.text;
       continue;
     }
-    if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox" || node.kind === "raisebox") {
+    if (
+      node.kind === "font-command" ||
+      node.kind === "group" ||
+      node.kind === "mbox" ||
+      node.kind === "raisebox" ||
+      node.kind === "dimension-box"
+    ) {
       text += mathTextPlainText(node.children);
     }
   }
