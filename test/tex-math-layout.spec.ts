@@ -810,6 +810,72 @@ describe("TeX math hlist layout", () => {
       .toBeGreaterThan(naturalGlue?.kind === "glue" ? naturalGlue.width : 0);
   });
 
+  it("lays out fbox and framebox text nuclei with TeX frame dimensions", () => {
+    const natural = layout(String.raw`\mbox{if}`);
+    const fbox = layout(String.raw`\fbox{if}`);
+    const framebox = layout(String.raw`\framebox{if}`);
+    const fixed = layout(String.raw`\framebox[24pt][r]{if}`);
+
+    expect(natural.supported).toBe(true);
+    expect(fbox.supported).toBe(true);
+    expect(framebox.supported).toBe(true);
+    expect(fixed.supported).toBe(true);
+    for (const result of [fbox, framebox]) {
+      expect(result.hlist?.width).toBeCloseTo((natural.hlist?.width ?? 0) + 6.8, 6);
+      expect(result.hlist?.height).toBeCloseTo((natural.hlist?.height ?? 0) + 3.4, 6);
+      expect(result.hlist?.depth).toBeCloseTo((natural.hlist?.depth ?? 0) + 3.4, 6);
+      expect(result.hlist?.items.map((item) => item.kind)).toEqual([
+        "rule",
+        "rule",
+        "kern",
+        "hlist",
+        "kern",
+        "rule",
+        "rule",
+      ]);
+      expect(result.hlist?.items[2]).toMatchObject({
+        kind: "kern",
+        x: 0.4,
+        width: 3,
+      });
+      expect(result.hlist?.items[3]).toMatchObject({
+        kind: "hlist",
+        role: "boxed-body",
+        x: 3.4,
+      });
+      expect(result.hlist?.items[4]).toMatchObject({
+        kind: "kern",
+        x: expect.closeTo((natural.hlist?.width ?? 0) + 3.4, 6),
+        width: 3,
+      });
+    }
+    expect(fixed.hlist?.width).toBeCloseTo(24, 6);
+    const fixedRules = fixed.hlist?.items.filter((item) => item.kind === "rule") ?? [];
+    expect(fixed.hlist?.items[0]).toMatchObject({
+      kind: "rule",
+      width: 24,
+      height: 0.4,
+    });
+    expect(fixedRules[2]).toMatchObject({
+      kind: "rule",
+      x: 23.6,
+      width: 0.4,
+    });
+    const fixedBody = fixed.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "boxed-body"
+    );
+    expect(fixedBody).toMatchObject({
+      kind: "hlist",
+      role: "boxed-body",
+      x: 3,
+      width: 18,
+    });
+    expect(fixedBody?.kind === "hlist"
+      ? flattenGlyphItems(fixedBody.items)[0]?.x
+      : undefined
+    ).toBeCloseTo(24 - 6 - (natural.hlist?.width ?? 0), 6);
+  });
+
   it("lays out llap and rlap as zero-width aligned text boxes", () => {
     const natural = layout(String.raw`\mbox{if}`);
     const llap = layout(String.raw`\llap{if}`);

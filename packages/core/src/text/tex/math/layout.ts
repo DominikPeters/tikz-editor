@@ -1,6 +1,7 @@
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import {
   simpleTexInlineTokensToLayoutItems,
+  texFrameMBoxHList,
   texMBoxHListFromLayoutItems,
   texReboxMBoxHList,
   type TexMathBox,
@@ -158,6 +159,7 @@ export interface TexMathChildHListLayoutItem {
     | "radical-degree"
     | "var-limit-row"
     | "boxed-body"
+    | "boxed-kern"
     | "vcenter-body"
     | "array-row"
     | "array-cell"
@@ -599,6 +601,8 @@ function isTextBoxNucleusCommand(command: TexMathTextNucleus["command"]): boolea
   return command === "mbox" ||
     command === "hbox" ||
     command === "makebox" ||
+    command === "fbox" ||
+    command === "framebox" ||
     command === "llap" ||
     command === "rlap";
 }
@@ -1135,10 +1139,17 @@ function layoutTextNucleus(
     if (!hlist) {
       return null;
     }
-    const boxedHList = texReboxMBoxHList(hlist, {
-      boxWidth: nucleus.boxWidth,
-      boxAlign: nucleus.boxAlign,
-    });
+    const boxedHList = nucleus.command === "fbox" || nucleus.command === "framebox"
+      ? texFrameMBoxHList(hlist, {
+          sourceSpan: nucleus.sourceSpan,
+          contentSourceSpan: nucleus.textSourceSpan,
+          boxWidth: nucleus.command === "framebox" ? nucleus.boxWidth : undefined,
+          boxAlign: nucleus.boxAlign,
+        })
+      : texReboxMBoxHList(hlist, {
+          boxWidth: nucleus.boxWidth,
+          boxAlign: nucleus.boxAlign,
+        });
     return {
       items: boxedHList.items,
       width: boxedHList.width,

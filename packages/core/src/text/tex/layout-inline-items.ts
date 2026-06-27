@@ -35,6 +35,9 @@ import {
 import { roundTexPt } from "./fonts/units.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
+const TEX_LATEX_FBOX_RULE_PT = 0.4;
+const TEX_LATEX_FBOX_SEP_PT = 3;
+
 export interface TexLayoutTextItem {
   readonly kind: "text";
   readonly role?: "list-label";
@@ -415,6 +418,7 @@ export function simpleTexSegmentToLayoutItems(
 
     if (token.kind === "mbox") {
       const box = texMBoxFromInlineNodes({
+        command: token.command ?? "mbox",
         source: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,
@@ -589,6 +593,7 @@ export function simpleTexSegmentToLayoutItems(
 }
 
 function texMBoxFromInlineNodes(params: {
+  readonly command: SimpleTexTextBoxCommandName;
   readonly source: string;
   readonly content: string;
   readonly sourceStart: number;
@@ -625,10 +630,23 @@ function texMBoxFromInlineNodes(params: {
   if (!hlist) {
     return null;
   }
-  const boxedHList = texReboxMBoxHList(hlist, {
-    boxWidth: params.boxWidth,
-    boxAlign: params.boxAlign,
-  });
+  const boxedHList = params.command === "fbox" || params.command === "framebox"
+    ? texFrameMBoxHList(hlist, {
+        sourceSpan: {
+          start: params.sourceStart,
+          end: params.sourceEnd,
+        },
+        contentSourceSpan: {
+          start: params.contentStart,
+          end: params.contentEnd,
+        },
+        boxWidth: params.command === "framebox" ? params.boxWidth : undefined,
+        boxAlign: params.boxAlign,
+      })
+    : texReboxMBoxHList(hlist, {
+        boxWidth: params.boxWidth,
+        boxAlign: params.boxAlign,
+      });
   return {
     source: params.source,
     content: params.content,
@@ -655,6 +673,122 @@ function texMBoxFromInlineNodes(params: {
     }],
     hlist: boxedHList,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
+  };
+}
+
+export function texFrameMBoxHList(
+  body: TexMathHList,
+  params: {
+    readonly sourceSpan: { readonly start: number; readonly end: number };
+    readonly contentSourceSpan: { readonly start: number; readonly end: number };
+    readonly boxWidth?: number;
+    readonly boxAlign?: SimpleTexTextBoxAlignment;
+  }
+): TexMathHList {
+  const rule = TEX_LATEX_FBOX_RULE_PT;
+  const sep = TEX_LATEX_FBOX_SEP_PT;
+  const hasExplicitWidth = params.boxWidth !== undefined && Number.isFinite(params.boxWidth);
+  const framedBody = hasExplicitWidth
+    ? texReboxMBoxHList(body, {
+        boxWidth: roundTexPt((params.boxWidth ?? 0) - 2 * sep),
+        boxAlign: params.boxAlign ?? "center",
+      })
+    : body;
+  const width = hasExplicitWidth
+    ? roundTexPt(params.boxWidth ?? 0)
+    : roundTexPt(framedBody.width + 2 * (rule + sep));
+  const bodyX = hasExplicitWidth ? sep : roundTexPt(rule + sep);
+  const height = roundTexPt(framedBody.height + sep + rule);
+  const depth = roundTexPt(framedBody.depth + sep + rule);
+  const sideHeight = roundTexPt(height + depth);
+  const kernItem = (x: number, width: number): TexMathKernLayoutItem => ({
+    kind: "kern",
+    x: roundTexPt(x),
+    width: roundTexPt(width),
+    reason: "text-kern",
+    sourceSpan: params.sourceSpan,
+  });
+  const liftedKernItem = (x: number, y: number, width: number): TexMathChildHListLayoutItem => ({
+    kind: "hlist",
+    role: "boxed-kern",
+    x: roundTexPt(x),
+    y: roundTexPt(y),
+    width: roundTexPt(width),
+    height: 0,
+    depth: 0,
+    sourceSpan: params.sourceSpan,
+    items: [kernItem(0, width)],
+  });
+  const rules: TexMathRuleLayoutItem[] = [
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: 0,
+      y: -height,
+      width,
+      height: rule,
+      sourceSpan: params.sourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: 0,
+      y: -height,
+      width: rule,
+      height: sideHeight,
+      sourceSpan: params.sourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: roundTexPt(width - rule),
+      y: -height,
+      width: rule,
+      height: sideHeight,
+      sourceSpan: params.sourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "boxed-rule",
+      x: 0,
+      y: roundTexPt(framedBody.depth + sep),
+      width,
+      height: rule,
+      sourceSpan: params.sourceSpan,
+    },
+  ];
+  const bodyChild: TexMathChildHListLayoutItem = {
+    kind: "hlist",
+    role: "boxed-body",
+    x: bodyX,
+    y: 0,
+    width: framedBody.width,
+    height: framedBody.height,
+    depth: framedBody.depth,
+    sourceSpan: params.contentSourceSpan,
+    items: framedBody.items,
+  };
+  const contentItems: TexMathHListItem[] = hasExplicitWidth
+    ? [
+        liftedKernItem(rule, sep, -rule),
+        kernItem(0, sep),
+        bodyChild,
+        kernItem(roundTexPt(sep + framedBody.width), sep),
+        liftedKernItem(width, sep, -rule),
+      ]
+    : [
+        kernItem(rule, sep),
+        bodyChild,
+        kernItem(roundTexPt(rule + sep + framedBody.width), sep),
+      ];
+  return {
+    kind: "math-hlist",
+    style: "text",
+    width,
+    height,
+    depth,
+    sourceSpan: params.sourceSpan,
+    items: [rules[0], rules[1], ...contentItems, rules[2], rules[3]],
   };
 }
 
@@ -1027,6 +1161,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
 
     if (token.kind === "mbox") {
       const box = texMBoxFromInlineNodes({
+        command: token.command ?? "mbox",
         source: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,

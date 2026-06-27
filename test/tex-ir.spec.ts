@@ -58,7 +58,7 @@ describe("simple TeX paragraph IR", () => {
 
   it("parses makebox and zero-width lap boxes as inline text hbox nodes", () => {
     const parsed = parseSimpleTexParagraphIr(
-      String.raw`A\makebox{b}B\makebox[20pt][r]{c}C\llap{d}D\rlap{e}E`
+      String.raw`A\makebox{b}B\makebox[20pt][r]{c}C\llap{d}D\rlap{e}E\fbox{f}F\framebox[24pt][l]{g}G`
     );
     const boxes = parsed.nodes.filter((node) => node.kind === "mbox");
 
@@ -94,6 +94,20 @@ describe("simple TeX paragraph IR", () => {
         text: String.raw`\rlap{e}`,
         content: "e",
         boxWidth: 0,
+        boxAlign: "left",
+      },
+      {
+        kind: "mbox",
+        command: "fbox",
+        text: String.raw`\fbox{f}`,
+        content: "f",
+      },
+      {
+        kind: "mbox",
+        command: "framebox",
+        text: String.raw`\framebox[24pt][l]{g}`,
+        content: "g",
+        boxWidth: 24,
         boxAlign: "left",
       },
     ]);

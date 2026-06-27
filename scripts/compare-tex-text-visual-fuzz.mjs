@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, box, box-hard, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, frame-box, box, box-hard, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -188,11 +188,12 @@ function parseArgs(argv) {
     "rule",
     "inline-rule",
     "mask-box",
+    "frame-box",
     "box",
     "box-hard",
     "mixed",
   ].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, box, box-hard, or mixed.");
+    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, frame-box, box, box-hard, or mixed.");
   }
   return options;
 }
@@ -686,6 +687,31 @@ function generateMaskBoxCase(index, random) {
   };
 }
 
+function generateFrameBoxCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const width = choice(random, [120, 150, 180, 220, 260, 320]);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = `${sentence(random, 4, 7)} ${inlineFrameBox(random)} ${sentence(random, 4, 7)}`;
+  } else if (feature === 1) {
+    text = `${inlineFrameBox(random)} ${sentence(random, 5, 9)} \\par ${sentence(random, 3, 6)}`;
+  } else if (feature === 2) {
+    text = `${sentence(random, 3, 6)} ${inlineFrameBox(random)} ${inlineFrameBox(random)} ${sentence(random, 3, 6)}`;
+  } else {
+    text = `\\begin{quote}${sentence(random, 3, 6)} ${inlineFrameBox(random)} ${sentence(random, 3, 6)}\\end{quote}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "frame-box",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
 function generateBoxCase(index, random) {
   const alignment = alignments[index % alignments.length];
   const widths = [140, 170, 200, 240, 300, 340];
@@ -761,7 +787,7 @@ function generateBoxHardCase(index, random) {
 }
 
 function generateMixedFeatureCase(index, random) {
-  const feature = index % 9;
+  const feature = index % 10;
   if (feature === 0) {
     const generated = generateListCase(index, random);
     return {
@@ -838,6 +864,16 @@ function generateMixedFeatureCase(index, random) {
     };
   }
   if (feature === 8) {
+    return {
+      id: `case-${String(index + 1).padStart(3, "0")}`,
+      feature: "mixed-frame-box",
+      text: `${sentence(random, 4, 8)} \\par ${inlineFrameBox(random)} ${sentence(random, 4, 8)}`,
+      width: choice(random, [150, 200, 240, 320]),
+      parindent: choice(random, [0, 10, 15]),
+      alignment: alignments[index % alignments.length],
+    };
+  }
+  if (feature === 9) {
     const generated = generateAlignmentEnvironmentCase(index, random);
     return {
       ...generated,
@@ -919,6 +955,27 @@ function inlineMaskBox(random) {
   return `\\${command}{${content}}`;
 }
 
+function inlineFrameBox(random) {
+  const content = choice(random, [
+    choice(random, words),
+    styledPhrase(random, 2, 3),
+    `${choice(random, words)} ${choice(random, words)}`,
+  ]);
+  const variant = choice(random, ["fbox", "framebox", "aligned-framebox", "stretched-framebox"]);
+  if (variant === "fbox") {
+    return `\\fbox{${content}}`;
+  }
+  if (variant === "aligned-framebox") {
+    const width = choice(random, ["20pt", "28pt", "0.5in"]);
+    const align = choice(random, ["l", "c", "r"]);
+    return `\\framebox[${width}][${align}]{${content}}`;
+  }
+  if (variant === "stretched-framebox") {
+    return `\\framebox[32pt][s]{${choice(random, words)} ${choice(random, words)}}`;
+  }
+  return `\\framebox{${content}}`;
+}
+
 function generateCaseForMode(index, random, mode) {
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
@@ -946,6 +1003,9 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "mask-box") {
     return generateMaskBoxCase(index, random);
+  }
+  if (mode === "frame-box") {
+    return generateFrameBoxCase(index, random);
   }
   if (mode === "box") {
     return generateBoxCase(index, random);
@@ -1817,10 +1877,34 @@ local function disc_is_line_end(disc)
   return true
 end
 local append_node_list
+local append_vlist
 
 local function append_hlist(parts, glyphs, hlist, cursor, baseline)
   append_node_list(parts, glyphs, hlist.list, hlist, cursor, baseline + (hlist.shift or 0))
   return cursor + (hlist.width or 0)
+end
+
+function append_vlist(parts, glyphs, vlist, cursor, baseline)
+  local y = baseline + (vlist.shift or 0) - (vlist.height or 0)
+  if vlist.list then
+    for child in node.traverse(vlist.list) do
+      local kind = node.type(child.id)
+      if kind == "hlist" then
+        append_node_list(parts, glyphs, child.list, child, cursor + (child.shift or 0), y + (child.height or 0))
+        y = y + (child.height or 0) + (child.depth or 0)
+      elseif kind == "vlist" then
+        append_vlist(parts, glyphs, child, cursor + (child.shift or 0), y + (child.height or 0))
+        y = y + (child.height or 0) + (child.depth or 0)
+      elseif kind == "glue" then
+        y = y + glue_width(child, nil)
+      elseif kind == "kern" then
+        y = y + (child.kern or 0)
+      elseif kind == "rule" then
+        y = y + (child.height or 0) + (child.depth or 0)
+      end
+    end
+  end
+  return cursor + (vlist.width or 0)
 end
 
 function append_node_list(parts, glyphs, list, parent, cursor, baseline)
@@ -1853,7 +1937,7 @@ function append_node_list(parts, glyphs, list, parent, cursor, baseline)
     elseif kind == "hlist" then
       x = append_hlist(parts, glyphs, child, x, baseline)
     elseif kind == "vlist" then
-      -- Nested vertical lists are handled by the line collector.
+      x = append_vlist(parts, glyphs, child, x, baseline)
     end
   end
   return x

@@ -1017,8 +1017,8 @@ describe("TeX math parser", () => {
     });
   });
 
-  it("parses makebox and zero-width lap commands through text-in-math nuclei", () => {
-    const result = parseTexMath(String.raw`\makebox[20pt][r]{if}+\llap{a}+\rlap{b}`);
+  it("parses makebox, lap, and framed box commands through text-in-math nuclei", () => {
+    const result = parseTexMath(String.raw`\makebox[20pt][r]{if}+\llap{a}+\rlap{b}+\fbox{c}+\framebox[24pt][l]{d}`);
 
     expect(result.diagnostics).toEqual([]);
     expect(atomAt(result, 0)).toMatchObject({
@@ -1049,6 +1049,22 @@ describe("TeX math parser", () => {
         command: "rlap",
         text: "b",
         boxWidth: 0,
+        boxAlign: "left",
+      },
+    });
+    expect(atomAt(result, 6)).toMatchObject({
+      nucleus: {
+        kind: "text",
+        command: "fbox",
+        text: "c",
+      },
+    });
+    expect(atomAt(result, 8)).toMatchObject({
+      nucleus: {
+        kind: "text",
+        command: "framebox",
+        text: "d",
+        boxWidth: 24,
         boxAlign: "left",
       },
     });

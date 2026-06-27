@@ -1290,7 +1290,7 @@ class TexMathParser {
     let boxWidth: number | undefined;
     let boxAlign: SimpleTexTextBoxAlignment | undefined;
     let argumentSpan = command.sourceSpan;
-    if (name === "makebox") {
+    if (name === "makebox" || name === "framebox") {
       const widthArgument = this.parseOptionalBracketDimensionArgument(
         command.sourceSpan,
         `${command.text} width`
@@ -6109,6 +6109,8 @@ function mathTextCommandName(text: string): "text" | "hbox" | SimpleTexTextBoxCo
     name === "hbox" ||
     name === "mbox" ||
     name === "makebox" ||
+    name === "fbox" ||
+    name === "framebox" ||
     name === "llap" ||
     name === "rlap" ||
     isSimpleTexFontCommandName(name)

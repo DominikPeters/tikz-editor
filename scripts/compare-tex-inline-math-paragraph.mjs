@@ -745,7 +745,7 @@ function randomMBoxFormula(random, variables) {
 }
 
 function randomTextBoxMathCommand(random, content) {
-  const variant = Math.floor(random() * 6);
+  const variant = Math.floor(random() * 9);
   if (variant === 0) {
     return `\\makebox{${content}}`;
   }
@@ -762,6 +762,17 @@ function randomTextBoxMathCommand(random, content) {
   }
   if (variant === 4) {
     return `\\rlap{${content}}`;
+  }
+  if (variant === 5) {
+    return `\\fbox{${content}}`;
+  }
+  if (variant === 6) {
+    return `\\framebox{${content}}`;
+  }
+  if (variant === 7) {
+    const width = choice(random, ["20pt", "28pt", "0.5in"]);
+    const align = choice(random, ["l", "c", "r"]);
+    return `\\framebox[${width}][${align}]{${content}}`;
   }
   return `\\mbox{${content}}`;
 }

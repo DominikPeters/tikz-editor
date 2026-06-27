@@ -1079,11 +1079,101 @@ describe("TeX vlist lowering", () => {
     expect(rlapBox?.mathSvgBody).toContain("data-tex-math-hlist");
   });
 
+  it("lays out text-mode fbox and framebox with TeX frame dimensions", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\mbox{g}\fbox{g}\framebox{g}\framebox[20pt][r]{g}`
+    );
+    const block = parsed.blocks[0];
+
+    expect(block).toBeDefined();
+    const boxes = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile
+        ).filter((item) => item.kind === "text-box")
+      : [];
+    const natural = boxes[0]?.box;
+    const fbox = boxes[1]?.box;
+    const framebox = boxes[2]?.box;
+    const fixed = boxes[3]?.box;
+    const fixedRules = fixed?.hlist?.items.filter((item) => item.kind === "rule") ?? [];
+    const fixedBody = fixed?.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "boxed-body"
+    );
+    const fixedGlyph = fixedBody?.kind === "hlist"
+      ? fixedBody.items.find((item) => item.kind === "glyph")
+      : undefined;
+
+    expect(boxes).toHaveLength(4);
+    for (const box of [fbox, framebox]) {
+      expect(box?.width).toBeCloseTo((natural?.width ?? 0) + 6.8, 6);
+      expect(box?.height).toBeCloseTo((natural?.height ?? 0) + 3.4, 6);
+      expect(box?.depth).toBeCloseTo((natural?.depth ?? 0) + 3.4, 6);
+      expect(box?.hlist?.items.map((item) => item.kind)).toEqual([
+        "rule",
+        "rule",
+        "kern",
+        "hlist",
+        "kern",
+        "rule",
+        "rule",
+      ]);
+      expect(box?.hlist?.items[2]).toMatchObject({
+        kind: "kern",
+        x: 0.4,
+        width: 3,
+      });
+      expect(box?.hlist?.items[3]).toMatchObject({
+        kind: "hlist",
+        role: "boxed-body",
+        x: 3.4,
+      });
+      expect(box?.hlist?.items[4]).toMatchObject({
+        kind: "kern",
+        x: expect.closeTo((natural?.width ?? 0) + 3.4, 6),
+        width: 3,
+      });
+    }
+    expect(fixed).toMatchObject({
+      width: 20,
+      height: expect.closeTo((natural?.height ?? 0) + 3.4, 6),
+      depth: expect.closeTo((natural?.depth ?? 0) + 3.4, 6),
+    });
+    expect(fixed?.hlist?.items[0]).toMatchObject({
+      kind: "rule",
+      width: 20,
+      height: 0.4,
+    });
+    expect(fixedRules[2]).toMatchObject({
+      kind: "rule",
+      x: 19.6,
+      width: 0.4,
+    });
+    expect(fixedBody).toMatchObject({
+      kind: "hlist",
+      role: "boxed-body",
+      x: 3,
+      width: expect.closeTo(20 - 6, 6),
+    });
+    expect(fixedGlyph?.kind === "glyph" ? fixedGlyph.x : undefined)
+      .toBeCloseTo(20 - 6 - (natural?.width ?? 0), 6);
+  });
+
   it("keeps unsupported makebox dimensions outside the simple text path", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`A\makebox[\width]{b}Z`, 120);
+    const framebox = analyzeSimpleTexParagraph(String.raw`A\framebox[\width]{b}Z`, 120);
 
     expect(analysis.ir?.unsupportedCommand).toBe(true);
     expect(analysis.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+    expect(framebox.ir?.unsupportedCommand).toBe(true);
+    expect(framebox.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
   });
 
   it("lays out text-mode rule as an inline TeX rule box", () => {

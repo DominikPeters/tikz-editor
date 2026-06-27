@@ -203,6 +203,9 @@ const formulas = args.formulas.length > 0
       "\\makebox[24pt][s]{a b}",
       "\\llap{if}",
       "\\rlap{if}",
+      "\\fbox{if}",
+      "\\framebox{if}",
+      "\\framebox[24pt][r]{if}",
       "\\phantom{x}+y",
       "\\hphantom{x}+y",
       "\\vphantom{\\frac{1}{2}}+y",
@@ -909,7 +912,7 @@ function randomMBoxMathFormula(rng) {
     String.raw`a\vphantom{g}c`,
     String.raw`a\smash{g}c`,
   ][randomInt(rng, 14)] ?? "if";
-  const variant = randomInt(rng, 6);
+  const variant = randomInt(rng, 9);
   if (variant === 0) {
     return String.raw`\makebox{` + content + "}";
   }
@@ -926,6 +929,17 @@ function randomMBoxMathFormula(rng) {
   }
   if (variant === 4) {
     return String.raw`\rlap{` + content + "}";
+  }
+  if (variant === 5) {
+    return String.raw`\fbox{` + content + "}";
+  }
+  if (variant === 6) {
+    return String.raw`\framebox{` + content + "}";
+  }
+  if (variant === 7) {
+    const width = [String.raw`20pt`, String.raw`28pt`, String.raw`0.5in`][randomInt(rng, 3)] ?? String.raw`20pt`;
+    const align = ["l", "c", "r"][randomInt(rng, 3)] ?? "c";
+    return String.raw`\framebox[` + width + "][" + align + "]{" + content + "}";
   }
   return String.raw`\mbox{` + content + "}";
 }

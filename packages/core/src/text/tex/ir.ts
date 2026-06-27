@@ -8,7 +8,7 @@ export type TexSpaceGlueProfile = "font" | "tikz-fixed";
 export type TexFontFamily = "roman" | "sans" | "typewriter" | "normal";
 export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
-export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap";
+export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap" | "fbox" | "framebox";
 export type SimpleTexTextBoxAlignment = "natural" | "left" | "center" | "right" | "stretch";
 export type SimpleTexDimensionBoxCommandName = "phantom" | "hphantom" | "vphantom" | "smash";
 export type SimpleTexFontCommandName =
@@ -1884,7 +1884,7 @@ function scanSimpleTexMBoxCommand(
   let boxWidth: number | undefined;
   let boxAlign: SimpleTexTextBoxAlignment | undefined;
   let unsupportedDimension = false;
-  if (command.name === "makebox" && text[cursor] === "[") {
+  if ((command.name === "makebox" || command.name === "framebox") && text[cursor] === "[") {
     const widthArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
     if (!widthArgument) {
       return null;
@@ -2183,7 +2183,7 @@ function scanSimpleTexTextBoxCommandName(
   text: string,
   start: number
 ): { readonly name: SimpleTexTextBoxCommandName; readonly end: number } | null {
-  for (const name of ["makebox", "mbox", "llap", "rlap"] satisfies readonly SimpleTexTextBoxCommandName[]) {
+  for (const name of ["framebox", "makebox", "mbox", "fbox", "llap", "rlap"] satisfies readonly SimpleTexTextBoxCommandName[]) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
