@@ -455,6 +455,15 @@ function paragraphInputFromSimpleTexBlock(
   blockIndex: number,
   options: LowerSimpleTexBlockItemsToVListOptions
 ): TexParagraphInput {
+  const scopePath = block.scopePath
+    ? texVBoxRolePathFromSimpleTexScopePath(block.scopePath)
+    : undefined;
+  const useFontSpaceGlueProfile =
+    scopePath?.at(-1)?.kind === "trivlist" &&
+    (
+      texVBoxRolePathContains(scopePath, "quote") ||
+      texVBoxRolePathContains(scopePath, "list")
+    );
   return {
     blockIndex,
     text: block.text,
@@ -478,10 +487,16 @@ function paragraphInputFromSimpleTexBlock(
     quoteDepth: block.quoteDepth,
     quotationDepth: block.quotationDepth,
     listContext: block.listContext,
-    ...(block.scopePath
-      ? { scopePath: texVBoxRolePathFromSimpleTexScopePath(block.scopePath) }
-      : {}),
+    ...(scopePath ? { scopePath } : {}),
+    ...(useFontSpaceGlueProfile ? { spaceGlueProfile: "font" as const } : {}),
   };
+}
+
+function texVBoxRolePathContains(
+  scopePath: readonly TexVBoxRole[] | undefined,
+  kind: TexVBoxRole["kind"]
+): boolean {
+  return scopePath?.some((role) => role.kind === kind) ?? false;
 }
 
 function sourceSpanForVListItems(

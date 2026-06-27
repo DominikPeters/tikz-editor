@@ -4505,8 +4505,8 @@ describe("simple TeX paragraph layout", () => {
         { text: "J", fontId: "lmromancaps10-regular" },
         { text: "K", fontId: "lmromancaps10-regular" },
         { text: "L", fontId: "lmromancaps10-regular" },
-        { text: "M", fontId: "lmromancaps10-regular" },
-        { text: "N", fontId: "lmromancaps10-regular" },
+        { text: "M", fontId: "lmroman10-bold" },
+        { text: "N", fontId: "lmsans10-bold" },
       ]);
   });
 
@@ -4586,7 +4586,7 @@ describe("simple TeX paragraph layout", () => {
         { text: "J", fontId: "lmromancaps10-regular" },
         { text: "K", fontId: "lmromancaps10-regular" },
         { text: "L", fontId: "lmromancaps10-regular" },
-        { text: "M", fontId: "lmromancaps10-regular" },
+        { text: "M", fontId: "lmroman10-bold" },
         { text: "N", fontId: "lmroman10-italic" },
         { text: "O", fontId: "lmroman10-regular" },
         { text: "P", fontId: "lmroman10-italic" },

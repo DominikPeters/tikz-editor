@@ -395,7 +395,6 @@ function comparisonItemsForFormula(formula, ours, tex) {
     || hasSubarrayEnvironment(formula)
     || hasSidesetCommand(formula)
     || hasAmsMathCommand(formula)
-    || hasAccentCommand(formula)
     || hasMathtoolsColonRelationCommand(formula)
   ) {
     return {
@@ -564,9 +563,8 @@ function texSource(formula) {
     hasSidesetCommand(formula) ||
     hasEllipsisCommand(formula) ||
     hasAmsMathCommand(formula) ||
-    hasAccentCommand(formula) ||
     hasAmsMathDelimiterCommand(formula) ||
-    formula.includes(String.raw`\text`)
+    hasAmsTextCommand(formula)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
   const arrayPreamble = hasArrayPackagePreambleExtension(formula)
@@ -1215,12 +1213,12 @@ function hasAmsMathCommand(source) {
   return amsMathCommands.some((command) => source.includes(command));
 }
 
-function hasAccentCommand(source) {
-  return accentCommands.some((command) => source.includes(command));
-}
-
 function hasAmsMathDelimiterCommand(source) {
   return amsMathDelimiterCommands.some((command) => source.includes(command));
+}
+
+function hasAmsTextCommand(source) {
+  return /\\text(?![A-Za-z])/.test(source);
 }
 
 function hasAmsSymbolCommand(source) {

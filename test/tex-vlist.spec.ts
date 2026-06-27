@@ -588,6 +588,108 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("uses TeX font-space glue for flush environments directly inside lists", () => {
+    const source = String.raw`\begin{enumerate}\item Manual position final source canvas. \begin{flushleft}Epsilon paper gamma shape, paper gamma.\end{flushleft}\end{enumerate}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "justified",
+      font,
+      options: { width: 120 },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      width: plan.breakContext.width,
+      spaceGlueProfile: plan.spaceGlueProfile,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
+      rightMarginWidth: plan.breakContext.scopePolicy.rightMarginWidth,
+      hasLabel: plan.lineLabel != null,
+    }))).toEqual([
+      {
+        text: "Manual position final source canvas.",
+        alignment: "justified",
+        width: undefined,
+        spaceGlueProfile: "font",
+        leftMarginWidth: 25,
+        rightMarginWidth: 0,
+        hasLabel: true,
+      },
+      {
+        text: "Epsilon paper gamma shape, paper gamma.",
+        alignment: "ragged-right",
+        width: undefined,
+        spaceGlueProfile: "font",
+        leftMarginWidth: 25,
+        rightMarginWidth: 0,
+        hasLabel: false,
+      },
+    ]);
+
+    const result = layoutSimpleTexParagraph(source, {
+      width: 120,
+      alignment: "justified",
+      parindent: 0,
+      tikzTextWidthNode: true,
+      metricProvider: computerModernTexMetricProvider,
+    });
+    expect(result.report?.lines.map(reportLineText)).toEqual([
+      "1.Manual position final",
+      "source canvas.",
+      "Epsilon paper gamma",
+      "shape, paper gamma.",
+    ]);
+  });
+
+  it("keeps list labels for lists nested inside flush environments", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{flushleft}\begin{itemize}\item Alpha beta gamma\end{itemize}\end{flushleft}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      items: parsed.items,
+      defaultAlignment: "justified",
+      font,
+      options: { width: 120 },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      width: plan.breakContext.width,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
+      hasLabel: plan.lineLabel != null,
+    }))).toEqual([
+      {
+        text: "Alpha beta gamma",
+        alignment: "ragged-right",
+        width: undefined,
+        leftMarginWidth: 25,
+        hasLabel: true,
+      },
+    ]);
+  });
+
+  it("keeps TikZ fixed spaces for root flush environments in text-width nodes", () => {
+    const source = String.raw`\begin{flushleft} Kernel compact compact shape computer beta, table direct pattern document alpha logic. \end{flushleft}`;
+    const result = layoutSimpleTexParagraph(source, {
+      width: 260,
+      alignment: "ragged-left",
+      parindent: 15,
+      tikzTextWidthNode: true,
+      metricProvider: computerModernTexMetricProvider,
+    });
+
+    expect(result.report?.lines.map(reportLineText)).toEqual([
+      "Kernel compact compact shape computer beta, table",
+      "direct pattern document alpha logic.",
+    ]);
+  });
+
   it("keeps normal display skips when the preceding line reaches the display", () => {
     const source = String.raw`Alpha Beta Gamma \[\sum_i^n\] Delta`;
     const parsed = parseSimpleTexParagraphIr(source);
@@ -2538,6 +2640,32 @@ describe("TeX vlist spacing", () => {
     ]);
   });
 
+  it("uses outside-list topsep when exiting a first-level list nested in quote", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote} Before \par \begin{itemize}\item Item\end{itemize} \par After\end{quote}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const grouped = groupSimpleTexVListScopes(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+    const scrubbed = {
+      ...grouped,
+      items: stripParagraphScopeMetadata(grouped.items),
+    };
+
+    expect(planSimpleTexParagraphVerticalSkips(scrubbed.items, font).map((skip) => ({
+      blockIndex: skip.blockIndex,
+      quoteSize: skip.quoteSize,
+      listSize: skip.listSize,
+      size: skip.size,
+    }))).toEqual([
+      { blockIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
+      { blockIndex: 1, quoteSize: 0, listSize: 10, size: 10 },
+      { blockIndex: 2, quoteSize: 0, listSize: 10, size: 10 },
+    ]);
+  });
+
   it("normalizes simple TeX vlists by materializing boundary glue and grouping scopes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
@@ -3847,6 +3975,10 @@ describe("TeX vlist layout registry", () => {
     expect(getTexVListLayoutsFromOutputJax(null)).toEqual([]);
   });
 });
+
+function reportLineText(line: { readonly segments: readonly { readonly text?: string }[] }): string {
+  return line.segments.map((segment) => segment.text ?? "").join("").trimEnd();
+}
 
 function flattenVListLeaves(items: readonly TexVListItem[]): readonly string[] {
   const leaves: string[] = [];

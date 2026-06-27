@@ -11,6 +11,7 @@ import {
   simpleTexFontStateForCommand,
   simpleTexInlineNodesToTokens,
   type SimpleTexFontState,
+  type SimpleTexInlineNode,
 } from "../ir.js";
 import type {
   GeneratedTexExtensibleRecipe,
@@ -198,6 +199,7 @@ export interface TexMathLayoutOptions {
   readonly baseAtPt?: number;
   readonly alphabet?: TexMathAlphabetCommand;
   readonly allowMiddleDelimiters?: boolean;
+  readonly suppressAmsNestedAccentAdjustment?: boolean;
 }
 
 export interface TexMathLayoutError {
@@ -295,6 +297,7 @@ export function layoutTexMathList(
   const fontProfile = options.fontProfile ?? resolveDefaultTexMathFontProfileForList(list);
   const baseAtPt = options.baseAtPt ?? 10;
   const alphabet = options.alphabet;
+  const suppressAmsNestedAccentAdjustment = options.suppressAmsNestedAccentAdjustment === true;
   let currentAlphabet = alphabet;
   let sawMathitAlphabetDeclaration = false;
   const spaced = spaceTexMathList(list, { style });
@@ -401,7 +404,15 @@ export function layoutTexMathList(
       });
       continue;
     }
-    const atomLayout = layoutAtom(item, fontProfile, currentStyle, currentCramped, baseAtPt, currentAlphabet);
+    const atomLayout = layoutAtom(
+      item,
+      fontProfile,
+      currentStyle,
+      currentCramped,
+      baseAtPt,
+      currentAlphabet,
+      suppressAmsNestedAccentAdjustment
+    );
     if (!atomLayout) {
       errors.push({
         message: "Only simple glyph math atoms are supported by the initial math hlist layout.",
@@ -526,7 +537,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return true;
   }
   if (nucleus.kind === "text") {
-    return !isTextBoxNucleusCommand(nucleus.command);
+    return texMathTextNucleusNeedsAmsMath(nucleus);
   }
   if (
     nucleus.kind === "aligned" ||
@@ -583,7 +594,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.body);
   }
   if (nucleus.kind === "accent") {
-    return true;
+    return nucleus.command === "dddot" ||
+      nucleus.command === "ddddot" ||
+      texMathListNeedsAmsMath(nucleus.base);
   }
   if (nucleus.kind === "alphabet") {
     return texMathListNeedsAmsMath(nucleus.list);
@@ -595,6 +608,40 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.body);
   }
   return false;
+}
+
+function texMathTextNucleusNeedsAmsMath(nucleus: TexMathTextNucleus): boolean {
+  if (nucleus.command === "text") {
+    return true;
+  }
+  if (nucleus.parts?.some((part) =>
+    part.kind === "math" && texMathListNeedsAmsMath(part.list)
+  )) {
+    return true;
+  }
+  return simpleTexInlineNodesNeedAmsMath(nucleus.nodes);
+}
+
+function simpleTexInlineNodesNeedAmsMath(
+  nodes: readonly SimpleTexInlineNode[] | undefined
+): boolean {
+  if (!nodes) {
+    return false;
+  }
+  return nodes.some((node) => {
+    if (node.kind === "math") {
+      return texMathListNeedsAmsMath(parseTexMath(node.content).list);
+    }
+    if (
+      node.kind === "group" ||
+      node.kind === "mbox" ||
+      node.kind === "raisebox" ||
+      node.kind === "dimension-box"
+    ) {
+      return simpleTexInlineNodesNeedAmsMath(node.children);
+    }
+    return false;
+  });
 }
 
 function isTextBoxNucleusCommand(command: TexMathTextNucleus["command"]): boolean {
@@ -661,9 +708,18 @@ function layoutAtom(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: number,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  suppressAmsNestedAccentAdjustment = false
 ): TexMathAtomLayout | null {
-  const nucleus = layoutNucleus(atom.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+  const nucleus = layoutNucleus(
+    atom.nucleus,
+    fontProfile,
+    style,
+    cramped,
+    baseAtPt,
+    alphabet,
+    suppressAmsNestedAccentAdjustment
+  );
   if (!nucleus) {
     return null;
   }
@@ -878,7 +934,8 @@ function layoutNucleus(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: number,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  suppressAmsNestedAccentAdjustment = false
 ): TexMathAtomLayout | null {
   if (nucleus.kind === "glyph") {
     return layoutGlyphNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -963,7 +1020,15 @@ function layoutNucleus(
     return layoutVarLimitNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "accent") {
-    return layoutAccentNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+    return layoutAccentNucleus(
+      nucleus,
+      fontProfile,
+      style,
+      cramped,
+      baseAtPt,
+      alphabet,
+      suppressAmsNestedAccentAdjustment
+    );
   }
   if (nucleus.kind === "alphabet") {
     return layoutAlphabetNucleus(nucleus, fontProfile, style, cramped, baseAtPt);
@@ -4285,7 +4350,8 @@ function layoutAccentBase(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: number,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  suppressAmsNestedAccentAdjustment = false
 ): TexMathHList | null {
   const item = list.items.length === 1 ? list.items[0] : null;
   if (
@@ -4309,7 +4375,14 @@ function layoutAccentBase(
     };
   }
 
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, {
+    fontProfile,
+    style,
+    cramped,
+    baseAtPt,
+    alphabet,
+    suppressAmsNestedAccentAdjustment,
+  });
   return result.supported ? result.hlist : null;
 }
 
@@ -4319,12 +4392,13 @@ function layoutAccentNucleus(
   style: TexMathStyle,
   _cramped: boolean,
   baseAtPt: number,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  suppressAmsNestedAccentAdjustment = false
 ): TexMathAtomLayout | null {
   if (nucleus.command === "dddot" || nucleus.command === "ddddot") {
     return layoutMultiDotAccentNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
-  const base = layoutAccentBase(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
+  const base = layoutAccentBase(nucleus.base, fontProfile, style, true, baseAtPt, alphabet, true);
   if (!base) {
     return null;
   }
@@ -4340,9 +4414,13 @@ function layoutAccentNucleus(
   const accentDepth = roundTexPt(tfmToPt(accent.font, metric.depth));
   const accentItalicCorrection = roundTexPt(tfmToPt(accent.font, metric.italicCorrection));
   const skew = accentBaseSkew(nucleus.base, fontProfile, style, baseAtPt, alphabet);
-  const singleGlyphBase = accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
+  const amsNestedAdjustment = suppressAmsNestedAccentAdjustment
+    ? { overlayXShift: 0, baseGlue: null }
+    : amsNestedAccentAdjustment(nucleus, fontProfile, style, baseAtPt, alphabet);
+  const scriptGlyphBase = amsNestedAccentScriptGlyphMetrics(nucleus, fontProfile, style, baseAtPt, alphabet) ??
+    accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
   const delta = Math.min(base.height, accentXHeight(accent.font));
-  const accentX = roundTexPt(skew + (base.width - accentCenterWidth) / 2);
+  const accentX = roundTexPt(skew + amsNestedAdjustment.overlayXShift + (base.width - accentCenterWidth) / 2);
   const accentY = roundTexPt(delta - base.height);
   const accentItem = {
     kind: "glyph",
@@ -4359,22 +4437,262 @@ function layoutAccentNucleus(
     italicCorrection: accentItalicCorrection,
     sourceSpan: nucleus.commandSourceSpan,
   } satisfies TexMathGlyphLayoutItem;
-  const baseChild = childHList("nucleus", 0, 0, base, nucleus.base.sourceSpan);
+  const adjustedBase = applyAmsNestedAccentAdjustment(base, amsNestedAdjustment);
+  const baseChild = childHList("nucleus", 0, 0, adjustedBase, nucleus.base.sourceSpan);
 
   return {
     items: [accentItem, baseChild],
-    width: base.width,
+    width: adjustedBase.width,
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
     depth: base.depth,
-    italicCorrection: singleGlyphBase?.italicCorrection ?? 0,
+    italicCorrection: scriptGlyphBase?.italicCorrection ?? 0,
     isCharacterNucleus: false,
-    scriptShiftsAsCharacter: singleGlyphBase !== null,
-    ...(singleGlyphBase ? {
-      scriptBaseWidth: singleGlyphBase.width,
-      scriptSuperscriptOffset: singleGlyphBase.italicCorrection,
+    scriptShiftsAsCharacter: scriptGlyphBase !== null,
+    ...(scriptGlyphBase ? {
+      scriptBaseWidth: scriptGlyphBase.width,
+      scriptSuperscriptOffset: scriptGlyphBase.italicCorrection,
     } : {}),
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+interface AmsNestedAccentAdjustment {
+  readonly overlayXShift: number;
+  readonly baseGlue: TexMathGlueLayoutItem | null;
+}
+
+function amsNestedAccentAdjustment(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): AmsNestedAccentAdjustment {
+  if (fontProfile.id !== luaLatexAmsMathFontProfile.id || !hasNestedAccentBase(nucleus.base)) {
+    return { overlayXShift: 0, baseGlue: null };
+  }
+  const deepestBase = innermostNestedAccentBase(nucleus.base);
+  const skewKern = hasMultipleLayoutAtoms(deepestBase)
+    ? trailingSkewKern(deepestBase, fontProfile, style, baseAtPt, alphabet)
+    : 0;
+  return {
+    overlayXShift: skewKern,
+    baseGlue: amsNestedAccentBaseGlue(deepestBase, fontProfile, style, baseAtPt),
+  };
+}
+
+function hasNestedAccentBase(base: TexMathList): boolean {
+  const item = base.items.length === 1 ? base.items[0] : null;
+  return item?.kind === "atom" &&
+    !item.subscript &&
+    !item.superscript &&
+    item.nucleus.kind === "accent";
+}
+
+function innermostNestedAccentBase(base: TexMathList): TexMathList {
+  let current = base;
+  while (hasNestedAccentBase(current)) {
+    const item = current.items[0];
+    if (item?.kind !== "atom" || item.nucleus.kind !== "accent") {
+      break;
+    }
+    current = item.nucleus.base;
+  }
+  return current;
+}
+
+function hasMultipleLayoutAtoms(list: TexMathList): boolean {
+  return list.items.filter((item) => item.kind === "atom").length > 1;
+}
+
+function trailingSkewKern(
+  list: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): number {
+  for (let index = list.items.length - 1; index >= 0; index -= 1) {
+    const item = list.items[index];
+    if (item?.kind !== "atom") {
+      continue;
+    }
+    if (item.subscript || item.superscript) {
+      return 0;
+    }
+    if (item.nucleus.kind === "accent") {
+      return trailingSkewKern(item.nucleus.base, fontProfile, style, baseAtPt, alphabet);
+    }
+    if (item.nucleus.kind === "list") {
+      return trailingSkewKern(item.nucleus.list, fontProfile, style, baseAtPt, alphabet);
+    }
+    if (item.nucleus.kind !== "glyph") {
+      return 0;
+    }
+    const glyph = resolveMathGlyph(item.nucleus, fontProfile, style, baseAtPt, alphabet);
+    if (!glyph) {
+      return 0;
+    }
+    const kern = glyph.font.data.ligKerns.find((rule) =>
+      rule[0] === "kern" &&
+      rule[1] === glyph.code &&
+      rule[2] === TEX_DEFAULT_SKEW_CHAR
+    );
+    return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
+  }
+  return 0;
+}
+
+function amsNestedAccentBaseGlue(
+  deepestBase: TexMathList,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathGlueLayoutItem | null {
+  const firstAtom = deepestBase.items.find((item): item is TexMathAtom => item.kind === "atom");
+  if (!firstAtom) {
+    return null;
+  }
+  const left = {
+    ...firstAtom,
+    atomClass: "ord" as const,
+    sourceSpan: {
+      start: firstAtom.sourceSpan.start,
+      end: firstAtom.sourceSpan.start,
+    },
+  } satisfies TexMathAtom;
+  const glue = texMathSpacingBetween(left, firstAtom, style);
+  if (!glue) {
+    return null;
+  }
+  return {
+    kind: "glue",
+    x: 0,
+    width: muToPt(fontProfile, style, baseAtPt, glue.mu),
+    mu: glue.mu,
+    stretch: muToPt(fontProfile, style, baseAtPt, glue.stretchMu),
+    shrink: muToPt(fontProfile, style, baseAtPt, glue.shrinkMu),
+    source: glue.source,
+    sourceSpan: glue.sourceSpan,
+  };
+}
+
+function amsNestedAccentScriptGlyphMetrics(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): { readonly width: number; readonly italicCorrection: number } | null {
+  if (fontProfile.id !== luaLatexAmsMathFontProfile.id || !hasNestedAccentBase(nucleus.base)) {
+    return null;
+  }
+  const deepestBase = innermostNestedAccentBase(nucleus.base);
+  const item = deepestBase.items.length === 1 ? deepestBase.items[0] : null;
+  if (
+    item?.kind !== "atom" ||
+    item.subscript ||
+    item.superscript ||
+    item.nucleus.kind !== "glyph"
+  ) {
+    return null;
+  }
+  const glyph = resolveMathGlyph(item.nucleus, fontProfile, style, baseAtPt, alphabet);
+  if (!glyph) {
+    return null;
+  }
+  const metric = requiredCharMetric(glyph.font, glyph.code);
+  return {
+    width: roundTexPt(tfmToPt(glyph.font, metric.width)),
+    italicCorrection: roundTexPt(tfmToPt(glyph.font, metric.italicCorrection)),
+  };
+}
+
+function applyAmsNestedAccentAdjustment(
+  hlist: TexMathHList,
+  adjustment: AmsNestedAccentAdjustment
+): TexMathHList {
+  if (adjustment.overlayXShift === 0 && !adjustment.baseGlue) {
+    return hlist;
+  }
+  const overlayShifted = adjustment.overlayXShift === 0
+    ? hlist
+    : shiftNestedAccentOverlay(hlist, adjustment.overlayXShift);
+  return adjustment.baseGlue
+    ? insertNestedAccentBaseGlue(overlayShifted, adjustment.baseGlue)
+    : overlayShifted;
+}
+
+function shiftNestedAccentOverlay(hlist: TexMathHList, xShift: number): TexMathHList {
+  return {
+    ...hlist,
+    items: shiftNestedAccentOverlayItems(hlist.items, xShift),
+  };
+}
+
+function shiftNestedAccentOverlayItems(
+  items: readonly TexMathHListItem[],
+  xShift: number
+): readonly TexMathHListItem[] {
+  const isAccentOverlay = isNestedAccentOverlayItems(items);
+  return items.map((item): TexMathHListItem => {
+    if (isAccentOverlay && item.kind === "glyph") {
+      return offsetMathLayoutItem(item, xShift);
+    }
+    if (item.kind === "hlist" && item.role === "nucleus") {
+      return {
+        ...item,
+        items: shiftNestedAccentOverlayItems(item.items, xShift),
+      };
+    }
+    return item;
+  });
+}
+
+function insertNestedAccentBaseGlue(
+  hlist: TexMathHList,
+  glue: TexMathGlueLayoutItem
+): TexMathHList {
+  return {
+    ...hlist,
+    width: roundTexPt(hlist.width + glue.width),
+    items: insertNestedAccentBaseGlueItems(hlist.items, glue),
+  };
+}
+
+function insertNestedAccentBaseGlueItems(
+  items: readonly TexMathHListItem[],
+  glue: TexMathGlueLayoutItem
+): readonly TexMathHListItem[] {
+  const isAccentOverlay = isNestedAccentOverlayItems(items);
+  let inserted = false;
+  const adjusted: TexMathHListItem[] = [];
+  for (const item of items) {
+    if (isAccentOverlay && item.kind === "hlist" && item.role === "nucleus") {
+      if (isNestedAccentOverlayItems(item.items)) {
+        adjusted.push({
+          ...item,
+          width: roundTexPt(item.width + glue.width),
+          items: insertNestedAccentBaseGlueItems(item.items, glue),
+        });
+      } else {
+        adjusted.push({ ...glue });
+        adjusted.push({
+          ...item,
+          x: roundTexPt(item.x + glue.width),
+        });
+      }
+      inserted = true;
+      continue;
+    }
+    adjusted.push(item);
+  }
+  return inserted ? adjusted : items;
+}
+
+function isNestedAccentOverlayItems(items: readonly TexMathHListItem[]): boolean {
+  return items.some((item) => item.kind === "glyph") &&
+    items.some((item) => item.kind === "hlist" && item.role === "nucleus");
 }
 
 function layoutMultiDotAccentNucleus(
@@ -5905,9 +6223,11 @@ function accentBaseSingleGlyphMetrics(
   if (
     item?.kind !== "atom" ||
     item.subscript ||
-    item.superscript ||
-    item.nucleus.kind !== "glyph"
+    item.superscript
   ) {
+    return null;
+  }
+  if (item.nucleus.kind !== "glyph") {
     return null;
   }
   const glyph = resolveMathGlyph(item.nucleus, fontProfile, style, baseAtPt, alphabet);

@@ -1171,8 +1171,8 @@ describe("simple TeX paragraph IR", () => {
         { text: "J", font: "lmromancaps10-regular" },
         { text: "K", font: "lmromancaps10-regular" },
         { text: "L", font: "lmromancaps10-regular" },
-        { text: "M", font: "lmromancaps10-regular" },
-        { text: "N", font: "lmromancaps10-regular" },
+        { text: "M", font: "lmroman10-bold" },
+        { text: "N", font: "lmsans10-bold" },
       ]);
   });
 

@@ -1617,6 +1617,16 @@ function texArticleListExitBoundarySkip(
   currentDepth: number,
   font: ResolvedTexFont
 ): number {
+  if (currentDepth <= 0) {
+    let size = 0;
+    for (let depth = previousDepth; depth > 0; depth -= 1) {
+      const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
+      state.listPartopsepByDepth.delete(depth);
+      size = Math.max(size, texArticleOutsideListBoundarySkip(usesPartopsep, font));
+    }
+    return size;
+  }
+
   let size = 0;
   for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
     const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;

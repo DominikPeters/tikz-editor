@@ -128,6 +128,21 @@ export function luaLatexDefaultFontIdForState(
   state: SimpleTexFontState,
   atPt = 10
 ): DefaultComputerModernTextFont {
+  if (state.shape === "small-caps" && state.series === "bold") {
+    if (state.family === "typewriter") {
+      return "lmmonolt10-bold";
+    }
+    if (state.family === "sans") {
+      return "lmsans10-bold";
+    }
+    if (atPt <= 5) {
+      return "lmroman5-bold";
+    }
+    if (atPt <= 7) {
+      return "lmroman7-bold";
+    }
+    return "lmroman10-bold";
+  }
   if (state.shape === "small-caps") {
     return state.family === "typewriter" ? "lmmonocaps10-regular" : "lmromancaps10-regular";
   }

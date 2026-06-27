@@ -930,6 +930,40 @@ describe("TeX math hlist layout", () => {
       ]);
   });
 
+  it("matches LaTeX font substitutions for bold small-caps text commands", () => {
+    const result = layout(
+      String.raw`\textsc{\textbf{Bold}}+\textsf{\textbf{\textsc{N}}}+\texttt{\textbf{\textsc{N}}}`
+    );
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])
+      .filter((glyph) =>
+        (glyph.code >= 66 && glyph.code <= 122) ||
+        glyph.code === 78
+      )
+      .map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
+        "lmroman10-bold/66",
+        "lmroman10-bold/111",
+        "lmroman10-bold/108",
+        "lmroman10-bold/100",
+        "lmsans10-bold/78",
+        "lmmonolt10-bold/78",
+      ]);
+  });
+
+  it("keeps kernel text font commands package-free for script font profile selection", () => {
+    const result = layout(String.raw`\makebox{\textrm{if}}^{\frac{\infty}{\sum}}`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])
+      .map((glyph) => `${glyph.fontId}/${glyph.code}`)).toEqual([
+        "lmroman10-regular/105",
+        "lmroman10-regular/102",
+        "cmsy5/49",
+        "cmex10/80",
+      ]);
+  });
+
   it("uses exact text design fonts in nested script text boxes", () => {
     const result = layout(String.raw`x_{\text{if}}+x_{y_{\textbf{if}}}+x_{\textsf{if}}+x_{y_{\texttt{if}}}+x_{\textsl{if}}`);
 
@@ -2125,8 +2159,8 @@ describe("TeX math hlist layout", () => {
     )).toMatchObject({
       kind: "rule",
       role: "fraction-rule",
-      y: expect.closeTo(-1.919998, 5),
-      height: expect.closeTo(0.339997, 5),
+      y: expect.closeTo(-1.949995, 5),
+      height: expect.closeTo(0.39999, 5),
     });
 
     const vecSup = layout(String.raw`\vec{z}^y`);
