@@ -56,11 +56,64 @@ describe("simple TeX paragraph IR", () => {
     expect(parsed.blocks[0]?.nodes.some((node) => node.kind === "mbox")).toBe(true);
   });
 
+  it("parses makebox and zero-width lap boxes as inline text hbox nodes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\makebox{b}B\makebox[20pt][r]{c}C\llap{d}D\rlap{e}E`
+    );
+    const boxes = parsed.nodes.filter((node) => node.kind === "mbox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(boxes).toMatchObject([
+      {
+        kind: "mbox",
+        command: "makebox",
+        text: String.raw`\makebox{b}`,
+        content: "b",
+        boxWidth: undefined,
+        boxAlign: undefined,
+      },
+      {
+        kind: "mbox",
+        command: "makebox",
+        text: String.raw`\makebox[20pt][r]{c}`,
+        content: "c",
+        boxWidth: 20,
+        boxAlign: "right",
+      },
+      {
+        kind: "mbox",
+        command: "llap",
+        text: String.raw`\llap{d}`,
+        content: "d",
+        boxWidth: 0,
+        boxAlign: "right",
+      },
+      {
+        kind: "mbox",
+        command: "rlap",
+        text: String.raw`\rlap{e}`,
+        content: "e",
+        boxWidth: 0,
+        boxAlign: "left",
+      },
+    ]);
+  });
+
   it("rejects vertical material inside inline mbox nodes", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \mbox{\par Beta}`, 120);
 
     expect(analysis.ir?.unsupportedCommand).toBe(true);
     expect(analysis.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+  });
+
+  it("keeps paragraph-start lap boxes out of the simple text path", () => {
+    const verticalMode = analyzeSimpleTexParagraph(String.raw`\rlap{overlay} Alpha`, 120);
+    const inline = analyzeSimpleTexParagraph(String.raw`Alpha \rlap{overlay} Beta`, 120);
+
+    expect(verticalMode.ir?.unsupportedCommand).toBe(true);
+    expect(verticalMode.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+    expect(inline.ir?.unsupportedCommand).toBe(false);
+    expect(inline.fallbackReason).toBeNull();
   });
 
   it("parses display math delimiters as vertical block items", () => {

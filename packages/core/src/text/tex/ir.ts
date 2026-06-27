@@ -1,5 +1,6 @@
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
+import { parseTexDimensionText } from "./dimensions.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
@@ -7,6 +8,8 @@ export type TexSpaceGlueProfile = "font" | "tikz-fixed";
 export type TexFontFamily = "roman" | "sans" | "typewriter" | "normal";
 export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
+export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap";
+export type SimpleTexTextBoxAlignment = "natural" | "left" | "center" | "right" | "stretch";
 export type SimpleTexFontCommandName =
   | "textit"
   | "textbf"
@@ -165,11 +168,14 @@ export interface SimpleTexGroupNode extends SimpleTexSourceRange {
 
 export interface SimpleTexMBoxNode extends SimpleTexSourceRange {
   readonly kind: "mbox";
+  readonly command: SimpleTexTextBoxCommandName;
   readonly text: string;
   readonly content: string;
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly children: readonly SimpleTexInlineNode[];
+  readonly boxWidth?: number;
+  readonly boxAlign?: SimpleTexTextBoxAlignment;
 }
 
 export interface SimpleTexParagraphBreakNode extends SimpleTexSourceRange {
@@ -283,6 +289,9 @@ export interface SimpleTexToken {
   readonly contentStart?: number;
   readonly contentEnd?: number;
   readonly children?: readonly SimpleTexInlineNode[];
+  readonly command?: SimpleTexTextBoxCommandName;
+  readonly boxWidth?: number;
+  readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly lineLeading?: string;
   readonly fontState: SimpleTexFontState;
   readonly italicCorrectionAfter?: boolean;
@@ -1798,15 +1807,46 @@ function scanSimpleTexMBoxCommand(
   end: number;
   unsupportedCommand: boolean;
 } | null {
-  const commandEnd = scanSimpleTexControlWord(text, start, "mbox");
-  if (commandEnd === null) {
+  const command = scanSimpleTexTextBoxCommandName(text, start);
+  if (!command) {
     return null;
   }
 
-  let groupStart = commandEnd;
-  while (text[groupStart] === " " || text[groupStart] === "\n") {
-    groupStart += 1;
+  let cursor = skipSimpleTexControlWordSpaces(text, command.end);
+  let boxWidth: number | undefined;
+  let boxAlign: SimpleTexTextBoxAlignment | undefined;
+  let unsupportedDimension = false;
+  if (command.name === "makebox" && text[cursor] === "[") {
+    const widthArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!widthArgument) {
+      return null;
+    }
+    const parsedWidth = parseTexDimensionText(widthArgument.content.trim());
+    if (parsedWidth === null) {
+      unsupportedDimension = true;
+      boxWidth = 0;
+    } else {
+      boxWidth = parsedWidth;
+    }
+    boxAlign = "center";
+    cursor = skipSimpleTexControlWordSpaces(text, widthArgument.end);
+    if (text[cursor] === "[") {
+      const alignArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+      if (!alignArgument) {
+        return null;
+      }
+      boxAlign = simpleTexTextBoxAlignment(alignArgument.content.trim());
+      cursor = skipSimpleTexControlWordSpaces(text, alignArgument.end);
+    }
+  } else if (command.name === "llap") {
+    boxWidth = 0;
+    boxAlign = "right";
+  } else if (command.name === "rlap") {
+    boxWidth = 0;
+    boxAlign = "left";
   }
+
+  const groupStart = cursor;
   if (text[groupStart] !== "{") {
     return null;
   }
@@ -1826,6 +1866,7 @@ function scanSimpleTexMBoxCommand(
   return {
     node: {
       kind: "mbox",
+      command: command.name,
       text: text.slice(start, groupEnd),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + groupEnd,
@@ -1835,10 +1876,55 @@ function scanSimpleTexMBoxCommand(
       children: childrenAreInline
         ? childScan.nodes.filter(isSimpleTexInlineNode)
         : [],
+      boxWidth,
+      boxAlign,
     },
     end: groupEnd,
-    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+    unsupportedCommand: unsupportedDimension || childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
   };
+}
+
+function scanSimpleTexTextBoxCommandName(
+  text: string,
+  start: number
+): { readonly name: SimpleTexTextBoxCommandName; readonly end: number } | null {
+  for (const name of ["makebox", "mbox", "llap", "rlap"] satisfies readonly SimpleTexTextBoxCommandName[]) {
+    const end = scanSimpleTexControlWord(text, start, name);
+    if (end !== null) {
+      return { name, end };
+    }
+  }
+  return null;
+}
+
+function scanSimpleTexOptionalBracketArgument(
+  text: string,
+  start: number
+): { readonly content: string; readonly end: number } | null {
+  const end = findBalancedSimpleTexOptionalArgumentEnd(text, start);
+  if (end === null) {
+    return null;
+  }
+  return {
+    content: text.slice(start + 1, end - 1),
+    end,
+  };
+}
+
+export function simpleTexTextBoxAlignment(value: string): SimpleTexTextBoxAlignment {
+  switch (value) {
+    case "l":
+    case "t":
+      return "left";
+    case "r":
+    case "b":
+      return "right";
+    case "s":
+      return "stretch";
+    case "c":
+    default:
+      return "center";
+  }
 }
 
 function scanSimpleTexFontCommandName(
@@ -2335,11 +2421,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
       const scopePath = currentSimpleTexScopePath();
+      const nodes = simpleTexInlineNodesForRange(sourceNodes, start, end);
+      unsupportedCommand ||= simpleTexBlockStartsWithVerticalModeLapBox(nodes);
       const block: SimpleTexParagraphBlock = {
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
         sourceEnd: end,
-        nodes: simpleTexInlineNodesForRange(sourceNodes, start, end),
+        nodes,
         noIndent,
         ...(startsAfterExplicitPar ? { startsAfterExplicitPar: true } : {}),
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
@@ -2366,6 +2454,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
       pendingListLabel = undefined;
       pendingListShowLabel = false;
     }
+  };
+
+  const simpleTexBlockStartsWithVerticalModeLapBox = (
+    nodes: readonly SimpleTexInlineNode[]
+  ): boolean => {
+    const first = nodes.find((node) => node.kind !== "space");
+    return first?.kind === "mbox" && (first.command === "llap" || first.command === "rlap");
   };
 
   const currentSimpleTexListContext = (): SimpleTexListContext | undefined => {
@@ -3058,6 +3153,9 @@ export function simpleTexInlineNodesToTokens(
         contentStart: node.contentStart,
         contentEnd: node.contentEnd,
         children: node.children,
+        command: node.command,
+        boxWidth: node.boxWidth,
+        boxAlign: node.boxAlign,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,

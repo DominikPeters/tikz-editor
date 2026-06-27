@@ -785,6 +785,46 @@ describe("TeX math hlist layout", () => {
     );
   });
 
+  it("packs makebox nuclei to fixed widths with TeX alignment positions", () => {
+    const natural = layout(String.raw`\mbox{if}`);
+    const right = layout(String.raw`\makebox[20pt][r]{if}`);
+    const center = layout(String.raw`\makebox[20pt][c]{if}`);
+    const stretch = layout(String.raw`\makebox[20pt][s]{a b}`);
+    const naturalStretch = layout(String.raw`\mbox{a b}`);
+
+    expect(natural.supported).toBe(true);
+    expect(right.supported).toBe(true);
+    expect(center.supported).toBe(true);
+    expect(stretch.supported).toBe(true);
+    const naturalWidth = natural.hlist?.width ?? 0;
+    expect(right.hlist?.width).toBeCloseTo(20, 6);
+    expect(center.hlist?.width).toBeCloseTo(20, 6);
+    expect(stretch.hlist?.width).toBeCloseTo(20, 6);
+    expect(flattenGlyphItems(right.hlist?.items ?? [])[0]?.x).toBeCloseTo(20 - naturalWidth, 5);
+    expect(flattenGlyphItems(center.hlist?.items ?? [])[0]?.x).toBeCloseTo((20 - naturalWidth) / 2, 5);
+    const stretchedGlue = flattenMathItems(stretch.hlist?.items ?? [])
+      .find((item) => item.kind === "glue");
+    const naturalGlue = flattenMathItems(naturalStretch.hlist?.items ?? [])
+      .find((item) => item.kind === "glue");
+    expect(stretchedGlue?.kind === "glue" ? stretchedGlue.width : 0)
+      .toBeGreaterThan(naturalGlue?.kind === "glue" ? naturalGlue.width : 0);
+  });
+
+  it("lays out llap and rlap as zero-width aligned text boxes", () => {
+    const natural = layout(String.raw`\mbox{if}`);
+    const llap = layout(String.raw`\llap{if}`);
+    const rlap = layout(String.raw`\rlap{if}`);
+
+    expect(natural.supported).toBe(true);
+    expect(llap.supported).toBe(true);
+    expect(rlap.supported).toBe(true);
+    const naturalWidth = natural.hlist?.width ?? 0;
+    expect(llap.hlist?.width).toBeCloseTo(0, 6);
+    expect(rlap.hlist?.width).toBeCloseTo(0, 6);
+    expect(flattenGlyphItems(llap.hlist?.items ?? [])[0]?.x).toBeCloseTo(-naturalWidth, 5);
+    expect(flattenGlyphItems(rlap.hlist?.items ?? [])[0]?.x).toBeCloseTo(0, 6);
+  });
+
   it("scales text command nuclei in script style", () => {
     const result = layout(String.raw`x_{\text{if}}`);
 

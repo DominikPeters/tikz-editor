@@ -2,6 +2,7 @@ import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import {
   simpleTexInlineTokensToLayoutItems,
   texMBoxHListFromLayoutItems,
+  texReboxMBoxHList,
   type TexMathBox,
   type TexMathBoxProvider,
 } from "../layout-inline-items.js";
@@ -522,7 +523,7 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return true;
   }
   if (nucleus.kind === "text") {
-    return nucleus.command !== "mbox" && nucleus.command !== "hbox";
+    return !isTextBoxNucleusCommand(nucleus.command);
   }
   if (
     nucleus.kind === "aligned" ||
@@ -588,6 +589,14 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     return texMathListNeedsAmsMath(nucleus.body);
   }
   return false;
+}
+
+function isTextBoxNucleusCommand(command: TexMathTextNucleus["command"]): boolean {
+  return command === "mbox" ||
+    command === "hbox" ||
+    command === "makebox" ||
+    command === "llap" ||
+    command === "rlap";
 }
 
 function amsMathSymbolCommand(text: string): boolean {
@@ -1089,13 +1098,14 @@ function layoutTextNucleus(
   style: TexMathStyle,
   baseAtPt: number
 ): TexMathAtomLayout | null {
-  const atPt = nucleus.command === "mbox" || nucleus.command === "hbox"
+  const isTextBoxCommand = isTextBoxNucleusCommand(nucleus.command);
+  const atPt = isTextBoxCommand
     ? baseAtPt
     : textStyleAtPt(style, baseAtPt);
   if (nucleus.nodes) {
     const initialFontState = textNucleusInitialFontState(nucleus, fontProfile);
     const tokens = textNucleusInlineTokens(nucleus, initialFontState);
-    const nestedMathStyle = nucleus.command === "mbox" || nucleus.command === "hbox" ? "text" : style;
+    const nestedMathStyle = isTextBoxCommand ? "text" : style;
     const nestedMathProvider = textNucleusMathBoxProvider(
       fontProfile,
       nestedMathStyle,
@@ -1118,11 +1128,15 @@ function layoutTextNucleus(
     if (!hlist) {
       return null;
     }
+    const boxedHList = texReboxMBoxHList(hlist, {
+      boxWidth: nucleus.boxWidth,
+      boxAlign: nucleus.boxAlign,
+    });
     return {
-      items: hlist.items,
-      width: hlist.width,
-      height: hlist.height,
-      depth: hlist.depth,
+      items: boxedHList.items,
+      width: boxedHList.width,
+      height: boxedHList.height,
+      depth: boxedHList.depth,
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
@@ -1223,8 +1237,7 @@ function textNucleusInlineTokens(
   const tokens = simpleTexInlineNodesToTokens(nucleus.nodes ?? [], initialFontState);
   if (
     nucleus.command === "text" ||
-    nucleus.command === "mbox" ||
-    nucleus.command === "hbox" ||
+    isTextBoxNucleusCommand(nucleus.command) ||
     !simpleTexFontStateMayHaveItalicCorrection(initialFontState)
   ) {
     return tokens;

@@ -26,6 +26,8 @@ import {
   type SimpleTexFontState,
   type SimpleTexInlineNode,
   type SimpleTexParagraphSegment,
+  type SimpleTexTextBoxAlignment,
+  type SimpleTexTextBoxCommandName,
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import { roundTexPt } from "./fonts/units.js";
@@ -253,7 +255,7 @@ export interface TexLayoutMathItem {
 export interface TexLayoutTextBoxItem {
   readonly kind: "text-box";
   readonly role?: "list-label";
-  readonly command: "mbox";
+  readonly command: SimpleTexTextBoxCommandName;
   readonly text: string;
   readonly content: string;
   readonly sourceStart: number;
@@ -412,6 +414,8 @@ export function simpleTexSegmentToLayoutItems(
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
+        boxWidth: token.boxWidth,
+        boxAlign: token.boxAlign,
         fontState: token.fontState,
         atPt,
         metricProvider,
@@ -420,11 +424,11 @@ export function simpleTexSegmentToLayoutItems(
         textFontProfile,
       });
       if (!box) {
-        throw new Error(`Failed to lay out TeX \\mbox for source range ${token.sourceStart}:${token.sourceEnd}.`);
+        throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
       }
       items.push({
         kind: "text-box",
-        command: "mbox",
+        command: token.command ?? "mbox",
         text: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,
@@ -482,6 +486,8 @@ function texMBoxFromInlineNodes(params: {
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly children: readonly SimpleTexInlineNode[];
+  readonly boxWidth?: number;
+  readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly fontState: SimpleTexFontState;
   readonly atPt: number;
   readonly metricProvider: TexMetricProvider;
@@ -509,6 +515,10 @@ function texMBoxFromInlineNodes(params: {
   if (!hlist) {
     return null;
   }
+  const boxedHList = texReboxMBoxHList(hlist, {
+    boxWidth: params.boxWidth,
+    boxAlign: params.boxAlign,
+  });
   return {
     source: params.source,
     content: params.content,
@@ -517,23 +527,23 @@ function texMBoxFromInlineNodes(params: {
     sourceEnd: params.sourceEnd,
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
-    width: hlist.width,
-    height: hlist.height,
-    depth: hlist.depth,
+    width: boxedHList.width,
+    height: boxedHList.height,
+    depth: boxedHList.depth,
     caretStops: texMBoxCaretStops(
       params.sourceStart,
       params.sourceEnd,
       params.contentStart,
       params.contentEnd,
-      hlist.width
+      boxedHList.width
     ),
     constructRanges: [{
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
       xStart: 0,
-      xEnd: hlist.width,
+      xEnd: boxedHList.width,
     }],
-    hlist,
+    hlist: boxedHList,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
   };
 }
@@ -673,6 +683,8 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
+        boxWidth: token.boxWidth,
+        boxAlign: token.boxAlign,
         fontState: token.fontState,
         atPt: params.atPt,
         metricProvider: params.metricProvider,
@@ -681,11 +693,11 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         textFontProfile: params.textFontProfile,
       });
       if (!box) {
-        throw new Error(`Failed to lay out TeX \\mbox for source range ${token.sourceStart}:${token.sourceEnd}.`);
+        throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
       }
       items.push({
         kind: "text-box",
-        command: "mbox",
+        command: token.command ?? "mbox",
         text: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,
@@ -861,6 +873,103 @@ export function texMBoxHListFromLayoutItems(params: {
     height: roundTexPt(height),
     depth: roundTexPt(depth),
     sourceSpan: params.sourceSpan,
+    items,
+  };
+}
+
+export function texReboxMBoxHList(
+  hlist: TexMathHList,
+  params: {
+    readonly boxWidth?: number;
+    readonly boxAlign?: SimpleTexTextBoxAlignment;
+  }
+): TexMathHList {
+  if (params.boxWidth === undefined || !Number.isFinite(params.boxWidth)) {
+    return hlist;
+  }
+  const targetWidth = roundTexPt(params.boxWidth);
+  const alignment = params.boxAlign ?? "center";
+  if (alignment === "stretch") {
+    return texSetMBoxHListWidth(hlist, targetWidth);
+  }
+  const offset = texMBoxAlignmentOffset(hlist.width, targetWidth, alignment);
+  if (offset === 0) {
+    return hlist.width === targetWidth
+      ? hlist
+      : { ...hlist, width: targetWidth };
+  }
+  return {
+    ...hlist,
+    width: targetWidth,
+    items: hlist.items.map((item): TexMathHListItem => ({
+      ...item,
+      x: roundTexPt(item.x + offset),
+    })),
+  };
+}
+
+function texMBoxAlignmentOffset(
+  naturalWidth: number,
+  targetWidth: number,
+  alignment: SimpleTexTextBoxAlignment
+): number {
+  switch (alignment) {
+    case "left":
+    case "natural":
+    case "stretch":
+      return 0;
+    case "right":
+      return roundTexPt(targetWidth - naturalWidth);
+    case "center":
+      return roundTexPt((targetWidth - naturalWidth) / 2);
+  }
+}
+
+function texSetMBoxHListWidth(
+  hlist: TexMathHList,
+  targetWidth: number
+): TexMathHList {
+  const roundedTargetWidth = roundTexPt(targetWidth);
+  const delta = roundTexPt(roundedTargetWidth - hlist.width);
+  if (delta === 0) {
+    return hlist.width === roundedTargetWidth
+      ? hlist
+      : { ...hlist, width: roundedTargetWidth };
+  }
+  const sign = delta > 0 ? "stretch" : "shrink";
+  const total = hlist.items.reduce((sum, item) => {
+    if (item.kind !== "glue") {
+      return sum;
+    }
+    return sum + Math.max(0, sign === "stretch" ? item.stretch : item.shrink);
+  }, 0);
+  if (total <= 0) {
+    return { ...hlist, width: roundedTargetWidth };
+  }
+  const ratio = sign === "stretch"
+    ? delta / total
+    : Math.min(-delta / total, 1);
+  let offset = 0;
+  const items = hlist.items.map((item): TexMathHListItem => {
+    const shiftedX = roundTexPt(item.x + offset);
+    if (item.kind !== "glue") {
+      return {
+        ...item,
+        x: shiftedX,
+      };
+    }
+    const adjustment = (sign === "stretch" ? item.stretch : -item.shrink) * ratio;
+    const adjustedWidth = roundTexPt(item.width + adjustment);
+    offset = roundTexPt(offset + adjustedWidth - item.width);
+    return {
+      ...item,
+      x: shiftedX,
+      width: adjustedWidth,
+    };
+  });
+  return {
+    ...hlist,
+    width: roundedTargetWidth,
     items,
   };
 }

@@ -1,6 +1,8 @@
 import type {
   SimpleTexFontCommandName,
   SimpleTexInlineNode,
+  SimpleTexTextBoxAlignment,
+  SimpleTexTextBoxCommandName,
 } from "../ir.js";
 
 export interface TexMathSourceSpan {
@@ -300,10 +302,12 @@ export type TexMathTextPart =
 
 export interface TexMathTextNucleus {
   readonly kind: "text";
-  readonly command?: "text" | "mbox" | "hbox" | SimpleTexFontCommandName;
+  readonly command?: "text" | "hbox" | SimpleTexTextBoxCommandName | SimpleTexFontCommandName;
   readonly text: string;
   readonly nodes?: readonly SimpleTexInlineNode[];
   readonly parts?: readonly TexMathTextPart[];
+  readonly boxWidth?: number;
+  readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly textSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }

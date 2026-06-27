@@ -731,10 +731,33 @@ function randomMBoxFormula(random, variables) {
     String.raw`\texttt{if}`,
     String.raw`\textit{\textup{if}}`,
   ]);
+  const command = randomTextBoxMathCommand(random, content);
   if (random() < 0.5) {
-    return `${variable}_{\\mbox{${content}}}`;
+    return `${variable}_{${command}}`;
   }
-  return `${variable}+\\mbox{${content}}`;
+  return `${variable}+${command}`;
+}
+
+function randomTextBoxMathCommand(random, content) {
+  const variant = Math.floor(random() * 6);
+  if (variant === 0) {
+    return `\\makebox{${content}}`;
+  }
+  if (variant === 1) {
+    const width = choice(random, ["12pt", "20pt", "0.4in"]);
+    const align = choice(random, ["l", "c", "r"]);
+    return `\\makebox[${width}][${align}]{${content}}`;
+  }
+  if (variant === 2) {
+    return "\\makebox[24pt][s]{a b}";
+  }
+  if (variant === 3) {
+    return `\\llap{${content}}`;
+  }
+  if (variant === 4) {
+    return `\\rlap{${content}}`;
+  }
+  return `\\mbox{${content}}`;
 }
 
 function randomTextCommandFormula(random, variables) {

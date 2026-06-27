@@ -291,7 +291,7 @@ function generateCase(index, random) {
   }
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
-    feature: ["plain", "multi-par", "noindent", "forced-break", "mixed", "declaration", "mbox"][feature],
+    feature: ["plain", "multi-par", "noindent", "forced-break", "mixed", "declaration", "text-box"][feature],
     text,
     width,
     parindent,
@@ -646,7 +646,7 @@ function generateBoxCase(index, random) {
   } else if (feature === 2) {
     text = `${sentence(random, 3, 6)} ${inlineMBox(random)} ${sentence(random, 3, 6)}`;
   } else {
-    text = `${inlineMBox(random)} ${sentence(random, 5, 9)} ${inlineMBox(random)}`;
+    text = `${inlineMBox(random, { allowLap: false })} ${sentence(random, 5, 9)} ${inlineMBox(random)}`;
   }
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
@@ -750,8 +750,8 @@ function generateMixedFeatureCase(index, random) {
   if (feature === 5) {
     return {
       id: `case-${String(index + 1).padStart(3, "0")}`,
-      feature: "mixed-mbox",
-      text: `${sentence(random, 5, 9)} \\par ${inlineMBox(random)} ${sentence(random, 3, 6)}`,
+      feature: "mixed-text-box",
+      text: `${sentence(random, 5, 9)} \\par ${inlineMBox(random, { allowLap: false })} ${sentence(random, 3, 6)}`,
       width: choice(random, [150, 200, 240, 320]),
       parindent: choice(random, [0, 10, 15]),
       alignment: alignments[index % alignments.length],
@@ -770,12 +770,33 @@ function generateMixedFeatureCase(index, random) {
   };
 }
 
-function inlineMBox(random) {
+function inlineMBox(random, options = {}) {
   const content = choice(random, [
     styledPhrase(random, 2, 4),
     `${choice(random, words)} ${choice(random, words)}`,
     ` ${choice(random, words)} `,
   ]);
+  const variants = options.allowLap === false
+    ? ["makebox", "aligned-makebox", "stretched-makebox", "mbox"]
+    : ["makebox", "aligned-makebox", "stretched-makebox", "llap", "rlap", "mbox"];
+  const variant = choice(random, variants);
+  if (variant === "makebox") {
+    return `\\makebox{${content}}`;
+  }
+  if (variant === "aligned-makebox") {
+    const width = choice(random, ["12pt", "20pt", "0.4in"]);
+    const align = choice(random, ["l", "c", "r"]);
+    return `\\makebox[${width}][${align}]{${content}}`;
+  }
+  if (variant === "stretched-makebox") {
+    return `\\makebox[24pt][s]{${choice(random, words)} ${choice(random, words)}}`;
+  }
+  if (variant === "llap") {
+    return `\\llap{${content}}`;
+  }
+  if (variant === "rlap") {
+    return `\\rlap{${content}}`;
+  }
   return `\\mbox{${content}}`;
 }
 

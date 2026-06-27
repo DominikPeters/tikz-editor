@@ -44,9 +44,13 @@ import type {
 import { texMathSymbolDeclaration } from "./symbol-definitions.js";
 import {
   parseSimpleTexInlineNodes,
+  simpleTexTextBoxAlignment,
   type SimpleTexFontCommandName,
+  type SimpleTexTextBoxAlignment,
+  type SimpleTexTextBoxCommandName,
   type SimpleTexInlineNode,
 } from "../ir.js";
+import { parseTexDimensionText, texDimensionUnitFactor } from "../dimensions.js";
 
 interface ParseListOptions {
   readonly stopAtGroupClose: boolean;
@@ -1256,8 +1260,36 @@ class TexMathParser {
   private parseText(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
     const name = mathTextCommandName(command.text) ?? "text";
+    let boxWidth: number | undefined;
+    let boxAlign: SimpleTexTextBoxAlignment | undefined;
+    let argumentSpan = command.sourceSpan;
+    if (name === "makebox") {
+      const widthArgument = this.parseOptionalBracketDimensionArgument(
+        command.sourceSpan,
+        `${command.text} width`
+      );
+      if (widthArgument) {
+        boxWidth = widthArgument.valuePt;
+        boxAlign = "center";
+        argumentSpan = spanUnion(argumentSpan, widthArgument.sourceSpan);
+        const alignArgument = this.parseOptionalBracketTextArgument(
+          command.sourceSpan,
+          `${command.text} alignment`
+        );
+        if (alignArgument) {
+          boxAlign = simpleTexTextBoxAlignment(alignArgument.text.trim());
+          argumentSpan = spanUnion(argumentSpan, alignArgument.sourceSpan);
+        }
+      }
+    } else if (name === "llap") {
+      boxWidth = 0;
+      boxAlign = "right";
+    } else if (name === "rlap") {
+      boxWidth = 0;
+      boxAlign = "left";
+    }
     const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} content`);
-    const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+    const sourceSpan = spanUnion(argumentSpan, content?.sourceSpan ?? argumentSpan);
     if (!content || content.unsupported) {
       return this.maybeParseScripts({
         kind: "atom",
@@ -1279,6 +1311,8 @@ class TexMathParser {
         text: content.text,
         nodes: content.nodes,
         parts: content.parts,
+        boxWidth,
+        boxAlign,
         textSourceSpan: content.textSourceSpan,
         sourceSpan,
       },
@@ -5712,41 +5746,6 @@ function bigDelimiterCommand(command: string): TexMathBigDelimiterCommand | null
   }
 }
 
-function texDimensionUnitFactor(unit: string): number | null {
-  switch (unit) {
-    case "pt":
-      return 1;
-    case "in":
-      return 72.27;
-    case "pc":
-      return 12;
-    case "cm":
-      return 72.27 / 2.54;
-    case "mm":
-      return 72.27 / 25.4;
-    case "bp":
-      return 72.27 / 72;
-    case "dd":
-      return 1238 / 1157;
-    case "cc":
-      return 12 * 1238 / 1157;
-    case "sp":
-      return 1 / 65536;
-    default:
-      return null;
-  }
-}
-
-function parseTexDimensionText(text: string): number | null {
-  const match = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([A-Za-z]{2})\s*$/.exec(text);
-  if (!match) {
-    return null;
-  }
-  const number = Number(match[1]);
-  const factor = texDimensionUnitFactor(match[2] ?? "");
-  return Number.isFinite(number) && factor !== null ? number * factor : null;
-}
-
 function styleCommandName(command: string): TexMathStyle | null {
   switch (commandName(command)) {
     case "displaystyle":
@@ -6065,9 +6064,17 @@ function operatorNameParts(parts: readonly string[]): readonly TexMathOperatorNa
   });
 }
 
-function mathTextCommandName(text: string): "text" | "mbox" | "hbox" | SimpleTexFontCommandName | null {
+function mathTextCommandName(text: string): "text" | "hbox" | SimpleTexTextBoxCommandName | SimpleTexFontCommandName | null {
   const name = commandName(text);
-  if (name === "text" || name === "mbox" || name === "hbox" || isSimpleTexFontCommandName(name)) {
+  if (
+    name === "text" ||
+    name === "hbox" ||
+    name === "mbox" ||
+    name === "makebox" ||
+    name === "llap" ||
+    name === "rlap" ||
+    isSimpleTexFontCommandName(name)
+  ) {
     return name;
   }
   return null;

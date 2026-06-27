@@ -197,6 +197,13 @@ const formulas = args.formulas.length > 0
       "\\emph{if}",
       "\\mbox{\\textbf{Bold} text}",
       "\\mbox{\\texttt{if}}",
+      "\\makebox{if}",
+      "\\makebox[20pt][l]{if}",
+      "\\makebox[20pt][c]{if}",
+      "\\makebox[20pt][r]{if}",
+      "\\makebox[24pt][s]{a b}",
+      "\\llap{if}",
+      "\\rlap{if}",
       "x_{\\text{if}}",
       "x_{y_{\\textbf{if}}}",
       "x_{\\mbox{$y$}}",
@@ -890,6 +897,24 @@ function randomMBoxMathFormula(rng) {
     String.raw`\textit{\textup{if}}`,
     String.raw`$x+y$ text`,
   ][randomInt(rng, 8)] ?? "if";
+  const variant = randomInt(rng, 6);
+  if (variant === 0) {
+    return String.raw`\makebox{` + content + "}";
+  }
+  if (variant === 1) {
+    const width = [String.raw`12pt`, String.raw`20pt`, String.raw`0.4in`][randomInt(rng, 3)] ?? String.raw`20pt`;
+    const align = ["l", "c", "r"][randomInt(rng, 3)] ?? "c";
+    return String.raw`\makebox[` + width + "][" + align + "]{" + content + "}";
+  }
+  if (variant === 2) {
+    return String.raw`\makebox[24pt][s]{a b}`;
+  }
+  if (variant === 3) {
+    return String.raw`\llap{` + content + "}";
+  }
+  if (variant === 4) {
+    return String.raw`\rlap{` + content + "}";
+  }
   return String.raw`\mbox{` + content + "}";
 }
 

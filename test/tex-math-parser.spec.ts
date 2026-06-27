@@ -980,6 +980,43 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses makebox and zero-width lap commands through text-in-math nuclei", () => {
+    const result = parseTexMath(String.raw`\makebox[20pt][r]{if}+\llap{a}+\rlap{b}`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 0, end: 21 },
+      nucleus: {
+        kind: "text",
+        command: "makebox",
+        text: "if",
+        boxWidth: 20,
+        boxAlign: "right",
+        textSourceSpan: { start: 18, end: 20 },
+        sourceSpan: { start: 0, end: 21 },
+      },
+    });
+    expect(atomAt(result, 2)).toMatchObject({
+      nucleus: {
+        kind: "text",
+        command: "llap",
+        text: "a",
+        boxWidth: 0,
+        boxAlign: "right",
+      },
+    });
+    expect(atomAt(result, 4)).toMatchObject({
+      nucleus: {
+        kind: "text",
+        command: "rlap",
+        text: "b",
+        boxWidth: 0,
+        boxAlign: "left",
+      },
+    });
+  });
+
   it("parses kernel text font commands as text-in-math nuclei", () => {
     const result = parseTexMath(
       String.raw`\textrm{a}+\textsf{b}+\texttt{c}+\textnormal{d}+\textbf{e}+\textmd{f}+\textit{g}+\textsl{h}+\textsc{i}+\textup{j}+\emph{k}`

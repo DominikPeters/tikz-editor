@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  analyzeSimpleTexParagraph,
   computerModernTexMetricProvider,
   createTexDerivedInlineMathBoxProvider,
   createSimpleTexLayoutDocumentIr,
@@ -1019,6 +1020,70 @@ describe("TeX vlist lowering", () => {
     });
     expect(spacedBox?.width ?? 0).toBeCloseTo((plainBox?.width ?? 0) + 2 * spaceWidth, 1);
     expect(spacedBox?.mathSvgBody).toContain("data-tex-math-hlist");
+  });
+
+  it("lays out text-mode makebox with fixed widths", () => {
+    const result = layoutSimpleTexParagraph(String.raw`A\makebox[20pt][r]{b}Z`, {
+      width: 200,
+      parindent: 0,
+    });
+
+    expect(result.supported).toBe(true);
+    const segments = result.report?.lines[0]?.segments ?? [];
+    const box = segments.find((segment) =>
+      segment.kind === "math" && segment.sourceKind === "text"
+    );
+    const z = segments.find((segment) =>
+      segment.kind === "text" && segment.text === "Z"
+    );
+    expect(box).toMatchObject({
+      kind: "math",
+      text: "b",
+      sourceKind: "text",
+      width: 20,
+    });
+    expect(z?.x).toBeCloseTo((box?.x ?? 0) + 20, 6);
+  });
+
+  it("lays out text-mode llap and rlap as zero-width inline hboxes", () => {
+    const llap = layoutSimpleTexParagraph(String.raw`A\llap{b}Z`, {
+      width: 200,
+      parindent: 0,
+    });
+    const rlap = layoutSimpleTexParagraph(String.raw`A\rlap{b}Z`, {
+      width: 200,
+      parindent: 0,
+    });
+
+    expect(llap.supported).toBe(true);
+    expect(rlap.supported).toBe(true);
+    const llapSegments = llap.report?.lines[0]?.segments ?? [];
+    const rlapSegments = rlap.report?.lines[0]?.segments ?? [];
+    const llapBox = llapSegments.find((segment) =>
+      segment.kind === "math" && segment.sourceKind === "text"
+    );
+    const rlapBox = rlapSegments.find((segment) =>
+      segment.kind === "math" && segment.sourceKind === "text"
+    );
+    const llapZ = llapSegments.find((segment) =>
+      segment.kind === "text" && segment.text === "Z"
+    );
+    const rlapZ = rlapSegments.find((segment) =>
+      segment.kind === "text" && segment.text === "Z"
+    );
+    expect(llapBox?.width).toBeCloseTo(0, 6);
+    expect(rlapBox?.width).toBeCloseTo(0, 6);
+    expect(llapZ?.x).toBeCloseTo(llapBox?.x ?? 0, 6);
+    expect(rlapZ?.x).toBeCloseTo(rlapBox?.x ?? 0, 6);
+    expect(llapBox?.mathSvgBody).toContain("data-tex-math-hlist");
+    expect(rlapBox?.mathSvgBody).toContain("data-tex-math-hlist");
+  });
+
+  it("keeps unsupported makebox dimensions outside the simple text path", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`A\makebox[\width]{b}Z`, 120);
+
+    expect(analysis.ir?.unsupportedCommand).toBe(true);
+    expect(analysis.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
   });
 
   it("lays out inline math inside text-mode mbox content", () => {
