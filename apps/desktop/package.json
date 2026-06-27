@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/desktop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,7 +16,7 @@
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
-    "@tikz-editor/app": "0.5.0",
+    "@tikz-editor/app": "0.5.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tauri-plugin-clipboard-x-api": "^2.0.2"

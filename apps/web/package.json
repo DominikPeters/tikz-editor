@@ -1,7 +1,7 @@
 {
   "name": "@tikz-editor/web",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "scripts": {
     "build:package-deps": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build",
@@ -22,7 +22,7 @@
     "profile:compare-report": "node ../../scripts/analyze-cpuprofile.mjs compare-report"
   },
   "dependencies": {
-    "@tikz-editor/app": "0.5.0",
+    "@tikz-editor/app": "0.5.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
