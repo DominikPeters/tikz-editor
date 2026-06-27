@@ -70,6 +70,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         atPt: params.font.atPt,
         metricProvider: params.metricProvider,
         mathBoxProvider: params.options.mathBoxProvider,
+        graphicsResolver: params.options.graphicsResolver,
         textFontProfile: params.options.textFontProfile,
       })
     );

@@ -11,6 +11,7 @@ import {
 import {
   simpleTexInlineNodesToLayoutItems,
 } from "../packages/core/src/text/tex/layout-inline-items.js";
+import type { NodeTextGraphicsResolver } from "../packages/core/src/text/types.js";
 import { texInterwordGlueForSpaceFactor } from "../packages/core/src/text/tex/space-glue.js";
 import {
   addParagraphVerticalGlueToVList,
@@ -1320,6 +1321,90 @@ describe("TeX vlist lowering", () => {
     });
   });
 
+  it("lays out resolved includegraphics as an inline TeX SVG image box", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\includegraphics[width=40pt,height=30pt,keepaspectratio]{fig}Z`
+    );
+    const block = parsed.blocks[0];
+    const graphicsResolver: NodeTextGraphicsResolver = {
+      cacheKey: "test-image-v1",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 20,
+        naturalHeightPt: 10,
+        revision: "r1",
+        resolvedPath: "/tmp/fig.png",
+      }),
+    };
+    const items = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile,
+          graphicsResolver
+        )
+      : [];
+    const graphicsItem = items.find((item) =>
+      item.kind === "text-box" && item.command === "includegraphics"
+    );
+    const box = graphicsItem?.kind === "text-box" ? graphicsItem.box : undefined;
+
+    expect(box).toMatchObject({
+      sourceKind: "text",
+      content: "fig",
+      width: 40,
+      height: 20,
+      depth: 0,
+    });
+    expect(box?.hlist).toBeUndefined();
+    expect(box?.svgBody).toContain('data-tex-includegraphics="true"');
+    expect(box?.svgBody).toContain('<image x="0" y="-2000" width="4000" height="2000"');
+    expect(box?.svgBody).toContain('href="data:image/png;base64,aW1hZ2U="');
+    expect(box?.svgBody).not.toContain("/tmp/fig.png");
+  });
+
+  it("lays out missing includegraphics placeholders with draft-like fallback dimensions", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\includegraphics{missing}\includegraphics[width=20pt]{missing}\includegraphics[height=12pt]{missing}\includegraphics[width=20pt,height=12pt]{missing}`
+    );
+    const block = parsed.blocks[0];
+    const boxes = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile
+        ).filter((item): item is Extract<typeof item, { kind: "text-box" }> =>
+          item.kind === "text-box" && item.command === "includegraphics"
+        )
+      : [];
+
+    expect(boxes).toHaveLength(4);
+    expect(boxes[0]?.box.width).toBeCloseTo(28.452756, 5);
+    expect(boxes[0]?.box.height).toBeCloseTo(28.452756, 5);
+    expect(boxes[1]?.box.width).toBeCloseTo(20, 6);
+    expect(boxes[1]?.box.height).toBeCloseTo(28.452756, 5);
+    expect(boxes[2]?.box.width).toBeCloseTo(28.452756, 5);
+    expect(boxes[2]?.box.height).toBeCloseTo(12, 6);
+    expect(boxes[3]?.box.width).toBeCloseTo(20, 6);
+    expect(boxes[3]?.box.height).toBeCloseTo(12, 6);
+    expect(boxes[0]?.box.svgBody).toContain('data-tex-includegraphics="placeholder"');
+    expect(boxes[0]?.box.svgBody).toContain('data-tex-includegraphics-status="missing"');
+  });
+
   it("lays out text-mode raisebox with natural and explicit dimensions", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\mbox{g}\raisebox{3pt}{g}\raisebox{3pt}[2pt][4pt]{g}`
@@ -1484,9 +1569,9 @@ describe("TeX vlist lowering", () => {
   });
 
   it("preserves block-position unsupported commands as vlist placeholders", () => {
-    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+    const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);
-    const placeholderStart = source.indexOf(String.raw`\includegraphics`);
+    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
     const placeholderEnd = source.indexOf(String.raw` \par Beta`);
 
     const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
@@ -1518,7 +1603,7 @@ describe("TeX vlist lowering", () => {
 
   it("groups scoped unsupported command placeholders into quote vboxes", () => {
     const parsed = parseSimpleTexParagraphIr(
-      String.raw`\begin{quote}\includegraphics{plot.pdf} \par Alpha\end{quote}`
+      String.raw`\begin{quote}\unsupportedgraphics{plot.pdf} \par Alpha\end{quote}`
     );
     const grouped = groupSimpleTexVListScopes(
       lowerSimpleTexBlockItemsToVList(parsed.items),
@@ -2820,7 +2905,7 @@ describe("TeX vlist layout", () => {
   });
 
   it("preserves source spans in positioned vlist box reports", () => {
-    const source = String.raw`Alpha \par \smallskip Beta \par \hrule width 24pt height 2pt depth 1pt \includegraphics{plot.pdf}`;
+    const source = String.raw`Alpha \par \smallskip Beta \par \hrule width 24pt height 2pt depth 1pt \unsupportedgraphics{plot.pdf}`;
     const parsed = parseSimpleTexParagraphIr(source);
     const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
     const measureItem: TexVListItemMeasurer = (item, cursor) =>
@@ -2855,7 +2940,7 @@ describe("TeX vlist layout", () => {
         kind: "rule",
         source: String.raw`\hrule width 24pt height 2pt depth 1pt`,
       },
-      { kind: "placeholder", source: String.raw`\includegraphics{plot.pdf}` },
+      { kind: "placeholder", source: String.raw`\unsupportedgraphics{plot.pdf}` },
     ]);
   });
 

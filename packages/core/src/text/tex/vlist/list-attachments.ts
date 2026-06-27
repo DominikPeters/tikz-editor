@@ -1,5 +1,6 @@
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
 import type { TexTextFontProfile } from "../fonts/text-profile.js";
+import type { NodeTextGraphicsResolver } from "../../types.js";
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import type {
   SimpleTexFontState,
@@ -35,7 +36,8 @@ export type TexInlineNodesToLayoutItems = (
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
-  textFontProfile?: TexTextFontProfile
+  textFontProfile?: TexTextFontProfile,
+  graphicsResolver?: NodeTextGraphicsResolver
 ) => TexLayoutInlineItem[];
 
 export interface TexListItemParagraphAttachments {
@@ -54,6 +56,7 @@ export function texListItemParagraphAttachments(params: {
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly inlineNodesToItems: TexInlineNodesToLayoutItems;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
 }): TexListItemParagraphAttachments {
   const listItemLabel = params.segmentIndex === 0 && params.listContext?.showLabel === true
@@ -68,7 +71,8 @@ export function texListItemParagraphAttachments(params: {
         params.metricProvider,
         params.spaceGlueProfile,
         params.inlineNodesToItems,
-        params.textFontProfile
+        params.textFontProfile,
+        params.graphicsResolver
       ))
       : [];
   const firstLineIndentWidth = texArticleDescriptionFirstLineIndentWidth(
@@ -84,7 +88,8 @@ export function texListItemParagraphAttachments(params: {
         params.spaceGlueProfile,
         listItemLabel,
         params.inlineNodesToItems,
-        params.textFontProfile
+        params.textFontProfile,
+        params.graphicsResolver
       )
     : undefined;
   const marginLabelHBox = marginLabel && listItemLabel && params.listContext
@@ -137,7 +142,8 @@ function texInlineLabelItemsForListContext(
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   inlineNodesToItems: TexInlineNodesToLayoutItems,
-  textFontProfile?: TexTextFontProfile
+  textFontProfile?: TexTextFontProfile,
+  graphicsResolver?: NodeTextGraphicsResolver
 ): TexLayoutInlineItem[] {
   if (labelBox.content.kind !== "source" || !listContext.label) {
     return [];
@@ -151,7 +157,8 @@ function texInlineLabelItemsForListContext(
     spaceGlueProfile,
     undefined,
     labelBox.fontState,
-    textFontProfile
+    textFontProfile,
+    graphicsResolver
   );
 }
 
@@ -171,7 +178,8 @@ function texLayoutLabelForListContext(
   spaceGlueProfile: TexSpaceGlueProfile,
   labelBox: TexVBoxListItemLabelBox,
   inlineNodesToItems: TexInlineNodesToLayoutItems,
-  textFontProfile?: TexTextFontProfile
+  textFontProfile?: TexTextFontProfile,
+  graphicsResolver?: NodeTextGraphicsResolver
 ): TexLayoutLabel {
   const rightEdge = requiredTexListItemLabelRightEdge(labelBox);
   const labelContent = labelBox.content;
@@ -189,7 +197,8 @@ function texLayoutLabelForListContext(
         spaceGlueProfile,
         undefined,
         labelBox.fontState,
-        textFontProfile
+        textFontProfile,
+        graphicsResolver
       ),
       sourceStart: listContext.label.sourceStart,
       sourceEnd: listContext.label.sourceEnd,

@@ -22,7 +22,9 @@ import type { MathJaxFont } from "tikz-editor/text/mathjax-engine";
 import type { SourcePatch } from "tikz-editor/edit/types";
 import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "tikz-editor/profiling";
+import { prepareImageAssetResolver } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";
+import type { DocumentFileRef } from "./store/types";
 
 /**
  * A plain-data snapshot of a fully evaluated TikZ document.
@@ -66,6 +68,7 @@ export type ComputeRequest = {
   documentId?: string;
   source: string;
   sourceRevision?: number | null;
+  documentFileRef?: DocumentFileRef | null;
   activeFigureId?: string | null;
   changedSourceIds?: string[] | null;
   patches?: SourcePatch[] | null;
@@ -155,6 +158,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         request.patchBaseRevision ?? null,
         trigger,
         sourceFingerprint,
+        request.documentFileRef ?? null,
         request.renderViewBox ?? null
       );
       const snapshot: SessionSnapshot = {
@@ -218,13 +222,19 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
     phases.textEngine = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
+    const graphicsResolver = await prepareImageAssetResolver({
+      source: request.source,
+      documentFileRef: request.documentFileRef ?? null
+    });
+    phases.imageAssets = performance.now() - phaseStartedAt;
+    phaseStartedAt = performance.now();
     const result = await renderTikzToSvgAsync(request.source, {
       parse: {
         recover: true,
         activeFigureId: request.activeFigureId,
         includeContextDefinitions: true
       },
-      evaluate: { sourceFingerprint },
+      evaluate: { sourceFingerprint, graphicsResolver },
       svg: { padding: resolveSvgPadding(request.source, request.activeFigureId) },
       textEngine
     });
@@ -246,7 +256,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     semanticSession.evaluate({
       figure: result.parse.figure,
       source: request.source,
-      options: { sourceFingerprint, textEngine },
+      options: { sourceFingerprint, textEngine, graphicsResolver },
       hints: { trigger: "other" }
     });
     phases.primeSemantic = performance.now() - phaseStartedAt;
@@ -324,6 +334,7 @@ async function computeSnapshotIncremental(
   patchBaseRevision: number | null,
   trigger: Extract<IncrementalSemanticTrigger, "drag-element" | "drag-handle">,
   sourceFingerprint: string | undefined,
+  documentFileRef: DocumentFileRef | null,
   renderViewBox: SvgViewBox | null
 ): Promise<{
   parse: ParseTikzResult;
@@ -339,6 +350,12 @@ async function computeSnapshotIncremental(
   const maybeTextEngine = getOptionalTextEngine();
   const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
   phases.textEngine = performance.now() - phaseStartedAt;
+  phaseStartedAt = performance.now();
+  const graphicsResolver = await prepareImageAssetResolver({
+    source,
+    documentFileRef
+  });
+  phases.imageAssets = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
   const parseSession = getIncrementalParseSession();
   const parseIncremental = parseSession.evaluate({
@@ -363,7 +380,7 @@ async function computeSnapshotIncremental(
   let incremental = session.evaluate({
     figure: parseResult.figure,
     source: parseResult.source,
-    options: { sourceFingerprint, textEngine },
+    options: { sourceFingerprint, textEngine, graphicsResolver },
     hints: {
       changedSourceIds,
       sourcePatches: patches,
@@ -400,7 +417,7 @@ async function computeSnapshotIncremental(
     incremental = session.evaluate({
       figure: parseResult.figure,
       source: parseResult.source,
-      options: { sourceFingerprint, textEngine },
+      options: { sourceFingerprint, textEngine, graphicsResolver },
       hints: {
         changedSourceIds,
         sourcePatches: patches,

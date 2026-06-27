@@ -175,7 +175,8 @@ export const semanticFeatureRegistry = [
   "keyword_and",
   "svg_path",
   "svg_circle",
-  "svg_text"
+  "svg_text",
+  "text_includegraphics"
 ] as const satisfies readonly FeatureId[];
 
 export const svgFeatureRegistry = [
@@ -267,6 +268,7 @@ export const svgFeatureRegistry = [
   "svg_path",
   "svg_circle",
   "svg_text",
+  "text_includegraphics",
   "render_pipeline"
 ] as const satisfies readonly FeatureId[];
 

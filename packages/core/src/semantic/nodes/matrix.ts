@@ -208,6 +208,9 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         normalizedCellText.text,
         "node font size normalization"
       );
+      if (containsIncludeGraphicsCommand(normalizedCellText.text)) {
+        params.markFeature("text_includegraphics", "supported");
+      }
       const cellTextStyle = normalizedCellText.fontSizePt === cellStyle.fontSize
         ? cellStyle
         : { ...cellStyle, fontSize: normalizedCellText.fontSizePt };
@@ -218,7 +221,8 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         cellTransformScale,
         params.context.textEngine,
         params.matrixMode.textMode,
-        normalizedMappedCellText.sourceMap
+        normalizedMappedCellText.sourceMap,
+        params.context.graphicsResolver
       );
 
       cellGrid[row][column] = {
@@ -1800,6 +1804,10 @@ function trimLeadingWhitespace(input: string): { text: string; consumed: number 
     text: input.slice(consumed),
     consumed
   };
+}
+
+function containsIncludeGraphicsCommand(text: string): boolean {
+  return /\\includegraphics\b/.test(text);
 }
 
 function trimLeftWhitespaceBoundary(input: string, from: number, to: number): number {

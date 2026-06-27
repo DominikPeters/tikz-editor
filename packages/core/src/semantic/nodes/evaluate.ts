@@ -294,7 +294,8 @@ export function measureNodeAnchorExtents(
     1,
     context.textEngine,
     "text",
-    normalizedMappedText.sourceMap
+    normalizedMappedText.sourceMap,
+    context.graphicsResolver
   );
   const nodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const anchor = resolveNodeAnchor(expandedNodeOptions);
@@ -610,6 +611,9 @@ export function evaluateNodeItem(
     layoutNodeText = partTexts.join(horizontal ? " " : "\\\\");
     layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
   }
+  if (containsIncludeGraphicsCommand(layoutNodeText)) {
+    markFeature("text_includegraphics", "supported");
+  }
   const nodeTextStyle = normalizedNodeText.fontSizePt === nodeStyle.fontSize
     ? nodeStyle
     : { ...nodeStyle, fontSize: normalizedNodeText.fontSizePt };
@@ -658,7 +662,8 @@ export function evaluateNodeItem(
     1,
     context.textEngine,
     placementOptions.textMode ?? "text",
-    layoutNodeMappedText.sourceMap
+    layoutNodeMappedText.sourceMap,
+    context.graphicsResolver
   );
   const adjustedNodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const shapeGeometry = resolveNodeShapeGeometryParams(expandedNodeOptions, () => context.mathRandom.nextRaw());
@@ -1591,7 +1596,9 @@ export function evaluateNodeItem(
             splitTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver
           );
           pushNodeElement(
             makeTextElement(
@@ -1629,7 +1636,9 @@ export function evaluateNodeItem(
             splitTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver
           );
           pushNodeElement(
             makeTextElement(
@@ -1668,7 +1677,9 @@ export function evaluateNodeItem(
             solidusTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver
           );
           pushNodeElement(
             makeTextElement(
@@ -1701,7 +1712,9 @@ export function evaluateNodeItem(
             solidusTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver
           );
           pushNodeElement(
             makeTextElement(
@@ -2525,6 +2538,10 @@ function collectSetNames(options: OptionListAst | undefined): string[] {
     }
   }
   return Array.from(new Set(names));
+}
+
+function containsIncludeGraphicsCommand(text: string): boolean {
+  return /\\includegraphics\b/.test(text);
 }
 
 function hasTextWidthOption(options: OptionListAst | undefined): boolean {

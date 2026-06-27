@@ -204,7 +204,8 @@ export function createSemanticEvaluationRun(
     identityMatrix(),
     opts.textEngine ?? null,
     source,
-    opts.sourceFingerprint
+    opts.sourceFingerprint,
+    opts.graphicsResolver
   );
   const prePictureContextStatements = figure.body.filter((statement) => isPrePictureContextStatement(statement, figure));
   const prePictureMacroAttribution = new WeakMap<Statement, MacroOriginFrame[]>();

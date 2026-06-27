@@ -2,6 +2,10 @@ import {
   defaultTexTextFontProfile,
   type TexTextFontProfile,
 } from "./fonts/text-profile.js";
+import type {
+  NodeTextGraphicsOptions,
+  NodeTextGraphicsResolver,
+} from "../types.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import {
   defaultTexMathFontProfile,
@@ -37,6 +41,8 @@ import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
 const TEX_LATEX_FBOX_RULE_PT = 0.4;
 const TEX_LATEX_FBOX_SEP_PT = 3;
+const TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT = 28.4527559055;
+const TEX_SVG_UNIT_SCALE = 100;
 
 export interface TexLayoutTextItem {
   readonly kind: "text";
@@ -261,6 +267,7 @@ export type TexLayoutTextBoxCommandName =
   | SimpleTexTextBoxCommandName
   | SimpleTexDimensionBoxCommandName
   | "rule"
+  | "includegraphics"
   | "raisebox";
 
 export interface TexLayoutTextBoxItem {
@@ -327,7 +334,8 @@ export function simpleTexInlineNodesToLayoutItems(
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
-  textFontProfile: TexTextFontProfile = defaultTexTextFontProfile
+  textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
+  graphicsResolver?: NodeTextGraphicsResolver
 ): TexLayoutInlineItem[] {
   return simpleTexSegmentToLayoutItems(
     {
@@ -342,7 +350,8 @@ export function simpleTexInlineNodesToLayoutItems(
     spaceGlueProfile,
     mathBoxProvider,
     initialFontState,
-    textFontProfile
+    textFontProfile,
+    graphicsResolver
   );
 }
 
@@ -353,7 +362,8 @@ export function simpleTexSegmentToLayoutItems(
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
-  textFontProfile: TexTextFontProfile = defaultTexTextFontProfile
+  textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
+  graphicsResolver?: NodeTextGraphicsResolver
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
@@ -434,6 +444,7 @@ export function simpleTexSegmentToLayoutItems(
         spaceGlueProfile,
         mathBoxProvider,
         textFontProfile,
+        graphicsResolver,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -481,6 +492,33 @@ export function simpleTexSegmentToLayoutItems(
       continue;
     }
 
+    if (token.kind === "includegraphics") {
+      const box = texIncludeGraphicsBox({
+        source: token.text,
+        filename: token.graphicsFilename ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        filenameStart: token.graphicsFilenameStart ?? token.sourceStart,
+        filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
+        options: token.graphicsOptions ?? { raw: "" },
+        graphicsResolver,
+      });
+      items.push({
+        kind: "text-box",
+        command: "includegraphics",
+        text: token.text,
+        content: token.graphicsFilename ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.graphicsFilenameStart ?? token.sourceStart,
+        contentEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
     if (token.kind === "raisebox") {
       const box = texRaiseBoxFromInlineNodes({
         source: token.text,
@@ -499,6 +537,7 @@ export function simpleTexSegmentToLayoutItems(
         spaceGlueProfile,
         mathBoxProvider,
         textFontProfile,
+        graphicsResolver,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -536,6 +575,7 @@ export function simpleTexSegmentToLayoutItems(
         spaceGlueProfile,
         mathBoxProvider,
         textFontProfile,
+        graphicsResolver,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -609,6 +649,7 @@ function texMBoxFromInlineNodes(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -617,6 +658,7 @@ function texMBoxFromInlineNodes(params: {
     spaceGlueProfile: params.spaceGlueProfile,
     mathBoxProvider: params.mathBoxProvider,
     textFontProfile: params.textFontProfile,
+    graphicsResolver: params.graphicsResolver,
     trimEdges: false,
   });
   const hlist = texMBoxHListFromLayoutItems({
@@ -855,6 +897,209 @@ function texRuleBox(params: {
   };
 }
 
+function texIncludeGraphicsBox(params: {
+  readonly source: string;
+  readonly filename: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly filenameStart: number;
+  readonly filenameEnd: number;
+  readonly options: {
+    readonly width?: number;
+    readonly height?: number;
+    readonly scale?: number;
+    readonly keepAspectRatio?: boolean;
+    readonly raw: string;
+  };
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
+}): TexMathBox {
+  const graphicsOptions = nodeTextGraphicsOptions(params.options);
+  const resolution = params.graphicsResolver?.resolve({
+    filename: params.filename,
+    options: graphicsOptions,
+    source: params.source,
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+  }) ?? { status: "missing" as const };
+  const natural = resolution.status === "resolved" &&
+    Number.isFinite(resolution.naturalWidthPt) &&
+    Number.isFinite(resolution.naturalHeightPt) &&
+    resolution.naturalWidthPt > 0 &&
+    resolution.naturalHeightPt > 0
+      ? {
+          width: resolution.naturalWidthPt * (params.options.scale ?? 1),
+          height: resolution.naturalHeightPt * (params.options.scale ?? 1),
+        }
+      : null;
+  const size = texIncludeGraphicsTargetSize(params.options, natural);
+  const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
+  const svgBody = resolution.status === "resolved"
+    ? renderTexIncludeGraphicsImageSvgBody({
+        sourceSpan,
+        filename: params.filename,
+        width: size.width,
+        height: size.height,
+        mimeType: resolution.mimeType,
+        dataBase64: resolution.dataBase64,
+      })
+    : renderTexIncludeGraphicsPlaceholderSvgBody({
+        sourceSpan,
+        filename: params.filename,
+        width: size.width,
+        height: size.height,
+        status: resolution.status,
+        reason: resolution.status === "unsupported" ? resolution.reason : undefined,
+      });
+  const width = roundTexPt(size.width);
+  const height = roundTexPt(size.height);
+  return {
+    source: params.source,
+    content: params.filename,
+    sourceKind: "text",
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+    contentStart: params.filenameStart,
+    contentEnd: params.filenameEnd,
+    width,
+    height,
+    depth: 0,
+    caretStops: texMBoxCaretStops(
+      params.sourceStart,
+      params.sourceEnd,
+      params.filenameStart,
+      params.filenameEnd,
+      width
+    ),
+    constructRanges: [{
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      xStart: 0,
+      xEnd: width,
+    }],
+    svgBody,
+  };
+}
+
+function nodeTextGraphicsOptions(options: {
+  readonly width?: number;
+  readonly height?: number;
+  readonly scale?: number;
+  readonly keepAspectRatio?: boolean;
+  readonly raw: string;
+}): NodeTextGraphicsOptions {
+  return {
+    raw: options.raw,
+    ...(options.width !== undefined ? { width: `${formatTexSvgNumber(options.width)}pt` } : {}),
+    ...(options.height !== undefined ? { height: `${formatTexSvgNumber(options.height)}pt` } : {}),
+    ...(options.scale !== undefined ? { scale: formatTexSvgNumber(options.scale) } : {}),
+    ...(options.keepAspectRatio ? { keepaspectratio: true } : {}),
+  };
+}
+
+function texIncludeGraphicsTargetSize(
+  options: {
+    readonly width?: number;
+    readonly height?: number;
+    readonly scale?: number;
+    readonly keepAspectRatio?: boolean;
+  },
+  natural: { readonly width: number; readonly height: number } | null
+): { readonly width: number; readonly height: number } {
+  const requestedWidth = finitePositive(options.width);
+  const requestedHeight = finitePositive(options.height);
+  const base = natural ?? {
+    width: TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1),
+    height: TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1),
+  };
+  if (requestedWidth !== null && requestedHeight !== null) {
+    if (options.keepAspectRatio && base.width > 0 && base.height > 0) {
+      const scale = Math.min(requestedWidth / base.width, requestedHeight / base.height);
+      return {
+        width: roundTexPt(base.width * scale),
+        height: roundTexPt(base.height * scale),
+      };
+    }
+    return {
+      width: roundTexPt(requestedWidth),
+      height: roundTexPt(requestedHeight),
+    };
+  }
+  if (requestedWidth !== null) {
+    return {
+      width: roundTexPt(requestedWidth),
+      height: roundTexPt(natural ? requestedWidth * (base.height / base.width) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT),
+    };
+  }
+  if (requestedHeight !== null) {
+    return {
+      width: roundTexPt(natural ? requestedHeight * (base.width / base.height) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT),
+      height: roundTexPt(requestedHeight),
+    };
+  }
+  return {
+    width: roundTexPt(base.width),
+    height: roundTexPt(base.height),
+  };
+}
+
+function finitePositive(value: number | undefined): number | null {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function renderTexIncludeGraphicsImageSvgBody(params: {
+  readonly sourceSpan: { readonly start: number; readonly end: number };
+  readonly filename: string;
+  readonly width: number;
+  readonly height: number;
+  readonly mimeType: string;
+  readonly dataBase64: string;
+}): string {
+  const width = params.width * TEX_SVG_UNIT_SCALE;
+  const height = params.height * TEX_SVG_UNIT_SCALE;
+  return [
+    `<g data-tex-includegraphics="true" data-source-start="${params.sourceSpan.start}" data-source-end="${params.sourceSpan.end}" data-tex-includegraphics-filename="${escapeTexSvgAttribute(params.filename)}">`,
+    `<image x="0" y="${formatTexSvgNumber(-height)}" width="${formatTexSvgNumber(width)}" height="${formatTexSvgNumber(height)}" preserveAspectRatio="none" href="data:${escapeTexSvgAttribute(params.mimeType)};base64,${escapeTexSvgAttribute(params.dataBase64)}" />`,
+    `</g>`,
+  ].join("");
+}
+
+function renderTexIncludeGraphicsPlaceholderSvgBody(params: {
+  readonly sourceSpan: { readonly start: number; readonly end: number };
+  readonly filename: string;
+  readonly width: number;
+  readonly height: number;
+  readonly status: "missing" | "unsupported";
+  readonly reason?: string;
+}): string {
+  const width = params.width * TEX_SVG_UNIT_SCALE;
+  const height = params.height * TEX_SVG_UNIT_SCALE;
+  const y = -height;
+  const reasonAttr = params.reason
+    ? ` data-tex-includegraphics-reason="${escapeTexSvgAttribute(params.reason)}"`
+    : "";
+  return [
+    `<g data-tex-includegraphics="placeholder" data-tex-includegraphics-status="${params.status}" data-source-start="${params.sourceSpan.start}" data-source-end="${params.sourceSpan.end}" data-tex-includegraphics-filename="${escapeTexSvgAttribute(params.filename)}"${reasonAttr}>`,
+    `<rect x="0" y="${formatTexSvgNumber(y)}" width="${formatTexSvgNumber(width)}" height="${formatTexSvgNumber(height)}" fill="none" stroke="currentColor" stroke-width="40" />`,
+    `<path d="M0 ${formatTexSvgNumber(y)} L${formatTexSvgNumber(width)} 0 M${formatTexSvgNumber(width)} ${formatTexSvgNumber(y)} L0 0" fill="none" stroke="currentColor" stroke-width="40" />`,
+    `</g>`,
+  ].join("");
+}
+
+function escapeTexSvgAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function formatTexSvgNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  return Number(value.toFixed(6)).toString();
+}
+
 function texRaiseBoxFromInlineNodes(params: {
   readonly source: string;
   readonly content: string;
@@ -872,6 +1117,7 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -880,6 +1126,7 @@ function texRaiseBoxFromInlineNodes(params: {
     spaceGlueProfile: params.spaceGlueProfile,
     mathBoxProvider: params.mathBoxProvider,
     textFontProfile: params.textFontProfile,
+    graphicsResolver: params.graphicsResolver,
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -965,6 +1212,7 @@ function texDimensionBoxFromInlineNodes(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -973,6 +1221,7 @@ function texDimensionBoxFromInlineNodes(params: {
     spaceGlueProfile: params.spaceGlueProfile,
     mathBoxProvider: params.mathBoxProvider,
     textFontProfile: params.textFontProfile,
+    graphicsResolver: params.graphicsResolver,
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -1097,6 +1346,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly trimEdges: boolean;
 }): TexLayoutInlineItem[] {
   const items: TexLayoutInlineItem[] = [];
@@ -1177,6 +1427,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         spaceGlueProfile: params.spaceGlueProfile,
         mathBoxProvider: params.mathBoxProvider,
         textFontProfile: params.textFontProfile,
+        graphicsResolver: params.graphicsResolver,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -1224,6 +1475,33 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       continue;
     }
 
+    if (token.kind === "includegraphics") {
+      const box = texIncludeGraphicsBox({
+        source: token.text,
+        filename: token.graphicsFilename ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        filenameStart: token.graphicsFilenameStart ?? token.sourceStart,
+        filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
+        options: token.graphicsOptions ?? { raw: "" },
+        graphicsResolver: params.graphicsResolver,
+      });
+      items.push({
+        kind: "text-box",
+        command: "includegraphics",
+        text: token.text,
+        content: token.graphicsFilename ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.graphicsFilenameStart ?? token.sourceStart,
+        contentEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
     if (token.kind === "raisebox") {
       const box = texRaiseBoxFromInlineNodes({
         source: token.text,
@@ -1242,6 +1520,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         spaceGlueProfile: params.spaceGlueProfile,
         mathBoxProvider: params.mathBoxProvider,
         textFontProfile: params.textFontProfile,
+        graphicsResolver: params.graphicsResolver,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -1279,6 +1558,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         spaceGlueProfile: params.spaceGlueProfile,
         mathBoxProvider: params.mathBoxProvider,
         textFontProfile: params.textFontProfile,
+        graphicsResolver: params.graphicsResolver,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);

@@ -187,6 +187,23 @@ export interface SimpleTexRuleNode extends SimpleTexSourceRange {
   readonly height: number;
 }
 
+export interface SimpleTexIncludeGraphicsNode extends SimpleTexSourceRange {
+  readonly kind: "includegraphics";
+  readonly text: string;
+  readonly filename: string;
+  readonly filenameStart: number;
+  readonly filenameEnd: number;
+  readonly options: SimpleTexGraphicsOptions;
+}
+
+export interface SimpleTexGraphicsOptions {
+  readonly width?: number;
+  readonly height?: number;
+  readonly scale?: number;
+  readonly keepAspectRatio?: boolean;
+  readonly raw: string;
+}
+
 export interface SimpleTexRaiseBoxNode extends SimpleTexSourceRange {
   readonly kind: "raisebox";
   readonly text: string;
@@ -295,6 +312,7 @@ export type SimpleTexInlineNode =
   | SimpleTexGroupNode
   | SimpleTexMBoxNode
   | SimpleTexRuleNode
+  | SimpleTexIncludeGraphicsNode
   | SimpleTexRaiseBoxNode
   | SimpleTexDimensionBoxNode;
 
@@ -314,7 +332,7 @@ export type SimpleTexControlNode =
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox" | "rule" | "raisebox" | "dimension-box";
+  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -330,6 +348,10 @@ export interface SimpleTexToken {
   readonly ruleRaise?: number;
   readonly ruleWidth?: number;
   readonly ruleHeight?: number;
+  readonly graphicsFilename?: string;
+  readonly graphicsFilenameStart?: number;
+  readonly graphicsFilenameEnd?: number;
+  readonly graphicsOptions?: SimpleTexGraphicsOptions;
   readonly lift?: number;
   readonly boxHeight?: number;
   readonly boxDepth?: number;
@@ -732,6 +754,7 @@ function scanSimpleTexIrNodes(
       const boxEnvironment = scanSimpleTexBoxEnvironment(text, index, sourceOffset);
       const mboxCommand = scanSimpleTexMBoxCommand(text, index, sourceOffset);
       const ruleCommand = scanSimpleTexRuleCommand(text, index, sourceOffset);
+      const includeGraphicsCommand = scanSimpleTexIncludeGraphicsCommand(text, index, sourceOffset);
       const raiseBoxCommand = scanSimpleTexRaiseBoxCommand(text, index, sourceOffset);
       const dimensionBoxCommand = scanSimpleTexDimensionBoxCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
@@ -794,6 +817,11 @@ function scanSimpleTexIrNodes(
         nodes.push(ruleCommand.node);
         unsupportedCommand ||= ruleCommand.unsupportedCommand;
         index = ruleCommand.end;
+        continue;
+      }
+      if (includeGraphicsCommand) {
+        nodes.push(includeGraphicsCommand.node);
+        index = includeGraphicsCommand.end;
         continue;
       }
       if (raiseBoxCommand) {
@@ -2014,6 +2042,131 @@ function scanSimpleTexRuleCommand(
   };
 }
 
+function scanSimpleTexIncludeGraphicsCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexIncludeGraphicsNode;
+  end: number;
+} | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "includegraphics");
+  if (commandEnd === null) {
+    return null;
+  }
+
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  let rawOptions = "";
+  if (text[cursor] === "[") {
+    const optionsArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!optionsArgument) {
+      return null;
+    }
+    rawOptions = optionsArgument.content;
+    cursor = skipSimpleTexControlWordSpaces(text, optionsArgument.end);
+  }
+
+  const groupStart = cursor;
+  if (text[groupStart] !== "{") {
+    return null;
+  }
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
+  if (groupEnd === null) {
+    return null;
+  }
+
+  const filenameStart = groupStart + 1;
+  const filenameEnd = groupEnd - 1;
+  return {
+    node: {
+      kind: "includegraphics",
+      text: text.slice(start, groupEnd),
+      filename: text.slice(filenameStart, filenameEnd).trim(),
+      filenameStart: sourceOffset + filenameStart,
+      filenameEnd: sourceOffset + filenameEnd,
+      options: parseSimpleTexGraphicsOptions(rawOptions),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+    },
+    end: groupEnd,
+  };
+}
+
+function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
+  let width: number | undefined;
+  let height: number | undefined;
+  let scale: number | undefined;
+  let keepAspectRatio = false;
+  for (const part of splitSimpleTexGraphicsOptions(raw)) {
+    const trimmed = part.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const equals = trimmed.indexOf("=");
+    const key = (equals >= 0 ? trimmed.slice(0, equals) : trimmed).trim().toLowerCase();
+    const value = equals >= 0 ? trimmed.slice(equals + 1).trim() : "";
+    if (key === "width") {
+      const parsed = parseTexDimensionText(value);
+      if (parsed !== null) {
+        width = parsed;
+      }
+      continue;
+    }
+    if (key === "height") {
+      const parsed = parseTexDimensionText(value);
+      if (parsed !== null) {
+        height = parsed;
+      }
+      continue;
+    }
+    if (key === "scale") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        scale = parsed;
+      }
+      continue;
+    }
+    if (key === "keepaspectratio") {
+      keepAspectRatio = equals < 0 || simpleTexBooleanOptionValue(value);
+    }
+  }
+  return {
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(scale !== undefined ? { scale } : {}),
+    ...(keepAspectRatio ? { keepAspectRatio } : {}),
+    raw,
+  };
+}
+
+function splitSimpleTexGraphicsOptions(raw: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let braceDepth = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char === "{") {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+      continue;
+    }
+    if (char === "," && braceDepth === 0) {
+      parts.push(raw.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(raw.slice(start));
+  return parts;
+}
+
+function simpleTexBooleanOptionValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized !== "false" && normalized !== "0" && normalized !== "no";
+}
+
 function scanSimpleTexRaiseBoxCommand(
   text: string,
   start: number,
@@ -2554,6 +2707,7 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "group" ||
     node.kind === "mbox" ||
     node.kind === "rule" ||
+    node.kind === "includegraphics" ||
     node.kind === "raisebox" ||
     node.kind === "dimension-box"
   );
@@ -3486,6 +3640,22 @@ export function simpleTexInlineNodesToTokens(
         ruleRaise: node.raise,
         ruleWidth: node.width,
         ruleHeight: node.height,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+      });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
+
+    if (node.kind === "includegraphics") {
+      tokens.push({
+        kind: "includegraphics",
+        text: node.text,
+        graphicsFilename: node.filename,
+        graphicsFilenameStart: node.filenameStart,
+        graphicsFilenameEnd: node.filenameEnd,
+        graphicsOptions: node.options,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,

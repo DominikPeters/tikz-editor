@@ -44,6 +44,7 @@ export type PlatformFileApi = {
     | { status: "failed"; fileRef: DocumentFileRef | null; reason?: string }
   >;
   readLinkedText?: (fileRef: DocumentFileRef) => Promise<LinkedTextReadResult>;
+  readLocalAsset?: (path: string) => Promise<LocalAssetReadResult>;
   writeLinkedText?: (
     fileRef: DocumentFileRef,
     text: string,
@@ -51,9 +52,23 @@ export type PlatformFileApi = {
   ) => Promise<LinkedTextWriteResult>;
   syncLinkedFileWatches?: (fileRefs: readonly DocumentFileRef[]) => Promise<void> | void;
   bindLinkedFileChange?: (handler: (fileRef: DocumentFileRef) => void) => (() => void) | void;
+  syncLocalAssetWatches?: (paths: readonly string[]) => Promise<void> | void;
+  bindLocalAssetChange?: (handler: (path: string) => void) => (() => void) | void;
   exportFile?: (content: BlobPart[], options: { fileName: string; mimeType: string }) => Promise<boolean>;
   clearRecentFiles?: () => Promise<void>;
 };
+
+export type LocalAssetReadResult =
+  | {
+      status: "ok";
+      path: string;
+      bytesBase64: string;
+      size: number;
+      revision: string;
+      mtimeMs?: number;
+    }
+  | { status: "missing"; path?: string }
+  | { status: "failed"; reason?: string; path?: string };
 
 export type ArxivSourceFile = {
   path: string;
@@ -322,6 +337,6 @@ export type EditorPlatform = {
 
 export type PlatformLatex = {
   checkAvailable: () => Promise<{ available: boolean; details: string }>;
-  compileTikzToSvg: (latexDocument: string) => Promise<string>;
+  compileTikzToSvg: (latexDocument: string, options?: { sourceDirectory?: string | null }) => Promise<string>;
   readLastCompileLog?: () => Promise<string>;
 };

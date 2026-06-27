@@ -65,6 +65,18 @@ type DesktopLinkedTextWriteResult =
   | { status: "missing" }
   | { status: "failed"; reason?: string };
 
+type DesktopLocalAssetReadResult =
+  | {
+      status: "ok";
+      path: string;
+      bytesBase64: string;
+      size: number;
+      revision: string;
+      mtimeMs?: number;
+    }
+  | { status: "missing"; path?: string }
+  | { status: "failed"; reason?: string; path?: string };
+
 type DesktopBridge = {
   openText: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenTextResult | null>;
   openBinary?: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenBinaryResult | null>;
@@ -76,6 +88,7 @@ type DesktopBridge = {
     forceSaveAs: boolean;
   }) => Promise<DesktopSaveTextResult>;
   readLinkedText?: (path: string) => Promise<DesktopLinkedTextReadResult>;
+  readLocalAsset?: (path: string) => Promise<DesktopLocalAssetReadResult>;
   writeLinkedText?: (params: {
     path: string;
     text: string;
@@ -83,6 +96,8 @@ type DesktopBridge = {
   }) => Promise<DesktopLinkedTextWriteResult>;
   syncLinkedFileWatches?: (paths: string[]) => Promise<void>;
   onLinkedFileChanged?: (handler: (payload: { path: string }) => void) => Promise<() => void>;
+  syncLocalAssetWatches?: (paths: string[]) => Promise<void>;
+  onLocalAssetChanged?: (handler: (payload: { path: string }) => void) => Promise<() => void>;
   exportFile: (params: {
     fileName: string;
     mimeType: string;
@@ -775,6 +790,10 @@ function createDefaultBridge(): DesktopBridge {
       const { invoke } = await import("@tauri-apps/api/core");
       return await invoke<DesktopLinkedTextReadResult>("desktop_read_linked_text", { path });
     },
+    readLocalAsset: async (path) => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return await invoke<DesktopLocalAssetReadResult>("desktop_read_local_asset", { path });
+    },
     writeLinkedText: async ({ path, text, expectedRevision }) => {
       const { invoke } = await import("@tauri-apps/api/core");
       return await invoke<DesktopLinkedTextWriteResult>("desktop_write_linked_text", {
@@ -790,6 +809,16 @@ function createDefaultBridge(): DesktopBridge {
     onLinkedFileChanged: async (handler) => {
       const { listen } = await import("@tauri-apps/api/event");
       return await listen<{ path: string }>("desktop-linked-file-changed", (event) => {
+        handler(event.payload);
+      });
+    },
+    syncLocalAssetWatches: async (paths) => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("desktop_sync_local_asset_watches", { paths });
+    },
+    onLocalAssetChanged: async (handler) => {
+      const { listen } = await import("@tauri-apps/api/event");
+      return await listen<{ path: string }>("desktop-local-asset-changed", (event) => {
         handler(event.payload);
       });
     },
@@ -1403,6 +1432,13 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         }
         return result;
       },
+      readLocalAsset: async (path) => {
+        const read = getBridge().readLocalAsset;
+        if (!read) {
+          return { status: "failed", reason: "Desktop local asset reads are unavailable.", path };
+        }
+        return await read(path);
+      },
       writeLinkedText: async (fileRef, text, expectedRevision): Promise<LinkedTextWriteResult> => {
         if (fileRef.provider !== "desktop-fs" || !fileRef.path || !getBridge().writeLinkedText) {
           return { status: "failed", reason: "File is not linked to a desktop path." };
@@ -1468,6 +1504,42 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
           unlisten?.();
         };
       },
+      syncLocalAssetWatches: async (paths) => {
+        const sync = getBridge().syncLocalAssetWatches;
+        if (!sync) {
+          return;
+        }
+        const uniquePaths = paths
+          .map((path) => path.trim())
+          .filter((path, index, all) => path.length > 0 && all.indexOf(path) === index);
+        await sync(uniquePaths);
+      },
+      bindLocalAssetChange: (handler) => {
+        const bridge = getBridge();
+        if (!bridge.onLocalAssetChanged) {
+          return;
+        }
+        let active = true;
+        let unlisten: (() => void) | null = null;
+        void bridge.onLocalAssetChanged((payload) => {
+          if (!active) {
+            return;
+          }
+          handler(payload.path);
+        }).then((fn) => {
+          if (!active) {
+            fn();
+            return;
+          }
+          unlisten = fn;
+        }).catch((error: unknown) => {
+          logDesktopPlatformDebug("Failed to bind local image asset watcher events.", error);
+        });
+        return () => {
+          active = false;
+          unlisten?.();
+        };
+      },
       exportFile: async (content, options) => {
         const blob = new Blob(content, { type: options.mimeType });
         const arrayBuffer = await blob.arrayBuffer();
@@ -1487,9 +1559,12 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         const { invoke } = await import("@tauri-apps/api/core");
         return await invoke<{ available: boolean; details: string }>("desktop_check_latex_available");
       },
-      compileTikzToSvg: async (latexDocument: string) => {
+      compileTikzToSvg: async (latexDocument: string, options?: { sourceDirectory?: string | null }) => {
         const { invoke } = await import("@tauri-apps/api/core");
-        return await invoke<string>("desktop_compile_tikz", { latexDocument });
+        return await invoke<string>("desktop_compile_tikz", {
+          latexDocument,
+          sourceDirectory: options?.sourceDirectory ?? null
+        });
       },
       readLastCompileLog: async () => {
         const { invoke } = await import("@tauri-apps/api/core");

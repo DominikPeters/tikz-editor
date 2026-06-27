@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import type { PlatformLatex } from "../platform/types";
+import type { DocumentFileRef } from "../store/types";
 import { createStandaloneLatexExportArtifact } from "tikz-editor/export/index";
 import css from "./TikzJaxModal.module.css";
 
@@ -42,6 +43,18 @@ function ensureTikzJaxLoaded(): Promise<void> {
   return _libPromise;
 }
 
+function latexSourceDirectoryFromFileRef(fileRef: DocumentFileRef | null | undefined): string | null {
+  if (fileRef?.provider !== "desktop-fs" || typeof fileRef.path !== "string") {
+    return null;
+  }
+  const path = fileRef.path.trim();
+  if (!path) {
+    return null;
+  }
+  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return separatorIndex > 0 ? path.slice(0, separatorIndex) : null;
+}
+
 type Phase =
   | "checking-native"
   | "compiling-native"
@@ -54,6 +67,7 @@ type Phase =
 type TikzJaxModalProps = {
   source: string;
   activeFigureId: string | null;
+  documentFileRef?: DocumentFileRef | null;
   onClose: () => void;
   latex?: PlatformLatex;
   showOpenInNewTab?: boolean;
@@ -63,6 +77,7 @@ type TikzJaxModalProps = {
 export function TikzJaxModal({
   source,
   activeFigureId,
+  documentFileRef = null,
   onClose,
   latex,
   showOpenInNewTab = true,
@@ -134,7 +149,9 @@ export function TikzJaxModal({
           });
         }, 120);
       }
-      const compilePromise = latex.compileTikzToSvg(latexDocument);
+      const compilePromise = latex.compileTikzToSvg(latexDocument, {
+        sourceDirectory: latexSourceDirectoryFromFileRef(documentFileRef)
+      });
       const timeoutPromise = new Promise<string>((_resolve, reject) => {
         const timeoutId = window.setTimeout(() => {
           reject(new Error(`Native compile did not return within ${NATIVE_COMPILE_TIMEOUT_MS}ms.`));
@@ -166,7 +183,7 @@ export function TikzJaxModal({
         window.clearInterval(pollId);
       }
     };
-  }, [activeFigureId, latex, source]);
+  }, [activeFigureId, documentFileRef, latex, source]);
 
   // TikZJax fallback path
   useEffect(() => {

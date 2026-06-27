@@ -1,5 +1,6 @@
 import type { TexMetricProvider } from "../fonts/types.js";
 import type { TexTextFontProfile } from "../fonts/text-profile.js";
+import type { NodeTextGraphicsResolver } from "../../types.js";
 import {
   simpleTexSegmentToLayoutItems,
   type TexMathBoxProvider,
@@ -13,6 +14,7 @@ export function texLayoutItemsForParagraphPlan(
     readonly atPt: number;
     readonly metricProvider: TexMetricProvider;
     readonly mathBoxProvider?: TexMathBoxProvider;
+    readonly graphicsResolver?: NodeTextGraphicsResolver;
     readonly textFontProfile?: TexTextFontProfile;
   }
 ): readonly TexLayoutInlineItem[] {
@@ -25,7 +27,8 @@ export function texLayoutItemsForParagraphPlan(
       plan.spaceGlueProfile,
       params.mathBoxProvider,
       params.textFontProfile?.defaultFontState,
-      params.textFontProfile
+      params.textFontProfile,
+      params.graphicsResolver
     ),
   ];
 }

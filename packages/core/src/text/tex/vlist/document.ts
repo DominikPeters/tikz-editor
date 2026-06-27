@@ -68,12 +68,14 @@ export function prepareSimpleTexLayoutScope(
     ? lowerSimpleTexBlockItemsToVList(params.items, {
         font: params.font,
         mathBoxProvider: params.options.mathBoxProvider,
+        graphicsResolver: params.options.graphicsResolver,
         width: params.options.width,
         tikzTextWidthNode: params.options.tikzTextWidthNode,
       })
     : lowerSimpleTexBlocksToVList(params.blocks, {
         font: params.font,
         mathBoxProvider: params.options.mathBoxProvider,
+        graphicsResolver: params.options.graphicsResolver,
         width: params.options.width,
         tikzTextWidthNode: params.options.tikzTextWidthNode,
       });

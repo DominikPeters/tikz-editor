@@ -161,8 +161,8 @@ export function resolveTwoPartShapeSizing(params: {
     params.rawNodeParts.find((part) => part.name === "lower")?.text ??
     params.rawNodeParts.find((part) => part.name !== "text")?.text ??
     "";
-  const upperLayout = resolveNodeLayout(upperText, params.options, params.style, 1, params.context.textEngine, params.textMode);
-  const lowerLayout = resolveNodeLayout(lowerText, params.options, params.style, 1, params.context.textEngine, params.textMode);
+  const upperLayout = resolveNodeLayout(upperText, params.options, params.style, 1, params.context.textEngine, params.textMode, undefined, params.context.graphicsResolver);
+  const lowerLayout = resolveNodeLayout(lowerText, params.options, params.style, 1, params.context.textEngine, params.textMode, undefined, params.context.graphicsResolver);
   const innerXSep = Math.max(0, (upperLayout.naturalWidth - upperLayout.textBlockWidth) / 2);
   const innerYSep = Math.max(0, (upperLayout.naturalHeight - upperLayout.textBlockHeight) / 2);
 
@@ -239,7 +239,7 @@ export function resolveRectangleSplitLayoutGeometry(params: {
   const innerSeps = resolveRectangleSplitInnerSeps(params.options);
   const emptyPart = resolveRectangleSplitEmptyPartMetrics(params.options);
   const parts = partTexts.map((text) => {
-    const layout = resolveNodeLayout(text, params.options, textStyle, 1, params.context.textEngine, params.textMode);
+    const layout = resolveNodeLayout(text, params.options, textStyle, 1, params.context.textEngine, params.textMode, undefined, params.context.graphicsResolver);
     const isEmpty = text.trim().length === 0;
     const metricWidth = isEmpty ? emptyPart.width + innerSeps.x * 2 : layout.naturalWidth;
     const metricHeight = isEmpty ? emptyPart.height + emptyPart.depth + innerSeps.y * 2 : layout.naturalHeight;

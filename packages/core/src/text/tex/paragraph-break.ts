@@ -11,6 +11,7 @@ import type {
   TexMetricProvider,
 } from "./fonts/types.js";
 import type { TexTextFontProfile } from "./fonts/text-profile.js";
+import type { NodeTextGraphicsResolver } from "../types.js";
 import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
@@ -60,6 +61,7 @@ export interface TexParagraphBreakOptions {
   readonly tikzTextWidthNode?: boolean;
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
 }
 

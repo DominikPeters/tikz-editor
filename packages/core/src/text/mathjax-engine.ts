@@ -36,6 +36,7 @@ import type {
 } from "./tex/vlist/index.js";
 import type {
   NodeTextEngine,
+  NodeTextGraphicsResolver,
   NodeTextMeasureRequest,
   NodeTextMetrics,
   NodeTextParagraphAlignment,
@@ -237,7 +238,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
         fontWeight: "normal",
         fontFamily: "serif"
       });
-      const defaultMeasureKey = measurementKey("text", prepared.text, null, prepared.font, null);
+      const defaultMeasureKey = measurementKey("text", prepared.text, null, prepared.font, null, null);
       const simpleTexEntry = buildSimpleTexTextCacheEntry({
         runtime,
         cacheKey: defaultMeasureKey,
@@ -306,7 +307,8 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const alignment = resolveParagraphAlignment(request.textWidthPt, request.alignment);
       const requiresParagraphGeometry =
         normalizedWidth != null || hasExplicitMultilineBreaks(prepared.text);
-      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment);
+      const graphicsCacheKey = request.graphicsResolver?.cacheKey ?? null;
+      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, graphicsCacheKey);
 
       let entry: CachedRenderEntry | null = cache.get(cacheKey) ?? null;
       if (!entry) {
@@ -320,7 +322,8 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
           requestedAlignment: request.alignment ?? null,
           eligible: prepared.simpleTexEligible,
           mode,
-          sourceMap: request.sourceMap
+          sourceMap: request.sourceMap,
+          graphicsResolver: request.graphicsResolver
         });
         if (entry) {
           cache.set(cacheKey, entry);
@@ -1017,6 +1020,7 @@ function buildSimpleTexTextCacheEntry(params: {
   eligible: boolean;
   mode: "text" | "math";
   sourceMap?: TextSourceMap;
+  graphicsResolver?: NodeTextGraphicsResolver;
 }): CachedRenderEntry | null {
   if (!isSimpleTexTextEligible(params)) {
     return null;
@@ -1045,6 +1049,7 @@ function buildSimpleTexTextCacheEntry(params: {
         baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
       }),
       ...(params.sourceMap ? { sourceMap: params.sourceMap } : {}),
+      ...(params.graphicsResolver ? { graphicsResolver: params.graphicsResolver } : {}),
     });
   } catch {
     return null;
@@ -2340,13 +2345,15 @@ function measurementKey(
   text: string,
   textWidthPt: number | null,
   font: TextFontOptions,
-  alignment: NodeTextParagraphAlignment | null
+  alignment: NodeTextParagraphAlignment | null,
+  graphicsCacheKey: string | null
 ): string {
   return JSON.stringify({
     mode,
     text,
     textWidthPt: textWidthPt == null ? null : formatPt(textWidthPt),
     alignment,
+    graphicsCacheKey,
     fontStyle: font.fontStyle,
     fontWeight: font.fontWeight,
     fontFamily: font.fontFamily

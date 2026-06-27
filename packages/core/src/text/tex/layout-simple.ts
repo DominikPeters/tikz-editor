@@ -1,6 +1,7 @@
 import type { Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
 import type { TextSourceMap } from "../source-map.js";
+import type { NodeTextGraphicsResolver } from "../types.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import {
   defaultTexTextFontProfile,
@@ -43,6 +44,7 @@ export interface TexParagraphLayoutOptions {
   readonly fallbackPolicy?: "whole-node" | "placeholder";
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
   readonly sourceMap?: TextSourceMap;
 }

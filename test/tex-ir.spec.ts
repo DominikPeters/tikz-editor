@@ -142,6 +142,27 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
+  it("parses includegraphics commands with options and source ranges", () => {
+    const source = String.raw`A \includegraphics[width=2cm,height=1cm,scale=0.5,keepaspectratio]{fig} B`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.find((node) => node.kind === "includegraphics");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(graphics).toMatchObject({
+      kind: "includegraphics",
+      text: String.raw`\includegraphics[width=2cm,height=1cm,scale=0.5,keepaspectratio]{fig}`,
+      filename: "fig",
+      filenameStart: source.indexOf("{fig}") + 1,
+      filenameEnd: source.indexOf("{fig}") + 4,
+      sourceStart: source.indexOf(String.raw`\includegraphics`),
+      sourceEnd: source.indexOf("{fig}") + "{fig}".length,
+    });
+    expect(graphics?.options.width).toBeCloseTo(56.905512, 5);
+    expect(graphics?.options.height).toBeCloseTo(28.452756, 5);
+    expect(graphics?.options.scale).toBe(0.5);
+    expect(graphics?.options.keepAspectRatio).toBe(true);
+  });
+
   it("parses phantom and smash commands as inline dimension boxes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`A\phantom{b}B\hphantom{c}C\vphantom{g}D\smash{\textit{x}}E`
@@ -514,9 +535,9 @@ describe("simple TeX paragraph IR", () => {
   });
 
   it("preserves block-position unsupported commands as placeholder block items", () => {
-    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+    const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);
-    const placeholderStart = source.indexOf(String.raw`\includegraphics`);
+    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
     const placeholderEnd = source.indexOf(String.raw` \par Beta`);
 
     expect(parsed.unsupportedCommand).toBe(true);
@@ -543,7 +564,7 @@ describe("simple TeX paragraph IR", () => {
       { kind: "paragraph", text: "Alpha" },
       {
         kind: "placeholder",
-        text: String.raw`\includegraphics[width=1cm]{plot.pdf}`,
+        text: String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}`,
         sourceStart: placeholderStart,
         sourceEnd: placeholderEnd,
         reason: "Unsupported TeX command in vertical mode.",

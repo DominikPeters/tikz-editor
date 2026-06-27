@@ -148,6 +148,18 @@ describe("render pipeline", () => {
     expect(result.svg.svg).not.toContain('\\mbox{x^2}');
   });
 
+  it("renders includegraphics placeholders through the TeX text engine without local paths", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    expect(result.semantic.featureUsage.text_includegraphics).toBe("used-supported");
+    expect(result.svg.svg).toContain('data-tex-includegraphics="placeholder"');
+    expect(result.svg.svg).toContain('data-tex-includegraphics-status="missing"');
+    expect(result.svg.svg).not.toContain("missing-image.png");
+  });
+
   it("supports fit around coordinates and marks fit capability usage", () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw,fit=(0,0) (1,1)] {};

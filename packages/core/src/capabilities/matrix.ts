@@ -641,6 +641,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "stable",
     fixtures: ["node_text"]
   },
+  text_includegraphics: {
+    parser: "not-applicable",
+    semantic: "stable",
+    svg: "stable",
+    edit: "none",
+    fixtures: ["node_text_includegraphics"],
+    notes:
+      "V1 supports PNG/JPEG/SVG inline graphics in the simple TeX text engine. Desktop resolves local assets; browser and unresolved assets render placeholders."
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

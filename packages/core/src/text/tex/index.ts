@@ -43,6 +43,8 @@ export {
   type SimpleTexFontDeclarationNode,
   type SimpleTexFontState,
   type SimpleTexGroupNode,
+  type SimpleTexGraphicsOptions,
+  type SimpleTexIncludeGraphicsNode,
   type SimpleTexInlineNode,
   type SimpleTexLineBreakNode,
   type SimpleTexMathNode,

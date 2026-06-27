@@ -9,6 +9,7 @@ import {
 import { useEditorStore } from "../store/store";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, setMathJaxFont, type ComputeRequest, type ComputeResponse } from "../compute";
+import { invalidateImageAssetPath } from "../image-asset-cache";
 import { applyEditAction } from "tikz-editor/edit/actions";
 import { getRepeatSelectionEligibility } from "tikz-editor/edit/actions/repeat";
 import { collectSourceWorldBounds } from "tikz-editor/edit/snapping";
@@ -299,6 +300,7 @@ export function App() {
   const [compiledPictureSource, setCompiledPictureSource] = useState<{
     source: string;
     activeFigureId: string | null;
+    fileRef: DocumentFileRef | null;
   } | null>(null);
   const [svgExportSvgResult, setSvgExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pngExportSvgResult, setPngExportSvgResult] = useState<EmitSvgResult | null>(null);
@@ -308,6 +310,7 @@ export function App() {
   const requestCloseIntentRef = useRef<(intent: CloseIntent) => void>(() => {});
   const computeSchedulerRef = useRef<ReturnType<typeof createSingleFlightScheduler<ComputeRequest, ComputeResponse>> | null>(null);
   const dragRenderViewBoxRef = useRef<ComputeRequest["renderViewBox"]>(null);
+  const [imageAssetRefreshToken, setImageAssetRefreshToken] = useState(0);
   const updateCheckPromiseRef = useRef<Promise<UpdateInfo | null> | null>(null);
   const sourceRef = useRef(source);
   const snapshotRef = useRef(snapshot);
@@ -324,6 +327,7 @@ export function App() {
         .join("\n"),
     [documents]
   );
+  const activeDocumentFileRef = documents[activeDocumentId]?.fileRef ?? null;
 
   function executeCloseIntent(intent: CloseIntent): void {
     if (intent.kind === "close-document") {
@@ -604,7 +608,8 @@ export function App() {
     onShowCompiledPicture: () => {
       setCompiledPictureSource({
         source,
-        activeFigureId
+        activeFigureId,
+        fileRef: activeDocumentFileRef
       });
     },
     onOpenSettings: () => {
@@ -798,6 +803,39 @@ export function App() {
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
+    const bind = getActiveEditorPlatform().files?.bindLocalAssetChange;
+    if (typeof bind !== "function") {
+      return;
+    }
+    const timers = new Map<string, number>();
+    const unbind = bind((path) => {
+      const key = path.trim();
+      if (!key) {
+        return;
+      }
+      const existing = timers.get(key);
+      if (existing != null) {
+        window.clearTimeout(existing);
+      }
+      const timer = window.setTimeout(() => {
+        timers.delete(key);
+        invalidateImageAssetPath(key);
+        setImageAssetRefreshToken((value) => value + 1);
+      }, 120);
+      timers.set(key, timer);
+    });
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+      timers.clear();
+      if (typeof unbind === "function") {
+        unbind();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!repeatModalState) {
       setRepeatPreviewModel(null);
       return;
@@ -843,6 +881,7 @@ export function App() {
     void computeSnapshot({
       id: crypto.randomUUID(),
       source: result.newSource,
+      documentFileRef: activeDocumentFileRef,
       activeFigureId: repeatModalState.activeFigureId
     }).then((response) => {
       if (cancelled) {
@@ -868,7 +907,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [repeatModalState, snapshot.svg]);
+  }, [activeDocumentFileRef, repeatModalState, snapshot.svg]);
 
   useEffect(() => {
     const scheduler = createSingleFlightScheduler<ComputeRequest, ComputeResponse>({
@@ -939,6 +978,7 @@ export function App() {
       kind: "render",
       source,
       sourceRevision,
+      documentFileRef: activeDocumentFileRef,
       activeFigureId,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
@@ -946,7 +986,7 @@ export function App() {
       trigger,
       renderViewBox
     });
-  }, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
@@ -960,13 +1000,14 @@ export function App() {
       kind: "render",
       source,
       sourceRevision,
+      documentFileRef: activeDocumentFileRef,
       activeFigureId,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger
     });
-  }, typingComputeDelay, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
+  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
 
   const prewarmDelay = activeCanvasDragKind || activeSourceScrubSourceId || pendingRequestId != null || !hoveredElementId || snapshot.source !== source
     ? null
@@ -982,11 +1023,12 @@ export function App() {
       documentId: activeDocumentId,
       kind: "prewarm",
       source,
+      documentFileRef: activeDocumentFileRef,
       activeFigureId,
       changedSourceIds: [hoveredElementId],
       trigger: "drag-element"
     });
-  }, prewarmDelay, [activeDocumentId, activeFigureId, hoveredElementId, source, prewarmDelay]);
+  }, prewarmDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, hoveredElementId, source, prewarmDelay]);
 
   useEffect(() => {
     if (!platform.assistant?.bindEvents) {
@@ -1033,6 +1075,7 @@ export function App() {
               documentId: event.documentId,
               kind: "render",
               source: sourceForDoc,
+              documentFileRef: doc.fileRef,
               activeFigureId: requestedFigId,
               changedSourceIds: null,
               patches: null,
@@ -1096,6 +1139,7 @@ export function App() {
             documentId: event.documentId,
             kind: "render",
             source: modifiedSource,
+            documentFileRef: doc.fileRef,
             activeFigureId: targetFigureId,
             changedSourceIds: null,
             patches: null,
@@ -2015,6 +2059,7 @@ export function App() {
           <TikzJaxModal
             source={compiledPictureSource.source}
             activeFigureId={compiledPictureSource.activeFigureId}
+            documentFileRef={compiledPictureSource.fileRef}
             onClose={() => { setCompiledPictureSource(null); }}
             latex={platform.latex}
             showOpenInNewTab={!platform.id.startsWith("desktop")}

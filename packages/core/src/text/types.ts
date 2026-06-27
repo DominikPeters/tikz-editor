@@ -20,6 +20,49 @@ export type NodeTextMeasureRequest = {
   fontFamily: NodeTextFontFamily;
   fontSizePt: number;
   sourceMap?: TextSourceMap;
+  graphicsResolver?: NodeTextGraphicsResolver;
+};
+
+export type NodeTextGraphicsOptionValue = string | boolean;
+
+export type NodeTextGraphicsOptions = Readonly<Record<string, NodeTextGraphicsOptionValue>>;
+
+export type NodeTextGraphicsResolveRequest = {
+  filename: string;
+  options: NodeTextGraphicsOptions;
+  source: string;
+  sourceStart: number;
+  sourceEnd: number;
+};
+
+export type NodeTextGraphicsResolution =
+  | {
+      status: "resolved";
+      mimeType: "image/png" | "image/jpeg" | "image/svg+xml";
+      dataBase64: string;
+      naturalWidthPt: number;
+      naturalHeightPt: number;
+      revision: string;
+      resolvedPath?: string;
+      watchedPaths?: readonly string[];
+    }
+  | {
+      status: "missing";
+      revision?: string;
+      resolvedPath?: string;
+      watchedPaths?: readonly string[];
+    }
+  | {
+      status: "unsupported";
+      reason?: string;
+      revision?: string;
+      resolvedPath?: string;
+      watchedPaths?: readonly string[];
+    };
+
+export type NodeTextGraphicsResolver = {
+  readonly cacheKey: string;
+  resolve(request: NodeTextGraphicsResolveRequest): NodeTextGraphicsResolution;
 };
 
 export type NodeTextMetrics = {

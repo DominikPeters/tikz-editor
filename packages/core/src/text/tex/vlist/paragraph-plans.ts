@@ -154,6 +154,7 @@ export function prepareTexLayoutParagraphsFromVList(
         metricProvider: params.metricProvider,
         spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
+        graphicsResolver: params.options.graphicsResolver,
         textFontProfile: params.options.textFontProfile,
       });
       if (listAttachments.marginLabelHBox) {
