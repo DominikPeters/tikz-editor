@@ -62,7 +62,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, box, box-hard, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, box, box-hard, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -186,11 +186,12 @@ function parseArgs(argv) {
     "list",
     "vertical-glue",
     "rule",
+    "inline-rule",
     "box",
     "box-hard",
     "mixed",
   ].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, box, box-hard, or mixed.");
+    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, box, box-hard, or mixed.");
   }
   return options;
 }
@@ -601,24 +602,57 @@ function generateRuleCase(index, random) {
   const ruleWidth = choice(random, [18, 24, 36, 48, 72]);
   const ruleHeight = choice(random, [0.4, 1, 2, 3]);
   const ruleDepth = choice(random, [0, 0.5, 1]);
-  const rule = `\\hrule width ${ruleWidth}pt height ${ruleHeight}pt depth ${ruleDepth}pt`;
-  const feature = index % 4;
+  const verticalRule = `\\hrule width ${ruleWidth}pt height ${ruleHeight}pt depth ${ruleDepth}pt`;
+  const feature = index % 8;
   let text;
   if (feature === 0) {
-    text = `${paragraph(random, 1)} \\par ${rule} ${paragraph(random, 1)}`;
+    text = `${paragraph(random, 1)} \\par ${verticalRule} ${paragraph(random, 1)}`;
   } else if (feature === 1) {
-    text = `${paragraph(random, 1)} \\par \\smallskip ${rule} \\smallskip ${paragraph(random, 1)}`;
+    text = `${paragraph(random, 1)} \\par \\smallskip ${verticalRule} \\smallskip ${paragraph(random, 1)}`;
   } else if (feature === 2) {
-    text = `\\begin{quote} ${paragraph(random, 1)} \\par ${rule} ${paragraph(random, 1)} \\end{quote}`;
-  } else {
+    text = `\\begin{quote} ${paragraph(random, 1)} \\par ${verticalRule} ${paragraph(random, 1)} \\end{quote}`;
+  } else if (feature === 3) {
     text = `${paragraph(random, 1)} \\par ${listEnvironment("itemize", [
-      `${rule} ${listItemText(random, index)}`,
+      `${verticalRule} ${listItemText(random, index)}`,
       listItemText(random, index + 1),
     ])}`;
+  } else if (feature === 4) {
+    text = `${sentence(random, 4, 7)} ${inlineRule(random)} ${sentence(random, 4, 7)}`;
+  } else if (feature === 5) {
+    text = `${inlineRule(random)} ${sentence(random, 5, 9)} \\par ${sentence(random, 3, 6)}`;
+  } else if (feature === 6) {
+    text = `${sentence(random, 3, 6)} ${inlineRaiseBox(random)} ${sentence(random, 3, 6)}`;
+  } else {
+    text = `\\begin{quote}${sentence(random, 3, 6)} ${inlineRaiseBox(random)} ${sentence(random, 3, 6)}\\end{quote}`;
   }
   return {
     id: `case-${String(index + 1).padStart(3, "0")}`,
     feature: "rule",
+    text,
+    width,
+    parindent,
+    alignment,
+  };
+}
+
+function generateInlineRuleCase(index, random) {
+  const alignment = alignments[index % alignments.length];
+  const width = choice(random, [120, 150, 180, 220, 260, 320]);
+  const parindent = choice(random, [0, 10, 15]);
+  const feature = index % 4;
+  let text;
+  if (feature === 0) {
+    text = `${sentence(random, 4, 7)} ${inlineRule(random)} ${sentence(random, 4, 7)}`;
+  } else if (feature === 1) {
+    text = `${inlineRule(random)} ${sentence(random, 5, 9)} \\par ${sentence(random, 3, 6)}`;
+  } else if (feature === 2) {
+    text = `${sentence(random, 3, 6)} ${inlineRaiseBox(random)} ${sentence(random, 3, 6)}`;
+  } else {
+    text = `\\begin{quote}${sentence(random, 3, 6)} ${inlineRaiseBox(random)} ${sentence(random, 3, 6)}\\end{quote}`;
+  }
+  return {
+    id: `case-${String(index + 1).padStart(3, "0")}`,
+    feature: "inline-rule",
     text,
     width,
     parindent,
@@ -701,7 +735,7 @@ function generateBoxHardCase(index, random) {
 }
 
 function generateMixedFeatureCase(index, random) {
-  const feature = index % 7;
+  const feature = index % 8;
   if (feature === 0) {
     const generated = generateListCase(index, random);
     return {
@@ -758,6 +792,16 @@ function generateMixedFeatureCase(index, random) {
     };
   }
   if (feature === 6) {
+    return {
+      id: `case-${String(index + 1).padStart(3, "0")}`,
+      feature: "mixed-inline-rule",
+      text: `${sentence(random, 4, 8)} \\par ${inlineRuleOrRaiseBox(random)} ${sentence(random, 4, 8)}`,
+      width: choice(random, [150, 200, 240, 320]),
+      parindent: choice(random, [0, 10, 15]),
+      alignment: alignments[index % alignments.length],
+    };
+  }
+  if (feature === 7) {
     const generated = generateAlignmentEnvironmentCase(index, random);
     return {
       ...generated,
@@ -800,6 +844,35 @@ function inlineMBox(random, options = {}) {
   return `\\mbox{${content}}`;
 }
 
+function inlineRule(random) {
+  const raise = choice(random, [-2, -1, 0, 1, 2, 3]);
+  const width = choice(random, [6, 10, 14, 18, 24, 32]);
+  const height = choice(random, [0.4, 0.8, 1.2, 2, 3]);
+  const raiseArgument = raise === 0 ? "" : `[${raise}pt]`;
+  return `\\rule${raiseArgument}{${width}pt}{${height}pt}`;
+}
+
+function inlineRaiseBox(random) {
+  const lift = choice(random, [-2, -1, 1, 2, 3]);
+  const content = choice(random, [
+    choice(random, words),
+    styledPhrase(random, 2, 3),
+    `${choice(random, words)} ${choice(random, words)}`,
+  ]);
+  const variant = choice(random, ["natural", "height", "height-depth"]);
+  if (variant === "height") {
+    return `\\raisebox{${lift}pt}[${choice(random, [3, 5, 7])}pt]{${content}}`;
+  }
+  if (variant === "height-depth") {
+    return `\\raisebox{${lift}pt}[${choice(random, [3, 5, 7])}pt][${choice(random, [0, 1, 2])}pt]{${content}}`;
+  }
+  return `\\raisebox{${lift}pt}{${content}}`;
+}
+
+function inlineRuleOrRaiseBox(random) {
+  return random() < 0.5 ? inlineRule(random) : inlineRaiseBox(random);
+}
+
 function generateCaseForMode(index, random, mode) {
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
@@ -821,6 +894,9 @@ function generateCaseForMode(index, random, mode) {
   }
   if (mode === "rule") {
     return generateRuleCase(index, random);
+  }
+  if (mode === "inline-rule") {
+    return generateInlineRuleCase(index, random);
   }
   if (mode === "box") {
     return generateBoxCase(index, random);
@@ -1692,7 +1768,7 @@ end
 local append_node_list
 
 local function append_hlist(parts, glyphs, hlist, cursor, baseline)
-  append_node_list(parts, glyphs, hlist.list, hlist, cursor, baseline)
+  append_node_list(parts, glyphs, hlist.list, hlist, cursor, baseline + (hlist.shift or 0))
   return cursor + (hlist.width or 0)
 end
 

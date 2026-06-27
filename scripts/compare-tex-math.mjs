@@ -896,7 +896,9 @@ function randomMBoxMathFormula(rng) {
     String.raw`\texttt{if}`,
     String.raw`\textit{\textup{if}}`,
     String.raw`$x+y$ text`,
-  ][randomInt(rng, 8)] ?? "if";
+    String.raw`\rule[1pt]{8pt}{0.8pt}`,
+    String.raw`\raisebox{2pt}{up}`,
+  ][randomInt(rng, 10)] ?? "if";
   const variant = randomInt(rng, 6);
   if (variant === 0) {
     return String.raw`\makebox{` + content + "}";

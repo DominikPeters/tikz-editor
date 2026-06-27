@@ -192,7 +192,7 @@ function findFirstInlineMathNode(nodes: readonly SimpleTexNode[]): SimpleTexMath
     if (node.kind === "math") {
       return node;
     }
-    if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") {
+    if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox" || node.kind === "raisebox") {
       const childMath = findFirstInlineMathNode(node.children);
       if (childMath) {
         return childMath;

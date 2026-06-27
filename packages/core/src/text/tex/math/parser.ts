@@ -4215,9 +4215,14 @@ class TexMathParser {
         textRunStart = node.sourceEnd;
         continue;
       }
-      if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") {
+      if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox" || node.kind === "raisebox") {
         flushTextRun(node.sourceStart);
         parts.push(...this.mathTextPartsFromInlineNodes(node.children));
+        textRunStart = node.sourceEnd;
+        continue;
+      }
+      if (node.kind === "rule") {
+        flushTextRun(node.sourceStart);
         textRunStart = node.sourceEnd;
       }
     }
@@ -6105,7 +6110,7 @@ function mathTextPlainText(nodes: readonly SimpleTexInlineNode[]): string {
       text += node.text;
       continue;
     }
-    if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") {
+    if (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox" || node.kind === "raisebox") {
       text += mathTextPlainText(node.children);
     }
   }

@@ -730,6 +730,8 @@ function randomMBoxFormula(random, variables) {
     String.raw`\textbf{Bold} text`,
     String.raw`\texttt{if}`,
     String.raw`\textit{\textup{if}}`,
+    String.raw`\rule[1pt]{8pt}{0.8pt}`,
+    String.raw`\raisebox{2pt}{up}`,
   ]);
   const command = randomTextBoxMathCommand(random, content);
   if (random() < 0.5) {

@@ -19,6 +19,7 @@ import type {
   TexMathHList,
   TexMathHListItem,
   TexMathKernLayoutItem,
+  TexMathRuleLayoutItem,
 } from "./math/layout.js";
 import {
   simpleTexInlineNodesToTokens,
@@ -252,10 +253,12 @@ export interface TexLayoutMathItem {
   readonly box: TexMathBox;
 }
 
+export type TexLayoutTextBoxCommandName = SimpleTexTextBoxCommandName | "rule" | "raisebox";
+
 export interface TexLayoutTextBoxItem {
   readonly kind: "text-box";
   readonly role?: "list-label";
-  readonly command: SimpleTexTextBoxCommandName;
+  readonly command: TexLayoutTextBoxCommandName;
   readonly text: string;
   readonly content: string;
   readonly sourceStart: number;
@@ -442,6 +445,71 @@ export function simpleTexSegmentToLayoutItems(
       continue;
     }
 
+    if (token.kind === "rule") {
+      const box = texRuleBox({
+        source: token.text,
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        raise: token.ruleRaise ?? 0,
+        width: token.ruleWidth ?? 0,
+        height: token.ruleHeight ?? 0,
+        metricProvider,
+        textFontProfile,
+      });
+      items.push({
+        kind: "text-box",
+        command: "rule",
+        text: token.text,
+        content: "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.sourceStart,
+        contentEnd: token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "raisebox") {
+      const box = texRaiseBoxFromInlineNodes({
+        source: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        children: token.children ?? [],
+        lift: token.lift ?? 0,
+        boxHeight: token.boxHeight,
+        boxDepth: token.boxDepth,
+        fontState: token.fontState,
+        atPt,
+        metricProvider,
+        spaceGlueProfile,
+        mathBoxProvider,
+        textFontProfile,
+      });
+      if (!box) {
+        throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "text-box",
+        command: "raisebox",
+        text: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
     if (token.kind === "forced-break") {
       const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
       items.push({
@@ -544,6 +612,164 @@ function texMBoxFromInlineNodes(params: {
       xEnd: boxedHList.width,
     }],
     hlist: boxedHList,
+    fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
+  };
+}
+
+function texRuleBox(params: {
+  readonly source: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly raise: number;
+  readonly width: number;
+  readonly height: number;
+  readonly metricProvider: TexMetricProvider;
+  readonly textFontProfile: TexTextFontProfile;
+}): TexMathBox {
+  const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
+  const width = roundTexPt(params.width);
+  const ruleHeight = roundTexPt(params.height);
+  const raisedHeight = params.height + params.raise;
+  const height = roundTexPt(Math.max(0, raisedHeight));
+  const depth = roundTexPt(Math.max(0, -params.raise));
+  const rule = {
+    kind: "rule",
+    role: "literal-rule",
+    x: 0,
+    y: roundTexPt(-raisedHeight),
+    width,
+    height: ruleHeight,
+    sourceSpan,
+  } satisfies TexMathRuleLayoutItem;
+  const hlist: TexMathHList = {
+    kind: "math-hlist",
+    style: "text",
+    width,
+    height,
+    depth,
+    sourceSpan,
+    items: [rule],
+  };
+  return {
+    source: params.source,
+    content: "",
+    sourceKind: "text",
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+    contentStart: params.sourceStart,
+    contentEnd: params.sourceEnd,
+    width,
+    height,
+    depth,
+    caretStops: texMBoxCaretStops(
+      params.sourceStart,
+      params.sourceEnd,
+      params.sourceStart,
+      params.sourceEnd,
+      width
+    ),
+    constructRanges: [{
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      xStart: 0,
+      xEnd: width,
+    }],
+    hlist,
+    fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
+  };
+}
+
+function texRaiseBoxFromInlineNodes(params: {
+  readonly source: string;
+  readonly content: string;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+  readonly lift: number;
+  readonly boxHeight?: number;
+  readonly boxDepth?: number;
+  readonly fontState: SimpleTexFontState;
+  readonly atPt: number;
+  readonly metricProvider: TexMetricProvider;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly mathBoxProvider?: TexMathBoxProvider;
+  readonly textFontProfile: TexTextFontProfile;
+}): TexMathBox | null {
+  const innerItems = simpleTexInlineTokensToLayoutItems({
+    tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
+    atPt: params.atPt,
+    metricProvider: params.metricProvider,
+    spaceGlueProfile: params.spaceGlueProfile,
+    mathBoxProvider: params.mathBoxProvider,
+    textFontProfile: params.textFontProfile,
+    trimEdges: false,
+  });
+  const body = texMBoxHListFromLayoutItems({
+    items: innerItems,
+    sourceSpan: {
+      start: params.contentStart,
+      end: params.contentEnd,
+    },
+    metricProvider: params.metricProvider,
+  });
+  if (!body) {
+    return null;
+  }
+  const lift = roundTexPt(params.lift);
+  const naturalHeight = roundTexPt(Math.max(0, body.height + lift));
+  const naturalDepth = roundTexPt(Math.max(0, body.depth - lift));
+  const height = roundTexPt(params.boxHeight ?? naturalHeight);
+  const depth = roundTexPt(params.boxDepth ?? naturalDepth);
+  const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
+  const hlist: TexMathHList = {
+    kind: "math-hlist",
+    style: "text",
+    width: body.width,
+    height,
+    depth,
+    sourceSpan,
+    items: [{
+      kind: "hlist",
+      role: "nucleus",
+      x: 0,
+      y: roundTexPt(-lift),
+      width: body.width,
+      height: body.height,
+      depth: body.depth,
+      sourceSpan: {
+        start: params.contentStart,
+        end: params.contentEnd,
+      },
+      items: body.items,
+    }],
+  };
+  return {
+    source: params.source,
+    content: params.content,
+    sourceKind: "text",
+    sourceStart: params.sourceStart,
+    sourceEnd: params.sourceEnd,
+    contentStart: params.contentStart,
+    contentEnd: params.contentEnd,
+    width: body.width,
+    height,
+    depth,
+    caretStops: texMBoxCaretStops(
+      params.sourceStart,
+      params.sourceEnd,
+      params.contentStart,
+      params.contentEnd,
+      body.width
+    ),
+    constructRanges: [{
+      sourceStart: params.sourceStart,
+      sourceEnd: params.sourceEnd,
+      xStart: 0,
+      xEnd: body.width,
+    }],
+    hlist,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
   };
 }
@@ -698,6 +924,71 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       items.push({
         kind: "text-box",
         command: token.command ?? "mbox",
+        text: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "rule") {
+      const box = texRuleBox({
+        source: token.text,
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        raise: token.ruleRaise ?? 0,
+        width: token.ruleWidth ?? 0,
+        height: token.ruleHeight ?? 0,
+        metricProvider: params.metricProvider,
+        textFontProfile: params.textFontProfile,
+      });
+      items.push({
+        kind: "text-box",
+        command: "rule",
+        text: token.text,
+        content: "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.sourceStart,
+        contentEnd: token.sourceEnd,
+        box,
+      });
+      hasSeenText = true;
+      spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "raisebox") {
+      const box = texRaiseBoxFromInlineNodes({
+        source: token.text,
+        content: token.content ?? "",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        contentStart: token.contentStart ?? token.sourceStart,
+        contentEnd: token.contentEnd ?? token.sourceEnd,
+        children: token.children ?? [],
+        lift: token.lift ?? 0,
+        boxHeight: token.boxHeight,
+        boxDepth: token.boxDepth,
+        fontState: token.fontState,
+        atPt: params.atPt,
+        metricProvider: params.metricProvider,
+        spaceGlueProfile: params.spaceGlueProfile,
+        mathBoxProvider: params.mathBoxProvider,
+        textFontProfile: params.textFontProfile,
+      });
+      if (!box) {
+        throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
+      }
+      items.push({
+        kind: "text-box",
+        command: "raisebox",
         text: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,

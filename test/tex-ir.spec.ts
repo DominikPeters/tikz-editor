@@ -99,6 +99,35 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("parses inline rule and raisebox commands", () => {
+    const source = String.raw`A\rule[1pt]{2pt}{3pt}B\raisebox{4pt}[5pt][6pt]{x \textbf{y}}C`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const rule = parsed.nodes.find((node) => node.kind === "rule");
+    const raisebox = parsed.nodes.find((node) => node.kind === "raisebox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(rule).toMatchObject({
+      kind: "rule",
+      text: String.raw`\rule[1pt]{2pt}{3pt}`,
+      raise: 1,
+      width: 2,
+      height: 3,
+    });
+    expect(raisebox).toMatchObject({
+      kind: "raisebox",
+      text: String.raw`\raisebox{4pt}[5pt][6pt]{x \textbf{y}}`,
+      lift: 4,
+      boxHeight: 5,
+      boxDepth: 6,
+      content: String.raw`x \textbf{y}`,
+      children: [
+        { kind: "text", text: "x" },
+        { kind: "space" },
+        { kind: "font-command", command: "textbf" },
+      ],
+    });
+  });
+
   it("rejects vertical material inside inline mbox nodes", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \mbox{\par Beta}`, 120);
 

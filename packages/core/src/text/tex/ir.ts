@@ -178,6 +178,26 @@ export interface SimpleTexMBoxNode extends SimpleTexSourceRange {
   readonly boxAlign?: SimpleTexTextBoxAlignment;
 }
 
+export interface SimpleTexRuleNode extends SimpleTexSourceRange {
+  readonly kind: "rule";
+  readonly text: string;
+  readonly raise: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface SimpleTexRaiseBoxNode extends SimpleTexSourceRange {
+  readonly kind: "raisebox";
+  readonly text: string;
+  readonly lift: number;
+  readonly boxHeight?: number;
+  readonly boxDepth?: number;
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
+}
+
 export interface SimpleTexParagraphBreakNode extends SimpleTexSourceRange {
   readonly kind: "paragraph-break";
   readonly text: string;
@@ -262,7 +282,9 @@ export type SimpleTexInlineNode =
   | SimpleTexFontCommandNode
   | SimpleTexFontDeclarationNode
   | SimpleTexGroupNode
-  | SimpleTexMBoxNode;
+  | SimpleTexMBoxNode
+  | SimpleTexRuleNode
+  | SimpleTexRaiseBoxNode;
 
 export type SimpleTexControlNode =
   | SimpleTexParagraphBreakNode
@@ -280,7 +302,7 @@ export type SimpleTexControlNode =
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox";
+  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox" | "rule" | "raisebox";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -292,6 +314,12 @@ export interface SimpleTexToken {
   readonly command?: SimpleTexTextBoxCommandName;
   readonly boxWidth?: number;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
+  readonly ruleRaise?: number;
+  readonly ruleWidth?: number;
+  readonly ruleHeight?: number;
+  readonly lift?: number;
+  readonly boxHeight?: number;
+  readonly boxDepth?: number;
   readonly lineLeading?: string;
   readonly fontState: SimpleTexFontState;
   readonly italicCorrectionAfter?: boolean;
@@ -548,7 +576,12 @@ function simpleTexIrHasUnsupportedDirectTextChar(nodes: readonly SimpleTexNode[]
       return true;
     }
     if (
-      (node.kind === "font-command" || node.kind === "group" || node.kind === "mbox") &&
+      (
+        node.kind === "font-command" ||
+        node.kind === "group" ||
+        node.kind === "mbox" ||
+        node.kind === "raisebox"
+      ) &&
       simpleTexIrHasUnsupportedDirectTextChar(node.children)
     ) {
       return true;
@@ -684,6 +717,8 @@ function scanSimpleTexIrNodes(
       const boxCommand = scanSimpleTexBoxCommand(text, index, sourceOffset);
       const boxEnvironment = scanSimpleTexBoxEnvironment(text, index, sourceOffset);
       const mboxCommand = scanSimpleTexMBoxCommand(text, index, sourceOffset);
+      const ruleCommand = scanSimpleTexRuleCommand(text, index, sourceOffset);
+      const raiseBoxCommand = scanSimpleTexRaiseBoxCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       if (boxEnvironment) {
@@ -738,6 +773,18 @@ function scanSimpleTexIrNodes(
         nodes.push(mboxCommand.node);
         unsupportedCommand ||= mboxCommand.unsupportedCommand;
         index = mboxCommand.end;
+        continue;
+      }
+      if (ruleCommand) {
+        nodes.push(ruleCommand.node);
+        unsupportedCommand ||= ruleCommand.unsupportedCommand;
+        index = ruleCommand.end;
+        continue;
+      }
+      if (raiseBoxCommand) {
+        nodes.push(raiseBoxCommand.node);
+        unsupportedCommand ||= raiseBoxCommand.unsupportedCommand;
+        index = raiseBoxCommand.end;
         continue;
       }
 
@@ -1884,6 +1931,170 @@ function scanSimpleTexMBoxCommand(
   };
 }
 
+function scanSimpleTexRuleCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexRuleNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "rule");
+  if (commandEnd === null) {
+    return null;
+  }
+
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  let raise = 0;
+  let unsupportedDimension = false;
+  if (text[cursor] === "[") {
+    const raiseArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!raiseArgument) {
+      return null;
+    }
+    const parsedRaise = parseTexDimensionText(raiseArgument.content.trim());
+    if (parsedRaise === null) {
+      unsupportedDimension = true;
+    } else {
+      raise = parsedRaise;
+    }
+    cursor = skipSimpleTexControlWordSpaces(text, raiseArgument.end);
+  }
+
+  const widthArgument = scanSimpleTexRequiredDimensionGroupArgument(text, cursor);
+  if (!widthArgument) {
+    return null;
+  }
+  const width = widthArgument.value ?? 0;
+  unsupportedDimension ||= widthArgument.value === null;
+  cursor = skipSimpleTexControlWordSpaces(text, widthArgument.end);
+
+  const heightArgument = scanSimpleTexRequiredDimensionGroupArgument(text, cursor);
+  if (!heightArgument) {
+    return null;
+  }
+  const height = heightArgument.value ?? 0;
+  unsupportedDimension ||= heightArgument.value === null;
+
+  const end = heightArgument.end;
+  return {
+    node: {
+      kind: "rule",
+      text: text.slice(start, end),
+      raise,
+      width,
+      height,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + end,
+    },
+    end,
+    unsupportedCommand: unsupportedDimension,
+  };
+}
+
+function scanSimpleTexRaiseBoxCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): {
+  node: SimpleTexRaiseBoxNode;
+  end: number;
+  unsupportedCommand: boolean;
+} | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "raisebox");
+  if (commandEnd === null) {
+    return null;
+  }
+
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  const liftArgument = scanSimpleTexRequiredDimensionGroupArgument(text, cursor);
+  if (!liftArgument) {
+    return null;
+  }
+  const lift = liftArgument.value ?? 0;
+  let unsupportedDimension = liftArgument.value === null;
+  cursor = skipSimpleTexControlWordSpaces(text, liftArgument.end);
+
+  let boxHeight: number | undefined;
+  let boxDepth: number | undefined;
+  let hasHeightArgument = false;
+  let heightArgumentIsEmpty = false;
+  if (text[cursor] === "[") {
+    const heightArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!heightArgument) {
+      return null;
+    }
+    hasHeightArgument = true;
+    const trimmedHeight = heightArgument.content.trim();
+    if (trimmedHeight !== "") {
+      const parsedHeight = parseTexDimensionText(trimmedHeight);
+      if (parsedHeight === null) {
+        unsupportedDimension = true;
+      } else {
+        boxHeight = parsedHeight;
+      }
+    } else {
+      heightArgumentIsEmpty = true;
+    }
+    cursor = skipSimpleTexControlWordSpaces(text, heightArgument.end);
+  }
+
+  if (hasHeightArgument && text[cursor] === "[") {
+    const depthArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!depthArgument) {
+      return null;
+    }
+    if (heightArgumentIsEmpty) {
+      unsupportedDimension = true;
+    }
+    const parsedDepth = parseTexDimensionText(depthArgument.content.trim());
+    if (parsedDepth === null) {
+      unsupportedDimension = true;
+    } else {
+      boxDepth = parsedDepth;
+    }
+    cursor = skipSimpleTexControlWordSpaces(text, depthArgument.end);
+  }
+
+  const groupStart = cursor;
+  if (text[groupStart] !== "{") {
+    return null;
+  }
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
+  if (groupEnd === null) {
+    return null;
+  }
+
+  const contentStart = groupStart + 1;
+  const contentEnd = groupEnd - 1;
+  const childScan = scanSimpleTexIrNodes(
+    text.slice(contentStart, contentEnd),
+    sourceOffset + contentStart
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
+  return {
+    node: {
+      kind: "raisebox",
+      text: text.slice(start, groupEnd),
+      lift,
+      boxHeight,
+      boxDepth,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+      content: text.slice(contentStart, contentEnd),
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + contentEnd,
+      children: childrenAreInline
+        ? childScan.nodes.filter(isSimpleTexInlineNode)
+        : [],
+    },
+    end: groupEnd,
+    unsupportedCommand: unsupportedDimension || childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+  };
+}
+
 function scanSimpleTexTextBoxCommandName(
   text: string,
   start: number
@@ -1908,6 +2119,23 @@ function scanSimpleTexOptionalBracketArgument(
   return {
     content: text.slice(start + 1, end - 1),
     end,
+  };
+}
+
+function scanSimpleTexRequiredDimensionGroupArgument(
+  text: string,
+  start: number
+): { readonly value: number | null; readonly end: number } | null {
+  if (text[start] !== "{") {
+    return null;
+  }
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, start);
+  if (groupEnd === null) {
+    return null;
+  }
+  return {
+    value: parseTexDimensionText(text.slice(start + 1, groupEnd - 1).trim()),
+    end: groupEnd,
   };
 }
 
@@ -2240,7 +2468,9 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "font-command" ||
     node.kind === "font-declaration" ||
     node.kind === "group" ||
-    node.kind === "mbox"
+    node.kind === "mbox" ||
+    node.kind === "rule" ||
+    node.kind === "raisebox"
   );
 }
 
@@ -3156,6 +3386,40 @@ export function simpleTexInlineNodesToTokens(
         command: node.command,
         boxWidth: node.boxWidth,
         boxAlign: node.boxAlign,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+      });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
+
+    if (node.kind === "rule") {
+      tokens.push({
+        kind: "rule",
+        text: node.text,
+        ruleRaise: node.raise,
+        ruleWidth: node.width,
+        ruleHeight: node.height,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+      });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
+
+    if (node.kind === "raisebox") {
+      tokens.push({
+        kind: "raisebox",
+        text: node.text,
+        content: node.content,
+        contentStart: node.contentStart,
+        contentEnd: node.contentEnd,
+        children: node.children,
+        lift: node.lift,
+        boxHeight: node.boxHeight,
+        boxDepth: node.boxDepth,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,

@@ -53,6 +53,8 @@ export {
   type SimpleTexParagraphSegment,
   type SimpleTexSegmentInput,
   type SimpleTexPlaceholderBlockItem,
+  type SimpleTexRaiseBoxNode,
+  type SimpleTexRuleNode,
   type SimpleTexSpaceNode,
   type SimpleTexTextNode,
   type SimpleTexTextBoxAlignment,

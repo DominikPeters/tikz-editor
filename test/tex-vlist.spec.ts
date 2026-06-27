@@ -1086,6 +1086,103 @@ describe("TeX vlist lowering", () => {
     expect(analysis.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
   });
 
+  it("lays out text-mode rule as an inline TeX rule box", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`\rule[3pt]{12pt}{2pt} Alpha`, 120);
+    const parsed = parseSimpleTexParagraphIr(String.raw`A\rule[3pt]{12pt}{2pt}Z`);
+    const block = parsed.blocks[0];
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(block).toBeDefined();
+    const items = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile
+        )
+      : [];
+    const ruleTextBox = items.find((item) =>
+      item.kind === "text-box" && item.command === "rule"
+    );
+    const ruleBox = ruleTextBox?.kind === "text-box" ? ruleTextBox.box : undefined;
+    const ruleItem = ruleBox?.hlist?.items.find((item) => item.kind === "rule");
+
+    expect(ruleBox).toMatchObject({
+      sourceKind: "text",
+      width: 12,
+      height: 5,
+      depth: 0,
+    });
+    expect(ruleItem).toMatchObject({
+      kind: "rule",
+      role: "literal-rule",
+      x: 0,
+      y: -5,
+      width: 12,
+      height: 2,
+    });
+  });
+
+  it("lays out text-mode raisebox with natural and explicit dimensions", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\mbox{g}\raisebox{3pt}{g}\raisebox{3pt}[2pt][4pt]{g}`
+    );
+    const block = parsed.blocks[0];
+
+    expect(block).toBeDefined();
+    const boxes = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile
+        ).filter((item) => item.kind === "text-box")
+      : [];
+    const plain = boxes[0]?.box;
+    const raised = boxes[1]?.box;
+    const explicit = boxes[2]?.box;
+
+    expect(raised?.width).toBeCloseTo(plain?.width ?? 0, 6);
+    expect(raised?.height).toBeCloseTo((plain?.height ?? 0) + 3, 6);
+    expect(raised?.depth).toBeCloseTo(Math.max(0, (plain?.depth ?? 0) - 3), 6);
+    expect(raised?.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      y: -3,
+    });
+    expect(explicit).toMatchObject({
+      width: plain?.width,
+      height: 2,
+      depth: 4,
+    });
+    expect(explicit?.hlist?.items[0]).toMatchObject({
+      kind: "hlist",
+      y: -3,
+    });
+  });
+
+  it("keeps unsupported rule and raisebox dimensions outside the simple text path", () => {
+    const rule = analyzeSimpleTexParagraph(String.raw`A\rule{1em}{1pt}Z`, 120);
+    const raisebox = analyzeSimpleTexParagraph(String.raw`A\raisebox{\height}{x}Z`, 120);
+    const raiseboxEmptyHeightWithDepth = analyzeSimpleTexParagraph(String.raw`A\raisebox{1pt}[][2pt]{x}Z`, 120);
+
+    expect(rule.ir?.unsupportedCommand).toBe(true);
+    expect(rule.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+    expect(raisebox.ir?.unsupportedCommand).toBe(true);
+    expect(raisebox.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+    expect(raiseboxEmptyHeightWithDepth.ir?.unsupportedCommand).toBe(true);
+    expect(raiseboxEmptyHeightWithDepth.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+  });
+
   it("lays out inline math inside text-mode mbox content", () => {
     const source = String.raw`Alpha \mbox{node $x$} Omega`;
     const result = layoutSimpleTexParagraph(source, {
