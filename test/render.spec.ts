@@ -1403,6 +1403,55 @@ World};
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
 
+  it("keeps top-level foreach-generated paths after pre-picture declarations", () => {
+    const source = String.raw`%%%%%%%%%%%%%%%%%%%%%%%
+%%% TikZ palette     %%
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\definecolor{fgd}{RGB}{30,30,30}
+\tikzset{axisline/.style={->,>=stealth,fgd,thick}}
+
+\begin{tikzpicture}[scale=0.6]
+  \draw[axisline] (0.3,0.7)--(6.1,0.7);
+  \foreach \lx/\ly/\ux/\uy in {0.8/4.45/1.67/5.34,
+    1.47/3.36/1.67/5.34, 1.47/3.36/2.09/4.25, 1.47/3.36/2.53/3.8,
+    1.93/2.33/2.09/4.25, 1.93/2.33/2.53/3.8, 1.93/2.33/2.94/2.77,
+    3.32/1.53/4.03/2.25, 3.32/1.53/5.13/1.8,
+    4.33/1.12/5.13/1.8}{
+    \fill[black!50,fill opacity=0.07] (\lx,\ly) rectangle (\ux,\uy);
+    \draw[black!50,densely dashed,thin] (\lx,\ly) rectangle (\ux,\uy);}
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+    const foreachPaths = result.semantic.scene.elements.filter(
+      (element): element is ScenePath => element.kind === "Path" && (element.origin?.foreachStack.length ?? 0) > 0
+    );
+
+    expect(foreachPaths).toHaveLength(20);
+    expect(foreachPaths.filter((path) => path.style.fillOpacity === 0.07)).toHaveLength(10);
+    expect(foreachPaths.filter((path) => path.style.dashArray?.join(",") === "4,2")).toHaveLength(10);
+    expect(result.svg.svg).toContain("stroke-dasharray");
+  });
+
+  it("keeps statement-macro-generated paths after pre-picture declarations", () => {
+    const source = String.raw`%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% pre-picture context   %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{tikzpicture}
+  \definecolor{brand}{RGB}{0,114,189}
+  \newcommand{\brandbox}{\draw[draw=brand,densely dashed] (0,0) rectangle (1,1);}
+  \brandbox
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+    const macroPaths = result.semantic.scene.elements.filter(
+      (element): element is ScenePath => element.kind === "Path" && (element.origin?.macroStack?.length ?? 0) > 0
+    );
+
+    expect(macroPaths).toHaveLength(1);
+    expect(macroPaths[0]?.style.stroke).toBe("#0072bd");
+    expect(macroPaths[0]?.style.dashArray?.join(",")).toBe("4,2");
+  });
+
   it("expands user-defined text macros before MathJax rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \def\labelmacro{\textsf{A}}

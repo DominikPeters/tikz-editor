@@ -206,21 +206,16 @@ export function createSemanticEvaluationRun(
     source,
     opts.sourceFingerprint
   );
-  const prePictureContextStatements = figure.body.filter((statement) => isPrePictureContextStatement(statement, figure));
-  const prePictureMacroAttribution = new WeakMap<Statement, MacroOriginFrame[]>();
-  for (const statement of prePictureContextStatements) {
-    withDependencySource(context, statement.id, () =>
-      withPgfMathRuntime(
-        { rng: context.mathRandom },
-        () => evaluateStatement(statement, context, diagnostics, featureUsage, prePictureMacroAttribution)
-      )
-    );
-  }
   const expanded = withPgfMathRuntime(
     { rng: context.mathRandom },
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
   );
-  const activeExpandedFigureBody = expanded.figureBody.filter((statement) => !isPrePictureContextStatement(statement, figure));
+  const prePictureContextStatements = expanded.figureBody.filter((statement) =>
+    isPrePictureContextStatement(statement, figure, expanded.statementAttribution, expanded.statementSourceMaps)
+  );
+  const activeExpandedFigureBody = expanded.figureBody.filter((statement) =>
+    !isPrePictureContextStatement(statement, figure, expanded.statementAttribution, expanded.statementSourceMaps)
+  );
   for (const diagnostic of expanded.diagnostics) {
     diagnostics.push({
       severity: diagnostic.severity,
@@ -228,6 +223,16 @@ export function createSemanticEvaluationRun(
       message: diagnostic.message,
       span: diagnostic.span
     });
+  }
+
+  for (const statement of prePictureContextStatements) {
+    const contextStatement = remapPrePictureContextStatement(statement, expanded.statementSourceMaps.get(statement));
+    withDependencySource(context, statement.id, () =>
+      withPgfMathRuntime(
+        { rng: context.mathRandom },
+        () => evaluateStatement(contextStatement, context, diagnostics, featureUsage, expanded.statementMacroAttribution)
+      )
+    );
   }
   const parent = currentFrame(context);
   const rootCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
@@ -586,8 +591,71 @@ function buildRootPictureOptionLayers(
   return layers;
 }
 
-function isPrePictureContextStatement(statement: Statement, figure: TikzFigure): boolean {
-  return statement.span.to <= figure.span.from;
+function isPrePictureContextStatement(
+  statement: Statement,
+  figure: TikzFigure,
+  statementAttribution: WeakMap<Statement, ForeachStatementAttribution>,
+  statementSourceMaps: WeakMap<Statement, ExpansionSourceMap>
+): boolean {
+  return resolveAuthoredStatementSpan(statement, statementAttribution, statementSourceMaps).to <= figure.span.from;
+}
+
+function resolveAuthoredStatementSpan(
+  statement: Statement,
+  statementAttribution: WeakMap<Statement, ForeachStatementAttribution>,
+  statementSourceMaps: WeakMap<Statement, ExpansionSourceMap>
+): Span {
+  const sourceMap = statementSourceMaps.get(statement);
+  if (sourceMap) {
+    return mapExpansionSpan(sourceMap, statement.span);
+  }
+
+  return statementAttribution.get(statement)?.sourceSpan ?? statement.span;
+}
+
+function remapPrePictureContextStatement(
+  statement: Statement,
+  sourceMap: ExpansionSourceMap | undefined
+): Statement {
+  if (!sourceMap) {
+    return statement;
+  }
+  return remapSpansDeepWithExpansionSourceMap(statement, sourceMap) as Statement;
+}
+
+function remapSpansDeepWithExpansionSourceMap(value: unknown, sourceMap: ExpansionSourceMap): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => remapSpansDeepWithExpansionSourceMap(entry, sourceMap));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  let nextRecord: Record<string, unknown> | null = null;
+  if (isSpanLikeRecord(record)) {
+    const mapped = sourceMap.mapSpan({ from: record.from, to: record.to }) ?? sourceMap.sourceSpan;
+    nextRecord = {
+      ...record,
+      from: mapped.from,
+      to: mapped.to
+    };
+  }
+
+  const sourceRecord = nextRecord ?? record;
+  for (const [key, nested] of Object.entries(sourceRecord)) {
+    const mapped = remapSpansDeepWithExpansionSourceMap(nested, sourceMap);
+    if (mapped !== nested) {
+      nextRecord ??= { ...sourceRecord };
+      nextRecord[key] = mapped;
+    }
+  }
+
+  return nextRecord ?? value;
+}
+
+function isSpanLikeRecord(record: Record<string, unknown>): record is Record<string, unknown> & Span {
+  return typeof record.from === "number" && typeof record.to === "number";
 }
 
 function buildSourceStatementSpanById(
