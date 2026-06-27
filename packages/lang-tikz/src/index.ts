@@ -19,14 +19,21 @@ const tikzHighlighting = styleTags({
   "NodeItem/NodeKw CoordinateOperation/CoordinateKw ToOperation/ToKw EdgeOperation/EdgeKw EdgeFromParentOperation/EdgeKw":
     t.keyword,
 
-  // Shape/operation keywords: circle, rectangle, arc, etc.
-  "CircleKw RectangleKw EllipseKw ArcKw GridKw ParabolaKw SinKw CosKw PlotKw SvgKw": t.typeName,
+  // Positioning/library words inside option lists.
+  "OptionPart/IdentifierLike/OfKw OptionPart/PathKeyword/AndKw OptionPart/Group/GroupPart/PathKeyword/AndKw":
+    t.keyword,
 
-  // Modifier keywords: at, bend, cycle, controls, and
-  "AtKw BendKw CycleKw ControlsKw AndKw": t.keyword,
+  // Shape/operation keywords in actual path operations.
+  "PathItem/PathKeyword/CircleKw PathItem/PathKeyword/RectangleKw PathItem/PathKeyword/EllipseKw PathItem/PathKeyword/ArcKw PathItem/PathKeyword/GridKw PathItem/PathKeyword/ParabolaKw PathItem/PathKeyword/SinKw PathItem/PathKeyword/CosKw PathItem/PathKeyword/PlotKw SvgOperation/SvgKw":
+    t.typeName,
 
-  // Foreach / let / in — loop constructs
-  "ForeachCmd ForeachKw LetKw InKw": t.keyword,
+  // Modifier keywords in recognized path/node/pic contexts.
+  "PathItem/PathKeyword/AtKw PathItem/PathKeyword/BendKw PathItem/PathKeyword/CycleKw PathItem/PathKeyword/ControlsKw PathItem/PathKeyword/AndKw NodeCommandItem/PathKeyword/AtKw NodePlacement/AtKw PicPlacement/AtKw ToTarget/CycleKw":
+    t.keyword,
+
+  // Foreach / let / in loop constructs.
+  "ForeachStatement/ForeachCmd ForeachStatement/InKw PathForeachOperation/ForeachCmd PathForeachOperation/ForeachKw PathForeachOperation/InKw NodeForeachClause/ForeachCmd NodeForeachClause/ForeachKw NodeForeachClause/InKw PicForeachClause/ForeachCmd PicForeachClause/ForeachKw PicForeachClause/InKw ChildForeachClause/ForeachCmd ChildForeachClause/ForeachKw ChildForeachClause/InKw LetOperation/LetKw LetOperation/InKw":
+    t.keyword,
 
   // Font size commands
   FontSizeCmd: t.keyword,

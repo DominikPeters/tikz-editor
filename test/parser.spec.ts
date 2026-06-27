@@ -678,6 +678,32 @@ describe("parseTikz", () => {
     }
   });
 
+  it("does not tokenize path keyword prefixes inside identifiers", () => {
+    const source = String.raw`\colorlet{sincolor}{red}
+\colorlet{circlefoo}{blue}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(collectCstText(source, result, "SinKw")).toHaveLength(0);
+    expect(collectCstText(source, result, "CircleKw")).toHaveLength(0);
+    expect(collectCstText(source, result, "Identifier")).toEqual(
+      expect.arrayContaining(["sincolor", "circlefoo"])
+    );
+  });
+
+  it("tokenizes positioning of as a whole-word option keyword", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node[draw,below right={0.47cm and 0.45cm} of target,office=1,offset=2] {node};
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(collectCstText(source, result, "OfKw")).toEqual(["of"]);
+    expect(collectCstText(source, result, "Identifier")).toEqual(
+      expect.arrayContaining(["office", "offset"])
+    );
+  });
+
   it("ignores empty node names when checking malformed coordinates", () => {
     const source = String.raw`\begin{tikzpicture}
   \node () at (0,0) {Hi};
