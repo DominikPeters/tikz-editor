@@ -99,6 +99,31 @@ function layoutItemsToRuns(
       continue;
     }
 
+    if (item.kind === "kern") {
+      pendingItalicCorrection = 0;
+      const wrapper: AnyWrapper = { texTextKernSpace: true };
+      runs.push({
+        kind: "space",
+        runIndex,
+        role: item.role,
+        sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
+        text: " ",
+        wrapper,
+        breakRef: {
+          kind: "mspace",
+          wrapper,
+        },
+        texGlue: {
+          width: item.width,
+          stretch: 0,
+          shrink: 0,
+          breakPenalty: 10_000,
+        },
+      } satisfies SpaceRun);
+      continue;
+    }
+
     if (item.kind === "math") {
       pendingItalicCorrection = 0;
       const fragments = mathBoxFragments(item.box);
@@ -682,7 +707,6 @@ function createTexParagraphMeasurement(
   metricProvider: TexMetricProvider,
   shapedRunForWrapper: (wrapper: AnyWrapper | null | undefined) => ShapedTexTextRun | null
 ): MeasurementService {
-  const spaceWidth = tfmToPt(font, font.data.fontdimen.space);
   const sliceWidthCache = new Map<string, number>();
   const measureTexSlice = (
     word: string,
@@ -792,7 +816,12 @@ function createTexParagraphMeasurement(
     };
   };
   return {
-    measureText: (value) => value === " " ? spaceWidth : metricProvider.shapeText(value, font).width,
+    measureText: (value, wrapper) => {
+      const textFont = shapedRunForWrapper(wrapper)?.font ?? font;
+      return value === " "
+        ? tfmToPt(textFont, textFont.data.fontdimen.space)
+        : metricProvider.shapeText(value, textFont).width;
+    },
     measureWord: (word, wrapper) => shapedRunForWrapper(wrapper)?.width ?? metricProvider.shapeText(word, font).width,
     measureMath: (wrapper) => {
       const bbox =

@@ -4510,6 +4510,54 @@ describe("simple TeX paragraph layout", () => {
       ]);
   });
 
+  it("measures styled discretionary post-break text with the run font", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`Natural basic computer position. \textbf{efficient baseline faithful} \textrm{model wide}. \par Canvas narrow canvas natural, rendering. \emph{reader rendering \emph{control vector layout} modern alpha output}.`,
+      {
+        paragraphId: "tex:styled-discretionary-post-break",
+        width: 320,
+        alignment: "ragged-left",
+        parindent: 0,
+        tikzTextWidthNode: true,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual([
+      "Natural basic computer position. ef-",
+      "ficient baseline faithful model wide.",
+      "Canvas narrow canvas natural, rendering. reader ren-",
+      "dering control vector layout modern alpha output.",
+    ]);
+    expect(result.report?.lines[1]?.xEnd).toBeCloseTo(320, 5);
+  });
+
+  it("preserves same-font kerns across text font command boundaries", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\textnormal{wide lattice affinity}.`,
+      {
+        paragraphId: "tex:same-font-command-boundary-kern",
+        width: 200,
+        alignment: "center",
+      }
+    );
+
+    const line = result.report?.lines[0];
+    const hiddenKern = line?.segments.find((segment) => segment.kind === "space" && segment.text === "");
+    const fontId = line?.segments.find((segment) => segment.kind === "text")?.fontId;
+    const font = computerModernTexMetricProvider.resolveFont({
+      fontId,
+      atPt: 10,
+    });
+    const expectedKern =
+      computerModernTexMetricProvider.shapeText("y.", font).width -
+      computerModernTexMetricProvider.shapeText("y", font).width -
+      computerModernTexMetricProvider.shapeText(".", font).width;
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["wide lattice affinity."]);
+    expect(hiddenKern?.width).toBeCloseTo(expectedKern, 5);
+  });
+
   it("preserves scoped font declaration fonts in line segments", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`A {\it B {\bf C} D} {\itshape E {\bfseries F}} {\sf G {\bf H} {\bfseries I} {\sc J}} {\scshape K {\sffamily L} {\bfseries M}} {\em N {\em O} P} Q`,

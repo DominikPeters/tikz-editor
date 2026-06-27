@@ -226,20 +226,23 @@ function buildTexLineReport(
       continue;
     }
 
-    const width = adjustedTexGlueWidth(
-      params.runWidths.get(run.runIndex) ?? 0,
-      run.kind === "space" && (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
-      line.glueSetRatio ?? 0
-    );
-    const isMathGlue = isTexMathGlueSpace(run.wrapper);
+    const naturalWidth = params.runWidths.get(run.runIndex) ?? 0;
+    const width = isTexTextKernSpace(run.wrapper)
+      ? naturalWidth
+      : adjustedTexGlueWidth(
+        naturalWidth,
+        run.kind === "space" && (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
+        line.glueSetRatio ?? 0
+      );
+    const isHiddenGlue = isTexHiddenGlueSpace(run.wrapper);
     segments.push({
       runIndex: run.runIndex,
       kind: "space",
       role: run.role,
-      text: isMathGlue ? "" : " ",
+      text: isHiddenGlue ? "" : " ",
       sourceStartRaw: run.sourceStart,
       sourceEndRaw: run.sourceEnd,
-      sourceKind: isMathGlue ? "math" : "text",
+      sourceKind: isHiddenGlue ? "math" : "text",
       x,
       width,
       caretStops: [x, roundTexPt(x + width)],
@@ -452,11 +455,23 @@ function isContinuationLineStartMath(
     Math.abs(x - (line.xOffset ?? 0)) < 1e-6;
 }
 
+function isTexHiddenGlueSpace(wrapper: unknown): boolean {
+  return isTexMathGlueSpace(wrapper) || isTexTextKernSpace(wrapper);
+}
+
 function isTexMathGlueSpace(wrapper: unknown): boolean {
   return Boolean(
     wrapper &&
     typeof wrapper === "object" &&
     (wrapper as { readonly texMathGlueSpace?: unknown }).texMathGlueSpace
+  );
+}
+
+function isTexTextKernSpace(wrapper: unknown): boolean {
+  return Boolean(
+    wrapper &&
+    typeof wrapper === "object" &&
+    (wrapper as { readonly texTextKernSpace?: unknown }).texTextKernSpace
   );
 }
 
@@ -648,6 +663,10 @@ function buildTexLineLabelSegments(
         caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
       });
       x = roundTexPt(x + shaped.width);
+      continue;
+    }
+    if (item.kind === "kern") {
+      x = roundTexPt(x + item.width);
       continue;
     }
     if (item.kind === "math") {
@@ -1063,6 +1082,10 @@ function texLayoutItemsNaturalWidth(
     }
     if (item.kind === "text") {
       width += metricProvider.shapeText(item.text, item.font).width;
+      continue;
+    }
+    if (item.kind === "kern") {
+      width += item.width;
       continue;
     }
     if (item.kind === "math") {

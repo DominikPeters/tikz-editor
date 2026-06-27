@@ -322,6 +322,10 @@ function texLayoutLabelHBoxContent(
       }
       continue;
     }
+    if (item.kind === "kern") {
+      width += item.width;
+      continue;
+    }
     if (item.kind === "math") {
       const mathWidth = texLayoutMathItemWidth(item);
       const svgBody = texLayoutBoxSvgBody(item.box);

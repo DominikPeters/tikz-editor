@@ -271,13 +271,23 @@ export interface TexLayoutPenaltyItem {
   readonly penalty: number;
 }
 
+export interface TexLayoutKernItem {
+  readonly kind: "kern";
+  readonly role?: "list-label";
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly font: ResolvedTexFont;
+  readonly width: number;
+}
+
 export type TexLayoutInlineItem =
   | TexLayoutTextItem
   | TexLayoutSpaceItem
   | TexLayoutForcedBreakItem
   | TexLayoutMathItem
   | TexLayoutTextBoxItem
-  | TexLayoutPenaltyItem;
+  | TexLayoutPenaltyItem
+  | TexLayoutKernItem;
 
 export interface TexLayoutGlyphItem {
   readonly kind: "glyph";
@@ -461,7 +471,7 @@ export function simpleTexSegmentToLayoutItems(
   ) {
     items.pop();
   }
-  return items;
+  return insertTextBoundaryKerns(items, metricProvider);
 }
 
 function texMBoxFromInlineNodes(params: {
@@ -721,7 +731,54 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       items.pop();
     }
   }
-  return items;
+  return insertTextBoundaryKerns(items, params.metricProvider);
+}
+
+function insertTextBoundaryKerns(
+  items: readonly TexLayoutInlineItem[],
+  metricProvider: TexMetricProvider
+): TexLayoutInlineItem[] {
+  const result: TexLayoutInlineItem[] = [];
+  for (const item of items) {
+    const previous = result.at(-1);
+    if (previous?.kind === "text" && item.kind === "text") {
+      const width = textBoundaryKernWidth(previous, item, metricProvider);
+      if (Math.abs(width) > 0.00001) {
+        result.push({
+          kind: "kern",
+          sourceStart: previous.sourceEnd,
+          sourceEnd: item.sourceStart,
+          font: item.font,
+          width,
+        });
+      }
+    }
+    result.push(item);
+  }
+  return result;
+}
+
+function textBoundaryKernWidth(
+  left: TexLayoutTextItem,
+  right: TexLayoutTextItem,
+  metricProvider: TexMetricProvider
+): number {
+  if (left.font.id !== right.font.id || left.text.length === 0 || right.text.length === 0) {
+    return 0;
+  }
+  const leftChar = left.text.at(-1) ?? "";
+  const rightChar = right.text[0] ?? "";
+  if (!leftChar || !rightChar) {
+    return 0;
+  }
+  const shapedPair = metricProvider.shapeText(`${leftChar}${rightChar}`, left.font);
+  if (!shapedPair.items.some((item) => item.kind === "kern")) {
+    return 0;
+  }
+  const separateWidth =
+    metricProvider.shapeText(leftChar, left.font).width +
+    metricProvider.shapeText(rightChar, right.font).width;
+  return roundTexPt(shapedPair.width - separateWidth);
 }
 
 export function texMBoxHListFromLayoutItems(params: {
@@ -768,6 +825,13 @@ export function texMBoxHListFromLayoutItems(params: {
       const layoutGlue = texMBoxGlueItem(cursor, glue, item.sourceStart, item.sourceEnd);
       items.push(layoutGlue);
       cursor = roundTexPt(cursor + layoutGlue.width);
+      continue;
+    }
+
+    if (item.kind === "kern") {
+      const kern = texMBoxKernItem(cursor, item.width, item.sourceStart, item.sourceEnd);
+      items.push(kern);
+      cursor = roundTexPt(cursor + kern.width);
       continue;
     }
 
