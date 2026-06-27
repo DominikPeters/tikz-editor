@@ -1,7 +1,13 @@
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
+import type * as PdfJs from "pdfjs-dist/legacy/build/pdf.mjs";
+
 const TEX_PT_PER_BP = 72.27 / 72;
 const DEFAULT_PDF_RENDER_SCALE = 2;
 const DEFAULT_PDF_MAX_DIMENSION_PX = 4096;
 const DEFAULT_PDF_MAX_AREA_PX = 16_000_000;
+
+type PdfJsModule = typeof PdfJs;
+type PdfWorkerMode = "real-worker-preferred" | "fake-worker";
 
 export type PdfAssetRasterizeRequest = {
   readonly bytes: Uint8Array;
@@ -25,6 +31,7 @@ export type PdfAssetRasterizeResult = {
 export type PdfAssetRasterizer = (request: PdfAssetRasterizeRequest) => Promise<PdfAssetRasterizeResult>;
 
 let pdfAssetRasterizer: PdfAssetRasterizer = rasterizePdfWithPdfJs;
+let pdfWorkerMode: PdfWorkerMode = "real-worker-preferred";
 
 export function setPdfAssetRasterizerForTests(rasterizer: PdfAssetRasterizer | null): () => void {
   const previous = pdfAssetRasterizer;
@@ -47,8 +54,24 @@ async function rasterizePdfWithPdfJs(request: PdfAssetRasterizeRequest): Promise
     throw new Error("PDF rendering requires a DOM document.");
   }
 
-  await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  try {
+    return await rasterizePdfWithWorkerMode(pdfjs, request, ownerDocument);
+  } catch (error) {
+    if (pdfWorkerMode !== "fake-worker" && isPdfWorkerSetupError(error)) {
+      pdfWorkerMode = "fake-worker";
+      return await rasterizePdfWithWorkerMode(pdfjs, request, ownerDocument);
+    }
+    throw error;
+  }
+}
+
+async function rasterizePdfWithWorkerMode(
+  pdfjs: PdfJsModule,
+  request: PdfAssetRasterizeRequest,
+  ownerDocument: Document
+): Promise<PdfAssetRasterizeResult> {
+  await configurePdfJsWorker(pdfjs);
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(request.bytes),
     isOffscreenCanvasSupported: false,
@@ -130,6 +153,19 @@ async function rasterizePdfWithPdfJs(request: PdfAssetRasterizeRequest): Promise
   } finally {
     await loadingTask.destroy();
   }
+}
+
+async function configurePdfJsWorker(pdfjs: PdfJsModule): Promise<void> {
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  if (pdfWorkerMode === "fake-worker" || typeof Worker === "undefined") {
+    pdfWorkerMode = "fake-worker";
+    await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  }
+}
+
+function isPdfWorkerSetupError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bworker\b/i.test(message) || message.includes("GlobalWorkerOptions.workerSrc");
 }
 
 function cappedRenderScale(params: {
