@@ -7,7 +7,7 @@ import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
 import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
 import { projectInputRange } from "../packages/core/src/text/source-map.js";
-import type { NodeTextEngine, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
+import type { NodeTextEngine, NodeTextGraphicsResolver, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
 
 function readLineboxTranslateXs(svg: string): number[] {
   const xs: number[] = [];
@@ -158,6 +158,31 @@ describe("render pipeline", () => {
     expect(result.svg.svg).toContain('data-tex-includegraphics="placeholder"');
     expect(result.svg.svg).toContain('data-tex-includegraphics-status="missing"');
     expect(result.svg.svg).not.toContain("missing-image.png");
+  });
+
+  it("renders rasterized PDF includegraphics assets as embedded PNG data URIs", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node at (0,0) {\includegraphics[width=1cm,page=2]{figure.pdf}};
+\end{tikzpicture}`;
+    const graphicsResolver: NodeTextGraphicsResolver = {
+      cacheKey: "pdf-page-2",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "cGRmLXBuZw==",
+        naturalWidthPt: 100,
+        naturalHeightPt: 50,
+        revision: "figure.pdf:r1:page=2",
+        resolvedPath: "/tmp/tikz/figure.pdf",
+      }),
+    };
+    const result = await renderTikzToSvgAsync(source, {
+      evaluate: { graphicsResolver },
+    });
+
+    expect(result.svg.svg).toContain('data-tex-includegraphics="true"');
+    expect(result.svg.svg).toContain('href="data:image/png;base64,cGRmLXBuZw=="');
+    expect(result.svg.svg).not.toContain("/tmp/tikz/figure.pdf");
   });
 
   it("supports fit around coordinates and marks fit capability usage", () => {

@@ -3,18 +3,22 @@ import type {
   NodeTextGraphicsResolveRequest,
   NodeTextGraphicsResolver,
 } from "tikz-editor/text/types";
+import { rasterizePdfAsset } from "./pdf-asset-rasterizer";
 import { getActiveEditorPlatform } from "./platform/current";
 import type { LocalAssetReadResult } from "./platform/types";
 import type { DocumentFileRef } from "./store/types";
 
-type SupportedMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
+type ResolvedImageMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
+type RawAssetMimeType = ResolvedImageMimeType | "application/pdf";
 
 type ImageIncludeCandidate = {
   readonly filename: string;
+  readonly rawOptions: string;
 };
 
 type PreparedAssetEntry = {
   readonly filename: string;
+  readonly rawOptions: string;
   readonly resolution: NodeTextGraphicsResolution;
 };
 
@@ -25,7 +29,7 @@ type PathCacheEntry = {
   readonly watchedPaths: readonly string[];
 };
 
-const SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"] as const;
+const SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg", ".pdf"] as const;
 const TEX_PT_PER_BP = 72.27 / 72;
 const pathCache = new Map<string, PathCacheEntry>();
 let cacheGeneration = 0;
@@ -42,12 +46,17 @@ export async function prepareImageAssetResolver(params: {
   const watchedPaths = new Set<string>();
 
   for (const include of includeCandidates) {
-    const requestKey = includeGraphicsRequestKey(include.filename, baseDirectory);
+    const requestKey = includeGraphicsRequestKey({
+      filename: include.filename,
+      rawOptions: include.rawOptions,
+      baseDirectory,
+    });
     if (entries.has(requestKey)) {
       continue;
     }
     const resolution = await resolveIncludeGraphicsAsset({
       filename: include.filename,
+      rawOptions: include.rawOptions,
       baseDirectory,
       readLocalAsset,
     });
@@ -56,6 +65,7 @@ export async function prepareImageAssetResolver(params: {
     }
     entries.set(requestKey, {
       filename: include.filename,
+      rawOptions: include.rawOptions,
       resolution,
     });
   }
@@ -67,12 +77,19 @@ export async function prepareImageAssetResolver(params: {
   const resolver: NodeTextGraphicsResolver = {
     cacheKey,
     resolve(request: NodeTextGraphicsResolveRequest): NodeTextGraphicsResolution {
-      const requestKey = includeGraphicsRequestKey(request.filename, baseDirectory);
+      const requestKey = includeGraphicsRequestKey({
+        filename: request.filename,
+        rawOptions: rawGraphicsOptions(request.options.raw),
+        baseDirectory,
+      });
       const prepared = entries.get(requestKey);
       if (prepared) {
         return prepared.resolution;
       }
-      return placeholderResolutionForUnpreparedRequest(request.filename, baseDirectory);
+      return placeholderResolutionForUnpreparedRequest(
+        request.filename,
+        baseDirectory
+      );
     },
   };
 
@@ -109,6 +126,7 @@ async function syncLocalAssetWatches(paths: readonly string[]): Promise<void> {
 
 async function resolveIncludeGraphicsAsset(params: {
   readonly filename: string;
+  readonly rawOptions: string;
   readonly baseDirectory: string | null;
   readonly readLocalAsset: ((path: string) => Promise<LocalAssetReadResult>) | undefined;
 }): Promise<NodeTextGraphicsResolution> {
@@ -140,7 +158,8 @@ async function resolveIncludeGraphicsAsset(params: {
   }
 
   for (const candidate of descriptor.candidates) {
-    const cached = pathCache.get(comparableLocalPath(candidate));
+    const cacheKey = assetCacheKeyForCandidate(candidate, params.rawOptions);
+    const cached = pathCache.get(cacheKey);
     if (cached) {
       if (cached.resolution.status === "resolved") {
         return cached.resolution;
@@ -152,8 +171,8 @@ async function resolveIncludeGraphicsAsset(params: {
     }
 
     const read = await params.readLocalAsset(candidate);
-    const entry = pathCacheEntryFromRead(candidate, descriptor.candidates, read);
-    pathCache.set(comparableLocalPath(candidate), entry);
+    const entry = await pathCacheEntryFromRead(candidate, descriptor.candidates, read, params.rawOptions);
+    pathCache.set(cacheKey, entry);
     if (entry.resolution.status === "resolved") {
       return entry.resolution;
     }
@@ -172,14 +191,15 @@ async function resolveIncludeGraphicsAsset(params: {
 function pathCacheEntryFromRead(
   candidate: string,
   watchedPaths: readonly string[],
-  read: LocalAssetReadResult
-): PathCacheEntry {
+  read: LocalAssetReadResult,
+  rawOptions: string
+): Promise<PathCacheEntry> {
   if (read.status !== "ok") {
     const missingPath = read.path ?? candidate;
     const revision = read.status === "missing"
       ? `missing:${missingPath}`
       : `failed:${missingPath}:${read.reason ?? ""}`;
-    return {
+    return Promise.resolve({
       path: missingPath,
       watchedPaths,
       signature: revision,
@@ -189,12 +209,12 @@ function pathCacheEntryFromRead(
         revision,
         watchedPaths,
       },
-    };
+    });
   }
 
-  const mimeType = mimeTypeForPath(read.path);
-  if (!mimeType) {
-    return {
+  const rawMimeType = rawAssetMimeTypeForPath(read.path);
+  if (!rawMimeType) {
+    return Promise.resolve({
       path: read.path,
       watchedPaths,
       signature: `unsupported:${read.path}:${read.revision}`,
@@ -205,13 +225,17 @@ function pathCacheEntryFromRead(
         watchedPaths,
         reason: "Unsupported image extension.",
       },
-    };
+    });
+  }
+
+  if (rawMimeType === "application/pdf") {
+    return pdfPathCacheEntryFromRead(read, watchedPaths, rawOptions);
   }
 
   const bytes = bytesFromBase64(read.bytesBase64);
-  const naturalSize = naturalSizeForImage(bytes, mimeType);
+  const naturalSize = naturalSizeForImage(bytes, rawMimeType);
   if (!naturalSize) {
-    return {
+    return Promise.resolve({
       path: read.path,
       watchedPaths,
       signature: `unsupported:${read.path}:${read.revision}:unreadable-size`,
@@ -222,11 +246,11 @@ function pathCacheEntryFromRead(
         watchedPaths,
         reason: "Could not determine image dimensions.",
       },
-    };
+    });
   }
 
   const signature = `${read.path}:${read.revision}:${naturalSize.widthPt}x${naturalSize.heightPt}`;
-  return {
+  return Promise.resolve({
     path: read.path,
     watchedPaths,
     signature,
@@ -235,12 +259,73 @@ function pathCacheEntryFromRead(
       resolvedPath: read.path,
       revision: read.revision,
       watchedPaths,
-      mimeType,
+      mimeType: rawMimeType,
       dataBase64: read.bytesBase64,
       naturalWidthPt: naturalSize.widthPt,
       naturalHeightPt: naturalSize.heightPt,
     },
-  };
+  });
+}
+
+async function pdfPathCacheEntryFromRead(
+  read: Extract<LocalAssetReadResult, { status: "ok" }>,
+  watchedPaths: readonly string[],
+  rawOptions: string
+): Promise<PathCacheEntry> {
+  const page = parsePdfPageOption(rawOptions);
+  if (page.status === "invalid") {
+    const signature = `unsupported:${read.path}:${read.revision}:pdf:${page.reason}`;
+    return {
+      path: read.path,
+      watchedPaths,
+      signature,
+      resolution: {
+        status: "unsupported",
+        resolvedPath: read.path,
+        revision: signature,
+        watchedPaths,
+        reason: page.reason,
+      },
+    };
+  }
+
+  try {
+    const rendered = await rasterizePdfAsset({
+      bytes: bytesFromBase64(read.bytesBase64),
+      pageNumber: page.pageNumber,
+    });
+    const signature = `${read.path}:${read.revision}:pdf:${rendered.signature}`;
+    return {
+      path: read.path,
+      watchedPaths,
+      signature,
+      resolution: {
+        status: "resolved",
+        resolvedPath: read.path,
+        revision: signature,
+        watchedPaths,
+        mimeType: rendered.mimeType,
+        dataBase64: rendered.dataBase64,
+        naturalWidthPt: rendered.naturalWidthPt,
+        naturalHeightPt: rendered.naturalHeightPt,
+      },
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const signature = `${read.path}:${read.revision}:pdf:render-failed:${page.pageNumber}:${reason}`;
+    return {
+      path: read.path,
+      watchedPaths,
+      signature,
+      resolution: {
+        status: "unsupported",
+        resolvedPath: read.path,
+        revision: signature,
+        watchedPaths,
+        reason,
+      },
+    };
+  }
 }
 
 function placeholderResolutionForUnpreparedRequest(
@@ -273,6 +358,7 @@ function imageAssetResolverCacheKey(params: {
       const resolution = entry.resolution;
       return {
         filename: entry.filename,
+        rawOptions: entry.rawOptions,
         status: resolution.status,
         revision: resolution.revision ?? null,
         path: resolution.resolvedPath ?? null,
@@ -281,7 +367,9 @@ function imageAssetResolverCacheKey(params: {
           : null,
       };
     })
-    .sort((left, right) => left.filename.localeCompare(right.filename));
+    .sort((left, right) =>
+      left.filename.localeCompare(right.filename) || left.rawOptions.localeCompare(right.rawOptions)
+    );
   return JSON.stringify({
     kind: "image-assets",
     generation: cacheGeneration,
@@ -292,18 +380,103 @@ function imageAssetResolverCacheKey(params: {
 
 function collectIncludeGraphicsCandidates(source: string): ImageIncludeCandidate[] {
   const candidates: ImageIncludeCandidate[] = [];
-  const pattern = /\\includegraphics\b\s*(?:\[[^\]]*\]\s*)?\{([^{}]+)\}/g;
+  const pattern = /\\includegraphics\b\s*(?:\[([^\]]*)\]\s*)?\{([^{}]+)\}/g;
   for (const match of source.matchAll(pattern)) {
-    const filename = match[1]?.trim();
+    const rawOptions = match[1] ?? "";
+    const filename = match[2]?.trim();
     if (filename) {
-      candidates.push({ filename });
+      candidates.push({ filename, rawOptions });
     }
   }
   return candidates;
 }
 
-function includeGraphicsRequestKey(filename: string, baseDirectory: string | null): string {
-  return `${baseDirectory ?? ""}\n${filename.trim()}`;
+function includeGraphicsRequestKey(params: {
+  readonly filename: string;
+  readonly rawOptions: string;
+  readonly baseDirectory: string | null;
+}): string {
+  const normalizedFilename = params.filename.trim();
+  const descriptor = includeGraphicsPathDescriptor(normalizedFilename, params.baseDirectory);
+  const needsOptions = descriptor?.kind === "extensionless" ||
+    (descriptor?.kind === "explicit" && extensionForPath(descriptor.candidates[0] ?? "") === ".pdf");
+  return [
+    params.baseDirectory ?? "",
+    normalizedFilename,
+    needsOptions ? pdfPageCacheDiscriminator(params.rawOptions) : "",
+  ].join("\n");
+}
+
+function rawGraphicsOptions(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function pdfPageCacheDiscriminator(rawOptions: string): string {
+  const page = parsePdfPageOption(rawOptions);
+  return page.status === "ok"
+    ? `page=${page.pageNumber}`
+    : `invalid-page=${rawOptions.trim()}`;
+}
+
+function parsePdfPageOption(rawOptions: string):
+  | { readonly status: "ok"; readonly pageNumber: number }
+  | { readonly status: "invalid"; readonly reason: string } {
+  for (const part of splitGraphicsOptions(rawOptions)) {
+    const trimmed = part.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const equals = trimmed.indexOf("=");
+    const key = (equals >= 0 ? trimmed.slice(0, equals) : trimmed).trim().toLowerCase();
+    if (key !== "page") {
+      continue;
+    }
+    if (equals < 0) {
+      return {
+        status: "invalid",
+        reason: "PDF page option must be a positive integer.",
+      };
+    }
+    const value = trimmed.slice(equals + 1).trim();
+    if (!/^\d+$/.test(value)) {
+      return {
+        status: "invalid",
+        reason: "PDF page option must be a positive integer.",
+      };
+    }
+    const pageNumber = Number(value);
+    if (!Number.isSafeInteger(pageNumber) || pageNumber < 1) {
+      return {
+        status: "invalid",
+        reason: "PDF page option must be a positive integer.",
+      };
+    }
+    return { status: "ok", pageNumber };
+  }
+  return { status: "ok", pageNumber: 1 };
+}
+
+function splitGraphicsOptions(raw: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let braceDepth = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char === "{") {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+      continue;
+    }
+    if (char === "," && braceDepth === 0) {
+      parts.push(raw.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(raw.slice(start));
+  return parts;
 }
 
 function includeGraphicsPathDescriptor(
@@ -405,6 +578,13 @@ function comparableLocalPath(path: string): string {
   return normalizeLocalPath(path).replaceAll("\\", "/");
 }
 
+function assetCacheKeyForCandidate(path: string, rawOptions: string): string {
+  const comparablePath = comparableLocalPath(path);
+  return extensionForPath(path) === ".pdf"
+    ? `${comparablePath}\npdf:${pdfPageCacheDiscriminator(rawOptions)}`
+    : comparablePath;
+}
+
 function isAbsoluteLocalPath(path: string): boolean {
   return path.startsWith("/") || path.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(path);
 }
@@ -422,7 +602,7 @@ function extensionForPath(path: string): string | null {
   return basename.slice(dotIndex).toLowerCase();
 }
 
-function mimeTypeForPath(path: string): SupportedMimeType | null {
+function rawAssetMimeTypeForPath(path: string): RawAssetMimeType | null {
   const extension = extensionForPath(path);
   if (extension === ".png") {
     return "image/png";
@@ -433,12 +613,15 @@ function mimeTypeForPath(path: string): SupportedMimeType | null {
   if (extension === ".svg") {
     return "image/svg+xml";
   }
+  if (extension === ".pdf") {
+    return "application/pdf";
+  }
   return null;
 }
 
 function naturalSizeForImage(
   bytes: Uint8Array,
-  mimeType: SupportedMimeType
+  mimeType: ResolvedImageMimeType
 ): { readonly widthPt: number; readonly heightPt: number } | null {
   if (mimeType === "image/png") {
     return naturalPngSize(bytes);

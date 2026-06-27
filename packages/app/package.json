@@ -57,6 +57,7 @@
     "jspdf": "^4.2.0",
     "keynote-clipboard": "^1.2.0",
     "mathlive": "^0.107.1",
+    "pdfjs-dist": "^6.1.200",
     "pptx2tikz": "^1.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
