@@ -9,6 +9,7 @@ export const APP_MENU_COMMAND_IDS = {
   SAVE_DOCUMENT_AS: "file.save-document-as",
   CLOSE_DOCUMENT: "file.close-document",
   CLOSE_ALL_DOCUMENTS: "file.close-all-documents",
+  QUIT_APP: "file.quit-app",
   OPEN_EXAMPLE: "file.open-example",
   EXPORT_SVG_DOWNLOAD: "file.export-svg-download",
   EXPORT_STANDALONE_LATEX_DOWNLOAD: "file.export-standalone-latex-download",

@@ -641,6 +641,9 @@ export function App() {
     onRequestCloseAllDocuments: () => {
       requestCloseIntent({ kind: "close-all" });
     },
+    onRequestQuitApp: () => {
+      requestCloseIntent({ kind: "window-close" });
+    },
     onRequestSaveDocument: (documentId, mode) => {
       void saveDocument(documentId, mode);
     },
@@ -1363,6 +1366,7 @@ export function App() {
         getSourceRevision: () => number;
         getSnapshotSource: () => string;
         getPendingRequestId: () => string | null;
+        getMenuDefinition: () => typeof menuDefinition;
         getCommandState: (commandId: string) => { enabled: boolean; known: boolean };
         runCommand: (commandId: string) => boolean;
         selectFirstFigure: () => void;
@@ -1403,6 +1407,9 @@ export function App() {
       },
       getPendingRequestId: () => {
         return useEditorStore.getState().pendingRequestId;
+      },
+      getMenuDefinition: () => {
+        return menuDefinition;
       },
       getCommandState: (commandId) => {
         const binding = commandRuntime.bindings[commandId as keyof typeof commandRuntime.bindings];
@@ -1497,7 +1504,7 @@ export function App() {
     return () => {
       delete globalLike.__TIKZ_EDITOR_APP_TEST_API__;
     };
-  }, [commandRuntime, dispatch]);
+  }, [commandRuntime, dispatch, menuDefinition]);
 
   useEffect(() => {
     const unbind = getActiveEditorPlatform().files?.bindOpenRequest?.((opened) => {

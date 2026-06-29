@@ -141,6 +141,22 @@ describe("editor-command-runtime", () => {
     expect(runtime.bindings[APP_MENU_COMMAND_IDS.CHECK_FOR_UPDATES].enabled).toBe(false);
   });
 
+  it("routes Quit through the app close guard callback", () => {
+    const onRequestQuitApp = vi.fn();
+    const runtime = createEditorCommandRuntime(
+      makeInput({
+        dispatch: vi.fn<(action: EditorAction) => void>(),
+        snapshot: makeSnapshot(renderTikzToSvg(SOURCE)),
+        selectedElementIds: new Set(),
+        onRequestQuitApp
+      })
+    );
+
+    expect(runtime.bindings[APP_MENU_COMMAND_IDS.QUIT_APP].enabled).toBe(true);
+    expect(runtime.runCommand(APP_MENU_COMMAND_IDS.QUIT_APP, "menu")).toBe(true);
+    expect(onRequestQuitApp).toHaveBeenCalledTimes(1);
+  });
+
   it("dispatches per-mode snap toggles", () => {
     const dispatch = vi.fn<(action: EditorAction) => void>();
     const rendered = renderTikzToSvg(SOURCE);
@@ -1337,6 +1353,7 @@ function makeInput({
   onOpenSaveWorkspace,
   onOpenManageWorkspaces,
   onCheckForUpdates,
+  onRequestQuitApp,
   updateCheckBusy
 }: {
   dispatch: (action: EditorAction) => void;
@@ -1377,6 +1394,7 @@ function makeInput({
   onOpenSaveWorkspace?: () => void;
   onOpenManageWorkspaces?: () => void;
   onCheckForUpdates?: () => void;
+  onRequestQuitApp?: () => void;
   updateCheckBusy?: boolean;
 }) {
   const activeFigureId = snapshot.parseResult?.activeFigureId ?? null;
@@ -1424,6 +1442,7 @@ function makeInput({
     onOpenSaveWorkspace,
     onOpenManageWorkspaces,
     onCheckForUpdates,
+    onRequestQuitApp,
     updateCheckBusy
   };
 }

@@ -124,6 +124,7 @@ type RuntimeInput = {
   onOpenPngExport?: (svgResult: EmitSvgResult) => void;
   onRequestCloseDocument?: (documentId: string) => void;
   onRequestCloseAllDocuments?: () => void;
+  onRequestQuitApp?: () => void;
   onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
   onAddNodeAdornment?: (kind: "label" | "pin") => void;
   onPositionNodeRelativeTo?: () => void;
@@ -192,6 +193,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onOpenPngExport,
     onRequestCloseDocument,
     onRequestCloseAllDocuments,
+    onRequestQuitApp,
     onRequestSaveDocument,
     onAddNodeAdornment,
     onPositionNodeRelativeTo,
@@ -507,6 +509,16 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           return;
         }
         dispatch({ type: "CLOSE_ALL_DOCUMENTS" });
+      }
+    },
+    [APP_MENU_COMMAND_IDS.QUIT_APP]: {
+      enabled: onRequestQuitApp != null || typeof getActiveEditorPlatform().window?.close === "function",
+      run: () => {
+        if (onRequestQuitApp) {
+          onRequestQuitApp();
+          return;
+        }
+        void getActiveEditorPlatform().window?.close?.();
       }
     },
     [APP_MENU_COMMAND_IDS.OPEN_EXAMPLE]: {
@@ -1079,8 +1091,9 @@ export function useEditorCommandRuntime(
     onOpenFromArxiv?: () => void;
     onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
     onOpenPngExport?: (svgResult: EmitSvgResult) => void;
-  onRequestCloseDocument?: (documentId: string) => void;
+    onRequestCloseDocument?: (documentId: string) => void;
     onRequestCloseAllDocuments?: () => void;
+    onRequestQuitApp?: () => void;
     onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
     onAddNodeAdornment?: (kind: "label" | "pin") => void;
     onPositionNodeRelativeTo?: () => void;
@@ -1216,6 +1229,7 @@ export function useEditorCommandRuntime(
         onOpenPngExport: options.onOpenPngExport,
         onRequestCloseDocument: options.onRequestCloseDocument,
         onRequestCloseAllDocuments: options.onRequestCloseAllDocuments,
+        onRequestQuitApp: options.onRequestQuitApp,
         onRequestSaveDocument: options.onRequestSaveDocument,
         onAddNodeAdornment: options.onAddNodeAdornment,
         onPositionNodeRelativeTo: options.onPositionNodeRelativeTo,
@@ -1268,6 +1282,7 @@ export function useEditorCommandRuntime(
       options.onOpenPngExport,
       options.onRequestCloseDocument,
       options.onRequestCloseAllDocuments,
+      options.onRequestQuitApp,
       options.onRequestSaveDocument,
       options.onAddNodeAdornment,
       options.onPositionNodeRelativeTo,
