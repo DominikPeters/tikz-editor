@@ -648,7 +648,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["node_text_includegraphics"],
     notes:
-      "V1 supports PNG/JPEG/SVG inline graphics and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
+      "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
   render_pipeline: {
     parser: "not-applicable",

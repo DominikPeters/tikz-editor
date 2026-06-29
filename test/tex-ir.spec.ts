@@ -163,6 +163,37 @@ describe("simple TeX paragraph IR", () => {
     expect(graphics?.options.keepAspectRatio).toBe(true);
   });
 
+  it("parses includegraphics crop and clip options", () => {
+    const source = String.raw`\includegraphics[trim=10bp 5bp 20bp 15bp,clip]{fig}\includegraphics[trim={10 5 20 15},clip=false,viewport=10 5 100 65]{fig}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.filter((node) => node.kind === "includegraphics");
+    const bp = 72.27 / 72;
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(graphics).toHaveLength(2);
+    expect(graphics[0]?.options.trim).toEqual({
+      left: 10 * bp,
+      bottom: 5 * bp,
+      right: 20 * bp,
+      top: 15 * bp,
+    });
+    expect(graphics[0]?.options.clip).toBe(true);
+    expect(graphics[1]?.options.trim).toEqual({
+      left: 10 * bp,
+      bottom: 5 * bp,
+      right: 20 * bp,
+      top: 15 * bp,
+    });
+    expect(graphics[1]?.options.clip).toBe(false);
+    expect(graphics[1]?.options.viewport).toEqual({
+      llx: 10 * bp,
+      lly: 5 * bp,
+      urx: 100 * bp,
+      ury: 65 * bp,
+    });
+    expect(graphics[1]?.options.raw).toBe("trim={10 5 20 15},clip=false,viewport=10 5 100 65");
+  });
+
   it("parses phantom and smash commands as inline dimension boxes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`A\phantom{b}B\hphantom{c}C\vphantom{g}D\smash{\textit{x}}E`

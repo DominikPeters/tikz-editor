@@ -1371,6 +1371,55 @@ describe("TeX vlist lowering", () => {
     expect(box?.svgBody).not.toContain("/tmp/fig.png");
   });
 
+  it("lays out includegraphics trim, clip, and viewport crop boxes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\includegraphics[trim=10pt 5pt 20pt 15pt]{fig}\includegraphics[trim=10pt 5pt 20pt 15pt,width=45pt]{fig}\includegraphics[trim=10pt 5pt 20pt 15pt,width=45pt,height=60pt,keepaspectratio]{fig}\includegraphics[trim=10pt 5pt 20pt 15pt,clip]{fig}\includegraphics[viewport=10pt 5pt 100pt 65pt,clip]{fig}`
+    );
+    const block = parsed.blocks[0];
+    const graphicsResolver: NodeTextGraphicsResolver = {
+      cacheKey: "test-cropped-image-v1",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 120,
+        naturalHeightPt: 80,
+        revision: "r1",
+        resolvedPath: "/tmp/fig.png",
+      }),
+    };
+    const boxes = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile,
+          graphicsResolver
+        ).filter((item): item is Extract<typeof item, { kind: "text-box" }> =>
+          item.kind === "text-box" && item.command === "includegraphics"
+        )
+      : [];
+
+    expect(boxes).toHaveLength(5);
+    expect(boxes[0]?.box).toMatchObject({ width: 90, height: 60, depth: 0 });
+    expect(boxes[1]?.box).toMatchObject({ width: 45, height: 30, depth: 0 });
+    expect(boxes[2]?.box).toMatchObject({ width: 45, height: 30, depth: 0 });
+    expect(boxes[3]?.box).toMatchObject({ width: 90, height: 60, depth: 0 });
+    expect(boxes[4]?.box).toMatchObject({ width: 90, height: 60, depth: 0 });
+    expect(boxes[0]?.box.svgBody).toContain(
+      '<svg x="0" y="-6000" width="9000" height="6000" overflow="visible" viewBox="1000 1500 9000 6000" preserveAspectRatio="none">'
+    );
+    expect(boxes[0]?.box.svgBody).toContain('<image x="0" y="0" width="12000" height="8000"');
+    expect(boxes[3]?.box.svgBody).toContain('overflow="hidden" viewBox="1000 1500 9000 6000"');
+    expect(boxes[4]?.box.svgBody).toContain('overflow="hidden" viewBox="1000 1500 9000 6000"');
+    expect(boxes[0]?.box.svgBody).not.toContain("/tmp/fig.png");
+  });
+
   it("lays out missing includegraphics placeholders with draft-like fallback dimensions", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\includegraphics{missing}\includegraphics[width=20pt]{missing}\includegraphics[height=12pt]{missing}\includegraphics[width=20pt,height=12pt]{missing}`

@@ -486,8 +486,8 @@ describe("TeX vlist hit target source offsets", () => {
   });
 
   it("resolves registered source hits for placeholders inside list-item vboxes", () => {
-    const source = String.raw`\begin{itemize}\item Alpha \par \includegraphics{plot.pdf} \par More\end{itemize}`;
-    const placeholderStart = source.indexOf(String.raw`\includegraphics`);
+    const source = String.raw`\begin{itemize}\item Alpha \par \unsupportedgraphics{plot.pdf} \par More\end{itemize}`;
+    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
     const placeholderEnd = source.indexOf(String.raw` \par More`);
     const snapshot = registeredSnapshotForSource(source, {
       fallbackPolicy: "placeholder",

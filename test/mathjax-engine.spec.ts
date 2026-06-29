@@ -694,7 +694,7 @@ describe("mathjax node text engine", () => {
     } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
     const callsBeforeMeasure = texCalls.length;
-    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+    const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
 
     const measured = engine.measure({
       text: source,

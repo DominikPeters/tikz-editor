@@ -30,6 +30,9 @@ import {
   type SimpleTexDimensionBoxCommandName,
   type SimpleTexDisplayMathDelimiter,
   type SimpleTexFontState,
+  type SimpleTexGraphicsOptions,
+  type SimpleTexGraphicsTrim,
+  type SimpleTexGraphicsViewport,
   type SimpleTexInlineNode,
   type SimpleTexParagraphSegment,
   type SimpleTexTextBoxAlignment,
@@ -904,13 +907,7 @@ function texIncludeGraphicsBox(params: {
   readonly sourceEnd: number;
   readonly filenameStart: number;
   readonly filenameEnd: number;
-  readonly options: {
-    readonly width?: number;
-    readonly height?: number;
-    readonly scale?: number;
-    readonly keepAspectRatio?: boolean;
-    readonly raw: string;
-  };
+  readonly options: SimpleTexGraphicsOptions;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
 }): TexMathBox {
   const graphicsOptions = nodeTextGraphicsOptions(params.options);
@@ -921,24 +918,37 @@ function texIncludeGraphicsBox(params: {
     sourceStart: params.sourceStart,
     sourceEnd: params.sourceEnd,
   }) ?? { status: "missing" as const };
-  const natural = resolution.status === "resolved" &&
+  const assetNatural = resolution.status === "resolved" &&
     Number.isFinite(resolution.naturalWidthPt) &&
     Number.isFinite(resolution.naturalHeightPt) &&
     resolution.naturalWidthPt > 0 &&
     resolution.naturalHeightPt > 0
       ? {
-          width: resolution.naturalWidthPt * (params.options.scale ?? 1),
-          height: resolution.naturalHeightPt * (params.options.scale ?? 1),
+          width: resolution.naturalWidthPt,
+          height: resolution.naturalHeightPt,
         }
       : null;
-  const size = texIncludeGraphicsTargetSize(params.options, natural);
+  const cropRect = assetNatural
+    ? texIncludeGraphicsCropRect(params.options, assetNatural)
+    : null;
+  const displayNatural = assetNatural
+    ? {
+        width: (cropRect?.width ?? assetNatural.width) * (params.options.scale ?? 1),
+        height: (cropRect?.height ?? assetNatural.height) * (params.options.scale ?? 1),
+      }
+    : null;
+  const size = texIncludeGraphicsTargetSize(params.options, displayNatural);
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
-  const svgBody = resolution.status === "resolved"
+  const svgBody = resolution.status === "resolved" && assetNatural
     ? renderTexIncludeGraphicsImageSvgBody({
         sourceSpan,
         filename: params.filename,
         width: size.width,
         height: size.height,
+        naturalWidth: assetNatural.width,
+        naturalHeight: assetNatural.height,
+        cropRect,
+        clip: params.options.clip === true,
         mimeType: resolution.mimeType,
         dataBase64: resolution.dataBase64,
       })
@@ -947,8 +957,12 @@ function texIncludeGraphicsBox(params: {
         filename: params.filename,
         width: size.width,
         height: size.height,
-        status: resolution.status,
-        reason: resolution.status === "unsupported" ? resolution.reason : undefined,
+        status: resolution.status === "resolved" ? "unsupported" : resolution.status,
+        reason: resolution.status === "resolved"
+          ? "Could not determine image dimensions."
+          : resolution.status === "unsupported"
+            ? resolution.reason
+            : undefined,
       });
   const width = roundTexPt(size.width);
   const height = roundTexPt(size.height);
@@ -980,19 +994,16 @@ function texIncludeGraphicsBox(params: {
   };
 }
 
-function nodeTextGraphicsOptions(options: {
-  readonly width?: number;
-  readonly height?: number;
-  readonly scale?: number;
-  readonly keepAspectRatio?: boolean;
-  readonly raw: string;
-}): NodeTextGraphicsOptions {
+function nodeTextGraphicsOptions(options: SimpleTexGraphicsOptions): NodeTextGraphicsOptions {
   return {
     raw: options.raw,
     ...(options.width !== undefined ? { width: `${formatTexSvgNumber(options.width)}pt` } : {}),
     ...(options.height !== undefined ? { height: `${formatTexSvgNumber(options.height)}pt` } : {}),
     ...(options.scale !== undefined ? { scale: formatTexSvgNumber(options.scale) } : {}),
     ...(options.keepAspectRatio ? { keepaspectratio: true } : {}),
+    ...(options.trim ? { trim: formatTexGraphicsTrim(options.trim) } : {}),
+    ...(options.viewport ? { viewport: formatTexGraphicsViewport(options.viewport) } : {}),
+    ...(options.clip !== undefined ? { clip: options.clip } : {}),
   };
 }
 
@@ -1046,19 +1057,94 @@ function finitePositive(value: number | undefined): number | null {
   return value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
 }
 
+type TexIncludeGraphicsCropRect = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
+function texIncludeGraphicsCropRect(
+  options: SimpleTexGraphicsOptions,
+  natural: { readonly width: number; readonly height: number }
+): TexIncludeGraphicsCropRect | null {
+  if (options.viewport) {
+    const crop = texIncludeGraphicsViewportCropRect(options.viewport, natural);
+    if (validTexIncludeGraphicsCropRect(crop)) {
+      return crop;
+    }
+    return null;
+  }
+  if (options.trim) {
+    const crop = {
+      x: options.trim.left,
+      y: options.trim.top,
+      width: natural.width - options.trim.left - options.trim.right,
+      height: natural.height - options.trim.bottom - options.trim.top,
+    };
+    if (validTexIncludeGraphicsCropRect(crop)) {
+      return crop;
+    }
+  }
+  return null;
+}
+
+function texIncludeGraphicsViewportCropRect(
+  viewport: SimpleTexGraphicsViewport,
+  natural: { readonly width: number; readonly height: number }
+): TexIncludeGraphicsCropRect {
+  return {
+    x: viewport.llx,
+    y: natural.height - viewport.ury,
+    width: viewport.urx - viewport.llx,
+    height: viewport.ury - viewport.lly,
+  };
+}
+
+function validTexIncludeGraphicsCropRect(crop: TexIncludeGraphicsCropRect): boolean {
+  return (
+    Number.isFinite(crop.x) &&
+    Number.isFinite(crop.y) &&
+    Number.isFinite(crop.width) &&
+    Number.isFinite(crop.height) &&
+    crop.width > 0 &&
+    crop.height > 0
+  );
+}
+
 function renderTexIncludeGraphicsImageSvgBody(params: {
   readonly sourceSpan: { readonly start: number; readonly end: number };
   readonly filename: string;
   readonly width: number;
   readonly height: number;
+  readonly naturalWidth: number;
+  readonly naturalHeight: number;
+  readonly cropRect: TexIncludeGraphicsCropRect | null;
+  readonly clip: boolean;
   readonly mimeType: string;
   readonly dataBase64: string;
 }): string {
   const width = params.width * TEX_SVG_UNIT_SCALE;
   const height = params.height * TEX_SVG_UNIT_SCALE;
+  const href = `data:${escapeTexSvgAttribute(params.mimeType)};base64,${escapeTexSvgAttribute(params.dataBase64)}`;
+  if (params.cropRect) {
+    const naturalWidth = params.naturalWidth * TEX_SVG_UNIT_SCALE;
+    const naturalHeight = params.naturalHeight * TEX_SVG_UNIT_SCALE;
+    const cropX = params.cropRect.x * TEX_SVG_UNIT_SCALE;
+    const cropY = params.cropRect.y * TEX_SVG_UNIT_SCALE;
+    const cropWidth = params.cropRect.width * TEX_SVG_UNIT_SCALE;
+    const cropHeight = params.cropRect.height * TEX_SVG_UNIT_SCALE;
+    return [
+      `<g data-tex-includegraphics="true" data-source-start="${params.sourceSpan.start}" data-source-end="${params.sourceSpan.end}" data-tex-includegraphics-filename="${escapeTexSvgAttribute(params.filename)}">`,
+      `<svg x="0" y="${formatTexSvgNumber(-height)}" width="${formatTexSvgNumber(width)}" height="${formatTexSvgNumber(height)}" overflow="${params.clip ? "hidden" : "visible"}" viewBox="${formatTexSvgNumber(cropX)} ${formatTexSvgNumber(cropY)} ${formatTexSvgNumber(cropWidth)} ${formatTexSvgNumber(cropHeight)}" preserveAspectRatio="none">`,
+      `<image x="0" y="0" width="${formatTexSvgNumber(naturalWidth)}" height="${formatTexSvgNumber(naturalHeight)}" preserveAspectRatio="none" href="${href}" />`,
+      `</svg>`,
+      `</g>`,
+    ].join("");
+  }
   return [
     `<g data-tex-includegraphics="true" data-source-start="${params.sourceSpan.start}" data-source-end="${params.sourceSpan.end}" data-tex-includegraphics-filename="${escapeTexSvgAttribute(params.filename)}">`,
-    `<image x="0" y="${formatTexSvgNumber(-height)}" width="${formatTexSvgNumber(width)}" height="${formatTexSvgNumber(height)}" preserveAspectRatio="none" href="data:${escapeTexSvgAttribute(params.mimeType)};base64,${escapeTexSvgAttribute(params.dataBase64)}" />`,
+    `<image x="0" y="${formatTexSvgNumber(-height)}" width="${formatTexSvgNumber(width)}" height="${formatTexSvgNumber(height)}" preserveAspectRatio="none" href="${href}" />`,
     `</g>`,
   ].join("");
 }
@@ -1098,6 +1184,24 @@ function formatTexSvgNumber(value: number): string {
     return "0";
   }
   return Number(value.toFixed(6)).toString();
+}
+
+function formatTexGraphicsTrim(trim: SimpleTexGraphicsTrim): string {
+  return [
+    `${formatTexSvgNumber(trim.left)}pt`,
+    `${formatTexSvgNumber(trim.bottom)}pt`,
+    `${formatTexSvgNumber(trim.right)}pt`,
+    `${formatTexSvgNumber(trim.top)}pt`,
+  ].join(" ");
+}
+
+function formatTexGraphicsViewport(viewport: SimpleTexGraphicsViewport): string {
+  return [
+    `${formatTexSvgNumber(viewport.llx)}pt`,
+    `${formatTexSvgNumber(viewport.lly)}pt`,
+    `${formatTexSvgNumber(viewport.urx)}pt`,
+    `${formatTexSvgNumber(viewport.ury)}pt`,
+  ].join(" ");
 }
 
 function texRaiseBoxFromInlineNodes(params: {

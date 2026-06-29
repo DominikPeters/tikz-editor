@@ -11,6 +11,7 @@ export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
 export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap" | "fbox" | "framebox";
 export type SimpleTexTextBoxAlignment = "natural" | "left" | "center" | "right" | "stretch";
 export type SimpleTexDimensionBoxCommandName = "phantom" | "hphantom" | "vphantom" | "smash";
+const TEX_GRAPHICS_BARE_NUMBER_UNIT_PT = 72.27 / 72;
 export type SimpleTexFontCommandName =
   | "textit"
   | "textbf"
@@ -201,7 +202,24 @@ export interface SimpleTexGraphicsOptions {
   readonly height?: number;
   readonly scale?: number;
   readonly keepAspectRatio?: boolean;
+  readonly trim?: SimpleTexGraphicsTrim;
+  readonly viewport?: SimpleTexGraphicsViewport;
+  readonly clip?: boolean;
   readonly raw: string;
+}
+
+export interface SimpleTexGraphicsTrim {
+  readonly left: number;
+  readonly bottom: number;
+  readonly right: number;
+  readonly top: number;
+}
+
+export interface SimpleTexGraphicsViewport {
+  readonly llx: number;
+  readonly lly: number;
+  readonly urx: number;
+  readonly ury: number;
 }
 
 export interface SimpleTexRaiseBoxNode extends SimpleTexSourceRange {
@@ -2097,6 +2115,9 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
   let height: number | undefined;
   let scale: number | undefined;
   let keepAspectRatio = false;
+  let trim: SimpleTexGraphicsTrim | undefined;
+  let viewport: SimpleTexGraphicsViewport | undefined;
+  let clip: boolean | undefined;
   for (const part of splitSimpleTexGraphicsOptions(raw)) {
     const trimmed = part.trim();
     if (!trimmed) {
@@ -2128,6 +2149,34 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
     }
     if (key === "keepaspectratio") {
       keepAspectRatio = equals < 0 || simpleTexBooleanOptionValue(value);
+      continue;
+    }
+    if (key === "trim") {
+      const parsed = parseSimpleTexGraphicsQuad(value);
+      if (parsed) {
+        trim = {
+          left: parsed[0],
+          bottom: parsed[1],
+          right: parsed[2],
+          top: parsed[3],
+        };
+      }
+      continue;
+    }
+    if (key === "viewport") {
+      const parsed = parseSimpleTexGraphicsQuad(value);
+      if (parsed) {
+        viewport = {
+          llx: parsed[0],
+          lly: parsed[1],
+          urx: parsed[2],
+          ury: parsed[3],
+        };
+      }
+      continue;
+    }
+    if (key === "clip") {
+      clip = equals < 0 || simpleTexBooleanOptionValue(value);
     }
   }
   return {
@@ -2135,6 +2184,9 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
     ...(height !== undefined ? { height } : {}),
     ...(scale !== undefined ? { scale } : {}),
     ...(keepAspectRatio ? { keepAspectRatio } : {}),
+    ...(trim ? { trim } : {}),
+    ...(viewport ? { viewport } : {}),
+    ...(clip !== undefined ? { clip } : {}),
     raw,
   };
 }
@@ -2165,6 +2217,70 @@ function splitSimpleTexGraphicsOptions(raw: string): string[] {
 function simpleTexBooleanOptionValue(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return normalized !== "false" && normalized !== "0" && normalized !== "no";
+}
+
+function parseSimpleTexGraphicsQuad(raw: string): [number, number, number, number] | null {
+  const parts = splitSimpleTexGraphicsDimensionList(stripSingleSimpleTexBraceLayer(raw));
+  if (parts.length !== 4) {
+    return null;
+  }
+  const parsed = parts.map((part) =>
+    parseSimpleTexGraphicsDimension(stripSingleSimpleTexBraceLayer(part))
+  );
+  if (parsed.includes(null)) {
+    return null;
+  }
+  return parsed as [number, number, number, number];
+}
+
+function parseSimpleTexGraphicsDimension(raw: string): number | null {
+  const trimmed = raw.trim();
+  const explicit = parseTexDimensionText(trimmed);
+  if (explicit !== null) {
+    return explicit;
+  }
+  const bare = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))$/.exec(trimmed);
+  if (!bare) {
+    return null;
+  }
+  const value = Number(bare[1]);
+  return Number.isFinite(value) ? value * TEX_GRAPHICS_BARE_NUMBER_UNIT_PT : null;
+}
+
+function splitSimpleTexGraphicsDimensionList(raw: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let braceDepth = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char === "{") {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+      continue;
+    }
+    if (/\s/.test(char) && braceDepth === 0) {
+      if (index > start) {
+        parts.push(raw.slice(start, index));
+      }
+      start = index + 1;
+    }
+  }
+  if (raw.length > start) {
+    parts.push(raw.slice(start));
+  }
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+function stripSingleSimpleTexBraceLayer(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return trimmed;
+  }
+  const end = findBalancedSimpleTexGroupEnd(trimmed, 0);
+  return end === trimmed.length ? trimmed.slice(1, -1).trim() : trimmed;
 }
 
 function scanSimpleTexRaiseBoxCommand(

@@ -2681,8 +2681,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("positions placeholder vlist items between supported paragraphs", () => {
-    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
-    const placeholderStart = source.indexOf(String.raw`\includegraphics`);
+    const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
+    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
     const placeholderEnd = source.indexOf(String.raw` \par Beta`);
     const parsed = parseSimpleTexParagraphIr(source);
     const supported = layoutSimpleTexParagraph(source, {
@@ -2740,7 +2740,7 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("keeps whole-node fallback by default but supports opt-in placeholder fallback", () => {
-    const source = String.raw`Alpha \par \includegraphics[width=1cm]{plot.pdf} \par Beta`;
+    const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const defaultResult = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:vlist-placeholder-default-fallback",
       width: 150,
@@ -2776,7 +2776,7 @@ describe("simple TeX paragraph layout", () => {
         y: 9.1,
         text: undefined,
         sourceSpan: {
-          start: source.indexOf(String.raw`\includegraphics`),
+          start: source.indexOf(String.raw`\unsupportedgraphics`),
           end: source.indexOf(String.raw` \par Beta`),
         },
       },

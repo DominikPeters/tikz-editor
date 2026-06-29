@@ -115,6 +115,50 @@ describe("image asset cache", () => {
     });
   });
 
+  it("reuses native image assets across trim and clip variants", async () => {
+    const documentFileRef = desktopFileRef();
+    const svgBase64 = Buffer.from('<svg width="120pt" height="80pt" viewBox="0 0 120 80"></svg>').toString("base64");
+    const reads: string[] = [];
+    setTestPlatform({
+      files: {
+        readLocalAsset: async (path) => {
+          reads.push(path);
+          return {
+            status: "ok",
+            path,
+            bytesBase64: svgBase64,
+            size: svgBase64.length,
+            revision: "svg-r2",
+          };
+        },
+      },
+    });
+    invalidateImageAssetPath("/tmp/tikz/fig.svg");
+
+    const resolver = await prepareImageAssetResolver({
+      source: String.raw`\node {\includegraphics[trim=10 5 20 15]{fig.svg}\includegraphics[trim=10 5 20 15,clip]{fig.svg}};`,
+      documentFileRef,
+    });
+    const visible = resolver.resolve({
+      filename: "fig.svg",
+      options: { raw: "trim=10 5 20 15" },
+      source: String.raw`\includegraphics[trim=10 5 20 15]{fig.svg}`,
+      sourceStart: 0,
+      sourceEnd: 45,
+    });
+    const clipped = resolver.resolve({
+      filename: "fig.svg",
+      options: { raw: "trim=10 5 20 15,clip" },
+      source: String.raw`\includegraphics[trim=10 5 20 15,clip]{fig.svg}`,
+      sourceStart: 0,
+      sourceEnd: 50,
+    });
+
+    expect(reads).toEqual(["/tmp/tikz/fig.svg"]);
+    expect(visible.status).toBe("resolved");
+    expect(clipped.status).toBe("resolved");
+  });
+
   it("resolves explicit PDF assets as rasterized PNG images", async () => {
     const documentFileRef = desktopFileRef();
     const pdfBytes = Buffer.from("%PDF-1.7\npage 1");
@@ -220,6 +264,44 @@ describe("image asset cache", () => {
       expect(page2.dataBase64).toBe("png-page-2");
       expect(page1.revision).not.toBe(page2.revision);
     }
+  });
+
+  it("reuses a PDF page asset across trim and clip variants", async () => {
+    const documentFileRef = desktopFileRef();
+    const pdfBase64 = Buffer.from("%PDF-1.7\npages").toString("base64");
+    const reads: string[] = [];
+    const rasterizedPages: number[] = [];
+    restorePdfRasterizer = setPdfAssetRasterizerForTests(async (request) => {
+      rasterizedPages.push(request.pageNumber);
+      return rasterizedPdfPage(request.pageNumber);
+    });
+    setTestPlatform({
+      files: {
+        readLocalAsset: async (path) => {
+          reads.push(path);
+          return {
+            status: "ok",
+            path,
+            bytesBase64: pdfBase64,
+            size: pdfBase64.length,
+            revision: "pdf-r2-trim",
+          };
+        },
+      },
+    });
+    invalidateImageAssetPath("/tmp/tikz/fig.pdf");
+
+    const resolver = await prepareImageAssetResolver({
+      source: String.raw`\node {\includegraphics[page=2,trim=10 5 20 15]{fig.pdf}\includegraphics[page=2,trim=10 5 20 15,clip]{fig.pdf}};`,
+      documentFileRef,
+    });
+    const visible = resolver.resolve(pdfResolveRequest("page=2,trim=10 5 20 15"));
+    const clipped = resolver.resolve(pdfResolveRequest("page=2,trim=10 5 20 15,clip"));
+
+    expect(reads).toEqual(["/tmp/tikz/fig.pdf"]);
+    expect(rasterizedPages).toEqual([2]);
+    expect(visible.status).toBe("resolved");
+    expect(clipped.status).toBe("resolved");
   });
 
   it("returns unsupported placeholders for invalid or failed PDF pages", async () => {

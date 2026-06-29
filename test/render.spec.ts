@@ -185,6 +185,32 @@ describe("render pipeline", () => {
     expect(result.svg.svg).not.toContain("/tmp/tikz/figure.pdf");
   });
 
+  it("renders cropped includegraphics assets as embedded SVG image viewports", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node at (0,0) {\includegraphics[trim=10pt 5pt 20pt 15pt,clip]{figure.png}};
+\end{tikzpicture}`;
+    const graphicsResolver: NodeTextGraphicsResolver = {
+      cacheKey: "cropped-png",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "Y3JvcHBlZA==",
+        naturalWidthPt: 120,
+        naturalHeightPt: 80,
+        revision: "figure.png:r1",
+        resolvedPath: "/tmp/tikz/figure.png",
+      }),
+    };
+    const result = await renderTikzToSvgAsync(source, {
+      evaluate: { graphicsResolver },
+    });
+
+    expect(result.svg.svg).toContain('data-tex-includegraphics="true"');
+    expect(result.svg.svg).toContain('overflow="hidden" viewBox="1000 1500 9000 6000"');
+    expect(result.svg.svg).toContain('href="data:image/png;base64,Y3JvcHBlZA=="');
+    expect(result.svg.svg).not.toContain("/tmp/tikz/figure.png");
+  });
+
   it("supports fit around coordinates and marks fit capability usage", () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw,fit=(0,0) (1,1)] {};

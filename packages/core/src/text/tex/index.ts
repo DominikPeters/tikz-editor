@@ -44,6 +44,8 @@ export {
   type SimpleTexFontState,
   type SimpleTexGroupNode,
   type SimpleTexGraphicsOptions,
+  type SimpleTexGraphicsTrim,
+  type SimpleTexGraphicsViewport,
   type SimpleTexIncludeGraphicsNode,
   type SimpleTexInlineNode,
   type SimpleTexLineBreakNode,
