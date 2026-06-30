@@ -13,6 +13,7 @@ import {
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId,
+  pgfMathStatementId,
   pgfkeysStatementId,
   nodeForeachClauseId,
   nodeItemId,
@@ -1216,6 +1217,14 @@ function reindexStatementsInPlace(
     if (statement.kind === "MacroCommandDefinition") {
       if (!preserveExistingId) {
         statement.id = macroCommandDefinitionStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+      }
+      continue;
+    }
+
+    if (statement.kind === "PgfMath") {
+      if (!preserveExistingId) {
+        statement.id = pgfMathStatementId(statementIndex);
         templateLocalIdByExpandedId.set(statement.id, previousId);
       }
       continue;

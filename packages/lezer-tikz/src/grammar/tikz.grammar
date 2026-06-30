@@ -6,7 +6,8 @@
   childContinuation,
   childBare,
   picGrouped,
-  picOptionOnly
+  picOptionOnly,
+  pgfMathSemicolon
 }
 
 TikzEnvironment {
@@ -35,6 +36,7 @@ Statement {
   MacroDefinitionStatement |
   MacroAliasStatement |
   MacroCommandDefinitionStatement |
+  PgfMathStatement |
   UnknownStatement
 }
 
@@ -329,6 +331,12 @@ FontSizeStatement {
   FontSizeCmd
 }
 
+PgfMathStatement {
+  PgfMathSetMacroCmd Group Group (!pgfMathSemicolon ";")? |
+  PgfMathParseCmd Group (!pgfMathSemicolon ";")? |
+  PgfMathSetSeedCmd Group (!pgfMathSemicolon ";")?
+}
+
 TikzSetStatement {
   TikzSetCmd StylePayload
 }
@@ -561,6 +569,7 @@ StylePayload {
 GroupPart {
   Comment |
   ScopeStatement |
+  PgfMathStatement |
   Group |
   Coordinate |
   OptionList |
@@ -631,6 +640,7 @@ StylePayloadPart {
 
 GroupPathOperator {
   "--" |
+  "++" |
   "-|" |
   "|-" |
   ".."
@@ -826,6 +836,9 @@ ForeachKw { @specialize<Identifier, "foreach"> }
     ProvideCommandCmd,
     DeclareRobustCommandCmd,
     DeclareMathOperatorCmd,
+    PgfMathSetMacroCmd,
+    PgfMathParseCmd,
+    PgfMathSetSeedCmd,
     InlineTikzCmd,
     EndTikz,
     FillDrawCmd,
@@ -904,6 +917,9 @@ ForeachKw { @specialize<Identifier, "foreach"> }
   ProvideCommandCmd { "\\providecommand" }
   DeclareRobustCommandCmd { "\\DeclareRobustCommand" }
   DeclareMathOperatorCmd { "\\DeclareMathOperator" }
+  PgfMathSetMacroCmd { "\\pgfmathsetmacro" }
+  PgfMathParseCmd { "\\pgfmathparse" }
+  PgfMathSetSeedCmd { "\\pgfmathsetseed" }
   PgfkeysCmd { "\\pgfkeys" }
   UseTikzLibraryCmd { "\\usetikzlibrary" }
   MatrixRowSepCmd { "\\\\" }

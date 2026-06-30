@@ -7,6 +7,7 @@ import {
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId,
+  pgfMathStatementId,
   pgfkeysStatementId,
   scopeStatementId,
   tikzLibraryStatementId,
@@ -20,6 +21,7 @@ import type {
   MacroAliasStatement,
   MacroCommandDefinitionStatement,
   MacroDefinitionStatement,
+  PgfMathStatement,
   PgfkeysStatement,
   ScopeStatement,
   Span,
@@ -94,6 +96,10 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
 
   if (node.type.name === "MacroCommandDefinitionStatement") {
     return mapMacroCommandDefinitionStatement(node, source, state);
+  }
+
+  if (node.type.name === "PgfMathStatement") {
+    return mapPgfMathStatement(node, source, state);
   }
 
   if (node.type.name === "TikzSetStatement" || node.type.name === "TikzStyleStatement" || node.type.name === "PgfkeysStatement") {
@@ -311,6 +317,29 @@ function resolveMacroCommandRaw(nodes: {
 
 function toDeclareMathOperatorBody(operatorNameRaw: string, starred: boolean): string {
   return `${starred ? "\\operatorname*" : "\\operatorname"}{${operatorNameRaw}}`;
+}
+
+function mapPgfMathStatement(node: SyntaxNode, source: string, state: StatementMappingState): PgfMathStatement {
+  const statementIndex = allocateStatementIndex(state);
+  const setMacroNode = findFirstChildByName(node, "PgfMathSetMacroCmd");
+  const parseNode = findFirstChildByName(node, "PgfMathParseCmd");
+  const commandNode = setMacroNode
+    ?? parseNode
+    ?? findFirstChildByName(node, "PgfMathSetSeedCmd");
+  const groups = findChildrenByName(node, "Group");
+  const commandRaw = commandNode
+    ? source.slice(commandNode.from, commandNode.to) as PgfMathStatement["commandRaw"]
+    : "\\pgfmathparse";
+
+  return {
+    kind: "PgfMath",
+    id: pgfMathStatementId(statementIndex),
+    span: { from: node.from, to: node.to },
+    raw: source.slice(node.from, node.to),
+    commandRaw,
+    argsRaw: groups.map((group) => extractGroupInnerRaw(group, source)),
+    argsSpan: groups.map((group) => toGroupInnerSpan(group, source))
+  };
 }
 
 function mapStyleDefinitionStatement(node: SyntaxNode, source: string, state: StatementMappingState): Statement | null {

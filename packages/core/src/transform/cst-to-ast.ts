@@ -432,6 +432,7 @@ function isRelevantDefinitionNode(node: SyntaxNode): boolean {
     typeName === "MacroDefinitionStatement" ||
     typeName === "MacroAliasStatement" ||
     typeName === "MacroCommandDefinitionStatement" ||
+    typeName === "PgfMathStatement" ||
     typeName === "StyleDefinitionStatement" ||
     typeName === "TikzSetStatement" ||
     typeName === "TikzStyleStatement" ||

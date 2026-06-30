@@ -76,6 +76,7 @@ export type Statement =
   | MacroDefinitionStatement
   | MacroAliasStatement
   | MacroCommandDefinitionStatement
+  | PgfMathStatement
   | TikzSetStatement
   | TikzStyleStatement
   | PgfkeysStatement
@@ -155,6 +156,16 @@ export type MacroCommandDefinitionStatement = {
   bodyRaw: string;
   bodySpan?: Span;
   starred: boolean;
+};
+
+export type PgfMathStatement = {
+  kind: "PgfMath";
+  id: string;
+  span: Span;
+  raw: string;
+  commandRaw: "\\pgfmathsetmacro" | "\\pgfmathparse" | "\\pgfmathsetseed";
+  argsRaw: string[];
+  argsSpan: Span[];
 };
 
 export type TikzSetStatement = {

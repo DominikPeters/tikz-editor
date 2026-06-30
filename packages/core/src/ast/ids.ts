@@ -22,6 +22,10 @@ export function macroCommandDefinitionStatementId(statementIndex: number): strin
   return `macro-command-definition:${statementIndex}`;
 }
 
+export function pgfMathStatementId(statementIndex: number): string {
+  return `pgfmath:${statementIndex}`;
+}
+
 export function tikzSetStatementId(statementIndex: number): string {
   return `tikz-set:${statementIndex}`;
 }

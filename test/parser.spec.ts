@@ -1331,6 +1331,33 @@ describe("parseTikz", () => {
     expect(coordinates.some((item) => item.kind === "Coordinate" && item.relativePrefix === "+")).toBe(true);
   });
 
+  it("parses semicolonless pgfmath statements without swallowing following paths", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pgfmathsetmacro{\xx}{1}
+  \pgfmathparse{2+3}
+  \pgfmathsetseed{7}
+  \draw (\xx,\pgfmathresult) rectangle +(1,1);
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(result.figure.body.map((statement) => statement.kind)).toEqual([
+      "PgfMath",
+      "PgfMath",
+      "PgfMath",
+      "Path"
+    ]);
+  });
+
+  it("accepts incremental rectangle coordinates inside grouped foreach bodies", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \foreach \i in {0}{\draw (0,0) rectangle ++(1,1);}
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+  });
+
   it("merges consecutive leading path option lists into statement options", () => {
     const source = String.raw`\begin{tikzpicture}
   \fill [decorate,decoration={zigzag}] [fill=blue!20,draw=blue,thick] (0,0) -- (1,0) -- cycle;
