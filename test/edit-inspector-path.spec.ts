@@ -285,6 +285,9 @@ describe("getInspectorDescriptor – path controls", () => {
     expect(step.step).toBeCloseTo(0.1, 6);
     expect(xstep.step).toBeCloseTo(0.1, 6);
     expect(ystep.step).toBeCloseTo(0.1, 6);
+    expect(step.minExclusive).toBe(0);
+    expect(xstep.minExclusive).toBe(0);
+    expect(ystep.minExclusive).toBe(0);
     expect(step.clearKeys).toContain("xstep");
     expect(step.clearKeys).toContain("ystep");
 

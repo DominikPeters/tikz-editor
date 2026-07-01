@@ -46,6 +46,7 @@ export type MultiInspectorNumberProperty = {
   mixed: boolean;
   step: number;
   min?: number;
+  minExclusive?: number;
   max?: number;
   unit?: string;
   defaultValue?: number;
@@ -790,6 +791,9 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       step: base.step,
       min: numberProperties.every((property) => property.min != null)
         ? Math.max(...numberProperties.map((property) => property.min as number))
+        : undefined,
+      minExclusive: numberProperties.every((property) => property.minExclusive != null)
+        ? Math.max(...numberProperties.map((property) => property.minExclusive as number))
         : undefined,
       max: numberProperties.every((property) => property.max != null)
         ? Math.min(...numberProperties.map((property) => property.max as number))

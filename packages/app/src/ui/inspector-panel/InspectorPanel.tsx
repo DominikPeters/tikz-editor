@@ -121,7 +121,7 @@ export function InspectorPanel() {
     () => new Set()
   );
   const [scalarDrafts, setScalarDrafts] = useState<Record<string, string>>({});
-  const [scalarProvenanceLocks, setScalarProvenanceLocks] = useState<Record<string, InspectorPropertyProvenance>>({});
+  const [scalarProvenanceLocks, setScalarProvenanceLocks] = useState<Record<string, InspectorPropertyProvenance | null>>({});
   const [optionalLengthDrafts, setOptionalLengthDrafts] = useState<Record<string, string>>({});
   const [strokeMoreOptionsOpen, setStrokeMoreOptionsOpen] = useState(false);
   const [fillMoreOptionsOpen, setFillMoreOptionsOpen] = useState(false);
@@ -191,14 +191,7 @@ export function InspectorPanel() {
     const write = property.write;
     if (write?.mode !== "setProperty" || !write.writable || write.elementId.length === 0) return;
     const parsed = Number(raw);
-    const next =
-      Number.isFinite(parsed) && property.min != null && property.max != null
-        ? clampNumber(parsed, property.min, property.max)
-        : Number.isFinite(parsed) && property.min != null
-          ? Math.max(parsed, property.min)
-          : Number.isFinite(parsed) && property.max != null
-            ? Math.min(parsed, property.max)
-            : parsed;
+    const next = normalizeNumberPropertyDraft(property, parsed);
     if (!Number.isFinite(next)) return;
     if (write.shadowContext) {
       applyShadowParamValue(write, property.id, next, options);
@@ -272,14 +265,7 @@ export function InspectorPanel() {
     options: NumberChangeOptions = {}
   ): void {
     const parsed = Number(raw);
-    const next =
-      Number.isFinite(parsed) && property.min != null && property.max != null
-        ? clampNumber(parsed, property.min, property.max)
-        : Number.isFinite(parsed) && property.min != null
-          ? Math.max(parsed, property.min)
-          : Number.isFinite(parsed) && property.max != null
-            ? Math.min(parsed, property.max)
-            : parsed;
+    const next = normalizeNumberPropertyDraft(property, parsed);
     if (!Number.isFinite(next)) return;
 
     const writableWrites = property.writes.filter((write) => write.writable && write.elementId.length > 0);
@@ -341,21 +327,46 @@ export function InspectorPanel() {
     return formatted;
   }
 
+  function normalizeNumberPropertyDraft(
+    property: Pick<Extract<InspectorProperty, { kind: "number" }> | Extract<MultiInspectorProperty, { kind: "number" }>, "min" | "minExclusive" | "max">,
+    value: number
+  ): number {
+    if (!Number.isFinite(value)) {
+      return Number.NaN;
+    }
+    if (property.minExclusive != null && value <= property.minExclusive) {
+      return Number.NaN;
+    }
+    if (property.min != null && property.max != null) {
+      return clampNumber(value, property.min, property.max);
+    }
+    if (property.min != null) {
+      return Math.max(value, property.min);
+    }
+    if (property.max != null) {
+      return Math.min(value, property.max);
+    }
+    return value;
+  }
+
   function singleScalarDraftKey(
     property: Extract<InspectorProperty, { kind: "number" }> | Extract<InspectorProperty, { kind: "length" }>
   ): string {
+    const selectedKey = selectedSourceIds.length === 1 ? selectedSourceIds[0] ?? "" : "";
     const elementId = property.kind === "number" ? (property.write?.elementId ?? "") : property.write.elementId;
-    return `single:${property.kind}:${property.id}:${elementId}`;
+    return `single:${property.kind}:${property.id}:${selectedKey || elementId}`;
   }
 
   function multiScalarDraftKey(
     property: Extract<MultiInspectorProperty, { kind: "number" }> | Extract<MultiInspectorProperty, { kind: "length" }>
   ): string {
-    const elementIds = property.writes
-      .map((write) => write.elementId)
+    const sourceIds = selectedSourceIds.length > 0
+      ? selectedSourceIds
+      : property.writes.map((write) => write.elementId);
+    const stableIds = sourceIds
       .filter((id) => id.length > 0)
       .sort();
-    return `multi:${property.kind}:${property.id}:${elementIds.join("|")}`;
+    return `multi:${property.kind}:${property.id}:${stableIds.join("|")}`;
   }
 
   function setScalarDraft(key: string, value: string): void {
@@ -382,7 +393,9 @@ export function InspectorPanel() {
     key: string,
     provenance: InspectorPropertyProvenance | null
   ): InspectorPropertyProvenance | null {
-    return scalarProvenanceLocks[key] ?? provenance;
+    return Object.hasOwn(scalarProvenanceLocks, key)
+      ? scalarProvenanceLocks[key] ?? null
+      : provenance;
   }
 
   function setScalarProvenanceLock(
@@ -390,15 +403,7 @@ export function InspectorPanel() {
     provenance: InspectorPropertyProvenance | null
   ): void {
     setScalarProvenanceLocks((current) => {
-      if (!provenance) {
-        if (!(key in current)) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[key];
-        return next;
-      }
-      if (current[key] === provenance) {
+      if (Object.hasOwn(current, key) && current[key] === provenance) {
         return current;
       }
       return { ...current, [key]: provenance };

@@ -1301,6 +1301,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.step,
             step: 0.1,
             unit: "cm",
+            minExclusive: 0,
             defaultValue: 1,
             clearKeys: uniqueStrings(GRID_STEP_CLEAR_KEYS),
             write: gridWriteTarget
@@ -1312,6 +1313,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.xstep,
             step: 0.1,
             unit: "cm",
+            minExclusive: 0,
             defaultValue: 1,
             clearKeys: uniqueStrings(GRID_XSTEP_CLEAR_KEYS),
             write: makeSetPropertyWriteTargetForElementId(inlineTarget, gridInspectorState.keywordId, "xstep")
@@ -1323,6 +1325,7 @@ export function getInspectorDescriptor(
             value: gridInspectorState.ystep,
             step: 0.1,
             unit: "cm",
+            minExclusive: 0,
             defaultValue: 1,
             clearKeys: uniqueStrings(GRID_YSTEP_CLEAR_KEYS),
             write: makeSetPropertyWriteTargetForElementId(inlineTarget, gridInspectorState.keywordId, "ystep")
