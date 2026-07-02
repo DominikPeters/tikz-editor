@@ -488,6 +488,120 @@
   }
 }
 
+:global(html[data-editor-platform="ipad"]) .numberInput,
+:global(html[data-editor-platform="ipad"]) .textInput {
+  border-color: transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+}
+
+:global(html[data-editor-platform="ipad"]) .numberInput:focus,
+:global(html[data-editor-platform="ipad"]) .textInput:focus {
+  outline: none;
+  border-color: var(--accent-btn-border);
+  background: var(--bg-pane);
+}
+
+:global(html[data-editor-platform="ipad"]) .numberInput:disabled {
+  background: color-mix(in srgb, var(--bg-app) 30%, transparent);
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxControl {
+  width: 100%;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  min-height: 34px;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxInput {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 44px;
+  min-width: 44px;
+  height: 26px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-faint) 36%, transparent);
+  transition: background-color 200ms ease;
+  flex-shrink: 0;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxInput::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.15);
+  transition: translate 200ms cubic-bezier(0.3, 1.1, 0.4, 1);
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxInput:checked {
+  background: var(--accent-dark);
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxInput:checked::before {
+  translate: 18px 0;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxInput:disabled {
+  opacity: 0.45;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxLabel {
+  color: var(--text);
+}
+
+:global(html[data-editor-platform="ipad"]) .nodeFontButtonGroup,
+:global(html[data-editor-platform="ipad"]) .multiArrangeGroup {
+  gap: 2px;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+}
+
+:global(html[data-editor-platform="ipad"]) .nodeFontIconButton,
+:global(html[data-editor-platform="ipad"]) .multiArrangeIconButton {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+:global(html[data-editor-platform="ipad"]) .nodeFontIconButton:hover:not(:disabled),
+:global(html[data-editor-platform="ipad"]) .nodeFontIconButton:active:not(:disabled),
+:global(html[data-editor-platform="ipad"]) .multiArrangeIconButton:hover:not(:disabled),
+:global(html[data-editor-platform="ipad"]) .multiArrangeIconButton:active:not(:disabled) {
+  background: var(--bg-pane);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+:global(html[data-editor-platform="ipad"]) .multiArrangeIconButton:disabled {
+  background: transparent;
+}
+
+:global(html[data-editor-platform="ipad"]) .sliderInput,
+:global(html[data-editor-platform="ipad"]) .rangeInput {
+  accent-color: var(--accent-dark);
+}
+
+:global(html[data-editor-platform="ipad"]) .toolHint {
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+:global(html[data-editor-platform="ipad"]) .subProperty {
+  border-left: 2px solid color-mix(in srgb, var(--border-light) 60%, transparent);
+  border-radius: 1px;
+}
+
 .lineWidthValueLabel {
   min-width: 0;
   overflow: hidden;

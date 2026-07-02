@@ -94,3 +94,46 @@
 :global(html[data-desktop-os="macos"]) .footer {
   background: transparent;
 }
+
+:global(html[data-editor-platform="ipad"]) .panel,
+:global(html[data-editor-platform="ipad"]) .header,
+:global(html[data-editor-platform="ipad"]) .sectionHeader,
+:global(html[data-editor-platform="ipad"]) .footer {
+  background: transparent;
+}
+
+:global(html[data-editor-platform="ipad"]) .header {
+  border-bottom: 0;
+  padding: 8px 14px 0;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+:global(html[data-editor-platform="ipad"]) .content {
+  padding: 10px;
+}
+
+:global(html[data-editor-platform="ipad"]) .section {
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-app) 42%, transparent);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+:global(html[data-editor-platform="ipad"]) .sectionHeader {
+  border-bottom: 0;
+  padding: 9px 12px 0;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+:global(html[data-editor-platform="ipad"]) .sectionBody {
+  padding: 8px 12px 12px;
+  gap: 10px;
+}
+
+:global(html[data-editor-platform="ipad"]) .footer {
+  border-top-color: color-mix(in srgb, var(--border) 70%, transparent);
+}

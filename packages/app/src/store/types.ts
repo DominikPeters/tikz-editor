@@ -104,7 +104,7 @@ export type DocumentFileRef = {
   name: string;
   handleId?: string;
   path?: string;
-  provider?: "browser-fsa" | "download" | "desktop-fs";
+  provider?: "browser-fsa" | "download" | "desktop-fs" | "ios-files";
 };
 
 export type FileRevision = {

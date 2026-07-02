@@ -48,7 +48,11 @@ export function revisionsMatch(left: FileRevision | null | undefined, right: Fil
 }
 
 export function isLinkedFileRef(fileRef: DocumentFileRef | null | undefined): fileRef is DocumentFileRef {
-  return fileRef?.provider === "desktop-fs" || (fileRef?.kind === "browser-file" && fileRef.provider === "browser-fsa");
+  return (
+    fileRef?.provider === "desktop-fs" ||
+    fileRef?.provider === "ios-files" ||
+    (fileRef?.kind === "browser-file" && fileRef.provider === "browser-fsa")
+  );
 }
 
 export function decideLinkedFileRefresh(doc: DocumentSession, readResult: LinkedTextReadResult): LinkedFileRefreshDecision {

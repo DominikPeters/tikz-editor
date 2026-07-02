@@ -1328,6 +1328,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     sourceBoundsSvg,
     matrixSelectionSourceIds,
     resizeFramesBySource,
+    selectionBoundsBySource,
     selectionBoxes,
     selectedAdornmentConnectors,
     adornmentHighlightBoxes,
@@ -1385,6 +1386,52 @@ export const CanvasPanel = memo(function CanvasPanel({
     setGuidePreview,
     LEFT_RULER_DRAG_SOURCE_WIDTH_PX
   });
+
+  // On iPad the inspector floats over the canvas's right edge; when it opens,
+  // pan just enough that the current selection is not hidden underneath it.
+  const inspectorOverlayOpen = useEditorStore(
+    (s) => s.showInspectorPanel || s.showObjectsPanel || s.showStylesPanel
+  );
+  const wasInspectorOverlayOpenRef = useRef(inspectorOverlayOpen);
+  useEffect(() => {
+    const wasOpen = wasInspectorOverlayOpenRef.current;
+    wasInspectorOverlayOpenRef.current = inspectorOverlayOpen;
+    if (!inspectorOverlayOpen || wasOpen) {
+      return;
+    }
+    if (document.documentElement.dataset.editorPlatform !== "ipad") {
+      return;
+    }
+    const viewport = viewportRef.current;
+    const viewBox = svgResultRef.current?.viewBox;
+    if (!viewport || !viewBox || selectionBoundsBySource.size === 0) {
+      return;
+    }
+    const merged = mergeBoundsList([...selectionBoundsBySource.values()]);
+    if (!merged) {
+      return;
+    }
+    const panel = document.querySelector('[data-testid="ipad-floating-panel"]');
+    const viewportRect = viewport.getBoundingClientRect();
+    const panelLeft = panel
+      ? panel.getBoundingClientRect().left - viewportRect.left
+      : viewportRect.width - 352;
+    const { translateX, translateY, scale } = canvasTransformRef.current;
+    const selectionLeft = translateX + (merged.minX - viewBox.x) * scale;
+    const selectionRight = translateX + (merged.maxX - viewBox.x) * scale;
+    const pad = 20;
+    if (selectionRight <= panelLeft - pad) {
+      return;
+    }
+    const dx = Math.min(
+      selectionRight - (panelLeft - pad),
+      Math.max(0, selectionLeft - pad)
+    );
+    if (dx <= 0) {
+      return;
+    }
+    dispatchCanvasTransform({ translateX: translateX - dx, translateY, scale });
+  }, [dispatchCanvasTransform, inspectorOverlayOpen, selectionBoundsBySource]);
 
   const { toolPreview } = useCanvasDerivedState({
     svgResult,
