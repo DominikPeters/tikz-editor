@@ -2,19 +2,15 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode
+  useState
 } from "react";
 import {
-  RiCloseLine,
-  RiLayoutRightLine,
-  RiPaletteLine,
-  RiStackLine,
-  RiSubtractLine,
   RiAddLine,
-  RiAspectRatioLine
+  RiAspectRatioLine,
+  RiCloseLine,
+  RiPushpinFill,
+  RiPushpinLine,
+  RiSubtractLine
 } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
 import type { SvgRenderModel } from "tikz-editor/svg";
@@ -37,16 +33,6 @@ import { resolveToolbarToolMode } from "./tool-config";
 import css from "./IpadEditorShell.module.css";
 
 type RightSidebarTab = "inspector" | "objects" | "styles";
-type PanelResizeSide = "source" | "right";
-type PanelResizeState = {
-  pointerId: number;
-  startClientX: number;
-  surfaceWidth: number;
-  startSourceWidth: number;
-  startRightWidth: number;
-};
-
-type IconComponent = typeof RiCloseLine;
 
 type IpadEditorShellProps = {
   commandRuntime: EditorCommandRuntime;
@@ -70,15 +56,8 @@ const RIGHT_PANEL_LABELS: Record<RightSidebarTab, string> = {
   objects: "Objects",
   styles: "Styles"
 };
-const SOURCE_PANEL_WIDTH_STORAGE_KEY = "tikz-editor-ipad-source-panel-width";
-const RIGHT_PANEL_WIDTH_STORAGE_KEY = "tikz-editor-ipad-right-panel-width";
-const DEFAULT_SOURCE_PANEL_WIDTH = 360;
-const DEFAULT_RIGHT_PANEL_WIDTH = 360;
-const MIN_SOURCE_PANEL_WIDTH = 220;
-const MIN_RIGHT_PANEL_WIDTH = 280;
-const MIN_CANVAS_COLUMN_WIDTH = 320;
-const PANEL_RESIZE_HANDLE_WIDTH = 8;
-const COMPACT_WORKSPACE_WIDTH = 920;
+const RIGHT_PANEL_TABS: readonly RightSidebarTab[] = ["inspector", "objects", "styles"];
+const SOURCE_PINNED_STORAGE_KEY = "tikz-editor-ipad-source-pinned";
 const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
   "1": "select",
   "2": "addNode",
@@ -96,26 +75,21 @@ function coerceRightSidebarTab(tab: RightSidebarTab | "assistant"): RightSidebar
   return tab === "assistant" ? "inspector" : tab;
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function readStoredPanelWidth(key: string, fallback: number): number {
+function readStoredSourcePinned(): boolean {
   if (typeof localStorage === "undefined") {
-    return fallback;
+    return false;
   }
-  const stored = Number(localStorage.getItem(key));
-  return Number.isFinite(stored) && stored > 0 ? stored : fallback;
+  return localStorage.getItem(SOURCE_PINNED_STORAGE_KEY) === "true";
 }
 
-function storePanelWidth(key: string, width: number): void {
+function storeSourcePinned(pinned: boolean): void {
   if (typeof localStorage === "undefined") {
     return;
   }
   try {
-    localStorage.setItem(key, String(Math.round(width)));
+    localStorage.setItem(SOURCE_PINNED_STORAGE_KEY, pinned ? "true" : "false");
   } catch {
-    // Width persistence is nice-to-have; resizing still works in-memory.
+    // Persistence is nice-to-have; pinning still works for the session.
   }
 }
 
@@ -130,10 +104,6 @@ function isTextEditingShortcutTarget(target: EventTarget | null): boolean {
   );
 }
 
-function clampPanelWidth(width: number, min: number, max: number): number {
-  return clampNumber(width, min, Math.max(min, max));
-}
-
 export function IpadEditorShell({
   commandRuntime,
   repeatPreviewModel,
@@ -142,16 +112,9 @@ export function IpadEditorShell({
 }: IpadEditorShellProps) {
   const didNormalizeInitialLayout = useRef(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
-  const editorSurfaceRef = useRef<HTMLDivElement | null>(null);
-  const panelResizeRef = useRef<PanelResizeState | null>(null);
-  const wasCompactWorkspaceRef = useRef(false);
-  const [sourcePanelWidth, setSourcePanelWidth] = useState(() =>
-    readStoredPanelWidth(SOURCE_PANEL_WIDTH_STORAGE_KEY, DEFAULT_SOURCE_PANEL_WIDTH)
-  );
-  const [rightPanelWidth, setRightPanelWidth] = useState(() =>
-    readStoredPanelWidth(RIGHT_PANEL_WIDTH_STORAGE_KEY, DEFAULT_RIGHT_PANEL_WIDTH)
-  );
-  const [panelResizeSide, setPanelResizeSide] = useState<PanelResizeSide | null>(null);
+  const [sourcePinned, setSourcePinned] = useState(readStoredSourcePinned);
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const {
     toolMode,
     pendingRequestId,
@@ -272,8 +235,6 @@ export function IpadEditorShell({
     dispatch({ type: "SET_TOOL_MODE", mode: "select" });
   }, [dispatch, toolMode]);
 
-  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
-  const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const closeZoomMenu = useCallback(() => { setZoomMenuOpen(false); }, []);
   const toggleZoomMenu = useCallback(() => { setZoomMenuOpen((open) => !open); }, []);
   const runZoomCommand = useCallback((commandId: AppMenuCommandId) => {
@@ -293,6 +254,13 @@ export function IpadEditorShell({
   const toggleSourcePanel = useCallback(() => {
     syncLayout({ sourceVisible: !showSourcePanel });
   }, [showSourcePanel, syncLayout]);
+
+  const toggleSourcePinned = useCallback(() => {
+    setSourcePinned((pinned) => {
+      storeSourcePinned(!pinned);
+      return !pinned;
+    });
+  }, []);
 
   const setRightPanelTab = useCallback((tab: RightSidebarTab) => {
     syncLayout({
@@ -324,32 +292,6 @@ export function IpadEditorShell({
       activeRightTab
     });
   }, [activeRightTab, syncLayout]);
-
-  useEffect(() => {
-    const workspace = workspaceRef.current;
-    if (!workspace) {
-      return;
-    }
-
-    const syncCompactState = () => {
-      const isCompact = workspace.getBoundingClientRect().width < COMPACT_WORKSPACE_WIDTH;
-      if (isCompact && !wasCompactWorkspaceRef.current && (showSourcePanel || rightPanelOpen)) {
-        syncLayout({
-          sourceVisible: false,
-          inspectorVisible: false,
-          objectsVisible: false,
-          stylesVisible: false,
-          activeRightTab
-        });
-      }
-      wasCompactWorkspaceRef.current = isCompact;
-    };
-
-    syncCompactState();
-    const observer = new ResizeObserver(syncCompactState);
-    observer.observe(workspace);
-    return () => { observer.disconnect(); };
-  }, [activeRightTab, rightPanelOpen, showSourcePanel, syncLayout]);
 
   const toggleFigures = useCallback(() => {
     syncLayout({ figuresVisible: hasMultipleFigures ? !showFiguresPanel : false });
@@ -401,114 +343,43 @@ export function IpadEditorShell({
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [dispatch, hasMultipleFigures, toggleFigures, toggleRightPanel, toggleSourcePanel]);
 
-  const updatePanelResize = useCallback((pointerId: number, clientX: number) => {
-    const resize = panelResizeRef.current;
-    if (resize?.pointerId !== pointerId) {
-      return;
-    }
-    const handleSpace =
-      (showSourcePanel ? PANEL_RESIZE_HANDLE_WIDTH : 0) +
-      (rightPanelOpen ? PANEL_RESIZE_HANDLE_WIDTH : 0);
-    const availablePanelSpace = Math.max(
-      MIN_SOURCE_PANEL_WIDTH + MIN_RIGHT_PANEL_WIDTH,
-      resize.surfaceWidth - MIN_CANVAS_COLUMN_WIDTH - handleSpace
-    );
-    const deltaX = clientX - resize.startClientX;
+  const sourceDocked = showSourcePanel && sourcePinned;
+  const sourceOverlay = showSourcePanel && !sourcePinned;
 
-    if (resize.pointerId === pointerId && panelResizeSide === "source") {
-      const maxSourceWidth = rightPanelOpen
-        ? availablePanelSpace - rightPanelWidth
-        : resize.surfaceWidth - MIN_CANVAS_COLUMN_WIDTH - handleSpace;
-      const nextWidth = clampPanelWidth(
-        resize.startSourceWidth + deltaX,
-        MIN_SOURCE_PANEL_WIDTH,
-        maxSourceWidth
-      );
-      setSourcePanelWidth(nextWidth);
-      return;
-    }
-
-    if (resize.pointerId === pointerId && panelResizeSide === "right") {
-      const maxRightWidth = showSourcePanel
-        ? availablePanelSpace - sourcePanelWidth
-        : resize.surfaceWidth - MIN_CANVAS_COLUMN_WIDTH - handleSpace;
-      const nextWidth = clampPanelWidth(
-        resize.startRightWidth - deltaX,
-        MIN_RIGHT_PANEL_WIDTH,
-        maxRightWidth
-      );
-      setRightPanelWidth(nextWidth);
-    }
-  }, [panelResizeSide, rightPanelOpen, rightPanelWidth, showSourcePanel, sourcePanelWidth]);
-
-  const finishPanelResize = useCallback((pointerId: number) => {
-    const resize = panelResizeRef.current;
-    if (resize?.pointerId !== pointerId) {
-      return;
-    }
-    panelResizeRef.current = null;
-    setPanelResizeSide(null);
-    storePanelWidth(SOURCE_PANEL_WIDTH_STORAGE_KEY, sourcePanelWidth);
-    storePanelWidth(RIGHT_PANEL_WIDTH_STORAGE_KEY, rightPanelWidth);
-  }, [rightPanelWidth, sourcePanelWidth]);
-
-  const beginPanelResize = useCallback((side: PanelResizeSide, event: ReactPointerEvent<HTMLButtonElement>) => {
-    const surface = editorSurfaceRef.current;
-    if (!surface) {
-      return;
-    }
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    panelResizeRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      surfaceWidth: surface.getBoundingClientRect().width,
-      startSourceWidth: sourcePanelWidth,
-      startRightWidth: rightPanelWidth
-    };
-    setPanelResizeSide(side);
-  }, [rightPanelWidth, sourcePanelWidth]);
-
-  const movePanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    updatePanelResize(event.pointerId, event.clientX);
-  }, [updatePanelResize]);
-
-  const endPanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    finishPanelResize(event.pointerId);
-  }, [finishPanelResize]);
-
-  useEffect(() => {
-    if (!panelResizeSide) {
-      return;
-    }
-
-    function onPointerMove(event: PointerEvent): void {
-      event.preventDefault();
-      updatePanelResize(event.pointerId, event.clientX);
-    }
-
-    function onPointerEnd(event: PointerEvent): void {
-      finishPanelResize(event.pointerId);
-    }
-
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
-    window.addEventListener("pointerup", onPointerEnd);
-    window.addEventListener("pointercancel", onPointerEnd);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerEnd);
-      window.removeEventListener("pointercancel", onPointerEnd);
-    };
-  }, [finishPanelResize, panelResizeSide, updatePanelResize]);
-
-  const editorSurfaceStyle = {
-    "--ipad-source-panel-width": `${Math.round(sourcePanelWidth)}px`,
-    "--ipad-right-panel-width": `${Math.round(rightPanelWidth)}px`
-  } as CSSProperties;
+  const sourceSurface = (
+    <div className={css.sourcePanelStack}>
+      <div className={css.sourceHeader} data-select="chrome">
+        <span className={css.sourceHeaderTitle}>Source</span>
+        <div className={css.sourceHeaderActions}>
+          <button
+            type="button"
+            className={css.compactIconButton}
+            onClick={toggleSourcePinned}
+            aria-label={sourcePinned ? "Unpin source panel" : "Pin source panel"}
+            title={sourcePinned ? "Unpin (float over canvas)" : "Pin (split with canvas)"}
+            aria-pressed={sourcePinned}
+            data-testid="ipad-source-pin"
+          >
+            {sourcePinned ? <RiPushpinFill size={18} aria-hidden /> : <RiPushpinLine size={18} aria-hidden />}
+          </button>
+          <button
+            type="button"
+            className={css.compactIconButton}
+            onClick={toggleSourcePanel}
+            aria-label="Close source panel"
+            title="Close source panel"
+            data-testid="ipad-source-close"
+          >
+            <RiCloseLine size={18} aria-hidden />
+          </button>
+        </div>
+      </div>
+      <div className={css.sourcePanelContent}>
+        <SourcePanel />
+      </div>
+      <SourceAccessoryBar />
+    </div>
+  );
 
   return (
     <div className={css.shell} data-testid="ipad-editor-shell">
@@ -535,6 +406,7 @@ export function IpadEditorShell({
         ref={workspaceRef}
         className={css.workspace}
         data-source-visible={showSourcePanel ? "true" : "false"}
+        data-source-pinned={sourcePinned ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
       >
         {showFigureStrip ? (
@@ -542,92 +414,58 @@ export function IpadEditorShell({
             <FigureNavigator />
           </div>
         ) : null}
-        <main className={css.stage}>
-          <div
-            ref={editorSurfaceRef}
-            style={editorSurfaceStyle}
-            className={[
-              css.editorSurface,
-              showSourcePanel ? css.editorSurfaceWithSource : "",
-              rightPanelOpen ? css.editorSurfaceWithRight : ""
-            ].filter(Boolean).join(" ")}
-          >
-            {showSourcePanel ? (
-              <PanelFrame kind="source">
-                <div className={css.sourcePanelStack}>
-                  <div className={css.sourcePanelContent}>
-                    <SourcePanel />
-                  </div>
-                  <SourceAccessoryBar />
-                </div>
-              </PanelFrame>
-            ) : null}
-            {showSourcePanel ? (
-              <PanelResizeHandle
-                side="source"
-                isActive={panelResizeSide === "source"}
-                value={sourcePanelWidth}
-                onPointerDown={beginPanelResize}
-                onPointerMove={movePanelResize}
-                onPointerUp={endPanelResize}
-              />
-            ) : null}
-            <PanelFrame kind="canvas">
-              <CanvasPanel repeatPreviewModel={repeatPreviewModel} />
-            </PanelFrame>
-            {rightPanelOpen ? (
-              <PanelResizeHandle
-                side="right"
-                isActive={panelResizeSide === "right"}
-                value={rightPanelWidth}
-                onPointerDown={beginPanelResize}
-                onPointerMove={movePanelResize}
-                onPointerUp={endPanelResize}
-              />
-            ) : null}
-            {rightPanelOpen ? (
-              <aside className={css.rightPanel} aria-label={activeRightPanelLabel}>
-                <div className={css.rightPanelHeader} data-select="chrome">
-                  <div className={css.rightPanelTabs} role="tablist" aria-label="Right panel">
-                    <PanelTabButton
-                      label="Inspector"
-                      icon={RiLayoutRightLine}
-                      active={activeRightTab === "inspector"}
-                      disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL]?.enabled}
-                      onClick={() => { setRightPanelTab("inspector"); }}
-                    />
-                    <PanelTabButton
-                      label="Objects"
-                      icon={RiStackLine}
-                      active={activeRightTab === "objects"}
-                      disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL]?.enabled}
-                      onClick={() => { setRightPanelTab("objects"); }}
-                    />
-                    <PanelTabButton
-                      label="Styles"
-                      icon={RiPaletteLine}
-                      active={activeRightTab === "styles"}
-                      disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL]?.enabled}
-                      onClick={() => { setRightPanelTab("styles"); }}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className={css.compactIconButton}
-                    onClick={closeRightPanel}
-                    aria-label={`Close ${activeRightPanelLabel}`}
-                    title={`Close ${activeRightPanelLabel}`}
-                  >
-                    <RiCloseLine size={20} aria-hidden />
-                  </button>
-                </div>
-                <div className={css.rightPanelBody}>
-                  <RightPanel activeTab={activeRightTab} />
-                </div>
-              </aside>
-            ) : null}
-          </div>
+
+        <main className={[css.stage, sourceDocked ? css.stageSplit : ""].filter(Boolean).join(" ")}>
+          {sourceDocked ? (
+            <section className={css.sourceColumn} aria-label="Source">
+              {sourceSurface}
+            </section>
+          ) : null}
+          <section className={css.canvasFrame}>
+            <CanvasPanel repeatPreviewModel={repeatPreviewModel} />
+          </section>
         </main>
+
+        {sourceOverlay ? (
+          <section className={css.sourceDrawer} aria-label="Source" data-testid="ipad-source-drawer">
+            {sourceSurface}
+          </section>
+        ) : null}
+
+        {rightPanelOpen ? (
+          <aside className={css.floatingPanel} aria-label={activeRightPanelLabel} data-testid="ipad-floating-panel">
+            <div className={css.floatingPanelHeader} data-select="chrome">
+              <div className={css.segmentedControl} role="tablist" aria-label="Right panel">
+                {RIGHT_PANEL_TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    className={[css.segment, activeRightTab === tab ? css.segmentActive : ""].filter(Boolean).join(" ")}
+                    aria-selected={activeRightTab === tab}
+                    disabled={!commandRuntime.bindings[RIGHT_PANEL_TAB_COMMANDS[tab]]?.enabled}
+                    onClick={() => { setRightPanelTab(tab); }}
+                    data-testid={`ipad-panel-tab-${tab}`}
+                  >
+                    {RIGHT_PANEL_LABELS[tab]}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className={css.compactIconButton}
+                onClick={closeRightPanel}
+                aria-label={`Close ${activeRightPanelLabel}`}
+                title={`Close ${activeRightPanelLabel}`}
+              >
+                <RiCloseLine size={20} aria-hidden />
+              </button>
+            </div>
+            <div className={css.floatingPanelBody}>
+              <RightPanel activeTab={activeRightTab} />
+            </div>
+          </aside>
+        ) : null}
 
         <IpadToolPalette
           toolMode={toolMode}
@@ -697,45 +535,11 @@ export function IpadEditorShell({
   );
 }
 
-function PanelResizeHandle({
-  side,
-  isActive,
-  value,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp
-}: {
-  side: PanelResizeSide;
-  isActive: boolean;
-  value: number;
-  onPointerDown: (side: PanelResizeSide, event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-}) {
-  const label = side === "source" ? "Resize Source" : "Resize Inspector";
-  return (
-    <button
-      type="button"
-      className={[
-        css.panelResizeHandle,
-        side === "source" ? css.sourceResizeHandle : css.rightResizeHandle,
-        isActive ? css.panelResizeHandleActive : ""
-      ].filter(Boolean).join(" ")}
-      role="separator"
-      aria-label={label}
-      aria-orientation="vertical"
-      aria-valuemin={side === "source" ? MIN_SOURCE_PANEL_WIDTH : MIN_RIGHT_PANEL_WIDTH}
-      aria-valuenow={Math.round(value)}
-      title={label}
-      data-active={isActive ? "true" : "false"}
-      style={{ touchAction: "none" }}
-      onPointerDown={(event) => { onPointerDown(side, event); }}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-    />
-  );
-}
+const RIGHT_PANEL_TAB_COMMANDS: Record<RightSidebarTab, AppMenuCommandId> = {
+  inspector: APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL,
+  objects: APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL,
+  styles: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL
+};
 
 const SOURCE_ACCESSORY_ITEMS: Array<{ label: string; detail: SourceAccessoryCommandDetail }> = [
   { label: "Undo", detail: { command: "undo" } },
@@ -766,46 +570,6 @@ function SourceAccessoryBar() {
       ))}
     </div>
   );
-}
-
-function PanelTabButton({
-  label,
-  icon: Icon,
-  active,
-  disabled = false,
-  onClick
-}: {
-  label: string;
-  icon: IconComponent;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      className={[css.panelTab, active ? css.panelTabActive : ""].filter(Boolean).join(" ")}
-      disabled={disabled}
-      aria-selected={active}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-    >
-      <Icon size={18} aria-hidden />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function PanelFrame({
-  kind,
-  children
-}: {
-  kind: "canvas" | "source";
-  children: ReactNode;
-}) {
-  return <section className={[css.panelFrame, css[`${kind}Frame`]].join(" ")}>{children}</section>;
 }
 
 function RightPanel({ activeTab }: { activeTab: RightSidebarTab }) {

@@ -30,10 +30,228 @@
 
 .stage {
   display: flex;
-  flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+
+.stageSplit .sourceColumn {
+  width: clamp(280px, 42%, 520px);
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-pane);
+}
+
+.canvasFrame {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  background: var(--bg-canvas-panel);
+}
+
+.sourceColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sourceDrawer {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  bottom: 12px;
+  z-index: 46;
+  width: min(46%, 520px);
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ipad-radius-card);
+  background: var(--ipad-material-thick);
+  -webkit-backdrop-filter: var(--ipad-material-blur);
+  backdrop-filter: var(--ipad-material-blur);
+  box-shadow: var(--ipad-shadow-float);
+  overflow: hidden;
+  animation: drawerIn 260ms cubic-bezier(0.22, 1.1, 0.36, 1);
+}
+
+@keyframes drawerIn {
+  from {
+    opacity: 0;
+    translate: -24px 0;
+  }
+}
+
+.sourcePanelStack {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sourceHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 4px 6px 4px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--ipad-chrome-font);
+}
+
+.sourceHeaderTitle {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sourceHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sourcePanelContent {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-pane);
+}
+
+.sourceAccessoryBar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 5px;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+}
+
+.sourceAccessoryButton {
+  appearance: none;
+  min-width: 40px;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-pane);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.sourceAccessoryButton:active {
+  background: var(--accent-btn-bg);
+  border-color: var(--accent-btn-border);
+}
+
+.floatingPanel {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 46;
+  width: min(340px, 44%);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ipad-radius-card);
+  background: var(--ipad-material-thick);
+  -webkit-backdrop-filter: var(--ipad-material-blur);
+  backdrop-filter: var(--ipad-material-blur);
+  box-shadow: var(--ipad-shadow-float);
+  overflow: hidden;
+  animation: floatingPanelIn 260ms cubic-bezier(0.22, 1.1, 0.36, 1);
+}
+
+@keyframes floatingPanelIn {
+  from {
+    opacity: 0;
+    translate: 24px 0;
+  }
+}
+
+.floatingPanelHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 8px 8px 8px 10px;
+  font-family: var(--ipad-chrome-font);
+}
+
+.segmentedControl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-app) 55%, transparent);
+}
+
+.segment {
+  appearance: none;
+  min-width: 0;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.segment:disabled {
+  color: var(--btn-disabled-text);
+}
+
+.segmentActive {
+  color: var(--text);
+  background: var(--bg-pane);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+}
+
+.compactIconButton {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+}
+
+.compactIconButton:active {
+  color: var(--text);
+  background: var(--btn-hover-bg);
+}
+
+.floatingPanelBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .figureStrip {
@@ -88,6 +306,7 @@
   bottom: 12px;
   z-index: 45;
   font-family: var(--ipad-chrome-font);
+  transition: bottom 260ms cubic-bezier(0.22, 1.1, 0.36, 1);
 }
 
 .zoomChipButton {
@@ -119,236 +338,22 @@
   bottom: 80px;
 }
 
-.editorSurface {
-  --ipad-source-panel-width: 360px;
-  --ipad-right-panel-width: 360px;
-
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  min-width: 0;
-  min-height: 0;
+.workspace[data-source-visible="true"][data-source-pinned="false"] .zoomChip {
+  left: calc(clamp(280px, 46%, 520px) + 24px);
 }
 
-.editorSurfaceWithSource {
-  grid-template-columns:
-    minmax(220px, min(var(--ipad-source-panel-width), 42vw))
-    8px
-    minmax(0, 1fr);
+.workspace[data-source-visible="true"][data-source-pinned="true"] .zoomChip {
+  left: calc(clamp(280px, 42%, 520px) + 24px);
 }
 
-.editorSurfaceWithRight {
-  grid-template-columns:
-    minmax(0, 1fr)
-    8px
-    minmax(280px, min(var(--ipad-right-panel-width), 36vw));
-}
+@media (max-width: 900px) {
+  .workspace[data-source-visible="true"][data-source-pinned="false"] .zoomChip {
+    left: calc(clamp(280px, 60%, 480px) + 24px);
+  }
 
-.editorSurfaceWithSource.editorSurfaceWithRight {
-  grid-template-columns:
-    minmax(200px, min(var(--ipad-source-panel-width), 30vw))
-    8px
-    minmax(280px, 1fr)
-    8px
-    minmax(260px, min(var(--ipad-right-panel-width), 32vw));
-}
-
-.panelFrame {
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-pane);
-}
-
-.canvasFrame {
-  position: relative;
-  overflow: visible;
-  background: var(--bg-canvas-panel);
-  border: 0;
-  border-radius: 0;
-}
-
-.sourceFrame {
-  background: var(--bg-pane);
-}
-
-.sourcePanelStack {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.sourcePanelContent {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
-.sourceAccessoryBar {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 44px;
-  padding: 5px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-header);
-  overflow-x: auto;
-  overflow-y: hidden;
-  flex-shrink: 0;
-}
-
-.sourceAccessoryButton {
-  appearance: none;
-  min-width: 40px;
-  height: 34px;
-  padding: 0 9px;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  background: var(--bg-pane);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.sourceAccessoryButton:hover,
-.sourceAccessoryButton:active {
-  background: var(--accent-btn-bg);
-  border-color: var(--accent-btn-border);
-}
-
-.panelResizeHandle {
-  appearance: none;
-  align-self: stretch;
-  width: 8px;
-  min-width: 8px;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background:
-    linear-gradient(
-      to right,
-      transparent 0,
-      transparent 3px,
-      color-mix(in srgb, var(--border) 74%, transparent) 3px,
-      color-mix(in srgb, var(--border) 74%, transparent) 5px,
-      transparent 5px
-    );
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.panelResizeHandle:hover,
-.panelResizeHandleActive {
-  background:
-    linear-gradient(
-      to right,
-      transparent 0,
-      transparent 2px,
-      var(--accent-dark) 2px,
-      var(--accent-dark) 6px,
-      transparent 6px
-    );
-}
-
-.rightPanel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-pane);
-  overflow: hidden;
-}
-
-.rightPanelHeader {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 4px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-header);
-}
-
-.rightPanelTabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
-}
-
-.panelTab {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  height: 32px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.panelTab span {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.panelTab:hover:not(:disabled),
-.panelTabActive {
-  color: var(--text);
-  background: var(--accent-btn-bg);
-  border-color: var(--accent-btn-border);
-}
-
-.panelTab:disabled {
-  color: var(--btn-disabled-text);
-}
-
-.compactIconButton {
-  appearance: none;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-}
-
-.compactIconButton:hover {
-  color: var(--text);
-  background: var(--btn-hover-bg);
-}
-
-.rightPanelBody {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  .workspace[data-source-visible="true"][data-source-pinned="true"] .zoomChip {
+    left: calc(clamp(240px, 40%, 380px) + 24px);
+  }
 }
 
 .shell :global(input),
@@ -362,58 +367,22 @@
   min-height: 0;
 }
 
-@media (max-width: 980px) {
-  .editorSurfaceWithSource {
-    grid-template-columns:
-      minmax(200px, min(var(--ipad-source-panel-width), 38vw))
-      8px
-      minmax(0, 1fr);
-  }
-
-  .editorSurfaceWithRight {
-    grid-template-columns:
-      minmax(0, 1fr)
-      8px
-      minmax(260px, min(var(--ipad-right-panel-width), 38vw));
-  }
-
-  .editorSurfaceWithSource.editorSurfaceWithRight {
-    grid-template-columns:
-      minmax(180px, min(var(--ipad-source-panel-width), 30vw))
-      8px
-      minmax(220px, 1fr)
-      8px
-      minmax(230px, min(var(--ipad-right-panel-width), 32vw));
-  }
-}
-
-@media (max-width: 760px) {
-  .editorSurfaceWithSource {
-    grid-template-columns:
-      minmax(190px, min(var(--ipad-source-panel-width), 42vw))
-      8px
-      minmax(0, 1fr);
-  }
-
-  .editorSurfaceWithRight {
-    grid-template-columns:
-      minmax(0, 1fr)
-      8px
-      minmax(240px, min(var(--ipad-right-panel-width), 42vw));
-  }
-
-  .editorSurfaceWithSource.editorSurfaceWithRight {
-    grid-template-columns:
-      minmax(168px, min(var(--ipad-source-panel-width), 32vw))
-      8px
-      minmax(180px, 1fr)
-      8px
-      minmax(220px, min(var(--ipad-right-panel-width), 34vw));
-  }
-}
-
 @media (max-height: 760px) {
   .figureStrip {
     height: 102px;
+  }
+}
+
+@media (max-width: 900px) {
+  .stageSplit .sourceColumn {
+    width: clamp(240px, 40%, 380px);
+  }
+
+  .floatingPanel {
+    width: min(320px, 52%);
+  }
+
+  .sourceDrawer {
+    width: min(60%, 480px);
   }
 }
