@@ -104,12 +104,13 @@
 
 :global(html[data-editor-platform="ipad"]) .header {
   border-bottom: 0;
-  padding: 10px 16px 0;
-  font-size: 15px;
-  font-weight: 650;
+  min-height: 0;
+  padding: 8px 16px 0;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: none;
-  letter-spacing: 0;
-  color: var(--text);
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
 }
 
 :global(html[data-editor-platform="ipad"]) .content {

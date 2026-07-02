@@ -521,3 +521,93 @@
   flex: 1;
   text-align: center;
 }
+
+/* ── iPad styling ──────────────────────────────────────────────────────── */
+
+:global(html[data-editor-platform="ipad"]) .triggerButton {
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ipad-control-fill);
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .triggerButtonOpen {
+  background: var(--bg-pane);
+}
+
+:global(html[data-editor-platform="ipad"]) .triggerButton:disabled {
+  background: var(--ipad-control-fill-disabled);
+}
+
+:global(html[data-editor-platform="ipad"]) .triggerSwatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+:global(html[data-editor-platform="ipad"]) .triggerCaret {
+  color: var(--text-muted);
+}
+
+:global(html[data-editor-platform="ipad"]) .popover {
+  width: 300px;
+  max-width: min(300px, calc(100vw - 24px));
+  border-radius: 12px;
+  box-shadow: var(--ipad-shadow-popover, 0 10px 24px rgba(0, 0, 0, 0.28));
+  overflow: hidden;
+}
+
+:global(html[data-editor-platform="ipad"]) .popover .root {
+  border: 0;
+  border-radius: 12px;
+  background: var(--ipad-material-thick, var(--bg-pane));
+  -webkit-backdrop-filter: var(--ipad-material-blur, none);
+  backdrop-filter: var(--ipad-material-blur, none);
+}
+
+:global(html[data-editor-platform="ipad"]) .root {
+  gap: 9px;
+  padding: 10px;
+}
+
+:global(html[data-editor-platform="ipad"]) .tabRow {
+  gap: 2px;
+  padding: 2px;
+  border-bottom: 0;
+  border-radius: 9px;
+  background: var(--ipad-control-fill);
+}
+
+:global(html[data-editor-platform="ipad"]) .tabButton {
+  flex: 1;
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+:global(html[data-editor-platform="ipad"]) .tabButtonActive {
+  border: 0;
+  background: var(--bg-pane);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+}
+
+:global(html[data-editor-platform="ipad"]) .swatchButton {
+  min-height: 28px;
+  border: 0;
+}
+
+:global(html[data-editor-platform="ipad"]) .swatchButtonSelected {
+  background: var(--accent-btn-bg);
+  box-shadow: inset 0 0 0 2px var(--accent-dark);
+}
+
+:global(html[data-editor-platform="ipad"]) .swatchDot {
+  width: 22px;
+  height: 22px;
+}

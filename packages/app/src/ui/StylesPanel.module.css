@@ -291,7 +291,7 @@
   padding: 4px 8px;
   border: 0;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  background: var(--ipad-control-fill);
   font-size: 14px;
 }
 
@@ -309,7 +309,7 @@
   padding: 4px 8px;
   border: 0;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  background: var(--ipad-control-fill);
   font-size: 14px;
 }
 

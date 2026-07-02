@@ -383,7 +383,7 @@
   width: 38px;
   height: 38px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-app) 55%, transparent);
+  background: var(--ipad-control-fill);
 }
 
 :global(html[data-editor-platform="ipad"]) .closeIconButton svg {

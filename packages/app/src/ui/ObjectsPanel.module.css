@@ -197,7 +197,7 @@
   padding: 2px;
   border: 0;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  background: var(--ipad-control-fill);
 }
 
 :global(html[data-editor-platform="ipad"]) .multiArrangeIconButton {

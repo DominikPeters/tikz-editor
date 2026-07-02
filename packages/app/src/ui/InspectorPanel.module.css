@@ -492,7 +492,7 @@
 :global(html[data-editor-platform="ipad"]) .textInput {
   border-color: transparent;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  background: var(--ipad-control-fill);
 }
 
 :global(html[data-editor-platform="ipad"]) .numberInput:focus,
@@ -503,7 +503,7 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .numberInput:disabled {
-  background: color-mix(in srgb, var(--bg-app) 30%, transparent);
+  background: var(--ipad-control-fill-disabled);
 }
 
 :global(html[data-editor-platform="ipad"]) .checkboxControl {
@@ -565,7 +565,7 @@
   padding: 2px;
   border: 0;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  background: var(--ipad-control-fill);
 }
 
 :global(html[data-editor-platform="ipad"]) .nodeFontIconButton,

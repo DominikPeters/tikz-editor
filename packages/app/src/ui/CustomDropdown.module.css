@@ -136,7 +136,7 @@
   padding: 5px 10px;
   border: 0;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  background: var(--ipad-control-fill);
   font-size: 14px;
 }
 
@@ -145,7 +145,7 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .trigger:disabled {
-  background: color-mix(in srgb, var(--bg-app) 30%, transparent);
+  background: var(--ipad-control-fill-disabled);
 }
 
 :global(html[data-editor-platform="ipad"]) .triggerCaret {
