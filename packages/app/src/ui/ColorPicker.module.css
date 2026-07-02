@@ -552,11 +552,17 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .popover {
-  width: 300px;
-  max-width: min(300px, calc(100vw - 24px));
+  width: 100%;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
   border-radius: 12px;
   box-shadow: var(--ipad-shadow-popover, 0 10px 24px rgba(0, 0, 0, 0.28));
   overflow: hidden;
+}
+
+:global(html[data-editor-platform="ipad"]) .colorGrid {
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 3px;
 }
 
 :global(html[data-editor-platform="ipad"]) .popover .root {
@@ -598,7 +604,7 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .swatchButton {
-  min-height: 28px;
+  min-height: 32px;
   border: 0;
 }
 
