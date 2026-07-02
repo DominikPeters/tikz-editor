@@ -1,8 +1,12 @@
 import type {
   DocumentFileRef,
   EditorPlatform,
+  FileRevision,
+  LinkedTextReadResult,
+  LinkedTextWriteResult,
   MenuCommandHandler
 } from "@tikz-editor/app";
+import { revisionForText } from "@tikz-editor/app";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -64,7 +68,7 @@ function fileRefFromPath(path: string, fallbackName: string): DocumentFileRef {
     kind: "file",
     name: fileNameFromPath(path, fallbackName),
     path,
-    provider: "download"
+    provider: "ios-files"
   };
 }
 
@@ -77,6 +81,80 @@ function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
 async function blobPartsToBytes(content: BlobPart[], mimeType: string): Promise<Uint8Array> {
   const blob = new Blob(content, { type: mimeType });
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function readLinkedTextFile(fileRef: DocumentFileRef): Promise<LinkedTextReadResult> {
+  if (fileRef.provider !== "ios-files" || !fileRef.path) {
+    return { status: "permission-needed" };
+  }
+  try {
+    const source = await readTextFile(fileRef.path);
+    return {
+      status: "ok",
+      source,
+      revision: revisionForText(source),
+      fileRef: fileRefFromPath(fileRef.path, fileRef.name)
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error instanceof Error ? error.message : "Unable to read linked file."
+    };
+  }
+}
+
+async function writeLinkedTextFile(
+  fileRef: DocumentFileRef,
+  text: string,
+  expectedRevision: FileRevision | null
+): Promise<LinkedTextWriteResult> {
+  if (fileRef.provider !== "ios-files" || !fileRef.path) {
+    return { status: "permission-needed" };
+  }
+  try {
+    const currentSource = await readTextFile(fileRef.path);
+    const currentRevision = revisionForText(currentSource);
+    if (expectedRevision && currentRevision.hash !== expectedRevision.hash) {
+      return {
+        status: "changed-on-disk",
+        source: currentSource,
+        revision: currentRevision,
+        fileRef: fileRefFromPath(fileRef.path, fileRef.name)
+      };
+    }
+    await writeTextFile(fileRef.path, text);
+    return {
+      status: "saved",
+      revision: revisionForText(text),
+      fileRef: fileRefFromPath(fileRef.path, fileRef.name)
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error instanceof Error ? error.message : "Unable to write linked file."
+    };
+  }
+}
+
+async function tryShareExport(content: BlobPart[], options: { fileName: string; mimeType: string }): Promise<boolean> {
+  if (typeof navigator.share !== "function" || typeof File === "undefined") {
+    return false;
+  }
+  const bytes = await blobPartsToBytes(content, options.mimeType);
+  const file = new File([arrayBufferFromBytes(bytes)], options.fileName, { type: options.mimeType });
+  const sharePayload = { files: [file], title: options.fileName };
+  if (typeof navigator.canShare === "function" && !navigator.canShare(sharePayload)) {
+    return false;
+  }
+  try {
+    await navigator.share(sharePayload);
+    return true;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return true;
+    }
+    return false;
+  }
 }
 
 export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): EditorPlatform {
@@ -198,7 +276,13 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
           };
         }
       },
+      readLinkedText: readLinkedTextFile,
+      writeLinkedText: writeLinkedTextFile,
+      syncLinkedFileWatches: () => {},
       exportFile: async (content, options) => {
+        if (await tryShareExport(content, options)) {
+          return true;
+        }
         const path = await save({
           defaultPath: options.fileName
         });

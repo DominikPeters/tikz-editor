@@ -21,7 +21,10 @@ import {
   historyKeymap,
   isolateHistory,
   indentLess,
-  indentMore
+  indentMore,
+  redo,
+  toggleLineComment,
+  undo
 } from "@codemirror/commands";
 import {
   bracketMatching,
@@ -71,8 +74,10 @@ import { useProjectNamedColorSwatches } from "../project-named-colors";
 import { useEditorStore } from "../store/store";
 import { ColorPicker } from "./ColorPicker";
 import {
+  SOURCE_ACCESSORY_COMMAND_EVENT,
   SOURCE_FORMAT_REQUEST_EVENT
 } from "./source-sync";
+import type { SourceAccessoryCommandDetail } from "./source-sync";
 import css from "./SourcePanel.module.css";
 import { formatTikzSource } from "tikz-editor/edit/source-format";
 
@@ -1307,6 +1312,40 @@ export function SourcePanel() {
     return () => { window.removeEventListener(SOURCE_FORMAT_REQUEST_EVENT, handleFormatRequest); };
   }, [editorIndentSize, formatterMaxLineLength, formatterReflowLongOptions]);
 
+  useEffect(() => {
+    const handleAccessoryCommand = (event: Event): void => {
+      const view = viewRef.current;
+      if (!view || assistantLockReason) {
+        return;
+      }
+      const detail = (event as CustomEvent<SourceAccessoryCommandDetail>).detail;
+      switch (detail.command) {
+        case "indent":
+          indentMore(view);
+          break;
+        case "outdent":
+          indentLess(view);
+          break;
+        case "comment":
+          toggleLineComment(view);
+          break;
+        case "undo":
+          undo(view);
+          break;
+        case "redo":
+          redo(view);
+          break;
+        case "insert":
+          insertAccessorySnippet(view, detail.text, detail.cursorOffset);
+          break;
+      }
+      view.focus();
+    };
+
+    window.addEventListener(SOURCE_ACCESSORY_COMMAND_EVENT, handleAccessoryCommand);
+    return () => { window.removeEventListener(SOURCE_ACCESSORY_COMMAND_EVENT, handleAccessoryCommand); };
+  }, [assistantLockReason]);
+
   const handleInlineColorChange = (nextToken: string): void => {
     const session = activeColorPicker;
     const view = viewRef.current;
@@ -1482,6 +1521,21 @@ function insertSoftIndent(view: EditorView): boolean {
   const transactionSpec = view.state.changeByRange((range) => ({
     changes: { from: range.from, to: range.to, insert: indentUnit },
     range: EditorSelection.cursor(range.from + indentUnit.length)
+  }));
+  view.dispatch(
+    view.state.update(transactionSpec, {
+      scrollIntoView: true,
+      userEvent: "input"
+    })
+  );
+  return true;
+}
+
+function insertAccessorySnippet(view: EditorView, text: string, cursorOffset = text.length): boolean {
+  const boundedOffset = clamp(cursorOffset, 0, text.length);
+  const transactionSpec = view.state.changeByRange((range) => ({
+    changes: { from: range.from, to: range.to, insert: text },
+    range: EditorSelection.cursor(range.from + boundedOffset)
   }));
   view.dispatch(
     view.state.update(transactionSpec, {

@@ -36,6 +36,7 @@ export type UseCanvasViewportEffectsArgs = {
   MIN_SCALE: number;
   MAX_SCALE: number;
   setFitToContentModeActive: ValueSetter<boolean>;
+  requestFitToContent: () => void;
 };
 
 export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
@@ -66,7 +67,8 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     zoomSpeed,
     MIN_SCALE,
     MAX_SCALE,
-    setFitToContentModeActive
+    setFitToContentModeActive,
+    requestFitToContent
   } = args;
 
   useEffect(() => {
@@ -183,6 +185,9 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     if (!viewport) return;
 
     const activeTouchPointers = new Map<number, ClientPoint>();
+    const touchStartPointers = new Map<number, { point: ClientPoint; time: number }>();
+    let lastTouchTap: { point: ClientPoint; time: number } | null = null;
+    let suppressTapUntilTouchesEnd = false;
     let pinchGesture:
       | {
           baseScale: number;
@@ -299,10 +304,13 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       if (event.pointerType !== "touch") {
         return;
       }
-      activeTouchPointers.set(event.pointerId, clientPoint(px(event.clientX), px(event.clientY)));
+      const point = clientPoint(px(event.clientX), px(event.clientY));
+      activeTouchPointers.set(event.pointerId, point);
+      touchStartPointers.set(event.pointerId, { point, time: event.timeStamp });
       if (activeTouchPointers.size < 2) {
         return;
       }
+      suppressTapUntilTouchesEnd = true;
       clearPendingTouchViewport();
       if (dragRef.current?.kind === "pan" || dragRef.current?.kind === "marquee") {
         setDragState(null);
@@ -328,10 +336,37 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       if (event.pointerType !== "touch" || !activeTouchPointers.has(event.pointerId)) {
         return;
       }
+      const start = touchStartPointers.get(event.pointerId) ?? null;
+      const current = activeTouchPointers.get(event.pointerId) ?? null;
+      const isTap =
+        !suppressTapUntilTouchesEnd &&
+        activeTouchPointers.size === 1 &&
+        start != null &&
+        current != null &&
+        Math.hypot(current.x - start.point.x, current.y - start.point.y) <= 12 &&
+        event.timeStamp - start.time <= 320;
+      if (isTap && current) {
+        if (
+          lastTouchTap &&
+          event.timeStamp - lastTouchTap.time <= 360 &&
+          Math.hypot(current.x - lastTouchTap.point.x, current.y - lastTouchTap.point.y) <= 48
+        ) {
+          requestFitToContent();
+          lastTouchTap = null;
+          event.preventDefault();
+        } else {
+          lastTouchTap = { point: current, time: event.timeStamp };
+        }
+      }
+
       activeTouchPointers.delete(event.pointerId);
+      touchStartPointers.delete(event.pointerId);
       if (activeTouchPointers.size >= 2) {
         beginPinchGesture();
         return;
+      }
+      if (activeTouchPointers.size === 0) {
+        suppressTapUntilTouchesEnd = false;
       }
       pinchGesture = null;
     };
@@ -349,6 +384,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
       activeTouchPointers.clear();
+      touchStartPointers.clear();
       pinchGesture = null;
     };
   }, [
@@ -359,6 +395,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     dragRef,
     fitToContentModeActiveRef,
     pendingTouchViewportRef,
+    requestFitToContent,
     setDragState,
     setFitToContentModeActive,
     svgResultRef,

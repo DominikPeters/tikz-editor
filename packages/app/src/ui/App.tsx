@@ -211,7 +211,9 @@ type PendingFileConflict = {
 };
 
 function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string | null {
-  return fileRef?.provider === "desktop-fs" && typeof fileRef.path === "string" && fileRef.path.trim().length > 0
+  return (fileRef?.provider === "desktop-fs" || fileRef?.provider === "ios-files") &&
+    typeof fileRef.path === "string" &&
+    fileRef.path.trim().length > 0
     ? fileRef.path
     : null;
 }

@@ -1430,6 +1430,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     MAX_SCALE
   });
 
+  const requestFitToContent = useCallback(() => {
+    dispatch({ type: "REQUEST_FIT_TO_CONTENT" });
+  }, [dispatch]);
+
   const copyWarningToClipboard = useCallback(() => {
     if (!warning) {
       return;
@@ -2717,7 +2721,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     zoomSpeed,
     MIN_SCALE,
     MAX_SCALE: maxZoomScale,
-    setFitToContentModeActive
+    setFitToContentModeActive,
+    requestFitToContent
   });
 
   useCanvasGuideEffects({

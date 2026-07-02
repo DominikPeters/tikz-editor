@@ -10,6 +10,7 @@
     "tauri": "tauri",
     "tauri:ios:init": "tauri ios init",
     "tauri:ios:dev": "tauri ios dev",
+    "tauri:ios:dev:sim": "node scripts/dev-simulator.mjs",
     "tauri:ios:dev:open": "tauri ios dev --open --host",
     "tauri:ios:build": "tauri ios build",
     "tauri:ios:build:open": "tauri ios build --open"

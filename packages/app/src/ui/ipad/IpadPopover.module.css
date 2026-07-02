@@ -1,0 +1,121 @@
+.host {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 80;
+  min-width: 220px;
+  max-width: min(380px, calc(100vw - 24px));
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 14px;
+  background: var(--ipad-material-thick);
+  -webkit-backdrop-filter: var(--ipad-material-blur);
+  backdrop-filter: var(--ipad-material-blur);
+  box-shadow: var(--ipad-shadow-popover);
+  font-family: var(--ipad-chrome-font);
+  transform-origin: top center;
+  animation: ipadPopoverIn 180ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  overscroll-behavior: contain;
+}
+
+.popover[data-align="start"] {
+  left: 0;
+  transform-origin: top left;
+}
+
+.popover[data-align="center"] {
+  left: 50%;
+  translate: -50% 0;
+}
+
+.popover[data-align="end"] {
+  right: 0;
+  transform-origin: top right;
+}
+
+.popover[data-direction="up"] {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom center;
+}
+
+.popover[data-direction="up"][data-align="start"] {
+  transform-origin: bottom left;
+}
+
+.popover[data-direction="up"][data-align="end"] {
+  transform-origin: bottom right;
+}
+
+@keyframes ipadPopoverIn {
+  from {
+    opacity: 0;
+    scale: 0.9;
+  }
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 248px;
+  padding: 6px;
+}
+
+.menuItem {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: default;
+}
+
+.menuItem:disabled {
+  color: var(--btn-disabled-text);
+}
+
+.menuItem:active:not(:disabled) {
+  background: var(--btn-hover-bg);
+}
+
+.menuItemCheck {
+  display: inline-flex;
+  width: 18px;
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+.menuItemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.menuItemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.menuSeparator {
+  height: 1px;
+  margin: 5px 2px;
+  background: var(--border);
+  flex-shrink: 0;
+}

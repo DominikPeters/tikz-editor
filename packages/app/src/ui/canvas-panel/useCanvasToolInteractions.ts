@@ -701,6 +701,50 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       if (event.button !== 0 || event.target !== event.currentTarget) {
         return;
       }
+      if (event.pointerType === "pen" && toolMode === "select") {
+        closeTextEditingSession();
+        if (!svgResult) {
+          return;
+        }
+        const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
+        const world = clientToWorldPoint(clientPoint, interactionSvgRef.current, svgResult.viewBox);
+        if (!world) {
+          return;
+        }
+        if (snapshot.source !== source) {
+          setWarning("Wait for recompute to finish before starting a draw gesture.");
+          event.preventDefault();
+          return;
+        }
+        const nextFreehandDraft = createFreehandToolDraft(world, canvasTransform.scale);
+        dispatch({ type: "SET_TOOL_MODE", mode: "addFreehand" });
+        setPathDraft(null);
+        setPathSegmentDraft(null);
+        setToolDraft(null);
+        setBezierBendDraft(null);
+        setPendingBezier(null);
+        setSnapLines([]);
+        setNodeAnchorOverlay(null);
+        setToolCursorWorld(world);
+        setFreehandDraft(nextFreehandDraft);
+        setDragTooltip(null);
+        setDragState({
+          kind: "tool-freehand",
+          pointerId: event.pointerId,
+          points: nextFreehandDraft.points,
+          minSampleDistanceWorld: nextFreehandDraft.minSampleDistanceWorld
+        });
+        logSnapDebug({
+          phase: "tool-freehand-start",
+          snapshotMatchesSource: true,
+          dragKind: "tool-freehand",
+          rawPoint: world,
+          snappedPoint: world,
+          lines: []
+        });
+        event.preventDefault();
+        return;
+      }
       if (toolMode !== "select") {
         if (toolMode !== "magnify") {
           onInteractionPointerDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
@@ -714,7 +758,32 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         event.preventDefault();
       }
     },
-    [closeTextEditingSession, onInteractionPointerDown, startMarqueeSelection, toolMode, viewportRef]
+    [
+      canvasTransform.scale,
+      closeTextEditingSession,
+      dispatch,
+      interactionSvgRef,
+      logSnapDebug,
+      onInteractionPointerDown,
+      setBezierBendDraft,
+      setDragState,
+      setDragTooltip,
+      setFreehandDraft,
+      setNodeAnchorOverlay,
+      setPathDraft,
+      setPathSegmentDraft,
+      setPendingBezier,
+      setSnapLines,
+      setToolCursorWorld,
+      setToolDraft,
+      setWarning,
+      snapshot.source,
+      source,
+      startMarqueeSelection,
+      svgResult,
+      toolMode,
+      viewportRef
+    ]
   );
 
   const onInteractionPointerMove = useCallback(

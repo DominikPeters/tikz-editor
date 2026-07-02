@@ -419,6 +419,75 @@
   flex-shrink: 0;
 }
 
+@media (pointer: coarse) {
+  .content {
+    padding-bottom: 12px;
+  }
+
+  .property {
+    gap: 7px;
+  }
+
+  .propertyLabel,
+  .checkboxLabel,
+  .sliderReadout,
+  .unitLabel {
+    font-size: max(12px, 1em);
+  }
+
+  .controlRow,
+  .toolSliderRow,
+  .roundedCornersControl,
+  .lineWidthValue {
+    gap: 10px;
+  }
+
+  .numberInput,
+  .textInput {
+    min-height: 34px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    font-size: 16px;
+  }
+
+  .sliderInput,
+  .rangeInput {
+    min-height: 34px;
+  }
+
+  .checkboxControl {
+    min-height: 34px;
+    gap: 9px;
+  }
+
+  .checkboxInput {
+    width: 20px;
+    height: 20px;
+  }
+
+  .nodeFontToolbar,
+  .fillQuickActions,
+  .multiArrangeRow {
+    gap: 8px;
+  }
+
+  .nodeFontIconButton,
+  .multiArrangeIconButton {
+    width: 34px;
+    height: 34px;
+  }
+
+  .nodeTextAlignButton {
+    width: 38px;
+    height: 34px;
+  }
+
+  .nodeFontButtonGroup,
+  .multiArrangeGroup {
+    border-radius: 6px;
+  }
+}
+
 .lineWidthValueLabel {
   min-width: 0;
   overflow: hidden;

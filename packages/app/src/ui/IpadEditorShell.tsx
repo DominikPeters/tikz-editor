@@ -1,22 +1,21 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
-  RiArrowGoBackLine,
-  RiArrowGoForwardLine,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
+} from "react";
+import {
   RiCloseLine,
-  RiCodeLine,
   RiDraggable,
-  RiDownloadCloudLine,
-  RiFileAddLine,
-  RiFolderOpenLine,
-  RiFullscreenLine,
   RiLayoutRightLine,
   RiPaletteLine,
-  RiSave3Line,
-  RiSettings3Line,
-  RiShareForwardLine,
   RiStackLine,
-  RiZoomInLine,
-  RiZoomOutLine
+  RiSubtractLine,
+  RiAddLine,
+  RiAspectRatioLine
 } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
 import type { SvgRenderModel } from "tikz-editor/svg";
@@ -31,8 +30,11 @@ import { InspectorPanel } from "./InspectorPanel";
 import { ObjectsPanel } from "./ObjectsPanel";
 import { SourcePanel } from "./SourcePanel";
 import { StylesPanel } from "./StylesPanel";
-import { TabStrip } from "./TabStrip";
+import { IpadNavBar } from "./ipad/IpadNavBar";
+import { IpadMenu, IpadMenuItem, IpadPopover } from "./ipad/IpadPopover";
+import { isCodeMirrorEventTarget } from "./editor-commands";
 import { GENERATED_NODE_SHAPE_PREVIEWS } from "./generated-node-shape-previews";
+import { requestSourceAccessoryCommand, type SourceAccessoryCommandDetail } from "./source-sync";
 import { ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } from "./ToolbarToolPopup";
 import { resolveToolbarToolMode, TOOL_BUTTONS } from "./tool-config";
 import css from "./IpadEditorShell.module.css";
@@ -42,8 +44,16 @@ type AddShapePresetId = Exclude<NodeShapePresetId, "custom">;
 type ToolPopupMode = "addShape" | "addMatrix";
 type ToolPopupPlacement = "left" | "right" | "above" | "below";
 type ToolPaletteLayout = "vertical" | "horizontal";
-type ToolPaletteEdge = "top" | "bottom" | null;
+type ToolPaletteEdge = "top" | "bottom" | "left" | "right" | null;
 type ToolPalettePosition = { x: number; y: number };
+type PanelResizeSide = "source" | "right";
+type PanelResizeState = {
+  pointerId: number;
+  startClientX: number;
+  surfaceWidth: number;
+  startSourceWidth: number;
+  startRightWidth: number;
+};
 type ToolPaletteDragState = {
   pointerId: number;
   startClientX: number;
@@ -57,7 +67,7 @@ type ToolPaletteDragState = {
   lastPosition: ToolPalettePosition;
 };
 
-type IconComponent = typeof RiFileAddLine;
+type IconComponent = typeof RiCloseLine;
 
 type IpadEditorShellProps = {
   commandRuntime: EditorCommandRuntime;
@@ -92,6 +102,15 @@ const TOOL_PALETTE_PADDING = 5;
 const TOOL_PALETTE_VERTICAL_COLUMNS = 2;
 const TOOL_PALETTE_VERTICAL_HANDLE_HEIGHT = 24;
 const TOOL_PALETTE_HORIZONTAL_HANDLE_WIDTH = 32;
+const SOURCE_PANEL_WIDTH_STORAGE_KEY = "tikz-editor-ipad-source-panel-width";
+const RIGHT_PANEL_WIDTH_STORAGE_KEY = "tikz-editor-ipad-right-panel-width";
+const DEFAULT_SOURCE_PANEL_WIDTH = 360;
+const DEFAULT_RIGHT_PANEL_WIDTH = 360;
+const MIN_SOURCE_PANEL_WIDTH = 220;
+const MIN_RIGHT_PANEL_WIDTH = 280;
+const MIN_CANVAS_COLUMN_WIDTH = 320;
+const PANEL_RESIZE_HANDLE_WIDTH = 8;
+const COMPACT_WORKSPACE_WIDTH = 920;
 const MATRIX_PICKER_MAX_COLUMNS = 10;
 const MATRIX_PICKER_MAX_ROWS = 8;
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
@@ -99,6 +118,17 @@ const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   label: option.label,
   previewSvg: GENERATED_NODE_SHAPE_PREVIEWS[option.value] ?? null
 }));
+const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
+  "1": "select",
+  "2": "addNode",
+  "3": "addShape",
+  "4": "addMatrix",
+  "5": "addLine",
+  "6": "addArrow",
+  "7": "addBezier",
+  "8": "addPath",
+  "9": "addFreehand"
+};
 
 function coerceRightSidebarTab(tab: RightSidebarTab | "assistant"): RightSidebarTab {
   return tab === "assistant" ? "inspector" : tab;
@@ -147,20 +177,32 @@ function getToolPaletteDimensions(layout: ToolPaletteLayout): Pick<ToolPaletteDr
   };
 }
 
-function resolveToolPaletteEdgeForPointer(clientY: number, parentTop: number, parentHeight: number): ToolPaletteEdge {
-  const pointerY = clientY - parentTop;
-  if (pointerY <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
-    return "top";
-  }
-  if (pointerY >= parentHeight - TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
-    return "bottom";
-  }
-  return null;
+function resolveToolPaletteLayout(edge: ToolPaletteEdge): ToolPaletteLayout {
+  return edge === "top" || edge === "bottom" ? "horizontal" : "vertical";
+}
+
+function resolveToolPaletteEdgeForPointer(
+  clientX: number,
+  clientY: number,
+  parentRect: DOMRect
+): ToolPaletteEdge {
+  const pointerX = clientX - parentRect.left;
+  const pointerY = clientY - parentRect.top;
+  const edgeDistances = [
+    { edge: "top", distance: pointerY },
+    { edge: "bottom", distance: parentRect.height - pointerY },
+    { edge: "left", distance: pointerX },
+    { edge: "right", distance: parentRect.width - pointerX }
+  ] satisfies Array<{ edge: NonNullable<ToolPaletteEdge>; distance: number }>;
+  const candidates = edgeDistances.filter((candidate) => candidate.distance <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE);
+  candidates.sort((left, right) => left.distance - right.distance);
+  return candidates[0]?.edge ?? null;
 }
 
 function resolveToolPaletteEdgeForPosition(
   position: ToolPalettePosition,
   layout: ToolPaletteLayout,
+  parentWidth: number,
   parentHeight: number
 ): ToolPaletteEdge {
   if (position.y <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
@@ -171,6 +213,12 @@ function resolveToolPaletteEdgeForPosition(
   if (position.y + dimensions.paletteHeight >= parentHeight - TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
     return "bottom";
   }
+  if (position.x <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
+    return "left";
+  }
+  if (position.x + dimensions.paletteWidth >= parentWidth - TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
+    return "right";
+  }
 
   return null;
 }
@@ -178,7 +226,9 @@ function resolveToolPaletteEdgeForPosition(
 function pinToolPaletteToEdge(
   position: ToolPalettePosition,
   edge: ToolPaletteEdge,
+  parentWidth: number,
   parentHeight: number,
+  paletteWidth: number,
   paletteHeight: number
 ): ToolPalettePosition {
   if (edge === "top") {
@@ -188,6 +238,15 @@ function pinToolPaletteToEdge(
     return {
       ...position,
       y: Math.max(TOOL_PALETTE_MARGIN, parentHeight - paletteHeight - TOOL_PALETTE_MARGIN)
+    };
+  }
+  if (edge === "left") {
+    return { ...position, x: TOOL_PALETTE_MARGIN };
+  }
+  if (edge === "right") {
+    return {
+      ...position,
+      x: Math.max(TOOL_PALETTE_MARGIN, parentWidth - paletteWidth - TOOL_PALETTE_MARGIN)
     };
   }
   return position;
@@ -223,6 +282,40 @@ function storeToolPalettePosition(position: ToolPalettePosition): void {
   }
 }
 
+function readStoredPanelWidth(key: string, fallback: number): number {
+  if (typeof localStorage === "undefined") {
+    return fallback;
+  }
+  const stored = Number(localStorage.getItem(key));
+  return Number.isFinite(stored) && stored > 0 ? stored : fallback;
+}
+
+function storePanelWidth(key: string, width: number): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  try {
+    localStorage.setItem(key, String(Math.round(width)));
+  } catch {
+    // Width persistence is nice-to-have; resizing still works in-memory.
+  }
+}
+
+function isTextEditingShortcutTarget(target: EventTarget | null): boolean {
+  const element = target instanceof Element ? target : null;
+  if (!element) {
+    return false;
+  }
+  return (
+    isCodeMirrorEventTarget(element) ||
+    element.closest("input, textarea, select, [contenteditable='true']") != null
+  );
+}
+
+function clampPanelWidth(width: number, min: number, max: number): number {
+  return clampNumber(width, min, Math.max(min, max));
+}
+
 export function IpadEditorShell({
   commandRuntime,
   repeatPreviewModel,
@@ -230,12 +323,19 @@ export function IpadEditorShell({
   updateChip = null
 }: IpadEditorShellProps) {
   const didNormalizeInitialLayout = useRef(false);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const editorSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const panelResizeRef = useRef<PanelResizeState | null>(null);
+  const wasCompactWorkspaceRef = useRef(false);
+  const [sourcePanelWidth, setSourcePanelWidth] = useState(() =>
+    readStoredPanelWidth(SOURCE_PANEL_WIDTH_STORAGE_KEY, DEFAULT_SOURCE_PANEL_WIDTH)
+  );
+  const [rightPanelWidth, setRightPanelWidth] = useState(() =>
+    readStoredPanelWidth(RIGHT_PANEL_WIDTH_STORAGE_KEY, DEFAULT_RIGHT_PANEL_WIDTH)
+  );
+  const [panelResizeSide, setPanelResizeSide] = useState<PanelResizeSide | null>(null);
   const {
-    activeDocument,
-    activeDocumentId,
-    tabOrder,
     toolMode,
-    selectedElementIds,
     pendingRequestId,
     snapshot,
     canvasFitToContentScale,
@@ -249,11 +349,7 @@ export function IpadEditorShell({
     rightSidebarTab,
     dispatch
   } = useEditorStore(useShallow((s) => ({
-    activeDocument: s.documents[s.activeDocumentId] ?? null,
-    activeDocumentId: s.activeDocumentId,
-    tabOrder: s.tabOrder,
     toolMode: s.toolMode,
-    selectedElementIds: s.selectedElementIds,
     pendingRequestId: s.pendingRequestId,
     snapshot: s.snapshot,
     canvasFitToContentScale: s.canvasFitToContentScale,
@@ -358,7 +454,11 @@ export function IpadEditorShell({
     dispatch({ type: "SET_TOOL_MODE", mode: "select" });
   }, [dispatch, toolMode]);
 
-  const runCommand = useCallback((commandId: AppMenuCommandId) => {
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const closeZoomMenu = useCallback(() => { setZoomMenuOpen(false); }, []);
+  const toggleZoomMenu = useCallback(() => { setZoomMenuOpen((open) => !open); }, []);
+  const runZoomCommand = useCallback((commandId: AppMenuCommandId) => {
+    setZoomMenuOpen(false);
     commandRuntime.runCommand(commandId, "platform");
   }, [commandRuntime]);
 
@@ -369,9 +469,7 @@ export function IpadEditorShell({
   const hasMultipleFigures = figureCount > 1;
   const showFigureStrip = hasMultipleFigures && showFiguresPanel;
   const zoomPercent = canvasFitToContentScale ? `${Math.round(canvasFitToContentScale * 100)}%` : "Fit";
-  const statusText = pendingRequestId
-    ? "Rendering"
-    : canvasStatusHint ?? `${selectedElementIds.size} selected`;
+  const statusText = pendingRequestId ? "Rendering…" : canvasStatusHint;
 
   const toggleSourcePanel = useCallback(() => {
     syncLayout({ sourceVisible: !showSourcePanel });
@@ -408,6 +506,32 @@ export function IpadEditorShell({
     });
   }, [activeRightTab, syncLayout]);
 
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (!workspace) {
+      return;
+    }
+
+    const syncCompactState = () => {
+      const isCompact = workspace.getBoundingClientRect().width < COMPACT_WORKSPACE_WIDTH;
+      if (isCompact && !wasCompactWorkspaceRef.current && (showSourcePanel || rightPanelOpen)) {
+        syncLayout({
+          sourceVisible: false,
+          inspectorVisible: false,
+          objectsVisible: false,
+          stylesVisible: false,
+          activeRightTab
+        });
+      }
+      wasCompactWorkspaceRef.current = isCompact;
+    };
+
+    syncCompactState();
+    const observer = new ResizeObserver(syncCompactState);
+    observer.observe(workspace);
+    return () => { observer.disconnect(); };
+  }, [activeRightTab, rightPanelOpen, showSourcePanel, syncLayout]);
+
   const toggleFigures = useCallback(() => {
     syncLayout({ figuresVisible: hasMultipleFigures ? !showFiguresPanel : false });
   }, [hasMultipleFigures, showFiguresPanel, syncLayout]);
@@ -416,151 +540,193 @@ export function IpadEditorShell({
     dispatch({ type: "SET_TOOL_MODE", mode: resolveToolbarToolMode(toolMode, nextMode) });
   }, [dispatch, toolMode]);
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.defaultPrevented || isTextEditingShortcutTarget(event.target)) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const commandOrControl = event.metaKey || event.ctrlKey;
+      if (!commandOrControl) {
+        return;
+      }
+
+      if (event.altKey && !event.shiftKey) {
+        if (key === "s") {
+          toggleSourcePanel();
+          event.preventDefault();
+          return;
+        }
+        if (key === "i") {
+          toggleRightPanel();
+          event.preventDefault();
+          return;
+        }
+        if (key === "f" && hasMultipleFigures) {
+          toggleFigures();
+          event.preventDefault();
+          return;
+        }
+      }
+
+      if (!event.altKey && !event.shiftKey) {
+        const shortcutMode = IPAD_NUMBERED_TOOL_SHORTCUTS[key];
+        if (shortcutMode) {
+          dispatch({ type: "SET_TOOL_MODE", mode: shortcutMode });
+          event.preventDefault();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => { window.removeEventListener("keydown", onKeyDown); };
+  }, [dispatch, hasMultipleFigures, toggleFigures, toggleRightPanel, toggleSourcePanel]);
+
+  const updatePanelResize = useCallback((pointerId: number, clientX: number) => {
+    const resize = panelResizeRef.current;
+    if (resize?.pointerId !== pointerId) {
+      return;
+    }
+    const handleSpace =
+      (showSourcePanel ? PANEL_RESIZE_HANDLE_WIDTH : 0) +
+      (rightPanelOpen ? PANEL_RESIZE_HANDLE_WIDTH : 0);
+    const availablePanelSpace = Math.max(
+      MIN_SOURCE_PANEL_WIDTH + MIN_RIGHT_PANEL_WIDTH,
+      resize.surfaceWidth - MIN_CANVAS_COLUMN_WIDTH - handleSpace
+    );
+    const deltaX = clientX - resize.startClientX;
+
+    if (resize.pointerId === pointerId && panelResizeSide === "source") {
+      const maxSourceWidth = rightPanelOpen
+        ? availablePanelSpace - rightPanelWidth
+        : resize.surfaceWidth - MIN_CANVAS_COLUMN_WIDTH - handleSpace;
+      const nextWidth = clampPanelWidth(
+        resize.startSourceWidth + deltaX,
+        MIN_SOURCE_PANEL_WIDTH,
+        maxSourceWidth
+      );
+      setSourcePanelWidth(nextWidth);
+      return;
+    }
+
+    if (resize.pointerId === pointerId && panelResizeSide === "right") {
+      const maxRightWidth = showSourcePanel
+        ? availablePanelSpace - sourcePanelWidth
+        : resize.surfaceWidth - MIN_CANVAS_COLUMN_WIDTH - handleSpace;
+      const nextWidth = clampPanelWidth(
+        resize.startRightWidth - deltaX,
+        MIN_RIGHT_PANEL_WIDTH,
+        maxRightWidth
+      );
+      setRightPanelWidth(nextWidth);
+    }
+  }, [panelResizeSide, rightPanelOpen, rightPanelWidth, showSourcePanel, sourcePanelWidth]);
+
+  const finishPanelResize = useCallback((pointerId: number) => {
+    const resize = panelResizeRef.current;
+    if (resize?.pointerId !== pointerId) {
+      return;
+    }
+    panelResizeRef.current = null;
+    setPanelResizeSide(null);
+    storePanelWidth(SOURCE_PANEL_WIDTH_STORAGE_KEY, sourcePanelWidth);
+    storePanelWidth(RIGHT_PANEL_WIDTH_STORAGE_KEY, rightPanelWidth);
+  }, [rightPanelWidth, sourcePanelWidth]);
+
+  const beginPanelResize = useCallback((side: PanelResizeSide, event: ReactPointerEvent<HTMLButtonElement>) => {
+    const surface = editorSurfaceRef.current;
+    if (!surface) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panelResizeRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      surfaceWidth: surface.getBoundingClientRect().width,
+      startSourceWidth: sourcePanelWidth,
+      startRightWidth: rightPanelWidth
+    };
+    setPanelResizeSide(side);
+  }, [rightPanelWidth, sourcePanelWidth]);
+
+  const movePanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    updatePanelResize(event.pointerId, event.clientX);
+  }, [updatePanelResize]);
+
+  const endPanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    finishPanelResize(event.pointerId);
+  }, [finishPanelResize]);
+
+  useEffect(() => {
+    if (!panelResizeSide) {
+      return;
+    }
+
+    function onPointerMove(event: PointerEvent): void {
+      event.preventDefault();
+      updatePanelResize(event.pointerId, event.clientX);
+    }
+
+    function onPointerEnd(event: PointerEvent): void {
+      finishPanelResize(event.pointerId);
+    }
+
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
+    };
+  }, [finishPanelResize, panelResizeSide, updatePanelResize]);
+
+  const editorSurfaceStyle = {
+    "--ipad-source-panel-width": `${Math.round(sourcePanelWidth)}px`,
+    "--ipad-right-panel-width": `${Math.round(rightPanelWidth)}px`
+  } as CSSProperties;
+
   return (
     <div className={css.shell} data-testid="ipad-editor-shell">
-      <header className={css.topBar} data-select="chrome">
-        <div className={css.commandCluster}>
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.NEW_DOCUMENT}
-            label="New"
-            icon={RiFileAddLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.OPEN_DOCUMENT}
-            label="Open"
-            icon={RiFolderOpenLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.SAVE_DOCUMENT}
-            label="Save"
-            icon={RiSave3Line}
-            onRun={runCommand}
-          />
-          <ToggleButton
-            label="Source"
-            icon={RiCodeLine}
-            active={showSourcePanel}
-            disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL]?.enabled}
-            onClick={toggleSourcePanel}
-          />
-          {hasMultipleFigures ? (
-            <ToggleButton
-              label="Figures"
-              icon={RiFullscreenLine}
-              active={showFiguresPanel}
-              onClick={toggleFigures}
-            />
-          ) : null}
-        </div>
-
-        <div className={css.documentCluster}>
-          <div className={css.documentTitle}>
-            <span className={css.documentName}>{activeDocument?.title ?? "Untitled"}</span>
-            {activeDocument?.dirty ? <span className={css.dirtyDot} aria-label="Unsaved changes" /> : null}
-          </div>
-        </div>
-
-        <div className={css.commandCluster}>
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.UNDO}
-            label="Undo"
-            icon={RiArrowGoBackLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.REDO}
-            label="Redo"
-            icon={RiArrowGoForwardLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.ZOOM_OUT}
-            label="Zoom out"
-            icon={RiZoomOutLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.ZOOM_IN}
-            label="Zoom in"
-            icon={RiZoomInLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.FIT_TO_CONTENT}
-            label={zoomPercent}
-            icon={RiFullscreenLine}
-            onRun={runCommand}
-            showLabel
-          />
-        </div>
-
-        <div className={css.commandCluster}>
-          <ToggleButton
-            label="Inspector"
-            icon={RiLayoutRightLine}
-            active={rightPanelOpen}
-            disabled={
-              !commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL]?.enabled &&
-              !commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL]?.enabled &&
-              !commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL]?.enabled
-            }
-            onClick={toggleRightPanel}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.EXPORT_SVG_DOWNLOAD}
-            label="Export"
-            icon={RiDownloadCloudLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.EXPORT_SVG_COPY}
-            label="Share"
-            icon={RiShareForwardLine}
-            onRun={runCommand}
-          />
-          <CommandButton
-            commandRuntime={commandRuntime}
-            commandId={APP_MENU_COMMAND_IDS.OPEN_SETTINGS}
-            label="Settings"
-            icon={RiSettings3Line}
-            onRun={runCommand}
-          />
-          {updateChip ? (
-            <button type="button" className={css.updateButton} onClick={updateChip.onClick}>
-              {updateChip.version}
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      <div className={css.tabsRow} data-select="chrome">
-        <TabStrip onRequestCloseDocument={onRequestCloseDocument} />
-      </div>
+      <IpadNavBar
+        commandRuntime={commandRuntime}
+        onRequestCloseDocument={onRequestCloseDocument}
+        showSourcePanel={showSourcePanel}
+        onToggleSource={toggleSourcePanel}
+        sourceToggleEnabled={commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL]?.enabled === true}
+        inspectorOpen={rightPanelOpen}
+        onToggleInspector={toggleRightPanel}
+        inspectorToggleEnabled={
+          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL]?.enabled === true ||
+          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL]?.enabled === true ||
+          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL]?.enabled === true
+        }
+        hasMultipleFigures={hasMultipleFigures}
+        showFiguresPanel={showFiguresPanel}
+        onToggleFigures={toggleFigures}
+        updateChip={updateChip}
+      />
 
       <div
+        ref={workspaceRef}
         className={css.workspace}
         data-source-visible={showSourcePanel ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
       >
+        {showFigureStrip ? (
+          <div className={css.figureStrip} data-select="chrome">
+            <FigureNavigator />
+          </div>
+        ) : null}
         <main className={css.stage}>
-          {showFigureStrip ? (
-            <div className={css.figureStrip}>
-              <FigureNavigator />
-            </div>
-          ) : null}
           <div
+            ref={editorSurfaceRef}
+            style={editorSurfaceStyle}
             className={[
               css.editorSurface,
               showSourcePanel ? css.editorSurfaceWithSource : "",
@@ -569,8 +735,23 @@ export function IpadEditorShell({
           >
             {showSourcePanel ? (
               <PanelFrame kind="source">
-                <SourcePanel />
+                <div className={css.sourcePanelStack}>
+                  <div className={css.sourcePanelContent}>
+                    <SourcePanel />
+                  </div>
+                  <SourceAccessoryBar />
+                </div>
               </PanelFrame>
+            ) : null}
+            {showSourcePanel ? (
+              <PanelResizeHandle
+                side="source"
+                isActive={panelResizeSide === "source"}
+                value={sourcePanelWidth}
+                onPointerDown={beginPanelResize}
+                onPointerMove={movePanelResize}
+                onPointerUp={endPanelResize}
+              />
             ) : null}
             <PanelFrame kind="canvas">
               <>
@@ -581,6 +762,16 @@ export function IpadEditorShell({
                 />
               </>
             </PanelFrame>
+            {rightPanelOpen ? (
+              <PanelResizeHandle
+                side="right"
+                isActive={panelResizeSide === "right"}
+                value={rightPanelWidth}
+                onPointerDown={beginPanelResize}
+                onPointerMove={movePanelResize}
+                onPointerUp={endPanelResize}
+              />
+            ) : null}
             {rightPanelOpen ? (
               <aside className={css.rightPanel} aria-label={activeRightPanelLabel}>
                 <div className={css.rightPanelHeader} data-select="chrome">
@@ -625,78 +816,130 @@ export function IpadEditorShell({
           </div>
         </main>
 
-        <div className={css.statusPill} data-select="chrome">
-          <span>{statusText}</span>
-          <span>{tabOrder.length} tab{tabOrder.length === 1 ? "" : "s"}</span>
-          <span>{activeDocumentId.slice(0, 6)}</span>
+        {statusText ? (
+          <div className={css.hintChip} data-select="chrome" aria-live="polite">
+            {statusText}
+          </div>
+        ) : null}
+
+        <div className={css.zoomChip} data-select="chrome">
+          <IpadPopover
+            open={zoomMenuOpen}
+            onClose={closeZoomMenu}
+            align="start"
+            direction="up"
+            ariaLabel="Zoom"
+            testId="ipad-zoom-popover"
+            trigger={
+              <button
+                type="button"
+                className={css.zoomChipButton}
+                aria-label="Zoom"
+                title="Zoom"
+                aria-haspopup="dialog"
+                aria-expanded={zoomMenuOpen}
+                onClick={toggleZoomMenu}
+                data-testid="ipad-zoom-button"
+              >
+                {zoomPercent}
+              </button>
+            }
+          >
+            <IpadMenu ariaLabel="Zoom">
+              <IpadMenuItem
+                label="Zoom In"
+                icon={<RiAddLine size={18} />}
+                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_IN]?.enabled}
+                onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.ZOOM_IN); }}
+              />
+              <IpadMenuItem
+                label="Zoom Out"
+                icon={<RiSubtractLine size={18} />}
+                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_OUT]?.enabled}
+                onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.ZOOM_OUT); }}
+              />
+              <IpadMenuItem
+                label="Fit to Content"
+                icon={<RiAspectRatioLine size={18} />}
+                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.FIT_TO_CONTENT]?.enabled}
+                onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.FIT_TO_CONTENT); }}
+              />
+            </IpadMenu>
+          </IpadPopover>
         </div>
       </div>
     </div>
   );
 }
 
-function CommandButton({
-  commandRuntime,
-  commandId,
-  label,
-  icon: Icon,
-  showLabel = false,
-  onRun
+function PanelResizeHandle({
+  side,
+  isActive,
+  value,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp
 }: {
-  commandRuntime: EditorCommandRuntime;
-  commandId: AppMenuCommandId;
-  label: string;
-  icon: IconComponent;
-  showLabel?: boolean;
-  onRun: (commandId: AppMenuCommandId) => void;
+  side: PanelResizeSide;
+  isActive: boolean;
+  value: number;
+  onPointerDown: (side: PanelResizeSide, event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
-  const binding = commandRuntime.bindings[commandId];
-  const disabled = !binding?.enabled;
-  const checked = binding?.checked === true;
+  const label = side === "source" ? "Resize Source" : "Resize Inspector";
   return (
     <button
       type="button"
-      className={[css.iconButton, checked ? css.iconButtonChecked : "", showLabel ? css.iconButtonLabeled : ""]
-        .filter(Boolean)
-        .join(" ")}
-      disabled={disabled}
+      className={[
+        css.panelResizeHandle,
+        side === "source" ? css.sourceResizeHandle : css.rightResizeHandle,
+        isActive ? css.panelResizeHandleActive : ""
+      ].filter(Boolean).join(" ")}
+      role="separator"
       aria-label={label}
+      aria-orientation="vertical"
+      aria-valuemin={side === "source" ? MIN_SOURCE_PANEL_WIDTH : MIN_RIGHT_PANEL_WIDTH}
+      aria-valuenow={Math.round(value)}
       title={label}
-      aria-pressed={checked || undefined}
-      onClick={() => { onRun(commandId); }}
-    >
-      <Icon size={22} aria-hidden />
-      {showLabel ? <span>{label}</span> : null}
-    </button>
+      data-active={isActive ? "true" : "false"}
+      style={{ touchAction: "none" }}
+      onPointerDown={(event) => { onPointerDown(side, event); }}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    />
   );
 }
 
-function ToggleButton({
-  label,
-  icon: Icon,
-  active,
-  disabled = false,
-  onClick
-}: {
-  label: string;
-  icon: IconComponent;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+const SOURCE_ACCESSORY_ITEMS: Array<{ label: string; detail: SourceAccessoryCommandDetail }> = [
+  { label: "Undo", detail: { command: "undo" } },
+  { label: "Redo", detail: { command: "redo" } },
+  { label: "Outdent", detail: { command: "outdent" } },
+  { label: "Indent", detail: { command: "indent" } },
+  { label: "\\", detail: { command: "insert", text: "\\" } },
+  { label: "{ }", detail: { command: "insert", text: "{}", cursorOffset: 1 } },
+  { label: ";", detail: { command: "insert", text: ";" } },
+  { label: "$ $", detail: { command: "insert", text: "$$", cursorOffset: 1 } },
+  { label: "%", detail: { command: "comment" } }
+];
+
+function SourceAccessoryBar() {
   return (
-    <button
-      type="button"
-      className={[css.toggleButton, active ? css.toggleButtonActive : ""].filter(Boolean).join(" ")}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      <Icon size={18} aria-hidden />
-      <span>{label}</span>
-    </button>
+    <div className={css.sourceAccessoryBar} data-select="chrome" aria-label="Source editing controls">
+      {SOURCE_ACCESSORY_ITEMS.map((item) => (
+        <button
+          key={`${item.label}-${item.detail.command}`}
+          type="button"
+          className={css.sourceAccessoryButton}
+          onClick={() => { requestSourceAccessoryCommand(item.detail); }}
+          aria-label={item.label}
+          title={item.label}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -741,6 +984,7 @@ function FloatingToolPalette({
   const dragRef = useRef<ToolPaletteDragState | null>(null);
   const [palettePosition, setPalettePosition] = useState<ToolPalettePosition>(readStoredToolPalettePosition);
   const [paletteLayout, setPaletteLayout] = useState<ToolPaletteLayout>("vertical");
+  const [paletteEdge, setPaletteEdge] = useState<ToolPaletteEdge>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [openToolPopup, setOpenToolPopup] = useState<ToolPopupMode | null>(null);
   const [popupPlacement, setPopupPlacement] = useState<ToolPopupPlacement>("right");
@@ -762,19 +1006,27 @@ function FloatingToolPalette({
   const normalizePalettePlacement = useCallback((
     position: ToolPalettePosition,
     layout: ToolPaletteLayout
-  ): { position: ToolPalettePosition; layout: ToolPaletteLayout } => {
+  ): { position: ToolPalettePosition; layout: ToolPaletteLayout; edge: ToolPaletteEdge } => {
     const palette = paletteRef.current;
     const parent = palette?.parentElement;
     if (!palette || !parent) {
-      return { position, layout };
+      return { position, layout, edge: null };
     }
     const parentRect = parent.getBoundingClientRect();
-    const edge = resolveToolPaletteEdgeForPosition(position, layout, parentRect.height);
-    const nextLayout: ToolPaletteLayout = edge ? "horizontal" : "vertical";
+    const edge = resolveToolPaletteEdgeForPosition(position, layout, parentRect.width, parentRect.height);
+    const nextLayout = resolveToolPaletteLayout(edge);
     const dimensions = getToolPaletteDimensions(nextLayout);
-    const pinnedPosition = pinToolPaletteToEdge(position, edge, parentRect.height, dimensions.paletteHeight);
+    const pinnedPosition = pinToolPaletteToEdge(
+      position,
+      edge,
+      parentRect.width,
+      parentRect.height,
+      dimensions.paletteWidth,
+      dimensions.paletteHeight
+    );
     return {
       layout: nextLayout,
+      edge,
       position: clampToolPalettePosition(pinnedPosition, {
         parentWidth: parentRect.width,
         parentHeight: parentRect.height,
@@ -791,17 +1043,21 @@ function FloatingToolPalette({
     if (normalized.layout !== paletteLayout) {
       setPaletteLayout(normalized.layout);
     }
+    if (normalized.edge !== paletteEdge) {
+      setPaletteEdge(normalized.edge);
+    }
     if (normalized.position.x !== palettePosition.x || normalized.position.y !== palettePosition.y) {
       setPalettePosition(normalized.position);
       storeToolPalettePosition(normalized.position);
     }
-  }, [isDragging, normalizePalettePlacement, paletteLayout, palettePosition]);
+  }, [isDragging, normalizePalettePlacement, paletteEdge, paletteLayout, palettePosition]);
 
   useEffect(() => {
     function onResize(): void {
       setPalettePosition((current) => {
         const normalized = normalizePalettePlacement(current, paletteLayout);
         setPaletteLayout(normalized.layout);
+        setPaletteEdge(normalized.edge);
         storeToolPalettePosition(normalized.position);
         return normalized.position;
       });
@@ -840,8 +1096,14 @@ function FloatingToolPalette({
     if (paletteLayout === "horizontal") {
       return paletteRect.top - parentRect.top > parentRect.height / 2 ? "above" : "below";
     }
+    if (paletteEdge === "right") {
+      return "left";
+    }
+    if (paletteEdge === "left") {
+      return "right";
+    }
     return paletteRect.left - parentRect.left > parentRect.width / 2 ? "left" : "right";
-  }, [paletteLayout]);
+  }, [paletteEdge, paletteLayout]);
 
   const toggleToolPopup = useCallback((mode: ToolPopupMode) => {
     setPopupPlacement(resolvePopupPlacement());
@@ -887,16 +1149,23 @@ function FloatingToolPalette({
     const parent = paletteRef.current?.parentElement;
     const parentRect = parent?.getBoundingClientRect();
     const edge = parentRect
-      ? resolveToolPaletteEdgeForPointer(clientY, parentRect.top, parentRect.height)
+      ? resolveToolPaletteEdgeForPointer(clientX, clientY, parentRect)
       : null;
-    const nextLayout: ToolPaletteLayout = edge ? "horizontal" : "vertical";
+    const nextLayout = resolveToolPaletteLayout(edge);
     const dimensions = getToolPaletteDimensions(nextLayout);
     const rawPosition = {
       x: drag.originX + clientX - drag.startClientX,
       y: drag.originY + clientY - drag.startClientY
     };
     const next = clampToolPalettePosition(
-      pinToolPaletteToEdge(rawPosition, edge, drag.parentHeight, dimensions.paletteHeight),
+      pinToolPaletteToEdge(
+        rawPosition,
+        edge,
+        drag.parentWidth,
+        drag.parentHeight,
+        dimensions.paletteWidth,
+        dimensions.paletteHeight
+      ),
       {
         parentWidth: drag.parentWidth,
         parentHeight: drag.parentHeight,
@@ -905,6 +1174,7 @@ function FloatingToolPalette({
     );
     drag.lastPosition = next;
     setPaletteLayout(nextLayout);
+    setPaletteEdge(edge);
     setPalettePosition(next);
   }, []);
 
@@ -1055,6 +1325,7 @@ function FloatingToolPalette({
       aria-label="Drawing tools"
       data-dragging={isDragging ? "true" : "false"}
       data-layout={paletteLayout}
+      data-edge={paletteEdge ?? "free"}
       data-select="chrome"
       data-testid="ipad-tool-palette"
     >
