@@ -36,7 +36,7 @@ test("help menu opens the web about modal", async ({ page }) => {
   const modal = page.getByTestId("about-modal");
   await expect(modal).toBeVisible();
   await expect(modal.getByRole("heading", { name: "TikZ Editor Web" })).toBeVisible();
-  await expect(modal.getByText("Version 0.1.0 (0.1.0)")).toBeVisible();
+  await expect(modal.getByText(/^Version (\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?) \(\1\)$/)).toBeVisible();
   await expect(modal.getByText("Dominik Peters")).toBeVisible();
   await expect(modal.getByRole("link", { name: "https://tikz.dev/editor/" })).toHaveAttribute(
     "href",
