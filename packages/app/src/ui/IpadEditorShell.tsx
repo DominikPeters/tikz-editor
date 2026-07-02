@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   RiCloseLine,
-  RiDraggable,
   RiLayoutRightLine,
   RiPaletteLine,
   RiStackLine,
@@ -19,7 +18,6 @@ import {
 } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
 import type { SvgRenderModel } from "tikz-editor/svg";
-import { NODE_SHAPE_OPTIONS, type NodeShapePresetId } from "tikz-editor/edit/inspector";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { useEditorStore } from "../store/store";
 import type { ToolMode } from "../store/types";
@@ -32,20 +30,13 @@ import { SourcePanel } from "./SourcePanel";
 import { StylesPanel } from "./StylesPanel";
 import { IpadNavBar } from "./ipad/IpadNavBar";
 import { IpadMenu, IpadMenuItem, IpadPopover } from "./ipad/IpadPopover";
+import { IpadToolPalette, type PaletteDock } from "./ipad/IpadToolPalette";
 import { isCodeMirrorEventTarget } from "./editor-commands";
-import { GENERATED_NODE_SHAPE_PREVIEWS } from "./generated-node-shape-previews";
 import { requestSourceAccessoryCommand, type SourceAccessoryCommandDetail } from "./source-sync";
-import { ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } from "./ToolbarToolPopup";
-import { resolveToolbarToolMode, TOOL_BUTTONS } from "./tool-config";
+import { resolveToolbarToolMode } from "./tool-config";
 import css from "./IpadEditorShell.module.css";
 
 type RightSidebarTab = "inspector" | "objects" | "styles";
-type AddShapePresetId = Exclude<NodeShapePresetId, "custom">;
-type ToolPopupMode = "addShape" | "addMatrix";
-type ToolPopupPlacement = "left" | "right" | "above" | "below";
-type ToolPaletteLayout = "vertical" | "horizontal";
-type ToolPaletteEdge = "top" | "bottom" | "left" | "right" | null;
-type ToolPalettePosition = { x: number; y: number };
 type PanelResizeSide = "source" | "right";
 type PanelResizeState = {
   pointerId: number;
@@ -53,18 +44,6 @@ type PanelResizeState = {
   surfaceWidth: number;
   startSourceWidth: number;
   startRightWidth: number;
-};
-type ToolPaletteDragState = {
-  pointerId: number;
-  startClientX: number;
-  startClientY: number;
-  originX: number;
-  originY: number;
-  parentWidth: number;
-  parentHeight: number;
-  paletteWidth: number;
-  paletteHeight: number;
-  lastPosition: ToolPalettePosition;
 };
 
 type IconComponent = typeof RiCloseLine;
@@ -91,17 +70,6 @@ const RIGHT_PANEL_LABELS: Record<RightSidebarTab, string> = {
   objects: "Objects",
   styles: "Styles"
 };
-const IPAD_TOOL_BUTTONS = TOOL_BUTTONS.filter((tool) => tool.mode !== "magnify");
-const DEFAULT_TOOL_PALETTE_POSITION: ToolPalettePosition = { x: 12, y: 96 };
-const TOOL_PALETTE_POSITION_STORAGE_KEY = "tikz-editor-ipad-tool-palette-position";
-const TOOL_PALETTE_MARGIN = 12;
-const TOOL_PALETTE_EDGE_SWITCH_DISTANCE = 84;
-const TOOL_PALETTE_BUTTON_SIZE = 44;
-const TOOL_PALETTE_GAP = 4;
-const TOOL_PALETTE_PADDING = 5;
-const TOOL_PALETTE_VERTICAL_COLUMNS = 2;
-const TOOL_PALETTE_VERTICAL_HANDLE_HEIGHT = 24;
-const TOOL_PALETTE_HORIZONTAL_HANDLE_WIDTH = 32;
 const SOURCE_PANEL_WIDTH_STORAGE_KEY = "tikz-editor-ipad-source-panel-width";
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = "tikz-editor-ipad-right-panel-width";
 const DEFAULT_SOURCE_PANEL_WIDTH = 360;
@@ -111,23 +79,17 @@ const MIN_RIGHT_PANEL_WIDTH = 280;
 const MIN_CANVAS_COLUMN_WIDTH = 320;
 const PANEL_RESIZE_HANDLE_WIDTH = 8;
 const COMPACT_WORKSPACE_WIDTH = 920;
-const MATRIX_PICKER_MAX_COLUMNS = 10;
-const MATRIX_PICKER_MAX_ROWS = 8;
-const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
-  id: option.value,
-  label: option.label,
-  previewSvg: GENERATED_NODE_SHAPE_PREVIEWS[option.value] ?? null
-}));
 const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
   "1": "select",
   "2": "addNode",
   "3": "addShape",
-  "4": "addMatrix",
-  "5": "addLine",
-  "6": "addArrow",
-  "7": "addBezier",
-  "8": "addPath",
-  "9": "addFreehand"
+  "4": "addLine",
+  "5": "addArrow",
+  "6": "addPath",
+  "7": "addFreehand",
+  "8": "addRect",
+  "9": "addEllipse",
+  "0": "addCircle"
 };
 
 function coerceRightSidebarTab(tab: RightSidebarTab | "assistant"): RightSidebarTab {
@@ -136,150 +98,6 @@ function coerceRightSidebarTab(tab: RightSidebarTab | "assistant"): RightSidebar
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
-}
-
-function clampToolPalettePosition(
-  position: ToolPalettePosition,
-  bounds: Pick<ToolPaletteDragState, "parentWidth" | "parentHeight" | "paletteWidth" | "paletteHeight">
-): ToolPalettePosition {
-  const maxX = Math.max(TOOL_PALETTE_MARGIN, bounds.parentWidth - bounds.paletteWidth - TOOL_PALETTE_MARGIN);
-  const maxY = Math.max(TOOL_PALETTE_MARGIN, bounds.parentHeight - bounds.paletteHeight - TOOL_PALETTE_MARGIN);
-  return {
-    x: clampNumber(position.x, TOOL_PALETTE_MARGIN, maxX),
-    y: clampNumber(position.y, TOOL_PALETTE_MARGIN, maxY)
-  };
-}
-
-function getToolPaletteDimensions(layout: ToolPaletteLayout): Pick<ToolPaletteDragState, "paletteWidth" | "paletteHeight"> {
-  if (layout === "horizontal") {
-    const itemCount = IPAD_TOOL_BUTTONS.length + 1;
-    return {
-      paletteWidth:
-        (TOOL_PALETTE_PADDING * 2) +
-        TOOL_PALETTE_HORIZONTAL_HANDLE_WIDTH +
-        (IPAD_TOOL_BUTTONS.length * TOOL_PALETTE_BUTTON_SIZE) +
-        ((itemCount - 1) * TOOL_PALETTE_GAP),
-      paletteHeight: (TOOL_PALETTE_PADDING * 2) + TOOL_PALETTE_BUTTON_SIZE
-    };
-  }
-
-  const toolRows = Math.ceil(IPAD_TOOL_BUTTONS.length / TOOL_PALETTE_VERTICAL_COLUMNS);
-  return {
-    paletteWidth:
-      (TOOL_PALETTE_PADDING * 2) +
-      (TOOL_PALETTE_VERTICAL_COLUMNS * TOOL_PALETTE_BUTTON_SIZE) +
-      ((TOOL_PALETTE_VERTICAL_COLUMNS - 1) * TOOL_PALETTE_GAP),
-    paletteHeight:
-      (TOOL_PALETTE_PADDING * 2) +
-      TOOL_PALETTE_VERTICAL_HANDLE_HEIGHT +
-      (toolRows * TOOL_PALETTE_BUTTON_SIZE) +
-      (toolRows * TOOL_PALETTE_GAP)
-  };
-}
-
-function resolveToolPaletteLayout(edge: ToolPaletteEdge): ToolPaletteLayout {
-  return edge === "top" || edge === "bottom" ? "horizontal" : "vertical";
-}
-
-function resolveToolPaletteEdgeForPointer(
-  clientX: number,
-  clientY: number,
-  parentRect: DOMRect
-): ToolPaletteEdge {
-  const pointerX = clientX - parentRect.left;
-  const pointerY = clientY - parentRect.top;
-  const edgeDistances = [
-    { edge: "top", distance: pointerY },
-    { edge: "bottom", distance: parentRect.height - pointerY },
-    { edge: "left", distance: pointerX },
-    { edge: "right", distance: parentRect.width - pointerX }
-  ] satisfies Array<{ edge: NonNullable<ToolPaletteEdge>; distance: number }>;
-  const candidates = edgeDistances.filter((candidate) => candidate.distance <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE);
-  candidates.sort((left, right) => left.distance - right.distance);
-  return candidates[0]?.edge ?? null;
-}
-
-function resolveToolPaletteEdgeForPosition(
-  position: ToolPalettePosition,
-  layout: ToolPaletteLayout,
-  parentWidth: number,
-  parentHeight: number
-): ToolPaletteEdge {
-  if (position.y <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
-    return "top";
-  }
-
-  const dimensions = getToolPaletteDimensions(layout);
-  if (position.y + dimensions.paletteHeight >= parentHeight - TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
-    return "bottom";
-  }
-  if (position.x <= TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
-    return "left";
-  }
-  if (position.x + dimensions.paletteWidth >= parentWidth - TOOL_PALETTE_EDGE_SWITCH_DISTANCE) {
-    return "right";
-  }
-
-  return null;
-}
-
-function pinToolPaletteToEdge(
-  position: ToolPalettePosition,
-  edge: ToolPaletteEdge,
-  parentWidth: number,
-  parentHeight: number,
-  paletteWidth: number,
-  paletteHeight: number
-): ToolPalettePosition {
-  if (edge === "top") {
-    return { ...position, y: TOOL_PALETTE_MARGIN };
-  }
-  if (edge === "bottom") {
-    return {
-      ...position,
-      y: Math.max(TOOL_PALETTE_MARGIN, parentHeight - paletteHeight - TOOL_PALETTE_MARGIN)
-    };
-  }
-  if (edge === "left") {
-    return { ...position, x: TOOL_PALETTE_MARGIN };
-  }
-  if (edge === "right") {
-    return {
-      ...position,
-      x: Math.max(TOOL_PALETTE_MARGIN, parentWidth - paletteWidth - TOOL_PALETTE_MARGIN)
-    };
-  }
-  return position;
-}
-
-function readStoredToolPalettePosition(): ToolPalettePosition {
-  if (typeof localStorage === "undefined") {
-    return DEFAULT_TOOL_PALETTE_POSITION;
-  }
-  try {
-    const stored = localStorage.getItem(TOOL_PALETTE_POSITION_STORAGE_KEY);
-    if (!stored) {
-      return DEFAULT_TOOL_PALETTE_POSITION;
-    }
-    const parsed = JSON.parse(stored) as Partial<ToolPalettePosition>;
-    if (typeof parsed.x !== "number" || typeof parsed.y !== "number") {
-      return DEFAULT_TOOL_PALETTE_POSITION;
-    }
-    return { x: parsed.x, y: parsed.y };
-  } catch {
-    return DEFAULT_TOOL_PALETTE_POSITION;
-  }
-}
-
-function storeToolPalettePosition(position: ToolPalettePosition): void {
-  if (typeof localStorage === "undefined") {
-    return;
-  }
-  try {
-    localStorage.setItem(TOOL_PALETTE_POSITION_STORAGE_KEY, JSON.stringify(position));
-  } catch {
-    // Local storage can be unavailable in restricted web views; movement still works for the session.
-  }
 }
 
 function readStoredPanelWidth(key: string, fallback: number): number {
@@ -455,6 +273,7 @@ export function IpadEditorShell({
   }, [dispatch, toolMode]);
 
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const closeZoomMenu = useCallback(() => { setZoomMenuOpen(false); }, []);
   const toggleZoomMenu = useCallback(() => { setZoomMenuOpen((open) => !open); }, []);
   const runZoomCommand = useCallback((commandId: AppMenuCommandId) => {
@@ -754,13 +573,7 @@ export function IpadEditorShell({
               />
             ) : null}
             <PanelFrame kind="canvas">
-              <>
-                <CanvasPanel repeatPreviewModel={repeatPreviewModel} />
-                <FloatingToolPalette
-                  toolMode={toolMode}
-                  onSelectTool={setToolMode}
-                />
-              </>
+              <CanvasPanel repeatPreviewModel={repeatPreviewModel} />
             </PanelFrame>
             {rightPanelOpen ? (
               <PanelResizeHandle
@@ -816,13 +629,25 @@ export function IpadEditorShell({
           </div>
         </main>
 
+        <IpadToolPalette
+          toolMode={toolMode}
+          onSelectTool={setToolMode}
+          onDockChange={setPaletteDock}
+        />
+
         {statusText ? (
           <div className={css.hintChip} data-select="chrome" aria-live="polite">
             {statusText}
           </div>
         ) : null}
 
-        <div className={css.zoomChip} data-select="chrome">
+        <div
+          className={[
+            css.zoomChip,
+            paletteDock.kind === "corner" && paletteDock.corner === "bottom-left" ? css.zoomChipRaised : ""
+          ].filter(Boolean).join(" ")}
+          data-select="chrome"
+        >
           <IpadPopover
             open={zoomMenuOpen}
             onClose={closeZoomMenu}
@@ -970,415 +795,6 @@ function PanelTabButton({
       <Icon size={18} aria-hidden />
       <span>{label}</span>
     </button>
-  );
-}
-
-function FloatingToolPalette({
-  toolMode,
-  onSelectTool
-}: {
-  toolMode: ToolMode;
-  onSelectTool: (mode: ToolMode) => void;
-}) {
-  const paletteRef = useRef<HTMLElement | null>(null);
-  const dragRef = useRef<ToolPaletteDragState | null>(null);
-  const [palettePosition, setPalettePosition] = useState<ToolPalettePosition>(readStoredToolPalettePosition);
-  const [paletteLayout, setPaletteLayout] = useState<ToolPaletteLayout>("vertical");
-  const [paletteEdge, setPaletteEdge] = useState<ToolPaletteEdge>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [openToolPopup, setOpenToolPopup] = useState<ToolPopupMode | null>(null);
-  const [popupPlacement, setPopupPlacement] = useState<ToolPopupPlacement>("right");
-  const [matrixHoverSize, setMatrixHoverSize] = useState<{ rows: number; columns: number } | null>(null);
-  const {
-    selectedAddShape,
-    selectedAddMatrixRows,
-    selectedAddMatrixColumns,
-    dispatch
-  } = useEditorStore(useShallow((s) => ({
-    selectedAddShape: s.selectedAddShape,
-    selectedAddMatrixRows: s.selectedAddMatrixRows,
-    selectedAddMatrixColumns: s.selectedAddMatrixColumns,
-    dispatch: s.dispatch
-  })));
-  const matrixPreviewRows = matrixHoverSize?.rows ?? selectedAddMatrixRows;
-  const matrixPreviewColumns = matrixHoverSize?.columns ?? selectedAddMatrixColumns;
-
-  const normalizePalettePlacement = useCallback((
-    position: ToolPalettePosition,
-    layout: ToolPaletteLayout
-  ): { position: ToolPalettePosition; layout: ToolPaletteLayout; edge: ToolPaletteEdge } => {
-    const palette = paletteRef.current;
-    const parent = palette?.parentElement;
-    if (!palette || !parent) {
-      return { position, layout, edge: null };
-    }
-    const parentRect = parent.getBoundingClientRect();
-    const edge = resolveToolPaletteEdgeForPosition(position, layout, parentRect.width, parentRect.height);
-    const nextLayout = resolveToolPaletteLayout(edge);
-    const dimensions = getToolPaletteDimensions(nextLayout);
-    const pinnedPosition = pinToolPaletteToEdge(
-      position,
-      edge,
-      parentRect.width,
-      parentRect.height,
-      dimensions.paletteWidth,
-      dimensions.paletteHeight
-    );
-    return {
-      layout: nextLayout,
-      edge,
-      position: clampToolPalettePosition(pinnedPosition, {
-        parentWidth: parentRect.width,
-        parentHeight: parentRect.height,
-        ...dimensions
-      })
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isDragging) {
-      return;
-    }
-    const normalized = normalizePalettePlacement(palettePosition, paletteLayout);
-    if (normalized.layout !== paletteLayout) {
-      setPaletteLayout(normalized.layout);
-    }
-    if (normalized.edge !== paletteEdge) {
-      setPaletteEdge(normalized.edge);
-    }
-    if (normalized.position.x !== palettePosition.x || normalized.position.y !== palettePosition.y) {
-      setPalettePosition(normalized.position);
-      storeToolPalettePosition(normalized.position);
-    }
-  }, [isDragging, normalizePalettePlacement, paletteEdge, paletteLayout, palettePosition]);
-
-  useEffect(() => {
-    function onResize(): void {
-      setPalettePosition((current) => {
-        const normalized = normalizePalettePlacement(current, paletteLayout);
-        setPaletteLayout(normalized.layout);
-        setPaletteEdge(normalized.edge);
-        storeToolPalettePosition(normalized.position);
-        return normalized.position;
-      });
-    }
-
-    window.addEventListener("resize", onResize);
-    return () => { window.removeEventListener("resize", onResize); };
-  }, [normalizePalettePlacement, paletteLayout]);
-
-  useEffect(() => {
-    if (!openToolPopup) {
-      return;
-    }
-
-    function onPointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
-      if (!target || paletteRef.current?.contains(target)) {
-        return;
-      }
-      setOpenToolPopup(null);
-      setMatrixHoverSize(null);
-    }
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => { window.removeEventListener("pointerdown", onPointerDown); };
-  }, [openToolPopup]);
-
-  const resolvePopupPlacement = useCallback((): ToolPopupPlacement => {
-    const palette = paletteRef.current;
-    const parent = palette?.parentElement;
-    if (!palette || !parent) {
-      return "right";
-    }
-    const parentRect = parent.getBoundingClientRect();
-    const paletteRect = palette.getBoundingClientRect();
-    if (paletteLayout === "horizontal") {
-      return paletteRect.top - parentRect.top > parentRect.height / 2 ? "above" : "below";
-    }
-    if (paletteEdge === "right") {
-      return "left";
-    }
-    if (paletteEdge === "left") {
-      return "right";
-    }
-    return paletteRect.left - parentRect.left > parentRect.width / 2 ? "left" : "right";
-  }, [paletteEdge, paletteLayout]);
-
-  const toggleToolPopup = useCallback((mode: ToolPopupMode) => {
-    setPopupPlacement(resolvePopupPlacement());
-    setMatrixHoverSize(null);
-    setOpenToolPopup((current) => (current === mode ? null : mode));
-  }, [resolvePopupPlacement]);
-
-  const beginPaletteDrag = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    const palette = paletteRef.current;
-    const parent = palette?.parentElement;
-    if (!palette || !parent) {
-      return;
-    }
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const parentRect = parent.getBoundingClientRect();
-    const paletteRect = palette.getBoundingClientRect();
-    const origin = {
-      x: paletteRect.left - parentRect.left,
-      y: paletteRect.top - parentRect.top
-    };
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      originX: origin.x,
-      originY: origin.y,
-      parentWidth: parentRect.width,
-      parentHeight: parentRect.height,
-      ...getToolPaletteDimensions(paletteLayout),
-      lastPosition: origin
-    };
-    setOpenToolPopup(null);
-    setMatrixHoverSize(null);
-    setIsDragging(true);
-  }, [paletteLayout]);
-
-  const updatePaletteDrag = useCallback((pointerId: number, clientX: number, clientY: number) => {
-    const drag = dragRef.current;
-    if (drag?.pointerId !== pointerId) {
-      return;
-    }
-    const parent = paletteRef.current?.parentElement;
-    const parentRect = parent?.getBoundingClientRect();
-    const edge = parentRect
-      ? resolveToolPaletteEdgeForPointer(clientX, clientY, parentRect)
-      : null;
-    const nextLayout = resolveToolPaletteLayout(edge);
-    const dimensions = getToolPaletteDimensions(nextLayout);
-    const rawPosition = {
-      x: drag.originX + clientX - drag.startClientX,
-      y: drag.originY + clientY - drag.startClientY
-    };
-    const next = clampToolPalettePosition(
-      pinToolPaletteToEdge(
-        rawPosition,
-        edge,
-        drag.parentWidth,
-        drag.parentHeight,
-        dimensions.paletteWidth,
-        dimensions.paletteHeight
-      ),
-      {
-        parentWidth: drag.parentWidth,
-        parentHeight: drag.parentHeight,
-        ...dimensions
-      }
-    );
-    drag.lastPosition = next;
-    setPaletteLayout(nextLayout);
-    setPaletteEdge(edge);
-    setPalettePosition(next);
-  }, []);
-
-  const finishPaletteDrag = useCallback((pointerId: number) => {
-    const drag = dragRef.current;
-    if (drag?.pointerId !== pointerId) {
-      return;
-    }
-    dragRef.current = null;
-    setIsDragging(false);
-    storeToolPalettePosition(drag.lastPosition);
-  }, []);
-
-  const movePalette = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    updatePaletteDrag(event.pointerId, event.clientX, event.clientY);
-  }, [updatePaletteDrag]);
-
-  const endPaletteDrag = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    finishPaletteDrag(event.pointerId);
-  }, [finishPaletteDrag]);
-
-  useEffect(() => {
-    if (!isDragging) {
-      return;
-    }
-
-    function onPointerMove(event: PointerEvent): void {
-      event.preventDefault();
-      updatePaletteDrag(event.pointerId, event.clientX, event.clientY);
-    }
-
-    function onPointerEnd(event: PointerEvent): void {
-      finishPaletteDrag(event.pointerId);
-    }
-
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
-    window.addEventListener("pointerup", onPointerEnd);
-    window.addEventListener("pointercancel", onPointerEnd);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerEnd);
-      window.removeEventListener("pointercancel", onPointerEnd);
-    };
-  }, [finishPaletteDrag, isDragging, updatePaletteDrag]);
-
-  const selectShape = useCallback((id: string) => {
-    dispatch({ type: "SET_ADD_SHAPE_PRESET", value: id as AddShapePresetId });
-    dispatch({ type: "SET_TOOL_MODE", mode: "addShape" });
-    setOpenToolPopup(null);
-  }, [dispatch]);
-
-  const selectMatrix = useCallback((rows: number, columns: number) => {
-    dispatch({ type: "SET_ADD_MATRIX_PRESET", rows, columns });
-    dispatch({ type: "SET_TOOL_MODE", mode: "addMatrix" });
-    setMatrixHoverSize(null);
-    setOpenToolPopup(null);
-  }, [dispatch]);
-
-  const renderToolPopup = () => {
-    if (openToolPopup === "addShape") {
-      return (
-        <div
-          className={[
-            css.toolPopup,
-            popupPlacement === "left" ? css.toolPopupLeft : "",
-            popupPlacement === "above" ? css.toolPopupAbove : "",
-            popupPlacement === "below" ? css.toolPopupBelow : ""
-          ].filter(Boolean).join(" ")}
-          role="dialog"
-          aria-label="Shape choices"
-          data-testid="ipad-tool-popup-addShape"
-        >
-          <ToolbarPopupSection title="Shape">
-            <ToolbarPopupVisualChoiceGrid
-              choices={SHAPE_POPUP_CHOICES}
-              selectedId={selectedAddShape}
-              onSelect={selectShape}
-              testIdPrefix="ipad-toolbar-shape-choice"
-            />
-          </ToolbarPopupSection>
-        </div>
-      );
-    }
-    if (openToolPopup === "addMatrix") {
-      const isSelected = (row: number, column: number): boolean =>
-        row <= matrixPreviewRows && column <= matrixPreviewColumns;
-      return (
-        <div
-          className={[
-            css.toolPopup,
-            css.matrixToolPopup,
-            popupPlacement === "left" ? css.toolPopupLeft : "",
-            popupPlacement === "above" ? css.toolPopupAbove : "",
-            popupPlacement === "below" ? css.toolPopupBelow : ""
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          role="dialog"
-          aria-label="Matrix choices"
-          data-testid="ipad-tool-popup-addMatrix"
-        >
-          <ToolbarPopupSection title={`Matrix (${matrixPreviewColumns} x ${matrixPreviewRows})`}>
-            <div
-              className={css.matrixPicker}
-              role="grid"
-              aria-label="Matrix size"
-              data-testid="ipad-matrix-picker-grid"
-              onPointerLeave={() => { setMatrixHoverSize(null); }}
-            >
-              {Array.from({ length: MATRIX_PICKER_MAX_ROWS }, (_, rowIndex) => rowIndex + 1).map((row) => (
-                <div key={row} className={css.matrixPickerRow} role="row">
-                  {Array.from({ length: MATRIX_PICKER_MAX_COLUMNS }, (_, columnIndex) => columnIndex + 1).map((column) => (
-                    <button
-                      key={`${row}-${column}`}
-                      type="button"
-                      className={[
-                        css.matrixPickerCell,
-                        isSelected(row, column) ? css.matrixPickerCellSelected : ""
-                      ].filter(Boolean).join(" ")}
-                      role="gridcell"
-                      aria-label={`${row} rows by ${column} columns`}
-                      aria-selected={isSelected(row, column)}
-                      data-testid={`ipad-matrix-picker-cell-${row}-${column}`}
-                      onPointerEnter={() => { setMatrixHoverSize({ rows: row, columns: column }); }}
-                      onFocus={() => { setMatrixHoverSize({ rows: row, columns: column }); }}
-                      onClick={() => { selectMatrix(row, column); }}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </ToolbarPopupSection>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  return (
-    <nav
-      ref={paletteRef}
-      className={css.toolPalette}
-      style={{ left: palettePosition.x, top: palettePosition.y }}
-      aria-label="Drawing tools"
-      data-dragging={isDragging ? "true" : "false"}
-      data-layout={paletteLayout}
-      data-edge={paletteEdge ?? "free"}
-      data-select="chrome"
-      data-testid="ipad-tool-palette"
-    >
-      <button
-        type="button"
-        className={css.toolPaletteHandle}
-        aria-label="Move tools"
-        title="Move tools"
-        style={{ touchAction: "none" }}
-        onPointerDown={beginPaletteDrag}
-        onPointerMove={movePalette}
-        onPointerUp={endPaletteDrag}
-        onPointerCancel={endPaletteDrag}
-        data-testid="ipad-tool-palette-drag-handle"
-      >
-        <RiDraggable size={18} aria-hidden />
-      </button>
-      {IPAD_TOOL_BUTTONS.map((tool) => {
-        const Icon = tool.icon;
-        const active = toolMode === tool.mode;
-        const popupMode = tool.mode === "addShape" || tool.mode === "addMatrix" ? tool.mode : null;
-        const popupOpen = popupMode != null && openToolPopup === popupMode;
-        return (
-          <button
-            key={tool.mode}
-            type="button"
-            className={[
-              css.toolButton,
-              active || popupOpen ? css.toolButtonActive : "",
-              popupMode ? css.toolButtonWithPopup : "",
-              tool.separatorBefore ? css.toolButtonSeparated : ""
-            ].filter(Boolean).join(" ")}
-            aria-label={tool.label}
-            title={tool.title}
-            aria-pressed={active || popupOpen}
-            aria-haspopup={popupMode ? "dialog" : undefined}
-            aria-expanded={popupMode ? popupOpen : undefined}
-            onClick={() => {
-              if (popupMode) {
-                toggleToolPopup(popupMode);
-                return;
-              }
-              setOpenToolPopup(null);
-              setMatrixHoverSize(null);
-              onSelectTool(tool.mode);
-            }}
-          >
-            <Icon size={24} />
-          </button>
-        );
-      })}
-      {renderToolPopup()}
-    </nav>
   );
 }
 
