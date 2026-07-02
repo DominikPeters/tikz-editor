@@ -1387,51 +1387,79 @@ export const CanvasPanel = memo(function CanvasPanel({
     LEFT_RULER_DRAG_SOURCE_WIDTH_PX
   });
 
-  // On iPad the inspector floats over the canvas's right edge; when it opens,
-  // pan just enough that the current selection is not hidden underneath it.
+  // On iPad the inspector floats over the canvas's right edge. When the panel
+  // opens — or the selection changes while it is open — pan just enough that
+  // the selection is not hidden underneath it. Never pans mid-drag.
   const inspectorOverlayOpen = useEditorStore(
     (s) => s.showInspectorPanel || s.showObjectsPanel || s.showStylesPanel
   );
+  const selectionRevealKey = [...selectedElementIds].sort().join("|");
   const wasInspectorOverlayOpenRef = useRef(inspectorOverlayOpen);
+  const lastRevealedSelectionRef = useRef(selectionRevealKey);
+  const pendingRevealRef = useRef(false);
   useEffect(() => {
     const wasOpen = wasInspectorOverlayOpenRef.current;
     wasInspectorOverlayOpenRef.current = inspectorOverlayOpen;
-    if (!inspectorOverlayOpen || wasOpen) {
+    const selectionChanged = lastRevealedSelectionRef.current !== selectionRevealKey;
+    lastRevealedSelectionRef.current = selectionRevealKey;
+    if (!inspectorOverlayOpen) {
+      pendingRevealRef.current = false;
       return;
     }
-    if (document.documentElement.dataset.editorPlatform !== "ipad") {
+    if (
+      (!wasOpen || selectionChanged) &&
+      selectionBoundsBySource.size > 0 &&
+      document.documentElement.dataset.editorPlatform === "ipad"
+    ) {
+      pendingRevealRef.current = true;
+    }
+    if (!pendingRevealRef.current) {
       return;
     }
-    const viewport = viewportRef.current;
-    const viewBox = svgResultRef.current?.viewBox;
-    if (!viewport || !viewBox || selectionBoundsBySource.size === 0) {
-      return;
-    }
-    const merged = mergeBoundsList([...selectionBoundsBySource.values()]);
-    if (!merged) {
-      return;
-    }
-    const panel = document.querySelector('[data-testid="ipad-floating-panel"]');
-    const viewportRect = viewport.getBoundingClientRect();
-    const panelLeft = panel
-      ? panel.getBoundingClientRect().left - viewportRect.left
-      : viewportRect.width - 352;
-    const { translateX, translateY, scale } = canvasTransformRef.current;
-    const selectionLeft = translateX + (merged.minX - viewBox.x) * scale;
-    const selectionRight = translateX + (merged.maxX - viewBox.x) * scale;
-    const pad = 20;
-    if (selectionRight <= panelLeft - pad) {
-      return;
-    }
-    const dx = Math.min(
-      selectionRight - (panelLeft - pad),
-      Math.max(0, selectionLeft - pad)
-    );
-    if (dx <= 0) {
-      return;
-    }
-    dispatchCanvasTransform({ translateX: translateX - dx, translateY, scale });
-  }, [dispatchCanvasTransform, inspectorOverlayOpen, selectionBoundsBySource]);
+
+    const revealSelection = () => {
+      pendingRevealRef.current = false;
+      if (dragRef.current) {
+        return;
+      }
+      const viewport = viewportRef.current;
+      const viewBox = svgResultRef.current?.viewBox;
+      if (!viewport || !viewBox) {
+        return;
+      }
+      const merged = mergeBoundsList([...selectionBoundsBySource.values()]);
+      if (!merged) {
+        return;
+      }
+      const panel = document.querySelector('[data-testid="ipad-floating-panel"]');
+      const viewportRect = viewport.getBoundingClientRect();
+      const panelLeft = panel
+        ? panel.getBoundingClientRect().left - viewportRect.left
+        : viewportRect.width - 352;
+      const { translateX, translateY, scale } = canvasTransformRef.current;
+      const selectionLeft = translateX + (merged.minX - viewBox.x) * scale;
+      const selectionRight = translateX + (merged.maxX - viewBox.x) * scale;
+      const pad = 20;
+      if (selectionRight <= panelLeft - pad) {
+        return;
+      }
+      const dx = Math.min(
+        selectionRight - (panelLeft - pad),
+        Math.max(0, selectionLeft - pad)
+      );
+      if (dx <= 0) {
+        return;
+      }
+      // Fit-to-content mode would immediately re-fit and revert the pan.
+      setFitToContentModeActive(false);
+      dispatchCanvasTransform({ translateX: translateX - dx, translateY, scale });
+    };
+
+    // Selecting an element starts a potential move drag on pointerdown; wait a
+    // beat so we only reveal for taps, never under an active drag.
+    const timer = window.setTimeout(revealSelection, 220);
+    return () => { window.clearTimeout(timer); };
+  }, [dispatchCanvasTransform, inspectorOverlayOpen, selectionBoundsBySource, selectionRevealKey, setFitToContentModeActive]);
 
   const { toolPreview } = useCanvasDerivedState({
     svgResult,

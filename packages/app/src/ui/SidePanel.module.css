@@ -104,9 +104,12 @@
 
 :global(html[data-editor-platform="ipad"]) .header {
   border-bottom: 0;
-  padding: 8px 14px 0;
-  font-size: 12px;
-  letter-spacing: 0.05em;
+  padding: 10px 16px 0;
+  font-size: 15px;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
 }
 
 :global(html[data-editor-platform="ipad"]) .content {

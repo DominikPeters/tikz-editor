@@ -6,7 +6,11 @@ import type {
   LinkedTextWriteResult,
   MenuCommandHandler
 } from "@tikz-editor/app";
-import { revisionForText } from "@tikz-editor/app";
+// Deep import on purpose: pulling revisionForText from the package index would
+// evaluate the editor store (and seed the workspace from the in-memory fallback
+// platform) before bootstrap() registers the iPad platform adapter — silently
+// discarding the persisted workspace on every launch.
+import { revisionForText } from "@tikz-editor/app/src/linked-file-sync";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl } from "@tauri-apps/plugin-opener";

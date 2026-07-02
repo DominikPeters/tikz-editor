@@ -237,3 +237,110 @@
 .addRow {
   padding-top: 2px;
 }
+
+/* ── iPad styling ──────────────────────────────────────────────────────── */
+
+:global(html[data-editor-platform="ipad"]) .content {
+  padding: 10px;
+}
+
+:global(html[data-editor-platform="ipad"]) .sectionTitle {
+  font-size: 13px;
+}
+
+:global(html[data-editor-platform="ipad"]) .sectionMeta {
+  font-size: 11px;
+}
+
+:global(html[data-editor-platform="ipad"]) .sectionLocation {
+  font-size: 10px;
+}
+
+:global(html[data-editor-platform="ipad"]) .ruleBody.ruleBody {
+  padding: 6px 8px;
+}
+
+:global(html[data-editor-platform="ipad"]) .declaration {
+  grid-template-columns: 24px minmax(0, 1.2fr) minmax(90px, 1fr) 32px;
+  gap: 7px;
+  padding: 2px 0;
+  min-height: 38px;
+  font-size: 12px;
+}
+
+:global(html[data-editor-platform="ipad"]) .keyCell {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxCell input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+:global(html[data-editor-platform="ipad"]) .propertyName {
+  font-size: 13px;
+}
+
+:global(html[data-editor-platform="ipad"]) .keyInput,
+:global(html[data-editor-platform="ipad"]) .valueInput,
+:global(html[data-editor-platform="ipad"]) .rawInput {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .keyInput:focus,
+:global(html[data-editor-platform="ipad"]) .valueInput:focus,
+:global(html[data-editor-platform="ipad"]) .rawInput:focus {
+  outline: none;
+  border: 0;
+  background: var(--bg-pane);
+  font-size: 16px;
+}
+
+:global(html[data-editor-platform="ipad"]) .rawValueButton {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .deleteButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 14px;
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+:global(html[data-editor-platform="ipad"]) .deleteButtonPlaceholder {
+  width: 32px;
+}
+
+:global(html[data-editor-platform="ipad"]) .addButton {
+  width: 32px;
+  height: 32px;
+  margin-top: 4px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxLabel {
+  font-size: 13px;
+  gap: 8px;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkboxLabel input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}

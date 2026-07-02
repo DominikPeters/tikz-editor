@@ -414,7 +414,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         return;
       }
 
-      if (!svgResult || (snapshotSource !== source && drag.kind !== "resize")) {
+      // Resize is not exempt: committing resizeElement while the snapshot lags the
+      // source splices coordinates at stale offsets and corrupts the document.
+      if (!svgResult || snapshotSource !== source) {
         setNodeAnchorOverlay(null);
         setSnapLines([]);
         maybeTriggerSnapFeedback(false);

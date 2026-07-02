@@ -602,6 +602,14 @@
   border-radius: 1px;
 }
 
+:global(html[data-editor-platform="ipad"]) .moreOptionsToggle {
+  min-height: 30px;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .lineWidthValueLabel {
   min-width: 0;
   overflow: hidden;

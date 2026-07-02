@@ -175,3 +175,35 @@
 .dropAfter {
   box-shadow: inset 0 -2px 0 var(--accent), inset 2px 0 0 color-mix(in srgb, var(--accent) 25%, transparent);
 }
+/* ── iPad styling ──────────────────────────────────────────────────────── */
+
+:global(html[data-editor-platform="ipad"]) .row {
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+:global(html[data-editor-platform="ipad"]) .title {
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .iconButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+}
+
+:global(html[data-editor-platform="ipad"]) .multiArrangeGroup {
+  gap: 2px;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+}
+
+:global(html[data-editor-platform="ipad"]) .multiArrangeIconButton {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
