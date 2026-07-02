@@ -203,32 +203,66 @@
   }
 }
 
+.popupHost {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
 .popup[data-place="above"] {
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 16px);
   left: 50%;
   translate: -50% 0;
   transform-origin: bottom center;
 }
 
+.popup[data-place="above"][data-anchor="end"] {
+  left: auto;
+  right: -4px;
+  translate: 0 0;
+  transform-origin: bottom right;
+}
+
 .popup[data-place="below"] {
-  top: calc(100% + 10px);
+  top: calc(100% + 16px);
   left: 50%;
   translate: -50% 0;
   transform-origin: top center;
 }
 
+.popup[data-place="below"][data-anchor="end"] {
+  left: auto;
+  right: -4px;
+  translate: 0 0;
+  transform-origin: top right;
+}
+
 .popup[data-place="side-right"] {
-  left: calc(100% + 10px);
+  left: calc(100% + 16px);
   top: 50%;
   translate: 0 -50%;
   transform-origin: center left;
 }
 
+.popup[data-place="side-right"][data-anchor="end"] {
+  top: auto;
+  bottom: -4px;
+  translate: 0 0;
+  transform-origin: bottom left;
+}
+
 .popup[data-place="side-left"] {
-  right: calc(100% + 10px);
+  right: calc(100% + 16px);
   top: 50%;
   translate: 0 -50%;
   transform-origin: center right;
+}
+
+.popup[data-place="side-left"][data-anchor="end"] {
+  top: auto;
+  bottom: -4px;
+  translate: 0 0;
+  transform-origin: bottom right;
 }
 
 .moreList {

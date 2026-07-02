@@ -467,9 +467,9 @@ export function IpadToolPalette({
           const Icon = tool.icon;
           const active = toolMode === tool.mode;
           const hasOptions = tool.mode === "addShape";
-          return (
+          const toolButton = (
             <button
-              key={tool.mode}
+              key={hasOptions ? undefined : tool.mode}
               type="button"
               className={[
                 css.toolButton,
@@ -488,61 +488,65 @@ export function IpadToolPalette({
               {hasOptions ? <span className={css.toolCaret} aria-hidden /> : null}
             </button>
           );
+          if (!hasOptions) {
+            return toolButton;
+          }
+          return (
+            <div key={tool.mode} className={css.popupHost}>
+              {toolButton}
+              {openPopup === "shape" ? (
+                <div
+                  className={css.popup}
+                  data-place={popupPlace}
+                  data-anchor="center"
+                  role="dialog"
+                  aria-label="Shape choices"
+                  data-testid="ipad-tool-popup-addShape"
+                >
+                  <ToolbarPopupSection title="Shape">
+                    <ToolbarPopupVisualChoiceGrid
+                      choices={SHAPE_POPUP_CHOICES}
+                      selectedId={selectedAddShape}
+                      onSelect={selectShapePreset}
+                      testIdPrefix="ipad-toolbar-shape-choice"
+                    />
+                  </ToolbarPopupSection>
+                </div>
+              ) : null}
+            </div>
+          );
         })}
-        <button
-          type="button"
-          className={[
-            css.toolButton,
-            css.toolButtonSeparated,
-            activeOverflowTool ? css.toolButtonActive : "",
-            openPopup === "more" ? css.toolButtonActive : ""
-          ].filter(Boolean).join(" ")}
-          aria-label="More tools"
-          title="More tools"
-          aria-haspopup="dialog"
-          aria-expanded={openPopup === "more"}
-          onClick={() => {
-            setMatrixDragSize(null);
-            setOpenPopup((current) => (current === "more" ? null : "more"));
-          }}
-          data-testid="ipad-tool-more"
-        >
-          {MoreFaceIcon ? <MoreFaceIcon size={24} /> : <MoreDotsIcon />}
-          <span className={css.toolCaret} aria-hidden />
-        </button>
-      </div>
-
-      <div className={css.puckFace} aria-hidden>
-        <ActiveToolIcon size={26} />
-      </div>
-
-      {openPopup === "shape" ? (
-        <div
-          className={css.popup}
-          data-place={popupPlace}
-          role="dialog"
-          aria-label="Shape choices"
-          data-testid="ipad-tool-popup-addShape"
-        >
-          <ToolbarPopupSection title="Shape">
-            <ToolbarPopupVisualChoiceGrid
-              choices={SHAPE_POPUP_CHOICES}
-              selectedId={selectedAddShape}
-              onSelect={selectShapePreset}
-              testIdPrefix="ipad-toolbar-shape-choice"
-            />
-          </ToolbarPopupSection>
-        </div>
-      ) : null}
-
-      {openPopup === "more" ? (
-        <div
-          className={css.popup}
-          data-place={popupPlace}
-          role="dialog"
-          aria-label="More tools"
-          data-testid="ipad-tool-popup-more"
-        >
+        <div className={css.popupHost}>
+          <button
+            type="button"
+            className={[
+              css.toolButton,
+              css.toolButtonSeparated,
+              activeOverflowTool ? css.toolButtonActive : "",
+              openPopup === "more" ? css.toolButtonActive : ""
+            ].filter(Boolean).join(" ")}
+            aria-label="More tools"
+            title="More tools"
+            aria-haspopup="dialog"
+            aria-expanded={openPopup === "more"}
+            onClick={() => {
+              setMatrixDragSize(null);
+              setOpenPopup((current) => (current === "more" ? null : "more"));
+            }}
+            data-testid="ipad-tool-more"
+          >
+            {MoreFaceIcon ? <MoreFaceIcon size={24} /> : <MoreDotsIcon />}
+            <span className={css.toolCaret} aria-hidden />
+          </button>
+          {openPopup === "more" ? (
+            <div
+              className={css.popup}
+              data-place={popupPlace}
+              data-anchor="end"
+              role="dialog"
+              aria-label="More tools"
+              data-testid="ipad-tool-popup-more"
+            >
           <div className={css.moreList}>
             {OVERFLOW_TOOLS.map((tool) => {
               const Icon = tool.icon;
@@ -653,8 +657,14 @@ export function IpadToolPalette({
               );
             })}
           </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
+
+      <div className={css.puckFace} aria-hidden>
+        <ActiveToolIcon size={26} />
+      </div>
     </nav>
   );
 }

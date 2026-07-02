@@ -161,6 +161,18 @@ export function IpadNavBar({
             />
           </IpadMenu>
         </IpadPopover>
+        <button
+          type="button"
+          className={[css.iconButton, showSourcePanel ? css.iconButtonActive : ""].filter(Boolean).join(" ")}
+          aria-label="Source"
+          title="Source"
+          aria-pressed={showSourcePanel}
+          disabled={!sourceToggleEnabled}
+          onClick={onToggleSource}
+          data-testid="ipad-source-toggle"
+        >
+          <RiCodeLine size={21} aria-hidden />
+        </button>
       </div>
 
       <div className={css.titleCluster}>
@@ -236,18 +248,6 @@ export function IpadNavBar({
           data-testid="ipad-redo-button"
         >
           <RiArrowGoForwardLine size={21} aria-hidden />
-        </button>
-        <button
-          type="button"
-          className={[css.iconButton, showSourcePanel ? css.iconButtonActive : ""].filter(Boolean).join(" ")}
-          aria-label="Source"
-          title="Source"
-          aria-pressed={showSourcePanel}
-          disabled={!sourceToggleEnabled}
-          onClick={onToggleSource}
-          data-testid="ipad-source-toggle"
-        >
-          <RiCodeLine size={21} aria-hidden />
         </button>
         <button
           type="button"

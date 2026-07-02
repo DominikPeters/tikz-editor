@@ -2,7 +2,9 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
 } from "react";
 import {
   RiAddLine,
@@ -58,6 +60,11 @@ const RIGHT_PANEL_LABELS: Record<RightSidebarTab, string> = {
 };
 const RIGHT_PANEL_TABS: readonly RightSidebarTab[] = ["inspector", "objects", "styles"];
 const SOURCE_PINNED_STORAGE_KEY = "tikz-editor-ipad-source-pinned";
+const SOURCE_WIDTH_STORAGE_KEY = "tikz-editor-ipad-source-width";
+const DEFAULT_SOURCE_COLUMN_WIDTH = 420;
+const MIN_SOURCE_COLUMN_WIDTH = 260;
+const MAX_SOURCE_COLUMN_WIDTH = 640;
+const MAX_SOURCE_COLUMN_FRACTION = 0.6;
 const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
   "1": "select",
   "2": "addNode",
@@ -73,6 +80,28 @@ const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
 
 function coerceRightSidebarTab(tab: RightSidebarTab | "assistant"): RightSidebarTab {
   return tab === "assistant" ? "inspector" : tab;
+}
+
+function readStoredSourceWidth(): number {
+  if (typeof localStorage === "undefined") {
+    return DEFAULT_SOURCE_COLUMN_WIDTH;
+  }
+  const stored = Number(localStorage.getItem(SOURCE_WIDTH_STORAGE_KEY));
+  if (!Number.isFinite(stored)) {
+    return DEFAULT_SOURCE_COLUMN_WIDTH;
+  }
+  return Math.min(Math.max(stored, MIN_SOURCE_COLUMN_WIDTH), MAX_SOURCE_COLUMN_WIDTH);
+}
+
+function storeSourceWidth(width: number): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  try {
+    localStorage.setItem(SOURCE_WIDTH_STORAGE_KEY, String(Math.round(width)));
+  } catch {
+    // Persistence is nice-to-have; resizing still works for the session.
+  }
 }
 
 function readStoredSourcePinned(): boolean {
@@ -112,7 +141,10 @@ export function IpadEditorShell({
 }: IpadEditorShellProps) {
   const didNormalizeInitialLayout = useRef(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const sourceResizeRef = useRef<{ pointerId: number; startClientX: number; startWidth: number } | null>(null);
   const [sourcePinned, setSourcePinned] = useState(readStoredSourcePinned);
+  const [sourceColumnWidth, setSourceColumnWidth] = useState(readStoredSourceWidth);
+  const [sourceResizing, setSourceResizing] = useState(false);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const {
@@ -262,6 +294,74 @@ export function IpadEditorShell({
     });
   }, []);
 
+  const moveSourceResizeTo = useCallback((pointerId: number, clientX: number) => {
+    const resize = sourceResizeRef.current;
+    const workspace = workspaceRef.current;
+    if (!workspace || resize?.pointerId !== pointerId) {
+      return;
+    }
+    const maxWidth = Math.min(
+      MAX_SOURCE_COLUMN_WIDTH,
+      workspace.getBoundingClientRect().width * MAX_SOURCE_COLUMN_FRACTION
+    );
+    const nextWidth = Math.min(
+      Math.max(resize.startWidth + clientX - resize.startClientX, MIN_SOURCE_COLUMN_WIDTH),
+      Math.max(MIN_SOURCE_COLUMN_WIDTH, maxWidth)
+    );
+    setSourceColumnWidth(nextWidth);
+  }, []);
+
+  const finishSourceResize = useCallback((pointerId: number) => {
+    if (sourceResizeRef.current?.pointerId !== pointerId) {
+      return;
+    }
+    sourceResizeRef.current = null;
+    setSourceResizing(false);
+    setSourceColumnWidth((width) => {
+      storeSourceWidth(width);
+      return width;
+    });
+  }, []);
+
+  const beginSourceResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Capture is a routing optimization; the window listeners below cover the drag.
+    }
+    sourceResizeRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startWidth: sourceColumnWidth
+    };
+    setSourceResizing(true);
+  }, [sourceColumnWidth]);
+
+  useEffect(() => {
+    if (!sourceResizing) {
+      return;
+    }
+
+    function onPointerMove(event: PointerEvent): void {
+      event.preventDefault();
+      moveSourceResizeTo(event.pointerId, event.clientX);
+    }
+
+    function onPointerEnd(event: PointerEvent): void {
+      finishSourceResize(event.pointerId);
+    }
+
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
+    };
+  }, [finishSourceResize, moveSourceResizeTo, sourceResizing]);
+
   const setRightPanelTab = useCallback((tab: RightSidebarTab) => {
     syncLayout({
       inspectorVisible: tab === "inspector",
@@ -405,6 +505,7 @@ export function IpadEditorShell({
       <div
         ref={workspaceRef}
         className={css.workspace}
+        style={{ "--ipad-source-col": `${Math.round(sourceColumnWidth)}px` } as CSSProperties}
         data-source-visible={showSourcePanel ? "true" : "false"}
         data-source-pinned={sourcePinned ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
@@ -418,9 +519,31 @@ export function IpadEditorShell({
 
         <main className={[css.stage, sourceDocked ? css.stageSplit : ""].filter(Boolean).join(" ")}>
           {sourceDocked ? (
-            <section className={css.sourceColumn} aria-label="Source">
-              {sourceSurface}
-            </section>
+            <>
+              <section
+                className={css.sourceColumn}
+                aria-label="Source"
+                style={{ width: `min(${Math.round(sourceColumnWidth)}px, ${MAX_SOURCE_COLUMN_FRACTION * 100}%)` }}
+              >
+                {sourceSurface}
+              </section>
+              <button
+                type="button"
+                className={css.splitDivider}
+                role="separator"
+                aria-label="Resize source panel"
+                aria-orientation="vertical"
+                aria-valuemin={MIN_SOURCE_COLUMN_WIDTH}
+                aria-valuemax={MAX_SOURCE_COLUMN_WIDTH}
+                aria-valuenow={Math.round(sourceColumnWidth)}
+                title="Resize source panel"
+                data-active={sourceResizing ? "true" : "false"}
+                data-testid="ipad-source-resize"
+                onPointerDown={beginSourceResize}
+              >
+                <span className={css.splitDividerBar} aria-hidden />
+              </button>
+            </>
           ) : null}
           <section className={css.canvasFrame}>
             <CanvasPanel repeatPreviewModel={repeatPreviewModel} />

@@ -36,10 +36,47 @@
 }
 
 .stageSplit .sourceColumn {
-  width: clamp(280px, 42%, 520px);
   flex-shrink: 0;
-  border-right: 1px solid var(--border);
   background: var(--bg-pane);
+}
+
+.splitDivider {
+  appearance: none;
+  position: relative;
+  width: 16px;
+  min-width: 16px;
+  padding: 0;
+  border: 0;
+  background: var(--bg-pane);
+  cursor: col-resize;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.splitDivider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.splitDividerBar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 5px;
+  height: 44px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+.splitDivider[data-active="true"] .splitDividerBar,
+.splitDivider:active .splitDividerBar {
+  background: var(--accent-dark);
 }
 
 .canvasFrame {
@@ -347,16 +384,12 @@
 }
 
 .workspace[data-source-visible="true"][data-source-pinned="true"] .zoomChip {
-  left: calc(clamp(280px, 42%, 520px) + 24px);
+  left: calc(min(var(--ipad-source-col, 420px), 60%) + 16px + 24px);
 }
 
 @media (max-width: 900px) {
   .workspace[data-source-visible="true"][data-source-pinned="false"] .zoomChip {
     left: calc(clamp(280px, 60%, 480px) + 24px);
-  }
-
-  .workspace[data-source-visible="true"][data-source-pinned="true"] .zoomChip {
-    left: calc(clamp(240px, 40%, 380px) + 24px);
   }
 }
 
@@ -378,10 +411,6 @@
 }
 
 @media (max-width: 900px) {
-  .stageSplit .sourceColumn {
-    width: clamp(240px, 40%, 380px);
-  }
-
   .floatingPanel {
     width: min(320px, 52%);
   }
