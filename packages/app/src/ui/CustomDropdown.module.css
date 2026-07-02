@@ -128,3 +128,53 @@
   border-top: 1px solid var(--border-lighter, var(--border-lighter));
   pointer-events: none;
 }
+
+/* ── iPad styling ──────────────────────────────────────────────────────── */
+
+:global(html[data-editor-platform="ipad"]) .trigger {
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-app) 52%, transparent);
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .triggerOpen {
+  background: var(--bg-pane);
+}
+
+:global(html[data-editor-platform="ipad"]) .trigger:disabled {
+  background: color-mix(in srgb, var(--bg-app) 30%, transparent);
+}
+
+:global(html[data-editor-platform="ipad"]) .triggerCaret {
+  color: var(--text-muted);
+}
+
+:global(html[data-editor-platform="ipad"]) .menu {
+  border: 0;
+  border-radius: 12px;
+  background: var(--ipad-material-thick, var(--bg-pane));
+  -webkit-backdrop-filter: var(--ipad-material-blur, none);
+  backdrop-filter: var(--ipad-material-blur, none);
+  box-shadow: var(--ipad-shadow-popover, 0 8px 32px rgba(0, 0, 0, 0.24));
+  padding: 5px;
+}
+
+:global(html[data-editor-platform="ipad"]) .option {
+  min-height: 40px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .optionSelected {
+  background: var(--accent-btn-bg);
+  color: var(--accent-dark);
+}
+
+:global(html[data-editor-platform="ipad"]) .menuHeader {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+}

@@ -517,9 +517,11 @@
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  width: 44px;
-  min-width: 44px;
-  height: 26px;
+  width: 40px;
+  min-width: 40px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
   margin: 0;
   border: 0;
   border-radius: 999px;
@@ -533,8 +535,8 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.15);
@@ -546,7 +548,7 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .checkboxInput:checked::before {
-  translate: 18px 0;
+  translate: 16px 0;
 }
 
 :global(html[data-editor-platform="ipad"]) .checkboxInput:disabled {

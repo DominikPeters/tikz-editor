@@ -159,6 +159,10 @@
   transform-origin: 0 0;
 }
 
+:global([data-canvas-pan-animate="true"]) .worldStage {
+  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .svgLayer {
   position: absolute;
   inset: 0;
