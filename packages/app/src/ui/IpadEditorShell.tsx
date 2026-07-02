@@ -408,6 +408,7 @@ export function IpadEditorShell({
         data-source-visible={showSourcePanel ? "true" : "false"}
         data-source-pinned={sourcePinned ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
+        data-figures-visible={showFigureStrip ? "true" : "false"}
       >
         {showFigureStrip ? (
           <div className={css.figureStrip} data-select="chrome">
@@ -482,7 +483,10 @@ export function IpadEditorShell({
         <div
           className={[
             css.zoomChip,
-            paletteDock.kind === "corner" && paletteDock.corner === "bottom-left" ? css.zoomChipRaised : ""
+            (paletteDock.kind === "corner" && paletteDock.corner === "bottom-left" && !showSourcePanel) ||
+            (paletteDock.kind === "edge" && paletteDock.edge === "bottom" && showSourcePanel)
+              ? css.zoomChipRaised
+              : ""
           ].filter(Boolean).join(" ")}
           data-select="chrome"
         >

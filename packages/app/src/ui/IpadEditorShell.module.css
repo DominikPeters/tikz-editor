@@ -277,6 +277,10 @@
   }
 }
 
+.workspace[data-figures-visible="true"] .hintChip {
+  top: 148px;
+}
+
 .hintChip {
   position: absolute;
   top: 10px;
