@@ -125,6 +125,25 @@ export function ColorPickerField({
       return;
     }
 
+    function clippingBounds(element: HTMLElement): { top: number; bottom: number } {
+      // The popover is clipped by the nearest overflowing ancestor (e.g. the
+      // scrollable inspector content inside the floating iPad panel), so
+      // measure available space against it rather than the window.
+      let node = element.parentElement;
+      while (node) {
+        const overflowY = getComputedStyle(node).overflowY;
+        if (overflowY === "auto" || overflowY === "scroll" || overflowY === "hidden") {
+          const rect = node.getBoundingClientRect();
+          return {
+            top: Math.max(rect.top, 0),
+            bottom: Math.min(rect.bottom, window.innerHeight)
+          };
+        }
+        node = node.parentElement;
+      }
+      return { top: 0, bottom: window.innerHeight };
+    }
+
     function updatePopoverPlacement(): void {
       const root = rootRef.current;
       const popover = popoverRef.current;
@@ -133,8 +152,9 @@ export function ColorPickerField({
       }
 
       const rootRect = root.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rootRect.bottom - POPOVER_VIEWPORT_PADDING_PX - POPOVER_GAP_PX;
-      const spaceAbove = rootRect.top - POPOVER_VIEWPORT_PADDING_PX - POPOVER_GAP_PX;
+      const bounds = clippingBounds(root);
+      const spaceBelow = bounds.bottom - rootRect.bottom - POPOVER_VIEWPORT_PADDING_PX - POPOVER_GAP_PX;
+      const spaceAbove = rootRect.top - bounds.top - POPOVER_VIEWPORT_PADDING_PX - POPOVER_GAP_PX;
       const naturalHeight = popover.scrollHeight;
       const popoverWidth = Math.ceil(popover.getBoundingClientRect().width);
       const shouldOpenUpward = naturalHeight > spaceBelow && spaceAbove > 0;

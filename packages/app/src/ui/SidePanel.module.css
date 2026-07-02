@@ -122,7 +122,6 @@
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-app) 42%, transparent);
   margin-bottom: 10px;
-  overflow: hidden;
 }
 
 :global(html[data-editor-platform="ipad"]) .sectionHeader {
