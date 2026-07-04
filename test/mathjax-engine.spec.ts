@@ -162,7 +162,9 @@ describe("mathjax node text engine", () => {
     const issue = engine.validate(String.raw`$\ell^2$`);
 
     expect(issue).toBeNull();
+    const flushed = await engine.flushPending?.();
     expect(tex2svgPromise.mock.calls.length).toBeGreaterThan(6);
+    expect(flushed?.length).toBeGreaterThan(0);
   });
 
   it("still returns invalid-node-tex for hard TeX errors", async () => {

@@ -1125,14 +1125,21 @@ function applyAddElement(
   at: WorldPoint,
   parseOptions: EditParseOptions
 ): EditActionResult {
-  const beforeStatements = parseStatementSnapshot(source);
+  const beforeStatements = parseStatementSnapshot(source, parseOptions);
   const resolved = resolveElementTemplateAnchorNames(source, template, parseOptions);
   const snippet = generateElementSource(resolved.template, at);
+  const parsedForInsertion = parseTikzForEdit(resolved.source, parseOptions);
 
-  const newSource = insertElementIntoSource(resolved.source, snippet);
+  const newSource = insertElementIntoSource(resolved.source, snippet, parsedForInsertion.figure.span);
 
-  const afterStatements = parseStatementSnapshot(newSource);
-  const insertedStatementId = afterStatements.all.find((ref) => !beforeStatements.byId.has(ref.id))!.id;
+  const afterStatements = parseStatementSnapshot(newSource, parseOptions);
+  const insertedStatementId = afterStatements.all.find((ref) => !beforeStatements.byId.has(ref.id))?.id;
+  if (!insertedStatementId) {
+    return {
+      kind: "error",
+      message: "Could not identify the inserted element."
+    };
+  }
 
   return {
     kind: "success",

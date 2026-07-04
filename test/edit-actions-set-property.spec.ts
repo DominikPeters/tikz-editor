@@ -50,6 +50,34 @@ describe("applyEditAction – setProperty", () => {
     }
   });
 
+  it("preserves comments and multiline formatting when updating command options", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[
+    red, % main color
+    thick
+  ] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected option update to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[
+    red, % main color
+    thick,
+    line width=2pt
+  ] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
   it("rejects empty setProperty keys", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[blue] (0,0) -- (1,0);
@@ -418,6 +446,24 @@ describe("applyEditAction – setProperty", () => {
       throw new Error("Expected empty style insertion to succeed");
     }
     expect(inserted.newSource).toBe(String.raw`accent/.style={draw=red}`);
+  });
+
+  it("clears the final option in a bare style source", () => {
+    const source = String.raw`accent/.style=draw`;
+    const targetId = makeStyleSourceTargetId({ from: 0, to: source.length });
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: targetId,
+      level: "named-style",
+      key: "draw",
+      value: ""
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected bare style clear to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`accent/.style=`);
   });
 
   it("supports writing named line width flags while clearing numeric line width", () => {
@@ -1572,6 +1618,40 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
     expect(result.newSource).toContain("draw");
     expect(result.newSource).toContain("fill=yellow");
     expect(result.newSource).toContain("{leaf}");
+  });
+
+  it("targets the requested duplicate tree-child sibling", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path node {root}
+    child { node {x} }
+    child { node {x} };
+\end{tikzpicture}`;
+    const rendered = renderTikzToSvg(source);
+    const childTexts = rendered.semantic.scene.elements.filter(
+      (entry) => entry.kind === "Text" && entry.text === "x" && entry.treeChild
+    );
+    const secondChildText = childTexts[1];
+    if (!secondChildText || secondChildText.kind !== "Text" || !secondChildText.treeChild) {
+      throw new Error("Expected a second tree child text element");
+    }
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: secondChildText.treeChild.childSourceId,
+      level: "command",
+      key: "fill",
+      value: "yellow"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected duplicate tree-child write to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \path node {root}
+    child { node {x} }
+    child { node[fill=yellow] {x} };
+\end{tikzpicture}`);
   });
 
   it("supports broader tree-child node property writes (e.g. line width)", () => {

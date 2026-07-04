@@ -241,7 +241,7 @@ export function applyAlignElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas);
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions);
 }
 
 export function applyDistributeElementsAction(
@@ -264,7 +264,7 @@ export function applyDistributeElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas);
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions);
 }
 
 function applyMoveElementsUsingHandleRewrites(
@@ -943,7 +943,8 @@ function applyElementDeltaMapStrict(
   source: string,
   editHandles: EditHandle[],
   elementIds: readonly string[],
-  deltasBySource: ReadonlyMap<string, WorldPoint>
+  deltasBySource: ReadonlyMap<string, WorldPoint>,
+  parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
   const normalizedIds = normalizeElementIds(elementIds);
   if (normalizedIds.length === 0) {
@@ -1055,7 +1056,7 @@ function applyElementDeltaMapStrict(
     currentSource,
     editHandles,
     deltasBySource,
-    {}
+    parseOptions
   );
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);

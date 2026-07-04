@@ -2438,10 +2438,16 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
     return undefined;
   }
 
-  const minX = Math.min(...points.map((point) => point.x));
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxX = Math.max(...points.map((point) => point.x));
-  const maxY = Math.max(...points.map((point) => point.y));
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
 
   return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
 }
@@ -3587,9 +3593,8 @@ function parseProvenanceSingleOptionLayer(
 }
 
 function resolveOptionValueStartOffset(entry: Extract<OptionListAst["entries"][number], { kind: "kv" }>): number {
-  const relative = entry.raw.indexOf(entry.valueRaw);
-  if (relative >= 0) {
-    return entry.span.from + relative;
+  if (entry.valueSpan) {
+    return entry.valueSpan.from;
   }
   return entry.span.from;
 }

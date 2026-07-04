@@ -190,9 +190,8 @@ function makeStyleChainEntry(
 }
 
 function resolveValueStartOffset(entry: Extract<OptionEntry, { kind: "kv" }>): number {
-  const rawIndex = entry.raw.indexOf(entry.valueRaw);
-  if (rawIndex >= 0) {
-    return entry.span.from + rawIndex;
+  if (entry.valueSpan) {
+    return entry.valueSpan.from;
   }
   return entry.span.from;
 }

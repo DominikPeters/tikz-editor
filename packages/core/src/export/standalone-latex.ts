@@ -85,14 +85,15 @@ function isDefinitionStatement(statement: Statement): boolean {
 
 function collectStatementById(statements: readonly Statement[]): Map<string, Statement> {
   const byId = new Map<string, Statement>();
-  for (const statement of statements) {
-    byId.set(statement.id, statement);
-    if (statement.kind === "Scope") {
-      for (const nested of statement.body) {
-        byId.set(nested.id, nested);
+  const visit = (entries: readonly Statement[]): void => {
+    for (const statement of entries) {
+      byId.set(statement.id, statement);
+      if (statement.kind === "Scope") {
+        visit(statement.body);
       }
     }
-  }
+  };
+  visit(statements);
   return byId;
 }
 

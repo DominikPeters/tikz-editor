@@ -23,6 +23,8 @@ const DEFAULT_GRAPH_STEP_PT = parseLength("1cm", "cm")!;
 const DEFAULT_GRAPH_SEP_PT = parseLength("1em", "cm")!;
 const DEFAULT_GRAPH_RADIUS_PT = parseLength("1cm", "cm")!;
 const BUILTIN_COLOR_CLASSES = ["all", "source", "target", "source'", "target'"] as const;
+const GRAPH_NODE_BUDGET = 10_000;
+const GRAPH_EDGE_BUDGET = 10_000;
 
 type ConnectorOperator = (typeof CONNECTOR_OPERATORS)[number];
 type GraphMode = "multi" | "simple";
@@ -932,7 +934,7 @@ class GraphPlanner {
     let localScope = this.cloneScope(scope);
     localScope = this.applyGroupOptionControls(localScope, spec.options);
     const groupPlan = this.extractGroupOptionPlan(spec.options, localScope);
-    const structure = parseSubgraphStructure(spec.options);
+    const structure = parseSubgraphStructure(spec.options, this.diagnostics);
 
     const verticesV = structure.verticesV;
     const verticesW = structure.verticesW;
@@ -985,11 +987,11 @@ class GraphPlanner {
       case "I_nm":
         break;
       case "K_n": {
-        edges.push(...this.buildEdgesForPairs(buildCliquePairs(vNames), kind, spec.span, localScope));
+        edges.push(...this.buildEdgesForPairs(buildCliquePairs(vNames, GRAPH_EDGE_BUDGET), kind, spec.span, localScope));
         break;
       }
       case "K_nm": {
-        edges.push(...this.buildEdgesForPairs(buildCompleteBipartitePairs(vNames, wNames), kind, spec.span, localScope));
+        edges.push(...this.buildEdgesForPairs(buildCompleteBipartitePairs(vNames, wNames, GRAPH_EDGE_BUDGET), kind, spec.span, localScope));
         break;
       }
       case "P_n": {
@@ -1001,7 +1003,7 @@ class GraphPlanner {
         break;
       }
       case "Grid_n": {
-        edges.push(...this.buildEdgesForPairs(buildGridPairs(vNames, structure.wrapAfter), kind, spec.span, localScope));
+        edges.push(...this.buildEdgesForPairs(buildGridPairs(vNames, structure.wrapAfter, GRAPH_EDGE_BUDGET), kind, spec.span, localScope));
         break;
       }
       default:
@@ -1097,7 +1099,14 @@ class GraphPlanner {
     edgeStyleOptions?: OptionListAst
   ): GraphPlannedEdgeInternal[] {
     const edges: GraphPlannedEdgeInternal[] = [];
+    if (pairs.length >= GRAPH_EDGE_BUDGET) {
+      pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+    }
     for (const pair of pairs) {
+      if (edges.length >= GRAPH_EDGE_BUDGET) {
+        pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+        break;
+      }
       edges.push(this.createEdgeFromPair(pair.from, pair.to, edgeKind, span, scope, edgeStyleOptions));
     }
     return edges;
@@ -1917,6 +1926,11 @@ class GraphPlanner {
     if (record.created) {
       return;
     }
+    if (this.nodes.length >= GRAPH_NODE_BUDGET) {
+      pushUniqueDiagnostic(this.diagnostics, "graph-node-budget-exceeded");
+      record.created = true;
+      return;
+    }
 
     const placementSlot = this.placementIndex;
     this.placementIndex += 1;
@@ -2097,9 +2111,16 @@ class GraphPlanner {
     const edges: GraphPlannedEdgeInternal[] = [];
     for (const operator of operators) {
       const pairs = buildOperatorPairs(operator, colors);
+      if (pairs.length >= GRAPH_EDGE_BUDGET) {
+        pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+      }
       for (const pair of pairs) {
         if (pair.from === pair.to) {
           continue;
+        }
+        if (edges.length >= GRAPH_EDGE_BUDGET) {
+          pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+          break;
         }
         edges.push(this.createEdgeFromPair(pair.from, pair.to, edgeKind, span, scope, edgeStyleOptions));
       }
@@ -3102,44 +3123,60 @@ function pairMatchingAndStar(left: string[], right: string[]): Array<{ from: str
   return pairs;
 }
 
-function buildPathPairs(nodes: string[]): Array<{ from: string; to: string }> {
+function buildPathPairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
-  for (let index = 1; index < nodes.length; index += 1) {
+  for (let index = 1; index < nodes.length && pairs.length < maxPairs; index += 1) {
     pairs.push({ from: nodes[index - 1], to: nodes[index] });
   }
   return pairs;
 }
 
-function buildCyclePairs(nodes: string[]): Array<{ from: string; to: string }> {
+function buildCyclePairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   if (nodes.length <= 1) {
     return [];
   }
-  const pairs = buildPathPairs(nodes);
-  pairs.push({ from: nodes[nodes.length - 1], to: nodes[0] });
+  const pairs = buildPathPairs(nodes, maxPairs);
+  if (pairs.length < maxPairs) {
+    pairs.push({ from: nodes[nodes.length - 1], to: nodes[0] });
+  }
   return pairs;
 }
 
-function buildCliquePairs(nodes: string[]): Array<{ from: string; to: string }> {
+function buildCliquePairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
   for (let left = 0; left < nodes.length; left += 1) {
     for (let right = left + 1; right < nodes.length; right += 1) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from: nodes[left], to: nodes[right] });
     }
   }
   return pairs;
 }
 
-function buildCompleteBipartitePairs(fromNodes: string[], toNodes: string[]): Array<{ from: string; to: string }> {
+function buildCompleteBipartitePairs(
+  fromNodes: string[],
+  toNodes: string[],
+  maxPairs = GRAPH_EDGE_BUDGET
+): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
   for (const from of fromNodes) {
     for (const to of toNodes) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from, to });
     }
   }
   return pairs;
 }
 
-function buildGridPairs(nodes: string[], wrapAfter: number | null): Array<{ from: string; to: string }> {
+function buildGridPairs(
+  nodes: string[],
+  wrapAfter: number | null,
+  maxPairs = GRAPH_EDGE_BUDGET
+): Array<{ from: string; to: string }> {
   if (nodes.length <= 1) {
     return [];
   }
@@ -3156,11 +3193,17 @@ function buildGridPairs(nodes: string[], wrapAfter: number | null): Array<{ from
 
     const rightIndex = index + 1;
     if (col + 1 < wrap && rightIndex < nodes.length && Math.floor(rightIndex / wrap) === row) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from: nodes[index], to: nodes[rightIndex] });
     }
 
     const downIndex = index + wrap;
     if (downIndex < nodes.length) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from: nodes[index], to: nodes[downIndex] });
     }
   }
@@ -3605,7 +3648,7 @@ function parseDefaultEdgeKind(raw: string): ConnectorOperator | null {
   return null;
 }
 
-function parseSubgraphStructure(options: OptionListAst | undefined): ParsedSubgraphStructure {
+function parseSubgraphStructure(options: OptionListAst | undefined, diagnostics: string[]): ParsedSubgraphStructure {
   let verticesV: string[] = [];
   let verticesW: string[] = [];
   let n: number | null = null;
@@ -3621,11 +3664,11 @@ function parseSubgraphStructure(options: OptionListAst | undefined): ParsedSubgr
 
     const key = normalizeGraphOptionKey(entry.key);
     if (key === "v") {
-      verticesV = parseVertexList(entry.valueRaw);
+      verticesV = parseVertexList(entry.valueRaw, diagnostics);
       continue;
     }
     if (key === "w") {
-      verticesW = parseVertexList(entry.valueRaw);
+      verticesW = parseVertexList(entry.valueRaw, diagnostics);
       continue;
     }
     if (key === "n") {
@@ -3650,14 +3693,14 @@ function parseSubgraphStructure(options: OptionListAst | undefined): ParsedSubgr
   }
 
   if (verticesV.length === 0 && n != null && n > 0) {
-    verticesV = sequenceLabels(n);
+    verticesV = sequenceLabels(n, diagnostics);
     if (nameShoreV.length === 0) {
       nameShoreV = "V";
     }
   }
 
   if (verticesW.length === 0 && m != null && m > 0) {
-    verticesW = sequenceLabels(m);
+    verticesW = sequenceLabels(m, diagnostics);
     if (nameShoreW.length === 0) {
       nameShoreW = "W";
     }
@@ -3684,7 +3727,7 @@ function parseShoreName(raw: string): string {
   return normalizeGraphText(raw);
 }
 
-function parseVertexList(raw: string): string[] {
+function parseVertexList(raw: string, diagnostics: string[]): string[] {
   const normalized = stripWrappingBraces(raw).trim();
   if (normalized.length === 0) {
     return [];
@@ -3695,16 +3738,19 @@ function parseVertexList(raw: string): string[] {
     .filter((segment) => segment.length > 0);
 
   if (parts.length === 3 && parts[1] === "...") {
-    const expanded = expandRange(parts[0], parts[2]);
+    const expanded = expandRange(parts[0], parts[2], diagnostics);
     if (expanded.length > 0) {
       return expanded;
     }
   }
 
-  return parts.map((part) => parseGraphTextToken(part).text);
+  if (parts.length > GRAPH_NODE_BUDGET) {
+    pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+  }
+  return parts.slice(0, GRAPH_NODE_BUDGET).map((part) => parseGraphTextToken(part).text);
 }
 
-function expandRange(leftRaw: string, rightRaw: string): string[] {
+function expandRange(leftRaw: string, rightRaw: string, diagnostics: string[]): string[] {
   const left = normalizeGraphText(leftRaw);
   const right = normalizeGraphText(rightRaw);
 
@@ -3713,13 +3759,17 @@ function expandRange(leftRaw: string, rightRaw: string): string[] {
   if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
     const from = Math.floor(leftNumber);
     const to = Math.floor(rightNumber);
+    const count = Math.abs(to - from) + 1;
+    if (count > GRAPH_NODE_BUDGET) {
+      pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+    }
     const result: string[] = [];
     if (from <= to) {
-      for (let current = from; current <= to; current += 1) {
+      for (let current = from; current <= to && result.length < GRAPH_NODE_BUDGET; current += 1) {
         result.push(String(current));
       }
     } else {
-      for (let current = from; current >= to; current -= 1) {
+      for (let current = from; current >= to && result.length < GRAPH_NODE_BUDGET; current -= 1) {
         result.push(String(current));
       }
     }
@@ -3729,13 +3779,17 @@ function expandRange(leftRaw: string, rightRaw: string): string[] {
   if (left.length === 1 && right.length === 1) {
     const leftCode = left.codePointAt(0)!;
     const rightCode = right.codePointAt(0)!;
+    const count = Math.abs(rightCode - leftCode) + 1;
+    if (count > GRAPH_NODE_BUDGET) {
+      pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+    }
     const result: string[] = [];
     if (leftCode <= rightCode) {
-      for (let code = leftCode; code <= rightCode; code += 1) {
+      for (let code = leftCode; code <= rightCode && result.length < GRAPH_NODE_BUDGET; code += 1) {
         result.push(String.fromCodePoint(code));
       }
     } else {
-      for (let code = leftCode; code >= rightCode; code -= 1) {
+      for (let code = leftCode; code >= rightCode && result.length < GRAPH_NODE_BUDGET; code -= 1) {
         result.push(String.fromCodePoint(code));
       }
     }
@@ -3745,9 +3799,12 @@ function expandRange(leftRaw: string, rightRaw: string): string[] {
   return [];
 }
 
-function sequenceLabels(count: number): string[] {
+function sequenceLabels(count: number, diagnostics: string[]): string[] {
+  if (count > GRAPH_NODE_BUDGET) {
+    pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+  }
   const labels: string[] = [];
-  for (let index = 1; index <= count; index += 1) {
+  for (let index = 1; index <= count && labels.length < GRAPH_NODE_BUDGET; index += 1) {
     labels.push(String(index));
   }
   return labels;
@@ -3761,4 +3818,10 @@ function mergeUnique(base: string[], next: string[]): string[] {
     }
   }
   return merged;
+}
+
+function pushUniqueDiagnostic(diagnostics: string[], diagnostic: string): void {
+  if (!diagnostics.includes(diagnostic)) {
+    diagnostics.push(diagnostic);
+  }
 }

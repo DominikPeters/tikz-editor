@@ -198,6 +198,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
   const validationCache = new Map<string, NodeTextValidationIssue | null>();
   const pendingAsyncRenders = new Set<Promise<void>>();
   const finalizedPendingCacheKeys = new Set<string>();
+  const asyncRenderQueue = { current: Promise.resolve() };
 
   return {
     validate(text: string): NodeTextValidationIssue | null {
@@ -225,29 +226,36 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
             alignment: null
           });
           if (entry) {
-            cache.set(defaultMeasureKey, entry);
+            setCappedMapValue(cache, defaultMeasureKey, entry, RENDER_CACHE_LIMIT);
           }
         }
-        validationCache.set(text, null);
+        setCappedMapValue(validationCache, text, null, VALIDATION_CACHE_LIMIT);
         return null;
       } catch (error) {
         if (isMathJaxAsyncRetryError(error)) {
-          queueAsyncCachePopulate(runtime, cache, pendingAsyncRenders, finalizedPendingCacheKeys, {
-            cacheKey: defaultMeasureKey,
-            sourceText: prepared.text,
-            textWidthPt: null,
-            font: prepared.font,
-            mode: "text",
-            alignment: null
-          });
-          validationCache.set(text, null);
+          queueAsyncCachePopulate(
+            runtime,
+            cache,
+            pendingAsyncRenders,
+            finalizedPendingCacheKeys,
+            asyncRenderQueue,
+            {
+              cacheKey: defaultMeasureKey,
+              sourceText: prepared.text,
+              textWidthPt: null,
+              font: prepared.font,
+              mode: "text",
+              alignment: null
+            }
+          );
+          setCappedMapValue(validationCache, text, null, VALIDATION_CACHE_LIMIT);
           return null;
         }
         const issue = {
           code: "invalid-node-tex",
           message: sanitizeErrorMessage(error)
         };
-        validationCache.set(text, issue);
+        setCappedMapValue(validationCache, text, issue, VALIDATION_CACHE_LIMIT);
         return issue;
       }
     },
@@ -281,19 +289,26 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
           if (!entry) {
             return null;
           }
-          cache.set(cacheKey, entry);
-          validationCache.set(request.text, null);
+          setCappedMapValue(cache, cacheKey, entry, RENDER_CACHE_LIMIT);
+          setCappedMapValue(validationCache, request.text, null, VALIDATION_CACHE_LIMIT);
         } catch (error) {
           if (isMathJaxAsyncRetryError(error)) {
-            queueAsyncCachePopulate(runtime, cache, pendingAsyncRenders, finalizedPendingCacheKeys, {
-              cacheKey,
-              sourceText: prepared.text,
-              textWidthPt: normalizedWidth,
-              font: prepared.font,
-              mode,
-              alignment
-            });
-            validationCache.set(request.text, null);
+            queueAsyncCachePopulate(
+              runtime,
+              cache,
+              pendingAsyncRenders,
+              finalizedPendingCacheKeys,
+              asyncRenderQueue,
+              {
+                cacheKey,
+                sourceText: prepared.text,
+                textWidthPt: normalizedWidth,
+                font: prepared.font,
+                mode,
+                alignment
+              }
+            );
+            setCappedMapValue(validationCache, request.text, null, VALIDATION_CACHE_LIMIT);
           }
           if (requiresParagraphGeometry) {
             throw error;
@@ -857,11 +872,26 @@ function isMathJaxAsyncRetryError(error: unknown): boolean {
   );
 }
 
+function setCappedMapValue<K, V>(map: Map<K, V>, key: K, value: V, limit: number): void {
+  if (map.has(key)) {
+    map.delete(key);
+  }
+  map.set(key, value);
+  while (map.size > limit) {
+    const oldest = map.keys().next();
+    if (oldest.done) {
+      break;
+    }
+    map.delete(oldest.value);
+  }
+}
+
 function queueAsyncCachePopulate(
   runtime: MathJaxRuntime,
   cache: Map<string, CachedRenderEntry>,
   pendingAsyncRenders: Set<Promise<void>>,
   finalizedPendingCacheKeys: Set<string>,
+  asyncRenderQueue: { current: Promise<void> },
   params: {
     cacheKey: string;
     sourceText: string;
@@ -875,10 +905,15 @@ function queueAsyncCachePopulate(
     return;
   }
 
-  const renderTask = renderMeasuredNodeWithPromise(runtime, params);
-
-  const task = renderTask
-    .then((node) => {
+  const task = asyncRenderQueue.current
+    .catch(() => {
+      // Keep the queue alive after best-effort async render failures.
+    })
+    .then(async () => {
+      if (cache.has(params.cacheKey)) {
+        return;
+      }
+      const node = await renderMeasuredNodeWithPromise(runtime, params);
       if (cache.has(params.cacheKey)) {
         return;
       }
@@ -890,13 +925,17 @@ function queueAsyncCachePopulate(
         null
       );
       if (entry) {
-        cache.set(params.cacheKey, entry);
+        setCappedMapValue(cache, params.cacheKey, entry, RENDER_CACHE_LIMIT);
         finalizedPendingCacheKeys.add(params.cacheKey);
       }
     })
     .catch(() => {
       // Retry remains best-effort and should not surface parser diagnostics.
     });
+  asyncRenderQueue.current = task.then(
+    () => {},
+    () => {}
+  );
   pendingAsyncRenders.add(task);
   void task.finally(() => {
     pendingAsyncRenders.delete(task);
@@ -1096,7 +1135,7 @@ function measureExactSingleLineWidth(
   }
   const measuredWidthPt = measureNaturalWidth(runtime, sourceText, font, mode);
   if (!(Number.isFinite(measuredWidthPt) && measuredWidthPt > 0)) {
-    exactSingleLineWidthCache.set(cacheKey, Number.NaN);
+    setCappedMapValue(exactSingleLineWidthCache, cacheKey, Number.NaN, EXACT_WIDTH_CACHE_LIMIT);
     return Number.NaN;
   }
   const entry = buildExactSingleLineCacheEntry({
@@ -1111,7 +1150,7 @@ function measureExactSingleLineWidth(
   const report = resolveParagraphReportById(runtime, entry?.paragraphId ?? null);
   const paragraphWidthPt = Number(report?.width) * MATHJAX_PARAGRAPH_PT_PER_WIDTH_UNIT;
   const width = Number.isFinite(paragraphWidthPt) && paragraphWidthPt > 0 ? paragraphWidthPt : entry?.baseWidthPt ?? measuredWidthPt;
-  exactSingleLineWidthCache.set(cacheKey, width);
+  setCappedMapValue(exactSingleLineWidthCache, cacheKey, width, EXACT_WIDTH_CACHE_LIMIT);
   return width;
 }
 
@@ -1508,6 +1547,9 @@ const WRAPPED_TEXT_SPACE_WIDTH_EM = TEX_INTERWORD_SPACE_EM;
 const WRAPPED_TEXT_SENTENCE_SPACE_WIDTH_EM = 0.5;
 const TEX_SENTENCE_EXTRA_SPACE_EM = 1 / 9;
 const SPACEFACTOR_NEUTRAL_CHARS = new Set(['"', "'", ")", "]", "}"]);
+const RENDER_CACHE_LIMIT = 512;
+const EXACT_WIDTH_CACHE_LIMIT = 512;
+const VALIDATION_CACHE_LIMIT = 512;
 const SPACEFACTOR_OPENING_CHARS = new Set(["(", "[", "{"]);
 const SPACEFACTOR_BY_CHAR = new Map<string, number>([
   [".", 3000],

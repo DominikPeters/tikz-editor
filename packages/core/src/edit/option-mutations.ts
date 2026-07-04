@@ -35,11 +35,15 @@ export function applyOptionMutationsToTarget(
 
   if (target.options && target.optionsSpan) {
     const format = target.optionsFormat ?? "bracketed";
-    const replacement = rewriteOptionListMutations(target.options, mutations, serializationContext, format);
+    const replacement = rewriteOptionListMutationsPreservingSource(
+      source,
+      target.optionsSpan,
+      target.options,
+      mutations,
+      serializationContext,
+      format
+    );
     if (replacement.length === 0) {
-      if (format !== "bracketed") {
-        return null;
-      }
       const oldSpan = target.optionsSpan;
       const updated = replaceSpan(source, oldSpan, "");
       if (updated.source === source) {
@@ -149,6 +153,190 @@ export function rewriteOptionListMutations(
 }
 
 export const normalizeOptionKey = normalizeSharedOptionKey;
+
+function rewriteOptionListMutationsPreservingSource(
+  source: string,
+  optionsSpan: Span,
+  options: OptionListAst,
+  mutations: ReadonlyMap<string, OptionMutation>,
+  serializationContext: OptionSerializationContext,
+  format: PropertyTargetOptionsFormat
+): string {
+  const original = source.slice(optionsSpan.from, optionsSpan.to);
+  const emitted = new Set<string>();
+  const replacements: Array<{ from: number; to: number; text: string; removesEntry: boolean }> = [];
+  const sortedEntries = [...options.entries].sort((left, right) => left.span.from - right.span.from);
+
+  for (const entry of sortedEntries) {
+    const entryKey = optionEntryKey(entry);
+    const directMutation = entryKey ? mutations.get(entryKey) : undefined;
+    const aliasKey =
+      entry.kind === "flag" && !directMutation
+        ? resolveFlagAliasKey(entry, mutations, serializationContext)
+        : null;
+    const mutationKey = directMutation ? entryKey : aliasKey;
+    const mutation = directMutation ?? (aliasKey ? mutations.get(aliasKey) : undefined);
+    if (!mutationKey || !mutation) {
+      continue;
+    }
+
+    const entryFrom = Math.max(0, entry.span.from - optionsSpan.from);
+    const entryTo = Math.max(entryFrom, entry.span.to - optionsSpan.from);
+    if (mutation.kind === "set" && !emitted.has(mutationKey)) {
+      replacements.push({
+        from: entryFrom,
+        to: entryTo,
+        text: serializeOptionEntry(mutationKey, mutation.value, serializationContext),
+        removesEntry: false
+      });
+      emitted.add(mutationKey);
+      continue;
+    }
+
+    replacements.push({
+      ...resolveEntryRemovalRange(original, entryFrom, entryTo),
+      text: "",
+      removesEntry: true
+    });
+  }
+
+  const entriesToInsert: string[] = [];
+  for (const [key, mutation] of mutations.entries()) {
+    if (mutation.kind !== "set" || emitted.has(key)) {
+      continue;
+    }
+    entriesToInsert.push(serializeOptionEntry(key, mutation.value, serializationContext));
+    emitted.add(key);
+  }
+
+  if (entriesToInsert.length === 0 && replacements.length === 0) {
+    return original;
+  }
+
+  if (
+    entriesToInsert.length === 0 &&
+    sortedEntries.length > 0 &&
+    replacements.filter((replacement) => replacement.removesEntry).length === sortedEntries.length
+  ) {
+    return format === "bracketed" || format === "bare" ? "" : wrapSerializedOptions("", format);
+  }
+
+  const rewritten = applyRelativeReplacements(original, replacements);
+  if (entriesToInsert.length === 0) {
+    return rewritten;
+  }
+
+  return insertSerializedOptionEntries(rewritten, entriesToInsert, format);
+}
+
+function applyRelativeReplacements(
+  source: string,
+  replacements: ReadonlyArray<{ from: number; to: number; text: string }>
+): string {
+  if (replacements.length === 0) {
+    return source;
+  }
+  let current = source;
+  const sorted = [...replacements].sort((left, right) => right.from - left.from || right.to - left.to);
+  for (const replacement of sorted) {
+    current = `${current.slice(0, replacement.from)}${replacement.text}${current.slice(replacement.to)}`;
+  }
+  return current;
+}
+
+function resolveEntryRemovalRange(source: string, from: number, to: number): { from: number; to: number } {
+  let right = to;
+  while (right < source.length && (source[right] === " " || source[right] === "\t")) {
+    right += 1;
+  }
+  if (source[right] === ",") {
+    right += 1;
+    if (source[right] === " ") {
+      right += 1;
+    }
+    return { from, to: right };
+  }
+
+  let left = from;
+  while (left > 0 && (source[left - 1] === " " || source[left - 1] === "\t")) {
+    left -= 1;
+  }
+  if (source[left - 1] === ",") {
+    left -= 1;
+    while (left > 0 && (source[left - 1] === " " || source[left - 1] === "\t")) {
+      left -= 1;
+    }
+    return { from: left, to };
+  }
+
+  return { from, to };
+}
+
+function insertSerializedOptionEntries(
+  source: string,
+  entries: readonly string[],
+  format: PropertyTargetOptionsFormat
+): string {
+  const content = entries.join(", ");
+  if (format === "bare") {
+    return source.trim().length === 0 ? content : `${source}, ${content}`;
+  }
+
+  const closeChar = format === "braced" ? "}" : "]";
+  const closeIndex = source.lastIndexOf(closeChar);
+  if (closeIndex < 0) {
+    return source.trim().length === 0 ? wrapSerializedOptions(content, format) : `${source}, ${content}`;
+  }
+
+  if (!source.includes("\n")) {
+    const prefix = hasOptionContent(source.slice(0, closeIndex), format) ? `, ${content}` : content;
+    return `${source.slice(0, closeIndex)}${prefix}${source.slice(closeIndex)}`;
+  }
+
+  const insertion = multilineInsertion(source, closeIndex, content, format);
+  return `${source.slice(0, insertion.index)}${insertion.text}${source.slice(insertion.index)}`;
+}
+
+function multilineInsertion(
+  source: string,
+  closeIndex: number,
+  content: string,
+  format: PropertyTargetOptionsFormat
+): { index: number; text: string } {
+  const closeLineStart = source.lastIndexOf("\n", closeIndex - 1);
+  const closingLineIsWhitespaceOnly =
+    closeLineStart >= 0 && source.slice(closeLineStart + 1, closeIndex).trim().length === 0;
+  const insertIndex = closingLineIsWhitespaceOnly ? closeLineStart : closeIndex;
+  const beforeInsertion = source.slice(0, insertIndex);
+  const indent = inferOptionEntryIndent(source, closeIndex);
+  const needsComma = hasOptionContent(beforeInsertion, format) && !/,\s*$/u.test(beforeInsertion);
+  const separator = needsComma ? "," : "";
+  return {
+    index: insertIndex,
+    text: `${separator}\n${indent}${content}`
+  };
+}
+
+function inferOptionEntryIndent(source: string, closeIndex: number): string {
+  const beforeClose = source.slice(0, closeIndex);
+  const lines = beforeClose.split(/\r?\n/u);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index] ?? "";
+    if (line.trim().length === 0 || line.trim() === "[" || line.trim() === "{") {
+      continue;
+    }
+    return line.match(/^[ \t]*/u)?.[0] ?? "";
+  }
+  const closeLine = source.slice(source.lastIndexOf("\n", closeIndex - 1) + 1, closeIndex);
+  return `${closeLine.match(/^[ \t]*/u)?.[0] ?? ""}  `;
+}
+
+function hasOptionContent(source: string, format: PropertyTargetOptionsFormat): boolean {
+  const trimmed = source
+    .replace(format === "braced" ? /^\s*\{/u : /^\s*\[/u, "")
+    .trim();
+  return trimmed.length > 0;
+}
 
 export function serializeOptionEntry(
   key: string,

@@ -129,7 +129,7 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       return existing;
     }
 
-    const id = `tikz-shading-${kind}-${gradientIdBySignature.size + 1}`;
+    const id = `tikz-shading-${kind}-${stableSvgIdComponent(signature)}`;
     gradientIdBySignature.set(signature, id);
     gradientDefById.set(id, buildDef(id));
     return id;
@@ -141,7 +141,7 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       return existing;
     }
 
-    const id = `tikz-pattern-${patternIdBySignature.size + 1}`;
+    const id = `tikz-pattern-${stableSvgIdComponent(signature)}`;
     patternIdBySignature.set(signature, id);
     patternDefById.set(id, buildDef(id));
     return id;
@@ -1618,6 +1618,15 @@ function encodeTextBody(text: string, x: number, y: number): string {
       return `<tspan x="${fmt(x)}" dy="${fmt(lineHeightEm)}em">${escapeText(line)}</tspan>`;
     })
     .join("");
+}
+
+function stableSvgIdComponent(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${(hash >>> 0).toString(36)}-${input.length.toString(36)}`;
 }
 
 function hasDrawablePathCommands(commands: ScenePathCommand[]): boolean {

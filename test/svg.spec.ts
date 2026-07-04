@@ -268,6 +268,41 @@ describe("svg emitter", () => {
     expect(emitted.diagnostics.some((diagnostic) => diagnostic.code.startsWith("unsupported-shading:"))).toBe(false);
   });
 
+  it("keeps reused gradient fill references resolvable after definition order changes", () => {
+    const firstSource = String.raw`\begin{tikzpicture}
+  \shade[left color=red,right color=blue] (0,0) rectangle (1,1);
+  \shade[left color=green,right color=yellow] (2,0) rectangle (3,1);
+\end{tikzpicture}`;
+    const firstParsed = parseTikz(firstSource);
+    const firstSemantic = evaluateTikzFigure(firstParsed.figure, firstSource);
+    const firstEmitted = emitSvg(firstSemantic.scene);
+
+    const secondSource = String.raw`\begin{tikzpicture}
+  \fill (0,0) rectangle (1,1);
+  \shade[left color=green,right color=yellow] (2,0) rectangle (3,1);
+\end{tikzpicture}`;
+    const secondParsed = parseTikz(secondSource);
+    const secondSemantic = evaluateTikzFigure(secondParsed.figure, secondSource);
+    const secondEmitted = emitSvg(secondSemantic.scene, {
+      reuse: {
+        previousModel: firstEmitted.model,
+        affectedSourceIds: [firstSemantic.scene.elements[0]!.sourceRef.sourceId]
+      }
+    });
+
+    const defIds = new Set(
+      secondEmitted.model.defs
+        .map((definition) => /id="([^"]+)"/u.exec(definition)?.[1] ?? null)
+        .filter((id): id is string => id != null)
+    );
+    const fillRefs = secondEmitted.model.parts
+      .map((part) => /url\(#([^)]+)\)/u.exec(part.markup)?.[1] ?? null)
+      .filter((id): id is string => id != null);
+
+    expect(fillRefs.length).toBeGreaterThan(0);
+    expect(fillRefs.every((id) => defIds.has(id))).toBe(true);
+  });
+
   it("emits SVG pattern defs and url() fills for pattern styles", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[pattern=grid,pattern color=red] (0,0) rectangle (1,1);

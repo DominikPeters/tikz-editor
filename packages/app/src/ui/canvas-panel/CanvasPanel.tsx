@@ -2347,6 +2347,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         mode,
         anchorLineRange: provisionalLineRange
       };
+      const pointerId = event.pointerId;
+      const pointerCaptureTarget = event.currentTarget;
       const offsetPromise = resolveTextOffsetFromClient(target, clientPoint);
       const lineRangePromise = mode === "line"
         ? resolveTextLineRangeFromClient(target, clientPoint)
@@ -2375,15 +2377,15 @@ export const CanvasPanel = memo(function CanvasPanel({
           baseInputRevision,
           sourceId: target.sourceId,
           sceneTextId: target.sceneTextId,
-          pointerId: event.pointerId,
+          pointerId,
           selectionStart: selection.start,
           selectionEnd: selection.end,
           anchorOffset: resolvedOffset,
           anchorLineRange: resolvedLineRange
         });
-        if (textSelectionDragRef.current?.pointerId === event.pointerId) {
+        if (textSelectionDragRef.current?.pointerId === pointerId) {
           textSelectionDragRef.current = {
-            pointerId: event.pointerId,
+            pointerId,
             sourceId: target.sourceId,
             sceneTextId: target.sceneTextId,
             anchorOffset: resolvedOffset,
@@ -2392,7 +2394,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           };
         }
         try {
-          event.currentTarget.setPointerCapture(event.pointerId);
+          pointerCaptureTarget.setPointerCapture(pointerId);
         } catch {
           // Ignore pointer capture failures; the window listeners still complete the drag.
         }

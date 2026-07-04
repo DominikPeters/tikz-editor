@@ -1,6 +1,7 @@
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint } from "../coords/points.js";
+import type { Span } from "../ast/types.js";
 import { CM_PER_PT, PT_PER_CM, formatNumber } from "./format.js";
 
 export type AnchorReference = {
@@ -137,14 +138,15 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
   }
 }
 
-export function insertElementIntoSource(source: string, snippet: string): string {
+export function insertElementIntoSource(source: string, snippet: string, figureSpan?: Span): string {
   const normalizedSnippet = snippet.trim();
   if (normalizedSnippet.length === 0) {
     return source;
   }
 
-  const endToken = "\\end{tikzpicture}";
-  const endIndex = source.lastIndexOf(endToken);
+  const resolvedEnd = resolveTikzpictureEndToken(source, figureSpan);
+  const endToken = resolvedEnd?.token ?? "\\end{tikzpicture}";
+  const endIndex = resolvedEnd?.from ?? source.lastIndexOf(endToken);
   if (endIndex < 0) {
     if (source.trim().length === 0) {
       return `\\begin{tikzpicture}\n  ${normalizedSnippet}\n\\end{tikzpicture}`;
@@ -164,6 +166,27 @@ export function insertElementIntoSource(source: string, snippet: string): string
   const prefix = needsLeadingNewline ? "\n" : "";
 
   return `${before}${prefix}${bodyIndent}${normalizedSnippet}\n${after}`;
+}
+
+function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined): { from: number; token: string } | null {
+  if (!figureSpan) {
+    return null;
+  }
+  const from = Math.max(0, Math.min(source.length, figureSpan.from));
+  const to = Math.max(from, Math.min(source.length, figureSpan.to));
+  const figureSource = source.slice(from, to);
+  const endPattern = /\\end\{tikzpicture\*?\}/gu;
+  let lastMatch: RegExpExecArray | null = null;
+  for (const match of figureSource.matchAll(endPattern)) {
+    lastMatch = match;
+  }
+  if (!lastMatch) {
+    return null;
+  }
+  return {
+    from: from + lastMatch.index,
+    token: lastMatch[0]
+  };
 }
 
 export function generateComplexPathSource(

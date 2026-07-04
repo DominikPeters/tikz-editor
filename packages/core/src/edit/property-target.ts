@@ -1223,6 +1223,13 @@ function absolutizeChildOperationSpans(
     if (raw.length > 0 && source.slice(span.from, span.to) === raw) {
       return span;
     }
+    const relativeSpan = {
+      from: containerSpan.from + span.from,
+      to: containerSpan.from + span.to
+    };
+    if (raw.length > 0 && source.slice(relativeSpan.from, relativeSpan.to) === raw) {
+      return relativeSpan;
+    }
     if (raw.length > 0) {
       const containerSlice = source.slice(containerSpan.from, containerSpan.to);
       const rawOffset = containerSlice.indexOf(raw);
@@ -1233,10 +1240,7 @@ function absolutizeChildOperationSpans(
         };
       }
     }
-    return {
-      from: containerSpan.from + span.from,
-      to: containerSpan.from + span.to
-    };
+    return relativeSpan;
   };
   return {
     ...child,
