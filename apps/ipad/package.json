@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "tauri": "tauri",
+    "tauri": "node scripts/tauri.mjs",
     "tauri:ios:init": "tauri ios init",
     "tauri:ios:dev": "tauri ios dev",
     "tauri:ios:dev:sim": "node scripts/dev-simulator.mjs",
     "tauri:ios:dev:open": "tauri ios dev --open --host",
+    "tauri:ios:run": "node scripts/tauri.mjs ios run",
     "tauri:ios:build": "tauri ios build",
     "tauri:ios:build:open": "tauri ios build --open"
   },
