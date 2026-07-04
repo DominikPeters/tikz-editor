@@ -66,6 +66,9 @@ type PaintOptions = {
   fillDisabled: boolean;
 };
 
+type CertificationRender = ReturnType<typeof renderTikzToSvg>;
+type CertificationRenderCache = Map<string, CertificationRender | null>;
+
 export function applyPlannedSetPropertyAction(
   source: string,
   action: SetPropertyAction,
@@ -87,6 +90,7 @@ export function cleanupIdiomaticPropertyWrites(
   }
 
   let current = source;
+  const certificationCache: CertificationRenderCache = new Map();
   const requestedElementIds = normalizeCleanupElementIds(elementIds);
   const pathIds = requestedElementIds ?? collectPathStatementIds(parseTikzForEdit(source, parseOptions).figure.body);
   for (const elementId of pathIds) {
@@ -100,7 +104,7 @@ export function cleanupIdiomaticPropertyWrites(
       parseOptions
     );
     for (const candidate of candidates) {
-      if (certifyEquivalentSource(current, candidate.source, parseOptions) && sourceLooksCleaner(candidate.source, current)) {
+      if (certifyEquivalentSource(current, candidate.source, parseOptions, certificationCache) && sourceLooksCleaner(candidate.source, current)) {
         current = candidate.source;
         break;
       }
@@ -173,11 +177,12 @@ export function planPropertyWrite(request: PropertyWriteRequest): PropertyWriteP
     return { conservative, selected: conservative, certificates: [] };
   }
 
+  const certificationCache: CertificationRenderCache = new Map();
   const certificates: CleanupCertificate[] = [];
   let selectedSource = conservative.newSource;
   let selectedReason: string | null = null;
   for (const candidate of candidates) {
-    const accepted = certifyEquivalentSource(conservative.newSource, candidate.source, parseOptions);
+    const accepted = certifyEquivalentSource(conservative.newSource, candidate.source, parseOptions, certificationCache);
     certificates.push({
       accepted,
       reason: accepted ? candidate.reason : "candidate changed semantic render output",
@@ -496,29 +501,45 @@ function styleSourceRefMatches(sourceId: string, targetSourceId: string): boolea
   return sourceId === targetSourceId;
 }
 
-function certifyEquivalentSource(leftSource: string, rightSource: string, parseOptions: EditParseOptions): boolean {
-  try {
-    const left = renderTikzToSvg(leftSource, {
-      parse: {
-        recover: true,
-        activeFigureId: parseOptions.activeFigureId,
-        includeContextDefinitions: true
-      }
-    });
-    const right = renderTikzToSvg(rightSource, {
-      parse: {
-        recover: true,
-        activeFigureId: parseOptions.activeFigureId,
-        includeContextDefinitions: true
-      }
-    });
-    return (
-      diagnosticsSignature(left.parse.diagnostics) === diagnosticsSignature(right.parse.diagnostics) &&
-      semanticSignature(left.semantic.scene.elements) === semanticSignature(right.semantic.scene.elements) &&
-      svgSignature(left.svg.svg) === svgSignature(right.svg.svg)
-    );
-  } catch {
+function certifyEquivalentSource(
+  leftSource: string,
+  rightSource: string,
+  parseOptions: EditParseOptions,
+  cache?: CertificationRenderCache
+): boolean {
+  const left = renderForCertification(leftSource, parseOptions, cache);
+  const right = renderForCertification(rightSource, parseOptions, cache);
+  if (!left || !right) {
     return false;
+  }
+  return (
+    diagnosticsSignature(left.parse.diagnostics) === diagnosticsSignature(right.parse.diagnostics) &&
+    semanticSignature(left.semantic.scene.elements) === semanticSignature(right.semantic.scene.elements) &&
+    svgSignature(left.svg.svg) === svgSignature(right.svg.svg)
+  );
+}
+
+function renderForCertification(
+  source: string,
+  parseOptions: EditParseOptions,
+  cache: CertificationRenderCache | undefined
+): CertificationRender | null {
+  if (cache?.has(source)) {
+    return cache.get(source) ?? null;
+  }
+  try {
+    const rendered = renderTikzToSvg(source, {
+      parse: {
+        recover: true,
+        activeFigureId: parseOptions.activeFigureId,
+        includeContextDefinitions: true
+      }
+    });
+    cache?.set(source, rendered);
+    return rendered;
+  } catch {
+    cache?.set(source, null);
+    return null;
   }
 }
 

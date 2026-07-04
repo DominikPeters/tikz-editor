@@ -155,11 +155,7 @@ export function createDefaultCustomStyleRegistry(): CustomStyleRegistry {
 }
 
 export function cloneCustomStyleRegistry(registry: CustomStyleRegistry): CustomStyleRegistry {
-  const cloned: CustomStyleRegistry = new Map();
-  for (const [name, layers] of registry.entries()) {
-    cloned.set(name, layers.map((layer) => cloneCustomStyleLayer(layer)));
-  }
-  return cloned;
+  return new Map(registry);
 }
 
 export function walkOptionEntriesWithCustomStyles(

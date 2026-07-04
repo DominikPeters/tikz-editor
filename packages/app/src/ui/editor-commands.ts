@@ -61,6 +61,18 @@ type AlignMode = "left" | "center" | "right" | "top" | "middle" | "bottom";
 type DistributeAxis = "horizontal" | "vertical";
 const DEFAULT_PASTE_OFFSET_PT = 0.25 * PT_PER_CM;
 
+type ActionAvailability = ReturnType<typeof getEditActionAvailability>;
+type TreeCommandTarget = { kind: "root" | "child"; sourceId: string; foreach: boolean };
+type MatrixStatementCommandTarget = { matrixSourceId: string; rowCount: number; columnCount: number };
+type UniformMatrixCellSelection = { matrixSourceId: string; rowIndex: number | null; columnIndex: number | null };
+
+const availabilityCache = new WeakMap<SelectionCommandContext, ActionAvailability>();
+const treeCommandTargetCache = new WeakMap<SelectionCommandContext, TreeCommandTarget | null>();
+const matrixStatementTargetCache = new WeakMap<SelectionCommandContext, MatrixStatementCommandTarget | null>();
+const uniformMatrixCellSelectionCache = new WeakMap<SelectionCommandContext, UniformMatrixCellSelection | null>();
+const matrixCellSelectionClassificationCache = new WeakMap<SelectionCommandContext, MatrixCellSelectionClassification>();
+const matrixActionCache = new WeakMap<SelectionCommandContext, Map<string, boolean>>();
+
 export type PasteSelectionResult =
   | { kind: "success" }
   | { kind: "failure"; reason: ClipboardReadFailureReason | "unsupported" };
@@ -1105,42 +1117,55 @@ function selectedSnippets(context: SelectionCommandContext): string[] {
 
 function resolveTreeCommandTarget(
   context: SelectionCommandContext
-): { kind: "root" | "child"; sourceId: string; foreach: boolean } | null {
+): TreeCommandTarget | null {
+  if (treeCommandTargetCache.has(context)) {
+    return treeCommandTargetCache.get(context) ?? null;
+  }
   if (context.selectedElementIds.size !== 1) {
+    treeCommandTargetCache.set(context, null);
     return null;
   }
   const sourceId = [...context.selectedElementIds][0]?.trim() ?? "";
   if (!sourceId) {
+    treeCommandTargetCache.set(context, null);
     return null;
   }
 
   const parseOptions = parseOptionsForContext(context);
   const resolved = resolvePropertyTarget(context.source, sourceId, parseOptions);
   if (resolved.kind !== "found") {
+    treeCommandTargetCache.set(context, null);
     return null;
   }
   if (resolved.target.kind === "tree-child") {
-    return {
+    const target: TreeCommandTarget = {
       kind: "child",
       sourceId,
       foreach: resolved.target.treeChildForeach === true
     };
+    treeCommandTargetCache.set(context, target);
+    return target;
   }
   if (resolved.target.kind !== "path-statement") {
+    treeCommandTargetCache.set(context, null);
     return null;
   }
 
   const parsed = parseTikzForEdit(context.source, parseOptions);
   const statement = findPathStatementById(parsed.figure.body, sourceId);
   if (!statement) {
+    treeCommandTargetCache.set(context, null);
     return null;
   }
   const hasNode = statement.items.some((item) => item.kind === "Node");
   const hasChildren = statement.items.some((item) => item.kind === "ChildOperation");
   if (!hasNode || !hasChildren) {
+    treeCommandTargetCache.set(context, null);
     return null;
   }
-  return { kind: "root", sourceId, foreach: false };
+  const target: TreeCommandTarget = { kind: "root", sourceId, foreach: false };
+  treeCommandTargetCache.set(context, target);
+  return target;
 }
 
 function findPathStatementById(statements: readonly Statement[], sourceId: string): PathStatement | null {
@@ -1179,35 +1204,48 @@ function selectedStatementRefs(context: SelectionCommandContext) {
 
 function resolveMatrixStatementCommandTarget(
   context: SelectionCommandContext
-): { matrixSourceId: string; rowCount: number; columnCount: number } | null {
+): MatrixStatementCommandTarget | null {
+  if (matrixStatementTargetCache.has(context)) {
+    return matrixStatementTargetCache.get(context) ?? null;
+  }
   if (context.selectedElementIds.size !== 1) {
+    matrixStatementTargetCache.set(context, null);
     return null;
   }
   const sourceId = [...context.selectedElementIds][0]?.trim() ?? "";
   if (!sourceId) {
+    matrixStatementTargetCache.set(context, null);
     return null;
   }
   const parseOptions = parseOptionsForContext(context);
   const resolved = resolvePropertyTarget(context.source, sourceId, parseOptions);
   if (resolved.kind !== "found" || resolved.target.kind !== "matrix-statement") {
+    matrixStatementTargetCache.set(context, null);
     return null;
   }
   const dimensions = resolveMatrixDimensions(context.source, resolved.target.matrixTextSpan, resolved.target.options);
   if (!dimensions) {
+    matrixStatementTargetCache.set(context, null);
     return null;
   }
-  return {
+  const target = {
     matrixSourceId: sourceId,
     rowCount: dimensions.rowCount,
     columnCount: dimensions.columnCount
   };
+  matrixStatementTargetCache.set(context, target);
+  return target;
 }
 
 function resolveUniformMatrixCellSelection(
   context: SelectionCommandContext
-): { matrixSourceId: string; rowIndex: number | null; columnIndex: number | null } | null {
+): UniformMatrixCellSelection | null {
+  if (uniformMatrixCellSelectionCache.has(context)) {
+    return uniformMatrixCellSelectionCache.get(context) ?? null;
+  }
   const sourceIds = [...context.selectedElementIds].map((id) => id.trim()).filter(Boolean);
   if (sourceIds.length === 0) {
+    uniformMatrixCellSelectionCache.set(context, null);
     return null;
   }
   const parseOptions = parseOptionsForContext(context);
@@ -1218,12 +1256,14 @@ function resolveUniformMatrixCellSelection(
   for (const sourceId of sourceIds) {
     const resolved = resolvePropertyTarget(context.source, sourceId, parseOptions);
     if (resolved.kind !== "found" || resolved.target.kind !== "matrix-cell") {
+      uniformMatrixCellSelectionCache.set(context, null);
       return null;
     }
     const currentMatrixSourceId = resolved.target.matrixSourceId?.trim() ?? "";
     const currentRow = resolved.target.row ?? 0;
     const currentColumn = resolved.target.column ?? 0;
     if (!currentMatrixSourceId || currentRow <= 0 || currentColumn <= 0) {
+      uniformMatrixCellSelectionCache.set(context, null);
       return null;
     }
     if (matrixSourceId == null) {
@@ -1233,6 +1273,7 @@ function resolveUniformMatrixCellSelection(
       continue;
     }
     if (matrixSourceId !== currentMatrixSourceId) {
+      uniformMatrixCellSelectionCache.set(context, null);
       return null;
     }
     if (rowIndex !== null && rowIndex !== currentRow) {
@@ -1244,9 +1285,12 @@ function resolveUniformMatrixCellSelection(
   }
 
   if (!matrixSourceId) {
+    uniformMatrixCellSelectionCache.set(context, null);
     return null;
   }
-  return { matrixSourceId, rowIndex, columnIndex };
+  const selection = { matrixSourceId, rowIndex, columnIndex };
+  uniformMatrixCellSelectionCache.set(context, selection);
+  return selection;
 }
 
 type MatrixCellSelectionClassification = {
@@ -1258,13 +1302,19 @@ type MatrixCellSelectionClassification = {
 function classifyMatrixCellSelection(
   context: SelectionCommandContext
 ): MatrixCellSelectionClassification {
+  const cached = matrixCellSelectionClassificationCache.get(context);
+  if (cached) {
+    return cached;
+  }
   const sourceIds = [...context.selectedElementIds].map((id) => id.trim()).filter(Boolean);
   if (sourceIds.length === 0) {
-    return {
+    const classification = {
       hasAnyMatrixCellSelection: false,
       exactFullRow: null,
       exactFullColumn: null
     };
+    matrixCellSelectionClassificationCache.set(context, classification);
+    return classification;
   }
 
   const parseOptions = parseOptionsForContext(context);
@@ -1287,34 +1337,42 @@ function classifyMatrixCellSelection(
   }
 
   if (matrixCells.length === 0) {
-    return {
+    const classification = {
       hasAnyMatrixCellSelection: false,
       exactFullRow: null,
       exactFullColumn: null
     };
+    matrixCellSelectionClassificationCache.set(context, classification);
+    return classification;
   }
 
   const matrixSourceId = matrixCells[0]?.matrixSourceId ?? null;
   if (!matrixSourceId || matrixCells.some((cell) => cell.matrixSourceId !== matrixSourceId)) {
-    return {
+    const classification = {
       hasAnyMatrixCellSelection: true,
       exactFullRow: null,
       exactFullColumn: null
     };
+    matrixCellSelectionClassificationCache.set(context, classification);
+    return classification;
   }
   if (hasNonMatrixSelection) {
-    return {
+    const classification = {
       hasAnyMatrixCellSelection: true,
       exactFullRow: null,
       exactFullColumn: null
     };
+    matrixCellSelectionClassificationCache.set(context, classification);
+    return classification;
   }
   if (!context.scene) {
-    return {
+    const classification = {
       hasAnyMatrixCellSelection: true,
       exactFullRow: null,
       exactFullColumn: null
     };
+    matrixCellSelectionClassificationCache.set(context, classification);
+    return classification;
   }
 
   const rowToCellIds = new Map<number, Set<string>>();
@@ -1352,11 +1410,13 @@ function classifyMatrixCellSelection(
       ? { matrixSourceId, columnIndex: singleColumn }
       : null;
 
-  return {
+  const classification = {
     hasAnyMatrixCellSelection: true,
     exactFullRow,
     exactFullColumn
   };
+  matrixCellSelectionClassificationCache.set(context, classification);
+  return classification;
 }
 
 function areSetValuesEqual(left: ReadonlySet<string>, right: ReadonlySet<string> | undefined): boolean {
@@ -1399,14 +1459,30 @@ function canApplyMatrixAction(
     | { kind: "removeMatrixColumn"; matrixSourceId: string; columnIndex: number }
     | { kind: "transposeMatrix"; matrixSourceId: string }
 ): boolean {
+  let cache = matrixActionCache.get(context);
+  if (!cache) {
+    cache = new Map();
+    matrixActionCache.set(context, cache);
+  }
+  const key = matrixActionCacheKey(action);
+  const cached = cache.get(key);
+  if (cached != null) {
+    return cached;
+  }
   const result = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
     parseOptions: parseOptionsForContext(context)
   });
-  return result.kind === "success" || result.kind === "partial";
+  const canApply = result.kind === "success" || result.kind === "partial";
+  cache.set(key, canApply);
+  return canApply;
 }
 
 function availabilityFor(context: SelectionCommandContext) {
-  return getEditActionAvailability({
+  const cached = availabilityCache.get(context);
+  if (cached) {
+    return cached;
+  }
+  const availability = getEditActionAvailability({
     source: context.source,
     activeFigureId: resolvedContextActiveFigureId(context),
     parseOptions: parseOptionsForContext(context),
@@ -1417,6 +1493,25 @@ function availabilityFor(context: SelectionCommandContext) {
     activeHandleId: context.activeHandleId ?? null,
     hasClipboardContent: true
   });
+  availabilityCache.set(context, availability);
+  return availability;
+}
+
+function matrixActionCacheKey(
+  action:
+    | { kind: "addMatrixRow"; matrixSourceId: string; rowIndex: number }
+    | { kind: "removeMatrixRow"; matrixSourceId: string; rowIndex: number }
+    | { kind: "addMatrixColumn"; matrixSourceId: string; columnIndex: number }
+    | { kind: "removeMatrixColumn"; matrixSourceId: string; columnIndex: number }
+    | { kind: "transposeMatrix"; matrixSourceId: string }
+): string {
+  if ("rowIndex" in action) {
+    return `${action.kind}:${action.matrixSourceId}:${action.rowIndex}`;
+  }
+  if ("columnIndex" in action) {
+    return `${action.kind}:${action.matrixSourceId}:${action.columnIndex}`;
+  }
+  return `${action.kind}:${action.matrixSourceId}`;
 }
 
 function reorderActionId(direction: ReorderDirection) {

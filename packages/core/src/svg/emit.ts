@@ -279,6 +279,15 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     for (const clipPath of element.clipChain ?? []) {
       ensureClipPathDefinition(clipPath);
     }
+    const needsShadowDefs = element.style.shadowLayers.length > 0;
+    const needsShadingDefs = element.style.shadeEnabled;
+    const needsPatternDefs = hasActivePatternFill(element.style);
+    if (!needsShadowDefs && !needsShadingDefs) {
+      if (needsPatternDefs) {
+        resolvePatternFill(element.style);
+      }
+      return;
+    }
     let elementBounds: SvgBounds | null;
     const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
     if (element.kind === "Path") {
@@ -953,6 +962,10 @@ function resolveShadowLayerStyle(layerStyle: ShadowRenderableStyle, baseStyle: R
     fillPattern: inheritsFill ? baseStyle.fillPattern : layerStyle.fillPattern,
     patternColor: inheritsFill ? baseStyle.patternColor : layerStyle.patternColor
   };
+}
+
+function hasActivePatternFill(style: PatternRenderableStyle): boolean {
+  return style.fillPattern != null && style.fill != null && style.fill !== "none";
 }
 
 function arrowTipAttributes(style: ResolvedStyle, tipPath: RenderedArrowTipPath): string[] {

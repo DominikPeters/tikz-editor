@@ -113,6 +113,7 @@ import type {
   NodeAnchorTarget,
   SceneElement,
   SceneFigure,
+  SceneClipPath,
   ScenePathCommand,
   SceneLayer,
   PicOriginFrame
@@ -1088,35 +1089,10 @@ function evaluateStatement(
         ),
         currentFrame(context).layer
       );
-      parent.clipChain = currentFrame(context).clipChain.map((clipPath) => ({
-        ...clipPath,
-        sourceRef: { ...clipPath.sourceRef },
-        commands: clipPath.commands.map((command) => {
-          if (command.kind === "Z") {
-            return { kind: "Z" };
-          }
-          if (command.kind === "M" || command.kind === "L") {
-            return { kind: command.kind, to: { ...command.to } };
-          }
-          if (command.kind === "C") {
-            return {
-              kind: "C",
-              c1: { ...command.c1 },
-              c2: { ...command.c2 },
-              to: { ...command.to }
-            };
-          }
-          return {
-            kind: "A",
-            rx: command.rx,
-            ry: command.ry,
-            xAxisRotation: command.xAxisRotation,
-            largeArc: command.largeArc,
-            sweep: command.sweep,
-            to: { ...command.to }
-          };
-        })
-      }));
+      const evaluatedClipChain = currentFrame(context).clipChain;
+      if (clipChainChanged(parent.clipChain, evaluatedClipChain)) {
+        parent.clipChain = cloneClipChain(evaluatedClipChain);
+      }
       parent.pictureSizeRelevant = currentFrame(context).pictureSizeRelevant;
       for (const name of intersectionDirectives.namedPathNames) {
         registerNamedPath(name, elements, context);
@@ -2296,6 +2272,50 @@ function extractStatementMacroOriginStack(trace: MacroExpansionTraceEvent[]): Ma
     }
   }
   return ordered;
+}
+
+function clipChainChanged(previous: readonly SceneClipPath[], next: readonly SceneClipPath[]): boolean {
+  if (previous.length !== next.length) {
+    return true;
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index] !== next[index]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cloneClipChain(clipChain: readonly SceneClipPath[]): SceneClipPath[] {
+  return clipChain.map((clipPath) => ({
+    ...clipPath,
+    sourceRef: { ...clipPath.sourceRef },
+    commands: clipPath.commands.map((command) => {
+      if (command.kind === "Z") {
+        return { kind: "Z" };
+      }
+      if (command.kind === "M" || command.kind === "L") {
+        return { kind: command.kind, to: { ...command.to } };
+      }
+      if (command.kind === "C") {
+        return {
+          kind: "C",
+          c1: { ...command.c1 },
+          c2: { ...command.c2 },
+          to: { ...command.to }
+        };
+      }
+      return {
+        kind: "A",
+        rx: command.rx,
+        ry: command.ry,
+        xAxisRotation: command.xAxisRotation,
+        largeArc: command.largeArc,
+        sweep: command.sweep,
+        to: { ...command.to }
+      };
+    })
+  }));
 }
 
 function cloneMacroOriginStack(stack: MacroOriginFrame[]): MacroOriginFrame[] {

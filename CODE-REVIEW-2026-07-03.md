@@ -10,6 +10,8 @@ Full-codebase review of tikz-editor (~275k lines of TypeScript, 728 tracked file
 
 **What's in notably good shape** (worth preserving deliberately): zero TODO/FIXME/HACK comments in source; zero `as any` and zero `@ts-ignore` in production code (the 6 `@ts-expect-error` are all in tests, justified); no `console.log` in production paths; only two empty catches, both benign and commented; strictly clean dependency layering (lezer-tikz ← {lang-tikz, core} ← app ← apps; core never imports app; within core, `semantic` never imports `edit`/`svg`/`render` — the single backwards edge is a type-only import of `SourcePatch` in `parser/incremental.ts:7`, trivially movable); every `addEventListener` in the app has a matching cleanup; e2e suites use deterministic injected bridges with only 7 `waitForTimeout`s in ~8k lines; shell entry points are 17 lines each with all logic shared in `packages/app`.
 
+**Implementation status notes:** added 2026-07-04 after the Priority 1 correctness pass and the first Priority 2 hot-path performance pass. "Done" means code was changed and verified locally; "Partial" means a contained improvement landed but the full recommendation still has follow-up work.
+
 ---
 
 ## Priority 1 — Correctness bugs
@@ -18,54 +20,69 @@ Full-codebase review of tikz-editor (~275k lines of TypeScript, 728 tracked file
 `packages/core/src/edit/option-mutations.ts:104-149`, root cause `packages/core/src/options/parse.ts:41-68`.
 Every `setProperty` rewrites the whole `optionsSpan` by re-joining `entry.raw.trim()` with `", "`. `maskLineComments` blanks comments before tokens are captured, so `\draw[red, % main color\n  thick]` + set `line width=2pt` → `\draw[red, thick, line width=2pt]` — comment silently deleted, multi-line list flattened. For a WYSIWYG-over-source editor, user formatting should be sacred. The comment-toggle path (`set-property.ts:129-481`) already has a careful comment-preserving serializer; the ordinary write path doesn't use it.
 **Fix:** make option mutations surgical (edit only the changed entry's span; whole-list rewrite only when structure requires it), or reuse the `parseCommentToggleItems` fragment model for all rewrites. *(high confidence)* → Architecture note A.
+**Status (2026-07-04): Done.** `option-mutations.ts` now uses a source-preserving rewrite path for spanned targets, with focused regression coverage for comments, multiline options, and bare-option clearing.
 
 ### 1.2 `addElement` broken in multi-figure documents ⚠️ verified empirically
 `packages/core/src/edit/actions.ts:1122-1144`, `packages/core/src/edit/element-templates.ts:140-168`.
 `insertElementIntoSource` inserts before the **last** `\end{tikzpicture}`; `applyAddElement` parses snapshots without forwarding `parseOptions` (so `activeFigureId` defaults to figure 0). With two figures, the diff finds no new statement and a non-null assertion throws a raw `TypeError`. Even fixed, the element lands in the last figure regardless of the active one.
 **Fix:** thread `parseOptions` into both snapshots, make insertion figure-aware, replace the `!` with an error result. *(high confidence)*
+**Status (2026-07-04): Done.** `addElement` now threads `parseOptions`, inserts into the active figure span, and returns an explicit error if the inserted element cannot be identified; multi-figure regression coverage was added.
 
 ### 1.3 SVG part-reuse can attach wrong/missing gradients & patterns after an edit
 `packages/core/src/svg/emit.ts:126-148, 1664-1685`; reuse driven from `packages/app/src/compute.ts:377-391`.
 Gradient/pattern def ids are sequence-numbered per emit (`gradientIdBySignature.size + 1`) and baked into part markup as `url(#tikz-shading-…-N)`. The keystroke reuse path replays *old* markup for unaffected elements while defs renumber from scratch: `\shade A; \shade B;` then edit A to `\fill` → B is "unaffected", reuses `url(#…-2)`, but the new emit registers B's gradient as `…-1`. B's fill silently breaks, or B picks up another element's gradient. Clip paths get a blanket reuse guard (line 1632); gradients/patterns get none.
 **Fix:** derive def ids from a content hash of the signature (stable across emits), or bail out of reuse when def-id assignment changes for any reused element. *(high confidence)* → Architecture note F.
+**Status (2026-07-04): Done.** Gradient and pattern ids are content-derived rather than sequence-derived, with a reuse regression test that verifies old part markup still resolves to current defs after an edit.
 
 ### 1.4 Uncapped `\graph` expansion can freeze the editor mid-keystroke
 `packages/core/src/semantic/path/graph.ts:3707-3754, 3122-3140`.
 `\foreach` is capped at 10,000 expansions (`semantic/evaluate.ts:212`) but graphs have no budget: typing `\graph { subgraph K_n [n=2000] };` plans ~2M edges each with full style resolution; `V={1,...,100000000}` builds a 100M-element array in `expandRange`. Hangs or OOMs while the user is still typing the number.
 **Fix:** add a node/edge budget in `buildGraphPlan` mirroring the foreach cap, with a diagnostic. *(high confidence)*
+**Status (2026-07-04): Done.** Graph expansion now caps planned nodes and edges and emits budget diagnostics; regression coverage exercises both large clique and huge range inputs.
 
 ### 1.5 `computeBounds` spreads unbounded arrays into `Math.min/max`
 `packages/core/src/semantic/evaluate.ts:2441-2444`.
 `Math.min(...points.map(...))` throws `RangeError` past the engine argument limit (~65k+ in V8). `points` accumulates every endpoint plus curve/arc extrema across all elements, so large foreach/plot-heavy figures can kill the whole render.
 **Fix:** single loop tracking min/max (also removes four intermediate arrays per call). *(high confidence on pattern)*
+**Status (2026-07-04): Done.** `computeBounds` now tracks extrema in one loop instead of spreading mapped arrays.
 
 ### 1.6 `setPointerCapture` in canvas text-selection can never succeed
 `packages/app/src/ui/canvas-panel/CanvasPanel.tsx:2354-2399` (esp. 2394-2398).
 `event.currentTarget.setPointerCapture(...)` is called inside a `.then()`; React nulls `currentTarget` after dispatch, so this is always a TypeError swallowed by the surrounding try/catch. Text-selection drags never capture the pointer → hover churn on neighboring elements during selection drags.
 **Fix:** save `event.currentTarget` to a local synchronously before the async work. *(high confidence)*
+**Status (2026-07-04): Done.** Canvas text selection captures the target and pointer id synchronously before async layout work.
 
 ### 1.7 Align/distribute drops `parseOptions` for `rotate around` pivots
 `packages/core/src/edit/actions/move-arrange-actions.ts:1054-1058, 1088-1098`.
 `applyElementDeltaMapStrict` passes a hard-coded `{}` where every sibling call threads `parseOptions`. In multi-figure docs the pivot adjustment parses figure 0: pivot silently not moved, or an identically-numbered statement in the wrong figure gets resolved.
 **Fix:** plumb `parseOptions` through. *(medium-high confidence)*
+**Status (2026-07-04): Done.** Align/distribute strict delta application now preserves `parseOptions`, including active-figure targeting for `rotate around` pivots; a multi-figure regression was added.
 
 ### 1.8 Race between global Knuth–Plass options and async MathJax renders
 `packages/core/src/text/mathjax-engine.ts:1483-1505, 860-904, 1181-1205`.
 Pending async renders each do "set jax-global options → await render"; render A can execute after render B overwrote `layoutMode`/`alignment`/`wrappedTextGaps`, producing a wrongly-laid-out result cached *permanently* under A's key.
 **Fix:** serialize async renders through a queue, or pass options per call instead of via shared jax state. *(medium confidence)*
+**Status (2026-07-04): Done.** Async MathJax cache population now serializes through a queue and re-checks cache state before inserting.
 
 ### 1.9 Wrong `PT_PER_CM` constant skews all coordinates reported to the AI assistant
 `packages/app/src/ui/assistant-tool-handlers.ts:5-6`.
 The constant is `28.3465` (big points per cm, 72/2.54) while its own comment claims TeX points — the rest of the pipeline uses `28.4527559055` (72.27/2.54), defined independently in five other places (`core/src/coords/source.ts:4`, `edit/format.ts:1`, `edit/snapping/grid-snaps.ts:9`, `semantic/style/constants.ts:399`, `semantic/path/node-positioning.ts:73`). All coordinates and radii the assistant sees are ~0.37% off.
 **Fix:** import `PT_PER_CM` from `coords/source` everywhere; delete the five local copies. *(high confidence)*
+**Status (2026-07-04): Done for the user-visible skew.** The assistant now imports the shared `PT_PER_CM` value from `tikz-editor/edit/format`; broader consolidation of every remaining local constant copy was not part of this pass.
 
 ### 1.10 Smaller correctness items
 - **Standalone export misses definitions in nested scopes** — `packages/core/src/export/standalone-latex.ts:86-97`: `collectStatementById` descends only one scope level, so a `\tikzset`/`\definecolor` two scopes deep is silently dropped and the exported `.tex` doesn't compile. Fix: recurse. *(medium-high)*
+- **Status (2026-07-04): Done.** `collectStatementById` now recurses through nested scope bodies.
 - **Clearing the last option of a bare-format target is a silent no-op** — `packages/core/src/edit/option-mutations.ts:38-56`: removing the only entry of e.g. `mystyle/.style={draw}` returns null → "would not change the source". Fix: emit empty string for bare format. *(medium)*
+- **Status (2026-07-04): Done.** Bare-format last-option removal is covered by the source-preserving option mutation rewrite and tests.
 - **Tree-child span resolution by `indexOf` of raw text** — `packages/core/src/edit/property-target.ts:1211-1348`: two identical `child {node {x}}` siblings resolve to the first occurrence; an edit aimed at the second can rewrite the first (system ships a "verify the updated source" warning rather than a correct edit). Fix: keep absolute offsets from the parser instead of re-finding text. *(high that it's fragile, medium that it's user-reachable)*
+- **Status (2026-07-04): Done.** Tree-child operation spans now prefer parser/absolute offsets before falling back to raw text search; duplicate-child regression coverage was added.
 - **Desktop About dialog reports 0.1.0** — `packages/app/src/ui/AboutModal.tsx:4` reads `TIKZ_EDITOR_VERSION`, defined only in `apps/web/vite.config.ts:12`, not desktop/landing. Fix: shared vite config helper. *(medium)*
+- **Status (2026-07-04): Done via desktop Vite config.** Desktop now defines `import.meta.env.TIKZ_EDITOR_VERSION`; extracting a shared Vite helper remains optional cleanup.
 - **Value-span attribution via `raw.indexOf(valueRaw)`** — duplicated in `semantic/evaluate.ts:3589-3595` and `semantic/style/resolve.ts:192-198`; mis-positions provenance spans when value text appears in the key (`x=x`). `OptionEntry` already carries `valueSpan` — use it, delete both helpers. *(high; impact minor)*
+- **Status (2026-07-04): Done.** Both helpers now use `entry.valueSpan?.from`.
 - **Local secret:** the untracked `TODO.md` contains a plaintext Azure VM password (line 64). Verified it never reached git history or the public repo — but remove it, and rotate if the VM is alive.
+- **Status (2026-07-04): Not done in code.** This is an operational/security cleanup item and should be handled separately without copying the secret into commits or chat.
 
 ---
 
@@ -77,52 +94,71 @@ These compound: the same keystroke pays all of them.
 `packages/app/src/ui/editor-command-runtime.ts:1189-1302`; call sites `App.tsx:591-659`, `CanvasPanel.tsx:1034-1080`; `editor-commands.ts:516-605, 1393-1420`.
 `useEditorCommandRuntime`'s `useMemo` keys on ~25 callbacks that both call sites pass as fresh inline arrows — the memo never holds, so `createEditorCommandRuntime` re-executes on every render of App **and** CanvasPanel (every keystroke, hover, drag frame). Each rebuild runs `actionAvailability` plus six `can*Selection` checks, each independently calling `deriveFacts` → `collectSourceWorldBounds` over the entire scene; matrix/foreach checks additionally run speculative `applyEditAction` calls. The drag-freezing logic inside the hook is dead weight because the memo never holds.
 **Fix:** (a) `useCallback` (or refs) for the option callbacks at both call sites; (b) compute availability once per context (`WeakMap<context, availability>`); (c) consider lazy per-menu-open `enabled` computation. *(high confidence; agent estimates fixing 2.1–2.3 eliminates most per-keystroke waste in the app layer)* → Architecture note C.
+**Status (2026-07-04): Mostly done.** App and CanvasPanel command callbacks are now stable/ref-backed, and command availability, matrix/tree target resolution, matrix cell classification, and speculative matrix checks are cached per runtime context. Lazy per-menu-open `enabled` computation remains a possible follow-up.
 
 ### 2.2 App root over-subscribes to the store
 `packages/app/src/ui/App.tsx:226-262, 974-992, 1233-1349, 1552-1571`; `DockLayout.tsx:412-449`.
 App subscribes to `hoveredElementId` (used only to schedule compute pre-warm) and the whole `documents` record — every hover transition and every assistant streaming delta re-renders the entire tree, and (via 2.1) rebuilds the command runtime. On desktop, the `syncNativeMenu` effect deps include `commandRuntime`, so a native-menu IPC sync fires on essentially every render; the global keydown listener is re-registered each render. Assistant handlers are plain functions, defeating `memo(AssistantPanel)`.
 **Fix:** move pre-warm into a transient `useEditorStore.subscribe` hook; select narrow fields; `useCallback` handlers; gate menu sync on a command-state signature. *(high confidence)*
+**Status (2026-07-04): Mostly done.** Hover prewarm now runs from a store subscription, platform/key handlers read current command runtime through refs, native menu sync is gated by a command-state signature, and assistant handlers are memoized. `App` still selects `documents` for tab/close/file-watch workflows, so deeper document-slice splitting remains follow-up work.
 
 ### 2.3 AssistantPanel subscribes to the whole active `DocumentSession`
 `packages/app/src/ui/AssistantPanel.tsx:49`; `store/reducer.ts:280-321`.
 The active-document object changes identity on every keystroke/snapshot/selection change, so the 1,187-line panel re-renders continuously during typing and drags.
 **Fix:** select only the assistant slice with `useShallow` (fields are already referentially stable). *(high confidence)*
+**Status (2026-07-04): Done.** `AssistantPanel` now selects only assistant items, pending approvals, turn status, error, and document presence.
 
 ### 2.4 Semantic evaluator deep-clones registries per path statement
 `packages/core/src/semantic/evaluate.ts:938-939, 997-998, 1163-1164, 1216-1217`; `semantic/style/custom-styles.ts:157-163`; `semantic/pics/registry.ts:41-47`.
 Every path statement — even `\draw (0,0)--(1,1);` — deep-clones the custom-style registry, pic registry, color aliases, and macro bindings before pushing a frame. O(statements × definitions) clone work per keystroke; 300 statements × 50 styles ≈ 15k layer clones per edit.
 **Fix:** copy-on-write registries (writes inside path statements are rare) or a layered lookup chain like the existing `PersistentMap`. *(high confidence)* → Architecture note B.
+**Status (2026-07-04): Partial.** Custom-style and pic registries now use shallow map clones, relying on replacement-on-write semantics for inherited entries. Macro bindings and color aliases still use eager `Map` clones because their current helper APIs mutate frames directly; full layered lookup remains future work.
 
 ### 2.5 Clip chain deep-cloned after every path statement
 `packages/core/src/semantic/evaluate.ts:1091-1119`. Rebuilt by cloning every command of every clip path even when the statement contains no `clip`. One large `\clip plot …` followed by K draws → K × clipSize allocations per keystroke.
 **Fix:** identity-compare / dirty-flag and skip the clone when unchanged. *(high confidence)*
+**Status (2026-07-04): Done.** Path evaluation now identity-compares clip-chain arrays and only deep-clones when the evaluated frame changed the chain.
 
 ### 2.6 SVG reuse path double-computes arrow geometry, path encoding, bounds
 `packages/core/src/svg/emit.ts:278-329 vs 339-437`. With reuse active, `registerDefsForElement` runs `renderPathWithArrows` + `encodePathData` + `computeSvgPathBounds` for **all** elements — then the main loop recomputes all three for edited ones. Bounds are computed even for elements with no shading/pattern/shadow, where they're never used.
 **Fix:** early-out when no shading/pattern/shadow; thread computed values into the main emission. *(high confidence)*
+**Status (2026-07-04): Partial.** The reuse pre-pass now registers clip defs unconditionally, resolves pattern-only defs without geometry, and skips bounds work for elements with no shading or shadows. Threading precomputed geometry into the main emission remains follow-up work.
 
 ### 2.7 Knuth–Plass always runs the hyphenation pass even when pass 1 succeeds
 `packages/core/src/text/knuth-plass/KnuthPlassVisitor.ts:370-400`. `pass2Model`/`pass2Dp` (hyphenation + second full DP) are computed unconditionally *before* checking whether pass 1 sufficed — inverting TeX's pretolerance design.
 **Fix:** compute pass 2 lazily on pass-1 failure; audit the main wrap path for the same pattern. *(high confidence)*
+**Status (2026-07-04): Done.** Pass 2 model/DP construction is now lazy and runs only when pass 1 fails.
 
 ### 2.8 MathJax engine caches are unbounded on a process-lifetime singleton
 `packages/core/src/text/mathjax-engine.ts:196-199`. Every keystroke inside a node label inserts a full rendered-SVG cache entry (`"Hello"`, `"Hell"`, `"Hel"`, …); no eviction anywhere.
 **Fix:** LRU cap or clear-on-idle. *(high confidence)*
+**Status (2026-07-04): Done.** MathJax render, exact-width, and validation caches now have capped insertion behavior.
 
 ### 2.9 Decoration sampling recomputes arc-length parameterization from scratch
 `packages/core/src/geometry/path-sampler.ts:444-462, 597-627, 215-244`; consumers `semantic/decorations/engine.ts:617-1156`.
 `parameterAtCubicDistance` runs 28 bisection iterations × 30-step Simpson per sample, recomputing total length each call; `sampleFrameFromStartExtrapolated` rescans segments from index 0 per sample. A coil/zigzag on a long curved path → millions of trig calls per keystroke.
 **Fix:** per-segment cached cumulative-length tables (build once in `commandsToSegments`, binary-search) + walking cursors. *(high confidence)*
+**Status (2026-07-04): Mostly done.** Path sampling now caches total/cumulative segment lengths per segment array and caches curved-segment length-to-parameter tables with binary search/refinement. Walking cursors in decoration consumers were not added.
 
 ### 2.10 Other hot-path items
 - **Incremental machinery activates only for drags; typing pays full re-eval + checkpoint snapshots** (`semantic/incremental.ts:713-732, 283-298`; `semantic/context.ts:455-480`): per-keystroke path = full parse + full evaluation + N/8 `structuredClone` snapshots of the whole frame stack whose only beneficiary is a later drag. Consider lazy checkpoint capture on first drag. *(high on mechanism, medium on net cost)*
+- **Status (2026-07-04): Not done.** This remains a larger incremental-evaluation refactor.
 - **Property-write cleanup renders the document 2× per candidate** (`edit/property-write-planner.ts:499-523`); node resize parses+evaluates ~5× per invocation (`actions/resize-element.ts:190-299`). Memoize `render(source)` within a plan; skip certification for pure option-appends. *(high on cost structure)*
+- **Status (2026-07-04): Partial.** Property-write certification now memoizes `render(source)` within each cleanup/plan call. Node-resize parse/evaluate reuse and pure option-append certification skipping remain follow-ups.
 - **Quadratic graph placement + array-based color sets** (`semantic/path/graph.ts:1976-2002, 3756-3764`): O(n²) chain offset re-simulation with scope clones per node; `Array.includes` color classes. *(medium-high; real graphs usually small)*
+- **Status (2026-07-04): Partial.** Color-class uniqueness/recolor filtering now uses `Set`-based lookups in the touched helpers. The chain-offset placement simulation remains unresolved.
 - **Constant option strings re-parsed per statement** (`semantic/path/evaluate.ts:382-384, 1023`; `graph.ts:2722, 3174`): `"draw"`, `"every edge"`, `"[auto]"` etc. fully tokenized in innermost loops. Small memo keyed on raw string. *(high mechanism, medium impact)*
+- **Status (2026-07-04): Partial.** The path evaluator now reuses module-level parsed constants for `"draw"`, `"every edge"`, `"edge from parent"`, and `"help lines"`. Graph-side constant parses are still pending.
 - **Foreach: redundant conditional-expansion per iteration** (`packages/core/src/foreach/expand.ts:257-266`): eager fallback work only needed on parse errors; double expansion when no macros defined. *(high)*
+- **Status (2026-07-04): Done.** Foreach expansion now skips macro expansion when no macro bindings exist and only parses the fallback body after a macro-expanded parse error.
 - **Node-position picking preflights every anchor synchronously in a render memo** (`CanvasPanel.tsx:1459-1522`): O(nodes) full edit-preflights on the render thread when picking starts. Compute lazily per hovered target. *(medium)*
+- **Status (2026-07-04): Not done.** Still a targeted UI follow-up.
 - **Drag controller: one 1,160-line effect, ~40 deps, re-registers 5 window listeners per keystroke/drag-frame** (`useCanvasDragController.ts:140-1301`): currently correct but a stale-closure landmine; register once + read hot values through refs. *(high mechanics, medium impact)*
+- **Status (2026-07-04): Not done.** Still a larger hook refactor.
 - **Completion re-scans raw source with ad-hoc scanners** (`packages/core/src/completion/index.ts:60-144`) duplicating knowledge the parser already has as AST statements. *(drift + recomputation concern)*
+- **Status (2026-07-04): Not done.** Still a parser/completion integration follow-up.
+
+**Verification (2026-07-04):** Priority 2 pass verified with focused Vitest coverage for SVG/model/property-write/foreach/decorations/graphs/pics/text hot paths, plus `npm run typecheck`, `npm run lint:prod`, and `git diff --check`.
 
 ---
 

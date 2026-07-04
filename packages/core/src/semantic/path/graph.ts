@@ -3379,7 +3379,8 @@ function applyColorOperationsToNodes(colors: GraphColorMap, ops: GraphColorOp[],
       continue;
     }
 
-    const fromNodes = colorNodes(colors, op.from).filter((node) => nodes.includes(node));
+    const eligibleNodes = new Set(nodes);
+    const fromNodes = colorNodes(colors, op.from).filter((node) => eligibleNodes.has(node));
     removeNodesFromColor(colors, op.from, fromNodes);
     addNodesToColor(colors, op.to, fromNodes);
   }
@@ -3812,8 +3813,10 @@ function sequenceLabels(count: number, diagnostics: string[]): string[] {
 
 function mergeUnique(base: string[], next: string[]): string[] {
   const merged = [...base];
+  const seen = new Set(merged);
   for (const value of next) {
-    if (!merged.includes(value)) {
+    if (!seen.has(value)) {
+      seen.add(value);
       merged.push(value);
     }
   }
