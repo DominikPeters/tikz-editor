@@ -178,11 +178,11 @@ Every path statement — even `\draw (0,0)--(1,1);` — deep-clones the custom-s
 
 ### 3.3 Six-way duplication in `graph.ts` option handling
 `semantic/path/graph.ts:1190-1523` vs `1525-1765` (same ~30 keys hand-dispatched twice, ×3 entry kinds each); `parseChain` (503-618) vs `parseChainFromParsedSpec` (620-731) ~110-line near-duplicates. Adding one graph option = up to 6 coordinated edits. Extract shared `applyGraphOptionEntry` table + common chain-walker. *(high confidence)*
-**Status (2026-07-04): Mostly done.** Node/group graph option handling now shares a common scope-control dispatcher for kv/flag/bare entries, leaving only node-specific edge accumulation and group-specific quote/text behavior at the call sites. The separate `parseChain` / `parseChainFromParsedSpec` chain-walker duplication remains follow-up work.
+**Status (2026-07-04): Done.** Node/group graph option handling now shares a common scope-control dispatcher for kv/flag/bare entries, leaving only node-specific edge accumulation and group-specific quote/text behavior at the call sites. Raw and parsed graph chains now feed one shared chain accumulator, so connector edge/color/layout updates live in one path.
 
 ### 3.4 `emit.ts` shape emission duplicated six ways (~400 lines)
 `packages/core/src/svg/emit.ts:717-889` (three structurally identical shadow emitters), `371-414, 463-506, 530-582` (double-stroke/plain branches per shape). Extract `emitStyledShape(tag, style, …)`. Also `fmt()` duplicated (`emit.ts:1521`, `model.ts:171`); module-global `currentPatternGlobalYPhase` (line 73) threads state invisibly through pattern renderers — pass explicitly. *(high confidence)*
-**Status (2026-07-04): Mostly done.** Path/circle/ellipse emission now shares styled-shape rendering helpers, double-stroke/plain branch handling, transform emission, and shadow shape emission. `fmt()` duplication and `currentPatternGlobalYPhase` cleanup remain separate follow-ups.
+**Status (2026-07-04): Done.** Path/circle/ellipse emission now shares styled-shape rendering helpers, double-stroke/plain branch handling, transform emission, and shadow shape emission. SVG number formatting is shared, and pattern rendering now threads its phase through an explicit context instead of module-global state.
 
 ### 3.5 God files with concrete decomposition seams
 - **`CanvasPanel.tsx` (3,806)**: extract `useCanvasTextEditSession` + `<CanvasTextEditPopup>` (lines 331-660, 2268-2753, 3536-3617), `useNodePositionTargetPicking` (1451-1663, 2755-2836), move text-measure helpers to a module. Also contains **dead snap-debug overlay** (~150 lines + an always-on window pointermove listener) behind hardcoded `showDevPanel={false}` at line 3776 — delete it (DevPanel supersedes it).

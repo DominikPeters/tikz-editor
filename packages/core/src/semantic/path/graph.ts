@@ -194,6 +194,22 @@ type GraphChainSegmentInput = {
   chain?: GraphSpecChain;
 };
 
+type GraphChainStep =
+  | { kind: "done" }
+  | { kind: "missing-right-node" }
+  | {
+      kind: "step";
+      operator: ConnectorOperator;
+      edgeOptions?: OptionListAst;
+      span: Span;
+      term: GraphTermResult;
+    };
+
+type GraphChainReader = {
+  readFirst: (scope: GraphScopeState, layout: GraphLayoutContext) => GraphTermResult | null;
+  readNext: (scope: GraphScopeState, layout: GraphLayoutContext) => GraphChainStep;
+};
+
 type ParsedDirectNodeSpec = {
   baseName: string;
   baseNameWasQuoted: boolean;
@@ -513,131 +529,96 @@ class GraphPlanner {
       return this.parseChainFromParsedSpec(parsedChain, scope, layout);
     }
 
-    let chainWidth = 0;
-    let chainDepth = 0;
-    let levelOffset = 0;
-
     let cursor = 0;
-    let chainScope = scope;
-    const first = this.parseNodeSpec(raw, from, cursor, chainScope, {
-      logicalWidth: layout.logicalWidth,
-      logicalDepth: layout.logicalDepth,
-      level: layout.level
-    });
-    if (!first) {
-      return {
-        entries: [],
-        exits: [],
-        edges: [],
-        colors: createEmptyColorMap(),
-        logicalWidth: 0,
-        logicalDepth: 0
-      };
-    }
-    cursor = first.next;
-    chainWidth += first.term.logicalWidth;
-    chainDepth = Math.max(chainDepth, first.term.logicalDepth);
-    levelOffset += 1;
-    chainScope = this.applyTrieChainPrefix(chainScope, first.term);
-
-    const chainSources = [...first.term.entries];
-    let chainTargets = [...first.term.exits];
-    let chainColors = cloneColorMap(first.term.colors);
-    const edges: GraphPlannedEdgeInternal[] = [...first.term.edges];
-
-    while (true) {
-      const afterSpace = skipWhitespace(raw, cursor);
-      const connector = readConnector(raw, afterSpace, CONNECTOR_OPERATORS);
-      if (!connector) {
-        break;
-      }
-      cursor = connector.next;
-
-      const edgeOptionRead = this.readOptionList(raw, from, cursor);
-      const edgeLocalOptions = edgeOptionRead?.options;
-      if (edgeOptionRead) {
-        cursor = edgeOptionRead.next;
-      }
-      const edgePlan = this.extractEdgeOptionPlan(edgeLocalOptions, chainScope);
-
-      const nextNode = this.parseNodeSpec(raw, from, cursor, chainScope, {
-        logicalWidth: layout.logicalWidth + chainWidth,
-        logicalDepth: layout.logicalDepth,
-        level: layout.level + levelOffset
-      });
-      if (!nextNode) {
-        this.diagnostics.push("graph-connector-without-right-node");
-        break;
-      }
-      cursor = nextNode.next;
-      edges.push(...nextNode.term.edges);
-      chainWidth += nextNode.term.logicalWidth;
-      chainDepth = Math.max(chainDepth, nextNode.term.logicalDepth);
-      levelOffset += 1;
-
-      const nextSources = colorNodes(nextNode.term.colors, "source");
-      const nextTargets = colorNodes(nextNode.term.colors, "target");
-
-      const includeConnectorEdge = connector.operator !== "-!-" || chainScope.mode === "simple";
-      if (includeConnectorEdge) {
-        const operatorColors = mergeColorMaps(chainColors, nextNode.term.colors);
-        setColorNodes(operatorColors, "target'", chainTargets);
-        setColorNodes(operatorColors, "source'", nextSources);
-
-        const operators = edgePlan.operators.length > 0 ? edgePlan.operators : [chainScope.defaultJoinOperator];
-        for (const operator of operators) {
-          edges.push(
-            ...this.buildEdgesForOperators(
-              [operator],
-              operatorColors,
-              connector.operator,
-              {
-                from: from + connector.index,
-                to: from + nextNode.next
-              },
-              chainScope,
-              edgePlan.styleOptions
-            )
-          );
+    return this.parseChainWithReader(scope, layout, {
+      readFirst: (chainScope, nodeLayout) => {
+        const first = this.parseNodeSpec(raw, from, cursor, chainScope, nodeLayout);
+        if (!first) {
+          return null;
         }
+        cursor = first.next;
+        return first.term;
+      },
+      readNext: (chainScope, nodeLayout) => {
+        const afterSpace = skipWhitespace(raw, cursor);
+        const connector = readConnector(raw, afterSpace, CONNECTOR_OPERATORS);
+        if (!connector) {
+          return { kind: "done" };
+        }
+        cursor = connector.next;
+
+        const edgeOptionRead = this.readOptionList(raw, from, cursor);
+        if (edgeOptionRead) {
+          cursor = edgeOptionRead.next;
+        }
+
+        const nextNode = this.parseNodeSpec(raw, from, cursor, chainScope, nodeLayout);
+        if (!nextNode) {
+          return { kind: "missing-right-node" };
+        }
+        cursor = nextNode.next;
+        return {
+          kind: "step",
+          operator: connector.operator,
+          edgeOptions: edgeOptionRead?.options,
+          span: {
+            from: from + connector.index,
+            to: from + nextNode.next
+          },
+          term: nextNode.term
+        };
       }
-
-      chainColors = mergeColorMaps(chainColors, nextNode.term.colors);
-      setColorNodes(chainColors, "source", chainSources);
-      setColorNodes(chainColors, "target", nextTargets);
-      chainTargets = [...nextTargets];
-      chainScope = this.applyTrieChainPrefix(chainScope, nextNode.term);
-    }
-
-    return {
-      entries: chainSources,
-      exits: chainTargets,
-      edges,
-      colors: chainColors,
-      logicalWidth: chainWidth,
-      logicalDepth: chainDepth
-    };
+    });
   }
 
   private parseChainFromParsedSpec(chain: GraphSpecChain, scope: GraphScopeState, layout: GraphLayoutContext): GraphTermResult {
+    let index = 0;
+    return this.parseChainWithReader(scope, layout, {
+      readFirst: (chainScope, nodeLayout) => {
+        const firstNodeSpec = chain.nodes[0];
+        if (!firstNodeSpec) {
+          return null;
+        }
+        return this.parseNodeTerm(firstNodeSpec.raw, firstNodeSpec.span.from, chainScope, nodeLayout);
+      },
+      readNext: (chainScope, nodeLayout) => {
+        const pairCount = Math.min(chain.connectors.length, chain.nodes.length - 1);
+        if (index >= pairCount) {
+          return { kind: "done" };
+        }
+
+        const connector = chain.connectors[index];
+        const nextNodeSpec = chain.nodes[index + 1];
+        index += 1;
+        const edgeOptions =
+          connector.optionsRaw && connector.optionsSpan
+            ? parseOptionListRaw(connector.optionsRaw, connector.optionsSpan.from)
+            : undefined;
+        const term = this.parseNodeTerm(nextNodeSpec.raw, nextNodeSpec.span.from, chainScope, nodeLayout);
+        if (!term) {
+          return { kind: "missing-right-node" };
+        }
+        return {
+          kind: "step",
+          operator: connector.operator,
+          edgeOptions,
+          span: {
+            from: connector.span.from,
+            to: nextNodeSpec.span.to
+          },
+          term
+        };
+      }
+    });
+  }
+
+  private parseChainWithReader(scope: GraphScopeState, layout: GraphLayoutContext, reader: GraphChainReader): GraphTermResult {
     let chainWidth = 0;
     let chainDepth = 0;
     let levelOffset = 0;
 
-    const firstNodeSpec = chain.nodes[0];
-    if (!firstNodeSpec) {
-      return {
-        entries: [],
-        exits: [],
-        edges: [],
-        colors: createEmptyColorMap(),
-        logicalWidth: 0,
-        logicalDepth: 0
-      };
-    }
-
     let chainScope = scope;
-    const firstTerm = this.parseNodeTerm(firstNodeSpec.raw, firstNodeSpec.span.from, chainScope, {
+    const firstTerm = reader.readFirst(chainScope, {
       logicalWidth: layout.logicalWidth,
       logicalDepth: layout.logicalDepth,
       level: layout.level
@@ -663,26 +644,22 @@ class GraphPlanner {
     let chainColors = cloneColorMap(firstTerm.colors);
     const edges: GraphPlannedEdgeInternal[] = [...firstTerm.edges];
 
-    const pairCount = Math.min(chain.connectors.length, chain.nodes.length - 1);
-    for (let index = 0; index < pairCount; index += 1) {
-      const connector = chain.connectors[index];
-      const nextNodeSpec = chain.nodes[index + 1];
-      const edgeLocalOptions =
-        connector.optionsRaw && connector.optionsSpan
-          ? parseOptionListRaw(connector.optionsRaw, connector.optionsSpan.from)
-          : undefined;
-      const edgePlan = this.extractEdgeOptionPlan(edgeLocalOptions, chainScope);
-
-      const nextTerm = this.parseNodeTerm(nextNodeSpec.raw, nextNodeSpec.span.from, chainScope, {
+    while (true) {
+      const step = reader.readNext(chainScope, {
         logicalWidth: layout.logicalWidth + chainWidth,
         logicalDepth: layout.logicalDepth,
         level: layout.level + levelOffset
       });
-      if (!nextTerm) {
+      if (step.kind === "done") {
+        break;
+      }
+      if (step.kind === "missing-right-node") {
         this.diagnostics.push("graph-connector-without-right-node");
         break;
       }
 
+      const edgePlan = this.extractEdgeOptionPlan(step.edgeOptions, chainScope);
+      const nextTerm = step.term;
       edges.push(...nextTerm.edges);
       chainWidth += nextTerm.logicalWidth;
       chainDepth = Math.max(chainDepth, nextTerm.logicalDepth);
@@ -691,7 +668,7 @@ class GraphPlanner {
       const nextSources = colorNodes(nextTerm.colors, "source");
       const nextTargets = colorNodes(nextTerm.colors, "target");
 
-      const includeConnectorEdge = connector.operator !== "-!-" || chainScope.mode === "simple";
+      const includeConnectorEdge = step.operator !== "-!-" || chainScope.mode === "simple";
       if (includeConnectorEdge) {
         const operatorColors = mergeColorMaps(chainColors, nextTerm.colors);
         setColorNodes(operatorColors, "target'", chainTargets);
@@ -703,11 +680,8 @@ class GraphPlanner {
             ...this.buildEdgesForOperators(
               [operator],
               operatorColors,
-              connector.operator,
-              {
-                from: connector.span.from,
-                to: nextNodeSpec.span.to
-              },
+              step.operator,
+              step.span,
               chainScope,
               edgePlan.styleOptions
             )

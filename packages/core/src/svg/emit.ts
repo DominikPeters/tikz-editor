@@ -20,6 +20,7 @@ import type { RenderedArrowTipPath } from "./arrows/types.js";
 import { createSvgModelBuilder, serializeSvgModel } from "./model.js";
 import { computeViewBox } from "./viewbox.js";
 import type { EmitSvgOptions, EmitSvgResult, SvgRenderModel, SvgRenderPart, SvgViewBox } from "./types.js";
+import { formatSvgNumber as fmt } from "./format.js";
 
 type ShadowRenderableStyle = Pick<
   ResolvedStyle,
@@ -57,6 +58,10 @@ type ShadowRenderableStyle = Pick<
 
 type PatternRenderableStyle = Pick<ResolvedStyle, "fill" | "fillPattern" | "patternColor">;
 
+type PatternRenderContext = {
+  globalYPhase: number;
+};
+
 type ShadingTransform = {
   centerX: number;
   centerY: number;
@@ -79,7 +84,6 @@ type StyledSvgShape =
   | { kind: "circle"; cx: number; cy: number; radius: number }
   | { kind: "ellipse"; cx: number; cy: number; rx: number; ry: number };
 
-let currentPatternGlobalYPhase = 0;
 const PGF_SHADE_SCALE_FACTOR = 0.01992528;
 const PGF_SHADE_CANONICAL_SIZE = 100.375;
 const PGF_SHADE_CANONICAL_HALF = PGF_SHADE_CANONICAL_SIZE / 2;
@@ -933,34 +937,31 @@ function renderBallGradientDefinition(id: string, transform: ShadingTransform, b
 }
 
 function renderPatternDefinition(id: string, pattern: ResolvedPattern, patternColor: string | null, globalYPhase: number): string {
-  const previousGlobalYPhase = currentPatternGlobalYPhase;
-  currentPatternGlobalYPhase = globalYPhase;
-  try {
-    if (pattern.kind === "legacy") {
-      return renderLegacyPatternDefinition(id, pattern, patternColor);
-    }
-    return renderMetaPatternDefinition(id, pattern, patternColor ?? "black");
-  } finally {
-    currentPatternGlobalYPhase = previousGlobalYPhase;
+  const context: PatternRenderContext = { globalYPhase };
+  if (pattern.kind === "legacy") {
+    return renderLegacyPatternDefinition(id, pattern, patternColor, context);
   }
+  return renderMetaPatternDefinition(id, pattern, patternColor ?? "black", context);
 }
 
 function renderLegacyPatternDefinition(
   id: string,
   pattern: Extract<ResolvedPattern, { kind: "legacy" }>,
-  patternColor: string | null
+  patternColor: string | null,
+  context: PatternRenderContext
 ): string {
   const strokeColor = patternColor ?? "black";
   const mm = 2.84527559055;
 
   if (pattern.name === "horizontal lines") {
-    return renderPatternElement(id, 0, 0, 3, 3, `<path d="M -1 0.5 L 4 0.5" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`);
+    return renderPatternElement(context, id, 0, 0, 3, 3, `<path d="M -1 0.5 L 4 0.5" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`);
   }
   if (pattern.name === "vertical lines") {
-    return renderPatternElement(id, 0, 0, 3, 3, `<path d="M 0.5 -1 L 0.5 4" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`);
+    return renderPatternElement(context, id, 0, 0, 3, 3, `<path d="M 0.5 -1 L 0.5 4" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`);
   }
   if (pattern.name === "north east lines") {
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -971,6 +972,7 @@ function renderLegacyPatternDefinition(
   }
   if (pattern.name === "north west lines") {
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -981,6 +983,7 @@ function renderLegacyPatternDefinition(
   }
   if (pattern.name === "grid") {
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -991,6 +994,7 @@ function renderLegacyPatternDefinition(
   }
   if (pattern.name === "crosshatch") {
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -1000,10 +1004,11 @@ function renderLegacyPatternDefinition(
     );
   }
   if (pattern.name === "dots") {
-    return renderPatternElement(id, -1, -1, 3, 3, `<circle cx="0" cy="0" r="0.5" fill="${escapeAttr(strokeColor)}" />`);
+    return renderPatternElement(context, id, -1, -1, 3, 3, `<circle cx="0" cy="0" r="0.5" fill="${escapeAttr(strokeColor)}" />`);
   }
   if (pattern.name === "crosshatch dots") {
     return renderPatternElement(
+      context,
       id,
       -1,
       -1,
@@ -1018,7 +1023,7 @@ function renderLegacyPatternDefinition(
     const center = 1 * mm;
     const radius = 1 * mm;
     const pathData = polygonPathFromPolarAngles(center, center, radius, [18, 162, 306, 90, 234]);
-    return renderPatternElement(id, 0, 0, 3 * mm, 3 * mm, `<path d="${escapeAttr(pathData)}" fill="${escapeAttr(strokeColor)}" />`);
+    return renderPatternElement(context, id, 0, 0, 3 * mm, 3 * mm, `<path d="${escapeAttr(pathData)}" fill="${escapeAttr(strokeColor)}" />`);
   }
   if (pattern.name === "sixpointed stars") {
     const center = 1 * mm;
@@ -1026,6 +1031,7 @@ function renderLegacyPatternDefinition(
     const first = polygonPathFromPolarAngles(center, center, radius, [30, 150, 270]);
     const second = polygonPathFromPolarAngles(center, center, radius, [-30, -270, -150]);
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -1036,6 +1042,7 @@ function renderLegacyPatternDefinition(
   }
   if (pattern.name === "bricks") {
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -1050,6 +1057,7 @@ function renderLegacyPatternDefinition(
   }
   if (pattern.name === "checkerboard") {
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -1063,6 +1071,7 @@ function renderLegacyPatternDefinition(
   if (pattern.name === "checkerboard light gray") {
     const dark = mixColors("#000000", "#ffffff", 0.2) ?? "#cccccc";
     return renderPatternElement(
+      context,
       id,
       0,
       0,
@@ -1074,42 +1083,44 @@ function renderLegacyPatternDefinition(
     );
   }
   if (pattern.name === "horizontal lines light gray") {
-    return renderHorizontalBandPattern(id, mixColors("#000000", "#ffffff", 0.1) ?? "#e6e6e6", mixColors("#000000", "#ffffff", 0.15) ?? "#d9d9d9");
+    return renderHorizontalBandPattern(context, id, mixColors("#000000", "#ffffff", 0.1) ?? "#e6e6e6", mixColors("#000000", "#ffffff", 0.15) ?? "#d9d9d9");
   }
   if (pattern.name === "horizontal lines gray") {
-    return renderHorizontalBandPattern(id, mixColors("#000000", "#ffffff", 0.3) ?? "#b3b3b3", mixColors("#000000", "#ffffff", 0.35) ?? "#a6a6a6");
+    return renderHorizontalBandPattern(context, id, mixColors("#000000", "#ffffff", 0.3) ?? "#b3b3b3", mixColors("#000000", "#ffffff", 0.35) ?? "#a6a6a6");
   }
   if (pattern.name === "horizontal lines dark gray") {
-    return renderHorizontalBandPattern(id, mixColors("#000000", "#ffffff", 0.9) ?? "#1a1a1a", mixColors("#000000", "#ffffff", 0.85) ?? "#262626");
+    return renderHorizontalBandPattern(context, id, mixColors("#000000", "#ffffff", 0.9) ?? "#1a1a1a", mixColors("#000000", "#ffffff", 0.85) ?? "#262626");
   }
   if (pattern.name === "horizontal lines light blue") {
-    return renderHorizontalBandPattern(id, mixColors("#0000ff", "#ffffff", 0.1) ?? "#e6e6ff", mixColors("#0000ff", "#ffffff", 0.15) ?? "#d9d9ff");
+    return renderHorizontalBandPattern(context, id, mixColors("#0000ff", "#ffffff", 0.1) ?? "#e6e6ff", mixColors("#0000ff", "#ffffff", 0.15) ?? "#d9d9ff");
   }
   if (pattern.name === "horizontal lines dark blue") {
-    return renderHorizontalBandPattern(id, mixColors("#0000ff", "#ffffff", 0.9) ?? "#1a1aff", mixColors("#0000ff", "#ffffff", 0.85) ?? "#2626ff");
+    return renderHorizontalBandPattern(context, id, mixColors("#0000ff", "#ffffff", 0.9) ?? "#1a1aff", mixColors("#0000ff", "#ffffff", 0.85) ?? "#2626ff");
   }
   if (pattern.name === "crosshatch dots gray") {
     const background = mixColors("#000000", "#ffffff", 0.2) ?? "#cccccc";
     const light = mixColors("#000000", "#ffffff", 0.1) ?? "#e6e6e6";
     const dark = mixColors("#000000", "#ffffff", 0.7) ?? "#4d4d4d";
-    return renderCrosshatchDotsPattern(id, background, light, dark);
+    return renderCrosshatchDotsPattern(context, id, background, light, dark);
   }
   const steelBlue = "#afc3dd";
   const darkSteelBlue = mixColors("#000000", steelBlue, 0.5) ?? "#58626f";
   const light = mixColors(darkSteelBlue, "#ffffff", 0.1) ?? "#efeff2";
   const dark = mixColors(darkSteelBlue, "#ffffff", 0.7) ?? "#8a8f9b";
-  return renderCrosshatchDotsPattern(id, steelBlue, light, dark);
+  return renderCrosshatchDotsPattern(context, id, steelBlue, light, dark);
 }
 
 function renderMetaPatternDefinition(
   id: string,
   pattern: Exclude<ResolvedPattern, { kind: "legacy" }>,
-  patternColor: string
+  patternColor: string,
+  context: PatternRenderContext
 ): string {
   const transform = buildPatternTransform(pattern.xshift, pattern.yshift, pattern.angle);
   if (pattern.kind === "meta-lines") {
     const halfDistance = pattern.distance / 2;
     return renderPatternElement(
+      context,
       id,
       -halfDistance,
       -halfDistance,
@@ -1125,6 +1136,7 @@ function renderMetaPatternDefinition(
   if (pattern.kind === "meta-hatch") {
     const halfDistance = pattern.distance / 2;
     return renderPatternElement(
+      context,
       id,
       -halfDistance,
       -halfDistance,
@@ -1139,6 +1151,7 @@ function renderMetaPatternDefinition(
   if (pattern.kind === "meta-dots") {
     const halfDistance = pattern.distance / 2;
     return renderPatternElement(
+      context,
       id,
       -halfDistance,
       -halfDistance,
@@ -1152,6 +1165,7 @@ function renderMetaPatternDefinition(
   const halfDistance = pattern.distance / 2;
   const starPath = buildStarPath(pattern.radius, pattern.points);
   return renderPatternElement(
+    context,
     id,
     -halfDistance,
     -halfDistance,
@@ -1162,8 +1176,9 @@ function renderMetaPatternDefinition(
   );
 }
 
-function renderHorizontalBandPattern(id: string, firstColor: string, secondColor: string): string {
+function renderHorizontalBandPattern(context: PatternRenderContext, id: string, firstColor: string, secondColor: string): string {
   return renderPatternElement(
+    context,
     id,
     0,
     0,
@@ -1174,8 +1189,15 @@ function renderHorizontalBandPattern(id: string, firstColor: string, secondColor
   );
 }
 
-function renderCrosshatchDotsPattern(id: string, background: string, lightDots: string, darkDots: string): string {
+function renderCrosshatchDotsPattern(
+  context: PatternRenderContext,
+  id: string,
+  background: string,
+  lightDots: string,
+  darkDots: string
+): string {
   return renderPatternElement(
+    context,
     id,
     0,
     0,
@@ -1190,6 +1212,7 @@ function renderCrosshatchDotsPattern(id: string, background: string, lightDots: 
 }
 
 function renderPatternElement(
+  context: PatternRenderContext,
   id: string,
   x: number,
   y: number,
@@ -1199,7 +1222,7 @@ function renderPatternElement(
   patternTransform?: string | null
 ): string {
   const transformParts: string[] = [];
-  const effectiveGlobalPhase = currentPatternGlobalYPhase - y;
+  const effectiveGlobalPhase = context.globalYPhase - y;
   if (Math.abs(effectiveGlobalPhase) > 1e-6) {
     // Keep pattern coordinates in the same affine y frame as toSvgPoint: y_svg = C - y.
     transformParts.push(`translate(0 ${fmt(effectiveGlobalPhase)})`);
@@ -1375,10 +1398,6 @@ function worldTransformToSvgTransform(
 
 function formatMatrix(matrix: SvgTransform): string {
   return `matrix(${fmt(matrix.a)} ${fmt(matrix.b)} ${fmt(matrix.c)} ${fmt(matrix.d)} ${fmt(matrix.e)} ${fmt(matrix.f)})`;
-}
-
-function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
 }
 
 function clamp01(value: number): number {
