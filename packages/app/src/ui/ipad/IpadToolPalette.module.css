@@ -10,6 +10,11 @@
   visibility: hidden;
 }
 
+.palette[data-state="puck"],
+.palette[data-state="mini"] {
+  overflow: hidden;
+}
+
 .palette[data-measured="true"] {
   visibility: visible;
 }
@@ -41,6 +46,7 @@
   gap: 2px;
   padding: 6px;
   opacity: 1;
+  visibility: visible;
   transition: opacity 160ms ease-out;
 }
 
@@ -51,6 +57,8 @@
 .palette[data-state="puck"] .tools,
 .palette[data-state="mini"] .tools {
   opacity: 0;
+  visibility: hidden;
+  transition: none;
   pointer-events: none;
 }
 
