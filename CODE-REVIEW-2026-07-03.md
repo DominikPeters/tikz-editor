@@ -81,8 +81,6 @@ The constant is `28.3465` (big points per cm, 72/2.54) while its own comment cla
 - **Status (2026-07-04): Done via desktop Vite config.** Desktop now defines `import.meta.env.TIKZ_EDITOR_VERSION`; extracting a shared Vite helper remains optional cleanup.
 - **Value-span attribution via `raw.indexOf(valueRaw)`** — duplicated in `semantic/evaluate.ts:3589-3595` and `semantic/style/resolve.ts:192-198`; mis-positions provenance spans when value text appears in the key (`x=x`). `OptionEntry` already carries `valueSpan` — use it, delete both helpers. *(high; impact minor)*
 - **Status (2026-07-04): Done.** Both helpers now use `entry.valueSpan?.from`.
-- **Local secret:** the untracked `TODO.md` contains a plaintext Azure VM password (line 64). Verified it never reached git history or the public repo — but remove it, and rotate if the VM is alive.
-- **Status (2026-07-04): Not done in code.** This is an operational/security cleanup item and should be handled separately without copying the secret into commits or chat.
 
 ---
 
@@ -324,7 +322,7 @@ Choose content-hash ids over reuse-bailout: `tikz-shading-<hash(signature)>` ins
 
 ## Suggested plan of attack
 
-**Quick wins (hours each):** 1.4 graph budget, 1.5 computeBounds loop, 1.6 pointer capture, 1.9 PT_PER_CM consolidation, 2.3 AssistantPanel selector, 2.5 clip-chain skip, 2.7 lazy KP pass 2, 2.8 cache cap, 4.1–4.4 CI steps, grid-step-picker dedup (3.8), snap-debug deletion, TODO.md password.
+**Quick wins (hours each):** 1.4 graph budget, 1.5 computeBounds loop, 1.6 pointer capture, 1.9 PT_PER_CM consolidation, 2.3 AssistantPanel selector, 2.5 clip-chain skip, 2.7 lazy KP pass 2, 2.8 cache cap, 4.1–4.4 CI steps, grid-step-picker dedup (3.8), snap-debug deletion.
 
 **High-leverage days:** 2.1 + 2.2 (command runtime + App subscriptions — likely eliminates most per-keystroke app-layer waste), 1.1 surgical option mutations (comment preservation), 1.2 figure-aware addElement, 1.3 stable def ids, 2.4 copy-on-write registries, an error toast channel for export failures (3.9).
 
