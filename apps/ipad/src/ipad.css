@@ -21,6 +21,7 @@ html[data-editor-platform="ipad"] body {
   width: 100%;
   height: 100%;
   margin: 0;
+  overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
 }
@@ -34,7 +35,16 @@ html[data-editor-platform="ipad"] body {
 }
 
 html[data-editor-platform="ipad"] #root {
-  width: 100%;
+  position: fixed;
+  top: var(--ipad-safe-area-top);
+  right: var(--ipad-safe-area-right);
+  bottom: 0;
+  left: var(--ipad-safe-area-left);
+  width: auto;
+  height: auto;
+}
+
+html[data-editor-platform="ipad"] #root > * {
   height: 100%;
 }
 

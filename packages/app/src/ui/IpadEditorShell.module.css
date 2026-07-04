@@ -11,6 +11,7 @@
   /* iOS-style adaptive fill: lightens surfaces in dark mode, darkens in light. */
   --ipad-control-fill: color-mix(in srgb, var(--text) 9%, transparent);
   --ipad-control-fill-disabled: color-mix(in srgb, var(--text) 4%, transparent);
+  --ipad-bottom-touch-inset: var(--ipad-safe-area-bottom, env(safe-area-inset-bottom, 0px));
 }
 
 .shell {
@@ -42,6 +43,7 @@
 
 .stageSplit .sourceColumn {
   flex-shrink: 0;
+  margin-bottom: var(--ipad-bottom-touch-inset);
   background: var(--bg-pane);
 }
 
@@ -56,6 +58,10 @@
   cursor: col-resize;
   touch-action: none;
   flex-shrink: 0;
+}
+
+.stageSplit .splitDivider {
+  margin-bottom: var(--ipad-bottom-touch-inset);
 }
 
 .splitDivider::before {
@@ -104,7 +110,7 @@
   position: absolute;
   top: 10px;
   left: 12px;
-  bottom: 12px;
+  bottom: calc(12px + var(--ipad-bottom-touch-inset));
   z-index: 46;
   width: min(46%, 520px);
   min-width: 280px;

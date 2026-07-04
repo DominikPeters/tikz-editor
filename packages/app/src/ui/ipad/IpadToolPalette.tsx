@@ -46,6 +46,7 @@ const TAP_SLOP = 8;
 const MOMENTUM_SECONDS = 0.42;
 const MOMENTUM_MAX_DISTANCE = 900;
 const DOCK_STORAGE_KEY = "tikz-editor-ipad-tool-palette-dock";
+const SAFE_AREA_BOTTOM_CSS_VALUE = "var(--ipad-safe-area-bottom, env(safe-area-inset-bottom, 0px))";
 
 const EXPANDED_MAIN =
   (PALETTE_PADDING * 2) +
@@ -110,10 +111,38 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-function restRect(dock: PaletteDock, parentWidth: number, parentHeight: number): Rect {
+function parseCssPixelValue(value: string): number | null {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+}
+
+function readSafeAreaBottom(): number {
+  if (typeof document === "undefined") {
+    return 0;
+  }
+  const direct = parseCssPixelValue(getComputedStyle(document.documentElement).getPropertyValue("--ipad-safe-area-bottom"));
+  if (direct != null) {
+    return direct;
+  }
+  if (!document.body) {
+    return 0;
+  }
+  const probe = document.createElement("div");
+  probe.style.position = "fixed";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  probe.style.paddingBottom = SAFE_AREA_BOTTOM_CSS_VALUE;
+  document.body.append(probe);
+  const resolved = parseCssPixelValue(getComputedStyle(probe).paddingBottom) ?? 0;
+  probe.remove();
+  return resolved;
+}
+
+function restRect(dock: PaletteDock, parentWidth: number, parentHeight: number, safeAreaBottom: number): Rect {
+  const bottomEdgeMargin = EDGE_MARGIN + safeAreaBottom;
   if (dock.kind === "corner") {
     const x = dock.corner.endsWith("left") ? EDGE_MARGIN : parentWidth - PUCK_SIZE - EDGE_MARGIN;
-    const y = dock.corner.startsWith("top") ? EDGE_MARGIN : parentHeight - PUCK_SIZE - EDGE_MARGIN;
+    const y = dock.corner.startsWith("top") ? EDGE_MARGIN : parentHeight - PUCK_SIZE - bottomEdgeMargin;
     return { x, y, width: PUCK_SIZE, height: PUCK_SIZE };
   }
   const horizontal = dock.edge === "top" || dock.edge === "bottom";
@@ -127,17 +156,24 @@ function restRect(dock: PaletteDock, parentWidth: number, parentHeight: number):
   const y = dock.edge === "top"
     ? EDGE_MARGIN
     : dock.edge === "bottom"
-      ? parentHeight - height - EDGE_MARGIN
-      : clamp((parentHeight - height) / 2, EDGE_MARGIN, parentHeight - height - EDGE_MARGIN);
+      ? parentHeight - height - bottomEdgeMargin
+      : clamp((parentHeight - height) / 2, EDGE_MARGIN, parentHeight - height - bottomEdgeMargin);
   return { x, y, width, height };
 }
 
-function dockForProjectedPoint(x: number, y: number, parentWidth: number, parentHeight: number): PaletteDock {
+function dockForProjectedPoint(
+  x: number,
+  y: number,
+  parentWidth: number,
+  parentHeight: number,
+  safeAreaBottom: number
+): PaletteDock {
+  const bottomEdgeY = parentHeight - safeAreaBottom;
   const corners: Array<{ corner: PaletteCorner; cx: number; cy: number }> = [
     { corner: "top-left", cx: 0, cy: 0 },
     { corner: "top-right", cx: parentWidth, cy: 0 },
-    { corner: "bottom-left", cx: 0, cy: parentHeight },
-    { corner: "bottom-right", cx: parentWidth, cy: parentHeight }
+    { corner: "bottom-left", cx: 0, cy: bottomEdgeY },
+    { corner: "bottom-right", cx: parentWidth, cy: bottomEdgeY }
   ];
   for (const candidate of corners) {
     const distance = Math.hypot(x - candidate.cx, y - candidate.cy);
@@ -147,7 +183,7 @@ function dockForProjectedPoint(x: number, y: number, parentWidth: number, parent
   }
   const edgeDistances: Array<{ edge: PaletteEdge; distance: number }> = [
     { edge: "top", distance: y },
-    { edge: "bottom", distance: parentHeight - y },
+    { edge: "bottom", distance: bottomEdgeY - y },
     { edge: "left", distance: x },
     { edge: "right", distance: parentWidth - x }
   ];
@@ -172,6 +208,7 @@ export function IpadToolPalette({
   const dragRef = useRef<DragState | null>(null);
   const [dock, setDock] = useState<PaletteDock>(readStoredDock);
   const [parentSize, setParentSize] = useState<{ width: number; height: number } | null>(null);
+  const [safeAreaBottom, setSafeAreaBottom] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
@@ -213,11 +250,18 @@ export function IpadToolPalette({
     const syncSize = () => {
       const rect = parent.getBoundingClientRect();
       setParentSize({ width: rect.width, height: rect.height });
+      setSafeAreaBottom(readSafeAreaBottom());
     };
     syncSize();
     const observer = new ResizeObserver(syncSize);
     observer.observe(parent);
-    return () => { observer.disconnect(); };
+    window.visualViewport?.addEventListener("resize", syncSize);
+    window.addEventListener("orientationchange", syncSize);
+    return () => {
+      observer.disconnect();
+      window.visualViewport?.removeEventListener("resize", syncSize);
+      window.removeEventListener("orientationchange", syncSize);
+    };
   }, []);
 
   useEffect(() => {
@@ -239,7 +283,7 @@ export function IpadToolPalette({
   }, [openPopup]);
 
   const isMini = dock.kind === "corner";
-  const rest = parentSize ? restRect(dock, parentSize.width, parentSize.height) : null;
+  const rest = parentSize ? restRect(dock, parentSize.width, parentSize.height, safeAreaBottom) : null;
   const frame: Rect | null = dragging && dragPosition
     ? { x: dragPosition.x, y: dragPosition.y, width: PUCK_SIZE, height: PUCK_SIZE }
     : rest;
@@ -327,10 +371,11 @@ export function IpadToolPalette({
     const momentumX = clamp(velocityX * MOMENTUM_SECONDS, -MOMENTUM_MAX_DISTANCE, MOMENTUM_MAX_DISTANCE);
     const momentumY = clamp(velocityY * MOMENTUM_SECONDS, -MOMENTUM_MAX_DISTANCE, MOMENTUM_MAX_DISTANCE);
     const projectedX = clamp(last.x + momentumX, 0, parentRect.width);
-    const projectedY = clamp(last.y + momentumY, 0, parentRect.height);
+    const bottomEdgeY = Math.max(0, parentRect.height - safeAreaBottom);
+    const projectedY = clamp(last.y + momentumY, 0, bottomEdgeY);
     setSettling(true);
-    applyDock(dockForProjectedPoint(projectedX, projectedY, parentRect.width, parentRect.height));
-  }, [applyDock, dock]);
+    applyDock(dockForProjectedPoint(projectedX, projectedY, parentRect.width, parentRect.height, safeAreaBottom));
+  }, [applyDock, dock, safeAreaBottom]);
 
   const moveDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) {
