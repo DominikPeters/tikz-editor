@@ -1,13 +1,10 @@
+import type { EditActionResultLike } from "../result-types.js";
 import { replaceSpan } from "../patch.js";
 import { resolvePropertyTarget } from "../property-target.js";
 import type { EditParseOptions } from "../parse-options.js";
-import type { SourcePatch } from "../types.js";
 import { parseMatrixRowsForEdit, resolveMatrixMode } from "../../semantic/nodes/matrix.js";
 import type { Span } from "../../ast/types.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string };
 
 type MatrixStructureTarget = {
   matrixSourceId: string;

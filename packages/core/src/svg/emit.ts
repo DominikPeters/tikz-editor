@@ -70,6 +70,15 @@ type SvgModelReuseContext = {
   previousPartsByElementId: Map<string, SvgRenderPart[]>;
 };
 
+type AppendSvgPart = (basePartId: string, sourceId: string, elementId: string | null, markup: string) => void;
+
+type ResolveFillPaint = (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null) => string | null;
+
+type StyledSvgShape =
+  | { kind: "path"; d: string }
+  | { kind: "circle"; cx: number; cy: number; radius: number }
+  | { kind: "ellipse"; cx: number; cy: number; rx: number; ry: number };
+
 let currentPatternGlobalYPhase = 0;
 const PGF_SHADE_SCALE_FACTOR = 0.01992528;
 const PGF_SHADE_CANONICAL_SIZE = 100.375;
@@ -365,11 +374,12 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
             continue;
           }
           const pathBounds = svgElementTransform ? transformSvgBounds(rawPathBounds, svgElementTransform) : rawPathBounds;
-          emitShadowPathPart({
+          emitShadowShapeParts({
             appendPart,
             sourceId: element.sourceRef.sourceId,
             elementId: element.id,
-            d,
+            shadowPartKind: "path",
+            shape: { kind: "path", d },
             bounds: pathBounds,
             shadowLayers: element.style.shadowLayers,
             baseStyle: element.style,
@@ -377,50 +387,17 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
             ensureCircularShadowMaskDefinition
           });
 
-          if (shouldEmitDoubleStroke(element.style)) {
-            const outerFill = resolveFillPaint(element.style, element.sourceRef.sourceId, pathBounds);
-            const outerAttrs = styleAttributes(element.style, false, {
-              lineWidth: doubleOuterLineWidth(element.style),
-              fill: outerFill ?? undefined
-            });
-            if (svgElementTransform) {
-              outerAttrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
-            }
-            appendPart(
-              `${element.id}:shaft:outer`,
-              element.sourceRef.sourceId,
-              element.id,
-              `<path data-source-id="${escapeAttr(element.sourceRef.sourceId)}" d="${escapeAttr(d)}" ${outerAttrs.join(" ")} />`
-            );
-            const innerAttrs = styleAttributes(element.style, false, {
-              stroke: element.style.doubleColor,
-              fill: "none",
-              lineWidth: doubleInnerLineWidth(element.style)
-            });
-            if (svgElementTransform) {
-              innerAttrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
-            }
-            appendPart(
-              `${element.id}:shaft:inner`,
-              element.sourceRef.sourceId,
-              element.id,
-              `<path data-source-id="${escapeAttr(element.sourceRef.sourceId)}" d="${escapeAttr(d)}" ${innerAttrs.join(" ")} />`
-            );
-          } else {
-            const resolvedFill = resolveFillPaint(element.style, element.sourceRef.sourceId, pathBounds);
-            const attrs = styleAttributes(element.style, false, {
-              fill: resolvedFill ?? undefined
-            });
-            if (svgElementTransform) {
-              attrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
-            }
-            appendPart(
-              `${element.id}:shaft`,
-              element.sourceRef.sourceId,
-              element.id,
-              `<path data-source-id="${escapeAttr(element.sourceRef.sourceId)}" d="${escapeAttr(d)}" ${attrs.join(" ")} />`
-            );
-          }
+          appendStyledShapeParts({
+            appendPart,
+            basePartId: `${element.id}:shaft`,
+            sourceId: element.sourceRef.sourceId,
+            elementId: element.id,
+            shape: { kind: "path", d },
+            style: element.style,
+            bounds: pathBounds,
+            resolveFillPaint,
+            transforms: svgElementTransform ? [formatMatrix(svgElementTransform)] : []
+          });
         }
       }
 
@@ -456,63 +433,29 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
         pt(center.y + element.radius)
       );
       const transformedCircleBounds = svgElementTransform ? transformSvgBounds(circleBounds, svgElementTransform) : circleBounds;
-      emitShadowCircle({
+      emitShadowShapeParts({
         appendPart,
         sourceId: element.sourceRef.sourceId,
         elementId: element.id,
-        cx: center.x,
-        cy: center.y,
-        radius: element.radius,
+        shadowPartKind: "circle",
+        shape: { kind: "circle", cx: center.x, cy: center.y, radius: element.radius },
         bounds: transformedCircleBounds,
         shadowLayers: element.style.shadowLayers,
         baseStyle: element.style,
         resolveFillPaint,
         ensureCircularShadowMaskDefinition
       });
-      if (shouldEmitDoubleStroke(element.style)) {
-        const outerFill = resolveFillPaint(element.style, element.sourceRef.sourceId, transformedCircleBounds);
-        const outerAttrs = styleAttributes(element.style, false, {
-          lineWidth: doubleOuterLineWidth(element.style),
-          fill: outerFill ?? undefined
-        });
-        if (svgElementTransform) {
-          outerAttrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
-        }
-        appendPart(
-          `${element.id}:circle:outer`,
-          element.sourceRef.sourceId,
-          element.id,
-          `<circle data-source-id="${escapeAttr(element.sourceRef.sourceId)}" cx="${fmt(center.x)}" cy="${fmt(center.y)}" r="${fmt(element.radius)}" ${outerAttrs.join(" ")} />`
-        );
-        const innerAttrs = styleAttributes(element.style, false, {
-          stroke: element.style.doubleColor,
-          fill: "none",
-          lineWidth: doubleInnerLineWidth(element.style)
-        });
-        if (svgElementTransform) {
-          innerAttrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
-        }
-        appendPart(
-          `${element.id}:circle:inner`,
-          element.sourceRef.sourceId,
-          element.id,
-          `<circle data-source-id="${escapeAttr(element.sourceRef.sourceId)}" cx="${fmt(center.x)}" cy="${fmt(center.y)}" r="${fmt(element.radius)}" ${innerAttrs.join(" ")} />`
-        );
-      } else {
-        const resolvedFill = resolveFillPaint(element.style, element.sourceRef.sourceId, transformedCircleBounds);
-        const attrs = styleAttributes(element.style, false, {
-          fill: resolvedFill ?? undefined
-        });
-        if (svgElementTransform) {
-          attrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
-        }
-        appendPart(
-          `${element.id}:circle`,
-          element.sourceRef.sourceId,
-          element.id,
-          `<circle data-source-id="${escapeAttr(element.sourceRef.sourceId)}" cx="${fmt(center.x)}" cy="${fmt(center.y)}" r="${fmt(element.radius)}" ${attrs.join(" ")} />`
-        );
-      }
+      appendStyledShapeParts({
+        appendPart,
+        basePartId: `${element.id}:circle`,
+        sourceId: element.sourceRef.sourceId,
+        elementId: element.id,
+        shape: { kind: "circle", cx: center.x, cy: center.y, radius: element.radius },
+        style: element.style,
+        bounds: transformedCircleBounds,
+        resolveFillPaint,
+        transforms: svgElementTransform ? [formatMatrix(svgElementTransform)] : []
+      });
       continue;
     }
 
@@ -521,74 +464,34 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
       const ellipseBounds = computeSvgEllipseBounds(center.x, center.y, element.rx, element.ry, element.rotation ?? 0);
       const transformedEllipseBounds = svgElementTransform ? transformSvgBounds(ellipseBounds, svgElementTransform) : ellipseBounds;
-      emitShadowEllipse({
+      const ellipseRotationTransforms = ellipseTransformAttributes(element.rotation ?? 0, center.x, center.y);
+      emitShadowShapeParts({
         appendPart,
         sourceId: element.sourceRef.sourceId,
         elementId: element.id,
-        cx: center.x,
-        cy: center.y,
-        rx: element.rx,
-        ry: element.ry,
-        rotation: element.rotation ?? 0,
+        shadowPartKind: "ellipse",
+        shape: { kind: "ellipse", cx: center.x, cy: center.y, rx: element.rx, ry: element.ry },
         bounds: transformedEllipseBounds,
         shadowLayers: element.style.shadowLayers,
         baseStyle: element.style,
         resolveFillPaint,
-        ensureCircularShadowMaskDefinition
+        ensureCircularShadowMaskDefinition,
+        transforms: ellipseRotationTransforms
       });
-      if (shouldEmitDoubleStroke(element.style)) {
-        const outerFill = resolveFillPaint(element.style, element.sourceRef.sourceId, transformedEllipseBounds);
-        const outerAttrs = styleAttributes(element.style, false, {
-          lineWidth: doubleOuterLineWidth(element.style),
-          fill: outerFill ?? undefined
-        });
-        const outerTransforms: string[] = [];
-        if (svgElementTransform) outerTransforms.push(formatMatrix(svgElementTransform));
-        if (element.rotation && Math.abs(element.rotation) > 1e-6) outerTransforms.push(`rotate(${fmt(-element.rotation)} ${fmt(center.x)} ${fmt(center.y)})`);
-        if (outerTransforms.length > 0) {
-          outerAttrs.push(`transform="${outerTransforms.join(" ")}"`);
-        }
-        appendPart(
-          `${element.id}:ellipse:outer`,
-          element.sourceRef.sourceId,
-          element.id,
-          `<ellipse data-source-id="${escapeAttr(element.sourceRef.sourceId)}" cx="${fmt(center.x)}" cy="${fmt(center.y)}" rx="${fmt(element.rx)}" ry="${fmt(element.ry)}" ${outerAttrs.join(" ")} />`
-        );
-        const innerAttrs = styleAttributes(element.style, false, {
-          stroke: element.style.doubleColor,
-          fill: "none",
-          lineWidth: doubleInnerLineWidth(element.style)
-        });
-        const innerTransforms: string[] = [];
-        if (svgElementTransform) innerTransforms.push(formatMatrix(svgElementTransform));
-        if (element.rotation && Math.abs(element.rotation) > 1e-6) innerTransforms.push(`rotate(${fmt(-element.rotation)} ${fmt(center.x)} ${fmt(center.y)})`);
-        if (innerTransforms.length > 0) {
-          innerAttrs.push(`transform="${innerTransforms.join(" ")}"`);
-        }
-        appendPart(
-          `${element.id}:ellipse:inner`,
-          element.sourceRef.sourceId,
-          element.id,
-          `<ellipse data-source-id="${escapeAttr(element.sourceRef.sourceId)}" cx="${fmt(center.x)}" cy="${fmt(center.y)}" rx="${fmt(element.rx)}" ry="${fmt(element.ry)}" ${innerAttrs.join(" ")} />`
-        );
-      } else {
-        const resolvedFill = resolveFillPaint(element.style, element.sourceRef.sourceId, transformedEllipseBounds);
-        const attrs = styleAttributes(element.style, false, {
-          fill: resolvedFill ?? undefined
-        });
-        const transforms: string[] = [];
-        if (svgElementTransform) transforms.push(formatMatrix(svgElementTransform));
-        if (element.rotation && Math.abs(element.rotation) > 1e-6) transforms.push(`rotate(${fmt(-element.rotation)} ${fmt(center.x)} ${fmt(center.y)})`);
-        if (transforms.length > 0) {
-          attrs.push(`transform="${transforms.join(" ")}"`);
-        }
-        appendPart(
-          `${element.id}:ellipse`,
-          element.sourceRef.sourceId,
-          element.id,
-          `<ellipse data-source-id="${escapeAttr(element.sourceRef.sourceId)}" cx="${fmt(center.x)}" cy="${fmt(center.y)}" rx="${fmt(element.rx)}" ry="${fmt(element.ry)}" ${attrs.join(" ")} />`
-        );
-      }
+      appendStyledShapeParts({
+        appendPart,
+        basePartId: `${element.id}:ellipse`,
+        sourceId: element.sourceRef.sourceId,
+        elementId: element.id,
+        shape: { kind: "ellipse", cx: center.x, cy: center.y, rx: element.rx, ry: element.ry },
+        style: element.style,
+        bounds: transformedEllipseBounds,
+        resolveFillPaint,
+        transforms: [
+          ...(svgElementTransform ? [formatMatrix(svgElementTransform)] : []),
+          ...ellipseRotationTransforms
+        ]
+      });
       continue;
     }
 
@@ -723,173 +626,116 @@ function encodePathData(commands: ScenePathCommand[], viewBox: { y: number; heig
   return chunks.join(" ");
 }
 
-function emitShadowPathPart(args: {
-  appendPart: (basePartId: string, sourceId: string, elementId: string | null, markup: string) => void;
+function appendStyledShapeParts(args: {
+  appendPart: AppendSvgPart;
+  basePartId: string;
   sourceId: string;
   elementId: string | null;
-  d: string;
+  shape: StyledSvgShape;
+  style: ShadowRenderableStyle;
   bounds: SvgBounds | null;
-  shadowLayers: ShadowLayer[];
-  baseStyle: ResolvedStyle;
-  resolveFillPaint: (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null) => string | null;
-  ensureCircularShadowMaskDefinition: () => string;
+  resolveFillPaint: ResolveFillPaint;
+  transforms?: readonly string[];
 }): void {
-  for (let index = 0; index < args.shadowLayers.length; index += 1) {
-    const layer = args.shadowLayers[index];
-    const layerStyle = resolveShadowLayerStyle(layer.style as ShadowRenderableStyle, args.baseStyle);
-    const groupTransform = shadowTransformMatrix(layer, args.bounds);
-    const maskId = layer.fade === "circle-fuzzy-edge-15" ? args.ensureCircularShadowMaskDefinition() : null;
-    const shapes: string[] = [];
-
-    if (shouldEmitDoubleStroke(layerStyle)) {
-      const outerFill = args.resolveFillPaint(layerStyle, args.sourceId, args.bounds);
-      const outerAttrs = styleAttributes(layerStyle, false, {
-        lineWidth: doubleOuterLineWidth(layerStyle),
-        fill: outerFill ?? undefined
-      });
-      shapes.push(`<path data-source-id="${escapeAttr(args.sourceId)}" d="${escapeAttr(args.d)}" ${outerAttrs.join(" ")} />`);
-      const innerAttrs = styleAttributes(layerStyle, false, {
-        stroke: layerStyle.doubleColor,
-        fill: "none",
-        lineWidth: doubleInnerLineWidth(layerStyle)
-      });
-      shapes.push(`<path data-source-id="${escapeAttr(args.sourceId)}" d="${escapeAttr(args.d)}" ${innerAttrs.join(" ")} />`);
-    } else {
-      const resolvedFill = args.resolveFillPaint(layerStyle, args.sourceId, args.bounds);
-      const attrs = styleAttributes(layerStyle, false, {
-        fill: resolvedFill ?? undefined
-      });
-      shapes.push(`<path data-source-id="${escapeAttr(args.sourceId)}" d="${escapeAttr(args.d)}" ${attrs.join(" ")} />`);
-    }
-
-    const groupAttrs = shadowGroupAttributes(args.sourceId, index + 1, layer, groupTransform, maskId);
-    args.appendPart(
-      `${args.elementId ?? args.sourceId}:shadow:path:${index + 1}`,
-      args.sourceId,
-      args.elementId,
-      `<g ${groupAttrs.join(" ")}>${shapes.join("")}</g>`
-    );
+  const markups = renderStyledShapeMarkups(args);
+  if (markups.length === 2) {
+    args.appendPart(`${args.basePartId}:outer`, args.sourceId, args.elementId, markups[0]);
+    args.appendPart(`${args.basePartId}:inner`, args.sourceId, args.elementId, markups[1]);
+    return;
+  }
+  if (markups[0]) {
+    args.appendPart(args.basePartId, args.sourceId, args.elementId, markups[0]);
   }
 }
 
-function emitShadowCircle(args: {
-  appendPart: (basePartId: string, sourceId: string, elementId: string | null, markup: string) => void;
+function renderStyledShapeMarkups(args: {
   sourceId: string;
-  elementId: string | null;
-  cx: number;
-  cy: number;
-  radius: number;
+  shape: StyledSvgShape;
+  style: ShadowRenderableStyle;
   bounds: SvgBounds | null;
-  shadowLayers: ShadowLayer[];
-  baseStyle: ResolvedStyle;
-  resolveFillPaint: (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null) => string | null;
-  ensureCircularShadowMaskDefinition: () => string;
-}): void {
-  for (let index = 0; index < args.shadowLayers.length; index += 1) {
-    const layer = args.shadowLayers[index];
-    const layerStyle = resolveShadowLayerStyle(layer.style as ShadowRenderableStyle, args.baseStyle);
-    const groupTransform = shadowTransformMatrix(layer, args.bounds);
-    const maskId = layer.fade === "circle-fuzzy-edge-15" ? args.ensureCircularShadowMaskDefinition() : null;
-    const shapes: string[] = [];
+  resolveFillPaint: ResolveFillPaint;
+  transforms?: readonly string[];
+}): string[] {
+  const transforms = args.transforms ?? [];
+  if (shouldEmitDoubleStroke(args.style)) {
+    const outerFill = args.resolveFillPaint(args.style, args.sourceId, args.bounds);
+    const outerAttrs = styleAttributes(args.style, false, {
+      lineWidth: doubleOuterLineWidth(args.style),
+      fill: outerFill ?? undefined
+    });
+    appendTransformAttribute(outerAttrs, transforms);
+    const innerAttrs = styleAttributes(args.style, false, {
+      stroke: args.style.doubleColor,
+      fill: "none",
+      lineWidth: doubleInnerLineWidth(args.style)
+    });
+    appendTransformAttribute(innerAttrs, transforms);
+    return [
+      renderStyledShapeElement(args.sourceId, args.shape, outerAttrs),
+      renderStyledShapeElement(args.sourceId, args.shape, innerAttrs)
+    ];
+  }
 
-    if (shouldEmitDoubleStroke(layerStyle)) {
-      const outerFill = args.resolveFillPaint(layerStyle, args.sourceId, args.bounds);
-      const outerAttrs = styleAttributes(layerStyle, false, {
-        lineWidth: doubleOuterLineWidth(layerStyle),
-        fill: outerFill ?? undefined
-      });
-      shapes.push(
-        `<circle data-source-id="${escapeAttr(args.sourceId)}" cx="${fmt(args.cx)}" cy="${fmt(args.cy)}" r="${fmt(args.radius)}" ${outerAttrs.join(" ")} />`
-      );
-      const innerAttrs = styleAttributes(layerStyle, false, {
-        stroke: layerStyle.doubleColor,
-        fill: "none",
-        lineWidth: doubleInnerLineWidth(layerStyle)
-      });
-      shapes.push(
-        `<circle data-source-id="${escapeAttr(args.sourceId)}" cx="${fmt(args.cx)}" cy="${fmt(args.cy)}" r="${fmt(args.radius)}" ${innerAttrs.join(" ")} />`
-      );
-    } else {
-      const resolvedFill = args.resolveFillPaint(layerStyle, args.sourceId, args.bounds);
-      const attrs = styleAttributes(layerStyle, false, {
-        fill: resolvedFill ?? undefined
-      });
-      shapes.push(
-        `<circle data-source-id="${escapeAttr(args.sourceId)}" cx="${fmt(args.cx)}" cy="${fmt(args.cy)}" r="${fmt(args.radius)}" ${attrs.join(" ")} />`
-      );
-    }
+  const resolvedFill = args.resolveFillPaint(args.style, args.sourceId, args.bounds);
+  const attrs = styleAttributes(args.style, false, {
+    fill: resolvedFill ?? undefined
+  });
+  appendTransformAttribute(attrs, transforms);
+  return [renderStyledShapeElement(args.sourceId, args.shape, attrs)];
+}
 
-    const groupAttrs = shadowGroupAttributes(args.sourceId, index + 1, layer, groupTransform, maskId);
-    args.appendPart(
-      `${args.elementId ?? args.sourceId}:shadow:circle:${index + 1}`,
-      args.sourceId,
-      args.elementId,
-      `<g ${groupAttrs.join(" ")}>${shapes.join("")}</g>`
-    );
+function renderStyledShapeElement(sourceId: string, shape: StyledSvgShape, attrs: readonly string[]): string {
+  const sourceAttr = `data-source-id="${escapeAttr(sourceId)}"`;
+  const styleAttrs = attrs.join(" ");
+  if (shape.kind === "path") {
+    return `<path ${sourceAttr} d="${escapeAttr(shape.d)}" ${styleAttrs} />`;
+  }
+  if (shape.kind === "circle") {
+    return `<circle ${sourceAttr} cx="${fmt(shape.cx)}" cy="${fmt(shape.cy)}" r="${fmt(shape.radius)}" ${styleAttrs} />`;
+  }
+  return `<ellipse ${sourceAttr} cx="${fmt(shape.cx)}" cy="${fmt(shape.cy)}" rx="${fmt(shape.rx)}" ry="${fmt(shape.ry)}" ${styleAttrs} />`;
+}
+
+function appendTransformAttribute(attrs: string[], transforms: readonly string[]): void {
+  if (transforms.length > 0) {
+    attrs.push(`transform="${transforms.join(" ")}"`);
   }
 }
 
-function emitShadowEllipse(args: {
-  appendPart: (basePartId: string, sourceId: string, elementId: string | null, markup: string) => void;
+function ellipseTransformAttributes(rotation: number, cx: number, cy: number): string[] {
+  return Math.abs(rotation) > 1e-6 ? [`rotate(${fmt(-rotation)} ${fmt(cx)} ${fmt(cy)})`] : [];
+}
+
+function emitShadowShapeParts(args: {
+  appendPart: AppendSvgPart;
   sourceId: string;
   elementId: string | null;
-  cx: number;
-  cy: number;
-  rx: number;
-  ry: number;
-  rotation: number;
+  shadowPartKind: string;
+  shape: StyledSvgShape;
   bounds: SvgBounds | null;
   shadowLayers: ShadowLayer[];
   baseStyle: ResolvedStyle;
-  resolveFillPaint: (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null) => string | null;
+  resolveFillPaint: ResolveFillPaint;
   ensureCircularShadowMaskDefinition: () => string;
+  transforms?: readonly string[];
 }): void {
   for (let index = 0; index < args.shadowLayers.length; index += 1) {
     const layer = args.shadowLayers[index];
     const layerStyle = resolveShadowLayerStyle(layer.style as ShadowRenderableStyle, args.baseStyle);
     const groupTransform = shadowTransformMatrix(layer, args.bounds);
     const maskId = layer.fade === "circle-fuzzy-edge-15" ? args.ensureCircularShadowMaskDefinition() : null;
-    const shapes: string[] = [];
-
-    if (shouldEmitDoubleStroke(layerStyle)) {
-      const outerFill = args.resolveFillPaint(layerStyle, args.sourceId, args.bounds);
-      const outerAttrs = styleAttributes(layerStyle, false, {
-        lineWidth: doubleOuterLineWidth(layerStyle),
-        fill: outerFill ?? undefined
-      });
-      if (Math.abs(args.rotation) > 1e-6) {
-        outerAttrs.push(`transform="rotate(${fmt(-args.rotation)} ${fmt(args.cx)} ${fmt(args.cy)})"`);
-      }
-      shapes.push(
-        `<ellipse data-source-id="${escapeAttr(args.sourceId)}" cx="${fmt(args.cx)}" cy="${fmt(args.cy)}" rx="${fmt(args.rx)}" ry="${fmt(args.ry)}" ${outerAttrs.join(" ")} />`
-      );
-      const innerAttrs = styleAttributes(layerStyle, false, {
-        stroke: layerStyle.doubleColor,
-        fill: "none",
-        lineWidth: doubleInnerLineWidth(layerStyle)
-      });
-      if (Math.abs(args.rotation) > 1e-6) {
-        innerAttrs.push(`transform="rotate(${fmt(-args.rotation)} ${fmt(args.cx)} ${fmt(args.cy)})"`);
-      }
-      shapes.push(
-        `<ellipse data-source-id="${escapeAttr(args.sourceId)}" cx="${fmt(args.cx)}" cy="${fmt(args.cy)}" rx="${fmt(args.rx)}" ry="${fmt(args.ry)}" ${innerAttrs.join(" ")} />`
-      );
-    } else {
-      const resolvedFill = args.resolveFillPaint(layerStyle, args.sourceId, args.bounds);
-      const attrs = styleAttributes(layerStyle, false, {
-        fill: resolvedFill ?? undefined
-      });
-      if (Math.abs(args.rotation) > 1e-6) {
-        attrs.push(`transform="rotate(${fmt(-args.rotation)} ${fmt(args.cx)} ${fmt(args.cy)})"`);
-      }
-      shapes.push(
-        `<ellipse data-source-id="${escapeAttr(args.sourceId)}" cx="${fmt(args.cx)}" cy="${fmt(args.cy)}" rx="${fmt(args.rx)}" ry="${fmt(args.ry)}" ${attrs.join(" ")} />`
-      );
-    }
+    const shapes = renderStyledShapeMarkups({
+      sourceId: args.sourceId,
+      shape: args.shape,
+      style: layerStyle,
+      bounds: args.bounds,
+      resolveFillPaint: args.resolveFillPaint,
+      transforms: args.transforms
+    });
 
     const groupAttrs = shadowGroupAttributes(args.sourceId, index + 1, layer, groupTransform, maskId);
     args.appendPart(
-      `${args.elementId ?? args.sourceId}:shadow:ellipse:${index + 1}`,
+      `${args.elementId ?? args.sourceId}:shadow:${args.shadowPartKind}:${index + 1}`,
       args.sourceId,
       args.elementId,
       `<g ${groupAttrs.join(" ")}>${shapes.join("")}</g>`

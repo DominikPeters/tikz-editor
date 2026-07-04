@@ -19,6 +19,12 @@ type OptionSerializationContext = {
   bareColorKey: "draw" | "fill" | null;
 };
 
+type RelativeReplacement = {
+  from: number;
+  to: number;
+  text: string;
+};
+
 const DEFAULT_OPTION_SERIALIZATION_CONTEXT: OptionSerializationContext = {
   bareColorKey: null
 };
@@ -221,7 +227,7 @@ function rewriteOptionListMutationsPreservingSource(
     return format === "bracketed" || format === "bare" ? "" : wrapSerializedOptions("", format);
   }
 
-  const rewritten = applyRelativeReplacements(original, replacements);
+  const rewritten = normalizeTopLevelCommaSpacing(applyRelativeReplacements(original, replacements), format);
   if (entriesToInsert.length === 0) {
     return rewritten;
   }
@@ -229,19 +235,188 @@ function rewriteOptionListMutationsPreservingSource(
   return insertSerializedOptionEntries(rewritten, entriesToInsert, format);
 }
 
+function normalizeTopLevelCommaSpacing(source: string, format: PropertyTargetOptionsFormat): string {
+  if (source.includes("\n") || source.includes("\r")) {
+    return source;
+  }
+
+  let squareDepth = 0;
+  let curlyDepth = 0;
+  let parenDepth = 0;
+  let result = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? "";
+    if (char === "," && isTopLevelComma(format, squareDepth, curlyDepth, parenDepth)) {
+      let nextIndex = index + 1;
+      while (source[nextIndex] === " " || source[nextIndex] === "\t") {
+        nextIndex += 1;
+      }
+      const next = source[nextIndex];
+      if (next !== undefined && next !== "]" && next !== "}") {
+        result += ", ";
+      }
+      index = nextIndex - 1;
+      continue;
+    }
+
+    result += char;
+    if (char === "[") {
+      squareDepth += 1;
+    } else if (char === "]") {
+      squareDepth = Math.max(0, squareDepth - 1);
+    } else if (char === "{") {
+      curlyDepth += 1;
+    } else if (char === "}") {
+      curlyDepth = Math.max(0, curlyDepth - 1);
+    } else if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")") {
+      parenDepth = Math.max(0, parenDepth - 1);
+    }
+  }
+  return result;
+}
+
+function isTopLevelComma(
+  format: PropertyTargetOptionsFormat,
+  squareDepth: number,
+  curlyDepth: number,
+  parenDepth: number
+): boolean {
+  if (parenDepth !== 0) {
+    return false;
+  }
+  if (format === "bracketed") {
+    return squareDepth === 1 && curlyDepth === 0;
+  }
+  if (format === "braced") {
+    return squareDepth === 0 && curlyDepth === 1;
+  }
+  return squareDepth === 0 && curlyDepth === 0;
+}
+
 function applyRelativeReplacements(
   source: string,
-  replacements: ReadonlyArray<{ from: number; to: number; text: string }>
+  replacements: ReadonlyArray<RelativeReplacement>
 ): string {
   if (replacements.length === 0) {
     return source;
   }
   let current = source;
-  const sorted = [...replacements].sort((left, right) => right.from - left.from || right.to - left.to);
+  const sorted = normalizeRelativeReplacements(source, replacements)
+    .sort((left, right) => right.from - left.from || right.to - left.to);
   for (const replacement of sorted) {
     current = `${current.slice(0, replacement.from)}${replacement.text}${current.slice(replacement.to)}`;
   }
   return current;
+}
+
+function normalizeRelativeReplacements(
+  source: string,
+  replacements: ReadonlyArray<RelativeReplacement>
+): RelativeReplacement[] {
+  const replacementsWithMergedRemovals = mergeEmptyRemovals(replacements);
+  const setReplacements = replacementsWithMergedRemovals.filter((replacement) => replacement.text.length > 0);
+  const removalReplacements = replacementsWithMergedRemovals
+    .filter((replacement) => replacement.text.length === 0)
+    .flatMap((replacement) => subtractSetReplacementRanges(replacement, setReplacements));
+  return mergeEmptyRemovals([
+    ...setReplacements,
+    ...extendTerminalEmptyRemovals(source, removalReplacements, setReplacements)
+  ]);
+}
+
+function mergeEmptyRemovals(replacements: ReadonlyArray<RelativeReplacement>): RelativeReplacement[] {
+  const sorted = [...replacements].sort((left, right) => left.from - right.from || left.to - right.to);
+  const normalized: RelativeReplacement[] = [];
+  for (const replacement of sorted) {
+    const previous = normalized[normalized.length - 1];
+    if (previous?.text.length === 0 && replacement.text.length === 0 && replacement.from <= previous.to) {
+      previous.to = Math.max(previous.to, replacement.to);
+      continue;
+    }
+    normalized.push({ ...replacement });
+  }
+  return normalized;
+}
+
+function subtractSetReplacementRanges(
+  removal: RelativeReplacement,
+  setReplacements: readonly RelativeReplacement[]
+): RelativeReplacement[] {
+  let pieces: RelativeReplacement[] = [{ ...removal }];
+  for (const setReplacement of setReplacements) {
+    if (setReplacement.from >= setReplacement.to) {
+      continue;
+    }
+    pieces = pieces.flatMap((piece) => subtractRange(piece, setReplacement));
+  }
+  return pieces;
+}
+
+function subtractRange(removal: RelativeReplacement, protectedRange: RelativeReplacement): RelativeReplacement[] {
+  const overlapFrom = Math.max(removal.from, protectedRange.from);
+  const overlapTo = Math.min(removal.to, protectedRange.to);
+  if (overlapFrom >= overlapTo) {
+    return [removal];
+  }
+
+  const pieces: RelativeReplacement[] = [];
+  if (removal.from < overlapFrom) {
+    pieces.push({ from: removal.from, to: overlapFrom, text: "" });
+  }
+  if (overlapTo < removal.to) {
+    pieces.push({ from: overlapTo, to: removal.to, text: "" });
+  }
+  return pieces;
+}
+
+function extendTerminalEmptyRemovals(
+  source: string,
+  removals: readonly RelativeReplacement[],
+  protectedReplacements: readonly RelativeReplacement[]
+): RelativeReplacement[] {
+  return removals.map((removal) => extendTerminalEmptyRemoval(source, removal, protectedReplacements));
+}
+
+function extendTerminalEmptyRemoval(
+  source: string,
+  removal: RelativeReplacement,
+  protectedReplacements: readonly RelativeReplacement[]
+): RelativeReplacement {
+  let right = removal.to;
+  while (right < source.length && (source[right] === " " || source[right] === "\t")) {
+    right += 1;
+  }
+  if (right < source.length && source[right] !== "]" && source[right] !== "}") {
+    return removal;
+  }
+
+  let left = removal.from;
+  while (left > 0 && (source[left - 1] === " " || source[left - 1] === "\t")) {
+    left -= 1;
+  }
+  if (source[left - 1] !== ",") {
+    return removal;
+  }
+
+  const commaRange = { from: left - 1, to: removal.from };
+  if (protectedReplacements.some((replacement) => rangesOverlap(commaRange, replacement))) {
+    return removal;
+  }
+
+  left -= 1;
+  while (left > 0 && (source[left - 1] === " " || source[left - 1] === "\t")) {
+    left -= 1;
+  }
+  return {
+    ...removal,
+    from: left
+  };
+}
+
+function rangesOverlap(left: { from: number; to: number }, right: { from: number; to: number }): boolean {
+  return left.from < right.to && right.from < left.to;
 }
 
 function resolveEntryRemovalRange(source: string, from: number, to: number): { from: number; to: number } {

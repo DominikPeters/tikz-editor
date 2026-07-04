@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "./result-types.js";
 import type { Span, Statement } from "../ast/types.js";
 import { renderTikzToSvg } from "../render/index.js";
 import type { SceneElement } from "../semantic/types.js";
@@ -15,19 +16,6 @@ import {
   shouldOmitDefaultWhenEquivalent
 } from "./property-registry.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export type CleanupCertificate =
   | {
@@ -171,6 +159,9 @@ export function planPropertyWrite(request: PropertyWriteRequest): PropertyWriteP
   if (mode === "preview" || mode === "drag-frame" || request.action.commentMode) {
     return { conservative, selected: conservative, certificates: [] };
   }
+  if (hasParseErrors(conservative.newSource, parseOptions)) {
+    return { conservative, selected: conservative, certificates: [] };
+  }
 
   const candidates = buildCleanupCandidates(request.source, conservative.newSource, request.action, parseOptions);
   if (candidates.length === 0) {
@@ -240,6 +231,10 @@ function collectPathStatementIds(statements: readonly Statement[]): string[] {
     }
   }
   return ids;
+}
+
+function hasParseErrors(source: string, parseOptions: EditParseOptions): boolean {
+  return parseTikzForEdit(source, parseOptions).diagnostics.some((diagnostic) => diagnostic.severity === "error");
 }
 
 function buildDefaultOmissionCandidate(

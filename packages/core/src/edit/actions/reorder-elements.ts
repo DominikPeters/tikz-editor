@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { Span } from "../../ast/types.js";
 import type { SourcePatch } from "../types.js";
 import {
@@ -11,12 +12,10 @@ import {
   type StatementRef
 } from "../statement-ops.js";
 import type { EditParseOptions } from "../parse-options.js";
+import { normalizeElementIds } from "../statement-find.js";
 
 export type ReorderDirection = "sendToBack" | "sendBackward" | "bringForward" | "bringToFront";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string };
 
 export type ReorderReplacement = {
   span: Span;
@@ -257,21 +256,4 @@ function arraysEqual(left: readonly string[], right: readonly string[]): boolean
     }
   }
   return true;
-}
-
-function normalizeElementIds(elementIds: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const elementId of elementIds) {
-    if (typeof elementId !== "string") {
-      continue;
-    }
-    const id = elementId.trim();
-    if (id.length === 0 || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    normalized.push(id);
-  }
-  return normalized;
 }

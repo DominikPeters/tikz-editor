@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, Statement, Span } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { frameTransform, worldTransform, type FrameTransform } from "../../coords/transforms.js";
@@ -28,13 +29,10 @@ import {
   ROTATE_CLEAR_KEYS,
   type TransformInspectorMutationContext
 } from "../property-write-builders.js";
+import { findPathStatementById } from "../statement-find.js";
 
 const ROTATE_EPSILON = 1e-6;
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export type RotateElementAction = {
   kind: "rotateElement";
@@ -562,20 +560,6 @@ function collectPathShapeHints(items: readonly PathItem[], hints: Set<ScenePathS
   }
 }
 
-function findPathStatementById(statements: readonly Statement[], elementId: string): Extract<Statement, { kind: "Path" }> | null {
-  for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === elementId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const found = findPathStatementById(statement.body, elementId);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  return null;
-}
 
 function isDirectFrameLocalHandle(handle: EditHandle): handle is EditHandle & {
   rewriteMode: "direct";

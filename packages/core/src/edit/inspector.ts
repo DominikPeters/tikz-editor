@@ -43,6 +43,7 @@ import {
   type TransformInspectorKey,
   type TransformInspectorMutationContext
 } from "./property-write-builders.js";
+import { uniqueStrings } from "./statement-find.js";
 import {
   ARROW_DEFAULT_CLEAR_KEYS,
   ARROW_OPTION_KEY,
@@ -3328,18 +3329,4 @@ function canonicalDecorationName(raw: string | null | undefined): string | null 
   }
   const normalized = raw.trim().toLowerCase().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized : null;
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    unique.push(normalized);
-  }
-  return unique;
 }

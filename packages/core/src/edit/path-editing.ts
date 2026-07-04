@@ -1,6 +1,7 @@
-import type { CoordinateItem, PathItem, PathKeywordItem, PathStatement, Statement } from "../ast/types.js";
+import type { CoordinateItem, PathItem, PathKeywordItem, PathStatement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
+import { findPathStatementById } from "./statement-find.js";
 
 export type PathPointKind = "corner" | "smooth";
 
@@ -361,21 +362,6 @@ function describePathItem(item: PathItem): string {
     case "PathKeyword": return "path keywords";
     case "UnknownPathItem": return "unsupported syntax";
   }
-}
-
-function findPathStatementById(statements: readonly Statement[], elementId: string): PathStatement | null {
-  for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === elementId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, elementId);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-  return null;
 }
 
 function isSharedExpandedHandleSpan(handle: EditHandle, editHandles: readonly EditHandle[]): boolean {

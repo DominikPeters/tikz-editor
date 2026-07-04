@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type {
   EditHandle,
   EvaluateOptions,
@@ -46,9 +47,9 @@ import {
   type OptionMutation,
   type OptionMutationApplyResult
 } from "../option-mutations.js";
-import type { SourcePatch } from "../types.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, propertyTargetUsesFit, sourceUsesFitNodeFromParseResult } from "../fit.js";
+import { findPathStatementById } from "../statement-find.js";
 
 const RESIZE_EPSILON = 1e-3;
 
@@ -100,10 +101,6 @@ export type ResizeElementAction = {
   };
 };
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export function applyResizeElementAction(
   source: string,
@@ -287,6 +284,14 @@ export function applyResizeElementAction(
     candidates: resizeCandidates
   });
   if (!rewritten) {
+    if (nodeLinearTransform && !preserveExplicitWidthFloor && !preserveExplicitHeightFloor) {
+      return {
+        kind: "success",
+        newSource: source,
+        patches: [],
+        changedSourceIds: [elementId]
+      };
+    }
     return { kind: "unsupported", reason: "Resize would not change node constraints." };
   }
 
@@ -1975,24 +1980,6 @@ function resolveResizePropertyTarget(
   }
 
   return defaultTarget;
-}
-
-function findPathStatementById(
-  statements: readonly Statement[],
-  elementId: string
-): Extract<Statement, { kind: "Path" }> | null {
-  for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === elementId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, elementId);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-  return null;
 }
 
 function findPathStatementContainingNodeId(

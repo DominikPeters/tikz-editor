@@ -20,6 +20,7 @@ import {
   applyTextReplacements,
   parseStatementSnapshot
 } from "./statement-ops.js";
+import { normalizeElementIds, uniqueStrings } from "./statement-find.js";
 import type { PathPointKind } from "./path-editing.js";
 import {
   applyMovePathAttachedNodeAction,
@@ -878,20 +879,6 @@ function applyUngroupElements(
   return applyUngroupElementsAction(source, action.elementIds, parseOptions);
 }
 
-function normalizeElementIds(elementIds: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const elementId of elementIds) {
-    const id = elementId.trim();
-    if (id.length === 0 || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    normalized.push(id);
-  }
-  return normalized;
-}
-
 function resolveNodeTextSpanForElementId(
   source: string,
   elementId: string,
@@ -1059,20 +1046,6 @@ function normalizeNodeNameCandidate(raw: string | undefined): string | null {
     return null;
   }
   return trimmed;
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    unique.push(normalized);
-  }
-  return unique;
 }
 
 function applySetProperty(

@@ -1,10 +1,10 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import type { SemanticDependencyGraph } from "../../semantic/dependencies.js";
 import type { Statement, Span } from "../../ast/types.js";
 import { parseEditableTargetId } from "../editable-targets.js";
 import { normalizeOptionKey } from "../option-key.js";
-import type { SourcePatch } from "../types.js";
 import type { EditParseOptions } from "../parse-options.js";
 import {
   applyTextReplacements,
@@ -15,9 +15,6 @@ import {
 } from "../statement-ops.js";
 import { parseTikzForEdit } from "../parse-options.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string };
 
 export function applyGroupElementsAction(
   source: string,

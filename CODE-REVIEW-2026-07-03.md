@@ -169,16 +169,20 @@ Every path statement — even `\draw (0,0)--(1,1);` — deep-clones the custom-s
 - `findPathStatementById`: **8 copies** with subtly different signatures (`move-arrange-actions.ts:1366`, `resize-element.ts:1980`, `rotate-element.ts:565`, `tree-child-actions.ts:273`, `property-target.ts:949`, `fit.ts:43`, `inspector/grid-state.ts:62`, `path-editing.ts:366`).
 - `normalizeElementIds` ×5, `uniqueStrings` ×4; `set-property.ts` inlines a copy of its own helper (77-99 vs 630-653).
 **Fix:** `edit/result-types.ts` + `edit/statement-find.ts`; removes ~300 lines and the drift risk. *(high confidence)*
+**Status (2026-07-04): Done.** Added shared `edit/result-types.ts` and `edit/statement-find.ts`; action files, fit/path-editing/inspector/property-write helpers now import the shared result and statement/ID utilities instead of carrying local copies.
 
 ### 3.2 The "every X node styles" frame-meta explosion (~600 deletable lines)
 `semantic/context.ts:143-181`; `semantic/evaluate.ts:272-337, 988-1053, 1207-1272, 2064-2105, 2849-2947, 2980-3429`.
 22 hardcoded per-shape fields (`everyKiteNodeStyles`, …) each threaded through the frame type, three ~65-line push blocks, three lookup tables, and a bucket-clone block. The pic path (line 1510) already proves the fix: replace with one `everyShapeNodeStyles: Map<string, ProvenanceOptionList[]>` + spread. New shapes become one-line additions. *(high confidence)* → Architecture note D.
+**Status (2026-07-04): Partial.** Repeated clone/assignment blocks are now centralized through `FRAME_STYLE_BUCKET_KEYS`, and node shape style lookup is shared by node evaluation and effective-option merging. The recommended end-state (`everyShapeNodeStyles: Map<...>`) is still a follow-up; the semantic frame still exposes the legacy per-shape fields.
 
 ### 3.3 Six-way duplication in `graph.ts` option handling
 `semantic/path/graph.ts:1190-1523` vs `1525-1765` (same ~30 keys hand-dispatched twice, ×3 entry kinds each); `parseChain` (503-618) vs `parseChainFromParsedSpec` (620-731) ~110-line near-duplicates. Adding one graph option = up to 6 coordinated edits. Extract shared `applyGraphOptionEntry` table + common chain-walker. *(high confidence)*
+**Status (2026-07-04): Mostly done.** Node/group graph option handling now shares a common scope-control dispatcher for kv/flag/bare entries, leaving only node-specific edge accumulation and group-specific quote/text behavior at the call sites. The separate `parseChain` / `parseChainFromParsedSpec` chain-walker duplication remains follow-up work.
 
 ### 3.4 `emit.ts` shape emission duplicated six ways (~400 lines)
 `packages/core/src/svg/emit.ts:717-889` (three structurally identical shadow emitters), `371-414, 463-506, 530-582` (double-stroke/plain branches per shape). Extract `emitStyledShape(tag, style, …)`. Also `fmt()` duplicated (`emit.ts:1521`, `model.ts:171`); module-global `currentPatternGlobalYPhase` (line 73) threads state invisibly through pattern renderers — pass explicitly. *(high confidence)*
+**Status (2026-07-04): Mostly done.** Path/circle/ellipse emission now shares styled-shape rendering helpers, double-stroke/plain branch handling, transform emission, and shadow shape emission. `fmt()` duplication and `currentPatternGlobalYPhase` cleanup remain separate follow-ups.
 
 ### 3.5 God files with concrete decomposition seams
 - **`CanvasPanel.tsx` (3,806)**: extract `useCanvasTextEditSession` + `<CanvasTextEditPopup>` (lines 331-660, 2268-2753, 3536-3617), `useNodePositionTargetPicking` (1451-1663, 2755-2836), move text-measure helpers to a module. Also contains **dead snap-debug overlay** (~150 lines + an always-on window pointermove listener) behind hardcoded `showDevPanel={false}` at line 3776 — delete it (DevPanel supersedes it).

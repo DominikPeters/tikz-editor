@@ -293,28 +293,7 @@ export function createSemanticEvaluationRun(
       pinDistancePt: rootMeta.pinDistancePt,
       pinEdgeRaw: rootMeta.pinEdgeRaw,
       transformShape: rootMeta.transformShape,
-      everyNodeStyles: rootMeta.everyNodeStyles,
-      everyTextNodePartStyles: rootMeta.everyTextNodePartStyles,
-      everyFitStyles: rootMeta.everyFitStyles,
-      everyPicStyles: rootMeta.everyPicStyles,
-      everyRectangleNodeStyles: rootMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: rootMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: rootMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: rootMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: rootMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: rootMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: rootMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: rootMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: rootMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: rootMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: rootMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: rootMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: rootMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: rootMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: rootMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: rootMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: rootMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: rootMeta.everyDoubleArrowNodeStyles,
+      ...cloneFrameStyleBuckets(rootMeta),
       treeLevel: rootMeta.treeLevel,
       treeLevelDistancePt: rootMeta.treeLevelDistancePt,
       treeSiblingDistancePt: rootMeta.treeSiblingDistancePt,
@@ -1009,28 +988,7 @@ function evaluateStatement(
       pinDistancePt: frameMeta.pinDistancePt,
       pinEdgeRaw: frameMeta.pinEdgeRaw,
       transformShape: frameMeta.transformShape,
-      everyNodeStyles: frameMeta.everyNodeStyles,
-      everyTextNodePartStyles: frameMeta.everyTextNodePartStyles,
-      everyFitStyles: frameMeta.everyFitStyles,
-      everyPicStyles: frameMeta.everyPicStyles,
-      everyRectangleNodeStyles: frameMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frameMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frameMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frameMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frameMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frameMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: frameMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frameMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frameMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frameMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frameMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: frameMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: frameMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frameMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frameMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frameMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frameMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frameMeta.everyDoubleArrowNodeStyles,
+      ...cloneFrameStyleBuckets(frameMeta),
       treeLevel: frameMeta.treeLevel,
       treeLevelDistancePt: frameMeta.treeLevelDistancePt,
       treeSiblingDistancePt: frameMeta.treeSiblingDistancePt,
@@ -1203,28 +1161,7 @@ function evaluateStatement(
       pinDistancePt: frameMeta.pinDistancePt,
       pinEdgeRaw: frameMeta.pinEdgeRaw,
       transformShape: frameMeta.transformShape,
-      everyNodeStyles: frameMeta.everyNodeStyles,
-      everyTextNodePartStyles: frameMeta.everyTextNodePartStyles,
-      everyFitStyles: frameMeta.everyFitStyles,
-      everyPicStyles: frameMeta.everyPicStyles,
-      everyRectangleNodeStyles: frameMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frameMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frameMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frameMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frameMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frameMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: frameMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frameMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frameMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frameMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frameMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: frameMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: frameMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frameMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frameMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frameMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frameMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frameMeta.everyDoubleArrowNodeStyles,
+      ...cloneFrameStyleBuckets(frameMeta),
       treeLevel: frameMeta.treeLevel,
       treeLevelDistancePt: frameMeta.treeLevelDistancePt,
       treeSiblingDistancePt: frameMeta.treeSiblingDistancePt,
@@ -2037,28 +1974,7 @@ function applyOptionListsToCurrentFrame(
   frame.pinDistancePt = frameMeta.pinDistancePt;
   frame.pinEdgeRaw = frameMeta.pinEdgeRaw;
   frame.transformShape = frameMeta.transformShape;
-  frame.everyNodeStyles = frameMeta.everyNodeStyles;
-  frame.everyTextNodePartStyles = frameMeta.everyTextNodePartStyles;
-  frame.everyFitStyles = frameMeta.everyFitStyles;
-  frame.everyPicStyles = frameMeta.everyPicStyles;
-  frame.everyRectangleNodeStyles = frameMeta.everyRectangleNodeStyles;
-  frame.everyCircleNodeStyles = frameMeta.everyCircleNodeStyles;
-  frame.everyDiamondNodeStyles = frameMeta.everyDiamondNodeStyles;
-  frame.everyTrapeziumNodeStyles = frameMeta.everyTrapeziumNodeStyles;
-  frame.everyIsoscelesTriangleNodeStyles = frameMeta.everyIsoscelesTriangleNodeStyles;
-  frame.everyKiteNodeStyles = frameMeta.everyKiteNodeStyles;
-  frame.everyDartNodeStyles = frameMeta.everyDartNodeStyles;
-  frame.everyCircularSectorNodeStyles = frameMeta.everyCircularSectorNodeStyles;
-  frame.everyCylinderNodeStyles = frameMeta.everyCylinderNodeStyles;
-  frame.everyCloudNodeStyles = frameMeta.everyCloudNodeStyles;
-  frame.everyStarburstNodeStyles = frameMeta.everyStarburstNodeStyles;
-  frame.everySignalNodeStyles = frameMeta.everySignalNodeStyles;
-  frame.everyTapeNodeStyles = frameMeta.everyTapeNodeStyles;
-  frame.everyRectangleCalloutNodeStyles = frameMeta.everyRectangleCalloutNodeStyles;
-  frame.everyEllipseCalloutNodeStyles = frameMeta.everyEllipseCalloutNodeStyles;
-  frame.everyCloudCalloutNodeStyles = frameMeta.everyCloudCalloutNodeStyles;
-  frame.everySingleArrowNodeStyles = frameMeta.everySingleArrowNodeStyles;
-  frame.everyDoubleArrowNodeStyles = frameMeta.everyDoubleArrowNodeStyles;
+  assignFrameStyleBuckets(frame, frameMeta);
   frame.treeLevel = frameMeta.treeLevel;
   frame.treeLevelDistancePt = frameMeta.treeLevelDistancePt;
   frame.treeSiblingDistancePt = frameMeta.treeSiblingDistancePt;
@@ -2897,6 +2813,31 @@ type FrameStyleBuckets = {
   everyDoubleArrowNodeStyles: ProvenanceOptionList[];
 };
 
+const FRAME_STYLE_BUCKET_KEYS = [
+  "everyNodeStyles",
+  "everyTextNodePartStyles",
+  "everyFitStyles",
+  "everyPicStyles",
+  "everyRectangleNodeStyles",
+  "everyCircleNodeStyles",
+  "everyDiamondNodeStyles",
+  "everyTrapeziumNodeStyles",
+  "everyIsoscelesTriangleNodeStyles",
+  "everyKiteNodeStyles",
+  "everyDartNodeStyles",
+  "everyCircularSectorNodeStyles",
+  "everyCylinderNodeStyles",
+  "everyCloudNodeStyles",
+  "everyStarburstNodeStyles",
+  "everySignalNodeStyles",
+  "everyTapeNodeStyles",
+  "everyRectangleCalloutNodeStyles",
+  "everyEllipseCalloutNodeStyles",
+  "everyCloudCalloutNodeStyles",
+  "everySingleArrowNodeStyles",
+  "everyDoubleArrowNodeStyles"
+] as const satisfies readonly (keyof FrameStyleBuckets)[];
+
 const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, keyof FrameStyleBuckets> = {
   "every node/.style": "everyNodeStyles",
   "every text node part/.style": "everyTextNodePartStyles",
@@ -3003,6 +2944,20 @@ const TREE_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof Omit<TreeMetaBuckets
   "level/.append style": "treeLevelStyleTemplateLayers"
 };
 
+function cloneFrameStyleBuckets(base: FrameStyleBuckets): FrameStyleBuckets {
+  const buckets = {} as FrameStyleBuckets;
+  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+    buckets[key] = [...base[key]];
+  }
+  return buckets;
+}
+
+function assignFrameStyleBuckets(target: FrameStyleBuckets, source: FrameStyleBuckets): void {
+  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+    target[key] = source[key];
+  }
+}
+
 export function resolveFrameMeta(
   base: {
     namePrefix: string;
@@ -3088,30 +3043,7 @@ export function resolveFrameMeta(
   let treeDeferredEdgeFromParentPath = base.treeDeferredEdgeFromParentPath;
   let treeDeferredEdgeFromParentMacro = base.treeDeferredEdgeFromParentMacro;
 
-  const styleBuckets: FrameStyleBuckets = {
-    everyNodeStyles: [...base.everyNodeStyles],
-    everyTextNodePartStyles: [...base.everyTextNodePartStyles],
-    everyFitStyles: [...base.everyFitStyles],
-    everyPicStyles: [...base.everyPicStyles],
-    everyRectangleNodeStyles: [...base.everyRectangleNodeStyles],
-    everyCircleNodeStyles: [...base.everyCircleNodeStyles],
-    everyDiamondNodeStyles: [...base.everyDiamondNodeStyles],
-    everyTrapeziumNodeStyles: [...base.everyTrapeziumNodeStyles],
-    everyIsoscelesTriangleNodeStyles: [...base.everyIsoscelesTriangleNodeStyles],
-    everyKiteNodeStyles: [...base.everyKiteNodeStyles],
-    everyDartNodeStyles: [...base.everyDartNodeStyles],
-    everyCircularSectorNodeStyles: [...base.everyCircularSectorNodeStyles],
-    everyCylinderNodeStyles: [...base.everyCylinderNodeStyles],
-    everyCloudNodeStyles: [...base.everyCloudNodeStyles],
-    everyStarburstNodeStyles: [...base.everyStarburstNodeStyles],
-    everySignalNodeStyles: [...base.everySignalNodeStyles],
-    everyTapeNodeStyles: [...base.everyTapeNodeStyles],
-    everyRectangleCalloutNodeStyles: [...base.everyRectangleCalloutNodeStyles],
-    everyEllipseCalloutNodeStyles: [...base.everyEllipseCalloutNodeStyles],
-    everyCloudCalloutNodeStyles: [...base.everyCloudCalloutNodeStyles],
-    everySingleArrowNodeStyles: [...base.everySingleArrowNodeStyles],
-    everyDoubleArrowNodeStyles: [...base.everyDoubleArrowNodeStyles]
-  };
+  const styleBuckets = cloneFrameStyleBuckets(base);
   const treeBuckets: TreeMetaBuckets = {
     treeEveryChildStyles: [...base.treeEveryChildStyles],
     treeEveryChildNodeStyles: [...base.treeEveryChildNodeStyles],

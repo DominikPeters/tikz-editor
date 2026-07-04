@@ -76,6 +76,7 @@ import { evaluateMatrixNodeItem, resolveMatrixMode } from "./matrix.js";
 import { collectScopedNodeNames } from "./named-coordinates.js";
 import {
   resolveEffectiveNodeOptions,
+  resolveEveryShapeNodeStyleLists,
   resolveNodeAnchor,
   resolveNodeLayer,
   resolveNodeOptionTransform,
@@ -1936,61 +1937,7 @@ function expandProvenanceOptionLayers(
 }
 
 function resolveEveryShapeNodeStyleLayers(frame: SemanticContext["stack"][number], nodeShape: NodeShape): ProvenanceOptionList[] {
-  if (nodeShape === "circle") {
-    return frame.everyCircleNodeStyles;
-  }
-  if (nodeShape === "rectangle") {
-    return frame.everyRectangleNodeStyles;
-  }
-  if (nodeShape === "diamond") {
-    return frame.everyDiamondNodeStyles;
-  }
-  if (nodeShape === "trapezium") {
-    return frame.everyTrapeziumNodeStyles;
-  }
-  if (nodeShape === "isosceles triangle") {
-    return frame.everyIsoscelesTriangleNodeStyles;
-  }
-  if (nodeShape === "kite") {
-    return frame.everyKiteNodeStyles;
-  }
-  if (nodeShape === "dart") {
-    return frame.everyDartNodeStyles;
-  }
-  if (nodeShape === "circular sector") {
-    return frame.everyCircularSectorNodeStyles;
-  }
-  if (nodeShape === "cylinder") {
-    return frame.everyCylinderNodeStyles;
-  }
-  if (nodeShape === "cloud") {
-    return frame.everyCloudNodeStyles;
-  }
-  if (nodeShape === "starburst") {
-    return frame.everyStarburstNodeStyles;
-  }
-  if (nodeShape === "signal") {
-    return frame.everySignalNodeStyles;
-  }
-  if (nodeShape === "tape") {
-    return frame.everyTapeNodeStyles;
-  }
-  if (nodeShape === "rectangle callout") {
-    return frame.everyRectangleCalloutNodeStyles;
-  }
-  if (nodeShape === "ellipse callout") {
-    return frame.everyEllipseCalloutNodeStyles;
-  }
-  if (nodeShape === "cloud callout") {
-    return frame.everyCloudCalloutNodeStyles;
-  }
-  if (nodeShape === "single arrow") {
-    return frame.everySingleArrowNodeStyles;
-  }
-  if (nodeShape === "double arrow") {
-    return frame.everyDoubleArrowNodeStyles;
-  }
-  return [];
+  return resolveEveryShapeNodeStyleLists(nodeShape, frame);
 }
 
 function resolveAutoNodeAnchor(
