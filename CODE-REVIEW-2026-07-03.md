@@ -224,15 +224,19 @@ Decomposition contracts and recommended order for the four big splits are in Arc
 
 ### 4.1 CI runs neither lint nor typecheck
 `.github/workflows/ci.yml` runs only `npm test` + e2e. `lint:ci` and `typecheck` exist in root `package.json` but nothing calls them — type/lint regressions land silently. Add `npm run lint:ci && npm run typecheck` as a CI step. *(high confidence)*
+**Status (2026-07-04): Done.** The CI test job now runs `npm run lint:ci` and `npm run typecheck` before the unit/e2e suites.
 
 ### 4.2 `apps/desktop/src` is typechecked by nothing
 Root tsconfig `include` lists web + landing but not desktop; desktop `build` is plain `vite build`. The 1,579-line `desktop-platform.ts` is never seen by `tsc`. The desktop mock-bridge suite (`test:e2e:mock`) isn't in CI either. Add `apps/desktop/src` to the root typecheck include; run `test:e2e:mock` in CI. *(high confidence)*
+**Status (2026-07-04): Done.** Root typecheck now includes `apps/desktop/src`, and CI runs the desktop workspace's `test:e2e:mock` suite.
 
 ### 4.3 No drift guard for the committed generated parser
 `packages/lezer-tikz/src/grammar/tikz-parser.ts` is committed (currently in sync — verified by regenerating), but `npm test` regenerates before running, so CI passes even if the committed copy is stale while typecheck/eslint check the stale one. Add CI step: `npm run generate:grammar && git diff --exit-code packages/lezer-tikz/src/grammar/`. *(high confidence)*
+**Status (2026-07-04): Done.** CI now regenerates the grammar and fails on diffs under `packages/lezer-tikz/src/grammar/`.
 
 ### 4.4 CI double-runs; no concurrency control
 `ci.yml` triggers on bare `push:` (all branches) + `pull_request:` → every PR commit runs the full suite (incl. Playwright + Rust build) twice. Restrict push to `master`, add a `concurrency` block, cache `tauri-driver`/target dir as `release-desktop.yml` already does. *(high confidence)*
+**Status (2026-07-04): Done.** CI push triggers are restricted to `master`, workflow concurrency cancels superseded runs, and the desktop Linux job now caches the Rust target dir plus `tauri-driver`.
 
 ### 4.5 tsconfig `paths` map duplicated 4×
 Identical 13-entry blocks in root, web, desktop (byte-identical incl. the same indentation glitch), subset in landing. Extract `tsconfig.base.json`; the `@tikz-editor/app/*` path entries may be redundant entirely given `moduleResolution: bundler` + package exports. *(high confidence)*

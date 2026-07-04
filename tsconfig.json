@@ -25,6 +25,6 @@
       "tikz-editor/*": ["./packages/core/src/*"]
     }
   },
-  "include": ["test", "scripts", "packages/core/src", "packages/app/src", "packages/lezer-tikz/src", "packages/lang-tikz/src", "apps/web/src", "apps/landing/src"],
+  "include": ["test", "scripts", "packages/core/src", "packages/app/src", "packages/lezer-tikz/src", "packages/lang-tikz/src", "apps/web/src", "apps/landing/src", "apps/desktop/src"],
   "exclude": ["node_modules", "packages/core/dist", "apps/web/dist"]
 }
