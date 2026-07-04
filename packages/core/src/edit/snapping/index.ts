@@ -9,6 +9,7 @@ import {
 } from "./geometry.js";
 import { collectGridSnaps, pickGridStepPt, snapToNextMultiple } from "./grid-snaps.js";
 import {
+  SNAP_CLUSTER_BREAK_PX,
   collectGuideSnaps,
   collectPointSnaps,
   createEmptySnapBuckets,
@@ -177,7 +178,8 @@ function snapPointerWithPointsAndGrid({
     selectionPoints: [pointer],
     referencePoints,
     enabledAxis: null,
-    thresholdWorld: settings.thresholdPx / context.zoom
+    thresholdWorld: settings.thresholdPx / context.zoom,
+    clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
 
   const offset = pointSnapOffset(firstPass.nearest);
@@ -225,7 +227,8 @@ function runSelectionSnapPasses({
     selection,
     includeGaps,
     enabledAxis,
-    thresholdWorld
+    thresholdWorld,
+    clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
 
   const offset = worldPoint(pt(firstPass.nearest.x[0]?.offset ?? 0), pt(firstPass.nearest.y[0]?.offset ?? 0));
@@ -262,7 +265,8 @@ function collectPointGridAndGapSnaps({
   selection,
   includeGaps,
   enabledAxis,
-  thresholdWorld
+  thresholdWorld,
+  clusterBreakWorld
 }: {
   context: SnapContext;
   settings: SnapSettings;
@@ -270,6 +274,7 @@ function collectPointGridAndGapSnaps({
   includeGaps: boolean;
   enabledAxis?: Axis | null;
   thresholdWorld: number;
+  clusterBreakWorld?: number;
 }): {
   nearest: AxisSnapBuckets;
 } {
@@ -283,7 +288,8 @@ function collectPointGridAndGapSnaps({
       minOffset,
       nearest,
       kind: "point",
-      enabledAxis
+      enabledAxis,
+      clusterBreakWorld
     });
   }
 
@@ -324,7 +330,8 @@ function collectPointAndGridSnaps({
   selectionPoints,
   referencePoints,
   enabledAxis,
-  thresholdWorld
+  thresholdWorld,
+  clusterBreakWorld
 }: {
   context: SnapContext;
   settings: SnapSettings;
@@ -332,6 +339,7 @@ function collectPointAndGridSnaps({
   referencePoints: WorldPoint[];
   enabledAxis?: Axis | null;
   thresholdWorld: number;
+  clusterBreakWorld?: number;
 }): {
   nearest: AxisSnapBuckets;
 } {
@@ -345,7 +353,8 @@ function collectPointAndGridSnaps({
       minOffset,
       nearest,
       kind: "point",
-      enabledAxis
+      enabledAxis,
+      clusterBreakWorld
     });
   }
 

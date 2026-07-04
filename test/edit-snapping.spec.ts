@@ -258,8 +258,10 @@ describe("edit snapping core", () => {
       rawDelta: wp(7, 7)
     });
 
-    expect(snapped.snappedDelta?.x).toBeCloseTo(6, 6);
-    expect(snapped.snappedDelta?.y).toBeCloseTo(6, 6);
+    // Center-to-center is the nearest same-role snap (corner-to-center no
+    // longer matches): selection center (99, 99) -> circle center (100, 100).
+    expect(snapped.snappedDelta?.x).toBeCloseTo(8, 6);
+    expect(snapped.snappedDelta?.y).toBeCloseTo(8, 6);
     expect(snapped.lines.some((line) => line.type === "points")).toBe(true);
   });
 
@@ -764,7 +766,13 @@ describe("edit snapping core", () => {
     expect(boundsBySource.has("ignored")).toBe(false);
     expect(boundsBySource.has("")).toBe(false);
     expect(boundsBySource.get("ellipse")?.maxX).toBeGreaterThan(25);
-    expect(boundsBySource.get("curve")?.maxY).toBeGreaterThanOrEqual(30);
+    // Tight cubic bounds: the true curve maximum (~11.37) rather than the
+    // control-point hull (c1.y = 30).
+    expect(boundsBySource.get("curve")?.maxY).toBeCloseTo(11.3711, 3);
+    // Tight arc bounds: the arc bulges right of the endpoint x = 40 and below
+    // the endpoints, but far less than the old +/-rx/ry boxes suggested.
+    expect(boundsBySource.get("curve")?.maxX).toBeCloseTo(40.2705, 3);
+    expect(boundsBySource.get("curve")?.minY).toBeCloseTo(-5.4057, 3);
     expect(boundsBySource.get("matrix")).toMatchObject({
       minX: boundsBySource.get("cell")?.minX,
       minY: boundsBySource.get("cell")?.minY,
@@ -907,9 +915,79 @@ describe("edit snapping core", () => {
     const unlimited = buildVisibleGaps(referenceBounds, 100);
     expect(unlimited.horizontal.map((gap) => [gap.startBounds.sourceId, gap.endBounds.sourceId])).toEqual([
       ["a", "b"],
-      ["a", "c"],
       ["b", "c"]
     ]);
     expect(unlimited.vertical).toHaveLength(0);
+  });
+
+  it("keeps non-adjacent gaps when the in-between element sits in a different band", () => {
+    const referenceBounds = [
+      { ...wb(0, 0, 10, 10), sourceId: "a" },
+      { ...wb(20, 40, 30, 50), sourceId: "between-other-band" },
+      { ...wb(40, 0, 50, 10), sourceId: "c" }
+    ];
+
+    const gaps = buildVisibleGaps(referenceBounds, 100);
+    expect(gaps.horizontal.map((gap) => [gap.startBounds.sourceId, gap.endBounds.sourceId])).toEqual([
+      ["a", "c"]
+    ]);
+  });
+
+  it("merges intersecting reference bounds before building gaps", () => {
+    const referenceBounds = [
+      { ...wb(0, 0, 20, 20), sourceId: "envelope" },
+      { ...wb(5, 5, 10, 10), sourceId: "nested" },
+      { ...wb(40, 0, 50, 10), sourceId: "right" }
+    ];
+
+    const gaps = buildVisibleGaps(referenceBounds, 100);
+    expect(gaps.horizontal).toHaveLength(1);
+    expect(gaps.horizontal[0].startBounds.maxX).toBe(20);
+    expect(gaps.horizontal[0].endBounds.minX).toBe(40);
+  });
+
+  it("does not snap selection corners to reference centers", () => {
+    const scene = [makeCircle("ref", 30, 30, 5)];
+    const context = buildSnapContext({
+      sceneElements: scene,
+      selectedSourceIds: [],
+      zoom: 1,
+      settings: { grid: { enabled: false }, gaps: { enabled: false } }
+    });
+
+    // Moved selection corner lands at (29, 29), 1pt from the circle center
+    // (30, 30); the nearest same-role target is the bounds corner at (25, 25).
+    const snapped = snapSelectionTranslation({
+      context,
+      selection: selectionFromBounds(14, 14, 24, 24),
+      rawDelta: wp(5, 5)
+    });
+
+    expect(snapped.snappedDelta?.x).toBeCloseTo(1, 6);
+    expect(snapped.snappedDelta?.y).toBeCloseTo(1, 6);
+  });
+
+  it("prefers the visually nearest cluster over a marginally closer far-away offset", () => {
+    const scene = [
+      makeCircle("near", 8, 5, 5),
+      makeCircle("far", 7.5, 305, 5)
+    ];
+    const context = buildSnapContext({
+      sceneElements: scene,
+      selectedSourceIds: [],
+      zoom: 1,
+      settings: { grid: { enabled: false }, gaps: { enabled: false } }
+    });
+
+    // The far circle offers a smaller x offset (2.5 vs 3), but it sits ~300pt
+    // away; the near circle's corner should win.
+    const snapped = snapSelectionTranslation({
+      context,
+      selection: selectionFromBounds(0, 0, 10, 10),
+      rawDelta: wp(0, 0)
+    });
+
+    expect(snapped.snappedDelta?.x).toBeCloseTo(3, 6);
+    expect(snapped.snappedDelta?.y).toBeCloseTo(0, 6);
   });
 });

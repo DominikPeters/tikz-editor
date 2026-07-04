@@ -54,9 +54,20 @@ export type SnapModifiers = {
   ctrlOrMeta: boolean;
 };
 
+export type SnapPointRole = "corner" | "center";
+
 export type SnapPoint = WorldPoint & {
   sourceId: string;
-  role: "corner" | "center";
+  role: SnapPointRole;
+};
+
+/**
+ * A selection-side snap point. Points with a role only match reference points
+ * of the same role (corners align with corners, centers with centers);
+ * role-less points (e.g. the free pointer during tool use) match anything.
+ */
+export type SelectionSnapPoint = WorldPoint & {
+  role?: SnapPointRole;
 };
 
 export type SnapBounds = WorldBounds & {
@@ -115,7 +126,7 @@ export type SnapResult = {
 
 export type SelectionGeometry = {
   bounds: WorldBounds;
-  snapPoints: WorldPoint[];
+  snapPoints: SelectionSnapPoint[];
 };
 
 export type BuildSnapContextInput = {

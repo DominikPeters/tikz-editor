@@ -7,7 +7,7 @@ import type {
   SceneText
 } from "../../semantic/types.js";
 import type { WorldBounds, WorldPoint } from "../../coords/points.js";
-import type { SelectionGeometry, SnapBounds, SnapPoint } from "./types.js";
+import type { SelectionGeometry, SelectionSnapPoint, SnapBounds, SnapPoint } from "./types.js";
 
 export const SNAP_EPSILON = 1e-6;
 
@@ -45,8 +45,11 @@ export function translateBounds(bounds: WorldBounds, delta: WorldPoint): WorldBo
   );
 }
 
-export function translatePoints(points: readonly WorldPoint[], delta: WorldPoint): WorldPoint[] {
-  return points.map((point) => worldPoint(pt(point.x + delta.x), pt(point.y + delta.y)));
+export function translatePoints<T extends WorldPoint>(points: readonly T[], delta: WorldPoint): T[] {
+  return points.map((point) => ({
+    ...point,
+    ...worldPoint(pt(point.x + delta.x), pt(point.y + delta.y))
+  }));
 }
 
 export function expandBounds(bounds: WorldBounds, padding: number): WorldBounds {
@@ -77,14 +80,14 @@ export function rangesOverlap(a: [number, number], b: [number, number]): boolean
   return rangeIntersection(a, b) !== null;
 }
 
-export function selectionSnapPointsFromBounds(bounds: WorldBounds): WorldPoint[] {
+export function selectionSnapPointsFromBounds(bounds: WorldBounds): SelectionSnapPoint[] {
   const center = boundsCenter(bounds);
   return [
-    worldPoint(pt(bounds.minX), pt(bounds.minY)),
-    worldPoint(pt(bounds.maxX), pt(bounds.minY)),
-    worldPoint(pt(bounds.minX), pt(bounds.maxY)),
-    worldPoint(pt(bounds.maxX), pt(bounds.maxY)),
-    center
+    { ...worldPoint(pt(bounds.minX), pt(bounds.minY)), role: "corner" },
+    { ...worldPoint(pt(bounds.maxX), pt(bounds.minY)), role: "corner" },
+    { ...worldPoint(pt(bounds.minX), pt(bounds.maxY)), role: "corner" },
+    { ...worldPoint(pt(bounds.maxX), pt(bounds.maxY)), role: "corner" },
+    { ...center, role: "center" }
   ];
 }
 
@@ -247,32 +250,53 @@ function pathBoundsInWorld(path: ScenePath): WorldBounds | null {
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
   let previous: WorldPoint | null = null;
+  let subpathStart: WorldPoint | null = null;
 
+  const includeX = (x: number) => {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+  };
+  const includeY = (y: number) => {
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  };
   const includePoint = (point: WorldPoint) => {
-    minX = Math.min(minX, point.x);
-    minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x);
-    maxY = Math.max(maxY, point.y);
+    includeX(point.x);
+    includeY(point.y);
   };
 
   for (const command of path.commands) {
-    if (command.kind === "Z") continue;
-
-    if (command.kind === "C") {
-      includePoint(command.c1);
-      includePoint(command.c2);
+    if (command.kind === "Z") {
+      previous = subpathStart;
+      continue;
     }
 
-    if (command.kind === "A") {
-      if (previous) {
-        includePoint(worldPoint(pt(previous.x - command.rx), pt(previous.y - command.ry)));
-        includePoint(worldPoint(pt(previous.x + command.rx), pt(previous.y + command.ry)));
-      }
+    if (command.kind === "M") {
+      subpathStart = command.to;
+    }
 
-      includePoint(worldPoint(pt(command.to.x - command.rx), pt(command.to.y - command.ry)));
-      includePoint(worldPoint(pt(command.to.x + command.rx), pt(command.to.y + command.ry)));
-      previous = command.to;
-      continue;
+    if (command.kind === "C") {
+      if (previous) {
+        for (const x of cubicAxisExtrema(previous.x, command.c1.x, command.c2.x, command.to.x)) {
+          includeX(x);
+        }
+        for (const y of cubicAxisExtrema(previous.y, command.c1.y, command.c2.y, command.to.y)) {
+          includeY(y);
+        }
+      } else {
+        // Without a current point the curve is malformed; fall back to the
+        // conservative control-point hull.
+        includePoint(command.c1);
+        includePoint(command.c2);
+      }
+    }
+
+    if (command.kind === "A" && previous) {
+      const arc = arcBounds(previous, command);
+      includeX(arc.minX);
+      includeX(arc.maxX);
+      includeY(arc.minY);
+      includeY(arc.maxY);
     }
 
     includePoint(command.to);
@@ -284,6 +308,133 @@ function pathBoundsInWorld(path: ScenePath): WorldBounds | null {
   }
 
   return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
+}
+
+/**
+ * Axis values at the interior extrema of a cubic Bézier segment: roots of the
+ * derivative in (0, 1). Endpoints are handled by the caller.
+ */
+function cubicAxisExtrema(p0: number, c1: number, c2: number, p3: number): number[] {
+  const a = 3 * (-p0 + 3 * c1 - 3 * c2 + p3);
+  const b = 6 * (p0 - 2 * c1 + c2);
+  const c = 3 * (c1 - p0);
+
+  const ts: number[] = [];
+  if (Math.abs(a) < SNAP_EPSILON) {
+    if (Math.abs(b) > SNAP_EPSILON) {
+      ts.push(-c / b);
+    }
+  } else {
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant >= 0) {
+      const sqrtD = Math.sqrt(discriminant);
+      ts.push((-b + sqrtD) / (2 * a), (-b - sqrtD) / (2 * a));
+    }
+  }
+
+  const values: number[] = [];
+  for (const t of ts) {
+    if (t <= SNAP_EPSILON || t >= 1 - SNAP_EPSILON) {
+      continue;
+    }
+    const u = 1 - t;
+    values.push(u * u * u * p0 + 3 * u * u * t * c1 + 3 * u * t * t * c2 + t * t * t * p3);
+  }
+  return values;
+}
+
+/**
+ * Tight bounds of an SVG-style elliptical arc (endpoint parameterization,
+ * per SVG spec appendix F.6.5): convert to center parameterization, then take
+ * the endpoints plus the axis-extremal angles that lie within the swept range.
+ */
+function arcBounds(
+  from: WorldPoint,
+  command: { rx: number; ry: number; xAxisRotation: number; largeArc: boolean; sweep: boolean; to: WorldPoint }
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  const endpointsOnly = {
+    minX: Math.min(from.x, command.to.x),
+    minY: Math.min(from.y, command.to.y),
+    maxX: Math.max(from.x, command.to.x),
+    maxY: Math.max(from.y, command.to.y)
+  };
+
+  let rx = Math.abs(command.rx);
+  let ry = Math.abs(command.ry);
+  if (rx < SNAP_EPSILON || ry < SNAP_EPSILON) {
+    return endpointsOnly;
+  }
+
+  const phi = (command.xAxisRotation * Math.PI) / 180;
+  const cosPhi = Math.cos(phi);
+  const sinPhi = Math.sin(phi);
+
+  const dx = (from.x - command.to.x) / 2;
+  const dy = (from.y - command.to.y) / 2;
+  const x1p = cosPhi * dx + sinPhi * dy;
+  const y1p = -sinPhi * dx + cosPhi * dy;
+
+  if (Math.abs(x1p) < SNAP_EPSILON && Math.abs(y1p) < SNAP_EPSILON) {
+    return endpointsOnly;
+  }
+
+  const lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+  if (lambda > 1) {
+    const scale = Math.sqrt(lambda);
+    rx *= scale;
+    ry *= scale;
+  }
+
+  const rxSq = rx * rx;
+  const rySq = ry * ry;
+  const numerator = rxSq * rySq - rxSq * y1p * y1p - rySq * x1p * x1p;
+  const denominator = rxSq * y1p * y1p + rySq * x1p * x1p;
+  const factor =
+    (command.largeArc !== command.sweep ? 1 : -1) *
+    Math.sqrt(Math.max(0, numerator / denominator));
+  const cxp = (factor * rx * y1p) / ry;
+  const cyp = (-factor * ry * x1p) / rx;
+
+  const cx = cosPhi * cxp - sinPhi * cyp + (from.x + command.to.x) / 2;
+  const cy = sinPhi * cxp + cosPhi * cyp + (from.y + command.to.y) / 2;
+
+  const startAngle = Math.atan2((y1p - cyp) / ry, (x1p - cxp) / rx);
+  const endAngle = Math.atan2((-y1p - cyp) / ry, (-x1p - cxp) / rx);
+  let sweepAngle = endAngle - startAngle;
+  if (command.sweep && sweepAngle < 0) {
+    sweepAngle += 2 * Math.PI;
+  } else if (!command.sweep && sweepAngle > 0) {
+    sweepAngle -= 2 * Math.PI;
+  }
+
+  const angleOnArc = (angle: number): boolean => {
+    let delta = angle - startAngle;
+    const twoPi = 2 * Math.PI;
+    delta = ((delta % twoPi) + twoPi) % twoPi;
+    return command.sweep ? delta <= sweepAngle : delta - twoPi >= sweepAngle;
+  };
+
+  const bounds = { ...endpointsOnly };
+  const includeAngle = (angle: number) => {
+    if (!angleOnArc(angle)) {
+      return;
+    }
+    const x = cx + rx * Math.cos(angle) * cosPhi - ry * Math.sin(angle) * sinPhi;
+    const y = cy + rx * Math.cos(angle) * sinPhi + ry * Math.sin(angle) * cosPhi;
+    bounds.minX = Math.min(bounds.minX, x);
+    bounds.maxX = Math.max(bounds.maxX, x);
+    bounds.minY = Math.min(bounds.minY, y);
+    bounds.maxY = Math.max(bounds.maxY, y);
+  };
+
+  const thetaX = Math.atan2(-ry * sinPhi, rx * cosPhi);
+  const thetaY = Math.atan2(ry * cosPhi, rx * sinPhi);
+  includeAngle(thetaX);
+  includeAngle(thetaX + Math.PI);
+  includeAngle(thetaY);
+  includeAngle(thetaY + Math.PI);
+
+  return bounds;
 }
 
 function computeEllipseBounds(cx: number, cy: number, rx: number, ry: number, rotation: number): WorldBounds {
