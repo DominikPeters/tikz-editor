@@ -66,6 +66,17 @@ function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGEl
   return clientPoint(px(event.clientX), px(event.clientY));
 }
 
+const TOUCH_ELEMENT_DRAG_ACTIVATION_DELAY_MS = 80;
+const TOUCH_ELEMENT_DRAG_ACTIVATION_DISTANCE_SQ = 36;
+
+type PendingTouchElementDrag = {
+  pointerId: number;
+  startClient: ClientPoint;
+  startTime: number;
+  draggedIds: string[];
+  adornmentDragFromText: boolean;
+};
+
 export function useCanvasElementInteractions(args: UseCanvasElementInteractionsArgs) {
   const {
     svgResult,
@@ -120,6 +131,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     moved: boolean;
     dragStarted: boolean;
   } | null>(null);
+  const pendingTouchElementDragRef = useRef<PendingTouchElementDrag | null>(null);
+  const activeTouchPointerIdsRef = useRef<Set<number>>(new Set());
 
   const startElementDrag = useCallback(
     (
@@ -249,7 +262,66 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
   );
 
   useEffect(() => {
+    const activeTouchPointerIds = activeTouchPointerIdsRef.current;
+
+    function clearPendingTouchInteractions() {
+      pendingTouchElementDragRef.current = null;
+      pendingScopeDrillRef.current = null;
+    }
+
+    function onTouchPointerDownCapture(event: PointerEvent) {
+      if (event.pointerType !== "touch") {
+        return;
+      }
+      activeTouchPointerIds.add(event.pointerId);
+      if (activeTouchPointerIds.size >= 2) {
+        clearPendingTouchInteractions();
+      }
+    }
+
+    function onTouchPointerEndCapture(event: PointerEvent) {
+      if (event.pointerType !== "touch") {
+        return;
+      }
+      activeTouchPointerIds.delete(event.pointerId);
+      if (pendingTouchElementDragRef.current?.pointerId === event.pointerId) {
+        pendingTouchElementDragRef.current = null;
+      }
+      if (pendingScopeDrillRef.current?.pointerId === event.pointerId) {
+        pendingScopeDrillRef.current = null;
+      }
+    }
+
     function onWorldPointerMove(event: PointerEvent) {
+      const pendingTouchDrag = pendingTouchElementDragRef.current;
+      if (pendingTouchDrag?.pointerId === event.pointerId) {
+        if (event.pointerType !== "touch" || activeTouchPointerIds.size >= 2) {
+          pendingTouchElementDragRef.current = null;
+          return;
+        }
+        const clientPoint = clientPointFromEvent(event);
+        const dx = clientPoint.x - pendingTouchDrag.startClient.x;
+        const dy = clientPoint.y - pendingTouchDrag.startClient.y;
+        if ((dx * dx) + (dy * dy) <= TOUCH_ELEMENT_DRAG_ACTIVATION_DISTANCE_SQ) {
+          return;
+        }
+        if (event.timeStamp - pendingTouchDrag.startTime < TOUCH_ELEMENT_DRAG_ACTIVATION_DELAY_MS) {
+          return;
+        }
+        if (!svgResult) {
+          return;
+        }
+        const world = clientToWorldPoint(clientPoint, interactionSvgRef.current, svgResult.viewBox);
+        if (!world) {
+          return;
+        }
+        pendingTouchElementDragRef.current = null;
+        startElementDrag(event.pointerId, world, pendingTouchDrag.draggedIds, {
+          adornmentDragFromText: pendingTouchDrag.adornmentDragFromText
+        });
+        return;
+      }
+
       const pending = pendingScopeDrillRef.current;
       if (pending?.pointerId !== event.pointerId || pending.dragStarted) {
         return;
@@ -273,6 +345,10 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     }
 
     function onWorldPointerUp(event: PointerEvent) {
+      if (pendingTouchElementDragRef.current?.pointerId === event.pointerId) {
+        pendingTouchElementDragRef.current = null;
+      }
+
       const pending = pendingScopeDrillRef.current;
       if (pending?.pointerId !== event.pointerId) {
         return;
@@ -368,6 +444,9 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       );
     }
 
+    window.addEventListener("pointerdown", onTouchPointerDownCapture, true);
+    window.addEventListener("pointerup", onTouchPointerEndCapture, true);
+    window.addEventListener("pointercancel", onTouchPointerEndCapture, true);
     window.addEventListener("pointermove", onWorldPointerMove);
     window.addEventListener("pointerup", onWorldPointerUp);
     window.addEventListener("pointercancel", onWorldPointerUp);
@@ -375,6 +454,9 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     window.addEventListener("pointerup", onTextWorldPointerUp);
     window.addEventListener("pointercancel", onTextWorldPointerUp);
     return () => {
+      window.removeEventListener("pointerdown", onTouchPointerDownCapture, true);
+      window.removeEventListener("pointerup", onTouchPointerEndCapture, true);
+      window.removeEventListener("pointercancel", onTouchPointerEndCapture, true);
       window.removeEventListener("pointermove", onWorldPointerMove);
       window.removeEventListener("pointerup", onWorldPointerUp);
       window.removeEventListener("pointercancel", onWorldPointerUp);
@@ -540,6 +622,17 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         isAdornmentTarget &&
         region?.shape === "rect" &&
         typeof region.sceneTextKey === "string";
+      if (event.pointerType === "touch") {
+        pendingTouchElementDragRef.current = {
+          pointerId: event.pointerId,
+          startClient: clientPoint,
+          startTime: event.timeStamp,
+          draggedIds,
+          adornmentDragFromText
+        };
+        setSnapLines([]);
+        return;
+      }
       startElementDrag(event.pointerId, world, draggedIds, { adornmentDragFromText });
     },
     [

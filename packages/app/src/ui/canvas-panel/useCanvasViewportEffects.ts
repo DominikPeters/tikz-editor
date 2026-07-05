@@ -11,6 +11,7 @@ import type { SvgViewBox } from "tikz-editor/svg/types";
 export type UseCanvasViewportEffectsArgs = {
   dragRef: MutableRefObject<DragState | null>;
   pendingTouchViewportRef: MutableRefObject<PendingTouchViewport | null>;
+  suppressNextBackgroundClickRef: MutableRefObject<boolean>;
   setDragState: ValueSetter<DragState | null>;
   setToolDraft: StateSetter<Extract<DragState, { kind: "tool-create" }> | null>;
   setToolCursorWorld: StateSetter<WorldPoint | null>;
@@ -43,6 +44,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
   const {
     dragRef,
     pendingTouchViewportRef,
+    suppressNextBackgroundClickRef,
     setDragState,
     setToolDraft,
     setToolCursorWorld,
@@ -188,6 +190,8 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     const touchStartPointers = new Map<number, { point: ClientPoint; time: number }>();
     let lastTouchTap: { point: ClientPoint; time: number } | null = null;
     let suppressTapUntilTouchesEnd = false;
+    let touchEventPinchActive = false;
+    let touchEventPinchIds: [number, number] | null = null;
     let pinchGesture:
       | {
           baseScale: number;
@@ -205,7 +209,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       pendingTouchViewportRef.current = null;
     };
 
-    const touchPair = () => {
+    const pointerTouchPair = () => {
       const [first, second] = [...activeTouchPointers.values()];
       if (!first || !second) {
         return null;
@@ -213,15 +217,30 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       return { first, second };
     };
 
-    const beginPinchGesture = () => {
+    const stopPinchEvent = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+
+    const claimViewportPinch = (event: Event) => {
+      suppressTapUntilTouchesEnd = true;
+      suppressNextBackgroundClickRef.current = true;
+      clearPendingTouchViewport();
+      if (dragRef.current) {
+        setDragState(null);
+      }
+      stopPinchEvent(event);
+    };
+
+    const beginPinchGestureFromPoints = (first: ClientPoint, second: ClientPoint) => {
       const currentSvg = svgResultRef.current;
-      const pair = touchPair();
-      if (!currentSvg || !pair) {
+      if (!currentSvg) {
         pinchGesture = null;
         return;
       }
-      const center = midpointLocal(pair.first, pair.second, viewport);
-      const distance = touchDistance(pair.first, pair.second);
+      const center = midpointLocal(first, second, viewport);
+      const distance = touchDistance(first, second);
       if (!Number.isFinite(distance) || distance <= 0) {
         pinchGesture = null;
         return;
@@ -234,17 +253,25 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       };
     };
 
-    const updatePinchGesture = () => {
-      const currentSvg = svgResultRef.current;
-      const pair = touchPair();
-      if (!currentSvg || !pair || !pinchGesture) {
+    const beginPointerPinchGesture = () => {
+      const pair = pointerTouchPair();
+      if (!pair) {
+        pinchGesture = null;
         return;
       }
-      const distance = touchDistance(pair.first, pair.second);
+      beginPinchGestureFromPoints(pair.first, pair.second);
+    };
+
+    const updatePinchGestureFromPoints = (first: ClientPoint, second: ClientPoint) => {
+      const currentSvg = svgResultRef.current;
+      if (!currentSvg || !pinchGesture) {
+        return;
+      }
+      const distance = touchDistance(first, second);
       if (!Number.isFinite(distance) || distance <= 0) {
         return;
       }
-      const center = midpointLocal(pair.first, pair.second, viewport);
+      const center = midpointLocal(first, second, viewport);
       const nextScale = clamp(
         pinchGesture.baseScale * (distance / pinchGesture.baseDistance),
         MIN_SCALE,
@@ -258,6 +285,14 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       }
 
       dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
+    };
+
+    const updatePointerPinchGesture = () => {
+      const pair = pointerTouchPair();
+      if (!pair) {
+        return;
+      }
+      updatePinchGestureFromPoints(pair.first, pair.second);
     };
 
     const onWheel = (event: WheelEvent) => {
@@ -301,6 +336,10 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     };
 
     const onPointerDown = (event: PointerEvent) => {
+      if (touchEventPinchActive) {
+        stopPinchEvent(event);
+        return;
+      }
       if (event.pointerType !== "touch") {
         return;
       }
@@ -310,29 +349,35 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       if (activeTouchPointers.size < 2) {
         return;
       }
-      suppressTapUntilTouchesEnd = true;
-      clearPendingTouchViewport();
-      if (dragRef.current?.kind === "pan" || dragRef.current?.kind === "marquee") {
-        setDragState(null);
-      }
-      beginPinchGesture();
-      updatePinchGesture();
-      event.preventDefault();
+      claimViewportPinch(event);
+      beginPointerPinchGesture();
+      updatePointerPinchGesture();
     };
 
     const onPointerMove = (event: PointerEvent) => {
+      if (touchEventPinchActive) {
+        stopPinchEvent(event);
+        return;
+      }
       if (event.pointerType !== "touch" || !activeTouchPointers.has(event.pointerId)) {
         return;
       }
       activeTouchPointers.set(event.pointerId, clientPoint(px(event.clientX), px(event.clientY)));
       if (!pinchGesture) {
+        if (suppressTapUntilTouchesEnd) {
+          stopPinchEvent(event);
+        }
         return;
       }
-      updatePinchGesture();
-      event.preventDefault();
+      updatePointerPinchGesture();
+      stopPinchEvent(event);
     };
 
     const onPointerUp = (event: PointerEvent) => {
+      if (touchEventPinchActive) {
+        stopPinchEvent(event);
+        return;
+      }
       if (event.pointerType !== "touch" || !activeTouchPointers.has(event.pointerId)) {
         return;
       }
@@ -353,36 +398,144 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         ) {
           requestFitToContent();
           lastTouchTap = null;
-          event.preventDefault();
+          stopPinchEvent(event);
         } else {
           lastTouchTap = { point: current, time: event.timeStamp };
         }
       }
 
+      const wasPinching = pinchGesture != null || suppressTapUntilTouchesEnd;
       activeTouchPointers.delete(event.pointerId);
       touchStartPointers.delete(event.pointerId);
       if (activeTouchPointers.size >= 2) {
-        beginPinchGesture();
+        beginPointerPinchGesture();
+        if (wasPinching) {
+          stopPinchEvent(event);
+        }
         return;
       }
       if (activeTouchPointers.size === 0) {
         suppressTapUntilTouchesEnd = false;
       }
       pinchGesture = null;
+      if (wasPinching) {
+        stopPinchEvent(event);
+      }
+    };
+
+    const touchPointById = (touches: TouchList, id: number): ClientPoint | null => {
+      for (let index = 0; index < touches.length; index += 1) {
+        const touch = touches.item(index);
+        if (touch?.identifier === id) {
+          return clientPoint(px(touch.clientX), px(touch.clientY));
+        }
+      }
+      return null;
+    };
+
+    const viewportTouchIds = (touches: TouchList): number[] => {
+      const rect = viewport.getBoundingClientRect();
+      const ids: number[] = [];
+      for (let index = 0; index < touches.length; index += 1) {
+        const touch = touches.item(index);
+        if (
+          touch &&
+          touch.clientX >= rect.left &&
+          touch.clientX <= rect.right &&
+          touch.clientY >= rect.top &&
+          touch.clientY <= rect.bottom
+        ) {
+          ids.push(touch.identifier);
+        }
+      }
+      return ids;
+    };
+
+    const beginTouchEventPinch = (event: TouchEvent): boolean => {
+      const ids = viewportTouchIds(event.touches);
+      if (ids.length < 2) {
+        return false;
+      }
+      const first = touchPointById(event.touches, ids[0]);
+      const second = touchPointById(event.touches, ids[1]);
+      if (!first || !second) {
+        return false;
+      }
+      touchEventPinchActive = true;
+      touchEventPinchIds = [ids[0], ids[1]];
+      activeTouchPointers.clear();
+      touchStartPointers.clear();
+      claimViewportPinch(event);
+      beginPinchGestureFromPoints(first, second);
+      updatePinchGestureFromPoints(first, second);
+      return true;
+    };
+
+    const updateTouchEventPinch = (event: TouchEvent): boolean => {
+      if (!touchEventPinchActive || !touchEventPinchIds) {
+        return beginTouchEventPinch(event);
+      }
+      const first = touchPointById(event.touches, touchEventPinchIds[0]);
+      const second = touchPointById(event.touches, touchEventPinchIds[1]);
+      if (!first || !second) {
+        pinchGesture = null;
+        const ids = viewportTouchIds(event.touches);
+        if (ids.length >= 2) {
+          touchEventPinchIds = [ids[0], ids[1]];
+          return updateTouchEventPinch(event);
+        }
+        if (event.touches.length === 0) {
+          touchEventPinchActive = false;
+          touchEventPinchIds = null;
+          suppressTapUntilTouchesEnd = false;
+        }
+        stopPinchEvent(event);
+        return true;
+      }
+      updatePinchGestureFromPoints(first, second);
+      stopPinchEvent(event);
+      return true;
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (touchEventPinchActive || event.touches.length >= 2) {
+        updateTouchEventPinch(event);
+      }
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (touchEventPinchActive || event.touches.length >= 2) {
+        updateTouchEventPinch(event);
+      }
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      if (!touchEventPinchActive) {
+        return;
+      }
+      updateTouchEventPinch(event);
     };
 
     viewport.addEventListener("wheel", onWheel, { passive: false });
-    viewport.addEventListener("pointerdown", onPointerDown, { passive: false });
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
-    window.addEventListener("pointerup", onPointerUp, { passive: false });
-    window.addEventListener("pointercancel", onPointerUp, { passive: false });
+    viewport.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
+    window.addEventListener("pointermove", onPointerMove, { capture: true, passive: false });
+    window.addEventListener("pointerup", onPointerUp, { capture: true, passive: false });
+    window.addEventListener("pointercancel", onPointerUp, { capture: true, passive: false });
+    window.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
+    window.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+    window.addEventListener("touchend", onTouchEnd, { capture: true, passive: false });
+    window.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: false });
 
     return () => {
       viewport.removeEventListener("wheel", onWheel);
-      viewport.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
+      viewport.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      window.removeEventListener("pointermove", onPointerMove, { capture: true });
+      window.removeEventListener("pointerup", onPointerUp, { capture: true });
+      window.removeEventListener("pointercancel", onPointerUp, { capture: true });
+      window.removeEventListener("touchstart", onTouchStart, { capture: true });
+      window.removeEventListener("touchmove", onTouchMove, { capture: true });
+      window.removeEventListener("touchend", onTouchEnd, { capture: true });
+      window.removeEventListener("touchcancel", onTouchEnd, { capture: true });
       activeTouchPointers.clear();
       touchStartPointers.clear();
       pinchGesture = null;
@@ -399,6 +552,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     setDragState,
     setFitToContentModeActive,
     svgResultRef,
+    suppressNextBackgroundClickRef,
     viewportRef,
     zoomSpeed
   ]);

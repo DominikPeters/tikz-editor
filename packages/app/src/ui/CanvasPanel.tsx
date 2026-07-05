@@ -2840,6 +2840,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   useCanvasViewportEffects({
     dragRef,
     pendingTouchViewportRef,
+    suppressNextBackgroundClickRef,
     setDragState,
     setToolDraft,
     setToolCursorWorld,

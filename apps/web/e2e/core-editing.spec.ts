@@ -16,6 +16,7 @@ import {
   openMenuCommand,
   openMenuSection,
   readSource,
+  readCanvasTransform,
   readSelectionOverlayBoxSourceIds,
   readStoreSource,
   resetStorageBeforeNavigation,
@@ -409,8 +410,7 @@ test("clearing source editor does not trigger maximum update depth crash", async
 test("canvas supports two-finger pinch zoom on touch devices", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
-\draw[line width=1.2pt] (-2,-1.5) rectangle (2,1.5);
-\draw[fill=black] (0,0) circle (0.35);
+\draw (0,0) -- (1,1);
 \end{tikzpicture}`);
 
   const readStageMetrics = async () => {
@@ -523,6 +523,96 @@ test("canvas supports two-finger pinch zoom on touch devices", async ({ page }) 
   });
 
   await expect.poll(async () => (await readStageMetrics())?.width ?? 0).toBeGreaterThan((before?.width ?? 0) * 1.1);
+
+  await waitForHitRegions(page);
+  await clickHitRegionByTargetId(page, "path:0");
+
+  const sourceBefore = await readStoreSource(page);
+  const transformBefore = await readCanvasTransform(page);
+  const regionBox = await page.locator("[data-hit-region-target-id='path:0']").first().boundingBox();
+  const viewportBox = await canvasViewport(page).boundingBox();
+  if (!regionBox || !viewportBox) {
+    throw new Error("Missing canvas or selected path bounds.");
+  }
+
+  const firstStart = {
+    x: regionBox.x + regionBox.width / 2,
+    y: regionBox.y + regionBox.height / 2
+  };
+  const secondStart = {
+    x: Math.min(viewportBox.x + viewportBox.width - 80, firstStart.x + 90),
+    y: firstStart.y
+  };
+  const firstEnd = {
+    x: Math.max(viewportBox.x + 40, firstStart.x - 50),
+    y: firstStart.y
+  };
+  const secondEnd = {
+    x: Math.min(viewportBox.x + viewportBox.width - 40, secondStart.x + 50),
+    y: secondStart.y
+  };
+
+  await page.evaluate(({ firstStart, secondStart, firstEnd, secondEnd }) => {
+    const dispatchPointer = (target: EventTarget, type: string, init: PointerEventInit) => {
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerType: "touch",
+          button: 0,
+          buttons: type === "pointerup" ? 0 : 1,
+          ...init
+        })
+      );
+    };
+    const firstTarget = document.elementFromPoint(firstStart.x, firstStart.y);
+    const secondTarget = document.elementFromPoint(secondStart.x, secondStart.y);
+    if (!firstTarget || !secondTarget) {
+      throw new Error("Missing synthetic pinch targets.");
+    }
+
+    dispatchPointer(firstTarget, "pointerdown", {
+      pointerId: 301,
+      isPrimary: true,
+      clientX: firstStart.x,
+      clientY: firstStart.y
+    });
+    dispatchPointer(secondTarget, "pointerdown", {
+      pointerId: 302,
+      isPrimary: false,
+      clientX: secondStart.x,
+      clientY: secondStart.y
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 301,
+      isPrimary: true,
+      clientX: firstEnd.x,
+      clientY: firstEnd.y
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 302,
+      isPrimary: false,
+      clientX: secondEnd.x,
+      clientY: secondEnd.y
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 301,
+      isPrimary: true,
+      clientX: firstEnd.x,
+      clientY: firstEnd.y
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 302,
+      isPrimary: false,
+      clientX: secondEnd.x,
+      clientY: secondEnd.y
+    });
+  }, { firstStart, secondStart, firstEnd, secondEnd });
+
+  await expect.poll(async () => (await readCanvasTransform(page)).scale).toBeGreaterThan(transformBefore.scale * 1.05);
+  await page.waitForTimeout(150);
+  expect(await readStoreSource(page)).toBe(sourceBefore);
 });
 
 test("short background touch tap clears the current selection", async ({ page }) => {
