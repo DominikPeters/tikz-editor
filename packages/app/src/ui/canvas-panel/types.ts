@@ -35,7 +35,8 @@ export type CanvasEditParseOptions = EditParseOptions;
 
 export type ApplyActionWithFeedbackFn = (
   action: EditAction,
-  historyMergeKey?: string
+  historyMergeKey?: string,
+  sourceOverride?: string
 ) => ApplyActionFeedback;
 
 export type CanvasContextMenuState = {
@@ -43,6 +44,9 @@ export type CanvasContextMenuState = {
   anchor: ViewportPoint;
   handleIdOverride?: string | null;
   includeEditEquationForSingleNode?: boolean;
+  nodePositioningAction?: "position-relative" | "convert-absolute" | null;
+  includePathSubmenuForSingleSelection?: boolean;
+  includeFlattenForeach?: boolean;
   includeMatrixMultiRemoveRow?: boolean;
   includeMatrixMultiRemoveColumn?: boolean;
   includeMatrixMultiInsertRowAbove?: boolean;
@@ -171,11 +175,20 @@ export type DragState =
       kind: "rotate";
       pointerId: number;
       elementId: string;
+      sourceId: string;
       cursor: string;
       centerWorld: WorldPoint;
       startPointerAngleDeg: number;
+      centerPivotWorld: WorldPoint;
+      startCenterPivotPointerAngleDeg: number;
       baseRotateDeg: number;
       lastAppliedRotateDeg: number;
+      lastAppliedRotateMode: "property" | "origin" | "center-pivot";
+      activeRotateMode: "property" | "origin" | "center-pivot";
+      lastPointerClient: ClientPoint;
+      lastPointerWorld: WorldPoint;
+      preEditBaselineSource: string;
+      latestSource: string;
       historyMergeKey: string;
     }
   | {
@@ -307,6 +320,16 @@ export type TextEditingSession = {
 export type NodeAnchorOverlayState = {
   visibleAnchors: NodeAnchorTarget[];
   snappedAnchor: NodeAnchorTarget | null;
+  anchorStateBySourceId?: ReadonlyMap<string, { disabled?: boolean }>;
+  radiusScale?: number;
+};
+
+export type NodePositionLinkDisplay = {
+  key: string;
+  from: WorldPoint;
+  to: WorldPoint;
+  sourceId: string;
+  targetSourceId?: string;
 };
 
 export type EditableTextTarget = {
@@ -341,6 +364,7 @@ export type SnapDebugLogInput = {
 
 export type ApplyActionFeedback = {
   sourceChanged: boolean;
+  newSource?: string;
 };
 
 export type SelectionBounds = {
@@ -414,6 +438,7 @@ export type HandleDisplay =
       point: SvgPoint;
       anchor: SvgPoint;
       centerWorld: WorldPoint;
+      centerPivotWorld: WorldPoint;
       cursor: string;
       kind: "rotate-element";
       elementId: string;

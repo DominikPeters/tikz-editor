@@ -16,6 +16,8 @@ import type { PlacementSegment } from "./path/types.js";
 
 export const SHADOW_INHERIT_STROKE = "__tikz-shadow-inherit-stroke__";
 export const SHADOW_INHERIT_FILL = "__tikz-shadow-inherit-fill__";
+export const MAIN_SCENE_LAYER = "main";
+export const BACKGROUND_SCENE_LAYER = "background";
 
 export type SourceCmPoint2D = SourceCmPoint;
 export type FrameLocalPoint2D = FrameLocalPoint;
@@ -83,9 +85,15 @@ export type SceneFigure = {
   kind: "SceneFigure";
   span: Span;
   requiredTikzLibraries: readonly string[];
+  layers: SceneLayer[];
   elements: SceneElement[];
   bounds?: WorldBounds;
   hasStatefulGraphicsState?: boolean;
+};
+
+export type SceneLayer = {
+  name: string;
+  order: number;
 };
 
 export type SceneAdornment = {
@@ -193,6 +201,7 @@ export type ScenePath = {
   kind: "Path";
   id: string;
   runtimeId: string;
+  layer: string;
   sourceRef: SourceRef;
   identityRef?: IdentitySourceRef;
   matrixCell?: MatrixCellInfo;
@@ -213,6 +222,7 @@ export type SceneCircle = {
   kind: "Circle";
   id: string;
   runtimeId: string;
+  layer: string;
   sourceRef: SourceRef;
   identityRef?: IdentitySourceRef;
   matrixCell?: MatrixCellInfo;
@@ -232,6 +242,7 @@ export type SceneEllipse = {
   kind: "Ellipse";
   id: string;
   runtimeId: string;
+  layer: string;
   sourceRef: SourceRef;
   identityRef?: IdentitySourceRef;
   matrixCell?: MatrixCellInfo;
@@ -253,6 +264,7 @@ export type SceneText = {
   kind: "Text";
   id: string;
   runtimeId: string;
+  layer: string;
   sourceRef: SourceRef;
   identityRef?: IdentitySourceRef;
   matrixCell?: MatrixCellInfo;
@@ -283,9 +295,20 @@ export type ForeachOriginFrame = {
   bindings: Record<string, string>;
 };
 
+export type PicOriginFrame = {
+  invocationId: string;
+  invocationSpan: Span;
+  picType: string;
+  codeSpan?: Span;
+  codeSource: "inline" | "definition";
+  parameterized: boolean;
+};
+
 export type SceneElementOrigin = {
   foreachStack: ForeachOriginFrame[];
   foreachTemplateLocalTargetId?: string;
+  picStack?: PicOriginFrame[];
+  picTemplateLocalTargetId?: string;
   macroStack?: MacroOriginFrame[];
 };
 

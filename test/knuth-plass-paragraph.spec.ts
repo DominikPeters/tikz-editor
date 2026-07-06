@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { applyBreaks } from "../packages/core/src/text/knuth-plass/paragraph/applyBreaks.js";
+import {
+  TEX_INTERWORD_SHRINK_EM,
+  TEX_INTERWORD_STRETCH_EM,
+  TIKZ_RAGGED_SKIP_STRETCH_EM,
+  buildAlignmentProfile
+} from "../packages/core/src/text/knuth-plass/alignment.js";
 import { collectBreakablePenalties, collectSpaceBreakpoints } from "../packages/core/src/text/knuth-plass/paragraph/breakpoints.js";
 import { breakWithDp } from "../packages/core/src/text/knuth-plass/paragraph/dp.js";
 import { greedyBreakParagraph } from "../packages/core/src/text/knuth-plass/paragraph/greedy.js";
@@ -1272,10 +1278,20 @@ describe("knuth-plass paragraph helpers", () => {
 
     expect(defaultHyphenator.hyphenate("hyphenation").length).toBeGreaterThan(0);
     expect(defaultHyphenator.hyphenate("hyphenation")).toBe(defaultHyphenator.hyphenate("Hyphenation"));
+    expect(defaultHyphenator.hyphenate("blandit")).toEqual([4]);
     expect(defaultHyphenator.hyphenate("nonasciié")).toEqual([]);
     expect(permissiveHyphenator.hyphenate("cooperation").length).toBeGreaterThanOrEqual(
       defaultHyphenator.hyphenate("cooperation").length
     );
+  });
+
+  it("uses literal TikZ and TeX glue constants for paragraph alignment profiles", () => {
+    expect(buildAlignmentProfile("ragged-right").rightskip.stretch).toBe(TIKZ_RAGGED_SKIP_STRETCH_EM);
+    expect(buildAlignmentProfile("ragged-left").leftskip.stretch).toBe(TIKZ_RAGGED_SKIP_STRETCH_EM);
+    expect(buildAlignmentProfile("center").leftskip.stretch).toBe(TIKZ_RAGGED_SKIP_STRETCH_EM);
+    expect(buildAlignmentProfile("center").rightskip.stretch).toBe(TIKZ_RAGGED_SKIP_STRETCH_EM);
+    expect(buildAlignmentProfile("justified").interwordStretch).toBe(TEX_INTERWORD_STRETCH_EM);
+    expect(buildAlignmentProfile("justified").interwordShrink).toBe(TEX_INTERWORD_SHRINK_EM);
   });
 
   it("builds paragraph reports with measured partial text, glue, and visible hyphens", () => {

@@ -14,6 +14,12 @@ describe("option mutation serialization", () => {
     expect(rewriteOptionListMutations(parseOptionListRaw("[draw]"), mutations, undefined, "bare")).toBe("");
   });
 
+  it("can remove the no-arrow shorthand flag", () => {
+    const mutations = new Map([["-", { kind: "remove" } as const]]);
+
+    expect(rewriteOptionListMutations(parseOptionListRaw("[red, -]"), mutations)).toBe("[red]");
+  });
+
   it("serializes bare draw colors only for color-like values", () => {
     const drawContext = { bareColorKey: "draw" as const };
 

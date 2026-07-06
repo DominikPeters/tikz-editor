@@ -9,6 +9,7 @@ function makePath(sourceId: string, commands: ScenePath["commands"]): SceneEleme
     kind: "Path",
     id: `path:${sourceId}`,
     runtimeId: `runtime:path:${sourceId}`,
+    layer: "main",
     sourceRef: {
       sourceId,
       sourceSpan: { from: 0, to: 0 },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createMinimalTikzSourceArtifact,
   createStandaloneLatexExportArtifact,
   DEFAULT_STANDALONE_LATEX_EXPORT_FILE_NAME,
   normalizeStandaloneLatexExportFileName,
@@ -70,6 +71,32 @@ describe("standalone latex export helpers", () => {
     expect(artifact.text).toContain(String.raw`\def\base{(1,0)}`);
     expect(artifact.text).toContain(String.raw`\let\edgeend\base`);
     expect(artifact.text).toContain(String.raw`\newcommand{\twostep}[1][\edgeend]{#1 -- (2,0)}`);
+  });
+
+  it("creates a minimal editable TikZ source for an active figure", () => {
+    const source = String.raw`\def\usedlabel{A}
+\def\unused{Z}
+\colorlet{accent}{blue}
+\tikzset{accent line/.style={draw=accent,line width=2pt}}
+This paragraph belongs to the paper, not the figure.
+\begin{tikzpicture}
+  \draw[accent line] (0,0) -- (1,0);
+  \node at (0,0) {\usedlabel};
+\end{tikzpicture}`;
+    const artifact = createMinimalTikzSourceArtifact({
+      source,
+      activeFigureId: "figure:0"
+    });
+
+    expect(artifact.complete).toBe(true);
+    expect(artifact.text).toContain(String.raw`\def\usedlabel{A}`);
+    expect(artifact.text).not.toContain(String.raw`\def\unused{Z}`);
+    expect(artifact.text).toContain(String.raw`\colorlet{accent}{blue}`);
+    expect(artifact.text).toContain(String.raw`\tikzset{accent line/.style={draw=accent,line width=2pt}}`);
+    expect(artifact.text).not.toContain("This paragraph belongs to the paper");
+    expect(artifact.text).toContain(String.raw`\begin{tikzpicture}`);
+    expect(artifact.text).toContain(String.raw`\draw[accent line] (0,0) -- (1,0);`);
+    expect(artifact.text).toContain(String.raw`\node at (0,0) {\usedlabel};`);
   });
 
   it("includes transitive style and color definitions used by the active figure", () => {

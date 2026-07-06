@@ -4,9 +4,22 @@ import {
   resolveHandleDragAction,
   shouldCommitHandleAnchorOnPointerUp
 } from "../../packages/app/src/ui/canvas-panel/handle-drag-actions.js";
+import {
+  isAdditiveSelectionModifier,
+  isResizeHandleAdditiveSelectionModifier
+} from "../../packages/app/src/ui/canvas-panel/selection-modifiers.js";
 import { wp } from "../coords-helpers.js";
 
 describe("handle drag actions", () => {
+  it("keeps Shift as additive selection for ordinary handles but not resize handles", () => {
+    const shiftOnly = { shiftKey: true, ctrlKey: false, metaKey: false };
+    const ctrlOnly = { shiftKey: false, ctrlKey: true, metaKey: false };
+
+    expect(isAdditiveSelectionModifier(shiftOnly)).toBe(true);
+    expect(isResizeHandleAdditiveSelectionModifier(shiftOnly)).toBe(false);
+    expect(isResizeHandleAdditiveSelectionModifier(ctrlOnly)).toBe(true);
+  });
+
   it("uses connectHandle during drag when an endpoint anchor is active", () => {
     const action = resolveHandleDragAction({
       handleId: "handle-1",

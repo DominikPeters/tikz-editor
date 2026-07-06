@@ -18,6 +18,12 @@ export const APP_MENU_DEFINITION = [
       },
       {
         kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.OPEN_FROM_ARXIV,
+        label: "Open from arXiv...",
+        platforms: ["desktop"]
+      },
+      {
+        kind: "command",
         commandId: APP_MENU_COMMAND_IDS.OPEN_EXAMPLE,
         label: "Open Example..."
       },
@@ -114,6 +120,14 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.OPEN_SETTINGS,
         label: "Settings...",
         accelerator: "CmdOrCtrl+,"
+      },
+      { kind: "separator", platforms: ["desktop-windows", "desktop-linux"] },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.QUIT_APP,
+        label: "Quit",
+        accelerator: "CmdOrCtrl+Q",
+        platforms: ["desktop-windows", "desktop-linux"]
       }
     ]
   },

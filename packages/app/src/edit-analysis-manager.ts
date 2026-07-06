@@ -53,7 +53,7 @@ export function getSharedEditAnalysisView(params: {
     params.snapshot.parseResult?.activeFigureId === params.activeFigureId &&
     cachedEntry.primedSnapshotRevision !== params.snapshot.revision
   ) {
-    session.primeFromParse(params.snapshot.parseResult, params.source, {
+    session.primeFromParse(params.snapshot.parseResult, params.snapshot.source, {
       activeFigureId: params.activeFigureId ?? params.snapshot.parseResult.activeFigureId
     });
     cachedEntry.primedSnapshotRevision = params.snapshot.revision;

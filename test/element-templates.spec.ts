@@ -45,6 +45,21 @@ describe("element templates", () => {
     expect(generateElementSource({ kind: "node", text: "{  A  }" }, wp(cm(0), cm(0)))).toBe("\\node at (0,0) {A};");
   });
 
+  it("generates styled text and shaped node snippets", () => {
+    expect(generateElementSource({ kind: "node", strokeColor: "black" }, wp(cm(0), cm(0)))).toBe(
+      "\\node[draw] at (0,0) {node};"
+    );
+    expect(generateElementSource({ kind: "node", strokeColor: "red" }, wp(cm(0), cm(0)))).toBe(
+      "\\node[draw=red] at (0,0) {node};"
+    );
+    expect(
+      generateElementSource(
+        { kind: "node", shape: "rectangle", text: "", strokeColor: "red", fillColor: "blue" },
+        wp(cm(0), cm(0))
+      )
+    ).toBe("\\node[draw=red, fill=blue, shape=rectangle, minimum width=2.2cm, minimum height=1.4cm] at (0,0) {};");
+  });
+
   it("generates a shaped node snippet with explicit dragged minimum dimensions", () => {
     const snippet = generateElementSource(
       {
@@ -235,6 +250,15 @@ describe("element templates", () => {
       ]
     );
     expect(snippet).toBe("\\draw (0,0) -- (1,0) -- (2,1);");
+  });
+
+  it("generates a styled complex path snippet", () => {
+    const snippet = generateComplexPathSource(
+      wp(cm(0), cm(0)),
+      [{ kind: "line", to: wp(cm(1), cm(0)) }],
+      { strokeColor: "red" }
+    );
+    expect(snippet).toBe("\\draw[draw=red] (0,0) -- (1,0);");
   });
 
   it("generates a mixed line/bezier complex path snippet", () => {

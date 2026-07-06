@@ -1,5 +1,7 @@
 import { RiArrowDownSLine, RiAspectRatioLine, RiGridLine } from "@remixicon/react";
 import { useEditorStore } from "../store/store";
+import type { CanvasDragKind, ToolMode } from "../store/types";
+import { getModifierKeyLabels, type ModifierKeyLabels } from "./key-labels";
 import { useFrameTimingStats } from "./useFrameTimingStats";
 import { RenderedTooltip } from "./RenderedTooltip";
 import css from "./StatusBar.module.css";
@@ -22,7 +24,9 @@ export function StatusBar() {
   const showGrid = useEditorStore((s) => s.showGrid);
   const selectedIds = useEditorStore((s) => s.selectedElementIds);
   const pendingRequestId = useEditorStore((s) => s.pendingRequestId);
+  const toolMode = useEditorStore((s) => s.toolMode);
   const activeCanvasDragKind = useEditorStore((s) => s.activeCanvasDragKind);
+  const activeSourceScrubSourceId = useEditorStore((s) => s.activeSourceScrubSourceId);
   const canvasStatusHint = useEditorStore((s) => s.canvasStatusHint);
   const dispatch = useEditorStore((s) => s.dispatch);
 
@@ -106,6 +110,12 @@ export function StatusBar() {
       ? `semantic ${incrementalInfo.fallbackReason}`
       : null
   ].filter(Boolean).join(" + ") || "unknown";
+  const modifierHint = resolveModifierHint(
+    activeCanvasDragKind,
+    activeSourceScrubSourceId,
+    toolMode,
+    getModifierKeyLabels()
+  );
 
   return (
     <div className={css.bar} data-testid="status-bar" data-select="chrome">
@@ -148,6 +158,13 @@ export function StatusBar() {
         {canvasStatusHint && (
           <div className={css.cell}>
             <span className={css.hint}>{canvasStatusHint}</span>
+          </div>
+        )}
+
+        {modifierHint && (
+          <div className={css.cell}>
+            <span className={css.label}>Modifiers:</span>
+            <span className={css.hint}>{modifierHint}</span>
           </div>
         )}
       </div>
@@ -248,4 +265,58 @@ export function StatusBar() {
 
 function formatPerf(value: number | null, digits = 1): string {
   return value == null ? "—" : value.toFixed(digits);
+}
+
+function resolveModifierHint(
+  activeCanvasDragKind: CanvasDragKind | null,
+  activeSourceScrubSourceId: string | null,
+  toolMode: ToolMode,
+  keys: ModifierKeyLabels
+): string | null {
+  if (activeSourceScrubSourceId) {
+    return `${keys.shift} adjust numbers more slowly · ${keys.alt} adjust numbers faster`;
+  }
+
+  switch (activeCanvasDragKind) {
+    case "rotate":
+      return `${keys.shift} snap to 15° increments · ${keys.primary} ignore snapping · ${keys.alt} rotate around center`;
+    case "resize":
+      return `${keys.shift} keep proportions`;
+    case "element":
+      return `${keys.primary} ignore snapping`;
+    case "handle":
+      return `${keys.primary} ignore snapping`;
+    case "tool-create":
+      return resolveToolCreateModifierHint(toolMode, keys);
+    case "marquee":
+      return `${keys.shift} or ${keys.primary} add to selection`;
+    case "pan":
+    case null:
+      return null;
+  }
+}
+
+function resolveToolCreateModifierHint(toolMode: ToolMode, keys: ModifierKeyLabels): string {
+  const snapHint = `${keys.primary} ignore snapping`;
+  switch (toolMode) {
+    case "addRect":
+      return `${keys.shift} draw a square · ${snapHint}`;
+    case "addEllipse":
+      return `${keys.shift} draw a circle · ${snapHint}`;
+    case "addGrid":
+      return `${keys.shift} draw a square grid · ${snapHint}`;
+    case "select":
+    case "magnify":
+    case "addBucket":
+    case "addNode":
+    case "addMatrix":
+    case "addShape":
+    case "addPath":
+    case "addFreehand":
+    case "addLine":
+    case "addCircle":
+    case "addArrow":
+    case "addBezier":
+      return snapHint;
+  }
 }

@@ -12,6 +12,7 @@ describe("app menu definition", () => {
     expect(APP_MENU_COMMAND_IDS.SAVE_DOCUMENT_AS).toBe("file.save-document-as");
     expect(APP_MENU_COMMAND_IDS.CLOSE_DOCUMENT).toBe("file.close-document");
     expect(APP_MENU_COMMAND_IDS.CLOSE_ALL_DOCUMENTS).toBe("file.close-all-documents");
+    expect(APP_MENU_COMMAND_IDS.QUIT_APP).toBe("file.quit-app");
   });
 
   it("defines an open-example command id", () => {
@@ -146,6 +147,22 @@ describe("app menu definition", () => {
     expect(macHelp?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.CHECK_FOR_UPDATES)).toBe(false);
   });
 
+  it("filters Quit into File on Windows and Linux, but not macOS or web", () => {
+    const windowsFile = filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, "desktop-windows")
+      .find((section) => section.id === "file");
+    const linuxFile = filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, "desktop-linux")
+      .find((section) => section.id === "file");
+    const macFile = filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, "desktop-macos")
+      .find((section) => section.id === "file");
+    const webFile = filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, "web")
+      .find((section) => section.id === "file");
+
+    expect(windowsFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(true);
+    expect(linuxFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(true);
+    expect(macFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(false);
+    expect(webFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(false);
+  });
+
   it("exposes Open Example in the File menu", () => {
     const fileSection = APP_MENU_DEFINITION.find((section) => section.id === "file");
     expect(fileSection).toBeDefined();
@@ -160,19 +177,23 @@ describe("app menu definition", () => {
     expect(commandItem.label).toBe("Open Example...");
   });
 
-  it("places Open Example directly below Open in the File menu", () => {
+  it("places Open Example below the file opening commands in the File menu", () => {
     const fileSection = APP_MENU_DEFINITION.find((section) => section.id === "file");
     expect(fileSection).toBeDefined();
     const items = fileSection?.items ?? [];
     const openIndex = items.findIndex(
       (item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.OPEN_DOCUMENT
     );
+    const arxivIndex = items.findIndex(
+      (item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.OPEN_FROM_ARXIV
+    );
     const openExampleIndex = items.findIndex(
       (item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.OPEN_EXAMPLE
     );
 
     expect(openIndex).toBeGreaterThanOrEqual(0);
-    expect(openExampleIndex).toBe(openIndex + 1);
+    expect(arxivIndex).toBe(openIndex + 1);
+    expect(openExampleIndex).toBe(arxivIndex + 1);
   });
 
   it("exposes Ipe, PowerPoint, and SVG import commands in the File > Import submenu", () => {

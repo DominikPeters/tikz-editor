@@ -1,6 +1,10 @@
 export { KnuthPlassVisitor } from './KnuthPlassVisitor.js';
 export {
   DEFAULT_PARAGRAPH_ALIGNMENT,
+  TEX_INTERWORD_SHRINK_EM,
+  TEX_INTERWORD_SPACE_EM,
+  TEX_INTERWORD_STRETCH_EM,
+  TIKZ_RAGGED_SKIP_STRETCH_EM,
   buildAlignmentProfile,
   normalizeParagraphAlignment,
   type ParagraphAlignment,

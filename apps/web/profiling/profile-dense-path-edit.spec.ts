@@ -277,7 +277,7 @@ async function resolveDenseAndShortTargetIds(page: import("@playwright/test").Pa
 test("profile dense path editing interactions", async ({ page }, testInfo) => {
   const variants = [];
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, DENSE_PATH_SOURCE);
   await installProbe(page);
   await page.getByRole("button", { name: "Select" }).click();
@@ -301,7 +301,7 @@ test("profile dense path editing interactions", async ({ page }, testInfo) => {
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, DENSE_PATH_SOURCE);
   await installProbe(page);
   await page.getByRole("button", { name: "Select" }).click();
@@ -328,7 +328,7 @@ test("profile dense path editing interactions", async ({ page }, testInfo) => {
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, ENDPOINT_SOURCE);
   await installProbe(page);
   await page.getByRole("button", { name: "Select" }).click();

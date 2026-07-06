@@ -28,7 +28,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function prepareSelectedNode(page: import("@playwright/test").Page): Promise<void> {
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, SIMPLE_FIGURE);
   await page.getByRole("button", { name: "Select" }).click();
   await waitForHitRegions(page);

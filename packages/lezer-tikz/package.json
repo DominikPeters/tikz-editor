@@ -1,0 +1,44 @@
+{
+  "name": "@tikz-editor/lezer-tikz",
+  "version": "0.5.2",
+  "description": "Lezer parser for TikZ",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./grammar/tikz-parser": {
+      "types": "./dist/grammar/tikz-parser.d.ts",
+      "import": "./dist/grammar/tikz-parser.js"
+    },
+    "./grammar/tikz-parser.terms": {
+      "types": "./dist/grammar/tikz-parser.terms.d.ts",
+      "import": "./dist/grammar/tikz-parser.terms.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/grammar/tikz.grammar",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate:grammar": "lezer-generator --typeScript src/grammar/tikz.grammar -o src/grammar/tikz-parser.ts",
+    "build": "npm run generate:grammar && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lezer/common": "^1.5.1",
+    "@lezer/lr": "^1.4.8"
+  },
+  "devDependencies": {
+    "@lezer/generator": "^1.8.0",
+    "typescript": "^5.7.3"
+  }
+}

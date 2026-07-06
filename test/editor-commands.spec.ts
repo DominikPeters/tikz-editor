@@ -711,7 +711,7 @@ describe("editor-commands", () => {
         level: "command",
         key: "rotate",
         value: "180",
-        clearKeys: ["/tikz/rotate"]
+        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
       }
     });
     expect(second).toMatchObject({
@@ -722,7 +722,7 @@ describe("editor-commands", () => {
         level: "command",
         key: "rotate",
         value: "90",
-        clearKeys: ["/tikz/rotate"]
+        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
       }
     });
     expect(first?.type).toBe("APPLY_EDIT_ACTION");

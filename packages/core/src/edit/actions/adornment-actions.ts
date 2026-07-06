@@ -1,25 +1,12 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { extractNodeAdornmentPlan } from "../../semantic/path/label-quotes.js";
 import { replaceSpan } from "../patch.js";
 import { resolvePropertyTarget } from "../property-target.js";
-import type { SourcePatch } from "../types.js";
 import { applyAdornmentValueRewrite } from "./adornment-set-property.js";
 import type { EditParseOptions } from "../parse-options.js";
 import type { DragFormatPrecision } from "../format.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export type MoveAdornmentAction = {
   targetId: string;

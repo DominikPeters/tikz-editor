@@ -3,6 +3,7 @@ import { LinebreakVisitor } from '@mathjax/src/cjs/output/common/LinebreakVisito
 import {
   buildAlignmentProfile,
   DEFAULT_PARAGRAPH_ALIGNMENT,
+  TEX_INTERWORD_SPACE_EM,
   normalizeParagraphAlignment,
   type ParagraphAlignment,
 } from './alignment.js';
@@ -379,39 +380,42 @@ function buildWrappedExplicitLines(params: {
       tolerance: resolved.pretolerance,
     });
 
-    const pass2Model = runsToItems(localRuns, measurement, {
-      enableAutomaticHyphenation: true,
-      hyphenator,
-      hyphenpenalty: resolved.hyphenpenalty,
-      exhyphenpenalty: resolved.exhyphenpenalty,
-      spaceStretch: alignmentProfile.interwordStretch,
-      spaceShrink: alignmentProfile.interwordShrink,
-    });
-    const pass2Dp = breakWithDp(pass2Model, targetWidth, {
-      ...commonDpOptions,
-      tolerance: resolved.tolerance,
-      allowInfeasible: alignment !== 'justified',
-    });
-
     let chosenLines: GreedyLine[];
+    let pass2Model: ReturnType<typeof runsToItems> | null = null;
+    let pass2Dp: ReturnType<typeof breakWithDp> | null = null;
     if (pass1Dp.canProceed && pass1Dp.lines.length) {
       chosenLines = pass1Dp.lines;
       linebreakingMode = pass1Dp.mode;
-    } else if (pass2Dp.canProceed && pass2Dp.lines.length) {
-      chosenLines = pass2Dp.lines;
-      linebreakingMode = pass2Dp.mode;
-      if (passLabel === 'wrapped-explicit-pretolerance') {
-        passLabel = 'wrapped-explicit-tolerance';
-      }
     } else {
-      throw new Error(
-        `Wrapped-explicit segment ${segmentIndex} failed: ${[
-          ...pass1Model.errors,
-          ...pass1Dp.errors,
-          ...pass2Model.errors,
-          ...pass2Dp.errors,
-        ].join('; ') || 'no solution'}`
-      );
+      pass2Model = runsToItems(localRuns, measurement, {
+        enableAutomaticHyphenation: true,
+        hyphenator,
+        hyphenpenalty: resolved.hyphenpenalty,
+        exhyphenpenalty: resolved.exhyphenpenalty,
+        spaceStretch: alignmentProfile.interwordStretch,
+        spaceShrink: alignmentProfile.interwordShrink,
+      });
+      pass2Dp = breakWithDp(pass2Model, targetWidth, {
+        ...commonDpOptions,
+        tolerance: resolved.tolerance,
+        allowInfeasible: alignment !== 'justified',
+      });
+      if (pass2Dp.canProceed && pass2Dp.lines.length) {
+        chosenLines = pass2Dp.lines;
+        linebreakingMode = pass2Dp.mode;
+        if (passLabel === 'wrapped-explicit-pretolerance') {
+          passLabel = 'wrapped-explicit-tolerance';
+        }
+      } else {
+        throw new Error(
+          `Wrapped-explicit segment ${segmentIndex} failed: ${[
+            ...pass1Model.errors,
+            ...pass1Dp.errors,
+            ...pass2Model.errors,
+            ...pass2Dp.errors,
+          ].join('; ') || 'no solution'}`
+        );
+      }
     }
 
     if (!chosenLines.length) {
@@ -421,7 +425,7 @@ function buildWrappedExplicitLines(params: {
     }
 
     errors.push(...pass1Model.errors);
-    if (passLabel !== 'wrapped-explicit-pretolerance') {
+    if (passLabel !== 'wrapped-explicit-pretolerance' && pass2Model && pass2Dp) {
       errors.push(...pass1Dp.errors, ...pass2Model.errors, ...pass2Dp.errors);
     }
 
@@ -449,16 +453,14 @@ function formatGapWidthEm(widthEm: number): string {
   return `${Number(widthEm.toFixed(6))}em`;
 }
 
-const DEFAULT_INTERWORD_SPACE_EM = 0.3333;
-
 function applyWrappedTextGapWidths(
   runs: ParagraphRun[],
   wrappedTextGaps: WrappedTextGap[] | undefined
 ): void {
-  const gapWidthBySourceStart = new Map<number, number>();
+  const gapBySourceStart = new Map<number, WrappedTextGap>();
   for (const gap of wrappedTextGaps ?? []) {
     if (Number.isFinite(gap.widthEm) && gap.widthEm >= 0) {
-      gapWidthBySourceStart.set(gap.sourceStart, gap.widthEm);
+      gapBySourceStart.set(gap.sourceStart, gap);
     }
   }
 
@@ -469,7 +471,14 @@ function applyWrappedTextGapWidths(
     if (run.breakRef.isForcedLineBreak) {
       continue;
     }
-    const widthEm = gapWidthBySourceStart.get(run.sourceStart) ?? DEFAULT_INTERWORD_SPACE_EM;
+    const gap = gapBySourceStart.get(run.sourceStart);
+    const widthEm = gap?.widthEm ?? TEX_INTERWORD_SPACE_EM;
+    run.texGlue = {
+      width: widthEm,
+      stretch: gap?.stretchEm ?? 0,
+      shrink: gap?.shrinkEm ?? 0,
+      spaceFactor: gap?.spaceFactor,
+    };
     const attrs = run.breakRef.wrapper.node?.attributes;
     if (!attrs || typeof attrs.set !== 'function') {
       continue;
@@ -785,8 +794,7 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
     applyWrappedTextGapWidths(runs, options.wrappedTextGaps);
     this.captureOriginalMspaceStateFromRuns(runs);
 
-    const spaceWidth = this.estimateSpaceWidth(runs, measurement, width);
-    const alignmentProfile = buildAlignmentProfile(resolved.alignment, spaceWidth);
+    const alignmentProfile = buildAlignmentProfile(resolved.alignment);
 
     const pass1Model = runsToItems(runs, measurement, {
       enableAutomaticHyphenation: false,
@@ -827,7 +835,6 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
         originalMspaceWidthByWrapper: this.originalMspaceWidthByWrapper,
         alignment: resolved.alignment,
         targetWidth,
-        spaceWidth,
         paragraphId,
         wrappedTextGaps: options.wrappedTextGaps,
       });
@@ -888,7 +895,6 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
         originalMspaceWidthByWrapper: this.originalMspaceWidthByWrapper,
         alignment: resolved.alignment,
         targetWidth: width,
-        spaceWidth,
         paragraphId,
         wrappedTextGaps: options.wrappedTextGaps,
       });
@@ -1008,7 +1014,6 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
       originalMspaceWidthByWrapper: this.originalMspaceWidthByWrapper,
       alignment: resolved.alignment,
       targetWidth: width,
-      spaceWidth,
       paragraphId,
       wrappedTextGaps: options.wrappedTextGaps,
     });
@@ -1087,43 +1092,6 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
       lefthyphenmin: options.lefthyphenmin ?? englishDefaults.lefthyphenmin,
       righthyphenmin: options.righthyphenmin ?? englishDefaults.righthyphenmin,
     };
-  }
-
-  private estimateSpaceWidth(
-    runs: ParagraphRun[],
-    measurement: MeasurementService,
-    width: number
-  ): number {
-    let bestWidth = Number.POSITIVE_INFINITY;
-    for (const run of runs) {
-      if (run.kind === 'space') {
-        if (
-          run.breakRef.kind === 'mspace' &&
-          run.breakRef.isForcedLineBreak !== true
-        ) {
-          const measured = measurement.measureMath(run.wrapper);
-          if (measured > 0) {
-            bestWidth = Math.min(bestWidth, measured);
-            continue;
-          }
-        }
-        const w =
-          run.breakRef.kind === 'mspace'
-            ? measurement.measureMath(run.wrapper)
-            : measurement.measureText(' ', run.wrapper);
-        if (w > 0) {
-          bestWidth = Math.min(bestWidth, w);
-        }
-      }
-      if (run.kind === 'text') {
-        const w = measurement.measureText(' ', run.wrapper);
-        if (w > 0) {
-          bestWidth = Math.min(bestWidth, w);
-        }
-      }
-    }
-
-    return Number.isFinite(bestWidth) ? bestWidth : Math.max(width / 40, 0.25);
   }
 
   private captureOriginalMtextStateFromRuns(runs: ParagraphRun[]): void {

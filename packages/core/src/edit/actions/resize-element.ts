@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type {
   EditHandle,
   EvaluateOptions,
@@ -46,9 +47,9 @@ import {
   type OptionMutation,
   type OptionMutationApplyResult
 } from "../option-mutations.js";
-import type { SourcePatch } from "../types.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, propertyTargetUsesFit, sourceUsesFitNodeFromParseResult } from "../fit.js";
+import { findPathStatementById } from "../statement-find.js";
 
 const RESIZE_EPSILON = 1e-3;
 
@@ -100,10 +101,6 @@ export type ResizeElementAction = {
   };
 };
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export function applyResizeElementAction(
   source: string,
@@ -287,6 +284,14 @@ export function applyResizeElementAction(
     candidates: resizeCandidates
   });
   if (!rewritten) {
+    if (nodeLinearTransform && !preserveExplicitWidthFloor && !preserveExplicitHeightFloor) {
+      return {
+        kind: "success",
+        newSource: source,
+        patches: [],
+        changedSourceIds: [elementId]
+      };
+    }
     return { kind: "unsupported", reason: "Resize would not change node constraints." };
   }
 
@@ -838,10 +843,32 @@ function applyResizePathRectangle(
 
   if (isRectangleCornerRole(action.role)) {
     const fixedLocal = roleCorners[oppositeRectangleCornerRole(action.role)];
-    minX = Math.min(fixedLocal.x, localPointer.x);
-    maxX = Math.max(fixedLocal.x, localPointer.x);
-    minY = Math.min(fixedLocal.y, localPointer.y);
-    maxY = Math.max(fixedLocal.y, localPointer.y);
+    let movingLocal = localPointer;
+    if (action.preserveAspect) {
+      const currentWidth = currentMaxX - currentMinX;
+      const currentHeight = currentMaxY - currentMinY;
+      const fixedAspectRatio =
+        Number.isFinite(action.preserveAspectRatio) && action.preserveAspectRatio! > RESIZE_EPSILON
+          ? action.preserveAspectRatio!
+          : currentWidth > RESIZE_EPSILON && currentHeight > RESIZE_EPSILON
+            ? currentHeight / currentWidth
+            : null;
+      if (fixedAspectRatio && fixedAspectRatio > RESIZE_EPSILON) {
+        const nextWidth = Math.abs(localPointer.x - fixedLocal.x);
+        const nextHeight = Math.abs(localPointer.y - fixedLocal.y);
+        const preservedWidth = Math.max(nextWidth, nextHeight / fixedAspectRatio);
+        const preservedHeight = preservedWidth * fixedAspectRatio;
+        const roleDirection = rectangleCornerDirection(action.role);
+        movingLocal = frameLocalPoint(
+          pt(fixedLocal.x + roleDirection.x * preservedWidth),
+          pt(fixedLocal.y + roleDirection.y * preservedHeight)
+        );
+      }
+    }
+    minX = Math.min(fixedLocal.x, movingLocal.x);
+    maxX = Math.max(fixedLocal.x, movingLocal.x);
+    minY = Math.min(fixedLocal.y, movingLocal.y);
+    maxY = Math.max(fixedLocal.y, movingLocal.y);
   } else if (action.role === "left" || action.role === "right") {
     const fixedX = action.role === "left"
       ? (roleCorners["top-right"].x + roleCorners["bottom-right"].x) / 2
@@ -1508,6 +1535,19 @@ function oppositeRectangleCornerRole(role: RectangleCornerRole): RectangleCorner
   }
 }
 
+function rectangleCornerDirection(role: RectangleCornerRole): { x: -1 | 1; y: -1 | 1 } {
+  switch (role) {
+    case "top-left":
+      return { x: -1, y: 1 };
+    case "top-right":
+      return { x: 1, y: 1 };
+    case "bottom-left":
+      return { x: -1, y: -1 };
+    case "bottom-right":
+      return { x: 1, y: -1 };
+  }
+}
+
 function pointDistanceSquared(left: WorldPoint, right: WorldPoint): number {
   const dx = left.x - right.x;
   const dy = left.y - right.y;
@@ -1940,24 +1980,6 @@ function resolveResizePropertyTarget(
   }
 
   return defaultTarget;
-}
-
-function findPathStatementById(
-  statements: readonly Statement[],
-  elementId: string
-): Extract<Statement, { kind: "Path" }> | null {
-  for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === elementId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, elementId);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-  return null;
 }
 
 function findPathStatementContainingNodeId(

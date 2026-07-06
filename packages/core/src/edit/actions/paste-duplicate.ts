@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -32,25 +33,6 @@ export type DuplicateElementsAction = {
   delta?: WorldPoint;
 };
 
-type EditActionResultLike =
-  | {
-      kind: "success";
-      newSource: string;
-      patches: SourcePatch[];
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 type MoveElementsResultLike =
   | { kind: "success"; newSource: string }

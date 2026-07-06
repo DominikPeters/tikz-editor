@@ -6,6 +6,7 @@ import type {
   SpaceRun,
 } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
+import { TEX_INTERWORD_SPACE_EM } from '../alignment.js';
 import type { WrappedTextGap } from '../install.js';
 
 export interface AppliedBreak extends BreakDecision {
@@ -17,7 +18,6 @@ export interface ApplyBreaksOptions {
   originalMspaceWidthByWrapper?: WeakMap<object, string | undefined>;
   alignment?: ParagraphAlignment;
   targetWidth?: number;
-  spaceWidth?: number;
   paragraphId?: string;
   wrappedTextGaps?: WrappedTextGap[];
 }
@@ -57,8 +57,6 @@ interface MtextBreakAction {
 
 const MTEXT_INDENT_PATCHED = Symbol('kp-mtext-indent-patched');
 const MTEXT_INDENT_PATCH_ORIGINAL = Symbol('kp-mtext-indent-original');
-const DEFAULT_INTERWORD_SPACE_EM = 0.3333;
-
 function alignmentToHorizontalAlign(alignment: ParagraphAlignment): 'left' | 'right' | 'center' {
   if (alignment === 'ragged-left') {
     return 'right';
@@ -183,10 +181,10 @@ function applyWrappedTextGapWidths(
   runs: ParagraphRun[],
   wrappedTextGaps: WrappedTextGap[] | undefined
 ): void {
-  const gapWidthBySourceStart = new Map<number, number>();
+  const gapBySourceStart = new Map<number, WrappedTextGap>();
   for (const gap of wrappedTextGaps ?? []) {
     if (Number.isFinite(gap.widthEm) && gap.widthEm >= 0) {
-      gapWidthBySourceStart.set(gap.sourceStart, gap.widthEm);
+      gapBySourceStart.set(gap.sourceStart, gap);
     }
   }
 
@@ -194,7 +192,14 @@ function applyWrappedTextGapWidths(
     if (!isAdjustableMspaceRun(run)) {
       continue;
     }
-    const widthEm = gapWidthBySourceStart.get(run.sourceStart) ?? DEFAULT_INTERWORD_SPACE_EM;
+    const gap = gapBySourceStart.get(run.sourceStart);
+    const widthEm = gap?.widthEm ?? TEX_INTERWORD_SPACE_EM;
+    run.texGlue = {
+      width: widthEm,
+      stretch: gap?.stretchEm ?? 0,
+      shrink: gap?.shrinkEm ?? 0,
+      spaceFactor: gap?.spaceFactor,
+    };
     const wrapper = (run.breakRef as { wrapper?: AnyWrapper | null }).wrapper;
     if (!wrapper) {
       continue;

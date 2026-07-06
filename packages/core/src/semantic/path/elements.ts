@@ -3,6 +3,7 @@ import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { ResolvedStyle, SceneCircle, SceneElement, SceneEllipse, ScenePath, ScenePathCommand, ScenePathShapeHint } from "../types.js";
+import { MAIN_SCENE_LAYER } from "../types.js";
 import { applyMatrix, inverseMatrix } from "../transform.js";
 import { appendPathPoint, roundClosedPathStartCorner } from "./segments.js";
 import type { StyleChainEntry } from "../style-chain.js";
@@ -24,6 +25,7 @@ export function makePath(
     kind: "Path",
     id: `scene-path:${sourceId}:${itemId}`,
     runtimeId: `scene-path:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
       sourceSpan: span,
@@ -188,6 +190,7 @@ export function makeRectangleElement(
     kind: "Path",
     id: `scene-rectangle:${sourceId}:${itemId}`,
     runtimeId: `scene-rectangle:${sourceId}:${itemId}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
       sourceSpan: span,
@@ -242,6 +245,7 @@ export function makeCircleElement(
     kind: "Circle",
     id: `scene-circle:${sourceId}:${span.from}`,
     runtimeId: `scene-circle:${sourceId}:${span.from}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
       sourceSpan: span,
@@ -269,6 +273,7 @@ export function makeEllipseElement(
     kind: "Ellipse",
     id: `scene-ellipse:${sourceId}:${span.from}`,
     runtimeId: `scene-ellipse:${sourceId}:${span.from}`,
+    layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
       sourceSpan: span,

@@ -1,6 +1,6 @@
 [package]
-name = "app"
-version = "0.2.0"
+name = "tikz-editor"
+version = "0.5.0"
 description = "A WYSIWYG editor foundation for TikZ"
 authors = ["Dominik Peters"]
 license = "MIT"
@@ -35,6 +35,9 @@ url = "2.5"
 tempfile = "3"
 tokio = { version = "1", features = ["time"] }
 notify = "8.2"
+flate2 = "1.1"
+tar = "0.4"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"

@@ -21,7 +21,7 @@ import {
 import { mapBodyStatements, mapStatementNode, unwrapStatementLikeNode } from "../domains/statements/parse.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { findFirstChildByName, findFirstNodeByName, forEachChild, walk } from "../syntax/cursor.js";
-import { parseSyntax } from "../syntax/parse.js";
+import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import { collectParseErrorDiagnostics, collectStructuralDiagnostics } from "../diagnostics/collect.js";
 import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 import { scanTikzFigures, type ScannedFigure } from "../parser/figure-scan.js";
@@ -432,6 +432,7 @@ function isRelevantDefinitionNode(node: SyntaxNode): boolean {
     typeName === "MacroDefinitionStatement" ||
     typeName === "MacroAliasStatement" ||
     typeName === "MacroCommandDefinitionStatement" ||
+    typeName === "PgfMathStatement" ||
     typeName === "StyleDefinitionStatement" ||
     typeName === "TikzSetStatement" ||
     typeName === "TikzStyleStatement" ||

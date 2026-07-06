@@ -229,7 +229,7 @@ async function prepareScopeSelection(
   page: import("@playwright/test").Page,
   options: { hideSourcePanel?: boolean } = {}
 ): Promise<void> {
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, SOURCE);
   await installProbe(page, "scope:1");
   await focusCanvas(page);
@@ -243,7 +243,7 @@ async function prepareScopeSelection(
 }
 
 async function prepareScopeSelectionWithoutPreselect(page: import("@playwright/test").Page): Promise<void> {
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, SOURCE);
   await installProbe(page, "scope:1");
   await focusCanvas(page);

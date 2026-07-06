@@ -188,6 +188,67 @@ export function resolveNodeOptionTransform(
   return computeRelativeTransformMatrix(frame.transform, resolved.transform);
 }
 
+export type EveryShapeNodeStyleBucketKey =
+  | "everyRectangleNodeStyles"
+  | "everyCircleNodeStyles"
+  | "everyDiamondNodeStyles"
+  | "everyTrapeziumNodeStyles"
+  | "everyIsoscelesTriangleNodeStyles"
+  | "everyKiteNodeStyles"
+  | "everyDartNodeStyles"
+  | "everyCircularSectorNodeStyles"
+  | "everyCylinderNodeStyles"
+  | "everyCloudNodeStyles"
+  | "everyStarburstNodeStyles"
+  | "everySignalNodeStyles"
+  | "everyTapeNodeStyles"
+  | "everyRectangleCalloutNodeStyles"
+  | "everyEllipseCalloutNodeStyles"
+  | "everyCloudCalloutNodeStyles"
+  | "everySingleArrowNodeStyles"
+  | "everyDoubleArrowNodeStyles";
+
+export type EveryShapeNodeStyleBuckets<T> = Record<EveryShapeNodeStyleBucketKey, T[]>;
+
+const EVERY_SHAPE_NODE_STYLE_BUCKET_BY_SHAPE: Partial<Record<NodeShape, EveryShapeNodeStyleBucketKey>> = {
+  circle: "everyCircleNodeStyles",
+  rectangle: "everyRectangleNodeStyles",
+  "rounded rectangle": "everyRectangleNodeStyles",
+  "chamfered rectangle": "everyRectangleNodeStyles",
+  "cross out": "everyRectangleNodeStyles",
+  "strike out": "everyRectangleNodeStyles",
+  "rectangle split": "everyRectangleNodeStyles",
+  "magnifying glass": "everyCircleNodeStyles",
+  "circle split": "everyCircleNodeStyles",
+  "circle solidus": "everyCircleNodeStyles",
+  "ellipse split": "everyCircleNodeStyles",
+  "diamond split": "everyDiamondNodeStyles",
+  diamond: "everyDiamondNodeStyles",
+  trapezium: "everyTrapeziumNodeStyles",
+  "isosceles triangle": "everyIsoscelesTriangleNodeStyles",
+  kite: "everyKiteNodeStyles",
+  dart: "everyDartNodeStyles",
+  "circular sector": "everyCircularSectorNodeStyles",
+  cylinder: "everyCylinderNodeStyles",
+  cloud: "everyCloudNodeStyles",
+  starburst: "everyStarburstNodeStyles",
+  signal: "everySignalNodeStyles",
+  tape: "everyTapeNodeStyles",
+  "rectangle callout": "everyRectangleCalloutNodeStyles",
+  "ellipse callout": "everyEllipseCalloutNodeStyles",
+  "cloud callout": "everyCloudCalloutNodeStyles",
+  "single arrow": "everySingleArrowNodeStyles",
+  "double arrow": "everyDoubleArrowNodeStyles"
+};
+
+export function resolveEveryShapeNodeStyleLists<T>(
+  shape: NodeShape,
+  buckets: EveryShapeNodeStyleBuckets<T>
+): T[] {
+  const bucket = EVERY_SHAPE_NODE_STYLE_BUCKET_BY_SHAPE[shape];
+  return bucket ? buckets[bucket] : [];
+}
+
 export function resolveEffectiveNodeOptions(params: {
   statementOptions: OptionListAst | undefined;
   nodeOptions: OptionListAst | undefined;
@@ -195,25 +256,7 @@ export function resolveEffectiveNodeOptions(params: {
   everyFitStyles?: NodeStyleOptionList[];
   applyEveryFitStyles?: boolean;
   syntheticOptions?: OptionListAst[];
-  everyRectangleNodeStyles: NodeStyleOptionList[];
-  everyCircleNodeStyles: NodeStyleOptionList[];
-  everyDiamondNodeStyles: NodeStyleOptionList[];
-  everyTrapeziumNodeStyles: NodeStyleOptionList[];
-  everyIsoscelesTriangleNodeStyles: NodeStyleOptionList[];
-  everyKiteNodeStyles: NodeStyleOptionList[];
-  everyDartNodeStyles: NodeStyleOptionList[];
-  everyCircularSectorNodeStyles: NodeStyleOptionList[];
-  everyCylinderNodeStyles: NodeStyleOptionList[];
-  everyCloudNodeStyles: NodeStyleOptionList[];
-  everyStarburstNodeStyles: NodeStyleOptionList[];
-  everySignalNodeStyles: NodeStyleOptionList[];
-  everyTapeNodeStyles: NodeStyleOptionList[];
-  everyRectangleCalloutNodeStyles: NodeStyleOptionList[];
-  everyEllipseCalloutNodeStyles: NodeStyleOptionList[];
-  everyCloudCalloutNodeStyles: NodeStyleOptionList[];
-  everySingleArrowNodeStyles: NodeStyleOptionList[];
-  everyDoubleArrowNodeStyles: NodeStyleOptionList[];
-}): OptionListAst | undefined {
+} & EveryShapeNodeStyleBuckets<NodeStyleOptionList>): OptionListAst | undefined {
   const everyFitStyles = params.applyEveryFitStyles ? (params.everyFitStyles ?? []) : [];
   const syntheticOptions = params.syntheticOptions ?? [];
   const base = mergeOptionLists([
@@ -224,7 +267,7 @@ export function resolveEffectiveNodeOptions(params: {
     ...syntheticOptions
   ]);
   const shape = resolveNodeShape(base);
-  const shapeStyles = resolveShapeStyleLists(shape, params);
+  const shapeStyles = resolveEveryShapeNodeStyleLists(shape, params);
 
   return mergeOptionLists([
     ...params.everyNodeStyles.map(optionListFromNodeStyleSource),
@@ -272,98 +315,6 @@ export function expandNodeOptionsForShape(
   );
 
   return resolved.expandedOptionLists[0] ?? options;
-}
-
-function resolveShapeStyleLists(
-  shape: NodeShape,
-  params: {
-    everyRectangleNodeStyles: NodeStyleOptionList[];
-    everyCircleNodeStyles: NodeStyleOptionList[];
-    everyDiamondNodeStyles: NodeStyleOptionList[];
-    everyTrapeziumNodeStyles: NodeStyleOptionList[];
-    everyIsoscelesTriangleNodeStyles: NodeStyleOptionList[];
-    everyKiteNodeStyles: NodeStyleOptionList[];
-    everyDartNodeStyles: NodeStyleOptionList[];
-    everyCircularSectorNodeStyles: NodeStyleOptionList[];
-    everyCylinderNodeStyles: NodeStyleOptionList[];
-    everyCloudNodeStyles: NodeStyleOptionList[];
-    everyStarburstNodeStyles: NodeStyleOptionList[];
-    everySignalNodeStyles: NodeStyleOptionList[];
-    everyTapeNodeStyles: NodeStyleOptionList[];
-    everyRectangleCalloutNodeStyles: NodeStyleOptionList[];
-    everyEllipseCalloutNodeStyles: NodeStyleOptionList[];
-    everyCloudCalloutNodeStyles: NodeStyleOptionList[];
-    everySingleArrowNodeStyles: NodeStyleOptionList[];
-    everyDoubleArrowNodeStyles: NodeStyleOptionList[];
-  }
-): NodeStyleOptionList[] {
-  if (shape === "circle") {
-    return params.everyCircleNodeStyles;
-  }
-  if (shape === "rectangle") {
-    return params.everyRectangleNodeStyles;
-  }
-  if (shape === "rounded rectangle" || shape === "chamfered rectangle" || shape === "cross out" || shape === "strike out" || shape === "rectangle split") {
-    return params.everyRectangleNodeStyles;
-  }
-  if (shape === "magnifying glass" || shape === "circle split" || shape === "circle solidus") {
-    return params.everyCircleNodeStyles;
-  }
-  if (shape === "ellipse split") {
-    return params.everyCircleNodeStyles;
-  }
-  if (shape === "diamond split") {
-    return params.everyDiamondNodeStyles;
-  }
-  if (shape === "diamond") {
-    return params.everyDiamondNodeStyles;
-  }
-  if (shape === "trapezium") {
-    return params.everyTrapeziumNodeStyles;
-  }
-  if (shape === "isosceles triangle") {
-    return params.everyIsoscelesTriangleNodeStyles;
-  }
-  if (shape === "kite") {
-    return params.everyKiteNodeStyles;
-  }
-  if (shape === "dart") {
-    return params.everyDartNodeStyles;
-  }
-  if (shape === "circular sector") {
-    return params.everyCircularSectorNodeStyles;
-  }
-  if (shape === "cylinder") {
-    return params.everyCylinderNodeStyles;
-  }
-  if (shape === "cloud") {
-    return params.everyCloudNodeStyles;
-  }
-  if (shape === "starburst") {
-    return params.everyStarburstNodeStyles;
-  }
-  if (shape === "signal") {
-    return params.everySignalNodeStyles;
-  }
-  if (shape === "tape") {
-    return params.everyTapeNodeStyles;
-  }
-  if (shape === "rectangle callout") {
-    return params.everyRectangleCalloutNodeStyles;
-  }
-  if (shape === "ellipse callout") {
-    return params.everyEllipseCalloutNodeStyles;
-  }
-  if (shape === "cloud callout") {
-    return params.everyCloudCalloutNodeStyles;
-  }
-  if (shape === "single arrow") {
-    return params.everySingleArrowNodeStyles;
-  }
-  if (shape === "double arrow") {
-    return params.everyDoubleArrowNodeStyles;
-  }
-  return [];
 }
 
 type NodeStyleOptionList = OptionListAst | ProvenanceOptionList;

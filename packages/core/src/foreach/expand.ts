@@ -13,6 +13,7 @@ import {
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId,
+  pgfMathStatementId,
   pgfkeysStatementId,
   nodeForeachClauseId,
   nodeItemId,
@@ -20,6 +21,8 @@ import {
   pathForeachItemId,
   pathKeywordItemId,
   pathOptionItemId,
+  picForeachClauseId,
+  picOperationItemId,
   plotOperationItemId,
   pathStatementId,
   scopeStatementId,
@@ -41,7 +44,9 @@ import type {
   PathForeachItem,
   PathItem,
   PathStatement,
+  PicOperationItem,
   ScopeStatement,
+  Span,
   Statement,
   TikzFigure,
   UnknownStatement
@@ -250,18 +255,27 @@ function expandForeachStatement(
     const nextStack = [...stack, frame];
 
     const substituted = substituteForeachBindingsWithMap(statement.bodyRaw, combinedBindings);
-    const macroExpandedBodyRaw = expandTexConditionals(expandMacroBindings(substituted.output, context.macroBindings));
+    const macroExpandedSourceRaw =
+      context.macroBindings.size === 0
+        ? substituted.output
+        : expandMacroBindings(substituted.output, context.macroBindings);
+    const macroExpandedBodyRaw = expandTexConditionals(macroExpandedSourceRaw);
     const parsedMacroExpandedBody = parseStatementsFromBodyWithMapping(macroExpandedBodyRaw, { from: 0, to: macroExpandedBodyRaw.length });
-    const substitutedBodyRaw = expandTexConditionals(substituted.output);
-    const parsedSubstitutedBody = parsedMacroExpandedBody.hasParseError
-      ? parseStatementsFromBodyWithMapping(substitutedBodyRaw, { from: 0, to: substitutedBodyRaw.length })
-      : null;
-    const parsedBody = parsedSubstitutedBody && !parsedSubstitutedBody.hasParseError
-      ? parsedSubstitutedBody
-      : parsedMacroExpandedBody;
-    const canMapSubstitutedBody = parsedBody === parsedSubstitutedBody
-      ? substitutedBodyRaw === substituted.output
-      : macroExpandedBodyRaw === substituted.output;
+    let parsedBody = parsedMacroExpandedBody;
+    let mappedBodyRaw = macroExpandedBodyRaw;
+    if (parsedMacroExpandedBody.hasParseError) {
+      const substitutedBodyRaw = macroExpandedSourceRaw === substituted.output
+        ? macroExpandedBodyRaw
+        : expandTexConditionals(substituted.output);
+      const parsedSubstitutedBody = substitutedBodyRaw === macroExpandedBodyRaw
+        ? parsedMacroExpandedBody
+        : parseStatementsFromBodyWithMapping(substitutedBodyRaw, { from: 0, to: substitutedBodyRaw.length });
+      if (!parsedSubstitutedBody.hasParseError) {
+        parsedBody = parsedSubstitutedBody;
+        mappedBodyRaw = substitutedBodyRaw;
+      }
+    }
+    const canMapSubstitutedBody = mappedBodyRaw === substituted.output;
     if (parsedBody.hasParseError) {
       context.diagnostics.push({
         severity: "warning",
@@ -370,7 +384,7 @@ function createContiguousTemplateMapper(sourceSpan: { from: number; to: number }
   };
 }
 
-function createTemplateMapper(item: NodeItem | ChildOperationItem): TemplateSourceMapper {
+function createTemplateMapper(item: NodeItem | ChildOperationItem | PicOperationItem): TemplateSourceMapper {
   const clauses = item.foreachClauses ?? [];
   if (clauses.length === 0) {
     return createContiguousTemplateMapper(item.span);
@@ -514,6 +528,12 @@ function expandPathItems(
     if (item.kind === "Node" && (item).foreachClauses && (item).foreachClauses.length > 0) {
       const expandedNodes = expandNodeForeachItem(item, stack, inheritedBindings, context);
       expanded.push(...expandedNodes);
+      continue;
+    }
+
+    if (item.kind === "PicOperation" && item.foreachClauses && item.foreachClauses.length > 0) {
+      const expandedPics = expandPicForeachItem(item, stack, inheritedBindings, context);
+      expanded.push(...expandedPics);
       continue;
     }
 
@@ -770,6 +790,151 @@ function expandNodeForeachItem(
   }
 
   return expanded;
+}
+
+function expandPicForeachItem(
+  item: PicOperationItem,
+  stack: ForeachOriginFrame[],
+  inheritedBindings: Record<string, string>,
+  context: ExpandContext
+): PathItem[] {
+  const clauses = item.foreachClauses ?? [];
+  if (clauses.length === 0) {
+    if (stack.length > 0) {
+      markPathItemForeachStack(item, stack, context);
+    }
+    return [item];
+  }
+
+  let variants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [
+    { bindings: { ...inheritedBindings }, stack: [...stack] }
+  ];
+
+  for (const clause of clauses) {
+    const nextVariants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [];
+    for (const variant of variants) {
+      const variablesRaw = clause.variablesRaw?.trim() ?? "";
+      const listRaw = clause.listRaw?.trim() ?? "";
+      if (variablesRaw.length === 0 || listRaw.length === 0) {
+        context.diagnostics.push({
+          severity: "warning",
+          code: "invalid-foreach-header",
+          message: "Could not parse pic foreach loop header.",
+          span: clause.span
+        });
+        continue;
+      }
+
+      const { iterations, diagnostics } = buildForeachIterations({
+        variablesRaw,
+        listRaw,
+        options: clause.options,
+        baseBindings: variant.bindings,
+        loopSpan: clause.span
+      });
+      context.diagnostics.push(...diagnostics);
+
+      for (const iteration of iterations) {
+        if (!consumeExpansionBudget(context, clause.span)) {
+          break;
+        }
+
+        const combinedBindings = {
+          ...variant.bindings,
+          ...iteration.bindings
+        };
+        const frame: ForeachOriginFrame = {
+          loopId: clause.id,
+          loopSpan: clause.span,
+          iterationIndex: iteration.index,
+          bindings: { ...iteration.bindings }
+        };
+        nextVariants.push({
+          bindings: combinedBindings,
+          stack: [...variant.stack, frame]
+        });
+      }
+    }
+    variants = nextVariants;
+  }
+
+  const expanded: PathItem[] = [];
+  for (const variant of variants) {
+    const template = normalizePicForeachTemplateRaw(item.templateRaw);
+    const substituted = substituteForeachBindingsWithMap(template.raw, variant.bindings);
+    const macroExpandedPicRaw = expandMacroBindings(substituted.output, context.macroBindings);
+    const picRaw = expandTexConditionals(macroExpandedPicRaw);
+    const canMapPic = picRaw === substituted.output;
+    const parsed = parsePathItemsFromFragmentWithSyntheticMapping(picRaw, { from: 0, to: picRaw.length });
+    if (parsed.hasParseError) {
+      context.diagnostics.push({
+        severity: "warning",
+        code: "foreach-body-parse-error",
+        message: "Could not parse expanded pic foreach body.",
+        span: item.span
+      });
+    }
+
+    const expandedItems = expandPathItems(parsed.value, variant.stack, variant.bindings, context)
+      .filter((entry): entry is PicOperationItem => entry.kind === "PicOperation");
+    recordPathItemSourceMaps(expandedItems, {
+      sourceId: item.id,
+      sourceSpan: item.span,
+      sourceKind: "foreach",
+      mapSpan: (span) => {
+        const generatedSpan = parsed.sourceMapper.mapSpan(span);
+        if (!generatedSpan || !canMapPic) {
+          return null;
+        }
+        return mapSubstitutedFragmentSpan(
+          generatedSpan,
+          (substitutedSpan) => {
+            const normalizedTemplateSpan = substituted.mapSpan(substitutedSpan);
+            return normalizedTemplateSpan ? template.mapSpan(normalizedTemplateSpan) : null;
+          },
+          createTemplateMapper(item)
+        );
+      }
+    }, context);
+    for (const expandedItem of expandedItems) {
+      markPathItemForeachStack(expandedItem, variant.stack, context);
+    }
+    expanded.push(...expandedItems);
+  }
+
+  return expanded;
+}
+
+function normalizePicForeachTemplateRaw(templateRaw: string): { raw: string; mapSpan: (span: Span) => Span | null } {
+  let raw = templateRaw;
+  const leadingWhitespace = raw.search(/\S/u);
+  const keywordStart = leadingWhitespace < 0 ? 0 : leadingWhitespace;
+  const hasTopLevelPicCommand =
+    raw.startsWith("\\pic", keywordStart) && !/[A-Za-z@]/u.test(raw[keywordStart + "\\pic".length] ?? "");
+
+  if (hasTopLevelPicCommand) {
+    raw = `${raw.slice(0, keywordStart)}pic${raw.slice(keywordStart + "\\pic".length)}`;
+  }
+
+  const trailingSemicolon = /;\s*$/u.exec(raw);
+  if (trailingSemicolon) {
+    raw = raw.slice(0, trailingSemicolon.index);
+  }
+
+  return {
+    raw,
+    mapSpan: (span) => {
+      if (span.from < 0 || span.to < span.from || span.to > raw.length) {
+        return null;
+      }
+
+      const mapOffset = (offset: number) => hasTopLevelPicCommand && offset >= keywordStart ? offset + 1 : offset;
+      return {
+        from: mapOffset(span.from),
+        to: mapOffset(span.to)
+      };
+    }
+  };
 }
 
 function markPathItemForeachStack(item: PathItem, stack: ForeachOriginFrame[], context: ExpandContext): void {
@@ -1066,6 +1231,14 @@ function reindexStatementsInPlace(
       continue;
     }
 
+    if (statement.kind === "PgfMath") {
+      if (!preserveExistingId) {
+        statement.id = pgfMathStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+      }
+      continue;
+    }
+
     if (statement.kind === "TikzSet") {
       if (!preserveExistingId) {
         statement.id = tikzSetStatementId(statementIndex);
@@ -1186,6 +1359,16 @@ function reindexPathItems(
     if (item.kind === "PathForeach") {
       item.id = pathForeachItemId(statementIndex, itemIndex);
       templateLocalIdByExpandedId.set(item.id, previousId);
+      continue;
+    }
+    if (item.kind === "PicOperation") {
+      item.id = picOperationItemId(statementIndex, itemIndex);
+      templateLocalIdByExpandedId.set(item.id, previousId);
+      if (item.foreachClauses) {
+        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
+          item.foreachClauses[clauseIndex].id = picForeachClauseId(statementIndex, itemIndex, clauseIndex);
+        }
+      }
       continue;
     }
     if (item.kind === "PathComment") {
@@ -1318,6 +1501,16 @@ function reindexNestedPathItems(
     if (item.kind === "PathForeach") {
       item.id = `path-foreach:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
+      continue;
+    }
+    if (item.kind === "PicOperation") {
+      item.id = `pic-operation:${statementIndex}:${nestedPrefix}`;
+      templateLocalIdByExpandedId.set(item.id, previousId);
+      if (item.foreachClauses) {
+        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
+          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        }
+      }
       continue;
     }
     if (item.kind === "PathComment") {

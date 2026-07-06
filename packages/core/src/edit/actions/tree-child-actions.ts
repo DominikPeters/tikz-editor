@@ -1,13 +1,11 @@
-import type { ChildOperationItem, PathStatement, Span, Statement } from "../../ast/types.js";
+import type { EditActionResultLike } from "../result-types.js";
+import type { ChildOperationItem, PathStatement, Span } from "../../ast/types.js";
 import { lineIndentAtOffset } from "../statement-ops.js";
 import { replaceSpan } from "../patch.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { resolvePropertyTarget } from "../property-target.js";
-import type { SourcePatch } from "../types.js";
+import { findPathStatementById } from "../statement-find.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string };
 
 type AddTreeChildAction = {
   parentSourceId: string;
@@ -268,20 +266,4 @@ function skipHorizontalWhitespace(source: string, offset: number): number {
 
 function clampOffset(value: number, length: number): number {
   return Math.max(0, Math.min(length, Math.trunc(value)));
-}
-
-function findPathStatementById(statements: readonly Statement[], sourceId: string): PathStatement | null {
-  for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, sourceId);
-      if (nested) {
-        return nested;
-      }
-      continue;
-    }
-    if (statement.kind === "Path" && statement.id === sourceId) {
-      return statement;
-    }
-  }
-  return null;
 }

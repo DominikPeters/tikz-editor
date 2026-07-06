@@ -19,6 +19,23 @@ export const capabilityFixtures: Record<string, string> = {
   foreach_node_basic: String.raw`\begin{tikzpicture}
   \path (0,0) -- (2,0) node foreach \p in {0.25,0.75} [pos=\p] {\p};
 \end{tikzpicture}`,
+  pic_inline_code: String.raw`\begin{tikzpicture}
+  \pic at (1,0) [pics/code={\draw (0,0) -- (1,0); \node at (.5,.25) {P};}] {};
+\end{tikzpicture}`,
+  pic_simple_definition: String.raw`\begin{tikzpicture}
+  \tikzset{tick/.pic={\draw (0,-.1) -- (0,.1);}, pics/dot/.style={code={\fill (0,0) circle [radius=1pt];}}}
+  \pic at (0,0) {tick};
+  \pic at (1,0) {dot};
+\end{tikzpicture}`,
+  pic_path_placement: String.raw`\begin{tikzpicture}
+  \tikzset{mark/.pic={\draw[red] (0,0) circle [radius=2pt];}}
+  \path (0,0) -- (2,0) pic[pos=.5,rotate=30] {mark};
+\end{tikzpicture}`,
+  pic_template_editing: String.raw`\begin{tikzpicture}
+  \tikzset{bar/.pic={\draw[line width=.4pt,blue] (0,0) -- (1,0);}}
+  \pic at (0,0) {bar};
+  \pic at (0,1) {bar};
+\end{tikzpicture}`,
   foreach_options_core: String.raw`\begin{tikzpicture}
   \foreach \x [count=\i from 1, evaluate=\x as \y using \x*2] in {1,2}
     \draw (\i,0) -- (\y,0);
@@ -60,6 +77,12 @@ export const capabilityFixtures: Record<string, string> = {
   use_as_bounding_box: String.raw`\begin{tikzpicture}
   \path[use as bounding box] (0,0) rectangle (1,1);
   \fill[red] (-1,-1) rectangle (3,3);
+\end{tikzpicture}`,
+  backgrounds_library: String.raw`\begin{tikzpicture}[framed]
+  \begin{scope}[on background layer={draw=yellow}]
+    \draw (-0.2,-0.2) rectangle (1.2,0.2);
+  \end{scope}
+  \draw (0,0) -- (1,0);
 \end{tikzpicture}`,
   arrow_tips: String.raw`\begin{tikzpicture}[>=Stealth]
   \draw[arrows={-Latex[open,length=10pt]}] (0,0) -- (1,0);

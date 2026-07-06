@@ -1,8 +1,8 @@
+import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
 import { resolvePropertyTarget } from "../property-target.js";
 import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import type { EditParseOptions } from "../parse-options.js";
-import type { SourcePatch } from "../types.js";
 import {
   PATH_ATTACHED_NODE_POSITION_VALUE_KEY,
   PATH_ATTACHED_NODE_SIDE_KEY
@@ -16,10 +16,6 @@ import {
 import type { WorldPoint } from "../../coords/points.js";
 import type { PathAttachedNodePlacementRegime } from "../../semantic/types.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 const PATH_ATTACHED_DISTANCE_EPSILON_PT = 0.05;
 export const PATH_ATTACHED_NODE_EDIT_NOOP_REASON = "Path-attached node edit would not change the source.";

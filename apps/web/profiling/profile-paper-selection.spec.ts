@@ -323,7 +323,7 @@ test("profile paper selection hover vs click", async ({ page }, testInfo) => {
     );
   }
   await seedWorkspace(page, target, "doc-profile-paper");
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await installProbe(page);
 
   printDebug("after-app-load", await readDebugState(page, target));

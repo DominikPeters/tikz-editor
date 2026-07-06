@@ -96,6 +96,25 @@ describe("edit analysis session", () => {
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
+  it("keeps primed parse results attached to the source they parsed", () => {
+    const parsedSource = String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (1.34,1.1);
+\end{tikzpicture}`;
+    const newerSource = String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (1.35,1.09);
+\end{tikzpicture}`;
+    const parseResult = parserModule.parseTikz(parsedSource, {
+      recover: true,
+      activeFigureId: "figure:0"
+    });
+    const session = createEditAnalysisSession();
+
+    const primed = session.primeFromParse(parseResult, newerSource);
+
+    expect(primed.source).toBe(parsedSource);
+    expect(session.ensure(newerSource, { activeFigureId: "figure:0" })).not.toBe(primed);
+  });
+
   it("memoizes cached analysis lookups and reuses the previous source entry", () => {
     const scopedSource = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);

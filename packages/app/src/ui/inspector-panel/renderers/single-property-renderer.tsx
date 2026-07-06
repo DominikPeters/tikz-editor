@@ -2,7 +2,7 @@ import { formatNumber } from "tikz-editor/edit/format";
 import type { InspectorProperty, NodeFontFamilyId, NodeFontSizePresetId } from "tikz-editor/edit/inspector";
 import { ColorPickerField } from "../../ColorPicker";
 import { CustomDropdown } from "../../CustomDropdown";
-import css from "../../InspectorPanel.module.css";
+import css from "../InspectorPanel.module.css";
 import { getInspectorPropertyCapabilityStatus } from "../../capabilities";
 import {
 LINE_WIDTH_CUSTOM_OPTION_VALUE,
@@ -35,11 +35,11 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
     withValueProvenanceClass,
     renderSingleTextField,
     renderSingleNumberField,
+    renderSingleLengthField,
     renderSingleOptionalLengthField,
     renderReadOnlyReasonNote,
     renderNodeTextAlignToolbar,
     renderScrubbableNumberLabel,
-    applySingleLengthValue,
     maybeWrapWithProvenanceTooltip,
     commitAfterHoverPreview,
     applyNodeShapeValue,
@@ -209,39 +209,9 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
     }
 
     if (property.kind === "length") {
-      const writable = property.write.writable && capability.status !== "unsupported";
       return (
         <div key={property.id} className={propertyClassName}>
-          {renderScrubbableNumberLabel(property.label, {
-            writable,
-            value: property.value,
-            step: property.step,
-            onPreview: (next: number) => { applySingleLengthValue(property, next, { recordInHistory: false }); },
-            onCommit: (next: number) => { applySingleLengthValue(property, next); }
-          })}
-          <div className={css.controlRow}>
-            {maybeWrapWithProvenanceTooltip(
-              provenance,
-              <input
-                className={withValueProvenanceClass(css.numberInput, provenance)}
-                type="number"
-                step={property.step}
-                value={formatNumber(property.value)}
-                disabled={!writable}
-                onChange={(event) => {
-                  const next = Number(event.currentTarget.value);
-                  if (!Number.isFinite(next)) {
-                    return;
-                  }
-                  applySingleLengthValue(property, next);
-                }}
-              />,
-              true
-            )}
-            <span className={css.unitLabel}>{property.unit}</span>
-          </div>
-          {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
-          {renderReadOnlyReasonNote(readOnlyReason)}
+          {renderSingleLengthField(property, false, provenance)}
         </div>
       );
     }

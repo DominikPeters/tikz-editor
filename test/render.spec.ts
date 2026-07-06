@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderTikzToSvg, renderTikzToSvgAsync } from "../packages/core/src/render/index.js";
 import { parseLength } from "../packages/core/src/semantic/coords/parse-length.js";
-import type { SceneCircle, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
+import type { SceneCircle, SceneEllipse, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
 import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
@@ -222,6 +222,54 @@ describe("render pipeline", () => {
     );
     expect(fitPath?.style.fill).toBe("#ff0000");
     expect(nonFitPath?.style.fill).not.toBe("#ff0000");
+  });
+
+  it("applies every fit shape and spacing styles after fit sizing", () => {
+    const fitEllipseWithInnerSep = (innerSep: string): SceneEllipse => {
+      const source = String.raw`\begin{tikzpicture}[every fit/.style={ellipse,draw,inner sep=${innerSep}}]
+  \node (a) at (0,0) {};
+  \node (b) at (2,1) {};
+  \node[fit=(a) (b)] {};
+\end{tikzpicture}`;
+      const result = renderTikzToSvg(source);
+      const fitEllipse = result.semantic.scene.elements.find(
+        (element): element is SceneEllipse => element.kind === "Ellipse" && element.sourceRef.sourceId === "path:2"
+      );
+      expect(fitEllipse).toBeDefined();
+      if (!fitEllipse) {
+        throw new Error("Expected every-fit ellipse element.");
+      }
+      return fitEllipse;
+    };
+
+    const fitEllipse = fitEllipseWithInnerSep("-2pt");
+    const zeroSepFitEllipse = fitEllipseWithInnerSep("0pt");
+    expect(fitEllipse.style.stroke).toBe("black");
+    expect(fitEllipse.rx).toBeLessThan(zeroSepFitEllipse.rx);
+    expect(fitEllipse.ry).toBeLessThan(zeroSepFitEllipse.ry);
+  });
+
+  it("resolves fit targets from named labels introduced by styles", () => {
+    const source = String.raw`\begin{tikzpicture}[
+  every fit/.style={ellipse,draw,inner sep=-2pt},
+  leaf/.style={label={[name=#1]below:$#1$}}
+]
+  \node[leaf=a] at (0,0) {};
+  \node[leaf=b] at (2,0) {};
+  \node[fit=(a) (b)] {};
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+    const fitEllipse = result.semantic.scene.elements.find(
+      (element): element is SceneEllipse => element.kind === "Ellipse" && element.sourceRef.sourceId === "path:2"
+    );
+
+    expect(result.semantic.diagnostics.some((diagnostic) => diagnostic.code === "unsupported-fit-targets")).toBe(false);
+    expect(fitEllipse).toBeDefined();
+    if (!fitEllipse) {
+      throw new Error("Expected fit ellipse around styled labels.");
+    }
+    expect(fitEllipse.style.stroke).toBe("black");
+    expect(fitEllipse.rx).toBeGreaterThan(parseLength("1cm", "pt") ?? 28);
   });
 
   it("supports fit references to node names with apostrophes and spaces", () => {
@@ -977,29 +1025,64 @@ World};
 
   it("uses wider sentence spacing than ordinary interword spacing in wrapped paragraphs", async () => {
     const ordinary = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
-  \node[text width=100pt,align=left] at (0,0) {A B};
+  \node[text width=100pt,align=left] at (0,0) {a b};
 \end{tikzpicture}`);
     const sentence = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[text width=100pt,align=left] at (0,0) {a. B};
+\end{tikzpicture}`);
+    const lowercaseSentence = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[text width=100pt,align=left] at (0,0) {a. b};
+\end{tikzpicture}`);
+    const capitalAbbreviation = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
   \node[text width=100pt,align=left] at (0,0) {A. B};
 \end{tikzpicture}`);
 
     const ordinaryText = ordinary.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const sentenceText = sentence.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    const lowercaseSentenceText = lowercaseSentence.semantic.scene.elements.find(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    const capitalAbbreviationText = capitalAbbreviation.semantic.scene.elements.find(
+      (element): element is SceneText => element.kind === "Text"
+    );
 
     expect(ordinaryText?.kind).toBe("Text");
     expect(sentenceText?.kind).toBe("Text");
-    if (ordinaryText?.kind === "Text" && sentenceText?.kind === "Text") {
+    expect(lowercaseSentenceText?.kind).toBe("Text");
+    expect(capitalAbbreviationText?.kind).toBe("Text");
+    if (
+      ordinaryText?.kind === "Text" &&
+      sentenceText?.kind === "Text" &&
+      lowercaseSentenceText?.kind === "Text" &&
+      capitalAbbreviationText?.kind === "Text"
+    ) {
       const ordinaryReport = reportForParagraphId(
         ordinaryText.textRenderInfo?.mode === "mathjax" ? ordinaryText.textRenderInfo.paragraphId : null
       );
       const sentenceReport = reportForParagraphId(
         sentenceText.textRenderInfo?.mode === "mathjax" ? sentenceText.textRenderInfo.paragraphId : null
       );
+      const lowercaseSentenceReport = reportForParagraphId(
+        lowercaseSentenceText.textRenderInfo?.mode === "mathjax"
+          ? lowercaseSentenceText.textRenderInfo.paragraphId
+          : null
+      );
+      const capitalAbbreviationReport = reportForParagraphId(
+        capitalAbbreviationText.textRenderInfo?.mode === "mathjax"
+          ? capitalAbbreviationText.textRenderInfo.paragraphId
+          : null
+      );
       expect(ordinaryReport).not.toBeNull();
       expect(sentenceReport).not.toBeNull();
+      expect(lowercaseSentenceReport).not.toBeNull();
+      expect(capitalAbbreviationReport).not.toBeNull();
       const ordinarySpace = ordinaryReport?.runs.find((run) => run.kind === "space");
       const sentenceSpace = sentenceReport?.runs.find((run) => run.kind === "space");
+      const lowercaseSentenceSpace = lowercaseSentenceReport?.runs.find((run) => run.kind === "space");
+      const capitalAbbreviationSpace = capitalAbbreviationReport?.runs.find((run) => run.kind === "space");
       expect(sentenceSpace?.width ?? 0).toBeGreaterThan(ordinarySpace?.width ?? 0);
+      expect(lowercaseSentenceSpace?.width ?? 0).toBeGreaterThan(ordinarySpace?.width ?? 0);
+      expect(capitalAbbreviationSpace?.width ?? 0).toBeCloseTo(ordinarySpace?.width ?? 0, 6);
     }
   });
 
@@ -1318,6 +1401,55 @@ World};
     expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
     expect(result.svg.svg.includes('xml:space="preserve">\\textsf{')).toBe(false);
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+  });
+
+  it("keeps top-level foreach-generated paths after pre-picture declarations", () => {
+    const source = String.raw`%%%%%%%%%%%%%%%%%%%%%%%
+%%% TikZ palette     %%
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\definecolor{fgd}{RGB}{30,30,30}
+\tikzset{axisline/.style={->,>=stealth,fgd,thick}}
+
+\begin{tikzpicture}[scale=0.6]
+  \draw[axisline] (0.3,0.7)--(6.1,0.7);
+  \foreach \lx/\ly/\ux/\uy in {0.8/4.45/1.67/5.34,
+    1.47/3.36/1.67/5.34, 1.47/3.36/2.09/4.25, 1.47/3.36/2.53/3.8,
+    1.93/2.33/2.09/4.25, 1.93/2.33/2.53/3.8, 1.93/2.33/2.94/2.77,
+    3.32/1.53/4.03/2.25, 3.32/1.53/5.13/1.8,
+    4.33/1.12/5.13/1.8}{
+    \fill[black!50,fill opacity=0.07] (\lx,\ly) rectangle (\ux,\uy);
+    \draw[black!50,densely dashed,thin] (\lx,\ly) rectangle (\ux,\uy);}
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+    const foreachPaths = result.semantic.scene.elements.filter(
+      (element): element is ScenePath => element.kind === "Path" && (element.origin?.foreachStack.length ?? 0) > 0
+    );
+
+    expect(foreachPaths).toHaveLength(20);
+    expect(foreachPaths.filter((path) => path.style.fillOpacity === 0.07)).toHaveLength(10);
+    expect(foreachPaths.filter((path) => path.style.dashArray?.join(",") === "4,2")).toHaveLength(10);
+    expect(result.svg.svg).toContain("stroke-dasharray");
+  });
+
+  it("keeps statement-macro-generated paths after pre-picture declarations", () => {
+    const source = String.raw`%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% pre-picture context   %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{tikzpicture}
+  \definecolor{brand}{RGB}{0,114,189}
+  \newcommand{\brandbox}{\draw[draw=brand,densely dashed] (0,0) rectangle (1,1);}
+  \brandbox
+\end{tikzpicture}`;
+    const result = renderTikzToSvg(source);
+    const macroPaths = result.semantic.scene.elements.filter(
+      (element): element is ScenePath => element.kind === "Path" && (element.origin?.macroStack?.length ?? 0) > 0
+    );
+
+    expect(macroPaths).toHaveLength(1);
+    expect(macroPaths[0]?.style.stroke).toBe("#0072bd");
+    expect(macroPaths[0]?.style.dashArray?.join(",")).toBe("4,2");
   });
 
   it("expands user-defined text macros before MathJax rendering in async mode", async () => {

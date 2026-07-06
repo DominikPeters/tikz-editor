@@ -41,7 +41,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
             <span className={css.titleQualifier}>Web</span>
           </h2>
 
-          <p className={css.version}>Version {APP_VERSION} ({APP_VERSION})</p>
+          <p className={css.version}>Version {APP_VERSION}</p>
 
           <dl className={css.meta}>
             <div className={css.metaRow}>

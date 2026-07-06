@@ -1,0 +1,986 @@
+@top TikzFile { TikzInline | (BodyItem* TikzEnvironment)+ BodyItem* | BodyItem* }
+
+@skip { space }
+
+@precedence {
+  childContinuation,
+  childBare,
+  picGrouped,
+  picOptionOnly,
+  pgfMathSemicolon
+}
+
+TikzEnvironment {
+  BeginTikz OptionList? BodyItem* EndTikz
+}
+
+BodyItem {
+  Comment |
+  Statement |
+  StrayToken
+}
+
+TikzInline {
+  InlineTikzCmd OptionList? BodyItem*
+}
+
+Statement {
+  ScopeStatement |
+  ForeachStatement |
+  PathStatement |
+  FontSizeStatement |
+  StyleDefinitionStatement |
+  TikzLibraryStatement |
+  ColorletStatement |
+  DefineColorStatement |
+  MacroDefinitionStatement |
+  MacroAliasStatement |
+  MacroCommandDefinitionStatement |
+  PgfMathStatement |
+  UnknownStatement
+}
+
+StyleDefinitionStatement {
+  TikzSetStatement |
+  TikzStyleStatement |
+  PgfkeysStatement
+}
+
+ScopeStatement {
+  BeginScope OptionList? BodyItem* EndScope
+}
+
+ForeachStatement {
+  ForeachCmd ForeachHeaderToken* InKw ForeachList ForeachBody
+}
+
+ForeachBody {
+  Group |
+  Statement
+}
+
+ForeachHeaderToken {
+  Comment |
+  OptionList |
+  Coordinate |
+  PathKeyword |
+  FontSizeCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  ControlSymbolCmd |
+  CommandName |
+  IdentifierLike |
+  Number |
+  OptionPunct
+}
+
+ForeachList {
+  Group |
+  Coordinate |
+  FontSizeCmd |
+  ControlSymbolCmd |
+  CommandName |
+  IdentifierLike
+}
+
+PathStatement {
+  PicPathStatement |
+  NodePathStatement |
+  PathCommand PathItem* ";"
+}
+
+PicPathStatement {
+  PicCmd PicForeachClause* PicQualifier* Group? ";"
+}
+
+NodePathStatement {
+  NodeCmd NodeCommandItem* ";"
+}
+
+PathCommand {
+  GraphCmd |
+  DrawCmd |
+  PathCmd |
+  FillDrawCmd |
+  FillCmd |
+  PatternCmd |
+  ClipCmd |
+  ShadeCmd |
+  ShadeDrawCmd |
+  UseAsBoundingBoxCmd |
+  MatrixCmd |
+  CoordinateCmd
+}
+
+NodeCommandItem {
+  PathForeachOperation |
+  ToOperation |
+  EdgeOperation |
+  ChildOperation |
+  EdgeFromParentOperation |
+  SvgOperation |
+  LetOperation |
+  CoordinateOperation |
+  DecorateOperation |
+  PicOperation |
+  NodeItem |
+  Comment |
+  OptionList |
+  RelativeCoordinate |
+  Coordinate |
+  PathKeyword |
+  NodeTextGroup |
+  PathOperator |
+  UnknownPathItem
+}
+
+PathItem {
+  PathForeachOperation |
+  ToOperation |
+  EdgeOperation |
+  ChildOperation |
+  EdgeFromParentOperation |
+  SvgOperation |
+  LetOperation |
+  CoordinateOperation |
+  DecorateOperation |
+  PicOperation |
+  Comment |
+  RelativeCoordinate |
+  Coordinate |
+  NodeItem |
+  OptionList |
+  PathOperator |
+  PathKeyword |
+  Group |
+  UnknownPathItem
+}
+
+PathOperator {
+  "--" |
+  "-|" |
+  "|-" |
+  ".." |
+  ","
+}
+
+NodeItem {
+  NodeKw NodeForeachClause* NodeQualifier* NodeTextGroup
+}
+
+NodeForeachClause {
+  ForeachKw ForeachHeaderToken* InKw ForeachList
+}
+
+NodeQualifier {
+  OptionList |
+  NodePlacement |
+  NodeName
+}
+
+NodePlacement {
+  AtKw CoordinateLike
+}
+
+NodeName {
+  Coordinate
+}
+
+PicOperation {
+  PicKw PicForeachClause* OptionList? !picGrouped PicPlacement? Group |
+  PicKw PicForeachClause* OptionList !picOptionOnly
+}
+
+PicForeachClause {
+  (ForeachKw | ForeachCmd) ForeachHeaderToken* InKw ForeachList
+}
+
+PicQualifier {
+  OptionList |
+  PicPlacement |
+  PicName
+}
+
+PicPlacement {
+  AtKw CoordinateLike
+}
+
+PicName {
+  Coordinate
+}
+
+CoordinateLike {
+  RelativeCoordinate |
+  Coordinate
+}
+
+RelativeCoordinate {
+  RelativePrefix Coordinate
+}
+
+RelativePrefix {
+  "++" |
+  "+"
+}
+
+PathKeyword {
+  AtKw |
+  BendKw |
+  CycleKw |
+  CircleKw |
+  ControlsKw |
+  AndKw |
+  RectangleKw |
+  EllipseKw |
+  ArcKw |
+  GridKw |
+  PlotKw |
+  CoordinatesKw |
+  ParabolaKw |
+  SinKw |
+  CosKw
+}
+
+ToOperation {
+  ToKw OptionList? (NodeItem | PicOperation)* ToTarget
+}
+
+EdgeOperation {
+  EdgeKw OptionList? (NodeItem | PicOperation)* ToTarget
+}
+
+ChildOperation {
+  ChildKw !childContinuation (OptionList ChildForeachClause* Group? | ChildForeachClause+ Group? | Group) |
+  ChildKw !childBare
+}
+
+ChildForeachClause {
+  (ForeachKw | ForeachCmd) ForeachHeaderToken* InKw ForeachList
+}
+
+EdgeFromParentOperation {
+  EdgeKw ((FromKw ParentKw) | (ToKw ParentKw)) OptionList? NodeItem
+}
+
+PathForeachOperation {
+  (ForeachKw | ForeachCmd) ForeachHeaderToken* InKw ForeachList Group
+}
+
+ToTarget {
+  CoordinateLike |
+  CycleKw
+}
+
+SvgOperation {
+  SvgKw OptionList? SvgPayload
+}
+
+SvgPayload {
+  Group |
+  QuotedSvg
+}
+
+LetOperation {
+  LetKw LetPart* InKw
+}
+
+LetPart {
+  Comment |
+  RelativeCoordinate |
+  Coordinate |
+  OptionList |
+  Group |
+  PathKeyword |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  IdentifierLike |
+  Number |
+  LetPunct |
+  StraySymbol
+}
+
+LetPunct {
+  "," |
+  "="
+}
+
+CoordinateOperation {
+  CoordinateKw OptionList? Coordinate
+}
+
+DecorateOperation {
+  DecorateKw OptionList? Group
+}
+
+UnknownStatement {
+  CommandName UnknownPart* ";"
+}
+
+UnknownPart {
+  Comment |
+  RelativeCoordinate |
+  Coordinate |
+  OptionList |
+  Group |
+  PathOperator |
+  UnknownPathItem
+}
+
+FontSizeStatement {
+  FontSizeCmd
+}
+
+PgfMathStatement {
+  PgfMathSetMacroCmd Group Group (!pgfMathSemicolon ";")? |
+  PgfMathParseCmd Group (!pgfMathSemicolon ";")? |
+  PgfMathSetSeedCmd Group (!pgfMathSemicolon ";")?
+}
+
+TikzSetStatement {
+  TikzSetCmd StylePayload
+}
+
+TikzStyleStatement {
+  TikzStyleCmd (Group | IdentifierLike) ("+"? "=") (OptionList | StylePayload)
+}
+
+PgfkeysStatement {
+  PgfkeysCmd StylePayload
+}
+
+ColorletStatement {
+  ColorletCmd Group Group
+}
+
+DefineColorStatement {
+  DefineColorCmd Group Group Group
+}
+
+TikzLibraryStatement {
+  UseTikzLibraryCmd Group
+}
+
+MacroDefinitionStatement {
+  DefCmd CommandName Group
+}
+
+MacroAliasStatement {
+  LetDefCmd CommandName LetAliasTarget
+}
+
+LetAliasTarget {
+  "="? (CommandName | Group)
+}
+
+MacroCommandDefinitionStatement {
+  ((NewCommandCmd | RenewCommandCmd | ProvideCommandCmd | DeclareRobustCommandCmd) "*"?
+    MacroCommandName
+    MacroCommandArityClause?
+    Group) |
+  (DeclareMathOperatorCmd "*"?
+    MacroCommandName
+    Group)
+}
+
+MacroCommandArityClause {
+  MacroCommandArity
+  MacroCommandDefaultArg?
+}
+
+MacroCommandName {
+  CommandName |
+  Group
+}
+
+MacroCommandArity {
+  "[" Number "]"
+}
+
+MacroCommandDefaultArg {
+  "[" MacroCommandDefaultArgPart* "]"
+}
+
+MacroCommandDefaultArgPart {
+  Comment |
+  Group |
+  Coordinate |
+  OptionList |
+  GroupPathOperator |
+  MatrixRowSepCmd |
+  EscapedAmpersandCmd |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedSpaceCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  PathKeyword |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  ToKw |
+  EdgeKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  PicKw |
+  Number |
+  IdentifierLike |
+  GroupPunct
+}
+
+UnknownPathItem {
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  IdentifierLike |
+  Number |
+  StraySymbol
+}
+
+OptionList {
+  "[" OptionPart* "]"
+}
+
+OptionPart {
+  Comment |
+  Group |
+  QuotedSvg |
+  Coordinate |
+  GroupPathOperator |
+  PathKeyword |
+  EscapedAmpersandCmd |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedSpaceCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  NodeKw |
+  ToKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  EdgeKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  PicKw |
+  IdentifierLike |
+  Number |
+  OptionPunct
+}
+
+OptionPunct {
+  "," |
+  "=" |
+  ":" |
+  "/" |
+  "." |
+  "-" |
+  "+" |
+  "|" |
+  "!" |
+  "?" |
+  ">" |
+  "<" |
+  "'" |
+  "$" |
+  "^" |
+  "_" |
+  "~" |
+  "*" |
+  "#" |
+  "&" |
+  "@"
+}
+
+Group {
+  "{" GroupPart* "}"
+}
+
+NodeTextGroup {
+  "{" NodeTextPart* "}"
+}
+
+NodeTextPart {
+  Comment |
+  NodeTextGroup |
+  NodeTextDollarMath |
+  MatrixRowSepCmd |
+  EscapedAmpersandCmd |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedSpaceCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  EscapedBracketOpenCmd |
+  EscapedBracketCloseCmd |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  NodeTextChunk |
+  NodeTextPunct
+}
+
+NodeTextDollarMath {
+  DoubleDollar NodeTextMathPart* DoubleDollar |
+  Dollar NodeTextMathPart* Dollar
+}
+
+NodeTextMathPart {
+  Comment |
+  NodeTextGroup |
+  MatrixRowSepCmd |
+  EscapedAmpersandCmd |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedSpaceCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  NodeTextChunk |
+  NodeTextPunct
+}
+
+StylePayload {
+  "{" StylePayloadPart* "}"
+}
+
+GroupPart {
+  Comment |
+  ScopeStatement |
+  PgfMathStatement |
+  Group |
+  Coordinate |
+  OptionList |
+  GroupPathOperator |
+  MatrixRowSepCmd |
+  EscapedAmpersandCmd |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedSpaceCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  PathKeyword |
+  ForeachCmd |
+  ForeachKw |
+  KnownCommand |
+  NodeKw |
+  PicKw |
+  ControlSymbolCmd |
+  CommandName |
+  ToKw |
+  EdgeKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  Number |
+  IdentifierLike |
+  GroupPunct
+}
+
+StylePayloadPart {
+  Comment |
+  StylePayload |
+  Coordinate |
+  OptionList |
+  PathKeyword |
+  EscapedAmpersandCmd |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  NodeKw |
+  PicKw |
+  ToKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  Number |
+  IdentifierLike |
+  OptionPunct
+}
+
+GroupPathOperator {
+  "--" |
+  "++" |
+  "-|" |
+  "|-" |
+  ".."
+}
+
+GroupPunct {
+  "," |
+  "." |
+  ":" |
+  ";" |
+  "!" |
+  "?" |
+  "-" |
+  "+" |
+  "/" |
+  "=" |
+  "|" |
+  "&" |
+  "^" |
+  "$" |
+  "_" |
+  "~" |
+  "*" |
+  "#" |
+  "'" |
+  ">" |
+  "<" |
+  "\"" |
+  "`"
+}
+
+Coordinate {
+  "(" CoordPart* ")"
+}
+
+  CoordPart {
+  Coordinate |
+  OptionList |
+  Group |
+  GroupPathOperator |
+  PathKeyword |
+  EscapedPercentCmd |
+  EscapedDollarCmd |
+  EscapedBraceOpenCmd |
+  EscapedBraceCloseCmd |
+  EscapedParenOpenCmd |
+  EscapedParenCloseCmd |
+  KnownCommand |
+  ControlSymbolCmd |
+  CommandName |
+  ToKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  NodeKw |
+  PicKw |
+  Number |
+  IdentifierLike |
+  "," |
+  "." |
+  ":" |
+  "-" |
+  "+" |
+  "/" |
+  "=" |
+  "$" |
+  "!" |
+  "*" |
+  "|" |
+  "&" |
+  "^" |
+  "_" |
+  "#" |
+  "'"
+}
+
+IdentifierLike {
+  Identifier |
+  OfKw
+}
+
+KnownCommand {
+  GraphCmd |
+  DrawCmd |
+  PathCmd |
+  FillDrawCmd |
+  FillCmd |
+  PatternCmd |
+  ClipCmd |
+  ShadeCmd |
+  ShadeDrawCmd |
+  UseAsBoundingBoxCmd |
+  MatrixCmd |
+  NodeCmd |
+  PicCmd |
+  CoordinateCmd |
+  FontSizeCmd
+}
+
+StraySymbol {
+  "*" |
+  "!" |
+  "?" |
+  "'" |
+  "\"" |
+  "$" |
+  "|" |
+  "&" |
+  "^" |
+  "_" |
+  "~" |
+  "@"
+}
+
+StrayToken {
+  Number |
+  ToKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  PicKw |
+  IdentifierLike |
+  PathKeyword |
+  "{" |
+  "}" |
+  "]" |
+  "(" |
+  ")" |
+  "," |
+  ";" |
+  ":" |
+  "." |
+  "=" |
+  "-" |
+  "+" |
+  "/" |
+  StraySymbol
+}
+
+// Word keywords specialize Identifier so they only match as whole words.
+AtKw { @specialize<Identifier, "at"> }
+BendKw { @specialize<Identifier, "bend"> }
+CycleKw { @specialize<Identifier, "cycle"> }
+CircleKw { @specialize<Identifier, "circle"> }
+ToKw { @specialize<Identifier, "to"> }
+ChildKw { @specialize<Identifier, "child"> }
+FromKw { @specialize<Identifier, "from"> }
+ParentKw { @specialize<Identifier, "parent"> }
+SvgKw { @specialize<Identifier, "svg"> }
+LetKw { @specialize<Identifier, "let"> }
+InKw { @specialize<Identifier, "in"> }
+OfKw { @specialize<Identifier, "of"> }
+CoordinateKw { @specialize<Identifier, "coordinate"> }
+CoordinatesKw { @specialize<Identifier, "coordinates"> }
+DecorateKw { @specialize<Identifier, "decorate"> }
+EdgeKw { @specialize<Identifier, "edge"> }
+ControlsKw { @specialize<Identifier, "controls"> }
+AndKw { @specialize<Identifier, "and"> }
+RectangleKw { @specialize<Identifier, "rectangle"> }
+EllipseKw { @specialize<Identifier, "ellipse"> }
+ArcKw { @specialize<Identifier, "arc"> }
+GridKw { @specialize<Identifier, "grid"> }
+PlotKw { @specialize<Identifier, "plot"> }
+ParabolaKw { @specialize<Identifier, "parabola"> }
+SinKw { @specialize<Identifier, "sin"> }
+CosKw { @specialize<Identifier, "cos"> }
+NodeKw { @specialize<Identifier, "node"> }
+PicKw { @specialize<Identifier, "pic"> }
+ForeachKw { @specialize<Identifier, "foreach"> }
+
+@tokens {
+  @precedence {
+    BeginTikz,
+    DoubleDollar,
+    TikzSetCmd,
+    TikzStyleCmd,
+    DefineColorCmd,
+    DefCmd,
+    ColorletCmd,
+    LetDefCmd,
+    NewCommandCmd,
+    RenewCommandCmd,
+    ProvideCommandCmd,
+    DeclareRobustCommandCmd,
+    DeclareMathOperatorCmd,
+    PgfMathSetMacroCmd,
+    PgfMathParseCmd,
+    PgfMathSetSeedCmd,
+    InlineTikzCmd,
+    EndTikz,
+    FillDrawCmd,
+    FillCmd,
+    PatternCmd,
+    DrawCmd,
+    GraphCmd,
+    PathCmd,
+    ClipCmd,
+    ShadeDrawCmd,
+    ShadeCmd,
+    UseAsBoundingBoxCmd,
+    BeginScope,
+    EndScope,
+    ForeachCmd,
+    MatrixCmd,
+    NodeCmd,
+    PicCmd,
+    CoordinateCmd,
+    PgfkeysCmd,
+    UseTikzLibraryCmd,
+    MatrixRowSepCmd,
+    EscapedAmpersandCmd,
+    EscapedPercentCmd,
+    EscapedDollarCmd,
+    EscapedBraceOpenCmd,
+    EscapedBraceCloseCmd,
+    EscapedSpaceCmd,
+    EscapedParenOpenCmd,
+    EscapedParenCloseCmd,
+    EscapedBracketOpenCmd,
+    EscapedBracketCloseCmd,
+    ControlSymbolCmd,
+    FontSizeCmd,
+    CommandName,
+    Dollar,
+    Number,
+    Identifier,
+    Comment,
+    space
+  }
+
+  space { $[ \t\n\r]+ }
+
+  Comment { "%" ![\n\r]* }
+
+  BeginTikz { "\\begin{tikzpicture}" | "\\begin{tikzpicture*}" }
+  InlineTikzCmd { "\\tikz" ![A-Za-z@] }
+  EndTikz { "\\end{tikzpicture}" | "\\end{tikzpicture*}" }
+
+  DrawCmd { "\\draw" }
+  GraphCmd { "\\graph" }
+  PathCmd { "\\path" }
+  FillDrawCmd { "\\filldraw" }
+  FillCmd { "\\fill" }
+  PatternCmd { "\\pattern" }
+  ClipCmd { "\\clip" }
+  ShadeCmd { "\\shade" }
+  ShadeDrawCmd { "\\shadedraw" }
+  UseAsBoundingBoxCmd { "\\useasboundingbox" }
+  MatrixCmd { "\\matrix" }
+  BeginScope { "\\begin{scope}" }
+  EndScope { "\\end{scope}" }
+  ForeachCmd { "\\foreach" }
+  NodeCmd { "\\node" }
+  PicCmd { "\\pic" }
+  CoordinateCmd { "\\coordinate" }
+  TikzSetCmd { "\\tikzset" }
+  TikzStyleCmd { "\\tikzstyle" }
+  DefCmd { "\\def" }
+  ColorletCmd { "\\colorlet" }
+  DefineColorCmd { "\\definecolor" }
+  LetDefCmd { "\\let" }
+  NewCommandCmd { "\\newcommand" }
+  RenewCommandCmd { "\\renewcommand" }
+  ProvideCommandCmd { "\\providecommand" }
+  DeclareRobustCommandCmd { "\\DeclareRobustCommand" }
+  DeclareMathOperatorCmd { "\\DeclareMathOperator" }
+  PgfMathSetMacroCmd { "\\pgfmathsetmacro" }
+  PgfMathParseCmd { "\\pgfmathparse" }
+  PgfMathSetSeedCmd { "\\pgfmathsetseed" }
+  PgfkeysCmd { "\\pgfkeys" }
+  UseTikzLibraryCmd { "\\usetikzlibrary" }
+  MatrixRowSepCmd { "\\\\" }
+  EscapedAmpersandCmd { "\\&" }
+  EscapedPercentCmd { "\\%" }
+  EscapedDollarCmd { "\\$" }
+  EscapedBraceOpenCmd { "\\{" }
+  EscapedBraceCloseCmd { "\\}" }
+  EscapedSpaceCmd { "\\ " }
+  EscapedParenOpenCmd { "\\(" }
+  EscapedParenCloseCmd { "\\)" }
+  EscapedBracketOpenCmd { "\\[" }
+  EscapedBracketCloseCmd { "\\]" }
+  ControlSymbolCmd {
+    "\\," |
+    "\\!" |
+    "\\;" |
+    "\\:" |
+    "\\." |
+    "\\?" |
+    "\\/" |
+    "\\|" |
+    "\\+" |
+    "\\-" |
+    "\\=" |
+    "\\*" |
+    "\\'" |
+    "\\\"" |
+    "\\`" |
+    "\\~" |
+    "\\^" |
+    "\\_" |
+    "\\#"
+  }
+
+  FontSizeCmd {
+    "\\tiny" |
+    "\\scriptsize" |
+    "\\footnotesize" |
+    "\\small" |
+    "\\normalsize" |
+    "\\large" |
+    "\\Large" |
+    "\\LARGE" |
+    "\\huge" |
+    "\\Huge"
+  }
+
+  CommandName { "\\" $[A-Za-z@]+ }
+
+  DoubleDollar { "$$" }
+
+  Dollar { "$" }
+
+  Number { $[0-9]+ ("." $[0-9]+)? }
+
+  Identifier { $[A-Za-z] $[-A-Za-z0-9_:@]* }
+
+  NodeTextChunk { ![\\{}$%&^_~#\[\](),.;:!?'"`=+\-*/|<>\n\r \t]+ }
+
+  NodeTextPunct { $[&^_~#\[\](),.;:!?'"`=+\-*/|<>] }
+
+  QuotedSvg { "\"" !["\n\r]* "\"" }
+}

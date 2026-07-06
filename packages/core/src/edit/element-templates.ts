@@ -1,6 +1,7 @@
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint } from "../coords/points.js";
+import type { Span } from "../ast/types.js";
 import { CM_PER_PT, PT_PER_CM, formatNumber } from "./format.js";
 
 export type AnchorReference = {
@@ -46,7 +47,8 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
       const namePart = formatNodeName(template.name);
       if (template.shape) {
         const hasExplicitShapeSize = template.minimumWidthPt != null || template.minimumHeightPt != null;
-        const optionParts = ["draw", `shape=${template.shape}`];
+        const optionParts = buildNodeOptions(template.strokeColor, template.fillColor, true);
+        optionParts.push(`shape=${template.shape}`);
         if (hasExplicitShapeSize) {
           if (template.minimumWidthPt != null) {
             optionParts.push(`minimum width=${formatNumber(template.minimumWidthPt * CM_PER_PT)}cm`);
@@ -60,7 +62,9 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
         }
         return `\\node[${optionParts.join(", ")}]${namePart} at ${atCoord} {${text}};`;
       }
-      return `\\node${namePart} at ${atCoord} {${text}};`;
+      const nodeOptions = buildNodeOptions(template.strokeColor, template.fillColor, false);
+      const optionText = nodeOptions.length > 0 ? `[${nodeOptions.join(", ")}]` : "";
+      return `\\node${optionText}${namePart} at ${atCoord} {${text}};`;
     }
 
     case "matrix": {
@@ -134,14 +138,15 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
   }
 }
 
-export function insertElementIntoSource(source: string, snippet: string): string {
+export function insertElementIntoSource(source: string, snippet: string, figureSpan?: Span): string {
   const normalizedSnippet = snippet.trim();
   if (normalizedSnippet.length === 0) {
     return source;
   }
 
-  const endToken = "\\end{tikzpicture}";
-  const endIndex = source.lastIndexOf(endToken);
+  const resolvedEnd = resolveTikzpictureEndToken(source, figureSpan);
+  const endToken = resolvedEnd?.token ?? "\\end{tikzpicture}";
+  const endIndex = resolvedEnd?.from ?? source.lastIndexOf(endToken);
   if (endIndex < 0) {
     if (source.trim().length === 0) {
       return `\\begin{tikzpicture}\n  ${normalizedSnippet}\n\\end{tikzpicture}`;
@@ -163,10 +168,31 @@ export function insertElementIntoSource(source: string, snippet: string): string
   return `${before}${prefix}${bodyIndent}${normalizedSnippet}\n${after}`;
 }
 
+function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined): { from: number; token: string } | null {
+  if (!figureSpan) {
+    return null;
+  }
+  const from = Math.max(0, Math.min(source.length, figureSpan.from));
+  const to = Math.max(from, Math.min(source.length, figureSpan.to));
+  const figureSource = source.slice(from, to);
+  const endPattern = /\\end\{tikzpicture\*?\}/gu;
+  let lastMatch: RegExpExecArray | null = null;
+  for (const match of figureSource.matchAll(endPattern)) {
+    lastMatch = match;
+  }
+  if (!lastMatch) {
+    return null;
+  }
+  return {
+    from: from + lastMatch.index,
+    token: lastMatch[0]
+  };
+}
+
 export function generateComplexPathSource(
   start: WorldPoint,
   segments: readonly ComplexPathSegment[],
-  options: { closed?: boolean; startAnchor?: AnchorReference } = {}
+  options: { closed?: boolean; startAnchor?: AnchorReference; strokeColor?: string } = {}
 ): string | null {
   if (segments.length === 0) {
     return null;
@@ -188,7 +214,8 @@ export function generateComplexPathSource(
     parts.push("-- cycle");
   }
 
-  return `\\draw ${parts.join(" ")};`;
+  const drawOptions = buildDrawOptions(options.strokeColor, undefined, false);
+  return `\\draw${drawOptions} ${parts.join(" ")};`;
 }
 
 /**
@@ -399,7 +426,7 @@ function resolveBezierControls(
   };
 }
 
-function buildDrawOptions(
+export function buildDrawOptions(
   strokeColor: string | undefined,
   fillColor: string | undefined,
   hasArrow: boolean
@@ -419,4 +446,24 @@ function buildDrawOptions(
   }
 
   return parts.length > 0 ? `[${parts.join(", ")}]` : "";
+}
+
+function buildNodeOptions(
+  strokeColor: string | undefined,
+  fillColor: string | undefined,
+  defaultDraw: boolean
+): string[] {
+  const parts: string[] = [];
+
+  if (strokeColor) {
+    parts.push(strokeColor === "black" ? "draw" : `draw=${strokeColor}`);
+  } else if (defaultDraw) {
+    parts.push("draw");
+  }
+
+  if (fillColor && fillColor !== "none") {
+    parts.push(`fill=${fillColor}`);
+  }
+
+  return parts;
 }

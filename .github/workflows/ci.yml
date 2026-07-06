@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
+    branches: [master]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -14,7 +19,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Check generated grammar is committed
+        run: |
+          npm run generate:grammar
+          git diff --exit-code packages/lezer-tikz/src/grammar/
+      - name: Lint and typecheck
+        run: |
+          npm run lint:ci
+          npm run typecheck
       - run: npm test
+      - run: npm run -w @tikz-editor/desktop test:e2e:mock
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:ci
 
@@ -27,6 +41,16 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - id: cache-tauri-driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: ${{ runner.os }}-tauri-driver-v1-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-driver-v1-
       - name: Install Tauri dependencies
         run: |
           sudo apt-get update
@@ -40,5 +64,6 @@ jobs:
             xvfb
       - run: npm ci
       - run: cargo install tauri-driver --locked
+        if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
       - run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
       - run: xvfb-run -a npm run test:desktop:e2e

@@ -21,6 +21,7 @@ export type TikzEditorProfilingComputeTiming = {
   semanticFallbackReason?: string | null;
   recomputedStatementCount?: number | null;
   reusedStatementCount?: number | null;
+  phaseDurationsMs?: Record<string, number>;
 };
 
 export type TikzEditorProfilingSvgPatchTiming = {

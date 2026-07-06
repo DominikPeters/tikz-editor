@@ -139,10 +139,11 @@ export function appendPathToolSegmentFromGesture(
   };
 }
 
-export function generatePathToolSource(draft: PathToolDraft, options: { closed: boolean }): string | null {
+export function generatePathToolSource(draft: PathToolDraft, options: { closed: boolean; strokeColor?: string }): string | null {
   return generateComplexPathSource(draft.startWorld, draft.segments, {
     closed: options.closed,
-    startAnchor: draft.startAnchor
+    startAnchor: draft.startAnchor,
+    strokeColor: options.strokeColor
   });
 }
 

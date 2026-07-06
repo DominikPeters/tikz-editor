@@ -1,5 +1,6 @@
 import type { NodeItem, PathStatement, ScopeStatement, Statement } from "tikz-editor/ast/types";
 import type { EditAnalysisView } from "tikz-editor/edit/analysis";
+import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
 import type { OptionEntry, OptionListAst } from "tikz-editor/options/types";
 import type { SceneElement, SceneFigure } from "tikz-editor/semantic/types";
 
@@ -45,8 +46,13 @@ export function buildObjectsPanelModel(args: {
   }
 
   const byId = new Map<string, ObjectsPanelNode>();
+  const figureBoundsState = resolveFigureBoundsState(analysisView.source, {
+    activeFigureId: analysisView.activeFigureId,
+    analysisView
+  });
+  const boundingBoxSourceId = figureBoundsState.mode === "fixed" ? figureBoundsState.sourceId : null;
   const nodes = analysisView.parseResult.figure.body
-    .map((statement) => buildNode(statement, analysisView, sceneElementsBySourceId, selectedIds, byId))
+    .map((statement) => buildNode(statement, analysisView, sceneElementsBySourceId, selectedIds, byId, boundingBoxSourceId))
     .filter((node): node is ObjectsPanelNode => node != null);
 
   return { nodes, byId };
@@ -57,7 +63,8 @@ function buildNode(
   analysisView: EditAnalysisView,
   sceneElementsBySourceId: ReadonlyMap<string, SceneElement[]>,
   selectedIds: ReadonlySet<string>,
-  byId: Map<string, ObjectsPanelNode>
+  byId: Map<string, ObjectsPanelNode>,
+  boundingBoxSourceId: string | null
 ): ObjectsPanelNode | null {
   if (statement.kind !== "Path" && statement.kind !== "Scope") {
     return null;
@@ -65,7 +72,7 @@ function buildNode(
 
   const children = statement.kind === "Scope"
     ? statement.body
-        .map((child) => buildNode(child, analysisView, sceneElementsBySourceId, selectedIds, byId))
+        .map((child) => buildNode(child, analysisView, sceneElementsBySourceId, selectedIds, byId, boundingBoxSourceId))
         .filter((node): node is ObjectsPanelNode => node != null)
     : [];
   const ref = analysisView.statementSnapshot.byId.get(statement.id);
@@ -78,7 +85,9 @@ function buildNode(
   const displayOptions = primaryNode?.options ?? options;
   const explicitNodeName = primaryNode?.name?.trim();
   const explicitName = explicitNodeName === undefined || explicitNodeName.length === 0 ? readOptionValue(displayOptions, "name") : explicitNodeName;
-  const label = deriveStatementLabel(statement, sceneElementsBySourceId.get(statement.id) ?? []);
+  const label = statement.id === boundingBoxSourceId
+    ? "Bounding Box"
+    : deriveStatementLabel(statement, sceneElementsBySourceId.get(statement.id) ?? []);
   const targetResolution = analysisView.resolvePropertyTarget(writeTargetId);
   const siblingCount = analysisView.statementSnapshot.byParentKey.get(ref.parentKey)?.length ?? 0;
   const node: ObjectsPanelNode = {
@@ -103,6 +112,9 @@ function buildNode(
 
 function deriveStatementLabel(statement: PathStatement | ScopeStatement, elements: readonly SceneElement[]): string {
   if (statement.kind === "Scope") {
+    if (hasOptionFlag(statement.options, "on background layer")) {
+      return "Background Layer";
+    }
     return "Scope";
   }
 

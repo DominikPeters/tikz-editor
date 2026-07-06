@@ -260,7 +260,7 @@ function summarizeProbe(snapshot: PathToolProbeSnapshot) {
 test("profile bucket fill and path creation interactions", async ({ page }, testInfo) => {
   const variants = [];
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, BUCKET_SOURCE);
   await installProbe(page);
   await page.getByTestId("toolbar-bucket-color-caret").click();
@@ -289,7 +289,7 @@ test("profile bucket fill and path creation interactions", async ({ page }, test
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, BUCKET_SOURCE);
   await installProbe(page);
   await openMenuCommand(page, "view", "view.toggle-source-panel");
@@ -319,7 +319,7 @@ test("profile bucket fill and path creation interactions", async ({ page }, test
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, String.raw`\begin{tikzpicture}
 \end{tikzpicture}`);
   await installProbe(page);
@@ -350,7 +350,7 @@ test("profile bucket fill and path creation interactions", async ({ page }, test
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, String.raw`\begin{tikzpicture}
 \end{tikzpicture}`);
   await installProbe(page);

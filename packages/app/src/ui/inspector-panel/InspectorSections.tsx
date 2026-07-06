@@ -14,7 +14,7 @@ import {
   type InspectorPropertyProvenanceMap
 } from "./panel-helpers";
 import { SidePanel } from "../SidePanel";
-import css from "../InspectorPanel.module.css";
+import css from "./InspectorPanel.module.css";
 
 export function InspectorSingleSection(props: {
   section: InspectorDescriptor["sections"][number];

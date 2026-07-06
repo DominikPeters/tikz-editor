@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TikZ Editor",
-  "version": "0.2.0",
+  "version": "0.5.2",
   "identifier": "com.tikz.editor",
   "build": {
     "frontendDist": "../dist",
@@ -40,19 +40,25 @@
       {
         "name": "TikZ Source",
         "description": "TikZ source document",
-        "ext": ["tikz"],
+        "ext": [
+          "tikz"
+        ],
         "role": "Editor",
         "rank": "Owner",
         "mimeType": "application/x-tikz",
         "exportedType": {
           "identifier": "com.tikz.editor.tikz",
-          "conformsTo": ["public.plain-text"]
+          "conformsTo": [
+            "public.plain-text"
+          ]
         }
       },
       {
         "name": "TeX Source",
         "description": "TeX source document",
-        "ext": ["tex"],
+        "ext": [
+          "tex"
+        ],
         "role": "Editor",
         "rank": "Alternate",
         "mimeType": "text/x-tex"

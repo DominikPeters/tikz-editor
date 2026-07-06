@@ -6,6 +6,7 @@ import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult 
 import { resolvePropertyTargetFromParseResult } from "tikz-editor/edit/property-target";
 import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
 import { collectSourceWorldBounds } from "tikz-editor/edit/snapping";
+import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
 import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "tikz-editor/semantic/types";
 import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
@@ -811,7 +812,13 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
           key: `node-handle:${rotateHandleSourceId}:rotate`,
           point: rotateHandlePosition.handleSvg,
           anchor: rotateHandlePosition.anchorSvg,
-          centerWorld: { ...rotateFrame.centerWorld },
+          centerWorld: resolveRotateInteractionCenterWorld(
+            snapshot.source,
+            snapshot.parseResult,
+            rotateHandleSourceId,
+            rotateFrame.centerWorld
+          ),
+          centerPivotWorld: { ...rotateFrame.centerWorld },
           cursor: "grab",
           kind: "rotate-element",
           elementId: rotateHandleSourceId
@@ -820,7 +827,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     }
 
     return displays;
-  }, [ROTATE_HANDLE_OFFSET_PX, canvasTransform.scale, collapsedDensePathEndpointsBySource, collapsedDensePathSourceIds, dragCapability.draggableHandleIds, draggableSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, resizablePathShapeSourceIds, resizeFrameSourceIds, resizeFramesBySource, scopeResizeSourceIds, selectedElementIds, selectedHandles, selectionBoundsBySource, snapshot.editHandles, snapshot.scene, svgResult, toolMode, treeChildSourceIds]);
+  }, [ROTATE_HANDLE_OFFSET_PX, canvasTransform.scale, collapsedDensePathEndpointsBySource, collapsedDensePathSourceIds, dragCapability.draggableHandleIds, draggableSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, resizablePathShapeSourceIds, resizeFrameSourceIds, resizeFramesBySource, scopeResizeSourceIds, selectedElementIds, selectedHandles, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, snapshot.source, svgResult, toolMode, treeChildSourceIds]);
 
   const hitRegions = useMemo(() => {
     if (!snapshot.scene || !svgResult) return [];
@@ -1139,6 +1146,42 @@ export function buildResizeHandleDisplaysForFrame({
   }
 
   return displays;
+}
+
+function resolveRotateInteractionCenterWorld(
+  source: string,
+  parseResult: CanvasSnapshot["parseResult"],
+  sourceId: string,
+  fallback: WorldPoint
+): WorldPoint {
+  if (!parseResult) {
+    return { ...fallback };
+  }
+  const resolvedTarget = resolvePropertyTargetFromParseResult(source, parseResult, sourceId);
+  if (resolvedTarget.kind !== "found") {
+    return { ...fallback };
+  }
+  const transformContext = resolveTransformInspectorMutationContextFromOptionEntries(
+    resolvedTarget.target.options?.entries
+  );
+  const rotateAround = transformContext.values.rotateAround;
+  if (!rotateAround) {
+    return { ...fallback };
+  }
+  return parseRotateAroundPivotWorld(rotateAround.pivotRaw) ?? { ...fallback };
+}
+
+function parseRotateAroundPivotWorld(raw: string): WorldPoint | null {
+  const coordinate = parseCoordinateLike(raw);
+  if (!coordinate) {
+    return null;
+  }
+  const x = parseLength(coordinate.x, "cm");
+  const y = parseLength(coordinate.y, "cm");
+  if (x == null || y == null) {
+    return null;
+  }
+  return worldPoint(pt(x), pt(y));
 }
 
 export function buildResizeHandleDisplaysForBounds({

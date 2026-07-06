@@ -31,6 +31,7 @@ export type PlatformClipboard = {
 export type PlatformFileApi = {
   openText?: (options?: { addToRecent?: boolean }) => Promise<{ source: string; fileRef: DocumentFileRef | null } | null>;
   openBinary?: (options?: { addToRecent?: boolean }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
+  fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   bindOpenRequest?: (
     handler: (opened: { source: string; fileRef: DocumentFileRef | null }) => void
   ) => (() => void) | void;
@@ -54,6 +55,17 @@ export type PlatformFileApi = {
   clearRecentFiles?: () => Promise<void>;
 };
 
+export type ArxivSourceFile = {
+  path: string;
+  source: string;
+  size: number;
+};
+
+export type ArxivSourcePayload = {
+  id: string;
+  files: ArxivSourceFile[];
+};
+
 export type PlatformMenu = {
   usesNativeMenuBar?: boolean;
   usesNativeContextMenus?: boolean;
@@ -67,6 +79,7 @@ export type PlatformMenu = {
   showNativeContextMenu?: (payload: {
     items: readonly AppMenuItem[];
     commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
 };
 

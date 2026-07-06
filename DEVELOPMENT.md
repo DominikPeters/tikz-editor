@@ -34,6 +34,11 @@ npm run test:corpus
 # Web e2e tests (Playwright)
 npm run test:e2e
 
+# Web e2e tests in Firefox or WebKit
+npm run test:e2e:firefox
+npm run test:e2e:webkit
+npm run test:e2e:all-browsers
+
 # Desktop e2e tests
 npm run test:desktop:e2e
 

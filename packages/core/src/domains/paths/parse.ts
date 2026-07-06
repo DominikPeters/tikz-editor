@@ -21,6 +21,7 @@ import {
   mapEdgeFromParentOperationItem,
   mapLetOperationItem,
   mapPathForeachOperationItem,
+  mapPicOperationItem,
   mapSvgOperationItem,
   mapToOperationItem
 } from "./operations.js";
@@ -34,6 +35,19 @@ type PathItemContext = {
 };
 
 export function mapPathStatement(node: SyntaxNode, source: string, statementIndex: number): PathStatement {
+  const picPathStatement = findFirstChildByName(node, "PicPathStatement");
+  if (picPathStatement) {
+    const picItem = mapPicOperationItem(picPathStatement, source, statementIndex, 0);
+    return {
+      kind: "Path",
+      id: pathStatementId(statementIndex),
+      span: { from: node.from, to: node.to },
+      command: "path",
+      options: undefined,
+      items: [picItem]
+    };
+  }
+
   const nodePathStatement = findFirstChildByName(node, "NodePathStatement");
   const commandNode = nodePathStatement
     ? findFirstChildByName(nodePathStatement, "NodeCmd")
@@ -320,6 +334,10 @@ function mapPathItem(
     return mapDecorateOperationNode(actual, source, statementIndex, itemIndex);
   }
 
+  if (actual.type.name === "PicOperation") {
+    return mapPicOperationItem(actual, source, statementIndex, itemIndex);
+  }
+
   if (actual.type.name === "NodeItem") {
     context.syntheticNodeEmitted = true;
     context.pendingNodeOptions = [];
@@ -405,6 +423,7 @@ function isDirectPathItemNode(name: string): boolean {
     name === "LetOperation" ||
     name === "CoordinateOperation" ||
     name === "DecorateOperation" ||
+    name === "PicOperation" ||
     name === "Comment" ||
     name === "NodeItem" ||
     name === "UnknownPathItem" ||

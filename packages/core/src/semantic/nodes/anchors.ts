@@ -1643,6 +1643,7 @@ export function registerNamedNodeAnchors(
     context,
     name,
     {
+      sourceId: producerSourceId,
       shape,
       center: transformedCenter,
       anchorTransform: worldTransform(nodeTransform.a, nodeTransform.b, nodeTransform.c, nodeTransform.d, 0, 0),

@@ -64,6 +64,27 @@ describe("objects panel model", () => {
     expect(node?.writeTargetId).not.toBe(node?.id);
   });
 
+  it("labels explicit background scopes as background layers", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \begin{scope}[on background layer]
+    \draw (0,0) -- (1,0);
+  \end{scope}
+  \begin{scope}[on background layer={draw=yellow}]
+    \draw (0,-1) -- (1,-1);
+  \end{scope}
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const semantic = evaluateSemantic(source);
+    const model = buildObjectsPanelModel({
+      analysisView,
+      scene: semantic.scene,
+      selectedIds: new Set()
+    });
+
+    expect(model.nodes.map((node) => node.label)).toEqual(["Background Layer", "Background Layer"]);
+    expect(model.nodes.flatMap((node) => node.children.map((child) => child.label))).toEqual(["Line", "Line"]);
+  });
+
   it("derives smarter labels for supported path operations", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (-2.5, 2.5) -- (2.5, 2.5);
@@ -85,5 +106,39 @@ describe("objects panel model", () => {
     expect(model.byId.get("path:2")?.label).toBe("Polyline");
     expect(model.byId.get("path:3")?.label).toBe("Connector");
     expect(model.byId.get("path:4")?.label).toBe("Curve");
+  });
+
+  it("labels recognized leading figure bounds as Bounding Box", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \useasboundingbox (0,0) rectangle (1,1);
+  \draw (0.2,0.8) rectangle (0.8,0.2);
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const semantic = evaluateSemantic(source);
+    const model = buildObjectsPanelModel({
+      analysisView,
+      scene: semantic.scene,
+      selectedIds: new Set()
+    });
+
+    expect(model.byId.get("path:0")?.label).toBe("Bounding Box");
+    expect(model.byId.get("path:1")?.label).toBe("Rectangle");
+  });
+
+  it("does not label later bounding-box directives as canonical Bounding Box", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (-1,-1) rectangle (1,1);
+  \path[use as bounding box] (0,0) rectangle (1,1);
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const semantic = evaluateSemantic(source);
+    const model = buildObjectsPanelModel({
+      analysisView,
+      scene: semantic.scene,
+      selectedIds: new Set()
+    });
+
+    expect(model.byId.get("path:0")?.label).toBe("Rectangle");
+    expect(model.byId.get("path:1")?.label).toBe("Rectangle");
   });
 });

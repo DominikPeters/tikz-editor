@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { replaceSpan } from "../patch.js";
@@ -5,10 +6,8 @@ import { resolvePropertyTarget } from "../property-target.js";
 import type { SourcePatch } from "../types.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
+import { normalizeElementIds } from "../statement-find.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string };
 
 type DeleteTarget = {
   span: Span;
@@ -475,18 +474,4 @@ function unwrapSingleBraceLayer(raw: string): { content: string; hadOuterBraces:
 function stripOuterBraces(raw: string): string {
   const unwrapped = unwrapSingleBraceLayer(raw);
   return unwrapped.content.trim();
-}
-
-function normalizeElementIds(elementIds: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const elementId of elementIds) {
-    const id = elementId.trim();
-    if (id.length === 0 || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    normalized.push(id);
-  }
-  return normalized;
 }

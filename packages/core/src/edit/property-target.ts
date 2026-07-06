@@ -3,7 +3,7 @@ import type { ParseTikzResult } from "../parser/index.js";
 import { parseStatementsFromBodyWithMapping } from "../foreach/snippet-parse.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { normalizeOptionKey } from "./option-key.js";
-import type { OptionListAst } from "../options/types.js";
+import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import {
   extractNodeAdornmentPlan,
@@ -14,6 +14,7 @@ import { parseCustomStyleDefinition } from "../semantic/style/custom-styles.js";
 import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/nodes/matrix.js";
 import { incrementProfilingCounter } from "../profiling.js";
+import { findPathStatementById } from "./statement-find.js";
 
 export type PropertyTargetKind =
   | "figure"
@@ -25,6 +26,7 @@ export type PropertyTargetKind =
   | "matrix-cell"
   | "tree-child"
   | "foreach-template"
+  | "pic-template"
   | "node-adornment"
   | "to-operation"
   | "edge-operation"
@@ -34,6 +36,7 @@ export type PropertyTargetKind =
 export const TIKZPICTURE_GLOBAL_TARGET_ID = "__tikzpicture__";
 export const STYLE_SOURCE_TARGET_PREFIX = "__style_source__:";
 export const FOREACH_TEMPLATE_TARGET_PREFIX = "__foreach_template__:";
+export const PIC_TEMPLATE_TARGET_PREFIX = "__pic_template__:";
 
 export type PropertyTargetOptionsFormat = "bracketed" | "bare" | "braced";
 
@@ -84,6 +87,8 @@ export type PropertyTarget = {
   treeChildNodeSpanFallbackUsed?: boolean;
   foreachLoopId?: string;
   foreachLocalTargetId?: string;
+  picCodeSpan?: Span;
+  picLocalTargetId?: string;
 };
 
 export type PropertyTargetResolution =
@@ -114,6 +119,10 @@ export function resolvePropertyTarget(source: string, elementId: string, parseOp
   const parseResult = parseTikzForEdit(source, {
     ...parseOptions,
   });
+  const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
+  if (picTemplateTarget) {
+    return { kind: "found", target: picTemplateTarget };
+  }
   const foreachTemplateTarget = resolveForeachTemplateTargetFromParseResult(parseResult, normalizedId);
   if (foreachTemplateTarget) {
     return { kind: "found", target: foreachTemplateTarget };
@@ -135,21 +144,27 @@ export function resolvePropertyTarget(source: string, elementId: string, parseOp
 }
 
 export function resolvePropertyTargetFromParseResult(
-  source: string,
+  _source: string,
   parseResult: ParseTikzResult,
   elementId: string
 ): PropertyTargetResolution {
+  const parseSource = parseResult.source;
   const normalizedId = elementId.trim();
   if (normalizedId.length === 0) {
     return { kind: "not-found", reason: "Missing element id" };
   }
 
   if (normalizedId === TIKZPICTURE_GLOBAL_TARGET_ID) {
-    return resolveFigurePropertyTargetFromParseResult(source, parseResult);
+    return resolveFigurePropertyTargetFromParseResult(parseSource, parseResult);
   }
 
   if (normalizedId.startsWith(STYLE_SOURCE_TARGET_PREFIX)) {
-    return resolveStyleSourceTarget(source, normalizedId);
+    return resolveStyleSourceTarget(parseSource, normalizedId);
+  }
+
+  const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
+  if (picTemplateTarget) {
+    return { kind: "found", target: picTemplateTarget };
   }
 
   const foreachTemplateTarget = resolveForeachTemplateTargetFromParseResult(parseResult, normalizedId);
@@ -157,16 +172,16 @@ export function resolvePropertyTargetFromParseResult(
     return { kind: "found", target: foreachTemplateTarget };
   }
 
-  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, source, normalizedId);
+  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
   if (matrixCellTarget) {
     return { kind: "found", target: matrixCellTarget };
   }
-  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, source, normalizedId);
+  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
   if (treeChildTarget) {
     return { kind: "found", target: treeChildTarget };
   }
 
-  const target = findTargetInStatements(parseResult.figure.body, source, normalizedId);
+  const target = findTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
   if (!target) {
     return { kind: "not-found", reason: `No editable source target found for ${normalizedId}` };
   }
@@ -458,6 +473,76 @@ export function makeForeachTemplateTargetId(
 ): string {
   const loopPath = [loopId, ...nestedLoopLocalIds].join("/");
   return `${FOREACH_TEMPLATE_TARGET_PREFIX}${loopPath}::${localTargetId}`;
+}
+
+export function makePicTemplateTargetId(codeSpan: Span, localTargetId: string): string {
+  return `${PIC_TEMPLATE_TARGET_PREFIX}${codeSpan.from}:${codeSpan.to}::${localTargetId}`;
+}
+
+function parsePicTemplateTargetId(
+  targetId: string
+): { codeSpan: Span; localTargetId: string } | null {
+  if (!targetId.startsWith(PIC_TEMPLATE_TARGET_PREFIX)) {
+    return null;
+  }
+  const payload = targetId.slice(PIC_TEMPLATE_TARGET_PREFIX.length);
+  const separator = payload.indexOf("::");
+  if (separator <= 0 || separator >= payload.length - 2) {
+    return null;
+  }
+  const spanRaw = payload.slice(0, separator);
+  const localTargetId = payload.slice(separator + 2).trim();
+  const [fromRaw, toRaw] = spanRaw.split(":");
+  const from = Number(fromRaw);
+  const to = Number(toRaw);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to <= from || localTargetId.length === 0) {
+    return null;
+  }
+  return {
+    codeSpan: { from, to },
+    localTargetId
+  };
+}
+
+function resolvePicTemplateTargetFromParseResult(
+  parseResult: ParseTikzResult,
+  targetId: string
+): PropertyTarget | null {
+  const parsed = parsePicTemplateTargetId(targetId);
+  if (!parsed) {
+    return null;
+  }
+  const source = parseResult.source;
+  if (parsed.codeSpan.to > source.length) {
+    return null;
+  }
+
+  const codeRaw = source.slice(parsed.codeSpan.from, parsed.codeSpan.to);
+  const reparsedBody = parseStatementsFromBodyWithMapping(codeRaw, parsed.codeSpan);
+  const resolved = resolvePropertyTargetFromParseResult(
+    reparsedBody.parseResult.source,
+    reparsedBody.parseResult,
+    parsed.localTargetId
+  );
+  if (resolved.kind !== "found") {
+    return null;
+  }
+
+  const remapped = remapPropertyTargetToOriginalSource(resolved.target, reparsedBody.sourceMapper);
+  if (!remapped) {
+    return null;
+  }
+  const templateNodeTextSpan = resolvePathStatementNodeTextSpan(reparsedBody.parseResult.figure.body, parsed.localTargetId);
+  const remappedTemplateNodeTextSpan = templateNodeTextSpan ? reparsedBody.sourceMapper.mapSpan(templateNodeTextSpan) : null;
+
+  return {
+    ...remapped,
+    id: targetId,
+    kind: "pic-template",
+    textSpan: remapped.textSpan ?? remappedTemplateNodeTextSpan ?? undefined,
+    picCodeSpan: parsed.codeSpan,
+    picLocalTargetId: parsed.localTargetId
+  };
 }
 
 function parseForeachTemplateTargetId(
@@ -862,25 +947,6 @@ function findNodeItemInStatements(
   return null;
 }
 
-function findPathStatementById(
-  statements: Statement[],
-  statementId: string
-): PathStatement | null {
-  for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, statementId);
-      if (nested) {
-        return nested;
-      }
-      continue;
-    }
-    if (statement.kind === "Path" && statement.id === statementId) {
-      return statement;
-    }
-  }
-  return null;
-}
-
 function findForeachStatementById(
   statements: Statement[],
   statementId: string
@@ -915,6 +981,24 @@ function remapPropertyTargetToOriginalSource(
     span,
     insertOffset
   };
+
+  const options = remapOptionList(target.options, mapper);
+  if (target.options && !options) {
+    return null;
+  }
+  remapped.options = options ?? undefined;
+
+  const treeChildOptions = remapOptionList(target.treeChildOptions, mapper);
+  if (target.treeChildOptions && !treeChildOptions) {
+    return null;
+  }
+  remapped.treeChildOptions = treeChildOptions ?? undefined;
+
+  const treeNodeOptions = remapOptionList(target.treeNodeOptions, mapper);
+  if (target.treeNodeOptions && !treeNodeOptions) {
+    return null;
+  }
+  remapped.treeNodeOptions = treeNodeOptions ?? undefined;
 
   const spanKeys: Array<keyof PropertyTarget> = [
     "optionsSpan",
@@ -959,6 +1043,79 @@ function remapPropertyTargetToOriginalSource(
   }
 
   return remapped;
+}
+
+function remapOptionList(
+  options: OptionListAst | undefined,
+  mapper: { mapSpan: (span: Span) => Span | null }
+): OptionListAst | null {
+  if (!options) {
+    return null;
+  }
+  const span = mapper.mapSpan(options.span);
+  if (!span) {
+    return null;
+  }
+  const entries: OptionEntry[] = [];
+  for (const entry of options.entries) {
+    const remapped = remapOptionEntry(entry, mapper);
+    if (!remapped) {
+      return null;
+    }
+    entries.push(remapped);
+  }
+  return {
+    ...options,
+    span,
+    entries
+  };
+}
+
+function remapOptionEntry(
+  entry: OptionEntry,
+  mapper: { mapSpan: (span: Span) => Span | null }
+): OptionEntry | null {
+  const span = mapper.mapSpan(entry.span);
+  if (!span) {
+    return null;
+  }
+  if (entry.kind === "unknown") {
+    return {
+      ...entry,
+      span
+    };
+  }
+
+  let keySpan: Span | undefined;
+  if (entry.keySpan) {
+    const mappedKeySpan = mapper.mapSpan(entry.keySpan);
+    if (!mappedKeySpan) {
+      return null;
+    }
+    keySpan = mappedKeySpan;
+  }
+  if (entry.kind === "flag") {
+    return {
+      ...entry,
+      span,
+      keySpan
+    };
+  }
+
+  let valueSpan: Span | null | undefined = entry.valueSpan;
+  if (entry.valueSpan) {
+    const mappedValueSpan = mapper.mapSpan(entry.valueSpan);
+    if (!mappedValueSpan) {
+      return null;
+    }
+    valueSpan = mappedValueSpan;
+  }
+  return {
+    ...entry,
+    span,
+    keySpan,
+    valueSpan
+  };
 }
 
 function resolveMatrixBodyOpenOffset(source: string, textSpan: Span): number | undefined {
@@ -1139,6 +1296,13 @@ function absolutizeChildOperationSpans(
     if (raw.length > 0 && source.slice(span.from, span.to) === raw) {
       return span;
     }
+    const relativeSpan = {
+      from: containerSpan.from + span.from,
+      to: containerSpan.from + span.to
+    };
+    if (raw.length > 0 && source.slice(relativeSpan.from, relativeSpan.to) === raw) {
+      return relativeSpan;
+    }
     if (raw.length > 0) {
       const containerSlice = source.slice(containerSpan.from, containerSpan.to);
       const rawOffset = containerSlice.indexOf(raw);
@@ -1149,10 +1313,7 @@ function absolutizeChildOperationSpans(
         };
       }
     }
-    return {
-      from: containerSpan.from + span.from,
-      to: containerSpan.from + span.to
-    };
+    return relativeSpan;
   };
   return {
     ...child,

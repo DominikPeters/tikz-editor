@@ -27,6 +27,7 @@ export type { SvgExportArtifact, CreateSvgExportArtifactOptions } from "./svg.js
 
 export {
   createStandaloneLatexExportArtifact,
+  createMinimalTikzSourceArtifact,
   normalizeStandaloneLatexExportFileName,
   STANDALONE_LATEX_EXPORT_MIME_TYPE,
   DEFAULT_STANDALONE_LATEX_EXPORT_FILE_NAME
@@ -35,5 +36,7 @@ export {
 export type {
   StandaloneExportDiagnostic,
   StandaloneLatexExportArtifact,
-  CreateStandaloneLatexExportArtifactOptions
+  CreateStandaloneLatexExportArtifactOptions,
+  MinimalTikzSourceArtifact,
+  CreateMinimalTikzSourceArtifactOptions
 } from "./standalone-latex.js";

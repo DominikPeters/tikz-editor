@@ -7,6 +7,30 @@ import { wp } from "../coords-helpers.js";
 const cm = (value: number): number => value * PT_PER_CM;
 
 describe("cutover regressions", () => {
+  it("emits unpadded SVG viewBox for recognized fixed figure bounds", async () => {
+    const auto = await computeSnapshot({
+      id: "auto-bounds-padding",
+      kind: "render",
+      source: String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (1,1);
+\end{tikzpicture}`
+    });
+    const fixed = await computeSnapshot({
+      id: "fixed-bounds-padding",
+      kind: "render",
+      source: String.raw`\begin{tikzpicture}
+  \useasboundingbox (0,0) rectangle (1,1);
+  \draw (0.2,0.8) rectangle (0.8,0.2);
+\end{tikzpicture}`
+    });
+
+    expect(auto.snapshot.svg?.viewBox.width).toBeGreaterThan(cm(1));
+    expect(fixed.snapshot.svg?.viewBox.x).toBeCloseTo(0, 6);
+    expect(fixed.snapshot.svg?.viewBox.y).toBeCloseTo(0, 6);
+    expect(fixed.snapshot.svg?.viewBox.width).toBeCloseTo(cm(1), 6);
+    expect(fixed.snapshot.svg?.viewBox.height).toBeCloseTo(cm(1), 6);
+  });
+
   it("updates rendered scene after source edits", async () => {
     const sourceA = String.raw`\begin{tikzpicture}
   \node[draw] at (0,0) {A};

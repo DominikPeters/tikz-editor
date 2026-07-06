@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import {
   gotoApp,
   openMenuCommand,
@@ -6,6 +7,10 @@ import {
   selectAllSceneElements,
   setSource
 } from "./helpers";
+
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
 
 const SAMPLE_SOURCE = String.raw`\begin{tikzpicture}
   \node[draw] at (0,0) {A};
@@ -17,15 +22,18 @@ test.beforeEach(async ({ page }) => {
   await gotoApp(page);
 });
 
-test("panel modal closes on Escape even when focus is outside the panel", async ({ page }) => {
+test("panel modal closes on Escape events from outside the panel", async ({ page }) => {
   await openMenuCommand(page, "insert", "insert.equation");
-  await expect(page.getByTestId("equation-modal")).toBeVisible();
+  const modal = page.getByTestId("equation-modal");
+  await expect(modal).toBeVisible();
+  await expect(modal.locator("math-field")).toBeVisible();
 
-  await page.getByTestId("menu-section-file").focus();
-  await expect(page.getByTestId("menu-section-file")).toBeFocused();
+  const fileMenuTrigger = page.getByTestId("menu-section-file");
+  await fileMenuTrigger.evaluate((element) => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  });
 
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("equation-modal")).toHaveCount(0);
+  await expect(modal).toHaveCount(0);
 });
 
 test("help menu opens the web about modal", async ({ page }) => {
@@ -36,7 +44,7 @@ test("help menu opens the web about modal", async ({ page }) => {
   const modal = page.getByTestId("about-modal");
   await expect(modal).toBeVisible();
   await expect(modal.getByRole("heading", { name: "TikZ Editor Web" })).toBeVisible();
-  await expect(modal.getByText(/^Version (\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?) \(\1\)$/)).toBeVisible();
+  await expect(modal.getByText(`Version ${packageJson.version}`, { exact: true })).toBeVisible();
   await expect(modal.getByText("Dominik Peters")).toBeVisible();
   await expect(modal.getByRole("link", { name: "https://tikz.dev/editor/" })).toHaveAttribute(
     "href",

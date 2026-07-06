@@ -3,7 +3,7 @@ import { viewportPoint as makeViewportPoint, clientPoint, px } from "tikz-editor
 import { clamp, distanceSquared, viewportToSvgPoint } from "./geometry";
 import { resolveToolCreateCurrentWorld } from "./interaction-helpers";
 import type { ClientPoint, SvgPoint, ViewportPoint, WorldPoint } from "../coords/types";
-import type { CanvasDragKind, CanvasTransform } from "../../store/types";
+import type { CanvasTransform } from "../../store/types";
 import type { CanvasSnapshot, DragState, PendingTouchViewport, SourceBoundsMap, StateSetter, ValueSetter } from "./types";
 import type { ResizeFrame } from "./resize-frames";
 import type { SvgViewBox } from "tikz-editor/svg/types";
@@ -30,8 +30,6 @@ export type UseCanvasViewportEffectsArgs = {
   resizeFramesBySource: ReadonlyMap<string, ResizeFrame | null>;
   liveResizeFramesRef: MutableRefObject<ReadonlyMap<string, ResizeFrame | null>>;
   previousViewBoxRef: MutableRefObject<SvgViewBox | null>;
-  activeCanvasDragKind: CanvasDragKind | null;
-  setDragPatchMode: StateSetter<"partial" | "full">;
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   zoomSpeed: number;
   MIN_SCALE: number;
@@ -63,8 +61,6 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     resizeFramesBySource,
     liveResizeFramesRef,
     previousViewBoxRef,
-    activeCanvasDragKind,
-    setDragPatchMode,
     dispatchCanvasTransform,
     zoomSpeed,
     MIN_SCALE,
@@ -127,7 +123,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     return () => { observer.disconnect(); };
   }, [setViewportSize, viewportRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
   }, [canvasTransform, canvasTransformRef]);
 
@@ -139,7 +135,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     svgResultRef.current = svgResult;
   }, [svgResult, svgResultRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     fitToContentModeActiveRef.current = fitToContentModeActive;
   }, [fitToContentModeActive, fitToContentModeActiveRef]);
 
@@ -167,10 +163,6 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     const sameH = Math.abs(previous.height - svgResult.viewBox.height) < 1e-6;
     if (sameX && sameY && sameW && sameH) return;
 
-    if (activeCanvasDragKind) {
-      setDragPatchMode("full");
-    }
-
     const currentTransform = canvasTransformRef.current;
     const scale = currentTransform.scale;
 
@@ -180,7 +172,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       ((previous.y + previous.height) - (svgResult.viewBox.y + svgResult.viewBox.height)) * scale;
 
     dispatchCanvasTransform({ translateX, translateY, scale });
-  }, [activeCanvasDragKind, canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, setDragPatchMode, svgResult]);
+  }, [canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, svgResult]);
 
   useEffect(() => {
     const viewport = viewportRef.current;

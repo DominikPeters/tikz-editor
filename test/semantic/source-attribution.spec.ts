@@ -165,6 +165,22 @@ describe("semantic source attribution invariants", () => {
     }
   });
 
+  it("keeps pic generated elements grouped on the invocation with template identity refs", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \tikzset{tick/.pic={\draw[blue] (0,0) -- (1,0);}}
+  \pic at (1,0) {tick};
+\end{tikzpicture}`;
+    const result = evaluateSemantic(source);
+
+    assertOriginalSourceRefInvariants(source, result);
+    const path = elementsOfKind(result.scene.elements, "Path")[0];
+    expect(path?.sourceRef.sourceId).toMatch(/^pic-operation:/);
+    expect(path?.identityRef?.sourceId).toBe("path:0");
+    expect(path?.origin?.picStack).toHaveLength(1);
+    expect(path?.origin?.picTemplateLocalTargetId).toBe("path:0");
+    expect(source.slice(path?.sourceRef.sourceSpan.from ?? 0, path?.sourceRef.sourceSpan.to ?? 0)).toBe(String.raw`\pic at (1,0) {tick};`);
+  });
+
   it("maps chained node foreach clauses to the original node template", () => {
     const source = String.raw`\begin{tikzpicture}
   \path (0,0) node foreach \x in {0,1} foreach \y in {a,b} [name=n\x\y] {\x\y};

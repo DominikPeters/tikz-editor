@@ -36,7 +36,7 @@ import { renderArrowTipPreviewPaths } from "tikz-editor/svg/arrows/preview";
 import { renderPathMorphingDecorationPreviewSvg } from "tikz-editor/svg/decorations/preview";
 import { renderFillPatternPreviewSvg } from "tikz-editor/svg/patterns/preview";
 import type { CustomDropdownItem, CustomDropdownOption } from "../CustomDropdown";
-import css from "../InspectorPanel.module.css";
+import css from "./InspectorPanel.module.css";
 
 export type MultiInspectorNumberProperty = {
   kind: "number";
@@ -46,8 +46,10 @@ export type MultiInspectorNumberProperty = {
   mixed: boolean;
   step: number;
   min?: number;
+  minExclusive?: number;
   max?: number;
   unit?: string;
+  defaultValue?: number;
   clearKeys?: string[];
   writes: SetPropertyWriteTarget[];
   readOnlyReason?: string;
@@ -61,6 +63,7 @@ export type MultiInspectorLengthProperty = {
   mixed: boolean;
   step: number;
   unit: "pt";
+  defaultValue?: number;
   clearKeys?: string[];
   writes: SetPropertyWriteTarget[];
   note?: string;
@@ -789,10 +792,14 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       min: numberProperties.every((property) => property.min != null)
         ? Math.max(...numberProperties.map((property) => property.min as number))
         : undefined,
+      minExclusive: numberProperties.every((property) => property.minExclusive != null)
+        ? Math.max(...numberProperties.map((property) => property.minExclusive as number))
+        : undefined,
       max: numberProperties.every((property) => property.max != null)
         ? Math.min(...numberProperties.map((property) => property.max as number))
         : undefined,
       unit: base.unit,
+      defaultValue: consensusDefaultValue(numberProperties),
       clearKeys,
       writes,
       readOnlyReason: deriveReadOnlyReason(writes)
@@ -818,6 +825,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !numbersAreEqual(values),
       step: base.step,
       unit: base.unit,
+      defaultValue: consensusDefaultValue(lengthProperties),
       clearKeys,
       writes,
       note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
@@ -1241,6 +1249,15 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
   }
 
   return null;
+}
+
+function consensusDefaultValue(properties: ReadonlyArray<{ defaultValue?: number }>): number | undefined {
+  const values = properties.map((property) => property.defaultValue);
+  if (values.some((value) => value == null)) {
+    return undefined;
+  }
+  const numericValues = values as number[];
+  return numbersAreEqual(numericValues) ? numericValues[0] : undefined;
 }
 
 export function deriveReadOnlyReason(

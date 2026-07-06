@@ -1,8 +1,8 @@
 import { worldBounds, worldPoint } from "../../coords/points.js";
 import type { WorldPoint, WorldBounds } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
-import type { CoordinateItem, EdgeFromParentOperationItem, EdgeOperationItem, GraphOperationItem, NodeItem, PathItem, PathStatement, PlotOperationItem, Span, ToOperationItem } from "../../ast/types.js";
-import type { OptionListAst } from "../../options/types.js";
+import type { CoordinateItem, EdgeFromParentOperationItem, EdgeOperationItem, GraphOperationItem, NodeItem, PathItem, PathStatement, PicOperationItem, PlotOperationItem, Span, ToOperationItem } from "../../ast/types.js";
+import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { parseTikz } from "../../parser/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import {
@@ -51,13 +51,15 @@ import {
   materializeNodeAdornment
 } from "./label-quotes.js";
 import { expandMacroBindings } from "../../macros/index.js";
-import type { DiagnosticPushFn, FeatureMarkFn, PlacementSegment } from "./types.js";
+import type { DiagnosticPushFn, FeatureMarkFn, PathEvaluationOptions, PlacementSegment } from "./types.js";
 import { applyMatrix, identityMatrix } from "../transform.js";
 import { createEditHandle } from "../edit-handles.js";
 import { parseStyleValueAsOptionList, resolveContextDelta } from "../style/resolve.js";
+import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "../style/diagnostics.js";
 import { expandOptionListMacros } from "../style/macro-options.js";
 import { cloneStyleChain, type StyleChainEntry, type StyleTraceLayerInput } from "../style-chain.js";
-import { cloneCustomStyleRegistry } from "../style/custom-styles.js";
+import { cloneCustomStyleRegistry, walkOptionEntriesWithCustomStyles } from "../style/custom-styles.js";
+import { applyPicDefinitionsFromOptionLists, clonePicDefinitionRegistry } from "../pics/registry.js";
 import { computeBounds, resolveFrameMeta } from "../evaluate.js";
 import {
   applyPlotOptionLists,
@@ -79,6 +81,13 @@ import {
   evaluatePlotCoordinatePoints,
   extractPlotCoordinateEntries
 } from "./evaluate-plot.js";
+import { emitCircleOrEllipse, transformCircleGeometry, transformEllipseGeometry } from "./evaluate-shapes.js";
+import { handleChildOperationCluster } from "./evaluate-tree.js";
+
+const DRAW_EDGE_OPTIONS = parseStyleValueAsOptionList("draw");
+const EVERY_EDGE_OPTIONS = parseStyleValueAsOptionList("every edge");
+const EDGE_FROM_PARENT_STYLE_OPTIONS = parseStyleValueAsOptionList("edge from parent");
+const HELP_LINES_OPTIONS = parseStyleValueAsOptionList("help lines");
 
 function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
@@ -87,8 +96,79 @@ function wp(x: number, y: number): WorldPoint {
 function wb(minX: number, minY: number, maxX: number, maxY: number): WorldBounds {
   return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
 }
-import { emitCircleOrEllipse, transformCircleGeometry, transformEllipseGeometry } from "./evaluate-shapes.js";
-import { handleChildOperationCluster } from "./evaluate-tree.js";
+
+function pushStyleDiagnostic(
+  pushDiagnostic: DiagnosticPushFn,
+  diagnostic: StyleDiagnostic,
+  messagePrefix: string,
+  fallbackSpan: Span
+): void {
+  const code = styleDiagnosticCode(diagnostic);
+  const span = styleDiagnosticSpan(diagnostic, fallbackSpan);
+  pushDiagnostic(code, `${messagePrefix}: ${code}`, span.from, span.to);
+}
+
+function resolveOptionsForNodeAdornmentPlan(
+  options: OptionListAst | undefined,
+  frame: SemanticContext["stack"][number],
+  context: SemanticContext
+): OptionListAst | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  const macroExpanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
+  const expandedEntries: OptionEntry[] = [];
+  const diagnostics: string[] = [];
+  walkOptionEntriesWithCustomStyles(
+    macroExpanded,
+    cloneCustomStyleRegistry(frame.customStyles),
+    (entry) => expandedEntries.push(entry),
+    diagnostics
+  );
+
+  const expandedOptions: OptionListAst | undefined =
+    expandedEntries.length > 0
+      ? {
+          span: options.span,
+          raw: macroExpanded.map((list) => list.raw).join(", "),
+          entries: expandedEntries
+        }
+      : undefined;
+  const rawSignature = nodeAdornmentControlSignature(options);
+  const expandedSignature = nodeAdornmentControlSignature(expandedOptions);
+  return rawSignature === expandedSignature ? options : expandedOptions;
+}
+
+function nodeAdornmentControlSignature(options: OptionListAst | undefined): string {
+  if (!options) {
+    return "";
+  }
+
+  return options.entries
+    .filter((entry) => {
+      if (entry.kind === "kv") {
+        return (
+          entry.key === "label" ||
+          entry.key === "pin" ||
+          entry.key === "label position" ||
+          entry.key === "pin position" ||
+          entry.key === "label distance" ||
+          entry.key === "pin distance" ||
+          entry.key === "pin edge" ||
+          entry.key === "quotes mean label" ||
+          entry.key === "quotes mean pin"
+        );
+      }
+      if (entry.kind === "flag") {
+        return entry.key === "quotes mean label" || entry.key === "quotes mean pin";
+      }
+      const trimmed = entry.raw.trim();
+      return trimmed.startsWith("\"") || trimmed.startsWith("'");
+    })
+    .map((entry) => entry.raw)
+    .join("\n");
+}
 
 export function evaluatePathStatement(
   statement: PathStatement,
@@ -96,9 +176,7 @@ export function evaluatePathStatement(
   style: ResolvedStyle,
   markFeature: FeatureMarkFn,
   pushDiagnostic: DiagnosticPushFn,
-  options: {
-    honorInitialCurrentPoint?: boolean;
-  } = {}
+  options: PathEvaluationOptions = {}
 ): SceneElement[] {
   const geometryElements: SceneElement[] = [];
   const behindNodeElements: SceneElement[] = [];
@@ -128,6 +206,7 @@ export function evaluatePathStatement(
   let pendingNamedCoordinate: { name: string } | null = null;
   let pendingSegmentPlacements: Array<{ name: string; fraction: number }> = [];
   let pendingSegmentNodes: NodeItem[] = [];
+  let pendingSegmentPics: Array<{ item: PicOperationItem; fraction: number }> = [];
   let pendingNodeNameForNodeCommand: string | null = null;
   let lastPlacementSegment: PlacementSegment | null = null;
   let previousSegmentRoundedCorners: number | null = null;
@@ -212,6 +291,30 @@ export function evaluatePathStatement(
     }
     pendingSegmentNodes = [];
   };
+  const emitPicOperation = (
+    item: PicOperationItem,
+    placement: WorldPoint,
+    segment: PlacementSegment | null = null
+  ): void => {
+    markFeature("pic_operation", "supported");
+    if (!options.evaluatePicOperation) {
+      markFeature("pic_operation", "unsupported");
+      pushDiagnostic("unsupported-pic-operation", "`pic` operations are parsed but not semantically implemented here.", item.span.from, item.span.to);
+      return;
+    }
+    const resolved = options.evaluatePicOperation(item, placement, segment);
+    behindNodeElements.push(...resolved.behindElements);
+    frontNodeElements.push(...resolved.frontElements);
+  };
+  const flushPendingSegmentPics = (segment: PlacementSegment | null): void => {
+    if (!segment || pendingSegmentPics.length === 0) {
+      return;
+    }
+    for (const pending of pendingSegmentPics) {
+      emitPicOperation(pending.item, pointAtPlacementSegment(segment, pending.fraction), segment);
+    }
+    pendingSegmentPics = [];
+  };
   const flushPendingCircle = (sourceId: string, span: Span): void => {
     if (!pendingCircleCenter) {
       return;
@@ -281,9 +384,9 @@ export function evaluatePathStatement(
     return candidateStyle.shadeEnabled || (candidateStyle.fill != null && candidateStyle.fill !== "none") || hasFilledShadowLayer;
   };
   let shouldCompoundFilledSubpaths = computeShouldCompoundFilledSubpaths(style);
-  const drawEdgeOptions = parseStyleValueAsOptionList("draw");
-  const everyEdgeOptions = parseStyleValueAsOptionList("every edge");
-  const edgeFromParentStyleOptions = parseStyleValueAsOptionList("edge from parent");
+  const drawEdgeOptions = DRAW_EDGE_OPTIONS;
+  const everyEdgeOptions = EVERY_EDGE_OPTIONS;
+  const edgeFromParentStyleOptions = EDGE_FROM_PARENT_STYLE_OPTIONS;
   let currentItemIndex = -1;
   const itemHandlers = new Map<PathItem["kind"], (item: PathItem) => void>([
     [
@@ -614,11 +717,12 @@ export function evaluatePathStatement(
               (raw) => resolveContextColorAliasValue(context, raw)
             )
           );
-          for (const code of resolvedEdgeStyle.diagnostics) {
+          for (const diagnostic of resolvedEdgeStyle.diagnostics) {
+            const code = styleDiagnosticCode(diagnostic);
             if (code === "unsupported-option-flag:every edge") {
               continue;
             }
-            pushDiagnostic(code, `Graph edge option issue: ${code}`, edge.span.from, edge.span.to);
+            pushStyleDiagnostic(pushDiagnostic, diagnostic, "Graph edge option issue", edge.span);
           }
 
           const handled = withDependencySource(context, graphStatement.id, () =>
@@ -738,6 +842,8 @@ export function evaluatePathStatement(
               label: "path option"
             } as const;
             const optionCustomStyles = cloneCustomStyleRegistry(treeFrameState.customStyles);
+            const optionPicDefinitions = clonePicDefinitionRegistry(treeFrameState.picDefinitions);
+            applyPicDefinitionsFromOptionLists(optionPicDefinitions, [expandedOptions], optionSourceRef);
             const optionResolved = resolveContextDelta(
               treeFrameState.style,
               treeFrameState.transform,
@@ -753,8 +859,8 @@ export function evaluatePathStatement(
               treeFrameState.styleChain,
               (raw) => resolveContextColorAliasValue(context, raw)
             );
-            for (const code of optionResolved.diagnostics) {
-              pushDiagnostic(code, `Path option issue: ${code}`, item.span.from, item.span.to);
+            for (const diagnostic of optionResolved.diagnostics) {
+              pushStyleDiagnostic(pushDiagnostic, diagnostic, "Path option issue", item.span);
             }
 
             const optionMeta = resolveFrameMeta(treeFrameState, optionResolved.expandedOptionLists, optionSourceRef);
@@ -765,7 +871,8 @@ export function evaluatePathStatement(
               style: optionResolved.style,
               styleChain: optionResolved.chain,
               transform: optionResolved.transform,
-              customStyles: optionCustomStyles
+              customStyles: optionCustomStyles,
+              picDefinitions: optionPicDefinitions
             };
             style = treeFrameState.style;
             statementStyleChain = treeFrameState.styleChain;
@@ -794,13 +901,14 @@ export function evaluatePathStatement(
           pendingSegmentNodes.push(item);
           return;
         }
-        const adornmentPlan = extractNodeAdornmentPlan(item.options, {
-          quoteMode: frame.nodeQuotesMode,
-          labelPosition: frame.labelPosition,
-          pinPosition: frame.pinPosition,
-          labelDistancePt: frame.labelDistancePt,
-          pinDistancePt: frame.pinDistancePt,
-          pinEdgeRaw: frame.pinEdgeRaw
+        const adornmentOptions = resolveOptionsForNodeAdornmentPlan(item.options, treeFrameState, context);
+        const adornmentPlan = extractNodeAdornmentPlan(adornmentOptions, {
+          quoteMode: treeFrameState.nodeQuotesMode,
+          labelPosition: treeFrameState.labelPosition,
+          pinPosition: treeFrameState.pinPosition,
+          labelDistancePt: treeFrameState.labelDistancePt,
+          pinDistancePt: treeFrameState.pinDistancePt,
+          pinEdgeRaw: treeFrameState.pinEdgeRaw
         });
         const declaredNodeName = pendingNodeNameForNodeCommand ?? item.name ?? null;
         const hasFollowingTreeChildren = hasFollowingChildOperation(statement.items, currentItemIndex + 1);
@@ -917,7 +1025,7 @@ export function evaluatePathStatement(
               };
 
               const pinEdgeOptionLayers: StyleTraceLayerInput[] = [];
-              const helpLinesOptions = parseStyleValueAsOptionList("help lines");
+              const helpLinesOptions = HELP_LINES_OPTIONS;
               if (helpLinesOptions) {
                 pinEdgeOptionLayers.push({
                   kind: "command",
@@ -951,8 +1059,8 @@ export function evaluatePathStatement(
                 statementStyleChain,
                 (raw) => resolveContextColorAliasValue(context, raw)
               );
-              for (const code of resolvedPinEdgeStyle.diagnostics) {
-                pushDiagnostic(code, `Pin edge option issue: ${code}`, spec.span.from, spec.span.to);
+              for (const diagnostic of resolvedPinEdgeStyle.diagnostics) {
+                pushStyleDiagnostic(pushDiagnostic, diagnostic, "Pin edge option issue", spec.span);
               }
 
               const pinEdgeHandlesStart = context.editHandles.length;
@@ -1113,8 +1221,8 @@ export function evaluatePathStatement(
               params: { ...resolvedDecorateOptions.style.decoration.params }
             }
           };
-          for (const code of resolvedDecorateOptions.diagnostics) {
-            pushDiagnostic(code, `Decorate option issue: ${code}`, item.span.from, item.span.to);
+          for (const diagnostic of resolvedDecorateOptions.diagnostics) {
+            pushStyleDiagnostic(pushDiagnostic, diagnostic, "Decorate option issue", item.span);
           }
         } else {
           operationStyle = {
@@ -1154,13 +1262,14 @@ export function evaluatePathStatement(
             return;
           }
 
-          const adornmentPlan = extractNodeAdornmentPlan(item.options, {
-            quoteMode: frame.nodeQuotesMode,
-            labelPosition: frame.labelPosition,
-            pinPosition: frame.pinPosition,
-            labelDistancePt: frame.labelDistancePt,
-            pinDistancePt: frame.pinDistancePt,
-            pinEdgeRaw: frame.pinEdgeRaw
+          const adornmentOptions = resolveOptionsForNodeAdornmentPlan(item.options, treeFrameState, context);
+          const adornmentPlan = extractNodeAdornmentPlan(adornmentOptions, {
+            quoteMode: treeFrameState.nodeQuotesMode,
+            labelPosition: treeFrameState.labelPosition,
+            pinPosition: treeFrameState.pinPosition,
+            labelDistancePt: treeFrameState.labelDistancePt,
+            pinDistancePt: treeFrameState.pinDistancePt,
+            pinEdgeRaw: treeFrameState.pinEdgeRaw
           });
           if (adornmentPlan.adornments.length === 0) {
             return;
@@ -1225,6 +1334,46 @@ export function evaluatePathStatement(
       }
     ],
     [
+      "PicOperation",
+      (pathItem) => {
+        const item = pathItem as PicOperationItem;
+        const placementFraction = resolveNodePositionFraction(item.options);
+        if (placementFraction != null && currentOperator) {
+          pendingSegmentPics.push({ item, fraction: placementFraction });
+          return;
+        }
+
+        const segment = placementFraction != null ? lastPlacementSegment : null;
+        const explicitPlacement = item.atRaw ? evaluateRawCoordinate(item.atRaw, context, item.atRelativePrefix) : null;
+        if (explicitPlacement) {
+          for (const code of explicitPlacement.diagnostics) {
+            pushDiagnostic(code, `Pic placement issue: ${code}`, item.atSpan?.from ?? item.span.from, item.atSpan?.to ?? item.span.to);
+          }
+          if (!explicitPlacement.world) {
+            markFeature("pic_operation", "unsupported");
+            pushDiagnostic("invalid-pic-placement", "Could not evaluate pic placement.", item.atSpan?.from ?? item.span.from, item.atSpan?.to ?? item.span.to);
+            return;
+          }
+          if (item.atSpan) {
+            const handle = createEditHandle(explicitPlacement, item.atSpan, item.id, "node-position", context);
+            if (handle) {
+              context.editHandles.push(handle);
+            }
+          }
+          emitPicOperation(item, explicitPlacement.world, segment);
+          return;
+        }
+
+        if (placementFraction != null && segment) {
+          emitPicOperation(item, pointAtPlacementSegment(segment, placementFraction), segment);
+          return;
+        }
+
+        const placement = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        emitPicOperation(item, placement, null);
+      }
+    ],
+    [
       "UnknownPathItem",
       () => {}
     ],
@@ -1262,6 +1411,12 @@ export function evaluatePathStatement(
         activePath = handled.activePath;
         if (handled.segment) {
           lastPlacementSegment = handled.segment;
+        }
+        if (handled.segment) {
+          for (const pic of toItem.pics ?? []) {
+            const fraction = resolveNodePositionFraction(pic.options) ?? 0.5;
+            emitPicOperation(pic, pointAtPlacementSegment(handled.segment, fraction), handled.segment);
+          }
         }
         behindNodeElements.push(...handled.behindNodeElements);
         frontNodeElements.push(...handled.frontNodeElements);
@@ -1357,11 +1512,12 @@ export function evaluatePathStatement(
           statementStyleChain,
           (raw) => resolveContextColorAliasValue(context, raw)
         );
-        for (const code of resolvedEdgeStyle.diagnostics) {
+        for (const diagnostic of resolvedEdgeStyle.diagnostics) {
+          const code = styleDiagnosticCode(diagnostic);
           if (code === "unsupported-option-flag:every edge") {
             continue;
           }
-          pushDiagnostic(code, `Edge option issue: ${code}`, item.span.from, item.span.to);
+          pushStyleDiagnostic(pushDiagnostic, diagnostic, "Edge option issue", item.span);
         }
 
         const handled = applyEdgeOperation(
@@ -1375,6 +1531,12 @@ export function evaluatePathStatement(
           edgeOperationStart.point,
           edgeOperationStart.coordinateRaw
         );
+        if (handled.segment) {
+          for (const pic of edgeItem.pics ?? []) {
+            const fraction = resolveNodePositionFraction(pic.options) ?? 0.5;
+            emitPicOperation(pic, pointAtPlacementSegment(handled.segment, fraction), handled.segment);
+          }
+        }
         if (handled.activePath && hasDrawablePathSegments(handled.activePath)) {
           frontNodeElements.push(...handled.behindNodeElements);
           frontNodeElements.push(handled.activePath);
@@ -1430,8 +1592,8 @@ export function evaluatePathStatement(
             (raw) => resolveContextColorAliasValue(context, raw)
           );
           operationTransform = optionResolved.transform;
-          for (const code of optionResolved.diagnostics) {
-            pushDiagnostic(code, `SVG option issue: ${code}`, item.span.from, item.span.to);
+          for (const diagnostic of optionResolved.diagnostics) {
+            pushStyleDiagnostic(pushDiagnostic, diagnostic, "SVG option issue", item.span);
           }
         }
 
@@ -1797,6 +1959,7 @@ export function evaluatePathStatement(
           lastPlacementSegment = appended.segment;
           flushPendingSegmentNodes(appended.segment);
           flushPendingSegmentPlacements(appended.segment);
+          flushPendingSegmentPics(appended.segment);
           previousSegmentRoundedCorners = appended.nextRoundedCorners;
           context.pathStartPoint = pathSourcePoint;
         } else {
@@ -1837,6 +2000,7 @@ export function evaluatePathStatement(
         lastPlacementSegment = appended.segment;
         flushPendingSegmentNodes(appended.segment);
         flushPendingSegmentPlacements(appended.segment);
+        flushPendingSegmentPics(appended.segment);
         previousSegmentRoundedCorners = appended.nextRoundedCorners;
       } else {
         activePath.commands.push({ kind: "M", to: pathTargetPoint });
@@ -2315,6 +2479,7 @@ export function evaluatePathStatement(
 
     if (
       item.kind === "Node" ||
+      item.kind === "PicOperation" ||
       item.kind === "DecorateOperation" ||
       item.kind === "CoordinateOperation"
     ) {

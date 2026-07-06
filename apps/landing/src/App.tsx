@@ -294,7 +294,7 @@ function TikzDevFooter() {
   return (
     <footer className="landingTikzDevFooter">
       <div className="landingFooterLinks">
-        <a href="https://tikz.dev/license">License</a>
+        <a href="https://github.com/DominikPeters/tikz-editor/blob/master/LICENSE">License</a>
         <span aria-hidden="true">·</span>
         <a href="https://github.com/DominikPeters/tikz-editor">GitHub</a>
         <span aria-hidden="true">·</span>
@@ -709,7 +709,7 @@ function HowItWorksSection() {
           The app includes a custom color picker that internally converts RGB colors to the closest color representable by short xcolor strings, so that #409a40 becomes violet!88!white!45!green. The code for this is available as the npm package <a href="https://www.npmjs.com/package/xcolor-rgb-convert">xcolor-rgb-convert</a>.
         </p>
         <p>
-          The app supports importing a variety of file formats based on converters that I developed for this purpose; these converters are available as standalone npm packages: <a href="https://www.npmjs.com/package/svg2tikz">svg2tikz</a>, <a href="https://www.npmjs.com/package/pptx2tikz">pptx2tikz</a> built on top of <a href="https://github.com/pipipi-pikachu/pptxtojson">pptxtojson</a>, and <a href="https://www.npmjs.com/package/ipe2tikz">ipe2tikz</a>. The desktop app also supports directly pasting objects from PowerPoint and Keynote; for the latter feature I built an interpreter for the keynote clipboard format, available as npm package <a href="https://www.npmjs.com/package/keynote-clipboard">keynote-clipboard</a>. The desktop app also includes support for AI assistance via the <a href="https://developers.openai.com/codex/app-server">Codex App Server</a>.
+          The app supports importing a variety of file formats based on converters that I developed for this purpose; these converters are available as standalone npm packages: <a href="https://www.npmjs.com/package/svg2tikz">svg2tikz</a>, <a href="https://www.npmjs.com/package/pptx2tikz">pptx2tikz</a> built on top of <a href="https://github.com/pipipi-pikachu/pptxtojson">pptxtojson</a>, and <a href="https://www.npmjs.com/package/ipe2tikz">ipe2tikz</a>. The desktop app also supports directly pasting objects from PowerPoint and Keynote; for the latter feature I built an interpreter for the keynote clipboard format, available as npm package <a href="https://www.npmjs.com/package/keynote-clipboard">keynote-clipboard</a>. The desktop app also includes support for AI assistance via the <a href="https://developers.openai.com/codex/app-server">Codex App Server</a>. The app's source editor is built on top of <a href="https://codemirror.net/">CodeMirror</a>.
         </p>
       </div>
     </section>

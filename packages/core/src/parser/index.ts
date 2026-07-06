@@ -6,7 +6,7 @@ import { FeatureFlags } from "../ast/features.js";
 import { walkStatements } from "../ast/walk.js";
 import { collectContextDefinitions, fromCst } from "../transform/cst-to-ast.js";
 import type { TikzFigure, TikzFigureInventoryItem } from "../ast/types.js";
-import { parseSyntax } from "../syntax/parse.js";
+import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import {
   getCachedContextDefinitions,
   resolveActiveFigureSpan,

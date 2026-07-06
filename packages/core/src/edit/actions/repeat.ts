@@ -1,7 +1,7 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { walkPathItems } from "../../ast/walk.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
-import type { SourcePatch } from "../types.js";
 import { CM_PER_PT, formatNumber } from "../format.js";
 import {
   applyTextReplacements,
@@ -14,6 +14,7 @@ import {
 } from "../statement-ops.js";
 import { applySetPropertyAction } from "./set-property.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
+import { normalizeElementIds, uniqueStrings } from "../statement-find.js";
 
 export type RepeatElementsAction = {
   elementIds: string[];
@@ -23,19 +24,6 @@ export type RepeatElementsAction = {
   verticalStep: number;
 };
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 type RepeatLoop = {
   variable: string;
@@ -559,34 +547,6 @@ function normalizeRepeatCount(value: number): number {
     return 1;
   }
   return Math.max(1, Math.floor(value));
-}
-
-function normalizeElementIds(elementIds: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const rawId of elementIds) {
-    const id = rawId.trim();
-    if (id.length === 0 || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    normalized.push(id);
-  }
-  return normalized;
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const rawValue of values) {
-    const value = rawValue.trim();
-    if (value.length === 0 || seen.has(value)) {
-      continue;
-    }
-    seen.add(value);
-    normalized.push(value);
-  }
-  return normalized;
 }
 
 function detectPreferredNewline(source: string, aroundOffset: number): string {

@@ -72,6 +72,9 @@ function itemWidthForRun(
   }
 
   if (run.kind === 'space') {
+    if (run.texGlue) {
+      return run.texGlue.width;
+    }
     if (run.breakRef.kind === 'mspace') {
       return measurement.measureMath(run.wrapper);
     }
@@ -218,8 +221,8 @@ export function runsToItems(
         continue;
       }
 
-      const stretch = options.spaceStretch ?? 0;
-      const shrink = options.spaceShrink ?? 0;
+      const stretch = run.texGlue?.stretch ?? options.spaceStretch ?? 0;
+      const shrink = run.texGlue?.shrink ?? options.spaceShrink ?? 0;
 
       items.push({
         kind: 'glue',

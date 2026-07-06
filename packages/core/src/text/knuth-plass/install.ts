@@ -25,6 +25,9 @@ export type KnuthPlassLayoutMode =
 export interface WrappedTextGap {
   sourceStart: number;
   widthEm: number;
+  stretchEm?: number;
+  shrinkEm?: number;
+  spaceFactor?: number;
 }
 
 export interface KnuthPlassConfig {

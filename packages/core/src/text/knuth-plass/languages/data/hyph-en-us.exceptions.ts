@@ -1,13 +1,11 @@
 /**
- * Hyphenation data derived from TeX Live hyph-utf8 package.
- * Source files:
- *   - hyph-en-us.pat.txt
- *   - hyph-en-us.hyp.txt
+ * Hyphenation data derived from TeX Live default English hyphen.tex.
  *
- * Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken
- * Copying and distribution of these pattern files, with or without
- * modification, are permitted in any medium without royalty provided
- * the copyright notice and this notice are preserved.
+ * TeX Live language.dat maps default english/usenglish to hyphen.tex;
+ * usenglishmax uses hyph-en-us.tex and is intentionally not the default here.
+ * Source file: tex/generic/hyphen/hyphen.tex
+ *
+ * The source hyphen.tex permits unlimited copying and redistribution.
  */
 
 export const EN_US_EXCEPTIONS: readonly string[] = [
@@ -24,5 +22,5 @@ export const EN_US_EXCEPTIONS: readonly string[] = [
   "re-cog-ni-zance",
   "ref-or-ma-tion",
   "ret-ri-bu-tion",
-  "ta-ble"
+  "ta-ble",
 ];

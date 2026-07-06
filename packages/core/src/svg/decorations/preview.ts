@@ -3,6 +3,7 @@ import { pt } from "../../coords/scalars.js";
 import { applyDecorationToPath } from "../../semantic/decorations/index.js";
 import { defaultStyle } from "../../semantic/style/defaults.js";
 import type { DecorationStyle, SceneElement, SceneFigure, ScenePath } from "../../semantic/types.js";
+import { MAIN_SCENE_LAYER } from "../../semantic/types.js";
 import { emitSvg } from "../emit.js";
 
 const PREVIEW_SOURCE_SPAN = { from: 0, to: 0 } as const;
@@ -44,6 +45,7 @@ export function renderPathMorphingDecorationPreviewSvg(
     kind: "Path",
     id: "preview:path-morphing",
     runtimeId: "preview:path-morphing",
+    layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId: "preview:path-morphing", sourceSpan: PREVIEW_SOURCE_SPAN, sourceFingerprint: "" },
     style,
     styleChain: [],
@@ -56,6 +58,7 @@ export function renderPathMorphingDecorationPreviewSvg(
     kind: "SceneFigure",
     span: PREVIEW_SOURCE_SPAN,
     requiredTikzLibraries: [],
+    layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements: applyPathMorphingDecoration(path, style.decoration)
   };
   const bounds = computeDecorationPreviewBounds(figure.elements);

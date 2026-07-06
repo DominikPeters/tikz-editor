@@ -9,16 +9,19 @@ import {
   type InspectorSnapshot
 } from "tikz-editor/edit/inspector";
 import {
+  DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContextFromOptionEntries,
   resolveTransformInspectorValues,
+  transformRotateInspectorLabel,
   type TransformInspectorKey,
   type TransformInspectorMutationContext
 } from "tikz-editor/edit/property-write-builders";
 import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
 import { buildStylesCascadeModel } from "tikz-editor/edit/styles-cascade";
+import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
-import { useProjectNamedColorSwatches } from "../../project-named-colors";
+import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
 import { actionAvailability } from "../editor-commands";
@@ -99,6 +102,7 @@ function buildScopeInspectorDescriptor(
           value: transformValues.xshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xshift,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "xshift", transformContext)
         },
         {
@@ -108,6 +112,7 @@ function buildScopeInspectorDescriptor(
           value: transformValues.yshift,
           step: 0.1,
           unit: "pt",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "yshift", transformContext)
         },
         {
@@ -116,6 +121,7 @@ function buildScopeInspectorDescriptor(
           label: "X scale",
           value: transformValues.xscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "xscale", transformContext)
         },
         {
@@ -124,15 +130,17 @@ function buildScopeInspectorDescriptor(
           label: "Y scale",
           value: transformValues.yscale,
           step: 0.1,
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "yscale", transformContext)
         },
         {
           kind: "number",
           id: "rotate",
-          label: "Rotate",
+          label: transformRotateInspectorLabel(transformContext),
           value: transformValues.rotate,
           step: 1,
           unit: "deg",
+          defaultValue: DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
           write: buildScopeTransformWriteTarget(scopeId, writable, readOnlyReason, "rotate", transformContext)
         }
       ]
@@ -259,6 +267,10 @@ export function useInspectorModel(args: {
   );
   const globalTransformValues = useMemo(
     () => resolveTransformInspectorValues(source, TIKZPICTURE_GLOBAL_TARGET_ID, parseOptions),
+    [parseOptions, source]
+  );
+  const figureBoundsState = useMemo(
+    () => resolveFigureBoundsState(source, parseOptions),
     [parseOptions, source]
   );
 
@@ -452,6 +464,7 @@ export function useInspectorModel(args: {
     selectedSourceIds,
     projectNamedColorSwatches,
     globalTransformValues,
+    figureBoundsState,
     selectedElements,
     descriptors,
     descriptor,

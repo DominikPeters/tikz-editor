@@ -404,6 +404,11 @@ function injectRendererContext(code, latexContext = {}) {
     return code;
   }
 
+  const inlineInjected = injectInlineTikzRendererContext(code, injections);
+  if (inlineInjected != null) {
+    return inlineInjected;
+  }
+
   const beginToken = "\\begin{tikzpicture}";
   const beginIndex = code.indexOf(beginToken);
   if (beginIndex === -1) {
@@ -422,6 +427,56 @@ function injectRendererContext(code, latexContext = {}) {
   }
 
   return `${code.slice(0, insertionPoint)}\n${injections}\n${code.slice(insertionPoint)}`;
+}
+
+function injectInlineTikzRendererContext(code, injections) {
+  const inlineStart = code.search(/\S/u);
+  if (inlineStart < 0) {
+    return null;
+  }
+
+  const inlineToken = "\\tikz";
+  if (!code.startsWith(inlineToken, inlineStart)) {
+    return null;
+  }
+
+  let cursor = inlineStart + inlineToken.length;
+  if (/[A-Za-z@]/u.test(code[cursor] ?? "")) {
+    return null;
+  }
+
+  while (cursor < code.length && /\s/u.test(code[cursor] ?? "")) {
+    cursor += 1;
+  }
+
+  let optionRaw = "";
+  if ((code[cursor] ?? "") === "[") {
+    const optionEnd = findBalancedBracketEnd(code, cursor, "[", "]");
+    if (optionEnd == null) {
+      return null;
+    }
+    optionRaw = code.slice(cursor, optionEnd);
+    cursor = optionEnd;
+    while (cursor < code.length && /\s/u.test(code[cursor] ?? "")) {
+      cursor += 1;
+    }
+  }
+
+  const body = unwrapInlineTikzBody(code.slice(cursor).trim());
+  return `\\begin{tikzpicture}${optionRaw}\n${injections}\n${body}\n\\end{tikzpicture}`;
+}
+
+function unwrapInlineTikzBody(body) {
+  if (!body.startsWith("{")) {
+    return body;
+  }
+
+  const bodyEnd = findBalancedBracketEnd(body, 0, "{", "}");
+  if (bodyEnd == null || body.slice(bodyEnd).trim().length > 0) {
+    return body;
+  }
+
+  return body.slice(1, bodyEnd - 1).trim();
 }
 
 function findBalancedBracketEnd(source, start, openChar, closeChar) {

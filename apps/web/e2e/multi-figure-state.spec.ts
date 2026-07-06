@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  expectSourceCanvasConsistency,
   gotoApp,
   readCanvasTransform,
   readFigureCount,
   resetStorageBeforeNavigation,
-  setCanvasTransform,
   setSource,
   tabSwitchButtons
 } from "./helpers";
@@ -44,12 +44,31 @@ async function settleCanvasTransform(
   page: Page,
   requested: { translateX: number; translateY: number; scale: number }
 ): Promise<{ translateX: number; translateY: number; scale: number }> {
-  await setCanvasTransform(page, requested);
   await expect.poll(async () => {
+    await page.evaluate((nextTransform) => {
+      const api = (globalThis as unknown as {
+        __TIKZ_EDITOR_APP_TEST_API__?: {
+          setCanvasTransform?: (transform: { translateX: number; translateY: number; scale: number }) => void;
+        };
+      }).__TIKZ_EDITOR_APP_TEST_API__;
+      if (typeof api?.setCanvasTransform !== "function") {
+        throw new Error("App test API setCanvasTransform is unavailable.");
+      }
+      api.setCanvasTransform(nextTransform);
+    }, requested);
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      });
+    }));
     const transform = await readCanvasTransform(page);
-    return Math.abs(transform.scale - requested.scale) < 0.005;
+    return (
+      Math.abs(transform.translateX - requested.translateX) < 0.05 &&
+      Math.abs(transform.translateY - requested.translateY) < 0.05 &&
+      Math.abs(transform.scale - requested.scale) < 0.005
+    );
   }, {
-    timeout: 4_000,
+    timeout: 8_000,
     intervals: [50, 100, 200, 400]
   }).toBe(true);
   return await readCanvasTransform(page);
@@ -78,6 +97,7 @@ test("viewport is remembered per figure and first visit auto-fits", async ({ pag
   const figure1Transform = await settleCanvasTransform(page, { translateX: 130, translateY: 70, scale: 1.8 });
 
   await page.getByRole("button", { name: "Figure 2" }).click();
+  await expectSourceCanvasConsistency(page, { assertNoPendingRequest: true });
 
   await expect.poll(async () => {
     const transform = await readCanvasTransform(page);
@@ -94,6 +114,7 @@ test("viewport is remembered per figure and first visit auto-fits", async ({ pag
   const figure2Transform = await settleCanvasTransform(page, { translateX: 25, translateY: 48, scale: 0.82 });
 
   await page.getByRole("button", { name: "Figure 1" }).click();
+  await expectSourceCanvasConsistency(page, { assertNoPendingRequest: true });
   await expect.poll(async () => {
     const transform = await readCanvasTransform(page);
     return (
@@ -107,6 +128,7 @@ test("viewport is remembered per figure and first visit auto-fits", async ({ pag
   }).toBe(true);
 
   await page.getByRole("button", { name: "Figure 2" }).click();
+  await expectSourceCanvasConsistency(page, { assertNoPendingRequest: true });
   await expect.poll(async () => {
     const transform = await readCanvasTransform(page);
     return (

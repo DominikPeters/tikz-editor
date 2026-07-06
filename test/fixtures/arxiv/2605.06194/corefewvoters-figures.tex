@@ -1,0 +1,231 @@
+% Reduced fixture from arXiv:2605.06194. It keeps paper-level definitions plus the nine TikZ figures.
+\DeclareMathOperator{\cone}{cone}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+
+\definecolor{normalizDirectiveColor}{HTML}{4A5568}
+\definecolor{normalizSupplyColor}{HTML}{2B6CB0}
+\definecolor{normalizSizeColor}{HTML}{6AB832}
+\definecolor{normalizUtilityColor}{HTML}{B7791F}
+
+\begin{document}
+
+\begin{tikzpicture}[yscale=0.45,xscale=0.9,voter/.style={anchor=south}]
+		\foreach \i in {1,...,3}
+			\node[voter] at (\i-0.5, -1.3) {$\i$};
+		
+		\draw[fill=orange!40] (0, 0) rectangle (2, 1);
+		\draw[fill=orange!40] (0, 1) rectangle (2, 2);
+		\draw[fill=orange!40] (0, 2) rectangle (2, 3);
+		\draw[fill=orange!40] (0, 3) rectangle (2, 4);
+		\draw[fill=orange!40] (0, 4) rectangle (2, 5);
+		\draw[fill=orange!40] (0, 5) rectangle (2, 6);
+		\draw[fill=orange!40] (0, 6) rectangle (2, 7);
+		\draw[fill=orange!40] (0, 7) rectangle (2, 8);
+		\draw[fill=orange!40] (0, 8) rectangle (2, 9);
+		\draw[fill=orange!40] (0, 9) rectangle (2, 10);
+
+		\draw[fill=violet!40] (0,10) rectangle (1, 11);  
+		\draw[fill=violet!40] (1,10) rectangle (2, 11); 
+
+		\draw[fill=teal!40] (2, 0) rectangle (3, 1);
+		\draw[fill=teal!40] (2, 1) rectangle (3, 2);
+		\draw[fill=teal!40] (2, 2) rectangle (3, 3);
+		\draw[fill=teal!40] (2, 3) rectangle (3, 4);
+		\draw[fill=teal!40] (2, 4) rectangle (3, 5);
+		\draw[fill=teal!40] (2, 5) rectangle (3, 6);
+		\draw[fill=teal!40] (2, 6) rectangle (3, 7);
+		\draw[fill=teal!40] (2, 7) rectangle (3, 8);
+
+		\node at ( 1, 0.5) {$c_{1}$};
+		\node at ( 1, 1.5) {$c_{2}$};
+		\node at ( 1, 2.5) {$c_{3}$};
+		\node at ( 1, 3.5) {$c_{4}$};
+		\node at ( 1, 4.5) {$c_{5}$};
+		\node at ( 1, 5.5) {$c_{6}$};
+		\node at ( 1, 6.5) {$c_{7}$};
+		\node at ( 1, 7.5) {$c_{8}$};
+		\node at ( 1, 8.5) {$c_{9}$};
+		\node at ( 1, 9.5) {$c_{10}$};
+		
+		\node at ( 0.5, 10.5) {$c_{11}$};
+		\node at ( 1.5, 10.5) {$c_{12}$};
+								
+		\node at ( 2.5, 0.5) {$c_{13}$};
+		\node at ( 2.5, 1.5) {$c_{14}$};
+		\node at ( 2.5, 2.5) {$c_{15}$};
+		\node at ( 2.5, 3.5) {$c_{16}$};
+		\node at ( 2.5, 4.5) {$c_{17}$};
+		\node at ( 2.5, 5.5) {$c_{18}$};
+		\node at ( 2.5, 6.5) {$c_{19}$};
+		\node at ( 2.5, 7.5) {$c_{20}$};
+	\end{tikzpicture}
+
+\begin{tikzpicture}[
+				scale=0.8,
+				voter/.style={circle,draw,fill=white}
+				]
+				\path[use as bounding box] (-1.55,-2) rectangle (6.05,2.25);
+				
+\foreach \i/\x/\y in {1/0/1.4,2/-1.2/-0.7,3/1.2/-0.7,4/4.5/1.4,5/3.3/-0.7,6/5.7/-0.7}{
+					\node[voter] (v\i) at (\x,\y) {$\i$};
+				}
+				
+\draw[very thick,black] (v1) -- (v2) -- (v3) -- (v1);
+				\draw[very thick,black] (v4) -- (v5) -- (v6) -- (v4);
+			\end{tikzpicture}
+
+\begin{tikzpicture}[
+			scale=0.8,
+			voter/.style={circle,draw,fill=white}
+			]
+\foreach \i/\ang in {1/90,2/30,3/-30,4/-90,5/-150,6/150}{
+				\node[voter] (v\i) at (\ang:2) {$\i$};
+			}
+			
+\draw[very thick,blue!75]          (v1) -- (v2) -- (v6) -- (v1);
+			\draw[very thick,red!75]           (v4) -- (v5) -- (v6) -- (v4);
+			\draw[very thick,green!60!black]   (v2) -- (v3) -- (v4) -- (v2);
+			\draw[very thick, double=orange!80!black, draw=white, double distance=1.2pt]  (v1) -- (v3) -- (v5) -- (v1);
+		\end{tikzpicture}
+
+\begin{tikzpicture}[scale=0.75,every path/.style={>=stealth}]
+			\draw[->,gray!60] (0,0) -- (4.6,0);
+			\draw[->,gray!60] (0,0) -- (0,4.6);
+			\foreach \x in {0,...,4}
+			\foreach \y in {0,...,4}
+			\fill[gray!45] (\x,\y) circle (1.25pt);
+			\foreach \x/\y in {0/0,1/0,2/0,3/0,1/2,2/2,3/2,2/4,3/4}
+			\draw[->,blue!75!black,line width=0.75pt,shorten >=1.7pt] (\x,\y) -- ++(1,0);
+			\foreach \x/\y in {0/0,1/0,2/0,3/0,1/2,2/2,3/2}
+			\draw[->,green!55!black,line width=0.75pt,shorten >=1.7pt] (\x,\y) -- ++(1,2);
+			\foreach \x/\y in {0/0,1/0,1/2,2/0,2/2,2/4,3/0,3/2,3/4,4/0,4/2,4/4}
+			\fill[black] (\x,\y) circle (2.0pt);
+			\node[blue!75!black] at (0.6,0.26) {$g_1$};
+			\node[green!55!black] at (0.33,1.44) {$g_2$};
+		\end{tikzpicture}
+
+\begin{tikzpicture}[scale=0.75,every path/.style={>=stealth}]
+			\fill[blue!8] (0,0) -- (4.35,0) -- (4.35,4.35) -- (2.18,4.35) -- cycle;
+			\draw[->,gray!60] (0,0) -- (4.6,0);
+			\draw[->,gray!60] (0,0) -- (0,4.6);
+			\foreach \x in {0,...,4}
+			\foreach \y in {0,...,4}
+			\fill[gray!45] (\x,\y) circle (1.25pt);
+			\draw[thick,blue!75!black] (0,0) -- (4.35,0);
+			\draw[->,blue!75!black,line width=0.75pt,shorten >=1.7pt] (0,0) -- (1,0);
+			\draw[thick,green!55!black] (0,0) -- (2.18,4.35);
+			\draw[->,green!55!black,line width=0.75pt,shorten >=1.7pt] (0,0) -- (1,2);
+			\draw[dashed,blue!35] (4.35,0) -- (4.35,4.35);
+			\draw[dashed,blue!35] (2.18,4.35) -- (4.35,4.35);
+			\node[blue!70!black] at (2.9,1.45) {$\cone(M)$};
+			\foreach \x/\y in {0/0,1/0,1/2,2/0,2/2,2/4,3/0,3/2,3/4,4/0,4/2,4/4}
+			\fill[black] (\x,\y) circle (1.8pt);
+			\foreach \x/\y in {1/1,2/1,2/3,3/1,3/3,4/1,4/3}
+			\draw[red!80!black] (\x,\y) circle (2.3pt);
+		\end{tikzpicture}
+
+\begin{tikzpicture}[scale=0.75,every path/.style={>=stealth}]
+			\fill[blue!8] (0,0) -- (4.35,0) -- (4.35,4.35) -- (2.18,4.35) -- cycle;
+			\draw[->,gray!60] (0,0) -- (4.6,0);
+			\draw[->,gray!60] (0,0) -- (0,4.6);
+			\foreach \x in {0,...,4}
+			\foreach \y in {0,...,4}
+			\fill[gray!45] (\x,\y) circle (1.25pt);
+			\draw[thick,blue!75!black] (0,0) -- (4.35,0);
+			\draw[->,blue!75!black,line width=0.75pt,shorten >=1.7pt] (0,0) -- (1,0);
+			\draw[thick,green!55!black] (0,0) -- (2.18,4.35);
+			\draw[->,green!55!black,line width=0.75pt,shorten >=1.7pt] (0,0) -- (1,2);
+			\draw[dashed,blue!35] (4.35,0) -- (4.35,4.35);
+			\draw[dashed,blue!35] (2.18,4.35) -- (4.35,4.35);
+			\foreach \x/\y in {0/0,1/0,1/2,2/0,2/2,3/0,3/2}
+			\draw[->,violet!85!black,line width=0.75pt,shorten >=1.7pt] (\x,\y) -- ++(1,1);
+\node[violet!85!black] at (3.72,2.22) {$g_3$};
+			\foreach \x/\y in {0/0,1/0,1/1,1/2,2/0,2/1,2/2,2/3,2/4,3/0,3/1,3/2,3/3,3/4,4/0,4/1,4/2,4/3,4/4}
+			\fill[black] (\x,\y) circle (1.8pt);
+		\end{tikzpicture}
+
+\begin{tikzpicture}[scale=0.8,every path/.style={>=stealth}]
+		\fill[blue!8] (0,0) -- (4.35,0) -- (4.35,4.35) -- (2.18,4.35) -- cycle;
+		\draw[->,gray!60] (0,0) -- (4.6,0);
+		\draw[->,gray!60] (0,0) -- (0,4.6);
+		\foreach \x in {0,...,4}
+			\foreach \y in {0,...,4}
+				\fill[gray!45] (\x,\y) circle (1.25pt);
+		\draw[thick,blue!75!black] (0,0) -- (4.35,0);
+		\draw[->,blue!75!black,line width=0.75pt,shorten >=1.7pt] (0,0) -- (1,0);
+		\draw[thick,green!55!black] (0,0) -- (2.18,4.35);
+		\draw[->,green!55!black,line width=0.75pt,shorten >=1.7pt] (0,0) -- (1,2);
+		\foreach \x/\y in {0/0,1/0,1/2,2/0,2/2,2/4,3/0,3/2,3/4,4/0,4/2,4/4}
+			\fill[black] (\x,\y) circle (1.8pt);
+		\foreach \x/\y in {1/1,2/1,2/3,3/1,3/3,4/1,4/3}
+			\draw[red!80!black] (\x,\y) circle (2.3pt);
+		\draw[red!80!black, semithick] (2,3) circle (2.2pt);
+		\draw[red!80!black, semithick] (1,1) circle (2.2pt);
+		\draw[->,orange!90!black,line width=1.0pt,shorten >=3pt,shorten <=3pt] (2,3) -- (1,1)
+			node[right=0.78pt, pos=0.7] {$-g_2$};
+		\node[anchor=south west, red!80!black, node font=\footnotesize] at (1.81,3.03) {$(2,3)$};
+		\node[anchor=north west, red!80!black, node font=\footnotesize] at (0.55,0.97) {$(1,1)$};
+	\end{tikzpicture}
+
+\begin{tikzpicture}[yscale=0.56,xscale=0.9,voter/.style={anchor=south}]		
+\foreach \i in {1,...,3}
+			\node[voter] at (\i-0.5,-1) {$\i$};
+
+\foreach[count=\y from 0] \lab in {$a_1$,$a_2$,$a_3$,$a_4$,$a_5$,$a_6$}{
+			\draw[fill=orange!40] (0,\y) rectangle (2,\y+1);
+			\node at (1,\y+0.5) {\lab};
+		}
+
+\foreach[count=\y from 6] \lab in {$b_1$,$b_2$}{
+			\draw[fill=violet!40] (0,\y) rectangle (1,\y+1);
+			\draw[fill=violet!40] (2,\y) rectangle (3,\y+1);
+			\node at (0.5,\y+0.5) {\lab};
+			\node at (2.5,\y+0.5) {\lab};
+		}
+
+\foreach[count=\y from 8] \lab in {$c_1$,$c_2$}{
+			\draw[fill=teal!40] (1,\y) rectangle (3,\y+1);
+			\node at (2,\y+0.5) {\lab};
+		}
+
+\foreach[count=\y from 0] \lab in {$d_1$,$d_2$,$d_3$}{
+			\draw[fill=blue!25] (2,\y) rectangle (3,\y+1);
+			\node at (2.5,\y+0.5) {\lab};
+		}
+	\end{tikzpicture}
+
+\begin{tikzpicture}[yscale=0.6,xscale=0.9,voter/.style={anchor=south}]	
+
+	\foreach \i in {1,...,9}
+		\node[voter] at (\i-0.5, -1) {$\i$};
+
+\draw[fill=orange!40] (0,0) rectangle (6,1);
+    \node at (3,0.5) {$18 \times a$};
+
+    \draw[fill=violet!40] (6,0) rectangle (8,1);
+    \node at (10.1,0.4) {$3 \times b$};
+
+    \draw[fill=violet!40] (6,1) rectangle (7,2);
+    \draw[fill=violet!40] (8,1) rectangle (9,2);
+    \node at (10.1,1.4) {$3 \times c$};
+
+    \draw[fill=violet!40] (7,2) rectangle (9,3);
+    \node at (10.1,2.4) {$3 \times d$};
+
+\draw[fill=teal!40] (0,3) rectangle (4,4);
+    \draw[fill=teal!40] (6,3) rectangle (7,4);
+    \node at (3,3.5) {$7 \times e$};
+
+    \draw[fill=teal!40] (0,4) rectangle (4,5);
+    \draw[fill=teal!40] (7,4) rectangle (8,5);
+    \node at (3,4.5) {$7 \times f$};
+
+    \draw[fill=teal!40] (0,5) rectangle (4,6);
+    \draw[fill=teal!40] (8,5) rectangle (9,6);
+    \node at (3,5.5) {$7 \times g$};
+
+\end{tikzpicture}
+
+\end{document}

@@ -2,14 +2,15 @@ import {
   isCoordinateEditHandle,
   isFrameLocalCoordinateEditHandle,
   isRelativeCoordinateEditHandle,
-  type EditHandle
+  type EditHandle,
+  type EditHandlePositioningContext
 } from "../semantic/types.js";
 import { pt } from "../coords/scalars.js";
 import { worldPoint, worldVector } from "../coords/points.js";
 import type { WorldPoint } from "../coords/points.js";
 import { ptToCm } from "../coords/source.js";
 import { worldToLocal, worldDeltaToLocalDelta, localToSourceUnits } from "./coords.js";
-import { CM_PER_PT, formatNumber } from "./format.js";
+import { CM_PER_PT, formatNumber, type NumberFormatOptions } from "./format.js";
 import { formatCoordinate, formatPolarCoordinate } from "./style.js";
 
 /**
@@ -293,8 +294,14 @@ function rewritePositioning(
   if (handle.handleType !== "node-positioning") {
     return null;
   }
-  const ctx = handle.positioningContext;
+  return rewritePositioningFromContext(newWorld, handle.positioningContext);
+}
 
+export function rewritePositioningFromContext(
+  newWorld: WorldPoint,
+  ctx: EditHandlePositioningContext,
+  formatOptions?: NumberFormatOptions
+): string | null {
   const centerDeltaWorld = wp(newWorld.x - ctx.targetCenter.x, newWorld.y - ctx.targetCenter.y);
   const c2cXcm = centerDeltaWorld.x * CM_PER_PT;
   const c2cYcm = centerDeltaWorld.y * CM_PER_PT;
@@ -381,14 +388,14 @@ function rewritePositioning(
     if (scalar == null) {
       return null;
     }
-    return `${direction}=${formatNumber(scalar)}cm of ${ctx.targetNodeName}`;
+    return `${direction}=${formatNumber(scalar, formatOptions)}cm of ${ctx.targetNodeName}`;
   }
   if (direction === "above" || direction === "below") {
     const scalar = signedScalarForDirection(direction, shiftXcm, shiftYcm);
     if (scalar == null) {
       return null;
     }
-    return `${direction}=${formatNumber(scalar)}cm of ${ctx.targetNodeName}`;
+    return `${direction}=${formatNumber(scalar, formatOptions)}cm of ${ctx.targetNodeName}`;
   }
 
   const pair = signedPairForDirection(direction, shiftXcm, shiftYcm);
@@ -396,5 +403,8 @@ function rewritePositioning(
     return null;
   }
 
-  return `${direction}={${formatNumber(pair.vertical)}cm and ${formatNumber(pair.horizontal)}cm} of ${ctx.targetNodeName}`;
+  return `${direction}={${formatNumber(pair.vertical, formatOptions)}cm and ${formatNumber(
+    pair.horizontal,
+    formatOptions
+  )}cm} of ${ctx.targetNodeName}`;
 }

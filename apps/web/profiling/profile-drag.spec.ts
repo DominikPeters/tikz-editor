@@ -242,7 +242,7 @@ function summarizeProbe(snapshot: BasicDragProbeSnapshot, sourceRevisionBefore: 
 test("profile basic canvas drags", async ({ page }, testInfo) => {
   const variants = [];
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(
     page,
     String.raw`\begin{tikzpicture}
@@ -290,7 +290,7 @@ test("profile basic canvas drags", async ({ page }, testInfo) => {
   }));
 
   const largeDragSource = buildLargeDragSource();
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, largeDragSource);
   await installProbe(page);
   await page.getByRole("button", { name: "Select" }).click();
@@ -332,7 +332,7 @@ test("profile basic canvas drags", async ({ page }, testInfo) => {
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(
     page,
     String.raw`\begin{tikzpicture}
@@ -377,7 +377,7 @@ test("profile basic canvas drags", async ({ page }, testInfo) => {
     }
   }));
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, String.raw`\begin{tikzpicture}
 \end{tikzpicture}`);
   await installProbe(page);

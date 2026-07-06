@@ -1,7 +1,10 @@
 .root {
-  position: absolute;
-  z-index: 8;
+  position: fixed;
+  z-index: 300;
   pointer-events: auto;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--app-ui-font-size, 11px);
 }
 
 .menu {

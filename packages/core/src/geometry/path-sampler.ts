@@ -48,6 +48,23 @@ export type PathSegment =
       arc: ArcGeometry | null;
     };
 
+type PathMetrics = {
+  totalLength: number;
+  cumulativeLengths: number[];
+};
+
+type LengthParameterTable = {
+  parameters: number[];
+  cumulativeLengths: number[];
+  measurementScale: number;
+  totalLength: number;
+};
+
+const LENGTH_PARAMETER_TABLE_STEPS = 32;
+const LENGTH_PARAMETER_REFINE_STEPS = 12;
+const pathMetricsCache = new WeakMap<readonly PathSegment[], PathMetrics>();
+const lengthParameterTableCache = new WeakMap<PathSegment, LengthParameterTable>();
+
 export function clonePoint(point: WorldPoint): WorldPoint {
   return worldPoint(pt(point.x), pt(point.y));
 }
@@ -209,7 +226,7 @@ export function commandsToSegments(commands: ScenePathCommand[]): PathSegment[] 
 }
 
 export function totalSegmentLength(segments: PathSegment[]): number {
-  return segments.reduce((sum, segment) => sum + segment.length, 0);
+  return pathMetricsForSegments(segments).totalLength;
 }
 
 export function sampleFrameFromStartExtrapolated(segments: PathSegment[], distance: number): Frame | null {
@@ -217,7 +234,8 @@ export function sampleFrameFromStartExtrapolated(segments: PathSegment[], distan
     return null;
   }
 
-  const totalLength = totalSegmentLength(segments);
+  const metrics = pathMetricsForSegments(segments);
+  const totalLength = metrics.totalLength;
   if (distance <= 0) {
     const frame = sampleSegmentFrameAtDistance(segments[0], 0);
     const shifted = addPoint(frame.point, scaleVector(frame.tangent, distance));
@@ -231,16 +249,8 @@ export function sampleFrameFromStartExtrapolated(segments: PathSegment[], distan
     return { point: shifted, tangent: frame.tangent, normal: frame.normal };
   }
 
-  let traveled = 0;
-  for (const segment of segments) {
-    if (traveled + segment.length >= distance) {
-      return sampleSegmentFrameAtDistance(segment, distance - traveled);
-    }
-    traveled += segment.length;
-  }
-
-  const last = segments[segments.length - 1];
-  return sampleSegmentFrameAtDistance(last, last.length);
+  const hit = segmentAtDistanceFromStart(segments, metrics, distance);
+  return sampleSegmentFrameAtDistance(hit.segment, hit.localDistance);
 }
 
 export function sampleFrameFromEndExtrapolated(segments: PathSegment[], distance: number): Frame | null {
@@ -248,7 +258,8 @@ export function sampleFrameFromEndExtrapolated(segments: PathSegment[], distance
     return null;
   }
 
-  const totalLength = totalSegmentLength(segments);
+  const metrics = pathMetricsForSegments(segments);
+  const totalLength = metrics.totalLength;
   const first = segments[0];
   const last = segments[segments.length - 1];
 
@@ -264,22 +275,57 @@ export function sampleFrameFromEndExtrapolated(segments: PathSegment[], distance
     return { point: shifted, tangent: frame.tangent, normal: frame.normal };
   }
 
-  let traveled = 0;
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const segment = segments[index];
-    if (traveled + segment.length >= distance) {
-      const localDistance = segment.length - (distance - traveled);
-      return sampleSegmentFrameAtDistance(segment, localDistance);
-    }
-    traveled += segment.length;
-  }
-
-  return sampleSegmentFrameAtDistance(first, 0);
+  const hit = segmentAtDistanceFromStart(segments, metrics, totalLength - distance);
+  return sampleSegmentFrameAtDistance(hit.segment, hit.localDistance);
 }
 
 export function samplePointFromStartExtrapolated(segments: PathSegment[], distance: number): WorldPoint | null {
   const frame = sampleFrameFromStartExtrapolated(segments, distance);
   return frame ? frame.point : null;
+}
+
+function pathMetricsForSegments(segments: readonly PathSegment[]): PathMetrics {
+  const cached = pathMetricsCache.get(segments);
+  if (cached) {
+    return cached;
+  }
+  let totalLength = 0;
+  const cumulativeLengths: number[] = [];
+  for (const segment of segments) {
+    totalLength += segment.length;
+    cumulativeLengths.push(totalLength);
+  }
+  const metrics = { totalLength, cumulativeLengths };
+  pathMetricsCache.set(segments, metrics);
+  return metrics;
+}
+
+function segmentAtDistanceFromStart(
+  segments: readonly PathSegment[],
+  metrics: PathMetrics,
+  distance: number
+): { segment: PathSegment; localDistance: number } {
+  const index = findFirstCumulativeDistanceAtLeast(metrics.cumulativeLengths, distance);
+  const segment = segments[index] ?? segments[segments.length - 1];
+  const previousDistance = index > 0 ? metrics.cumulativeLengths[index - 1] ?? 0 : 0;
+  return {
+    segment,
+    localDistance: distance - previousDistance
+  };
+}
+
+function findFirstCumulativeDistanceAtLeast(cumulativeLengths: readonly number[], distance: number): number {
+  let low = 0;
+  let high = cumulativeLengths.length - 1;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if ((cumulativeLengths[mid] ?? 0) < distance) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
 }
 
 export function commandFromSegment(segment: PathSegment): DrawableCommand {
@@ -326,8 +372,8 @@ export function sliceSegment(segment: PathSegment, startDistance: number, endDis
   }
 
   if (segment.kind === "C") {
-    const t0 = parameterAtCubicDistance(segment.from, segment.command.c1, segment.command.c2, segment.to, localStart);
-    const t1 = parameterAtCubicDistance(segment.from, segment.command.c1, segment.command.c2, segment.to, localEnd);
+    const t0 = parameterAtSegmentDistance(segment, localStart);
+    const t1 = parameterAtSegmentDistance(segment, localEnd);
     const [p0, p1, p2, p3] = sliceCubic(segment.from, segment.command.c1, segment.command.c2, segment.to, t0, t1);
     return {
       kind: "C",
@@ -351,8 +397,8 @@ export function sliceSegment(segment: PathSegment, startDistance: number, endDis
   }
 
   const arc = segment.arc;
-  const u0 = parameterAtArcDistance(arc, localStart);
-  const u1 = parameterAtArcDistance(arc, localEnd);
+  const u0 = parameterAtSegmentDistance(segment, localStart);
+  const u1 = parameterAtSegmentDistance(segment, localEnd);
   const startPoint = pointOnArc(arc, u0);
   const endPoint = pointOnArc(arc, u1);
   const delta = arc.deltaAngle * (u1 - u0);
@@ -391,7 +437,7 @@ function sampleSegmentFrameAtDistance(segment: PathSegment, distance: number): F
   }
 
   if (segment.kind === "C") {
-    const t = parameterAtCubicDistance(segment.from, segment.command.c1, segment.command.c2, segment.to, localDistance);
+    const t = parameterAtSegmentDistance(segment, localDistance);
     const point = pointOnCubic(segment.from, segment.command.c1, segment.command.c2, segment.to, t);
     const derivative = derivativeOnCubic(segment.from, segment.command.c1, segment.command.c2, segment.to, t);
     const tangent =
@@ -401,7 +447,7 @@ function sampleSegmentFrameAtDistance(segment: PathSegment, distance: number): F
   }
 
   if (segment.arc) {
-    const u = parameterAtArcDistance(segment.arc, localDistance);
+    const u = parameterAtSegmentDistance(segment, localDistance);
     const point = pointOnArc(segment.arc, u);
     const derivative = derivativeOnArc(segment.arc, u);
     const tangent =
@@ -415,6 +461,102 @@ function sampleSegmentFrameAtDistance(segment: PathSegment, distance: number): F
   const tangent = normalizeVector(subtractPoint(segment.to, segment.from));
   const normal = perpendicular(tangent);
   return { point, tangent, normal };
+}
+
+function parameterAtSegmentDistance(segment: PathSegment, distance: number): number {
+  const safeLength = Math.max(segment.length, 0);
+  if (safeLength <= EPSILON) {
+    return 0;
+  }
+  const target = clamp(distance, 0, safeLength);
+  if (target <= EPSILON) {
+    return 0;
+  }
+  if (target >= safeLength - EPSILON) {
+    return 1;
+  }
+
+  if (segment.kind === "C") {
+    return parameterAtCurvedSegmentDistance(segment, target, (start, end) =>
+      cubicLength(segment.from, segment.command.c1, segment.command.c2, segment.to, start, end)
+    );
+  }
+  if (segment.kind === "A" && segment.arc) {
+    const arc = segment.arc;
+    return parameterAtCurvedSegmentDistance(segment, target, (start, end) => arcLength(arc, start, end));
+  }
+  return target / safeLength;
+}
+
+function parameterAtCurvedSegmentDistance(
+  segment: PathSegment,
+  distance: number,
+  measureBetween: (start: number, end: number) => number
+): number {
+  const table = lengthParameterTableForSegment(segment, measureBetween);
+  if (table.totalLength <= EPSILON) {
+    return 0;
+  }
+  const scaledDistance = clamp(distance, 0, Math.max(segment.length, EPSILON)) * (table.totalLength / Math.max(segment.length, EPSILON));
+  const index = findFirstCumulativeDistanceAtLeast(table.cumulativeLengths, scaledDistance);
+  const previousIndex = Math.max(0, index - 1);
+  const t0 = table.parameters[previousIndex] ?? 0;
+  const t1 = table.parameters[index] ?? 1;
+  const distanceBefore = table.cumulativeLengths[previousIndex] ?? 0;
+  const targetInInterval = scaledDistance - distanceBefore;
+  if (t1 - t0 <= EPSILON) {
+    return t0;
+  }
+
+  let low = t0;
+  let high = t1;
+  for (let step = 0; step < LENGTH_PARAMETER_REFINE_STEPS; step += 1) {
+    const mid = (low + high) / 2;
+    const measured = measureBetween(t0, mid) * table.measurementScale;
+    if (measured < targetInInterval) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+  return (low + high) / 2;
+}
+
+function lengthParameterTableForSegment(
+  segment: PathSegment,
+  measureBetween: (start: number, end: number) => number
+): LengthParameterTable {
+  const cached = lengthParameterTableCache.get(segment);
+  if (cached) {
+    return cached;
+  }
+
+  const parameters: number[] = [0];
+  const rawCumulativeLengths: number[] = [0];
+  let rawTotalLength = 0;
+  let previousParameter = 0;
+  for (let step = 1; step <= LENGTH_PARAMETER_TABLE_STEPS; step += 1) {
+    const parameter = step / LENGTH_PARAMETER_TABLE_STEPS;
+    rawTotalLength += measureBetween(previousParameter, parameter);
+    parameters.push(parameter);
+    rawCumulativeLengths.push(rawTotalLength);
+    previousParameter = parameter;
+  }
+
+  const scale = rawTotalLength > EPSILON ? Math.max(segment.length, 0) / rawTotalLength : 1;
+  const cumulativeLengths = rawCumulativeLengths.map((length) => length * scale);
+  const finalIndex = cumulativeLengths.length - 1;
+  if (finalIndex >= 0) {
+    cumulativeLengths[finalIndex] = Math.max(segment.length, 0);
+  }
+  const table = {
+    parameters,
+    cumulativeLengths,
+    measurementScale: scale,
+    totalLength: Math.max(segment.length, 0)
+  };
+  lengthParameterTableCache.set(segment, table);
+  return table;
 }
 
 function lineLength(from: WorldPoint, to: WorldPoint): number {
@@ -439,26 +581,6 @@ function cubicLength(p0: WorldPoint, p1: WorldPoint, p2: WorldPoint, p3: WorldPo
     const d = derivativeOnCubic(p0, p1, p2, p3, t);
     return Math.hypot(d.x, d.y);
   }, start, end, 30);
-}
-
-function parameterAtCubicDistance(p0: WorldPoint, p1: WorldPoint, p2: WorldPoint, p3: WorldPoint, distance: number): number {
-  const total = cubicLength(p0, p1, p2, p3, 0, 1);
-  if (total <= EPSILON) {
-    return 0;
-  }
-  const target = clamp(distance, 0, total);
-  let low = 0;
-  let high = 1;
-  for (let index = 0; index < 28; index += 1) {
-    const mid = (low + high) / 2;
-    const length = cubicLength(p0, p1, p2, p3, 0, mid);
-    if (length < target) {
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-  return (low + high) / 2;
 }
 
 function pointOnCubic(p0: WorldPoint, p1: WorldPoint, p2: WorldPoint, p3: WorldPoint, t: number): WorldPoint {
@@ -604,26 +726,6 @@ function arcLength(arc: ArcGeometry, start: number, end: number): number {
     const derivative = derivativeOnArc(arc, u);
     return Math.hypot(derivative.x, derivative.y);
   }, u0, u1, 32);
-}
-
-function parameterAtArcDistance(arc: ArcGeometry, distance: number): number {
-  const total = arcLength(arc, 0, 1);
-  if (total <= EPSILON) {
-    return 0;
-  }
-  const target = clamp(distance, 0, total);
-  let low = 0;
-  let high = 1;
-  for (let index = 0; index < 28; index += 1) {
-    const mid = (low + high) / 2;
-    const measured = arcLength(arc, 0, mid);
-    if (measured < target) {
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-  return (low + high) / 2;
 }
 
 function pointOnArc(arc: ArcGeometry, t: number): WorldPoint {

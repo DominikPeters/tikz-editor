@@ -1,28 +1,21 @@
-import {
-  APP_MENU_COMMAND_IDS,
-  applyWorkspace,
-  findActiveWorkspaceId,
-  listAllWorkspaces,
-  type AssistantAccountSnapshot,
-  type DesktopContextMenuItem,
-  type DesktopContextMenuPayload,
-  type AssistantDynamicToolResult,
-  type AssistantEvent,
-  type AssistantModelOption,
-  type AssistantThreadState,
-  type AssistantThreadSummary,
-  type AppMenuCommandId,
-  type AppMenuDefinition,
-  type AppMenuItem,
-  type DocumentFileRef,
-  type EditorPlatform,
-  type FileRevision,
-  type LinkedTextReadResult,
-  type LinkedTextWriteResult,
-  type UpdateInfo,
-  type UpdateInstallProgress,
-  type MenuCommandHandler
-} from "@tikz-editor/app";
+import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuDefinition, type AppMenuItem } from "@tikz-editor/app/app-menu";
+import type { LinkedTextReadResult, LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
+import type {
+  AssistantAccountSnapshot,
+  DesktopContextMenuItem,
+  DesktopContextMenuPayload,
+  AssistantDynamicToolResult,
+  AssistantEvent,
+  AssistantModelOption,
+  AssistantThreadState,
+  AssistantThreadSummary,
+  ArxivSourcePayload,
+  EditorPlatform,
+  UpdateInfo,
+  UpdateInstallProgress,
+  MenuCommandHandler
+} from "@tikz-editor/app/platform/types";
+import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
 import type { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import type { Update } from "@tauri-apps/plugin-updater";
 
@@ -75,6 +68,7 @@ type DesktopLinkedTextWriteResult =
 type DesktopBridge = {
   openText: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenTextResult | null>;
   openBinary?: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenBinaryResult | null>;
+  fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   saveText: (params: {
     text: string;
     suggestedName?: string;
@@ -418,6 +412,7 @@ function createNativeDesktopMenuManager(options: {
 
   async function buildWorkspaceMenuItems(): Promise<NativeMenuNode[]> {
     const menuApi = await import("@tauri-apps/api/menu");
+    const { applyWorkspace, findActiveWorkspaceId, listAllWorkspaces } = await import("@tikz-editor/app/workspace");
     const entries = listAllWorkspaces();
     const activeId = findActiveWorkspaceId();
     const items: NativeMenuNode[] = [];
@@ -763,6 +758,10 @@ function createDefaultBridge(): DesktopBridge {
         addToRecent: options?.addToRecent
       });
     },
+    fetchArxivSource: async (idOrUrl) => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return await invoke<ArxivSourcePayload>("desktop_fetch_arxiv_source", { idOrUrl });
+    },
     saveText: async ({ text, suggestedName, path, forceSaveAs }) => {
       const { invoke } = await import("@tauri-apps/api/core");
       return await invoke<DesktopSaveTextResult>("desktop_save_text", {
@@ -941,7 +940,9 @@ function createDefaultBridge(): DesktopBridge {
       pendingUpdate = null;
     },
     relaunch: async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
       const { relaunch } = await import("@tauri-apps/plugin-process");
+      await invoke("desktop_prepare_update_relaunch");
       await relaunch();
     },
     assistantEnsureDocumentThread: async ({ documentId, source, threadId, workspacePath, figurePath, previewPath }) => {
@@ -1048,6 +1049,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
   let bridgeOverride: DesktopBridge | null = null;
   const getBridge = () => bridgeOverride ?? readInjectedTestEnvironment().bridge ?? mergedEnv.bridge ?? defaultBridge;
   let menuHandler: MenuCommandHandler | null = null;
+  const contextMenuHandlersByRequestId = new Map<string, MenuCommandHandler>();
   let openRequestHandler: ((opened: { source: string; fileRef: DocumentFileRef | null }) => void) | null = null;
   let closeRequestHandler: (() => void) | null = null;
   const pendingOpenedBuffer: Array<{ source: string; fileRef: DocumentFileRef | null }> = [];
@@ -1153,6 +1155,12 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         return null;
       });
     contextMenuCommandUnlistenPromise ??= getBridge().onContextMenuCommand((payload) => {
+        const contextMenuHandler = contextMenuHandlersByRequestId.get(payload.requestId);
+        if (contextMenuHandler) {
+          contextMenuHandlersByRequestId.delete(payload.requestId);
+          contextMenuHandler(payload.commandId, "context-menu");
+          return;
+        }
         menuHandler?.(payload.commandId, "context-menu");
       }).catch((error: unknown) => {
         logDesktopPlatformDebug("Failed to register native context menu hook.", error);
@@ -1236,10 +1244,25 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       showNativeContextMenu: async (payload) => {
         nextContextMenuRequestId += 1;
         const requestId = `ctx-${Date.now()}-${nextContextMenuRequestId}`;
-        await getBridge().showContextMenu({
-          requestId,
-          items: serializeDesktopContextMenuItems(payload.items, payload.commandStates)
-        });
+        let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
+        if (payload.onCommandRun) {
+          contextMenuHandlersByRequestId.set(requestId, payload.onCommandRun);
+          cleanupTimeout = setTimeout(() => {
+            contextMenuHandlersByRequestId.delete(requestId);
+          }, 30_000);
+        }
+        try {
+          await getBridge().showContextMenu({
+            requestId,
+            items: serializeDesktopContextMenuItems(payload.items, payload.commandStates)
+          });
+        } catch (error) {
+          contextMenuHandlersByRequestId.delete(requestId);
+          if (cleanupTimeout != null) {
+            clearTimeout(cleanupTimeout);
+          }
+          throw error;
+        }
       }
     },
     window: {
@@ -1333,6 +1356,13 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
           bytes,
           fileRef: toDesktopFileRef(opened.path, opened.name)
         };
+      },
+      fetchArxivSource: async (idOrUrl) => {
+        const fetchArxivSource = getBridge().fetchArxivSource;
+        if (!fetchArxivSource) {
+          throw new Error("Opening from arXiv is unavailable in this desktop build.");
+        }
+        return await fetchArxivSource(idOrUrl);
       },
       saveText: async (text, options) => {
         const mode = options?.mode ?? "save";

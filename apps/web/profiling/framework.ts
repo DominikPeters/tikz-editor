@@ -47,7 +47,7 @@ export type ProfilingVariantReport<
   label: string;
   dimensions: Record<string, string | number | boolean | null>;
   artifacts: {
-    cpuProfilePath: string;
+    cpuProfilePath: string | null;
     analysisPath: string | null;
   };
   metrics: TMetrics;
@@ -263,10 +263,14 @@ export async function captureProfileVariant<
   }>;
 }): Promise<ProfilingVariantReport<TMetrics, TProbeSnapshot>> {
   await resetAppProfilingSession(params.page, `${params.scenarioId}:${params.variantId}`);
-  const client = await startCDPProfile(params.page);
+  const browserName = params.page.context().browser()?.browserType().name() ?? "unknown";
+  const client = browserName === "chromium" ? await startCDPProfile(params.page) : null;
   const result = await params.run();
   const instrumentation = await readAppProfilingSnapshot(params.page);
-  const cpuProfilePath = await stopCDPProfile(client, cpuProfileFilename(params.scenarioId, params.variantId));
+  const cpuProfilePath =
+    client == null
+      ? null
+      : await stopCDPProfile(client, cpuProfileFilename(params.scenarioId, params.variantId));
   return {
     id: params.variantId,
     label: params.label,

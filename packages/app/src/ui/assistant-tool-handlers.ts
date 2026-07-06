@@ -1,9 +1,7 @@
 import type { EmitSvgResult, SvgRenderModel, SvgRenderPart } from "tikz-editor/svg/index";
 import type { SessionSnapshot } from "../compute";
 import type { Diagnostic } from "tikz-editor/diagnostics/types";
-
-// 1 TikZ cm = 28.3465 pt (TeX points)
-const PT_PER_CM = 28.3465;
+import { PT_PER_CM } from "tikz-editor/edit/format";
 
 // ─── Diagnostics ──────────────────────────────────────────────────────────────
 

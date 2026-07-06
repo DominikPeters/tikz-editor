@@ -823,56 +823,8 @@ describe("knuth-plass install helpers", () => {
     expect(mspaceInvalidations).toBeGreaterThan(0);
   });
 
-  it("estimates spacing, line metrics, paragraph ids, and reports from visitor helpers", () => {
+  it("reads line metrics, paragraph ids, and reports from visitor helpers", () => {
     const visitor = makeVisitor();
-    const measurement = {
-      measureMath: (wrapper: any) => Number(wrapper?.width ?? 0),
-      measureText: (text: string, wrapper: any) => text.length * Number(wrapper?.scale ?? 1)
-    };
-    const textWrapper = { scale: 0.5 };
-    const mspace = { width: 2, node: wrapperNode("mspace") };
-    const forcedMspace = { width: 4, node: wrapperNode("mspace") };
-
-    expect(visitor["estimateSpaceWidth"]([
-      {
-        kind: "space",
-        runIndex: 0,
-        sourceStart: 0,
-        sourceEnd: 1,
-        text: " ",
-        wrapper: mspace,
-        breakRef: { kind: "mspace", wrapper: mspace }
-      },
-      {
-        kind: "space",
-        runIndex: 1,
-        sourceStart: 1,
-        sourceEnd: 2,
-        text: " ",
-        wrapper: forcedMspace,
-        breakRef: { kind: "mspace", wrapper: forcedMspace, isForcedLineBreak: true }
-      },
-      {
-        kind: "space",
-        runIndex: 3,
-        sourceStart: 2,
-        sourceEnd: 3,
-        text: " ",
-        wrapper: textWrapper,
-        breakRef: { kind: "mtext-space", wrapper: textWrapper, childIndex: 0, wordIndex: 0 }
-      },
-      {
-        kind: "text",
-        runIndex: 2,
-        sourceStart: 2,
-        sourceEnd: 7,
-        text: "Alpha",
-        wrapper: textWrapper,
-        childIndex: 0,
-        wordIndex: 0
-      }
-    ], measurement, 20)).toBe(0.5);
-    expect(visitor["estimateSpaceWidth"]([], measurement, 4)).toBe(0.25);
 
     const lineWrapper = {
       lineBBox: [

@@ -23,7 +23,7 @@ export default defineConfig({
     trace: "off"
   },
   webServer: {
-    command: `${withoutColorEnv} npm run build -- --base /editor/ --sourcemap && ${withoutColorEnv} npx vite preview --host 127.0.0.1 --port 4174`,
+    command: `${withoutColorEnv} npm run build -- --base / --sourcemap && ${withoutColorEnv} npx vite preview --host 127.0.0.1 --port 4174`,
     cwd: "..",
     url: "http://127.0.0.1:4174",
     reuseExistingServer: !process.env.CI,
@@ -36,6 +36,10 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] }
+    },
+    {
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] }
     }
   ]
 });

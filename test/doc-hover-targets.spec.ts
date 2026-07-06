@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseSyntax } from "../packages/core/src/syntax/parse.js";
+import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import { resolveDocHoverTarget } from "../packages/core/src/completion/doc-hover.js";
 
 function resolveAt(sourceWithCursor: string) {

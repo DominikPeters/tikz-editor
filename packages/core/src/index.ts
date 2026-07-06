@@ -30,6 +30,7 @@ export {
   SVG_EXPORT_MIME_TYPE,
   DEFAULT_SVG_EXPORT_FILE_NAME,
   createStandaloneLatexExportArtifact,
+  createMinimalTikzSourceArtifact,
   normalizeStandaloneLatexExportFileName,
   STANDALONE_LATEX_EXPORT_MIME_TYPE,
   DEFAULT_STANDALONE_LATEX_EXPORT_FILE_NAME
@@ -77,7 +78,9 @@ export type {
   SvgExportArtifact,
   CreateSvgExportArtifactOptions,
   StandaloneLatexExportArtifact,
-  CreateStandaloneLatexExportArtifactOptions
+  CreateStandaloneLatexExportArtifactOptions,
+  MinimalTikzSourceArtifact,
+  CreateMinimalTikzSourceArtifactOptions
 } from "./export/index.js";
 export type {
   ActionAvailability,

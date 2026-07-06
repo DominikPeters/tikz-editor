@@ -22,7 +22,7 @@ import type { WorldPoint } from "../coords/types";
 import type { EditorAction } from "../../store/types";
 
 export type UseCanvasDragControllerParams = {
-  applyActionWithFeedback: (action: EditAction, mergeKey?: string) => ApplyActionFeedback;
+  applyActionWithFeedback: (action: EditAction, mergeKey?: string, sourceOverride?: string) => ApplyActionFeedback;
   dispatch: (action: EditorAction) => void;
   dispatchCanvasTransform: (transform: { translateX: number; translateY: number; scale: number }) => void;
   logSnapDebug: (input: SnapDebugLogInput) => void;

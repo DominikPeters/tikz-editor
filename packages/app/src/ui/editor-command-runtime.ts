@@ -69,6 +69,7 @@ import {
 
 import { requestSourceFormat } from "./source-sync";
 import { resolveOpenedFileForDocument, resolveOpenedPowerPointForDocument } from "./svg-import";
+import { resolveNodePositioningContextMenuAction } from "./canvas-panel/node-positioning-context-action";
 
 export type CommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
 
@@ -118,12 +119,16 @@ type RuntimeInput = {
   updateCanvasSettings: (patch: Partial<AppSettings["canvas"]>) => void;
   dispatch: Dispatch;
   onOpenExample?: () => void;
+  onOpenFromArxiv?: () => void;
   onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
   onOpenPngExport?: (svgResult: EmitSvgResult) => void;
   onRequestCloseDocument?: (documentId: string) => void;
   onRequestCloseAllDocuments?: () => void;
+  onRequestQuitApp?: () => void;
   onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
   onAddNodeAdornment?: (kind: "label" | "pin") => void;
+  onPositionNodeRelativeTo?: () => void;
+  onConvertNodePositionToAbsolute?: () => void;
   onShowCompiledPicture?: () => void;
   onOpenSettings?: () => void;
   onFocusAssistant?: () => void;
@@ -183,12 +188,16 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     updateCanvasSettings,
     dispatch,
     onOpenExample,
+    onOpenFromArxiv,
     onOpenSvgExport,
     onOpenPngExport,
     onRequestCloseDocument,
     onRequestCloseAllDocuments,
+    onRequestQuitApp,
     onRequestSaveDocument,
     onAddNodeAdornment,
+    onPositionNodeRelativeTo,
+    onConvertNodePositionToAbsolute,
     onShowCompiledPicture,
     onOpenSettings,
     onFocusAssistant,
@@ -354,6 +363,14 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           (resolved.target.kind === "path-statement" && resolved.target.pathCommand === "node"))
       );
     })();
+  const nodePositioningAction = singleSelectedId
+    ? resolveNodePositioningContextMenuAction({
+        source,
+        sourceId: singleSelectedId,
+        snapshot,
+        parseOptions
+      })
+    : null;
   const equationTarget = resolveEquationNodeTargetFromSelection(source, selectedElementIds, parseOptions);
   const canTreeAddChild = canAddTreeChild(commandContext);
   const canTreeAddSibling = canAddTreeSibling(commandContext);
@@ -397,6 +414,10 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.OPEN_DOCUMENT]: {
       enabled: canOpen,
       run: () => { runOpenDocument(); }
+    },
+    [APP_MENU_COMMAND_IDS.OPEN_FROM_ARXIV]: {
+      enabled: typeof getActiveEditorPlatform().files?.fetchArxivSource === "function" && onOpenFromArxiv != null,
+      run: () => onOpenFromArxiv?.()
     },
     [APP_MENU_COMMAND_IDS.IMPORT_IPE]: {
       enabled: canOpen,
@@ -488,6 +509,16 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           return;
         }
         dispatch({ type: "CLOSE_ALL_DOCUMENTS" });
+      }
+    },
+    [APP_MENU_COMMAND_IDS.QUIT_APP]: {
+      enabled: onRequestQuitApp != null || typeof getActiveEditorPlatform().window?.close === "function",
+      run: () => {
+        if (onRequestQuitApp) {
+          onRequestQuitApp();
+          return;
+        }
+        void getActiveEditorPlatform().window?.close?.();
       }
     },
     [APP_MENU_COMMAND_IDS.OPEN_EXAMPLE]: {
@@ -843,6 +874,14 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       enabled: canAddAdornment && onAddNodeAdornment != null,
       run: () => onAddNodeAdornment?.("pin")
     },
+    [APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO]: {
+      enabled: nodePositioningAction === "position-relative" && onPositionNodeRelativeTo != null,
+      run: () => onPositionNodeRelativeTo?.()
+    },
+    [APP_MENU_COMMAND_IDS.NODE_CONVERT_TO_ABSOLUTE]: {
+      enabled: nodePositioningAction === "convert-absolute" && onConvertNodePositionToAbsolute != null,
+      run: () => onConvertNodePositionToAbsolute?.()
+    },
     [APP_MENU_COMMAND_IDS.FIT_TO_CONTENT]: {
       enabled: snapshot.svg != null,
       checked: fitToContentModeActive,
@@ -1049,12 +1088,16 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
 export function useEditorCommandRuntime(
   options: {
     onOpenExample?: () => void;
+    onOpenFromArxiv?: () => void;
     onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
     onOpenPngExport?: (svgResult: EmitSvgResult) => void;
-  onRequestCloseDocument?: (documentId: string) => void;
-  onRequestCloseAllDocuments?: () => void;
-  onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
+    onRequestCloseDocument?: (documentId: string) => void;
+    onRequestCloseAllDocuments?: () => void;
+    onRequestQuitApp?: () => void;
+    onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
     onAddNodeAdornment?: (kind: "label" | "pin") => void;
+    onPositionNodeRelativeTo?: () => void;
+    onConvertNodePositionToAbsolute?: () => void;
     onShowCompiledPicture?: () => void;
     onOpenSettings?: () => void;
     onFocusAssistant?: () => void;
@@ -1181,12 +1224,16 @@ export function useEditorCommandRuntime(
         updateCanvasSettings,
         dispatch,
         onOpenExample: options.onOpenExample,
+        onOpenFromArxiv: options.onOpenFromArxiv,
         onOpenSvgExport: options.onOpenSvgExport,
         onOpenPngExport: options.onOpenPngExport,
         onRequestCloseDocument: options.onRequestCloseDocument,
         onRequestCloseAllDocuments: options.onRequestCloseAllDocuments,
+        onRequestQuitApp: options.onRequestQuitApp,
         onRequestSaveDocument: options.onRequestSaveDocument,
         onAddNodeAdornment: options.onAddNodeAdornment,
+        onPositionNodeRelativeTo: options.onPositionNodeRelativeTo,
+        onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute,
         onShowCompiledPicture: options.onShowCompiledPicture,
         onOpenSettings: options.onOpenSettings,
         onCheckForUpdates: options.onCheckForUpdates,
@@ -1230,12 +1277,16 @@ export function useEditorCommandRuntime(
       updateCanvasSettings,
       dispatch,
       options.onOpenExample,
+      options.onOpenFromArxiv,
       options.onOpenSvgExport,
       options.onOpenPngExport,
       options.onRequestCloseDocument,
       options.onRequestCloseAllDocuments,
+      options.onRequestQuitApp,
       options.onRequestSaveDocument,
       options.onAddNodeAdornment,
+      options.onPositionNodeRelativeTo,
+      options.onConvertNodePositionToAbsolute,
       options.onShowCompiledPicture,
       options.onOpenSettings,
       options.onCheckForUpdates,

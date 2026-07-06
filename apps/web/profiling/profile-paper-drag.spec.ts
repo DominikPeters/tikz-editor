@@ -87,6 +87,13 @@ async function installProbe(page: import("@playwright/test").Page, targetSourceI
     let lastComputingTextCount = -1;
     let lastStatusBarText = "__uninitialized__";
     let lastHandleCenter: { x: number; y: number } | null = null;
+    const onDragPatchModeFull = (event: Event) => {
+      const detail = event instanceof CustomEvent && event.detail && typeof event.detail === "object"
+        ? event.detail as Record<string, unknown>
+        : {};
+      record("drag-patch-mode-full", detail);
+    };
+    window.addEventListener("tikz-editor:drag-patch-mode-full", onDragPatchModeFull);
 
     const sourcePanelVisible = (): boolean => document.querySelector(".cm-editor") != null;
     const handleCount = (): number => document.querySelectorAll("[data-handle-kind]").length;
@@ -240,6 +247,7 @@ async function installProbe(page: import("@playwright/test").Page, targetSourceI
     window.addEventListener("beforeunload", () => {
       observer.disconnect();
       window.cancelAnimationFrame(rafId);
+      window.removeEventListener("tikz-editor:drag-patch-mode-full", onDragPatchModeFull);
     });
   }, targetSourceId);
 }
@@ -458,7 +466,7 @@ test("profile paper drag for the magenta axis endpoint", async ({ page }, testIn
     );
   }
   await seedWorkspace(page, target, "doc-profile-paper-drag");
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await installProbe(page, target.targetSourceId);
 
   printDebug("after-app-load", await readDebugState(page, target));

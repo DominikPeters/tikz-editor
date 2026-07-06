@@ -1,5 +1,5 @@
 import { Fragment, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import type { EditHandle } from "tikz-editor/semantic/types";
+import type { EditHandle, NodeAnchorTarget } from "tikz-editor/semantic/types";
 import type { WorldPoint } from "../coords/types";
 import type { ResizeRole } from "tikz-editor/edit/actions";
 import type { SnapLine } from "tikz-editor/edit/snapping";
@@ -12,10 +12,11 @@ import type {
   AdornmentHighlightBox,
   HandleDisplay,
   NodeAnchorOverlayState,
+  NodePositionLinkDisplay,
   SelectionBoxDisplay
 } from "./types";
 import { fmt, worldToSvgPoint } from "./geometry";
-import css from "../CanvasPanel.module.css";
+import css from "./CanvasPanel.module.css";
 
 const SNAP_GAP_ARROW_MARKER_ID = "snap-gap-arrow-marker";
 const TOOL_PREVIEW_NODE_RADIUS_PX = 12;
@@ -51,20 +52,91 @@ export type ToolPreview =
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "path"; d: string };
 
+const PT_PER_CM = 28.4527559055;
+const SNAP_GAP_LABEL_FONT_PX = 9;
+const SNAP_GAP_LABEL_HEIGHT_PX = 13;
+const SNAP_GAP_LABEL_CHAR_PX = 5.4;
+const SNAP_GAP_LABEL_PADDING_PX = 6;
+
+function formatGapDistanceCm(distancePt: number): string {
+  return Number((distancePt / PT_PER_CM).toFixed(2)).toString();
+}
+
+function SnapLabelPill({
+  x,
+  y,
+  text,
+  worldPerPx
+}: {
+  x: number;
+  y: number;
+  text: string;
+  worldPerPx: number;
+}) {
+  const width = (text.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+  const height = SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx;
+  return (
+    <g>
+      <rect
+        x={x - width / 2}
+        y={y - height / 2}
+        width={width}
+        height={height}
+        rx={2 * worldPerPx}
+        className={css.snapGapLabelRect}
+      />
+      <text
+        x={x}
+        y={y}
+        className={css.snapGapLabelText}
+        fontSize={SNAP_GAP_LABEL_FONT_PX * worldPerPx}
+        textAnchor="middle"
+        dominantBaseline="central"
+      >
+        {text}
+      </text>
+    </g>
+  );
+}
+
+function snapNameLabel(
+  sourceIds: readonly string[] | undefined,
+  sourceNames: ReadonlyMap<string, string> | undefined,
+  role?: "corner" | "center"
+): string | null {
+  if (sourceIds?.length !== 1 || !sourceNames) {
+    return null;
+  }
+  const name = sourceNames.get(sourceIds[0]);
+  if (!name) {
+    return null;
+  }
+  if (!role) {
+    return name;
+  }
+  return `${role === "center" ? "center" : "edge"} · ${name}`;
+}
+
 export function SnapOverlay({
   snapLines,
+  sourceNames,
   viewBox,
+  scale,
   snapStrokeWidth,
   snapCrossSize
 }: {
   snapLines: readonly SnapLine[];
+  sourceNames?: ReadonlyMap<string, string>;
   viewBox: SvgViewBox;
+  scale: number;
   snapStrokeWidth: number;
   snapCrossSize: number;
 }) {
   if (snapLines.length === 0) {
     return null;
   }
+
+  const worldPerPx = 1 / Math.max(scale, 1e-3);
 
   return (
     <g className={css.snapOverlay}>
@@ -86,6 +158,22 @@ export function SnapOverlay({
           const points = line.points.map((point) => worldToSvgPoint(point, viewBox));
           const first = points[0];
           const last = points[points.length - 1];
+          const lineClass =
+            line.role === "center" ? `${css.snapLine} ${css.snapCenterLine}` : css.snapLine;
+          const label = snapNameLabel(line.sourceIds, sourceNames, line.role);
+          let labelPosition: { x: number; y: number } | null = null;
+          if (label && first && last) {
+            const dx = last.x - first.x;
+            const dy = last.y - first.y;
+            const length = Math.hypot(dx, dy);
+            const ux = length > 1e-6 ? dx / length : 1;
+            const uy = length > 1e-6 ? dy / length : 0;
+            const labelWidth = (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+            const halfAlong =
+              Math.abs(ux) > Math.abs(uy) ? labelWidth / 2 : (SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx) / 2;
+            const offset = 10 * worldPerPx + halfAlong;
+            labelPosition = { x: last.x + ux * offset, y: last.y + uy * offset };
+          }
           return (
             <g key={`snap-points-${index}`}>
               {first && last && points.length > 1 && (
@@ -94,8 +182,16 @@ export function SnapOverlay({
                   y1={first.y}
                   x2={last.x}
                   y2={last.y}
-                  className={css.snapLine}
+                  className={lineClass}
                   strokeWidth={snapStrokeWidth}
+                />
+              )}
+              {label && labelPosition && (
+                <SnapLabelPill
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  text={label}
+                  worldPerPx={worldPerPx}
                 />
               )}
               {points.map((point, pointIndex) => (
@@ -125,6 +221,20 @@ export function SnapOverlay({
         if (line.type === "pointer") {
           const from = worldToSvgPoint(line.from, viewBox);
           const to = worldToSvgPoint(line.to, viewBox);
+          const label = snapNameLabel(line.sourceIds, sourceNames);
+          let labelPosition: { x: number; y: number } | null = null;
+          if (label) {
+            const dx = from.x - to.x;
+            const dy = from.y - to.y;
+            const length = Math.hypot(dx, dy);
+            const ux = length > 1e-6 ? dx / length : 1;
+            const uy = length > 1e-6 ? dy / length : 0;
+            const labelWidth = (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+            const halfAlong =
+              Math.abs(ux) > Math.abs(uy) ? labelWidth / 2 : (SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx) / 2;
+            const offset = 10 * worldPerPx + halfAlong;
+            labelPosition = { x: from.x + ux * offset, y: from.y + uy * offset };
+          }
           return (
             <g key={`snap-pointer-${index}`}>
               <line
@@ -135,6 +245,14 @@ export function SnapOverlay({
                 className={css.snapLine}
                 strokeWidth={snapStrokeWidth}
               />
+              {label && labelPosition && (
+                <SnapLabelPill
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  text={label}
+                  worldPerPx={worldPerPx}
+                />
+              )}
               <line
                 x1={from.x - snapCrossSize}
                 y1={from.y - snapCrossSize}
@@ -161,18 +279,33 @@ export function SnapOverlay({
               const a = worldToSvgPoint(segment[0], viewBox);
               const b = worldToSvgPoint(segment[1], viewBox);
               const isEqualGap = line.gapKind === "equal";
+              const distancePt =
+                line.direction === "horizontal"
+                  ? Math.abs(segment[1].x - segment[0].x)
+                  : Math.abs(segment[1].y - segment[0].y);
+              const label = formatGapDistanceCm(distancePt);
+              const labelWidth =
+                (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+              const segmentLength = Math.hypot(b.x - a.x, b.y - a.y);
+              const showLabel = segmentLength > labelWidth * 1.3;
+              const midX = (a.x + b.x) / 2;
+              const midY = (a.y + b.y) / 2;
               return (
-                <line
-                  key={`snap-gap-segment-${index}-${segmentIndex}`}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  className={`${css.snapLine} ${css.snapGapLine}`}
-                  strokeWidth={snapStrokeWidth}
-                  markerStart={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
-                  markerEnd={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
-                />
+                <g key={`snap-gap-segment-${index}-${segmentIndex}`}>
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    className={`${css.snapLine} ${css.snapGapLine}`}
+                    strokeWidth={snapStrokeWidth}
+                    markerStart={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
+                    markerEnd={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
+                  />
+                  {showLabel && (
+                    <SnapLabelPill x={midX} y={midY} text={label} worldPerPx={worldPerPx} />
+                  )}
+                </g>
               );
             })}
           </g>
@@ -476,6 +609,40 @@ export function CurveControlOverlay({
   );
 }
 
+export function NodePositionLinkOverlay({
+  links,
+  viewBox
+}: {
+  links: readonly NodePositionLinkDisplay[];
+  viewBox: SvgViewBox;
+}) {
+  if (links.length === 0) {
+    return null;
+  }
+
+  return (
+    <g className={css.nodePositionLinkOverlay}>
+      {links.map((link) => {
+        const from = worldToSvgPoint(link.from, viewBox);
+        const to = worldToSvgPoint(link.to, viewBox);
+        return (
+          <line
+            key={link.key}
+            className={css.nodePositionLinkLine}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            data-testid="node-position-link"
+            data-node-position-link-source-id={link.sourceId}
+            data-node-position-link-target-source-id={link.targetSourceId}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 export function HitRegionLayer({
   hitRegions,
   hoveredElementId,
@@ -485,7 +652,8 @@ export function HitRegionLayer({
   onElementPointerDown,
   onElementContextMenu,
   onElementDoubleClick,
-  onHoverChange
+  onHoverChange,
+  cursorByTargetId
 }: {
   hitRegions: readonly HitRegion[];
   hoveredElementId: string | null;
@@ -496,6 +664,7 @@ export function HitRegionLayer({
   onElementContextMenu: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onHoverChange: (targetId: string | null) => void;
+  cursorByTargetId?: ReadonlyMap<string, string>;
 }) {
   const clipSvgIdBySceneId = new Map<string, string>();
   const clipDefs: Array<{ sceneId: string; svgId: string; d: string; fillRule: "nonzero" | "evenodd" }> = [];
@@ -540,8 +709,11 @@ export function HitRegionLayer({
       ) : null}
       {hitRegions.map((region) => {
         const isHovered = hoveredElementId === (toolMode === "addBucket" ? region.sourceId : region.targetId);
+        const cursorOverride = cursorByTargetId?.get(region.targetId);
         const cursor =
-          toolMode === "select"
+          cursorByTargetId
+            ? cursorOverride ?? "default"
+          : toolMode === "select"
             ? region.shape === "rect" && region.matrixEdgeSelection
               ? region.matrixEdgeSelection.cursor
               : region.shape === "rect" && region.interactionMode === "move"
@@ -902,6 +1074,7 @@ export function HandleOverlay({
     event: ReactPointerEvent<SVGElement>,
     sourceId: string,
     centerWorld: WorldPoint,
+    centerPivotWorld: WorldPoint,
     cursor: string
   ) => void;
 }) {
@@ -921,7 +1094,7 @@ export function HandleOverlay({
             onResizeHandlePointerDown(event, display.elementId, display.role, display.cursor);
             return;
           }
-          onRotateHandlePointerDown(event, display.elementId, display.centerWorld, display.cursor);
+          onRotateHandlePointerDown(event, display.elementId, display.centerWorld, display.centerPivotWorld, display.cursor);
         };
         const onContextMenu = (event: ReactMouseEvent<SVGElement>) =>
           { onElementContextMenu(
@@ -1026,12 +1199,18 @@ export function NodeAnchorOverlay({
   anchorOverlay,
   viewBox,
   strokeWidth,
-  radius
+  radius,
+  onAnchorPointerDown,
+  onAnchorClick,
+  onAnchorHoverChange
 }: {
   anchorOverlay: NodeAnchorOverlayState | null;
   viewBox: SvgViewBox;
   strokeWidth: number;
   radius: number;
+  onAnchorPointerDown?: (event: ReactPointerEvent<SVGCircleElement>, anchor: NodeAnchorTarget) => void;
+  onAnchorClick?: (event: ReactMouseEvent<SVGCircleElement>, anchor: NodeAnchorTarget) => void;
+  onAnchorHoverChange?: (anchor: NodeAnchorTarget | null) => void;
 }) {
   if (!anchorOverlay || anchorOverlay.visibleAnchors.length === 0) {
     return null;
@@ -1041,6 +1220,10 @@ export function NodeAnchorOverlay({
     <g className={css.nodeAnchorOverlay}>
       {anchorOverlay.visibleAnchors.map((anchor) => {
         const point = worldToSvgPoint(anchor.world, viewBox);
+        const anchorSourceId = anchor.nodeSourceId?.trim() ?? "";
+        const anchorState = anchorSourceId ? anchorOverlay.anchorStateBySourceId?.get(anchorSourceId) : undefined;
+        const disabled = anchorState?.disabled === true;
+        const radiusScale = anchorOverlay.radiusScale ?? 1;
         const snapped =
           anchorOverlay.snappedAnchor?.nodeName === anchor.nodeName &&
           anchorOverlay.snappedAnchor?.nodeSourceId === anchor.nodeSourceId &&
@@ -1048,16 +1231,37 @@ export function NodeAnchorOverlay({
         return (
           <circle
             key={`${anchor.nodeName || anchor.nodeSourceId}:${anchor.anchor}`}
-            className={`${css.nodeAnchorPoint} ${snapped ? css.nodeAnchorPointSnapped : ""}`}
+            className={`${css.nodeAnchorPoint} ${snapped ? css.nodeAnchorPointSnapped : ""} ${onAnchorPointerDown || onAnchorClick ? css.nodeAnchorPointInteractive : ""} ${disabled ? css.nodeAnchorPointDisabled : ""}`}
             cx={point.x}
             cy={point.y}
-            r={snapped ? radius * 1.1 : radius * 0.85}
+            r={(snapped ? radius * 1.1 : radius * 0.85) * radiusScale}
             strokeWidth={strokeWidth}
+            onPointerDown={
+              onAnchorPointerDown
+                ? (event) => { onAnchorPointerDown(event, anchor); }
+                : undefined
+            }
+            onClick={
+              onAnchorClick
+                ? (event) => { onAnchorClick(event, anchor); }
+                : undefined
+            }
+            onPointerEnter={
+              onAnchorHoverChange
+                ? () => { onAnchorHoverChange(anchor); }
+                : undefined
+            }
+            onPointerLeave={
+              onAnchorHoverChange
+                ? () => { onAnchorHoverChange(null); }
+                : undefined
+            }
             data-testid="node-anchor-dot"
             data-anchor-node={anchor.nodeName}
             data-anchor-source-id={anchor.nodeSourceId}
             data-anchor-name={anchor.anchor}
             data-anchor-snapped={snapped ? "true" : undefined}
+            data-anchor-disabled={disabled ? "true" : undefined}
           />
         );
       })}

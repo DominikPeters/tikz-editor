@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { lookupTikzDocEntry, resetTikzDocCacheForTests } from "../packages/app/src/tikz-docs";
+import { lookupTikzDocEntry, resetTikzDocCacheForTests } from "../packages/app/src/ui/source-panel/tikz-docs";
 
 describe("tikz docs lookup", () => {
   afterEach(() => {

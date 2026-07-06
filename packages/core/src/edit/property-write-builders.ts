@@ -1,4 +1,5 @@
 import type { OptionEntry } from "../options/types.js";
+import { splitAllAtTopLevel } from "../domains/coordinates/parse.js";
 import { parseCoordinateLike, parseLength } from "../semantic/coords/parse-length.js";
 import { stripEnclosingBraces } from "../semantic/style/option-utils.js";
 import { SHADOW_INHERIT_FILL, SHADOW_INHERIT_STROKE } from "../semantic/types.js";
@@ -8,6 +9,7 @@ import type { SemanticPropertyId } from "./property-registry.js";
 import { resolvePropertyTarget, type PropertyTargetResolution } from "./property-target.js";
 import { formatNumber } from "./format.js";
 import { normalizeOptionKey } from "./option-key.js";
+import { uniqueStrings } from "./statement-find.js";
 import {
   ARROW_DEFAULT_CLEAR_KEYS,
   ARROW_OPTION_KEY,
@@ -203,12 +205,18 @@ export type NodeFontSetPropertyMutation = {
 
 export type TransformInspectorKey = "xshift" | "yshift" | "xscale" | "yscale" | "rotate";
 
+export type TransformRotateAroundContext = {
+  pivotRaw: string;
+  pivotLabel: string;
+};
+
 export type TransformInspectorValues = {
   xshift: number;
   yshift: number;
   xscale: number;
   yscale: number;
   rotate: number;
+  rotateAround?: TransformRotateAroundContext | null;
 };
 
 export type TransformInspectorPresence = {
@@ -219,6 +227,7 @@ export type TransformInspectorPresence = {
   xscale: boolean;
   yscale: boolean;
   rotate: boolean;
+  rotateAround?: boolean;
 };
 
 export type TransformInspectorMutationContext = {
@@ -252,12 +261,13 @@ export const DEFAULT_TRANSFORM_INSPECTOR_VALUES: TransformInspectorValues = {
   yshift: 0,
   xscale: 1,
   yscale: 1,
-  rotate: 0
+  rotate: 0,
+  rotateAround: null
 };
 
 export const SHIFT_CLEAR_KEYS = ["shift", "/tikz/shift"] as const;
 export const SCALE_CLEAR_KEYS = ["scale", "/tikz/scale"] as const;
-export const ROTATE_CLEAR_KEYS = ["/tikz/rotate"] as const;
+export const ROTATE_CLEAR_KEYS = ["/tikz/rotate", "rotate around", "/tikz/rotate around"] as const;
 export const LINE_WIDTH_NUMERIC_KEY = "line width";
 export const LINE_WIDTH_PRESET_KEYS = LINE_WIDTH_PRESETS.map((preset) => preset.label);
 export const LINE_WIDTH_ALL_OPTION_KEYS = [LINE_WIDTH_NUMERIC_KEY, ...LINE_WIDTH_PRESET_KEYS];
@@ -509,9 +519,12 @@ export function buildNodeShapeSetPropertyMutation(
 
 export function buildNodeInnerSepSetPropertyMutation(value: number): NodeInnerSepSetPropertyMutation {
   const safe = Number.isFinite(value) && value >= 0 ? value : NODE_INNER_SEP_DEFAULT;
+  const formatted = Math.abs(safe - NODE_INNER_SEP_DEFAULT) <= 1e-6
+    ? ".3333em"
+    : `${formatInspectorLength(safe)}pt`;
   return {
     key: "inner sep",
-    value: `${formatInspectorLength(safe)}pt`,
+    value: formatted,
     clearKeys: uniqueStrings([...NODE_INNER_SEP_CLEAR_KEYS])
   };
 }
@@ -698,6 +711,20 @@ export function resolveTransformInspectorMutationContextFromOptionEntries(
       const parsed = parseTransformScalar(entry.valueRaw);
       if (parsed != null) {
         values.rotate = parsed;
+        values.rotateAround = null;
+      }
+      continue;
+    }
+
+    if (key === "rotate around" || key === "/tikz/rotate around") {
+      presence.rotateAround = true;
+      const parsed = parseRotateAroundTransformValue(entry.valueRaw);
+      if (parsed) {
+        values.rotate = parsed.angleDeg;
+        values.rotateAround = {
+          pivotRaw: parsed.pivotRaw,
+          pivotLabel: parsed.pivotLabel
+        };
       }
     }
   }
@@ -794,14 +821,7 @@ export function buildTransformSetPropertyMutations(
     return mutations;
   }
 
-  return [
-    buildTransformMutation(
-      "rotate",
-      safeNextValue,
-      DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
-      ROTATE_CLEAR_KEYS
-    )
-  ];
+  return [buildRotateTransformMutation(sanitizedCurrent.rotateAround ?? null, safeNextValue)];
 }
 
 export function buildShadowMutationContextForPreset(preset: ShadowPresetId): ShadowMutationContext {
@@ -872,8 +892,16 @@ export function cloneTransformInspectorValues(values: TransformInspectorValues):
     yshift: values.yshift,
     xscale: values.xscale,
     yscale: values.yscale,
-    rotate: values.rotate
+    rotate: values.rotate,
+    rotateAround: cloneTransformRotateAroundContext(values.rotateAround)
   };
+}
+
+export function transformRotateInspectorLabel(
+  context: TransformInspectorValues | TransformInspectorMutationContext
+): string {
+  const values = "values" in context ? context.values : context;
+  return values.rotateAround ? `Rotate around ${values.rotateAround.pivotLabel}` : "Rotate";
 }
 
 export function transformPropertyCandidateKeys(key: TransformInspectorKey): string[] {
@@ -886,19 +914,7 @@ export function transformPropertyCandidateKeys(key: TransformInspectorKey): stri
   return uniqueStrings([key, ...ROTATE_CLEAR_KEYS]);
 }
 
-export function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    unique.push(normalized);
-  }
-  return unique;
-}
+export { uniqueStrings } from "./statement-find.js";
 
 function createPropertyTargetResolver(
   source: string,
@@ -1031,6 +1047,46 @@ function arrowPresetSideRaw(preset: Exclude<ArrowTipPresetId, "custom">, side: A
   return "";
 }
 
+function parseRotateAroundTransformValue(
+  raw: string
+): { angleDeg: number; pivotRaw: string; pivotLabel: string } | null {
+  const normalized = stripEnclosingBraces(raw).trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const parts = splitAllAtTopLevel(normalized, ":").map((part) => part.trim());
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const angleRaw = parts[0] ?? "";
+  const pivotRaw = parts.slice(1).join(":").trim();
+  if (angleRaw.length === 0 || pivotRaw.length === 0) {
+    return null;
+  }
+
+  const angleDeg = parseTransformScalar(angleRaw);
+  if (angleDeg == null) {
+    return null;
+  }
+
+  return {
+    angleDeg,
+    pivotRaw,
+    pivotLabel: formatRotateAroundPivotLabel(pivotRaw)
+  };
+}
+
+function formatRotateAroundPivotLabel(raw: string): string {
+  const trimmed = raw.trim();
+  const coordinate = parseCoordinateLike(trimmed);
+  if (!coordinate) {
+    return trimmed;
+  }
+  return `(${coordinate.x.trim()}, ${coordinate.y.trim()})`;
+}
+
 function parseTransformScalar(raw: string): number | null {
   const parsed = Number(stripEnclosingBraces(raw).trim());
   if (!Number.isFinite(parsed)) {
@@ -1058,6 +1114,12 @@ function parseShiftTransformValue(raw: string): { x: number; y: number } | null 
   };
 }
 
+function cloneTransformRotateAroundContext(
+  context: TransformRotateAroundContext | null | undefined
+): TransformRotateAroundContext | null {
+  return context ? { ...context } : null;
+}
+
 function createEmptyTransformInspectorPresence(): TransformInspectorPresence {
   return {
     shift: false,
@@ -1066,7 +1128,8 @@ function createEmptyTransformInspectorPresence(): TransformInspectorPresence {
     yshift: false,
     xscale: false,
     yscale: false,
-    rotate: false
+    rotate: false,
+    rotateAround: false
   };
 }
 
@@ -1117,7 +1180,8 @@ function sanitizeTransformInspectorValues(values: TransformInspectorValues): Tra
     yshift: Number.isFinite(values.yshift) ? normalizeTinyNumber(values.yshift) : DEFAULT_TRANSFORM_INSPECTOR_VALUES.yshift,
     xscale: Number.isFinite(values.xscale) ? normalizeTinyNumber(values.xscale) : DEFAULT_TRANSFORM_INSPECTOR_VALUES.xscale,
     yscale: Number.isFinite(values.yscale) ? normalizeTinyNumber(values.yscale) : DEFAULT_TRANSFORM_INSPECTOR_VALUES.yscale,
-    rotate: Number.isFinite(values.rotate) ? normalizeTinyNumber(values.rotate) : DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate
+    rotate: Number.isFinite(values.rotate) ? normalizeTinyNumber(values.rotate) : DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
+    rotateAround: cloneTransformRotateAroundContext(values.rotateAround)
   };
 }
 
@@ -1138,6 +1202,28 @@ function buildTransformMutation(
     value: isDefault ? "" : formatInspectorLength(normalizedValue) + (key === "xshift" || key === "yshift" ? "pt" : ""),
     clearKeys: uniqueStrings(isDefault ? [key, ...clearKeys] : clearKeys)
   };
+}
+
+function buildRotateTransformMutation(
+  rotateAround: TransformRotateAroundContext | null,
+  value: number
+): TransformSetPropertyMutation {
+  const normalizedValue = normalizeTinyNumber(value);
+  const isDefault = Math.abs(normalizedValue - DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate) <= 1e-6;
+  if (rotateAround) {
+    const key = "rotate around";
+    return {
+      key,
+      value: isDefault ? "" : `{${formatInspectorLength(normalizedValue)}:${rotateAround.pivotRaw}}`,
+      clearKeys: uniqueStrings(isDefault ? [key, ...ROTATE_CLEAR_KEYS] : ["rotate", ...ROTATE_CLEAR_KEYS])
+    };
+  }
+  return buildTransformMutation(
+    "rotate",
+    normalizedValue,
+    DEFAULT_TRANSFORM_INSPECTOR_VALUES.rotate,
+    ROTATE_CLEAR_KEYS
+  );
 }
 
 function formatInspectorLength(value: number): string {

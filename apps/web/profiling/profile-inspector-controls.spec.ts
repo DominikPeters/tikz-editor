@@ -124,7 +124,7 @@ async function summarizeRun(page: Page, sourceRevisionBefore: number) {
 test("profile inspector controls on a selected path", async ({ page }, testInfo) => {
   const variants = [];
 
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await installFrameProbe(page);
 
   await prepareSelectedPath(page);

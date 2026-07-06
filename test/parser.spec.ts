@@ -678,6 +678,32 @@ describe("parseTikz", () => {
     }
   });
 
+  it("does not tokenize path keyword prefixes inside identifiers", () => {
+    const source = String.raw`\colorlet{sincolor}{red}
+\colorlet{circlefoo}{blue}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(collectCstText(source, result, "SinKw")).toHaveLength(0);
+    expect(collectCstText(source, result, "CircleKw")).toHaveLength(0);
+    expect(collectCstText(source, result, "Identifier")).toEqual(
+      expect.arrayContaining(["sincolor", "circlefoo"])
+    );
+  });
+
+  it("tokenizes positioning of as a whole-word option keyword", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node[draw,below right={0.47cm and 0.45cm} of target,office=1,offset=2] {node};
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(collectCstText(source, result, "OfKw")).toEqual(["of"]);
+    expect(collectCstText(source, result, "Identifier")).toEqual(
+      expect.arrayContaining(["office", "offset"])
+    );
+  });
+
   it("ignores empty node names when checking malformed coordinates", () => {
     const source = String.raw`\begin{tikzpicture}
   \node () at (0,0) {Hi};
@@ -1305,6 +1331,33 @@ describe("parseTikz", () => {
     expect(coordinates.some((item) => item.kind === "Coordinate" && item.relativePrefix === "+")).toBe(true);
   });
 
+  it("parses semicolonless pgfmath statements without swallowing following paths", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pgfmathsetmacro{\xx}{1}
+  \pgfmathparse{2+3}
+  \pgfmathsetseed{7}
+  \draw (\xx,\pgfmathresult) rectangle +(1,1);
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(result.figure.body.map((statement) => statement.kind)).toEqual([
+      "PgfMath",
+      "PgfMath",
+      "PgfMath",
+      "Path"
+    ]);
+  });
+
+  it("accepts incremental rectangle coordinates inside grouped foreach bodies", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \foreach \i in {0}{\draw (0,0) rectangle ++(1,1);}
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+  });
+
   it("merges consecutive leading path option lists into statement options", () => {
     const source = String.raw`\begin{tikzpicture}
   \fill [decorate,decoration={zigzag}] [fill=blue!20,draw=blue,thick] (0,0) -- (1,0) -- cycle;
@@ -1539,6 +1592,58 @@ describe("parseTikz", () => {
     expect(plots.length).toBe(2);
     const modes = plots.map((item) => (item.kind === "PlotOperation" ? item.mode : "unknown"));
     expect(modes).toEqual(expect.arrayContaining(["function", "file"]));
+  });
+
+  it("maps top-level and path pic syntax to PicOperation items", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pic at (1,0) {foo};
+  \path (0,0) pic {foo};
+  \path pic [rotate=30] at (1,0) {foo};
+  \pic [pic type=foo];
+  \path (0,0) pic [pic type=foo] (1,0);
+  \path pic foreach \x in {1,2} at (\x,0) {foo};
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
+    const paths = result.figure.body.filter((statement) => statement.kind === "Path");
+    expect(paths).toHaveLength(6);
+    const pics = paths.flatMap((statement) =>
+      statement.kind === "Path" ? statement.items.filter((item) => item.kind === "PicOperation") : []
+    );
+    expect(pics).toHaveLength(6);
+
+    const [topLevel, pathPlaced, rotated, typeFromOption, pathTypeFromOption, foreachPic] = pics;
+    expect(topLevel?.kind).toBe("PicOperation");
+    if (topLevel?.kind === "PicOperation") {
+      expect(topLevel.atRaw).toBe("(1,0)");
+      expect(topLevel.typeRaw).toBe("foo");
+    }
+    expect(pathPlaced?.kind).toBe("PicOperation");
+    if (pathPlaced?.kind === "PicOperation") {
+      expect(pathPlaced.typeSource).toBe("group");
+      expect(pathPlaced.typeRaw).toBe("foo");
+    }
+    expect(rotated?.kind).toBe("PicOperation");
+    if (rotated?.kind === "PicOperation") {
+      expect(rotated.options?.entries.some((entry) => entry.kind === "kv" && entry.key === "rotate")).toBe(true);
+      expect(rotated.atRaw).toBe("(1,0)");
+    }
+    expect(typeFromOption?.kind).toBe("PicOperation");
+    if (typeFromOption?.kind === "PicOperation") {
+      expect(typeFromOption.typeSource).toBe("option");
+      expect(typeFromOption.typeRaw).toBe("foo");
+    }
+    expect(pathTypeFromOption?.kind).toBe("PicOperation");
+    if (pathTypeFromOption?.kind === "PicOperation") {
+      expect(pathTypeFromOption.typeSource).toBe("option");
+      expect(pathTypeFromOption.typeRaw).toBe("foo");
+    }
+    expect(foreachPic?.kind).toBe("PicOperation");
+    if (foreachPic?.kind === "PicOperation") {
+      expect(foreachPic.foreachClauses).toHaveLength(1);
+      expect(foreachPic.atRaw).toBe("(\\x,0)");
+    }
   });
 
   it("parses to, edge, svg, let, decorate, and coordinate operations with typed IR items", () => {

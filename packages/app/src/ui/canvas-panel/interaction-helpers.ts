@@ -99,8 +99,7 @@ export function createTemplateForToolDrag(
       pt((startWorld.y + endWorld.y) / 2)
     );
     if (hasDrag) {
-      const bezierTemplate = createBezierTemplateFromBend(startWorld, endWorld, bend);
-      return { ...bezierTemplate, strokeColor };
+      return createBezierTemplateFromBend(startWorld, endWorld, bend, { strokeColor });
     }
     return { kind: "bezier", strokeColor };
   }
@@ -199,14 +198,16 @@ export function resolveBezierControlsFromBend(
 export function createBezierTemplateFromBend(
   startWorld: WorldPoint,
   endWorld: WorldPoint,
-  bendWorld: WorldPoint
+  bendWorld: WorldPoint,
+  options?: { strokeColor?: string }
 ): Extract<ElementTemplate, { kind: "bezier" }> {
   const controls = resolveBezierControlsFromBend(startWorld, endWorld, bendWorld);
   return {
     kind: "bezier",
     to: controls.endWorld,
     control1: controls.control1,
-    control2: controls.control2
+    control2: controls.control2,
+    strokeColor: options?.strokeColor
   };
 }
 
@@ -450,14 +451,30 @@ export function projectResizeDimensionsFromCenter(
 export function projectResizeDimensionsFromOppositeCorner(
   pointerWorld: WorldPoint,
   frame: ResizeFrame,
-  role: Extract<DragState, { kind: "resize" }>["role"]
+  role: Extract<DragState, { kind: "resize" }>["role"],
+  preserveAspectRatio: number | null = null,
+  preserveAspectDuringResize = false
 ): { width: number; height: number } {
   const basis = resolveFrameBasis(frame);
   const fixed = oppositeCornerWorld(frame, role);
   const delta = worldVector(pt(pointerWorld.x - fixed.x), pt(pointerWorld.y - fixed.y));
+  let width = Math.abs(dotPoint(delta, basis.widthUnit));
+  let height = Math.abs(dotPoint(delta, basis.heightUnit));
+  const aspectRatio =
+    preserveAspectRatio && preserveAspectRatio > TOOLTIP_ZERO_EPSILON
+      ? preserveAspectRatio
+      : null;
+
+  if (preserveAspectDuringResize && aspectRatio) {
+    if (width > TOOLTIP_ZERO_EPSILON || height > TOOLTIP_ZERO_EPSILON) {
+      width = Math.max(width, height / aspectRatio);
+      height = width * aspectRatio;
+    }
+  }
+
   return {
-    width: clampTooltipScalar(Math.abs(dotPoint(delta, basis.widthUnit))),
-    height: clampTooltipScalar(Math.abs(dotPoint(delta, basis.heightUnit)))
+    width: clampTooltipScalar(width),
+    height: clampTooltipScalar(height)
   };
 }
 

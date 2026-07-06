@@ -4,6 +4,7 @@ import { collectGeometryInvalidation } from "tikz-editor/semantic/index";
 import type { SceneElement } from "tikz-editor/semantic/types";
 
 import type { CanvasDragKind } from "../../store/types";
+import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import type { CanvasSnapshot } from "./types";
 
 export type UseCanvasSvgPatchInvalidationArgs = {
@@ -50,6 +51,10 @@ export function useCanvasSvgPatchInvalidation({
         )
       )
     ) {
+      recordDragPatchModeFullReason("path-attached-node", {
+        activeCanvasDragKind,
+        selectedSourceIds: [...selectedElementIds]
+      });
       setDragPatchMode("full");
       setDragAffectedSourceIds(null);
       return;
@@ -76,6 +81,11 @@ export function useCanvasSvgPatchInvalidation({
       changedSourceIds: changedSourceIdsForInvalidation
     });
     if (invalidation.reachedOpaque) {
+      recordDragPatchModeFullReason("opaque-invalidation", {
+        activeCanvasDragKind,
+        changedSourceIds,
+        changedSourceIdsForInvalidation
+      });
       setDragPatchMode("full");
       setDragAffectedSourceIds(null);
       return;

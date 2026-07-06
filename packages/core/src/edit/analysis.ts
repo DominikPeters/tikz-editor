@@ -86,8 +86,9 @@ export function createEditAnalysisSession(): EditAnalysisSession {
   };
 
   return {
-    primeFromParse(parse, source, options = {}) {
+    primeFromParse(parse, _source, options = {}) {
       const activeFigureId = options.activeFigureId ?? parse.activeFigureId;
+      const source = parse.source;
       const hit = lookup(source, activeFigureId);
       if (hit?.parseResult === parse) {
         return hit.view;

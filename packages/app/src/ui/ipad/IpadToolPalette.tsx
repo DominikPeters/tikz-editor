@@ -10,7 +10,7 @@ import {
 import { RiArrowRightSLine } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
 import { NODE_SHAPE_OPTIONS, type NodeShapePresetId } from "tikz-editor/edit/inspector";
-import { useProjectNamedColorSwatches } from "../../project-named-colors";
+import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import { useEditorStore } from "../../store/store";
 import type { ToolMode } from "../../store/types";
 import { ColorPicker } from "../ColorPicker";

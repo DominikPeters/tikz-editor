@@ -29,6 +29,8 @@ export type {
 export type {
   AssistantApi,
   AssistantAccountSnapshot,
+  ArxivSourceFile,
+  ArxivSourcePayload,
   AssistantChatContent,
   DesktopContextMenuItem,
   DesktopContextMenuPayload,

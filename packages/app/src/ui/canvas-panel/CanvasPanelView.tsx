@@ -23,6 +23,7 @@ import {
   HandleOverlay,
   HitRegionLayer,
   NodeAnchorOverlay,
+  NodePositionLinkOverlay,
   SelectionDragLayer,
   SelectionOverlay,
   SnapOverlay,
@@ -38,6 +39,7 @@ import type {
   HandleDisplay,
   MagnifierState,
   NodeAnchorOverlayState,
+  NodePositionLinkDisplay,
   SelectionBoxDisplay,
   TextEditingSession,
   TextSelectionOverlay,
@@ -52,7 +54,7 @@ import type { GridLines } from "./useCanvasGuidesAndRulers";
 import type { GuideOrientation } from "./types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
-import css from "../CanvasPanel.module.css";
+import css from "./CanvasPanel.module.css";
 
 const MAGNIFIER_DIAMETER_PX = 300;
 const MAGNIFIER_SCALE = 2.25;
@@ -113,6 +115,7 @@ type CanvasPanelViewProps = {
   guideHitStrokeWidth: number;
   onGuidePointerDown: (event: ReactPointerEvent<SVGLineElement>, orientation: GuideOrientation, value: number) => void;
   snapLines: readonly SnapLine[];
+  snapSourceNames: ReadonlyMap<string, string>;
   snapStrokeWidth: number;
   snapCrossSize: number;
   toolPreview: ToolPreview | null;
@@ -122,10 +125,12 @@ type CanvasPanelViewProps = {
   hoveredElementId: string | null;
   editableTextRegionKeys: ReadonlySet<string>;
   draggableSourceIds: ReadonlySet<string>;
+  hitRegionCursorByTargetId?: ReadonlyMap<string, string>;
   onElementPointerDown: (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onElementContextMenu: (event: ReactMouseEvent<SVGElement>, sourceId: string, region?: HitRegion, handleId?: string | null) => void;
   onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
   onHoverChange: (id: string | null) => void;
+  nodePositionLinks: readonly NodePositionLinkDisplay[];
   marqueeBounds: SvgBounds | null;
   selectionBoxes: readonly SelectionBoxDisplay[];
   adornmentHighlightBoxes: readonly AdornmentHighlightBox[];
@@ -137,11 +142,21 @@ type CanvasPanelViewProps = {
   curveControlLines: readonly CurveControlLine[];
   curveControlStrokeWidth: number;
   nodeAnchorOverlay: NodeAnchorOverlayState | null;
+  onNodeAnchorPointerDown?: (event: ReactPointerEvent<SVGCircleElement>, targetId: string) => void;
+  onNodeAnchorClick?: (event: ReactMouseEvent<SVGCircleElement>, targetId: string) => void;
+  onNodeAnchorHoverChange?: (targetId: string | null) => void;
+  nodePositionTargetTooltip: { content: string; anchor: { x: number; y: number } } | null;
   handleHalfSize: number;
   handleDisplays: readonly HandleDisplay[];
   onHandlePointerDown: (event: ReactPointerEvent<SVGElement>, handle: EditHandle) => void;
   onResizeHandlePointerDown: (event: ReactPointerEvent<SVGElement>, sourceId: string, role: ResizeRole, cursor: string) => void;
-  onRotateHandlePointerDown: (event: ReactPointerEvent<SVGElement>, sourceId: string, centerWorld: WorldPoint, cursor: string) => void;
+  onRotateHandlePointerDown: (
+    event: ReactPointerEvent<SVGElement>,
+    sourceId: string,
+    centerWorld: WorldPoint,
+    centerPivotWorld: WorldPoint,
+    cursor: string
+  ) => void;
   platform: EditorPlatform;
   contextMenuState: CanvasContextMenuState | null;
   commandRuntimeBindings: CommandBindings;
@@ -231,6 +246,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     guideHitStrokeWidth,
     onGuidePointerDown,
     snapLines,
+    snapSourceNames,
     snapStrokeWidth,
     snapCrossSize,
     toolPreview,
@@ -240,10 +256,12 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     hoveredElementId,
     editableTextRegionKeys,
     draggableSourceIds,
+    hitRegionCursorByTargetId,
     onElementPointerDown,
     onElementContextMenu,
     onElementDoubleClick,
     onHoverChange,
+    nodePositionLinks,
     marqueeBounds,
     selectionBoxes,
     adornmentHighlightBoxes,
@@ -255,6 +273,10 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     curveControlLines,
     curveControlStrokeWidth,
     nodeAnchorOverlay,
+    onNodeAnchorPointerDown,
+    onNodeAnchorClick,
+    onNodeAnchorHoverChange,
+    nodePositionTargetTooltip,
     handleHalfSize,
     handleDisplays,
     onHandlePointerDown,
@@ -641,7 +663,9 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
 
                 <SnapOverlay
                   snapLines={snapLines}
+                  sourceNames={snapSourceNames}
                   viewBox={svgResult.viewBox}
+                  scale={canvasTransform.scale}
                   snapStrokeWidth={snapStrokeWidth}
                   snapCrossSize={snapCrossSize}
                 />
@@ -659,10 +683,16 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   toolMode={toolMode}
                   editableTextRegionKeys={editableTextRegionKeys}
                   draggableSourceIds={draggableSourceIds}
+                  cursorByTargetId={hitRegionCursorByTargetId}
                   onElementPointerDown={onElementPointerDown}
                   onElementContextMenu={onElementContextMenu}
                   onElementDoubleClick={onElementDoubleClick}
                   onHoverChange={onHoverChange}
+                />
+
+                <NodePositionLinkOverlay
+                  links={nodePositionLinks}
+                  viewBox={svgResult.viewBox}
                 />
 
                 <SelectionOverlay
@@ -694,6 +724,29 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   viewBox={svgResult.viewBox}
                   strokeWidth={handleStrokeWidth}
                   radius={handleHalfSize}
+                  onAnchorPointerDown={
+                    onNodeAnchorPointerDown
+                      ? (event, anchor) => {
+                          if (anchor.nodeSourceId) {
+                            onNodeAnchorPointerDown(event, anchor.nodeSourceId);
+                          }
+                        }
+                      : undefined
+                  }
+                  onAnchorClick={
+                    onNodeAnchorClick
+                      ? (event, anchor) => {
+                          if (anchor.nodeSourceId) {
+                            onNodeAnchorClick(event, anchor.nodeSourceId);
+                          }
+                        }
+                      : undefined
+                  }
+                  onAnchorHoverChange={
+                    onNodeAnchorHoverChange
+                      ? (anchor) => { onNodeAnchorHoverChange(anchor?.nodeSourceId ?? null); }
+                      : undefined
+                  }
                 />
 
                 {toolMode === "select" && (
@@ -910,6 +963,15 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             />
           ) : null}
 
+          {nodePositionTargetTooltip ? (
+            <RenderedTooltip
+              content={nodePositionTargetTooltip.content}
+              open
+              anchor={nodePositionTargetTooltip.anchor}
+              data-testid="node-position-target-tooltip"
+            />
+          ) : null}
+
           {warning && (
             <RenderedTooltip content="Click to copy message" block>
               <div
@@ -926,7 +988,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               </div>
             </RenderedTooltip>
           )}
-          {selectionHint ? (
+          {selectionHint && !warning ? (
             <div className={css.selectionHint} data-testid="canvas-selection-hint" data-select="text">
               {selectionHint}
             </div>

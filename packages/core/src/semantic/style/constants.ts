@@ -170,6 +170,7 @@ export const NON_STYLE_OPTION_KEYS = new Set([
   "growth function",
   "edge from parent path",
   "edge from parent macro",
+  "every picture",
   "every child/.style",
   "every child/.append style",
   "every child node/.style",
@@ -179,6 +180,20 @@ export const NON_STYLE_OPTION_KEYS = new Set([
   "name path",
   "name path global",
   "name path local",
+  "on background layer",
+  "every on background layer",
+  "show background rectangle",
+  "show background grid",
+  "show background top",
+  "show background bottom",
+  "show background left",
+  "show background right",
+  "inner frame sep",
+  "inner frame xsep",
+  "inner frame ysep",
+  "outer frame sep",
+  "outer frame xsep",
+  "outer frame ysep",
   "name intersections",
   "domain",
   "samples",
@@ -218,6 +233,12 @@ export const NON_STYLE_OPTION_KEYS = new Set([
   "bar interval shift",
   "every node/.style",
   "every node/.append style",
+  "every text node part/.style",
+  "every text node part/.append style",
+  "every fit/.style",
+  "every fit/.append style",
+  "every pic/.style",
+  "every pic/.append style",
   "every rectangle node/.style",
   "every rectangle node/.append style",
   "every circle node/.style",
@@ -258,6 +279,7 @@ export const NON_STYLE_OPTION_KEYS = new Set([
 ]);
 
 export const NON_STYLE_OPTION_FLAGS = new Set([
+  "every picture",
   "behind path",
   "in front of path",
   "circle",
@@ -363,7 +385,15 @@ export const NON_STYLE_OPTION_FLAGS = new Set([
   "growth function",
   "edge from parent path",
   "edge from parent macro",
-  "edge from parent"
+  "edge from parent",
+  "on background layer",
+  "every on background layer",
+  "show background rectangle",
+  "show background grid",
+  "show background top",
+  "show background bottom",
+  "show background left",
+  "show background right"
 ]);
 
 export const PT_PER_CM = parseLength("1cm", "cm")!;

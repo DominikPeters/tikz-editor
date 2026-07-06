@@ -397,7 +397,7 @@ test("profile paper inspector color change for the magenta axis", async ({ page 
   }
 
   await seedWorkspace(page, target, "doc-profile-paper-color");
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await installProbe(page, target.targetSourceId);
   await waitForTargetFigureReady(page, target);
 

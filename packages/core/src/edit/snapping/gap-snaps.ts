@@ -4,6 +4,8 @@ import type { WorldBounds, WorldPoint } from "../../coords/points.js";
 import { roundSnapValue } from "./point-snaps.js";
 import {
   SNAP_EPSILON,
+  boundsIntersect,
+  mergeBounds,
   rangeIntersection,
   rangesOverlap
 } from "./geometry.js";
@@ -21,10 +23,15 @@ export function buildVisibleGaps(
   referenceBounds: readonly SnapBounds[],
   maxPairsPerAxis: number
 ): { horizontal: Gap[]; vertical: Gap[] } {
+  // Overlapping/nested bounds (matrix cells inside their matrix envelope, stacked
+  // shapes) act as one unit for spacing purposes; without the merge every contained
+  // box would both spawn its own gaps and fail the adjacency test below.
+  const mergedBounds = mergeIntersectingBounds(referenceBounds);
+
   const horizontal: Gap[] = [];
   const vertical: Gap[] = [];
 
-  const sortedX = [...referenceBounds].sort((a, b) => a.minX - b.minX);
+  const sortedX = [...mergedBounds].sort((a, b) => a.minX - b.minX);
   let pairs = 0;
 
   horizontalLoop: for (let i = 0; i < sortedX.length; i += 1) {
@@ -41,6 +48,10 @@ export function buildVisibleGaps(
 
       const overlap = rangeIntersection([start.minY, start.maxY], [end.minY, end.maxY]);
       if (!overlap) {
+        continue;
+      }
+
+      if (gapIsBlocked(mergedBounds, start, end, overlap, "x")) {
         continue;
       }
 
@@ -61,7 +72,7 @@ export function buildVisibleGaps(
     }
   }
 
-  const sortedY = [...referenceBounds].sort((a, b) => a.minY - b.minY);
+  const sortedY = [...mergedBounds].sort((a, b) => a.minY - b.minY);
   pairs = 0;
 
   verticalLoop: for (let i = 0; i < sortedY.length; i += 1) {
@@ -78,6 +89,10 @@ export function buildVisibleGaps(
 
       const overlap = rangeIntersection([start.minX, start.maxX], [end.minX, end.maxX]);
       if (!overlap) {
+        continue;
+      }
+
+      if (gapIsBlocked(mergedBounds, start, end, overlap, "y")) {
         continue;
       }
 
@@ -99,6 +114,59 @@ export function buildVisibleGaps(
   }
 
   return { horizontal, vertical };
+}
+
+function mergeIntersectingBounds(referenceBounds: readonly SnapBounds[]): SnapBounds[] {
+  const merged: SnapBounds[] = [];
+
+  for (const bounds of referenceBounds) {
+    let current = bounds;
+    let intersecting = merged.findIndex((other) => boundsIntersect(other, current));
+    while (intersecting !== -1) {
+      const [other] = merged.splice(intersecting, 1);
+      current = { ...mergeBounds(other, current), sourceId: other.sourceId };
+      intersecting = merged.findIndex((candidate) => boundsIntersect(candidate, current));
+    }
+    merged.push(current);
+  }
+
+  return merged;
+}
+
+function gapIsBlocked(
+  allBounds: readonly SnapBounds[],
+  start: SnapBounds,
+  end: SnapBounds,
+  overlap: [number, number],
+  axis: Axis
+): boolean {
+  for (const bounds of allBounds) {
+    if (bounds === start || bounds === end) {
+      continue;
+    }
+
+    if (axis === "x") {
+      if (bounds.maxX <= start.maxX + SNAP_EPSILON || bounds.minX >= end.minX - SNAP_EPSILON) {
+        continue;
+      }
+      const lo = Math.max(bounds.minY, overlap[0]);
+      const hi = Math.min(bounds.maxY, overlap[1]);
+      if (hi - lo > SNAP_EPSILON) {
+        return true;
+      }
+    } else {
+      if (bounds.maxY <= start.maxY + SNAP_EPSILON || bounds.minY >= end.minY - SNAP_EPSILON) {
+        continue;
+      }
+      const lo = Math.max(bounds.minX, overlap[0]);
+      const hi = Math.min(bounds.maxX, overlap[1]);
+      if (hi - lo > SNAP_EPSILON) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 export function collectGapSnaps({

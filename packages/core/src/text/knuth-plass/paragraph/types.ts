@@ -97,6 +97,12 @@ export interface SpaceRun extends BaseRun {
   text: ' ';
   breakRef: BreakRef;
   wrapper: AnyWrapper;
+  texGlue?: {
+    width: number;
+    stretch: number;
+    shrink: number;
+    spaceFactor?: number;
+  };
 }
 
 export interface MathRun extends BaseRun {

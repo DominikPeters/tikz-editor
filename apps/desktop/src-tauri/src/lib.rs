@@ -5,7 +5,10 @@ use assistant::{
     AssistantThreadSummary,
 };
 use base64::Engine;
-use clipboard_rs::{common::RustImage, Clipboard, ClipboardContent, ClipboardContext, RustImageData};
+use clipboard_rs::{
+    common::RustImage, Clipboard, ClipboardContent, ClipboardContext, RustImageData,
+};
+use flate2::read::GzDecoder;
 use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
@@ -15,7 +18,10 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
+use std::io::Cursor;
+use std::io::Read;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -171,9 +177,27 @@ mod macos_about {
     }
 }
 
+#[cfg(target_os = "macos")]
+mod macos_activation {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::MainThreadMarker;
+
+    pub fn activate_ignoring_other_apps() {
+        let mtm = MainThreadMarker::new().expect("app activation must run on the main thread");
+        let app = NSApplication::sharedApplication(mtm);
+        #[allow(deprecated)]
+        app.activateIgnoringOtherApps(true);
+    }
+}
+
 const MAX_RECENT_FILES: usize = 10;
 const LATEX_COMMAND_TIMEOUT_SECS: u64 = 20;
+const ARXIV_SOURCE_DOWNLOAD_TIMEOUT_SECS: u64 = 60;
+const ARXIV_SOURCE_MAX_ARCHIVE_BYTES: u64 = 80 * 1024 * 1024;
+const ARXIV_SOURCE_MAX_TEXT_BYTES: u64 = 30 * 1024 * 1024;
+const ARXIV_SOURCE_MAX_FILES: usize = 2_000;
 const RECENTS_FILENAME: &str = "recent-files.json";
+const UPDATE_RELAUNCH_MARKER_FILENAME: &str = "pending-update-relaunch";
 const CONTEXT_MENU_EVENT_PREFIX: &str = "ctx::";
 const DESKTOP_OPEN_REQUESTS_CHANGED_EVENT: &str = "desktop-open-requests-changed";
 const DESKTOP_LINKED_FILE_CHANGED_EVENT: &str = "desktop-linked-file-changed";
@@ -207,11 +231,6 @@ struct RecentFilesState {
 }
 
 #[derive(Default)]
-struct WindowCloseState {
-    allow_next_close: Mutex<bool>,
-}
-
-#[derive(Default)]
 struct PendingOpenRequestsState {
     requests: Mutex<Vec<OpenTextPayload>>,
     failures: Mutex<Vec<OpenTextFailurePayload>>,
@@ -242,6 +261,21 @@ struct OpenBinaryPayload {
     bytes_base64: String,
     path: String,
     name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArxivSourceFilePayload {
+    path: String,
+    source: String,
+    size: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArxivSourcePayload {
+    id: String,
+    files: Vec<ArxivSourceFilePayload>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -441,6 +475,34 @@ fn save_recent_files_to_disk(app: &AppHandle, files: &[String]) {
     }
 }
 
+fn update_relaunch_marker_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_config_dir()
+        .ok()
+        .map(|dir| dir.join(UPDATE_RELAUNCH_MARKER_FILENAME))
+}
+
+fn write_update_relaunch_marker(app: &AppHandle) -> Result<(), String> {
+    let Some(path) = update_relaunch_marker_path(app) else {
+        return Err("Could not resolve app config directory.".to_string());
+    };
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    fs::write(path, b"1").map_err(|error| error.to_string())
+}
+
+fn consume_update_relaunch_marker(app: &AppHandle) -> bool {
+    let Some(path) = update_relaunch_marker_path(app) else {
+        return false;
+    };
+    match fs::remove_file(path) {
+        Ok(()) => true,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(_) => false,
+    }
+}
+
 fn normalize_recents(entries: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for entry in entries {
@@ -522,6 +584,31 @@ fn collect_associated_file_paths(args: &[String], cwd: Option<&str>) -> Vec<Path
     out
 }
 
+fn collect_associated_file_paths_from_urls(urls: &[Url]) -> Vec<PathBuf> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out: Vec<PathBuf> = Vec::new();
+
+    for url in urls {
+        if url.scheme() != "file" {
+            continue;
+        }
+        let Ok(path) = url.to_file_path() else {
+            continue;
+        };
+        if !has_supported_association_extension(&path) {
+            continue;
+        }
+
+        let key = path.to_string_lossy().to_string();
+        if !seen.insert(key) {
+            continue;
+        }
+        out.push(path);
+    }
+
+    out
+}
+
 fn read_open_text_payload_from_path(path: &Path) -> Result<OpenTextPayload, String> {
     let source = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let path_string = path.to_string_lossy().to_string();
@@ -535,6 +622,188 @@ fn read_open_text_payload_from_path(path: &Path) -> Result<OpenTextPayload, Stri
         path: path_string,
         name,
     })
+}
+
+fn split_arxiv_version_suffix(value: &str) -> (&str, Option<&str>) {
+    let Some((base, version)) = value.rsplit_once('v') else {
+        return (value, None);
+    };
+    if base.is_empty() || version.is_empty() || !version.chars().all(|ch| ch.is_ascii_digit()) {
+        return (value, None);
+    }
+    (base, Some(version))
+}
+
+fn is_valid_arxiv_id(value: &str) -> bool {
+    let value = value.trim();
+    let (base, version) = split_arxiv_version_suffix(value);
+    if version.is_some_and(|v| v == "0") {
+        return false;
+    }
+    if let Some((left, right)) = base.split_once('.') {
+        return left.len() == 4
+            && left.chars().all(|ch| ch.is_ascii_digit())
+            && (right.len() == 4 || right.len() == 5)
+            && right.chars().all(|ch| ch.is_ascii_digit());
+    }
+    if let Some((category, number)) = base.split_once('/') {
+        return !category.is_empty()
+            && category
+                .chars()
+                .all(|ch| ch.is_ascii_alphabetic() || ch == '-' || ch == '.')
+            && number.len() == 7
+            && number.chars().all(|ch| ch.is_ascii_digit());
+    }
+    false
+}
+
+fn extract_arxiv_id(input: &str) -> Result<String, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Enter an arXiv URL or ID.".to_string());
+    }
+    if is_valid_arxiv_id(trimmed) {
+        return Ok(trimmed.to_string());
+    }
+    let parsed = Url::parse(trimmed).map_err(|_| "Invalid arXiv URL or ID.".to_string())?;
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    if host != "arxiv.org" && host != "www.arxiv.org" {
+        return Err("URL must point to arxiv.org.".to_string());
+    }
+    let segments: Vec<&str> = parsed
+        .path_segments()
+        .map(|segments| segments.collect())
+        .unwrap_or_default();
+    if segments.len() < 2 || !matches!(segments[0], "abs" | "pdf" | "src" | "html") {
+        return Err("URL must be an arXiv abstract, PDF, HTML, or source URL.".to_string());
+    }
+    let first = segments[1].trim_end_matches(".pdf");
+    let candidate = if is_valid_arxiv_id(first) {
+        first.to_string()
+    } else if segments.len() >= 3 {
+        format!("{}/{}", first, segments[2].trim_end_matches(".pdf"))
+    } else {
+        first.to_string()
+    };
+    if is_valid_arxiv_id(&candidate) {
+        Ok(candidate)
+    } else {
+        Err("Invalid arXiv URL or ID.".to_string())
+    }
+}
+
+fn is_source_text_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    matches!(
+        Path::new(&lower).extension().and_then(|ext| ext.to_str()),
+        Some(
+            "tex" | "tikz" | "sty" | "cls" | "dtx" | "ins" | "ltx" | "def" | "bib" | "bbl" | "txt"
+        )
+    )
+}
+
+fn safe_archive_path(path: &Path) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let text = value.to_str()?;
+                if text.is_empty() {
+                    return None;
+                }
+                parts.push(text.to_string());
+            }
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    Some(parts.join("/"))
+}
+
+fn decode_utf8_lossy(bytes: Vec<u8>) -> String {
+    match String::from_utf8(bytes) {
+        Ok(source) => source,
+        Err(error) => String::from_utf8_lossy(error.as_bytes()).into_owned(),
+    }
+}
+
+fn read_text_entry(path: String, bytes: Vec<u8>) -> ArxivSourceFilePayload {
+    ArxivSourceFilePayload {
+        path,
+        size: bytes.len() as u64,
+        source: decode_utf8_lossy(bytes),
+    }
+}
+
+fn arxiv_source_files_from_gzip(bytes: &[u8]) -> Result<Vec<ArxivSourceFilePayload>, String> {
+    let mut decoder = GzDecoder::new(Cursor::new(bytes));
+    let mut decoded: Vec<u8> = Vec::new();
+    decoder
+        .read_to_end(&mut decoded)
+        .map_err(|error| format!("Could not decompress arXiv source: {error}"))?;
+    if decoded.len() as u64 > ARXIV_SOURCE_MAX_TEXT_BYTES {
+        return Err("arXiv source archive is too large.".to_string());
+    }
+
+    let mut archive = tar::Archive::new(Cursor::new(decoded.as_slice()));
+    let mut files: Vec<ArxivSourceFilePayload> = Vec::new();
+    if let Ok(entries) = archive.entries() {
+        for entry_result in entries {
+            if files.len() >= ARXIV_SOURCE_MAX_FILES {
+                break;
+            }
+            let mut entry = match entry_result {
+                Ok(entry) => entry,
+                Err(_) => {
+                    files.clear();
+                    break;
+                }
+            };
+            if !entry.header().entry_type().is_file() {
+                continue;
+            }
+            let path = match entry.path().ok().and_then(|path| safe_archive_path(&path)) {
+                Some(path) => path,
+                None => continue,
+            };
+            if !is_source_text_path(&path) {
+                continue;
+            }
+            let entry_size = entry.header().size().unwrap_or(0);
+            if entry_size > ARXIV_SOURCE_MAX_TEXT_BYTES {
+                continue;
+            }
+            let mut entry_bytes: Vec<u8> = Vec::new();
+            if entry.read_to_end(&mut entry_bytes).is_ok() {
+                files.push(read_text_entry(path, entry_bytes));
+            }
+        }
+    }
+
+    if !files.is_empty() {
+        return Ok(files);
+    }
+
+    Ok(vec![read_text_entry("main.tex".to_string(), decoded)])
+}
+
+fn arxiv_source_files_from_response(bytes: &[u8]) -> Result<Vec<ArxivSourceFilePayload>, String> {
+    if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
+        return arxiv_source_files_from_gzip(bytes);
+    }
+    if bytes.starts_with(b"%PDF") {
+        return Err("arXiv returned a PDF rather than TeX source for this paper.".to_string());
+    }
+    if bytes.len() as u64 > ARXIV_SOURCE_MAX_TEXT_BYTES {
+        return Err("arXiv source file is too large.".to_string());
+    }
+    Ok(vec![read_text_entry(
+        "main.tex".to_string(),
+        bytes.to_vec(),
+    )])
 }
 
 fn hash_text_for_revision(text: &str) -> String {
@@ -643,6 +912,15 @@ fn enqueue_pending_open_results(
 
 fn process_associated_open_requests(app: &AppHandle, args: &[String], cwd: Option<&str>) {
     let candidates = collect_associated_file_paths(args, cwd);
+    process_associated_file_paths(app, candidates);
+}
+
+fn process_associated_open_urls(app: &AppHandle, urls: &[Url]) {
+    let candidates = collect_associated_file_paths_from_urls(urls);
+    process_associated_file_paths(app, candidates);
+}
+
+fn process_associated_file_paths(app: &AppHandle, candidates: Vec<PathBuf>) {
     if candidates.is_empty() {
         return;
     }
@@ -1448,6 +1726,53 @@ fn desktop_open_binary(
 }
 
 #[tauri::command]
+async fn desktop_fetch_arxiv_source(id_or_url: String) -> Result<ArxivSourcePayload, String> {
+    let id = extract_arxiv_id(&id_or_url)?;
+    let url = format!("https://arxiv.org/src/{id}");
+    let client = reqwest::Client::builder()
+        .user_agent("TikZ Editor desktop arXiv source import")
+        .build()
+        .map_err(|error| error.to_string())?;
+    let response = tokio::time::timeout(
+        Duration::from_secs(ARXIV_SOURCE_DOWNLOAD_TIMEOUT_SECS),
+        client.get(url).send(),
+    )
+    .await
+    .map_err(|_| "Timed out while downloading arXiv source.".to_string())?
+    .map_err(|error| format!("Could not download arXiv source: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "arXiv returned HTTP {} for this source.",
+            response.status().as_u16()
+        ));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > ARXIV_SOURCE_MAX_ARCHIVE_BYTES)
+    {
+        return Err("arXiv source archive is too large.".to_string());
+    }
+
+    let bytes = tokio::time::timeout(
+        Duration::from_secs(ARXIV_SOURCE_DOWNLOAD_TIMEOUT_SECS),
+        response.bytes(),
+    )
+    .await
+    .map_err(|_| "Timed out while reading arXiv source.".to_string())?
+    .map_err(|error| format!("Could not read arXiv source: {error}"))?;
+    if bytes.len() as u64 > ARXIV_SOURCE_MAX_ARCHIVE_BYTES {
+        return Err("arXiv source archive is too large.".to_string());
+    }
+
+    let files = arxiv_source_files_from_response(&bytes)?;
+    if files.is_empty() {
+        return Err("No TeX source files were found in this arXiv source.".to_string());
+    }
+    Ok(ArxivSourcePayload { id, files })
+}
+
+#[tauri::command]
 fn desktop_save_text(
     text: String,
     suggested_name: Option<String>,
@@ -1683,18 +2008,10 @@ async fn desktop_show_message_dialog(
 
 #[tauri::command]
 fn desktop_confirm_window_close(app: AppHandle) -> Result<(), String> {
-    {
-        let state = app.state::<WindowCloseState>();
-        let mut allow = state
-            .allow_next_close
-            .lock()
-            .map_err(|_| "close state unavailable".to_string())?;
-        *allow = true;
-    }
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
-    window.close().map_err(|error| error.to_string())
+    window.destroy().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1750,6 +2067,11 @@ fn desktop_open_external(url: String, app: AppHandle) -> Result<bool, String> {
         .open_url(sanitized, None::<&str>)
         .map(|_| true)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn desktop_prepare_update_relaunch(app: AppHandle) -> Result<(), String> {
+    write_update_relaunch_marker(&app)
 }
 
 #[tauri::command]
@@ -2111,31 +2433,12 @@ pub fn run() {
 
     let builder = builder
         .manage(RecentFilesState::default())
-        .manage(WindowCloseState::default())
         .manage(PendingOpenRequestsState::default())
         .manage(LinkedFileWatchState::default());
 
     builder
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let allow_close = {
-                    let state = window.state::<WindowCloseState>();
-                    let decision = match state.allow_next_close.lock() {
-                        Ok(mut allow) => {
-                            if *allow {
-                                *allow = false;
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        Err(_) => false,
-                    };
-                    decision
-                };
-                if allow_close {
-                    return;
-                }
                 api.prevent_close();
                 let _ = window.emit("desktop-window-close-request", ());
             }
@@ -2149,6 +2452,7 @@ pub fn run() {
             desktop_read_last_compile_log,
             desktop_open_text,
             desktop_open_binary,
+            desktop_fetch_arxiv_source,
             desktop_save_text,
             desktop_read_linked_text,
             desktop_write_linked_text,
@@ -2162,6 +2466,7 @@ pub fn run() {
             desktop_take_pending_open_requests,
             desktop_take_pending_open_failures,
             desktop_open_external,
+            desktop_prepare_update_relaunch,
             desktop_perform_snap_haptic,
             desktop_prefers_non_blinking_text_insertion_indicator,
             desktop_read_custom_clipboard_text,
@@ -2194,6 +2499,9 @@ pub fn run() {
                 };
 
                 if let Some(window) = handle.get_webview_window("main") {
+                    // Native context menu dismissal can leave the WKWebView in a state where
+                    // the first mouse-down after this command is consumed by focus restoration.
+                    let _ = window.set_focus();
                     let _ = window.emit(
                         "desktop-context-menu-command",
                         DesktopContextMenuCommandEvent {
@@ -2242,22 +2550,42 @@ pub fn run() {
                 });
             }
 
+            #[cfg(target_os = "macos")]
+            if consume_update_relaunch_marker(&app.handle()) {
+                macos_activation::activate_ignoring_other_apps();
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = event {
+                process_associated_open_urls(app, &urls);
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         changed_linked_paths_for_event, collect_associated_file_paths,
-        has_supported_association_extension, map_unsaved_changes_dialog_result,
-        validate_external_url,
+        collect_associated_file_paths_from_urls, has_supported_association_extension,
+        map_unsaved_changes_dialog_result, validate_external_url,
     };
     use rfd::MessageDialogResult;
     use std::collections::HashSet;
     use std::path::{Path, PathBuf};
+    use url::Url;
 
     #[test]
     fn validates_supported_external_urls() {
@@ -2307,6 +2635,30 @@ mod tests {
         ];
 
         let collected = collect_associated_file_paths(&args, Some("/tmp/work"));
+        let rendered: Vec<String> = collected
+            .iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(
+            rendered,
+            vec![
+                "/tmp/work/first.tikz".to_string(),
+                "/tmp/work/second.tex".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn collects_associated_paths_from_file_urls() {
+        let urls = vec![
+            Url::from_file_path("/tmp/work/first.tikz").unwrap(),
+            Url::parse("https://example.com/second.tex").unwrap(),
+            Url::from_file_path("/tmp/work/second.tex").unwrap(),
+            Url::from_file_path("/tmp/work/third.txt").unwrap(),
+            Url::from_file_path("/tmp/work/first.tikz").unwrap(),
+        ];
+
+        let collected = collect_associated_file_paths_from_urls(&urls);
         let rendered: Vec<String> = collected
             .iter()
             .map(|path| path.to_string_lossy().to_string())

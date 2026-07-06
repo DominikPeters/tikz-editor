@@ -92,10 +92,11 @@ export function defaultStyle(): ResolvedStyle {
 }
 
 export function commandDefaultStyle(command: PathCommand, inheritedStyle: ResolvedStyle): Partial<ResolvedStyle> {
+  const inheritedFillColor = currentFillColor(inheritedStyle);
   switch (command) {
     case "draw":
       return {
-        stroke: inheritedStyle.stroke ?? "black",
+        stroke: currentStrokeColor(inheritedStyle),
         fill: null,
         fillPattern: null,
         shadeEnabled: false,
@@ -112,31 +113,32 @@ export function commandDefaultStyle(command: PathCommand, inheritedStyle: Resolv
       };
     case "pattern":
       return {
-        fill: inheritedStyle.fill ?? "black",
+        fill: inheritedFillColor,
         fillPattern: inheritedStyle.fillPattern ?? DEFAULT_PATTERN,
         shadeEnabled: false
       };
     case "shade":
       return {
-        fill: inheritedStyle.fill ?? "black",
+        fill: inheritedFillColor,
         stroke: inheritedStyle.drawExplicit ? inheritedStyle.stroke ?? "black" : null,
         shadeEnabled: true
       };
     case "shadedraw":
       return {
-        fill: inheritedStyle.fill ?? "black",
+        fill: inheritedFillColor,
         stroke: inheritedStyle.stroke ?? "black",
         drawExplicit: true,
         shadeEnabled: true
       };
     case "fill":
       return {
-        fill: inheritedStyle.fill ?? "black",
-        stroke: inheritedStyle.drawExplicit ? inheritedStyle.stroke ?? "black" : null
+        fill: inheritedFillColor,
+        stroke: null,
+        drawExplicit: false
       };
     case "filldraw":
       return {
-        fill: inheritedStyle.fill ?? "black",
+        fill: inheritedFillColor,
         stroke: inheritedStyle.stroke ?? "black",
         drawExplicit: true
       };
@@ -166,6 +168,14 @@ export function commandDefaultStyle(command: PathCommand, inheritedStyle: Resolv
     default:
       return {};
   }
+}
+
+function currentFillColor(style: ResolvedStyle): string {
+  return style.fill ?? style.textColor ?? (!style.drawExplicit ? style.stroke : null) ?? "black";
+}
+
+function currentStrokeColor(style: ResolvedStyle): string {
+  return style.stroke ?? style.textColor ?? "black";
 }
 
 export { DEFAULT_TEXT_FONT_SIZE };

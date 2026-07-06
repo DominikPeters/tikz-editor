@@ -318,7 +318,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("measures node text edit latency for one appended character", async ({ page }) => {
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, SOURCE);
   await clickTextHitRegionByTargetId(page, "path:0");
 

@@ -7,6 +7,7 @@ import type { OptionListAst } from "../../options/types.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import { applyMatrix, applyMatrixToVector } from "../transform.js";
 import type { ResolvedStyle, ScenePath } from "../types.js";
+import { MAIN_SCENE_LAYER } from "../types.js";
 import type { DiagnosticPushFn } from "./types.js";
 import { parseCoordinateLike, parseLength } from "../coords/parse-length.js";
 import { coordinateInner, normalizeOptionValue, toRadians } from "./shared.js";
@@ -25,6 +26,8 @@ type GridPolarStep = Readonly<{ x: number; y: number }>;
 function gridPolarStep(x: number, y: number): GridPolarStep {
   return { x, y };
 }
+
+const GRID_POSITION_EPSILON = 1e-6;
 
 export function extractGridSteps(
   item: PathOptionItem,
@@ -220,11 +223,12 @@ export function makeGridElements(
 
   const paths: ScenePath[] = [];
   if (spacingX > 0) {
-    for (let x = minX; x <= maxX + 1e-6; x += spacingX) {
+    for (const x of gridLinePositions(minX, maxX, spacingX)) {
       paths.push({
         kind: "Path",
         id: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
         runtimeId: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
+        layer: MAIN_SCENE_LAYER,
         sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
@@ -236,11 +240,12 @@ export function makeGridElements(
     }
   }
   if (spacingY > 0) {
-    for (let y = minY; y <= maxY + 1e-6; y += spacingY) {
+    for (const y of gridLinePositions(minY, maxY, spacingY)) {
       paths.push({
         kind: "Path",
         id: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
         runtimeId: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
+        layer: MAIN_SCENE_LAYER,
         sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
@@ -288,13 +293,14 @@ function makeAffineGridElements(
 
   const paths: ScenePath[] = [];
   if (localStepX > 1e-9) {
-    for (let x = minLocalX; x <= maxLocalX + 1e-6; x += localStepX) {
+    for (const x of gridLinePositions(minLocalX, maxLocalX, localStepX)) {
       const fromPoint = applyMatrix(transform, wp(x, minLocalY));
       const toPoint = applyMatrix(transform, wp(x, maxLocalY));
       paths.push({
         kind: "Path",
         id: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
         runtimeId: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
+        layer: MAIN_SCENE_LAYER,
         sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
@@ -307,13 +313,14 @@ function makeAffineGridElements(
   }
 
   if (localStepY > 1e-9) {
-    for (let y = minLocalY; y <= maxLocalY + 1e-6; y += localStepY) {
+    for (const y of gridLinePositions(minLocalY, maxLocalY, localStepY)) {
       const fromPoint = applyMatrix(transform, wp(minLocalX, y));
       const toPoint = applyMatrix(transform, wp(maxLocalX, y));
       paths.push({
         kind: "Path",
         id: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
         runtimeId: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
+        layer: MAIN_SCENE_LAYER,
         sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
@@ -326,6 +333,27 @@ function makeAffineGridElements(
   }
 
   return paths;
+}
+
+function gridLinePositions(min: number, max: number, spacing: number): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(spacing) || spacing <= 0) {
+    return [];
+  }
+
+  const lower = Math.min(min, max);
+  const upper = Math.max(min, max);
+  const positions: number[] = [];
+  let value = Math.ceil((lower - GRID_POSITION_EPSILON) / spacing) * spacing;
+  if (Math.abs(value) <= GRID_POSITION_EPSILON) {
+    value = 0;
+  }
+
+  const maxIterations = Math.ceil(Math.max(0, upper - lower) / spacing) + 3;
+  for (let index = 0; index < maxIterations && value <= upper + GRID_POSITION_EPSILON; index += 1) {
+    positions.push(Math.abs(value) <= GRID_POSITION_EPSILON ? 0 : value);
+    value += spacing;
+  }
+  return positions;
 }
 
 function applyInverseMatrix(matrix: WorldTransform, point: WorldPoint): WorldPoint | null {

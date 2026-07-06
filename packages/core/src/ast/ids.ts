@@ -22,6 +22,10 @@ export function macroCommandDefinitionStatementId(statementIndex: number): strin
   return `macro-command-definition:${statementIndex}`;
 }
 
+export function pgfMathStatementId(statementIndex: number): string {
+  return `pgfmath:${statementIndex}`;
+}
+
 export function tikzSetStatementId(statementIndex: number): string {
   return `tikz-set:${statementIndex}`;
 }
@@ -84,6 +88,14 @@ export function plotOperationItemId(statementIndex: number, itemIndex: number): 
 
 export function pathForeachItemId(statementIndex: number, itemIndex: number): string {
   return `path-foreach:${statementIndex}:${itemIndex}`;
+}
+
+export function picOperationItemId(statementIndex: number, itemIndex: number): string {
+  return `pic-operation:${statementIndex}:${itemIndex}`;
+}
+
+export function picForeachClauseId(statementIndex: number, itemIndex: number, clauseIndex: number): string {
+  return `pic-foreach-clause:${statementIndex}:${itemIndex}:${clauseIndex}`;
 }
 
 export function toOperationItemId(statementIndex: number, itemIndex: number): string {

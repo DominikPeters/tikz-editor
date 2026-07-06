@@ -3,6 +3,14 @@ import type { StyleChainEntry, StyleSourceRef } from "../semantic/style-chain.js
 import type { SceneElement, ResolvedStyle } from "../semantic/types.js";
 import type { EditAction, StyleLevel } from "./actions.js";
 import {
+  TIKZPICTURE_GLOBAL_TARGET_ID,
+  getInspectorDescriptor,
+  type InspectorDescriptor,
+  type InspectorProperty,
+  type InspectorSnapshot,
+  type SetPropertyWriteTarget
+} from "./inspector.js";
+import {
   DASH_STYLE_OPTIONS,
   FILL_MODE_OPTIONS,
   FILL_PATTERN_OPTIONS,
@@ -10,20 +18,16 @@ import {
   LINE_CAP_OPTIONS,
   LINE_JOIN_OPTIONS,
   NODE_INNER_SEP_DEFAULT,
-  NODE_SHAPE_OPTIONS,
-  TIKZPICTURE_GLOBAL_TARGET_ID,
+  NODE_SHAPE_OPTIONS
+} from "./inspector/presets.js";
+import {
   dashStylePresetFromStyle,
   fillPatternPresetFromResolvedPattern,
   fillShadingPresetFromStyleName,
-  getInspectorDescriptor,
   lineCapPresetFromStyle,
   lineJoinPresetFromStyle,
-  lineWidthPresetLabel,
-  type InspectorDescriptor,
-  type InspectorProperty,
-  type InspectorSnapshot,
-  type SetPropertyWriteTarget
-} from "./inspector.js";
+  lineWidthPresetLabel
+} from "./inspector/preset-values.js";
 import { resolveTransformInspectorValues } from "./property-write-builders.js";
 import {
   FOREACH_TEMPLATE_TARGET_PREFIX,

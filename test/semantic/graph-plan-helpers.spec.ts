@@ -183,4 +183,16 @@ describe("semantic graph planner helpers", () => {
     expect(unsupported.diagnostics).toEqual(["unsupported-subgraph:Nope"]);
     expect(unsupported.nodes).toEqual([]);
   });
+
+  it("caps large subgraph expansions before they allocate unbounded edge lists", () => {
+    const complete = buildGraphPlan(graphOperation("subgraph K_n [n=2000]"));
+
+    expect(complete.nodes).toHaveLength(2000);
+    expect(complete.edges).toHaveLength(10_000);
+    expect(complete.diagnostics).toContain("graph-edge-budget-exceeded");
+
+    const hugeRange = buildGraphPlan(graphOperation("subgraph P_n [v={1,...,100000000}]"));
+    expect(hugeRange.nodes).toHaveLength(10_000);
+    expect(hugeRange.diagnostics).toContain("graph-node-budget-exceeded");
+  });
 });

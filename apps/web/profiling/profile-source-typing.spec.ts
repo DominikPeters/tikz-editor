@@ -308,7 +308,7 @@ function summarizeProbe(
 }
 
 async function prepareVariant(page: Page, variant: SourceTypingVariant): Promise<void> {
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, variant.source);
   await waitForHitRegions(page, 1);
   await installProbe(page);

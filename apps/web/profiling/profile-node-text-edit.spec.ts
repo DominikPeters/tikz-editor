@@ -471,7 +471,7 @@ function summarizeProbe(snapshot: NodeTextEditProbeSnapshot, typedCharacters: nu
 }
 
 async function prepareVariant(page: Page, variant: NodeTextEditVariant): Promise<void> {
-  await gotoApp(page, "/editor/");
+  await gotoApp(page, "/");
   await setSource(page, variant.source);
   await waitForHitRegions(page, 1);
   await installProbe(page);

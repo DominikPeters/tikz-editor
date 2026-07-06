@@ -278,9 +278,11 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
   local node = node
   local glyph_id = node.id("glyph")
   local glue_id = node.id("glue")
+  local kern_id = node.id("kern")
   local hlist_id = node.id("hlist")
   local vlist_id = node.id("vlist")
   local disc_id = node.id("disc")
+  local penalty_id = node.id("penalty")
   local ligatures = {
     [0xFB00] = "ff",
     [0xFB01] = "fi",
@@ -337,6 +339,63 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
     local text = table.concat(parts)
     return (text:gsub("%s+$", "")), has_vlist
   end
+  local function sp_to_pt(value)
+    return (value or 0) / 65536
+  end
+  local function finite_glue_metric(glue, field)
+    local order = glue[field .. "_order"] or 0
+    if order ~= 0 then
+      return 0
+    end
+    return glue[field] or 0
+  end
+  local function list_metrics(list)
+    local width = 0
+    local stretch = 0
+    local shrink = 0
+    local cur = list
+    while cur do
+      if cur.id == glyph_id or cur.id == kern_id then
+        width = width + (cur.width or 0)
+      elseif cur.id == glue_id then
+        width = width + (cur.width or 0)
+        stretch = stretch + finite_glue_metric(cur, "stretch")
+        shrink = shrink + finite_glue_metric(cur, "shrink")
+      elseif cur.id == hlist_id or cur.id == vlist_id then
+        width = width + (cur.width or 0)
+      elseif cur.id == disc_id then
+        -- A selected discretionary replacement is materialized in the line;
+        -- inactive discretionary alternatives do not contribute natural width.
+      elseif cur.id == penalty_id then
+        -- Penalties do not contribute horizontal width.
+      end
+      cur = cur.next
+    end
+    return width, stretch, shrink
+  end
+  local function glue_sign_name(value)
+    if value == 1 then
+      return "stretching"
+    end
+    if value == 2 then
+      return "shrinking"
+    end
+    return "normal"
+  end
+  local function estimated_badness(ratio)
+    if ratio == nil then
+      return nil
+    end
+    local absolute = math.abs(ratio)
+    if absolute == math.huge then
+      return 10000
+    end
+    local badness = math.floor(100 * absolute * absolute * absolute + 0.5)
+    if badness > 10000 then
+      return 10000
+    end
+    return badness
+  end
   local lines = {}
   local function collect_lines(list)
     local cur = list
@@ -345,10 +404,29 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
         local width_pt = (cur.width or 0) / 65536
         local text, has_vlist = line_text(cur.list)
         if not has_vlist and #text > 0 and math.abs(width_pt - ${widthPt}) < 0.05 then
+          local natural_width, stretch, shrink = list_metrics(cur.list)
+          local delta = (cur.width or 0) - natural_width
+          local ratio = nil
+          if delta > 0 and stretch > 0 then
+            ratio = delta / stretch
+          elseif delta < 0 and shrink > 0 then
+            ratio = delta / shrink
+          elseif delta ~= 0 then
+            ratio = math.huge
+          else
+            ratio = 0
+          end
           lines[#lines + 1] = {
             text = text,
             hyphenated = text:sub(-1) == "-",
             widthPt = width_pt,
+            naturalWidthPt = sp_to_pt(natural_width),
+            finiteStretchPt = sp_to_pt(stretch),
+            finiteShrinkPt = sp_to_pt(shrink),
+            glueSet = cur.glue_set or 0,
+            glueSign = glue_sign_name(cur.glue_sign or 0),
+            glueOrder = cur.glue_order or 0,
+            badness = estimated_badness(ratio),
           }
         end
       end
@@ -377,6 +455,20 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
       .. quote .. "text" .. quote .. ":" .. json_escape(line.text) .. ","
       .. quote .. "hyphenated" .. quote .. ":" .. tostring(line.hyphenated) .. ","
       .. quote .. "widthPt" .. quote .. ":" .. string.format("%.6f", line.widthPt)
+      .. ","
+      .. quote .. "naturalWidthPt" .. quote .. ":" .. string.format("%.6f", line.naturalWidthPt)
+      .. ","
+      .. quote .. "finiteStretchPt" .. quote .. ":" .. string.format("%.6f", line.finiteStretchPt)
+      .. ","
+      .. quote .. "finiteShrinkPt" .. quote .. ":" .. string.format("%.6f", line.finiteShrinkPt)
+      .. ","
+      .. quote .. "glueSet" .. quote .. ":" .. string.format("%.9f", line.glueSet)
+      .. ","
+      .. quote .. "glueSign" .. quote .. ":" .. json_escape(line.glueSign)
+      .. ","
+      .. quote .. "glueOrder" .. quote .. ":" .. tostring(line.glueOrder)
+      .. ","
+      .. quote .. "badness" .. quote .. ":" .. tostring(line.badness or "null")
       .. "}"
   end
   out[#out + 1] = "]}"
@@ -519,9 +611,12 @@ async function runOurRenderer(caseSpec, caseDir, renderer) {
         hyphenated: text.endsWith("-"),
         xStart: line.xStart,
         xEnd: line.xEnd,
+        naturalWidth: line.naturalWidth,
         targetWidth: line.targetWidth,
         badness: line.badness,
         glueSetRatio: line.glueSetRatio,
+        spaceCount: line.spaceCount,
+        spaceDeltaPerGap: line.spaceDeltaPerGap,
         breakKind: line.break?.kind ?? null,
       };
     }),

@@ -16,6 +16,7 @@ import { PT_PER_CM } from "tikz-editor/edit/format";
 import { pt, worldPoint } from "tikz-editor/coords";
 import { emitSvgModel, type SvgRenderModel } from "tikz-editor/svg";
 import type { SceneFigure } from "tikz-editor/semantic/types";
+import { createMinimalTikzSourceArtifact } from "tikz-editor/export/index";
 import { installAppProfilingRecorder, readAppProfilingSnapshot, resetAppProfilingSession } from "../profiling";
 import { AppMenuBar } from "./AppMenuBar";
 import { Toolbar } from "./Toolbar";
@@ -45,6 +46,7 @@ import { formatEquationText, type EquationNodeTarget } from "./equation-utils";
 import { useDebouncedEffect } from "./hooks/useDebouncedEffect";
 import { decideLinkedFileRefresh, isLinkedFileRef, type LinkedTextWriteResult } from "../linked-file-sync";
 import type { DocumentFileRef, DocumentSession, FileRevision } from "../store/types";
+import { createArxivVirtualFileName, type ArxivPaperSession, type ArxivTikzCandidate } from "../arxiv-source";
 import "./selection.css";
 
 const DevPanel = lazy(async () => {
@@ -55,6 +57,11 @@ const DevPanel = lazy(async () => {
 const OpenExampleModal = lazy(async () => {
   const mod = await import("./OpenExampleModal");
   return { default: mod.OpenExampleModal };
+});
+
+const OpenFromArxivModal = lazy(async () => {
+  const mod = await import("./OpenFromArxivModal");
+  return { default: mod.OpenFromArxivModal };
 });
 
 const SettingsModal = lazy(async () => {
@@ -225,7 +232,6 @@ export function App() {
     snapshot,
     activeFigureId,
     selectedElementIds,
-    pendingRequestId,
     activeDocumentId,
     documents,
     tabOrder,
@@ -235,7 +241,6 @@ export function App() {
     lastEditPatchBaseRevision,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
-    hoveredElementId,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
@@ -243,7 +248,6 @@ export function App() {
     snapshot: s.snapshot,
     activeFigureId: s.activeFigureId,
     selectedElementIds: s.selectedElementIds,
-    pendingRequestId: s.pendingRequestId,
     activeDocumentId: s.activeDocumentId,
     documents: s.documents,
     tabOrder: s.tabOrder,
@@ -253,7 +257,6 @@ export function App() {
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
-    hoveredElementId: s.hoveredElementId,
     dispatch: s.dispatch
   })));
   const { uiFontSizePx, colorScheme, canvasInvert, mathJaxFont } = useSettingsStore(useShallow((s) => ({
@@ -266,6 +269,12 @@ export function App() {
   const menuTarget = menuTargetFromPlatformId(platform.id);
   const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), [menuTarget]);
   const [showOpenExampleModal, setShowOpenExampleModal] = useState(false);
+  const [showOpenFromArxivModal, setShowOpenFromArxivModal] = useState(false);
+  const [openFromArxivSession, setOpenFromArxivSession] = useState<ArxivPaperSession>({
+    input: "",
+    paper: null,
+    selectedCandidateId: null
+  });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSaveWorkspaceModal, setShowSaveWorkspaceModal] = useState(false);
   const [showManageWorkspacesModal, setShowManageWorkspacesModal] = useState(false);
@@ -298,6 +307,7 @@ export function App() {
   const [pendingFileConflict, setPendingFileConflict] = useState<PendingFileConflict | null>(null);
   const requestCloseIntentRef = useRef<(intent: CloseIntent) => void>(() => {});
   const computeSchedulerRef = useRef<ReturnType<typeof createSingleFlightScheduler<ComputeRequest, ComputeResponse>> | null>(null);
+  const dragRenderViewBoxRef = useRef<ComputeRequest["renderViewBox"]>(null);
   const updateCheckPromiseRef = useRef<Promise<UpdateInfo | null> | null>(null);
   const sourceRef = useRef(source);
   const snapshotRef = useRef(snapshot);
@@ -578,69 +588,98 @@ export function App() {
     }
   }, [runUpdateCheck, showNativeMessage]);
 
-  const commandRuntime = useEditorCommandRuntime({
-    onOpenExample: () => {
-      setShowOpenExampleModal(true);
-    },
-    onOpenSvgExport: (svgResult) => {
-      setSvgExportSvgResult(svgResult);
-    },
-    onOpenPngExport: (svgResult) => {
-      setPngExportSvgResult(svgResult);
-    },
-    onShowCompiledPicture: () => {
-      setCompiledPictureSource({
-        source,
-        activeFigureId
-      });
-    },
-    onOpenSettings: () => {
-      setShowSettingsModal(true);
-    },
-    onCheckForUpdates: () => {
-      void handleManualUpdateCheck();
-    },
-    updateCheckBusy: updateCheckBusy || updateModalPhase.status === "installing",
-    onOpenInsertEquation: () => {
-      setEquationModalState({ mode: "insert" });
-    },
-    onOpenEditEquation: (target) => {
-      setEquationModalState({ mode: "edit", target });
-    },
-    onOpenRepeat: () => {
-      const nextState = resolveRepeatModalState({
-        source,
-        activeFigureId,
-        selectedElementIds,
-        scene: snapshot.scene,
-        documentId: activeDocumentId
-      });
-      if (nextState) {
-        setRepeatModalState(nextState);
-      }
-    },
-    onFocusAssistant: () => {
-      dispatch({ type: "SET_RIGHT_SIDEBAR_TAB", tab: "assistant" });
-    },
-    onRequestCloseDocument: (documentId) => {
-      requestCloseIntent({ kind: "close-document", documentId });
-    },
-    onRequestCloseAllDocuments: () => {
-      requestCloseIntent({ kind: "close-all" });
-    },
-    onRequestSaveDocument: (documentId, mode) => {
-      void saveDocument(documentId, mode);
-    },
-    onOpenSaveWorkspace: () => {
-      setShowSaveWorkspaceModal(true);
-    },
-    onOpenManageWorkspaces: () => {
-      setShowManageWorkspacesModal(true);
-    },
-    onShowAbout: () => {
-      setShowAboutModal(true);
+  const handleOpenExampleCommand = useCallback(() => {
+    setShowOpenExampleModal(true);
+  }, []);
+  const handleOpenFromArxivCommand = useCallback(() => {
+    setShowOpenFromArxivModal(true);
+  }, []);
+  const handleOpenSvgExportCommand = useCallback((svgResult: EmitSvgResult) => {
+    setSvgExportSvgResult(svgResult);
+  }, []);
+  const handleOpenPngExportCommand = useCallback((svgResult: EmitSvgResult) => {
+    setPngExportSvgResult(svgResult);
+  }, []);
+  const handleShowCompiledPictureCommand = useCallback(() => {
+    setCompiledPictureSource({
+      source,
+      activeFigureId
+    });
+  }, [activeFigureId, source]);
+  const handleOpenSettingsCommand = useCallback(() => {
+    setShowSettingsModal(true);
+  }, []);
+  const handleCheckForUpdatesCommand = useCallback(() => {
+    void handleManualUpdateCheck();
+  }, [handleManualUpdateCheck]);
+  const handleOpenInsertEquationCommand = useCallback(() => {
+    setEquationModalState({ mode: "insert" });
+  }, []);
+  const handleOpenEditEquationCommand = useCallback((target: EquationNodeTarget) => {
+    setEquationModalState({ mode: "edit", target });
+  }, []);
+  const handleOpenRepeatCommand = useCallback(() => {
+    const nextState = resolveRepeatModalState({
+      source,
+      activeFigureId,
+      selectedElementIds,
+      scene: snapshot.scene,
+      documentId: activeDocumentId
+    });
+    if (nextState) {
+      setRepeatModalState(nextState);
     }
+  }, [activeDocumentId, activeFigureId, selectedElementIds, snapshot.scene, source]);
+  const handleFocusAssistantCommand = useCallback(() => {
+    dispatch({ type: "SET_RIGHT_SIDEBAR_TAB", tab: "assistant" });
+  }, [dispatch]);
+  const handleRequestCloseDocumentCommand = useCallback((documentId: string) => {
+    requestCloseIntentRef.current({ kind: "close-document", documentId });
+  }, []);
+  const handleRequestCloseAllDocumentsCommand = useCallback(() => {
+    requestCloseIntentRef.current({ kind: "close-all" });
+  }, []);
+  const handleRequestQuitAppCommand = useCallback(() => {
+    requestCloseIntentRef.current({ kind: "window-close" });
+  }, []);
+  const handleRequestSaveDocumentCommand = useCallback((documentId: string, mode: "save" | "save-as") => {
+    void saveDocument(documentId, mode);
+  }, [saveDocument]);
+  const handleOpenSaveWorkspaceCommand = useCallback(() => {
+    setShowSaveWorkspaceModal(true);
+  }, []);
+  const handleOpenManageWorkspacesCommand = useCallback(() => {
+    setShowManageWorkspacesModal(true);
+  }, []);
+  const handleShowAboutCommand = useCallback(() => {
+    setShowAboutModal(true);
+  }, []);
+
+  const commandRuntime = useEditorCommandRuntime({
+    onOpenExample: handleOpenExampleCommand,
+    onOpenFromArxiv: handleOpenFromArxivCommand,
+    onOpenSvgExport: handleOpenSvgExportCommand,
+    onOpenPngExport: handleOpenPngExportCommand,
+    onShowCompiledPicture: handleShowCompiledPictureCommand,
+    onOpenSettings: handleOpenSettingsCommand,
+    onCheckForUpdates: handleCheckForUpdatesCommand,
+    updateCheckBusy: updateCheckBusy || updateModalPhase.status === "installing",
+    onOpenInsertEquation: handleOpenInsertEquationCommand,
+    onOpenEditEquation: handleOpenEditEquationCommand,
+    onOpenRepeat: handleOpenRepeatCommand,
+    onFocusAssistant: handleFocusAssistantCommand,
+    onRequestCloseDocument: handleRequestCloseDocumentCommand,
+    onRequestCloseAllDocuments: handleRequestCloseAllDocumentsCommand,
+    onRequestQuitApp: handleRequestQuitAppCommand,
+    onRequestSaveDocument: handleRequestSaveDocumentCommand,
+    onOpenSaveWorkspace: handleOpenSaveWorkspaceCommand,
+    onOpenManageWorkspaces: handleOpenManageWorkspacesCommand,
+    onShowAbout: handleShowAboutCommand
   });
+  const commandRuntimeRef = useRef(commandRuntime);
+  const toolModeRef = useRef(toolMode);
+  commandRuntimeRef.current = commandRuntime;
+  toolModeRef.current = toolMode;
 
   useEffect(() => {
     const apply = (dark: boolean) => {
@@ -903,6 +942,13 @@ export function App() {
     [activeSourceScrubSourceId, lastEditChangedSourceIds]
   );
   const trigger = computeTrigger(activeCanvasDragKind, activeSourceScrubSourceId);
+  const isDragComputeTrigger = trigger === "drag-element" || trigger === "drag-handle";
+  if (isDragComputeTrigger && !dragRenderViewBoxRef.current && snapshot.svg?.viewBox) {
+    dragRenderViewBoxRef.current = snapshot.svg.viewBox;
+  } else if (!isDragComputeTrigger) {
+    dragRenderViewBoxRef.current = null;
+  }
+  const renderViewBox = isDragComputeTrigger ? dragRenderViewBoxRef.current ?? null : null;
   const typingComputeDelay = trigger === "other" && changedSourceIds == null
     ? (source.length > 80_000 ? 220 : 120)
     : null;
@@ -923,9 +969,10 @@ export function App() {
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
-      trigger
+      trigger,
+      renderViewBox
     });
-  }, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
@@ -947,25 +994,60 @@ export function App() {
     });
   }, typingComputeDelay, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
 
-  const prewarmDelay = activeCanvasDragKind || activeSourceScrubSourceId || pendingRequestId != null || !hoveredElementId || snapshot.source !== source
-    ? null
-    : 120;
+  useEffect(() => {
+    let prewarmTimer: number | null = null;
 
-  useDebouncedEffect(() => {
-    const scheduler = computeSchedulerRef.current;
-    if (!scheduler || prewarmDelay == null || !hoveredElementId) {
-      return;
-    }
-    scheduler.schedule({
-      id: crypto.randomUUID(),
-      documentId: activeDocumentId,
-      kind: "prewarm",
-      source,
-      activeFigureId,
-      changedSourceIds: [hoveredElementId],
-      trigger: "drag-element"
-    });
-  }, prewarmDelay, [activeDocumentId, activeFigureId, hoveredElementId, source, prewarmDelay]);
+    const clearPrewarmTimer = () => {
+      if (prewarmTimer == null) {
+        return;
+      }
+      window.clearTimeout(prewarmTimer);
+      prewarmTimer = null;
+    };
+
+    const isPrewarmable = (state: ReturnType<typeof useEditorStore.getState>, hoveredElementId: string | null): hoveredElementId is string => (
+      state.activeCanvasDragKind == null &&
+      state.activeSourceScrubSourceId == null &&
+      state.pendingRequestId == null &&
+      hoveredElementId != null &&
+      state.snapshot.source === state.source
+    );
+
+    const scheduleFromState = (state: ReturnType<typeof useEditorStore.getState>) => {
+      const hoveredElementId = state.hoveredElementId;
+      clearPrewarmTimer();
+      if (!isPrewarmable(state, hoveredElementId)) {
+        return;
+      }
+      prewarmTimer = window.setTimeout(() => {
+        prewarmTimer = null;
+        const latest = useEditorStore.getState();
+        if (latest.hoveredElementId !== hoveredElementId || !isPrewarmable(latest, hoveredElementId)) {
+          return;
+        }
+        const scheduler = computeSchedulerRef.current;
+        if (!scheduler) {
+          return;
+        }
+        scheduler.schedule({
+          id: crypto.randomUUID(),
+          documentId: latest.activeDocumentId,
+          kind: "prewarm",
+          source: latest.source,
+          activeFigureId: latest.activeFigureId,
+          changedSourceIds: [hoveredElementId],
+          trigger: "drag-element"
+        });
+      }, 120);
+    };
+
+    scheduleFromState(useEditorStore.getState());
+    const unsubscribe = useEditorStore.subscribe(scheduleFromState);
+    return () => {
+      clearPrewarmTimer();
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!platform.assistant?.bindEvents) {
@@ -1197,24 +1279,27 @@ export function App() {
     return typeof unbind === "function" ? unbind : undefined;
   }, [dispatch, platform.assistant]);
 
-  async function buildCurrentPreviewBase64(sourceForDoc: string, snapshotForDoc: ComputeResponse["snapshot"]): Promise<string | null> {
+  const buildCurrentPreviewBase64 = useCallback(async (
+    sourceForDoc: string,
+    snapshotForDoc: ComputeResponse["snapshot"]
+  ): Promise<string | null> => {
     if (!snapshotForDoc.svg || snapshotForDoc.source !== sourceForDoc) {
       return null;
     }
     const { renderPngExport } = await import("./export-commands");
     const rendered = await renderPngExport(snapshotForDoc.svg, { dpi: 144, transparentBackground: false });
     return await blobToBase64(rendered.blob);
-  }
+  }, []);
 
-  async function handleAssistantPrompt(
+  const handleAssistantPrompt = useCallback(async (
     prompt: string,
     model: string | null,
     attachments: AssistantComposerImageAttachment[]
-  ): Promise<void> {
-    const documentId = activeDocumentId;
-    const currentDocument = documents[documentId];
-    const currentSource = currentDocument?.source ?? source;
-    const currentSnapshot = currentDocument?.snapshot ?? snapshot;
+  ): Promise<void> => {
+    const documentId = activeDocumentIdRef.current;
+    const currentDocument = documentsRef.current[documentId];
+    const currentSource = currentDocument?.source ?? sourceRef.current;
+    const currentSnapshot = currentDocument?.snapshot ?? snapshotRef.current;
     const { buildFigureContext: buildFigCtx, buildDiagnosticsText: buildDiag } = await import("./assistant-tool-handlers");
     const figureContext = buildFigCtx(currentSource, currentSnapshot);
     const diagnosticsText = buildDiag(currentSource, currentSnapshot);
@@ -1248,7 +1333,7 @@ export function App() {
       }
     });
     try {
-      const assistant = platform.assistant;
+      const assistant = getActiveEditorPlatform().assistant;
       if (isSteeringActiveTurn) {
         await assistant?.steerTurn?.({
           documentId,
@@ -1306,30 +1391,31 @@ export function App() {
         message: error instanceof Error ? error.message : String(error)
       });
     }
-  }
+  }, [buildCurrentPreviewBase64, dispatch]);
 
-  async function handleInterruptAssistantTurn(): Promise<void> {
+  const handleInterruptAssistantTurn = useCallback(async (): Promise<void> => {
+    const documentId = activeDocumentIdRef.current;
     try {
-      await platform.assistant?.interruptTurn?.({ documentId: activeDocumentId });
+      await getActiveEditorPlatform().assistant?.interruptTurn?.({ documentId });
     } catch (error) {
       dispatch({
         type: "ASSISTANT_SET_ERROR",
-        documentId: activeDocumentId,
+        documentId,
         message: error instanceof Error ? error.message : String(error)
       });
     }
-  }
+  }, [dispatch]);
 
-  function handleAssistantNewChat(): void {
-    dispatch({ type: "ASSISTANT_NEW_CHAT", documentId: activeDocumentId });
-  }
+  const handleAssistantNewChat = useCallback((): void => {
+    dispatch({ type: "ASSISTANT_NEW_CHAT", documentId: activeDocumentIdRef.current });
+  }, [dispatch]);
 
   useEffect(() => {
-    const unbind = getActiveEditorPlatform().menu?.bindCommandHandler?.((commandId) => {
-      commandRuntime.runCommand(commandId, "platform");
+    const unbind = platform.menu?.bindCommandHandler?.((commandId) => {
+      commandRuntimeRef.current.runCommand(commandId, "platform");
     });
     return typeof unbind === "function" ? unbind : undefined;
-  }, [commandRuntime]);
+  }, [platform.menu]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -1342,6 +1428,7 @@ export function App() {
         getSourceRevision: () => number;
         getSnapshotSource: () => string;
         getPendingRequestId: () => string | null;
+        getMenuDefinition: () => typeof menuDefinition;
         getCommandState: (commandId: string) => { enabled: boolean; known: boolean };
         runCommand: (commandId: string) => boolean;
         selectFirstFigure: () => void;
@@ -1383,15 +1470,18 @@ export function App() {
       getPendingRequestId: () => {
         return useEditorStore.getState().pendingRequestId;
       },
+      getMenuDefinition: () => {
+        return menuDefinition;
+      },
       getCommandState: (commandId) => {
-        const binding = commandRuntime.bindings[commandId as keyof typeof commandRuntime.bindings];
+        const binding = commandRuntimeRef.current.bindings[commandId as keyof typeof commandRuntimeRef.current.bindings];
         return {
           enabled: binding?.enabled ?? false,
           known: binding != null
         };
       },
       runCommand: (commandId) => {
-        return commandRuntime.runCommand(commandId as keyof typeof commandRuntime.bindings, "platform");
+        return commandRuntimeRef.current.runCommand(commandId as keyof typeof commandRuntimeRef.current.bindings, "platform");
       },
       selectFirstFigure: () => {
         const firstFigureId = snapshotRef.current.figures[0]?.id ?? null;
@@ -1476,7 +1566,7 @@ export function App() {
     return () => {
       delete globalLike.__TIKZ_EDITOR_APP_TEST_API__;
     };
-  }, [commandRuntime, dispatch]);
+  }, [dispatch, menuDefinition]);
 
   useEffect(() => {
     const unbind = getActiveEditorPlatform().files?.bindOpenRequest?.((opened) => {
@@ -1525,26 +1615,38 @@ export function App() {
     setPendingAutoFit(false);
   }, [dispatch, pendingAutoFit, snapshot.source, source]);
 
+  const nativeMenuCommandState = useMemo(() => {
+    const entries = Object.entries(commandRuntime.bindings).map(([commandId, binding]) => {
+      const state = { enabled: binding.enabled, checked: binding.checked };
+      return [commandId, state] as const;
+    });
+    return {
+      commandStates: Object.fromEntries(entries) as Record<keyof typeof commandRuntime.bindings, { enabled: boolean; checked?: boolean }>,
+      signature: entries.map(([commandId, state]) =>
+        `${commandId}:${state.enabled ? "1" : "0"}:${state.checked === true ? "1" : "0"}`
+      ).join("|")
+    };
+  }, [commandRuntime]);
+  const nativeMenuCommandStatesRef = useRef(nativeMenuCommandState.commandStates);
+  useEffect(() => {
+    nativeMenuCommandStatesRef.current = nativeMenuCommandState.commandStates;
+  }, [nativeMenuCommandState.commandStates]);
+  const workspaceSignature = useMemo(
+    () => userWorkspaces.map((ws) => `${ws.id}:${ws.name}`).join("|"),
+    [userWorkspaces]
+  );
+
   useEffect(() => {
     const sync = platform.menu?.syncNativeMenu;
     if (typeof sync !== "function") {
       return;
     }
-    const commandStates = Object.fromEntries(
-      Object.entries(commandRuntime.bindings).map(([commandId, binding]) => [
-        commandId,
-        { enabled: binding.enabled, checked: binding.checked }
-      ])
-    ) as Record<keyof typeof commandRuntime.bindings, { enabled: boolean; checked?: boolean }>;
-    const workspaceSignature = userWorkspaces
-      .map((ws) => `${ws.id}:${ws.name}`)
-      .join("|");
     void sync({
       definition: menuDefinition,
-      commandStates,
+      commandStates: nativeMenuCommandStatesRef.current,
       workspaceSignature
     });
-  }, [commandRuntime, commandRuntime.bindings, menuDefinition, platform.menu, userWorkspaces]);
+  }, [menuDefinition, nativeMenuCommandState.signature, platform.menu, workspaceSignature]);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -1553,61 +1655,63 @@ export function App() {
         return;
       }
 
+      const runtime = commandRuntimeRef.current;
+      const currentToolMode = toolModeRef.current;
       const key = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && key === "f") {
-        if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.FORMAT_TIKZ, "shortcut")) {
+        if (runtime.runCommand(APP_MENU_COMMAND_IDS.FORMAT_TIKZ, "shortcut")) {
           e.preventDefault();
         }
         return;
       }
 
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && key === "a") {
-        if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.TOGGLE_ASSISTANT_PANEL, "shortcut")) {
+        if (runtime.runCommand(APP_MENU_COMMAND_IDS.TOGGLE_ASSISTANT_PANEL, "shortcut")) {
           e.preventDefault();
         }
         return;
       }
 
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "n") {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.NEW_DOCUMENT, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.NEW_DOCUMENT, "shortcut");
         e.preventDefault();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "w") {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.CLOSE_DOCUMENT, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.CLOSE_DOCUMENT, "shortcut");
         e.preventDefault();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "s") {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.SAVE_DOCUMENT, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.SAVE_DOCUMENT, "shortcut");
         e.preventDefault();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "o") {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.OPEN_DOCUMENT, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.OPEN_DOCUMENT, "shortcut");
         e.preventDefault();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "0") {
-        if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.FIT_TO_CONTENT, "shortcut")) {
+        if (runtime.runCommand(APP_MENU_COMMAND_IDS.FIT_TO_CONTENT, "shortcut")) {
           e.preventDefault();
         }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === ",") {
-        if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.OPEN_SETTINGS, "shortcut")) {
+        if (runtime.runCommand(APP_MENU_COMMAND_IDS.OPEN_SETTINGS, "shortcut")) {
           e.preventDefault();
         }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === "=" || key === "+")) {
-        if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.ZOOM_IN, "shortcut")) {
+        if (runtime.runCommand(APP_MENU_COMMAND_IDS.ZOOM_IN, "shortcut")) {
           e.preventDefault();
         }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "-") {
-        if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.ZOOM_OUT, "shortcut")) {
+        if (runtime.runCommand(APP_MENU_COMMAND_IDS.ZOOM_OUT, "shortcut")) {
           e.preventDefault();
         }
         return;
@@ -1615,16 +1719,16 @@ export function App() {
 
       // Ctrl+Shift+D: toggle dev panel
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === "d") {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.TOGGLE_DEV_PANEL, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.TOGGLE_DEV_PANEL, "shortcut");
         e.preventDefault();
         return;
       }
 
       // Ctrl/Cmd+Shift+E: edit equation when possible, otherwise insert equation.
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && key === "e") {
-        const edited = commandRuntime.runCommand(APP_MENU_COMMAND_IDS.EDIT_EQUATION, "shortcut");
+        const edited = runtime.runCommand(APP_MENU_COMMAND_IDS.EDIT_EQUATION, "shortcut");
         if (!edited) {
-          commandRuntime.runCommand(APP_MENU_COMMAND_IDS.INSERT_EQUATION, "shortcut");
+          runtime.runCommand(APP_MENU_COMMAND_IDS.INSERT_EQUATION, "shortcut");
         }
         e.preventDefault();
         return;
@@ -1649,7 +1753,7 @@ export function App() {
       }
       const canvasShortcutContext = isCanvasViewportFocused();
 
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && key === "escape" && toolMode !== "select") {
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && key === "escape" && currentToolMode !== "select") {
         dispatch({ type: "SET_TOOL_MODE", mode: "select" });
         e.preventDefault();
         return;
@@ -1682,7 +1786,7 @@ export function App() {
             return;
           }
           // Otherwise, if canvas elements are selected, copy them directly.
-          if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.COPY, "shortcut")) {
+          if (runtime.runCommand(APP_MENU_COMMAND_IDS.COPY, "shortcut")) {
             e.preventDefault();
           }
           return;
@@ -1698,7 +1802,7 @@ export function App() {
             return;
           }
           // Otherwise, if canvas elements are selected, cut them directly.
-          if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.CUT, "shortcut")) {
+          if (runtime.runCommand(APP_MENU_COMMAND_IDS.CUT, "shortcut")) {
             e.preventDefault();
           }
           return;
@@ -1710,7 +1814,7 @@ export function App() {
             return;
           }
           // Otherwise, paste directly via async clipboard API.
-          if (commandRuntime.runCommand(APP_MENU_COMMAND_IDS.PASTE, "shortcut")) {
+          if (runtime.runCommand(APP_MENU_COMMAND_IDS.PASTE, "shortcut")) {
             e.preventDefault();
           }
           return;
@@ -1720,7 +1824,7 @@ export function App() {
           if (!canvasShortcutContext) {
             return;
           }
-          commandRuntime.runCommand(APP_MENU_COMMAND_IDS.DUPLICATE, "shortcut");
+          runtime.runCommand(APP_MENU_COMMAND_IDS.DUPLICATE, "shortcut");
           e.preventDefault();
           return;
         }
@@ -1729,7 +1833,7 @@ export function App() {
           if (!canvasShortcutContext) {
             return;
           }
-          commandRuntime.runCommand(APP_MENU_COMMAND_IDS.GROUP, "shortcut");
+          runtime.runCommand(APP_MENU_COMMAND_IDS.GROUP, "shortcut");
           e.preventDefault();
           return;
         }
@@ -1738,7 +1842,7 @@ export function App() {
           if (!canvasShortcutContext) {
             return;
           }
-          commandRuntime.runCommand(APP_MENU_COMMAND_IDS.UNGROUP, "shortcut");
+          runtime.runCommand(APP_MENU_COMMAND_IDS.UNGROUP, "shortcut");
           e.preventDefault();
           return;
         }
@@ -1754,23 +1858,19 @@ export function App() {
       }
 
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === "z") {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.UNDO, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.UNDO, "shortcut");
         e.preventDefault();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && key === "z") || (!e.shiftKey && key === "y"))) {
-        commandRuntime.runCommand(APP_MENU_COMMAND_IDS.REDO, "shortcut");
+        runtime.runCommand(APP_MENU_COMMAND_IDS.REDO, "shortcut");
         e.preventDefault();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => { window.removeEventListener("keydown", onKeyDown); };
-  }, [
-    commandRuntime,
-    dispatch,
-    toolMode
-  ]);
+  }, [dispatch]);
 
   const appStyle = {
     "--app-ui-font-size": `${uiFontSizePx}px`,
@@ -1780,6 +1880,25 @@ export function App() {
   const loadExampleIntoEditor = (example: TikzOpenExample) => {
     dispatch({ type: "NEW_DOCUMENT", source: example.source, title: example.title });
     setShowOpenExampleModal(false);
+    setPendingAutoFit(true);
+  };
+
+  const loadArxivCandidateIntoEditor = (candidate: ArxivTikzCandidate) => {
+    const fileName = createArxivVirtualFileName(candidate);
+    const minimalSource = createMinimalTikzSourceArtifact({
+      source: candidate.contextualSource,
+      activeFigureId: "figure:0"
+    });
+    dispatch({ type: "NEW_DOCUMENT", source: minimalSource.text, title: fileName });
+    dispatch({
+      type: "MARK_DOCUMENT_SAVED",
+      fileRef: {
+        kind: "virtual",
+        name: fileName,
+        provider: "download"
+      }
+    });
+    setShowOpenFromArxivModal(false);
     setPendingAutoFit(true);
   };
 
@@ -1973,6 +2092,16 @@ export function App() {
             examples={OPEN_EXAMPLE_CATALOG}
             onClose={() => { setShowOpenExampleModal(false); }}
             onSelectExample={loadExampleIntoEditor}
+          />
+        </Suspense>
+      ) : null}
+      {showOpenFromArxivModal ? (
+        <Suspense fallback={null}>
+          <OpenFromArxivModal
+            session={openFromArxivSession}
+            onSessionChange={setOpenFromArxivSession}
+            onClose={() => { setShowOpenFromArxivModal(false); }}
+            onOpenCandidate={loadArxivCandidateIntoEditor}
           />
         </Suspense>
       ) : null}

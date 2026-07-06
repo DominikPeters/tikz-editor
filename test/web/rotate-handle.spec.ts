@@ -128,6 +128,57 @@ describe("statement rotate extraction", () => {
     expect(resolveStatementRotateDegrees(statement)).toBe(12);
   });
 
+  it("extracts rotate around angle values for handle drags", () => {
+    const statement: Statement = {
+      kind: "Path",
+      id: "path:0",
+      span: { from: 0, to: 10 },
+      command: "draw",
+      items: [],
+      options: {
+        span: { from: 5, to: 40 },
+        raw: "[rotate around={32:(3.09,0.79)}]",
+        entries: [
+          {
+            kind: "kv",
+            key: "rotate around",
+            valueRaw: "{32:(3.09,0.79)}",
+            span: { from: 6, to: 39 },
+            raw: "rotate around={32:(3.09,0.79)}"
+          }
+        ]
+      }
+    };
+
+    expect(resolveStatementRotateDegrees(statement)).toBe(32);
+  });
+
+  it("uses the last recognized rotate-like transform for handle drags", () => {
+    const statement: Statement = {
+      kind: "Path",
+      id: "path:0",
+      span: { from: 0, to: 10 },
+      command: "draw",
+      items: [],
+      options: {
+        span: { from: 5, to: 55 },
+        raw: "[rotate around={32:(3.09,0.79)}, rotate=10]",
+        entries: [
+          {
+            kind: "kv",
+            key: "rotate around",
+            valueRaw: "{32:(3.09,0.79)}",
+            span: { from: 6, to: 39 },
+            raw: "rotate around={32:(3.09,0.79)}"
+          },
+          { kind: "kv", key: "rotate", valueRaw: "10", span: { from: 41, to: 50 }, raw: "rotate=10" }
+        ]
+      }
+    };
+
+    expect(resolveStatementRotateDegrees(statement)).toBe(10);
+  });
+
   it("falls back to zero for missing or invalid rotate values", () => {
     const noRotate: Statement = {
       kind: "Path",

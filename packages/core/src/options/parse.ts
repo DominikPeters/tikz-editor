@@ -116,7 +116,7 @@ function classifyOptionToken(
   }
 
   if (
-    /^(<-|->|<->|\|-\||[A-Za-z][A-Za-z0-9 -]*)$/.test(token) ||
+    /^(-|<-|->|<->|\|-\||[A-Za-z][A-Za-z0-9 -]*)$/.test(token) ||
     looksLikeArrowSpecification(token) ||
     looksLikeColorSpecification(token)
   ) {

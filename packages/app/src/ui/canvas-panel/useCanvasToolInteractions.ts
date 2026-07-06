@@ -74,6 +74,7 @@ export type UseCanvasToolInteractionsArgs = {
   dispatch: CanvasDispatch;
   selectedAddMatrixRows: number;
   selectedAddMatrixColumns: number;
+  creationStrokeColor: string;
   pathDraft: PathToolDraft | null;
   pathSegmentDraft: Extract<DragState, { kind: "tool-path-segment" }> | null;
   dragRef: MutableRefObject<DragState | null>;
@@ -127,6 +128,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
     dispatch,
     selectedAddMatrixRows,
     selectedAddMatrixColumns,
+    creationStrokeColor,
     pathDraft,
     pathSegmentDraft,
     dragRef,
@@ -556,7 +558,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
                   columns: selectedAddMatrixColumns,
                   matrixKind: "nodes"
                 }
-              : { kind: "node" },
+              : { kind: "node", strokeColor: creationStrokeColor },
             at: nodeAt
           });
           if (!ok.sourceChanged) {
@@ -650,6 +652,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       applyActionWithFeedback,
       canvasTransform,
       dispatch,
+      creationStrokeColor,
       finalizePathDraft,
       logSnapDebug,
       queueSelectionForAddedElement,
