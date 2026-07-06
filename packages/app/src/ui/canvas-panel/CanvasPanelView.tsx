@@ -115,6 +115,7 @@ type CanvasPanelViewProps = {
   guideHitStrokeWidth: number;
   onGuidePointerDown: (event: ReactPointerEvent<SVGLineElement>, orientation: GuideOrientation, value: number) => void;
   snapLines: readonly SnapLine[];
+  snapSourceNames: ReadonlyMap<string, string>;
   snapStrokeWidth: number;
   snapCrossSize: number;
   toolPreview: ToolPreview | null;
@@ -245,6 +246,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     guideHitStrokeWidth,
     onGuidePointerDown,
     snapLines,
+    snapSourceNames,
     snapStrokeWidth,
     snapCrossSize,
     toolPreview,
@@ -661,7 +663,9 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
 
                 <SnapOverlay
                   snapLines={snapLines}
+                  sourceNames={snapSourceNames}
                   viewBox={svgResult.viewBox}
+                  scale={canvasTransform.scale}
                   snapStrokeWidth={snapStrokeWidth}
                   snapCrossSize={snapCrossSize}
                 />

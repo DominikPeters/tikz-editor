@@ -125,6 +125,10 @@ fallback if scenes get large.
 
 ## Implementation plan
 
+Status (2026-07-04): Phases 1 and 2 implemented and verified (unit tests in
+`test/edit-snapping*.spec.ts` plus live drag verification in the web app).
+Phase 3 remains open.
+
 Phase 1 — core correctness (contained, testable in `packages/core`):
 1. Adjacent-only gaps with pre-merge of intersecting reference bounds
    (`gap-snaps.ts`, `context.ts`).
@@ -140,6 +144,80 @@ Phase 2 — rendering (`packages/app` overlays):
 Phase 3 — optional depth:
 5. Per-element snap geometry hook (circle quadrants, path endpoints/anchors).
 6. Snap-explanation label and/or snapped-element highlight (Graphite-style).
+
+## Snap labels (Phase 3, implemented for named elements)
+
+Research (Opus agent over our own codebase, 2026-07-04): the only good per-element
+naming sources are (a) explicit TikZ node/coordinate names — surfaced via
+`snapshot.semanticResult.nodeAnchorTargets` (`nodeName` + `nodeSourceId`), which covers
+exactly the named elements that can appear as snap references, since bare
+`\coordinate`s render no scene element — and (b) the Objects panel's generic kind
+vocabulary (`deriveStatementLabel` in `packages/app/src/ui/objects-panel/model.ts`),
+which does not disambiguate same-kind shapes and is not worth a pill.
+
+Decision: label only when a snap line's references resolve to **exactly one element
+with an explicit name**. Implementation: snap candidates and `SnapLine` carry reference
+`sourceIds`; `CanvasPanel` memoizes a `sourceId → name` map from `nodeAnchorTargets`;
+`SnapOverlay` renders an "edge · foo" / "center · foo" pill (name only for pointer
+snaps) beyond the line end. Grouped lines merging several references stay unlabeled by
+design — the full-span line is the explanation there.
+
+## Overlay lifecycle: flicker, and the derived-state design
+
+Symptom: snap lines vanish momentarily whenever a drag's own edit lands, because
+`CanvasPanel` clears `snapLines` on any `snapshot.source !== source` transition — a
+guard meant for external edits that also fires for the drag's own applies.
+
+**Implemented (cheap fix):** skip the clear while `dragRef.current` is an active drag;
+the next pointermove overwrites the lines anyway. External edits (typing in the source
+panel) still clear.
+
+**Full version (not implemented): snap lines as derived state.** Treat the overlay as
+`lines = f(activeDrag, scene, zoom)` recomputed on every snapshot recompute, instead of
+imperative `setSnapLines` calls sprinkled across ~10 sites. What it buys beyond flicker:
+
+1. **Dependent-element correctness.** `drag.snapContext` is frozen at drag start; in
+   TikZ, moving an element can relocate dependents (paths referencing named nodes,
+   relative coordinates), whose *old* positions remain snap targets mid-drag — the
+   "inexplicable line" failure mode reintroduced via staleness. Rebuilding the context
+   per recompute fixes it.
+2. **Self-chasing dependents.** Dependents are not in `selectedSourceIds`, so today they
+   are valid snap references even though they move with the drag (approach a target and
+   it moves away). Any rebuild design must exclude drag-dependent elements via the
+   semantic dependency graph (`packages/core/src/semantic/dependencies.ts`) — worth
+   doing even without the rest.
+3. **Mid-drag zoom coherence.** Threshold (`thresholdPx / zoom`) and viewport reference
+   filtering are computed at drag start; scroll-zoom mid-drag leaves both stale.
+4. **Consolidation/testability.** One derivation point replaces ~10 imperative
+   clear/set sites (each tool finalizer must currently remember to clear) and is unit-
+   testable as a pure function.
+5. **Feedback beyond pointer drags.** Keyboard nudges (`snapKeyboardNudge` returns
+   `lines: []` today), paste placement, and tool previews could reuse the same
+   derivation for free.
+
+Suggested implementation order: (a) dependent-exclusion in `buildSnapContext` input
+(correctness, independent of the refactor); (b) a `deriveSnapLines(dragState, snapshot,
+canvasTransform)` selector used by an effect that refreshes lines on snapshot
+recompute while a drag is active; (c) migrate the imperative call sites tool by tool.
+
+**Measuring the performance impact** before/while doing (b):
+
+- Cost centers: `buildSnapContext` (reference bounds + points + `buildVisibleGaps`) per
+  recompute, and `snapSelectionTranslation` per pointermove. Adjacent-only gaps already
+  cut gap building from O(n²) pairs to roughly O(n·k) with blocker scans.
+- Use the existing in-app profiling: the status bar perf HUD (fps / p95 / max drag ms)
+  and the dev test API's `resetProfilingSession()` / `getProfilingSnapshot()`
+  (`packages/app/src/profiling.ts`) — record a scripted drag (the synthetic
+  pointer-event driver used for verification works headlessly) before/after on the same
+  scene and compare p95 drag-frame times.
+- Add a `vitest bench` for the core pipeline: synthetic scenes of 100 / 500 / 2000
+  elements (grids of rects, plus a matrix-heavy case), measuring `buildSnapContext` and
+  one `snapSelectionTranslation` call. Budget: context rebuild under ~8ms at 500
+  elements (one 120Hz frame); if exceeded, patch reference bounds incrementally by
+  changed `sourceIds` (the recompute already reports `lastEditChangedSourceIds`) rather
+  than rebuilding from scratch.
+- Watch the degenerate cases: many overlapping bounds make `mergeIntersectingBounds`
+  quadratic (repeated `findIndex`); if benches show it, swap to a sweep by sorted minX.
 
 ## License notes
 

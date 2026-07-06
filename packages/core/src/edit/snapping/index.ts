@@ -191,7 +191,8 @@ function snapPointerWithPointsAndGrid({
     selectionPoints: [snappedPoint],
     referencePoints,
     enabledAxis: null,
-    thresholdWorld: 0
+    thresholdWorld: 0,
+    clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
 
   const lines = [
@@ -244,7 +245,8 @@ function runSelectionSnapPasses({
     selection: snappedSelection,
     includeGaps,
     enabledAxis,
-    thresholdWorld: 0
+    thresholdWorld: 0,
+    clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
 
   const pointLines = createPointSnapLines(secondPass.nearest);

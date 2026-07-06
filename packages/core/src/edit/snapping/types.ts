@@ -108,14 +108,27 @@ export type SnapContext = {
 };
 
 export type SnapLine =
-  | { type: "points"; axis: Axis; points: WorldPoint[] }
+  | {
+      /**
+       * One alignment guide per snapped coordinate: `points` holds every
+       * aligned point (selection and references) sorted along the line, so
+       * renderers can draw a single full span. `role` styles center
+       * alignments differently from edge/corner alignments. `sourceIds` are
+       * the distinct reference elements on the line, for labelling.
+       */
+      type: "points";
+      axis: Axis;
+      role?: SnapPointRole;
+      points: WorldPoint[];
+      sourceIds?: string[];
+    }
   | {
       type: "gap";
       direction: "horizontal" | "vertical";
       gapKind: "center" | "equal";
       segments: Array<[WorldPoint, WorldPoint]>;
     }
-  | { type: "pointer"; axis: Axis; from: WorldPoint; to: WorldPoint };
+  | { type: "pointer"; axis: Axis; from: WorldPoint; to: WorldPoint; sourceIds?: string[] };
 
 export type SnapResult = {
   offset: WorldPoint;
@@ -181,6 +194,8 @@ export type PointSnapCandidate = {
   to: WorldPoint;
   offset: number;
   key: number;
+  role?: SnapPointRole;
+  sourceId?: string;
 };
 
 export type GapSnapDirection =

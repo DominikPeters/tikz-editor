@@ -52,20 +52,91 @@ export type ToolPreview =
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "path"; d: string };
 
+const PT_PER_CM = 28.4527559055;
+const SNAP_GAP_LABEL_FONT_PX = 9;
+const SNAP_GAP_LABEL_HEIGHT_PX = 13;
+const SNAP_GAP_LABEL_CHAR_PX = 5.4;
+const SNAP_GAP_LABEL_PADDING_PX = 6;
+
+function formatGapDistanceCm(distancePt: number): string {
+  return Number((distancePt / PT_PER_CM).toFixed(2)).toString();
+}
+
+function SnapLabelPill({
+  x,
+  y,
+  text,
+  worldPerPx
+}: {
+  x: number;
+  y: number;
+  text: string;
+  worldPerPx: number;
+}) {
+  const width = (text.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+  const height = SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx;
+  return (
+    <g>
+      <rect
+        x={x - width / 2}
+        y={y - height / 2}
+        width={width}
+        height={height}
+        rx={2 * worldPerPx}
+        className={css.snapGapLabelRect}
+      />
+      <text
+        x={x}
+        y={y}
+        className={css.snapGapLabelText}
+        fontSize={SNAP_GAP_LABEL_FONT_PX * worldPerPx}
+        textAnchor="middle"
+        dominantBaseline="central"
+      >
+        {text}
+      </text>
+    </g>
+  );
+}
+
+function snapNameLabel(
+  sourceIds: readonly string[] | undefined,
+  sourceNames: ReadonlyMap<string, string> | undefined,
+  role?: "corner" | "center"
+): string | null {
+  if (sourceIds?.length !== 1 || !sourceNames) {
+    return null;
+  }
+  const name = sourceNames.get(sourceIds[0]);
+  if (!name) {
+    return null;
+  }
+  if (!role) {
+    return name;
+  }
+  return `${role === "center" ? "center" : "edge"} · ${name}`;
+}
+
 export function SnapOverlay({
   snapLines,
+  sourceNames,
   viewBox,
+  scale,
   snapStrokeWidth,
   snapCrossSize
 }: {
   snapLines: readonly SnapLine[];
+  sourceNames?: ReadonlyMap<string, string>;
   viewBox: SvgViewBox;
+  scale: number;
   snapStrokeWidth: number;
   snapCrossSize: number;
 }) {
   if (snapLines.length === 0) {
     return null;
   }
+
+  const worldPerPx = 1 / Math.max(scale, 1e-3);
 
   return (
     <g className={css.snapOverlay}>
@@ -87,6 +158,22 @@ export function SnapOverlay({
           const points = line.points.map((point) => worldToSvgPoint(point, viewBox));
           const first = points[0];
           const last = points[points.length - 1];
+          const lineClass =
+            line.role === "center" ? `${css.snapLine} ${css.snapCenterLine}` : css.snapLine;
+          const label = snapNameLabel(line.sourceIds, sourceNames, line.role);
+          let labelPosition: { x: number; y: number } | null = null;
+          if (label && first && last) {
+            const dx = last.x - first.x;
+            const dy = last.y - first.y;
+            const length = Math.hypot(dx, dy);
+            const ux = length > 1e-6 ? dx / length : 1;
+            const uy = length > 1e-6 ? dy / length : 0;
+            const labelWidth = (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+            const halfAlong =
+              Math.abs(ux) > Math.abs(uy) ? labelWidth / 2 : (SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx) / 2;
+            const offset = 10 * worldPerPx + halfAlong;
+            labelPosition = { x: last.x + ux * offset, y: last.y + uy * offset };
+          }
           return (
             <g key={`snap-points-${index}`}>
               {first && last && points.length > 1 && (
@@ -95,8 +182,16 @@ export function SnapOverlay({
                   y1={first.y}
                   x2={last.x}
                   y2={last.y}
-                  className={css.snapLine}
+                  className={lineClass}
                   strokeWidth={snapStrokeWidth}
+                />
+              )}
+              {label && labelPosition && (
+                <SnapLabelPill
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  text={label}
+                  worldPerPx={worldPerPx}
                 />
               )}
               {points.map((point, pointIndex) => (
@@ -126,6 +221,20 @@ export function SnapOverlay({
         if (line.type === "pointer") {
           const from = worldToSvgPoint(line.from, viewBox);
           const to = worldToSvgPoint(line.to, viewBox);
+          const label = snapNameLabel(line.sourceIds, sourceNames);
+          let labelPosition: { x: number; y: number } | null = null;
+          if (label) {
+            const dx = from.x - to.x;
+            const dy = from.y - to.y;
+            const length = Math.hypot(dx, dy);
+            const ux = length > 1e-6 ? dx / length : 1;
+            const uy = length > 1e-6 ? dy / length : 0;
+            const labelWidth = (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+            const halfAlong =
+              Math.abs(ux) > Math.abs(uy) ? labelWidth / 2 : (SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx) / 2;
+            const offset = 10 * worldPerPx + halfAlong;
+            labelPosition = { x: from.x + ux * offset, y: from.y + uy * offset };
+          }
           return (
             <g key={`snap-pointer-${index}`}>
               <line
@@ -136,6 +245,14 @@ export function SnapOverlay({
                 className={css.snapLine}
                 strokeWidth={snapStrokeWidth}
               />
+              {label && labelPosition && (
+                <SnapLabelPill
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  text={label}
+                  worldPerPx={worldPerPx}
+                />
+              )}
               <line
                 x1={from.x - snapCrossSize}
                 y1={from.y - snapCrossSize}
@@ -162,18 +279,33 @@ export function SnapOverlay({
               const a = worldToSvgPoint(segment[0], viewBox);
               const b = worldToSvgPoint(segment[1], viewBox);
               const isEqualGap = line.gapKind === "equal";
+              const distancePt =
+                line.direction === "horizontal"
+                  ? Math.abs(segment[1].x - segment[0].x)
+                  : Math.abs(segment[1].y - segment[0].y);
+              const label = formatGapDistanceCm(distancePt);
+              const labelWidth =
+                (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
+              const segmentLength = Math.hypot(b.x - a.x, b.y - a.y);
+              const showLabel = segmentLength > labelWidth * 1.3;
+              const midX = (a.x + b.x) / 2;
+              const midY = (a.y + b.y) / 2;
               return (
-                <line
-                  key={`snap-gap-segment-${index}-${segmentIndex}`}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  className={`${css.snapLine} ${css.snapGapLine}`}
-                  strokeWidth={snapStrokeWidth}
-                  markerStart={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
-                  markerEnd={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
-                />
+                <g key={`snap-gap-segment-${index}-${segmentIndex}`}>
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    className={`${css.snapLine} ${css.snapGapLine}`}
+                    strokeWidth={snapStrokeWidth}
+                    markerStart={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
+                    markerEnd={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
+                  />
+                  {showLabel && (
+                    <SnapLabelPill x={midX} y={midY} text={label} worldPerPx={worldPerPx} />
+                  )}
+                </g>
               );
             })}
           </g>

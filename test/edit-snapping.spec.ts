@@ -967,6 +967,90 @@ describe("edit snapping core", () => {
     expect(snapped.snappedDelta?.y).toBeCloseTo(1, 6);
   });
 
+  it("groups aligned references into one full-span line and suppresses the bracketed center line", () => {
+    const scene = [
+      makeCircle("upper", 30, 100, 5),
+      makeCircle("lower", 30, 140, 5)
+    ];
+    const context = buildSnapContext({
+      sceneElements: scene,
+      selectedSourceIds: [],
+      zoom: 1,
+      settings: { grid: { enabled: false }, gaps: { enabled: false } }
+    });
+
+    // Selection is 10 wide like the circle bounds [25,35]; after the +1 snap
+    // both edges and the center align with both circles.
+    const snapped = snapSelectionTranslation({
+      context,
+      selection: selectionFromBounds(24, 0, 34, 10),
+      rawDelta: wp(0, 0)
+    });
+
+    expect(snapped.snappedDelta?.x).toBeCloseTo(1, 6);
+
+    const pointLines = snapped.lines.filter(
+      (line): line is Extract<typeof line, { type: "points" }> => line.type === "points" && line.axis === "x"
+    );
+    expect(pointLines).toHaveLength(2);
+    expect(pointLines.every((line) => line.role === "corner")).toBe(true);
+    expect(pointLines.map((line) => line.points[0].x).sort((a, b) => a - b)).toEqual([25, 35]);
+    for (const line of pointLines) {
+      // 2 selection corners + 2 corners per circle, sorted along the guide
+      expect(line.points).toHaveLength(6);
+      expect(line.points[0].y).toBeCloseTo(0, 6);
+      expect(line.points[5].y).toBeCloseTo(145, 6);
+    }
+  });
+
+  it("emits a center-role line when only the centers align", () => {
+    const scene = [
+      makeCircle("upper", 30, 100, 5),
+      makeCircle("lower", 30, 140, 5)
+    ];
+    const context = buildSnapContext({
+      sceneElements: scene,
+      selectedSourceIds: [],
+      zoom: 1,
+      settings: { grid: { enabled: false }, gaps: { enabled: false } }
+    });
+
+    // Selection is 12 wide: its center x = 30 matches the circles' centers
+    // exactly, while its edges (24, 36) match nothing.
+    const snapped = snapSelectionTranslation({
+      context,
+      selection: selectionFromBounds(24, 0, 36, 10),
+      rawDelta: wp(0, 0)
+    });
+
+    expect(snapped.snappedDelta?.x).toBeCloseTo(0, 6);
+
+    const pointLines = snapped.lines.filter(
+      (line): line is Extract<typeof line, { type: "points" }> => line.type === "points"
+    );
+    expect(pointLines).toHaveLength(1);
+    expect(pointLines[0].role).toBe("center");
+    expect(pointLines[0].points.map((point) => point.y)).toEqual([5, 100, 140]);
+    expect(pointLines[0].sourceIds?.slice().sort()).toEqual(["lower", "upper"]);
+  });
+
+  it("carries the reference sourceId on pointer snap lines", () => {
+    const scene = [makeCircle("ref", 20, 20, 5)];
+    const context = buildSnapContext({
+      sceneElements: scene,
+      selectedSourceIds: [],
+      zoom: 1,
+      settings: { grid: { enabled: false }, gaps: { enabled: false } }
+    });
+
+    const result = snapHandlePosition({ context, point: wp(24.5, 25.5) });
+    const pointerLines = result.lines.filter(
+      (line): line is Extract<typeof line, { type: "pointer" }> => line.type === "pointer"
+    );
+    expect(pointerLines.length).toBeGreaterThan(0);
+    expect(pointerLines.every((line) => line.sourceIds?.[0] === "ref")).toBe(true);
+  });
+
   it("prefers the visually nearest cluster over a marginally closer far-away offset", () => {
     const scene = [
       makeCircle("near", 8, 5, 5),

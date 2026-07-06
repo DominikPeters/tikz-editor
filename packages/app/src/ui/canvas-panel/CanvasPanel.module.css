@@ -302,8 +302,24 @@
   stroke-dasharray: 4 3;
 }
 
+.snapCenterLine {
+  stroke-dasharray: 6 3;
+  opacity: 0.85;
+}
+
 .snapGapArrowHead {
   fill: var(--color-snap);
+}
+
+.snapGapLabelRect {
+  fill: var(--color-snap);
+}
+
+.snapGapLabelText {
+  fill: #fff;
+  font-family: var(--font-ui, sans-serif);
+  pointer-events: none;
+  user-select: none;
 }
 
 .gridMinor {

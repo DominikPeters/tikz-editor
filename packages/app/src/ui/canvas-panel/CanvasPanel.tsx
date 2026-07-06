@@ -3287,6 +3287,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (snapshot.source === source) {
       return;
     }
+    // Source changes caused by an active drag's own applies must not wipe the
+    // overlay (the next pointermove overwrites it anyway); only external edits
+    // invalidate the lines.
+    if (dragRef.current) {
+      return;
+    }
     setSnapLines([]);
   }, [snapshot.source, source]);
 
@@ -3567,6 +3573,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   const guideHitStrokeWidth = 12 / Math.max(canvasTransform.scale, 1e-3);
   const snapStrokeWidth = 1 / Math.max(canvasTransform.scale, 1e-3);
   const snapCrossSize = 3 / Math.max(canvasTransform.scale, 1e-3);
+  const snapSourceNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const target of snapshot.semanticResult?.nodeAnchorTargets ?? []) {
+      if (target.nodeSourceId && !names.has(target.nodeSourceId)) {
+        names.set(target.nodeSourceId, target.nodeName);
+      }
+    }
+    return names;
+  }, [snapshot.semanticResult?.nodeAnchorTargets]);
   const textEditPopup = useMemo(() => {
     if (!textEditingSession || !svgResult) {
       return null;
@@ -3738,6 +3753,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         guideHitStrokeWidth={guideHitStrokeWidth}
         onGuidePointerDown={onGuidePointerDown}
         snapLines={snapLines}
+        snapSourceNames={snapSourceNames}
         snapStrokeWidth={snapStrokeWidth}
         snapCrossSize={snapCrossSize}
         toolPreview={toolPreview}
