@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
@@ -26,10 +27,6 @@ import {
 import type { SourcePatch } from "../types.js";
 import type { EditParseOptions } from "../parse-options.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export type SplitPathAction = { elementId: string; handleId: string };
 export type JoinPathsAction = { elementIds: [string, string] };

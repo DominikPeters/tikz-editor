@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, rewriteOptionListMutations, type OptionMutation } from "../option-mutations.js";
 import { TREE_CHILD_LAYOUT_WRITABLE_KEYS } from "../tree-editing.js";
@@ -5,25 +6,11 @@ import { resolvePropertyTarget } from "../property-target.js";
 import type { PropertyTarget, PropertyTargetOptionsFormat } from "../property-target.js";
 import { replaceSpan } from "../patch.js";
 import type { Span } from "../../ast/types.js";
-import type { SourcePatch } from "../types.js";
 import { applyAdornmentSetProperty } from "./adornment-set-property.js";
 import { applyPathAttachedNodeInspectorAction } from "./path-attached-node-actions.js";
 import type { EditParseOptions } from "../parse-options.js";
 import type { SemanticPropertyId } from "../property-registry.js";
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 export type SetPropertyAction = {
   elementId: string;

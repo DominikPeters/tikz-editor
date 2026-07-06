@@ -218,6 +218,35 @@ describe("applyEditAction - rotateElement", () => {
     expect(result.newSource).toContain("rotate around={0:(0.5,2.5)}");
   });
 
+  it("moves rotate-around pivots in the active figure only when aligning", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (1,1);
+  \draw[rotate around={0:(9,9)}] (3,2) rectangle (4,3);
+\end{tikzpicture}
+\begin{tikzpicture}
+  \draw (0,0) rectangle (1,1);
+  \draw[rotate around={0:(3.5,2.5)}] (3,2) rectangle (4,3);
+\end{tikzpicture}`;
+    const parseOptions = { activeFigureId: "figure:1" };
+    const semantic = evaluateTikzFigure(parseTikz(source, { recover: true, ...parseOptions }).figure, source);
+
+    const result = applyEditAction(
+      source,
+      semantic.editHandles,
+      {
+        kind: "alignElements",
+        elementIds: ["path:0", "path:1"],
+        mode: "left"
+      },
+      { parseOptions }
+    );
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("rotate around={0:(9,9)}");
+    expect(result.newSource).toContain("rotate around={0:(0.5,2.5)}");
+  });
+
   it("moves center rotate-around pivots when distributing explicit path shapes", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) rectangle (1,1);

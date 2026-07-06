@@ -380,39 +380,42 @@ function buildWrappedExplicitLines(params: {
       tolerance: resolved.pretolerance,
     });
 
-    const pass2Model = runsToItems(localRuns, measurement, {
-      enableAutomaticHyphenation: true,
-      hyphenator,
-      hyphenpenalty: resolved.hyphenpenalty,
-      exhyphenpenalty: resolved.exhyphenpenalty,
-      spaceStretch: alignmentProfile.interwordStretch,
-      spaceShrink: alignmentProfile.interwordShrink,
-    });
-    const pass2Dp = breakWithDp(pass2Model, targetWidth, {
-      ...commonDpOptions,
-      tolerance: resolved.tolerance,
-      allowInfeasible: alignment !== 'justified',
-    });
-
     let chosenLines: GreedyLine[];
+    let pass2Model: ReturnType<typeof runsToItems> | null = null;
+    let pass2Dp: ReturnType<typeof breakWithDp> | null = null;
     if (pass1Dp.canProceed && pass1Dp.lines.length) {
       chosenLines = pass1Dp.lines;
       linebreakingMode = pass1Dp.mode;
-    } else if (pass2Dp.canProceed && pass2Dp.lines.length) {
-      chosenLines = pass2Dp.lines;
-      linebreakingMode = pass2Dp.mode;
-      if (passLabel === 'wrapped-explicit-pretolerance') {
-        passLabel = 'wrapped-explicit-tolerance';
-      }
     } else {
-      throw new Error(
-        `Wrapped-explicit segment ${segmentIndex} failed: ${[
-          ...pass1Model.errors,
-          ...pass1Dp.errors,
-          ...pass2Model.errors,
-          ...pass2Dp.errors,
-        ].join('; ') || 'no solution'}`
-      );
+      pass2Model = runsToItems(localRuns, measurement, {
+        enableAutomaticHyphenation: true,
+        hyphenator,
+        hyphenpenalty: resolved.hyphenpenalty,
+        exhyphenpenalty: resolved.exhyphenpenalty,
+        spaceStretch: alignmentProfile.interwordStretch,
+        spaceShrink: alignmentProfile.interwordShrink,
+      });
+      pass2Dp = breakWithDp(pass2Model, targetWidth, {
+        ...commonDpOptions,
+        tolerance: resolved.tolerance,
+        allowInfeasible: alignment !== 'justified',
+      });
+      if (pass2Dp.canProceed && pass2Dp.lines.length) {
+        chosenLines = pass2Dp.lines;
+        linebreakingMode = pass2Dp.mode;
+        if (passLabel === 'wrapped-explicit-pretolerance') {
+          passLabel = 'wrapped-explicit-tolerance';
+        }
+      } else {
+        throw new Error(
+          `Wrapped-explicit segment ${segmentIndex} failed: ${[
+            ...pass1Model.errors,
+            ...pass1Dp.errors,
+            ...pass2Model.errors,
+            ...pass2Dp.errors,
+          ].join('; ') || 'no solution'}`
+        );
+      }
     }
 
     if (!chosenLines.length) {
@@ -422,7 +425,7 @@ function buildWrappedExplicitLines(params: {
     }
 
     errors.push(...pass1Model.errors);
-    if (passLabel !== 'wrapped-explicit-pretolerance') {
+    if (passLabel !== 'wrapped-explicit-pretolerance' && pass2Model && pass2Dp) {
       errors.push(...pass1Dp.errors, ...pass2Model.errors, ...pass2Dp.errors);
     }
 

@@ -1,5 +1,5 @@
 import { parseTikz } from "../../parser/index.js";
-import type { PathItem, PathStatement, Statement } from "../../ast/types.js";
+import type { PathItem, PathStatement } from "../../ast/types.js";
 import type { OptionListAst } from "../../options/types.js";
 import { parseCoordinateLike, parseLength } from "../../semantic/coords/parse-length.js";
 import type { SceneElement } from "../../semantic/types.js";
@@ -7,6 +7,7 @@ import type { StyleChainEntry } from "../../semantic/style-chain.js";
 import { CM_PER_PT } from "../format.js";
 import type { EditParseOptions } from "../parse-options.js";
 import { normalizeOptionKey } from "../option-key.js";
+import { findPathStatementById } from "../statement-find.js";
 
 const GRID_DEFAULT_STEP_CM = 1;
 
@@ -57,21 +58,6 @@ export function findPathStatementInSource(source: string, sourceId: string, pars
     activeFigureId: parseOptions.activeFigureId,
   });
   return findPathStatementById(parsed.figure.body, sourceId);
-}
-
-function findPathStatementById(statements: Statement[], sourceId: string): PathStatement | null {
-  for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === sourceId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, sourceId);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-  return null;
 }
 
 function collectGridKeywords(

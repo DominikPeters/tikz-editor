@@ -1,6 +1,7 @@
 import type { OptionEntry } from "../options/types.js";
 import type { ResolvedStyle } from "../semantic/types.js";
 import { normalizeOptionKey } from "./option-key.js";
+import { uniqueStrings } from "./statement-find.js";
 import {
   ARROW_DEFAULT_CLEAR_KEYS,
   AXIS_SHADING_CONFLICT_CLEAR_KEYS,
@@ -552,19 +553,7 @@ export function buildSetPropertyActionsForTargets(
   return actions;
 }
 
-export function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    unique.push(normalized);
-  }
-  return unique;
-}
+export { uniqueStrings } from "./statement-find.js";
 
 function property(
   id: SemanticPropertyId,

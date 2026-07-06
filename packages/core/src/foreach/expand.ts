@@ -13,6 +13,7 @@ import {
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId,
+  pgfMathStatementId,
   pgfkeysStatementId,
   nodeForeachClauseId,
   nodeItemId,
@@ -254,18 +255,27 @@ function expandForeachStatement(
     const nextStack = [...stack, frame];
 
     const substituted = substituteForeachBindingsWithMap(statement.bodyRaw, combinedBindings);
-    const macroExpandedBodyRaw = expandTexConditionals(expandMacroBindings(substituted.output, context.macroBindings));
+    const macroExpandedSourceRaw =
+      context.macroBindings.size === 0
+        ? substituted.output
+        : expandMacroBindings(substituted.output, context.macroBindings);
+    const macroExpandedBodyRaw = expandTexConditionals(macroExpandedSourceRaw);
     const parsedMacroExpandedBody = parseStatementsFromBodyWithMapping(macroExpandedBodyRaw, { from: 0, to: macroExpandedBodyRaw.length });
-    const substitutedBodyRaw = expandTexConditionals(substituted.output);
-    const parsedSubstitutedBody = parsedMacroExpandedBody.hasParseError
-      ? parseStatementsFromBodyWithMapping(substitutedBodyRaw, { from: 0, to: substitutedBodyRaw.length })
-      : null;
-    const parsedBody = parsedSubstitutedBody && !parsedSubstitutedBody.hasParseError
-      ? parsedSubstitutedBody
-      : parsedMacroExpandedBody;
-    const canMapSubstitutedBody = parsedBody === parsedSubstitutedBody
-      ? substitutedBodyRaw === substituted.output
-      : macroExpandedBodyRaw === substituted.output;
+    let parsedBody = parsedMacroExpandedBody;
+    let mappedBodyRaw = macroExpandedBodyRaw;
+    if (parsedMacroExpandedBody.hasParseError) {
+      const substitutedBodyRaw = macroExpandedSourceRaw === substituted.output
+        ? macroExpandedBodyRaw
+        : expandTexConditionals(substituted.output);
+      const parsedSubstitutedBody = substitutedBodyRaw === macroExpandedBodyRaw
+        ? parsedMacroExpandedBody
+        : parseStatementsFromBodyWithMapping(substitutedBodyRaw, { from: 0, to: substitutedBodyRaw.length });
+      if (!parsedSubstitutedBody.hasParseError) {
+        parsedBody = parsedSubstitutedBody;
+        mappedBodyRaw = substitutedBodyRaw;
+      }
+    }
+    const canMapSubstitutedBody = mappedBodyRaw === substituted.output;
     if (parsedBody.hasParseError) {
       context.diagnostics.push({
         severity: "warning",
@@ -1216,6 +1226,14 @@ function reindexStatementsInPlace(
     if (statement.kind === "MacroCommandDefinition") {
       if (!preserveExistingId) {
         statement.id = macroCommandDefinitionStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+      }
+      continue;
+    }
+
+    if (statement.kind === "PgfMath") {
+      if (!preserveExistingId) {
+        statement.id = pgfMathStatementId(statementIndex);
         templateLocalIdByExpandedId.set(statement.id, previousId);
       }
       continue;

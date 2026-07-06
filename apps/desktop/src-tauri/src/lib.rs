@@ -232,11 +232,6 @@ struct RecentFilesState {
 }
 
 #[derive(Default)]
-struct WindowCloseState {
-    allow_next_close: Mutex<bool>,
-}
-
-#[derive(Default)]
 struct PendingOpenRequestsState {
     requests: Mutex<Vec<OpenTextPayload>>,
     failures: Mutex<Vec<OpenTextFailurePayload>>,
@@ -2412,18 +2407,10 @@ async fn desktop_show_message_dialog(
 
 #[tauri::command]
 fn desktop_confirm_window_close(app: AppHandle) -> Result<(), String> {
-    {
-        let state = app.state::<WindowCloseState>();
-        let mut allow = state
-            .allow_next_close
-            .lock()
-            .map_err(|_| "close state unavailable".to_string())?;
-        *allow = true;
-    }
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
-    window.close().map_err(|error| error.to_string())
+    window.destroy().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -2845,7 +2832,6 @@ pub fn run() {
 
     let builder = builder
         .manage(RecentFilesState::default())
-        .manage(WindowCloseState::default())
         .manage(PendingOpenRequestsState::default())
         .manage(LinkedFileWatchState::default())
         .manage(LocalAssetWatchState::default());
@@ -2853,24 +2839,6 @@ pub fn run() {
     builder
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let allow_close = {
-                    let state = window.state::<WindowCloseState>();
-                    let decision = match state.allow_next_close.lock() {
-                        Ok(mut allow) => {
-                            if *allow {
-                                *allow = false;
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        Err(_) => false,
-                    };
-                    decision
-                };
-                if allow_close {
-                    return;
-                }
                 api.prevent_close();
                 let _ = window.emit("desktop-window-close-request", ());
             }

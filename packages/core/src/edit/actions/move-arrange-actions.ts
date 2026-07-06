@@ -1,3 +1,4 @@
+import type { EditActionResultLike } from "../result-types.js";
 import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import type { OptionEntry } from "../../options/types.js";
@@ -24,23 +25,11 @@ import { applyOptionMutationsToTarget, rewriteOptionListMutations, type OptionMu
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "../parse-options.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
+import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
 
 const ARRANGE_EPSILON = 1e-6;
 const CENTER_PIVOT_EPSILON = 1e-3;
 
-type EditActionResultLike =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
 
 type KeyValueOptionEntry = Extract<OptionEntry, { kind: "kv" }>;
 type KeyValueOptionCandidate = { entry: KeyValueOptionEntry; index: number };
@@ -241,7 +230,7 @@ export function applyAlignElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas);
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions);
 }
 
 export function applyDistributeElementsAction(
@@ -264,7 +253,7 @@ export function applyDistributeElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas);
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions);
 }
 
 function applyMoveElementsUsingHandleRewrites(
@@ -943,7 +932,8 @@ function applyElementDeltaMapStrict(
   source: string,
   editHandles: EditHandle[],
   elementIds: readonly string[],
-  deltasBySource: ReadonlyMap<string, WorldPoint>
+  deltasBySource: ReadonlyMap<string, WorldPoint>,
+  parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
   const normalizedIds = normalizeElementIds(elementIds);
   if (normalizedIds.length === 0) {
@@ -1055,7 +1045,7 @@ function applyElementDeltaMapStrict(
     currentSource,
     editHandles,
     deltasBySource,
-    {}
+    parseOptions
   );
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);
@@ -1361,50 +1351,4 @@ function expandChangedSourceIdsForMovedElements(
   }
 
   return expanded;
-}
-
-function findPathStatementById(
-  statements: readonly Statement[],
-  elementId: string
-): Extract<Statement, { kind: "Path" }> | null {
-  for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === elementId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, elementId);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-  return null;
-}
-
-function normalizeElementIds(elementIds: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const elementId of elementIds) {
-    const id = elementId.trim();
-    if (id.length === 0 || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    normalized.push(id);
-  }
-  return normalized;
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    unique.push(normalized);
-  }
-  return unique;
 }

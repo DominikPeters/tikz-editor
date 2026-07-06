@@ -39,11 +39,7 @@ export function createDefaultPicDefinitionRegistry(): PicDefinitionRegistry {
 }
 
 export function clonePicDefinitionRegistry(registry: PicDefinitionRegistry): PicDefinitionRegistry {
-  const cloned: PicDefinitionRegistry = new Map();
-  for (const [name, definition] of registry) {
-    cloned.set(name, clonePicDefinition(definition));
-  }
-  return cloned;
+  return new Map(registry);
 }
 
 export function applyPicDefinitionsFromOptionLists(
@@ -206,20 +202,6 @@ function registerPicDefinition(
     parameterized: containsParameterPlaceholder(code.raw),
     codeLayer
   });
-}
-
-function clonePicDefinition(definition: PicDefinition): PicDefinition {
-  return {
-    ...definition,
-    codeSpan: definition.codeSpan ? { ...definition.codeSpan } : undefined,
-    sourceRef:
-      cloneStyleSourceRef(definition.sourceRef) ??
-      ({
-        sourceId: `pic-definition:${definition.name}:unknown`,
-        sourceKind: "pic-definition",
-        label: definition.name
-      } satisfies StyleSourceRef)
-  };
 }
 
 function parsePicsStyleDefinitionName(normalizedKey: string): string | null {

@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/lang-tikz",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "description": "CodeMirror 6 language support for TikZ",
   "type": "module",
   "license": "MIT",
@@ -26,7 +26,7 @@
   "dependencies": {
     "@codemirror/language": "^6.12.1",
     "@lezer/highlight": "^1.2.3",
-    "@tikz-editor/lezer-tikz": "0.5.0"
+    "@tikz-editor/lezer-tikz": "0.5.2"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

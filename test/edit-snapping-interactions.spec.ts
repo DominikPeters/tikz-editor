@@ -47,13 +47,15 @@ describe("snapping interaction wrappers", () => {
       settings: { grid: { enabled: false }, gaps: { enabled: false } }
     });
 
+    // Moved selection [23,33] sits 2pt from aligning both corners and center
+    // with the circle's bounds [25,35] (like-with-like role matching).
     const result = snapSelectionTranslation({
       context,
       selection: selection(15, 15, 25, 25),
-      rawDelta: wp(4, 4)
+      rawDelta: wp(8, 8)
     });
 
-    expect(result.snappedDelta).toEqual(wp(5, 5));
+    expect(result.snappedDelta).toEqual(wp(10, 10));
     expect(result.lines.length).toBeGreaterThan(0);
   });
 

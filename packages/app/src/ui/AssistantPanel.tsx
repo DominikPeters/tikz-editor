@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { RiAddLine, RiSendPlane2Line, RiStopMiniLine } from "@remixicon/react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -30,6 +31,8 @@ type AssistantPanelProps = {
 };
 
 const AUTO_MODEL_VALUE = "__auto__";
+const EMPTY_ASSISTANT_ITEMS: AssistantItem[] = [];
+const EMPTY_ASSISTANT_PENDING_APPROVALS: AssistantPendingApproval[] = [];
 
 function logAssistantDebug(message: string, error?: unknown): void {
   if (typeof console === "undefined" || typeof console.info !== "function") {
@@ -46,7 +49,16 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
   const assistantApi = getActiveEditorPlatform().assistant;
   const assistantAvailable = typeof assistantApi?.startTurn === "function";
-  const doc = useEditorStore((s) => s.documents[s.activeDocumentId]);
+  const assistantState = useEditorStore(useShallow((s) => {
+    const doc = s.documents[s.activeDocumentId];
+    return {
+      hasDocument: doc != null,
+      assistantItems: doc?.assistantItems ?? EMPTY_ASSISTANT_ITEMS,
+      assistantPendingApprovals: doc?.assistantPendingApprovals ?? EMPTY_ASSISTANT_PENDING_APPROVALS,
+      assistantTurnStatus: doc?.assistantTurnStatus ?? "idle",
+      assistantError: doc?.assistantError ?? null
+    };
+  }));
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [modelOptions, setModelOptions] = useState<AssistantModelOption[]>([]);
@@ -72,11 +84,11 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   const shouldStickToBottomRef = useRef(true);
 
   const groupedItems = useMemo(() => {
-    return (doc?.assistantItems ?? []).map((item) => ({
+    return assistantState.assistantItems.map((item) => ({
       key: item.id,
       item
     }));
-  }, [doc?.assistantItems]);
+  }, [assistantState.assistantItems]);
   const dropdownOptions = useMemo<Array<CustomDropdownOption<string>>>(() => (
     [
       { value: AUTO_MODEL_VALUE, label: "Auto model" },
@@ -165,7 +177,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
       return;
     }
     timeline.scrollTop = timeline.scrollHeight;
-  }, [groupedItems.length, doc?.assistantPendingApprovals.length]);
+  }, [groupedItems.length, assistantState.assistantPendingApprovals.length]);
 
   useEffect(() => {
     if (!assistantAvailable || !assistantApi?.checkCodexStatus) {
@@ -341,14 +353,14 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     );
   }
 
-  if (!doc) {
+  if (!assistantState.hasDocument) {
     return <div className={css.empty} data-select="text">No active document.</div>;
   }
 
-  const running = doc.assistantTurnStatus === "starting" || doc.assistantTurnStatus === "inProgress";
+  const running = assistantState.assistantTurnStatus === "starting" || assistantState.assistantTurnStatus === "inProgress";
   const hasPromptText = prompt.trim().length > 0;
   const composerAction = running && !hasPromptText ? "stop" : "send";
-  const workingIndicatorLabel = doc.assistantTurnStatus === "starting"
+  const workingIndicatorLabel = assistantState.assistantTurnStatus === "starting"
     ? "Setting up conversation..."
     : "Assistant is working...";
 
@@ -473,7 +485,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
         </button>
       </SidePanel.Header>
 
-      {doc.assistantError ? <div className={css.error} data-select="text">{doc.assistantError}</div> : null}
+      {assistantState.assistantError ? <div className={css.error} data-select="text">{assistantState.assistantError}</div> : null}
 
       <SidePanel.Content
         className={css.timeline}
@@ -489,7 +501,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
         {groupedItems.map(({ key, item }) => (
           <AssistantTimelineItem key={key} item={item} />
         ))}
-        {doc.assistantPendingApprovals.map((approval) => (
+        {assistantState.assistantPendingApprovals.map((approval) => (
           <div key={approval.requestId} className={css.card}>
             <div className={css.cardTitle}>Approval Required</div>
             <ApprovalPreview approval={approval} />

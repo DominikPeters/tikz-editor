@@ -106,6 +106,7 @@ export type InspectorProperty =
       value: number;
       step: number;
       min?: number;
+      minExclusive?: number;
       max?: number;
       unit?: string;
       defaultValue?: number;

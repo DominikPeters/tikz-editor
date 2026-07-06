@@ -302,38 +302,80 @@
   stroke-dasharray: 4 3;
 }
 
+.snapCenterLine {
+  stroke-dasharray: 6 3;
+  opacity: 0.85;
+}
+
 .snapGapArrowHead {
   fill: var(--color-snap);
 }
 
+.snapGapLabelRect {
+  fill: var(--color-snap);
+}
+
+.snapGapLabelText {
+  fill: #fff;
+  font-family: var(--font-ui, sans-serif);
+  pointer-events: none;
+  user-select: none;
+}
+
 .gridMinor {
-  stroke: rgba(85, 82, 76, 0.12);
+  stroke: rgba(85, 82, 76, 0.16);
   vector-effect: non-scaling-stroke;
-  shape-rendering: crispEdges;
 }
 
 .gridMajor {
-  stroke: rgba(69, 65, 59, 0.18);
+  stroke: rgba(69, 65, 59, 0.24);
   vector-effect: non-scaling-stroke;
-  shape-rendering: crispEdges;
 }
 
 .gridAxis {
-  stroke: color-mix(in srgb, var(--accent-dark) 30%, transparent);
+  stroke: color-mix(in srgb, var(--accent-dark) 40%, transparent);
   vector-effect: non-scaling-stroke;
-  shape-rendering: crispEdges;
 }
 
 :global([data-color-scheme="dark"]) .gridMinor {
-  stroke: rgba(85, 82, 76, 0.16);
+  stroke: rgba(85, 82, 76, 0.2);
 }
 
 :global([data-color-scheme="dark"]) .gridMajor {
-  stroke: rgba(69, 65, 59, 0.26);
+  stroke: rgba(69, 65, 59, 0.32);
 }
 
 :global([data-color-scheme="dark"]) .gridAxis {
-  stroke: rgba(37, 34, 116, 0.4);
+  stroke: rgba(37, 34, 116, 0.5);
+}
+
+@media (min-resolution: 2dppx) {
+  .gridMinor {
+    stroke: rgba(85, 82, 76, 0.12);
+    shape-rendering: crispEdges;
+  }
+
+  .gridMajor {
+    stroke: rgba(69, 65, 59, 0.18);
+    shape-rendering: crispEdges;
+  }
+
+  .gridAxis {
+    stroke: color-mix(in srgb, var(--accent-dark) 30%, transparent);
+    shape-rendering: crispEdges;
+  }
+
+  :global([data-color-scheme="dark"]) .gridMinor {
+    stroke: rgba(85, 82, 76, 0.16);
+  }
+
+  :global([data-color-scheme="dark"]) .gridMajor {
+    stroke: rgba(69, 65, 59, 0.26);
+  }
+
+  :global([data-color-scheme="dark"]) .gridAxis {
+    stroke: rgba(37, 34, 116, 0.4);
+  }
 }
 
 .hitRegions {

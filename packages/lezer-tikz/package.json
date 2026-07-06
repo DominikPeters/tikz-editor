@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/lezer-tikz",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "description": "Lezer parser for TikZ",
   "type": "module",
   "license": "MIT",
@@ -30,7 +30,7 @@
     "access": "public"
   },
   "scripts": {
-    "generate:grammar": "lezer-generator src/grammar/tikz.grammar -o src/grammar/tikz-parser.ts",
+    "generate:grammar": "lezer-generator --typeScript src/grammar/tikz.grammar -o src/grammar/tikz-parser.ts",
     "build": "npm run generate:grammar && tsc -p tsconfig.json"
   },
   "dependencies": {

@@ -9,6 +9,7 @@ import type { SemanticPropertyId } from "./property-registry.js";
 import { resolvePropertyTarget, type PropertyTargetResolution } from "./property-target.js";
 import { formatNumber } from "./format.js";
 import { normalizeOptionKey } from "./option-key.js";
+import { uniqueStrings } from "./statement-find.js";
 import {
   ARROW_DEFAULT_CLEAR_KEYS,
   ARROW_OPTION_KEY,
@@ -913,19 +914,7 @@ export function transformPropertyCandidateKeys(key: TransformInspectorKey): stri
   return uniqueStrings([key, ...ROTATE_CLEAR_KEYS]);
 }
 
-export function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    unique.push(normalized);
-  }
-  return unique;
-}
+export { uniqueStrings } from "./statement-find.js";
 
 function createPropertyTargetResolver(
   source: string,

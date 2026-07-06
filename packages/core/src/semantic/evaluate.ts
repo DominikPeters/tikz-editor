@@ -4,6 +4,7 @@ import type {
   MacroAliasStatement,
   MacroCommandDefinitionStatement,
   MacroDefinitionStatement,
+  PgfMathStatement,
   PgfkeysStatement,
   PathItem,
   PicOperationItem,
@@ -112,6 +113,7 @@ import type {
   NodeAnchorTarget,
   SceneElement,
   SceneFigure,
+  SceneClipPath,
   ScenePathCommand,
   SceneLayer,
   PicOriginFrame
@@ -207,21 +209,16 @@ export function createSemanticEvaluationRun(
     opts.sourceFingerprint,
     opts.graphicsResolver
   );
-  const prePictureContextStatements = figure.body.filter((statement) => isPrePictureContextStatement(statement, figure));
-  const prePictureMacroAttribution = new WeakMap<Statement, MacroOriginFrame[]>();
-  for (const statement of prePictureContextStatements) {
-    withDependencySource(context, statement.id, () =>
-      withPgfMathRuntime(
-        { rng: context.mathRandom },
-        () => evaluateStatement(statement, context, diagnostics, featureUsage, prePictureMacroAttribution)
-      )
-    );
-  }
   const expanded = withPgfMathRuntime(
     { rng: context.mathRandom },
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
   );
-  const activeExpandedFigureBody = expanded.figureBody.filter((statement) => !isPrePictureContextStatement(statement, figure));
+  const prePictureContextStatements = expanded.figureBody.filter((statement) =>
+    isPrePictureContextStatement(statement, figure, expanded.statementAttribution, expanded.statementSourceMaps)
+  );
+  const activeExpandedFigureBody = expanded.figureBody.filter((statement) =>
+    !isPrePictureContextStatement(statement, figure, expanded.statementAttribution, expanded.statementSourceMaps)
+  );
   for (const diagnostic of expanded.diagnostics) {
     diagnostics.push({
       severity: diagnostic.severity,
@@ -229,6 +226,16 @@ export function createSemanticEvaluationRun(
       message: diagnostic.message,
       span: diagnostic.span
     });
+  }
+
+  for (const statement of prePictureContextStatements) {
+    const contextStatement = remapPrePictureContextStatement(statement, expanded.statementSourceMaps.get(statement));
+    withDependencySource(context, statement.id, () =>
+      withPgfMathRuntime(
+        { rng: context.mathRandom },
+        () => evaluateStatement(contextStatement, context, diagnostics, featureUsage, expanded.statementMacroAttribution)
+      )
+    );
   }
   const parent = currentFrame(context);
   const rootCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
@@ -287,28 +294,7 @@ export function createSemanticEvaluationRun(
       pinDistancePt: rootMeta.pinDistancePt,
       pinEdgeRaw: rootMeta.pinEdgeRaw,
       transformShape: rootMeta.transformShape,
-      everyNodeStyles: rootMeta.everyNodeStyles,
-      everyTextNodePartStyles: rootMeta.everyTextNodePartStyles,
-      everyFitStyles: rootMeta.everyFitStyles,
-      everyPicStyles: rootMeta.everyPicStyles,
-      everyRectangleNodeStyles: rootMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: rootMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: rootMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: rootMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: rootMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: rootMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: rootMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: rootMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: rootMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: rootMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: rootMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: rootMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: rootMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: rootMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: rootMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: rootMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: rootMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: rootMeta.everyDoubleArrowNodeStyles,
+      ...cloneFrameStyleBuckets(rootMeta),
       treeLevel: rootMeta.treeLevel,
       treeLevelDistancePt: rootMeta.treeLevelDistancePt,
       treeSiblingDistancePt: rootMeta.treeSiblingDistancePt,
@@ -587,8 +573,71 @@ function buildRootPictureOptionLayers(
   return layers;
 }
 
-function isPrePictureContextStatement(statement: Statement, figure: TikzFigure): boolean {
-  return statement.span.to <= figure.span.from;
+function isPrePictureContextStatement(
+  statement: Statement,
+  figure: TikzFigure,
+  statementAttribution: WeakMap<Statement, ForeachStatementAttribution>,
+  statementSourceMaps: WeakMap<Statement, ExpansionSourceMap>
+): boolean {
+  return resolveAuthoredStatementSpan(statement, statementAttribution, statementSourceMaps).to <= figure.span.from;
+}
+
+function resolveAuthoredStatementSpan(
+  statement: Statement,
+  statementAttribution: WeakMap<Statement, ForeachStatementAttribution>,
+  statementSourceMaps: WeakMap<Statement, ExpansionSourceMap>
+): Span {
+  const sourceMap = statementSourceMaps.get(statement);
+  if (sourceMap) {
+    return mapExpansionSpan(sourceMap, statement.span);
+  }
+
+  return statementAttribution.get(statement)?.sourceSpan ?? statement.span;
+}
+
+function remapPrePictureContextStatement(
+  statement: Statement,
+  sourceMap: ExpansionSourceMap | undefined
+): Statement {
+  if (!sourceMap) {
+    return statement;
+  }
+  return remapSpansDeepWithExpansionSourceMap(statement, sourceMap) as Statement;
+}
+
+function remapSpansDeepWithExpansionSourceMap(value: unknown, sourceMap: ExpansionSourceMap): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => remapSpansDeepWithExpansionSourceMap(entry, sourceMap));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  let nextRecord: Record<string, unknown> | null = null;
+  if (isSpanLikeRecord(record)) {
+    const mapped = sourceMap.mapSpan({ from: record.from, to: record.to }) ?? sourceMap.sourceSpan;
+    nextRecord = {
+      ...record,
+      from: mapped.from,
+      to: mapped.to
+    };
+  }
+
+  const sourceRecord = nextRecord ?? record;
+  for (const [key, nested] of Object.entries(sourceRecord)) {
+    const mapped = remapSpansDeepWithExpansionSourceMap(nested, sourceMap);
+    if (mapped !== nested) {
+      nextRecord ??= { ...sourceRecord };
+      nextRecord[key] = mapped;
+    }
+  }
+
+  return nextRecord ?? value;
+}
+
+function isSpanLikeRecord(record: Record<string, unknown>): record is Record<string, unknown> & Span {
+  return typeof record.from === "number" && typeof record.to === "number";
 }
 
 function buildSourceStatementSpanById(
@@ -940,28 +989,7 @@ function evaluateStatement(
       pinDistancePt: frameMeta.pinDistancePt,
       pinEdgeRaw: frameMeta.pinEdgeRaw,
       transformShape: frameMeta.transformShape,
-      everyNodeStyles: frameMeta.everyNodeStyles,
-      everyTextNodePartStyles: frameMeta.everyTextNodePartStyles,
-      everyFitStyles: frameMeta.everyFitStyles,
-      everyPicStyles: frameMeta.everyPicStyles,
-      everyRectangleNodeStyles: frameMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frameMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frameMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frameMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frameMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frameMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: frameMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frameMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frameMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frameMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frameMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: frameMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: frameMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frameMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frameMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frameMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frameMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frameMeta.everyDoubleArrowNodeStyles,
+      ...cloneFrameStyleBuckets(frameMeta),
       treeLevel: frameMeta.treeLevel,
       treeLevelDistancePt: frameMeta.treeLevelDistancePt,
       treeSiblingDistancePt: frameMeta.treeSiblingDistancePt,
@@ -1020,35 +1048,10 @@ function evaluateStatement(
         ),
         currentFrame(context).layer
       );
-      parent.clipChain = currentFrame(context).clipChain.map((clipPath) => ({
-        ...clipPath,
-        sourceRef: { ...clipPath.sourceRef },
-        commands: clipPath.commands.map((command) => {
-          if (command.kind === "Z") {
-            return { kind: "Z" };
-          }
-          if (command.kind === "M" || command.kind === "L") {
-            return { kind: command.kind, to: { ...command.to } };
-          }
-          if (command.kind === "C") {
-            return {
-              kind: "C",
-              c1: { ...command.c1 },
-              c2: { ...command.c2 },
-              to: { ...command.to }
-            };
-          }
-          return {
-            kind: "A",
-            rx: command.rx,
-            ry: command.ry,
-            xAxisRotation: command.xAxisRotation,
-            largeArc: command.largeArc,
-            sweep: command.sweep,
-            to: { ...command.to }
-          };
-        })
-      }));
+      const evaluatedClipChain = currentFrame(context).clipChain;
+      if (clipChainChanged(parent.clipChain, evaluatedClipChain)) {
+        parent.clipChain = cloneClipChain(evaluatedClipChain);
+      }
       parent.pictureSizeRelevant = currentFrame(context).pictureSizeRelevant;
       for (const name of intersectionDirectives.namedPathNames) {
         registerNamedPath(name, elements, context);
@@ -1159,28 +1162,7 @@ function evaluateStatement(
       pinDistancePt: frameMeta.pinDistancePt,
       pinEdgeRaw: frameMeta.pinEdgeRaw,
       transformShape: frameMeta.transformShape,
-      everyNodeStyles: frameMeta.everyNodeStyles,
-      everyTextNodePartStyles: frameMeta.everyTextNodePartStyles,
-      everyFitStyles: frameMeta.everyFitStyles,
-      everyPicStyles: frameMeta.everyPicStyles,
-      everyRectangleNodeStyles: frameMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frameMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frameMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frameMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frameMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frameMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: frameMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frameMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frameMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frameMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frameMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: frameMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: frameMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frameMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frameMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frameMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frameMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frameMeta.everyDoubleArrowNodeStyles,
+      ...cloneFrameStyleBuckets(frameMeta),
       treeLevel: frameMeta.treeLevel,
       treeLevelDistancePt: frameMeta.treeLevelDistancePt,
       treeSiblingDistancePt: frameMeta.treeSiblingDistancePt,
@@ -1231,6 +1213,11 @@ function evaluateStatement(
   if (statement.kind === "MacroCommandDefinition") {
     applyMacroCommandDefinitionStatement(statement, context, diagnostics);
     markFeature(featureUsage, "unknown_statement", "supported");
+    return [];
+  }
+
+  if (statement.kind === "PgfMath") {
+    applyPgfMathStatement(statement, context, diagnostics, featureUsage);
     return [];
   }
 
@@ -1587,8 +1574,110 @@ function stampPicElement(
   return base;
 }
 
+function applyPgfMathStatement(
+  statement: PgfMathStatement,
+  context: ReturnType<typeof createSemanticContext>,
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage
+): void {
+  markFeature(featureUsage, "pgfmath_expression", "supported");
+  const frame = currentFrame(context);
+
+  if (statement.commandRaw === "\\pgfmathsetseed") {
+    markFeature(featureUsage, "pgfmath_seed_commands", "supported");
+    const expressionRaw = statement.argsRaw[0] ?? "";
+    const expressionSpan = statement.argsSpan[0] ?? statement.span;
+    const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
+      maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
+      trace: context.macroTraceCollector ?? undefined
+    });
+    if (containsPgfMathRandomToken(expanded)) {
+      markFeature(featureUsage, "pgfmath_random_functions", "supported");
+    }
+    const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
+    if (evaluated.ok === false) {
+      diagnostics.push({
+        severity: "warning",
+        code: `invalid-pgfmathsetseed:${evaluated.code}`,
+        message: "\\pgfmathsetseed failed: " + evaluated.message,
+        span: expressionSpan
+      });
+      return;
+    }
+    context.mathRandom.setSeed(Math.trunc(evaluated.quantity.value));
+    return;
+  }
+
+  if (statement.commandRaw === "\\pgfmathparse") {
+    const expressionRaw = statement.argsRaw[0] ?? "";
+    const expressionSpan = statement.argsSpan[0] ?? statement.span;
+    const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
+      maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
+      trace: context.macroTraceCollector ?? undefined
+    });
+    if (containsPgfMathRandomToken(expanded)) {
+      markFeature(featureUsage, "pgfmath_random_functions", "supported");
+    }
+    const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
+    if (evaluated.ok === false) {
+      diagnostics.push({
+        severity: "warning",
+        code: `invalid-pgfmathparse:${evaluated.code}`,
+        message: "\\pgfmathparse failed: " + evaluated.message,
+        span: expressionSpan
+      });
+      return;
+    }
+    writeContextMacroBinding(context, "\\pgfmathresult", {
+      kind: "text",
+      value: formatPgfMathNumber(evaluated.quantity.value),
+      provenance: []
+    });
+    return;
+  }
+
+  const targetRaw = statement.argsRaw[0] ?? "";
+  const targetSpan = statement.argsSpan[0] ?? statement.span;
+  const target = normalizeMacroName(targetRaw);
+  if (target == null) {
+    diagnostics.push({
+      severity: "warning",
+      code: "invalid-pgfmathsetmacro-target",
+      message: "\\pgfmathsetmacro requires a control-sequence macro target.",
+      span: targetSpan
+    });
+    return;
+  }
+
+  const expressionRaw = statement.argsRaw[1] ?? "";
+  const expressionSpan = statement.argsSpan[1] ?? statement.span;
+  const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
+    maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
+    trace: context.macroTraceCollector ?? undefined
+  });
+  if (containsPgfMathRandomToken(expanded)) {
+    markFeature(featureUsage, "pgfmath_random_functions", "supported");
+  }
+  const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
+  if (evaluated.ok === false) {
+    diagnostics.push({
+      severity: "warning",
+      code: `invalid-pgfmathsetmacro:${evaluated.code}`,
+      message: "\\pgfmathsetmacro failed: " + evaluated.message,
+      span: expressionSpan
+    });
+    return;
+  }
+
+  writeContextMacroBinding(context, target, {
+    kind: "text",
+    value: formatPgfMathNumber(evaluated.quantity.value),
+    provenance: []
+  });
+}
+
 function describeUnsupportedStatement(raw: string): string {
-  const command = parseStandaloneCommandInvocations(raw)[0]?.command ?? parseStandaloneCommandName(raw);
+  const command = parseLeadingCommandName(raw) ?? parseStandaloneCommandName(raw);
   if (command) {
     return `Unknown or unsupported command \`${command}\`; this editor will ignore the statement. Check for a typo or unsupported TikZ command.`;
   }
@@ -1598,111 +1687,10 @@ function describeUnsupportedStatement(raw: string): string {
 function applyStandaloneCommandStatement(
   raw: string,
   context: ReturnType<typeof createSemanticContext>,
-  diagnostics: Diagnostic[],
-  span: { from: number; to: number },
-  featureUsage: FeatureUsage
+  _diagnostics: Diagnostic[],
+  _span: { from: number; to: number },
+  _featureUsage: FeatureUsage
 ): boolean {
-  let handled = false;
-  for (const invocation of parseStandaloneCommandInvocations(raw)) {
-    if (invocation.command === "\\pgfmathsetseed" && invocation.args.length === 1) {
-      handled = true;
-      markFeature(featureUsage, "pgfmath_expression", "supported");
-      markFeature(featureUsage, "pgfmath_seed_commands", "supported");
-      const frame = currentFrame(context);
-      const expanded = expandMacroBindings(invocation.args[0], frame.macroBindings, {
-        maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-        trace: context.macroTraceCollector ?? undefined
-      });
-      if (containsPgfMathRandomToken(expanded)) {
-        markFeature(featureUsage, "pgfmath_random_functions", "supported");
-      }
-      const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
-      if (evaluated.ok === false) {
-        diagnostics.push({
-          severity: "warning",
-          code: `invalid-pgfmathsetseed:${evaluated.code}`,
-          message: `\\pgfmathsetseed failed: ${evaluated.message}`,
-          span
-        });
-      } else {
-        context.mathRandom.setSeed(Math.trunc(evaluated.quantity.value));
-      }
-      continue;
-    }
-
-    if (invocation.command === "\\pgfmathparse" && invocation.args.length === 1) {
-      handled = true;
-      markFeature(featureUsage, "pgfmath_expression", "supported");
-      const frame = currentFrame(context);
-      const expanded = expandMacroBindings(invocation.args[0], frame.macroBindings, {
-        maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-        trace: context.macroTraceCollector ?? undefined
-      });
-      if (containsPgfMathRandomToken(expanded)) {
-        markFeature(featureUsage, "pgfmath_random_functions", "supported");
-      }
-      const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
-      if (evaluated.ok === false) {
-        diagnostics.push({
-          severity: "warning",
-          code: `invalid-pgfmathparse:${evaluated.code}`,
-          message: `\\pgfmathparse failed: ${evaluated.message}`,
-          span
-        });
-      } else {
-        writeContextMacroBinding(context, "\\pgfmathresult", {
-          kind: "text",
-          value: formatPgfMathNumber(evaluated.quantity.value),
-          provenance: []
-        });
-      }
-      continue;
-    }
-
-    if (invocation.command === "\\pgfmathsetmacro" && invocation.args.length === 2) {
-      handled = true;
-      markFeature(featureUsage, "pgfmath_expression", "supported");
-      const target = normalizeMacroName(invocation.args[0]);
-      if (target == null) {
-        diagnostics.push({
-          severity: "warning",
-          code: "invalid-pgfmathsetmacro-target",
-          message: "\\pgfmathsetmacro requires a control-sequence macro target.",
-          span
-        });
-        return true;
-      }
-      const frame = currentFrame(context);
-      const expanded = expandMacroBindings(invocation.args[1], frame.macroBindings, {
-        maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-        trace: context.macroTraceCollector ?? undefined
-      });
-      if (containsPgfMathRandomToken(expanded)) {
-        markFeature(featureUsage, "pgfmath_random_functions", "supported");
-      }
-      const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
-      if (evaluated.ok === false) {
-        diagnostics.push({
-          severity: "warning",
-          code: `invalid-pgfmathsetmacro:${evaluated.code}`,
-          message: `\\pgfmathsetmacro failed: ${evaluated.message}`,
-          span
-        });
-      } else {
-        writeContextMacroBinding(context, target, {
-          kind: "text",
-          value: formatPgfMathNumber(evaluated.quantity.value),
-          provenance: []
-        });
-      }
-      continue;
-    }
-  }
-
-  if (handled) {
-    return true;
-  }
-
   const command = parseStandaloneCommandName(raw);
   if (command) {
     const fontFactor = FONT_SIZE_COMMAND_FACTORS[command];
@@ -1987,28 +1975,7 @@ function applyOptionListsToCurrentFrame(
   frame.pinDistancePt = frameMeta.pinDistancePt;
   frame.pinEdgeRaw = frameMeta.pinEdgeRaw;
   frame.transformShape = frameMeta.transformShape;
-  frame.everyNodeStyles = frameMeta.everyNodeStyles;
-  frame.everyTextNodePartStyles = frameMeta.everyTextNodePartStyles;
-  frame.everyFitStyles = frameMeta.everyFitStyles;
-  frame.everyPicStyles = frameMeta.everyPicStyles;
-  frame.everyRectangleNodeStyles = frameMeta.everyRectangleNodeStyles;
-  frame.everyCircleNodeStyles = frameMeta.everyCircleNodeStyles;
-  frame.everyDiamondNodeStyles = frameMeta.everyDiamondNodeStyles;
-  frame.everyTrapeziumNodeStyles = frameMeta.everyTrapeziumNodeStyles;
-  frame.everyIsoscelesTriangleNodeStyles = frameMeta.everyIsoscelesTriangleNodeStyles;
-  frame.everyKiteNodeStyles = frameMeta.everyKiteNodeStyles;
-  frame.everyDartNodeStyles = frameMeta.everyDartNodeStyles;
-  frame.everyCircularSectorNodeStyles = frameMeta.everyCircularSectorNodeStyles;
-  frame.everyCylinderNodeStyles = frameMeta.everyCylinderNodeStyles;
-  frame.everyCloudNodeStyles = frameMeta.everyCloudNodeStyles;
-  frame.everyStarburstNodeStyles = frameMeta.everyStarburstNodeStyles;
-  frame.everySignalNodeStyles = frameMeta.everySignalNodeStyles;
-  frame.everyTapeNodeStyles = frameMeta.everyTapeNodeStyles;
-  frame.everyRectangleCalloutNodeStyles = frameMeta.everyRectangleCalloutNodeStyles;
-  frame.everyEllipseCalloutNodeStyles = frameMeta.everyEllipseCalloutNodeStyles;
-  frame.everyCloudCalloutNodeStyles = frameMeta.everyCloudCalloutNodeStyles;
-  frame.everySingleArrowNodeStyles = frameMeta.everySingleArrowNodeStyles;
-  frame.everyDoubleArrowNodeStyles = frameMeta.everyDoubleArrowNodeStyles;
+  assignFrameStyleBuckets(frame, frameMeta);
   frame.treeLevel = frameMeta.treeLevel;
   frame.treeLevelDistancePt = frameMeta.treeLevelDistancePt;
   frame.treeSiblingDistancePt = frameMeta.treeSiblingDistancePt;
@@ -2224,6 +2191,50 @@ function extractStatementMacroOriginStack(trace: MacroExpansionTraceEvent[]): Ma
   return ordered;
 }
 
+function clipChainChanged(previous: readonly SceneClipPath[], next: readonly SceneClipPath[]): boolean {
+  if (previous.length !== next.length) {
+    return true;
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index] !== next[index]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cloneClipChain(clipChain: readonly SceneClipPath[]): SceneClipPath[] {
+  return clipChain.map((clipPath) => ({
+    ...clipPath,
+    sourceRef: { ...clipPath.sourceRef },
+    commands: clipPath.commands.map((command) => {
+      if (command.kind === "Z") {
+        return { kind: "Z" };
+      }
+      if (command.kind === "M" || command.kind === "L") {
+        return { kind: command.kind, to: { ...command.to } };
+      }
+      if (command.kind === "C") {
+        return {
+          kind: "C",
+          c1: { ...command.c1 },
+          c2: { ...command.c2 },
+          to: { ...command.to }
+        };
+      }
+      return {
+        kind: "A",
+        rx: command.rx,
+        ry: command.ry,
+        xAxisRotation: command.xAxisRotation,
+        largeArc: command.largeArc,
+        sweep: command.sweep,
+        to: { ...command.to }
+      };
+    })
+  }));
+}
+
 function cloneMacroOriginStack(stack: MacroOriginFrame[]): MacroOriginFrame[] {
   return stack.map((origin) => ({
     macroName: origin.macroName,
@@ -2252,73 +2263,8 @@ function parseStandaloneCommandName(raw: string): string | null {
   return stripped;
 }
 
-function parseStandaloneCommandInvocations(raw: string): Array<{ command: string; args: string[] }> {
-  const stripped = stripOptionalTrailingSemicolon(raw.trim());
-  const invocations: Array<{ command: string; args: string[] }> = [];
-  let cursor = 0;
-
-  while (cursor < stripped.length) {
-    while (cursor < stripped.length && /[\s;]/.test(stripped[cursor])) {
-      cursor += 1;
-    }
-    if (cursor >= stripped.length) {
-      break;
-    }
-    const commandMatch = stripped.slice(cursor).match(/^(\\[A-Za-z@]+)/);
-    if (!commandMatch) {
-      break;
-    }
-    const command = commandMatch[1];
-    cursor += command.length;
-    const args: string[] = [];
-
-    while (cursor < stripped.length) {
-      while (cursor < stripped.length && /\s/.test(stripped[cursor])) {
-        cursor += 1;
-      }
-      if (cursor >= stripped.length || stripped[cursor] !== "{") {
-        break;
-      }
-      const parsed = readSingleBracedArgument(stripped, cursor);
-      if (!parsed) {
-        return invocations;
-      }
-      args.push(parsed.value);
-      cursor = parsed.next;
-    }
-
-    invocations.push({ command, args });
-  }
-
-  return invocations;
-}
-
-function readSingleBracedArgument(source: string, from: number): { value: string; next: number } | null {
-  if (source[from] !== "{") {
-    return null;
-  }
-  let depth = 0;
-  for (let index = from; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-    if (char === "{") {
-      depth += 1;
-      continue;
-    }
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return { value: source.slice(from + 1, index), next: index + 1 };
-      }
-      if (depth < 0) {
-        return null;
-      }
-    }
-  }
-  return null;
+function parseLeadingCommandName(raw: string): string | null {
+  return raw.trim().match(/^(\\[A-Za-z@]+)/)?.[1] ?? null;
 }
 
 function normalizePgfkeysOptionList(list: OptionListAst): OptionListAst {
@@ -2429,10 +2375,16 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
     return undefined;
   }
 
-  const minX = Math.min(...points.map((point) => point.x));
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxX = Math.max(...points.map((point) => point.x));
-  const maxY = Math.max(...points.map((point) => point.y));
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
 
   return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
 }
@@ -2790,28 +2742,13 @@ function markForeachFeaturesFromFigure(figure: TikzFigure, featureUsage: Feature
       return;
     }
 
-    if (statement.kind === "UnknownStatement") {
-      const invocations = parseStandaloneCommandInvocations(statement.raw);
-      if (invocations.length === 0) {
-        return;
+    if (statement.kind === "PgfMath") {
+      markFeature(featureUsage, "pgfmath_expression", "supported");
+      if (statement.commandRaw === "\\pgfmathsetseed") {
+        markFeature(featureUsage, "pgfmath_seed_commands", "supported");
       }
-      for (const invocation of invocations) {
-        if (
-          invocation.command === "\\pgfmathsetseed"
-          || invocation.command === "\\pgfmathparse"
-          || invocation.command === "\\pgfmathsetmacro"
-        ) {
-          markFeature(featureUsage, "pgfmath_expression", "supported");
-        }
-        if (invocation.command === "\\pgfmathsetseed") {
-          markFeature(featureUsage, "pgfmath_seed_commands", "supported");
-        }
-        for (const arg of invocation.args) {
-          if (containsPgfMathRandomToken(arg)) {
-            markFeature(featureUsage, "pgfmath_random_functions", "supported");
-            break;
-          }
-        }
+      if (statement.argsRaw.some((arg) => containsPgfMathRandomToken(arg))) {
+        markFeature(featureUsage, "pgfmath_random_functions", "supported");
       }
       return;
     }
@@ -2876,6 +2813,31 @@ type FrameStyleBuckets = {
   everySingleArrowNodeStyles: ProvenanceOptionList[];
   everyDoubleArrowNodeStyles: ProvenanceOptionList[];
 };
+
+const FRAME_STYLE_BUCKET_KEYS = [
+  "everyNodeStyles",
+  "everyTextNodePartStyles",
+  "everyFitStyles",
+  "everyPicStyles",
+  "everyRectangleNodeStyles",
+  "everyCircleNodeStyles",
+  "everyDiamondNodeStyles",
+  "everyTrapeziumNodeStyles",
+  "everyIsoscelesTriangleNodeStyles",
+  "everyKiteNodeStyles",
+  "everyDartNodeStyles",
+  "everyCircularSectorNodeStyles",
+  "everyCylinderNodeStyles",
+  "everyCloudNodeStyles",
+  "everyStarburstNodeStyles",
+  "everySignalNodeStyles",
+  "everyTapeNodeStyles",
+  "everyRectangleCalloutNodeStyles",
+  "everyEllipseCalloutNodeStyles",
+  "everyCloudCalloutNodeStyles",
+  "everySingleArrowNodeStyles",
+  "everyDoubleArrowNodeStyles"
+] as const satisfies readonly (keyof FrameStyleBuckets)[];
 
 const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, keyof FrameStyleBuckets> = {
   "every node/.style": "everyNodeStyles",
@@ -2983,6 +2945,20 @@ const TREE_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof Omit<TreeMetaBuckets
   "level/.append style": "treeLevelStyleTemplateLayers"
 };
 
+function cloneFrameStyleBuckets(base: FrameStyleBuckets): FrameStyleBuckets {
+  const buckets = {} as FrameStyleBuckets;
+  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+    buckets[key] = [...base[key]];
+  }
+  return buckets;
+}
+
+function assignFrameStyleBuckets(target: FrameStyleBuckets, source: FrameStyleBuckets): void {
+  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+    target[key] = source[key];
+  }
+}
+
 export function resolveFrameMeta(
   base: {
     namePrefix: string;
@@ -3068,30 +3044,7 @@ export function resolveFrameMeta(
   let treeDeferredEdgeFromParentPath = base.treeDeferredEdgeFromParentPath;
   let treeDeferredEdgeFromParentMacro = base.treeDeferredEdgeFromParentMacro;
 
-  const styleBuckets: FrameStyleBuckets = {
-    everyNodeStyles: [...base.everyNodeStyles],
-    everyTextNodePartStyles: [...base.everyTextNodePartStyles],
-    everyFitStyles: [...base.everyFitStyles],
-    everyPicStyles: [...base.everyPicStyles],
-    everyRectangleNodeStyles: [...base.everyRectangleNodeStyles],
-    everyCircleNodeStyles: [...base.everyCircleNodeStyles],
-    everyDiamondNodeStyles: [...base.everyDiamondNodeStyles],
-    everyTrapeziumNodeStyles: [...base.everyTrapeziumNodeStyles],
-    everyIsoscelesTriangleNodeStyles: [...base.everyIsoscelesTriangleNodeStyles],
-    everyKiteNodeStyles: [...base.everyKiteNodeStyles],
-    everyDartNodeStyles: [...base.everyDartNodeStyles],
-    everyCircularSectorNodeStyles: [...base.everyCircularSectorNodeStyles],
-    everyCylinderNodeStyles: [...base.everyCylinderNodeStyles],
-    everyCloudNodeStyles: [...base.everyCloudNodeStyles],
-    everyStarburstNodeStyles: [...base.everyStarburstNodeStyles],
-    everySignalNodeStyles: [...base.everySignalNodeStyles],
-    everyTapeNodeStyles: [...base.everyTapeNodeStyles],
-    everyRectangleCalloutNodeStyles: [...base.everyRectangleCalloutNodeStyles],
-    everyEllipseCalloutNodeStyles: [...base.everyEllipseCalloutNodeStyles],
-    everyCloudCalloutNodeStyles: [...base.everyCloudCalloutNodeStyles],
-    everySingleArrowNodeStyles: [...base.everySingleArrowNodeStyles],
-    everyDoubleArrowNodeStyles: [...base.everyDoubleArrowNodeStyles]
-  };
+  const styleBuckets = cloneFrameStyleBuckets(base);
   const treeBuckets: TreeMetaBuckets = {
     treeEveryChildStyles: [...base.treeEveryChildStyles],
     treeEveryChildNodeStyles: [...base.treeEveryChildNodeStyles],
@@ -3593,9 +3546,8 @@ function parseProvenanceSingleOptionLayer(
 }
 
 function resolveOptionValueStartOffset(entry: Extract<OptionListAst["entries"][number], { kind: "kv" }>): number {
-  const relative = entry.raw.indexOf(entry.valueRaw);
-  if (relative >= 0) {
-    return entry.span.from + relative;
+  if (entry.valueSpan) {
+    return entry.valueSpan.from;
   }
   return entry.span.from;
 }

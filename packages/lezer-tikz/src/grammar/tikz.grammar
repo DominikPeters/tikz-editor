@@ -6,7 +6,8 @@
   childContinuation,
   childBare,
   picGrouped,
-  picOptionOnly
+  picOptionOnly,
+  pgfMathSemicolon
 }
 
 TikzEnvironment {
@@ -35,6 +36,7 @@ Statement {
   MacroDefinitionStatement |
   MacroAliasStatement |
   MacroCommandDefinitionStatement |
+  PgfMathStatement |
   UnknownStatement
 }
 
@@ -329,6 +331,12 @@ FontSizeStatement {
   FontSizeCmd
 }
 
+PgfMathStatement {
+  PgfMathSetMacroCmd Group Group (!pgfMathSemicolon ";")? |
+  PgfMathParseCmd Group (!pgfMathSemicolon ";")? |
+  PgfMathSetSeedCmd Group (!pgfMathSemicolon ";")?
+}
+
 TikzSetStatement {
   TikzSetCmd StylePayload
 }
@@ -561,6 +569,7 @@ StylePayload {
 GroupPart {
   Comment |
   ScopeStatement |
+  PgfMathStatement |
   Group |
   Coordinate |
   OptionList |
@@ -631,6 +640,7 @@ StylePayloadPart {
 
 GroupPathOperator {
   "--" |
+  "++" |
   "-|" |
   "|-" |
   ".."
@@ -713,7 +723,8 @@ Coordinate {
 }
 
 IdentifierLike {
-  Identifier
+  Identifier |
+  OfKw
 }
 
 KnownCommand {
@@ -779,6 +790,37 @@ StrayToken {
   StraySymbol
 }
 
+// Word keywords specialize Identifier so they only match as whole words.
+AtKw { @specialize<Identifier, "at"> }
+BendKw { @specialize<Identifier, "bend"> }
+CycleKw { @specialize<Identifier, "cycle"> }
+CircleKw { @specialize<Identifier, "circle"> }
+ToKw { @specialize<Identifier, "to"> }
+ChildKw { @specialize<Identifier, "child"> }
+FromKw { @specialize<Identifier, "from"> }
+ParentKw { @specialize<Identifier, "parent"> }
+SvgKw { @specialize<Identifier, "svg"> }
+LetKw { @specialize<Identifier, "let"> }
+InKw { @specialize<Identifier, "in"> }
+OfKw { @specialize<Identifier, "of"> }
+CoordinateKw { @specialize<Identifier, "coordinate"> }
+CoordinatesKw { @specialize<Identifier, "coordinates"> }
+DecorateKw { @specialize<Identifier, "decorate"> }
+EdgeKw { @specialize<Identifier, "edge"> }
+ControlsKw { @specialize<Identifier, "controls"> }
+AndKw { @specialize<Identifier, "and"> }
+RectangleKw { @specialize<Identifier, "rectangle"> }
+EllipseKw { @specialize<Identifier, "ellipse"> }
+ArcKw { @specialize<Identifier, "arc"> }
+GridKw { @specialize<Identifier, "grid"> }
+PlotKw { @specialize<Identifier, "plot"> }
+ParabolaKw { @specialize<Identifier, "parabola"> }
+SinKw { @specialize<Identifier, "sin"> }
+CosKw { @specialize<Identifier, "cos"> }
+NodeKw { @specialize<Identifier, "node"> }
+PicKw { @specialize<Identifier, "pic"> }
+ForeachKw { @specialize<Identifier, "foreach"> }
+
 @tokens {
   @precedence {
     BeginTikz,
@@ -794,6 +836,9 @@ StrayToken {
     ProvideCommandCmd,
     DeclareRobustCommandCmd,
     DeclareMathOperatorCmd,
+    PgfMathSetMacroCmd,
+    PgfMathParseCmd,
+    PgfMathSetSeedCmd,
     InlineTikzCmd,
     EndTikz,
     FillDrawCmd,
@@ -809,7 +854,6 @@ StrayToken {
     BeginScope,
     EndScope,
     ForeachCmd,
-    ForeachKw,
     MatrixCmd,
     NodeCmd,
     PicCmd,
@@ -828,33 +872,6 @@ StrayToken {
     EscapedBracketOpenCmd,
     EscapedBracketCloseCmd,
     ControlSymbolCmd,
-    AtKw,
-    BendKw,
-    CycleKw,
-    CircleKw,
-    ToKw,
-    ChildKw,
-    FromKw,
-    ParentKw,
-    SvgKw,
-    LetKw,
-    InKw,
-    CoordinatesKw,
-    CoordinateKw,
-    DecorateKw,
-    EdgeKw,
-    ControlsKw,
-    AndKw,
-    RectangleKw,
-    EllipseKw,
-    ArcKw,
-    GridKw,
-    PlotKw,
-    ParabolaKw,
-    SinKw,
-    CosKw,
-    NodeKw,
-    PicKw,
     FontSizeCmd,
     CommandName,
     Dollar,
@@ -886,7 +903,6 @@ StrayToken {
   BeginScope { "\\begin{scope}" }
   EndScope { "\\end{scope}" }
   ForeachCmd { "\\foreach" }
-  ForeachKw { "foreach" }
   NodeCmd { "\\node" }
   PicCmd { "\\pic" }
   CoordinateCmd { "\\coordinate" }
@@ -901,6 +917,9 @@ StrayToken {
   ProvideCommandCmd { "\\providecommand" }
   DeclareRobustCommandCmd { "\\DeclareRobustCommand" }
   DeclareMathOperatorCmd { "\\DeclareMathOperator" }
+  PgfMathSetMacroCmd { "\\pgfmathsetmacro" }
+  PgfMathParseCmd { "\\pgfmathparse" }
+  PgfMathSetSeedCmd { "\\pgfmathsetseed" }
   PgfkeysCmd { "\\pgfkeys" }
   UseTikzLibraryCmd { "\\usetikzlibrary" }
   MatrixRowSepCmd { "\\\\" }
@@ -935,35 +954,6 @@ StrayToken {
     "\\_" |
     "\\#"
   }
-
-  AtKw { "at" }
-  BendKw { "bend" }
-  CycleKw { "cycle" }
-  CircleKw { "circle" }
-  ToKw { "to" }
-  ChildKw { "child" }
-  FromKw { "from" }
-  ParentKw { "parent" }
-  SvgKw { "svg" }
-  LetKw { "let" }
-  InKw { "in" ![-A-Za-z0-9_:@] }
-  CoordinateKw { "coordinate" }
-  DecorateKw { "decorate" }
-  EdgeKw { "edge" }
-  ControlsKw { "controls" }
-  AndKw { "and" }
-  RectangleKw { "rectangle" }
-  EllipseKw { "ellipse" }
-  ArcKw { "arc" }
-  GridKw { "grid" }
-  PlotKw { "plot" }
-  CoordinatesKw { "coordinates" }
-  ParabolaKw { "parabola" }
-  SinKw { "sin" }
-  CosKw { "cos" }
-
-  NodeKw { "node" }
-  PicKw { "pic" }
 
   FontSizeCmd {
     "\\tiny" |

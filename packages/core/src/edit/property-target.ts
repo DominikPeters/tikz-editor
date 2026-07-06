@@ -3,7 +3,7 @@ import type { ParseTikzResult } from "../parser/index.js";
 import { parseStatementsFromBodyWithMapping } from "../foreach/snippet-parse.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { normalizeOptionKey } from "./option-key.js";
-import type { OptionListAst } from "../options/types.js";
+import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import {
   extractNodeAdornmentPlan,
@@ -14,6 +14,7 @@ import { parseCustomStyleDefinition } from "../semantic/style/custom-styles.js";
 import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/nodes/matrix.js";
 import { incrementProfilingCounter } from "../profiling.js";
+import { findPathStatementById } from "./statement-find.js";
 
 export type PropertyTargetKind =
   | "figure"
@@ -946,25 +947,6 @@ function findNodeItemInStatements(
   return null;
 }
 
-function findPathStatementById(
-  statements: Statement[],
-  statementId: string
-): PathStatement | null {
-  for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, statementId);
-      if (nested) {
-        return nested;
-      }
-      continue;
-    }
-    if (statement.kind === "Path" && statement.id === statementId) {
-      return statement;
-    }
-  }
-  return null;
-}
-
 function findForeachStatementById(
   statements: Statement[],
   statementId: string
@@ -999,6 +981,24 @@ function remapPropertyTargetToOriginalSource(
     span,
     insertOffset
   };
+
+  const options = remapOptionList(target.options, mapper);
+  if (target.options && !options) {
+    return null;
+  }
+  remapped.options = options ?? undefined;
+
+  const treeChildOptions = remapOptionList(target.treeChildOptions, mapper);
+  if (target.treeChildOptions && !treeChildOptions) {
+    return null;
+  }
+  remapped.treeChildOptions = treeChildOptions ?? undefined;
+
+  const treeNodeOptions = remapOptionList(target.treeNodeOptions, mapper);
+  if (target.treeNodeOptions && !treeNodeOptions) {
+    return null;
+  }
+  remapped.treeNodeOptions = treeNodeOptions ?? undefined;
 
   const spanKeys: Array<keyof PropertyTarget> = [
     "optionsSpan",
@@ -1043,6 +1043,79 @@ function remapPropertyTargetToOriginalSource(
   }
 
   return remapped;
+}
+
+function remapOptionList(
+  options: OptionListAst | undefined,
+  mapper: { mapSpan: (span: Span) => Span | null }
+): OptionListAst | null {
+  if (!options) {
+    return null;
+  }
+  const span = mapper.mapSpan(options.span);
+  if (!span) {
+    return null;
+  }
+  const entries: OptionEntry[] = [];
+  for (const entry of options.entries) {
+    const remapped = remapOptionEntry(entry, mapper);
+    if (!remapped) {
+      return null;
+    }
+    entries.push(remapped);
+  }
+  return {
+    ...options,
+    span,
+    entries
+  };
+}
+
+function remapOptionEntry(
+  entry: OptionEntry,
+  mapper: { mapSpan: (span: Span) => Span | null }
+): OptionEntry | null {
+  const span = mapper.mapSpan(entry.span);
+  if (!span) {
+    return null;
+  }
+  if (entry.kind === "unknown") {
+    return {
+      ...entry,
+      span
+    };
+  }
+
+  let keySpan: Span | undefined;
+  if (entry.keySpan) {
+    const mappedKeySpan = mapper.mapSpan(entry.keySpan);
+    if (!mappedKeySpan) {
+      return null;
+    }
+    keySpan = mappedKeySpan;
+  }
+  if (entry.kind === "flag") {
+    return {
+      ...entry,
+      span,
+      keySpan
+    };
+  }
+
+  let valueSpan: Span | null | undefined = entry.valueSpan;
+  if (entry.valueSpan) {
+    const mappedValueSpan = mapper.mapSpan(entry.valueSpan);
+    if (!mappedValueSpan) {
+      return null;
+    }
+    valueSpan = mappedValueSpan;
+  }
+  return {
+    ...entry,
+    span,
+    keySpan,
+    valueSpan
+  };
 }
 
 function resolveMatrixBodyOpenOffset(source: string, textSpan: Span): number | undefined {
@@ -1223,6 +1296,13 @@ function absolutizeChildOperationSpans(
     if (raw.length > 0 && source.slice(span.from, span.to) === raw) {
       return span;
     }
+    const relativeSpan = {
+      from: containerSpan.from + span.from,
+      to: containerSpan.from + span.to
+    };
+    if (raw.length > 0 && source.slice(relativeSpan.from, relativeSpan.to) === raw) {
+      return relativeSpan;
+    }
     if (raw.length > 0) {
       const containerSlice = source.slice(containerSpan.from, containerSpan.to);
       const rawOffset = containerSlice.indexOf(raw);
@@ -1233,10 +1313,7 @@ function absolutizeChildOperationSpans(
         };
       }
     }
-    return {
-      from: containerSpan.from + span.from,
-      to: containerSpan.from + span.to
-    };
+    return relativeSpan;
   };
   return {
     ...child,

@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TikZ Editor",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "identifier": "com.tikz.editor",
   "build": {
     "frontendDist": "../dist",

@@ -84,6 +84,11 @@ import {
 import { emitCircleOrEllipse, transformCircleGeometry, transformEllipseGeometry } from "./evaluate-shapes.js";
 import { handleChildOperationCluster } from "./evaluate-tree.js";
 
+const DRAW_EDGE_OPTIONS = parseStyleValueAsOptionList("draw");
+const EVERY_EDGE_OPTIONS = parseStyleValueAsOptionList("every edge");
+const EDGE_FROM_PARENT_STYLE_OPTIONS = parseStyleValueAsOptionList("edge from parent");
+const HELP_LINES_OPTIONS = parseStyleValueAsOptionList("help lines");
+
 function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
 }
@@ -379,9 +384,9 @@ export function evaluatePathStatement(
     return candidateStyle.shadeEnabled || (candidateStyle.fill != null && candidateStyle.fill !== "none") || hasFilledShadowLayer;
   };
   let shouldCompoundFilledSubpaths = computeShouldCompoundFilledSubpaths(style);
-  const drawEdgeOptions = parseStyleValueAsOptionList("draw");
-  const everyEdgeOptions = parseStyleValueAsOptionList("every edge");
-  const edgeFromParentStyleOptions = parseStyleValueAsOptionList("edge from parent");
+  const drawEdgeOptions = DRAW_EDGE_OPTIONS;
+  const everyEdgeOptions = EVERY_EDGE_OPTIONS;
+  const edgeFromParentStyleOptions = EDGE_FROM_PARENT_STYLE_OPTIONS;
   let currentItemIndex = -1;
   const itemHandlers = new Map<PathItem["kind"], (item: PathItem) => void>([
     [
@@ -1020,7 +1025,7 @@ export function evaluatePathStatement(
               };
 
               const pinEdgeOptionLayers: StyleTraceLayerInput[] = [];
-              const helpLinesOptions = parseStyleValueAsOptionList("help lines");
+              const helpLinesOptions = HELP_LINES_OPTIONS;
               if (helpLinesOptions) {
                 pinEdgeOptionLayers.push({
                   kind: "command",

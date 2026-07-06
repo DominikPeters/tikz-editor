@@ -58,6 +58,8 @@ try {
   const scenarios = [
     ["boot and tab lifecycle", scenarioBootAndTabLifecycle],
     ["native menu dispatch", scenarioNativeMenuDispatch],
+    ["quit menu availability", scenarioQuitMenuAvailability],
+    ["native quit command close guard", scenarioNativeQuitCommandCloseGuard],
     ["isolation and restore", scenarioIsolationAndRestore],
     ["example open", scenarioExampleOpen],
     ["open, save, save as", scenarioOpenSaveSaveAs],
@@ -324,6 +326,65 @@ async function scenarioNativeMenuDispatch(browserInstance) {
   await expectCount(browserInstance, "[data-testid^='tab-switch-']", 1);
 }
 
+async function scenarioQuitMenuAvailability(browserInstance) {
+  const { platform, fileItems } = await browserInstance.execute(() => {
+    const definition = window.__TIKZ_EDITOR_APP_TEST_API__.getMenuDefinition();
+    const fileSection = definition.find((section) => section.id === "file");
+    return {
+      platform: navigator.platform,
+      fileItems: fileSection?.items.map((item) => ({
+        kind: item.kind,
+        label: "label" in item ? item.label : null,
+        commandId: "commandId" in item ? item.commandId : null
+      })) ?? []
+    };
+  });
+  const quitItem = fileItems.find((item) => item.commandId === "file.quit-app");
+  if (/(mac|iphone|ipad)/i.test(platform)) {
+    assert.equal(quitItem, undefined, "macOS should keep Quit in the native application menu, not File");
+    return;
+  }
+  assert.deepEqual(
+    quitItem,
+    {
+      kind: "command",
+      label: "Quit",
+      commandId: "file.quit-app"
+    },
+    "Windows/Linux desktop File menu should expose Quit"
+  );
+}
+
+async function scenarioNativeQuitCommandCloseGuard(browserInstance) {
+  if (await isMacDesktop(browserInstance)) {
+    return;
+  }
+  await setDesktopClosedFlag(browserInstance, false);
+  await clearUnsavedDecisions(browserInstance);
+  await setSource(browserInstance, "\\draw (15,15)--(16,16); % dirty-quit-cancel");
+  let promptCount = await getUnsavedPromptCount(browserInstance);
+
+  await queueUnsavedDecision(browserInstance, "cancel");
+  await dispatchNativeMenuCommand(browserInstance, "file.quit-app");
+  await expectUnsavedPromptCount(browserInstance, promptCount + 1);
+  let closed = await browserInstance.execute(() => window.__DESKTOP_E2E_CLOSED__);
+  assert.equal(closed, false, "canceling Quit should leave the desktop window open");
+
+  promptCount += 1;
+  await setSource(browserInstance, "\\draw (17,17)--(18,18); % dirty-quit-discard");
+  await queueUnsavedDecision(browserInstance, "discard");
+  await dispatchNativeMenuCommand(browserInstance, "file.quit-app");
+  await expectUnsavedPromptCount(browserInstance, promptCount + 1);
+  closed = await browserInstance.execute(() => window.__DESKTOP_E2E_CLOSED__);
+  assert.equal(closed, true, "discarding changes from Quit should request desktop window close");
+  await clearUnsavedDecisions(browserInstance);
+}
+
+async function isMacDesktop(browserInstance) {
+  const platform = await browserInstance.execute(() => navigator.platform);
+  return /(mac|iphone|ipad)/i.test(platform);
+}
+
 async function scenarioIsolationAndRestore(browserInstance) {
   await setSource(browserInstance, "\\draw (0,0)--(1,0); % doc1");
   await dispatchCommand(browserInstance, "file.new-document");
@@ -511,6 +572,7 @@ async function scenarioUnsavedGuard(browserInstance) {
   await setSource(browserInstance, "\\draw (7,7)--(8,8); % dirty-window-close");
   promptCount += 1;
   await queueUnsavedDecision(browserInstance, "discard");
+  await setDesktopClosedFlag(browserInstance, false);
   await browserInstance.execute(() => {
     window.__TIKZ_EDITOR_DESKTOP_TEST_API__.triggerWindowCloseRequest();
   });
@@ -534,6 +596,24 @@ async function dispatchCommand(browserInstance, commandId) {
   }, {
     timeout: 10_000,
     timeoutMsg: `Command did not become enabled for ${commandId}; lastState=${JSON.stringify(lastState)}`
+  });
+}
+
+async function dispatchNativeMenuCommand(browserInstance, commandId) {
+  let lastState = null;
+  await browserInstance.waitUntil(async () => {
+    lastState = await browserInstance.execute((id) => {
+      return window.__TIKZ_EDITOR_APP_TEST_API__.getCommandState(id);
+    }, commandId);
+    if (!lastState.enabled) {
+      return false;
+    }
+    return await browserInstance.execute((id) => {
+      return window.__TIKZ_EDITOR_DESKTOP_TEST_API__.dispatchCommand(id);
+    }, commandId);
+  }, {
+    timeout: 10_000,
+    timeoutMsg: `Native menu command did not become enabled for ${commandId}; lastState=${JSON.stringify(lastState)}`
   });
 }
 
@@ -603,6 +683,12 @@ async function clearUnsavedDecisions(browserInstance) {
   await browserInstance.execute(() => {
     window.__DESKTOP_E2E_UNSAVED_DECISIONS__.length = 0;
   });
+}
+
+async function setDesktopClosedFlag(browserInstance, closed) {
+  await browserInstance.execute((nextClosed) => {
+    window.__DESKTOP_E2E_CLOSED__ = nextClosed;
+  }, closed);
 }
 
 async function closeAllDocumentsDiscardingChanges(browserInstance) {

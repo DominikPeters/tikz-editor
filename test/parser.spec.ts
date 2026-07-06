@@ -678,6 +678,32 @@ describe("parseTikz", () => {
     }
   });
 
+  it("does not tokenize path keyword prefixes inside identifiers", () => {
+    const source = String.raw`\colorlet{sincolor}{red}
+\colorlet{circlefoo}{blue}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(collectCstText(source, result, "SinKw")).toHaveLength(0);
+    expect(collectCstText(source, result, "CircleKw")).toHaveLength(0);
+    expect(collectCstText(source, result, "Identifier")).toEqual(
+      expect.arrayContaining(["sincolor", "circlefoo"])
+    );
+  });
+
+  it("tokenizes positioning of as a whole-word option keyword", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node[draw,below right={0.47cm and 0.45cm} of target,office=1,offset=2] {node};
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(collectCstText(source, result, "OfKw")).toEqual(["of"]);
+    expect(collectCstText(source, result, "Identifier")).toEqual(
+      expect.arrayContaining(["office", "offset"])
+    );
+  });
+
   it("ignores empty node names when checking malformed coordinates", () => {
     const source = String.raw`\begin{tikzpicture}
   \node () at (0,0) {Hi};
@@ -1303,6 +1329,33 @@ describe("parseTikz", () => {
     expect(coordinates.length).toBeGreaterThanOrEqual(3);
     expect(coordinates.some((item) => item.kind === "Coordinate" && item.relativePrefix === "++")).toBe(true);
     expect(coordinates.some((item) => item.kind === "Coordinate" && item.relativePrefix === "+")).toBe(true);
+  });
+
+  it("parses semicolonless pgfmath statements without swallowing following paths", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pgfmathsetmacro{\xx}{1}
+  \pgfmathparse{2+3}
+  \pgfmathsetseed{7}
+  \draw (\xx,\pgfmathresult) rectangle +(1,1);
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
+    expect(result.figure.body.map((statement) => statement.kind)).toEqual([
+      "PgfMath",
+      "PgfMath",
+      "PgfMath",
+      "Path"
+    ]);
+  });
+
+  it("accepts incremental rectangle coordinates inside grouped foreach bodies", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \foreach \i in {0}{\draw (0,0) rectangle ++(1,1);}
+\end{tikzpicture}`;
+    const result = parseTikz(source);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "parse-error")).toBe(false);
   });
 
   it("merges consecutive leading path option lists into statement options", () => {

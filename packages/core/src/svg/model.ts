@@ -3,6 +3,7 @@ import type {
   SvgRenderPart,
   SvgViewBox
 } from "./types.js";
+import { formatSvgNumber as fmt } from "./format.js";
 
 type XmlFormatter = (xml: string, options?: XmlFormatterOptions) => string;
 
@@ -166,8 +167,4 @@ function sanitizePartIdBase(base: string): string {
     return "part";
   }
   return trimmed.replace(/\s+/g, "_");
-}
-
-function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
 }

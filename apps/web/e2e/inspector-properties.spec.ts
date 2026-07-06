@@ -26,6 +26,17 @@ async function waitForNextFrame(locator: Locator): Promise<void> {
   }));
 }
 
+async function selectSourceIds(page: Page, sourceIds: string[]): Promise<void> {
+  await page.evaluate((ids) => {
+    const api = (globalThis as unknown as {
+      __TIKZ_EDITOR_APP_TEST_API__?: {
+        selectSourceIds?: (sourceIds: string[]) => void;
+      };
+    }).__TIKZ_EDITOR_APP_TEST_API__;
+    api?.selectSourceIds?.(ids);
+  }, sourceIds);
+}
+
 test("node stroke color inspector writes draw option", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
@@ -67,6 +78,35 @@ test("default scalar input selects all on focus and keeps focus after first edit
   await expect.poll(async () => input.evaluate((element) => getComputedStyle(element).fontStyle)).toBe("normal");
   await expect.poll(async () => input.evaluate((element) => document.activeElement === element)).toBe(true);
   await expect.poll(async () => readSource(page)).toContain("inner sep=12pt");
+});
+
+test("grid step manual input keeps focus while typing a fractional value starting with zero", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+  \draw (0,0) grid (2,2);
+\end{tikzpicture}`);
+  await waitForHitRegions(page, 1);
+
+  await selectSourceIds(page, ["path:0"]);
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["path:0"]);
+
+  const input = await numberInputAfterLabel(page, "Step");
+  await expect(input).toHaveValue("1");
+  await input.click();
+  await waitForNextFrame(input);
+  await input.selectText();
+
+  await input.pressSequentially("0");
+
+  await expect(input).toBeVisible();
+  await expect(input).toHaveValue("0");
+  await expect.poll(async () => input.evaluate((element) => document.activeElement === element)).toBe(true);
+
+  await input.pressSequentially(".1");
+
+  await expect(input).toHaveValue("0.1");
+  await expect.poll(async () => input.evaluate((element) => document.activeElement === element)).toBe(true);
+  await expect.poll(async () => readSource(page)).toContain("grid[step=0.1cm]");
 });
 
 test("preview dropdown mouseout keeps dropdown open", async ({ page }) => {

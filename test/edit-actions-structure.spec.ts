@@ -29,6 +29,37 @@ describe("applyEditAction – addElement", () => {
     }
   });
 
+  it("inserts into the active figure in a multi-figure document", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}
+\begin{tikzpicture}
+  \draw (2,0) -- (3,0);
+\end{tikzpicture}`;
+
+    const result = applyEditAction(
+      source,
+      [],
+      {
+        kind: "addElement",
+        template: { kind: "node", text: "A" },
+        at: wp(cm(4), cm(5))
+      },
+      { parseOptions: { activeFigureId: "figure:0" } }
+    );
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected addElement to succeed");
+    }
+    const insertedIndex = result.newSource.indexOf(String.raw`\node at (4,5) {A};`);
+    const firstEndIndex = result.newSource.indexOf(String.raw`\end{tikzpicture}`);
+    const secondBeginIndex = result.newSource.lastIndexOf(String.raw`\begin{tikzpicture}`);
+    expect(insertedIndex).toBeGreaterThan(0);
+    expect(insertedIndex).toBeLessThan(firstEndIndex);
+    expect(insertedIndex).toBeLessThan(secondBeginIndex);
+  });
+
   it("inserts a bezier snippet with explicit controls", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);

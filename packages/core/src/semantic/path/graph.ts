@@ -23,6 +23,8 @@ const DEFAULT_GRAPH_STEP_PT = parseLength("1cm", "cm")!;
 const DEFAULT_GRAPH_SEP_PT = parseLength("1em", "cm")!;
 const DEFAULT_GRAPH_RADIUS_PT = parseLength("1cm", "cm")!;
 const BUILTIN_COLOR_CLASSES = ["all", "source", "target", "source'", "target'"] as const;
+const GRAPH_NODE_BUDGET = 10_000;
+const GRAPH_EDGE_BUDGET = 10_000;
 
 type ConnectorOperator = (typeof CONNECTOR_OPERATORS)[number];
 type GraphMode = "multi" | "simple";
@@ -190,6 +192,22 @@ type GraphChainSegmentInput = {
   raw: string;
   from: number;
   chain?: GraphSpecChain;
+};
+
+type GraphChainStep =
+  | { kind: "done" }
+  | { kind: "missing-right-node" }
+  | {
+      kind: "step";
+      operator: ConnectorOperator;
+      edgeOptions?: OptionListAst;
+      span: Span;
+      term: GraphTermResult;
+    };
+
+type GraphChainReader = {
+  readFirst: (scope: GraphScopeState, layout: GraphLayoutContext) => GraphTermResult | null;
+  readNext: (scope: GraphScopeState, layout: GraphLayoutContext) => GraphChainStep;
 };
 
 type ParsedDirectNodeSpec = {
@@ -511,131 +529,96 @@ class GraphPlanner {
       return this.parseChainFromParsedSpec(parsedChain, scope, layout);
     }
 
-    let chainWidth = 0;
-    let chainDepth = 0;
-    let levelOffset = 0;
-
     let cursor = 0;
-    let chainScope = scope;
-    const first = this.parseNodeSpec(raw, from, cursor, chainScope, {
-      logicalWidth: layout.logicalWidth,
-      logicalDepth: layout.logicalDepth,
-      level: layout.level
-    });
-    if (!first) {
-      return {
-        entries: [],
-        exits: [],
-        edges: [],
-        colors: createEmptyColorMap(),
-        logicalWidth: 0,
-        logicalDepth: 0
-      };
-    }
-    cursor = first.next;
-    chainWidth += first.term.logicalWidth;
-    chainDepth = Math.max(chainDepth, first.term.logicalDepth);
-    levelOffset += 1;
-    chainScope = this.applyTrieChainPrefix(chainScope, first.term);
-
-    const chainSources = [...first.term.entries];
-    let chainTargets = [...first.term.exits];
-    let chainColors = cloneColorMap(first.term.colors);
-    const edges: GraphPlannedEdgeInternal[] = [...first.term.edges];
-
-    while (true) {
-      const afterSpace = skipWhitespace(raw, cursor);
-      const connector = readConnector(raw, afterSpace, CONNECTOR_OPERATORS);
-      if (!connector) {
-        break;
-      }
-      cursor = connector.next;
-
-      const edgeOptionRead = this.readOptionList(raw, from, cursor);
-      const edgeLocalOptions = edgeOptionRead?.options;
-      if (edgeOptionRead) {
-        cursor = edgeOptionRead.next;
-      }
-      const edgePlan = this.extractEdgeOptionPlan(edgeLocalOptions, chainScope);
-
-      const nextNode = this.parseNodeSpec(raw, from, cursor, chainScope, {
-        logicalWidth: layout.logicalWidth + chainWidth,
-        logicalDepth: layout.logicalDepth,
-        level: layout.level + levelOffset
-      });
-      if (!nextNode) {
-        this.diagnostics.push("graph-connector-without-right-node");
-        break;
-      }
-      cursor = nextNode.next;
-      edges.push(...nextNode.term.edges);
-      chainWidth += nextNode.term.logicalWidth;
-      chainDepth = Math.max(chainDepth, nextNode.term.logicalDepth);
-      levelOffset += 1;
-
-      const nextSources = colorNodes(nextNode.term.colors, "source");
-      const nextTargets = colorNodes(nextNode.term.colors, "target");
-
-      const includeConnectorEdge = connector.operator !== "-!-" || chainScope.mode === "simple";
-      if (includeConnectorEdge) {
-        const operatorColors = mergeColorMaps(chainColors, nextNode.term.colors);
-        setColorNodes(operatorColors, "target'", chainTargets);
-        setColorNodes(operatorColors, "source'", nextSources);
-
-        const operators = edgePlan.operators.length > 0 ? edgePlan.operators : [chainScope.defaultJoinOperator];
-        for (const operator of operators) {
-          edges.push(
-            ...this.buildEdgesForOperators(
-              [operator],
-              operatorColors,
-              connector.operator,
-              {
-                from: from + connector.index,
-                to: from + nextNode.next
-              },
-              chainScope,
-              edgePlan.styleOptions
-            )
-          );
+    return this.parseChainWithReader(scope, layout, {
+      readFirst: (chainScope, nodeLayout) => {
+        const first = this.parseNodeSpec(raw, from, cursor, chainScope, nodeLayout);
+        if (!first) {
+          return null;
         }
+        cursor = first.next;
+        return first.term;
+      },
+      readNext: (chainScope, nodeLayout) => {
+        const afterSpace = skipWhitespace(raw, cursor);
+        const connector = readConnector(raw, afterSpace, CONNECTOR_OPERATORS);
+        if (!connector) {
+          return { kind: "done" };
+        }
+        cursor = connector.next;
+
+        const edgeOptionRead = this.readOptionList(raw, from, cursor);
+        if (edgeOptionRead) {
+          cursor = edgeOptionRead.next;
+        }
+
+        const nextNode = this.parseNodeSpec(raw, from, cursor, chainScope, nodeLayout);
+        if (!nextNode) {
+          return { kind: "missing-right-node" };
+        }
+        cursor = nextNode.next;
+        return {
+          kind: "step",
+          operator: connector.operator,
+          edgeOptions: edgeOptionRead?.options,
+          span: {
+            from: from + connector.index,
+            to: from + nextNode.next
+          },
+          term: nextNode.term
+        };
       }
-
-      chainColors = mergeColorMaps(chainColors, nextNode.term.colors);
-      setColorNodes(chainColors, "source", chainSources);
-      setColorNodes(chainColors, "target", nextTargets);
-      chainTargets = [...nextTargets];
-      chainScope = this.applyTrieChainPrefix(chainScope, nextNode.term);
-    }
-
-    return {
-      entries: chainSources,
-      exits: chainTargets,
-      edges,
-      colors: chainColors,
-      logicalWidth: chainWidth,
-      logicalDepth: chainDepth
-    };
+    });
   }
 
   private parseChainFromParsedSpec(chain: GraphSpecChain, scope: GraphScopeState, layout: GraphLayoutContext): GraphTermResult {
+    let index = 0;
+    return this.parseChainWithReader(scope, layout, {
+      readFirst: (chainScope, nodeLayout) => {
+        const firstNodeSpec = chain.nodes[0];
+        if (!firstNodeSpec) {
+          return null;
+        }
+        return this.parseNodeTerm(firstNodeSpec.raw, firstNodeSpec.span.from, chainScope, nodeLayout);
+      },
+      readNext: (chainScope, nodeLayout) => {
+        const pairCount = Math.min(chain.connectors.length, chain.nodes.length - 1);
+        if (index >= pairCount) {
+          return { kind: "done" };
+        }
+
+        const connector = chain.connectors[index];
+        const nextNodeSpec = chain.nodes[index + 1];
+        index += 1;
+        const edgeOptions =
+          connector.optionsRaw && connector.optionsSpan
+            ? parseOptionListRaw(connector.optionsRaw, connector.optionsSpan.from)
+            : undefined;
+        const term = this.parseNodeTerm(nextNodeSpec.raw, nextNodeSpec.span.from, chainScope, nodeLayout);
+        if (!term) {
+          return { kind: "missing-right-node" };
+        }
+        return {
+          kind: "step",
+          operator: connector.operator,
+          edgeOptions,
+          span: {
+            from: connector.span.from,
+            to: nextNodeSpec.span.to
+          },
+          term
+        };
+      }
+    });
+  }
+
+  private parseChainWithReader(scope: GraphScopeState, layout: GraphLayoutContext, reader: GraphChainReader): GraphTermResult {
     let chainWidth = 0;
     let chainDepth = 0;
     let levelOffset = 0;
 
-    const firstNodeSpec = chain.nodes[0];
-    if (!firstNodeSpec) {
-      return {
-        entries: [],
-        exits: [],
-        edges: [],
-        colors: createEmptyColorMap(),
-        logicalWidth: 0,
-        logicalDepth: 0
-      };
-    }
-
     let chainScope = scope;
-    const firstTerm = this.parseNodeTerm(firstNodeSpec.raw, firstNodeSpec.span.from, chainScope, {
+    const firstTerm = reader.readFirst(chainScope, {
       logicalWidth: layout.logicalWidth,
       logicalDepth: layout.logicalDepth,
       level: layout.level
@@ -661,26 +644,22 @@ class GraphPlanner {
     let chainColors = cloneColorMap(firstTerm.colors);
     const edges: GraphPlannedEdgeInternal[] = [...firstTerm.edges];
 
-    const pairCount = Math.min(chain.connectors.length, chain.nodes.length - 1);
-    for (let index = 0; index < pairCount; index += 1) {
-      const connector = chain.connectors[index];
-      const nextNodeSpec = chain.nodes[index + 1];
-      const edgeLocalOptions =
-        connector.optionsRaw && connector.optionsSpan
-          ? parseOptionListRaw(connector.optionsRaw, connector.optionsSpan.from)
-          : undefined;
-      const edgePlan = this.extractEdgeOptionPlan(edgeLocalOptions, chainScope);
-
-      const nextTerm = this.parseNodeTerm(nextNodeSpec.raw, nextNodeSpec.span.from, chainScope, {
+    while (true) {
+      const step = reader.readNext(chainScope, {
         logicalWidth: layout.logicalWidth + chainWidth,
         logicalDepth: layout.logicalDepth,
         level: layout.level + levelOffset
       });
-      if (!nextTerm) {
+      if (step.kind === "done") {
+        break;
+      }
+      if (step.kind === "missing-right-node") {
         this.diagnostics.push("graph-connector-without-right-node");
         break;
       }
 
+      const edgePlan = this.extractEdgeOptionPlan(step.edgeOptions, chainScope);
+      const nextTerm = step.term;
       edges.push(...nextTerm.edges);
       chainWidth += nextTerm.logicalWidth;
       chainDepth = Math.max(chainDepth, nextTerm.logicalDepth);
@@ -689,7 +668,7 @@ class GraphPlanner {
       const nextSources = colorNodes(nextTerm.colors, "source");
       const nextTargets = colorNodes(nextTerm.colors, "target");
 
-      const includeConnectorEdge = connector.operator !== "-!-" || chainScope.mode === "simple";
+      const includeConnectorEdge = step.operator !== "-!-" || chainScope.mode === "simple";
       if (includeConnectorEdge) {
         const operatorColors = mergeColorMaps(chainColors, nextTerm.colors);
         setColorNodes(operatorColors, "target'", chainTargets);
@@ -701,11 +680,8 @@ class GraphPlanner {
             ...this.buildEdgesForOperators(
               [operator],
               operatorColors,
-              connector.operator,
-              {
-                from: connector.span.from,
-                to: nextNodeSpec.span.to
-              },
+              step.operator,
+              step.span,
               chainScope,
               edgePlan.styleOptions
             )
@@ -932,7 +908,7 @@ class GraphPlanner {
     let localScope = this.cloneScope(scope);
     localScope = this.applyGroupOptionControls(localScope, spec.options);
     const groupPlan = this.extractGroupOptionPlan(spec.options, localScope);
-    const structure = parseSubgraphStructure(spec.options);
+    const structure = parseSubgraphStructure(spec.options, this.diagnostics);
 
     const verticesV = structure.verticesV;
     const verticesW = structure.verticesW;
@@ -985,11 +961,11 @@ class GraphPlanner {
       case "I_nm":
         break;
       case "K_n": {
-        edges.push(...this.buildEdgesForPairs(buildCliquePairs(vNames), kind, spec.span, localScope));
+        edges.push(...this.buildEdgesForPairs(buildCliquePairs(vNames, GRAPH_EDGE_BUDGET), kind, spec.span, localScope));
         break;
       }
       case "K_nm": {
-        edges.push(...this.buildEdgesForPairs(buildCompleteBipartitePairs(vNames, wNames), kind, spec.span, localScope));
+        edges.push(...this.buildEdgesForPairs(buildCompleteBipartitePairs(vNames, wNames, GRAPH_EDGE_BUDGET), kind, spec.span, localScope));
         break;
       }
       case "P_n": {
@@ -1001,7 +977,7 @@ class GraphPlanner {
         break;
       }
       case "Grid_n": {
-        edges.push(...this.buildEdgesForPairs(buildGridPairs(vNames, structure.wrapAfter), kind, spec.span, localScope));
+        edges.push(...this.buildEdgesForPairs(buildGridPairs(vNames, structure.wrapAfter, GRAPH_EDGE_BUDGET), kind, spec.span, localScope));
         break;
       }
       default:
@@ -1097,7 +1073,14 @@ class GraphPlanner {
     edgeStyleOptions?: OptionListAst
   ): GraphPlannedEdgeInternal[] {
     const edges: GraphPlannedEdgeInternal[] = [];
+    if (pairs.length >= GRAPH_EDGE_BUDGET) {
+      pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+    }
     for (const pair of pairs) {
+      if (edges.length >= GRAPH_EDGE_BUDGET) {
+        pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+        break;
+      }
       edges.push(this.createEdgeFromPair(pair.from, pair.to, edgeKind, span, scope, edgeStyleOptions));
     }
     return edges;
@@ -1233,96 +1216,12 @@ class GraphPlanner {
         continue;
       }
 
-      let consumed = false;
+      let consumed: boolean;
 
       if (entry.kind === "kv") {
         const key = normalizeGraphOptionKey(entry.key);
 
-        if (key === "nodes") {
-          const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
-          if (parsed) {
-            scope.nodeOptionLists.push(parsed);
-          }
-          consumed = true;
-        } else if (key === "edge" || key === "edges") {
-          const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
-          if (parsed) {
-            scope.edgeOptionLists.push(parsed);
-          }
-          consumed = true;
-        } else if (key === "name") {
-          const rawName = normalizeGraphText(entry.valueRaw);
-          scope = appendScopedNamePrefix(scope, rawName);
-          consumed = true;
-        } else if (key === "name separator") {
-          scope.nameSeparator = normalizeGraphText(entry.valueRaw);
-          consumed = true;
-        } else if (key === "as") {
-          scope.asTextOverride = normalizeGraphText(entry.valueRaw);
-          consumed = true;
-        } else if (key === "empty nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.emptyNodes = enabled;
-          }
-          consumed = true;
-        } else if (key === "math nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.mathNodes = enabled;
-          }
-          consumed = true;
-        } else if (key === "trie") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.trieEnabled = enabled;
-          }
-          consumed = true;
-        } else if (key === "left anchor" || key === "source anchor") {
-          scope.sourceAnchor = parseGraphAnchor(entry.valueRaw);
-          consumed = true;
-        } else if (key === "right anchor" || key === "target anchor") {
-          scope.targetAnchor = parseGraphAnchor(entry.valueRaw);
-          consumed = true;
-        } else if (key === "edge label" || key === "edge label'" || key === "edge node") {
-          const parsed = parseOptionListRaw(`[${entry.raw}]`, entry.span.from);
-          scope.edgeOptionLists.push(parsed);
-          consumed = true;
-        } else if (key === "use existing nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.nodeResolution = enabled ? "existing" : scope.nodeResolution === "existing" ? "auto" : scope.nodeResolution;
-          }
-          consumed = true;
-        } else if (key === "fresh nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.nodeResolution = enabled ? "fresh" : scope.nodeResolution === "fresh" ? "auto" : scope.nodeResolution;
-          }
-          consumed = true;
-        } else if (key === "number nodes") {
-          scope = applyNumberNodes(scope, entry.valueRaw);
-          consumed = true;
-        } else if (key === "number nodes sep") {
-          scope = applyNumberNodesSeparator(scope, normalizeGraphText(entry.valueRaw));
-          consumed = true;
-        } else if (key === "simple") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled === true) {
-            scope.mode = "simple";
-          } else if (enabled === false && scope.mode === "simple") {
-            scope.mode = "multi";
-          }
-          consumed = true;
-        } else if (key === "multi") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled === true) {
-            scope.mode = "multi";
-          } else if (enabled === false && scope.mode === "multi") {
-            scope.mode = "simple";
-          }
-          consumed = true;
-        } else if (key === "target edge style") {
+        if (key === "target edge style") {
           const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
           if (parsed) {
             accumulatorOps.push({ kind: "add-target-style", options: parsed });
@@ -1366,36 +1265,10 @@ class GraphPlanner {
           accumulatorOps.push(makeAddSourceNodeOp(baseNodeText, entry.valueRaw, entry.span, true));
           scope.asTextOverride = "";
           consumed = true;
-        } else if (key === "color class") {
-          const className = normalizeColorClassName(entry.valueRaw);
-          if (className.length > 0) {
-            scope.declaredColorClasses.add(className);
-          }
-          consumed = true;
-        } else if (isDefaultEdgeKindKey(key)) {
-          const parsedKind = parseDefaultEdgeKind(entry.valueRaw);
-          if (parsedKind) {
-            scope.defaultOperatorEdgeKind = parsedKind;
-          }
-          consumed = true;
-        } else if (key === "default edge operator") {
-          const operator = parseOperatorFromRaw(entry.valueRaw, scope, "edge");
-          if (operator) {
-            scope.defaultJoinOperator = operator;
-          }
-          consumed = true;
-        }
-
-        if (!consumed) {
-          const levelStyle = parseLevelStyleDefinition(entry);
-          if (levelStyle) {
-            addLevelStyleOption(scope.levelStyleOptionLists, levelStyle.level, levelStyle.options);
-            consumed = true;
-          }
-        }
-
-        if (!consumed) {
-          consumed = applyPlacementControlFromKv(scope, key, entry.valueRaw, true);
+        } else {
+          const control = applyGraphScopeControlEntry(scope, entry, { updatePlacementBase: true });
+          scope = control.scope;
+          consumed = control.consumed;
         }
 
         if (!consumed) {
@@ -1416,13 +1289,7 @@ class GraphPlanner {
       } else if (entry.kind === "flag") {
         const key = normalizeGraphOptionKey(entry.key);
 
-        if (key === "simple") {
-          scope.mode = "simple";
-          consumed = true;
-        } else if (key === "multi") {
-          scope.mode = "multi";
-          consumed = true;
-        } else if (key === "target edge clear" || key === "clear >") {
+        if (key === "target edge clear" || key === "clear >") {
           accumulatorOps.push({ kind: "clear-target" });
           consumed = true;
         } else if (key === "source edge clear" || key === "clear <") {
@@ -1436,31 +1303,10 @@ class GraphPlanner {
           accumulatorOps.push(makeAddSourceNodeOp(baseNodeText, "", entry.span, true));
           scope.asTextOverride = "";
           consumed = true;
-        } else if (key === "fresh nodes") {
-          scope.nodeResolution = "fresh";
-          consumed = true;
-        } else if (key === "use existing nodes") {
-          scope.nodeResolution = "existing";
-          consumed = true;
-        } else if (key === "empty nodes") {
-          scope.emptyNodes = true;
-          consumed = true;
-        } else if (key === "math nodes") {
-          scope.mathNodes = true;
-          consumed = true;
-        } else if (key === "trie") {
-          scope.trieEnabled = true;
-          consumed = true;
-        } else if (key === "number nodes") {
-          scope = applyNumberNodes(scope);
-          consumed = true;
-        } else if (isEdgeKindFlag(key)) {
-          scope.defaultOperatorEdgeKind = key as ConnectorOperator;
-          consumed = true;
-        }
-
-        if (!consumed) {
-          consumed = applyPlacementControlFromFlag(scope, key, true);
+        } else {
+          const control = applyGraphScopeControlEntry(scope, entry, { updatePlacementBase: true });
+          scope = control.scope;
+          consumed = control.consumed;
         }
 
         if (!consumed) {
@@ -1486,12 +1332,6 @@ class GraphPlanner {
         } else if (normalizedRaw === "clear <") {
           accumulatorOps.push({ kind: "clear-source" });
           consumed = true;
-        } else if (normalizedRaw === "simple") {
-          scope.mode = "simple";
-          consumed = true;
-        } else if (normalizedRaw === "multi") {
-          scope.mode = "multi";
-          consumed = true;
         } else if (normalizedRaw === "put node text on incoming edges") {
           accumulatorOps.push(makeAddTargetNodeOp(baseNodeText, "", entry.span, true));
           scope.asTextOverride = "";
@@ -1500,10 +1340,10 @@ class GraphPlanner {
           accumulatorOps.push(makeAddSourceNodeOp(baseNodeText, "", entry.span, true));
           scope.asTextOverride = "";
           consumed = true;
-        }
-
-        if (!consumed) {
-          consumed = applyPlacementControlFromFlag(scope, normalizedRaw, true);
+        } else {
+          const control = applyGraphScopeControlEntry(scope, entry, { updatePlacementBase: true });
+          scope = control.scope;
+          consumed = control.consumed;
         }
       }
 
@@ -1536,110 +1376,10 @@ class GraphPlanner {
     for (const entry of options.entries) {
       if (entry.kind === "kv") {
         const key = normalizeGraphOptionKey(entry.key);
-        if (key === "nodes") {
-          const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
-          if (parsed) {
-            scope.nodeOptionLists.push(parsed);
-          }
-          continue;
-        }
-        if (key === "edge" || key === "edges") {
-          const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
-          if (parsed) {
-            scope.edgeOptionLists.push(parsed);
-          }
-          continue;
-        }
         if (key === "edge quotes") {
           const parsed = makeEdgeQuotesAppendStyleOption(entry.valueRaw, entry.span.from);
           if (parsed) {
             scope.edgeOptionLists.push(parsed);
-          }
-          continue;
-        }
-        if (key === "name") {
-          const rawName = normalizeGraphText(entry.valueRaw);
-          scope = appendScopedNamePrefix(scope, rawName);
-          continue;
-        }
-        if (key === "name separator") {
-          scope.nameSeparator = normalizeGraphText(entry.valueRaw);
-          continue;
-        }
-        if (key === "as") {
-          scope.asTextOverride = normalizeGraphText(entry.valueRaw);
-          continue;
-        }
-        if (key === "empty nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.emptyNodes = enabled;
-          }
-          continue;
-        }
-        if (key === "math nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.mathNodes = enabled;
-          }
-          continue;
-        }
-        if (key === "trie") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.trieEnabled = enabled;
-          }
-          continue;
-        }
-        if (key === "left anchor" || key === "source anchor") {
-          scope.sourceAnchor = parseGraphAnchor(entry.valueRaw);
-          continue;
-        }
-        if (key === "right anchor" || key === "target anchor") {
-          scope.targetAnchor = parseGraphAnchor(entry.valueRaw);
-          continue;
-        }
-        if (key === "edge label" || key === "edge label'" || key === "edge node") {
-          scope.edgeOptionLists.push(parseOptionListRaw(`[${entry.raw}]`, entry.span.from));
-          continue;
-        }
-        if (key === "use existing nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.nodeResolution = enabled ? "existing" : scope.nodeResolution === "existing" ? "auto" : scope.nodeResolution;
-          }
-          continue;
-        }
-        if (key === "fresh nodes") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled != null) {
-            scope.nodeResolution = enabled ? "fresh" : scope.nodeResolution === "fresh" ? "auto" : scope.nodeResolution;
-          }
-          continue;
-        }
-        if (key === "number nodes") {
-          scope = applyNumberNodes(scope, entry.valueRaw);
-          continue;
-        }
-        if (key === "number nodes sep") {
-          scope = applyNumberNodesSeparator(scope, normalizeGraphText(entry.valueRaw));
-          continue;
-        }
-        if (key === "simple") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled === true) {
-            scope.mode = "simple";
-          } else if (enabled === false && scope.mode === "simple") {
-            scope.mode = "multi";
-          }
-          continue;
-        }
-        if (key === "multi") {
-          const enabled = parseGraphBoolean(entry.valueRaw, true);
-          if (enabled === true) {
-            scope.mode = "multi";
-          } else if (enabled === false && scope.mode === "multi") {
-            scope.mode = "simple";
           }
           continue;
         }
@@ -1653,69 +1393,8 @@ class GraphPlanner {
           scope.asTextOverride = "";
           continue;
         }
-        if (key === "color class") {
-          const className = normalizeColorClassName(entry.valueRaw);
-          if (className.length > 0) {
-            scope.declaredColorClasses.add(className);
-          }
-          continue;
-        }
-        if (isDefaultEdgeKindKey(key)) {
-          const parsedKind = parseDefaultEdgeKind(entry.valueRaw);
-          if (parsedKind) {
-            scope.defaultOperatorEdgeKind = parsedKind;
-          }
-          continue;
-        }
-        if (key === "default edge operator") {
-          const operator = parseOperatorFromRaw(entry.valueRaw, scope, "edge");
-          if (operator) {
-            scope.defaultJoinOperator = operator;
-          }
-          continue;
-        }
-        const levelStyle = parseLevelStyleDefinition(entry);
-        if (levelStyle) {
-          addLevelStyleOption(scope.levelStyleOptionLists, levelStyle.level, levelStyle.options);
-          continue;
-        }
-        if (applyPlacementControlFromKv(scope, key, entry.valueRaw, updatePlacementBase)) {
-          continue;
-        }
       } else if (entry.kind === "flag") {
         const key = normalizeGraphOptionKey(entry.key);
-        if (key === "simple") {
-          scope.mode = "simple";
-          continue;
-        }
-        if (key === "multi") {
-          scope.mode = "multi";
-          continue;
-        }
-        if (key === "fresh nodes") {
-          scope.nodeResolution = "fresh";
-          continue;
-        }
-        if (key === "use existing nodes") {
-          scope.nodeResolution = "existing";
-          continue;
-        }
-        if (key === "empty nodes") {
-          scope.emptyNodes = true;
-          continue;
-        }
-        if (key === "math nodes") {
-          scope.mathNodes = true;
-          continue;
-        }
-        if (key === "trie") {
-          scope.trieEnabled = true;
-          continue;
-        }
-        if (key === "number nodes") {
-          scope = applyNumberNodes(scope);
-          continue;
-        }
         if (key === "put node text on incoming edges") {
           scope.putNodeTextIncomingOptions.push("");
           scope.asTextOverride = "";
@@ -1726,39 +1405,13 @@ class GraphPlanner {
           scope.asTextOverride = "";
           continue;
         }
-        if (isEdgeKindFlag(key)) {
-          scope.defaultOperatorEdgeKind = key as ConnectorOperator;
-          continue;
-        }
-        if (applyPlacementControlFromFlag(scope, key, updatePlacementBase)) {
-          continue;
-        }
-      } else {
-        const rawToken = normalizeGraphOptionKey(entry.raw.trim().toLowerCase());
-        if (rawToken === "simple") {
-          scope.mode = "simple";
-          continue;
-        }
-        if (rawToken === "multi") {
-          scope.mode = "multi";
-          continue;
-        }
-        if (rawToken === "empty nodes") {
-          scope.emptyNodes = true;
-          continue;
-        }
-        if (rawToken === "math nodes") {
-          scope.mathNodes = true;
-          continue;
-        }
-        if (rawToken === "trie") {
-          scope.trieEnabled = true;
-          continue;
-        }
-        if (applyPlacementControlFromFlag(scope, rawToken, updatePlacementBase)) {
-          continue;
-        }
       }
+
+      const control = applyGraphScopeControlEntry(scope, entry, {
+        updatePlacementBase,
+        allowBareNodeStateFlags: true
+      });
+      scope = control.scope;
     }
 
     return scope;
@@ -1915,6 +1568,11 @@ class GraphPlanner {
     layout: GraphLayoutContext
   ): void {
     if (record.created) {
+      return;
+    }
+    if (this.nodes.length >= GRAPH_NODE_BUDGET) {
+      pushUniqueDiagnostic(this.diagnostics, "graph-node-budget-exceeded");
+      record.created = true;
       return;
     }
 
@@ -2097,9 +1755,16 @@ class GraphPlanner {
     const edges: GraphPlannedEdgeInternal[] = [];
     for (const operator of operators) {
       const pairs = buildOperatorPairs(operator, colors);
+      if (pairs.length >= GRAPH_EDGE_BUDGET) {
+        pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+      }
       for (const pair of pairs) {
         if (pair.from === pair.to) {
           continue;
+        }
+        if (edges.length >= GRAPH_EDGE_BUDGET) {
+          pushUniqueDiagnostic(this.diagnostics, "graph-edge-budget-exceeded");
+          break;
         }
         edges.push(this.createEdgeFromPair(pair.from, pair.to, edgeKind, span, scope, edgeStyleOptions));
       }
@@ -2137,6 +1802,243 @@ class GraphPlanner {
       next: segment.next
     };
   }
+}
+
+type GraphScopeControlOptions = {
+  updatePlacementBase: boolean;
+  allowBareNodeStateFlags?: boolean;
+};
+
+function applyGraphScopeControlEntry(
+  scope: GraphScopeState,
+  entry: OptionEntry,
+  options: GraphScopeControlOptions
+): { consumed: boolean; scope: GraphScopeState } {
+  if (entry.kind === "kv") {
+    return applyGraphScopeControlKv(scope, entry, options.updatePlacementBase);
+  }
+  if (entry.kind === "flag") {
+    return applyGraphScopeControlFlag(scope, normalizeGraphOptionKey(entry.key), options.updatePlacementBase);
+  }
+
+  const rawToken = normalizeGraphOptionKey(entry.raw.trim().toLowerCase());
+  return applyGraphScopeControlBare(scope, rawToken, options);
+}
+
+function applyGraphScopeControlKv(
+  scope: GraphScopeState,
+  entry: Extract<OptionEntry, { kind: "kv" }>,
+  updatePlacementBase: boolean
+): { consumed: boolean; scope: GraphScopeState } {
+  const key = normalizeGraphOptionKey(entry.key);
+
+  if (key === "nodes") {
+    const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
+    if (parsed) {
+      scope.nodeOptionLists.push(parsed);
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "edge" || key === "edges") {
+    const parsed = parseGraphValueAsOptionList(entry.valueRaw, entry.span.from);
+    if (parsed) {
+      scope.edgeOptionLists.push(parsed);
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "name") {
+    return { consumed: true, scope: appendScopedNamePrefix(scope, normalizeGraphText(entry.valueRaw)) };
+  }
+  if (key === "name separator") {
+    scope.nameSeparator = normalizeGraphText(entry.valueRaw);
+    return { consumed: true, scope };
+  }
+  if (key === "as") {
+    scope.asTextOverride = normalizeGraphText(entry.valueRaw);
+    return { consumed: true, scope };
+  }
+  if (key === "empty nodes") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled != null) {
+      scope.emptyNodes = enabled;
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "math nodes") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled != null) {
+      scope.mathNodes = enabled;
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "trie") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled != null) {
+      scope.trieEnabled = enabled;
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "left anchor" || key === "source anchor") {
+    scope.sourceAnchor = parseGraphAnchor(entry.valueRaw);
+    return { consumed: true, scope };
+  }
+  if (key === "right anchor" || key === "target anchor") {
+    scope.targetAnchor = parseGraphAnchor(entry.valueRaw);
+    return { consumed: true, scope };
+  }
+  if (key === "edge label" || key === "edge label'" || key === "edge node") {
+    scope.edgeOptionLists.push(parseOptionListRaw(`[${entry.raw}]`, entry.span.from));
+    return { consumed: true, scope };
+  }
+  if (key === "use existing nodes") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled != null) {
+      scope.nodeResolution = enabled ? "existing" : scope.nodeResolution === "existing" ? "auto" : scope.nodeResolution;
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "fresh nodes") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled != null) {
+      scope.nodeResolution = enabled ? "fresh" : scope.nodeResolution === "fresh" ? "auto" : scope.nodeResolution;
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "number nodes") {
+    return { consumed: true, scope: applyNumberNodes(scope, entry.valueRaw) };
+  }
+  if (key === "number nodes sep") {
+    return { consumed: true, scope: applyNumberNodesSeparator(scope, normalizeGraphText(entry.valueRaw)) };
+  }
+  if (key === "simple") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled === true) {
+      scope.mode = "simple";
+    } else if (enabled === false && scope.mode === "simple") {
+      scope.mode = "multi";
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "multi") {
+    const enabled = parseGraphBoolean(entry.valueRaw, true);
+    if (enabled === true) {
+      scope.mode = "multi";
+    } else if (enabled === false && scope.mode === "multi") {
+      scope.mode = "simple";
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "color class") {
+    const className = normalizeColorClassName(entry.valueRaw);
+    if (className.length > 0) {
+      scope.declaredColorClasses.add(className);
+    }
+    return { consumed: true, scope };
+  }
+  if (isDefaultEdgeKindKey(key)) {
+    const parsedKind = parseDefaultEdgeKind(entry.valueRaw);
+    if (parsedKind) {
+      scope.defaultOperatorEdgeKind = parsedKind;
+    }
+    return { consumed: true, scope };
+  }
+  if (key === "default edge operator") {
+    const operator = parseOperatorFromRaw(entry.valueRaw, scope, "edge");
+    if (operator) {
+      scope.defaultJoinOperator = operator;
+    }
+    return { consumed: true, scope };
+  }
+
+  const levelStyle = parseLevelStyleDefinition(entry);
+  if (levelStyle) {
+    addLevelStyleOption(scope.levelStyleOptionLists, levelStyle.level, levelStyle.options);
+    return { consumed: true, scope };
+  }
+  if (applyPlacementControlFromKv(scope, key, entry.valueRaw, updatePlacementBase)) {
+    return { consumed: true, scope };
+  }
+
+  return { consumed: false, scope };
+}
+
+function applyGraphScopeControlFlag(
+  scope: GraphScopeState,
+  key: string,
+  updatePlacementBase: boolean
+): { consumed: boolean; scope: GraphScopeState } {
+  if (key === "simple") {
+    scope.mode = "simple";
+    return { consumed: true, scope };
+  }
+  if (key === "multi") {
+    scope.mode = "multi";
+    return { consumed: true, scope };
+  }
+  if (key === "fresh nodes") {
+    scope.nodeResolution = "fresh";
+    return { consumed: true, scope };
+  }
+  if (key === "use existing nodes") {
+    scope.nodeResolution = "existing";
+    return { consumed: true, scope };
+  }
+  if (key === "empty nodes") {
+    scope.emptyNodes = true;
+    return { consumed: true, scope };
+  }
+  if (key === "math nodes") {
+    scope.mathNodes = true;
+    return { consumed: true, scope };
+  }
+  if (key === "trie") {
+    scope.trieEnabled = true;
+    return { consumed: true, scope };
+  }
+  if (key === "number nodes") {
+    return { consumed: true, scope: applyNumberNodes(scope) };
+  }
+  if (isEdgeKindFlag(key)) {
+    scope.defaultOperatorEdgeKind = key as ConnectorOperator;
+    return { consumed: true, scope };
+  }
+  if (applyPlacementControlFromFlag(scope, key, updatePlacementBase)) {
+    return { consumed: true, scope };
+  }
+  return { consumed: false, scope };
+}
+
+function applyGraphScopeControlBare(
+  scope: GraphScopeState,
+  rawToken: string,
+  options: GraphScopeControlOptions
+): { consumed: boolean; scope: GraphScopeState } {
+  if (rawToken === "simple") {
+    scope.mode = "simple";
+    return { consumed: true, scope };
+  }
+  if (rawToken === "multi") {
+    scope.mode = "multi";
+    return { consumed: true, scope };
+  }
+  if (options.allowBareNodeStateFlags) {
+    if (rawToken === "empty nodes") {
+      scope.emptyNodes = true;
+      return { consumed: true, scope };
+    }
+    if (rawToken === "math nodes") {
+      scope.mathNodes = true;
+      return { consumed: true, scope };
+    }
+    if (rawToken === "trie") {
+      scope.trieEnabled = true;
+      return { consumed: true, scope };
+    }
+  }
+  if (applyPlacementControlFromFlag(scope, rawToken, options.updatePlacementBase)) {
+    return { consumed: true, scope };
+  }
+  return { consumed: false, scope };
 }
 
 function applyNumberNodes(scope: GraphScopeState, valueRaw?: string): GraphScopeState {
@@ -3102,44 +3004,60 @@ function pairMatchingAndStar(left: string[], right: string[]): Array<{ from: str
   return pairs;
 }
 
-function buildPathPairs(nodes: string[]): Array<{ from: string; to: string }> {
+function buildPathPairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
-  for (let index = 1; index < nodes.length; index += 1) {
+  for (let index = 1; index < nodes.length && pairs.length < maxPairs; index += 1) {
     pairs.push({ from: nodes[index - 1], to: nodes[index] });
   }
   return pairs;
 }
 
-function buildCyclePairs(nodes: string[]): Array<{ from: string; to: string }> {
+function buildCyclePairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   if (nodes.length <= 1) {
     return [];
   }
-  const pairs = buildPathPairs(nodes);
-  pairs.push({ from: nodes[nodes.length - 1], to: nodes[0] });
+  const pairs = buildPathPairs(nodes, maxPairs);
+  if (pairs.length < maxPairs) {
+    pairs.push({ from: nodes[nodes.length - 1], to: nodes[0] });
+  }
   return pairs;
 }
 
-function buildCliquePairs(nodes: string[]): Array<{ from: string; to: string }> {
+function buildCliquePairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
   for (let left = 0; left < nodes.length; left += 1) {
     for (let right = left + 1; right < nodes.length; right += 1) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from: nodes[left], to: nodes[right] });
     }
   }
   return pairs;
 }
 
-function buildCompleteBipartitePairs(fromNodes: string[], toNodes: string[]): Array<{ from: string; to: string }> {
+function buildCompleteBipartitePairs(
+  fromNodes: string[],
+  toNodes: string[],
+  maxPairs = GRAPH_EDGE_BUDGET
+): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
   for (const from of fromNodes) {
     for (const to of toNodes) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from, to });
     }
   }
   return pairs;
 }
 
-function buildGridPairs(nodes: string[], wrapAfter: number | null): Array<{ from: string; to: string }> {
+function buildGridPairs(
+  nodes: string[],
+  wrapAfter: number | null,
+  maxPairs = GRAPH_EDGE_BUDGET
+): Array<{ from: string; to: string }> {
   if (nodes.length <= 1) {
     return [];
   }
@@ -3156,11 +3074,17 @@ function buildGridPairs(nodes: string[], wrapAfter: number | null): Array<{ from
 
     const rightIndex = index + 1;
     if (col + 1 < wrap && rightIndex < nodes.length && Math.floor(rightIndex / wrap) === row) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from: nodes[index], to: nodes[rightIndex] });
     }
 
     const downIndex = index + wrap;
     if (downIndex < nodes.length) {
+      if (pairs.length >= maxPairs) {
+        return pairs;
+      }
       pairs.push({ from: nodes[index], to: nodes[downIndex] });
     }
   }
@@ -3336,7 +3260,8 @@ function applyColorOperationsToNodes(colors: GraphColorMap, ops: GraphColorOp[],
       continue;
     }
 
-    const fromNodes = colorNodes(colors, op.from).filter((node) => nodes.includes(node));
+    const eligibleNodes = new Set(nodes);
+    const fromNodes = colorNodes(colors, op.from).filter((node) => eligibleNodes.has(node));
     removeNodesFromColor(colors, op.from, fromNodes);
     addNodesToColor(colors, op.to, fromNodes);
   }
@@ -3605,7 +3530,7 @@ function parseDefaultEdgeKind(raw: string): ConnectorOperator | null {
   return null;
 }
 
-function parseSubgraphStructure(options: OptionListAst | undefined): ParsedSubgraphStructure {
+function parseSubgraphStructure(options: OptionListAst | undefined, diagnostics: string[]): ParsedSubgraphStructure {
   let verticesV: string[] = [];
   let verticesW: string[] = [];
   let n: number | null = null;
@@ -3621,11 +3546,11 @@ function parseSubgraphStructure(options: OptionListAst | undefined): ParsedSubgr
 
     const key = normalizeGraphOptionKey(entry.key);
     if (key === "v") {
-      verticesV = parseVertexList(entry.valueRaw);
+      verticesV = parseVertexList(entry.valueRaw, diagnostics);
       continue;
     }
     if (key === "w") {
-      verticesW = parseVertexList(entry.valueRaw);
+      verticesW = parseVertexList(entry.valueRaw, diagnostics);
       continue;
     }
     if (key === "n") {
@@ -3650,14 +3575,14 @@ function parseSubgraphStructure(options: OptionListAst | undefined): ParsedSubgr
   }
 
   if (verticesV.length === 0 && n != null && n > 0) {
-    verticesV = sequenceLabels(n);
+    verticesV = sequenceLabels(n, diagnostics);
     if (nameShoreV.length === 0) {
       nameShoreV = "V";
     }
   }
 
   if (verticesW.length === 0 && m != null && m > 0) {
-    verticesW = sequenceLabels(m);
+    verticesW = sequenceLabels(m, diagnostics);
     if (nameShoreW.length === 0) {
       nameShoreW = "W";
     }
@@ -3684,7 +3609,7 @@ function parseShoreName(raw: string): string {
   return normalizeGraphText(raw);
 }
 
-function parseVertexList(raw: string): string[] {
+function parseVertexList(raw: string, diagnostics: string[]): string[] {
   const normalized = stripWrappingBraces(raw).trim();
   if (normalized.length === 0) {
     return [];
@@ -3695,16 +3620,19 @@ function parseVertexList(raw: string): string[] {
     .filter((segment) => segment.length > 0);
 
   if (parts.length === 3 && parts[1] === "...") {
-    const expanded = expandRange(parts[0], parts[2]);
+    const expanded = expandRange(parts[0], parts[2], diagnostics);
     if (expanded.length > 0) {
       return expanded;
     }
   }
 
-  return parts.map((part) => parseGraphTextToken(part).text);
+  if (parts.length > GRAPH_NODE_BUDGET) {
+    pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+  }
+  return parts.slice(0, GRAPH_NODE_BUDGET).map((part) => parseGraphTextToken(part).text);
 }
 
-function expandRange(leftRaw: string, rightRaw: string): string[] {
+function expandRange(leftRaw: string, rightRaw: string, diagnostics: string[]): string[] {
   const left = normalizeGraphText(leftRaw);
   const right = normalizeGraphText(rightRaw);
 
@@ -3713,13 +3641,17 @@ function expandRange(leftRaw: string, rightRaw: string): string[] {
   if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
     const from = Math.floor(leftNumber);
     const to = Math.floor(rightNumber);
+    const count = Math.abs(to - from) + 1;
+    if (count > GRAPH_NODE_BUDGET) {
+      pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+    }
     const result: string[] = [];
     if (from <= to) {
-      for (let current = from; current <= to; current += 1) {
+      for (let current = from; current <= to && result.length < GRAPH_NODE_BUDGET; current += 1) {
         result.push(String(current));
       }
     } else {
-      for (let current = from; current >= to; current -= 1) {
+      for (let current = from; current >= to && result.length < GRAPH_NODE_BUDGET; current -= 1) {
         result.push(String(current));
       }
     }
@@ -3729,13 +3661,17 @@ function expandRange(leftRaw: string, rightRaw: string): string[] {
   if (left.length === 1 && right.length === 1) {
     const leftCode = left.codePointAt(0)!;
     const rightCode = right.codePointAt(0)!;
+    const count = Math.abs(rightCode - leftCode) + 1;
+    if (count > GRAPH_NODE_BUDGET) {
+      pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+    }
     const result: string[] = [];
     if (leftCode <= rightCode) {
-      for (let code = leftCode; code <= rightCode; code += 1) {
+      for (let code = leftCode; code <= rightCode && result.length < GRAPH_NODE_BUDGET; code += 1) {
         result.push(String.fromCodePoint(code));
       }
     } else {
-      for (let code = leftCode; code >= rightCode; code -= 1) {
+      for (let code = leftCode; code >= rightCode && result.length < GRAPH_NODE_BUDGET; code -= 1) {
         result.push(String.fromCodePoint(code));
       }
     }
@@ -3745,9 +3681,12 @@ function expandRange(leftRaw: string, rightRaw: string): string[] {
   return [];
 }
 
-function sequenceLabels(count: number): string[] {
+function sequenceLabels(count: number, diagnostics: string[]): string[] {
+  if (count > GRAPH_NODE_BUDGET) {
+    pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");
+  }
   const labels: string[] = [];
-  for (let index = 1; index <= count; index += 1) {
+  for (let index = 1; index <= count && labels.length < GRAPH_NODE_BUDGET; index += 1) {
     labels.push(String(index));
   }
   return labels;
@@ -3755,10 +3694,18 @@ function sequenceLabels(count: number): string[] {
 
 function mergeUnique(base: string[], next: string[]): string[] {
   const merged = [...base];
+  const seen = new Set(merged);
   for (const value of next) {
-    if (!merged.includes(value)) {
+    if (!seen.has(value)) {
+      seen.add(value);
       merged.push(value);
     }
   }
   return merged;
+}
+
+function pushUniqueDiagnostic(diagnostics: string[], diagnostic: string): void {
+  if (!diagnostics.includes(diagnostic)) {
+    diagnostics.push(diagnostic);
+  }
 }

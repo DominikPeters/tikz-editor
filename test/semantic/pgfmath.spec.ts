@@ -288,6 +288,23 @@ describe("semantic evaluator / pgfmath", () => {
     }
   });
 
+  it("evaluates semicolonless pgfmathsetmacro statements inside nested foreach bodies", () => {
+    const source = String.raw`\begin{tikzpicture}
+\foreach \i in {0,1,2}{\foreach \j in {0,1,2}{%
+    \pgfmathsetmacro{\xx}{12.86+\i*0.16}%
+    \pgfmathsetmacro{\yy}{1.60+\j*0.16}%
+    \draw[black!55,line width=0.25pt,fill=black!12] (\xx,\yy) rectangle ++(0.15,0.15);
+  }}
+\end{tikzpicture}`;
+
+    const result = evaluateSemantic(source);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "foreach-body-parse-error")).toBe(false);
+    expect(result.diagnostics.some((diagnostic) => (diagnostic.code ?? "").startsWith("invalid-pgfmathsetmacro"))).toBe(false);
+
+    const paths = elementsOfKind(result.scene.elements, "Path");
+    expect(paths).toHaveLength(9);
+  });
+
   it("accepts xcolor named rgb components with omitted channels defaulting to zero", () => {
     const source = String.raw`\begin{tikzpicture}
   \node[circle,draw,fill={rgb:blue,115;green,158},text=white] {54};

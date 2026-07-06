@@ -936,6 +936,11 @@ export const CanvasPanel = memo(function CanvasPanel({
   const [equationModalTarget, setEquationModalTarget] = useState<EquationNodeTarget | null>(null);
   const [expandedDensePathSourceId, setExpandedDensePathSourceId] = useState<string | null>(null);
   const fitToContentModeActiveRef = useRef(fitToContentModeActive);
+  const applyActionWithFeedbackRef = useRef<((
+    action: EditAction,
+    historyMergeKey?: string,
+    sourceOverride?: string
+  ) => ApplyActionFeedback) | null>(null);
   const clearPendingNodePositionTargetPick = useCallback(() => {
     suppressNodeAnchorClickRef.current = false;
     setPendingNodePositionTargetPick(null);
@@ -1058,51 +1063,77 @@ export const CanvasPanel = memo(function CanvasPanel({
     [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
   );
 
+  const canvasCommandStateRef = useRef<{
+    source: string;
+    selectedElementIds: ReadonlySet<string>;
+    sceneElements: readonly SceneElement[];
+    viewBox: SvgViewBox | null;
+    editParseOptions: typeof editParseOptions;
+  } | null>(null);
+  canvasCommandStateRef.current = {
+    source,
+    selectedElementIds,
+    sceneElements: snapshot.scene?.elements ?? [],
+    viewBox: svgResult?.viewBox ?? null,
+    editParseOptions
+  };
+  const handleAddNodeAdornmentCommand = useCallback((kind: "label" | "pin") => {
+    const state = canvasCommandStateRef.current;
+    if (!state) {
+      return;
+    }
+    const result = resolveNodeAdornmentContextAction({
+      source: state.source,
+      clickedTargetId: contextMenuContextRef.current.clickedTargetId,
+      selectedTargetId: state.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null,
+      clickedWorld: contextMenuContextRef.current.clickedWorld,
+      sceneElements: state.sceneElements,
+      viewBox: state.viewBox,
+      adornmentKind: kind,
+      text: kind === "pin" ? "Pin" : "Label",
+      parseOptions: state.editParseOptions
+    });
+    if (result.kind !== "ready") {
+      return;
+    }
+    dispatch({
+      type: "APPLY_EDIT_ACTION",
+      action: result.action
+    });
+    setPendingAdornmentTextEditTargetId(result.pendingTextTargetId);
+  }, [contextMenuContextRef, dispatch]);
+  const handlePositionNodeRelativeToCommand = useCallback(() => {
+    const state = canvasCommandStateRef.current;
+    const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
+    if (!selectedSourceId) {
+      return;
+    }
+    closeTextEditingSession();
+    clearPendingNodePositionTargetPick();
+    setPendingNodePositionTargetPick({ nodeSourceId: selectedSourceId });
+  }, [clearPendingNodePositionTargetPick, closeTextEditingSession]);
+  const handleConvertNodePositionToAbsoluteCommand = useCallback(() => {
+    const state = canvasCommandStateRef.current;
+    const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
+    const applyActionWithFeedback = applyActionWithFeedbackRef.current;
+    if (!selectedSourceId || !applyActionWithFeedback) {
+      return;
+    }
+    applyActionWithFeedback({
+      kind: "convertNodePositionToAbsolute",
+      nodeId: selectedSourceId
+    });
+    clearPendingNodePositionTargetPick();
+  }, [clearPendingNodePositionTargetPick]);
+  const handleOpenEditEquationCommand = useCallback((target: EquationNodeTarget) => {
+    setEquationModalTarget(target);
+  }, []);
+
   const commandRuntime = useEditorCommandRuntime({
-    onAddNodeAdornment: (kind) => {
-      const result = resolveNodeAdornmentContextAction({
-        source,
-        clickedTargetId: contextMenuContextRef.current.clickedTargetId,
-        selectedTargetId: selectedElementIds.size === 1 ? [...selectedElementIds][0] ?? null : null,
-        clickedWorld: contextMenuContextRef.current.clickedWorld,
-        sceneElements: snapshot.scene?.elements ?? [],
-        viewBox: svgResult?.viewBox ?? null,
-        adornmentKind: kind,
-        text: kind === "pin" ? "Pin" : "Label",
-        parseOptions: editParseOptions
-      });
-      if (result.kind !== "ready") {
-        return;
-      }
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        action: result.action
-      });
-      setPendingAdornmentTextEditTargetId(result.pendingTextTargetId);
-    },
-    onPositionNodeRelativeTo: () => {
-      const selectedSourceId = selectedElementIds.size === 1 ? [...selectedElementIds][0] ?? null : null;
-      if (!selectedSourceId) {
-        return;
-      }
-      closeTextEditingSession();
-      clearPendingNodePositionTargetPick();
-      setPendingNodePositionTargetPick({ nodeSourceId: selectedSourceId });
-    },
-    onConvertNodePositionToAbsolute: () => {
-      const selectedSourceId = selectedElementIds.size === 1 ? [...selectedElementIds][0] ?? null : null;
-      if (!selectedSourceId) {
-        return;
-      }
-      applyActionWithFeedback({
-        kind: "convertNodePositionToAbsolute",
-        nodeId: selectedSourceId
-      });
-      clearPendingNodePositionTargetPick();
-    },
-    onOpenEditEquation: (target) => {
-      setEquationModalTarget(target);
-    },
+    onAddNodeAdornment: handleAddNodeAdornmentCommand,
+    onPositionNodeRelativeTo: handlePositionNodeRelativeToCommand,
+    onConvertNodePositionToAbsolute: handleConvertNodePositionToAbsoluteCommand,
+    onOpenEditEquation: handleOpenEditEquationCommand,
     activeHandleIdOverride: contextMenuHandleIdOverride
   });
 
@@ -1886,6 +1917,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     },
     [activeDocumentId, dispatch, editParseOptions, source, sourceRevision, snapshot.editHandles]
   );
+  applyActionWithFeedbackRef.current = applyActionWithFeedback;
 
   const queueSelectionForAddedElement = useCallback(
     (preferredWorld: WorldPoint, preferredSourceId?: string) => {
@@ -2409,6 +2441,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         mode,
         anchorLineRange: provisionalLineRange
       };
+      const pointerId = event.pointerId;
+      const pointerCaptureTarget = event.currentTarget;
       const outputJax = getActiveMathJaxOutputJax();
       const containerElement = outputJax ? resolveRenderedMathTextElement(target) : null;
       const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
@@ -2458,15 +2492,15 @@ export const CanvasPanel = memo(function CanvasPanel({
           baseInputRevision,
           sourceId: target.sourceId,
           sceneTextId: target.sceneTextId,
-          pointerId: event.pointerId,
+          pointerId,
           selectionStart: expandedSelection.start,
           selectionEnd: expandedSelection.end,
           anchorOffset: resolvedOffset,
           anchorLineRange: resolvedLineRange
         });
-        if (textSelectionDragRef.current?.pointerId === event.pointerId) {
+        if (textSelectionDragRef.current?.pointerId === pointerId) {
           textSelectionDragRef.current = {
-            pointerId: event.pointerId,
+            pointerId,
             sourceId: target.sourceId,
             sceneTextId: target.sceneTextId,
             anchorOffset: resolvedOffset,
@@ -2475,7 +2509,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           };
         }
         try {
-          event.currentTarget.setPointerCapture(event.pointerId);
+          pointerCaptureTarget.setPointerCapture(pointerId);
         } catch {
           // Ignore pointer capture failures; the window listeners still complete the drag.
         }
@@ -3338,6 +3372,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (snapshot.source === source) {
       return;
     }
+    // Source changes caused by an active drag's own applies must not wipe the
+    // overlay (the next pointermove overwrites it anyway); only external edits
+    // invalidate the lines.
+    if (dragRef.current) {
+      return;
+    }
     setSnapLines([]);
   }, [snapshot.source, source]);
 
@@ -3618,6 +3658,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   const guideHitStrokeWidth = 12 / Math.max(canvasTransform.scale, 1e-3);
   const snapStrokeWidth = 1 / Math.max(canvasTransform.scale, 1e-3);
   const snapCrossSize = 3 / Math.max(canvasTransform.scale, 1e-3);
+  const snapSourceNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const target of snapshot.semanticResult?.nodeAnchorTargets ?? []) {
+      if (target.nodeSourceId && !names.has(target.nodeSourceId)) {
+        names.set(target.nodeSourceId, target.nodeName);
+      }
+    }
+    return names;
+  }, [snapshot.semanticResult?.nodeAnchorTargets]);
   const textEditPopup = useMemo(() => {
     if (!textEditingSession || !svgResult) {
       return null;
@@ -3789,6 +3838,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         guideHitStrokeWidth={guideHitStrokeWidth}
         onGuidePointerDown={onGuidePointerDown}
         snapLines={snapLines}
+        snapSourceNames={snapSourceNames}
         snapStrokeWidth={snapStrokeWidth}
         snapCrossSize={snapCrossSize}
         toolPreview={toolPreview}
