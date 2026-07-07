@@ -28,6 +28,10 @@ export interface LineSegmentReport {
   sourceEndRaw?: number;
   sourceKind?: 'text' | 'math';
   role?: 'list-label';
+  literal?: {
+    reason: string;
+    detail?: string;
+  };
   fontId?: string;
   glyphCode?: number;
   mathSvgBody?: string;

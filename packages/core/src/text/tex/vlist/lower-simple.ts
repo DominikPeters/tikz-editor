@@ -345,13 +345,16 @@ function unsupportedDisplayMathPlaceholder(
   sourceSpan: TexSourceSpan
 ): TexPlaceholderItem {
   const reason = "TeX display math rendering is not implemented for this formula.";
+  // The literal run renders one line of monospaced source at 10pt; both
+  // cmtt10 and lmmono10 advance 5.25pt per character.
   return {
     kind: "placeholder",
     sourceSpan,
     reason,
     scopePath: scopePathForVerticalBlockItem(item),
+    literalText: item.text,
     estimated: {
-      width: 0,
+      width: 5.25 * item.text.length,
       height: 10,
       depth: 4,
     },

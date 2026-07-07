@@ -95,6 +95,7 @@ function layoutItemsToRuns(
         childIndex: runIndex,
         wordIndex: 0,
         allowAutomaticHyphenation: texTextFontAllowsAutomaticHyphenation(item.font),
+        ...(item.literal ? { literal: item.literal } : {}),
       } satisfies TextRun);
       continue;
     }

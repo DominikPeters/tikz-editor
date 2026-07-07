@@ -83,6 +83,10 @@ interface BaseRun {
   role?: 'list-label';
   sourceStart: number;
   sourceEnd: number;
+  literal?: {
+    reason: string;
+    detail?: string;
+  };
 }
 
 export interface TextRun extends BaseRun {

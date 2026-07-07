@@ -763,8 +763,14 @@ describe("TeX vlist lowering", () => {
         kind: "placeholder",
         sourceSpan: { start: 0, end: source.length },
         reason: "TeX display math rendering is not implemented for this formula.",
+        literalText: source,
       }),
     ]);
+    const placeholder = vlist.items[0];
+    if (placeholder?.kind !== "placeholder") {
+      throw new Error("expected placeholder item");
+    }
+    expect(placeholder.estimated.width).toBeGreaterThan(0);
   });
 
   it("lowers explicit vertical glue commands into vlist glue", () => {
@@ -1617,40 +1623,23 @@ describe("TeX vlist lowering", () => {
     expect(box?.mathSvgBody).toContain('data-tex-font="cmmi10"');
   });
 
-  it("preserves block-position unsupported commands as vlist placeholders", () => {
+  it("lowers block-position unsupported commands as literal paragraphs", () => {
     const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);
-    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
-    const placeholderEnd = source.indexOf(String.raw` \par Beta`);
 
     const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
     expect(vlist.items.map((item) =>
-      item.kind === "placeholder"
-        ? {
-            kind: item.kind,
-            sourceSpan: item.sourceSpan,
-            estimated: item.estimated,
-          }
-        : item.kind === "paragraph"
-          ? {
-              kind: item.kind,
-              text: item.paragraph.text,
-            }
-        : {
-            kind: item.kind,
-          }
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
+        : { kind: item.kind }
     )).toEqual([
       { kind: "paragraph", text: "Alpha" },
-      {
-        kind: "placeholder",
-        sourceSpan: { start: placeholderStart, end: placeholderEnd },
-        estimated: { width: 0, height: 8.5, depth: 3.5 },
-      },
+      { kind: "paragraph", text: String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}` },
       { kind: "paragraph", text: "Beta" },
     ]);
   });
 
-  it("groups scoped unsupported command placeholders into quote vboxes", () => {
+  it("groups scoped unsupported commands into quote vboxes as literal paragraphs", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\begin{quote}\unsupportedgraphics{plot.pdf} \par Alpha\end{quote}`
     );
@@ -1659,8 +1648,7 @@ describe("TeX vlist lowering", () => {
       computerModernTexMetricProvider.resolveFont()
     );
 
-    expect(parsed.unsupportedCommand).toBe(true);
-    expect(parsed.partialFallbackSupported).toBe(true);
+    expect(parsed.unsupportedCommand).toBe(false);
     expect(grouped.items).toHaveLength(1);
     const quote = grouped.items[0];
     expect(quote).toMatchObject({
@@ -1671,13 +1659,11 @@ describe("TeX vlist lowering", () => {
       throw new Error("expected quote vbox");
     }
     expect(quote.items.map((item) =>
-      item.kind === "placeholder"
-        ? { kind: item.kind, reason: item.reason }
-        : item.kind === "paragraph"
-          ? { kind: item.kind, text: item.paragraph.text }
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.paragraph.text }
         : { kind: item.kind }
     )).toEqual([
-      { kind: "placeholder", reason: "Unsupported TeX command in vertical mode." },
+      { kind: "paragraph", text: String.raw`\unsupportedgraphics{plot.pdf}` },
       { kind: "paragraph", text: "Alpha" },
     ]);
   });
@@ -2989,7 +2975,7 @@ describe("TeX vlist layout", () => {
         kind: "rule",
         source: String.raw`\hrule width 24pt height 2pt depth 1pt`,
       },
-      { kind: "placeholder", source: String.raw`\unsupportedgraphics{plot.pdf}` },
+      { kind: "paragraph", source: String.raw`\unsupportedgraphics{plot.pdf}` },
     ]);
   });
 

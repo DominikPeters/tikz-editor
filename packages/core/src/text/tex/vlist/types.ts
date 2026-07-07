@@ -320,6 +320,12 @@ export interface TexPlaceholderItem {
   readonly scopePath?: readonly TexVBoxRole[];
   readonly reason: string;
   readonly estimated: TexBoxMetrics;
+  /**
+   * Raw source text rendered as a literal typewriter run so the placeholder
+   * is visible and editable instead of an empty box
+   * (design/tex-total-rendering.md).
+   */
+  readonly literalText?: string;
 }
 
 export interface TexDisplayMathItem {

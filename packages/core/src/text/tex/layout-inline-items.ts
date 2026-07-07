@@ -37,6 +37,7 @@ import {
   type SimpleTexParagraphSegment,
   type SimpleTexTextBoxAlignment,
   type SimpleTexTextBoxCommandName,
+  type SimpleTexTokenLiteralInfo,
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import { roundTexPt } from "./fonts/units.js";
@@ -57,6 +58,7 @@ export interface TexLayoutTextItem {
   readonly italicCorrectionAfter: boolean;
   readonly spaceFactorBefore: number;
   readonly spaceFactorAfter: number;
+  readonly literal?: SimpleTexTokenLiteralInfo;
 }
 
 export interface TexLayoutSpaceItem {
@@ -328,6 +330,62 @@ export interface TexLayoutLabel {
   readonly rightEdge: number;
 }
 
+const TEX_LITERAL_FONT_STATE: SimpleTexFontState = {
+  family: "typewriter",
+  series: "medium",
+  shape: "upright",
+};
+
+// Lowers raw source text to literal typewriter items: the total-rendering
+// degradation for spans the engine cannot interpret (see
+// design/tex-total-rendering.md). Breaks are allowed only at spaces.
+function texLiteralItemsForSource(params: {
+  readonly source: string;
+  readonly sourceStart: number;
+  readonly literal: SimpleTexTokenLiteralInfo;
+  readonly atPt: number;
+  readonly metricProvider: TexMetricProvider;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly textFontProfile: TexTextFontProfile;
+}): TexLayoutInlineItem[] {
+  const font = params.textFontProfile.resolveTextFont(
+    TEX_LITERAL_FONT_STATE,
+    params.atPt,
+    params.metricProvider
+  );
+  const items: TexLayoutInlineItem[] = [];
+  const pattern = /([ \n]+)|([^ \n]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(params.source)) !== null) {
+    const segmentStart = params.sourceStart + match.index;
+    const segmentEnd = segmentStart + match[0].length;
+    if (match[1] !== undefined) {
+      items.push({
+        kind: "space",
+        text: " ",
+        sourceStart: segmentStart,
+        sourceEnd: segmentEnd,
+        font,
+        spaceFactor: 1000,
+        spaceGlueProfile: params.spaceGlueProfile,
+      });
+    } else {
+      items.push({
+        kind: "text",
+        text: match[0],
+        sourceStart: segmentStart,
+        sourceEnd: segmentEnd,
+        font,
+        italicCorrectionAfter: false,
+        spaceFactorBefore: 1000,
+        spaceFactorAfter: 1000,
+        literal: params.literal,
+      });
+    }
+  }
+  return items;
+}
+
 export function simpleTexInlineNodesToLayoutItems(
   nodes: readonly SimpleTexInlineNode[],
   sourceStart: number,
@@ -395,6 +453,7 @@ export function simpleTexSegmentToLayoutItems(
         italicCorrectionAfter,
         spaceFactorBefore,
         spaceFactorAfter: spaceFactor,
+        ...(token.literal ? { literal: token.literal } : {}),
       });
       hasSeenText = true;
       continue;
@@ -411,7 +470,20 @@ export function simpleTexSegmentToLayoutItems(
         contentEnd: token.contentEnd ?? token.sourceEnd,
       }) ?? null;
       if (!box) {
-        throw new Error(`Missing TeX inline math box for source range ${token.sourceStart}:${token.sourceEnd}.`);
+        // Total rendering: a math span the math subsystem cannot handle is
+        // contained as a literal run instead of escalating to node fallback.
+        items.push(...texLiteralItemsForSource({
+          source: token.text,
+          sourceStart: token.sourceStart,
+          literal: { reason: "math-error" },
+          atPt,
+          metricProvider,
+          spaceGlueProfile,
+          textFontProfile,
+        }));
+        hasSeenText = true;
+        spaceFactor = 1000;
+        continue;
       }
       items.push({
         kind: "math",
@@ -1479,6 +1551,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         italicCorrectionAfter,
         spaceFactorBefore,
         spaceFactorAfter: spaceFactor,
+        ...(token.literal ? { literal: token.literal } : {}),
       });
       hasSeenText = true;
       continue;
@@ -1495,7 +1568,18 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         contentEnd: token.contentEnd ?? token.sourceEnd,
       }) ?? null;
       if (!box) {
-        throw new Error(`Missing TeX inline math box for source range ${token.sourceStart}:${token.sourceEnd}.`);
+        items.push(...texLiteralItemsForSource({
+          source: token.text,
+          sourceStart: token.sourceStart,
+          literal: { reason: "math-error" },
+          atPt: params.atPt,
+          metricProvider: params.metricProvider,
+          spaceGlueProfile: params.spaceGlueProfile,
+          textFontProfile: params.textFontProfile,
+        }));
+        hasSeenText = true;
+        spaceFactor = 1000;
+        continue;
       }
       items.push({
         kind: "math",

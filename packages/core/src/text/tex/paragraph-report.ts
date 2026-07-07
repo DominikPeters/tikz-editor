@@ -169,6 +169,7 @@ function buildTexLineReport(
         runIndex: run.runIndex,
         kind: "text",
         role: run.role,
+        ...(run.literal ? { literal: run.literal } : {}),
         text: run.text.slice(startOffset, endOffset),
         startOffset,
         endOffset,

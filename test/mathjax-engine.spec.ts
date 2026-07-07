@@ -185,7 +185,9 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    const issue = engine.validate(String.raw`\unsupported{$\ell^2$}`);
+    // Non-ASCII input still routes to the MathJax path (literal runs cannot
+    // absorb it), keeping this a MathJax-validation test.
+    const issue = engine.validate(String.raw`café $\ell^2$`);
 
     expect(issue).toBeNull();
     const flushed = await engine.flushPending?.();
@@ -212,7 +214,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    const issue = engine.validate(String.raw`$\unknownmacro$`);
+    const issue = engine.validate(String.raw`café $\unknownmacro$`);
 
     expect(issue).toEqual({
       code: "invalid-node-tex",
@@ -348,7 +350,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    expect(engine.validate(String.raw`Alpha \unsupported \\ Beta`)).toBeNull();
+    expect(engine.validate(String.raw`Alpha é \\ Beta`)).toBeNull();
     const changedKeys = await engine.flushPending?.();
 
     expect(changedKeys?.length).toBe(1);
@@ -635,11 +637,10 @@ describe("mathjax node text engine", () => {
     expect(body).toContain('data-tex-glyph="120"');
   });
 
-  it("falls back for unsupported inline math without MathJax-backed TeX-path measurement", async () => {
+  it("contains unsupported inline math as literal runs without calling MathJax", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
-    const { createMathJaxNodeTextEngine, getActiveMathJaxOutputJax } = await import("../packages/core/src/text/mathjax-engine.js");
-    const { getKnuthPlassReportsFromOutputJax } = await import("../packages/core/src/text/knuth-plass/index.js");
+    const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
     const callsBeforeMeasure = texCalls.length;
 
@@ -653,20 +654,14 @@ describe("mathjax node text engine", () => {
       fontSizePt: 10
     });
 
-    expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
-    expect(texCalls).not.toContain(String.raw`\textstyle{\unknown{x}}`);
-    expect(measured?.paragraphId).not.toMatch(/^tex:/);
-    const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
-    const report = reports.find((entry) => entry.paragraphId === measured?.paragraphId);
-    expect(report?.runs.some((run) => run.kind === "math")).not.toBe(true);
-    expect(report?.lines.flatMap((line) => line.segments).some((segment) =>
-      segment.kind === "math" && segment.sourceKind === "math" && segment.mathSvgBody?.includes("data-paragraph-id")
-    )).not.toBe(true);
+    expect(texCalls.length).toBe(callsBeforeMeasure);
+    expect(measured?.paragraphId).toMatch(/^tex:/);
     const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
+    expect(body).toContain('data-tex-literal="math-error"');
     expect(body).not.toContain('data-tex-inline-math="true"');
   });
 
-  it("falls back to MathJax for unsupported wrapped TeX syntax", async () => {
+  it("renders unsupported wrapped TeX syntax as literal runs through the TeX path", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
@@ -683,11 +678,13 @@ describe("mathjax node text engine", () => {
       fontSizePt: 10
     });
 
-    expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
-    expect(measured?.paragraphId).not.toMatch(/^tex:/);
+    expect(texCalls.length).toBe(callsBeforeMeasure);
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    const body = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
+    expect(body).toContain('data-tex-literal="unsupported-command"');
   });
 
-  it("renders placeholder fallback structure through the debug renderer", async () => {
+  it("renders block-position unknown commands as literal paragraphs through the debug renderer", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
     const {
@@ -708,8 +705,8 @@ describe("mathjax node text engine", () => {
       fontSizePt: 10
     });
 
-    expect(texCalls.length).toBeGreaterThan(callsBeforeMeasure);
-    expect(measured?.paragraphId).not.toMatch(/^tex:/);
+    expect(texCalls.length).toBe(callsBeforeMeasure);
+    expect(measured?.paragraphId).toMatch(/^tex:/);
 
     const debugBody = renderSimpleTexParagraphDebugSvgBody({
       text: source,
@@ -721,10 +718,11 @@ describe("mathjax node text engine", () => {
     expect(debugBody).toContain('data-mjx-linebox="true"');
     expect(debugBody).toContain('data-line-index="0"');
     expect(debugBody).toContain('data-line-index="1"');
+    expect(debugBody).toContain('data-line-index="2"');
     expect(debugBody).toContain('data-tex-glyph="65"');
     expect(debugBody).toContain('data-tex-glyph="66"');
-    expect(debugBody.match(/data-mjx-linebox="true"/g)).toHaveLength(2);
-    expect(debugBody).toContain('width="150" height="12" fill="none"');
+    expect(debugBody).toContain('data-tex-literal="unsupported-command"');
+    expect(debugBody.match(/data-mjx-linebox="true"/g)).toHaveLength(3);
   });
 
   it("renders generic vlist structure for measured hbox and rule items", async () => {
@@ -1576,7 +1574,7 @@ describe("mathjax node text engine", () => {
     };
     const diagnosticModule = await import("../packages/core/src/text/mathjax-engine.js");
     const diagnosticEngine = await diagnosticModule.createMathJaxNodeTextEngine();
-    expect(diagnosticEngine.validate(String.raw`$\bad$`)).toEqual({
+    expect(diagnosticEngine.validate(String.raw`café $\bad$`)).toEqual({
       code: "invalid-node-tex",
       message: "object diagnostic"
     });
@@ -1701,7 +1699,7 @@ describe("mathjax node text engine", () => {
       };
       const diagnosticModule = await import("../packages/core/src/text/mathjax-engine.js");
       const diagnosticEngine = await diagnosticModule.createMathJaxNodeTextEngine();
-      expect(diagnosticEngine.validate(String.raw`$\bad$`)).toEqual({
+      expect(diagnosticEngine.validate(String.raw`café $\bad$`)).toEqual({
         code: "invalid-node-tex",
         message: testCase.message
       });

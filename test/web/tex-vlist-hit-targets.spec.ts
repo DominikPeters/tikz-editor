@@ -485,13 +485,11 @@ describe("TeX vlist hit target source offsets", () => {
     expect(treeHasItemKind(snapshot.tree, "glue")).toBe(true);
   });
 
-  it("resolves registered source hits for placeholders inside list-item vboxes", () => {
-    const source = String.raw`\begin{itemize}\item Alpha \par \unsupportedgraphics{plot.pdf} \par More\end{itemize}`;
-    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
-    const placeholderEnd = source.indexOf(String.raw` \par More`);
-    const snapshot = registeredSnapshotForSource(source, {
-      fallbackPolicy: "placeholder",
-    });
+  it("resolves registered source hits for display-math placeholders inside list-item vboxes", () => {
+    const source = String.raw`\begin{itemize}\item Alpha \par \[\unknown{x}\] \par More\end{itemize}`;
+    const placeholderStart = source.indexOf(String.raw`\[`);
+    const placeholderEnd = placeholderStart + String.raw`\[\unknown{x}\]`.length;
+    const snapshot = registeredSnapshotForSource(source);
     const placeholder = snapshot.items.find((item) => item.kind === "placeholder");
     if (!placeholder) {
       throw new Error("expected registered placeholder geometry");
@@ -501,13 +499,13 @@ describe("TeX vlist hit target source offsets", () => {
     expect(placeholder).toMatchObject({
       sourceStart: placeholderStart,
       sourceEnd: placeholderEnd,
-      placeholderReason: "Unsupported TeX command in vertical mode.",
+      placeholderReason: "TeX display math rendering is not implemented for this formula.",
     });
     expect(snapshot.placeholders).toEqual([
       expect.objectContaining({
         sourceStart: placeholderStart,
         sourceEnd: placeholderEnd,
-        reason: "Unsupported TeX command in vertical mode.",
+        reason: "TeX display math rendering is not implemented for this formula.",
       }),
     ]);
 
@@ -534,5 +532,16 @@ describe("TeX vlist hit target source offsets", () => {
       offset: placeholderStart,
       selectionRange: { start: placeholderStart, end: placeholderEnd },
     });
+  });
+
+  it("keeps unknown commands inside list items as paragraphs, not placeholders", () => {
+    const source = String.raw`\begin{itemize}\item Alpha \par \unsupportedgraphics{plot.pdf} \par More\end{itemize}`;
+    const snapshot = registeredSnapshotForSource(source);
+
+    expect(snapshot.source).toBe("registered");
+    expect(snapshot.placeholders).toEqual([]);
+    expect(snapshot.items.filter((item) => item.kind === "placeholder")).toEqual([]);
+    expect(treeHasItemKind(snapshot.tree, "placeholder")).toBe(false);
+    expect(treeHasItemKind(snapshot.tree, "paragraph")).toBe(true);
   });
 });

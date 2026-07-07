@@ -1378,7 +1378,7 @@ function renderTexVListItemsSvgContent(
       continue;
     }
     if (item.item.kind === "placeholder") {
-      pieces.push(renderTexPlaceholderSvgMetadata(item, report.width, options));
+      pieces.push(renderTexPlaceholderSvgMetadata(item, report.width, options, options.metricProvider));
       continue;
     }
     if (item.item.kind === "rule") {
@@ -1475,8 +1475,9 @@ function renderTexReportLineSvg(
         atPt: TEX_TEXT_BASE_FONT_SIZE,
       })
       : font;
+    let segmentMarkup: string;
     if (typeof segment.glyphCode === "number") {
-      pieces.push(renderTexGlyphCode(
+      segmentMarkup = renderTexGlyphCode(
         segment.glyphCode,
         segmentFont,
         segment.x - lineLeft,
@@ -1484,9 +1485,9 @@ function renderTexReportLineSvg(
         typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
           ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
           : undefined
-      ));
+      );
     } else {
-      pieces.push(renderTexGlyphRun(
+      segmentMarkup = renderTexGlyphRun(
         text,
         segmentFont,
         segment.x - lineLeft,
@@ -1495,8 +1496,19 @@ function renderTexReportLineSvg(
         typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
           ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
           : undefined
-      ));
+      );
     }
+    if (segment.literal) {
+      const literalSpanAttrs =
+        typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
+          ? ` data-source-start="${segment.sourceStartRaw}" data-source-end="${segment.sourceEndRaw}"`
+          : "";
+      segmentMarkup =
+        `<g data-tex-literal="${escapeXmlAttribute(segment.literal.reason)}"${literalSpanAttrs}>` +
+        segmentMarkup +
+        "</g>";
+    }
+    pieces.push(segmentMarkup);
   }
   pieces.push("</g>");
   return pieces.join("");
@@ -1666,18 +1678,61 @@ function renderTexVBoxSvgMetadata(
 function renderTexPlaceholderSvgMetadata(
   item: PositionedTexVListItem,
   width: number,
-  origin: TexVListSvgOrigin = {}
+  origin: TexVListSvgOrigin = {},
+  metricProvider?: TexMetricProvider
 ): string {
   if (item.item.kind !== "placeholder") {
     return "";
   }
   const boxHeight = item.metrics.height + item.metrics.depth;
   const boxWidth = Math.max(width, item.metrics.width);
-  return [
+  const pieces = [
     `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
-    `</g>`,
-  ].join("");
+  ];
+  const literalText = item.item.literalText;
+  if (literalText && metricProvider) {
+    pieces.push(renderTexPlaceholderLiteralSvg(
+      literalText,
+      item.item.sourceSpan,
+      item.metrics.height,
+      metricProvider
+    ));
+  }
+  pieces.push(`</g>`);
+  return pieces.join("");
+}
+
+function renderTexPlaceholderLiteralSvg(
+  literalText: string,
+  sourceSpan: { readonly start: number; readonly end: number },
+  baseline: number,
+  metricProvider: TexMetricProvider
+): string {
+  const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+    { family: "typewriter", series: "medium", shape: "upright" },
+    TEX_TEXT_BASE_FONT_SIZE,
+    metricProvider
+  );
+  // The literal face is monospaced, so a single shaped character gives the
+  // advance used for word spacing.
+  const spaceAdvance = metricProvider.shapeText("x", font).width;
+  const pieces = [
+    `<g data-tex-literal="display-math-unsupported" data-source-start="${sourceSpan.start}" data-source-end="${sourceSpan.end}">`,
+  ];
+  let cursor = 0;
+  const pattern = /([ \n]+)|([^ \n]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(literalText)) !== null) {
+    if (match[1] !== undefined) {
+      cursor += spaceAdvance * match[1].length;
+      continue;
+    }
+    pieces.push(renderTexGlyphRun(match[0], font, cursor, baseline, metricProvider));
+    cursor += metricProvider.shapeText(match[0], font).width;
+  }
+  pieces.push("</g>");
+  return pieces.join("");
 }
 
 function renderTexVListLeafBoxSvgMetadata(

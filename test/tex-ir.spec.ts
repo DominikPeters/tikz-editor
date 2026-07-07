@@ -565,44 +565,34 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
-  it("preserves block-position unsupported commands as placeholder block items", () => {
+  it("parses block-position unsupported commands as literal paragraphs", () => {
     const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);
-    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
-    const placeholderEnd = source.indexOf(String.raw` \par Beta`);
 
-    expect(parsed.unsupportedCommand).toBe(true);
-    expect(parsed.partialFallbackSupported).toBe(true);
-    expect(parsed.blocks.map((block) => block.text)).toEqual(["Alpha", "Beta"]);
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.blocks.map((block) => block.text)).toEqual([
+      "Alpha",
+      String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}`,
+      "Beta",
+    ]);
     expect(parsed.items.map((item) =>
-      item.kind === "placeholder"
-        ? {
-            kind: item.kind,
-            text: item.text,
-            sourceStart: item.sourceStart,
-            sourceEnd: item.sourceEnd,
-            reason: item.reason,
-          }
-        : item.kind === "paragraph"
-          ? {
-              kind: item.kind,
-              text: item.block.text,
-            }
-        : {
-            kind: item.kind,
-          }
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.block.text }
+        : { kind: item.kind }
     )).toEqual([
       { kind: "paragraph", text: "Alpha" },
-      {
-        kind: "placeholder",
-        text: String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}`,
-        sourceStart: placeholderStart,
-        sourceEnd: placeholderEnd,
-        reason: "Unsupported TeX command in vertical mode.",
-      },
+      { kind: "paragraph", text: String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}` },
       { kind: "paragraph", text: "Beta" },
     ]);
 
+    const literalBlock = parsed.blocks[1];
+    const literals = literalBlock?.nodes.filter((node) => node.kind === "literal") ?? [];
+    expect(literals).toHaveLength(1);
+    expect(literals[0]).toMatchObject({
+      reason: "unsupported-command",
+      detail: String.raw`\unsupportedgraphics`,
+      sourceStart: source.indexOf(String.raw`\unsupportedgraphics`),
+    });
   });
 
   it("routes layout paragraph IR through V0 vlist paragraph items", () => {

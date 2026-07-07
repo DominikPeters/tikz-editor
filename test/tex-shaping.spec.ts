@@ -2680,113 +2680,79 @@ describe("simple TeX paragraph layout", () => {
     });
   });
 
-  it("positions placeholder vlist items between supported paragraphs", () => {
+  it("positions literal paragraphs from unsupported commands between supported paragraphs", () => {
     const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
-    const placeholderStart = source.indexOf(String.raw`\unsupportedgraphics`);
-    const placeholderEnd = source.indexOf(String.raw` \par Beta`);
     const parsed = parseSimpleTexParagraphIr(source);
     const supported = layoutSimpleTexParagraph(source, {
-      paragraphId: "tex:vlist-placeholder-reference",
+      paragraphId: "tex:vlist-literal-reference",
       width: 150,
       alignment: "ragged-right",
-      fallbackPolicy: "placeholder",
     });
 
-    expect(parsed.unsupportedCommand).toBe(true);
+    expect(parsed.unsupportedCommand).toBe(false);
     expect(supported.supported).toBe(true);
     const vlistLayout = supported.vlistLayout;
+    if (!vlistLayout) {
+      throw new Error("expected vlist layout");
+    }
 
-    expect(vlistLayout && {
-      linePlacementYs: vlistLayout.linePlacements.map((placement) => placement.y),
-      metrics: vlistLayout.metrics,
-      items: vlistLayout.items.map((item) => ({
+    const items = vlistLayout.items
+      .filter((item) => item.item.kind === "paragraph")
+      .map((item) => ({
         kind: item.item.kind,
         y: item.y,
-        metrics: item.metrics,
         text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
-        reason: item.item.kind === "placeholder" ? item.item.reason : undefined,
         sourceSpan: item.item.sourceSpan,
-      })),
-    }).toEqual({
-      linePlacementYs: [0, 21.1],
-      metrics: { width: 150, height: 8.5, depth: 19.54 },
-      items: [
-        {
-          kind: "paragraph",
-          y: 0,
-          metrics: expect.objectContaining({ height: expect.closeTo(7.16, 2) }),
-          text: "Alpha",
-          reason: undefined,
-          sourceSpan: { start: 0, end: 5 },
-        },
-        {
-          kind: "placeholder",
-          y: 9.1,
-          metrics: { width: 0, height: 8.5, depth: 3.5 },
-          text: undefined,
-          reason: "Unsupported TeX command in vertical mode.",
-          sourceSpan: { start: placeholderStart, end: placeholderEnd },
-        },
-        {
-          kind: "paragraph",
-          y: 21.1,
-          metrics: expect.objectContaining({ height: expect.closeTo(6.83, 2) }),
-          text: "Beta",
-          reason: undefined,
-          sourceSpan: { start: source.indexOf("Beta"), end: source.length },
-        },
-      ],
-    });
+      }));
+    expect(items.map((item) => [item.kind, item.text])).toEqual([
+      ["paragraph", "Alpha"],
+      ["paragraph", String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}`],
+      ["paragraph", "Beta"],
+    ]);
+    expect(items[0]?.sourceSpan).toEqual({ start: 0, end: 5 });
+    expect(items[1]?.sourceSpan?.start).toBe(source.indexOf(String.raw`\unsupportedgraphics`));
+    expect(items[2]?.sourceSpan).toEqual({ start: source.indexOf("Beta"), end: source.length });
+    expect(items[0]!.y).toBeLessThan(items[1]!.y);
+    expect(items[1]!.y).toBeLessThan(items[2]!.y);
+
+    const segments = supported.report?.lines.flatMap((line) => line.segments) ?? [];
+    const literalSegments = segments.filter((segment) => segment.literal);
+    expect(literalSegments.length).toBeGreaterThan(0);
+    expect(literalSegments.every(
+      (segment) => segment.literal?.reason === "unsupported-command"
+    )).toBe(true);
+    expect(literalSegments.every(
+      (segment) => segment.fontId?.includes("mono") || segment.fontId?.includes("tt")
+    )).toBe(true);
   });
 
-  it("keeps whole-node fallback by default but supports opt-in placeholder fallback", () => {
+  it("renders unknown commands through the TeX path regardless of fallback policy", () => {
     const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const defaultResult = layoutSimpleTexParagraph(source, {
-      paragraphId: "tex:vlist-placeholder-default-fallback",
+      paragraphId: "tex:vlist-literal-default",
       width: 150,
       alignment: "ragged-right",
     });
-    const partialResult = layoutSimpleTexParagraph(source, {
-      paragraphId: "tex:vlist-placeholder-opt-in",
+    const placeholderPolicyResult = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:vlist-literal-placeholder-policy",
       width: 150,
       alignment: "ragged-right",
       fallbackPolicy: "placeholder",
     });
 
-    expect(defaultResult.supported).toBe(false);
-    expect(defaultResult.report).toBeNull();
-    expect(defaultResult.fallbackReason).toContain("TeX syntax");
-
-    expect(partialResult.supported).toBe(true);
-    expect(partialResult.fallbackReason).toBeNull();
-    expect(partialResult.report?.errors).toEqual([
-      "Paragraph contains TeX syntax that is not supported by the simple text path.",
-    ]);
-    expect(lineTexts(partialResult.report)).toEqual(["Alpha", "Beta"]);
-    expect(partialResult.vlistLayout?.linePlacements.map((placement) => placement.y)).toEqual([0, 21.1]);
-    expect(partialResult.vlistLayout?.items.map((item) => ({
-      kind: item.item.kind,
-      y: item.y,
-      text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
-      sourceSpan: item.item.sourceSpan,
-    }))).toEqual([
-      { kind: "paragraph", y: 0, text: "Alpha", sourceSpan: { start: 0, end: 5 } },
-      {
-        kind: "placeholder",
-        y: 9.1,
-        text: undefined,
-        sourceSpan: {
-          start: source.indexOf(String.raw`\unsupportedgraphics`),
-          end: source.indexOf(String.raw` \par Beta`),
-        },
-      },
-      {
-        kind: "paragraph",
-        y: 21.1,
-        text: "Beta",
-        sourceSpan: { start: source.indexOf("Beta"), end: source.length },
-      },
-    ]);
+    for (const result of [defaultResult, placeholderPolicyResult]) {
+      expect(result.supported).toBe(true);
+      expect(result.fallbackReason).toBeNull();
+      expect(result.report?.errors ?? []).toEqual([]);
+      const paragraphTexts = (result.vlistLayout?.items ?? [])
+        .filter((item) => item.item.kind === "paragraph")
+        .map((item) => (item.item.kind === "paragraph" ? item.item.paragraph.text : ""));
+      expect(paragraphTexts).toEqual([
+        "Alpha",
+        String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}`,
+        "Beta",
+      ]);
+    }
   });
 
   it("keeps explicit vertical glue inside quote vbox metadata", () => {
@@ -5413,17 +5379,19 @@ unordered.`;
     expect(result.errors).toEqual([result.fallbackReason]);
   });
 
-  it("reports whole-node fallback when the inline math box provider cannot measure a formula", () => {
+  it("contains formulas the math box provider cannot measure as literal runs", () => {
     const result = layoutSimpleTexParagraph(String.raw`Alpha $x$`, {
       paragraphId: "tex:math-provider-fallback",
       width: 100,
       mathBoxProvider: { getInlineMathBox: () => null },
     });
 
-    expect(result.supported).toBe(false);
-    expect(result.report).toBeNull();
-    expect(result.fallbackReason).toContain("Missing TeX inline math box");
-    expect(result.errors).toEqual([result.fallbackReason]);
+    expect(result.supported).toBe(true);
+    expect(result.fallbackReason).toBeNull();
+    const segments = result.report?.lines.flatMap((line) => line.segments) ?? [];
+    const literalSegments = segments.filter((segment) => segment.literal);
+    expect(literalSegments.map((segment) => segment.text).join("")).toBe("$x$");
+    expect(literalSegments.every((segment) => segment.literal?.reason === "math-error")).toBe(true);
   });
 
   it("keeps current editor hit testing usable for TeX paragraph reports", async () => {

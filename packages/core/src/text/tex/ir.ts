@@ -267,6 +267,19 @@ export interface SimpleTexUnsupportedCommandNode extends SimpleTexSourceRange {
   readonly text: string;
 }
 
+export type SimpleTexLiteralReason =
+  | "unsupported-command"
+  | "unsupported-character"
+  | "malformed-input"
+  | "math-error";
+
+export interface SimpleTexLiteralNode extends SimpleTexSourceRange {
+  readonly kind: "literal";
+  readonly text: string;
+  readonly reason: SimpleTexLiteralReason;
+  readonly detail?: string;
+}
+
 export interface SimpleTexEnvironmentBoundaryNode extends SimpleTexSourceRange {
   readonly kind: "environment-boundary";
   readonly text: string;
@@ -332,7 +345,8 @@ export type SimpleTexInlineNode =
   | SimpleTexRuleNode
   | SimpleTexIncludeGraphicsNode
   | SimpleTexRaiseBoxNode
-  | SimpleTexDimensionBoxNode;
+  | SimpleTexDimensionBoxNode
+  | SimpleTexLiteralNode;
 
 export type SimpleTexControlNode =
   | SimpleTexParagraphBreakNode
@@ -376,6 +390,12 @@ export interface SimpleTexToken {
   readonly lineLeading?: string;
   readonly fontState: SimpleTexFontState;
   readonly italicCorrectionAfter?: boolean;
+  readonly literal?: SimpleTexTokenLiteralInfo;
+}
+
+export interface SimpleTexTokenLiteralInfo {
+  readonly reason: SimpleTexLiteralReason;
+  readonly detail?: string;
 }
 
 export interface SimpleTexParagraphBlock {
@@ -602,7 +622,7 @@ export function analyzeSimpleTexParagraph(
     };
   }
   const ir = buildSimpleTexParagraphIr(text);
-  if (ir.unsupportedCommand || simpleTexIrHasUnsupportedDirectTextChar(ir.nodes)) {
+  if (ir.unsupportedCommand) {
     return {
       ir,
       fallbackReason: "Paragraph contains TeX syntax that is not supported by the simple text path.",
@@ -621,40 +641,6 @@ export function analyzeSimpleTexParagraph(
     }
   }
   return { ir, fallbackReason: null };
-}
-
-function simpleTexIrHasUnsupportedDirectTextChar(nodes: readonly SimpleTexNode[]): boolean {
-  for (const node of nodes) {
-    if (node.kind === "text" && unsupportedDirectTextCharPattern.test(node.text)) {
-      return true;
-    }
-    if (
-      (
-        node.kind === "font-command" ||
-        node.kind === "group" ||
-        node.kind === "mbox" ||
-        node.kind === "raisebox" ||
-        node.kind === "dimension-box"
-      ) &&
-      simpleTexIrHasUnsupportedDirectTextChar(node.children)
-    ) {
-      return true;
-    }
-    if (
-      node.kind === "item" &&
-      node.labelNodes &&
-      simpleTexIrHasUnsupportedDirectTextChar(node.labelNodes)
-    ) {
-      return true;
-    }
-    if (
-      node.kind === "box" &&
-      simpleTexIrHasUnsupportedDirectTextChar(node.body.nodes)
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export function parseSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
@@ -901,13 +887,15 @@ function scanSimpleTexIrNodes(
       }
 
       const end = scanUnsupportedControlSequenceEnd(text, index);
+      const commandNameMatch = /^\\[A-Za-z]+/.exec(text.slice(index));
       nodes.push({
-        kind: "unsupported-command",
+        kind: "literal",
         text: text.slice(index, end),
+        reason: "unsupported-command",
+        detail: commandNameMatch?.[0] ?? text.slice(index, Math.min(end, index + 2)),
         sourceStart,
         sourceEnd: sourceOffset + end,
       });
-      unsupportedCommand = true;
       index = end;
       continue;
     }
@@ -921,36 +909,36 @@ function scanSimpleTexIrNodes(
         continue;
       }
       nodes.push({
-        kind: "unsupported-command",
+        kind: "literal",
         text: char,
+        reason: "malformed-input",
         sourceStart,
         sourceEnd: sourceStart + 1,
       });
-      unsupportedCommand = true;
       index += 1;
       continue;
     }
 
     if (char === "}") {
       nodes.push({
-        kind: "unsupported-command",
+        kind: "literal",
         text: char,
+        reason: "malformed-input",
         sourceStart,
         sourceEnd: sourceStart + 1,
       });
-      unsupportedCommand = true;
       index += 1;
       continue;
     }
 
     if (char === "$") {
       nodes.push({
-        kind: "unsupported-command",
+        kind: "literal",
         text: char,
+        reason: "malformed-input",
         sourceStart,
         sourceEnd: sourceStart + 1,
       });
-      unsupportedCommand = true;
       index += 1;
       continue;
     }
@@ -985,6 +973,18 @@ function scanSimpleTexIrNodes(
       continue;
     }
 
+    if (unsupportedDirectTextCharPattern.test(char ?? "")) {
+      nodes.push({
+        kind: "literal",
+        text: char ?? "",
+        reason: "unsupported-character",
+        sourceStart,
+        sourceEnd: sourceStart + 1,
+      });
+      index += 1;
+      continue;
+    }
+
     const start = index;
     while (
       index < text.length &&
@@ -992,6 +992,7 @@ function scanSimpleTexIrNodes(
       text[index] !== "{" &&
       text[index] !== "}" &&
       text[index] !== "$" &&
+      !unsupportedDirectTextCharPattern.test(text[index] ?? "") &&
       !whitespacePattern.test(text[index] ?? "")
     ) {
       index += 1;
@@ -2825,7 +2826,8 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "rule" ||
     node.kind === "includegraphics" ||
     node.kind === "raisebox" ||
-    node.kind === "dimension-box"
+    node.kind === "dimension-box" ||
+    node.kind === "literal"
   );
 }
 
@@ -3849,6 +3851,49 @@ export function simpleTexInlineNodesToTokens(
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
       });
+      continue;
+    }
+
+    if (node.kind === "literal") {
+      // Literal source is displayed in the typewriter face; OT1 typewriter
+      // keeps \ { } _ # % ^ ~ & at their ASCII positions, unlike roman.
+      const literalFontState: SimpleTexFontState = {
+        family: "typewriter",
+        series: "medium",
+        shape: "upright",
+      };
+      const literalInfo: SimpleTexTokenLiteralInfo = node.detail
+        ? { reason: node.reason, detail: node.detail }
+        : { reason: node.reason };
+      // Split on whitespace: text tokens must not contain spaces (TFM fonts
+      // have no glyph at 0x20), and spaces are the only break opportunities
+      // inside a literal run.
+      const pattern = /([ \n]+)|([^ \n]+)/g;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(node.text)) !== null) {
+        const segmentStart = node.sourceStart + match.index;
+        const segmentEnd = segmentStart + match[0].length;
+        if (match[1] !== undefined) {
+          tokens.push({
+            kind: "space",
+            text: " ",
+            sourceStart: segmentStart,
+            sourceEnd: segmentEnd,
+            fontState: literalFontState,
+            literal: literalInfo,
+          });
+        } else {
+          tokens.push({
+            kind: "text",
+            text: match[0],
+            sourceStart: segmentStart,
+            sourceEnd: segmentEnd,
+            fontState: literalFontState,
+            literal: literalInfo,
+          });
+        }
+      }
+      skipPostLineBreakSpace = false;
       continue;
     }
 
