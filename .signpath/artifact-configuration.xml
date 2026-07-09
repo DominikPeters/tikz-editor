@@ -18,7 +18,7 @@
       subject="TikZ Editor"
       author="tikz">
       <!-- Sign the installed application as well as the MSI container. -->
-      <pe-file path="tikz-editor.exe">
+      <pe-file path="**/tikz-editor.exe">
         <authenticode-sign />
       </pe-file>
       <authenticode-sign />
