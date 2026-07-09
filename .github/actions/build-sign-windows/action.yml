@@ -1,0 +1,178 @@
+name: Build and Sign Windows Bundles
+description: Build the Tauri Windows app and sign it and its installers with SignPath.
+
+inputs:
+  api-token:
+    description: SignPath API token.
+    required: true
+  organization-id:
+    description: SignPath organization ID.
+    required: true
+  project-slug:
+    description: SignPath project slug.
+    required: false
+    default: tikz-editor
+  signing-policy-slug:
+    description: SignPath signing policy slug.
+    required: true
+  artifact-configuration-slug:
+    description: SignPath artifact configuration slug.
+    required: false
+    default: windows-signing
+  wait-for-completion-timeout-in-seconds:
+    description: Maximum time to wait for SignPath signing and any required approval.
+    required: false
+    default: "600"
+  tauri-signing-private-key:
+    description: Private key used to sign Tauri updater artifacts.
+    required: true
+  tauri-signing-private-key-password:
+    description: Password for the Tauri updater private key, if any.
+    required: false
+
+outputs:
+  signed-artifact-directory:
+    description: Directory containing signed installers and regenerated updater signatures.
+    value: ${{ steps.collect.outputs.directory }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - uses: dtolnay/rust-toolchain@stable
+
+    - uses: swatinem/rust-cache@v2
+      with:
+        workspaces: apps/desktop/src-tauri -> target
+
+    - name: Install dependencies
+      shell: pwsh
+      run: npm ci
+
+    - name: Build application executable
+      shell: pwsh
+      run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
+
+    - name: Stage unsigned application executable
+      shell: pwsh
+      run: |
+        $source = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\target\release\tikz-editor.exe"
+        $destination = Join-Path $env:RUNNER_TEMP "signpath-unsigned-app"
+        New-Item -ItemType Directory -Force -Path $destination | Out-Null
+        Copy-Item -LiteralPath $source -Destination (Join-Path $destination "tikz-editor.exe")
+
+    - name: Upload unsigned application executable
+      id: upload-unsigned-app
+      uses: actions/upload-artifact@v7
+      with:
+        name: signpath-app-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}\signpath-unsigned-app\tikz-editor.exe
+        compression-level: 0
+        if-no-files-found: error
+
+    - name: Sign application executable
+      uses: signpath/github-action-submit-signing-request@v2
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project-slug }}
+        signing-policy-slug: ${{ inputs.signing-policy-slug }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration-slug }}
+        github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: ${{ inputs.wait-for-completion-timeout-in-seconds }}
+        output-artifact-directory: ${{ runner.temp }}\signpath-signed-app
+
+    - name: Install signed application executable
+      shell: pwsh
+      run: |
+        $signed = Join-Path $env:RUNNER_TEMP "signpath-signed-app\tikz-editor.exe"
+        $target = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\target\release\tikz-editor.exe"
+        $signature = Get-AuthenticodeSignature -LiteralPath $signed
+        if ($null -eq $signature.SignerCertificate) {
+          throw "SignPath returned an application executable without an Authenticode signature."
+        }
+        Copy-Item -LiteralPath $signed -Destination $target -Force
+
+    - name: Bundle installers around signed application
+      shell: pwsh
+      env:
+        TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.tauri-signing-private-key }}
+        TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.tauri-signing-private-key-password }}
+      run: npm run -w @tikz-editor/desktop tauri -- bundle --ci
+
+    - name: Stage unsigned installers
+      shell: pwsh
+      run: |
+        $bundle = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\target\release\bundle"
+        $destination = Join-Path $env:RUNNER_TEMP "signpath-unsigned-installers"
+        New-Item -ItemType Directory -Force -Path $destination | Out-Null
+
+        $nsis = @(Get-ChildItem -Path (Join-Path $bundle "nsis\*.exe"))
+        $msi = @(Get-ChildItem -Path (Join-Path $bundle "msi\*.msi"))
+        if ($nsis.Count -ne 1 -or $msi.Count -ne 1) {
+          throw "Expected exactly one NSIS installer and one MSI; found $($nsis.Count) NSIS and $($msi.Count) MSI files."
+        }
+        Copy-Item -LiteralPath $nsis[0].FullName -Destination $destination
+        Copy-Item -LiteralPath $msi[0].FullName -Destination $destination
+
+    - name: Upload unsigned installers
+      id: upload-unsigned-installers
+      uses: actions/upload-artifact@v7
+      with:
+        name: signpath-installers-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}\signpath-unsigned-installers
+        compression-level: 0
+        if-no-files-found: error
+
+    - name: Sign Windows installers
+      uses: signpath/github-action-submit-signing-request@v2
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project-slug }}
+        signing-policy-slug: ${{ inputs.signing-policy-slug }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration-slug }}
+        github-artifact-id: ${{ steps.upload-unsigned-installers.outputs.artifact-id }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: ${{ inputs.wait-for-completion-timeout-in-seconds }}
+        output-artifact-directory: ${{ runner.temp }}\signpath-signed-installers
+
+    - name: Regenerate Tauri updater signatures
+      shell: pwsh
+      env:
+        TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.tauri-signing-private-key }}
+        TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.tauri-signing-private-key-password }}
+      run: |
+        $directory = Join-Path $env:RUNNER_TEMP "signpath-signed-installers"
+        $installers = @(Get-ChildItem -Path $directory -File | Where-Object { $_.Extension -in ".exe", ".msi" })
+        if ($installers.Count -ne 2) {
+          throw "Expected two signed installers from SignPath; found $($installers.Count)."
+        }
+
+        foreach ($installer in $installers) {
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          if ($null -eq $signature.SignerCertificate) {
+            throw "SignPath returned $($installer.Name) without an Authenticode signature."
+          }
+          npm run -w @tikz-editor/desktop tauri -- signer sign "$($installer.FullName)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to generate the Tauri updater signature for $($installer.Name)."
+          }
+        }
+
+    - name: Collect signed Windows artifacts
+      id: collect
+      shell: pwsh
+      run: |
+        $source = Join-Path $env:RUNNER_TEMP "signpath-signed-installers"
+        $destination = Join-Path $env:GITHUB_WORKSPACE "signpath-windows-output"
+        New-Item -ItemType Directory -Force -Path $destination | Out-Null
+        Copy-Item -Path (Join-Path $source "*.exe") -Destination $destination
+        Copy-Item -Path (Join-Path $source "*.msi") -Destination $destination
+        Copy-Item -Path (Join-Path $source "*.sig") -Destination $destination
+        "directory=$destination" >> $env:GITHUB_OUTPUT
