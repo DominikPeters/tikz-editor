@@ -1,5 +1,6 @@
 import { COLOR_HEX, NAMED_COLORS } from "./constants.js";
 import { normalizeOptionValue } from "./option-utils.js";
+import { hexToRgb, rgbToHex } from "../../utils/color-convert.js";
 
 export type ColorAliasResolver = (rawColorName: string) => string | null;
 
@@ -442,25 +443,4 @@ function resolveCurrentColor(color: string | null | undefined): string | null {
     return normalized;
   }
   return parseMixedColor(normalized, null) ?? normalized;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = hex.replace(/^#/, "");
-  const value = normalized.length === 3 ? normalized.split("").map((char) => char + char).join("") : normalized;
-  const parsed = Number.parseInt(value, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  return (
-    "#" +
-    [rgb.r, rgb.g, rgb.b]
-      .map((component) => Math.round(Math.max(0, Math.min(255, component))))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
 }

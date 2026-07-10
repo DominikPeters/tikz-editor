@@ -37,6 +37,7 @@ import type {
   SvgViewBox,
 } from "./types.js";
 import { formatSvgNumber as fmt } from "./format.js";
+import { hexToRgb, rgbToHex } from "../utils/color-convert.js";
 
 type ShadowRenderableStyle = Pick<
   ResolvedStyle,
@@ -2017,33 +2018,6 @@ function clamp01(value: number): number {
     return 1;
   }
   return value;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = hex.replace(/^#/, "");
-  const value =
-    normalized.length === 3
-      ? normalized
-          .split("")
-          .map((char) => char + char)
-          .join("")
-      : normalized;
-  const parsed = Number.parseInt(value, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255,
-  };
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  return (
-    "#" +
-    [rgb.r, rgb.g, rgb.b]
-      .map((component) => Math.max(0, Math.min(255, component)))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
 }
 
 function escapeText(value: string): string {
