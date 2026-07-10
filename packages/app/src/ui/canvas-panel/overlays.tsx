@@ -429,7 +429,7 @@ export function ToolPreviewOverlay({
         </g>
       )}
       {toolPreview.kind === "complex-path" && (
-        <g>
+        <g data-testid="canvas-tool-preview-complex-path">
           {toolPreview.segments.map((segment, index) =>
             segment.kind === "line" ? (
               <line

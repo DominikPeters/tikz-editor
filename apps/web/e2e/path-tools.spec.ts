@@ -1202,6 +1202,60 @@ test("multi-segment path tool finalizes on Enter", async ({ page }) => {
   await expect.poll(async () => readSource(page)).toContain("--");
 });
 
+test("multi-segment path draft does not follow document tab switches", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+  await toolbarButton(page, "Path").click();
+
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+
+  await page.mouse.click(box.x + 120, box.y + 120);
+  await page.mouse.click(box.x + 200, box.y + 120);
+  await expect(page.getByTestId("canvas-tool-preview-complex-path")).toBeVisible();
+
+  await page.getByTestId("tab-new").click();
+
+  await expect(page.getByTestId("canvas-tool-preview-complex-path")).toHaveCount(0);
+  await expect(toolbarButton(page, "Path")).toHaveClass(/btnActive/);
+});
+
+test("Ctrl-Z undoes the latest path draft segment without leaving the tool", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+  await toolbarButton(page, "Path").click();
+
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+
+  await page.mouse.click(box.x + 100, box.y + 100);
+  await page.mouse.click(box.x + 160, box.y + 100);
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await readSource(page)).match(/\\draw/g)?.length ?? 0).toBe(1);
+  const sourceBeforeDraft = await readSource(page);
+
+  await toolbarButton(page, "Path").click();
+  await page.mouse.click(box.x + 120, box.y + 160);
+  await page.mouse.click(box.x + 200, box.y + 160);
+  await page.mouse.click(box.x + 200, box.y + 220);
+  await page.keyboard.press("ControlOrMeta+z");
+
+  await expect.poll(async () => readSource(page)).toBe(sourceBeforeDraft);
+  await expect(toolbarButton(page, "Path")).toHaveClass(/btnActive/);
+  await page.keyboard.press("Enter");
+
+  await expect.poll(async () => (await readSource(page)).match(/\\draw/g)?.length ?? 0).toBe(2);
+  await expect.poll(async () => (await readSource(page)).match(/--/g)?.length ?? 0).toBe(2);
+});
+
 test("multi-segment path tool keeps named anchors when clicking anchor dots", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}

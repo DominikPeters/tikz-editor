@@ -139,6 +139,17 @@ export function appendPathToolSegmentFromGesture(
   };
 }
 
+export function undoLastPathToolSegment(draft: PathToolDraft): PathToolDraft {
+  if (draft.segments.length === 0) {
+    return draft;
+  }
+
+  return {
+    ...draft,
+    segments: draft.segments.slice(0, -1)
+  };
+}
+
 export function generatePathToolSource(draft: PathToolDraft, options: { closed: boolean; strokeColor?: string }): string | null {
   return generateComplexPathSource(draft.startWorld, draft.segments, {
     closed: options.closed,

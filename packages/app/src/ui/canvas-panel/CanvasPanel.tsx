@@ -98,7 +98,9 @@ import {
 appendPathToolSegmentFromGesture,
 generateAppendSegmentSource,
 generatePathToolSource,
+pathToolCurrentPoint,
 pathToolHasDrawableSegments,
+undoLastPathToolSegment,
 type PathToolGestureSegment
 } from "./path-tool";
 import { collectDensePathSourceIds, resolvePathSelectionHint } from "./path-selection-hint";
@@ -1242,6 +1244,18 @@ export const CanvasPanel = memo(function CanvasPanel({
     pathDraftRef.current = pathDraft;
   }, [pathDraft]);
 
+  useLayoutEffect(() => {
+    pathDraftRef.current = null;
+    setPathDraft(null);
+    setPathSegmentDraft(null);
+    setToolCursorWorld(null);
+    setNodeAnchorOverlay(null);
+    setSnapLines([]);
+    if (dragRef.current?.kind === "tool-path-segment") {
+      setDragState(null);
+    }
+  }, [activeDocumentId, activeFigureId, setDragState]);
+
   useEffect(() => {
     freehandDraftRef.current = freehandDraft;
   }, [freehandDraft]);
@@ -1913,6 +1927,25 @@ export const CanvasPanel = memo(function CanvasPanel({
     setPathSegmentDraft(null);
     setToolCursorWorld(segment.endWorld);
   }, []);
+
+  const undoPathDraftSegment = useCallback(() => {
+    const draft = pathDraftRef.current;
+    if (!draft || draft.segments.length === 0) {
+      return false;
+    }
+
+    const nextDraft = undoLastPathToolSegment(draft);
+    pathDraftRef.current = nextDraft;
+    setPathDraft(nextDraft);
+    setPathSegmentDraft(null);
+    setToolCursorWorld(pathToolCurrentPoint(nextDraft));
+    setNodeAnchorOverlay(null);
+    setSnapLines([]);
+    if (dragRef.current?.kind === "tool-path-segment") {
+      setDragState(null);
+    }
+    return true;
+  }, [setDragState]);
 
   const appendFreehandSamplePoint = useCallback((point: WorldPoint): WorldPoint[] | null => {
     let nextPoints: WorldPoint[] | null = null;
@@ -3150,6 +3183,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     setContextMenuState,
     toolMode,
     finalizePathDraft,
+    undoPathDraftSegment,
     setWarning,
     setFreehandDraft,
     dragRef,

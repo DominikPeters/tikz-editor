@@ -53,6 +53,7 @@ export type UseCanvasKeyboardClipboardArgs = {
   setContextMenuState: StateSetter<CanvasContextMenuState | null>;
   toolMode: ToolMode;
   finalizePathDraft: (closed: boolean) => void;
+  undoPathDraftSegment: () => boolean;
   setWarning: StateSetter<string | null>;
   setFreehandDraft: StateSetter<FreehandToolDraft | null>;
   dragRef: MutableRefObject<DragState | null>;
@@ -133,6 +134,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     setContextMenuState,
     toolMode,
     finalizePathDraft,
+    undoPathDraftSegment,
     setWarning,
     setFreehandDraft,
     dragRef,
@@ -231,6 +233,20 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         finalizePathDraft(false);
         setWarning(null);
         event.preventDefault();
+        return;
+      }
+
+      if (
+        toolMode === "addPath" &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "z" &&
+        undoPathDraftSegment()
+      ) {
+        setWarning(null);
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -357,7 +373,8 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       snapshot,
       source,
       textEditingSession,
-      toolMode
+      toolMode,
+      undoPathDraftSegment
     ]
   );
 
