@@ -217,6 +217,10 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     const maybeTextEngine = getOptionalTextEngine();
     const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
     phases.textEngine = performance.now() - phaseStartedAt;
+    // Full renders also seed the incremental cache. Route their one semantic
+    // evaluation through the session instead of evaluating again after render.
+    incrementalSemanticSession?.reset();
+    const semanticSession = getIncrementalSemanticSession();
     phaseStartedAt = performance.now();
     const result = await renderTikzToSvgAsync(request.source, {
       parse: {
@@ -225,13 +229,17 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         includeContextDefinitions: true
       },
       evaluate: { sourceFingerprint },
+      semanticEvaluator: (figure, source, options) =>
+        semanticSession.evaluate({
+          figure,
+          source,
+          options,
+          hints: { trigger: "other" }
+        }).semantic,
       svg: { padding: resolveSvgPadding(request.source, request.activeFigureId) },
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
-    // Non-drag requests currently bypass the incremental session.
-    // Reset to avoid reusing stale cached prefixes on the next drag.
-    incrementalSemanticSession?.reset();
     incrementalWarmSource = request.source;
     phaseStartedAt = performance.now();
     const parseSession = getIncrementalParseSession();
@@ -241,15 +249,6 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       sourceRevision: request.sourceRevision ?? null
     });
     phases.primeParse = performance.now() - phaseStartedAt;
-    phaseStartedAt = performance.now();
-    const semanticSession = getIncrementalSemanticSession();
-    semanticSession.evaluate({
-      figure: result.parse.figure,
-      source: request.source,
-      options: { sourceFingerprint, textEngine },
-      hints: { trigger: "other" }
-    });
-    phases.primeSemantic = performance.now() - phaseStartedAt;
     previousSvgModel = result.svg.model;
 
     const snapshot: SessionSnapshot = {

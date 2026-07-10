@@ -68,7 +68,24 @@ describe("computeSnapshot edge orchestration", () => {
   });
 
   it("uses the full path with a missing optional text engine and reuses warm prewarm results", async () => {
-    const renderTikzToSvgAsync = vi.fn(async (source: string) => makeRenderResult(source));
+    const semanticEvaluate = vi.fn((input: { source: string }) => ({
+      semantic: makeRenderResult(input.source).semantic,
+      stats: {}
+    }));
+    const renderTikzToSvgAsync = vi.fn(async (
+      source: string,
+      options: {
+        semanticEvaluator?: (
+          figure: MockRenderResult["parse"]["figure"],
+          source: string,
+          evaluateOptions: Record<string, unknown>
+        ) => MockRenderResult["semantic"];
+      }
+    ) => {
+      const result = makeRenderResult(source);
+      const semantic = options.semanticEvaluator?.(result.parse.figure, source, {});
+      return semantic ? { ...result, semantic } : result;
+    });
     vi.doMock("@tikz-editor/core/render/index", () => ({ renderTikzToSvgAsync }));
     vi.doMock("@tikz-editor/core/text/mathjax-engine", () => ({
       createMathJaxNodeTextEngine: vi.fn(async () => {
@@ -84,7 +101,7 @@ describe("computeSnapshot edge orchestration", () => {
     vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
         reset: vi.fn(),
-        evaluate: vi.fn()
+        evaluate: semanticEvaluate
       }))
     }));
 
@@ -122,6 +139,7 @@ describe("computeSnapshot edge orchestration", () => {
     expect(prewarm.snapshot.source).toBe("\\begin{tikzpicture}\\end{tikzpicture}");
     expect(prewarm.diagnostics).toEqual([]);
     expect(renderTikzToSvgAsync).toHaveBeenCalledTimes(1);
+    expect(semanticEvaluate).toHaveBeenCalledTimes(1);
   });
 
   it("returns compute-error diagnostics and clears cached state when full rendering throws", async () => {
@@ -170,7 +188,9 @@ describe("computeSnapshot edge orchestration", () => {
       }
     ]);
     expect(parseReset).toHaveBeenCalledTimes(1);
-    expect(semanticReset).toHaveBeenCalledTimes(1);
+    // The old cache is cleared before the full render and any partial cache
+    // created by a failing evaluator is cleared again in the error path.
+    expect(semanticReset).toHaveBeenCalledTimes(2);
   });
 
   it("merges dependency, matrix, scope, and pending MathJax source ids into SVG reuse hints", async () => {
