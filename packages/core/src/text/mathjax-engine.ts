@@ -1616,12 +1616,17 @@ function computeWrappedTextGap(
   };
 }
 
-function collectWrappedTextGaps(
+type WrappedTextSpacingToken =
+  | { kind: "text"; value: string }
+  | { kind: "gap"; gap: WrappedTextGap };
+
+function tokenizeWrappedTextSpacing(
   text: string,
   alignment: NodeTextParagraphAlignment | null
-): WrappedTextGap[] {
-  const gaps: WrappedTextGap[] = [];
+): WrappedTextSpacingToken[] {
+  const tokens: WrappedTextSpacingToken[] = [];
   let index = 0;
+  let textStart = 0;
   let inMath = false;
   let spaceFactor = 1000;
 
@@ -1666,10 +1671,17 @@ function collectWrappedTextGaps(
       while (index < text.length && /\s/.test(text[index])) {
         index += 1;
       }
-      gaps.push({
-        sourceStart: start,
-        ...computeWrappedTextGap(spaceFactor, alignment),
+      if (start > textStart) {
+        tokens.push({ kind: "text", value: text.slice(textStart, start) });
+      }
+      tokens.push({
+        kind: "gap",
+        gap: {
+          sourceStart: start,
+          ...computeWrappedTextGap(spaceFactor, alignment),
+        },
       });
+      textStart = index;
       spaceFactor = 1000;
       continue;
     }
@@ -1680,77 +1692,25 @@ function collectWrappedTextGaps(
     index += 1;
   }
 
-  return gaps;
+  if (textStart < text.length) {
+    tokens.push({ kind: "text", value: text.slice(textStart) });
+  }
+  return tokens;
 }
 
-function encodeWrappedTextSpaces(
+function collectWrappedTextGaps(
   text: string,
   alignment: NodeTextParagraphAlignment | null
-): string {
-  let encoded = "";
-  let index = 0;
-  let inMath = false;
-  let spaceFactor = 1000;
+): WrappedTextGap[] {
+  return tokenizeWrappedTextSpacing(text, alignment)
+    .filter((token): token is Extract<WrappedTextSpacingToken, { kind: "gap" }> => token.kind === "gap")
+    .map((token) => token.gap);
+}
 
-  while (index < text.length) {
-    const char = text[index];
-
-    if (char === "$") {
-      encoded += char;
-      const escaped = index > 0 && text[index - 1] === "\\";
-      if (!escaped) {
-        inMath = !inMath;
-        spaceFactor = 1000;
-      }
-      index += 1;
-      continue;
-    }
-
-    if (char === "\\") {
-      const next = text[index + 1] ?? "";
-      if (next === "\\") {
-        encoded += "\\\\";
-        index += 2;
-        continue;
-      }
-      if (isAsciiLetter(next)) {
-        let end = index + 2;
-        while (end < text.length && isAsciiLetter(text[end])) {
-          end += 1;
-        }
-        encoded += text.slice(index, end);
-        if (!inMath && text[end] === " ") {
-          encoded += " ";
-          end += 1;
-        }
-        spaceFactor = 1000;
-        index = end;
-        continue;
-      }
-      encoded += text.slice(index, Math.min(text.length, index + 2));
-      spaceFactor = 1000;
-      index += Math.min(2, text.length - index);
-      continue;
-    }
-
-    if (!inMath && /\s/.test(char)) {
-      while (index < text.length && /\s/.test(text[index])) {
-        index += 1;
-      }
-      const { widthEm } = computeWrappedTextGap(spaceFactor, alignment);
-      encoded += encodedGapCommand(widthEm);
-      spaceFactor = 1000;
-      continue;
-    }
-
-    encoded += char;
-    if (!inMath) {
-      spaceFactor = texSpaceFactorAfterChar(char, spaceFactor);
-    }
-    index += 1;
-  }
-
-  return encoded;
+function encodeWrappedTextSpaces(text: string, alignment: NodeTextParagraphAlignment | null): string {
+  return tokenizeWrappedTextSpacing(text, alignment)
+    .map((token) => (token.kind === "text" ? token.value : encodedGapCommand(token.gap.widthEm)))
+    .join("");
 }
 
 function buildWrappedTeX(
