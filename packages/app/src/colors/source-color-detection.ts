@@ -1,4 +1,6 @@
 import type { Tree } from "@lezer/common";
+import { hexToRgb, rgbToHex } from "@tikz-editor/core/utils/color-convert";
+import { clamp, clamp01 } from "@tikz-editor/core/utils/math";
 import { parseOptionListRaw } from "@tikz-editor/core/options/parse";
 import type { OptionEntry, OptionListAst } from "@tikz-editor/core/options/types";
 import { normalizeColor, resolveDefineColorModel } from "@tikz-editor/core/semantic/style/colors";
@@ -464,7 +466,7 @@ function resolveMixedColor(raw: string, context: ColorResolveContext): string | 
     };
   }
 
-  return rgbToHex(current.r, current.g, current.b);
+  return rgbToHex(current);
 }
 
 function resolveColorTokenToRgb(
@@ -744,32 +746,4 @@ function normalizeHex(input: string): string {
     return `#${expanded}`;
   }
   return `#${raw}`;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = normalizeHex(hex).replace(/^#/, "");
-  const parsed = Number.parseInt(normalized, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  return (
-    "#" +
-    [r, g, b]
-      .map((component) => Math.round(Math.max(0, Math.min(255, component))))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function clamp01(value: number): number {
-  return clamp(value, 0, 1);
 }
