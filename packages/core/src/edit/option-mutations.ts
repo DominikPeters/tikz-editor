@@ -227,72 +227,12 @@ function rewriteOptionListMutationsPreservingSource(
     return format === "bracketed" || format === "bare" ? "" : wrapSerializedOptions("", format);
   }
 
-  const rewritten = normalizeTopLevelCommaSpacing(applyRelativeReplacements(original, replacements), format);
+  const rewritten = applyRelativeReplacements(original, replacements);
   if (entriesToInsert.length === 0) {
     return rewritten;
   }
 
   return insertSerializedOptionEntries(rewritten, entriesToInsert, format);
-}
-
-function normalizeTopLevelCommaSpacing(source: string, format: PropertyTargetOptionsFormat): string {
-  if (source.includes("\n") || source.includes("\r")) {
-    return source;
-  }
-
-  let squareDepth = 0;
-  let curlyDepth = 0;
-  let parenDepth = 0;
-  let result = "";
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index] ?? "";
-    if (char === "," && isTopLevelComma(format, squareDepth, curlyDepth, parenDepth)) {
-      let nextIndex = index + 1;
-      while (source[nextIndex] === " " || source[nextIndex] === "\t") {
-        nextIndex += 1;
-      }
-      const next = source[nextIndex];
-      if (next !== undefined && next !== "]" && next !== "}") {
-        result += ", ";
-      }
-      index = nextIndex - 1;
-      continue;
-    }
-
-    result += char;
-    if (char === "[") {
-      squareDepth += 1;
-    } else if (char === "]") {
-      squareDepth = Math.max(0, squareDepth - 1);
-    } else if (char === "{") {
-      curlyDepth += 1;
-    } else if (char === "}") {
-      curlyDepth = Math.max(0, curlyDepth - 1);
-    } else if (char === "(") {
-      parenDepth += 1;
-    } else if (char === ")") {
-      parenDepth = Math.max(0, parenDepth - 1);
-    }
-  }
-  return result;
-}
-
-function isTopLevelComma(
-  format: PropertyTargetOptionsFormat,
-  squareDepth: number,
-  curlyDepth: number,
-  parenDepth: number
-): boolean {
-  if (parenDepth !== 0) {
-    return false;
-  }
-  if (format === "bracketed") {
-    return squareDepth === 1 && curlyDepth === 0;
-  }
-  if (format === "braced") {
-    return squareDepth === 0 && curlyDepth === 1;
-  }
-  return squareDepth === 0 && curlyDepth === 0;
 }
 
 function applyRelativeReplacements(
@@ -454,7 +394,12 @@ function insertSerializedOptionEntries(
 ): string {
   const content = entries.join(", ");
   if (format === "bare") {
-    return source.trim().length === 0 ? content : `${source}, ${content}`;
+    if (source.trim().length === 0) {
+      return content;
+    }
+    const insertIndex = trailingHorizontalWhitespaceStart(source, source.length);
+    const beforeInsertion = source.slice(0, insertIndex);
+    return `${beforeInsertion}, ${content}${source.slice(insertIndex)}`;
   }
 
   const closeChar = format === "braced" ? "}" : "]";
@@ -463,13 +408,26 @@ function insertSerializedOptionEntries(
     return source.trim().length === 0 ? wrapSerializedOptions(content, format) : `${source}, ${content}`;
   }
 
+  if (source.includes("\n") && !hasOptionContent(source.slice(0, closeIndex), format)) {
+    return wrapSerializedOptions(content, format);
+  }
+
   if (!source.includes("\n")) {
-    const prefix = hasOptionContent(source.slice(0, closeIndex), format) ? `, ${content}` : content;
-    return `${source.slice(0, closeIndex)}${prefix}${source.slice(closeIndex)}`;
+    const insertIndex = trailingHorizontalWhitespaceStart(source, closeIndex);
+    const prefix = hasOptionContent(source.slice(0, insertIndex), format) ? `, ${content}` : content;
+    return `${source.slice(0, insertIndex)}${prefix}${source.slice(insertIndex)}`;
   }
 
   const insertion = multilineInsertion(source, closeIndex, content, format);
   return `${source.slice(0, insertion.index)}${insertion.text}${source.slice(insertion.index)}`;
+}
+
+function trailingHorizontalWhitespaceStart(source: string, end: number): number {
+  let index = end;
+  while (index > 0 && (source[index - 1] === " " || source[index - 1] === "\t")) {
+    index -= 1;
+  }
+  return index;
 }
 
 function multilineInsertion(

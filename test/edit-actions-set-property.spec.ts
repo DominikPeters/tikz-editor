@@ -50,10 +50,52 @@ describe("applyEditAction – setProperty", () => {
     }
   });
 
+  it("preserves unrelated inline option spacing when inserting a property", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red,     thick] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected inline option insertion to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[red,     thick, line width=2pt] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
+  it("updates the first duplicate property and removes later duplicates without reflowing siblings", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red,  line width=.4pt,     dashed, line width=.8pt] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected duplicate option update to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[red,  line width=2pt,     dashed] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
   it("preserves comments and multiline formatting when updating command options", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[
-    red, % main color
+    red,     % main color
     thick
   ] (0,0) -- (1,0);
 \end{tikzpicture}`;
@@ -71,7 +113,7 @@ describe("applyEditAction – setProperty", () => {
     }
     expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
   \draw[
-    red, % main color
+    red,     % main color
     thick,
     line width=2pt
   ] (0,0) -- (1,0);
