@@ -167,7 +167,7 @@ describe("getInspectorDescriptor – attachments", () => {
       editHandles: rendered.semantic.editHandles
     });
 
-    expect(descriptor.sections.some((section) => section.id === "adornment")).toBe(true);
+    expect(descriptor.sections.map((section) => section.id)).toEqual(["adornment", "pin-edge"]);
     const pinEdgeSection = descriptor.sections.find((section) => section.id === "pin-edge");
     expect(pinEdgeSection).toBeDefined();
     if (!pinEdgeSection) {

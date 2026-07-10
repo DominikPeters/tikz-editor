@@ -1568,6 +1568,12 @@ describe("getInspectorDescriptor – path controls", () => {
       source,
       editHandles: rendered.semantic.editHandles
     });
+    expect(descriptor.sections.map((section) => section.id)).toEqual([
+      "transform",
+      "path",
+      "stroke",
+      "shadow"
+    ]);
     const shadowSection = descriptor.sections.find((section) => section.id === "shadow");
     expect(shadowSection).toBeDefined();
     if (!shadowSection) {

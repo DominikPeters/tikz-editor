@@ -28,8 +28,6 @@ import {
 } from "../semantic/style/option-utils.js";
 import { parseLength } from "../semantic/coords/parse-length.js";
 import { DEFAULT_TEXT_FONT_SIZE } from "../semantic/style/constants.js";
-import { normalizeColor } from "../semantic/style/colors.js";
-import { SHADOW_INHERIT_FILL, SHADOW_INHERIT_STROKE } from "../semantic/types.js";
 import {
   cloneTransformInspectorValues,
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
@@ -37,9 +35,7 @@ import {
   transformRotateInspectorLabel,
   transformPropertyCandidateKeys,
   type ArrowTipWriteContext,
-  type FillPatternOptionMutationContext,
   type NodeFontMutationContext,
-  type ShadowMutationContext,
   type TransformInspectorKey,
   type TransformInspectorMutationContext
 } from "./property-write-builders.js";
@@ -53,16 +49,8 @@ import {
   CURATED_NODE_SHAPE_SET,
   DASH_STYLE_OPTIONS,
   DASH_STYLE_PRESET_CLEAR_KEYS,
-  DEFAULT_META_PATTERN_DISTANCE,
-  DEFAULT_META_PATTERN_RADIUS,
-  DEFAULT_META_PATTERN_STARS_DISTANCE,
-  DEFAULT_META_PATTERN_STARS_RADIUS,
-  FILL_MODE_OPTIONS,
   FILL_PATTERN_CLEAR_KEYS,
-  FILL_PATTERN_OPTIONS,
   FILL_SHADING_CLEAR_KEYS,
-  FILL_SHADING_OPTIONS,
-  FILL_STYLE_CUSTOM_NOTE,
   LINE_CAP_OPTIONS,
   LINE_JOIN_OPTIONS,
   NODE_FONT_CUSTOM_NOTE,
@@ -84,18 +72,8 @@ import {
   RADIAL_SHADING_CONFLICT_CLEAR_KEYS,
   ROUNDED_CORNERS_CLEAR_KEYS,
   ROUNDED_CORNERS_DEFAULT_RADIUS,
-  SHADOW_ALL_KEYS,
-  SHADOW_PRESET_DEFAULTS,
-  SHADOW_PRESET_OPTIONS,
-  SHADING_ACTIVATION_KEYS
+  SHADOW_ALL_KEYS
 } from "./inspector/presets.js";
-import {
-  ADORNMENT_ANGLE_PROPERTY_KEY,
-  ADORNMENT_DISTANCE_PROPERTY_KEY,
-  ADORNMENT_TEXT_PROPERTY_KEY,
-  PIN_EDGE_DRAW_PROPERTY_KEY,
-  PIN_EDGE_LINE_WIDTH_PROPERTY_KEY
-} from "./adornment-keys.js";
 import {
   PATH_ATTACHED_NODE_POSITION_VALUE_KEY,
   PATH_ATTACHED_NODE_SIDE_KEY
@@ -104,24 +82,16 @@ import { PATH_POSITION_PRESETS, resolvePathPositionPreset } from "../semantic/pa
 import type {
   ArrowTipPresetId,
   ArrowTipSide,
-  DashStylePresetId,
-  FillModePresetId,
-  FillPatternMetaFamilyId,
-  FillPatternMetaValues,
-  FillPatternPresetId,
-  FillShadingPresetId,
   NodeFontFamilyId,
   NodeFontSizePresetId,
   NodeShapePresetId,
   PathMorphingDecorationPresetId,
-  PathMorphingDecorationSuboptionSpec,
-  ShadowPresetId
+  PathMorphingDecorationSuboptionSpec
 } from "./inspector/presets.js";
 import type {
   ArrowMarker,
   ArrowTipKind,
   ResolvedStyle,
-  ResolvedPattern,
   SceneElement,
   ScenePathCommand
 } from "../semantic/types.js";
@@ -138,9 +108,6 @@ import {
 import { resolveGridInspectorState } from "./inspector/grid-state.js";
 import {
   dashStylePresetFromStyle,
-  fillPatternPresetFromRaw,
-  fillPatternPresetFromResolvedPattern,
-  fillShadingPresetFromStyleName,
   lineCapPresetFromStyle,
   lineJoinPresetFromStyle,
   lineWidthPresetLabel
@@ -149,6 +116,10 @@ import {
   buildMatrixInspectorDescriptor as buildMatrixInspectorDescriptorBase,
   buildTreeInspectorDescriptor as buildTreeInspectorDescriptorBase
 } from "./inspector/matrix-tree-descriptors.js";
+import { buildAdornmentSections } from "./inspector/adornment-sections.js";
+import { buildFillSection } from "./inspector/fill-section.js";
+import { buildShadowSection } from "./inspector/shadow-section.js";
+import type { InspectorSectionBuildContext, SectionBuilder } from "./inspector/section-builder.js";
 import { createInspectorTargetResolver, type InspectorTargetResolver } from "./inspector/target-resolver.js";
 import type {
   ArrowTipWriteTarget,
@@ -236,6 +207,7 @@ const NODE_PAINT_SOURCE_KINDS = new Set(["node-options"]);
 const NODE_BACKED_SECTION_ORDER = ["transform", "node", "stroke", "fill", "path", "grid", "text", "shadow"] as const;
 const PATH_SECTION_ORDER = ["transform", "grid", "path", "stroke", "fill", "text", "shadow"] as const;
 const DEFAULT_SECTION_ORDER = ["transform", "stroke", "fill", "text", "shadow"] as const;
+const SECTION_BUILDERS: readonly SectionBuilder[] = [buildFillSection, buildShadowSection];
 
 function resolveInspectorStrokeColor(element: SceneElement, targetKind: string | null): string | null {
   if (!shouldPresentNodeStrokeAsActive(element, targetKind)) {
@@ -388,29 +360,6 @@ export function getInspectorDescriptor(
     inlineTarget.targetKind,
     resolvedInlineTarget
   );
-  const fillColor = normalizeInspectorColorValue(element.style.fill);
-  const fillColorSyntax = resolveColorSyntaxValue(
-    resolvedInlineTarget,
-    ["fill", "color"],
-    fillColor,
-    colorAliases,
-    element.styleChain
-  );
-  const patternColor = normalizeInspectorColorValue(element.style.patternColor);
-  const patternColorSyntax = resolveColorSyntaxValue(
-    resolvedInlineTarget,
-    ["pattern color"],
-    patternColor,
-    colorAliases,
-    element.styleChain
-  );
-  const fillPaintState = resolveFillPaintState(
-    snapshot.source,
-    inlineTarget.targetId,
-    element.style,
-    snapshot.parseOptions,
-    resolveTarget
-  );
   const textColor = normalizeInspectorColorValue(element.style.textColor);
   const textColorSyntax = resolveColorSyntaxValue(
     resolvedInlineTarget,
@@ -419,11 +368,17 @@ export function getInspectorDescriptor(
     colorAliases,
     element.styleChain
   );
+  const sectionContext: InspectorSectionBuildContext = {
+    source: snapshot.source,
+    element,
+    resolvedTarget: resolvedInlineTarget,
+    colorAliases,
+    writeProperty: (key) => makeSetPropertyWriteTarget(inlineTarget, key)
+  };
   const pathStrokeVisibility =
     element.kind === "Path"
       ? computePathStrokeControlVisibility(element.commands, element.style.dashArray)
       : null;
-  const pathFillVisibility = element.kind === "Path" ? pathSupportsFillEditing(element.commands) : true;
   const nodeInspectorState =
     inlineTarget.targetKind === "node-item" || inlineTarget.targetKind === "matrix-cell" || inlineTarget.targetKind === "tree-child"
       ? resolveNodeInspectorState(snapshot.source, inlineTarget.targetId, element.style, element.kind, snapshot.parseOptions, resolveTarget)
@@ -484,114 +439,19 @@ export function getInspectorDescriptor(
         })()
       : null;
 
-  if (inlineTarget.targetKind === "node-adornment" && inlineTarget.targetId) {
-    const adornmentState = resolveAdornmentInspectorState(
-      snapshot.source,
-      inlineTarget.targetId,
-      element.style,
-      snapshot.parseOptions,
-      resolveTarget
-    );
-    if (adornmentState) {
-      const sections: InspectorSection[] = [
-        {
-          id: "adornment",
-          title: adornmentState.kind === "pin" ? "Pin" : "Label",
-          sourceLevel: "command",
-          properties: [
-            {
-              kind: "text",
-              id: "adornment-text",
-              label: "Text",
-              value: adornmentState.text,
-              write: makeSetPropertyWriteTarget(inlineTarget, ADORNMENT_TEXT_PROPERTY_KEY)
-            },
-            {
-              kind: "number",
-              id: "adornment-angle",
-              label: "Angle",
-              value: adornmentState.angleDeg,
-              step: 1,
-              unit: "deg",
-              write: makeSetPropertyWriteTarget(inlineTarget, ADORNMENT_ANGLE_PROPERTY_KEY)
-            },
-            {
-              kind: "length",
-              id: "adornment-distance",
-              label: adornmentState.kind === "pin" ? "Pin distance" : "Label distance",
-              value: adornmentState.distancePt,
-              step: 0.1,
-              unit: "pt",
-              write: makeSetPropertyWriteTarget(inlineTarget, ADORNMENT_DISTANCE_PROPERTY_KEY)
-            },
-            {
-              kind: "color",
-              id: "adornment-text-color",
-              label: "Text color",
-              value: textColor,
-              syntaxValue: textColorSyntax,
-              options: colorOptionsForValue(textColor),
-              write: makeSetPropertyWriteTarget(inlineTarget, "text")
-            },
-            {
-              kind: "color",
-              id: "adornment-draw-color",
-              label: "Draw",
-              value: strokeColor,
-              syntaxValue: strokeColorSyntax,
-              options: colorOptionsForValue(strokeColor),
-              write: makeSetPropertyWriteTarget(inlineTarget, "draw")
-            },
-            {
-              kind: "color",
-              id: "adornment-fill-color",
-              label: "Fill",
-              value: fillColor,
-              syntaxValue: fillColorSyntax,
-              options: colorOptionsForValue(fillColor),
-              write: makeSetPropertyWriteTarget(inlineTarget, "fill")
-            }
-          ]
-        }
-      ];
-
-      if (adornmentState.kind === "pin") {
-        sections.push({
-          id: "pin-edge",
-          title: "Pin Edge",
-          sourceLevel: "command",
-          properties: [
-            {
-              kind: "color",
-              id: "pin-edge-color",
-              label: "Color",
-              value: adornmentState.pinEdge.draw,
-              syntaxValue: adornmentState.pinEdge.draw,
-              options: colorOptionsForValue(adornmentState.pinEdge.draw),
-              write: makeSetPropertyWriteTarget(inlineTarget, PIN_EDGE_DRAW_PROPERTY_KEY)
-            },
-            {
-              kind: "length",
-              id: "pin-edge-line-width",
-              label: "Line width",
-              value: adornmentState.pinEdge.lineWidthPt,
-              step: 0.1,
-              unit: "pt",
-              write: makeSetPropertyWriteTarget(inlineTarget, PIN_EDGE_LINE_WIDTH_PROPERTY_KEY)
-            }
-          ]
-        });
-      }
-
-      return {
-        elementKind: normalizeElementKind(element.kind),
-        elementId: element.sourceRef.sourceId,
-        writeTargetId: inlineTarget.targetId,
-        readOnlyReason: inlineTarget.reason,
-        infoNote: inlineTarget.infoNote,
-        sections: applyForeachVariableReadOnlyToSections(sections, inlineTarget, resolveTarget)
-      };
-    }
+  const adornmentSections =
+    inlineTarget.targetKind === "node-adornment"
+      ? buildAdornmentSections(sectionContext)
+      : null;
+  if (adornmentSections) {
+    return {
+      elementKind: normalizeElementKind(element.kind),
+      elementId: element.sourceRef.sourceId,
+      writeTargetId: inlineTarget.targetId,
+      readOnlyReason: inlineTarget.reason,
+      infoNote: inlineTarget.infoNote,
+      sections: applyForeachVariableReadOnlyToSections(adornmentSections, inlineTarget, resolveTarget)
+    };
   }
 
   const sections: InspectorSection[] = [
@@ -896,275 +756,6 @@ export function getInspectorDescriptor(
       ]
     });
   }
-  if (pathFillVisibility) {
-    const fillProperties: InspectorProperty[] = [
-      {
-        kind: "color",
-        id: "fill-color",
-        label: "Color",
-        value: fillColor,
-        syntaxValue: fillColorSyntax,
-        options: colorOptionsForValue(fillColor),
-        write: makeSetPropertyWriteTarget(inlineTarget, "fill")
-      },
-      {
-        kind: "fillMode",
-        id: "fill-mode",
-        label: "Mode",
-        value: fillPaintState.mode,
-        options: FILL_MODE_OPTIONS,
-        context: {
-          fillColor: fillColorSyntax ?? fillColor,
-          patternColor: patternColorSyntax ?? patternColor,
-          shading: fillPaintState.shading,
-          pattern: fillPaintState.pattern
-        },
-        write: makeSetPropertyWriteTarget(inlineTarget, "fill")
-      }
-    ];
-
-    if (fillPaintState.mode === "gradient") {
-      fillProperties.push({
-        kind: "fillShading",
-        id: "fill-shading",
-        label: "Shading",
-        value: fillPaintState.shading,
-        options: FILL_SHADING_OPTIONS,
-        note: fillPaintState.shading === "custom" ? FILL_STYLE_CUSTOM_NOTE : undefined,
-        write: makeSetPropertyWriteTarget(inlineTarget, "shading")
-      });
-
-      if (fillPaintState.shading === "axis") {
-        const topColor = normalizeInspectorColorValue(element.style.axisTopColor);
-        const topColorSyntax = resolveColorSyntaxValue(
-          resolvedInlineTarget,
-          ["top color", "left color"],
-          topColor,
-          colorAliases,
-          element.styleChain
-        );
-        const bottomColor = normalizeInspectorColorValue(element.style.axisBottomColor);
-        const bottomColorSyntax = resolveColorSyntaxValue(
-          resolvedInlineTarget,
-          ["bottom color", "right color"],
-          bottomColor,
-          colorAliases,
-          element.styleChain
-        );
-        fillProperties.push({
-          kind: "color",
-          id: "fill-axis-top-color",
-          label: "Start color",
-          value: topColor,
-          syntaxValue: topColorSyntax,
-          options: colorOptionsForValue(topColor),
-          write: makeSetPropertyWriteTarget(inlineTarget, "top color")
-        });
-        fillProperties.push({
-          kind: "color",
-          id: "fill-axis-bottom-color",
-          label: "End color",
-          value: bottomColor,
-          syntaxValue: bottomColorSyntax,
-          options: colorOptionsForValue(bottomColor),
-          write: makeSetPropertyWriteTarget(inlineTarget, "bottom color")
-        });
-        fillProperties.push({
-          kind: "number",
-          id: "fill-shading-angle",
-          label: "Angle",
-          value: element.style.shadingAngle,
-          step: 1,
-          unit: "deg",
-          write: makeSetPropertyWriteTarget(inlineTarget, "shading angle")
-        });
-      } else if (fillPaintState.shading === "radial") {
-        const innerColor = normalizeInspectorColorValue(element.style.radialInnerColor);
-        const innerColorSyntax = resolveColorSyntaxValue(
-          resolvedInlineTarget,
-          ["inner color"],
-          innerColor,
-          colorAliases,
-          element.styleChain
-        );
-        const outerColor = normalizeInspectorColorValue(element.style.radialOuterColor);
-        const outerColorSyntax = resolveColorSyntaxValue(
-          resolvedInlineTarget,
-          ["outer color"],
-          outerColor,
-          colorAliases,
-          element.styleChain
-        );
-        fillProperties.push({
-          kind: "color",
-          id: "fill-radial-inner-color",
-          label: "Inner color",
-          value: innerColor,
-          syntaxValue: innerColorSyntax,
-          options: colorOptionsForValue(innerColor),
-          write: makeSetPropertyWriteTarget(inlineTarget, "inner color")
-        });
-        fillProperties.push({
-          kind: "color",
-          id: "fill-radial-outer-color",
-          label: "Outer color",
-          value: outerColor,
-          syntaxValue: outerColorSyntax,
-          options: colorOptionsForValue(outerColor),
-          write: makeSetPropertyWriteTarget(inlineTarget, "outer color")
-        });
-      } else if (fillPaintState.shading === "ball") {
-        const ballColor = normalizeInspectorColorValue(element.style.ballColor);
-        const ballColorSyntax = resolveColorSyntaxValue(
-          resolvedInlineTarget,
-          ["ball color"],
-          ballColor,
-          colorAliases,
-          element.styleChain
-        );
-        fillProperties.push({
-          kind: "color",
-          id: "fill-ball-color",
-          label: "Ball color",
-          value: ballColor,
-          syntaxValue: ballColorSyntax,
-          options: colorOptionsForValue(ballColor),
-          write: makeSetPropertyWriteTarget(inlineTarget, "ball color")
-        });
-      }
-    } else if (fillPaintState.mode === "pattern") {
-      fillProperties.push({
-        kind: "fillPattern",
-        id: "fill-pattern",
-        label: "Pattern",
-        value: fillPaintState.pattern,
-        options: FILL_PATTERN_OPTIONS,
-        note: fillPaintState.pattern === "custom" ? FILL_STYLE_CUSTOM_NOTE : undefined,
-        write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-      });
-      fillProperties.push({
-        kind: "color",
-        id: "fill-pattern-color",
-        label: "Pattern color",
-        value: patternColor,
-        syntaxValue: patternColorSyntax,
-        options: colorOptionsForValue(patternColor),
-        write: makeSetPropertyWriteTarget(inlineTarget, "pattern color")
-      });
-
-      const fillPatternOptionContext = resolveFillPatternOptionMutationContext(
-        element.style.fillPattern,
-        fillPaintState.pattern,
-        element.style.lineWidth
-      );
-      if (fillPatternOptionContext) {
-        fillProperties.push({
-          kind: "fillPatternOption",
-          id: "fill-pattern-angle",
-          label: "Angle",
-          option: "angle",
-          value: fillPatternOptionContext.values.angle,
-          step: 1,
-          unit: "deg",
-          context: fillPatternOptionContext,
-          write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-        });
-        fillProperties.push({
-          kind: "fillPatternOption",
-          id: "fill-pattern-distance",
-          label: "Distance",
-          option: "distance",
-          value: fillPatternOptionContext.values.distance,
-          step: 0.1,
-          unit: "pt",
-          context: fillPatternOptionContext,
-          write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-        });
-        fillProperties.push({
-          kind: "fillPatternOption",
-          id: "fill-pattern-xshift",
-          label: "X shift",
-          option: "xshift",
-          value: fillPatternOptionContext.values.xshift,
-          step: 0.1,
-          unit: "pt",
-          context: fillPatternOptionContext,
-          write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-        });
-        fillProperties.push({
-          kind: "fillPatternOption",
-          id: "fill-pattern-yshift",
-          label: "Y shift",
-          option: "yshift",
-          value: fillPatternOptionContext.values.yshift,
-          step: 0.1,
-          unit: "pt",
-          context: fillPatternOptionContext,
-          write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-        });
-
-        if (fillPatternOptionContext.family === "Lines" || fillPatternOptionContext.family === "Hatch") {
-          fillProperties.push({
-            kind: "fillPatternOption",
-            id: "fill-pattern-line-width",
-            label: "Line width",
-            option: "line width",
-            value: fillPatternOptionContext.values.lineWidth,
-            step: 0.1,
-            unit: "pt",
-            context: fillPatternOptionContext,
-            write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-          });
-        }
-
-        if (fillPatternOptionContext.family === "Dots" || fillPatternOptionContext.family === "Stars") {
-          fillProperties.push({
-            kind: "fillPatternOption",
-            id: "fill-pattern-radius",
-            label: "Radius",
-            option: "radius",
-            value: fillPatternOptionContext.values.radius,
-            step: 0.1,
-            unit: "pt",
-            context: fillPatternOptionContext,
-            write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-          });
-        }
-
-        if (fillPatternOptionContext.family === "Stars") {
-          fillProperties.push({
-            kind: "fillPatternOption",
-            id: "fill-pattern-points",
-            label: "Points",
-            option: "points",
-            value: fillPatternOptionContext.values.points,
-            step: 1,
-            context: fillPatternOptionContext,
-            write: makeSetPropertyWriteTarget(inlineTarget, "pattern")
-          });
-        }
-      }
-    }
-
-    fillProperties.push({
-      kind: "number",
-      id: "fill-opacity",
-      label: "Opacity",
-      value: element.style.fillOpacity,
-      step: 0.05,
-      min: 0,
-      max: 1,
-      defaultValue: 1,
-      write: makeSetPropertyWriteTarget(inlineTarget, "fill opacity")
-    });
-    sections.push({
-      id: "fill",
-      title: "Fill",
-      sourceLevel: "command",
-      properties: fillProperties
-    });
-  }
-
   const strokeSection = sections.find((section) => section.id === "stroke");
   if (strokeSection && pathStrokeVisibility) {
     if (pathStrokeVisibility.showLineCap) {
@@ -1362,116 +953,11 @@ export function getInspectorDescriptor(
     });
   }
 
-  // Shadow section
-  {
-    const shadowLayer = element.style.shadowLayers[0] ?? null;
-    const shadowPreset = resolveShadowPreset(
-      snapshot.source,
-      inlineTarget.targetId,
-      snapshot.parseOptions,
-      resolveTarget
-    );
-    const shadowOverrides = resolveShadowOptionOverrides(
-      snapshot.source,
-      inlineTarget.targetId,
-      snapshot.parseOptions,
-      resolveTarget
-    );
-    const defaults = SHADOW_PRESET_DEFAULTS[shadowPreset !== "none" ? shadowPreset : "drop-shadow"];
-    const shadowColor =
-      shadowOverrides.color != null
-        ? resolveShadowOverrideColorValue(shadowOverrides.color, defaults.color)
-        : resolveShadowInspectorColorValue(shadowLayer?.style.fill ?? defaults.color, defaults.color, colorAliases);
-
-    const shadowContext: ShadowMutationContext = {
-      preset: shadowPreset,
-      xshiftPt: shadowOverrides.xshiftPt ?? shadowLayer?.xshift ?? defaults.xshiftPt,
-      yshiftPt: shadowOverrides.yshiftPt ?? shadowLayer?.yshift ?? defaults.yshiftPt,
-      scale: shadowOverrides.scale ?? shadowLayer?.scale ?? defaults.scale,
-      opacity:
-        shadowOverrides.opacity ??
-        shadowLayer?.style.fillOpacity ??
-        shadowLayer?.style.strokeOpacity ??
-        defaults.opacity ??
-        1,
-      color: shadowColor
-    };
-
-    const shadowWrite = (): SetPropertyWriteTarget => ({
-      ...makeSetPropertyWriteTarget(inlineTarget, "drop shadow"),
-      shadowContext
-    });
-
-    const shadowProperties: InspectorProperty[] = [
-      {
-        kind: "shadowPreset",
-        id: "shadow-preset",
-        label: "Shadow",
-        value: shadowPreset,
-        options: SHADOW_PRESET_OPTIONS,
-        context: shadowContext,
-        write: makeSetPropertyWriteTarget(inlineTarget, "drop shadow")
-      }
-    ];
-
-    if (shadowPreset !== "none") {
-      shadowProperties.push(
-        {
-          kind: "length",
-          id: "shadow-xshift",
-          label: "X offset",
-          value: shadowContext.xshiftPt,
-          step: 1,
-          unit: "pt",
-          write: shadowWrite()
-        },
-        {
-          kind: "length",
-          id: "shadow-yshift",
-          label: "Y offset",
-          value: shadowContext.yshiftPt,
-          step: 1,
-          unit: "pt",
-          write: shadowWrite()
-        },
-        {
-          kind: "number",
-          id: "shadow-scale",
-          label: "Scale",
-          value: shadowContext.scale,
-          step: 0.05,
-          write: shadowWrite()
-        }
-      );
-      shadowProperties.push({
-        kind: "number",
-        id: "shadow-opacity",
-        label: "Opacity",
-        value: shadowContext.opacity,
-        step: 0.05,
-        min: 0,
-        max: 1,
-        write: shadowWrite()
-      });
-      if (defaults.color !== null) {
-        shadowProperties.push({
-          kind: "color",
-          id: "shadow-color",
-          label: "Color",
-          value: shadowContext.color,
-          syntaxValue: shadowContext.color,
-          options: colorOptionsForValue(shadowContext.color),
-          write: shadowWrite()
-        });
-      }
+  for (const buildSection of SECTION_BUILDERS) {
+    const section = buildSection(sectionContext);
+    if (section) {
+      sections.push(section);
     }
-
-    sections.push({
-      id: "shadow",
-      title: "Shadow",
-      sourceLevel: "command",
-      properties: shadowProperties
-    });
   }
 
   if (inlineTarget.targetKind === "tree-child" || inlineTarget.targetKind === "matrix-cell") {
@@ -1787,268 +1273,6 @@ function splitArrowSpecificationRaw(raw: string): { startRaw: string; endRaw: st
   };
 }
 
-function resolveFillPaintState(
-  source: string,
-  targetId: string | null,
-  style: {
-    shadeEnabled: boolean;
-    shading: string;
-    fillPattern: ResolvedPattern | null;
-  },
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
-): { mode: FillModePresetId; shading: FillShadingPresetId; pattern: FillPatternPresetId } {
-  const fallbackShading = style.shadeEnabled ? fillShadingPresetFromStyleName(style.shading) : "axis";
-  const fallbackPattern = fillPatternPresetFromResolvedPattern(style.fillPattern);
-
-  let patternActive = style.fillPattern != null;
-  let shadingActive = style.shadeEnabled;
-  let shading: FillShadingPresetId = fallbackShading;
-  let pattern: FillPatternPresetId = fallbackPattern;
-  let sawPatternOption = false;
-  let sawShadingOption = false;
-
-  if (targetId) {
-    const resolved = resolveTarget(targetId);
-    if (resolved.kind !== "not-found" && resolved.target.options) {
-      for (const entry of resolved.target.options.entries) {
-        if (entry.kind === "flag") {
-          const key = normalizeOptionKey(entry.key);
-          if (key === "pattern" || key === "/tikz/pattern") {
-            patternActive = true;
-            sawPatternOption = true;
-            if (pattern === "custom") {
-              pattern = "dots";
-            }
-            continue;
-          }
-          if (key === "shade" || key === "/tikz/shade") {
-            shadingActive = true;
-            sawShadingOption = true;
-            continue;
-          }
-          continue;
-        }
-
-        if (entry.kind !== "kv") {
-          continue;
-        }
-
-        const key = normalizeOptionKey(entry.key);
-        if (key === "pattern" || key === "/tikz/pattern") {
-          sawPatternOption = true;
-          const normalizedPatternValue = stripEnclosingBraces(entry.valueRaw).trim().toLowerCase();
-          if (normalizedPatternValue === "none") {
-            patternActive = false;
-            continue;
-          }
-          patternActive = true;
-          pattern = fillPatternPresetFromRaw(entry.valueRaw);
-          continue;
-        }
-
-        if (key === "shade" || key === "/tikz/shade") {
-          const parsedShade = parseInspectorBoolean(entry.valueRaw);
-          if (parsedShade != null) {
-            sawShadingOption = true;
-            shadingActive = parsedShade;
-          }
-          continue;
-        }
-
-        if (key === "shading" || key === "/tikz/shading") {
-          sawShadingOption = true;
-          shadingActive = true;
-          shading = fillShadingPresetFromStyleName(entry.valueRaw);
-          continue;
-        }
-
-        if (!SHADING_ACTIVATION_KEYS.has(key)) {
-          continue;
-        }
-
-        sawShadingOption = true;
-        shadingActive = true;
-        const inferred = fillShadingPresetFromActivationKey(key);
-        if (inferred) {
-          shading = inferred;
-        }
-      }
-    }
-  }
-
-  if (sawPatternOption && patternActive && pattern === "custom") {
-    return { mode: "pattern", shading, pattern };
-  }
-  if (sawPatternOption && patternActive) {
-    return { mode: "pattern", shading, pattern: pattern === "custom" ? "dots" : pattern };
-  }
-  if (patternActive) {
-    return { mode: "pattern", shading, pattern };
-  }
-  if (sawShadingOption && shadingActive) {
-    return { mode: "gradient", shading, pattern };
-  }
-  if (shadingActive) {
-    return { mode: "gradient", shading, pattern };
-  }
-  return { mode: "solid", shading, pattern };
-}
-
-function resolveFillPatternOptionMutationContext(
-  pattern: ResolvedPattern | null,
-  fallbackPatternPreset: FillPatternPresetId,
-  fallbackLineWidth: number
-): FillPatternOptionMutationContext | null {
-  if (pattern?.kind === "meta-lines") {
-    return {
-      family: "Lines",
-      values: {
-        angle: pattern.angle,
-        distance: pattern.distance,
-        xshift: pattern.xshift,
-        yshift: pattern.yshift,
-        lineWidth: pattern.lineWidth,
-        radius: DEFAULT_META_PATTERN_RADIUS,
-        points: 5
-      }
-    };
-  }
-  if (pattern?.kind === "meta-hatch") {
-    return {
-      family: "Hatch",
-      values: {
-        angle: pattern.angle,
-        distance: pattern.distance,
-        xshift: pattern.xshift,
-        yshift: pattern.yshift,
-        lineWidth: pattern.lineWidth,
-        radius: DEFAULT_META_PATTERN_RADIUS,
-        points: 5
-      }
-    };
-  }
-  if (pattern?.kind === "meta-dots") {
-    return {
-      family: "Dots",
-      values: {
-        angle: pattern.angle,
-        distance: pattern.distance,
-        xshift: pattern.xshift,
-        yshift: pattern.yshift,
-        lineWidth: normalizeFillPatternLineWidthFallback(fallbackLineWidth),
-        radius: pattern.radius,
-        points: 5
-      }
-    };
-  }
-  if (pattern?.kind === "meta-stars") {
-    return {
-      family: "Stars",
-      values: {
-        angle: pattern.angle,
-        distance: pattern.distance,
-        xshift: pattern.xshift,
-        yshift: pattern.yshift,
-        lineWidth: normalizeFillPatternLineWidthFallback(fallbackLineWidth),
-        radius: pattern.radius,
-        points: pattern.points
-      }
-    };
-  }
-
-  const fallbackFamily = fillPatternMetaFamilyFromPreset(fallbackPatternPreset);
-  if (!fallbackFamily) {
-    return null;
-  }
-  return {
-    family: fallbackFamily,
-    values: defaultFillPatternMetaValues(fallbackFamily, fallbackLineWidth)
-  };
-}
-
-function parseInspectorBoolean(raw: string): boolean | null {
-  return parseBooleanishNormalized(stripEnclosingBraces(raw), {
-    allowOnOff: true,
-    allowNoneAsFalse: true,
-    empty: true
-  });
-}
-
-function fillShadingPresetFromActivationKey(key: string): FillShadingPresetId | null {
-  if (
-    key === "inner color" ||
-    key === "/tikz/inner color" ||
-    key === "outer color" ||
-    key === "/tikz/outer color"
-  ) {
-    return "radial";
-  }
-  if (key === "ball color" || key === "/tikz/ball color") {
-    return "ball";
-  }
-  if (
-    key === "lower left" ||
-    key === "/tikz/lower left" ||
-    key === "lower right" ||
-    key === "/tikz/lower right" ||
-    key === "upper left" ||
-    key === "/tikz/upper left" ||
-    key === "upper right" ||
-    key === "/tikz/upper right"
-  ) {
-    return "custom";
-  }
-  if (
-    key === "top color" ||
-    key === "/tikz/top color" ||
-    key === "middle color" ||
-    key === "/tikz/middle color" ||
-    key === "bottom color" ||
-    key === "/tikz/bottom color" ||
-    key === "left color" ||
-    key === "/tikz/left color" ||
-    key === "right color" ||
-    key === "/tikz/right color" ||
-    key === "shading angle" ||
-    key === "/tikz/shading angle"
-  ) {
-    return "axis";
-  }
-  return null;
-}
-
-function fillPatternMetaFamilyFromPreset(preset: FillPatternPresetId): FillPatternMetaFamilyId | null {
-  if (preset === "Lines" || preset === "Hatch" || preset === "Dots" || preset === "Stars") {
-    return preset;
-  }
-  return null;
-}
-
-function defaultFillPatternMetaValues(
-  family: FillPatternMetaFamilyId,
-  fallbackLineWidth: number
-): FillPatternMetaValues {
-  const defaultDistance = family === "Stars" ? DEFAULT_META_PATTERN_STARS_DISTANCE : DEFAULT_META_PATTERN_DISTANCE;
-  const defaultRadius = family === "Stars" ? DEFAULT_META_PATTERN_STARS_RADIUS : DEFAULT_META_PATTERN_RADIUS;
-  return {
-    angle: 0,
-    distance: defaultDistance,
-    xshift: 0,
-    yshift: 0,
-    lineWidth: normalizeFillPatternLineWidthFallback(fallbackLineWidth),
-    radius: defaultRadius,
-    points: 5
-  };
-}
-
-function normalizeFillPatternLineWidthFallback(value: number): number {
-  if (Number.isFinite(value) && value > 0) {
-    return value;
-  }
-  return 0.4;
-}
-
 function resolvePathMorphingDecorationSuboptionProperties(
   preset: PathMorphingDecorationPresetId,
   decoration: { params: Record<string, string> },
@@ -2095,174 +1319,6 @@ function resolvePathMorphingDecorationSuboptionValue(
 
   const parsed = Number(stripEnclosingBraces(rawValue).trim());
   return Number.isFinite(parsed) ? parsed : spec.defaultValue;
-}
-
-function resolveShadowPreset(
-  source: string,
-  targetId: string | null,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
-): ShadowPresetId {
-  if (!targetId) {
-    return "none";
-  }
-
-  const resolved = resolveTarget(targetId);
-  if (resolved.kind === "not-found" || !resolved.target.options) {
-    return "none";
-  }
-
-  for (const entry of resolved.target.options.entries) {
-    const key =
-      entry.kind === "flag" || entry.kind === "kv" ? normalizeOptionKey(entry.key) : null;
-    if (!key) {
-      continue;
-    }
-    if (key === "drop shadow") return "drop-shadow";
-    if (key === "copy shadow" || key === "double copy shadow") return "copy-shadow";
-    if (key === "circular drop shadow") return "circular-drop-shadow";
-    if (key === "circular glow") return "circular-glow";
-    if (key === "general shadow") return "drop-shadow";
-  }
-
-  return "none";
-}
-
-function resolveShadowOptionOverrides(
-  source: string,
-  targetId: string | null,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
-): Partial<Omit<ShadowMutationContext, "preset">> {
-  if (!targetId) {
-    return {};
-  }
-
-  const resolved = resolveTarget(targetId);
-  if (resolved.kind === "not-found" || !resolved.target.options) {
-    return {};
-  }
-
-  let overrides: Partial<Omit<ShadowMutationContext, "preset">> = {};
-  for (const entry of resolved.target.options.entries) {
-    const key =
-      entry.kind === "flag" || entry.kind === "kv" ? normalizeOptionKey(entry.key) : null;
-    if (
-      key !== "drop shadow" &&
-      key !== "copy shadow" &&
-      key !== "double copy shadow" &&
-      key !== "circular drop shadow" &&
-      key !== "circular glow" &&
-      key !== "general shadow"
-    ) {
-      continue;
-    }
-
-    if (entry.kind !== "kv") {
-      overrides = {};
-      continue;
-    }
-
-    const nested = parseStyleValueAsOptionList(entry.valueRaw);
-    if (!nested) {
-      continue;
-    }
-
-    const nextOverrides: Partial<Omit<ShadowMutationContext, "preset">> = {};
-    for (const nestedEntry of nested.entries) {
-      if (nestedEntry.kind !== "kv") {
-        continue;
-      }
-      const nestedKey = normalizeOptionKey(nestedEntry.key);
-      if (nestedKey === "shadow xshift") {
-        const parsed = parseLength(nestedEntry.valueRaw, "pt");
-        if (parsed != null) {
-          nextOverrides.xshiftPt = parsed;
-        }
-        continue;
-      }
-      if (nestedKey === "shadow yshift") {
-        const parsed = parseLength(nestedEntry.valueRaw, "pt");
-        if (parsed != null) {
-          nextOverrides.yshiftPt = parsed;
-        }
-        continue;
-      }
-      if (nestedKey === "shadow scale") {
-        const parsed = Number(stripEnclosingBraces(nestedEntry.valueRaw).trim());
-        if (Number.isFinite(parsed)) {
-          nextOverrides.scale = parsed;
-        }
-        continue;
-      }
-      if (nestedKey === "opacity") {
-        const parsed = Number(stripEnclosingBraces(nestedEntry.valueRaw).trim());
-        if (Number.isFinite(parsed)) {
-          nextOverrides.opacity = parsed;
-        }
-        continue;
-      }
-      if (nestedKey === "fill") {
-        const rawColor = stripEnclosingBraces(nestedEntry.valueRaw).trim();
-        if (rawColor.length > 0) {
-          nextOverrides.color = rawColor;
-        }
-      }
-    }
-    overrides = nextOverrides;
-  }
-
-  return overrides;
-}
-
-function resolveShadowInspectorColorValue(
-  rawColor: string | null | undefined,
-  defaultColor: string | null,
-  colorAliases: ReadonlyMap<string, string>
-): string | null {
-  if (!rawColor) {
-    return defaultColor;
-  }
-
-  const trimmed = rawColor.trim();
-  if (
-    trimmed.length === 0 ||
-    trimmed === SHADOW_INHERIT_FILL ||
-    trimmed === SHADOW_INHERIT_STROKE
-  ) {
-    return defaultColor;
-  }
-
-  const resolveAlias = (candidate: string): string | null => colorAliases.get(candidate.trim().toLowerCase()) ?? null;
-  const normalizedRaw = normalizeInspectorColorValue(normalizeColor(trimmed, { resolveAlias }));
-  if (defaultColor) {
-    const normalizedDefault = normalizeInspectorColorValue(normalizeColor(defaultColor, { resolveAlias }));
-    if (normalizedRaw != null && normalizedRaw === normalizedDefault) {
-      return defaultColor;
-    }
-  }
-
-  return normalizeInspectorColorValue(trimmed) ?? trimmed;
-}
-
-function resolveShadowOverrideColorValue(
-  rawColor: string | null | undefined,
-  defaultColor: string | null
-): string | null {
-  if (!rawColor) {
-    return defaultColor;
-  }
-
-  const trimmed = rawColor.trim();
-  if (
-    trimmed.length === 0 ||
-    trimmed === SHADOW_INHERIT_FILL ||
-    trimmed === SHADOW_INHERIT_STROKE
-  ) {
-    return defaultColor;
-  }
-
-  return trimmed;
 }
 
 function resolvePathMorphingDecorationPreset(
@@ -3039,135 +2095,6 @@ function resolveRoundedCornersDisableRequiresSharpCorners(
   return inheritedRoundedCorners != null && inheritedRoundedCorners > 0;
 }
 
-function resolveAdornmentInspectorState(
-  source: string,
-  targetId: string,
-  style: ResolvedStyle,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
-): {
-  kind: "label" | "pin";
-  text: string;
-  angleDeg: number;
-  distancePt: number;
-  distanceExplicit: boolean;
-  pinEdge: {
-    draw: string | null;
-    lineWidthPt: number;
-    dashStyle: DashStylePresetId;
-  };
-} | null {
-  const resolved = resolveTarget(targetId);
-  if (resolved.kind === "not-found" || resolved.target.kind !== "node-adornment") {
-    return null;
-  }
-
-  const angleDeg = parseAdornmentAngleForInspector(resolved.target.angleRaw ?? "center");
-  const text = resolved.target.textSpan
-    ? stripEnclosingBraces(source.slice(resolved.target.textSpan.from, resolved.target.textSpan.to))
-    : "";
-  const pinEdge = resolvePinEdgeInspectorState(resolved.target.pinEdgeRaw ?? null);
-
-  return {
-    kind: resolved.target.adornmentKind ?? "label",
-    text,
-    angleDeg,
-    distancePt: resolved.target.distancePt ?? resolved.target.defaultDistancePt ?? 0,
-    distanceExplicit: resolved.target.distanceExplicit ?? false,
-    pinEdge: {
-      draw: pinEdge.draw,
-      lineWidthPt: pinEdge.lineWidthPt ?? style.lineWidth,
-      dashStyle: pinEdge.dashStyle
-    }
-  };
-}
-
-function parseAdornmentAngleForInspector(raw: string): number {
-  const normalized = raw.trim().toLowerCase();
-  const keyword =
-    normalized === "center" || normalized === "centered" ? 0 :
-    normalized === "right" || normalized === "east" ? 0 :
-    normalized === "above right" || normalized === "north east" ? 45 :
-    normalized === "above" || normalized === "north" ? 90 :
-    normalized === "above left" || normalized === "north west" ? 135 :
-    normalized === "left" || normalized === "west" ? 180 :
-    normalized === "below left" || normalized === "south west" ? -135 :
-    normalized === "below" || normalized === "south" ? -90 :
-    normalized === "below right" || normalized === "south east" ? -45 :
-    null;
-  if (keyword != null) {
-    return keyword;
-  }
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-  return parsed;
-}
-
-function resolvePinEdgeInspectorState(pinEdgeRaw: string | null): {
-  draw: string | null;
-  lineWidthPt: number | null;
-  dashStyle: DashStylePresetId;
-} {
-  const options = pinEdgeRaw ? parseStyleValueAsOptionList(pinEdgeRaw) : null;
-  let draw: string | null = null;
-  let lineWidthPt: number | null = null;
-  let dashStyle: DashStylePresetId = "solid";
-
-  for (const entry of options?.entries ?? []) {
-    if (entry.kind === "flag") {
-      const normalized = normalizeOptionKey(entry.key);
-      if (
-        normalized === "dashed" ||
-        normalized === "densely dashed" ||
-        normalized === "loosely dashed" ||
-        normalized === "dotted" ||
-        normalized === "densely dotted" ||
-        normalized === "loosely dotted"
-      ) {
-        dashStyle = normalized;
-      } else if (isLikelyColorValue(entry.key)) {
-        draw = entry.key.trim();
-      }
-      continue;
-    }
-    if (entry.kind !== "kv") {
-      continue;
-    }
-    const key = normalizeOptionKey(entry.key);
-    if (key === "draw" || key === "color") {
-      draw = entry.valueRaw.trim() || null;
-      continue;
-    }
-    if (key === "line width") {
-      lineWidthPt = parseLength(entry.valueRaw, "pt");
-      continue;
-    }
-    if (
-      key === "solid" ||
-      key === "dashed" ||
-      key === "densely dashed" ||
-      key === "loosely dashed" ||
-      key === "dotted" ||
-      key === "densely dotted" ||
-      key === "loosely dotted"
-    ) {
-      dashStyle = key;
-    }
-  }
-
-  return { draw, lineWidthPt, dashStyle };
-}
-
-function isLikelyColorValue(raw: string): boolean {
-  const trimmed = raw.trim().toLowerCase();
-  if (trimmed.length === 0) {
-    return false;
-  }
-  return trimmed === "none" || /^[a-z][a-z0-9._:@!-]*$/i.test(trimmed) || /^#[0-9a-f]{3,8}$/i.test(trimmed);
-}
-
 function normalizeElementKind(kind: SceneElement["kind"]): InspectorDescriptor["elementKind"] {
   if (kind === "Path") return "path";
   if (kind === "Circle") return "circle";
@@ -3181,80 +2108,6 @@ function pathSupportsArrowTipEditing(commands: ScenePathCommand[]): boolean {
     return false;
   }
   return commands.some((command) => command.kind === "L" || command.kind === "C" || command.kind === "A");
-}
-
-function pathSupportsFillEditing(commands: ScenePathCommand[]): boolean {
-  type OpenSubpathState = {
-    hasCurveOrArc: boolean;
-    segmentCount: number;
-    points: Array<{ x: number; y: number }>;
-  };
-
-  const POLYGON_AREA_EPSILON = 1e-9;
-  let subpath: OpenSubpathState | null = null;
-
-  const flushOpenSubpath = (): boolean => {
-    if (!subpath) {
-      return false;
-    }
-    if (subpath.hasCurveOrArc && subpath.segmentCount >= 1) {
-      return true;
-    }
-    if (subpath.segmentCount < 2) {
-      return false;
-    }
-    return Math.abs(polygonSignedArea(subpath.points)) > POLYGON_AREA_EPSILON;
-  };
-
-  for (const command of commands) {
-    if (command.kind === "M") {
-      if (flushOpenSubpath()) {
-        return true;
-      }
-      subpath = {
-        hasCurveOrArc: false,
-        segmentCount: 0,
-        points: [command.to]
-      };
-      continue;
-    }
-
-    if (command.kind === "Z") {
-      return true;
-    }
-
-    if (!subpath) {
-      continue;
-    }
-
-    if (command.kind === "L") {
-      subpath.segmentCount += 1;
-      subpath.points.push(command.to);
-      continue;
-    }
-
-    if (command.kind === "C" || command.kind === "A") {
-      subpath.hasCurveOrArc = true;
-      subpath.segmentCount += 1;
-      subpath.points.push(command.to);
-    }
-  }
-
-  return flushOpenSubpath();
-}
-
-function polygonSignedArea(points: ReadonlyArray<{ x: number; y: number }>): number {
-  if (points.length < 3) {
-    return 0;
-  }
-
-  let area = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
-    area += current.x * next.y - next.x * current.y;
-  }
-  return area / 2;
 }
 
 function pathMorphingDecorationPresetFromStyle(style: {
