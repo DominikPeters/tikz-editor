@@ -824,7 +824,12 @@ export const CanvasPanel = memo(function CanvasPanel({
   const baseSvgModel = snapshot.svgModel;
   const [warning, setWarning] = useState<string | null>(null);
   const [dragTooltip, setDragTooltip] = useState<DragTooltipState | null>(null);
-  const dragTooltipBoundaryRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null);
+  const [dragTooltipBoundary, setDragTooltipBoundary] = useState<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
   const [dragCursorLock, setDragCursorLock] = useState<string | null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
   const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
@@ -1195,13 +1200,19 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [pathAttachedNodePreview, snapshot.source]);
   const pendingTouchViewportRef = useRef<PendingTouchViewport | null>(null);
 
-  // Cache viewport boundary once on drag-start, clear on drag-end (avoids getBoundingClientRect per frame)
-  if (dragTooltip && !dragTooltipBoundaryRef.current && viewportRef.current) {
-    const r = viewportRef.current.getBoundingClientRect();
-    dragTooltipBoundaryRef.current = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-  } else if (!dragTooltip) {
-    dragTooltipBoundaryRef.current = null;
-  }
+  const dragTooltipVisible = dragTooltip != null;
+  useLayoutEffect(() => {
+    if (!dragTooltipVisible) {
+      setDragTooltipBoundary(null);
+      return;
+    }
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    setDragTooltipBoundary({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }, [dragTooltipVisible]);
 
   const setActiveCanvasDragKind = useCallback(
     (kind: CanvasDragKind | null) => {
@@ -3818,7 +3829,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           setContextMenuState(null);
         }}
         dragTooltip={dragTooltip}
-        dragTooltipBoundary={dragTooltipBoundaryRef.current}
+        dragTooltipBoundary={dragTooltipBoundary}
         warning={warning}
         copyWarningToClipboard={copyWarningToClipboard}
         onWarningBarKeyDown={onWarningBarKeyDown}
