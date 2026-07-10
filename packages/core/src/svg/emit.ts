@@ -437,7 +437,7 @@ export function emitSvgModel(
       if (!elementBounds) {
         return undefined;
       }
-      if (elementBounds && svgElementTransform) {
+      if (svgElementTransform) {
         elementBounds = transformSvgBounds(elementBounds, svgElementTransform);
       }
       preparedGeometry = {
