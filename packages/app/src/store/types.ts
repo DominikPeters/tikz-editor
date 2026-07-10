@@ -85,8 +85,6 @@ export type HistoryEntry = {
   label: string;
   /** Optional key used to coalesce drag updates into one undo step. */
   mergeKey?: string;
-  /** Patches to apply to go backward (undo). */
-  backward: SourcePatch[];
   /** Patches to apply to go forward (redo). */
   forward: SourcePatch[];
   /** Source before the action (for full undo). */

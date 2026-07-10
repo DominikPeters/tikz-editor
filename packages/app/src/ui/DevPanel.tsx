@@ -370,7 +370,6 @@ function EditingTab({
               ["kind", currentHistoryEntry.kind],
               ["label", currentHistoryEntry.label],
               ["merge key", currentHistoryEntry.mergeKey ?? "none"],
-              ["backward patches", String(currentHistoryEntry.backward.length)],
               ["forward patches", String(currentHistoryEntry.forward.length)],
               ["source before", `${currentHistoryEntry.sourceBefore.length} chars`],
               ["source after", `${currentHistoryEntry.sourceAfter.length} chars`]

@@ -699,7 +699,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           label: "AI assistant edit",
           mergeKey,
           forward: [],
-          backward: [],
           sourceBefore: lastEntry?.mergeKey === mergeKey ? lastEntry.sourceBefore : doc.source,
           sourceAfter: action.source
         };
@@ -904,7 +903,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         label: actionLabel(historyKind),
         mergeKey,
         forward: result.patches,
-        backward: result.patches,
         sourceBefore: activeDoc.source,
         sourceAfter: result.newSource,
         selectedElementIdsBefore: [...activeDoc.selectedElementIds],

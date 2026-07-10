@@ -114,7 +114,6 @@ describe("editorReducer – CODE_EDITED", () => {
         {
           kind: "move",
           label: "Moved element",
-          backward: [],
           forward: [],
           sourceBefore: "before",
           sourceAfter: "after"
