@@ -17,8 +17,10 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     readCustomClipboardBytes: async () => null,
     writeClipboardBundle: async () => undefined,
     setWindowTitle: async () => undefined,
+    setTheme: async () => undefined,
     closeWindow: async () => undefined,
     confirmUnsavedChanges: async () => "cancel",
+    showAboutPanel: async () => undefined,
     openExternalUrl: async () => true,
     listRecentFiles: async () => [],
     clearRecentFiles: async () => undefined,
@@ -28,6 +30,9 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     onWindowCloseRequest: async () => () => undefined,
     showContextMenu: async () => undefined,
     onContextMenuCommand: async () => () => undefined,
+    checkLatexAvailable: async () => ({ available: false, details: "test bridge" }),
+    compileTikz: async () => "<svg />",
+    readLastCompileLog: async () => "",
     ...overrides
   };
 }
