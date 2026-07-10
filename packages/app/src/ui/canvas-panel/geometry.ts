@@ -1,4 +1,6 @@
-import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { clamp as clampValue } from "@tikz-editor/core/utils/math";
+export { clamp, distanceSquared } from "@tikz-editor/core/utils/math";
 import { pickGridStepPt } from "@tikz-editor/core/edit/snapping";
 import { GRID_MINOR_TARGET_PX } from "@tikz-editor/core/edit/snapping/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
@@ -240,12 +242,12 @@ function formatCm(valueCm: number): string {
   return rounded2.toFixed(2);
 }
 
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+export function clampFinite(value: number, min: number, max: number): number {
+  return Number.isFinite(value) ? clampValue(value, min, max) : min;
 }
 
 export function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
+  return formatNumber(value, { fractionDigits: 4 });
 }
 
 export function resizeCursorForVector(vector: WorldVector): string {
@@ -273,10 +275,4 @@ export function resizeCursorForVector(vector: WorldVector): string {
 
 export function vectorLengthSquared(vector: Pick<WorldPoint, "x" | "y">): number {
   return vector.x * vector.x + vector.y * vector.y;
-}
-
-export function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }

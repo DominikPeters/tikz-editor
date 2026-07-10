@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { clamp } from "@tikz-editor/core/utils/math";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore } from "../../settings/useSettingsStore";
 import { EDITOR_FONT_SIZE_MAX_PX, EDITOR_FONT_SIZE_MIN_PX } from "../../settings/types";
@@ -1906,10 +1907,6 @@ function uniqueStrings(values: Iterable<string>): string[] {
     unique.add(trimmed);
   }
   return [...unique].sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
 }
 
 function computeInlineColorPopoverStyle(anchorRect: DOMRectReadOnly): CSSProperties {
