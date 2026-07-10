@@ -20,7 +20,7 @@ import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import { buildStylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
-import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
@@ -245,25 +245,20 @@ export function useInspectorModel(args: {
     activeCanvasDragKind === "rotate" ||
     activeCanvasDragKind === "handle";
   const frozenPropertyProvenanceRef = useRef<FrozenPropertyProvenanceView | null>(null);
-  const editAnalysisView = useMemo(
+  const parseOptions = useMemo(
     () =>
-      getSharedEditAnalysisView({
+      buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         source,
         activeFigureId,
-        snapshot
+        snapshot,
+        analysis: "shared",
+        overrides: {
+          colorAliases: snapshot.semanticResult?.colorAliases ?? null
+        }
       }),
     [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
-  );
-  const parseOptions = useMemo(
-    () => ({
-      activeFigureId,
-      analysisView: editAnalysisView,
-      analysisSession: getSharedEditAnalysisSession(),
-      colorAliases: snapshot.semanticResult?.colorAliases ?? null
-    }),
-    [activeFigureId, editAnalysisView, snapshot.semanticResult]
   );
   const globalTransformValues = useMemo(
     () => resolveTransformInspectorValues(source, TIKZPICTURE_GLOBAL_TARGET_ID, parseOptions),

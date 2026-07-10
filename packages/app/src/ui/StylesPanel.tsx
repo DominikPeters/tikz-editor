@@ -15,7 +15,7 @@ import {
 } from "@tikz-editor/core/edit/styles-cascade";
 import { NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "@tikz-editor/core/semantic/style/constants";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
-import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../edit-analysis-manager";
+import { buildEditParseOptions } from "../edit-parse-options";
 import { useProjectNamedColorSwatches } from "../colors/project-named-colors";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
@@ -81,24 +81,17 @@ export function StylesPanel() {
       .map((sourceId) => bySource.get(sourceId))
       .filter((element): element is SceneElement => element != null);
   }, [selectedIds, selectedSourceIds, snapshot.scene]);
-  const editAnalysisView = useMemo(
+  const parseOptions = useMemo(
     () =>
-      getSharedEditAnalysisView({
+      buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         source,
         activeFigureId,
-        snapshot
+        snapshot,
+        analysis: "shared"
       }),
     [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
-  );
-  const parseOptions = useMemo(
-    () => ({
-      activeFigureId,
-      analysisView: editAnalysisView,
-      analysisSession: getSharedEditAnalysisSession()
-    }),
-    [activeFigureId, editAnalysisView]
   );
 
   const models = useMemo(

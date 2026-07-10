@@ -9,7 +9,7 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import type { AssistantItem } from "../platform/types";
-import { buildSnapshotEditSourceFingerprint } from "../source-identity";
+import { buildEditParseOptions } from "../edit-parse-options";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
 import {
   createDocumentSession,
@@ -755,25 +755,28 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ) {
         result = action.precomputedResult;
       } else {
-        const sourceFingerprint = buildSnapshotEditSourceFingerprint({
+        const parseOptions = buildEditParseOptions({
           documentId,
           sourceRevision: activeDoc.sourceRevision,
-          sourceLength: activeDoc.source.length,
-          sourceRefs: activeDoc.snapshot.editHandles.map((handle) => handle.sourceRef)
+          source: activeDoc.source,
+          activeFigureId: activeDoc.activeFigureId,
+          snapshot: activeDoc.snapshot,
+          analysis: "none",
+          overrides: {
+            indentSize: action.parseOptions?.indentSize,
+            propertyWriteMode:
+              action.parseOptions?.propertyWriteMode ??
+              (action.recordInHistory === false ? "preview" : "commit")
+          }
         });
+        const { sourceFingerprint } = parseOptions;
         result = applyEditAction(
           activeDoc.source,
           activeDoc.snapshot.editHandles,
           action.action,
           {
             evaluateOptions: { sourceFingerprint },
-            parseOptions: {
-              activeFigureId:
-                activeDoc.activeFigureId ?? (activeDoc.snapshot.figures.length > 1 ? null : undefined),
-              indentSize: action.parseOptions?.indentSize,
-              propertyWriteMode: action.parseOptions?.propertyWriteMode ?? (action.recordInHistory === false ? "preview" : "commit"),
-              sourceFingerprint
-            }
+            parseOptions
           }
         );
       }

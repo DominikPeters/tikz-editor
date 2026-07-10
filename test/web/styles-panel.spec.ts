@@ -16,6 +16,7 @@ type MockStoreState = {
   activeFigureId: string | null;
   snapshot: {
     source: string;
+    figures: unknown[];
     editHandles: unknown[];
     scene: { elements: Array<{ sourceRef: { sourceId: string } }> };
   };
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => {
     activeFigureId: null,
     snapshot: {
       source: "\\draw[dashed] (0,0) -- (1,0);",
+      figures: [],
       editHandles: [],
       scene: {
         elements: [{ sourceRef: { sourceId: "el-1" } }]

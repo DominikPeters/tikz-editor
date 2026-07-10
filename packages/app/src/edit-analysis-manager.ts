@@ -8,7 +8,7 @@ import {
 export type EditAnalysisKey = {
   documentId: string;
   sourceRevision: number;
-  activeFigureId: string | null;
+  activeFigureId: string | null | undefined;
 };
 
 type CachedEntry = {
@@ -23,7 +23,7 @@ export function getSharedEditAnalysisView(params: {
   documentId: string;
   sourceRevision: number;
   source: string;
-  activeFigureId: string | null;
+  activeFigureId: string | null | undefined;
   snapshot: SessionSnapshot;
 }): EditAnalysisView {
   const analysisSource = params.snapshot.source === params.source
@@ -49,12 +49,14 @@ export function getSharedEditAnalysisView(params: {
   }
 
   const session = cachedEntry.session;
+  const snapshotParseResult = params.snapshot.parseResult;
   if (
-    params.snapshot.parseResult?.activeFigureId === params.activeFigureId &&
+    snapshotParseResult != null &&
+    snapshotParseResult.activeFigureId === params.activeFigureId &&
     cachedEntry.primedSnapshotRevision !== params.snapshot.revision
   ) {
-    session.primeFromParse(params.snapshot.parseResult, params.snapshot.source, {
-      activeFigureId: params.activeFigureId ?? params.snapshot.parseResult.activeFigureId
+    session.primeFromParse(snapshotParseResult, params.snapshot.source, {
+      activeFigureId: params.activeFigureId ?? snapshotParseResult.activeFigureId
     });
     cachedEntry.primedSnapshotRevision = params.snapshot.revision;
   }

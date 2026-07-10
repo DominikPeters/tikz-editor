@@ -48,11 +48,10 @@ import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/t
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
 import { buildCanvasContextMenuDefinition } from "../../context-menu";
-import { getSharedEditAnalysisSession,getSharedEditAnalysisView } from "../../edit-analysis-manager";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { GRID_SIZE_MINOR_TARGET_PX } from "../../settings/types";
 import { useSettingsStore } from "../../settings/useSettingsStore";
-import { buildSnapshotEditSourceFingerprint } from "../../source-identity";
 import { useEditorStore } from "../../store/store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { resolveBucketFillEdit } from "./bucket-fill";
@@ -1011,18 +1010,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [activeCanvasTextEditSourceId, dispatch]);
 
   const editParseOptions = useMemo(
-    () => ({
-      activeFigureId:
-        activeFigureId ?? (snapshot.figures.length > 1 ? null : undefined),
-      analysisView: getSharedEditAnalysisView({
+    () =>
+      buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         source,
         activeFigureId,
-        snapshot
+        snapshot,
+        analysis: "shared"
       }),
-      analysisSession: getSharedEditAnalysisSession()
-    }),
     [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
   );
 
@@ -1435,12 +1431,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       return null;
     }
     const statusBySourceId = new Map<string, NodePositionTargetStatus>();
-    const sourceFingerprint = buildSnapshotEditSourceFingerprint({
-      documentId: activeDocumentId,
-      sourceRevision,
-      sourceLength: source.length,
-      sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
-    });
+    const { sourceFingerprint } = editParseOptions;
     return (anchor: NodeAnchorTarget): NodePositionTargetStatus | null => {
       const targetSourceId = anchor.nodeSourceId?.trim();
       if (!targetSourceId) {
@@ -1488,13 +1479,11 @@ export const CanvasPanel = memo(function CanvasPanel({
       return status;
     };
   }, [
-    activeDocumentId,
     activeTextEngine,
     editParseOptions,
     pendingNodePositionTargetPick,
     snapshot,
-    source,
-    sourceRevision
+    source
   ]);
   const pendingNodePositionTargetStatusBySourceId = useMemo(() => {
     const statusBySourceId = new Map<string, NodePositionTargetStatus>();
@@ -1812,12 +1801,16 @@ export const CanvasPanel = memo(function CanvasPanel({
   const applyActionWithFeedback = useCallback(
     (action: EditAction, historyMergeKey?: string, sourceOverride?: string): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
-      const sourceFingerprint = buildSnapshotEditSourceFingerprint({
-        documentId: activeDocumentId,
-        sourceRevision,
-        sourceLength: sourceForEdit.length,
-        sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
-      });
+      const sourceFingerprint = sourceForEdit === source
+        ? editParseOptions.sourceFingerprint
+        : buildEditParseOptions({
+            documentId: activeDocumentId,
+            sourceRevision,
+            source: sourceForEdit,
+            activeFigureId,
+            snapshot,
+            analysis: "none"
+          }).sourceFingerprint;
       const result = applyEditAction(sourceForEdit, snapshot.editHandles, action, {
         evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
@@ -1862,7 +1855,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
       return { sourceChanged: false };
     },
-    [activeDocumentId, dispatch, editParseOptions, source, sourceRevision, snapshot.editHandles]
+    [activeDocumentId, activeFigureId, dispatch, editParseOptions, source, sourceRevision, snapshot]
   );
   applyActionWithFeedbackRef.current = applyActionWithFeedback;
 
