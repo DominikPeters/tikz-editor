@@ -6,8 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type RefObject,
-  type SyntheticEvent as ReactSyntheticEvent
+  type RefObject
 } from "react";
 import type { AppMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
@@ -41,7 +40,6 @@ import type {
   NodeAnchorOverlayState,
   NodePositionLinkDisplay,
   SelectionBoxDisplay,
-  TextEditingSession,
   TextSelectionOverlay,
   TextSelectionOverlayBox
 } from "./types";
@@ -54,6 +52,7 @@ import type { GridLines } from "./useCanvasGuidesAndRulers";
 import type { GuideOrientation } from "./types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
+import { CanvasTextEditPopup, type CanvasTextEditViewModel } from "./CanvasTextEditPopup";
 import css from "./CanvasPanel.module.css";
 
 const MAGNIFIER_DIAMETER_PX = 300;
@@ -168,21 +167,7 @@ type CanvasPanelViewProps = {
   warning: string | null;
   copyWarningToClipboard: () => void;
   onWarningBarKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
-  textEditingSession: TextEditingSession | null;
-  textEditPopup: { centerX: number; top: number; maxWidth: number; textareaWidth: number } | null;
-  textEditPopupHeight: number | null;
-  textEditPopupRef: RefObject<HTMLDivElement | null>;
-  textEditTextareaSizing: { rows: number } | null;
-  textEditTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  textEditCaretOverlay: { left: number; top: number; height: number } | null;
-  hideNativeTextEditCaret: boolean;
-  onTextEditPopupPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onTextEditTextareaSelect: (event: ReactSyntheticEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaCopy: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaCut: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaDrop: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  canvasTextEdit: CanvasTextEditViewModel;
   selectionHint: string | null;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
@@ -288,20 +273,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     warning,
     copyWarningToClipboard,
     onWarningBarKeyDown,
-    textEditingSession,
-    textEditPopup,
-    textEditPopupHeight,
-    textEditTextareaSizing,
-    textEditTextareaRef,
-    textEditCaretOverlay,
-    hideNativeTextEditCaret,
-    onTextEditPopupPointerDown,
-    onTextEditTextareaSelect,
-    onTextEditTextareaCopy,
-    onTextEditTextareaCut,
-    onTextEditTextareaPaste,
-    onTextEditTextareaDrop,
-    onTextEditTextareaKeyDown,
+    canvasTextEdit,
     selectionHint,
     RULER_SIZE,
     magnifierState
@@ -317,6 +289,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
   const magnifierTop = magnifierVisible
     ? Math.max(0, Math.min(viewportSize.height - MAGNIFIER_DIAMETER_PX, magnifierState.center.y - magnifierRadius))
     : 0;
+  const textEditingSession = canvasTextEdit.session;
   const textCaretBlinkKey =
     textEditingSession && textEditingSession.selectionStart === textEditingSession.selectionEnd
       ? `${textEditingSession.sourceId}:${textEditingSession.selectionStart}:${textEditingSession.selectionEnd}:${textEditingSession.text}`
@@ -813,60 +786,12 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           ) : null}
 
-          {textEditingSession && textEditPopup ? (
-            <div
-              ref={props.textEditPopupRef}
-              className={css.textEditPopup}
-              style={{
-                left: textEditPopup.centerX,
-                top: textEditPopup.top,
-                maxWidth: textEditPopup.maxWidth,
-                transform: "translateX(-50%)",
-                visibility: textEditPopupHeight == null ? "hidden" : "visible"
-              }}
-              onPointerDown={onTextEditPopupPointerDown}
-              data-testid="canvas-text-edit-popup"
-            >
-              {textEditingSession.isForeachTemplateEdit ? (
-                <div className={css.textEditPopupTag} data-testid="canvas-text-edit-foreach-tag">foreach</div>
-              ) : null}
-              <div className={css.textEditTextareaLayer}>
-                <textarea
-                  ref={textEditTextareaRef}
-                  className={[css.textEditTextarea, hideNativeTextEditCaret ? css.textEditTextareaHideNativeCaret : ""].filter(Boolean).join(" ")}
-                  value={textEditingSession.text}
-                  spellCheck={false}
-                  rows={textEditTextareaSizing?.rows}
-                  style={textEditTextareaSizing != null ? { width: textEditPopup.textareaWidth } : undefined}
-                  onSelect={onTextEditTextareaSelect}
-                  onCopy={onTextEditTextareaCopy}
-                  onCut={onTextEditTextareaCut}
-                  onPaste={onTextEditTextareaPaste}
-                  onDrop={onTextEditTextareaDrop}
-                  onKeyDown={onTextEditTextareaKeyDown}
-                  data-testid="canvas-text-edit-textarea"
-                  data-select="text"
-                />
-                {textEditCaretOverlay ? (
-                  <div
-                    className={[
-                      css.textEditViewportCaret,
-                      props.prefersNonBlinkingTextInsertionIndicator ? css.textCaretNoBlink : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-hidden="true"
-                    style={{
-                      left: textEditCaretOverlay.left,
-                      top: textEditCaretOverlay.top,
-                      height: textEditCaretOverlay.height,
-                      animation: "none",
-                      opacity: textCaretBlinkVisible ? 1 : 0
-                    }}
-                  />
-                ) : null}
-              </div>
-            </div>
+          {canvasTextEdit.popup ? (
+            <CanvasTextEditPopup
+              model={canvasTextEdit.popup}
+              prefersNonBlinkingTextInsertionIndicator={props.prefersNonBlinkingTextInsertionIndicator}
+              caretBlinkVisible={textCaretBlinkVisible}
+            />
           ) : null}
 
           {magnifierVisible ? (
