@@ -1,5 +1,6 @@
 import type { WorldTransform } from "../coords/transforms.js";
 import type { WorldPoint, WorldBounds } from "../coords/points.js";
+import { PT_PER_CM } from "../coords/source.js";
 import type { OptionListAst } from "../options/types.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { MacroBinding, MacroExpansionTraceEvent } from "../macros/index.js";
@@ -276,7 +277,7 @@ export function createSemanticContext(
   source = "",
   sourceFingerprint = computeSourceFingerprint(source)
 ): SemanticContext {
-  const defaultNodeDistance = 28.4527559055;
+  const defaultNodeDistance = PT_PER_CM;
   const defaultTreeDistance = 15 * 2.84527559055;
   const clonedStyle = cloneResolvedStyle(initialStyle);
   const defaultBackgroundState = createDefaultSemanticBackgroundState();
