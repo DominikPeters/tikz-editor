@@ -3,6 +3,7 @@ import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import { frameToWorldTransform } from "../packages/core/src/coords/transforms.js";
 import { scaleMatrix } from "../packages/core/src/semantic/transform.js";
 import { applyEditAction, preflightPositionNodeRelativeToAction } from "../packages/core/src/edit/actions.js";
+import { createEditAnalysisSession } from "../packages/core/src/edit/analysis.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { createMathJaxNodeTextEngine } from "../packages/core/src/text/mathjax-engine.js";
@@ -446,6 +447,32 @@ describe("applyEditAction – moveElement", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain("\\matrix[matrix of nodes] at (1,2) {");
     expect(result.newSource).not.toContain("at=(");
+  });
+
+  it("rejects a matrix target whose cached body opening is missing", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {
+    A & B \\
+  };
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const target = analysisView.resolvePropertyTarget("path:0");
+    expect(target.kind).toBe("found");
+    if (target.kind !== "found") return;
+    delete target.target.matrixBodyOpenOffset;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(2))
+    }, {
+      parseOptions: { analysisView }
+    });
+
+    expect(result).toEqual({
+      kind: "unsupported",
+      reason: "Could not resolve matrix body opening for path:0"
+    });
   });
 
   it("moves matrix statements with ampersand replacement using inline placement syntax", () => {
@@ -1029,6 +1056,23 @@ describe("applyEditAction – moveElement", () => {
     if (noOp.kind === "unsupported") {
       expect(noOp.reason).toContain("already matches");
     }
+  });
+
+  it("rejects child-operation paths that have no tree root node", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path (0,0) child { node {Leaf} };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(1))
+    });
+
+    expect(result).toEqual({
+      kind: "unsupported",
+      reason: "Tree root path:0 has no root node to move"
+    });
   });
 
   it("prefers rewriting inline at when both inline and option placement are present", () => {

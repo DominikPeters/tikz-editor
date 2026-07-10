@@ -777,8 +777,14 @@ function rewriteSingleMatrixPlacement(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const statement = findPathStatementById(parsed.figure.body, elementId)!;
-  const matrixNode = findPrimaryMatrixNodeItem(statement)!;
+  const statement = findPathStatementById(parsed.figure.body, elementId);
+  if (!statement) {
+    return { kind: "unsupported", reason: `Could not resolve matrix statement ${elementId}` };
+  }
+  const matrixNode = findPrimaryMatrixNodeItem(statement);
+  if (!matrixNode) {
+    return { kind: "unsupported", reason: `Could not resolve matrix node for ${elementId}` };
+  }
 
   const semantic = evaluateTikzFigure(parsed.figure, source);
   const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
@@ -815,17 +821,25 @@ function rewriteSingleMatrixPlacement(
   );
   const matrixTarget = resolvePropertyTarget(source, elementId, parseOptions);
   if (matrixTarget.kind === "found" && matrixTarget.target.kind === "matrix-statement") {
-    const bodyOpenOffset = matrixTarget.target.matrixBodyOpenOffset!;
+    const bodyOpenOffset = matrixTarget.target.matrixBodyOpenOffset;
+    if (bodyOpenOffset == null) {
+      return { kind: "unsupported", reason: `Could not resolve matrix body opening for ${elementId}` };
+    }
 
     if (atOptionEntry) {
+      const targetOptions = matrixTarget.target.options;
+      const targetOptionsSpan = matrixTarget.target.optionsSpan;
+      if (!targetOptions || !targetOptionsSpan) {
+        return { kind: "unsupported", reason: `Could not resolve matrix options for ${elementId}` };
+      }
       const optionReplacement = rewriteOptionListMutations(
-        matrixTarget.target.options!,
+        targetOptions,
         new Map<string, OptionMutation>([["at", { kind: "remove" }]]),
         undefined,
         matrixTarget.target.optionsFormat
       );
       const applied = applyTextReplacements(source, [
-        { span: matrixTarget.target.optionsSpan!, text: optionReplacement },
+        { span: targetOptionsSpan, text: optionReplacement },
         {
           span: { from: bodyOpenOffset, to: bodyOpenOffset },
           text: buildMatrixInlineAtInsertion(source, bodyOpenOffset, nextCoordinate)
@@ -842,7 +856,10 @@ function rewriteSingleMatrixPlacement(
       source,
       { from: bodyOpenOffset, to: bodyOpenOffset },
       buildMatrixInlineAtInsertion(source, bodyOpenOffset, nextCoordinate)
-    )!;
+    );
+    if (!rewrittenInlineInsertion) {
+      return { kind: "unsupported", reason: `Matrix ${elementId} placement already matches the requested position` };
+    }
     return { kind: "success", source: rewrittenInlineInsertion.source, patches: [rewrittenInlineInsertion.patch] };
   }
 
@@ -861,8 +878,14 @@ function rewriteSingleTreeRootPlacement(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const statement = findPathStatementById(parsed.figure.body, elementId)!;
-  const rootNode = findPrimaryTreeRootNodeItem(statement)!;
+  const statement = findPathStatementById(parsed.figure.body, elementId);
+  if (!statement) {
+    return { kind: "unsupported", reason: `Could not resolve tree root statement ${elementId}` };
+  }
+  const rootNode = findPrimaryTreeRootNodeItem(statement);
+  if (!rootNode) {
+    return { kind: "unsupported", reason: `Tree root ${elementId} has no root node to move` };
+  }
 
   const semantic = evaluateTikzFigure(parsed.figure, source);
   const placementHandle = semantic.editHandles.find(
@@ -924,7 +947,10 @@ function rewriteSingleTreeRootPlacement(
   }
 
   const insertionOffset = resolveTreeRootNodePlacementInsertionOffset(rootNode, source);
-  const inserted = replaceSourceSpan(source, { from: insertionOffset, to: insertionOffset }, ` at ${nextCoordinate}`)!;
+  const inserted = replaceSourceSpan(source, { from: insertionOffset, to: insertionOffset }, ` at ${nextCoordinate}`);
+  if (!inserted) {
+    return { kind: "unsupported", reason: `Tree root ${elementId} placement already matches the requested position` };
+  }
   return { kind: "success", source: inserted.source, patches: [inserted.patch] };
 }
 

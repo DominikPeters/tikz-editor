@@ -249,7 +249,13 @@ export function applyResizeElementAction(
     widthResizeStrategy === "text-width"
       ? Math.max(RESIZE_EPSILON, requestedWidth - effectiveTextWidthInset)
       : null;
-  const liveBounds = resolveNodeResizeBounds(semantic.scene.elements, elementId)!;
+  const liveBounds = resolveNodeResizeBounds(semantic.scene.elements, elementId);
+  if (!liveBounds) {
+    return {
+      kind: "error",
+      message: `Resize invariant failed: current bounds for ${elementId} are missing.`
+    };
+  }
   const liveWorldWidth = liveBounds.maxX - liveBounds.minX;
   const liveWorldHeight = liveBounds.maxY - liveBounds.minY;
   const liveLocalSize = nodeLinearTransform
@@ -353,10 +359,13 @@ function buildNodeResizeMutationCandidates(args: {
     formatPrecision
   } = args;
   if (widthResizeStrategy === "text-width" && affectsWidth) {
+    if (requestedTextWidth == null) {
+      return [];
+    }
     const textWidthMutation: OptionMutation = {
       kind: "set",
       value: `${formatNumber(
-        Math.max(RESIZE_EPSILON, requestedTextWidth!),
+        Math.max(RESIZE_EPSILON, requestedTextWidth),
         pointDimensionFormatOptions(formatPrecision)
       )}pt`
     };
@@ -864,9 +873,10 @@ function applyResizePathRectangle(
     if (action.preserveAspect) {
       const currentWidth = currentMaxX - currentMinX;
       const currentHeight = currentMaxY - currentMinY;
+      const requestedAspectRatio = action.preserveAspectRatio;
       const fixedAspectRatio =
-        Number.isFinite(action.preserveAspectRatio) && action.preserveAspectRatio! > RESIZE_EPSILON
-          ? action.preserveAspectRatio!
+        requestedAspectRatio != null && Number.isFinite(requestedAspectRatio) && requestedAspectRatio > RESIZE_EPSILON
+          ? requestedAspectRatio
           : currentWidth > RESIZE_EPSILON && currentHeight > RESIZE_EPSILON
             ? currentHeight / currentWidth
             : null;
@@ -1108,8 +1118,14 @@ function applyResizePathCircleOrEllipse(
     return { kind: "unsupported", reason: "Resize requires explicit circle/ellipse radii for single-axis drags." };
   }
 
-  let nextRxLocal = affectsWidth ? localDx : currentLocalRadii!.rx;
-  let nextRyLocal = affectsHeight ? localDy : currentLocalRadii!.ry;
+  let nextRxLocal = localDx;
+  if (!affectsWidth && currentLocalRadii) {
+    nextRxLocal = currentLocalRadii.rx;
+  }
+  let nextRyLocal = localDy;
+  if (!affectsHeight && currentLocalRadii) {
+    nextRyLocal = currentLocalRadii.ry;
+  }
   if (context.shapeKind === "circle") {
     const currentRadius = currentLocalRadii?.rx ?? Math.max(nextRxLocal, nextRyLocal);
     const nextRadius = Math.max(
@@ -1123,9 +1139,10 @@ function applyResizePathCircleOrEllipse(
       currentLocalRadii && currentLocalRadii.rx > RESIZE_EPSILON && currentLocalRadii.ry > RESIZE_EPSILON
         ? currentLocalRadii.ry / currentLocalRadii.rx
         : null;
+    const requestedAspectRatio = action.preserveAspectRatio;
     const fixedAspectRatio =
-      Number.isFinite(action.preserveAspectRatio) && action.preserveAspectRatio! > RESIZE_EPSILON
-        ? action.preserveAspectRatio!
+      requestedAspectRatio != null && Number.isFinite(requestedAspectRatio) && requestedAspectRatio > RESIZE_EPSILON
+        ? requestedAspectRatio
         : fallbackAspectRatio;
     if (!fixedAspectRatio || fixedAspectRatio <= RESIZE_EPSILON) {
       return { kind: "unsupported", reason: "Resize requires explicit ellipse radii to preserve aspect ratio." };
@@ -1576,11 +1593,10 @@ function resolveNodeResizeLinearTransform(
   sourceId: string
 ): { a: number; b: number; c: number; d: number } | null {
   const sourceElements = elements.filter((element) => element.sourceRef.sourceId === sourceId && !element.adornment);
-  const transformed = sourceElements.find((element) => element.transform != null);
-  if (!transformed) {
+  const transform = sourceElements.find((element) => element.transform != null)?.transform;
+  if (!transform) {
     return null;
   }
-  const transform = transformed.transform!;
   return {
     a: transform.a,
     b: transform.b,
@@ -1671,8 +1687,15 @@ function resolveNodeTextWidthInsetLocal(args: {
     return null;
   }
 
-  const nodeVisualWidth = textElement.nodeVisualWidth!;
-  const textBlockWidth = textElement.textBlockWidth!;
+  const { nodeVisualWidth, textBlockWidth } = textElement;
+  if (
+    typeof nodeVisualWidth !== "number" ||
+    typeof textBlockWidth !== "number" ||
+    !Number.isFinite(nodeVisualWidth) ||
+    !Number.isFinite(textBlockWidth)
+  ) {
+    return null;
+  }
   const rawInset = Math.max(0, nodeVisualWidth - textBlockWidth);
   if (!args.nodeLinearTransform) {
     return rawInset;

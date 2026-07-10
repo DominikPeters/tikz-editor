@@ -961,7 +961,10 @@ function moveStatementAfterNamedDefinition(
     return null;
   }
 
-  const producerRef = snapshot.byId.get(producerId)!;
+  const producerRef = snapshot.byId.get(producerId);
+  if (!producerRef) {
+    return null;
+  }
 
   if (movingRef.parentKey !== producerRef.parentKey) {
     return null;
@@ -971,14 +974,26 @@ function moveStatementAfterNamedDefinition(
     return null;
   }
 
-  const parentRefs = snapshot.byParentKey.get(movingRef.parentKey)!;
+  const parentRefs = snapshot.byParentKey.get(movingRef.parentKey);
+  if (!parentRefs) {
+    return null;
+  }
   const ids = parentRefs.map((ref) => ref.id);
+  if (!ids.includes(movingStatementId) || !ids.includes(producerId)) {
+    return null;
+  }
   const withoutMoving = ids.filter((id) => id !== movingStatementId);
   const producerIndexInFiltered = withoutMoving.indexOf(producerId);
+  if (producerIndexInFiltered < 0) {
+    return null;
+  }
   const nextOrder = [...withoutMoving];
   nextOrder.splice(producerIndexInFiltered + 1, 0, movingStatementId);
 
-  const replacement = buildParentReorderReplacement(snapshot.source, parentRefs, nextOrder)!;
+  const replacement = buildParentReorderReplacement(snapshot.source, parentRefs, nextOrder);
+  if (!replacement) {
+    return null;
+  }
 
   const applied = applyTextReplacements(source, [
     {
