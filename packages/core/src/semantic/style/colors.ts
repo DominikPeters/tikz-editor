@@ -1,6 +1,9 @@
 import { COLOR_HEX, NAMED_COLORS } from "./constants.js";
 import { normalizeOptionValue } from "./option-utils.js";
 import { hexToRgb, rgbToHex } from "../../utils/color-convert.js";
+import { clamp01 } from "../../utils/math.js";
+
+export { clamp01 } from "../../utils/math.js";
 
 export type ColorAliasResolver = (rawColorName: string) => string | null;
 
@@ -191,16 +194,6 @@ function toRgbColor(color: string): { r: number; g: number; b: number } | null {
     return hexToRgb(normalized);
   }
   return null;
-}
-
-export function clamp01(value: number): number {
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return value;
 }
 
 function parseComponentList(raw: string, count: number): number[] | null {
