@@ -226,8 +226,7 @@ export function App() {
     activeFigureId,
     selectedElementIds,
     activeDocumentId,
-    documents,
-    tabOrder,
+    linkedFileWatchSignature,
     toolMode,
     lastEditChangedSourceIds,
     lastEditPatches,
@@ -242,8 +241,11 @@ export function App() {
     activeFigureId: s.activeFigureId,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
-    documents: s.documents,
-    tabOrder: s.tabOrder,
+    linkedFileWatchSignature: Object.values(s.documents)
+      .map((doc) => linkedFilePathKey(doc.fileRef))
+      .filter((path): path is string => path != null)
+      .sort()
+      .join("\n"),
     toolMode: s.toolMode,
     lastEditChangedSourceIds: s.lastEditChangedSourceIds,
     lastEditPatches: s.lastEditPatches,
@@ -295,7 +297,11 @@ export function App() {
   const [svgExportSvgResult, setSvgExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pngExportSvgResult, setPngExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pendingAutoFit, setPendingAutoFit] = useState(false);
-  const [pendingClose, setPendingClose] = useState<{ intent: CloseIntent; dirtyDocumentIds: string[] } | null>(null);
+  const [pendingClose, setPendingClose] = useState<{
+    intent: CloseIntent;
+    dirtyDocumentIds: string[];
+    documentTitles: string[];
+  } | null>(null);
   const [pendingFileConflict, setPendingFileConflict] = useState<PendingFileConflict | null>(null);
   const [dragRenderViewBox, setDragRenderViewBox] = useState<ComputeRequest["renderViewBox"]>(null);
   const requestCloseIntentRef = useRef<(intent: CloseIntent) => void>(() => {});
@@ -304,18 +310,8 @@ export function App() {
   const sourceRef = useRef(source);
   const snapshotRef = useRef(snapshot);
   const activeDocumentIdRef = useRef(activeDocumentId);
-  const documentsRef = useRef(documents);
   const linkedWatchTimersRef = useRef<Map<string, number>>(new Map());
   const pendingBackgroundLinkedPathsRef = useRef<Set<string>>(new Set());
-  const linkedFileWatchSignature = useMemo(
-    () =>
-      Object.values(documents)
-        .map((doc) => linkedFilePathKey(doc.fileRef))
-        .filter((path): path is string => path != null)
-        .sort()
-        .join("\n"),
-    [documents]
-  );
 
   function executeCloseIntent(intent: CloseIntent): void {
     if (intent.kind === "close-document") {
@@ -330,14 +326,15 @@ export function App() {
   }
 
   function requestCloseIntent(intent: CloseIntent): void {
+    const { documents, tabOrder } = useEditorStore.getState();
     const dirtyDocumentIds = collectDirtyDocumentIdsForIntent(intent, documents, tabOrder);
     if (dirtyDocumentIds.length === 0) {
       executeCloseIntent(intent);
       return;
     }
+    const titles = dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled");
     const confirmNative = getActiveEditorPlatform().window?.confirmUnsavedChanges;
     if (confirmNative) {
-      const titles = dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled");
       const message =
         titles.length === 1
           ? `The document "${titles[0]}" has unsaved changes.`
@@ -347,7 +344,7 @@ export function App() {
       });
       return;
     }
-    setPendingClose({ intent, dirtyDocumentIds });
+    setPendingClose({ intent, dirtyDocumentIds, documentTitles: titles });
   }
 
   useLayoutEffect(() => {
@@ -376,7 +373,7 @@ export function App() {
       return;
     }
     void readLinkedText(doc.fileRef).then((result) => {
-      const currentDoc = documentsRef.current[doc.id];
+      const currentDoc = useEditorStore.getState().documents[doc.id];
       if (!currentDoc) {
         return;
       }
@@ -459,7 +456,7 @@ export function App() {
     mode: "save" | "save-as",
     options: { forceOverwrite?: boolean } = {}
   ): Promise<boolean> => {
-    const doc = documentsRef.current[documentId];
+    const doc = useEditorStore.getState().documents[documentId];
     if (!doc) {
       return false;
     }
@@ -723,18 +720,17 @@ export function App() {
     sourceRef.current = source;
     snapshotRef.current = snapshot;
     activeDocumentIdRef.current = activeDocumentId;
-    documentsRef.current = documents;
-  }, [activeDocumentId, documents, snapshot, source]);
+  }, [activeDocumentId, snapshot, source]);
 
   useEffect(() => {
-    for (const doc of Object.values(documentsRef.current)) {
+    for (const doc of Object.values(useEditorStore.getState().documents)) {
       applyLinkedReadDecision(doc, "restore");
     }
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
     const checkActiveDocument = () => {
-      const doc = documentsRef.current[activeDocumentIdRef.current];
+      const doc = useEditorStore.getState().documents[activeDocumentIdRef.current];
       if (doc) {
         applyLinkedReadDecision(doc, "focus");
       }
@@ -753,7 +749,7 @@ export function App() {
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
-    const doc = documentsRef.current[activeDocumentId];
+    const doc = useEditorStore.getState().documents[activeDocumentId];
     const pathKey = linkedFilePathKey(doc?.fileRef);
     if (pathKey) {
       pendingBackgroundLinkedPathsRef.current.delete(pathKey);
@@ -768,7 +764,7 @@ export function App() {
     if (typeof sync !== "function") {
       return;
     }
-    const fileRefs = Object.values(documentsRef.current)
+    const fileRefs = Object.values(useEditorStore.getState().documents)
       .map((doc) => doc.fileRef)
       .filter((fileRef): fileRef is DocumentFileRef => Boolean(fileRef && linkedFilePathKey(fileRef)));
     void sync(fileRefs);
@@ -795,7 +791,9 @@ export function App() {
       }
       const timer = window.setTimeout(() => {
         timers.delete(pathKey);
-        const docsForPath = Object.values(documentsRef.current).filter((doc) => linkedFilePathKey(doc.fileRef) === pathKey);
+        const docsForPath = Object.values(useEditorStore.getState().documents).filter(
+          (doc) => linkedFilePathKey(doc.fileRef) === pathKey
+        );
         const activeDoc = docsForPath.find((doc) => doc.id === activeDocumentIdRef.current);
         if (activeDoc) {
           applyLinkedReadDecision(activeDoc, "focus");
@@ -1055,7 +1053,7 @@ export function App() {
     const bindAssistantEvents = assistantApi.bindEvents!;
 
     async function respondToDynamicTool(event: Extract<AssistantEvent, { type: "dynamic-tool-call" }>): Promise<void> {
-      const doc = documentsRef.current[event.documentId];
+      const doc = useEditorStore.getState().documents[event.documentId];
       if (!doc) {
         return;
       }
@@ -1295,7 +1293,7 @@ export function App() {
     attachments: AssistantComposerImageAttachment[]
   ): Promise<void> => {
     const documentId = activeDocumentIdRef.current;
-    const currentDocument = documentsRef.current[documentId];
+    const currentDocument = useEditorStore.getState().documents[documentId];
     const currentSource = currentDocument?.source ?? sourceRef.current;
     const currentSnapshot = currentDocument?.snapshot ?? snapshotRef.current;
     const { buildFigureContext: buildFigCtx, buildDiagnosticsText: buildDiag } = await import("./assistant-tool-handlers");
@@ -1915,7 +1913,7 @@ export function App() {
     }
 
     for (const documentId of closeCtx.dirtyDocumentIds) {
-      const doc = documents[documentId];
+      const doc = useEditorStore.getState().documents[documentId];
       if (!doc?.dirty) {
         continue;
       }
@@ -2231,7 +2229,7 @@ export function App() {
       {pendingClose ? (
         <Suspense fallback={null}>
           <UnsavedChangesModal
-            documentTitles={pendingClose.dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled")}
+            documentTitles={pendingClose.documentTitles}
             onChoose={(decision) => {
               void handleUnsavedDecision(decision);
             }}
