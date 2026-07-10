@@ -20,6 +20,10 @@ import {
   validateSvgMarkup
 } from "../../packages/app/src/ui/export-commands.js";
 import { getActiveEditorPlatform, setActiveEditorPlatform } from "../../packages/app/src/platform/current.js";
+import {
+  dismissUiNotification,
+  getUiNotificationSnapshot
+} from "../../packages/app/src/ui/ui-notifications.js";
 
 const SOURCE = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
@@ -33,6 +37,7 @@ describe("export commands", () => {
   });
 
   afterEach(() => {
+    dismissUiNotification();
     setActiveEditorPlatform(previousPlatform);
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -161,6 +166,10 @@ describe("export commands", () => {
 
     await expect(copySvgMarkup(rendered.svg)).resolves.toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(getUiNotificationSnapshot()).toMatchObject({
+      kind: "error",
+      message: "Clipboard access is unavailable; SVG was not copied."
+    });
   });
 
   it("validates edited svg markup", () => {

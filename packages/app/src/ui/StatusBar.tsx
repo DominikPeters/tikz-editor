@@ -1,9 +1,15 @@
 import { RiArrowDownSLine, RiAspectRatioLine, RiGridLine } from "@remixicon/react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useEditorStore } from "../store/store";
 import type { CanvasDragKind, ToolMode } from "../store/types";
 import { getModifierKeyLabels, type ModifierKeyLabels } from "./key-labels";
 import { useFrameTimingStats } from "./useFrameTimingStats";
 import { RenderedTooltip } from "./RenderedTooltip";
+import {
+  dismissUiNotification,
+  getUiNotificationSnapshot,
+  subscribeUiNotifications
+} from "./ui-notifications";
 import css from "./StatusBar.module.css";
 
 const TEX_PT_PER_IN = 72.27;
@@ -29,6 +35,23 @@ export function StatusBar() {
   const activeSourceScrubSourceId = useEditorStore((s) => s.activeSourceScrubSourceId);
   const canvasStatusHint = useEditorStore((s) => s.canvasStatusHint);
   const dispatch = useEditorStore((s) => s.dispatch);
+  const uiNotification = useSyncExternalStore(
+    subscribeUiNotifications,
+    getUiNotificationSnapshot,
+    getUiNotificationSnapshot
+  );
+
+  useEffect(() => {
+    if (!uiNotification) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      dismissUiNotification(uiNotification.id);
+    }, 8_000);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [uiNotification]);
 
   const showPerf = import.meta.env.DEV;
   const perfStats = useFrameTimingStats(activeCanvasDragKind, showPerf);
@@ -120,6 +143,20 @@ export function StatusBar() {
   return (
     <div className={css.bar} data-testid="status-bar" data-select="chrome">
       <div className={css.group}>
+        {uiNotification && (
+          <div className={css.cell} role="alert">
+            <span className={css.error}>{uiNotification.message}</span>
+            <button
+              type="button"
+              className={css.dismissButton}
+              aria-label="Dismiss error"
+              onClick={() => { dismissUiNotification(uiNotification.id); }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {showFigureContext && (
           <div className={css.cell}>
             <span>Figure {activeFigureIndex + 1} of {figures.length}</span>

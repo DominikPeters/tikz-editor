@@ -6,6 +6,7 @@ import {
 } from "tikz-editor/export/index";
 import { serializeSvgModelAsync, type EmitSvgResult } from "tikz-editor/svg/index";
 import { getActiveEditorPlatform } from "../platform/current";
+import { publishUiError } from "./ui-notifications";
 
 const DEFAULT_PNG_EXPORT_DPI = 144;
 const MIN_PNG_EXPORT_DPI = 36;
@@ -35,6 +36,12 @@ export type RenderPngExportResult = {
 
 let svgOptimizerPromise: Promise<SvgOptimizer> | null = null;
 
+function reportExportFailure(message: string, error?: unknown): false {
+  console.warn(`[tikz-editor] ${message}`, error);
+  publishUiError(message);
+  return false;
+}
+
 export async function exportStandaloneLatexDownload(
   source: string,
   activeFigureId: string | null,
@@ -57,16 +64,13 @@ export async function exportStandaloneLatexDownload(
   }
 
   if (typeof document === "undefined" || typeof Blob === "undefined") {
-    console.warn("[tikz-editor] Standalone LaTeX export download is unavailable in this runtime.");
-    return false;
+    return reportExportFailure("Standalone LaTeX export is unavailable in this runtime.");
   }
   if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    console.warn("[tikz-editor] Standalone LaTeX export download requires URL.createObjectURL support.");
-    return false;
+    return reportExportFailure("Standalone LaTeX export requires object URL support.");
   }
   if (!document.body) {
-    console.warn("[tikz-editor] Standalone LaTeX export download requires document.body.");
-    return false;
+    return reportExportFailure("Standalone LaTeX export requires an active document.");
   }
 
   const blob = new Blob([artifact.text], { type: artifact.mimeType });
@@ -91,16 +95,13 @@ export async function exportSvgDownload(
   options: { fileName?: string } = {}
 ): Promise<boolean> {
   if (typeof document === "undefined" || typeof Blob === "undefined") {
-    console.warn("[tikz-editor] SVG export download is unavailable in this runtime.");
-    return false;
+    return reportExportFailure("SVG export is unavailable in this runtime.");
   }
   if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    console.warn("[tikz-editor] SVG export download requires URL.createObjectURL support.");
-    return false;
+    return reportExportFailure("SVG export requires object URL support.");
   }
   if (!document.body) {
-    console.warn("[tikz-editor] SVG export download requires document.body.");
-    return false;
+    return reportExportFailure("SVG export requires an active document.");
   }
 
   const text = await serializeSvgForExport(svgResult);
@@ -162,16 +163,13 @@ export async function exportPngDownload(
   options: RenderPngExportOptions = {}
 ): Promise<boolean> {
   if (typeof document === "undefined" || typeof URL === "undefined") {
-    console.warn("[tikz-editor] PNG export download is unavailable in this runtime.");
-    return false;
+    return reportExportFailure("PNG export is unavailable in this runtime.");
   }
   if (typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    console.warn("[tikz-editor] PNG export download requires URL.createObjectURL support.");
-    return false;
+    return reportExportFailure("PNG export requires object URL support.");
   }
   if (!document.body) {
-    console.warn("[tikz-editor] PNG export download requires document.body.");
-    return false;
+    return reportExportFailure("PNG export requires an active document.");
   }
 
   try {
@@ -197,8 +195,7 @@ export async function exportPngDownload(
       URL.revokeObjectURL(objectUrl);
     }
   } catch (error) {
-    console.warn("[tikz-editor] Failed to export PNG.", error);
-    return false;
+    return reportExportFailure("Failed to export PNG.", error);
   }
 }
 
@@ -209,8 +206,7 @@ export async function exportPdfDownload(
   options: { fileName?: string } = {}
 ): Promise<boolean> {
   if (typeof window === "undefined" || typeof document === "undefined") {
-    console.warn("[tikz-editor] PDF export is unavailable in this runtime.");
-    return false;
+    return reportExportFailure("PDF export is unavailable in this runtime.");
   }
 
   try {
@@ -234,12 +230,10 @@ export async function exportPdfDownload(
       return true;
     }
     if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-      console.warn("[tikz-editor] PDF export download requires URL.createObjectURL support.");
-      return false;
+      return reportExportFailure("PDF export requires object URL support.");
     }
     if (!document.body) {
-      console.warn("[tikz-editor] PDF export download requires document.body.");
-      return false;
+      return reportExportFailure("PDF export requires an active document.");
     }
 
     const objectUrl = URL.createObjectURL(blob);
@@ -256,17 +250,11 @@ export async function exportPdfDownload(
       URL.revokeObjectURL(objectUrl);
     }
   } catch (error) {
-    console.warn("[tikz-editor] Failed to export PDF.", error);
-    return false;
+    return reportExportFailure("Failed to export PDF.", error);
   }
 }
 
 export async function copySvgMarkup(svgResult: EmitSvgResult): Promise<boolean> {
-  if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
-    console.warn("[tikz-editor] Clipboard API is unavailable; could not copy SVG.");
-    return false;
-  }
-
   const text = await serializeSvgForExport(svgResult);
   return copySvgText(text);
 }
@@ -319,16 +307,13 @@ export async function downloadSvgMarkup(
   }
 
   if (typeof document === "undefined" || typeof Blob === "undefined") {
-    console.warn("[tikz-editor] SVG export download is unavailable in this runtime.");
-    return false;
+    return reportExportFailure("SVG export is unavailable in this runtime.");
   }
   if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    console.warn("[tikz-editor] SVG export download requires URL.createObjectURL support.");
-    return false;
+    return reportExportFailure("SVG export requires object URL support.");
   }
   if (!document.body) {
-    console.warn("[tikz-editor] SVG export download requires document.body.");
-    return false;
+    return reportExportFailure("SVG export requires an active document.");
   }
 
   const blob = new Blob([artifact.text], { type: artifact.mimeType });
@@ -361,16 +346,14 @@ export async function copySvgText(svgMarkup: string): Promise<boolean> {
   }
 
   if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
-    console.warn("[tikz-editor] Clipboard API is unavailable; could not copy SVG.");
-    return false;
+    return reportExportFailure("Clipboard access is unavailable; SVG was not copied.");
   }
 
   try {
     await navigator.clipboard.writeText(artifact.text);
     return true;
   } catch (error) {
-    console.warn("[tikz-editor] Failed to copy SVG to clipboard.", error);
-    return false;
+    return reportExportFailure("Failed to copy SVG to the clipboard.", error);
   }
 }
 
