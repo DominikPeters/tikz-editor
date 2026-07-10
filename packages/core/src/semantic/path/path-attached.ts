@@ -5,6 +5,7 @@ import {
   type WorldVector
 } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
+import { distanceSquared } from "../../utils/math.js";
 import type { OptionListAst } from "../../options/types.js";
 import type { StyleChainEntry } from "../style-chain.js";
 import type { ScenePathAttachment } from "../types.js";
@@ -509,12 +510,6 @@ function interpolate(from: WorldPoint, to: WorldPoint, t: number): WorldPoint {
 
 function distance(a: WorldPoint, b: WorldPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }
 
 function closestPointOnLine(p: WorldPoint, a: WorldPoint, b: WorldPoint): { t: number; point: WorldPoint } {

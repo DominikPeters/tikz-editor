@@ -2,8 +2,10 @@ import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import { normalizeOptionValue, isWrappedBySingleBracePair } from "../shared/option-value.js";
+import { clamp } from "../../utils/math.js";
 
 export { normalizeOptionValue, isWrappedBySingleBracePair };
+export { clamp };
 
 export function coordinateInner(raw: string): string | null {
   const trimmed = raw.trim();
@@ -15,10 +17,6 @@ export function coordinateInner(raw: string): string | null {
 
 export function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
-}
-
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 export function interpolate(from: WorldPoint, to: WorldPoint, t: number): WorldPoint {

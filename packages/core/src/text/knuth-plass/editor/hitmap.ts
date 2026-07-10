@@ -16,6 +16,7 @@ import {
 } from './mathPrefix.js';
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
+import { clamp } from '../../../utils/math.js';
 
 // The core package builds without the DOM lib; keep the editor hit-testing
 // helpers structurally typed so they remain importable in Node-only builds.
@@ -280,10 +281,6 @@ function sameContainerGeometry(
     Math.abs(left.matrixE - right.matrixE) <= EPSILON &&
     Math.abs(left.matrixF - right.matrixF) <= EPSILON
   );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function invalidParamsResult<T extends ResultBase>(

@@ -38,6 +38,7 @@ import type {
 } from "./types.js";
 import { formatSvgNumber as fmt } from "./format.js";
 import { hexToRgb, rgbToHex } from "../utils/color-convert.js";
+import { clamp01 } from "../utils/math.js";
 
 type ShadowRenderableStyle = Pick<
   ResolvedStyle,
@@ -2008,16 +2009,6 @@ function formatMatrix(matrix: SvgTransform): string {
   return `matrix(${fmt(matrix.a)} ${fmt(matrix.b)} ${fmt(matrix.c)} ${fmt(
     matrix.d
   )} ${fmt(matrix.e)} ${fmt(matrix.f)})`;
-}
-
-function clamp01(value: number): number {
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return value;
 }
 
 function escapeText(value: string): string {
