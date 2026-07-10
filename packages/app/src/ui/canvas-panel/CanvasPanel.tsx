@@ -493,6 +493,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     right: number;
     bottom: number;
   } | null>(null);
+  const [nodePositionTargetTooltip, setNodePositionTargetTooltip] = useState<{
+    content: string;
+    anchor: { x: number; y: number };
+  } | null>(null);
   const [dragCursorLock, setDragCursorLock] = useState<string | null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
   const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
@@ -640,13 +644,15 @@ export const CanvasPanel = memo(function CanvasPanel({
     viewBox: SvgViewBox | null;
     editParseOptions: typeof editParseOptions;
   } | null>(null);
-  canvasCommandStateRef.current = {
-    source,
-    selectedElementIds,
-    sceneElements: snapshot.scene?.elements ?? [],
-    viewBox: svgResult?.viewBox ?? null,
-    editParseOptions
-  };
+  useLayoutEffect(() => {
+    canvasCommandStateRef.current = {
+      source,
+      selectedElementIds,
+      sceneElements: snapshot.scene?.elements ?? [],
+      viewBox: svgResult?.viewBox ?? null,
+      editParseOptions
+    };
+  });
   const dispatchCanvasTransform = useCallback(
     (transform: CanvasTransform) => {
       if (
@@ -1065,26 +1071,29 @@ export const CanvasPanel = memo(function CanvasPanel({
     pendingNodePositionTargetStatusBySourceId
   ]);
 
-  const nodePositionTargetTooltip = useMemo(() => {
+  useLayoutEffect(() => {
     if (!pendingNodePositionTargetPick || !pendingNodePositionEffectiveHoverSourceId || !svgResult) {
-      return null;
+      setNodePositionTargetTooltip(null);
+      return;
     }
     const status = pendingNodePositionTargetStatusBySourceId.get(pendingNodePositionEffectiveHoverSourceId);
     if (!status || status.usable || !status.reason) {
-      return null;
+      setNodePositionTargetTooltip(null);
+      return;
     }
     const viewportRect = viewportRef.current?.getBoundingClientRect();
     if (!viewportRect) {
-      return null;
+      setNodePositionTargetTooltip(null);
+      return;
     }
     const svg = worldToSvgPoint(status.anchor.world, svgResult.viewBox);
-    return {
+    setNodePositionTargetTooltip({
       content: status.reason,
       anchor: {
         x: viewportRect.left + canvasTransform.translateX + (svg.x - svgResult.viewBox.x) * canvasTransform.scale,
         y: viewportRect.top + canvasTransform.translateY + (svg.y - svgResult.viewBox.y) * canvasTransform.scale
       }
-    };
+    });
   }, [
     canvasTransform.scale,
     canvasTransform.translateX,
@@ -1212,12 +1221,14 @@ export const CanvasPanel = memo(function CanvasPanel({
     ROTATE_HANDLE_OFFSET_PX
   });
 
-  canvasTransformRef.current = canvasTransform;
-  selectedElementIdsRef.current = selectedElementIds;
-  svgResultRef.current = svgResult;
-  fitToContentModeActiveRef.current = fitToContentModeActive;
-  sourceBoundsSvgRef.current = sourceBoundsSvg;
-  liveResizeFramesRef.current = resizeFramesBySource;
+  useLayoutEffect(() => {
+    canvasTransformRef.current = canvasTransform;
+    selectedElementIdsRef.current = selectedElementIds;
+    svgResultRef.current = svgResult;
+    fitToContentModeActiveRef.current = fitToContentModeActive;
+    sourceBoundsSvgRef.current = sourceBoundsSvg;
+    liveResizeFramesRef.current = resizeFramesBySource;
+  });
 
   const {
     snapGuideInput,
@@ -1372,7 +1383,9 @@ export const CanvasPanel = memo(function CanvasPanel({
     },
     [activeDocumentId, activeFigureId, dispatch, editParseOptions, source, sourceRevision, snapshot]
   );
-  applyActionWithFeedbackRef.current = applyActionWithFeedback;
+  useLayoutEffect(() => {
+    applyActionWithFeedbackRef.current = applyActionWithFeedback;
+  });
 
   const queueSelectionForAddedElement = useCallback(
     (preferredWorld: WorldPoint, preferredSourceId?: string) => {
@@ -2205,18 +2218,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     setToolCursorWorld,
     viewportRef,
     setViewportSize,
-    canvasTransform,
     canvasTransformRef,
-    selectedElementIds,
-    selectedElementIdsRef,
     svgResult,
     svgResultRef,
-    fitToContentModeActive,
     fitToContentModeActiveRef,
-    sourceBoundsSvg,
-    sourceBoundsSvgRef,
-    resizeFramesBySource,
-    liveResizeFramesRef,
     previousViewBoxRef,
     dispatchCanvasTransform,
     zoomSpeed,

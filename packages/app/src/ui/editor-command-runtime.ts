@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { getDockLayoutHandle } from "./DockLayout";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
@@ -1158,12 +1158,14 @@ export function useEditorCommandRuntime(
   );
   const frozenCommandInputsRef = useRef(liveCommandInputs);
   const snapshotMatchesSource = snapshot.source === source;
-  if (!activeCanvasDragKind && snapshotMatchesSource) {
-    frozenCommandInputsRef.current = liveCommandInputs;
-  }
   const effectiveCommandInputs = activeCanvasDragKind || !snapshotMatchesSource
     ? frozenCommandInputsRef.current
     : liveCommandInputs;
+  useLayoutEffect(() => {
+    if (!activeCanvasDragKind && snapshotMatchesSource) {
+      frozenCommandInputsRef.current = liveCommandInputs;
+    }
+  }, [activeCanvasDragKind, liveCommandInputs, snapshotMatchesSource]);
   return useMemo(
     () =>
       createEditorCommandRuntime({
