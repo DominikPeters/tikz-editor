@@ -101,6 +101,36 @@ export type ResizeElementAction = {
   };
 };
 
+type ResizeSourceEvaluation = {
+  parsed: ReturnType<typeof parseTikzForEdit>;
+  semantic: ReturnType<typeof evaluateTikzFigure>;
+  boundsBySource: ReturnType<typeof collectSourceWorldBounds>;
+};
+
+type ResolveResizeSourceEvaluation = (source: string) => ResizeSourceEvaluation;
+
+function createResizeSourceEvaluationResolver(
+  evaluateOptions: EvaluateOptions | undefined,
+  parseOptions: EditParseOptions
+): ResolveResizeSourceEvaluation {
+  const cache = new Map<string, ResizeSourceEvaluation>();
+  return (source) => {
+    const cached = cache.get(source);
+    if (cached) {
+      return cached;
+    }
+    const parsed = parseTikzForEdit(source, parseOptions);
+    const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+    const evaluation = {
+      parsed,
+      semantic,
+      boundsBySource: collectSourceWorldBounds(semantic.scene.elements)
+    };
+    cache.set(source, evaluation);
+    return evaluation;
+  };
+}
+
 
 export function applyResizeElementAction(
   source: string,
@@ -121,14 +151,11 @@ export function applyResizeElementAction(
     return { kind: "unsupported", reason: FIT_DIRECT_MANIPULATION_BLOCK_REASON };
   }
 
-  const parsed = parseTikzForEdit(source, {
-    ...parseOptions,
-  });
+  const resolveSourceEvaluation = createResizeSourceEvaluationResolver(evaluateOptions, parseOptions);
+  const { parsed, semantic, boundsBySource } = resolveSourceEvaluation(source);
   if (sourceUsesFitNodeFromParseResult(source, parsed, elementId)) {
     return { kind: "unsupported", reason: FIT_DIRECT_MANIPULATION_BLOCK_REASON };
   }
-  const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
-  const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
   const scopeBoundsById = buildScopeBoundsById(parsed.figure.body, boundsBySource);
   if (findScopeStatementById(parsed.figure.body, elementId)) {
     return applyResizeScope(source, action, resolved.target, scopeBoundsById, parsed.figure.body);
@@ -190,10 +217,7 @@ export function applyResizeElementAction(
   ]);
   const floorRewrite = applyOptionMutationsToTarget(source, resizeTarget, floorMutations);
   const floorSource = floorRewrite ? floorRewrite.source : source;
-  const floorParsed = parseTikzForEdit(floorSource, {
-    ...parseOptions,
-  });
-  const floorSemantic = evaluateTikzFigure(floorParsed.figure, floorSource, evaluateOptions);
+  const { semantic: floorSemantic } = resolveSourceEvaluation(floorSource);
   const floorBounds = resolveNodeResizeBounds(floorSemantic.scene.elements, elementId);
   if (!floorBounds) {
     return { kind: "unsupported", reason: "Could not resolve intrinsic node bounds for resize." };
@@ -274,14 +298,13 @@ export function applyResizeElementAction(
     source,
     resizeTarget,
     elementId,
-    evaluateOptions,
-    parseOptions,
     nodeLinearTransform,
     affectsWidth,
     affectsHeight,
     requestedWidth,
     requestedHeight,
-    candidates: resizeCandidates
+    candidates: resizeCandidates,
+    resolveSourceEvaluation
   });
   if (!rewritten) {
     if (nodeLinearTransform && !preserveExplicitWidthFloor && !preserveExplicitHeightFloor) {
@@ -446,27 +469,25 @@ function chooseBestNodeResizeMutationCandidate(args: {
   source: string;
   resizeTarget: PropertyTarget;
   elementId: string;
-  evaluateOptions: EvaluateOptions | undefined;
-  parseOptions: EditParseOptions;
   nodeLinearTransform: { a: number; b: number; c: number; d: number } | null;
   affectsWidth: boolean;
   affectsHeight: boolean;
   requestedWidth: number;
   requestedHeight: number;
   candidates: ReadonlyArray<{ mutations: Map<string, OptionMutation>; explicitConstraintCount: number; removesOtherConstraint: boolean }>;
+  resolveSourceEvaluation: ResolveResizeSourceEvaluation;
 }): OptionMutationApplyResult | null {
   const {
     source,
     resizeTarget,
     elementId,
-    evaluateOptions,
-    parseOptions,
     nodeLinearTransform,
     affectsWidth,
     affectsHeight,
     requestedWidth,
     requestedHeight,
-    candidates
+    candidates,
+    resolveSourceEvaluation
   } = args;
 
   let best: OptionMutationApplyResult | null = null;
@@ -475,11 +496,7 @@ function chooseBestNodeResizeMutationCandidate(args: {
   for (const candidate of candidates) {
     const rewritten = applyOptionMutationsToTarget(source, resizeTarget, candidate.mutations);
     const candidateSource = rewritten ? rewritten.source : source;
-    const parsed = parseTikzForEdit(candidateSource, {
-      ...parseOptions,
-    });
-    const semantic = evaluateTikzFigure(parsed.figure, candidateSource, evaluateOptions);
-    const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
+    const { boundsBySource } = resolveSourceEvaluation(candidateSource);
     const bounds = boundsBySource.get(elementId);
     if (!bounds) {
       continue;
