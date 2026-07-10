@@ -88,6 +88,55 @@ describe("semantic incremental evaluation", () => {
     });
   });
 
+  it("defers checkpoint capture until an eligible drag and reuses it on later frames", () => {
+    let source = makeIsolatedNodeFigure();
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const changedSourceId = seededParsed.figure.body[8]?.id;
+    expect(changedSourceId).toBeDefined();
+    if (!changedSourceId) {
+      throw new Error("Expected isolated node statement");
+    }
+
+    const seeded = session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+    expect(seeded.stats.checkpointPreparation).toBe("deferred");
+    expect(seeded.stats.checkpointCount).toBe(0);
+
+    source = source.replace("(10,10)", "(10.4,10.2)");
+    const firstParsed = parseTikz(source, { recover: true });
+    const firstDrag = session.evaluate({
+      figure: firstParsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: [changedSourceId]
+      }
+    });
+    expect(firstDrag.semantic).toEqual(evaluateTikzFigure(firstParsed.figure, source));
+    expect(firstDrag.stats.strategy).toBe("incremental");
+    expect(firstDrag.stats.checkpointPreparation).toBe("captured-from-deferred");
+    expect(firstDrag.stats.checkpointCount).toBeGreaterThan(0);
+
+    source = source.replace("(10.4,10.2)", "(10.8,10.4)");
+    const secondParsed = parseTikz(source, { recover: true });
+    const secondDrag = session.evaluate({
+      figure: secondParsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: [changedSourceId]
+      }
+    });
+    expect(secondDrag.semantic).toEqual(evaluateTikzFigure(secondParsed.figure, source));
+    expect(secondDrag.stats.strategy).toBe("incremental");
+    expect(secondDrag.stats.checkpointPreparation).toBe("reused");
+    expect(secondDrag.stats.checkpointCount).toBe(firstDrag.stats.checkpointCount);
+  });
+
   it("keeps stateful graphics on the full-evaluation path", () => {
     const source = String.raw`\begin{tikzpicture}
   \clip (0,0) rectangle (1,1);
