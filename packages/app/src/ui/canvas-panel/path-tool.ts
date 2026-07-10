@@ -8,6 +8,7 @@ import {
 } from "@tikz-editor/core/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
 
+import { distanceSquared } from "./geometry";
 import { resolveBezierControlsFromBend } from "./interaction-helpers";
 
 const MIN_SEGMENT_LENGTH_PT = 1e-3;
@@ -181,10 +182,4 @@ export function generateAppendSegmentSource(draft: PathToolDraft): string | null
   );
 
   return generateComplexPathPrependSource(newStart, revSegs, newStartAnchor);
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }

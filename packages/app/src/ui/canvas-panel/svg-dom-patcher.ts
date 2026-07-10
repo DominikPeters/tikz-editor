@@ -9,6 +9,7 @@ import {
   removePartOrder,
   upsertPartOrder
 } from "@tikz-editor/core/svg/order";
+import { fmt } from "./geometry";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -167,10 +168,6 @@ export class SvgDomPatcher {
 
     throw new Error(`Invalid SVG markup for part ${part.partId}`);
   }
-}
-
-function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
 }
 
 function isSvgElementNode(node: Element | null): node is SVGElement {

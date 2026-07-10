@@ -4,7 +4,7 @@ import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } 
 import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgPoint } from "../coords/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
-import { worldToSvgPoint } from "./geometry";
+import { fmt, worldToSvgPoint } from "./geometry";
 
 const HIT_STROKE_PX = 18;
 const ADORNMENT_TEXT_HIT_PADDING_PX = 8;
@@ -456,10 +456,6 @@ function encodePathData(commands: ScenePathCommand[], viewBox: Pick<SvgViewBox, 
   }
 
   return chunks.join(" ");
-}
-
-function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
 }
 
 function worldTransformToSvgTransform(

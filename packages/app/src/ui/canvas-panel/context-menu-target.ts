@@ -3,6 +3,7 @@ import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { ToolMode } from "../../store/types";
+import { clamp } from "./geometry";
 
 export type ContextMenuSelectionAction =
   | { kind: "preserve" }
@@ -160,8 +161,4 @@ export function clampContextMenuAnchor(
     x: clamp(anchor.x, padding, maxX),
     y: clamp(anchor.y, padding, maxY)
   };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }

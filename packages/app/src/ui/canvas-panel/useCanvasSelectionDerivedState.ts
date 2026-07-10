@@ -12,6 +12,7 @@ import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/typ
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import {
   computeVisibleRanges,
+  distanceSquared,
   resizeCursorForVector,
   vectorLengthSquared,
   worldToSvgPoint,
@@ -986,12 +987,6 @@ function nodeItemSourceId(
     isSyntheticTreeChildStatement
     ? statement.id
     : item.id;
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }
 
 function collectPathAttachedNodeSourceIds(statements: readonly Statement[]): Set<string> {

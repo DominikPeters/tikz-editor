@@ -2,6 +2,7 @@ import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
 import { pt, worldPoint } from "@tikz-editor/core/coords/index";
 import { buildDrawOptions } from "@tikz-editor/core/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
+import { distanceSquared } from "./geometry";
 
 const MIN_WORLD_DISTANCE_PT = 1e-3;
 
@@ -174,12 +175,6 @@ function polylineLength(points: readonly WorldPoint[]): number {
 
 function formatPointCm(point: WorldPoint): string {
   return `(${formatNumber(point.x * CM_PER_PT)},${formatNumber(point.y * CM_PER_PT)})`;
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }
 
 function clampSmoothingTolerancePx(value: number): number {
