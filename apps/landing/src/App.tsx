@@ -354,14 +354,14 @@ function Hero() {
                 </Fragment>
               ))}
             </div>
+            <p className="landingSigningAttribution">
+              macOS releases are signed by Dominik Peters. Windows: Free code signing provided by{" "}
+              <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
+              <a href="https://signpath.org/">SignPath Foundation</a>.{" "}
+              <a href="#code-signing-policy">Code-signing policy</a>.
+            </p>
           </div>
         </div>
-        <p className="landingSigningAttribution">
-          macOS releases are signed by Dominik Peters. Windows: Free code signing provided by{" "}
-          <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
-          <a href="https://signpath.org/">SignPath Foundation</a>.{" "}
-          <a href="#code-signing-policy">Code-signing policy</a>.
-        </p>
       </div>
       <figure className="landingHeroScreenshot" aria-label="TikZ Editor interface screenshot">
         <ScreenshotImage
@@ -745,8 +745,14 @@ function CodeSigningPolicy() {
           </div>
         </dl>
         <p>
-          <strong>Privacy statement:</strong> This program will not transfer any information to other networked
-          systems unless specifically requested by the user or the person installing or operating it.
+          <strong>Privacy policy:</strong> On startup, the desktop app requests update information from{" "}
+          <code>tikz.dev</code>. The server receives standard connection information such as the IP address,
+          but the request contains no documents, TikZ source, usage analytics, or persistent identifiers.
+        </p>
+        <p>
+          Other network requests are made only when the user invokes a networked feature, such as opening a
+          paper from arXiv, using Codex assistance, previewing with TikZJax, following an external link, or
+          downloading an update.
         </p>
       </div>
     </section>
