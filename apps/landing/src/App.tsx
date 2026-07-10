@@ -266,6 +266,7 @@ export function App() {
       <main className="landingPage">
         <Hero />
         <EditorStory />
+        <CodeSigningPolicy />
       </main>
       <TikzDevFooter />
     </div>
@@ -299,6 +300,8 @@ function TikzDevFooter() {
         <a href="https://github.com/DominikPeters/tikz-editor">GitHub</a>
         <span aria-hidden="true">·</span>
         <a href="https://github.com/DominikPeters/tikz-editor/issues">Feedback and issues</a>
+        <span aria-hidden="true">·</span>
+        <a href="#code-signing-policy">Code signing</a>
         <span aria-hidden="true">·</span>
         <a href="https://tikz.dev">PGF/<span className="landingTikzName">TikZ</span> Manual</a>
       </div>
@@ -353,6 +356,12 @@ function Hero() {
             </div>
           </div>
         </div>
+        <p className="landingSigningAttribution">
+          macOS releases are signed by Dominik Peters. Windows: Free code signing provided by{" "}
+          <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
+          <a href="https://signpath.org/">SignPath Foundation</a>.{" "}
+          <a href="#code-signing-policy">Code-signing policy</a>.
+        </p>
       </div>
       <figure className="landingHeroScreenshot" aria-label="TikZ Editor interface screenshot">
         <ScreenshotImage
@@ -710,6 +719,34 @@ function HowItWorksSection() {
         </p>
         <p>
           The app supports importing a variety of file formats based on converters that I developed for this purpose; these converters are available as standalone npm packages: <a href="https://www.npmjs.com/package/svg2tikz">svg2tikz</a>, <a href="https://www.npmjs.com/package/pptx2tikz">pptx2tikz</a> built on top of <a href="https://github.com/pipipi-pikachu/pptxtojson">pptxtojson</a>, and <a href="https://www.npmjs.com/package/ipe2tikz">ipe2tikz</a>. The desktop app also supports directly pasting objects from PowerPoint and Keynote; for the latter feature I built an interpreter for the keynote clipboard format, available as npm package <a href="https://www.npmjs.com/package/keynote-clipboard">keynote-clipboard</a>. The desktop app also includes support for AI assistance via the <a href="https://developers.openai.com/codex/app-server">Codex App Server</a>. The app's source editor is built on top of <a href="https://codemirror.net/">CodeMirror</a>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function CodeSigningPolicy() {
+  return (
+    <section className="landingCodeSigningPolicy" id="code-signing-policy" aria-labelledby="code-signing-policy-title">
+      <div className="landingCodeSigningPolicyInner">
+        <h2 id="code-signing-policy-title">Code-signing policy</h2>
+        <p>
+          Official Windows releases are built from the project source on GitHub Actions and signed through
+          SignPath. Every production signing request requires manual approval by the release approver.
+        </p>
+        <dl>
+          <div>
+            <dt>Committer and reviewer</dt>
+            <dd><a href="https://dominik-peters.de/">Dominik Peters</a></dd>
+          </div>
+          <div>
+            <dt>Release approver</dt>
+            <dd><a href="https://dominik-peters.de/">Dominik Peters</a></dd>
+          </div>
+        </dl>
+        <p>
+          <strong>Privacy statement:</strong> This program will not transfer any information to other networked
+          systems unless specifically requested by the user or the person installing or operating it.
         </p>
       </div>
     </section>
