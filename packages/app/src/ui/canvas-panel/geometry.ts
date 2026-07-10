@@ -1,4 +1,5 @@
 import { PT_PER_CM } from "tikz-editor/edit/format";
+import { pickGridStepPt } from "tikz-editor/edit/snapping";
 import { GRID_MINOR_TARGET_PX } from "tikz-editor/edit/snapping/types";
 import type { SvgViewBox } from "tikz-editor/svg/types";
 import { svgPoint, viewportPoint, pt, px } from "tikz-editor/coords/index";
@@ -210,20 +211,8 @@ export function svgToWorldPoint(point: SvgPoint, viewBox: Pick<SvgViewBox, "y" |
   return typedSvgToWorld(point, viewBox as SvgViewBox);
 }
 
-export function pickStepPt(scale: number, targetPixels: number): number {
-  const cmSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
-  const minStepPt = targetPixels / Math.max(scale, 1e-6);
-
-  for (const cmStep of cmSteps) {
-    const pt = cmStep * PT_PER_CM;
-    if (pt >= minStepPt) return pt;
-  }
-
-  return cmSteps[cmSteps.length - 1] * PT_PER_CM;
-}
-
 export function resolveOverlayGridSteps(scale: number, minorTargetPx: number = GRID_MINOR_TARGET_PX): OverlayGridSteps {
-  const minorStep = pickStepPt(scale, minorTargetPx);
+  const minorStep = pickGridStepPt(scale, minorTargetPx);
   return {
     minorStep,
     majorStep: minorStep * OVERLAY_MAJOR_STEP_MULTIPLE
