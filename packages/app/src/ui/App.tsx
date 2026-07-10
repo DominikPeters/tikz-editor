@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   APP_MENU_COMMAND_IDS,
@@ -297,9 +297,9 @@ export function App() {
   const [pendingAutoFit, setPendingAutoFit] = useState(false);
   const [pendingClose, setPendingClose] = useState<{ intent: CloseIntent; dirtyDocumentIds: string[] } | null>(null);
   const [pendingFileConflict, setPendingFileConflict] = useState<PendingFileConflict | null>(null);
+  const [dragRenderViewBox, setDragRenderViewBox] = useState<ComputeRequest["renderViewBox"]>(null);
   const requestCloseIntentRef = useRef<(intent: CloseIntent) => void>(() => {});
   const computeSchedulerRef = useRef<ReturnType<typeof createSingleFlightScheduler<ComputeRequest, ComputeResponse>> | null>(null);
-  const dragRenderViewBoxRef = useRef<ComputeRequest["renderViewBox"]>(null);
   const updateCheckPromiseRef = useRef<Promise<UpdateInfo | null> | null>(null);
   const sourceRef = useRef(source);
   const snapshotRef = useRef(snapshot);
@@ -350,7 +350,9 @@ export function App() {
     setPendingClose({ intent, dirtyDocumentIds });
   }
 
-  requestCloseIntentRef.current = requestCloseIntent;
+  useLayoutEffect(() => {
+    requestCloseIntentRef.current = requestCloseIntent;
+  });
 
   const showNativeMessage = useCallback(async (
     title: string,
@@ -670,8 +672,10 @@ export function App() {
   });
   const commandRuntimeRef = useRef(commandRuntime);
   const toolModeRef = useRef(toolMode);
-  commandRuntimeRef.current = commandRuntime;
-  toolModeRef.current = toolMode;
+  useLayoutEffect(() => {
+    commandRuntimeRef.current = commandRuntime;
+    toolModeRef.current = toolMode;
+  }, [commandRuntime, toolMode]);
 
   useEffect(() => {
     const apply = (dark: boolean) => {
@@ -935,12 +939,14 @@ export function App() {
   );
   const trigger = computeTrigger(activeCanvasDragKind, activeSourceScrubSourceId);
   const isDragComputeTrigger = trigger === "drag-element" || trigger === "drag-handle";
-  if (isDragComputeTrigger && !dragRenderViewBoxRef.current && snapshot.svg?.viewBox) {
-    dragRenderViewBoxRef.current = snapshot.svg.viewBox;
-  } else if (!isDragComputeTrigger) {
-    dragRenderViewBoxRef.current = null;
-  }
-  const renderViewBox = isDragComputeTrigger ? dragRenderViewBoxRef.current ?? null : null;
+  useLayoutEffect(() => {
+    if (!isDragComputeTrigger) {
+      setDragRenderViewBox(null);
+      return;
+    }
+    setDragRenderViewBox((current) => current ?? snapshot.svg?.viewBox ?? null);
+  }, [isDragComputeTrigger, snapshot.svg?.viewBox]);
+  const renderViewBox = isDragComputeTrigger ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
   const typingComputeDelay = trigger === "other" && changedSourceIds == null
     ? (source.length > 80_000 ? 220 : 120)
     : null;
