@@ -10,11 +10,12 @@ import { normalizeColor } from "../style/colors.js";
 import { normalizeOptionValue, parseStyleValueAsOptionList } from "../style/option-utils.js";
 import {
   commandsToSegments,
+  createPathSampleCursor,
   hasDrawablePathCommands,
-  sampleFrameFromEndExtrapolated,
   sampleFrameFromStartExtrapolated,
   splitPathIntoSubpaths,
   totalSegmentLength,
+  type PathSampleCursor,
   type PathSegment,
   sliceSegment
 } from "../../geometry/path-sampler.js";
@@ -300,6 +301,7 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
     } else if (textOptions.align === "center") {
       cursor += Math.max(0, (availableLength - textLength) / 2);
     }
+    const sampleCursor = createPathSampleCursor(segments);
 
     for (let characterIndex = 0; characterIndex < characters.length; characterIndex += 1) {
       const character = characters[characterIndex];
@@ -310,7 +312,7 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
         break;
       }
 
-      const frame = sampleTextAlongPathFrame(segments, centerDistance, textOptions.reversePath);
+      const frame = sampleTextAlongPathFrame(sampleCursor, centerDistance, textOptions.reversePath);
       if (!frame) {
         cursor = endDistance;
         continue;
@@ -500,8 +502,10 @@ function estimateTextAlongPathAdvance(character: string, fontSize: number): numb
   return Math.max(0.5, fontSize * 0.56);
 }
 
-function sampleTextAlongPathFrame(segments: PathSegment[], distance: number, reversePath: boolean): SampleFrame | null {
-  const sampled = reversePath ? sampleFrameFromEndExtrapolated(segments, distance) : sampleFrameFromStartExtrapolated(segments, distance);
+function sampleTextAlongPathFrame(cursor: PathSampleCursor, distance: number, reversePath: boolean): SampleFrame | null {
+  const sampled = reversePath
+    ? cursor.sampleFrameFromEndExtrapolated(distance)
+    : cursor.sampleFrameFromStartExtrapolated(distance);
   if (!sampled) {
     return null;
   }
@@ -603,9 +607,10 @@ function decorateZigzag(segments: PathSegment[], decoration: DecorationStyle, tr
   const half = segmentLength / 2;
   const total = totalSegmentLength(segments);
   const points: WorldPoint[] = [];
+  const cursor = createPathSampleCursor(segments);
 
   const pushAt = (distance: number, offset: number): void => {
-    const frame = sampleFrameFromStartExtrapolated(segments, distance);
+    const frame = cursor.sampleFrameFromStartExtrapolated(distance);
     if (!frame) {
       return;
     }
@@ -677,14 +682,15 @@ function decorateRandomStepsOnSegment(
   }
 
   const points: WorldPoint[] = [];
-  const startFrame = sampleFrameFromStartExtrapolated([segment], 0);
+  const cursor = createPathSampleCursor([segment]);
+  const startFrame = cursor.sampleFrameFromStartExtrapolated(0);
   if (!startFrame) {
     return points;
   }
   points.push(pointFromFrame(startFrame, 0, 0, decoration, transformSpec));
 
   for (let stateStart = 0; stateStart + 1.5 * segmentLength <= total + 1e-9; stateStart += segmentLength) {
-    const frame = sampleFrameFromStartExtrapolated([segment], stateStart);
+    const frame = cursor.sampleFrameFromStartExtrapolated(stateStart);
     if (!frame) {
       continue;
     }
@@ -693,7 +699,7 @@ function decorateRandomStepsOnSegment(
     points.push(pointFromFrame(frame, segmentLength + jitterX, jitterY, decoration, transformSpec));
   }
 
-  const endFrame = sampleFrameFromStartExtrapolated([segment], total);
+  const endFrame = cursor.sampleFrameFromStartExtrapolated(total);
   if (endFrame) {
     points.push(pointFromFrame(endFrame, 0, 0, decoration, transformSpec));
   }
@@ -705,8 +711,9 @@ function decorateSaw(segments: PathSegment[], decoration: DecorationStyle, trans
   const amplitude = getAmplitude(decoration);
   const total = totalSegmentLength(segments);
   const points: WorldPoint[] = [];
+  const cursor = createPathSampleCursor(segments);
 
-  const startFrame = sampleFrameFromStartExtrapolated(segments, 0);
+  const startFrame = cursor.sampleFrameFromStartExtrapolated(0);
   if (!startFrame) {
     return points;
   }
@@ -715,8 +722,8 @@ function decorateSaw(segments: PathSegment[], decoration: DecorationStyle, trans
   for (let distance = 0; distance < total - 1e-6; distance += segmentLength) {
     const peakDistance = Math.min(total, distance + segmentLength / 2);
     const endDistance = Math.min(total, distance + segmentLength);
-    const peakFrame = sampleFrameFromStartExtrapolated(segments, peakDistance);
-    const endFrame = sampleFrameFromStartExtrapolated(segments, endDistance);
+    const peakFrame = cursor.sampleFrameFromStartExtrapolated(peakDistance);
+    const endFrame = cursor.sampleFrameFromStartExtrapolated(endDistance);
     if (peakFrame) {
       points.push(pointFromFrame(peakFrame, 0, amplitude, decoration, transformSpec));
     }
@@ -733,10 +740,11 @@ function decorateBent(segments: PathSegment[], decoration: DecorationStyle, tran
   const amplitude = getAmplitude(decoration);
   const aspect = getNumberParam(decoration, "aspect", 0.5);
   const points: WorldPoint[] = [];
+  const cursor = createPathSampleCursor(segments);
 
-  const startFrame = sampleFrameFromStartExtrapolated(segments, 0);
-  const midFrame = sampleFrameFromStartExtrapolated(segments, clampLength(total * aspect, 0, total));
-  const endFrame = sampleFrameFromStartExtrapolated(segments, total);
+  const startFrame = cursor.sampleFrameFromStartExtrapolated(0);
+  const midFrame = cursor.sampleFrameFromStartExtrapolated(clampLength(total * aspect, 0, total));
+  const endFrame = cursor.sampleFrameFromStartExtrapolated(total);
   if (!startFrame || !midFrame || !endFrame) {
     return decorateLineto(segments, decoration, transformSpec);
   }
@@ -763,11 +771,12 @@ function decorateWave(
   const cycles = Math.max(1, total / segmentLength);
   const samples = Math.max(16, Math.ceil(cycles * 12));
   const points: WorldPoint[] = [];
+  const cursor = createPathSampleCursor(segments);
 
   for (let index = 0; index <= samples; index += 1) {
     const t = index / samples;
     const distance = t * total;
-    const frame = sampleFrameFromStartExtrapolated(segments, distance);
+    const frame = cursor.sampleFrameFromStartExtrapolated(distance);
     if (!frame) {
       continue;
     }
@@ -810,13 +819,14 @@ function decorateBumps(segments: PathSegment[], decoration: DecorationStyle, tra
     }
 
     const segmentPolyline: WorldPoint[] = [];
-    const startFrame = sampleFrameFromStartExtrapolated([segment], 0);
+    const cursor = createPathSampleCursor([segment]);
+    const startFrame = cursor.sampleFrameFromStartExtrapolated(0);
     if (startFrame) {
       segmentPolyline.push(pointFromFrame(startFrame, 0, 0, decoration, transformSpec));
     }
 
     for (let stateStart = 0; stateStart + 0.51 * bumpSegmentLength <= total + 1e-9; stateStart += stateWidth) {
-      const frame = sampleFrameFromStartExtrapolated([segment], stateStart);
+      const frame = cursor.sampleFrameFromStartExtrapolated(stateStart);
       if (!frame) {
         continue;
       }
@@ -842,7 +852,7 @@ function decorateBumps(segments: PathSegment[], decoration: DecorationStyle, tra
       }
     }
 
-    const endFrame = sampleFrameFromStartExtrapolated([segment], total);
+    const endFrame = cursor.sampleFrameFromStartExtrapolated(total);
     if (endFrame) {
       segmentPolyline.push(pointFromFrame(endFrame, 0, 0, decoration, transformSpec));
     }
@@ -868,9 +878,10 @@ function decorateTicksLike(
   const angleDegrees = getNumberParam(decoration, "angle", 45);
   const angleRadians = (angleDegrees * Math.PI) / 180;
   const polylines: WorldPoint[][] = [];
+  const cursor = createPathSampleCursor(segments);
 
   for (let distance = 0; distance <= total + 1e-6; distance += spacing) {
-    const frame = sampleFrameFromStartExtrapolated(segments, Math.min(distance, total));
+    const frame = cursor.sampleFrameFromStartExtrapolated(Math.min(distance, total));
     if (!frame) {
       continue;
     }
@@ -905,9 +916,10 @@ function decorateShapeMarks(
   const shapeName = canonicalDecorationName(decoration.params["shape"] ?? "circle") ?? "circle";
   const followPath = !transformSpec.shiftOnly;
   const polylines: WorldPoint[][] = [];
+  const cursor = createPathSampleCursor(segments);
 
   for (let distance = 0; distance <= total + 1e-6; distance += spacing) {
-    const frame = sampleFrameFromStartExtrapolated(segments, Math.min(distance, total));
+    const frame = cursor.sampleFrameFromStartExtrapolated(Math.min(distance, total));
     if (!frame) {
       continue;
     }
@@ -1052,9 +1064,10 @@ function decorateBrace(segments: PathSegment[], decoration: DecorationStyle, tra
   ));
 
   const points: WorldPoint[] = [];
+  const cursor = createPathSampleCursor(segments);
   for (const local of dedupeLocalWorldPoints(localWorldPoints)) {
     const distance = clampLength(local.x, 0, total);
-    const frame = sampleFrameFromStartExtrapolated(segments, distance);
+    const frame = cursor.sampleFrameFromStartExtrapolated(distance);
     if (!frame) {
       continue;
     }
@@ -1153,16 +1166,17 @@ function samplePolyline(
 
   const points: WorldPoint[] = [];
   const effectiveSpacing = Math.max(0.5, spacing);
+  const cursor = createPathSampleCursor(segments);
   for (let distance = 0; distance <= total + 1e-6; distance += effectiveSpacing) {
     const clampedDistance = Math.min(distance, total);
-    const frame = sampleFrameFromStartExtrapolated(segments, clampedDistance);
+    const frame = cursor.sampleFrameFromStartExtrapolated(clampedDistance);
     if (!frame) {
       continue;
     }
     points.push(pointFromFrame(frame, 0, offsetAtDistance(clampedDistance, total), decoration, transformSpec));
   }
 
-  const endFrame = sampleFrameFromStartExtrapolated(segments, total);
+  const endFrame = cursor.sampleFrameFromStartExtrapolated(total);
   if (endFrame) {
     const endWorldPoint = pointFromFrame(endFrame, 0, offsetAtDistance(total, total), decoration, transformSpec);
     const last = points[points.length - 1];

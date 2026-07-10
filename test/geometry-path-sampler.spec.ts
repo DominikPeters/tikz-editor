@@ -6,6 +6,7 @@ import {
   clonePoint,
   commandFromSegment,
   commandsToSegments,
+  createPathSampleCursor,
   flattenSubpaths,
   hasDrawablePathCommands,
   lengthOfVector,
@@ -83,6 +84,34 @@ describe("geometry path sampler primitives", () => {
     expect(sampleFrameFromEndExtrapolated(segments, 15)?.point).toEqual({ x: 5, y: 0 });
     expect(sampleFrameFromEndExtrapolated(segments, 25)?.point).toEqual({ x: -5, y: 0 });
     expect(samplePointFromStartExtrapolated(segments, 8)).toEqual({ x: 8, y: 0 });
+  });
+
+  it("walks sequential sample cursors in both directions without changing sampled frames", () => {
+    const commands: ScenePathCommand[] = [{ kind: "M", to: wp(0, 0) }];
+    for (let index = 1; index <= 256; index += 1) {
+      commands.push({ kind: "L", to: wp(index, 0) });
+    }
+    const segments = commandsToSegments(commands);
+
+    const forward = createPathSampleCursor(segments);
+    expect(forward.segmentIndex).toBeNull();
+    for (let index = 0; index < segments.length; index += 1) {
+      const distance = index + 0.5;
+      expect(forward.sampleFrameFromStartExtrapolated(distance)).toEqual(
+        sampleFrameFromStartExtrapolated(segments, distance)
+      );
+      expect(forward.segmentIndex).toBe(index);
+    }
+
+    const backward = createPathSampleCursor(segments);
+    expect(backward.segmentIndex).toBeNull();
+    for (let index = 0; index < segments.length; index += 1) {
+      const distanceFromEnd = index + 0.5;
+      expect(backward.sampleFrameFromEndExtrapolated(distanceFromEnd)).toEqual(
+        sampleFrameFromEndExtrapolated(segments, distanceFromEnd)
+      );
+      expect(backward.segmentIndex).toBe(segments.length - index - 1);
+    }
   });
 
   it("handles vector math and zero-length normalization fallbacks", () => {
@@ -201,6 +230,29 @@ describe("geometry path sampler primitives", () => {
     const frame = sampleFrameFromStartExtrapolated([arcSegment], arcSegment.length / 3);
     expect(frame?.point.x).toBeGreaterThanOrEqual(-8);
     expect(frame?.point.x).toBeLessThanOrEqual(8);
+  });
+
+  it("keeps cursor sampling bit-for-bit equivalent across cached curves and direction changes", () => {
+    const segments = commandsToSegments([
+      { kind: "M", to: wp(0, 0) },
+      { kind: "C", c1: wp(4, 12), c2: wp(9, -7), to: wp(14, 3) },
+      { kind: "L", to: wp(19, 3) },
+      { kind: "A", rx: 7, ry: 4, xAxisRotation: 25, largeArc: false, sweep: true, to: wp(28, 1) }
+    ]);
+    const total = totalSegmentLength(segments);
+    const distances = [total * 0.07, total * 0.31, total * 0.58, total * 0.93, total * 0.42];
+    const cursor = createPathSampleCursor(segments);
+
+    for (const distance of distances) {
+      expect(cursor.sampleFrameFromStartExtrapolated(distance)).toEqual(
+        sampleFrameFromStartExtrapolated(segments, distance)
+      );
+    }
+    for (const distance of distances) {
+      expect(cursor.sampleFrameFromEndExtrapolated(distance)).toEqual(
+        sampleFrameFromEndExtrapolated(segments, distance)
+      );
+    }
   });
 
   it("starts new segments when draw commands appear before an explicit move", () => {
