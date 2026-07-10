@@ -123,7 +123,8 @@ export type SemanticContextFrame = {
   styleChain: StyleChainEntry[];
   transform: WorldTransform;
   layer: string;
-  clipChain: SceneClipPath[];
+  /** Immutable by convention so child frames can share it until a clip operation replaces it. */
+  clipChain: readonly SceneClipPath[];
   pictureSizeRelevant: boolean;
   customStyles: CustomStyleRegistry;
   picDefinitions: PicDefinitionRegistry;
