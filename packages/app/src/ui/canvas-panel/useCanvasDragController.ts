@@ -12,7 +12,7 @@ import {
   px
 } from "@tikz-editor/core/coords/index";
 import { parseEditableTargetId } from "@tikz-editor/core/edit/editable-targets";
-import { formatNumber } from "@tikz-editor/core/edit/format";
+import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
 import { worldToLocal } from "@tikz-editor/core/edit/coords";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import { parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
@@ -78,7 +78,7 @@ const ADORNMENT_CENTER_SNAP_THRESHOLD_PT = 1;
 const GRID_RESIZE_STEP_EPSILON = 1e-9;
 const SNAP_FEEDBACK_EPSILON = 1e-6;
 const ADORNMENT_OWNER_CENTER_EPSILON = 1e-6;
-const MIN_SHAPE_DRAG_DIMENSION_PT = 0.1 * 28.4527559055;
+const MIN_SHAPE_DRAG_DIMENSION_PT = 0.1 * PT_PER_CM;
 
 type CanvasWorldListeners = {
   onPointerMove: (event: PointerEvent) => void;

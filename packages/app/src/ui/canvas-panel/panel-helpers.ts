@@ -1,5 +1,6 @@
 import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
 import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
 import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
@@ -48,7 +49,7 @@ type GuidesState = {
 };
 
 const GRID_SNAP_STEP_EPSILON = 1e-9;
-const DEFAULT_GRID_STEP = parseLength("1", "cm") ?? 28.4527559055;
+const DEFAULT_GRID_STEP = parseLength("1", "cm") ?? PT_PER_CM;
 
 export function collectSelectionBounds(
   elements: SceneElement[],

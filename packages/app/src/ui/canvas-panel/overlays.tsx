@@ -3,6 +3,7 @@ import type { EditHandle, NodeAnchorTarget } from "@tikz-editor/core/semantic/ty
 import type { WorldPoint } from "../coords/types";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { ToolMode } from "../../store/types";
 import type { HitRegion } from "./hit-regions";
@@ -52,7 +53,6 @@ export type ToolPreview =
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "path"; d: string };
 
-const PT_PER_CM = 28.4527559055;
 const SNAP_GAP_LABEL_FONT_PX = 9;
 const SNAP_GAP_LABEL_HEIGHT_PX = 13;
 const SNAP_GAP_LABEL_CHAR_PX = 5.4;
