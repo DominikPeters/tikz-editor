@@ -27,7 +27,7 @@ describe("getInspectorDescriptor – nodes", () => {
       editHandles: rendered.semantic.editHandles
     });
     const sectionIds = descriptor.sections.map((section) => section.id);
-    expect(sectionIds).toContain("node");
+    expect(sectionIds).toEqual(["transform", "node", "stroke", "fill", "shadow"]);
 
     const nodeSection = descriptor.sections.find((section) => section.id === "node");
     expect(nodeSection).toBeDefined();
