@@ -28,13 +28,11 @@ import {
 import type { HitRegion } from "./hit-regions";
 import type {
   DragState,
-  EditableTextTarget,
   GridResizeSnapConfig,
   SelectionAnchorRatio,
   SelectionBounds
 } from "./types";
 import {
-  clamp,
   distanceSquared,
   fmt,
   resizeCursorForVector,
@@ -484,13 +482,6 @@ export function selectionAnchorRatioFromPoint(bounds: WorldBounds, point: WorldP
   };
 }
 
-export function caretStrokeWidthInSvg(fontSizePt: number): number {
-  if (!Number.isFinite(fontSizePt) || fontSizePt <= 0) {
-    return 0.5;
-  }
-  return clamp(fontSizePt * 0.055, 0.45, 1.1);
-}
-
 export function estimateTextBlockWidth(text: string, fontSize: number): number {
   const lines = text.split("\n");
   const maxChars = lines.reduce((max, line) => Math.max(max, line.length), 0);
@@ -607,38 +598,6 @@ export function isMatrixNodeItem(item: NodeItem): boolean {
     }
   }
   return false;
-}
-
-export function resolveEditableTextTargetForSelectionOffsets(
-  targetId: string,
-  anchorOffset: number,
-  headOffset: number,
-  hitRegions: readonly HitRegion[],
-  resolveEditableTextTarget: (targetId: string, region: HitRegion | undefined) => EditableTextTarget | null
-): EditableTextTarget | null {
-  const rectRegions = hitRegions.filter(
-    (candidate): candidate is Extract<HitRegion, { shape: "rect" }> => candidate.targetId === targetId && candidate.shape === "rect"
-  );
-  if (rectRegions.length === 0) {
-    return null;
-  }
-
-  const minOffset = Math.min(anchorOffset, headOffset);
-  const maxOffset = Math.max(anchorOffset, headOffset);
-  let fallback: EditableTextTarget | null = null;
-
-  for (const region of rectRegions) {
-    const target = resolveEditableTextTarget(targetId, region);
-    if (!target) {
-      continue;
-    }
-    fallback ??= target;
-    if (minOffset >= target.sourceSpan.from && maxOffset <= target.sourceSpan.to) {
-      return target;
-    }
-  }
-
-  return fallback;
 }
 
 export function sourceHasSingleResizablePathShape(

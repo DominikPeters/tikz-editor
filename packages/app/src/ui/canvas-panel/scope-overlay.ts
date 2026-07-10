@@ -160,12 +160,6 @@ export function augmentScopeOverlayWithMatrices(
   };
 }
 
-export function resolveScopeAwareSelectionTarget(
-  input: ResolveScopeAwareSelectionTargetInput
-): string {
-  return resolveScopeAwarePointerDownTarget(input);
-}
-
 export function resolveScopeAwarePointerDownTarget(
   input: ResolveScopeAwareSelectionTargetInput
 ): string {

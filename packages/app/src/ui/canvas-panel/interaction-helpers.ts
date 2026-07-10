@@ -1,15 +1,14 @@
 import type { ElementTemplate } from "tikz-editor/edit/actions";
-import type { SelectionGeometry } from "tikz-editor/edit/snapping";
 import type { EditHandle, SceneElement, ScenePathCommand } from "tikz-editor/semantic/types";
 import { CM_PER_PT, PT_PER_CM, formatNumber } from "tikz-editor/edit/format";
 import { worldPoint, worldVector, svgBounds, pt } from "tikz-editor/coords/index";
 
 import { distanceSquared } from "./geometry";
 import { shouldConstrainToolCreateToSquare, type ToolCreateMode } from "../tool-config";
-import type { DragState, DragTooltipRow, SelectionAnchorRatio } from "./types";
+import type { DragState, DragTooltipRow } from "./types";
 import type { ResizeFrame } from "./resize-frames";
 import { resolveAddShapeDraft } from "./add-shape-draft";
-import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
+import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/types";
 import type { WorldVector } from "tikz-editor/coords/index";
 
 const DEFAULT_BEZIER_LENGTH_PT = 2 * PT_PER_CM;
@@ -24,34 +23,6 @@ export function boundsFromPoints(a: SvgPoint, b: SvgPoint): SvgBounds {
     pt(Math.min(a.y, b.y)),
     pt(Math.max(a.x, b.x)),
     pt(Math.max(a.y, b.y))
-  );
-}
-
-export function collectSourceIdsInBounds(boundsBySource: ReadonlyMap<string, SvgBounds>, selection: SvgBounds): string[] {
-  const result: string[] = [];
-  for (const [sourceId, bounds] of boundsBySource) {
-    if (boundsContainedWithin(bounds, selection)) {
-      result.push(sourceId);
-    }
-  }
-  return result;
-}
-
-export function deriveSelectionTranslationDeltaFromAnchor(
-  initialSelection: SelectionGeometry,
-  currentSelection: SelectionGeometry | null,
-  anchorRatio: SelectionAnchorRatio | null
-): WorldPoint {
-  if (!currentSelection) {
-    return worldPoint(pt(0), pt(0));
-  }
-
-  const ratio = anchorRatio ?? { x: 0.5, y: 0.5 };
-  const initialCenter = pointFromBoundsAnchorRatio(initialSelection.bounds, ratio);
-  const currentCenter = pointFromBoundsAnchorRatio(currentSelection.bounds, ratio);
-  return worldPoint(
-    pt(currentCenter.x - initialCenter.x),
-    pt(currentCenter.y - initialCenter.y)
   );
 }
 
@@ -275,17 +246,6 @@ function findClosestHandleMatch(
     }
   }
   return best;
-}
-
-function boundsContainedWithin(inner: SvgBounds, outer: SvgBounds): boolean {
-  return inner.minX >= outer.minX && inner.maxX <= outer.maxX && inner.minY >= outer.minY && inner.maxY <= outer.maxY;
-}
-
-function pointFromBoundsAnchorRatio(bounds: WorldBounds, ratio: SelectionAnchorRatio): WorldPoint {
-  return worldPoint(
-    pt(bounds.minX + (bounds.maxX - bounds.minX) * ratio.x),
-    pt(bounds.minY + (bounds.maxY - bounds.minY) * ratio.y)
-  );
 }
 
 function constrainRectCornerToSquare(startWorld: WorldPoint, cornerWorld: WorldPoint): WorldPoint {

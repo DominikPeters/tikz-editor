@@ -42,23 +42,6 @@ const BACKGROUND_STYLE_BY_HOOK: Record<SemanticBackgroundHookKind, string> = {
   right: "background right"
 };
 
-export const BACKGROUND_CONFIG_KEYS = new Set([
-  "on background layer",
-  "every on background layer",
-  "show background rectangle",
-  "show background grid",
-  "show background top",
-  "show background bottom",
-  "show background left",
-  "show background right",
-  "inner frame sep",
-  "inner frame xsep",
-  "inner frame ysep",
-  "outer frame sep",
-  "outer frame xsep",
-  "outer frame ysep"
-]);
-
 export function collectBackgroundOptionEffects(
   context: SemanticContext,
   optionLists: readonly OptionListAst[],
