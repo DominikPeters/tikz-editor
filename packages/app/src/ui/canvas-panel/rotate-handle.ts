@@ -1,4 +1,4 @@
-import { svgPoint, pt } from "tikz-editor/coords/index";
+import { svgPoint, pt } from "@tikz-editor/core/coords/index";
 import type { SvgPoint, WorldPoint } from "../coords/types";
 import type { ResizeFrame } from "./resize-frames";
 

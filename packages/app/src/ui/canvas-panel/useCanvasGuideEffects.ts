@@ -1,5 +1,5 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { clientPoint as makeClientPoint, px } from "tikz-editor/coords/index";
+import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import { addGuide, moveGuide, removeGuide } from "./panel-helpers";
 import type { ClientPoint } from "../coords/types";
 import type { GuideDragState, GuideOrientation, GuidePreview, GuidesState } from "./types";

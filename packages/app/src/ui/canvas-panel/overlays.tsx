@@ -1,9 +1,9 @@
 import { Fragment, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import type { EditHandle, NodeAnchorTarget } from "tikz-editor/semantic/types";
+import type { EditHandle, NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { ToolMode } from "../../store/types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";

@@ -5,11 +5,11 @@ import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
-import { pt, worldPoint } from "tikz-editor/coords/index";
-import { snapKeyboardNudge, type SnapLine } from "tikz-editor/edit/snapping";
-import type { EditAction } from "tikz-editor/edit/actions";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { snapKeyboardNudge, type SnapLine } from "@tikz-editor/core/edit/snapping";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditorPlatform } from "../../platform/types";
 import type { ToolMode } from "../../store/types";
 import type { WorldPoint } from "../coords/types";

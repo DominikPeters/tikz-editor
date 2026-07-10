@@ -3,7 +3,7 @@ import { RiDownloadCloudLine } from "@remixicon/react";
 import { useProjectNamedColorSwatches } from "../colors/project-named-colors";
 import { useEditorStore } from "../store/store";
 import { getActiveEditorPlatform } from "../platform/current";
-import { NODE_SHAPE_OPTIONS } from "tikz-editor/edit/inspector";
+import { NODE_SHAPE_OPTIONS } from "@tikz-editor/core/edit/inspector";
 import { ColorPicker, cssColorForToken } from "./ColorPicker";
 import { getToolCapabilityStatus } from "./capabilities";
 import { RenderedTooltip } from "./RenderedTooltip";

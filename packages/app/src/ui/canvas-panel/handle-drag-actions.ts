@@ -1,5 +1,5 @@
-import type { EditAction } from "tikz-editor/edit/actions";
-import type { NodeAnchorTarget } from "tikz-editor/semantic/types";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import type { NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
 
 export function resolveHandleDragAction(input: {

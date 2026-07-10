@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ParseTikzResult } from "tikz-editor/parser/index";
+import type { ParseTikzResult } from "@tikz-editor/core/parser/index";
 import { cancelGroup, requestThumbnail } from "./workers/thumbnail-worker-client";
 import type { ThumbnailRenderRequest } from "./workers/thumbnail-worker-types";
 

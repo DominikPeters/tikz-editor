@@ -1,5 +1,5 @@
-import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "tikz-editor/edit/actions";
-import type { EditActionResult } from "tikz-editor/edit/actions";
+import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
+import type { EditActionResult } from "@tikz-editor/core/edit/actions";
 import type {
   DocumentSession,
   EditorAction,

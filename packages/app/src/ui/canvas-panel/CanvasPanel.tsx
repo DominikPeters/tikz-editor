@@ -15,7 +15,7 @@ type MouseEvent as ReactMouseEvent,
 type PointerEvent as ReactPointerEvent,
 type SyntheticEvent as ReactSyntheticEvent
 } from "react";
-import { clientPoint as makeClientPoint,svgPoint as makeSvgPoint,worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "tikz-editor/coords/index";
+import { clientPoint as makeClientPoint,svgPoint as makeSvgPoint,worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "@tikz-editor/core/coords/index";
 import {
 ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
@@ -24,27 +24,27 @@ applyEditAction,
 preflightPositionNodeRelativeToAction,
 type EditAction,
 type EditActionResult
-} from "tikz-editor/edit/actions";
-import { PT_PER_CM,formatNumber } from "tikz-editor/edit/format";
+} from "@tikz-editor/core/edit/actions";
+import { PT_PER_CM,formatNumber } from "@tikz-editor/core/edit/format";
 import {
 makeForeachTemplateTargetId,
 resolvePropertyTargetFromParseResult
-} from "tikz-editor/edit/property-target";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import { renderTikzToSvg } from "tikz-editor/render/index";
+} from "@tikz-editor/core/edit/property-target";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import type {
 EditHandlePositioningContext,
 NodeAnchorTarget,
 SceneElement
-} from "tikz-editor/semantic/types";
-import type { SvgRenderModel } from "tikz-editor/svg";
-import type { SvgDiffHints, SvgViewBox } from "tikz-editor/svg/index";
+} from "@tikz-editor/core/semantic/types";
+import type { SvgRenderModel } from "@tikz-editor/core/svg";
+import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
 import {
 getKnuthPlassCaretFromPoint,
 getKnuthPlassLineRangeFromPoint
-} from "tikz-editor/text/knuth-plass";
-import { createMathJaxNodeTextEngine,getActiveMathJaxOutputJax } from "tikz-editor/text/mathjax-engine";
-import type { NodeTextEngine,NodeTextLayoutKind } from "tikz-editor/text/types";
+} from "@tikz-editor/core/text/knuth-plass";
+import { createMathJaxNodeTextEngine,getActiveMathJaxOutputJax } from "@tikz-editor/core/text/mathjax-engine";
+import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
 import { buildCanvasContextMenuDefinition } from "../../context-menu";

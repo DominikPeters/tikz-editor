@@ -1,5 +1,5 @@
-import { formatNumber } from "tikz-editor/edit/format";
-import type { NodeFontFamilyId, NodeFontSizePresetId } from "tikz-editor/edit/inspector";
+import { formatNumber } from "@tikz-editor/core/edit/format";
+import type { NodeFontFamilyId, NodeFontSizePresetId } from "@tikz-editor/core/edit/inspector";
 import { ColorPickerField } from "../../ColorPicker";
 import { CustomDropdown } from "../../CustomDropdown";
 import css from "../InspectorPanel.module.css";

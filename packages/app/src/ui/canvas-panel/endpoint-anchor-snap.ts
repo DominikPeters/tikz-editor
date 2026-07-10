@@ -1,5 +1,5 @@
-import { worldBounds, pt } from "tikz-editor/coords/index";
-import type { NodeAnchorTarget } from "tikz-editor/semantic/types";
+import { worldBounds, pt } from "@tikz-editor/core/coords/index";
+import type { NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldBounds, WorldPoint } from "../coords/types";
 
 const NODE_REVEAL_RADIUS_PX = 44;

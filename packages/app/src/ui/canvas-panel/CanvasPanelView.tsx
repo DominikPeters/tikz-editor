@@ -13,10 +13,10 @@ import type { AppMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
 import type { EditorPlatform } from "../../platform/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { EditHandle } from "tikz-editor/semantic/types";
-import type { SvgDiffHints, SvgRenderModel } from "tikz-editor/svg/index";
-import type { SnapLine } from "tikz-editor/edit/snapping";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { EditHandle } from "@tikz-editor/core/semantic/types";
+import type { SvgDiffHints, SvgRenderModel } from "@tikz-editor/core/svg/index";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import { CanvasSVGLayer } from "./CanvasSVGLayer";
 import {
   CurveControlOverlay,

@@ -1,9 +1,9 @@
-import { applyMatrix } from "tikz-editor/semantic/transform";
-import type { SvgTransform, WorldBounds, WorldPoint, WorldTransform } from "tikz-editor/coords/index";
-import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } from "tikz-editor/coords/index";
-import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "tikz-editor/semantic/types";
+import { applyMatrix } from "@tikz-editor/core/semantic/transform";
+import type { SvgTransform, WorldBounds, WorldPoint, WorldTransform } from "@tikz-editor/core/coords/index";
+import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } from "@tikz-editor/core/coords/index";
+import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgPoint } from "../coords/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import { worldToSvgPoint } from "./geometry";
 
 const HIT_STROKE_PX = 18;

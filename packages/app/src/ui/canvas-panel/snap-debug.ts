@@ -1,5 +1,5 @@
 import type { WorldPoint } from "../coords/types";
-import type { SnapContext, SnapLine } from "tikz-editor/edit/snapping";
+import type { SnapContext, SnapLine } from "@tikz-editor/core/edit/snapping";
 
 export type SnapDebugPoint = {
   x: number;

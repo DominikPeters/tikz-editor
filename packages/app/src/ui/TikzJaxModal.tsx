@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import type { PlatformLatex } from "../platform/types";
-import { createStandaloneLatexExportArtifact } from "tikz-editor/export/index";
+import { createStandaloneLatexExportArtifact } from "@tikz-editor/core/export/index";
 import css from "./TikzJaxModal.module.css";
 
 const TIKZJAX_FONTS_CSS = "https://cdn.jsdelivr.net/npm/@drgrice1/tikzjax@1.0.0-beta24/dist/fonts.css";

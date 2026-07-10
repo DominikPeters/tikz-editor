@@ -1,8 +1,8 @@
-import { PT_PER_CM } from "tikz-editor/edit/format";
-import { pickGridStepPt } from "tikz-editor/edit/snapping";
-import { GRID_MINOR_TARGET_PX } from "tikz-editor/edit/snapping/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { svgPoint, viewportPoint, pt, px } from "tikz-editor/coords/index";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { pickGridStepPt } from "@tikz-editor/core/edit/snapping";
+import { GRID_MINOR_TARGET_PX } from "@tikz-editor/core/edit/snapping/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { svgPoint, viewportPoint, pt, px } from "@tikz-editor/core/coords/index";
 import type { CanvasTransform } from "../../store/types";
 import {
   clientToSvg as typedClientToSvg,
@@ -13,7 +13,7 @@ import {
   worldToSvg as typedWorldToSvg
 } from "../coords/convert";
 import type { ClientPoint, SvgPoint, TextRectLocalPoint, ViewportPoint, WorldPoint } from "../coords/types";
-import type { WorldVector } from "tikz-editor/coords/index";
+import type { WorldVector } from "@tikz-editor/core/coords/index";
 
 export type RulerTick = {
   viewportPos: number;

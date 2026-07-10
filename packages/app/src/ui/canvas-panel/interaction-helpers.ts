@@ -1,7 +1,7 @@
-import type { ElementTemplate } from "tikz-editor/edit/actions";
-import type { EditHandle, SceneElement, ScenePathCommand } from "tikz-editor/semantic/types";
-import { CM_PER_PT, PT_PER_CM, formatNumber } from "tikz-editor/edit/format";
-import { worldPoint, worldVector, svgBounds, pt } from "tikz-editor/coords/index";
+import type { ElementTemplate } from "@tikz-editor/core/edit/actions";
+import type { EditHandle, SceneElement, ScenePathCommand } from "@tikz-editor/core/semantic/types";
+import { CM_PER_PT, PT_PER_CM, formatNumber } from "@tikz-editor/core/edit/format";
+import { worldPoint, worldVector, svgBounds, pt } from "@tikz-editor/core/coords/index";
 
 import { distanceSquared } from "./geometry";
 import { shouldConstrainToolCreateToSquare, type ToolCreateMode } from "../tool-config";
@@ -9,7 +9,7 @@ import type { DragState, DragTooltipRow } from "./types";
 import type { ResizeFrame } from "./resize-frames";
 import { resolveAddShapeDraft } from "./add-shape-draft";
 import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/types";
-import type { WorldVector } from "tikz-editor/coords/index";
+import type { WorldVector } from "@tikz-editor/core/coords/index";
 
 const DEFAULT_BEZIER_LENGTH_PT = 2 * PT_PER_CM;
 const STEP_SNAP_EPSILON = 1e-9;

@@ -7,7 +7,7 @@ import {
   type InspectorSection,
   type SetPropertyWriteTarget,
   type InspectorSnapshot
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import {
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContextFromOptionEntries,
@@ -15,11 +15,11 @@ import {
   transformRotateInspectorLabel,
   type TransformInspectorKey,
   type TransformInspectorMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { buildStylesCascadeModel } from "tikz-editor/edit/styles-cascade";
-import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
-import type { SceneElement } from "tikz-editor/semantic/types";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { buildStylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
+import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";

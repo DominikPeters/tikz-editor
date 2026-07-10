@@ -1,5 +1,5 @@
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { pt, px } from "tikz-editor/coords/index";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { pt, px } from "@tikz-editor/core/coords/index";
 import type { CanvasTransform } from "../../store/types";
 import type { ClientPoint, SvgPoint, ViewportPoint, WorldPoint } from "./types";
 import {
@@ -8,7 +8,7 @@ import {
   svgToWorldPoint as coreSvgToWorldPoint,
   viewportPoint,
   worldToSvgPoint as coreWorldToSvgPoint
-} from "tikz-editor/coords/index";
+} from "@tikz-editor/core/coords/index";
 
 export function clientToViewport(point: ClientPoint, viewportRect: DOMRect | null): ViewportPoint {
   return viewportPoint(

@@ -1,4 +1,4 @@
-import { formatNumber } from "tikz-editor/edit/format";
+import { formatNumber } from "@tikz-editor/core/edit/format";
 import {
   computeScrubbedValue,
   fractionDigits,

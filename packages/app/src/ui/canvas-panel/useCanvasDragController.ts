@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { AdornmentOwnerGeometry } from "tikz-editor/ast/types";
+import type { AdornmentOwnerGeometry } from "@tikz-editor/core/ast/types";
 import {
   applyFrameTransform,
   frameLocalPoint,
@@ -10,22 +10,22 @@ import {
   clientPoint,
   pt,
   px
-} from "tikz-editor/coords/index";
-import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
-import { formatNumber } from "tikz-editor/edit/format";
-import { worldToLocal } from "tikz-editor/edit/coords";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { parseLength } from "tikz-editor/semantic/coords/parse-length";
-import { intersectRayWithPolygon } from "tikz-editor/semantic/nodes/shape-geometry";
+} from "@tikz-editor/core/coords/index";
+import { parseEditableTargetId } from "@tikz-editor/core/edit/editable-targets";
+import { formatNumber } from "@tikz-editor/core/edit/format";
+import { worldToLocal } from "@tikz-editor/core/edit/coords";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
 import {
   snapHandlePosition,
   snapSelectionTranslation,
   snapToolPointer,
   type SnapLine
-} from "tikz-editor/edit/snapping";
-import type { SceneElement } from "tikz-editor/semantic/types";
+} from "@tikz-editor/core/edit/snapping";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint, WorldVector } from "../coords/types";
-import { applyMatrix, applyMatrixToVector, inverseMatrix } from "tikz-editor/semantic/transform";
+import { applyMatrix, applyMatrixToVector, inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import {
   closestPointOnPlacementSegment,
   pointAtPlacementSegment,
@@ -33,8 +33,8 @@ import {
   resolvePathAttachedDirectionUnit,
   resolvePathPositionPreset,
   tangentAtPlacementSegment
-} from "tikz-editor/semantic/path/path-attached";
-import type { SvgViewBox } from "tikz-editor/svg/index";
+} from "@tikz-editor/core/semantic/path/path-attached";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 import type { ClientPoint, WorldBounds } from "../coords/types";
 
 import {

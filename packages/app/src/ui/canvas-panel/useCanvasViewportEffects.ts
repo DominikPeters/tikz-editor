@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, type MutableRefObject, type RefObject } from "react";
-import { viewportPoint as makeViewportPoint, clientPoint, px } from "tikz-editor/coords/index";
+import { viewportPoint as makeViewportPoint, clientPoint, px } from "@tikz-editor/core/coords/index";
 import { clamp, distanceSquared, viewportToSvgPoint } from "./geometry";
 import { resolveToolCreateCurrentWorld } from "./interaction-helpers";
 import type { ClientPoint, SvgPoint, ViewportPoint, WorldPoint } from "../coords/types";
 import type { CanvasTransform } from "../../store/types";
 import type { CanvasSnapshot, DragState, PendingTouchViewport, SourceBoundsMap, StateSetter, ValueSetter } from "./types";
 import type { ResizeFrame } from "./resize-frames";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 
 export type UseCanvasViewportEffectsArgs = {
   dragRef: MutableRefObject<DragState | null>;

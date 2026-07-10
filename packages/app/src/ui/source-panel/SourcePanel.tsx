@@ -54,13 +54,13 @@ import {
   type ViewUpdate
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import type { PathItem, Span, Statement } from "tikz-editor/ast/types";
-import { collectSymbols, type DocumentSymbols } from "tikz-editor/completion/index";
-import { resolveDocHoverTarget } from "tikz-editor/completion/doc-hover";
-import { recordProfilingSourcePanelSyncTiming } from "tikz-editor/profiling";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import { NAMED_COLORS } from "tikz-editor/semantic/style/constants";
-import { applySourcePatches, patchesMatchSourceTransition } from "tikz-editor/edit/source-patches";
+import type { PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
+import { collectSymbols, type DocumentSymbols } from "@tikz-editor/core/completion/index";
+import { resolveDocHoverTarget } from "@tikz-editor/core/completion/doc-hover";
+import { recordProfilingSourcePanelSyncTiming } from "@tikz-editor/core/profiling";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { NAMED_COLORS } from "@tikz-editor/core/semantic/style/constants";
+import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 import { tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
@@ -74,7 +74,7 @@ import {
   SOURCE_FORMAT_REQUEST_EVENT
 } from "../source-sync";
 import css from "./SourcePanel.module.css";
-import { formatTikzSource } from "tikz-editor/edit/source-format";
+import { formatTikzSource } from "@tikz-editor/core/edit/source-format";
 
 // ── Dynamic configuration compartments ──────────────────────────────────────
 

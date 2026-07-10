@@ -1,6 +1,6 @@
-import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "tikz-editor/edit/path-editing";
-import type { EditParseOptions } from "tikz-editor/edit/parse-options";
-import type { EditHandle, SceneElement } from "tikz-editor/semantic/types";
+import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "@tikz-editor/core/edit/path-editing";
+import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import type { EditHandle, SceneElement } from "@tikz-editor/core/semantic/types";
 
 export const DENSE_PATH_SEGMENT_THRESHOLD = 7;
 

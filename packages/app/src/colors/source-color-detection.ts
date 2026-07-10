@@ -1,8 +1,8 @@
 import type { Tree } from "@lezer/common";
-import { parseOptionListRaw } from "tikz-editor/options/parse";
-import type { OptionEntry, OptionListAst } from "tikz-editor/options/types";
-import { normalizeColor, resolveDefineColorModel } from "tikz-editor/semantic/style/colors";
-import { parseStyleValueAsOptionList, readBalancedBlock } from "tikz-editor/semantic/style/option-utils";
+import { parseOptionListRaw } from "@tikz-editor/core/options/parse";
+import type { OptionEntry, OptionListAst } from "@tikz-editor/core/options/types";
+import { normalizeColor, resolveDefineColorModel } from "@tikz-editor/core/semantic/style/colors";
+import { parseStyleValueAsOptionList, readBalancedBlock } from "@tikz-editor/core/semantic/style/option-utils";
 
 export type SourceRange = {
   from: number;

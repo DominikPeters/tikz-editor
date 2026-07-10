@@ -1,5 +1,5 @@
 import type { TikzOpenExample } from "./open-example-catalog";
-import type { renderTikzToSvgAsync as renderTikzToSvgAsyncType } from "tikz-editor/render/index";
+import type { renderTikzToSvgAsync as renderTikzToSvgAsyncType } from "@tikz-editor/core/render/index";
 
 export type OpenExamplePreview = {
   exampleId: string;
@@ -54,14 +54,14 @@ async function renderOpenExamplePreviewWithRenderer(
 }
 
 export async function renderOpenExamplePreview(example: TikzOpenExample): Promise<OpenExamplePreview> {
-  const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
+  const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
   return renderOpenExamplePreviewWithRenderer(example, renderTikzToSvgAsync);
 }
 
 export async function renderOpenExamplePreviews(
   examples: readonly TikzOpenExample[]
 ): Promise<OpenExamplePreview[]> {
-  const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
+  const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
   return Promise.all(
     examples.map((example) => renderOpenExamplePreviewWithRenderer(example, renderTikzToSvgAsync))
   );

@@ -5,7 +5,7 @@ import {
   reverseComplexPathSegments,
   type AnchorReference,
   type ComplexPathSegment
-} from "tikz-editor/edit/element-templates";
+} from "@tikz-editor/core/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
 
 import { resolveBezierControlsFromBend } from "./interaction-helpers";

@@ -1,9 +1,9 @@
 import { useMemo, useRef } from "react";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { getDockLayoutHandle } from "./DockLayout";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import type { EditAnalysisView } from "tikz-editor/edit/analysis";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import type { EditAnalysisView } from "@tikz-editor/core/edit/analysis";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { SessionSnapshot } from "../compute";
 import { getSharedEditAnalysisView } from "../edit-analysis-manager";
 import { getActiveEditorPlatform } from "../platform/current";

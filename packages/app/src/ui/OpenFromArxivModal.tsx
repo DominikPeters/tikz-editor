@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { RenderTikzToSvgResult } from "tikz-editor/render/index";
+import type { RenderTikzToSvgResult } from "@tikz-editor/core/render/index";
 import {
   extractArxivTikzCandidates,
   type ArxivPaperSession,
@@ -96,7 +96,7 @@ export function OpenFromArxivModal({
     setPreviews(Object.fromEntries(candidates.map((candidate) => [candidate.id, { status: "loading" }])));
 
     void (async () => {
-      const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
+      const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
       await Promise.all(candidates.map(async (candidate) => {
         try {
           const result = await renderTikzToSvgAsync(candidate.contextualSource, {

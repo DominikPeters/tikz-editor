@@ -1,6 +1,6 @@
-import { CM_PER_PT, formatNumber } from "tikz-editor/edit/format";
-import { pt, worldPoint } from "tikz-editor/coords/index";
-import { buildDrawOptions } from "tikz-editor/edit/element-templates";
+import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
+import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { buildDrawOptions } from "@tikz-editor/core/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
 
 const MIN_WORLD_DISTANCE_PT = 1e-3;

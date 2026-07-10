@@ -1,7 +1,7 @@
-import type { EditAction } from "tikz-editor/edit/actions";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import type { EditHandle, NodeAnchorTarget, SceneElement } from "tikz-editor/semantic/types";
-import type { SvgViewBox } from "tikz-editor/svg/index";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import type { EditHandle, NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 
 import type { ScopeOverlayIndex } from "./scope-overlay";
 import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";

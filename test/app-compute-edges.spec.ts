@@ -60,28 +60,28 @@ describe("computeSnapshot edge orchestration", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("tikz-editor/render/index");
-    vi.doUnmock("tikz-editor/parser/index");
-    vi.doUnmock("tikz-editor/semantic/index");
-    vi.doUnmock("tikz-editor/svg/index");
-    vi.doUnmock("tikz-editor/text/mathjax-engine");
+    vi.doUnmock("@tikz-editor/core/render/index");
+    vi.doUnmock("@tikz-editor/core/parser/index");
+    vi.doUnmock("@tikz-editor/core/semantic/index");
+    vi.doUnmock("@tikz-editor/core/svg/index");
+    vi.doUnmock("@tikz-editor/core/text/mathjax-engine");
   });
 
   it("uses the full path with a missing optional text engine and reuses warm prewarm results", async () => {
     const renderTikzToSvgAsync = vi.fn(async (source: string) => makeRenderResult(source));
-    vi.doMock("tikz-editor/render/index", () => ({ renderTikzToSvgAsync }));
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
+    vi.doMock("@tikz-editor/core/render/index", () => ({ renderTikzToSvgAsync }));
+    vi.doMock("@tikz-editor/core/text/mathjax-engine", () => ({
       createMathJaxNodeTextEngine: vi.fn(async () => {
         throw new Error("MathJax unavailable");
       })
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
         prime: vi.fn(),
         reset: vi.fn()
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
         reset: vi.fn(),
         evaluate: vi.fn()
@@ -131,19 +131,19 @@ describe("computeSnapshot edge orchestration", () => {
       .mockRejectedValueOnce(new Error("render exploded"));
     const parseReset = vi.fn();
     const semanticReset = vi.fn();
-    vi.doMock("tikz-editor/render/index", () => ({
+    vi.doMock("@tikz-editor/core/render/index", () => ({
       renderTikzToSvgAsync
     }));
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
+    vi.doMock("@tikz-editor/core/text/mathjax-engine", () => ({
       createMathJaxNodeTextEngine: vi.fn(async () => null)
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
         prime: vi.fn(),
         reset: parseReset
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
         evaluate: vi.fn(),
         reset: semanticReset
@@ -251,27 +251,27 @@ describe("computeSnapshot edge orchestration", () => {
       flushPending: vi.fn(async () => ["mathjax:changed"])
     };
 
-    vi.doMock("tikz-editor/render/index", () => ({
+    vi.doMock("@tikz-editor/core/render/index", () => ({
       renderTikzToSvgAsync: vi.fn(async () => fullResult)
     }));
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
+    vi.doMock("@tikz-editor/core/text/mathjax-engine", () => ({
       createMathJaxNodeTextEngine: vi.fn(async () => textEngine)
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
         prime: vi.fn(),
         reset: vi.fn(),
         evaluate: parseEvaluate
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
         reset: vi.fn(),
         evaluate: semanticEvaluate
       })),
       collectGeometryInvalidation
     }));
-    vi.doMock("tikz-editor/svg/index", () => ({ emitSvg }));
+    vi.doMock("@tikz-editor/core/svg/index", () => ({ emitSvg }));
 
     const { computeSnapshot } = await import("../packages/app/src/compute.js");
     await computeSnapshot({ id: "seed", source: "seed", activeFigureId: "figure:0" });
@@ -367,7 +367,7 @@ describe("computeSnapshot edge orchestration", () => {
       diagnostics: []
     }));
 
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
+    vi.doMock("@tikz-editor/core/text/mathjax-engine", () => ({
       createMathJaxNodeTextEngine: vi.fn(async () => ({
         validate: () => null,
         measure: () => null,
@@ -375,13 +375,13 @@ describe("computeSnapshot edge orchestration", () => {
         flushPending: vi.fn(async () => [])
       }))
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
         reset: vi.fn(),
         evaluate: vi.fn(() => ({ parse: parseResult, stats: parseStats }))
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
         reset: vi.fn(),
         evaluate: vi.fn(() => ({ semantic: semanticResult, stats: semanticStats }))
@@ -391,7 +391,7 @@ describe("computeSnapshot edge orchestration", () => {
         reachedOpaque: true
       }))
     }));
-    vi.doMock("tikz-editor/svg/index", () => ({ emitSvg }));
+    vi.doMock("@tikz-editor/core/svg/index", () => ({ emitSvg }));
 
     const { computeSnapshot } = await import("../packages/app/src/compute.js");
     const response = await computeSnapshot({

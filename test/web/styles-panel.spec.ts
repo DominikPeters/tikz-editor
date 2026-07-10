@@ -64,9 +64,9 @@ vi.mock("../../packages/app/src/colors/project-named-colors", () => ({
   useProjectNamedColorSwatches: () => []
 }));
 
-vi.mock("tikz-editor/edit/styles-cascade", async () => {
-  const actual = await vi.importActual<typeof import("tikz-editor/edit/styles-cascade")>(
-    "tikz-editor/edit/styles-cascade"
+vi.mock("@tikz-editor/core/edit/styles-cascade", async () => {
+  const actual = await vi.importActual<typeof import("@tikz-editor/core/edit/styles-cascade")>(
+    "@tikz-editor/core/edit/styles-cascade"
   );
   return {
     ...actual,

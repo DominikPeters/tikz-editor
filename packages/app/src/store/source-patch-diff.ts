@@ -1,4 +1,4 @@
-import type { SourcePatch } from "tikz-editor/edit/types";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
 
 export function deriveSingleSourcePatch(previous: string, next: string): SourcePatch[] | null {
   if (previous === next) {

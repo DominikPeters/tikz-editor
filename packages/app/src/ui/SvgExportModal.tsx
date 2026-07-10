@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import {
   copySvgText,
   downloadSvgMarkup,

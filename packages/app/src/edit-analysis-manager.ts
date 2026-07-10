@@ -3,7 +3,7 @@ import {
   createEditAnalysisSession,
   type EditAnalysisSession,
   type EditAnalysisView
-} from "tikz-editor/edit/analysis";
+} from "@tikz-editor/core/edit/analysis";
 
 export type EditAnalysisKey = {
   documentId: string;

@@ -1,7 +1,7 @@
 import type { CanvasContextMenuTarget } from "../../context-menu";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { parseTikzForEdit, type EditParseOptions } from "tikz-editor/edit/parse-options";
-import type { PathStatement, Statement } from "tikz-editor/ast/types";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { ToolMode } from "../../store/types";
 
 export type ContextMenuSelectionAction =

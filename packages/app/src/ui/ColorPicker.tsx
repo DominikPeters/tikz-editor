@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { rgbToXcolorExpression, type RgbColor, type RgbToXcolorMode } from "xcolor-rgb-convert";
-import { normalizeColor } from "tikz-editor/semantic/style/colors";
+import { normalizeColor } from "@tikz-editor/core/semantic/style/colors";
 import { BASIC_PICKER_COLORS, BASIC_PICKER_COLOR_SET } from "../colors/color-palette";
 import type { NamedColorSwatch } from "../colors/project-named-colors";
 import { useSettingsStore } from "../settings/useSettingsStore";

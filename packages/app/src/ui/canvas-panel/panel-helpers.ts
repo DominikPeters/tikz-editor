@@ -1,9 +1,9 @@
-import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "tikz-editor/ast/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "tikz-editor/coords/index";
-import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
-import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
-import type { OptionListAst } from "tikz-editor/options/types";
+import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
+import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
+import type { OptionListAst } from "@tikz-editor/core/options/types";
 import {
   isFrameLocalCoordinateEditHandle,
   type EditHandle,
@@ -13,11 +13,11 @@ import {
   type ScenePathCommand,
   type ScenePathShapeHint,
   type SceneText
-} from "tikz-editor/semantic/types";
-import type { SvgTransform, WorldTransform, WorldVector } from "tikz-editor/coords/index";
-import { intersectRayWithPolygon } from "tikz-editor/semantic/nodes/shape-geometry";
-import type { SvgViewBox } from "tikz-editor/svg/index";
-import { applyMatrixToVector, inverseMatrix } from "tikz-editor/semantic/transform";
+} from "@tikz-editor/core/semantic/types";
+import type { SvgTransform, WorldTransform, WorldVector } from "@tikz-editor/core/coords/index";
+import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
+import { applyMatrixToVector, inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import type { CanvasDragKind } from "../../store/types";
 import type { ClientPoint, SvgBounds, SvgPoint, TextRectLocalPoint, WorldBounds, WorldPoint } from "../coords/types";
 import {

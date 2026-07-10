@@ -3,8 +3,8 @@ import {
   createPdfExportArtifact,
   createPngExportArtifact,
   createSvgExportArtifact
-} from "tikz-editor/export/index";
-import { serializeSvgModelAsync, type EmitSvgResult } from "tikz-editor/svg/index";
+} from "@tikz-editor/core/export/index";
+import { serializeSvgModelAsync, type EmitSvgResult } from "@tikz-editor/core/svg/index";
 import { getActiveEditorPlatform } from "../platform/current";
 import { publishUiError } from "./ui-notifications";
 
