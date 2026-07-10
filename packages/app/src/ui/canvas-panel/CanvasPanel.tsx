@@ -136,7 +136,8 @@ PendingAddedSelection,
 PendingBezier,
 PendingTouchViewport,
 SnapDebugLogInput,
-SourceBoundsMap
+SourceBoundsMap,
+StateSetter
 } from "./types";
 import { useCanvasDerivedState } from "./useCanvasDerivedState";
 import { useCanvasDragController } from "./useCanvasDragController";
@@ -186,6 +187,12 @@ type SnapDebugOverlayState = {
   lineCount: number;
   lineSummary: SnapDebugLineSummary[];
 };
+
+const EMPTY_GUIDES: GuidesState = { vertical: [], horizontal: [] };
+
+function canvasFigureContextKey(documentId: string, figureId: string | null): string {
+  return `${documentId}::${figureId ?? "none"}`;
+}
 
 type SnapDebugOverlayDragState =
   | {
@@ -861,7 +868,24 @@ export const CanvasPanel = memo(function CanvasPanel({
     width: 460,
     height: 220
   });
-  const [guides, setGuides] = useState<GuidesState>({ vertical: [], horizontal: [] });
+  const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
+  const [guidesByFigureKey, setGuidesByFigureKey] = useState(() => new Map<string, GuidesState>());
+  const guides = guidesByFigureKey.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
+  const setGuides = useCallback<StateSetter<GuidesState>>(
+    (update) => {
+      setGuidesByFigureKey((current) => {
+        const previous = current.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
+        const next = typeof update === "function" ? update(previous) : update;
+        if (next === previous) {
+          return current;
+        }
+        const updated = new Map(current);
+        updated.set(activeGuideFigureKey, next);
+        return updated;
+      });
+    },
+    [activeGuideFigureKey]
+  );
   const [guidePreview, setGuidePreview] = useState<GuidePreview | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const svgResult = useMemo(() => {
@@ -1134,6 +1158,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const suppressNextBackgroundClickRef = useRef(false);
   const pathDraftRef = useRef<PathToolDraft | null>(null);
   const freehandDraftRef = useRef<FreehandToolDraft | null>(null);
+  const previousCanvasContextKeyRef = useRef(canvasFigureContextKey(activeDocumentId, activeFigureId));
   const pendingAddedSelectionRef = useRef<PendingAddedSelection | null>(null);
   const canvasTransformRef = useRef(canvasTransform);
   const selectedElementIdsRef = useRef(selectedElementIds);
@@ -1245,16 +1270,56 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [pathDraft]);
 
   useLayoutEffect(() => {
+    const nextContextKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
+    if (previousCanvasContextKeyRef.current === nextContextKey) {
+      return;
+    }
+    previousCanvasContextKeyRef.current = nextContextKey;
+
     pathDraftRef.current = null;
+    freehandDraftRef.current = null;
+    textSelectionDragRef.current = null;
+    const pendingTouch = pendingTouchViewportRef.current;
+    if (pendingTouch) {
+      clearTimeout(pendingTouch.timer);
+      pendingTouchViewportRef.current = null;
+    }
+    guideDragRef.current = null;
+    document.body.classList.remove("is-dragging-guide-horizontal");
+    document.body.classList.remove("is-dragging-guide-vertical");
+
+    closeTextEditingSession();
+    clearPendingNodePositionTargetPick();
     setPathDraft(null);
+    setFreehandDraft(null);
     setPathSegmentDraft(null);
+    setToolDraft(null);
+    setBezierBendDraft(null);
+    setPendingBezier(null);
+    setMarqueeDraft(null);
+    setMagnifierState(null);
+    setPendingAdornmentTextEditTargetId(null);
+    setPathAttachedNodePreview(null);
+    setExpandedDensePathSourceId(null);
     setToolCursorWorld(null);
     setNodeAnchorOverlay(null);
     setSnapLines([]);
-    if (dragRef.current?.kind === "tool-path-segment") {
+    setGuidePreview(null);
+    setContextMenuState(null);
+    setWarning(null);
+    dispatch({ type: "SET_HOVERED_ELEMENT", id: null });
+    if (dragRef.current) {
       setDragState(null);
     }
-  }, [activeDocumentId, activeFigureId, setDragState]);
+  }, [
+    activeDocumentId,
+    activeFigureId,
+    clearPendingNodePositionTargetPick,
+    closeTextEditingSession,
+    dispatch,
+    setContextMenuState,
+    setDragState
+  ]);
 
   useEffect(() => {
     freehandDraftRef.current = freehandDraft;
@@ -1696,14 +1761,20 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      const isUndo =
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "z";
+      if (event.key !== "Escape" && !isUndo) {
         return;
       }
       event.preventDefault();
+      event.stopImmediatePropagation();
       clearPendingNodePositionTargetPick();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => { window.removeEventListener("keydown", handleKeyDown); };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => { window.removeEventListener("keydown", handleKeyDown, true); };
   }, [clearPendingNodePositionTargetPick, pendingNodePositionTargetPick]);
 
   useEffect(() => {
@@ -1928,24 +1999,61 @@ export const CanvasPanel = memo(function CanvasPanel({
     setToolCursorWorld(segment.endWorld);
   }, []);
 
-  const undoPathDraftSegment = useCallback(() => {
+  const undoTransientCanvasStep = useCallback(() => {
     const draft = pathDraftRef.current;
-    if (!draft || draft.segments.length === 0) {
-      return false;
+    if (draft) {
+      const nextDraft = draft.segments.length > 0 ? undoLastPathToolSegment(draft) : null;
+      pathDraftRef.current = nextDraft;
+      setPathDraft(nextDraft);
+      setPathSegmentDraft(null);
+      setToolCursorWorld(nextDraft ? pathToolCurrentPoint(nextDraft) : null);
+      setNodeAnchorOverlay(null);
+      setSnapLines([]);
+      if (dragRef.current?.kind === "tool-path-segment") {
+        setDragState(null);
+      }
+      return true;
     }
 
-    const nextDraft = undoLastPathToolSegment(draft);
-    pathDraftRef.current = nextDraft;
-    setPathDraft(nextDraft);
-    setPathSegmentDraft(null);
-    setToolCursorWorld(pathToolCurrentPoint(nextDraft));
-    setNodeAnchorOverlay(null);
-    setSnapLines([]);
-    if (dragRef.current?.kind === "tool-path-segment") {
-      setDragState(null);
+    const activeDrag = dragRef.current;
+    const hasBezierDraft =
+      pendingBezier != null ||
+      bezierBendDraft != null ||
+      toolDraft?.toolMode === "addBezier" ||
+      activeDrag?.kind === "tool-bezier-bend" ||
+      (activeDrag?.kind === "tool-create" && activeDrag.toolMode === "addBezier");
+    if (hasBezierDraft) {
+      setPendingBezier(null);
+      setBezierBendDraft(null);
+      setToolDraft(null);
+      setToolCursorWorld(null);
+      setNodeAnchorOverlay(null);
+      setSnapLines([]);
+      if (
+        activeDrag?.kind === "tool-bezier-bend" ||
+        (activeDrag?.kind === "tool-create" && activeDrag.toolMode === "addBezier")
+      ) {
+        setDragState(null);
+      }
+      return true;
     }
-    return true;
-  }, [setDragState]);
+
+    if (pendingNodePositionTargetPick) {
+      clearPendingNodePositionTargetPick();
+      setToolCursorWorld(null);
+      setSnapLines([]);
+      return true;
+    }
+
+    return false;
+  }, [
+    bezierBendDraft,
+    clearPendingNodePositionTargetPick,
+    pendingBezier,
+    pendingNodePositionTargetPick,
+    setDragState,
+    toolDraft
+  ]);
 
   const appendFreehandSamplePoint = useCallback((point: WorldPoint): WorldPoint[] | null => {
     let nextPoints: WorldPoint[] | null = null;
@@ -3183,7 +3291,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     setContextMenuState,
     toolMode,
     finalizePathDraft,
-    undoPathDraftSegment,
+    undoTransientCanvasStep,
     setWarning,
     setFreehandDraft,
     dragRef,
@@ -3255,6 +3363,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     bucketFillColor,
     source,
     snapshot,
+    activeDocumentId,
     activeFigureId,
     dispatch,
     bucketPreviewSessionRef

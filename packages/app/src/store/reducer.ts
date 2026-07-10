@@ -935,7 +935,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
 
     case "SET_SOURCE_TRANSIENT": {
-      workspace = updateDocument(workspace, activeId, (doc) => {
+      const documentId = activeDocumentIdFromAction(state, action.documentId);
+      workspace = updateDocument(workspace, documentId, (doc) => {
         if (doc.assistantLockReason) {
           return doc;
         }

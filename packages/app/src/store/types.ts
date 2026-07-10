@@ -350,6 +350,7 @@ export type EditorAction =
     }
   | {
       type: "SET_SOURCE_TRANSIENT";
+      documentId?: string;
       source: string;
       changedSourceIds?: string[] | null;
     }

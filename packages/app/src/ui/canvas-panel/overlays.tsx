@@ -422,6 +422,7 @@ export function ToolPreviewOverlay({
             strokeWidth={handleStrokeWidth}
           />
           <path
+            data-testid="canvas-tool-preview-bezier"
             d={`M ${fmt(toolPreview.x1)},${fmt(toolPreview.y1)} C ${fmt(toolPreview.c1x)},${fmt(toolPreview.c1y)} ${fmt(toolPreview.c2x)},${fmt(toolPreview.c2y)} ${fmt(toolPreview.x2)},${fmt(toolPreview.y2)}`}
             className={css.toolPreviewStroke}
             strokeWidth={handleStrokeWidth}

@@ -5,6 +5,8 @@ import { resolveBucketFillEdit } from "./bucket-fill";
 import type { CanvasDispatch, CanvasSnapshot } from "./types";
 
 export type BucketPreviewSession = {
+  documentId: string;
+  figureId: string | null;
   sourceId: string;
   colorToken: string;
   baseSource: string;
@@ -17,6 +19,7 @@ export type UseBucketFillPreviewArgs = {
   bucketFillColor: string;
   source: string;
   snapshot: CanvasSnapshot;
+  activeDocumentId: string;
   activeFigureId: string | null;
   dispatch: CanvasDispatch;
   bucketPreviewSessionRef: MutableRefObject<BucketPreviewSession | null>;
@@ -28,16 +31,31 @@ export function useBucketFillPreview({
   bucketFillColor,
   source,
   snapshot,
+  activeDocumentId,
   activeFigureId,
   dispatch,
   bucketPreviewSessionRef
 }: UseBucketFillPreviewArgs): void {
   useEffect(() => {
     const current = bucketPreviewSessionRef.current;
+    if (
+      current &&
+      (current.documentId !== activeDocumentId || current.figureId !== activeFigureId)
+    ) {
+      dispatch({
+        type: "SET_SOURCE_TRANSIENT",
+        documentId: current.documentId,
+        source: current.baseSource,
+        changedSourceIds: [current.sourceId]
+      });
+      bucketPreviewSessionRef.current = null;
+      return;
+    }
     if (toolMode !== "addBucket" || !hoveredElementId) {
       if (current && source !== current.baseSource) {
         dispatch({
           type: "SET_SOURCE_TRANSIENT",
+          documentId: current.documentId,
           source: current.baseSource,
           changedSourceIds: [current.sourceId]
         });
@@ -62,6 +80,7 @@ export function useBucketFillPreview({
       if (current && source !== current.baseSource) {
         dispatch({
           type: "SET_SOURCE_TRANSIENT",
+          documentId: current.documentId,
           source: current.baseSource,
           changedSourceIds: [current.sourceId]
         });
@@ -86,12 +105,15 @@ export function useBucketFillPreview({
       changedSourceIds: [hoveredElementId]
     });
     bucketPreviewSessionRef.current = {
+      documentId: activeDocumentId,
+      figureId: activeFigureId,
       sourceId: hoveredElementId,
       colorToken: bucketFillColor,
       baseSource,
       previewSource: nextPreviewSource
     };
   }, [
+    activeDocumentId,
     activeFigureId,
     bucketFillColor,
     bucketPreviewSessionRef,

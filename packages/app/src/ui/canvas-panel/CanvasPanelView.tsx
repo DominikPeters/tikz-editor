@@ -390,6 +390,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             <svg
               ref={topRulerRef}
               className={css.topRuler}
+              data-testid="canvas-top-ruler"
               data-select="chrome"
               viewBox={`0 0 ${Math.max(1, viewportSize.width)} ${RULER_SIZE}`}
               preserveAspectRatio="none"
@@ -422,6 +423,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             <svg
               ref={leftRulerRef}
               className={css.leftRuler}
+              data-testid="canvas-left-ruler"
               data-select="chrome"
               viewBox={`0 0 ${RULER_SIZE} ${Math.max(1, viewportSize.height)}`}
               preserveAspectRatio="none"
@@ -616,6 +618,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                     {renderedGuides.vertical.map((x: number) => (
                       <g key={`guide-v-${fmt(x)}`}>
                         <line
+                          data-testid="canvas-guide-vertical"
                           x1={x}
                           x2={x}
                           y1={visibleRanges?.svgMinY ?? svgResult.viewBox.y}
@@ -639,6 +642,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                       return (
                         <g key={`guide-h-${fmt(worldY)}`}>
                           <line
+                            data-testid="canvas-guide-horizontal"
                             x1={visibleRanges?.worldMinX ?? svgResult.viewBox.x}
                             x2={visibleRanges?.worldMaxX ?? (svgResult.viewBox.x + svgResult.viewBox.width)}
                             y1={y}
