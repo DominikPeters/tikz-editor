@@ -237,11 +237,13 @@ test("node relative positioning target reports negative spacing when visual plac
   await clickHitRegionByTargetId(page, "path:1", { button: "right" });
   await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
   const targetDot = page.getByTestId("node-anchor-dot");
-  await expect(targetDot).toHaveAttribute("data-anchor-disabled", "true");
+  // Target validity is preflighted lazily when the target is hovered.
+  await expect(targetDot).not.toHaveAttribute("data-anchor-disabled", "true");
   await expect(targetDot.locator("title")).toHaveCount(0);
   await expect(page.locator("[data-hit-region-target-id='path:0'] title")).toHaveCount(0);
   await targetDot.hover();
 
+  await expect(targetDot).toHaveAttribute("data-anchor-disabled", "true");
   await expect.poll(async () => targetDot.evaluate((el) => getComputedStyle(el).cursor)).toBe("not-allowed");
   await expect(page.getByTestId("node-position-target-tooltip")).toContainText("overlap vertically");
   await expect(page.getByTestId("canvas-selection-hint")).toHaveText(

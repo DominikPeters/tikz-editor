@@ -1416,21 +1416,28 @@ export const CanvasPanel = memo(function CanvasPanel({
       }),
     [pendingNodePositionTargetPick?.nodeSourceId, snapshot]
   );
-  const pendingNodePositionTargetStatusBySourceId = useMemo(() => {
-    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
-    if (!pendingNodePositionTargetPick || pendingNodePositionTargetAnchors.length === 0) {
-      return statusBySourceId;
+  const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
+    ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
+    : null;
+  const resolvePendingNodePositionTargetStatus = useMemo(() => {
+    if (!pendingNodePositionTargetPick) {
+      return null;
     }
+    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
     const sourceFingerprint = buildSnapshotEditSourceFingerprint({
       documentId: activeDocumentId,
       sourceRevision,
       sourceLength: source.length,
       sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
     });
-    for (const anchor of pendingNodePositionTargetAnchors) {
+    return (anchor: NodeAnchorTarget): NodePositionTargetStatus | null => {
       const targetSourceId = anchor.nodeSourceId?.trim();
       if (!targetSourceId) {
-        continue;
+        return null;
+      }
+      const cached = statusBySourceId.get(targetSourceId);
+      if (cached) {
+        return cached;
       }
       const action: EditAction = {
         kind: "positionNodeRelativeTo",
@@ -1443,42 +1450,60 @@ export const CanvasPanel = memo(function CanvasPanel({
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
       const { result } = preflight;
-      if (result.kind === "success" || result.kind === "partial") {
-        statusBySourceId.set(targetSourceId, {
-          anchor,
-          action,
-          result,
-          preview: preflight.preview,
-          usable: true,
-          reason: null
-        });
-        continue;
-      }
-      const rawReason = result.kind === "unsupported" ? result.reason : result.message;
-      statusBySourceId.set(targetSourceId, {
-        anchor,
-        action,
-        result,
-        preview: null,
-        usable: false,
-        reason: formatNodePositionTargetFailureReason({
-          rawReason,
-          currentNodeSourceId: pendingNodePositionTargetPick.nodeSourceId,
-          target: anchor,
-          snapshot
-        })
-      });
-    }
-    return statusBySourceId;
+      const status: NodePositionTargetStatus =
+        result.kind === "success" || result.kind === "partial"
+          ? {
+              anchor,
+              action,
+              result,
+              preview: preflight.preview,
+              usable: true,
+              reason: null
+            }
+          : {
+              anchor,
+              action,
+              result,
+              preview: null,
+              usable: false,
+              reason: formatNodePositionTargetFailureReason({
+                rawReason: result.kind === "unsupported" ? result.reason : result.message,
+                currentNodeSourceId: pendingNodePositionTargetPick.nodeSourceId,
+                target: anchor,
+                snapshot
+              })
+            };
+      statusBySourceId.set(targetSourceId, status);
+      return status;
+    };
   }, [
     activeDocumentId,
     activeTextEngine,
     editParseOptions,
-    pendingNodePositionTargetAnchors,
     pendingNodePositionTargetPick,
     snapshot,
     source,
     sourceRevision
+  ]);
+  const pendingNodePositionTargetStatusBySourceId = useMemo(() => {
+    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
+    if (!pendingNodePositionEffectiveHoverSourceId || !resolvePendingNodePositionTargetStatus) {
+      return statusBySourceId;
+    }
+    const hoveredAnchor = pendingNodePositionTargetAnchors.find(
+      (anchor) => anchor.nodeSourceId === pendingNodePositionEffectiveHoverSourceId
+    );
+    if (hoveredAnchor?.nodeSourceId) {
+      const status = resolvePendingNodePositionTargetStatus(hoveredAnchor);
+      if (status) {
+        statusBySourceId.set(hoveredAnchor.nodeSourceId, status);
+      }
+    }
+    return statusBySourceId;
+  }, [
+    pendingNodePositionEffectiveHoverSourceId,
+    pendingNodePositionTargetAnchors,
+    resolvePendingNodePositionTargetStatus
   ]);
 
   const pendingNodePositionHitRegionCursorByTargetId = useMemo(() => {
@@ -1486,15 +1511,18 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
     const cursorByTargetId = new Map<string, string>();
-    for (const [sourceId, status] of pendingNodePositionTargetStatusBySourceId) {
-      cursorByTargetId.set(sourceId, status.usable ? "pointer" : "not-allowed");
+    for (const anchor of pendingNodePositionTargetAnchors) {
+      if (anchor.nodeSourceId) {
+        const status = pendingNodePositionTargetStatusBySourceId.get(anchor.nodeSourceId);
+        cursorByTargetId.set(anchor.nodeSourceId, status?.usable === false ? "not-allowed" : "pointer");
+      }
     }
     return cursorByTargetId;
-  }, [pendingNodePositionTargetPick, pendingNodePositionTargetStatusBySourceId]);
-
-  const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
-    ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
-    : null;
+  }, [
+    pendingNodePositionTargetAnchors,
+    pendingNodePositionTargetPick,
+    pendingNodePositionTargetStatusBySourceId
+  ]);
 
   const pendingNodePositionAnchorOverlay = useMemo<NodeAnchorOverlayState | null>(() => {
     if (!pendingNodePositionTargetPick || pendingNodePositionTargetAnchors.length === 0) {
@@ -2786,7 +2814,10 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!target?.nodeSourceId) {
         return true;
       }
-      const status = pendingNodePositionTargetStatusBySourceId.get(target.nodeSourceId);
+      const status =
+        pendingNodePositionTargetStatusBySourceId.get(target.nodeSourceId) ??
+        resolvePendingNodePositionTargetStatus?.(target) ??
+        null;
       if (status && !status.usable) {
         return true;
       }
@@ -2820,6 +2851,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       pendingNodePositionTargetAnchors,
       pendingNodePositionTargetPick,
       pendingNodePositionTargetStatusBySourceId,
+      resolvePendingNodePositionTargetStatus,
       source
     ]
   );
