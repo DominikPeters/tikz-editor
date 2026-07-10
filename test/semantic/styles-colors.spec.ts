@@ -460,6 +460,32 @@ describe("semantic evaluator / styles and colors", () => {
       ]));
     });
 
+    it("keeps exact key aliases on the same key-value handler paths", () => {
+      const identity = worldTransform(1, 0, 0, 1, 0, 0);
+      const applyOptionEntry = (entry: OptionEntry, style = defaultStyle(), transform = identity): ApplyOutcome => {
+        if (entry.kind !== "kv") {
+          return { style, transform, diagnostics: [] };
+        }
+        return applyKvEntry(entry.key, entry.valueRaw, style, transform, applyOptionEntry);
+      };
+      const apply = (key: string, valueRaw: string) =>
+        applyKvEntry(key, valueRaw, defaultStyle(), identity, applyOptionEntry);
+
+      for (const [canonical, alias, valueRaw] of [
+        ["line cap", "cap", "projecting"],
+        ["line join", "join", "bevel"],
+        ["node font", "font", String.raw`\bfseries\small`],
+        ["shorten <", "shorten <=", "2pt"],
+        ["shorten >", "shorten >=", "3pt"],
+        ["rotate around", "/tikz/rotate around", "{30:(1,2)}"],
+        ["cm", "/tikz/cm", "{1,0,0,1,(1,2)}"],
+        ["decorate", "/tikz/decorate", "true"],
+        ["decoration", "/pgf/decoration", "{name=zigzag,segment length=4pt}"]
+      ]) {
+        expect(apply(alias, valueRaw)).toEqual(apply(canonical, valueRaw));
+      }
+    });
+
     it("resolves pattern and pattern color keys without unsupported-option diagnostics", () => {
       const source = String.raw`\begin{tikzpicture}
     \draw[pattern=grid,pattern color=red] (0,0) rectangle (1,1);
