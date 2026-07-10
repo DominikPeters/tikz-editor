@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildMatrixInspectorDescriptor,
   buildTreeInspectorDescriptor,
+  createInspectorTargetResolver,
   TIKZPICTURE_GLOBAL_TARGET_ID,
   type InspectorDescriptor,
   type InspectorSection,
   type SetPropertyWriteTarget,
-  type InspectorSnapshot
+  type InspectorSnapshot,
+  type InspectorTargetResolver
 } from "@tikz-editor/core/edit/inspector";
 import {
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
@@ -174,7 +176,11 @@ type FrozenPropertyProvenanceView = {
 export function useInspectorModel(args: {
   selectedIds: ReadonlySet<string>;
   dispatch: (action: EditorAction) => void;
-  getInspectorDescriptor: (element: SceneElement, context: InspectorSnapshot) => InspectorDescriptor;
+  getInspectorDescriptor: (
+    element: SceneElement,
+    context: InspectorSnapshot,
+    resolveTarget: InspectorTargetResolver
+  ) => InspectorDescriptor;
 }) {
   const { selectedIds, dispatch, getInspectorDescriptor } = args;
   const [{ source, snapshot }, setSourceSnapshot] = useState(() => {
@@ -296,14 +302,21 @@ export function useInspectorModel(args: {
   }, [selectedElementBySourceId, selectedSourceIds]);
 
   const descriptorEntries = useMemo(() => {
+    const resolveTarget = createInspectorTargetResolver(snapshot.source, parseOptions);
     return selectedSourceIds.map((sourceId) => {
-      const matrixDescriptor = buildMatrixInspectorDescriptor(snapshot.source, sourceId, parseOptions);
+      const matrixDescriptor = buildMatrixInspectorDescriptor(snapshot.source, sourceId, parseOptions, resolveTarget);
       if (matrixDescriptor) {
         return matrixDescriptor;
       }
 
       const selectedElement = selectedElementBySourceId.get(sourceId) ?? null;
-      const treeDescriptor = buildTreeInspectorDescriptor(snapshot.source, sourceId, selectedElement, parseOptions);
+      const treeDescriptor = buildTreeInspectorDescriptor(
+        snapshot.source,
+        sourceId,
+        selectedElement,
+        parseOptions,
+        resolveTarget
+      );
       if (treeDescriptor) {
         return treeDescriptor;
       }
@@ -317,11 +330,15 @@ export function useInspectorModel(args: {
         return null;
       }
 
-      return getInspectorDescriptor(element, {
-        source: snapshot.source,
-        editHandles: snapshot.editHandles,
-        parseOptions
-      });
+      return getInspectorDescriptor(
+        element,
+        {
+          source: snapshot.source,
+          editHandles: snapshot.editHandles,
+          parseOptions
+        },
+        resolveTarget
+      );
     });
   }, [getInspectorDescriptor, parseOptions, selectedElementBySourceId, selectedSourceIds, snapshot.editHandles, snapshot.source]);
 

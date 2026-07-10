@@ -50,6 +50,8 @@ import type {
   InspectorSnapshot,
   SetPropertyWriteTarget
 } from "./inspector/types.js";
+export { createInspectorTargetResolver } from "./inspector/target-resolver.js";
+export type { InspectorTargetResolver } from "./inspector/target-resolver.js";
 export { TIKZPICTURE_GLOBAL_TARGET_ID } from "./property-target.js";
 export type {
   ArrowTipWriteTarget,
@@ -181,7 +183,12 @@ export function getInspectorDescriptor(
   snapshot: InspectorSnapshot,
   resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(snapshot.source, snapshot.parseOptions)
 ): InspectorDescriptor {
-  const inlineTarget = resolveInlineWriteTarget(element, snapshot.source, snapshot.parseOptions, resolveTarget);
+  const inlineTarget = resolveInlineWriteTarget(
+    element,
+    snapshot.source,
+    snapshot.parseOptions ?? {},
+    resolveTarget
+  );
   const resolvedInlineTarget =
     inlineTarget.targetId != null
       ? resolveTarget(inlineTarget.targetId)
@@ -447,8 +454,8 @@ function sourceSpanContainsMacroOrigin(
 function resolveInlineWriteTarget(
   element: SceneElement,
   source: string,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
+  parseOptions: EditParseOptions,
+  resolveTarget: InspectorTargetResolver
 ): InlineWriteTarget {
   if (
     element.origin?.macroStack &&
