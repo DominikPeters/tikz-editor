@@ -60,7 +60,7 @@ import { resolveDocHoverTarget } from "tikz-editor/completion/doc-hover";
 import { recordProfilingSourcePanelSyncTiming } from "tikz-editor/profiling";
 import type { SceneElement } from "tikz-editor/semantic/types";
 import { NAMED_COLORS } from "tikz-editor/semantic/style/constants";
-import { patchesMatchSourceTransition } from "tikz-editor/edit/source-patches";
+import { applySourcePatches, patchesMatchSourceTransition } from "tikz-editor/edit/source-patches";
 import { tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
@@ -119,7 +119,6 @@ type PendingExternalSourceSync = {
   nextSource: string;
   sourceRevision: number;
   lastEditPatches: readonly SourceSyncPatch[] | null;
-  lastEditPatchBaseRevision: number | null;
   patchChain: SourceSyncPatchStep[] | null;
   coalescedToAnimationFrame: boolean;
 };
@@ -299,22 +298,8 @@ function findExternalSourceSyncAnnotation(
 function buildExternalSourceSyncChanges(
   currentSource: string,
   nextSource: string,
-  lastEditPatches: readonly SourceSyncPatch[] | null,
-  canTrustPatches: boolean,
-  trustedPatchChain: readonly SourceSyncPatchStep[] | null
+  lastEditPatches: readonly SourceSyncPatch[] | null
 ): SourceSyncChanges {
-  if (trustedPatchChain && trustedPatchChain.length > 0) {
-    return {
-      changes: trustedPatchChain.flatMap((step) => sourcePatchChanges(step.patches)),
-      trustedPatch: true
-    };
-  }
-  if (canTrustPatches && lastEditPatches && lastEditPatches.length > 0) {
-    return {
-      changes: sourcePatchChanges(lastEditPatches),
-      trustedPatch: true
-    };
-  }
   if (
     lastEditPatches &&
     lastEditPatches.length > 0 &&
@@ -322,13 +307,29 @@ function buildExternalSourceSyncChanges(
   ) {
     return {
       changes: sourcePatchChanges(lastEditPatches),
-      trustedPatch: false
+      trustedPatch: true
     };
   }
   return {
     changes: { from: 0, to: currentSource.length, insert: nextSource },
     trustedPatch: false
   };
+}
+
+function patchChainMatchesSourceTransition(
+  currentSource: string,
+  nextSource: string,
+  patchChain: readonly SourceSyncPatchStep[]
+): boolean {
+  let source = currentSource;
+  for (const step of patchChain) {
+    const applied = applySourcePatches(source, step.patches);
+    if (applied.kind !== "success") {
+      return false;
+    }
+    source = applied.source;
+  }
+  return source === nextSource;
 }
 
 function sourcePatchChanges(patches: readonly SourceSyncPatch[]): SourceSyncChange[] {
@@ -339,7 +340,8 @@ function sourcePatchChanges(patches: readonly SourceSyncPatch[]): SourceSyncChan
   }));
 }
 
-class ExternalSourceSyncManager {
+// Exported for tests (test/web/source-sync-stale-buffer.spec.ts).
+export class ExternalSourceSyncManager {
   private lastKnownSource: string;
   private lastKnownRevision: number | null;
 
@@ -370,7 +372,6 @@ class ExternalSourceSyncManager {
     nextSource: string,
     sourceRevision: number,
     lastEditPatches: readonly SourceSyncPatch[] | null,
-    lastEditPatchBaseRevision: number | null,
     patchChain: readonly SourceSyncPatchStep[] | null,
     coalescedToAnimationFrame: boolean
   ): void {
@@ -381,32 +382,25 @@ class ExternalSourceSyncManager {
       this.lastKnownRevision = sourceRevision;
       return;
     }
-    if (
-      this.lastKnownRevision == null &&
-      lastEditPatchBaseRevision != null &&
-      lastEditPatches != null &&
-      lastEditPatches.length > 0
-    ) {
-      this.lastKnownRevision = lastEditPatchBaseRevision;
-    }
-    const canTrustPatches =
-      lastEditPatches != null &&
-      lastEditPatches.length > 0 &&
-      lastEditPatchBaseRevision != null &&
-      lastEditPatchBaseRevision === this.lastKnownRevision;
-    const trustedPatchChain =
+    // Revision bookkeeping cannot authorize patch application: buffer edits
+    // reset lastKnownRevision to null, and revision numbers are per-document
+    // counters that can collide across document switches. Patches are applied
+    // only when replaying them on the tracked buffer content reproduces
+    // nextSource exactly; anything else falls back to replacing the whole
+    // document.
+    const verifiedPatchChain =
       patchChain &&
       patchChain.length > 0 &&
-      patchChain[0]?.baseRevision === this.lastKnownRevision &&
-      patchChain[patchChain.length - 1]?.sourceRevision === sourceRevision
+      patchChain[patchChain.length - 1]?.sourceRevision === sourceRevision &&
+      patchChainMatchesSourceTransition(this.lastKnownSource, nextSource, patchChain)
         ? patchChain
         : null;
-    if (trustedPatchChain) {
-      const patchCount = trustedPatchChain.reduce((count, step) => count + step.patches.length, 0);
+    if (verifiedPatchChain) {
+      const patchCount = verifiedPatchChain.reduce((count, step) => count + step.patches.length, 0);
       const startedAt = performance.now();
       dispatchPatchChainWithStableHorizontalScroll(
         this.view,
-        trustedPatchChain,
+        verifiedPatchChain,
         nextSource,
         sourceRevision
       );
@@ -426,9 +420,7 @@ class ExternalSourceSyncManager {
     const syncChanges = buildExternalSourceSyncChanges(
       this.lastKnownSource,
       nextSource,
-      lastEditPatches,
-      canTrustPatches,
-      null
+      lastEditPatches
     );
     const patchCount = Array.isArray(syncChanges.changes) ? syncChanges.changes.length : 1;
     const mode = Array.isArray(syncChanges.changes) ? "patch" : "replace";
@@ -456,7 +448,7 @@ class ExternalSourceSyncManager {
   }
 }
 
-const externalSourceSyncPlugin = ViewPlugin.fromClass(ExternalSourceSyncManager);
+export const externalSourceSyncPlugin = ViewPlugin.fromClass(ExternalSourceSyncManager);
 
 function useExternalSourceSync(
   viewRef: RefObject<EditorView | null>,
@@ -505,7 +497,7 @@ function useExternalSourceSync(
         throttleIdRef.current = null;
       }
       pendingSyncRef.current = null;
-      plugin.syncExternalSource(source, sourceRevision, lastEditPatches, lastEditPatchBaseRevision, null, false);
+      plugin.syncExternalSource(source, sourceRevision, lastEditPatches, null, false);
       return;
     }
 
@@ -528,7 +520,6 @@ function useExternalSourceSync(
       nextSource: source,
       sourceRevision,
       lastEditPatches,
-      lastEditPatchBaseRevision,
       patchChain,
       coalescedToAnimationFrame: true
     };
@@ -544,7 +535,6 @@ function useExternalSourceSync(
         pending.nextSource,
         pending.sourceRevision,
         pending.lastEditPatches,
-        pending.lastEditPatchBaseRevision,
         pending.patchChain,
         pending.coalescedToAnimationFrame
       );
