@@ -5,6 +5,7 @@ import { stripWrappingBraces } from "../../utils/braces.js";
 import { parseStyleValueAsOptionList } from "./option-utils.js";
 import type { StyleSourceRef } from "../style-chain.js";
 import { cloneStyleSourceRef } from "../style-chain.js";
+import { PersistentMap } from "../persistent-map.js";
 
 export type CustomStyleRegistry = Map<string, CustomStyleLayer[]>;
 
@@ -147,7 +148,7 @@ const BUILTIN_CUSTOM_STYLE_REGISTRY_ENTRIES: Array<[string, CustomStyleLayer[]]>
 );
 
 export function createDefaultCustomStyleRegistry(): CustomStyleRegistry {
-  const registry: CustomStyleRegistry = new Map();
+  const registry = new PersistentMap<string, CustomStyleLayer[]>();
   for (const [name, layers] of BUILTIN_CUSTOM_STYLE_REGISTRY_ENTRIES) {
     registry.set(name, layers.map((layer) => cloneCustomStyleLayer(layer)));
   }
@@ -155,7 +156,14 @@ export function createDefaultCustomStyleRegistry(): CustomStyleRegistry {
 }
 
 export function cloneCustomStyleRegistry(registry: CustomStyleRegistry): CustomStyleRegistry {
-  return new Map(registry);
+  if (registry instanceof PersistentMap) {
+    return registry.fork();
+  }
+  const imported = new PersistentMap<string, CustomStyleLayer[]>();
+  for (const [name, layers] of registry) {
+    imported.set(name, layers);
+  }
+  return imported;
 }
 
 export function walkOptionEntriesWithCustomStyles(

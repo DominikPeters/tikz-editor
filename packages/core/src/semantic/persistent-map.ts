@@ -11,8 +11,9 @@ type PersistentMapState<K, V> = {
 
 export type PersistentMapSnapshot<K, V> = PersistentMapState<K, V>;
 
-export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
+export class PersistentMap<K, V> implements Map<K, V> {
   private state: PersistentMapState<K, V>;
+  readonly [Symbol.toStringTag] = "Map";
 
   constructor(snapshot?: PersistentMapSnapshot<K, V>) {
     this.state = snapshot ?? createRootState<K, V>();
@@ -69,7 +70,7 @@ export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
   }
 
   forEach(
-    callbackfn: (value: V, key: K, map: ReadonlyMap<K, V>) => void,
+    callbackfn: (value: V, key: K, map: Map<K, V>) => void,
     thisArg?: unknown
   ): void {
     this.materialize().forEach((value, key) => {

@@ -8,9 +8,9 @@ import { parseLength } from "./coords/parse-length.js";
 import type { EditHandle, ResolvedStyle, SceneClipPath, SceneElement, SceneLayer } from "./types.js";
 import { BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER } from "./types.js";
 import type { CustomStyleRegistry } from "./style/custom-styles.js";
-import { createDefaultCustomStyleRegistry } from "./style/custom-styles.js";
+import { cloneCustomStyleRegistry, createDefaultCustomStyleRegistry } from "./style/custom-styles.js";
 import type { PicDefinitionRegistry } from "./pics/registry.js";
-import { createDefaultPicDefinitionRegistry } from "./pics/registry.js";
+import { clonePicDefinitionRegistry, createDefaultPicDefinitionRegistry } from "./pics/registry.js";
 import { computeSourceFingerprint } from "../utils/source-fingerprint.js";
 import type { StyleChainEntry, StyleSourceRef } from "./style-chain.js";
 import { cloneResolvedStyle } from "./style-chain.js";
@@ -420,9 +420,11 @@ export function popFrame(context: SemanticContext): void {
 }
 
 function forkSemanticContextFrame(frame: SemanticContextFrame): SemanticContextFrame {
-  const { colorAliases, macroBindings, ...cloneable } = frame;
+  const { customStyles, picDefinitions, colorAliases, macroBindings, ...cloneable } = frame;
   return {
     ...structuredClone(cloneable),
+    customStyles: cloneCustomStyleRegistry(customStyles),
+    picDefinitions: clonePicDefinitionRegistry(picDefinitions),
     colorAliases: colorAliases.fork(),
     macroBindings: macroBindings.fork()
   };

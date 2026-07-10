@@ -907,6 +907,31 @@ describe("semantic evaluator / styles and colors", () => {
       }
     });
 
+    it("inherits custom styles while isolating replacement and append writes between scopes", () => {
+      const source = String.raw`\begin{tikzpicture}
+    \tikzset{shared/.style={draw=red}}
+    \begin{scope}
+      \tikzset{shared/.append style={dashed}}
+      \draw[shared] (0,0) -- (1,0);
+    \end{scope}
+    \begin{scope}
+      \tikzset{shared/.style={draw=blue}}
+      \draw[shared] (0,1) -- (1,1);
+    \end{scope}
+    \draw[shared] (0,2) -- (1,2);
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      const paths = elementsOfKind(result.scene.elements, "Path");
+
+      expect(paths).toHaveLength(3);
+      expect(paths[0]?.style.stroke).toBe("#ff0000");
+      expect(paths[0]?.style.dashArray).toEqual([3, 3]);
+      expect(paths[1]?.style.stroke).toBe("#0000ff");
+      expect(paths[1]?.style.dashArray).not.toEqual([3, 3]);
+      expect(paths[2]?.style.stroke).toBe("#ff0000");
+      expect(paths[2]?.style.dashArray).not.toEqual([3, 3]);
+    });
+
     it("applies custom styles defined via \\tikzset, \\tikzstyle, and \\pgfkeys", () => {
       const source = String.raw`\begin{tikzpicture}
     \tikzset{
