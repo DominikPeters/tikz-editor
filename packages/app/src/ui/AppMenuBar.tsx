@@ -4,27 +4,8 @@ import type { CommandBindings } from "./editor-command-runtime";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { BUILT_IN_WORKSPACES } from "./DockLayout";
 import { applyWorkspace, findActiveWorkspaceId } from "./workspace-apply";
+import { formatAccelerator } from "./key-labels";
 import css from "./AppMenuBar.module.css";
-
-const IS_MAC_PLATFORM =
-  typeof navigator !== "undefined" &&
-  /(mac|iphone|ipad)/i.test(navigator.platform);
-
-function formatAccelerator(accelerator: string | undefined): string {
-  if (!accelerator) {
-    return "";
-  }
-
-  return accelerator
-    .split("+")
-    .map((part) => {
-      if (part === "CmdOrCtrl") {
-        return IS_MAC_PLATFORM ? "Cmd" : "Ctrl";
-      }
-      return part;
-    })
-    .join(IS_MAC_PLATFORM ? " " : "+");
-}
 
 function MenuPopup({
   items,

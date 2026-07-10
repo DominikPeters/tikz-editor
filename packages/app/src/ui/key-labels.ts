@@ -27,6 +27,24 @@ export function isMacLikePlatform(platformName: string = readCurrentPlatformName
   return /(mac|iphone|ipad)/i.test(platformName);
 }
 
+export function isWindowsLikePlatform(platformName: string = readCurrentPlatformName()): boolean {
+  return /win/i.test(platformName);
+}
+
+export function formatAccelerator(
+  accelerator: string | undefined,
+  platformName: string = readCurrentPlatformName()
+): string {
+  if (!accelerator) {
+    return "";
+  }
+  const isMac = isMacLikePlatform(platformName);
+  return accelerator
+    .split("+")
+    .map((part) => part === "CmdOrCtrl" ? (isMac ? "Cmd" : "Ctrl") : part)
+    .join(isMac ? " " : "+");
+}
+
 export function getModifierKeyLabels(platformName: string = readCurrentPlatformName()): ModifierKeyLabels {
   if (isMacLikePlatform(platformName)) {
     return {

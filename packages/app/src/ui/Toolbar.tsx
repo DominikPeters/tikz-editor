@@ -18,6 +18,7 @@ import { GENERATED_NODE_SHAPE_PREVIEWS } from "./generated-node-shape-previews";
 import { ToolbarToolPopup, ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } from "./ToolbarToolPopup";
 import popupCss from "./ToolbarToolPopup.module.css";
 import type { ToolMode } from "../store/types";
+import { isMacLikePlatform } from "./key-labels";
 import css from "./Toolbar.module.css";
 
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
@@ -51,10 +52,7 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
   const matrixPreviewRows = matrixHoverSize?.rows ?? selectedAddMatrixRows;
   const matrixPreviewColumns = matrixHoverSize?.columns ?? selectedAddMatrixColumns;
   const isDesktop = getActiveEditorPlatform().id.startsWith("desktop");
-  const isMacDesktop =
-    isDesktop &&
-    typeof navigator !== "undefined" &&
-    /(mac|iphone|ipad)/i.test(navigator.platform);
+  const isMacDesktop = isDesktop && isMacLikePlatform();
   const showAppTitle = !isDesktop;
 
   // Close popup when tool mode changes (unless it's a popup that can be used independently)

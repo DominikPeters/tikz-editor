@@ -22,6 +22,7 @@ import { AppMenuBar } from "./AppMenuBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
 import { StatusBar } from "./StatusBar";
+import { isMacLikePlatform, isWindowsLikePlatform } from "./key-labels";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { useEditorCommandRuntime } from "./editor-command-runtime";
 import { toolModeFromShortcut } from "./tool-config";
@@ -127,13 +128,11 @@ let startupUpdateCheckStarted = false;
 
 function menuTargetFromPlatformId(platformId: string): AppMenuPlatformTarget {
   if (platformId.startsWith("desktop")) {
-    if (typeof navigator !== "undefined") {
-      if (/(mac|iphone|ipad)/i.test(navigator.platform)) {
-        return "desktop-macos";
-      }
-      if (/win/i.test(navigator.platform)) {
-        return "desktop-windows";
-      }
+    if (isMacLikePlatform()) {
+      return "desktop-macos";
+    }
+    if (isWindowsLikePlatform()) {
+      return "desktop-windows";
     }
     return "desktop-linux";
   }
@@ -144,13 +143,10 @@ function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "oth
   if (!platformId.startsWith("desktop")) {
     return null;
   }
-  if (typeof navigator === "undefined") {
-    return "other";
-  }
-  if (/(mac|iphone|ipad)/i.test(navigator.platform)) {
+  if (isMacLikePlatform()) {
     return "macos";
   }
-  if (/win/i.test(navigator.platform)) {
+  if (isWindowsLikePlatform()) {
     return "windows";
   }
   return "other";

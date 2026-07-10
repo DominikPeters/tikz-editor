@@ -7,6 +7,7 @@ import type { EmitSvgResult } from "tikz-editor/svg/index";
 import type { SessionSnapshot } from "../compute";
 import { getSharedEditAnalysisView } from "../edit-analysis-manager";
 import { getActiveEditorPlatform } from "../platform/current";
+import { isMacLikePlatform } from "./key-labels";
 import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { buildSnapshotEditSourceFingerprint } from "../source-identity";
@@ -256,8 +257,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     typeof getActiveEditorPlatform().updates?.relaunch === "function";
   const isMacDesktop =
     getActiveEditorPlatform().id.startsWith("desktop") &&
-    typeof navigator !== "undefined" &&
-    /(mac|iphone|ipad)/i.test(navigator.platform);
+    isMacLikePlatform();
 
   const insertBinding = (mode: ToolMode): CommandBinding => {
     const capability = getToolCapabilityStatus(mode);

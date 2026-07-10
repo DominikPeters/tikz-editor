@@ -156,6 +156,7 @@ import { useCanvasViewportPersistence } from "./useCanvasViewportPersistence";
 import { useBucketFillPreview,type BucketPreviewSession } from "./useBucketFillPreview";
 import type { ClientPoint,SvgBounds,ViewportPoint,WorldPoint } from "../coords/types";
 import { useEditorCommandRuntime,type CommandOrigin } from "../editor-command-runtime";
+import { isMacLikePlatform } from "../key-labels";
 import {
 formatEquationText,
 type EquationNodeTarget
@@ -1376,7 +1377,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!platform.id.startsWith("desktop")) {
       return;
     }
-    if (typeof navigator === "undefined" || !/(mac|iphone|ipad)/i.test(navigator.platform)) {
+    if (!isMacLikePlatform()) {
       return;
     }
     void platform.haptics?.performSnapFeedback?.();
