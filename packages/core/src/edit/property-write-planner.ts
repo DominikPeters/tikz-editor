@@ -331,8 +331,11 @@ function isPureComplementaryPaintAppend(
   const command = normalizedPaintCommand(resolved.target.pathCommand);
   const key = normalizeOptionKey(action.key);
   const paint = resolvePaintOptions(source, action.elementId, parseOptions);
-  return (command === "draw" && key === "fill" && paint.fill == null)
-    || (command === "fill" && (key === "draw" || key === "color") && paint.draw == null);
+  return (command === "draw" && key === "fill" && paint.fill == null && !paint.drawDisabled)
+    || (command === "fill"
+      && (key === "draw" || key === "color")
+      && paint.draw == null
+      && !paint.fillDisabled);
 }
 
 function commandRemovesExplicitDrawSuppression(command: "path" | "draw" | "fill"): boolean {

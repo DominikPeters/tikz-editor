@@ -155,6 +155,26 @@ describe("property write planner", () => {
     }
   });
 
+  it("still certifies paint cleanup when the command's primary paint is explicitly disabled", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[draw=none] (0,0) rectangle (1,1);
+\end{tikzpicture}`;
+    const plan = planPropertyWrite({
+      source,
+      action: {
+        elementId: "path:0",
+        key: "fill",
+        value: "red"
+      }
+    });
+
+    expect(plan.certificates).not.toEqual([]);
+    expect(plan.selected.kind).toBe("success");
+    if (plan.selected.kind === "success") {
+      expect(plan.selected.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
+    }
+  });
+
   it("cleans no-options paint commands and reports explicit changed ids", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
