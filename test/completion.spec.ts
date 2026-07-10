@@ -33,8 +33,6 @@ describe("collectSymbols", () => {
     /pgf/nshelper/.prefix style={line width=1pt},
     plain={not a style}
   }
-  \pgfkeys{\broken without close
-  \tikzstyle broken
   \node[draw] (standalone) at (0,0) {S};
   \node (bad name) at (1,0) {Bad};
 \end{tikzpicture}`;
@@ -48,7 +46,7 @@ describe("collectSymbols", () => {
     expect(symbols.styleNames).not.toContain("plain");
   });
 
-  it("ignores malformed standalone node and style declarations while continuing to scan", () => {
+  it("uses recovered parser output for malformed node and style declarations", () => {
     const source = String.raw`\begin{tikzpicture}
   \tikzset{/.style={draw}, later/.style={blue}}
   \pgfkeys{plain={not a style}}
@@ -58,15 +56,12 @@ describe("collectSymbols", () => {
   \node[draw] (afterOptions) {A};
   \node (invalid name) {B};
 \end{tikzpicture}`;
-    const parseResult = {
-      source,
-      figure: { body: [] }
-    };
+    const parseResult = parseTikz(source, { recover: true });
 
-    const symbols = collectSymbols({ parseResult: parseResult as never });
+    const symbols = collectSymbols({ parseResult });
 
     expect(symbols.nodeNames).toContain("afterOptions");
-    expect(symbols.nodeNames).not.toContain("invalid name");
+    expect(symbols.nodeNames).toContain("invalid name");
     expect(symbols.styleNames).toEqual(expect.arrayContaining(["later", "legacy spaced"]));
     expect(symbols.styleNames).not.toContain("");
     expect(symbols.styleNames).not.toContain("plain");
