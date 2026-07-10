@@ -184,11 +184,6 @@ type CanvasPanelViewProps = {
   onTextEditTextareaDrop: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
   onTextEditTextareaKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   selectionHint: string | null;
-  showDevPanel: boolean;
-  snapDebugRect: { left: number; top: number; width: number; height: number };
-  onSnapDebugMovePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  snapDebug: unknown;
-  onSnapDebugResizePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
 };
@@ -308,11 +303,6 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     onTextEditTextareaDrop,
     onTextEditTextareaKeyDown,
     selectionHint,
-    showDevPanel,
-    snapDebugRect,
-    onSnapDebugMovePointerDown,
-    snapDebug,
-    onSnapDebugResizePointerDown,
     RULER_SIZE,
     magnifierState
   } = props;
@@ -997,33 +987,6 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               {selectionHint}
             </div>
           ) : null}
-          {showDevPanel && (
-            <div
-              className={css.snapDebugOverlay}
-              data-testid="snap-debug-overlay"
-              style={{
-                left: snapDebugRect.left,
-                top: snapDebugRect.top,
-                width: snapDebugRect.width,
-                height: snapDebugRect.height
-              }}
-            >
-              <div className={css.snapDebugTitle} onPointerDown={onSnapDebugMovePointerDown}>
-                Snap Debug (drag to move)
-              </div>
-              <pre className={css.snapDebugBody} data-select="text">
-                {snapDebug
-                  ? JSON.stringify(snapDebug, null, 2)
-                  : "Trigger a snap interaction to populate diagnostics."}
-              </pre>
-              <RenderedTooltip content="Drag to resize">
-                <div
-                  className={css.snapDebugResizeHandle}
-                  onPointerDown={onSnapDebugResizePointerDown}
-                />
-              </RenderedTooltip>
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -107,14 +107,9 @@ import { collectDensePathSourceIds, resolvePathSelectionHint } from "./path-sele
 import type { resolveResizeFrameForSource } from "./resize-frames";
 import { isSvgPointWithinScopeBounds } from "./scope-overlay";
 import {
-clampSnapDebugOverlayRect,
 summarizeSnapContextForDebug,
 summarizeSnapLinesForDebug,
-toDebugPoint,
-type SnapDebugContextSummary,
-type SnapDebugLineSummary,
-type SnapDebugOverlayRect,
-type SnapDebugPoint
+toDebugPoint
 } from "./snap-debug";
 import { createSourceRenderOffsetMap } from "./text-offset-map";
 import { applyTextMeasureFont,collectLogicalLineRanges,createVisualTextLayout,resolveVisualLineLeft } from "./text-visual-layout";
@@ -173,41 +168,11 @@ const EquationModal = lazy(async () => {
   return { default: mod.EquationModal };
 });
 
-type SnapDebugOverlayState = {
-  atIso: string;
-  phase: string;
-  note: string | null;
-  snapshotMatchesSource: boolean;
-  dragKind: DragState["kind"] | null;
-  rawPoint: SnapDebugPoint | null;
-  rawDelta: SnapDebugPoint | null;
-  snappedPoint: SnapDebugPoint | null;
-  snappedDelta: SnapDebugPoint | null;
-  offset: SnapDebugPoint | null;
-  context: SnapDebugContextSummary | null;
-  lineCount: number;
-  lineSummary: SnapDebugLineSummary[];
-};
-
 const EMPTY_GUIDES: GuidesState = { vertical: [], horizontal: [] };
 
 function canvasFigureContextKey(documentId: string, figureId: string | null): string {
   return `${documentId}::${figureId ?? "none"}`;
 }
-
-type SnapDebugOverlayDragState =
-  | {
-      kind: "move";
-      startClient: ClientPoint;
-      startLeft: number;
-      startTop: number;
-    }
-  | {
-      kind: "resize";
-      startClient: ClientPoint;
-      startWidth: number;
-      startHeight: number;
-    };
 
 const RULER_SIZE = 24;
 const MIN_SCALE = 0.05;
@@ -862,13 +827,6 @@ export const CanvasPanel = memo(function CanvasPanel({
   const dragTooltipBoundaryRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null);
   const [dragCursorLock, setDragCursorLock] = useState<string | null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
-  const [snapDebug, setSnapDebug] = useState<SnapDebugOverlayState | null>(null);
-  const [snapDebugRect, setSnapDebugRect] = useState<SnapDebugOverlayRect>({
-    left: 10,
-    top: 10,
-    width: 460,
-    height: 220
-  });
   const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
   const [guidesByFigureKey, setGuidesByFigureKey] = useState(() => new Map<string, GuidesState>());
   const guides = guidesByFigureKey.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
@@ -1168,7 +1126,6 @@ export const CanvasPanel = memo(function CanvasPanel({
   const liveResizeFramesRef = useRef(new Map<string, ReturnType<typeof resolveResizeFrameForSource>>());
   const previousViewBoxRef = useRef<SvgViewBox | null>(null);
   const guideDragRef = useRef<GuideDragState | null>(null);
-  const snapDebugDragRef = useRef<SnapDebugOverlayDragState | null>(null);
   const textEngineRef = useRef<NodeTextEngine | null>(null);
   const svgLayerHostRef = useRef<HTMLDivElement | null>(null);
   const appliedPathAttachedNodePreviewRef = useRef<Array<{ element: SVGElement; transform: string | null }>>([]);
@@ -1348,7 +1305,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         lineCount: lines.length,
         lineSummary: summarizeSnapLinesForDebug(lines)
       };
-      setSnapDebug(nextSnapDebug);
       dispatch({
         type: "SET_SNAP_DEBUG",
         snapDebug: nextSnapDebug,
@@ -1383,42 +1339,6 @@ export const CanvasPanel = memo(function CanvasPanel({
     void platform.haptics?.performSnapFeedback?.();
   }, [platform, snapHapticsEnabled]);
 
-  const onSnapDebugMovePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return;
-      }
-      snapDebugDragRef.current = {
-        kind: "move",
-        startClient: makeClientPoint(px(event.clientX), px(event.clientY)),
-        startLeft: snapDebugRect.left,
-        startTop: snapDebugRect.top
-      };
-      document.body.classList.add("is-dragging-snap-debug");
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [snapDebugRect.left, snapDebugRect.top]
-  );
-
-  const onSnapDebugResizePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return;
-      }
-      snapDebugDragRef.current = {
-        kind: "resize",
-        startClient: makeClientPoint(px(event.clientX), px(event.clientY)),
-        startWidth: snapDebugRect.width,
-        startHeight: snapDebugRect.height
-      };
-      document.body.classList.add("is-resizing-snap-debug");
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [snapDebugRect.height, snapDebugRect.width]
-  );
-
   useEffect(() => {
     let cancelled = false;
     void createMathJaxNodeTextEngine({ font: mathJaxFont })
@@ -1438,77 +1358,6 @@ export const CanvasPanel = memo(function CanvasPanel({
       cancelled = true;
     };
   }, [mathJaxFont]);
-
-  useEffect(() => {
-    function onPointerMove(event: PointerEvent) {
-      const drag = snapDebugDragRef.current;
-      if (!drag) {
-        return;
-      }
-
-      if (viewportSize.width <= 0 || viewportSize.height <= 0) {
-        return;
-      }
-
-      if (drag.kind === "move") {
-        setSnapDebugRect((current) =>
-          clampSnapDebugOverlayRect(
-            {
-              ...current,
-              left: drag.startLeft + (event.clientX - drag.startClient.x),
-              top: drag.startTop + (event.clientY - drag.startClient.y)
-            },
-            viewportSize.width,
-            viewportSize.height
-          )
-        );
-        return;
-      }
-
-      setSnapDebugRect((current) =>
-        clampSnapDebugOverlayRect(
-            {
-              ...current,
-            width: drag.startWidth + (event.clientX - drag.startClient.x),
-            height: drag.startHeight + (event.clientY - drag.startClient.y)
-            },
-          viewportSize.width,
-          viewportSize.height
-        )
-      );
-    }
-
-    function clearSnapDebugDragState() {
-      if (!snapDebugDragRef.current) {
-        return;
-      }
-      snapDebugDragRef.current = null;
-      document.body.classList.remove("is-dragging-snap-debug");
-      document.body.classList.remove("is-resizing-snap-debug");
-    }
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", clearSnapDebugDragState);
-    window.addEventListener("pointercancel", clearSnapDebugDragState);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", clearSnapDebugDragState);
-      window.removeEventListener("pointercancel", clearSnapDebugDragState);
-      clearSnapDebugDragState();
-    };
-  }, [viewportSize.height, viewportSize.width]);
-
-  useEffect(() => {
-    if (!showDevPanel) {
-      return;
-    }
-    if (viewportSize.width <= 0 || viewportSize.height <= 0) {
-      return;
-    }
-    setSnapDebugRect((current) =>
-      clampSnapDebugOverlayRect(current, viewportSize.width, viewportSize.height)
-    );
-  }, [showDevPanel, viewportSize.height, viewportSize.width]);
 
   const densePathSourceIds = useMemo(() => {
     return collectDensePathSourceIds(snapshot.scene?.elements);
@@ -3418,16 +3267,6 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [dragCursorLock]);
 
   useEffect(() => {
-    if (showDevPanel) {
-      return;
-    }
-    snapDebugDragRef.current = null;
-    document.body.classList.remove("is-dragging-snap-debug");
-    document.body.classList.remove("is-resizing-snap-debug");
-    setSnapDebug(null);
-  }, [showDevPanel]);
-
-  useEffect(() => {
     if (snapshot.source === source) {
       return;
     }
@@ -3967,11 +3806,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         onTextEditTextareaDrop={handleTextEditTextareaDrop}
         onTextEditTextareaKeyDown={handleTextEditTextareaKeyDown}
         selectionHint={canvasSelectionHint}
-        showDevPanel={false}
-        snapDebugRect={snapDebugRect}
-        onSnapDebugMovePointerDown={onSnapDebugMovePointerDown}
-        snapDebug={snapDebug}
-        onSnapDebugResizePointerDown={onSnapDebugResizePointerDown}
         magnifierState={magnifierState}
         RULER_SIZE={RULER_SIZE}
       />

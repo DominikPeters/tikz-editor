@@ -1,20 +1,9 @@
 import type { WorldPoint } from "../coords/types";
 import type { SnapContext, SnapLine } from "tikz-editor/edit/snapping";
 
-const SNAP_DEBUG_MIN_WIDTH_PX = 280;
-const SNAP_DEBUG_MIN_HEIGHT_PX = 140;
-const SNAP_DEBUG_MARGIN_PX = 8;
-
 export type SnapDebugPoint = {
   x: number;
   y: number;
-};
-
-export type SnapDebugOverlayRect = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
 };
 
 export type SnapDebugLineSummary =
@@ -47,30 +36,6 @@ export type SnapDebugContextSummary = {
   horizontalGapCount: number;
   verticalGapCount: number;
 };
-
-export function clampSnapDebugOverlayRect(
-  rect: SnapDebugOverlayRect,
-  viewportWidth: number,
-  viewportHeight: number
-): SnapDebugOverlayRect {
-  if (viewportWidth <= 0 || viewportHeight <= 0) {
-    return rect;
-  }
-
-  const maxWidth = Math.max(SNAP_DEBUG_MIN_WIDTH_PX, viewportWidth - SNAP_DEBUG_MARGIN_PX * 2);
-  const maxHeight = Math.max(SNAP_DEBUG_MIN_HEIGHT_PX, viewportHeight - SNAP_DEBUG_MARGIN_PX * 2);
-  const width = Math.max(SNAP_DEBUG_MIN_WIDTH_PX, Math.min(rect.width, maxWidth));
-  const height = Math.max(SNAP_DEBUG_MIN_HEIGHT_PX, Math.min(rect.height, maxHeight));
-  const maxLeft = Math.max(SNAP_DEBUG_MARGIN_PX, viewportWidth - width - SNAP_DEBUG_MARGIN_PX);
-  const maxTop = Math.max(SNAP_DEBUG_MARGIN_PX, viewportHeight - height - SNAP_DEBUG_MARGIN_PX);
-
-  return {
-    width,
-    height,
-    left: Math.max(SNAP_DEBUG_MARGIN_PX, Math.min(rect.left, maxLeft)),
-    top: Math.max(SNAP_DEBUG_MARGIN_PX, Math.min(rect.top, maxTop))
-  };
-}
 
 function roundForDebug(value: number): number {
   return Math.round(value * 1e4) / 1e4;
