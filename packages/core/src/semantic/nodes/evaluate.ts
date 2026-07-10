@@ -205,47 +205,13 @@ export function measureNodeAnchorExtents(
     statementOptions: statement.options,
     nodeOptions,
     everyNodeStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
   const effectiveNodeLocalOptions = resolveEffectiveNodeOptions({
     statementOptions: undefined,
     nodeOptions,
     everyNodeStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
 
   const expandedNodeOptions = expandNodePlacementOptions(effectiveNodeOptions, context);
@@ -339,48 +305,14 @@ export function evaluateNodeItem(
     nodeOptions,
     everyNodeStyles,
     everyFitStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
   let effectiveNodeLocalOptions = resolveEffectiveNodeOptions({
     statementOptions: undefined,
     nodeOptions,
     everyNodeStyles,
     everyFitStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
   let expandedNodeOptions = expandNodePlacementOptions(effectiveNodeOptions, context);
   let expandedNodeLocalOptions = expandNodePlacementOptions(effectiveNodeLocalOptions, context);
@@ -400,24 +332,7 @@ export function evaluateNodeItem(
       everyFitStyles,
       applyEveryFitStyles: true,
       syntheticOptions: fitSyntheticOptions,
-      everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frame.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frame.everyKiteNodeStyles,
-      everyDartNodeStyles: frame.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frame.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-      everySignalNodeStyles: frame.everySignalNodeStyles,
-      everyTapeNodeStyles: frame.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+      everyShapeNodeStyles: frame.everyShapeNodeStyles
     });
     effectiveNodeLocalOptions = resolveEffectiveNodeOptions({
       statementOptions: undefined,
@@ -426,24 +341,7 @@ export function evaluateNodeItem(
       everyFitStyles,
       applyEveryFitStyles: true,
       syntheticOptions: fitSyntheticOptions,
-      everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frame.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frame.everyKiteNodeStyles,
-      everyDartNodeStyles: frame.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frame.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-      everySignalNodeStyles: frame.everySignalNodeStyles,
-      everyTapeNodeStyles: frame.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+      everyShapeNodeStyles: frame.everyShapeNodeStyles
     });
 
     expandedNodeOptions = expandNodePlacementOptions(effectiveNodeOptions, context);
@@ -475,24 +373,7 @@ export function evaluateNodeItem(
         everyNodeStyles: [],
         everyFitStyles: [],
         syntheticOptions: [fitOverrides.overrideOptions],
-        everyRectangleNodeStyles: [],
-        everyCircleNodeStyles: [],
-        everyDiamondNodeStyles: [],
-        everyTrapeziumNodeStyles: [],
-        everyIsoscelesTriangleNodeStyles: [],
-        everyKiteNodeStyles: [],
-        everyDartNodeStyles: [],
-        everyCircularSectorNodeStyles: [],
-        everyCylinderNodeStyles: [],
-        everyCloudNodeStyles: [],
-        everyStarburstNodeStyles: [],
-        everySignalNodeStyles: [],
-        everyTapeNodeStyles: [],
-        everyRectangleCalloutNodeStyles: [],
-        everyEllipseCalloutNodeStyles: [],
-        everyCloudCalloutNodeStyles: [],
-        everySingleArrowNodeStyles: [],
-        everyDoubleArrowNodeStyles: []
+        everyShapeNodeStyles: new Map()
       })
     : nodeOptions;
 
@@ -1937,7 +1818,7 @@ function expandProvenanceOptionLayers(
 }
 
 function resolveEveryShapeNodeStyleLayers(frame: SemanticContext["stack"][number], nodeShape: NodeShape): ProvenanceOptionList[] {
-  return resolveEveryShapeNodeStyleLists(nodeShape, frame);
+  return [...resolveEveryShapeNodeStyleLists(nodeShape, frame.everyShapeNodeStyles)];
 }
 
 function resolveAutoNodeAnchor(

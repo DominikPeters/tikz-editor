@@ -86,6 +86,10 @@ export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
     this.state = snapshot;
   }
 
+  fork(): PersistentMap<K, V> {
+    return new PersistentMap(this.snapshot());
+  }
+
   private ensureWritable(): PersistentMapState<K, V> {
     if (!this.state.sealed) {
       return this.state;

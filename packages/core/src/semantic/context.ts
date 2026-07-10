@@ -126,8 +126,8 @@ export type SemanticContextFrame = {
   pictureSizeRelevant: boolean;
   customStyles: CustomStyleRegistry;
   picDefinitions: PicDefinitionRegistry;
-  colorAliases: Map<string, string>;
-  macroBindings: Map<string, MacroBinding>;
+  colorAliases: PersistentMap<string, string>;
+  macroBindings: PersistentMap<string, MacroBinding>;
   namePrefix: string;
   nameSuffix: string;
   nodeLayerMode: NodeLayerMode;
@@ -144,24 +144,7 @@ export type SemanticContextFrame = {
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
   everyPicStyles: ProvenanceOptionList[];
-  everyRectangleNodeStyles: ProvenanceOptionList[];
-  everyCircleNodeStyles: ProvenanceOptionList[];
-  everyDiamondNodeStyles: ProvenanceOptionList[];
-  everyTrapeziumNodeStyles: ProvenanceOptionList[];
-  everyIsoscelesTriangleNodeStyles: ProvenanceOptionList[];
-  everyKiteNodeStyles: ProvenanceOptionList[];
-  everyDartNodeStyles: ProvenanceOptionList[];
-  everyCircularSectorNodeStyles: ProvenanceOptionList[];
-  everyCylinderNodeStyles: ProvenanceOptionList[];
-  everyCloudNodeStyles: ProvenanceOptionList[];
-  everyStarburstNodeStyles: ProvenanceOptionList[];
-  everySignalNodeStyles: ProvenanceOptionList[];
-  everyTapeNodeStyles: ProvenanceOptionList[];
-  everyRectangleCalloutNodeStyles: ProvenanceOptionList[];
-  everyEllipseCalloutNodeStyles: ProvenanceOptionList[];
-  everyCloudCalloutNodeStyles: ProvenanceOptionList[];
-  everySingleArrowNodeStyles: ProvenanceOptionList[];
-  everyDoubleArrowNodeStyles: ProvenanceOptionList[];
+  everyShapeNodeStyles: Map<string, ProvenanceOptionList[]>;
   treeLevel: number;
   treeLevelDistancePt: number;
   treeSiblingDistancePt: number;
@@ -322,8 +305,8 @@ export function createSemanticContext(
         pictureSizeRelevant: true,
         customStyles: createDefaultCustomStyleRegistry(),
         picDefinitions: createDefaultPicDefinitionRegistry(),
-        colorAliases: new Map(),
-        macroBindings: new Map(),
+        colorAliases: new PersistentMap(),
+        macroBindings: new PersistentMap(),
         namePrefix: "",
         nameSuffix: "",
         nodeLayerMode: "front",
@@ -344,24 +327,7 @@ export function createSemanticContext(
         everyTextNodePartStyles: [],
         everyFitStyles: [],
         everyPicStyles: [],
-        everyRectangleNodeStyles: [],
-        everyCircleNodeStyles: [],
-        everyDiamondNodeStyles: [],
-        everyTrapeziumNodeStyles: [],
-        everyIsoscelesTriangleNodeStyles: [],
-        everyKiteNodeStyles: [],
-        everyDartNodeStyles: [],
-        everyCircularSectorNodeStyles: [],
-        everyCylinderNodeStyles: [],
-        everyCloudNodeStyles: [],
-        everyStarburstNodeStyles: [],
-        everySignalNodeStyles: [],
-        everyTapeNodeStyles: [],
-        everyRectangleCalloutNodeStyles: [],
-        everyEllipseCalloutNodeStyles: [],
-        everyCloudCalloutNodeStyles: [],
-        everySingleArrowNodeStyles: [],
-        everyDoubleArrowNodeStyles: [],
+        everyShapeNodeStyles: new Map(),
         treeLevel: 0,
         treeLevelDistancePt: defaultTreeDistance,
         treeSiblingDistancePt: defaultTreeDistance,
@@ -452,13 +418,22 @@ export function popFrame(context: SemanticContext): void {
   }
 }
 
+function forkSemanticContextFrame(frame: SemanticContextFrame): SemanticContextFrame {
+  const { colorAliases, macroBindings, ...cloneable } = frame;
+  return {
+    ...structuredClone(cloneable),
+    colorAliases: colorAliases.fork(),
+    macroBindings: macroBindings.fork()
+  };
+}
+
 export function snapshotSemanticContext(
   context: SemanticContext,
   options: SnapshotSemanticContextOptions = {}
 ): SemanticContextSnapshot {
   const editHandlesMode = options.editHandlesMode ?? "clone";
   return {
-    stack: structuredClone(context.stack),
+    stack: context.stack.map(forkSemanticContextFrame),
     layers: listContextSceneLayers(context),
     backgroundState: structuredClone(context.backgroundState),
     pictureBounds: context.pictureBounds ? { ...context.pictureBounds } : null,
@@ -484,7 +459,7 @@ export function restoreSemanticContext(
   snapshot: SemanticContextSnapshot,
   options: RestoreSemanticContextOptions = {}
 ): void {
-  context.stack = structuredClone(snapshot.stack);
+  context.stack = snapshot.stack.map(forkSemanticContextFrame);
   context.layers = new Map(snapshot.layers.map((layer) => [layer.name, { ...layer }]));
   context.backgroundState = structuredClone(snapshot.backgroundState);
   context.pictureBounds = snapshot.pictureBounds ? { ...snapshot.pictureBounds } : null;

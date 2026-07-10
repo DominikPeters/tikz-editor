@@ -1927,6 +1927,27 @@ describe("semantic evaluator / nodes and shapes", () => {
       }
     });
 
+    it("keeps shape style replacement and appends data-driven across shape aliases", () => {
+      const source = String.raw`\begin{tikzpicture}
+    \tikzset{
+      every rectangle node/.style={draw},
+      every rectangle node/.append style={fill=blue}
+    }
+    \tikzstyle{every circle node}=[draw]
+    \tikzstyle{every circle node}+=[fill=green]
+    \node[rounded rectangle] at (0,0) {R};
+    \node[circle] at (2,0) {C};
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+
+      const roundedRectangle = result.scene.elements.find(
+        (element) => element.kind === "Path" && element.id.startsWith("scene-node-box:")
+      );
+      const circle = elementsOfKind(result.scene.elements, "Circle")[0];
+      expect(roundedRectangle?.style.fill).toBe("#0000ff");
+      expect(circle?.style.fill).toBe("#00ff00");
+    });
+
     it("applies every-node style keys for diamond and trapezium nodes", () => {
       const source = String.raw`\begin{tikzpicture}[
     every node/.style={draw},
