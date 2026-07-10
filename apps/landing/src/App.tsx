@@ -354,12 +354,6 @@ function Hero() {
                 </Fragment>
               ))}
             </div>
-            <p className="landingSigningAttribution">
-              macOS releases are signed by Dominik Peters. Windows: Free code signing provided by{" "}
-              <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
-              <a href="https://signpath.org/">SignPath Foundation</a>.{" "}
-              <a href="#code-signing-policy">Code-signing policy</a>.
-            </p>
           </div>
         </div>
       </div>
@@ -455,7 +449,10 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
       icon: RiWindowsFill,
       primary: downloadLink("Download for Windows", mustFindDownload((download) => download.platform === "windows" && download.format === "exe")),
       alternatePrefix: "",
-      alternates: [releaseLink("Other platforms")]
+      alternates: [
+        releaseLink("Other platforms"),
+        { label: "Code-signing policy", url: "#code-signing-policy", sizeBytes: 0 }
+      ]
     };
   }
 
@@ -731,19 +728,12 @@ function CodeSigningPolicy() {
       <div className="landingCodeSigningPolicyInner">
         <h2 id="code-signing-policy-title">Code-signing policy</h2>
         <p>
-          Official Windows releases are built from the project source on GitHub Actions and signed through
-          SignPath. Every production signing request requires manual approval by the release approver.
+          Official Windows releases are built from the project source on GitHub Actions. Free code signing
+          provided by <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
+          <a href="https://signpath.org/">SignPath Foundation</a>. Every production signing request requires
+          manual approval by the release approver. Committer, reviewer, and release approver:{" "}
+          <a href="https://dominik-peters.de/">Dominik Peters</a>.
         </p>
-        <dl>
-          <div>
-            <dt>Committer and reviewer</dt>
-            <dd><a href="https://dominik-peters.de/">Dominik Peters</a></dd>
-          </div>
-          <div>
-            <dt>Release approver</dt>
-            <dd><a href="https://dominik-peters.de/">Dominik Peters</a></dd>
-          </div>
-        </dl>
         <p>
           <strong>Privacy policy:</strong> On startup, the desktop app requests update information from{" "}
           <code>tikz.dev</code>. The server receives standard connection information such as the IP address,

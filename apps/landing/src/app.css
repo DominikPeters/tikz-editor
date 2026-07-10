@@ -446,7 +446,6 @@ select {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  width: min(360px, 100%);
 }
 
 .landingPrimaryLink {
@@ -554,22 +553,6 @@ select {
 .landingDownloadAlternates a:hover {
   color: var(--landing-blue);
   text-decoration: underline;
-}
-
-.landingSigningAttribution {
-  width: 100%;
-  margin: 12px 0 0;
-  color: var(--landing-faint);
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
-.landingSigningAttribution a {
-  color: color-mix(in srgb, var(--landing-blue) 72%, var(--landing-faint));
-}
-
-.landingSigningAttribution a:hover {
-  color: var(--landing-blue);
 }
 
 .landingTextLink {
@@ -1342,59 +1325,34 @@ select {
 }
 
 .landingCodeSigningPolicy {
-  padding: clamp(30px, 4vw, 48px) 0;
+  padding: clamp(22px, 3vw, 34px) 0;
   border-top: 1px solid var(--landing-line);
   background: var(--landing-bg);
   scroll-margin-top: calc(var(--landing-header-height) + 18px);
 }
 
 .landingCodeSigningPolicyInner {
-  width: min(900px, calc(100vw - 32px));
+  width: min(720px, calc(100vw - 32px));
   margin: 0 auto;
 }
 
 .landingCodeSigningPolicy h2 {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: var(--landing-ink);
-  font-size: clamp(1.25rem, 2vw, 1.7rem);
-  line-height: 1.1;
-  font-weight: 760;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  font-weight: 700;
 }
 
 .landingCodeSigningPolicy p {
   margin: 0;
   color: var(--landing-muted);
-  font-size: 0.95rem;
-  line-height: 1.6;
+  font-size: 0.85rem;
+  line-height: 1.55;
 }
 
 .landingCodeSigningPolicy p + p {
-  margin-top: 14px;
-}
-
-.landingCodeSigningPolicy dl {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 36px;
-  margin: 18px 0;
-}
-
-.landingCodeSigningPolicy dl div {
-  min-width: 190px;
-}
-
-.landingCodeSigningPolicy dt {
-  color: var(--landing-faint);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.landingCodeSigningPolicy dd {
-  margin: 3px 0 0;
-  color: var(--landing-muted);
-  font-size: 0.95rem;
+  margin-top: 10px;
 }
 
 .landingCodeSigningPolicy a {
