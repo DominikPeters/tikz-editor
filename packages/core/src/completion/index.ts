@@ -1,6 +1,8 @@
 import type { NodeItem } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
+import { parseOptionListRaw } from "../options/parse.js";
+import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { walkStatements } from "../ast/walk.js";
 
 export type DocumentSymbols = {
@@ -42,6 +44,11 @@ export function collectSymbols(snapshot: SymbolSnapshot): DocumentSymbols {
       addTrimmedSymbol(coordinateNames, item.name);
     }
   });
+  // Completion runs on in-progress source: parser recovery swallows every
+  // statement after an unterminated brace group, so the raw scans below keep
+  // symbols visible for the regions the recovered AST does not cover.
+  collectStandaloneNodeCommandNamesFromSource(parseResult.source, nodeNames);
+  collectStyleSymbolsFromSource(parseResult.source, styleNames);
 
   return {
     nodeNames: [...nodeNames].sort(compareSymbolName),
@@ -68,6 +75,99 @@ function collectStyleSymbolsFromOptions(entries: readonly OptionEntry[], styleNa
     }
     addTrimmedSymbol(styleNames, styleNameFromOptionKey(entry.key));
   }
+}
+
+function collectStyleSymbolsFromSource(source: string, styleNames: Set<string>): void {
+  collectStyleSymbolsFromCommand(source, "\\tikzset", styleNames);
+  collectStyleSymbolsFromCommand(source, "\\pgfkeys", styleNames);
+  collectStyleSymbolsFromTikzstyle(source, styleNames);
+}
+
+function collectStandaloneNodeCommandNamesFromSource(source: string, nodeNames: Set<string>): void {
+  const command = "\\node";
+  let cursor = 0;
+
+  while (cursor < source.length) {
+    const commandIndex = source.indexOf(command, cursor);
+    if (commandIndex < 0) {
+      return;
+    }
+
+    let index = skipWhitespace(source, commandIndex + command.length);
+    const optionBlock = readBalancedBlock(source, index, "[", "]");
+    if (optionBlock) {
+      index = skipWhitespace(source, optionBlock.nextIndex);
+    }
+
+    const nameBlock = readBalancedBlock(source, index, "(", ")");
+    if (nameBlock) {
+      addTrimmedSymbol(nodeNames, normalizeSimpleSymbolName(nameBlock.content));
+      cursor = nameBlock.nextIndex;
+      continue;
+    }
+
+    cursor = commandIndex + command.length;
+  }
+}
+
+function collectStyleSymbolsFromCommand(source: string, command: string, styleNames: Set<string>): void {
+  let cursor = 0;
+  while (cursor < source.length) {
+    const commandIndex = source.indexOf(command, cursor);
+    if (commandIndex < 0) {
+      return;
+    }
+
+    const openBraceIndex = skipWhitespace(source, commandIndex + command.length);
+    const block = readBalancedBlock(source, openBraceIndex, "{", "}");
+    if (!block) {
+      cursor = commandIndex + command.length;
+      continue;
+    }
+
+    const optionList = parseOptionListRaw(`[${block.content}]`, openBraceIndex);
+    collectStyleSymbolsFromOptions(optionList.entries, styleNames);
+
+    cursor = block.nextIndex;
+  }
+}
+
+function collectStyleSymbolsFromTikzstyle(source: string, styleNames: Set<string>): void {
+  const command = "\\tikzstyle";
+  let cursor = 0;
+
+  while (cursor < source.length) {
+    const commandIndex = source.indexOf(command, cursor);
+    if (commandIndex < 0) {
+      return;
+    }
+
+    const openBraceIndex = skipWhitespace(source, commandIndex + command.length);
+    const nameBlock = readBalancedBlock(source, openBraceIndex, "{", "}");
+    if (!nameBlock) {
+      cursor = commandIndex + command.length;
+      continue;
+    }
+
+    addTrimmedSymbol(styleNames, normalizeStyleName(nameBlock.content));
+    cursor = nameBlock.nextIndex;
+  }
+}
+
+function normalizeSimpleSymbolName(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (/^[A-Za-z_][A-Za-z0-9:_-]*$/.test(trimmed)) {
+    return trimmed;
+  }
+  return null;
+}
+
+function skipWhitespace(input: string, index: number): number {
+  let cursor = index;
+  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+    cursor += 1;
+  }
+  return cursor;
 }
 
 function styleNameFromOptionKey(key: string): string | null {
