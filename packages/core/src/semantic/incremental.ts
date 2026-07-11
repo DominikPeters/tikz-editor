@@ -31,6 +31,7 @@ import type {
   SceneFigure
 } from "./types.js";
 import { MAIN_SCENE_LAYER } from "./types.js";
+import type { StyleSourceRef } from "./style-chain.js";
 
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
 export type IncrementalSemanticReplayMode = "full" | "suffix" | "selective";
@@ -729,6 +730,7 @@ function assembleSelectiveSemanticResult(args: {
   const editHandles: EditHandle[] = [];
   const diagnostics = run.diagnostics.slice(0, run.baseDiagnosticsCount);
 
+  const foreignSpanShift = createForeignSpanShiftResolver(previousSource, run.source);
   for (let index = 0; index < fragments.length; index += 1) {
     const fragment = fragments[index];
     const currentSourceSpan =
@@ -739,7 +741,8 @@ function assembleSelectiveSemanticResult(args: {
       fragment,
       currentSourceSpan,
       run.source,
-      sourceFingerprint
+      sourceFingerprint,
+      foreignSpanShift
     );
     elements.push(...materialized.elements);
     editHandles.push(...materialized.editHandles);
@@ -1192,7 +1195,8 @@ function materializeFragmentForCurrentSource(
   fragment: SemanticStatementFragment,
   currentSourceSpan: Span,
   source: string,
-  sourceFingerprint: string
+  sourceFingerprint: string,
+  foreignSpanShift: ForeignSpanShiftResolver
 ): Pick<SemanticStatementFragment, "elements" | "editHandles"> {
   if (fragment.sourceFingerprint === sourceFingerprint) {
     return {
@@ -1203,7 +1207,10 @@ function materializeFragmentForCurrentSource(
 
   const delta = currentSourceSpan.from - fragment.sourceSpan.from;
   const elements = structuredClone(fragment.elements);
-  shiftSpansDeep(elements, delta);
+  shiftSpansDeep(elements, delta, {
+    ownSourceId: fragment.sourceId,
+    resolveForeignDelta: foreignSpanShift
+  });
   retargetElementsSourceFingerprint(elements, sourceFingerprint);
 
   const editHandles = structuredClone(fragment.editHandles);
@@ -1231,6 +1238,7 @@ function materializeFragmentsForCache(
   fragments: readonly SemanticStatementFragment[],
   sourceFingerprint: string
 ): SemanticStatementFragment[] {
+  const foreignSpanShift = createForeignSpanShiftResolver(previousSource, currentSource);
   return fragments.map((fragment) => {
     const currentSourceSpan =
       locateCurrentSpan(previousSource, currentSource, fragment.sourceSpan)
@@ -1246,7 +1254,8 @@ function materializeFragmentsForCache(
       fragment,
       currentSourceSpan,
       currentSource,
-      sourceFingerprint
+      sourceFingerprint,
+      foreignSpanShift
     );
     const diagnostics = structuredClone(fragment.diagnostics);
     shiftSpansDeep(diagnostics, currentSourceSpan.from - fragment.sourceSpan.from);
@@ -1259,6 +1268,25 @@ function materializeFragmentsForCache(
       diagnostics
     };
   });
+}
+
+function createForeignSpanShiftResolver(previousSource: string, currentSource: string): ForeignSpanShiftResolver {
+  const cache = new Map<string, number | null>();
+  return (sourceRef) => {
+    const span = sourceRef.sourceSpan;
+    if (!span) {
+      return null;
+    }
+    const cacheKey = `${sourceRef.sourceId}:${span.from}:${span.to}`;
+    const cached = cache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const located = locateCurrentSpan(previousSource, currentSource, span);
+    const delta = located ? located.from - span.from : null;
+    cache.set(cacheKey, delta);
+    return delta;
+  };
 }
 
 function locateCurrentSpan(previousSource: string, currentSource: string, previousSpan: Span): Span | null {
@@ -1274,18 +1302,26 @@ function locateCurrentSpan(previousSource: string, currentSource: string, previo
   return fallback >= 0 ? { from: fallback, to: fallback + text.length } : null;
 }
 
-function shiftSpansDeep<T>(value: T, delta: number): T {
+type ForeignSpanShiftResolver = (sourceRef: StyleSourceRef) => number | null;
+
+type SpanShiftOptions = {
+  ownSourceId: string;
+  resolveForeignDelta: ForeignSpanShiftResolver;
+};
+
+function shiftSpansDeep<T>(value: T, delta: number, options?: SpanShiftOptions): T {
   if (delta === 0) {
     return value;
   }
-  shiftSpanObjectsInPlace(value, delta, new WeakSet<object>());
+  shiftSpanObjectsInPlace(value, delta, new WeakSet<object>(), options);
   return value;
 }
 
 function shiftSpanObjectsInPlace(
   value: unknown,
   delta: number,
-  visited: WeakSet<object>
+  visited: WeakSet<object>,
+  options?: SpanShiftOptions
 ): void {
   if (!value || typeof value !== "object") {
     return;
@@ -1296,7 +1332,7 @@ function shiftSpanObjectsInPlace(
   visited.add(value);
   if (Array.isArray(value)) {
     for (const entry of value) {
-      shiftSpanObjectsInPlace(entry, delta, visited);
+      shiftSpanObjectsInPlace(entry, delta, visited, options);
     }
     return;
   }
@@ -1309,8 +1345,50 @@ function shiftSpanObjectsInPlace(
     if (key === "identityRef" || (key === "rawOptions" && hasGeneratedStyleSourceRef(value))) {
       continue;
     }
-    shiftSpanObjectsInPlace(entry, delta, visited);
+    if (key === "styleChain" && Array.isArray(entry) && options) {
+      visited.add(entry);
+      for (const layer of entry) {
+        shiftStyleChainLayer(layer, delta, visited, options);
+      }
+      continue;
+    }
+    shiftSpanObjectsInPlace(entry, delta, visited, options);
   }
+}
+
+/**
+ * A style-chain layer can reference a statement other than the one being
+ * shifted (a `\tikzset`, a scope, a named style definition). Those spans move
+ * with the referenced statement, not with this fragment, so they are shifted
+ * by the referenced statement's own delta — or left untouched when that
+ * statement cannot be relocated.
+ */
+function shiftStyleChainLayer(
+  layer: unknown,
+  ownDelta: number,
+  visited: WeakSet<object>,
+  options: SpanShiftOptions
+): void {
+  if (!layer || typeof layer !== "object") {
+    return;
+  }
+  const sourceRef = (layer as { sourceRef?: StyleSourceRef }).sourceRef;
+  const sourceId = sourceRef?.sourceId;
+  const belongsToOwnStatement =
+    !sourceRef ||
+    !sourceId ||
+    sourceRef.identityRef != null ||
+    sourceId === options.ownSourceId ||
+    sourceId.startsWith(`${options.ownSourceId}:`);
+  if (belongsToOwnStatement) {
+    shiftSpanObjectsInPlace(layer, ownDelta, visited, options);
+    return;
+  }
+  const foreignDelta = options.resolveForeignDelta(sourceRef);
+  if (foreignDelta == null || foreignDelta === 0) {
+    return;
+  }
+  shiftSpanObjectsInPlace(layer, foreignDelta, visited, options);
 }
 
 function hasGeneratedStyleSourceRef(value: object): boolean {
