@@ -12,6 +12,18 @@ Full-codebase review of tikz-editor (~275k lines of TypeScript, 728 tracked file
 
 **Implementation status notes:** added 2026-07-04 after the Priority 1 correctness pass and the first Priority 2 hot-path performance pass. "Done" means code was changed and verified locally; "Partial" means a contained improvement landed but the full recommendation still has follow-up work.
 
+**Follow-up implementation status (2026-07-10):** the historical 2026-07-04 status annotations below are superseded for implementation tracking. The remaining verified correctness defects, hot-path costs, organization/tooling gaps, and contained decomposition seams were implemented and regression-tested in the `code-quality-2026-07-10` follow-up.
+
+- Source-backed option writes are surgical across the generic path and the specialized matrix-cell, tree, resize, arrange, adornment, and nested pin-edge writers. Unrelated comments, whitespace, duplicate-entry trivia, and comma style are preserved; normalized serialization remains only for newly synthesized or isolated fragments.
+- The typing/render path now uses stable command inputs and narrow document subscriptions; lazily prepared semantic checkpoints; a single semantic evaluation when priming incremental state; copy-on-write macro, color, custom-style, and pic registries; immutable shared clip chains; cached graph placement/constants and resize evaluations; lazy target preflight; AST-backed completion; and stable drag listeners.
+- SVG geometry/defs, Knuth–Plass fallback passes, MathJax tokenization/measurement, decoration traversal, foreach expansion, paint cleanup certification, and shared math/color/coordinate utilities no longer repeat the reviewed work unnecessarily.
+- The major contained seams landed: inspector section builders, canvas text-edit session, explicit path-evaluation state, table-driven style dispatch, node-shape emission, typed desktop bridge/native-menu/adapter modules, and a supported `@tikz-editor/core` package surface.
+- Tooling now shares a base TypeScript configuration, typechecks desktop, guards generated grammar drift, runs lint/typecheck/dead-code checks in CI, has an exact dead-code baseline, and removes the reviewed workspace debris and duplicate build work.
+
+The Architecture notes remain design constraints rather than requirements for literal class/type names. Some implementations use equivalent mechanisms—for example an explicit `PathBuilderState` object rather than requiring it to be a class, and shared parse-option/resolver construction rather than a single monolithic `EditContext`. The concrete defects and repeated costs described by the review are closed without claiming those directional sketches as mandatory APIs.
+
+**Verification (2026-07-10):** `npm run typecheck`; `npm run lint:ci`; the complete Vitest suite (210 files, 2,894 tests); capability and PGF corpus guards; the package build; grammar regeneration with no diff; and the 52-test Canvas text-editing Playwright suite all pass.
+
 ---
 
 ## Priority 1 — Correctness bugs
