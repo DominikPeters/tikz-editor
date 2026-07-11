@@ -11,6 +11,7 @@ import type { EditHandlePositioningContext, EvaluateOptions, NodeAnchorTarget } 
 import { worldToLocal, localToSourceUnits } from "../coords.js";
 import { CM_PER_PT, formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-key.js";
+import { rewriteSourceBackedOptionListMutations, type OptionMutation } from "../option-mutations.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { resolvePropertyTarget, type PropertyTarget, type PropertyTargetOptionsFormat } from "../property-target.js";
 import { rewritePositioningFromContext } from "../rewrite.js";
@@ -401,16 +402,25 @@ function rewriteNodePlacementSource(input: {
 }): { source: string; patches: ReturnType<typeof applyTextReplacements>["patches"] } | null {
   const replacements: TextReplacement[] = [];
 
-  const optionsReplacement = rewritePlacementOptions(
-    input.nodeRef.node.options,
-    input.target.optionsFormat ?? "bracketed",
-    input.placementEntry
-  );
-  const nodeOptionsSpan = input.nodeRef.node.optionsSpan ?? input.nodeRef.node.options?.span;
-  if (nodeOptionsSpan) {
-    const previous = input.source.slice(nodeOptionsSpan.from, nodeOptionsSpan.to);
-    if (previous !== optionsReplacement) {
-      replacements.push({ span: nodeOptionsSpan, text: optionsReplacement });
+  const nodeOptions = input.nodeRef.node.options;
+  const nodeOptionsSpan = input.nodeRef.node.optionsSpan ?? nodeOptions?.span;
+  if (nodeOptions && nodeOptionsSpan) {
+    const mutations = buildPlacementMutations(nodeOptions, input.placementEntry);
+    if (mutations.size > 0) {
+      const optionsReplacement = rewriteSourceBackedOptionListMutations(
+        input.source,
+        nodeOptionsSpan,
+        nodeOptions,
+        mutations,
+        input.target.optionsFormat ?? "bracketed",
+        // Keep an explicit anchor= option after the placement key so the
+        // authored anchor still overrides the placement's implied anchor.
+        { beforeKey: "anchor" }
+      );
+      const previous = input.source.slice(nodeOptionsSpan.from, nodeOptionsSpan.to);
+      if (previous !== optionsReplacement) {
+        replacements.push({ span: nodeOptionsSpan, text: optionsReplacement });
+      }
     }
   } else if (input.placementEntry) {
     replacements.push({
@@ -449,37 +459,24 @@ function rewriteNodePlacementSource(input: {
   return { source: applied.source, patches: applied.patches };
 }
 
-function rewritePlacementOptions(
-  options: OptionListAst | undefined,
-  format: PropertyTargetOptionsFormat,
+function buildPlacementMutations(
+  options: OptionListAst,
   placementEntry: string | null
-): string {
-  if (!options) {
-    return placementEntry ? wrapSerializedOptions(placementEntry, format) : "";
-  }
-
-  const parts: string[] = [];
-  let insertedPlacement = false;
+): Map<string, OptionMutation> {
+  const mutations = new Map<string, OptionMutation>();
   for (const entry of options.entries) {
-    if (shouldRemovePlacementOption(entry)) {
-      continue;
-    }
-    if (placementEntry && !insertedPlacement && optionEntryKey(entry) === "anchor") {
-      parts.push(placementEntry);
-      insertedPlacement = true;
-    }
-    const normalized = normalizeOptionEntryRaw(entry);
-    if (normalized.length > 0) {
-      parts.push(normalized);
+    const key = optionEntryKey(entry);
+    if (key && shouldRemovePlacementOption(entry)) {
+      mutations.set(key, { kind: "remove" });
     }
   }
-  if (placementEntry && !insertedPlacement) {
-    parts.push(placementEntry);
+  if (placementEntry) {
+    const equalsIndex = placementEntry.indexOf("=");
+    const key = normalizeOptionKey(equalsIndex >= 0 ? placementEntry.slice(0, equalsIndex) : placementEntry);
+    const value = equalsIndex >= 0 ? placementEntry.slice(equalsIndex + 1).trim() : "";
+    mutations.set(key, { kind: "set", value });
   }
-  if (parts.length === 0) {
-    return format === "bracketed" ? "" : wrapSerializedOptions("", format);
-  }
-  return wrapSerializedOptions(parts.join(", "), format);
+  return mutations;
 }
 
 function shouldRemovePlacementOption(entry: OptionEntry): boolean {
@@ -495,20 +492,6 @@ function optionEntryKey(entry: OptionEntry): string | null {
     return null;
   }
   return normalizeOptionKey(entry.key);
-}
-
-function normalizeOptionEntryRaw(entry: OptionEntry): string {
-  const raw = entry.raw.trim();
-  if (raw.length > 0) {
-    return raw;
-  }
-  if (entry.kind === "kv") {
-    return `${entry.key}=${entry.valueRaw}`;
-  }
-  if (entry.kind === "flag") {
-    return entry.key;
-  }
-  return "";
 }
 
 function wrapSerializedOptions(content: string, format: PropertyTargetOptionsFormat): string {
