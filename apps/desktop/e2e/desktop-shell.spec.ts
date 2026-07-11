@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { APP_MENU_COMMAND_IDS } from "@tikz-editor/app/app-menu";
+import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "@tikz-editor/app/app-menu";
 import { createDesktopPlatformAdapter } from "../src/platform/desktop-platform";
+import type { DesktopBridge } from "../src/platform/bridge";
 
 function makeMockBridge() {
   const opened = {
@@ -20,13 +21,15 @@ function makeMockBridge() {
   const assistantStartTurnPayloads: unknown[] = [];
   const messageDialogs: unknown[] = [];
   const updateProgressEvents: string[] = [];
+  const themeChanges: Array<"light" | "dark" | null> = [];
+  const latexDocuments: string[] = [];
   const pendingOpenRequests: Array<{ source: string; path: string; name: string }> = [];
   const pendingOpenFailures: Array<{ path: string; message: string }> = [];
   let snapHapticCalls = 0;
   let relaunchCalls = 0;
   let updateAvailable = true;
   let updateInstallShouldFail = false;
-  let contextMenuCommandHandler: ((payload: { requestId: string; commandId: string }) => void) | null = null;
+  let contextMenuCommandHandler: ((payload: { requestId: string; commandId: AppMenuCommandId }) => void) | null = null;
   let pendingOpenChangedHandler: (() => void) | null = null;
   return {
     saved,
@@ -36,6 +39,8 @@ function makeMockBridge() {
     assistantStartTurnPayloads,
     messageDialogs,
     updateProgressEvents,
+    themeChanges,
+    latexDocuments,
     getSnapHapticCalls: () => snapHapticCalls,
     getRelaunchCalls: () => relaunchCalls,
     setUpdateAvailable: (available: boolean) => {
@@ -74,16 +79,21 @@ function makeMockBridge() {
       readCustomClipboardBytes: async () => null,
       writeClipboardBundle: async () => undefined,
       setWindowTitle: async () => undefined,
+      setTheme: async (theme) => {
+        themeChanges.push(theme);
+      },
       closeWindow: async () => undefined,
       confirmUnsavedChanges: async () => "cancel" as const,
       showMessage: async (options: { title: string; message: string; kind?: "info" | "warning" | "error" }) => {
         messageDialogs.push(options);
       },
       openExternalUrl: async () => true,
+      showAboutPanel: async () => undefined,
       performSnapHaptic: async () => {
         snapHapticCalls += 1;
       },
       listRecentFiles: async () => [opened.path],
+      clearRecentFiles: async () => undefined,
       onWindowCloseRequest: async () => () => undefined,
       takePendingOpenRequests: async () => pendingOpenRequests.splice(0, pendingOpenRequests.length),
       takePendingOpenFailures: async () => pendingOpenFailures.splice(0, pendingOpenFailures.length),
@@ -106,6 +116,12 @@ function makeMockBridge() {
           }
         };
       },
+      checkLatexAvailable: async () => ({ available: true, details: "mock-latex" }),
+      compileTikz: async (latexDocument) => {
+        latexDocuments.push(latexDocument);
+        return "<svg data-mock-latex=\"true\" />";
+      },
+      readLastCompileLog: async () => "mock compile log",
       checkForUpdate: async () => updateAvailable
         ? {
             version: "0.2.0",
@@ -158,8 +174,8 @@ function makeMockBridge() {
         handler({ type: "error", documentId: "doc-1", message: "mock-event" });
         return () => undefined;
       }
-    },
-    emitContextMenuCommand: (payload: { requestId: string; commandId: string }) => {
+    } satisfies DesktopBridge,
+    emitContextMenuCommand: (payload: { requestId: string; commandId: AppMenuCommandId }) => {
       contextMenuCommandHandler?.(payload);
     },
     queuePendingOpenRequest: (payload: { source: string; path: string; name: string }) => {
@@ -266,12 +282,12 @@ describe("desktop shell flows", () => {
 
     await platform.menu?.showNativeContextMenu?.({
       items: [
-        { kind: "command", commandId: APP_MENU_COMMAND_IDS.REPEAT_LAST_ACTION, label: "Repeat Last Action" },
+        { kind: "command", commandId: APP_MENU_COMMAND_IDS.REDO, label: "Redo" },
         { kind: "command", commandId: APP_MENU_COMMAND_IDS.FLATTEN_FOREACH, label: "Flatten foreach" },
         { kind: "command", commandId: APP_MENU_COMMAND_IDS.UNDO, label: "Undo" }
       ],
       commandStates: {
-        [APP_MENU_COMMAND_IDS.REPEAT_LAST_ACTION]: { enabled: true },
+        [APP_MENU_COMMAND_IDS.REDO]: { enabled: true },
         [APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]: { enabled: false },
         [APP_MENU_COMMAND_IDS.UNDO]: { enabled: false }
       } as Record<string, { enabled: boolean; checked?: boolean }>
@@ -280,7 +296,7 @@ describe("desktop shell flows", () => {
     expect(mock.contextMenuPayloads).toHaveLength(1);
     expect(mock.contextMenuPayloads[0]).toEqual(expect.objectContaining({
       items: [
-        expect.objectContaining({ commandId: APP_MENU_COMMAND_IDS.REPEAT_LAST_ACTION }),
+        expect.objectContaining({ commandId: APP_MENU_COMMAND_IDS.REDO }),
         expect.objectContaining({ commandId: APP_MENU_COMMAND_IDS.UNDO, enabled: false })
       ]
     }));
@@ -624,5 +640,25 @@ describe("desktop shell flows", () => {
 
     await platform.haptics?.performSnapFeedback?.();
     expect(mock.getSnapHapticCalls()).toBe(1);
+  });
+
+  it("routes theme and LaTeX operations through the injected bridge", async () => {
+    const mock = makeMockBridge();
+    const platform = createDesktopPlatformAdapter({
+      storage: { getItem: () => null, setItem: () => undefined },
+      bridge: mock.bridge
+    });
+
+    await platform.window?.setTheme?.("dark");
+    await expect(platform.latex?.checkAvailable?.()).resolves.toEqual({
+      available: true,
+      details: "mock-latex"
+    });
+    await expect(platform.latex?.compileTikzToSvg?.("\\documentclass{standalone}"))
+      .resolves.toContain("data-mock-latex");
+    await expect(platform.latex?.readLastCompileLog?.()).resolves.toBe("mock compile log");
+
+    expect(mock.themeChanges).toEqual(["dark"]);
+    expect(mock.latexDocuments).toEqual(["\\documentclass{standalone}"]);
   });
 });

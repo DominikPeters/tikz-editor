@@ -1,7 +1,7 @@
-import type { EmitSvgResult, SvgRenderModel, SvgRenderPart } from "tikz-editor/svg/index";
+import type { EmitSvgResult, SvgRenderModel, SvgRenderPart } from "@tikz-editor/core/svg/index";
 import type { SessionSnapshot } from "../compute";
-import type { Diagnostic } from "tikz-editor/diagnostics/types";
-import { PT_PER_CM } from "tikz-editor/edit/format";
+import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 
 // ─── Diagnostics ──────────────────────────────────────────────────────────────
 

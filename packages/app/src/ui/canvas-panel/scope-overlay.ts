@@ -1,6 +1,6 @@
-import type { Statement } from "tikz-editor/ast/types";
-import { pt, svgBounds } from "tikz-editor/coords/index";
-import type { SceneElement } from "tikz-editor/semantic/types";
+import type { Statement } from "@tikz-editor/core/ast/types";
+import { pt, svgBounds } from "@tikz-editor/core/coords/index";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import type { SvgBounds, SvgPoint } from "../coords/types";
 import type { SourceBoundsMap } from "./types";
 
@@ -158,12 +158,6 @@ export function augmentScopeOverlayWithMatrices(
     ancestorScopeIdsBySourceId,
     boundsByScopeId
   };
-}
-
-export function resolveScopeAwareSelectionTarget(
-  input: ResolveScopeAwareSelectionTargetInput
-): string {
-  return resolveScopeAwarePointerDownTarget(input);
 }
 
 export function resolveScopeAwarePointerDownTarget(

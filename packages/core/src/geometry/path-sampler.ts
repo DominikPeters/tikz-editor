@@ -2,6 +2,7 @@ import { worldPoint, worldVector } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../coords/points.js";
 import type { ScenePathCommand } from "../semantic/types.js";
+import { clamp } from "../utils/math.js";
 
 export type Frame = {
   point: WorldPoint;
@@ -51,6 +52,19 @@ export type PathSegment =
 type PathMetrics = {
   totalLength: number;
   cumulativeLengths: number[];
+};
+
+type SegmentHit = {
+  segment: PathSegment;
+  localDistance: number;
+};
+
+type SegmentLocator = (distance: number) => SegmentHit;
+
+export type PathSampleCursor = {
+  readonly segmentIndex: number | null;
+  sampleFrameFromStartExtrapolated(distance: number): Frame | null;
+  sampleFrameFromEndExtrapolated(distance: number): Frame | null;
 };
 
 type LengthParameterTable = {
@@ -230,11 +244,59 @@ export function totalSegmentLength(segments: PathSegment[]): number {
 }
 
 export function sampleFrameFromStartExtrapolated(segments: PathSegment[], distance: number): Frame | null {
+  const metrics = pathMetricsForSegments(segments);
+  return sampleFrameFromStartWithLocator(segments, metrics, distance);
+}
+
+export function sampleFrameFromEndExtrapolated(segments: PathSegment[], distance: number): Frame | null {
+  const metrics = pathMetricsForSegments(segments);
+  return sampleFrameFromEndWithLocator(segments, metrics, distance);
+}
+
+export function createPathSampleCursor(segments: PathSegment[]): PathSampleCursor {
+  const metrics = pathMetricsForSegments(segments);
+  let segmentIndex: number | null = null;
+
+  const locateSegment = (distance: number): SegmentHit => {
+    if (segmentIndex == null) {
+      segmentIndex = findFirstCumulativeDistanceAtLeast(metrics.cumulativeLengths, distance);
+    } else {
+      while (segmentIndex > 0 && (metrics.cumulativeLengths[segmentIndex - 1] ?? 0) >= distance) {
+        segmentIndex -= 1;
+      }
+      while (
+        segmentIndex < segments.length - 1 &&
+        (metrics.cumulativeLengths[segmentIndex] ?? 0) < distance
+      ) {
+        segmentIndex += 1;
+      }
+    }
+    return segmentHitAtIndex(segments, metrics, segmentIndex, distance);
+  };
+
+  return {
+    get segmentIndex(): number | null {
+      return segmentIndex;
+    },
+    sampleFrameFromStartExtrapolated(distance: number): Frame | null {
+      return sampleFrameFromStartWithLocator(segments, metrics, distance, locateSegment);
+    },
+    sampleFrameFromEndExtrapolated(distance: number): Frame | null {
+      return sampleFrameFromEndWithLocator(segments, metrics, distance, locateSegment);
+    }
+  };
+}
+
+function sampleFrameFromStartWithLocator(
+  segments: PathSegment[],
+  metrics: PathMetrics,
+  distance: number,
+  locateSegment?: SegmentLocator
+): Frame | null {
   if (segments.length === 0) {
     return null;
   }
 
-  const metrics = pathMetricsForSegments(segments);
   const totalLength = metrics.totalLength;
   if (distance <= 0) {
     const frame = sampleSegmentFrameAtDistance(segments[0], 0);
@@ -249,16 +311,22 @@ export function sampleFrameFromStartExtrapolated(segments: PathSegment[], distan
     return { point: shifted, tangent: frame.tangent, normal: frame.normal };
   }
 
-  const hit = segmentAtDistanceFromStart(segments, metrics, distance);
+  const hit = locateSegment
+    ? locateSegment(distance)
+    : segmentAtDistanceFromStart(segments, metrics, distance);
   return sampleSegmentFrameAtDistance(hit.segment, hit.localDistance);
 }
 
-export function sampleFrameFromEndExtrapolated(segments: PathSegment[], distance: number): Frame | null {
+function sampleFrameFromEndWithLocator(
+  segments: PathSegment[],
+  metrics: PathMetrics,
+  distance: number,
+  locateSegment?: SegmentLocator
+): Frame | null {
   if (segments.length === 0) {
     return null;
   }
 
-  const metrics = pathMetricsForSegments(segments);
   const totalLength = metrics.totalLength;
   const first = segments[0];
   const last = segments[segments.length - 1];
@@ -275,7 +343,10 @@ export function sampleFrameFromEndExtrapolated(segments: PathSegment[], distance
     return { point: shifted, tangent: frame.tangent, normal: frame.normal };
   }
 
-  const hit = segmentAtDistanceFromStart(segments, metrics, totalLength - distance);
+  const absoluteDistance = totalLength - distance;
+  const hit = locateSegment
+    ? locateSegment(absoluteDistance)
+    : segmentAtDistanceFromStart(segments, metrics, absoluteDistance);
   return sampleSegmentFrameAtDistance(hit.segment, hit.localDistance);
 }
 
@@ -304,8 +375,17 @@ function segmentAtDistanceFromStart(
   segments: readonly PathSegment[],
   metrics: PathMetrics,
   distance: number
-): { segment: PathSegment; localDistance: number } {
+): SegmentHit {
   const index = findFirstCumulativeDistanceAtLeast(metrics.cumulativeLengths, distance);
+  return segmentHitAtIndex(segments, metrics, index, distance);
+}
+
+function segmentHitAtIndex(
+  segments: readonly PathSegment[],
+  metrics: PathMetrics,
+  index: number,
+  distance: number
+): SegmentHit {
   const segment = segments[index] ?? segments[segments.length - 1];
   const previousDistance = index > 0 ? metrics.cumulativeLengths[index - 1] ?? 0 : 0;
   return {
@@ -764,14 +844,4 @@ function integrateSimpson(fn: (t: number) => number, start: number, end: number,
     sum += fn(x) * (i % 2 === 0 ? 2 : 4);
   }
   return (h / 3) * sum;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (value < min) {
-    return min;
-  }
-  if (value > max) {
-    return max;
-  }
-  return value;
 }

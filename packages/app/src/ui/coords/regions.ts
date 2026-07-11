@@ -1,8 +1,8 @@
-import { textRectLocalPoint, px } from "tikz-editor/coords/index";
+import { textRectLocalPoint, px } from "@tikz-editor/core/coords/index";
 import type { HitRegion } from "../canvas-panel/hit-regions";
 import { rotatePointAroundCenter } from "../canvas-panel/geometry";
-import { inverseMatrix } from "tikz-editor/semantic/transform";
-import { worldTransform } from "tikz-editor/coords/index";
+import { inverseMatrix } from "@tikz-editor/core/semantic/transform";
+import { worldTransform } from "@tikz-editor/core/coords/index";
 import type { SvgPoint, TextRectLocalPoint } from "./types";
 
 export function resolveRectHitRegionContentBox(region: Extract<HitRegion, { shape: "rect" }>): {

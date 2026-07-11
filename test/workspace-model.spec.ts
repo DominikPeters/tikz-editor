@@ -61,6 +61,27 @@ describe("workspace model", () => {
     expect(switchedBack.source).toBe(initial.source);
   });
 
+  it("can restore transient source in an inactive document", () => {
+    const initial = makeInitialState();
+    const firstId = initial.activeDocumentId;
+    const withSecond = editorReducer(initial, {
+      type: "NEW_DOCUMENT",
+      source: "\\draw (2,2)--(3,3);",
+      title: "Doc B"
+    });
+    const secondId = withSecond.activeDocumentId;
+
+    const restored = editorReducer(withSecond, {
+      type: "SET_SOURCE_TRANSIENT",
+      documentId: firstId,
+      source: "\\draw (9,9)--(10,10);"
+    });
+
+    expect(restored.activeDocumentId).toBe(secondId);
+    expect(restored.source).toBe(withSecond.source);
+    expect(restored.documents[firstId]?.source).toBe("\\draw (9,9)--(10,10);");
+  });
+
   it("closes tabs and falls back to a fresh doc after close-all", () => {
     const initial = makeInitialState();
     const withSecond = editorReducer(initial, { type: "NEW_DOCUMENT", source: "\\draw (2,2)--(3,3);", title: "Doc B" });

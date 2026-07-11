@@ -38,5 +38,23 @@ describe("PersistentMap", () => {
       ["y", "two"]
     ]);
   });
-});
 
+  it("isolates forked overlays in both directions", () => {
+    const parent = new PersistentMap<string, number>();
+    parent.set("shared", 1);
+
+    const child = parent.fork();
+    child.set("shared", 2);
+    child.set("child-only", 3);
+    parent.set("parent-only", 4);
+
+    expect([...parent.entries()]).toEqual([
+      ["shared", 1],
+      ["parent-only", 4]
+    ]);
+    expect([...child.entries()]).toEqual([
+      ["shared", 2],
+      ["child-only", 3]
+    ]);
+  });
+});

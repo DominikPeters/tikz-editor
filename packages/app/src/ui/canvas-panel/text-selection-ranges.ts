@@ -1,4 +1,4 @@
-import { parseSourceSpans } from "tikz-editor/text/knuth-plass";
+import { parseSourceSpans } from "@tikz-editor/core/text/knuth-plass";
 
 export type TextSelectionRange = {
   start: number;

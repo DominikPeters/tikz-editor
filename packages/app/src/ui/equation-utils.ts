@@ -1,5 +1,5 @@
-import type { Span, Statement } from "tikz-editor/ast/types";
-import { parseTikzForEdit, type EditParseOptions } from "tikz-editor/edit/parse-options";
+import type { Span, Statement } from "@tikz-editor/core/ast/types";
+import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 
 export type EquationDelimiter = "inline-dollar" | "inline-paren" | "display-dollar";
 

@@ -1,4 +1,5 @@
 import type { NodeItem } from "../ast/types.js";
+import type { OptionEntry } from "../options/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { readBalancedBlock } from "../semantic/style/option-utils.js";
@@ -29,6 +30,13 @@ export function collectSymbols(snapshot: SymbolSnapshot): DocumentSymbols {
   const styleNames = new Set<string>();
 
   walkStatements(parseResult.figure.body, {
+    onStatement: (statement) => {
+      if (statement.kind === "TikzSet" || statement.kind === "Pgfkeys") {
+        collectStyleSymbolsFromOptions(statement.optionList.entries, styleNames);
+      } else if (statement.kind === "TikzStyle") {
+        addTrimmedSymbol(styleNames, normalizeStyleName(statement.styleNameRaw));
+      }
+    },
     onNode: (node) => {
       collectNodeIdentifiers(node, nodeNames);
     },
@@ -36,6 +44,9 @@ export function collectSymbols(snapshot: SymbolSnapshot): DocumentSymbols {
       addTrimmedSymbol(coordinateNames, item.name);
     }
   });
+  // Completion runs on in-progress source: parser recovery swallows every
+  // statement after an unterminated brace group, so the raw scans below keep
+  // symbols visible for the regions the recovered AST does not cover.
   collectStandaloneNodeCommandNamesFromSource(parseResult.source, nodeNames);
   collectStyleSymbolsFromSource(parseResult.source, styleNames);
 
@@ -54,6 +65,15 @@ function collectNodeIdentifiers(node: NodeItem, nodeNames: Set<string>): void {
   }
   for (const alias of node.aliases ?? []) {
     addTrimmedSymbol(nodeNames, alias);
+  }
+}
+
+function collectStyleSymbolsFromOptions(entries: readonly OptionEntry[], styleNames: Set<string>): void {
+  for (const entry of entries) {
+    if (entry.kind !== "kv" && entry.kind !== "flag") {
+      continue;
+    }
+    addTrimmedSymbol(styleNames, styleNameFromOptionKey(entry.key));
   }
 }
 
@@ -106,16 +126,7 @@ function collectStyleSymbolsFromCommand(source: string, command: string, styleNa
     }
 
     const optionList = parseOptionListRaw(`[${block.content}]`, openBraceIndex);
-    for (const entry of optionList.entries) {
-      if (entry.kind !== "kv" && entry.kind !== "flag") {
-        continue;
-      }
-      const styleName = styleNameFromOptionKey(entry.key);
-      if (!styleName) {
-        continue;
-      }
-      addTrimmedSymbol(styleNames, styleName);
-    }
+    collectStyleSymbolsFromOptions(optionList.entries, styleNames);
 
     cursor = block.nextIndex;
   }
@@ -141,6 +152,22 @@ function collectStyleSymbolsFromTikzstyle(source: string, styleNames: Set<string
     addTrimmedSymbol(styleNames, normalizeStyleName(nameBlock.content));
     cursor = nameBlock.nextIndex;
   }
+}
+
+function normalizeSimpleSymbolName(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (/^[A-Za-z_][A-Za-z0-9:_-]*$/.test(trimmed)) {
+    return trimmed;
+  }
+  return null;
+}
+
+function skipWhitespace(input: string, index: number): number {
+  let cursor = index;
+  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+    cursor += 1;
+  }
+  return cursor;
 }
 
 function styleNameFromOptionKey(key: string): string | null {
@@ -181,14 +208,6 @@ function inferNodeNameFromTemplate(templateRaw: string, atRaw: string | undefine
   return inferred;
 }
 
-function normalizeSimpleSymbolName(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (/^[A-Za-z_][A-Za-z0-9:_-]*$/.test(trimmed)) {
-    return trimmed;
-  }
-  return null;
-}
-
 function addTrimmedSymbol(target: Set<string>, value: string | null | undefined): void {
   if (!value) {
     return;
@@ -198,14 +217,6 @@ function addTrimmedSymbol(target: Set<string>, value: string | null | undefined)
     return;
   }
   target.add(trimmed);
-}
-
-function skipWhitespace(input: string, index: number): number {
-  let cursor = index;
-  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
-    cursor += 1;
-  }
-  return cursor;
 }
 
 function compareSymbolName(left: string, right: string): number {

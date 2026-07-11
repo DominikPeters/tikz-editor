@@ -11,8 +11,9 @@ type PersistentMapState<K, V> = {
 
 export type PersistentMapSnapshot<K, V> = PersistentMapState<K, V>;
 
-export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
+export class PersistentMap<K, V> implements Map<K, V> {
   private state: PersistentMapState<K, V>;
+  readonly [Symbol.toStringTag] = "Map";
 
   constructor(snapshot?: PersistentMapSnapshot<K, V>) {
     this.state = snapshot ?? createRootState<K, V>();
@@ -69,7 +70,7 @@ export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
   }
 
   forEach(
-    callbackfn: (value: V, key: K, map: ReadonlyMap<K, V>) => void,
+    callbackfn: (value: V, key: K, map: Map<K, V>) => void,
     thisArg?: unknown
   ): void {
     this.materialize().forEach((value, key) => {
@@ -84,6 +85,10 @@ export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
 
   restore(snapshot: PersistentMapSnapshot<K, V>): void {
     this.state = snapshot;
+  }
+
+  fork(): PersistentMap<K, V> {
+    return new PersistentMap(this.snapshot());
   }
 
   private ensureWritable(): PersistentMapState<K, V> {
@@ -104,6 +109,14 @@ export class PersistentMap<K, V> implements ReadonlyMap<K, V> {
   ): { found: true; value: V } | { found: false } {
     let state: PersistentMapState<K, V> | null = this.state;
     while (state) {
+      // A materialized map already folds in this layer and all ancestors, so
+      // it caps the chain walk for maps that fork once per drag frame.
+      if (state.materialized) {
+        if (state.materialized.has(key)) {
+          return { found: true, value: state.materialized.get(key) as V };
+        }
+        return { found: false };
+      }
       if (state.entries.has(key)) {
         const entry = state.entries.get(key);
         if (entry === DELETED) {
@@ -131,17 +144,28 @@ function createRootState<K, V>(): PersistentMapState<K, V> {
 }
 
 function materializeState<K, V>(state: PersistentMapState<K, V>): Map<K, V> {
-  if (state.materialized) {
-    return state.materialized;
+  const pending: PersistentMapState<K, V>[] = [];
+  let current: PersistentMapState<K, V> | null = state;
+  while (current && !current.materialized) {
+    pending.push(current);
+    current = current.parent;
   }
-  const materialized = state.parent ? new Map(materializeState(state.parent)) : new Map<K, V>();
-  for (const [key, entry] of state.entries) {
-    if (entry === DELETED) {
-      materialized.delete(key);
-    } else {
-      materialized.set(key, entry);
+  let materialized = current?.materialized ?? new Map<K, V>();
+  for (let index = pending.length - 1; index >= 0; index -= 1) {
+    const layer = pending[index];
+    if (!layer) {
+      continue;
     }
+    const next = new Map(materialized);
+    for (const [key, entry] of layer.entries) {
+      if (entry === DELETED) {
+        next.delete(key);
+      } else {
+        next.set(key, entry);
+      }
+    }
+    layer.materialized = next;
+    materialized = next;
   }
-  state.materialized = materialized;
   return materialized;
 }

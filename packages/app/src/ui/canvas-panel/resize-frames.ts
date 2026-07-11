@@ -1,7 +1,7 @@
-import { worldToLocal } from "tikz-editor/edit/coords";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { EditHandle, SceneCircle, SceneElement, SceneEllipse, ScenePath, ScenePathShapeHint, SceneText } from "tikz-editor/semantic/types";
-import { isFrameLocalCoordinateEditHandle } from "tikz-editor/semantic/types";
+import { worldToLocal } from "@tikz-editor/core/edit/coords";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { EditHandle, SceneCircle, SceneElement, SceneEllipse, ScenePath, ScenePathShapeHint, SceneText } from "@tikz-editor/core/semantic/types";
+import { isFrameLocalCoordinateEditHandle } from "@tikz-editor/core/semantic/types";
 import {
   applyFrameTransform,
   applyFrameVector,
@@ -14,11 +14,11 @@ import {
   worldTransform,
   worldVector,
   pt
-} from "tikz-editor/coords/index";
-import type { FrameLocalPoint, FrameTransform, WorldBounds, WorldTransform, WorldVector } from "tikz-editor/coords/index";
-import { applyMatrix } from "tikz-editor/semantic/transform";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { svgPoint } from "tikz-editor/coords/index";
+} from "@tikz-editor/core/coords/index";
+import type { FrameLocalPoint, FrameTransform, WorldBounds, WorldTransform, WorldVector } from "@tikz-editor/core/coords/index";
+import { applyMatrix } from "@tikz-editor/core/semantic/transform";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { svgPoint } from "@tikz-editor/core/coords/index";
 import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/types";
 import { svgToWorldPoint, worldToSvgPoint } from "./geometry";
 

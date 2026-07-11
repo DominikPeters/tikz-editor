@@ -1,14 +1,9 @@
+import { clampFinite as clamp } from "./geometry";
+
 export type SourceRenderOffsetMap = {
   sourceToRender: (sourceOffset: number) => number;
   renderToSource: (renderOffset: number) => number;
 };
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-  return Math.min(max, Math.max(min, value));
-}
 
 function equivalentChars(source: string, render: string): boolean {
   if (source === render) {

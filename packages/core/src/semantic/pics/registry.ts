@@ -4,6 +4,7 @@ import { stripWrappingBraces } from "../../utils/braces.js";
 import type { StyleSourceRef } from "../style-chain.js";
 import { cloneStyleSourceRef } from "../style-chain.js";
 import { parseStyleValueAsOptionList } from "../style/option-utils.js";
+import { PersistentMap } from "../persistent-map.js";
 
 type PicCodeLayer = "normal" | "background" | "foreground";
 
@@ -35,11 +36,18 @@ export type ResolvedPicCode =
     };
 
 export function createDefaultPicDefinitionRegistry(): PicDefinitionRegistry {
-  return new Map();
+  return new PersistentMap();
 }
 
 export function clonePicDefinitionRegistry(registry: PicDefinitionRegistry): PicDefinitionRegistry {
-  return new Map(registry);
+  if (registry instanceof PersistentMap) {
+    return registry.fork();
+  }
+  const imported = new PersistentMap<string, PicDefinition>();
+  for (const [name, definition] of registry) {
+    imported.set(name, definition);
+  }
+  return imported;
 }
 
 export function applyPicDefinitionsFromOptionLists(

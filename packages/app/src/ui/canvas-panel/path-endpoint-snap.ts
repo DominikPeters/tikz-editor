@@ -1,8 +1,8 @@
-import type { EditHandle } from "tikz-editor/semantic/types";
+import type { EditHandle } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
-import { analyzeExplicitPathStatement } from "tikz-editor/edit/path-editing";
-import type { PathStatement, Statement } from "tikz-editor/ast/types";
-import { parseTikzForEdit, type EditParseOptions } from "tikz-editor/edit/parse-options";
+import { analyzeExplicitPathStatement } from "@tikz-editor/core/edit/path-editing";
+import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
+import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 
 const ENDPOINT_SNAP_RADIUS_PX = 10;
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import type { InspectorDescriptor } from "tikz-editor/edit/inspector";
+import type { InspectorDescriptor } from "@tikz-editor/core/edit/inspector";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
 import { createNumberScrubState, updateNumberScrubState } from "./number-scrub";

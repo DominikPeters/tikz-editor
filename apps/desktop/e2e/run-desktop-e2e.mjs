@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { remote } from "webdriverio";
+import { installDeterministicBridgeInPage } from "../src/platform/e2e-mock-bridge.ts";
 
 if (shouldRerunUnderXvfb()) {
   const result = spawnSync("xvfb-run", ["-a", process.execPath, ...process.argv.slice(1)], {
@@ -182,129 +183,7 @@ async function createSession(application) {
 }
 
 async function installDeterministicBridge(browserInstance) {
-  await browserInstance.execute(() => {
-    const writes = [];
-    const exports = [];
-    const exportPayloads = [];
-    const clearRecentCalls = [];
-    const windowTitles = [];
-    const unsavedDecisions = [];
-    const unsavedPrompts = [];
-    const warnings = [];
-    const errors = [];
-    const linkedFiles = new Map();
-    const linkedRevisionForText = (text) => ({
-      hash: `e2e-${text.length}-${Array.from(text).reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 0).toString(16)}`,
-      size: text.length
-    });
-    const linkedFileRefForPath = (filePath) => ({
-      kind: "file",
-      provider: "desktop-fs",
-      path: filePath,
-      name: filePath.split("/").pop() ?? "tikz-document.tex"
-    });
-    if (!window.__DESKTOP_E2E_CONSOLE_CAPTURE_INSTALLED__) {
-      const originalWarn = console.warn.bind(console);
-      const originalError = console.error.bind(console);
-      console.warn = (...args) => {
-        window.__DESKTOP_E2E_WARNINGS__.push(args.map((value) => String(value)).join(" "));
-        originalWarn(...args);
-      };
-      console.error = (...args) => {
-        window.__DESKTOP_E2E_ERRORS__.push(args.map((value) => String(value)).join(" "));
-        originalError(...args);
-      };
-      window.__DESKTOP_E2E_CONSOLE_CAPTURE_INSTALLED__ = true;
-    }
-    const bridge = {
-      openText: async (path) => {
-        const resolvedPath = path ?? "/tmp/opened-from-e2e.tex";
-        const source = "\\\\draw (9,9)--(10,10); % desktop-opened";
-        linkedFiles.set(resolvedPath, {
-          source,
-          revision: linkedRevisionForText(source)
-        });
-        return {
-          source,
-          path: resolvedPath,
-          name: resolvedPath.split("/").pop() ?? "opened-from-e2e.tex"
-        };
-      },
-      saveText: async ({ text, suggestedName, path, forceSaveAs }) => {
-        const computedPath =
-          forceSaveAs || !path
-            ? `/tmp/${(suggestedName ?? "tikz-document").replace(/[^A-Za-z0-9_.-]/g, "_")}`
-            : path;
-        writes.push({ text, path: computedPath, forceSaveAs });
-        return {
-          ok: true,
-          path: computedPath,
-          name: computedPath.split("/").pop() ?? "tikz-document.tex"
-        };
-      },
-      readLinkedText: async (filePath) => {
-        const entry = linkedFiles.get(filePath);
-        if (!entry) {
-          return { status: "missing" };
-        }
-        return {
-          status: "ok",
-          source: entry.source,
-          revision: entry.revision,
-          fileRef: linkedFileRefForPath(filePath)
-        };
-      },
-      writeLinkedText: async ({ path: filePath, text }) => {
-        const revision = linkedRevisionForText(text);
-        linkedFiles.set(filePath, { source: text, revision });
-        writes.push({ text, path: filePath, forceSaveAs: false });
-        return {
-          status: "saved",
-          revision,
-          fileRef: linkedFileRefForPath(filePath)
-        };
-      },
-      exportFile: async ({ fileName, mimeType, bytesBase64 }) => {
-        exports.push(fileName);
-        exportPayloads.push({ fileName, mimeType, bytesBase64 });
-        return true;
-      },
-      clearRecentFiles: async () => {
-        clearRecentCalls.push(Date.now());
-      },
-      readClipboard: async () => "",
-      writeClipboard: async () => undefined,
-      readCustomClipboardText: async () => null,
-      readCustomClipboardBytes: async () => null,
-      writeClipboardBundle: async () => undefined,
-      setWindowTitle: async (title) => {
-        window.__DESKTOP_E2E_TITLE__ = title;
-        windowTitles.push(title);
-      },
-      closeWindow: async () => {
-        window.__DESKTOP_E2E_CLOSED__ = true;
-      },
-      confirmUnsavedChanges: async (message) => {
-        unsavedPrompts.push(message);
-        return unsavedDecisions.shift() ?? "cancel";
-      },
-      onMenuCommand: async () => () => undefined,
-      onOpenRecent: async () => () => undefined,
-      onWindowCloseRequest: async () => () => undefined,
-      onContextMenuCommand: async () => () => undefined
-    };
-    window.__DESKTOP_E2E_WRITES__ = writes;
-    window.__DESKTOP_E2E_EXPORTS__ = exports;
-    window.__DESKTOP_E2E_EXPORT_PAYLOADS__ = exportPayloads;
-    window.__DESKTOP_E2E_CLEAR_RECENT_CALLS__ = clearRecentCalls;
-    window.__DESKTOP_E2E_WINDOW_TITLES__ = windowTitles;
-    window.__DESKTOP_E2E_UNSAVED_DECISIONS__ = unsavedDecisions;
-    window.__DESKTOP_E2E_UNSAVED_PROMPTS__ = unsavedPrompts;
-    window.__DESKTOP_E2E_WARNINGS__ = warnings;
-    window.__DESKTOP_E2E_ERRORS__ = errors;
-    window.__DESKTOP_E2E_CLOSED__ = false;
-    window.__TIKZ_EDITOR_DESKTOP_TEST_API__.setBridgeOverride(bridge);
-  });
+  await browserInstance.execute(installDeterministicBridgeInPage);
 }
 
 async function scenarioBootAndTabLifecycle(browserInstance) {

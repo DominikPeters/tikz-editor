@@ -1,10 +1,10 @@
-import { applyMatrix } from "tikz-editor/semantic/transform";
-import type { SvgTransform, WorldBounds, WorldPoint, WorldTransform } from "tikz-editor/coords/index";
-import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } from "tikz-editor/coords/index";
-import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "tikz-editor/semantic/types";
+import { applyMatrix } from "@tikz-editor/core/semantic/transform";
+import type { SvgTransform, WorldBounds, WorldPoint, WorldTransform } from "@tikz-editor/core/coords/index";
+import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } from "@tikz-editor/core/coords/index";
+import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgPoint } from "../coords/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { worldToSvgPoint } from "./geometry";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { fmt, worldToSvgPoint } from "./geometry";
 
 const HIT_STROKE_PX = 18;
 const ADORNMENT_TEXT_HIT_PADDING_PX = 8;
@@ -456,10 +456,6 @@ function encodePathData(commands: ScenePathCommand[], viewBox: Pick<SvgViewBox, 
   }
 
   return chunks.join(" ");
-}
-
-function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
 }
 
 function worldTransformToSvgTransform(

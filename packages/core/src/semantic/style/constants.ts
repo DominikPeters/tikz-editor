@@ -1,5 +1,5 @@
 import type { ArrowTipKind } from "../types.js";
-import { parseLength } from "../coords/parse-length.js";
+import { PT_PER_CM } from "../../coords/source.js";
 
 export const NAMED_COLORS = new Set([
   "black",
@@ -396,7 +396,7 @@ export const NON_STYLE_OPTION_FLAGS = new Set([
   "show background right"
 ]);
 
-export const PT_PER_CM = parseLength("1cm", "cm")!;
+export { PT_PER_CM };
 export const DEFAULT_TEXT_FONT_SIZE = 9.96264;
 export const FONT_SIZE_COMMAND_FACTORS: Record<string, number> = {
   "\\tiny": 0.5,

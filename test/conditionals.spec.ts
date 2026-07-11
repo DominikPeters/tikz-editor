@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expandTexConditionals } from "tikz-editor/conditionals/expand.js";
+import { expandTexConditionals } from "@tikz-editor/core/conditionals/expand.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 
 describe("expandTexConditionals", () => {

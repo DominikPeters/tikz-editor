@@ -4,7 +4,7 @@ import type {
   TikzEditorProfilingRecorder,
   TikzEditorProfilingSourcePanelSyncTiming,
   TikzEditorProfilingSvgPatchTiming
-} from "tikz-editor/profiling";
+} from "@tikz-editor/core/profiling";
 
 export type AppProfilingSnapshot = {
   label: string | null;

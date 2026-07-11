@@ -25,6 +25,13 @@ const DEFAULT_GRAPH_RADIUS_PT = parseLength("1cm", "cm")!;
 const BUILTIN_COLOR_CLASSES = ["all", "source", "target", "source'", "target'"] as const;
 const GRAPH_NODE_BUDGET = 10_000;
 const GRAPH_EDGE_BUDGET = 10_000;
+const AUTO_OPTION_LIST = parseOptionListRaw("[auto]", 0);
+const CONNECTOR_OPTION_LISTS = new Map<ConnectorOperator, OptionListAst>(
+  CONNECTOR_OPERATORS.filter((operator) => operator !== "--" && operator !== "-!-").map((operator) => [
+    operator,
+    parseOptionListRaw(`[${operator}]`, 0)
+  ])
+);
 
 type ConnectorOperator = (typeof CONNECTOR_OPERATORS)[number];
 type GraphMode = "multi" | "simple";
@@ -105,6 +112,11 @@ type GraphScopeState = {
   placementBaseChainShift: GraphVector2;
   placementBaseGroupShift: GraphVector2;
   placementResetsCounters: boolean;
+};
+
+type CartesianChainOffsetCacheEntry = {
+  offsets: GraphVector2[];
+  simulationScope: GraphScopeState;
 };
 
 type GraphNodeAccumulatorOp =
@@ -254,6 +266,10 @@ class GraphPlanner {
   private readonly operation: GraphOperationItem;
   private readonly nodeRecords = new Map<string, GraphNodeRecord>();
   private readonly nodeSets = new Map<string, Set<string>>();
+  private readonly cartesianChainOffsets = new WeakMap<
+    Map<number, OptionListAst[]>,
+    Map<string, CartesianChainOffsetCacheEntry>
+  >();
   private placementIndex = 0;
   private anonymousNodeCounter = 1;
 
@@ -399,7 +415,9 @@ class GraphPlanner {
       wrapAfter: scope.wrapAfter,
       nodeCountHint: scope.nodeCountHint,
       circularPlacement: { ...scope.circularPlacement },
-      levelStyleOptionLists: cloneLevelStyleOptionLists(scope.levelStyleOptionLists),
+      // Level style maps are immutable after assignment. Share them across the
+      // many short-lived scope clones and replace the map when a style is added.
+      levelStyleOptionLists: scope.levelStyleOptionLists,
       chainSepDistance: scope.chainSepDistance,
       groupSepDistance: scope.groupSepDistance,
       placementBaseChainShift: { ...scope.placementBaseChainShift },
@@ -1637,25 +1655,49 @@ class GraphPlanner {
       return graphPoint(0, 0);
     }
 
-    let simulationScope = this.cloneScope(scope);
-    simulationScope.chainShift = { ...scope.placementBaseChainShift };
-    simulationScope.groupShift = { ...scope.placementBaseGroupShift };
-    simulationScope.placementBaseChainShift = { ...scope.placementBaseChainShift };
-    simulationScope.placementBaseGroupShift = { ...scope.placementBaseGroupShift };
+    let entriesByScope = this.cartesianChainOffsets.get(scope.levelStyleOptionLists);
+    if (!entriesByScope) {
+      entriesByScope = new Map();
+      this.cartesianChainOffsets.set(scope.levelStyleOptionLists, entriesByScope);
+    }
 
-    const offset: GraphVector2 = { x: 0, y: 0 };
-    for (let step = 1; step <= steps; step += 1) {
+    const cacheKey = [
+      scope.placementBaseChainShift.x,
+      scope.placementBaseChainShift.y,
+      scope.placementBaseGroupShift.x,
+      scope.placementBaseGroupShift.y
+    ].join(":");
+    let entry = entriesByScope.get(cacheKey);
+    if (!entry) {
+      const simulationScope = this.cloneScope(scope);
+      simulationScope.chainShift = { ...scope.placementBaseChainShift };
+      simulationScope.groupShift = { ...scope.placementBaseGroupShift };
+      simulationScope.placementBaseChainShift = { ...scope.placementBaseChainShift };
+      simulationScope.placementBaseGroupShift = { ...scope.placementBaseGroupShift };
+      entry = {
+        offsets: [{ x: 0, y: 0 }],
+        simulationScope
+      };
+      entriesByScope.set(cacheKey, entry);
+    }
+
+    while (entry.offsets.length <= steps) {
+      const step = entry.offsets.length;
       const levelOptionLists = scope.levelStyleOptionLists.get(step);
       if (levelOptionLists && levelOptionLists.length > 0) {
         for (const optionList of levelOptionLists) {
-          simulationScope = this.applyGroupOptionControls(simulationScope, optionList, false);
+          entry.simulationScope = this.applyGroupOptionControls(entry.simulationScope, optionList, false);
         }
       }
 
-      offset.x += simulationScope.chainShift.x;
-      offset.y += simulationScope.chainShift.y;
+      const previous = entry.offsets[step - 1];
+      entry.offsets.push({
+        x: previous.x + entry.simulationScope.chainShift.x,
+        y: previous.y + entry.simulationScope.chainShift.y
+      });
     }
 
+    const offset = entry.offsets[steps];
     return graphPoint(offset.x, offset.y);
   }
 
@@ -1952,7 +1994,11 @@ function applyGraphScopeControlKv(
 
   const levelStyle = parseLevelStyleDefinition(entry);
   if (levelStyle) {
-    addLevelStyleOption(scope.levelStyleOptionLists, levelStyle.level, levelStyle.options);
+    scope.levelStyleOptionLists = addLevelStyleOption(
+      scope.levelStyleOptionLists,
+      levelStyle.level,
+      levelStyle.options
+    );
     return { consumed: true, scope };
   }
   if (applyPlacementControlFromKv(scope, key, entry.valueRaw, updatePlacementBase)) {
@@ -2100,17 +2146,15 @@ function appendScopedNamePrefix(scope: GraphScopeState, rawName: string): GraphS
   };
 }
 
-function cloneLevelStyleOptionLists(levelStyleOptionLists: Map<number, OptionListAst[]>): Map<number, OptionListAst[]> {
-  const cloned = new Map<number, OptionListAst[]>();
-  for (const [level, optionLists] of levelStyleOptionLists.entries()) {
-    cloned.set(level, [...optionLists]);
-  }
-  return cloned;
-}
-
-function addLevelStyleOption(target: Map<number, OptionListAst[]>, level: number, options: OptionListAst): void {
+function addLevelStyleOption(
+  target: Map<number, OptionListAst[]>,
+  level: number,
+  options: OptionListAst
+): Map<number, OptionListAst[]> {
+  const next = new Map(target);
   const existing = target.get(level) ?? [];
-  target.set(level, [...existing, options]);
+  next.set(level, [...existing, options]);
+  return next;
 }
 
 function parseLevelStyleDefinition(entry: OptionEntry): { level: number; options: OptionListAst } | null {
@@ -2621,7 +2665,7 @@ function makeGraphEdgeNode(textRaw: string, optionsRaw: string, span: Span, defa
   const mergedOptions =
     defaultAuto
       ? mergeOptionLists([
-          parseOptionListRaw("[auto]", span.from),
+          rebaseOptionList(AUTO_OPTION_LIST, span.from),
           ...(parsedOptions ? [parsedOptions] : [])
         ])
       : parsedOptions;
@@ -3092,10 +3136,40 @@ function buildGridPairs(
 }
 
 function connectorToOptionList(operator: ConnectorOperator): OptionListAst | undefined {
-  if (operator === "--" || operator === "-!-") {
-    return undefined;
+  return CONNECTOR_OPTION_LISTS.get(operator);
+}
+
+function rebaseOptionList(options: OptionListAst, from: number): OptionListAst {
+  if (from === options.span.from) {
+    return options;
   }
-  return parseOptionListRaw(`[${operator}]`, 0);
+  const offset = from - options.span.from;
+  return {
+    ...options,
+    span: { from: options.span.from + offset, to: options.span.to + offset },
+    entries: options.entries.map((entry) => rebaseOptionEntry(entry, offset))
+  };
+}
+
+function rebaseOptionEntry(entry: OptionEntry, offset: number): OptionEntry {
+  const span = { from: entry.span.from + offset, to: entry.span.to + offset };
+  if (entry.kind === "unknown") {
+    return { ...entry, span };
+  }
+  const keySpan = entry.keySpan
+    ? { from: entry.keySpan.from + offset, to: entry.keySpan.to + offset }
+    : undefined;
+  if (entry.kind === "flag") {
+    return { ...entry, span, keySpan };
+  }
+  return {
+    ...entry,
+    span,
+    keySpan,
+    valueSpan: entry.valueSpan
+      ? { from: entry.valueSpan.from + offset, to: entry.valueSpan.to + offset }
+      : entry.valueSpan
+  };
 }
 
 function dedupeSimpleEdges(edges: GraphPlannedEdgeInternal[]): GraphPlannedEdgeInternal[] {

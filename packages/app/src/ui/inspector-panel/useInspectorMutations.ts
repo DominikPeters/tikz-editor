@@ -14,7 +14,7 @@ import type {
   NodeShapePresetId,
   PathMorphingDecorationPresetId,
   SetPropertyWriteTarget
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import {
   buildArrowTipSetPropertyMutation,
   buildDashStyleSetPropertyMutation,
@@ -32,8 +32,8 @@ import {
   type ArrowTipWriteTarget,
   type FillPatternOptionMutationContext,
   type NodeFontMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { buildPropertyMutations, propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { buildPropertyMutations, propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
 import type { EditorAction } from "../../store/types";
 
 export type ApplySetPropertyOptions = {

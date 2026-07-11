@@ -5,10 +5,7 @@ import { pt } from "../../coords/scalars.js";
 import { normalizeOptionValue, isWrappedBySingleBracePair } from "../shared/option-value.js";
 
 export { normalizeOptionValue, isWrappedBySingleBracePair };
-
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+export { clamp } from "../../utils/math.js";
 
 export function interpolate(from: WorldPoint, to: WorldPoint, t: number): WorldPoint {
   return worldPoint(

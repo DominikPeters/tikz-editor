@@ -1,8 +1,8 @@
-import type { NodeItem, PathStatement, ScopeStatement, Statement } from "tikz-editor/ast/types";
-import type { EditAnalysisView } from "tikz-editor/edit/analysis";
-import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
-import type { OptionEntry, OptionListAst } from "tikz-editor/options/types";
-import type { SceneElement, SceneFigure } from "tikz-editor/semantic/types";
+import type { NodeItem, PathStatement, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { EditAnalysisView } from "@tikz-editor/core/edit/analysis";
+import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
+import type { OptionEntry, OptionListAst } from "@tikz-editor/core/options/types";
+import type { SceneElement, SceneFigure } from "@tikz-editor/core/semantic/types";
 
 export type ObjectsPanelNode = {
   id: string;

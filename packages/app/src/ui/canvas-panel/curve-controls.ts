@@ -1,4 +1,4 @@
-import type { EditHandle, SceneElement, ScenePath } from "tikz-editor/semantic/types";
+import type { EditHandle, SceneElement, ScenePath } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
 
 export type CurveControlLine = {

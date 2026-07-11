@@ -30,6 +30,7 @@ import {
   parseCustomStyleDefinition,
   resolveCustomStyleInvocation
 } from "./custom-styles.js";
+import { PersistentMap } from "../persistent-map.js";
 import { commandDefaultStyle, defaultStyle, DEFAULT_TEXT_FONT_SIZE } from "./defaults.js";
 import { extractCircleRadius } from "./extract-circle-radius.js";
 import { parseStyleValueAsOptionList } from "./option-utils.js";
@@ -42,7 +43,7 @@ export function resolveContextDelta(
   baseStyle: ResolvedStyle,
   baseTransform: WorldTransform,
   optionLayers: StyleTraceLayerInput[],
-  customStyles: CustomStyleRegistry = new Map(),
+  customStyles: CustomStyleRegistry = new PersistentMap(),
   resolveCoordinate?: CoordinateResolver,
   baseChain: StyleChainEntry[] = [],
   resolveColorAliasValue?: ColorAliasResolver

@@ -2,7 +2,7 @@ import type {
   NodeTextGraphicsResolution,
   NodeTextGraphicsResolveRequest,
   NodeTextGraphicsResolver,
-} from "tikz-editor/text/types";
+} from "@tikz-editor/core/text/types";
 import { rasterizePdfAsset } from "./pdf-asset-rasterizer";
 import { getActiveEditorPlatform } from "./platform/current";
 import type { LocalAssetReadResult } from "./platform/types";

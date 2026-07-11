@@ -1,5 +1,5 @@
 import type { ParseTikzResult } from "../parser/index.js";
-import type { CoordinateItem, NodeItem, PathItem, Statement } from "../ast/types.js";
+import type { PathItem, Statement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import type { ApplyEditResult, EditIntent, EditIntentResult, TikzEdit } from "./types.js";
@@ -331,12 +331,4 @@ function isConflictingRewriteTarget(
     candidateRewriteHandle.sourceRef.sourceSpan.from === rewriteHandle.sourceRef.sourceSpan.from &&
     candidateRewriteHandle.sourceRef.sourceSpan.to === rewriteHandle.sourceRef.sourceSpan.to
   );
-}
-
-export function isCoordinateItem(item: PathItem): item is CoordinateItem {
-  return item.kind === "Coordinate";
-}
-
-export function isNodeItem(item: PathItem): item is NodeItem {
-  return item.kind === "Node";
 }

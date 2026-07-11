@@ -1,10 +1,10 @@
-import { applyEditAction, type EditAction, type EditActionResult } from "tikz-editor/edit/actions";
+import { applyEditAction, type EditAction, type EditActionResult } from "@tikz-editor/core/edit/actions";
 import {
   getInspectorDescriptor,
   type InspectorProperty,
   type InspectorSnapshot
-} from "tikz-editor/edit/inspector";
-import type { SceneElement } from "tikz-editor/semantic/types";
+} from "@tikz-editor/core/edit/inspector";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 
 export type BucketFillEditResolution =
   | {

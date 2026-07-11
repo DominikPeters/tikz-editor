@@ -9,9 +9,9 @@ import {
 } from './alignment.js';
 import { englishDefaults } from './languages/en.js';
 import { applyBreaks, type AppliedBreak } from './paragraph/applyBreaks.js';
-import { breakWithDp } from './paragraph/dp.js';
+import { breakWithDp, type DpResult } from './paragraph/dp.js';
 import { createEnglishHyphenator, type Hyphenator } from './paragraph/hyphenate.js';
-import { runsToItems } from './paragraph/items.js';
+import { runsToItems, type ParagraphModel } from './paragraph/items.js';
 import {
   createMeasurementService,
   type MeasurementService,
@@ -294,7 +294,7 @@ function buildFixedLines(
 function buildWrappedExplicitLines(params: {
   runs: ParagraphRun[];
   measurement: MeasurementService;
-  hyphenator: Hyphenator;
+  getHyphenator: () => Hyphenator;
   targetWidth: number;
   alignment: ParagraphAlignment;
   resolved: ResolvedKnuthPlassOptions;
@@ -326,7 +326,7 @@ function buildWrappedExplicitLines(params: {
   const {
     runs,
     measurement,
-    hyphenator,
+    getHyphenator,
     targetWidth,
     alignment,
     resolved,
@@ -389,7 +389,7 @@ function buildWrappedExplicitLines(params: {
     } else {
       pass2Model = runsToItems(localRuns, measurement, {
         enableAutomaticHyphenation: true,
-        hyphenator,
+        hyphenator: getHyphenator(),
         hyphenpenalty: resolved.hyphenpenalty,
         exhyphenpenalty: resolved.exhyphenpenalty,
         spaceStretch: alignmentProfile.interwordStretch,
@@ -446,6 +446,58 @@ function buildWrappedExplicitLines(params: {
     errors,
     passLabel,
     linebreakingMode,
+  };
+}
+
+export type MainParagraphPassCandidate = {
+  model: ParagraphModel;
+  dp: DpResult;
+};
+
+export type DeferredMainParagraphPass = MainParagraphPassCandidate & {
+  buildOverfullDp: () => DpResult;
+};
+
+export type MainParagraphPassSelection = MainParagraphPassCandidate & {
+  passLabel: 'pretolerance' | 'tolerance' | 'overfull';
+  pass2: MainParagraphPassCandidate | null;
+};
+
+function hasUsableParagraphLines(result: DpResult): boolean {
+  return result.canProceed && result.lines.length > 0;
+}
+
+/** @internal Exported from this module only so the lazy pass boundary can be regression-tested. */
+export function selectMainParagraphPass(
+  pass1: MainParagraphPassCandidate,
+  buildPass2: () => DeferredMainParagraphPass
+): MainParagraphPassSelection {
+  if (hasUsableParagraphLines(pass1.dp)) {
+    return {
+      ...pass1,
+      passLabel: 'pretolerance',
+      pass2: null,
+    };
+  }
+
+  const deferredPass2 = buildPass2();
+  const pass2 = {
+    model: deferredPass2.model,
+    dp: deferredPass2.dp,
+  };
+  if (hasUsableParagraphLines(pass2.dp)) {
+    return {
+      ...pass2,
+      passLabel: 'tolerance',
+      pass2,
+    };
+  }
+
+  return {
+    model: pass2.model,
+    dp: deferredPass2.buildOverfullDp(),
+    passLabel: 'overfull',
+    pass2,
   };
 }
 
@@ -754,10 +806,14 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
 
     const options = this.getKnuthPlassOptions(wrapper);
     const resolved = this.resolveKnuthPlassOptions(options);
-    const hyphenator: Hyphenator = createEnglishHyphenator({
-      leftMin: resolved.lefthyphenmin,
-      rightMin: resolved.righthyphenmin,
-    });
+    let hyphenator: Hyphenator | null = null;
+    const getHyphenator = (): Hyphenator => {
+      hyphenator ??= createEnglishHyphenator({
+        leftMin: resolved.lefthyphenmin,
+        rightMin: resolved.righthyphenmin,
+      });
+      return hyphenator;
+    };
     const measurement = createMeasurementService();
     const { runs, errors, unsupportedKinds } = flattenParagraph(wrapper);
     const emptyRunWidths = new Map<number, number>();
@@ -882,7 +938,7 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
       const wrappedExplicit = buildWrappedExplicitLines({
         runs,
         measurement,
-        hyphenator,
+        getHyphenator,
         targetWidth: width,
         alignment: resolved.alignment,
         resolved,
@@ -953,44 +1009,41 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
       tolerance: resolved.pretolerance,
     });
 
-    const pass2Model = runsToItems(runs, measurement, {
-      enableAutomaticHyphenation: true,
-      hyphenator,
-      hyphenpenalty: resolved.hyphenpenalty,
-      exhyphenpenalty: resolved.exhyphenpenalty,
-      spaceStretch: alignmentProfile.interwordStretch,
-      spaceShrink: alignmentProfile.interwordShrink,
-    });
-
-    const pass2Dp = breakWithDp(pass2Model, width, {
-      ...commonDpOptions,
-      tolerance: Math.max(resolved.tolerance, METRIC_COMPATIBILITY_TOLERANCE),
-    });
-
-    const overfullDp =
-      pass2Dp.canProceed && pass2Dp.lines.length
-        ? null
-        : breakWithDp(pass2Model, width, {
+    const selectedPass = selectMainParagraphPass(
+      { model: pass1Model, dp: pass1Dp },
+      () => {
+        const model = runsToItems(runs, measurement, {
+          enableAutomaticHyphenation: true,
+          hyphenator: getHyphenator(),
+          hyphenpenalty: resolved.hyphenpenalty,
+          exhyphenpenalty: resolved.exhyphenpenalty,
+          spaceStretch: alignmentProfile.interwordStretch,
+          spaceShrink: alignmentProfile.interwordShrink,
+        });
+        const tolerance = Math.max(
+          resolved.tolerance,
+          METRIC_COMPATIBILITY_TOLERANCE
+        );
+        return {
+          model,
+          dp: breakWithDp(model, width, {
             ...commonDpOptions,
-            tolerance: Math.max(resolved.tolerance, METRIC_COMPATIBILITY_TOLERANCE),
-            allowInfeasible: true,
-          });
-
-    let chosenModel = pass1Model;
-    let chosenDp = pass1Dp;
-    let passLabel = 'pretolerance';
-
-    if (!pass1Dp.canProceed || !pass1Dp.lines.length) {
-      chosenModel = pass2Model;
-      chosenDp = pass2Dp;
-      passLabel = 'tolerance';
-    }
-
-    if ((!chosenDp.canProceed || !chosenDp.lines.length) && overfullDp) {
-      chosenModel = pass2Model;
-      chosenDp = overfullDp;
-      passLabel = 'overfull';
-    }
+            tolerance,
+          }),
+          buildOverfullDp: () =>
+            breakWithDp(model, width, {
+              ...commonDpOptions,
+              tolerance,
+              allowInfeasible: true,
+            }),
+        };
+      }
+    );
+    const chosenModel = selectedPass.model;
+    const chosenDp = selectedPass.dp;
+    const passLabel = selectedPass.passLabel;
+    const pass2Model = selectedPass.pass2?.model ?? null;
+    const pass2Dp = selectedPass.pass2?.dp ?? null;
 
     if (!chosenDp.canProceed || !chosenDp.lines.length) {
       const diagnostics = [
@@ -1000,8 +1053,8 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
           : 'flattenWarnings=none',
         ...pass1Model.errors,
         ...pass1Dp.errors,
-        ...pass2Model.errors,
-        ...pass2Dp.errors,
+        ...(pass2Model?.errors ?? []),
+        ...(pass2Dp?.errors ?? []),
       ];
       throw new Error(
         `Knuth-Plass ${resolved.layoutMode} layout failed: ${diagnostics.join('; ') || 'no solution'}`
@@ -1038,8 +1091,8 @@ export class KnuthPlassVisitor extends LinebreakVisitor<
           : 'flattenWarnings=none',
         ...pass1Model.errors,
         ...pass1Dp.errors,
-        ...pass2Model.errors,
-        ...pass2Dp.errors,
+        ...(pass2Model?.errors ?? []),
+        ...(pass2Dp?.errors ?? []),
         ...applyResult.errors,
         `alignment=${resolved.alignment}`,
         `layoutMode=${resolved.layoutMode}`,

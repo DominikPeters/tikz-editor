@@ -1,7 +1,7 @@
-import type { ScenePathCommand } from "tikz-editor/semantic/types";
-import { worldBounds, worldPoint, pt } from "tikz-editor/coords/index";
+import type { ScenePathCommand } from "@tikz-editor/core/semantic/types";
+import { worldBounds, worldPoint, pt } from "@tikz-editor/core/coords/index";
 import type { WorldBounds, WorldPoint } from "../coords/types";
-import type { NodeShape } from "tikz-editor/semantic/nodes/types";
+import type { NodeShape } from "@tikz-editor/core/semantic/nodes/types";
 import {
   makeCircularSector,
   makeCloud,
@@ -24,7 +24,7 @@ import {
   makeTrapeziumPolygon,
   resolveCalloutPointerOffset,
   resolveNodeShapeGeometryParams
-} from "tikz-editor/semantic/nodes/shape-geometry";
+} from "@tikz-editor/core/semantic/nodes/shape-geometry";
 
 const DEFAULT_NODE_MINIMUM_DIMENSION_PT = 1;
 const PREVIEW_CONSTRAINT_PENALTY = 0.01;

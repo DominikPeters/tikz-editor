@@ -1,9 +1,10 @@
-import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "tikz-editor/ast/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "tikz-editor/coords/index";
-import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
-import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
-import type { OptionListAst } from "tikz-editor/options/types";
+import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
+import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
+import type { OptionListAst } from "@tikz-editor/core/options/types";
 import {
   isFrameLocalCoordinateEditHandle,
   type EditHandle,
@@ -13,11 +14,11 @@ import {
   type ScenePathCommand,
   type ScenePathShapeHint,
   type SceneText
-} from "tikz-editor/semantic/types";
-import type { SvgTransform, WorldTransform, WorldVector } from "tikz-editor/coords/index";
-import { intersectRayWithPolygon } from "tikz-editor/semantic/nodes/shape-geometry";
-import type { SvgViewBox } from "tikz-editor/svg/index";
-import { applyMatrixToVector, inverseMatrix } from "tikz-editor/semantic/transform";
+} from "@tikz-editor/core/semantic/types";
+import type { SvgTransform, WorldTransform, WorldVector } from "@tikz-editor/core/coords/index";
+import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
+import { applyMatrixToVector, inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import type { CanvasDragKind } from "../../store/types";
 import type { ClientPoint, SvgBounds, SvgPoint, TextRectLocalPoint, WorldBounds, WorldPoint } from "../coords/types";
 import {
@@ -28,13 +29,11 @@ import {
 import type { HitRegion } from "./hit-regions";
 import type {
   DragState,
-  EditableTextTarget,
   GridResizeSnapConfig,
   SelectionAnchorRatio,
   SelectionBounds
 } from "./types";
 import {
-  clamp,
   distanceSquared,
   fmt,
   resizeCursorForVector,
@@ -50,7 +49,7 @@ type GuidesState = {
 };
 
 const GRID_SNAP_STEP_EPSILON = 1e-9;
-const DEFAULT_GRID_STEP = parseLength("1", "cm") ?? 28.4527559055;
+const DEFAULT_GRID_STEP = parseLength("1", "cm") ?? PT_PER_CM;
 
 export function collectSelectionBounds(
   elements: SceneElement[],
@@ -484,13 +483,6 @@ export function selectionAnchorRatioFromPoint(bounds: WorldBounds, point: WorldP
   };
 }
 
-export function caretStrokeWidthInSvg(fontSizePt: number): number {
-  if (!Number.isFinite(fontSizePt) || fontSizePt <= 0) {
-    return 0.5;
-  }
-  return clamp(fontSizePt * 0.055, 0.45, 1.1);
-}
-
 export function estimateTextBlockWidth(text: string, fontSize: number): number {
   const lines = text.split("\n");
   const maxChars = lines.reduce((max, line) => Math.max(max, line.length), 0);
@@ -607,38 +599,6 @@ export function isMatrixNodeItem(item: NodeItem): boolean {
     }
   }
   return false;
-}
-
-export function resolveEditableTextTargetForSelectionOffsets(
-  targetId: string,
-  anchorOffset: number,
-  headOffset: number,
-  hitRegions: readonly HitRegion[],
-  resolveEditableTextTarget: (targetId: string, region: HitRegion | undefined) => EditableTextTarget | null
-): EditableTextTarget | null {
-  const rectRegions = hitRegions.filter(
-    (candidate): candidate is Extract<HitRegion, { shape: "rect" }> => candidate.targetId === targetId && candidate.shape === "rect"
-  );
-  if (rectRegions.length === 0) {
-    return null;
-  }
-
-  const minOffset = Math.min(anchorOffset, headOffset);
-  const maxOffset = Math.max(anchorOffset, headOffset);
-  let fallback: EditableTextTarget | null = null;
-
-  for (const region of rectRegions) {
-    const target = resolveEditableTextTarget(targetId, region);
-    if (!target) {
-      continue;
-    }
-    fallback ??= target;
-    if (minOffset >= target.sourceSpan.from && maxOffset <= target.sourceSpan.to) {
-      return target;
-    }
-  }
-
-  return fallback;
 }
 
 export function sourceHasSingleResizablePathShape(

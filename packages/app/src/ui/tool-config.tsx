@@ -1,6 +1,6 @@
 import React from "react";
 import { BASIC_PICKER_COLORS } from "../colors/color-palette";
-import type { SnapToolPointerKind } from "tikz-editor/edit/snapping";
+import type { SnapToolPointerKind } from "@tikz-editor/core/edit/snapping";
 import type { ToolMode } from "../store/types";
 
 // ── Custom Tool Icons ─────────────────────────────────────────────────────────

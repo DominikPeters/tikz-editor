@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { diffSvgModels, type SvgDiffHints, type SvgPatchOp, type SvgRenderModel } from "tikz-editor/svg/index";
-import { recordProfilingSvgPatchTiming } from "tikz-editor/profiling";
+import { diffSvgModels, type SvgDiffHints, type SvgPatchOp, type SvgRenderModel } from "@tikz-editor/core/svg/index";
+import { recordProfilingSvgPatchTiming } from "@tikz-editor/core/profiling";
 
 import { SvgDomPatcher } from "./svg-dom-patcher";
 import css from "./CanvasPanel.module.css";

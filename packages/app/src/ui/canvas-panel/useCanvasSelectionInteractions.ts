@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
-import { clientPoint as makeClientPoint, px } from "tikz-editor/coords/index";
-import type { EditHandle } from "tikz-editor/semantic/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
+import type { EditHandle } from "@tikz-editor/core/semantic/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { ClientPoint } from "../coords/types";
 import type { CanvasTransform } from "../../store/types";
 import { resolveScopeAwareContextMenuTarget, type ScopeOverlayIndex } from "./scope-overlay";

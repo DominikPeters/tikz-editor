@@ -38,7 +38,14 @@ export function applyGroupElementsAction(
   }
 
   const parentKey = selectedRefs[0].parentKey;
-  const parentRefs = snapshot.byParentKey.get(parentKey)!.slice().sort((left, right) => left.index - right.index);
+  const parentRefList = snapshot.byParentKey.get(parentKey);
+  if (!parentRefList) {
+    return {
+      kind: "error",
+      message: `Grouping invariant failed: parent statement list ${parentKey} is missing.`
+    };
+  }
+  const parentRefs = parentRefList.slice().sort((left, right) => left.index - right.index);
 
   const selectedIdSet = new Set(selectedRefs.map((ref) => ref.id));
   const selectedOrdered = parentRefs.filter((ref) => selectedIdSet.has(ref.id));
@@ -91,7 +98,13 @@ export function applyGroupElementsAction(
     from: appliedReplacement.newSpan.from + replacement.scopeLocalSpan.from,
     to: appliedReplacement.newSpan.from + replacement.scopeLocalSpan.to
   };
-  const groupedScopeId = resolveStatementIdBySpan(applied.source, scopeSpan, parseOptions)!;
+  const groupedScopeId = resolveStatementIdBySpan(applied.source, scopeSpan, parseOptions);
+  if (!groupedScopeId) {
+    return {
+      kind: "error",
+      message: "Grouping invariant failed: the new scope could not be resolved after rewriting the source."
+    };
+  }
 
   return {
     kind: "success",
@@ -126,7 +139,13 @@ export function applyUngroupElementsAction(
     return { kind: "unsupported", reason: optionCheck.reason };
   }
 
-  const parentRefs = snapshot.byParentKey.get(ref.parentKey)!;
+  const parentRefs = snapshot.byParentKey.get(ref.parentKey);
+  if (!parentRefs) {
+    return {
+      kind: "error",
+      message: `Ungrouping invariant failed: parent statement list ${ref.parentKey} is missing.`
+    };
+  }
   const indent = lineIndentAtOffset(source, ref.span.from);
   const newline = detectPreferredNewline(source, ref.span.from);
   const separator = resolveStatementSeparator(source, parentRefs, indent, newline);
@@ -141,7 +160,7 @@ export function applyUngroupElementsAction(
   let selectedSourceIds: string[] | undefined;
   if (replacementText.length > 0) {
     const nextSnapshot = parseStatementSnapshot(applied.source, parseOptions);
-    const selectedRefs = nextSnapshot.byParentKey.get(ref.parentKey)!
+    const selectedRefs = (nextSnapshot.byParentKey.get(ref.parentKey) ?? [])
       .filter((candidate) =>
         candidate.span.from >= appliedReplacement.newSpan.from &&
         candidate.span.to <= appliedReplacement.newSpan.to

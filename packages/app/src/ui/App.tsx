@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   APP_MENU_COMMAND_IDS,
@@ -10,19 +10,20 @@ import { useEditorStore } from "../store/store";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, setMathJaxFont, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
-import { applyEditAction } from "tikz-editor/edit/actions";
-import { getRepeatSelectionEligibility } from "tikz-editor/edit/actions/repeat";
-import { collectSourceWorldBounds } from "tikz-editor/edit/snapping";
-import { PT_PER_CM } from "tikz-editor/edit/format";
-import { pt, worldPoint } from "tikz-editor/coords";
-import { emitSvgModel, type SvgRenderModel } from "tikz-editor/svg";
-import type { SceneFigure } from "tikz-editor/semantic/types";
-import { createMinimalTikzSourceArtifact } from "tikz-editor/export/index";
+import { applyEditAction } from "@tikz-editor/core/edit/actions";
+import { getRepeatSelectionEligibility } from "@tikz-editor/core/edit/actions/repeat";
+import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { pt, worldPoint } from "@tikz-editor/core/coords";
+import { emitSvgModel, type SvgRenderModel } from "@tikz-editor/core/svg";
+import type { SceneFigure } from "@tikz-editor/core/semantic/types";
+import { createMinimalTikzSourceArtifact } from "@tikz-editor/core/export/index";
 import { installAppProfilingRecorder, readAppProfilingSnapshot, resetAppProfilingSession } from "../profiling";
 import { AppMenuBar } from "./AppMenuBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
 import { StatusBar } from "./StatusBar";
+import { isMacLikePlatform, isWindowsLikePlatform } from "./key-labels";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { useEditorCommandRuntime } from "./editor-command-runtime";
 import { toolModeFromShortcut } from "./tool-config";
@@ -38,7 +39,7 @@ import type { UnsavedChangesDecision } from "./UnsavedChangesModal";
 import type { FileConflictDecision } from "./FileConflictModal";
 import { collectDirtyDocumentIdsForIntent, type CloseIntent } from "./close-guard";
 import { OPEN_EXAMPLE_CATALOG, type TikzOpenExample } from "./examples/open-example-catalog";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { AssistantEvent, UpdateInfo, UpdateInstallProgress } from "../platform/types";
 import { resolveOpenedFileForDocument, dataTransferHasFilePayload } from "./svg-import";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
@@ -128,13 +129,11 @@ let startupUpdateCheckStarted = false;
 
 function menuTargetFromPlatformId(platformId: string): AppMenuPlatformTarget {
   if (platformId.startsWith("desktop")) {
-    if (typeof navigator !== "undefined") {
-      if (/(mac|iphone|ipad)/i.test(navigator.platform)) {
-        return "desktop-macos";
-      }
-      if (/win/i.test(navigator.platform)) {
-        return "desktop-windows";
-      }
+    if (isMacLikePlatform()) {
+      return "desktop-macos";
+    }
+    if (isWindowsLikePlatform()) {
+      return "desktop-windows";
     }
     return "desktop-linux";
   }
@@ -145,13 +144,10 @@ function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "oth
   if (!platformId.startsWith("desktop")) {
     return null;
   }
-  if (typeof navigator === "undefined") {
-    return "other";
-  }
-  if (/(mac|iphone|ipad)/i.test(navigator.platform)) {
+  if (isMacLikePlatform()) {
     return "macos";
   }
-  if (/win/i.test(navigator.platform)) {
+  if (isWindowsLikePlatform()) {
     return "windows";
   }
   return "other";
@@ -231,8 +227,8 @@ export function App() {
     activeFigureId,
     selectedElementIds,
     activeDocumentId,
-    documents,
-    tabOrder,
+    activeDocumentFileRef,
+    linkedFileWatchSignature,
     toolMode,
     lastEditChangedSourceIds,
     lastEditPatches,
@@ -247,8 +243,12 @@ export function App() {
     activeFigureId: s.activeFigureId,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
-    documents: s.documents,
-    tabOrder: s.tabOrder,
+    activeDocumentFileRef: s.documents[s.activeDocumentId]?.fileRef ?? null,
+    linkedFileWatchSignature: Object.values(s.documents)
+      .map((doc) => linkedFilePathKey(doc.fileRef))
+      .filter((path): path is string => path != null)
+      .sort()
+      .join("\n"),
     toolMode: s.toolMode,
     lastEditChangedSourceIds: s.lastEditChangedSourceIds,
     lastEditPatches: s.lastEditPatches,
@@ -301,29 +301,22 @@ export function App() {
   const [svgExportSvgResult, setSvgExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pngExportSvgResult, setPngExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pendingAutoFit, setPendingAutoFit] = useState(false);
-  const [pendingClose, setPendingClose] = useState<{ intent: CloseIntent; dirtyDocumentIds: string[] } | null>(null);
+  const [pendingClose, setPendingClose] = useState<{
+    intent: CloseIntent;
+    dirtyDocumentIds: string[];
+    documentTitles: string[];
+  } | null>(null);
   const [pendingFileConflict, setPendingFileConflict] = useState<PendingFileConflict | null>(null);
+  const [dragRenderViewBox, setDragRenderViewBox] = useState<ComputeRequest["renderViewBox"]>(null);
   const requestCloseIntentRef = useRef<(intent: CloseIntent) => void>(() => {});
   const computeSchedulerRef = useRef<ReturnType<typeof createSingleFlightScheduler<ComputeRequest, ComputeResponse>> | null>(null);
-  const dragRenderViewBoxRef = useRef<ComputeRequest["renderViewBox"]>(null);
   const [imageAssetRefreshToken, setImageAssetRefreshToken] = useState(0);
   const updateCheckPromiseRef = useRef<Promise<UpdateInfo | null> | null>(null);
   const sourceRef = useRef(source);
   const snapshotRef = useRef(snapshot);
   const activeDocumentIdRef = useRef(activeDocumentId);
-  const documentsRef = useRef(documents);
   const linkedWatchTimersRef = useRef<Map<string, number>>(new Map());
   const pendingBackgroundLinkedPathsRef = useRef<Set<string>>(new Set());
-  const linkedFileWatchSignature = useMemo(
-    () =>
-      Object.values(documents)
-        .map((doc) => linkedFilePathKey(doc.fileRef))
-        .filter((path): path is string => path != null)
-        .sort()
-        .join("\n"),
-    [documents]
-  );
-  const activeDocumentFileRef = documents[activeDocumentId]?.fileRef ?? null;
 
   function executeCloseIntent(intent: CloseIntent): void {
     if (intent.kind === "close-document") {
@@ -338,14 +331,15 @@ export function App() {
   }
 
   function requestCloseIntent(intent: CloseIntent): void {
+    const { documents, tabOrder } = useEditorStore.getState();
     const dirtyDocumentIds = collectDirtyDocumentIdsForIntent(intent, documents, tabOrder);
     if (dirtyDocumentIds.length === 0) {
       executeCloseIntent(intent);
       return;
     }
+    const titles = dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled");
     const confirmNative = getActiveEditorPlatform().window?.confirmUnsavedChanges;
     if (confirmNative) {
-      const titles = dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled");
       const message =
         titles.length === 1
           ? `The document "${titles[0]}" has unsaved changes.`
@@ -355,10 +349,12 @@ export function App() {
       });
       return;
     }
-    setPendingClose({ intent, dirtyDocumentIds });
+    setPendingClose({ intent, dirtyDocumentIds, documentTitles: titles });
   }
 
-  requestCloseIntentRef.current = requestCloseIntent;
+  useLayoutEffect(() => {
+    requestCloseIntentRef.current = requestCloseIntent;
+  });
 
   const showNativeMessage = useCallback(async (
     title: string,
@@ -382,7 +378,7 @@ export function App() {
       return;
     }
     void readLinkedText(doc.fileRef).then((result) => {
-      const currentDoc = documentsRef.current[doc.id];
+      const currentDoc = useEditorStore.getState().documents[doc.id];
       if (!currentDoc) {
         return;
       }
@@ -465,7 +461,7 @@ export function App() {
     mode: "save" | "save-as",
     options: { forceOverwrite?: boolean } = {}
   ): Promise<boolean> => {
-    const doc = documentsRef.current[documentId];
+    const doc = useEditorStore.getState().documents[documentId];
     if (!doc) {
       return false;
     }
@@ -679,8 +675,10 @@ export function App() {
   });
   const commandRuntimeRef = useRef(commandRuntime);
   const toolModeRef = useRef(toolMode);
-  commandRuntimeRef.current = commandRuntime;
-  toolModeRef.current = toolMode;
+  useLayoutEffect(() => {
+    commandRuntimeRef.current = commandRuntime;
+    toolModeRef.current = toolMode;
+  }, [commandRuntime, toolMode]);
 
   useEffect(() => {
     const apply = (dark: boolean) => {
@@ -728,18 +726,17 @@ export function App() {
     sourceRef.current = source;
     snapshotRef.current = snapshot;
     activeDocumentIdRef.current = activeDocumentId;
-    documentsRef.current = documents;
-  }, [activeDocumentId, documents, snapshot, source]);
+  }, [activeDocumentId, snapshot, source]);
 
   useEffect(() => {
-    for (const doc of Object.values(documentsRef.current)) {
+    for (const doc of Object.values(useEditorStore.getState().documents)) {
       applyLinkedReadDecision(doc, "restore");
     }
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
     const checkActiveDocument = () => {
-      const doc = documentsRef.current[activeDocumentIdRef.current];
+      const doc = useEditorStore.getState().documents[activeDocumentIdRef.current];
       if (doc) {
         applyLinkedReadDecision(doc, "focus");
       }
@@ -758,7 +755,7 @@ export function App() {
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
-    const doc = documentsRef.current[activeDocumentId];
+    const doc = useEditorStore.getState().documents[activeDocumentId];
     const pathKey = linkedFilePathKey(doc?.fileRef);
     if (pathKey) {
       pendingBackgroundLinkedPathsRef.current.delete(pathKey);
@@ -773,7 +770,7 @@ export function App() {
     if (typeof sync !== "function") {
       return;
     }
-    const fileRefs = Object.values(documentsRef.current)
+    const fileRefs = Object.values(useEditorStore.getState().documents)
       .map((doc) => doc.fileRef)
       .filter((fileRef): fileRef is DocumentFileRef => Boolean(fileRef && linkedFilePathKey(fileRef)));
     void sync(fileRefs);
@@ -800,7 +797,9 @@ export function App() {
       }
       const timer = window.setTimeout(() => {
         timers.delete(pathKey);
-        const docsForPath = Object.values(documentsRef.current).filter((doc) => linkedFilePathKey(doc.fileRef) === pathKey);
+        const docsForPath = Object.values(useEditorStore.getState().documents).filter(
+          (doc) => linkedFilePathKey(doc.fileRef) === pathKey
+        );
         const activeDoc = docsForPath.find((doc) => doc.id === activeDocumentIdRef.current);
         if (activeDoc) {
           applyLinkedReadDecision(activeDoc, "focus");
@@ -978,12 +977,14 @@ export function App() {
   );
   const trigger = computeTrigger(activeCanvasDragKind, activeSourceScrubSourceId);
   const isDragComputeTrigger = trigger === "drag-element" || trigger === "drag-handle";
-  if (isDragComputeTrigger && !dragRenderViewBoxRef.current && snapshot.svg?.viewBox) {
-    dragRenderViewBoxRef.current = snapshot.svg.viewBox;
-  } else if (!isDragComputeTrigger) {
-    dragRenderViewBoxRef.current = null;
-  }
-  const renderViewBox = isDragComputeTrigger ? dragRenderViewBoxRef.current ?? null : null;
+  useLayoutEffect(() => {
+    if (!isDragComputeTrigger) {
+      setDragRenderViewBox(null);
+      return;
+    }
+    setDragRenderViewBox((current) => current ?? snapshot.svg?.viewBox ?? null);
+  }, [isDragComputeTrigger, snapshot.svg?.viewBox]);
+  const renderViewBox = isDragComputeTrigger ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
   const typingComputeDelay = trigger === "other" && changedSourceIds == null
     ? (source.length > 80_000 ? 220 : 120)
     : null;
@@ -1095,7 +1096,7 @@ export function App() {
     const bindAssistantEvents = assistantApi.bindEvents!;
 
     async function respondToDynamicTool(event: Extract<AssistantEvent, { type: "dynamic-tool-call" }>): Promise<void> {
-      const doc = documentsRef.current[event.documentId];
+      const doc = useEditorStore.getState().documents[event.documentId];
       if (!doc) {
         return;
       }
@@ -1337,7 +1338,7 @@ export function App() {
     attachments: AssistantComposerImageAttachment[]
   ): Promise<void> => {
     const documentId = activeDocumentIdRef.current;
-    const currentDocument = documentsRef.current[documentId];
+    const currentDocument = useEditorStore.getState().documents[documentId];
     const currentSource = currentDocument?.source ?? sourceRef.current;
     const currentSnapshot = currentDocument?.snapshot ?? snapshotRef.current;
     const { buildFigureContext: buildFigCtx, buildDiagnosticsText: buildDiag } = await import("./assistant-tool-handlers");
@@ -1957,7 +1958,7 @@ export function App() {
     }
 
     for (const documentId of closeCtx.dirtyDocumentIds) {
-      const doc = documents[documentId];
+      const doc = useEditorStore.getState().documents[documentId];
       if (!doc?.dirty) {
         continue;
       }
@@ -2274,7 +2275,7 @@ export function App() {
       {pendingClose ? (
         <Suspense fallback={null}>
           <UnsavedChangesModal
-            documentTitles={pendingClose.dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled")}
+            documentTitles={pendingClose.documentTitles}
             onChoose={(decision) => {
               void handleUnsavedDecision(decision);
             }}

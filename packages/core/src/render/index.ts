@@ -6,7 +6,7 @@ import { emitSvg } from "../svg/emit.js";
 import type { EmitSvgOptions, EmitSvgResult } from "../svg/index.js";
 import { createMathJaxNodeTextEngine } from "../text/mathjax-engine.js";
 import type { NodeTextEngine } from "../text/types.js";
-import type { NodeItem } from "../ast/types.js";
+import type { NodeItem, TikzFigure } from "../ast/types.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
 
 let mathJaxEngineUnavailable = false;
@@ -16,6 +16,11 @@ let lastMathJaxWarning: string | null = null;
 export type RenderTikzOptions = {
   parse?: ParseTikzOptions;
   evaluate?: EvaluateOptions;
+  semanticEvaluator?: (
+    figure: TikzFigure,
+    source: string,
+    options: EvaluateOptions
+  ) => EvaluateTikzResult;
   svg?: EmitSvgOptions;
   textEngine?: NodeTextEngine | null;
   validateNodeText?: boolean;
@@ -36,7 +41,11 @@ export type RenderTikzToSvgResult = {
 
 export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): RenderTikzToSvgResult {
   const parseResult = parseTikz(source, opts.parse);
-  const semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, opts.evaluate);
+  const semanticResult = (opts.semanticEvaluator ?? evaluateTikzFigure)(
+    parseResult.figure,
+    parseResult.source,
+    opts.evaluate ?? {}
+  );
   const svgResult = emitSvg(semanticResult.scene, opts.svg);
 
   return {
@@ -115,12 +124,13 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
   };
 
   const parseResult = parseTikz(source, parseOpts);
-  let semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, evaluateOpts);
+  const semanticEvaluator = opts.semanticEvaluator ?? evaluateTikzFigure;
+  let semanticResult = semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts);
   let svgResult = emitSvg(semanticResult.scene, svgOpts);
 
   const flushedPendingTextKeys = await textEngine?.flushPending?.();
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
-    semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, evaluateOpts);
+    semanticResult = semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts);
     svgResult = emitSvg(semanticResult.scene, svgOpts);
   }
 

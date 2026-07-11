@@ -1,5 +1,5 @@
-import type { Span } from "tikz-editor/ast/types";
-import { replaceSpan } from "tikz-editor/edit/patch";
+import type { Span } from "@tikz-editor/core/ast/types";
+import { replaceSpan } from "@tikz-editor/core/edit/patch";
 
 import type { EditableTextTarget, TextEditingSession, TextSelectionOverlay } from "./types";
 import { clamp } from "./geometry";

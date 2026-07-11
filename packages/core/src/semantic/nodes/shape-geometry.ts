@@ -7,6 +7,7 @@ import { evaluateRawCoordinate } from "../coords/evaluate.js";
 import type { SemanticContext } from "../context.js";
 import { normalizeOptionValue } from "./utils.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
+import { clamp } from "../../utils/math.js";
 
 export type ShapeGeometryParams = {
   diamondAspect: number;
@@ -2979,10 +2980,6 @@ function clampFinite(value: number): number {
     return 0;
   }
   return Math.max(-1e6, Math.min(1e6, value));
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function cross(left: Pick<WorldPoint | WorldVector, "x" | "y">, right: Pick<WorldPoint | WorldVector, "x" | "y">): number {

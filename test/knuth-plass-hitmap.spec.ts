@@ -1142,18 +1142,39 @@ describe("knuth-plass hitmap line ranges", () => {
       clientPoint: clientPoint(px(0), px(0))
     };
 
-    await expect(getKnuthPlassCaretFromPoint(missingOutputJax, request)).resolves.toMatchObject({
+    await expect(getKnuthPlassCaretFromPoint(missingOutputJax, request)).resolves.toEqual({
       ok: false,
-      error: { code: "paragraph-not-found" }
+      paragraphId: "missing",
+      offset: null,
+      lineIndex: null,
+      kind: null,
+      snappedToMathPrefix: false,
+      error: {
+        code: "paragraph-not-found",
+        paragraphId: "missing",
+        message: "Paragraph 'missing' was not found in Knuth-Plass reports."
+      }
     });
     await expect(getKnuthPlassPointFromOffset(missingOutputJax, {
       paragraphId: "missing",
       sourceText: "Hello",
       containerElement: {},
       offset: 0
-    })).resolves.toMatchObject({
+    })).resolves.toEqual({
       ok: false,
-      error: { code: "paragraph-not-found" }
+      paragraphId: "missing",
+      offset: null,
+      lineIndex: null,
+      lineLocalX: null,
+      clientPoint: null,
+      rotationDeg: null,
+      kind: null,
+      snappedToMathPrefix: false,
+      error: {
+        code: "paragraph-not-found",
+        paragraphId: "missing",
+        message: "Paragraph 'missing' was not found in Knuth-Plass reports."
+      }
     });
     await expect(getKnuthPlassSelectionRects(missingOutputJax, {
       paragraphId: "missing",
@@ -1161,13 +1182,29 @@ describe("knuth-plass hitmap line ranges", () => {
       containerElement: {},
       startOffset: 0,
       endOffset: 1
-    })).resolves.toMatchObject({
+    })).resolves.toEqual({
       ok: false,
-      error: { code: "paragraph-not-found" }
+      paragraphId: "missing",
+      startOffset: 0,
+      endOffset: 0,
+      rects: [],
+      error: {
+        code: "paragraph-not-found",
+        paragraphId: "missing",
+        message: "Paragraph 'missing' was not found in Knuth-Plass reports."
+      }
     });
-    await expect(getKnuthPlassLineRangeFromPoint(null, request)).resolves.toMatchObject({
+    await expect(getKnuthPlassLineRangeFromPoint(null, request)).resolves.toEqual({
       ok: false,
-      error: { code: "paragraph-not-found" }
+      paragraphId: "missing",
+      lineIndex: null,
+      lineStartOffset: null,
+      lineEndOffset: null,
+      error: {
+        code: "paragraph-not-found",
+        paragraphId: "missing",
+        message: "Paragraph 'missing' was not found in Knuth-Plass reports."
+      }
     });
     await expect(getKnuthPlassLineRangeFromPoint({
       linebreaks: {
@@ -1499,7 +1536,7 @@ describe("knuth-plass hitmap line ranges", () => {
     const snapshot = getKnuthPlassVListGeometrySnapshot({
       outputJax,
       paragraphId,
-      containerElement: containerElement as any,
+      containerElement: containerElement,
     });
     const intertextParagraph = snapshot.paragraphs.find((paragraph) =>
       paragraph.sourceStart === intertextStart && paragraph.sourceEnd === intertextEnd

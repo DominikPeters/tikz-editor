@@ -1402,7 +1402,6 @@ function makeInput({
   return {
     source,
     activeFigureId,
-    editAnalysisView: null,
     snapshot,
     toolMode: "select" as const,
     selectedElementIds,

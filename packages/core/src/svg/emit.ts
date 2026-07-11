@@ -5,22 +5,40 @@ import type {
   SceneElement,
   SceneFigure,
   ScenePathCommand,
-  ShadowLayer
+  ShadowLayer,
 } from "../semantic/types.js";
 import { pt } from "../coords/scalars.js";
 import { svgBounds, svgPoint } from "../coords/points.js";
 import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/points.js";
 import type { SvgTransform, WorldTransform } from "../coords/transforms.js";
-import { worldToSvgPoint as convertWorldToSvgPoint, mapWorldTransformToSvgTransform as convertWorldToSvgTransform } from "../coords/svg.js";
+import {
+  worldToSvgPoint as convertWorldToSvgPoint,
+  mapWorldTransformToSvgTransform as convertWorldToSvgTransform,
+} from "../coords/svg.js";
 import { COLOR_HEX } from "../semantic/style/constants.js";
-import { SHADOW_INHERIT_FILL, SHADOW_INHERIT_STROKE } from "../semantic/types.js";
+import {
+  SHADOW_INHERIT_FILL,
+  SHADOW_INHERIT_STROKE,
+} from "../semantic/types.js";
 import { renderPathWithArrows } from "./arrows/render.js";
-import { computeSvgEllipseBounds, computeSvgPathBounds, transformSvgBounds } from "./geometry.js";
+import {
+  computeSvgEllipseBounds,
+  computeSvgPathBounds,
+  transformSvgBounds,
+} from "./geometry.js";
 import type { RenderedArrowTipPath } from "./arrows/types.js";
 import { createSvgModelBuilder, serializeSvgModel } from "./model.js";
 import { computeViewBox } from "./viewbox.js";
-import type { EmitSvgOptions, EmitSvgResult, SvgRenderModel, SvgRenderPart, SvgViewBox } from "./types.js";
+import type {
+  EmitSvgOptions,
+  EmitSvgResult,
+  SvgRenderModel,
+  SvgRenderPart,
+  SvgViewBox,
+} from "./types.js";
 import { formatSvgNumber as fmt } from "./format.js";
+import { hexToRgb, rgbToHex } from "../utils/color-convert.js";
+import { clamp01 } from "../utils/math.js";
 
 type ShadowRenderableStyle = Pick<
   ResolvedStyle,
@@ -56,7 +74,10 @@ type ShadowRenderableStyle = Pick<
   | "bilinearUpperRight"
 >;
 
-type PatternRenderableStyle = Pick<ResolvedStyle, "fill" | "fillPattern" | "patternColor">;
+type PatternRenderableStyle = Pick<
+  ResolvedStyle,
+  "fill" | "fillPattern" | "patternColor"
+>;
 
 type PatternRenderContext = {
   globalYPhase: number;
@@ -75,34 +96,73 @@ type SvgModelReuseContext = {
   previousPartsByElementId: Map<string, SvgRenderPart[]>;
 };
 
-type AppendSvgPart = (basePartId: string, sourceId: string, elementId: string | null, markup: string) => void;
+type AppendSvgPart = (
+  basePartId: string,
+  sourceId: string,
+  elementId: string | null,
+  markup: string
+) => void;
 
-type ResolveFillPaint = (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null) => string | null;
+type ResolveFillPaint = (
+  style: ShadowRenderableStyle,
+  sourceId: string,
+  bounds: SvgBounds | null
+) => string | null;
 
 type StyledSvgShape =
   | { kind: "path"; d: string }
   | { kind: "circle"; cx: number; cy: number; radius: number }
   | { kind: "ellipse"; cx: number; cy: number; rx: number; ry: number };
 
+type PreparedElementGeometry =
+  | {
+      kind: "Path";
+      renderedPath: ReturnType<typeof renderPathWithArrows>;
+      shaftPathData: string;
+      bounds: SvgBounds;
+      transform: SvgTransform | null;
+    }
+  | {
+      kind: "Circle";
+      center: SvgPoint;
+      bounds: SvgBounds;
+      transform: SvgTransform | null;
+    }
+  | {
+      kind: "Ellipse";
+      center: SvgPoint;
+      bounds: SvgBounds;
+      transform: SvgTransform | null;
+    };
+
 const PGF_SHADE_SCALE_FACTOR = 0.01992528;
 const PGF_SHADE_CANONICAL_SIZE = 100.375;
 const PGF_SHADE_CANONICAL_HALF = PGF_SHADE_CANONICAL_SIZE / 2;
 const PGF_BALL_FOCUS_OFFSET = PGF_SHADE_CANONICAL_HALF * 0.2;
-const PLAIN_TEXT_SERIF_FONT_STACK = "MJX-NCM, CMU Serif, Latin Modern Roman, Times New Roman, serif";
-const PLAIN_TEXT_SANS_FONT_STACK = "MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif";
-const PLAIN_TEXT_MONO_FONT_STACK = "MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
+const PLAIN_TEXT_SERIF_FONT_STACK =
+  "MJX-NCM, CMU Serif, Latin Modern Roman, Times New Roman, serif";
+const PLAIN_TEXT_SANS_FONT_STACK =
+  "MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif";
+const PLAIN_TEXT_MONO_FONT_STACK =
+  "MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
 
-export function emitSvg(scene: SceneFigure, opts: EmitSvgOptions = {}): EmitSvgResult {
+export function emitSvg(
+  scene: SceneFigure,
+  opts: EmitSvgOptions = {}
+): EmitSvgResult {
   const model = emitSvgModel(scene, opts);
   return {
     svg: serializeSvgModel(model, opts.includeXmlns !== false),
     viewBox: model.viewBox,
     model,
-    diagnostics: model.diagnostics
+    diagnostics: model.diagnostics,
   };
 }
 
-export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): SvgRenderModel {
+export function emitSvgModel(
+  scene: SceneFigure,
+  opts: EmitSvgOptions = {}
+): SvgRenderModel {
   const padding = opts.padding ?? 12;
   const viewBox = opts.viewBox ?? computeViewBox(scene, padding);
 
@@ -126,17 +186,26 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     elementId: string | null,
     markup: string
   ): void => {
-    const clipChain = elementId ? elementClipChainsById.get(elementId) : undefined;
-    const wrappedMarkup = clipChain && clipChain.length > 0 ? wrapMarkupWithClipChain(markup, clipChain) : markup;
+    const clipChain = elementId
+      ? elementClipChainsById.get(elementId)
+      : undefined;
+    const wrappedMarkup =
+      clipChain && clipChain.length > 0
+        ? wrapMarkupWithClipChain(markup, clipChain)
+        : markup;
     modelBuilder.addPart({
       basePartId,
       sourceId,
       elementId,
-      markup: wrappedMarkup
+      markup: wrappedMarkup,
     });
   };
 
-  const ensureGradientDefinition = (signature: string, kind: string, buildDef: (id: string) => string): string => {
+  const ensureGradientDefinition = (
+    signature: string,
+    kind: string,
+    buildDef: (id: string) => string
+  ): string => {
     const existing = gradientIdBySignature.get(signature);
     if (existing) {
       return existing;
@@ -148,7 +217,10 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     return id;
   };
 
-  const ensurePatternDefinition = (signature: string, buildDef: (id: string) => string): string => {
+  const ensurePatternDefinition = (
+    signature: string,
+    buildDef: (id: string) => string
+  ): string => {
     const existing = patternIdBySignature.get(signature);
     if (existing) {
       return existing;
@@ -166,7 +238,10 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       return id;
     }
 
-    shadowMaskDefById.set(id, renderCircularShadowMaskDefinition(id, `${id}-gradient`));
+    shadowMaskDefById.set(
+      id,
+      renderCircularShadowMaskDefinition(id, `${id}-gradient`)
+    );
     return id;
   };
 
@@ -183,14 +258,19 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     clipPathSvgIdBySceneId.set(clipPath.id, svgId);
     clipPathDefBySceneId.set(
       clipPath.id,
-      `<clipPath id="${svgId}" clipPathUnits="userSpaceOnUse"><path d="${escapeAttr(d)}"${
+      `<clipPath id="${svgId}" clipPathUnits="userSpaceOnUse"><path d="${escapeAttr(
+        d
+      )}"${
         clipPath.fillRule === "evenodd" ? ` clip-rule="evenodd"` : ""
       } /></clipPath>`
     );
     return svgId;
   };
 
-  const wrapMarkupWithClipChain = (markup: string, clipChain: readonly SceneClipPath[]): string => {
+  const wrapMarkupWithClipChain = (
+    markup: string,
+    clipChain: readonly SceneClipPath[]
+  ): string => {
     let wrapped = markup;
     for (const clipPath of clipChain) {
       const clipSvgId = ensureClipPathDefinition(clipPath);
@@ -202,12 +282,18 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     return wrapped;
   };
 
-  const resolveShadingFill = (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null): string | null => {
+  const resolveShadingFill = (
+    style: ShadowRenderableStyle,
+    sourceId: string,
+    bounds: SvgBounds | null
+  ): string | null => {
     if (!style.shadeEnabled) {
       return null;
     }
 
-    const shadingTransform = bounds ? computeShadingTransform(bounds, style.shadingAngle) : null;
+    const shadingTransform = bounds
+      ? computeShadingTransform(bounds, style.shadingAngle)
+      : null;
     if (!shadingTransform) {
       return null;
     }
@@ -219,10 +305,16 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
         transform: signatureShadingTransform(shadingTransform),
         top: style.axisTopColor,
         middle: style.axisMiddleColor,
-        bottom: style.axisBottomColor
+        bottom: style.axisBottomColor,
       });
       const id = ensureGradientDefinition(signature, "axis", (gradientId) =>
-        renderAxisGradientDefinition(gradientId, shadingTransform, style.axisTopColor, style.axisMiddleColor, style.axisBottomColor)
+        renderAxisGradientDefinition(
+          gradientId,
+          shadingTransform,
+          style.axisTopColor,
+          style.axisMiddleColor,
+          style.axisBottomColor
+        )
       );
       return `url(#${id})`;
     }
@@ -232,10 +324,15 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
         kind: "radial",
         transform: signatureShadingTransform(shadingTransform),
         inner: style.radialInnerColor,
-        outer: style.radialOuterColor
+        outer: style.radialOuterColor,
       });
       const id = ensureGradientDefinition(signature, "radial", (gradientId) =>
-        renderRadialGradientDefinition(gradientId, shadingTransform, style.radialInnerColor, style.radialOuterColor)
+        renderRadialGradientDefinition(
+          gradientId,
+          shadingTransform,
+          style.radialInnerColor,
+          style.radialOuterColor
+        )
       );
       return `url(#${id})`;
     }
@@ -244,10 +341,14 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       const signature = JSON.stringify({
         kind: "ball",
         transform: signatureShadingTransform(shadingTransform),
-        color: style.ballColor
+        color: style.ballColor,
       });
       const id = ensureGradientDefinition(signature, "ball", (gradientId) =>
-        renderBallGradientDefinition(gradientId, shadingTransform, style.ballColor)
+        renderBallGradientDefinition(
+          gradientId,
+          shadingTransform,
+          style.ballColor
+        )
       );
       return `url(#${id})`;
     }
@@ -256,7 +357,7 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       unsupportedShadingNames.add(shadingName);
       diagnostics.push({
         code: `unsupported-shading:${shadingName}`,
-        message: `Shading "${shadingName}" is not currently supported in SVG output (source ${sourceId}).`
+        message: `Shading "${shadingName}" is not currently supported in SVG output (source ${sourceId}).`,
       });
     }
 
@@ -271,24 +372,40 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     }
 
     const pattern = style.fillPattern;
-    const effectivePatternColor = pattern.kind === "legacy" && pattern.inherentlyColored ? null : style.patternColor;
+    const effectivePatternColor =
+      pattern.kind === "legacy" && pattern.inherentlyColored
+        ? null
+        : style.patternColor;
     const signature = JSON.stringify({
       pattern,
-      patternColor: effectivePatternColor
+      patternColor: effectivePatternColor,
     });
     const id = ensurePatternDefinition(signature, (patternId) =>
-      renderPatternDefinition(patternId, pattern, effectivePatternColor, patternGlobalYPhase)
+      renderPatternDefinition(
+        patternId,
+        pattern,
+        effectivePatternColor,
+        patternGlobalYPhase
+      )
     );
     return `url(#${id})`;
   };
 
-  const resolveFillPaint = (style: ShadowRenderableStyle, sourceId: string, bounds: SvgBounds | null): string | null => {
-    return resolveShadingFill(style, sourceId, bounds) ?? resolvePatternFill(style);
+  const resolveFillPaint = (
+    style: ShadowRenderableStyle,
+    sourceId: string,
+    bounds: SvgBounds | null
+  ): string | null => {
+    return (
+      resolveShadingFill(style, sourceId, bounds) ?? resolvePatternFill(style)
+    );
   };
 
   const reuseContext = createSvgModelReuseContext(scene, opts.reuse, viewBox);
 
-  const registerDefsForElement = (element: SceneElement): void => {
+  const registerDefsForElement = (
+    element: SceneElement
+  ): PreparedElementGeometry | undefined => {
     for (const clipPath of element.clipChain ?? []) {
       ensureClipPathDefinition(clipPath);
     }
@@ -299,26 +416,39 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       if (needsPatternDefs) {
         resolvePatternFill(element.style);
       }
-      return;
+      return undefined;
     }
     let elementBounds: SvgBounds | null;
-    const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
+    const svgElementTransform = element.transform
+      ? worldTransformToSvgTransform(element.transform, viewBox)
+      : null;
+    let preparedGeometry: PreparedElementGeometry;
     if (element.kind === "Path") {
       if (!hasDrawablePathCommands(element.commands)) {
-        return;
+        return undefined;
       }
       const renderedPath = renderPathWithArrows(element);
       if (!hasDrawablePathCommands(renderedPath.shaftCommands)) {
-        return;
+        return undefined;
       }
       const d = encodePathData(renderedPath.shaftCommands, viewBox);
       if (d.length === 0) {
-        return;
+        return undefined;
       }
       elementBounds = computeSvgPathBounds(renderedPath.shaftCommands, viewBox);
-      if (elementBounds && svgElementTransform) {
+      if (!elementBounds) {
+        return undefined;
+      }
+      if (svgElementTransform) {
         elementBounds = transformSvgBounds(elementBounds, svgElementTransform);
       }
+      preparedGeometry = {
+        kind: "Path",
+        renderedPath,
+        shaftPathData: d,
+        bounds: elementBounds,
+        transform: svgElementTransform,
+      };
     } else if (element.kind === "Circle") {
       const center = toSvgPoint(element.center, viewBox);
       elementBounds = svgBounds(
@@ -330,29 +460,52 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       if (svgElementTransform) {
         elementBounds = transformSvgBounds(elementBounds, svgElementTransform);
       }
+      preparedGeometry = {
+        kind: "Circle",
+        center,
+        bounds: elementBounds,
+        transform: svgElementTransform,
+      };
     } else if (element.kind === "Ellipse") {
       const center = toSvgPoint(element.center, viewBox);
-      elementBounds = computeSvgEllipseBounds(center.x, center.y, element.rx, element.ry, element.rotation ?? 0);
+      elementBounds = computeSvgEllipseBounds(
+        center.x,
+        center.y,
+        element.rx,
+        element.ry,
+        element.rotation ?? 0
+      );
       if (svgElementTransform) {
         elementBounds = transformSvgBounds(elementBounds, svgElementTransform);
       }
+      preparedGeometry = {
+        kind: "Ellipse",
+        center,
+        bounds: elementBounds,
+        transform: svgElementTransform,
+      };
     } else {
-      return;
+      return undefined;
     }
 
     for (const layer of element.style.shadowLayers) {
-      const layerStyle = resolveShadowLayerStyle(layer.style as ShadowRenderableStyle, element.style);
+      const layerStyle = resolveShadowLayerStyle(
+        layer.style as ShadowRenderableStyle,
+        element.style
+      );
       if (layer.fade === "circle-fuzzy-edge-15") {
         ensureCircularShadowMaskDefinition();
       }
       resolveFillPaint(layerStyle, element.sourceRef.sourceId, elementBounds);
     }
     resolveFillPaint(element.style, element.sourceRef.sourceId, elementBounds);
+    return preparedGeometry;
   };
 
   for (const element of scene.elements) {
+    let preparedGeometry: PreparedElementGeometry | undefined;
     if (reuseContext) {
-      registerDefsForElement(element);
+      preparedGeometry = registerDefsForElement(element);
       if (tryReuseElementParts(modelBuilder, reuseContext, element)) {
         continue;
       }
@@ -362,22 +515,41 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       if (!hasDrawablePathCommands(element.commands)) {
         diagnostics.push({
           code: "empty-path",
-          message: `Skipping path ${element.id} because it has no drawable segments.`
+          message: `Skipping path ${element.id} because it has no drawable segments.`,
         });
         continue;
       }
 
-      const renderedPath = renderPathWithArrows(element);
-      const shaftHasDrawableSegment = hasDrawablePathCommands(renderedPath.shaftCommands);
+      const preparedPath =
+        preparedGeometry?.kind === "Path" ? preparedGeometry : undefined;
+      const renderedPath =
+        preparedPath?.renderedPath ?? renderPathWithArrows(element);
+      const shaftHasDrawableSegment = hasDrawablePathCommands(
+        renderedPath.shaftCommands
+      );
       if (shaftHasDrawableSegment) {
-        const d = encodePathData(renderedPath.shaftCommands, viewBox);
+        const d =
+          preparedPath?.shaftPathData ??
+          encodePathData(renderedPath.shaftCommands, viewBox);
         if (d.length > 0) {
-          const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
-          const rawPathBounds = computeSvgPathBounds(renderedPath.shaftCommands, viewBox);
-          if (!rawPathBounds) {
-            continue;
+          const svgElementTransform =
+            preparedPath?.transform ??
+            (element.transform
+              ? worldTransformToSvgTransform(element.transform, viewBox)
+              : null);
+          let pathBounds = preparedPath?.bounds;
+          if (!pathBounds) {
+            const rawPathBounds = computeSvgPathBounds(
+              renderedPath.shaftCommands,
+              viewBox
+            );
+            if (!rawPathBounds) {
+              continue;
+            }
+            pathBounds = svgElementTransform
+              ? transformSvgBounds(rawPathBounds, svgElementTransform)
+              : rawPathBounds;
           }
-          const pathBounds = svgElementTransform ? transformSvgBounds(rawPathBounds, svgElementTransform) : rawPathBounds;
           emitShadowShapeParts({
             appendPart,
             sourceId: element.sourceRef.sourceId,
@@ -388,7 +560,7 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
             shadowLayers: element.style.shadowLayers,
             baseStyle: element.style,
             resolveFillPaint,
-            ensureCircularShadowMaskDefinition
+            ensureCircularShadowMaskDefinition,
           });
 
           appendStyledShapeParts({
@@ -400,7 +572,9 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
             style: element.style,
             bounds: pathBounds,
             resolveFillPaint,
-            transforms: svgElementTransform ? [formatMatrix(svgElementTransform)] : []
+            transforms: svgElementTransform
+              ? [formatMatrix(svgElementTransform)]
+              : [],
           });
         }
       }
@@ -411,16 +585,24 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
           continue;
         }
         const attrs = arrowTipAttributes(element.style, tipPath);
-        const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
+        const svgElementTransform = element.transform
+          ? worldTransformToSvgTransform(element.transform, viewBox)
+          : null;
         if (svgElementTransform) {
           attrs.push(`transform="${formatMatrix(svgElementTransform)}"`);
         }
         appendPart(
-          `${element.id}:tip:${tipPath.side}:${tipPath.index}:${tipPath.tipKind}:${tipPath.bend ? "bend" : "flat"}`,
+          `${element.id}:tip:${tipPath.side}:${tipPath.index}:${
+            tipPath.tipKind
+          }:${tipPath.bend ? "bend" : "flat"}`,
           element.sourceRef.sourceId,
           element.id,
-          `<path data-source-id="${escapeAttr(element.sourceRef.sourceId)}" data-arrow-tip-kind="${escapeAttr(tipPath.tipKind)}" ` +
-            `data-arrow-side="${tipPath.side}" data-arrow-index="${tipPath.index}" data-arrow-bend="${tipPath.bend ? "true" : "false"}" ` +
+          `<path data-source-id="${escapeAttr(
+            element.sourceRef.sourceId
+          )}" data-arrow-tip-kind="${escapeAttr(tipPath.tipKind)}" ` +
+            `data-arrow-side="${tipPath.side}" data-arrow-index="${
+              tipPath.index
+            }" data-arrow-bend="${tipPath.bend ? "true" : "false"}" ` +
             `d="${escapeAttr(d)}" ${attrs.join(" ")} />`
         );
       }
@@ -428,112 +610,206 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     }
 
     if (element.kind === "Circle") {
-      const center = toSvgPoint(element.center, viewBox);
-      const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
-      const circleBounds: SvgBounds = svgBounds(
-        pt(center.x - element.radius),
-        pt(center.y - element.radius),
-        pt(center.x + element.radius),
-        pt(center.y + element.radius)
-      );
-      const transformedCircleBounds = svgElementTransform ? transformSvgBounds(circleBounds, svgElementTransform) : circleBounds;
+      const preparedCircle =
+        preparedGeometry?.kind === "Circle" ? preparedGeometry : undefined;
+      const center =
+        preparedCircle?.center ?? toSvgPoint(element.center, viewBox);
+      const svgElementTransform =
+        preparedCircle?.transform ??
+        (element.transform
+          ? worldTransformToSvgTransform(element.transform, viewBox)
+          : null);
+      const transformedCircleBounds =
+        preparedCircle?.bounds ??
+        (() => {
+          const circleBounds: SvgBounds = svgBounds(
+            pt(center.x - element.radius),
+            pt(center.y - element.radius),
+            pt(center.x + element.radius),
+            pt(center.y + element.radius)
+          );
+          return svgElementTransform
+            ? transformSvgBounds(circleBounds, svgElementTransform)
+            : circleBounds;
+        })();
       emitShadowShapeParts({
         appendPart,
         sourceId: element.sourceRef.sourceId,
         elementId: element.id,
         shadowPartKind: "circle",
-        shape: { kind: "circle", cx: center.x, cy: center.y, radius: element.radius },
+        shape: {
+          kind: "circle",
+          cx: center.x,
+          cy: center.y,
+          radius: element.radius,
+        },
         bounds: transformedCircleBounds,
         shadowLayers: element.style.shadowLayers,
         baseStyle: element.style,
         resolveFillPaint,
-        ensureCircularShadowMaskDefinition
+        ensureCircularShadowMaskDefinition,
       });
       appendStyledShapeParts({
         appendPart,
         basePartId: `${element.id}:circle`,
         sourceId: element.sourceRef.sourceId,
         elementId: element.id,
-        shape: { kind: "circle", cx: center.x, cy: center.y, radius: element.radius },
+        shape: {
+          kind: "circle",
+          cx: center.x,
+          cy: center.y,
+          radius: element.radius,
+        },
         style: element.style,
         bounds: transformedCircleBounds,
         resolveFillPaint,
-        transforms: svgElementTransform ? [formatMatrix(svgElementTransform)] : []
+        transforms: svgElementTransform
+          ? [formatMatrix(svgElementTransform)]
+          : [],
       });
       continue;
     }
 
     if (element.kind === "Ellipse") {
-      const center = toSvgPoint(element.center, viewBox);
-      const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
-      const ellipseBounds = computeSvgEllipseBounds(center.x, center.y, element.rx, element.ry, element.rotation ?? 0);
-      const transformedEllipseBounds = svgElementTransform ? transformSvgBounds(ellipseBounds, svgElementTransform) : ellipseBounds;
-      const ellipseRotationTransforms = ellipseTransformAttributes(element.rotation ?? 0, center.x, center.y);
+      const preparedEllipse =
+        preparedGeometry?.kind === "Ellipse" ? preparedGeometry : undefined;
+      const center =
+        preparedEllipse?.center ?? toSvgPoint(element.center, viewBox);
+      const svgElementTransform =
+        preparedEllipse?.transform ??
+        (element.transform
+          ? worldTransformToSvgTransform(element.transform, viewBox)
+          : null);
+      const transformedEllipseBounds =
+        preparedEllipse?.bounds ??
+        (() => {
+          const ellipseBounds = computeSvgEllipseBounds(
+            center.x,
+            center.y,
+            element.rx,
+            element.ry,
+            element.rotation ?? 0
+          );
+          return svgElementTransform
+            ? transformSvgBounds(ellipseBounds, svgElementTransform)
+            : ellipseBounds;
+        })();
+      const ellipseRotationTransforms = ellipseTransformAttributes(
+        element.rotation ?? 0,
+        center.x,
+        center.y
+      );
       emitShadowShapeParts({
         appendPart,
         sourceId: element.sourceRef.sourceId,
         elementId: element.id,
         shadowPartKind: "ellipse",
-        shape: { kind: "ellipse", cx: center.x, cy: center.y, rx: element.rx, ry: element.ry },
+        shape: {
+          kind: "ellipse",
+          cx: center.x,
+          cy: center.y,
+          rx: element.rx,
+          ry: element.ry,
+        },
         bounds: transformedEllipseBounds,
         shadowLayers: element.style.shadowLayers,
         baseStyle: element.style,
         resolveFillPaint,
         ensureCircularShadowMaskDefinition,
-        transforms: ellipseRotationTransforms
+        transforms: ellipseRotationTransforms,
       });
       appendStyledShapeParts({
         appendPart,
         basePartId: `${element.id}:ellipse`,
         sourceId: element.sourceRef.sourceId,
         elementId: element.id,
-        shape: { kind: "ellipse", cx: center.x, cy: center.y, rx: element.rx, ry: element.ry },
+        shape: {
+          kind: "ellipse",
+          cx: center.x,
+          cy: center.y,
+          rx: element.rx,
+          ry: element.ry,
+        },
         style: element.style,
         bounds: transformedEllipseBounds,
         resolveFillPaint,
         transforms: [
           ...(svgElementTransform ? [formatMatrix(svgElementTransform)] : []),
-          ...ellipseRotationTransforms
-        ]
+          ...ellipseRotationTransforms,
+        ],
       });
       continue;
     }
 
     const position = toSvgPoint(element.position, viewBox);
-    const textBlockWidth = element.textBlockWidth ?? estimateTextBlockWidth(element.text, element.style.fontSize);
-    const textBlockHeight = element.textBlockHeight ?? Math.max(1, element.text.split("\n").length) * element.style.fontSize * 1.15;
+    const textBlockWidth =
+      element.textBlockWidth ??
+      estimateTextBlockWidth(element.text, element.style.fontSize);
+    const textBlockHeight =
+      element.textBlockHeight ??
+      Math.max(1, element.text.split("\n").length) *
+        element.style.fontSize *
+        1.15;
     const rotation = element.rotation ?? 0;
     const hasRotation = Math.abs(rotation) > 1e-6;
-    const svgElementTransform = element.transform ? worldTransformToSvgTransform(element.transform, viewBox) : null;
+    const svgElementTransform = element.transform
+      ? worldTransformToSvgTransform(element.transform, viewBox)
+      : null;
     if (element.textRenderInfo?.mode === "mathjax") {
-      const rendered = opts.textEngine?.renderFromCache(element.textRenderInfo.cacheKey) ?? null;
+      const rendered =
+        opts.textEngine?.renderFromCache(element.textRenderInfo.cacheKey) ??
+        null;
       if (!rendered) {
         diagnostics.push({
           code: "missing-mathjax-text-render",
-          message: `Missing cached MathJax text render payload for ${element.id}.`
+          message: `Missing cached MathJax text render payload for ${element.id}.`,
         });
       } else {
         const textColor = element.style.textColor ?? "#000000";
         const textOpacity = element.style.textOpacity;
         const x = position.x - textBlockWidth / 2;
         const y = position.y - textBlockHeight / 2;
-        const renderedViewBox = `${fmt(rendered.viewBox.x)} ${fmt(rendered.viewBox.y)} ${fmt(rendered.viewBox.width)} ${fmt(rendered.viewBox.height)}`;
+        const renderedViewBox = `${fmt(rendered.viewBox.x)} ${fmt(
+          rendered.viewBox.y
+        )} ${fmt(rendered.viewBox.width)} ${fmt(rendered.viewBox.height)}`;
         const paragraphAttr =
           element.textRenderInfo.paragraphId != null
-            ? ` data-paragraph-id="${escapeAttr(element.textRenderInfo.paragraphId)}"`
+            ? ` data-paragraph-id="${escapeAttr(
+                element.textRenderInfo.paragraphId
+              )}"`
             : "";
-        const layoutKindAttr = ` data-text-layout-kind="${escapeAttr(element.textRenderInfo.layoutKind)}"`;
-        const sceneTextIdAttr = ` data-scene-text-id="${escapeAttr(element.id)}"`;
-        const preserveAspectRatio = resolveMathJaxPreserveAspectRatio(element.textRenderInfo.paragraphAlignment);
+        const layoutKindAttr = ` data-text-layout-kind="${escapeAttr(
+          element.textRenderInfo.layoutKind
+        )}"`;
+        const sceneTextIdAttr = ` data-scene-text-id="${escapeAttr(
+          element.id
+        )}"`;
+        const preserveAspectRatio = resolveMathJaxPreserveAspectRatio(
+          element.textRenderInfo.paragraphAlignment
+        );
         const preserveAspectRatioAttr =
           preserveAspectRatio != null
             ? ` preserveAspectRatio="${escapeAttr(preserveAspectRatio)}"`
             : "";
-        const renderedSvg = `<svg data-source-id="${escapeAttr(element.sourceRef.sourceId)}" data-text-renderer="mathjax"${paragraphAttr}${layoutKindAttr}${sceneTextIdAttr} x="${fmt(x)}" y="${fmt(y)}" width="${fmt(textBlockWidth)}" height="${fmt(textBlockHeight)}" viewBox="${renderedViewBox}"${preserveAspectRatioAttr} color="${escapeAttr(textColor)}" opacity="${fmt(textOpacity)}" overflow="visible">${rendered.body}</svg>`;
+        const renderedSvg = `<svg data-source-id="${escapeAttr(
+          element.sourceRef.sourceId
+        )}" data-text-renderer="mathjax"${paragraphAttr}${layoutKindAttr}${sceneTextIdAttr} x="${fmt(
+          x
+        )}" y="${fmt(y)}" width="${fmt(textBlockWidth)}" height="${fmt(
+          textBlockHeight
+        )}" viewBox="${renderedViewBox}"${preserveAspectRatioAttr} color="${escapeAttr(
+          textColor
+        )}" opacity="${fmt(textOpacity)}" overflow="visible">${
+          rendered.body
+        }</svg>`;
         if (hasRotation || svgElementTransform) {
           const transforms: string[] = [];
-          if (svgElementTransform) transforms.push(formatMatrix(svgElementTransform));
-          if (hasRotation) transforms.push(`rotate(${fmt(-rotation)} ${fmt(position.x)} ${fmt(position.y)})`);
+          if (svgElementTransform)
+            transforms.push(formatMatrix(svgElementTransform));
+          if (hasRotation)
+            transforms.push(
+              `rotate(${fmt(-rotation)} ${fmt(position.x)} ${fmt(position.y)})`
+            );
           appendPart(
             `${element.id}:text:mathjax:rotated`,
             element.sourceRef.sourceId,
@@ -541,16 +817,29 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
             `<g transform="${transforms.join(" ")}">${renderedSvg}</g>`
           );
         } else {
-          appendPart(`${element.id}:text:mathjax`, element.sourceRef.sourceId, element.id, renderedSvg);
+          appendPart(
+            `${element.id}:text:mathjax`,
+            element.sourceRef.sourceId,
+            element.id,
+            renderedSvg
+          );
         }
         continue;
       }
     }
-    const textX = alignedTextAnchorX(position.x, textBlockWidth, element.style.textAlign);
+    const textX = alignedTextAnchorX(
+      position.x,
+      textBlockWidth,
+      element.style.textAlign
+    );
     const attrs = styleAttributes(element.style, true);
     const textTransforms: string[] = [];
-    if (svgElementTransform) textTransforms.push(formatMatrix(svgElementTransform));
-    if (hasRotation) textTransforms.push(`rotate(${fmt(-rotation)} ${fmt(position.x)} ${fmt(position.y)})`);
+    if (svgElementTransform)
+      textTransforms.push(formatMatrix(svgElementTransform));
+    if (hasRotation)
+      textTransforms.push(
+        `rotate(${fmt(-rotation)} ${fmt(position.x)} ${fmt(position.y)})`
+      );
     if (textTransforms.length > 0) {
       attrs.push(`transform="${textTransforms.join(" ")}"`);
     }
@@ -559,7 +848,11 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
       `${element.id}:text`,
       element.sourceRef.sourceId,
       element.id,
-      `<text data-source-id="${escapeAttr(element.sourceRef.sourceId)}" x="${fmt(textX)}" y="${fmt(position.y)}" ${attrs.join(" ")}>${textBody}</text>`
+      `<text data-source-id="${escapeAttr(
+        element.sourceRef.sourceId
+      )}" x="${fmt(textX)}" y="${fmt(position.y)}" ${attrs.join(
+        " "
+      )}>${textBody}</text>`
     );
   }
 
@@ -567,22 +860,31 @@ export function emitSvgModel(scene: SceneFigure, opts: EmitSvgOptions = {}): Svg
     ...gradientDefById.values(),
     ...patternDefById.values(),
     ...shadowMaskDefById.values(),
-    ...clipPathDefBySceneId.values()
+    ...clipPathDefBySceneId.values(),
   ];
   return modelBuilder.build({
     viewBox,
     defs: defsParts,
-    diagnostics
+    diagnostics,
   });
 }
 
 function resolveMathJaxPreserveAspectRatio(
-  alignment: ResolvedStyle["textAlign"] | "justified" | "ragged-right" | "ragged-left" | undefined
+  alignment:
+    | ResolvedStyle["textAlign"]
+    | "justified"
+    | "ragged-right"
+    | "ragged-left"
+    | undefined
 ): "xMinYMid meet" | "xMidYMid meet" | "xMaxYMid meet" | undefined {
   if (alignment === "center" || alignment === "flush center") {
     return "xMidYMid meet";
   }
-  if (alignment === "right" || alignment === "flush right" || alignment === "ragged-left") {
+  if (
+    alignment === "right" ||
+    alignment === "flush right" ||
+    alignment === "ragged-left"
+  ) {
     return "xMaxYMid meet";
   }
   if (
@@ -598,7 +900,10 @@ function resolveMathJaxPreserveAspectRatio(
   return undefined;
 }
 
-function encodePathData(commands: ScenePathCommand[], viewBox: { y: number; height: number }): string {
+function encodePathData(
+  commands: ScenePathCommand[],
+  viewBox: { y: number; height: number }
+): string {
   const chunks: string[] = [];
   for (const command of commands) {
     if (command.kind === "Z") {
@@ -611,7 +916,9 @@ function encodePathData(commands: ScenePathCommand[], viewBox: { y: number; heig
       const sweep = command.sweep ? 0 : 1;
       chunks.push(
         // Path points are mirrored into SVG space (`toSvgPoint`), so arc rotation must be mirrored too.
-        `A ${fmt(command.rx)} ${fmt(command.ry)} ${fmt(-command.xAxisRotation)} ${command.largeArc ? 1 : 0} ${sweep} ${fmt(to.x)} ${fmt(to.y)}`
+        `A ${fmt(command.rx)} ${fmt(command.ry)} ${fmt(
+          -command.xAxisRotation
+        )} ${command.largeArc ? 1 : 0} ${sweep} ${fmt(to.x)} ${fmt(to.y)}`
       );
       continue;
     }
@@ -620,7 +927,11 @@ function encodePathData(commands: ScenePathCommand[], viewBox: { y: number; heig
       const c1 = toSvgPoint(command.c1, viewBox);
       const c2 = toSvgPoint(command.c2, viewBox);
       const to = toSvgPoint(command.to, viewBox);
-      chunks.push(`C ${fmt(c1.x)} ${fmt(c1.y)} ${fmt(c2.x)} ${fmt(c2.y)} ${fmt(to.x)} ${fmt(to.y)}`);
+      chunks.push(
+        `C ${fmt(c1.x)} ${fmt(c1.y)} ${fmt(c2.x)} ${fmt(c2.y)} ${fmt(
+          to.x
+        )} ${fmt(to.y)}`
+      );
       continue;
     }
 
@@ -643,8 +954,18 @@ function appendStyledShapeParts(args: {
 }): void {
   const markups = renderStyledShapeMarkups(args);
   if (markups.length === 2) {
-    args.appendPart(`${args.basePartId}:outer`, args.sourceId, args.elementId, markups[0]);
-    args.appendPart(`${args.basePartId}:inner`, args.sourceId, args.elementId, markups[1]);
+    args.appendPart(
+      `${args.basePartId}:outer`,
+      args.sourceId,
+      args.elementId,
+      markups[0]
+    );
+    args.appendPart(
+      `${args.basePartId}:inner`,
+      args.sourceId,
+      args.elementId,
+      markups[1]
+    );
     return;
   }
   if (markups[0]) {
@@ -662,52 +983,77 @@ function renderStyledShapeMarkups(args: {
 }): string[] {
   const transforms = args.transforms ?? [];
   if (shouldEmitDoubleStroke(args.style)) {
-    const outerFill = args.resolveFillPaint(args.style, args.sourceId, args.bounds);
+    const outerFill = args.resolveFillPaint(
+      args.style,
+      args.sourceId,
+      args.bounds
+    );
     const outerAttrs = styleAttributes(args.style, false, {
       lineWidth: doubleOuterLineWidth(args.style),
-      fill: outerFill ?? undefined
+      fill: outerFill ?? undefined,
     });
     appendTransformAttribute(outerAttrs, transforms);
     const innerAttrs = styleAttributes(args.style, false, {
       stroke: args.style.doubleColor,
       fill: "none",
-      lineWidth: doubleInnerLineWidth(args.style)
+      lineWidth: doubleInnerLineWidth(args.style),
     });
     appendTransformAttribute(innerAttrs, transforms);
     return [
       renderStyledShapeElement(args.sourceId, args.shape, outerAttrs),
-      renderStyledShapeElement(args.sourceId, args.shape, innerAttrs)
+      renderStyledShapeElement(args.sourceId, args.shape, innerAttrs),
     ];
   }
 
-  const resolvedFill = args.resolveFillPaint(args.style, args.sourceId, args.bounds);
+  const resolvedFill = args.resolveFillPaint(
+    args.style,
+    args.sourceId,
+    args.bounds
+  );
   const attrs = styleAttributes(args.style, false, {
-    fill: resolvedFill ?? undefined
+    fill: resolvedFill ?? undefined,
   });
   appendTransformAttribute(attrs, transforms);
   return [renderStyledShapeElement(args.sourceId, args.shape, attrs)];
 }
 
-function renderStyledShapeElement(sourceId: string, shape: StyledSvgShape, attrs: readonly string[]): string {
+function renderStyledShapeElement(
+  sourceId: string,
+  shape: StyledSvgShape,
+  attrs: readonly string[]
+): string {
   const sourceAttr = `data-source-id="${escapeAttr(sourceId)}"`;
   const styleAttrs = attrs.join(" ");
   if (shape.kind === "path") {
     return `<path ${sourceAttr} d="${escapeAttr(shape.d)}" ${styleAttrs} />`;
   }
   if (shape.kind === "circle") {
-    return `<circle ${sourceAttr} cx="${fmt(shape.cx)}" cy="${fmt(shape.cy)}" r="${fmt(shape.radius)}" ${styleAttrs} />`;
+    return `<circle ${sourceAttr} cx="${fmt(shape.cx)}" cy="${fmt(
+      shape.cy
+    )}" r="${fmt(shape.radius)}" ${styleAttrs} />`;
   }
-  return `<ellipse ${sourceAttr} cx="${fmt(shape.cx)}" cy="${fmt(shape.cy)}" rx="${fmt(shape.rx)}" ry="${fmt(shape.ry)}" ${styleAttrs} />`;
+  return `<ellipse ${sourceAttr} cx="${fmt(shape.cx)}" cy="${fmt(
+    shape.cy
+  )}" rx="${fmt(shape.rx)}" ry="${fmt(shape.ry)}" ${styleAttrs} />`;
 }
 
-function appendTransformAttribute(attrs: string[], transforms: readonly string[]): void {
+function appendTransformAttribute(
+  attrs: string[],
+  transforms: readonly string[]
+): void {
   if (transforms.length > 0) {
     attrs.push(`transform="${transforms.join(" ")}"`);
   }
 }
 
-function ellipseTransformAttributes(rotation: number, cx: number, cy: number): string[] {
-  return Math.abs(rotation) > 1e-6 ? [`rotate(${fmt(-rotation)} ${fmt(cx)} ${fmt(cy)})`] : [];
+function ellipseTransformAttributes(
+  rotation: number,
+  cx: number,
+  cy: number
+): string[] {
+  return Math.abs(rotation) > 1e-6
+    ? [`rotate(${fmt(-rotation)} ${fmt(cx)} ${fmt(cy)})`]
+    : [];
 }
 
 function emitShadowShapeParts(args: {
@@ -725,21 +1071,35 @@ function emitShadowShapeParts(args: {
 }): void {
   for (let index = 0; index < args.shadowLayers.length; index += 1) {
     const layer = args.shadowLayers[index];
-    const layerStyle = resolveShadowLayerStyle(layer.style as ShadowRenderableStyle, args.baseStyle);
+    const layerStyle = resolveShadowLayerStyle(
+      layer.style as ShadowRenderableStyle,
+      args.baseStyle
+    );
     const groupTransform = shadowTransformMatrix(layer, args.bounds);
-    const maskId = layer.fade === "circle-fuzzy-edge-15" ? args.ensureCircularShadowMaskDefinition() : null;
+    const maskId =
+      layer.fade === "circle-fuzzy-edge-15"
+        ? args.ensureCircularShadowMaskDefinition()
+        : null;
     const shapes = renderStyledShapeMarkups({
       sourceId: args.sourceId,
       shape: args.shape,
       style: layerStyle,
       bounds: args.bounds,
       resolveFillPaint: args.resolveFillPaint,
-      transforms: args.transforms
+      transforms: args.transforms,
     });
 
-    const groupAttrs = shadowGroupAttributes(args.sourceId, index + 1, layer, groupTransform, maskId);
+    const groupAttrs = shadowGroupAttributes(
+      args.sourceId,
+      index + 1,
+      layer,
+      groupTransform,
+      maskId
+    );
     args.appendPart(
-      `${args.elementId ?? args.sourceId}:shadow:${args.shadowPartKind}:${index + 1}`,
+      `${args.elementId ?? args.sourceId}:shadow:${args.shadowPartKind}:${
+        index + 1
+      }`,
       args.sourceId,
       args.elementId,
       `<g ${groupAttrs.join(" ")}>${shapes.join("")}</g>`
@@ -756,7 +1116,7 @@ function shadowGroupAttributes(
 ): string[] {
   const attrs: string[] = [
     `data-source-id="${escapeAttr(sourceId)}"`,
-    `data-shadow-layer="${index}"`
+    `data-shadow-layer="${index}"`,
   ];
   if (layer.fade !== "none") {
     attrs.push(`data-shadow-fade="${escapeAttr(layer.fade)}"`);
@@ -770,7 +1130,10 @@ function shadowGroupAttributes(
   return attrs;
 }
 
-function shadowTransformMatrix(layer: ShadowLayer, bounds: SvgBounds | null): string | null {
+function shadowTransformMatrix(
+  layer: ShadowLayer,
+  bounds: SvgBounds | null
+): string | null {
   const scale = Number.isFinite(layer.scale) ? layer.scale : 1;
   const dx = Number.isFinite(layer.xshift) ? layer.xshift : 0;
   const dy = Number.isFinite(layer.yshift) ? -layer.yshift : 0;
@@ -784,41 +1147,67 @@ function shadowTransformMatrix(layer: ShadowLayer, bounds: SvgBounds | null): st
     f += cy - scale * cy;
   }
 
-  if (Math.abs(scale - 1) <= 1e-6 && Math.abs(e) <= 1e-6 && Math.abs(f) <= 1e-6) {
+  if (
+    Math.abs(scale - 1) <= 1e-6 &&
+    Math.abs(e) <= 1e-6 &&
+    Math.abs(f) <= 1e-6
+  ) {
     return null;
   }
 
   return `matrix(${fmt(scale)} 0 0 ${fmt(scale)} ${fmt(e)} ${fmt(f)})`;
 }
 
-function renderCircularShadowMaskDefinition(maskId: string, gradientId: string): string {
+function renderCircularShadowMaskDefinition(
+  maskId: string,
+  gradientId: string
+): string {
   return (
-    `<radialGradient id="${escapeAttr(gradientId)}" gradientUnits="objectBoundingBox" cx="0.5" cy="0.5" r="0.5">` +
+    `<radialGradient id="${escapeAttr(
+      gradientId
+    )}" gradientUnits="objectBoundingBox" cx="0.5" cy="0.5" r="0.5">` +
     `<stop offset="85%" stop-color="#ffffff" stop-opacity="1" />` +
     `<stop offset="100%" stop-color="#ffffff" stop-opacity="0" />` +
     `</radialGradient>` +
-    `<mask id="${escapeAttr(maskId)}" maskUnits="objectBoundingBox" maskContentUnits="objectBoundingBox">` +
-    `<rect x="0" y="0" width="1" height="1" fill="url(#${escapeAttr(gradientId)})" />` +
+    `<mask id="${escapeAttr(
+      maskId
+    )}" maskUnits="objectBoundingBox" maskContentUnits="objectBoundingBox">` +
+    `<rect x="0" y="0" width="1" height="1" fill="url(#${escapeAttr(
+      gradientId
+    )})" />` +
     `</mask>`
   );
 }
 
-function resolveShadowLayerStyle(layerStyle: ShadowRenderableStyle, baseStyle: ResolvedStyle): ShadowRenderableStyle {
+function resolveShadowLayerStyle(
+  layerStyle: ShadowRenderableStyle,
+  baseStyle: ResolvedStyle
+): ShadowRenderableStyle {
   const inheritsFill = layerStyle.fill === SHADOW_INHERIT_FILL;
   return {
     ...layerStyle,
-    stroke: layerStyle.stroke === SHADOW_INHERIT_STROKE ? baseStyle.stroke : layerStyle.stroke,
+    stroke:
+      layerStyle.stroke === SHADOW_INHERIT_STROKE
+        ? baseStyle.stroke
+        : layerStyle.stroke,
     fill: inheritsFill ? baseStyle.fill : layerStyle.fill,
     fillPattern: inheritsFill ? baseStyle.fillPattern : layerStyle.fillPattern,
-    patternColor: inheritsFill ? baseStyle.patternColor : layerStyle.patternColor
+    patternColor: inheritsFill
+      ? baseStyle.patternColor
+      : layerStyle.patternColor,
   };
 }
 
 function hasActivePatternFill(style: PatternRenderableStyle): boolean {
-  return style.fillPattern != null && style.fill != null && style.fill !== "none";
+  return (
+    style.fillPattern != null && style.fill != null && style.fill !== "none"
+  );
 }
 
-function arrowTipAttributes(style: ResolvedStyle, tipPath: RenderedArrowTipPath): string[] {
+function arrowTipAttributes(
+  style: ResolvedStyle,
+  tipPath: RenderedArrowTipPath
+): string[] {
   return [
     `stroke="${escapeAttr(tipPath.stroke)}"`,
     `fill="${escapeAttr(tipPath.fill)}"`,
@@ -826,7 +1215,7 @@ function arrowTipAttributes(style: ResolvedStyle, tipPath: RenderedArrowTipPath)
     `stroke-linecap="${tipPath.lineCap}"`,
     `stroke-linejoin="${tipPath.lineJoin}"`,
     `stroke-opacity="${fmt(style.strokeOpacity)}"`,
-    `fill-opacity="${fmt(style.fillOpacity)}"`
+    `fill-opacity="${fmt(style.fillOpacity)}"`,
   ];
 }
 
@@ -834,10 +1223,18 @@ function normalizeShadingName(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function computeShadingTransform(bounds: SvgBounds, angle: number): ShadingTransform | null {
+function computeShadingTransform(
+  bounds: SvgBounds,
+  angle: number
+): ShadingTransform | null {
   const width = bounds.maxX - bounds.minX;
   const height = bounds.maxY - bounds.minY;
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
     return null;
   }
 
@@ -850,8 +1247,10 @@ function computeShadingTransform(bounds: SvgBounds, angle: number): ShadingTrans
     return null;
   }
 
-  const scaleX = (PGF_SHADE_SCALE_FACTOR * (width * absCos + height * absSin)) / denom;
-  const scaleY = (PGF_SHADE_SCALE_FACTOR * (width * absSin + height * absCos)) / denom;
+  const scaleX =
+    (PGF_SHADE_SCALE_FACTOR * (width * absCos + height * absSin)) / denom;
+  const scaleY =
+    (PGF_SHADE_SCALE_FACTOR * (width * absSin + height * absCos)) / denom;
   if (Math.abs(scaleX) <= 1e-4 || Math.abs(scaleY) <= 1e-4) {
     return null;
   }
@@ -862,7 +1261,7 @@ function computeShadingTransform(bounds: SvgBounds, angle: number): ShadingTrans
     scaleX,
     scaleY,
     // Scene coordinates are mirrored into SVG space, so shading rotations must be mirrored too.
-    rotation: -resolvedAngle
+    rotation: -resolvedAngle,
   };
 }
 
@@ -872,13 +1271,17 @@ function signatureShadingTransform(transform: ShadingTransform): string {
     fmt(transform.centerY),
     fmt(transform.scaleX),
     fmt(transform.scaleY),
-    fmt(transform.rotation)
+    fmt(transform.rotation),
   ].join(",");
 }
 
 function shadingTransformAttribute(transform: ShadingTransform): string {
-  return `translate(${fmt(transform.centerX)} ${fmt(transform.centerY)}) ` +
-    `rotate(${fmt(transform.rotation)}) scale(${fmt(transform.scaleX)} ${fmt(transform.scaleY)})`;
+  return (
+    `translate(${fmt(transform.centerX)} ${fmt(transform.centerY)}) ` +
+    `rotate(${fmt(transform.rotation)}) scale(${fmt(transform.scaleX)} ${fmt(
+      transform.scaleY
+    )})`
+  );
 }
 
 function renderAxisGradientDefinition(
@@ -891,7 +1294,9 @@ function renderAxisGradientDefinition(
   const transformAttr = shadingTransformAttribute(transform);
   return (
     `<linearGradient id="${escapeAttr(id)}" gradientUnits="userSpaceOnUse" ` +
-    `x1="0" y1="${fmt(PGF_SHADE_CANONICAL_HALF)}" x2="0" y2="${fmt(-PGF_SHADE_CANONICAL_HALF)}" ` +
+    `x1="0" y1="${fmt(PGF_SHADE_CANONICAL_HALF)}" x2="0" y2="${fmt(
+      -PGF_SHADE_CANONICAL_HALF
+    )}" ` +
     `gradientTransform="${escapeAttr(transformAttr)}">` +
     `<stop offset="0%" stop-color="${escapeAttr(bottomColor)}" />` +
     `<stop offset="25%" stop-color="${escapeAttr(bottomColor)}" />` +
@@ -902,7 +1307,12 @@ function renderAxisGradientDefinition(
   );
 }
 
-function renderRadialGradientDefinition(id: string, transform: ShadingTransform, innerColor: string, outerColor: string): string {
+function renderRadialGradientDefinition(
+  id: string,
+  transform: ShadingTransform,
+  innerColor: string,
+  outerColor: string
+): string {
   const transformAttr = shadingTransformAttribute(transform);
   return (
     `<radialGradient id="${escapeAttr(id)}" gradientUnits="userSpaceOnUse" ` +
@@ -915,7 +1325,11 @@ function renderRadialGradientDefinition(id: string, transform: ShadingTransform,
   );
 }
 
-function renderBallGradientDefinition(id: string, transform: ShadingTransform, ballColor: string): string {
+function renderBallGradientDefinition(
+  id: string,
+  transform: ShadingTransform,
+  ballColor: string
+): string {
   const light15 = mixColors(ballColor, "#ffffff", 0.15) ?? ballColor;
   const light75 = mixColors(ballColor, "#ffffff", 0.75) ?? ballColor;
   const dark70 = mixColors(ballColor, "#000000", 0.7) ?? ballColor;
@@ -936,12 +1350,22 @@ function renderBallGradientDefinition(id: string, transform: ShadingTransform, b
   );
 }
 
-function renderPatternDefinition(id: string, pattern: ResolvedPattern, patternColor: string | null, globalYPhase: number): string {
+function renderPatternDefinition(
+  id: string,
+  pattern: ResolvedPattern,
+  patternColor: string | null,
+  globalYPhase: number
+): string {
   const context: PatternRenderContext = { globalYPhase };
   if (pattern.kind === "legacy") {
     return renderLegacyPatternDefinition(id, pattern, patternColor, context);
   }
-  return renderMetaPatternDefinition(id, pattern, patternColor ?? "black", context);
+  return renderMetaPatternDefinition(
+    id,
+    pattern,
+    patternColor ?? "black",
+    context
+  );
 }
 
 function renderLegacyPatternDefinition(
@@ -954,10 +1378,30 @@ function renderLegacyPatternDefinition(
   const mm = 2.84527559055;
 
   if (pattern.name === "horizontal lines") {
-    return renderPatternElement(context, id, 0, 0, 3, 3, `<path d="M -1 0.5 L 4 0.5" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`);
+    return renderPatternElement(
+      context,
+      id,
+      0,
+      0,
+      3,
+      3,
+      `<path d="M -1 0.5 L 4 0.5" stroke="${escapeAttr(
+        strokeColor
+      )}" stroke-width="0.4" fill="none" />`
+    );
   }
   if (pattern.name === "vertical lines") {
-    return renderPatternElement(context, id, 0, 0, 3, 3, `<path d="M 0.5 -1 L 0.5 4" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`);
+    return renderPatternElement(
+      context,
+      id,
+      0,
+      0,
+      3,
+      3,
+      `<path d="M 0.5 -1 L 0.5 4" stroke="${escapeAttr(
+        strokeColor
+      )}" stroke-width="0.4" fill="none" />`
+    );
   }
   if (pattern.name === "north east lines") {
     return renderPatternElement(
@@ -967,7 +1411,9 @@ function renderLegacyPatternDefinition(
       0,
       3,
       3,
-      `<path d="M -1 4 L 4 -1" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`
+      `<path d="M -1 4 L 4 -1" stroke="${escapeAttr(
+        strokeColor
+      )}" stroke-width="0.4" fill="none" />`
     );
   }
   if (pattern.name === "north west lines") {
@@ -978,7 +1424,9 @@ function renderLegacyPatternDefinition(
       0,
       3,
       3,
-      `<path d="M -1 -1 L 4 4" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`
+      `<path d="M -1 -1 L 4 4" stroke="${escapeAttr(
+        strokeColor
+      )}" stroke-width="0.4" fill="none" />`
     );
   }
   if (pattern.name === "grid") {
@@ -989,7 +1437,9 @@ function renderLegacyPatternDefinition(
       0,
       3,
       3,
-      `<path d="M 0 -1 L 0 4 M -1 0 L 4 0" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`
+      `<path d="M 0 -1 L 0 4 M -1 0 L 4 0" stroke="${escapeAttr(
+        strokeColor
+      )}" stroke-width="0.4" fill="none" />`
     );
   }
   if (pattern.name === "crosshatch") {
@@ -1000,11 +1450,21 @@ function renderLegacyPatternDefinition(
       0,
       3,
       3,
-      `<path d="M -1 -1 L 4 4 M -1 4 L 4 -1" stroke="${escapeAttr(strokeColor)}" stroke-width="0.4" fill="none" />`
+      `<path d="M -1 -1 L 4 4 M -1 4 L 4 -1" stroke="${escapeAttr(
+        strokeColor
+      )}" stroke-width="0.4" fill="none" />`
     );
   }
   if (pattern.name === "dots") {
-    return renderPatternElement(context, id, -1, -1, 3, 3, `<circle cx="0" cy="0" r="0.5" fill="${escapeAttr(strokeColor)}" />`);
+    return renderPatternElement(
+      context,
+      id,
+      -1,
+      -1,
+      3,
+      3,
+      `<circle cx="0" cy="0" r="0.5" fill="${escapeAttr(strokeColor)}" />`
+    );
   }
   if (pattern.name === "crosshatch dots") {
     return renderPatternElement(
@@ -1014,7 +1474,9 @@ function renderLegacyPatternDefinition(
       -1,
       3,
       3,
-      `<circle cx="0" cy="0" r="0.5" fill="${escapeAttr(strokeColor)}" /><circle cx="1.5" cy="-1.5" r="0.5" fill="${escapeAttr(
+      `<circle cx="0" cy="0" r="0.5" fill="${escapeAttr(
+        strokeColor
+      )}" /><circle cx="1.5" cy="-1.5" r="0.5" fill="${escapeAttr(
         strokeColor
       )}" />`
     );
@@ -1022,14 +1484,12 @@ function renderLegacyPatternDefinition(
   if (pattern.name === "fivepointed stars") {
     const center = 1 * mm;
     const radius = 1 * mm;
-    const pathData = polygonPathFromPolarAngles(center, center, radius, [18, 162, 306, 90, 234]);
-    return renderPatternElement(context, id, 0, 0, 3 * mm, 3 * mm, `<path d="${escapeAttr(pathData)}" fill="${escapeAttr(strokeColor)}" />`);
-  }
-  if (pattern.name === "sixpointed stars") {
-    const center = 1 * mm;
-    const radius = 1 * mm;
-    const first = polygonPathFromPolarAngles(center, center, radius, [30, 150, 270]);
-    const second = polygonPathFromPolarAngles(center, center, radius, [-30, -270, -150]);
+    const pathData = polygonPathFromPolarAngles(
+      center,
+      center,
+      radius,
+      [18, 162, 306, 90, 234]
+    );
     return renderPatternElement(
       context,
       id,
@@ -1037,7 +1497,34 @@ function renderLegacyPatternDefinition(
       0,
       3 * mm,
       3 * mm,
-      `<path d="${escapeAttr(`${first} ${second}`)}" fill="${escapeAttr(strokeColor)}" fill-rule="nonzero" />`
+      `<path d="${escapeAttr(pathData)}" fill="${escapeAttr(strokeColor)}" />`
+    );
+  }
+  if (pattern.name === "sixpointed stars") {
+    const center = 1 * mm;
+    const radius = 1 * mm;
+    const first = polygonPathFromPolarAngles(
+      center,
+      center,
+      radius,
+      [30, 150, 270]
+    );
+    const second = polygonPathFromPolarAngles(
+      center,
+      center,
+      radius,
+      [-30, -270, -150]
+    );
+    return renderPatternElement(
+      context,
+      id,
+      0,
+      0,
+      3 * mm,
+      3 * mm,
+      `<path d="${escapeAttr(`${first} ${second}`)}" fill="${escapeAttr(
+        strokeColor
+      )}" fill-rule="nonzero" />`
     );
   }
   if (pattern.name === "bricks") {
@@ -1048,10 +1535,14 @@ function renderLegacyPatternDefinition(
       0,
       4 * mm,
       4 * mm,
-      `<path d="M 0 ${fmt(1 * mm)} L ${fmt(4 * mm)} ${fmt(1 * mm)} M 0 ${fmt(3 * mm)} L ${fmt(4 * mm)} ${fmt(3 * mm)} ` +
-        `M ${fmt(1 * mm)} 0 L ${fmt(1 * mm)} ${fmt(1 * mm)} M ${fmt(3 * mm)} ${fmt(1 * mm)} L ${fmt(3 * mm)} ${fmt(
+      `<path d="M 0 ${fmt(1 * mm)} L ${fmt(4 * mm)} ${fmt(1 * mm)} M 0 ${fmt(
+        3 * mm
+      )} L ${fmt(4 * mm)} ${fmt(3 * mm)} ` +
+        `M ${fmt(1 * mm)} 0 L ${fmt(1 * mm)} ${fmt(1 * mm)} M ${fmt(
           3 * mm
-        )} M ${fmt(1 * mm)} ${fmt(3 * mm)} L ${fmt(1 * mm)} ${fmt(4 * mm)}" ` +
+        )} ${fmt(1 * mm)} L ${fmt(3 * mm)} ${fmt(3 * mm)} M ${fmt(
+          1 * mm
+        )} ${fmt(3 * mm)} L ${fmt(1 * mm)} ${fmt(4 * mm)}" ` +
         `stroke="${escapeAttr(strokeColor)}" stroke-width="0.8" fill="none" />`
     );
   }
@@ -1063,8 +1554,12 @@ function renderLegacyPatternDefinition(
       0,
       4 * mm,
       4 * mm,
-      `<rect x="0" y="0" width="${fmt(2 * mm)}" height="${fmt(2 * mm)}" fill="${escapeAttr(strokeColor)}" />` +
-        `<rect x="${fmt(2 * mm)}" y="${fmt(2 * mm)}" width="${fmt(2 * mm)}" height="${fmt(2 * mm)}" fill="${escapeAttr(strokeColor)}" />`
+      `<rect x="0" y="0" width="${fmt(2 * mm)}" height="${fmt(
+        2 * mm
+      )}" fill="${escapeAttr(strokeColor)}" />` +
+        `<rect x="${fmt(2 * mm)}" y="${fmt(2 * mm)}" width="${fmt(
+          2 * mm
+        )}" height="${fmt(2 * mm)}" fill="${escapeAttr(strokeColor)}" />`
     );
   }
 
@@ -1077,25 +1572,56 @@ function renderLegacyPatternDefinition(
       0,
       4 * mm,
       4 * mm,
-      `<rect x="0" y="0" width="${fmt(4 * mm)}" height="${fmt(4 * mm)}" fill="#000000" />` +
-        `<rect x="0" y="0" width="${fmt(2 * mm)}" height="${fmt(2 * mm)}" fill="${escapeAttr(dark)}" />` +
-        `<rect x="${fmt(2 * mm)}" y="${fmt(2 * mm)}" width="${fmt(2 * mm)}" height="${fmt(2 * mm)}" fill="${escapeAttr(dark)}" />`
+      `<rect x="0" y="0" width="${fmt(4 * mm)}" height="${fmt(
+        4 * mm
+      )}" fill="#000000" />` +
+        `<rect x="0" y="0" width="${fmt(2 * mm)}" height="${fmt(
+          2 * mm
+        )}" fill="${escapeAttr(dark)}" />` +
+        `<rect x="${fmt(2 * mm)}" y="${fmt(2 * mm)}" width="${fmt(
+          2 * mm
+        )}" height="${fmt(2 * mm)}" fill="${escapeAttr(dark)}" />`
     );
   }
   if (pattern.name === "horizontal lines light gray") {
-    return renderHorizontalBandPattern(context, id, mixColors("#000000", "#ffffff", 0.1) ?? "#e6e6e6", mixColors("#000000", "#ffffff", 0.15) ?? "#d9d9d9");
+    return renderHorizontalBandPattern(
+      context,
+      id,
+      mixColors("#000000", "#ffffff", 0.1) ?? "#e6e6e6",
+      mixColors("#000000", "#ffffff", 0.15) ?? "#d9d9d9"
+    );
   }
   if (pattern.name === "horizontal lines gray") {
-    return renderHorizontalBandPattern(context, id, mixColors("#000000", "#ffffff", 0.3) ?? "#b3b3b3", mixColors("#000000", "#ffffff", 0.35) ?? "#a6a6a6");
+    return renderHorizontalBandPattern(
+      context,
+      id,
+      mixColors("#000000", "#ffffff", 0.3) ?? "#b3b3b3",
+      mixColors("#000000", "#ffffff", 0.35) ?? "#a6a6a6"
+    );
   }
   if (pattern.name === "horizontal lines dark gray") {
-    return renderHorizontalBandPattern(context, id, mixColors("#000000", "#ffffff", 0.9) ?? "#1a1a1a", mixColors("#000000", "#ffffff", 0.85) ?? "#262626");
+    return renderHorizontalBandPattern(
+      context,
+      id,
+      mixColors("#000000", "#ffffff", 0.9) ?? "#1a1a1a",
+      mixColors("#000000", "#ffffff", 0.85) ?? "#262626"
+    );
   }
   if (pattern.name === "horizontal lines light blue") {
-    return renderHorizontalBandPattern(context, id, mixColors("#0000ff", "#ffffff", 0.1) ?? "#e6e6ff", mixColors("#0000ff", "#ffffff", 0.15) ?? "#d9d9ff");
+    return renderHorizontalBandPattern(
+      context,
+      id,
+      mixColors("#0000ff", "#ffffff", 0.1) ?? "#e6e6ff",
+      mixColors("#0000ff", "#ffffff", 0.15) ?? "#d9d9ff"
+    );
   }
   if (pattern.name === "horizontal lines dark blue") {
-    return renderHorizontalBandPattern(context, id, mixColors("#0000ff", "#ffffff", 0.9) ?? "#1a1aff", mixColors("#0000ff", "#ffffff", 0.85) ?? "#2626ff");
+    return renderHorizontalBandPattern(
+      context,
+      id,
+      mixColors("#0000ff", "#ffffff", 0.9) ?? "#1a1aff",
+      mixColors("#0000ff", "#ffffff", 0.85) ?? "#2626ff"
+    );
   }
   if (pattern.name === "crosshatch dots gray") {
     const background = mixColors("#000000", "#ffffff", 0.2) ?? "#cccccc";
@@ -1116,7 +1642,11 @@ function renderMetaPatternDefinition(
   patternColor: string,
   context: PatternRenderContext
 ): string {
-  const transform = buildPatternTransform(pattern.xshift, pattern.yshift, pattern.angle);
+  const transform = buildPatternTransform(
+    pattern.xshift,
+    pattern.yshift,
+    pattern.angle
+  );
   if (pattern.kind === "meta-lines") {
     const halfDistance = pattern.distance / 2;
     return renderPatternElement(
@@ -1126,7 +1656,9 @@ function renderMetaPatternDefinition(
       -halfDistance,
       pattern.distance,
       pattern.distance,
-      `<path d="M ${fmt(-halfDistance)} 0 L ${fmt(halfDistance)} 0" stroke="${escapeAttr(patternColor)}" stroke-width="${fmt(
+      `<path d="M ${fmt(-halfDistance)} 0 L ${fmt(
+        halfDistance
+      )} 0" stroke="${escapeAttr(patternColor)}" stroke-width="${fmt(
         pattern.lineWidth
       )}" fill="none" />`,
       transform
@@ -1142,8 +1674,12 @@ function renderMetaPatternDefinition(
       -halfDistance,
       pattern.distance,
       pattern.distance,
-      `<path d="M ${fmt(-halfDistance)} 0 L ${fmt(halfDistance)} 0 M 0 ${fmt(-halfDistance)} L 0 ${fmt(halfDistance)}" ` +
-        `stroke="${escapeAttr(patternColor)}" stroke-width="${fmt(pattern.lineWidth)}" fill="none" />`,
+      `<path d="M ${fmt(-halfDistance)} 0 L ${fmt(halfDistance)} 0 M 0 ${fmt(
+        -halfDistance
+      )} L 0 ${fmt(halfDistance)}" ` +
+        `stroke="${escapeAttr(patternColor)}" stroke-width="${fmt(
+          pattern.lineWidth
+        )}" fill="none" />`,
       transform
     );
   }
@@ -1157,7 +1693,9 @@ function renderMetaPatternDefinition(
       -halfDistance,
       pattern.distance,
       pattern.distance,
-      `<circle cx="0" cy="0" r="${fmt(pattern.radius)}" fill="${escapeAttr(patternColor)}" />`,
+      `<circle cx="0" cy="0" r="${fmt(pattern.radius)}" fill="${escapeAttr(
+        patternColor
+      )}" />`,
       transform
     );
   }
@@ -1176,7 +1714,12 @@ function renderMetaPatternDefinition(
   );
 }
 
-function renderHorizontalBandPattern(context: PatternRenderContext, id: string, firstColor: string, secondColor: string): string {
+function renderHorizontalBandPattern(
+  context: PatternRenderContext,
+  id: string,
+  firstColor: string,
+  secondColor: string
+): string {
   return renderPatternElement(
     context,
     id,
@@ -1184,8 +1727,12 @@ function renderHorizontalBandPattern(context: PatternRenderContext, id: string, 
     0,
     100,
     4,
-    `<rect x="0" y="0" width="100" height="2.5" fill="${escapeAttr(firstColor)}" />` +
-      `<rect x="0" y="2" width="100" height="2.5" fill="${escapeAttr(secondColor)}" />`
+    `<rect x="0" y="0" width="100" height="2.5" fill="${escapeAttr(
+      firstColor
+    )}" />` +
+      `<rect x="0" y="2" width="100" height="2.5" fill="${escapeAttr(
+        secondColor
+      )}" />`
   );
 }
 
@@ -1203,7 +1750,9 @@ function renderCrosshatchDotsPattern(
     0,
     8,
     8,
-    `<rect x="0" y="0" width="8" height="8" fill="${escapeAttr(background)}" />` +
+    `<rect x="0" y="0" width="8" height="8" fill="${escapeAttr(
+      background
+    )}" />` +
       `<circle cx="2" cy="1.75" r="1" fill="${escapeAttr(lightDots)}" />` +
       `<circle cx="6" cy="5.75" r="1" fill="${escapeAttr(lightDots)}" />` +
       `<circle cx="2" cy="2.25" r="1" fill="${escapeAttr(darkDots)}" />` +
@@ -1230,11 +1779,18 @@ function renderPatternElement(
   if (patternTransform && patternTransform.trim().length > 0) {
     transformParts.push(patternTransform.trim());
   }
-  const transformAttr = transformParts.length > 0 ? ` patternTransform="${escapeAttr(transformParts.join(" "))}"` : "";
+  const transformAttr =
+    transformParts.length > 0
+      ? ` patternTransform="${escapeAttr(transformParts.join(" "))}"`
+      : "";
   const offsetBody =
-    Math.abs(x) > 1e-6 || Math.abs(y) > 1e-6 ? `<g transform="translate(${fmt(-x)} ${fmt(-y)})">${body}</g>` : body;
+    Math.abs(x) > 1e-6 || Math.abs(y) > 1e-6
+      ? `<g transform="translate(${fmt(-x)} ${fmt(-y)})">${body}</g>`
+      : body;
   return (
-    `<pattern id="${escapeAttr(id)}" patternUnits="userSpaceOnUse" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(width)}" height="${fmt(
+    `<pattern id="${escapeAttr(id)}" patternUnits="userSpaceOnUse" x="${fmt(
+      x
+    )}" y="${fmt(y)}" width="${fmt(width)}" height="${fmt(
       height
     )}"${transformAttr}>` +
     offsetBody +
@@ -1242,7 +1798,11 @@ function renderPatternElement(
   );
 }
 
-function buildPatternTransform(xshift: number, yshift: number, angle: number): string | null {
+function buildPatternTransform(
+  xshift: number,
+  yshift: number,
+  angle: number
+): string | null {
   const transforms: string[] = [];
   if (Math.abs(xshift) > 1e-6 || Math.abs(yshift) > 1e-6) {
     transforms.push(`translate(${fmt(xshift)} ${fmt(-yshift)})`);
@@ -1267,7 +1827,12 @@ function buildStarPath(radius: number, points: number): string {
   return commands.join(" ");
 }
 
-function polygonPathFromPolarAngles(centerX: number, centerY: number, radius: number, angles: number[]): string {
+function polygonPathFromPolarAngles(
+  centerX: number,
+  centerY: number,
+  radius: number,
+  angles: number[]
+): string {
   if (angles.length === 0) {
     return "";
   }
@@ -1275,11 +1840,13 @@ function polygonPathFromPolarAngles(centerX: number, centerY: number, radius: nu
     const point = polarPoint(angle, radius);
     return {
       x: centerX + point.x,
-      y: centerY + point.y
+      y: centerY + point.y,
     };
   });
   const [first, ...rest] = points;
-  return `M ${fmt(first.x)} ${fmt(first.y)} ${rest.map((point) => `L ${fmt(point.x)} ${fmt(point.y)}`).join(" ")} Z`;
+  return `M ${fmt(first.x)} ${fmt(first.y)} ${rest
+    .map((point) => `L ${fmt(point.x)} ${fmt(point.y)}`)
+    .join(" ")} Z`;
 }
 
 function polarPoint(angleDeg: number, radius: number): SvgPoint {
@@ -1290,7 +1857,11 @@ function polarPoint(angleDeg: number, radius: number): SvgPoint {
   );
 }
 
-function mixColors(first: string, second: string, ratioFirst: number): string | null {
+function mixColors(
+  first: string,
+  second: string,
+  ratioFirst: number
+): string | null {
   const c1 = toRgb(first);
   const c2 = toRgb(second);
   if (!c1 || !c2) {
@@ -1301,7 +1872,7 @@ function mixColors(first: string, second: string, ratioFirst: number): string | 
   return rgbToHex({
     r: Math.round(c1.r * t + c2.r * (1 - t)),
     g: Math.round(c1.g * t + c2.g * (1 - t)),
-    b: Math.round(c1.b * t + c2.b * (1 - t))
+    b: Math.round(c1.b * t + c2.b * (1 - t)),
   });
 }
 
@@ -1310,7 +1881,10 @@ function toRgb(color: string): { r: number; g: number; b: number } | null {
   if (normalized in COLOR_HEX) {
     return hexToRgb(COLOR_HEX[normalized]);
   }
-  if (/^#[0-9a-f]{3}$/i.test(normalized) || /^#[0-9a-f]{6}$/i.test(normalized)) {
+  if (
+    /^#[0-9a-f]{3}$/i.test(normalized) ||
+    /^#[0-9a-f]{6}$/i.test(normalized)
+  ) {
     return hexToRgb(normalized);
   }
   return null;
@@ -1319,7 +1893,11 @@ function toRgb(color: string): { r: number; g: number; b: number } | null {
 function styleAttributes(
   style: ResolvedStyle | ShadowRenderableStyle,
   isText = false,
-  overrides: { stroke?: string | null; fill?: string | null; lineWidth?: number } = {}
+  overrides: {
+    stroke?: string | null;
+    fill?: string | null;
+    lineWidth?: number;
+  } = {}
 ): string[] {
   const attrs: string[] = [];
   if (isText) {
@@ -1347,8 +1925,15 @@ function styleAttributes(
     return attrs;
   }
 
-  attrs.push(`stroke="${escapeAttr(overrides.stroke ?? style.stroke ?? "none")}"`);
-  attrs.push(`fill="${escapeAttr(overrides.fill ?? (style.fill && style.fill !== "none" ? style.fill : "none"))}"`);
+  attrs.push(
+    `stroke="${escapeAttr(overrides.stroke ?? style.stroke ?? "none")}"`
+  );
+  attrs.push(
+    `fill="${escapeAttr(
+      overrides.fill ??
+        (style.fill && style.fill !== "none" ? style.fill : "none")
+    )}"`
+  );
   if (style.fillRule === "evenodd") {
     attrs.push(`fill-rule="evenodd"`);
   }
@@ -1358,7 +1943,11 @@ function styleAttributes(
   attrs.push(`stroke-opacity="${fmt(style.strokeOpacity)}"`);
   attrs.push(`fill-opacity="${fmt(style.fillOpacity)}"`);
   if (style.dashArray && style.dashArray.length > 0) {
-    attrs.push(`stroke-dasharray="${style.dashArray.map((entry) => fmt(entry)).join(" ")}"`);
+    attrs.push(
+      `stroke-dasharray="${style.dashArray
+        .map((entry) => fmt(entry))
+        .join(" ")}"`
+    );
     if (Math.abs(style.dashOffset) > 1e-6) {
       attrs.push(`stroke-dashoffset="${fmt(style.dashOffset)}"`);
     }
@@ -1374,18 +1963,38 @@ function shouldEmitDoubleStroke(style: {
   doubleLineCenterDistance: number | null;
   doubleColor: string;
 }): boolean {
-  return style.doubleStroke && style.stroke != null && style.stroke !== "none" && doubleInnerLineWidth(style) > 0;
+  return (
+    style.doubleStroke &&
+    style.stroke != null &&
+    style.stroke !== "none" &&
+    doubleInnerLineWidth(style) > 0
+  );
 }
 
-function doubleInnerLineWidth(style: { lineWidth: number; doubleDistance: number; doubleLineCenterDistance: number | null }): number {
-  return style.doubleLineCenterDistance == null ? style.doubleDistance : Math.max(0, style.doubleLineCenterDistance - style.lineWidth);
+function doubleInnerLineWidth(style: {
+  lineWidth: number;
+  doubleDistance: number;
+  doubleLineCenterDistance: number | null;
+}): number {
+  return style.doubleLineCenterDistance == null
+    ? style.doubleDistance
+    : Math.max(0, style.doubleLineCenterDistance - style.lineWidth);
 }
 
-function doubleOuterLineWidth(style: { lineWidth: number; doubleDistance: number; doubleLineCenterDistance: number | null }): number {
-  return style.doubleLineCenterDistance == null ? style.lineWidth * 2 + style.doubleDistance : style.lineWidth + style.doubleLineCenterDistance;
+function doubleOuterLineWidth(style: {
+  lineWidth: number;
+  doubleDistance: number;
+  doubleLineCenterDistance: number | null;
+}): number {
+  return style.doubleLineCenterDistance == null
+    ? style.lineWidth * 2 + style.doubleDistance
+    : style.lineWidth + style.doubleLineCenterDistance;
 }
 
-function toSvgPoint(point: WorldPoint, viewBox: Pick<SvgViewBox, "y" | "height">): SvgPoint {
+function toSvgPoint(
+  point: WorldPoint,
+  viewBox: Pick<SvgViewBox, "y" | "height">
+): SvgPoint {
   return convertWorldToSvgPoint(point, viewBox);
 }
 
@@ -1397,42 +2006,16 @@ function worldTransformToSvgTransform(
 }
 
 function formatMatrix(matrix: SvgTransform): string {
-  return `matrix(${fmt(matrix.a)} ${fmt(matrix.b)} ${fmt(matrix.c)} ${fmt(matrix.d)} ${fmt(matrix.e)} ${fmt(matrix.f)})`;
-}
-
-function clamp01(value: number): number {
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return value;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = hex.replace(/^#/, "");
-  const value = normalized.length === 3 ? normalized.split("").map((char) => char + char).join("") : normalized;
-  const parsed = Number.parseInt(value, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  return (
-    "#" +
-    [rgb.r, rgb.g, rgb.b]
-      .map((component) => Math.max(0, Math.min(255, component)))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
+  return `matrix(${fmt(matrix.a)} ${fmt(matrix.b)} ${fmt(matrix.c)} ${fmt(
+    matrix.d
+  )} ${fmt(matrix.e)} ${fmt(matrix.f)})`;
 }
 
 function escapeText(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function escapeAttr(value: string): string {
@@ -1440,7 +2023,16 @@ function escapeAttr(value: string): string {
 }
 
 function textAnchorForAlign(
-  align: "left" | "flush left" | "right" | "flush right" | "center" | "flush center" | "justify" | "none" | undefined
+  align:
+    | "left"
+    | "flush left"
+    | "right"
+    | "flush right"
+    | "center"
+    | "flush center"
+    | "justify"
+    | "none"
+    | undefined
 ): "start" | "middle" | "end" {
   if (!align) {
     return "middle";
@@ -1457,7 +2049,16 @@ function textAnchorForAlign(
 function alignedTextAnchorX(
   centerX: number,
   blockWidth: number,
-  align: "left" | "flush left" | "right" | "flush right" | "center" | "flush center" | "justify" | "none" | undefined
+  align:
+    | "left"
+    | "flush left"
+    | "right"
+    | "flush right"
+    | "center"
+    | "flush center"
+    | "justify"
+    | "none"
+    | undefined
 ): number {
   if (!Number.isFinite(blockWidth) || blockWidth <= 0) {
     return centerX;
@@ -1491,9 +2092,13 @@ function encodeTextBody(text: string, x: number, y: number): string {
   return lines
     .map((line, index) => {
       if (index === 0) {
-        return `<tspan x="${fmt(x)}" y="${fmt(y)}" dy="${fmt(startOffsetEm)}em">${escapeText(line)}</tspan>`;
+        return `<tspan x="${fmt(x)}" y="${fmt(y)}" dy="${fmt(
+          startOffsetEm
+        )}em">${escapeText(line)}</tspan>`;
       }
-      return `<tspan x="${fmt(x)}" dy="${fmt(lineHeightEm)}em">${escapeText(line)}</tspan>`;
+      return `<tspan x="${fmt(x)}" dy="${fmt(lineHeightEm)}em">${escapeText(
+        line
+      )}</tspan>`;
     })
     .join("");
 }
@@ -1508,7 +2113,10 @@ function stableSvgIdComponent(input: string): string {
 }
 
 function hasDrawablePathCommands(commands: ScenePathCommand[]): boolean {
-  return commands.some((command) => command.kind === "L" || command.kind === "C" || command.kind === "A");
+  return commands.some(
+    (command) =>
+      command.kind === "L" || command.kind === "C" || command.kind === "A"
+  );
 }
 
 function createSvgModelReuseContext(
@@ -1516,10 +2124,17 @@ function createSvgModelReuseContext(
   reuse: EmitSvgOptions["reuse"] | undefined,
   viewBox: SvgRenderModel["viewBox"]
 ): SvgModelReuseContext | null {
-  if (scene.hasStatefulGraphicsState || scene.elements.some((element) => (element.clipChain?.length ?? 0) > 0)) {
+  if (
+    scene.hasStatefulGraphicsState ||
+    scene.elements.some((element) => (element.clipChain?.length ?? 0) > 0)
+  ) {
     return null;
   }
-  if (!reuse?.previousModel || !reuse.affectedSourceIds || reuse.affectedSourceIds.length === 0) {
+  if (
+    !reuse?.previousModel ||
+    !reuse.affectedSourceIds ||
+    reuse.affectedSourceIds.length === 0
+  ) {
     return null;
   }
   if (!hasReusableModelInvariants(reuse.previousModel)) {
@@ -1544,7 +2159,7 @@ function createSvgModelReuseContext(
 
   return {
     affectedSourceIds: new Set(reuse.affectedSourceIds),
-    previousPartsByElementId
+    previousPartsByElementId,
   };
 }
 
@@ -1561,7 +2176,10 @@ function tryReuseElementParts(
     return false;
   }
   for (const part of reusableParts) {
-    if (part.sourceId !== element.sourceRef.sourceId || part.elementId !== element.id) {
+    if (
+      part.sourceId !== element.sourceRef.sourceId ||
+      part.elementId !== element.id
+    ) {
       return false;
     }
   }
@@ -1589,7 +2207,10 @@ function hasReusableModelInvariants(model: SvgRenderModel): boolean {
   return true;
 }
 
-function sameViewBox(left: SvgRenderModel["viewBox"], right: SvgRenderModel["viewBox"]): boolean {
+function sameViewBox(
+  left: SvgRenderModel["viewBox"],
+  right: SvgRenderModel["viewBox"]
+): boolean {
   return (
     Math.abs(left.x - right.x) <= 1e-9 &&
     Math.abs(left.y - right.y) <= 1e-9 &&

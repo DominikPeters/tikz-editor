@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { pt, worldPoint } from "tikz-editor/coords/index";
-import { PT_PER_CM } from "tikz-editor/edit/format";
-import type { ScenePathCommand } from "tikz-editor/semantic/types";
+import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import type { ScenePathCommand } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import type { NodeShapePresetId } from "tikz-editor/edit/inspector";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { distanceSquared, fmt, worldToSvgPoint, worldToSvgY } from "./geometry";
 import { resolveBezierControlsFromBend } from "./interaction-helpers";

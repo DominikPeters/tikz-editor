@@ -1,7 +1,7 @@
 import type { SessionSnapshot } from "../compute";
-import type { EditAction, EditActionResult } from "tikz-editor/edit/actions";
-import type { SourcePatch } from "tikz-editor/edit/types";
-import type { NodeShapePresetId } from "tikz-editor/edit/inspector";
+import type { EditAction, EditActionResult } from "@tikz-editor/core/edit/actions";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
+import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type {
   AssistantItem,
   AssistantPendingApproval,
@@ -85,8 +85,6 @@ export type HistoryEntry = {
   label: string;
   /** Optional key used to coalesce drag updates into one undo step. */
   mergeKey?: string;
-  /** Patches to apply to go backward (undo). */
-  backward: SourcePatch[];
   /** Patches to apply to go forward (redo). */
   forward: SourcePatch[];
   /** Source before the action (for full undo). */
@@ -350,6 +348,7 @@ export type EditorAction =
     }
   | {
       type: "SET_SOURCE_TRANSIENT";
+      documentId?: string;
       source: string;
       changedSourceIds?: string[] | null;
     }

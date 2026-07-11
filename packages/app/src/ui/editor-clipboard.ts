@@ -1,5 +1,5 @@
-import { renderTikzToSvg } from "tikz-editor/render/index";
-import { serializeSvgModel, serializeSvgModelAsync } from "tikz-editor/svg/index";
+import { renderTikzToSvg } from "@tikz-editor/core/render/index";
+import { serializeSvgModel, serializeSvgModelAsync } from "@tikz-editor/core/svg/index";
 
 // Chromium custom clipboard formats require the "web " prefix.
 export const TIKZ_CLIPBOARD_MIME = "web application/x-tikz-editor+json";

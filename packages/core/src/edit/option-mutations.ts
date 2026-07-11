@@ -41,7 +41,7 @@ export function applyOptionMutationsToTarget(
 
   if (target.options && target.optionsSpan) {
     const format = target.optionsFormat ?? "bracketed";
-    const replacement = rewriteOptionListMutationsPreservingSource(
+    const replacement = rewriteOptionListMutationsPreservingSourceInternal(
       source,
       target.optionsSpan,
       target.options,
@@ -158,15 +158,40 @@ export function rewriteOptionListMutations(
   return wrapSerializedOptions(parts.join(", "), format);
 }
 
+/**
+ * Rewrites an option list that is backed by an existing source span without
+ * normalizing unrelated entries or interstitial trivia. Use
+ * `rewriteOptionListMutations` only for synthesized/isolated option fragments.
+ */
+export function rewriteSourceBackedOptionListMutations(
+  source: string,
+  optionsSpan: Span,
+  options: OptionListAst,
+  mutations: ReadonlyMap<string, OptionMutation>,
+  format: PropertyTargetOptionsFormat = "bracketed",
+  insert: { beforeKey: string } | null = null
+): string {
+  return rewriteOptionListMutationsPreservingSourceInternal(
+    source,
+    optionsSpan,
+    options,
+    mutations,
+    DEFAULT_OPTION_SERIALIZATION_CONTEXT,
+    format,
+    insert?.beforeKey ?? null
+  );
+}
+
 export const normalizeOptionKey = normalizeSharedOptionKey;
 
-function rewriteOptionListMutationsPreservingSource(
+function rewriteOptionListMutationsPreservingSourceInternal(
   source: string,
   optionsSpan: Span,
   options: OptionListAst,
   mutations: ReadonlyMap<string, OptionMutation>,
   serializationContext: OptionSerializationContext,
-  format: PropertyTargetOptionsFormat
+  format: PropertyTargetOptionsFormat,
+  insertBeforeKey: string | null = null
 ): string {
   const original = source.slice(optionsSpan.from, optionsSpan.to);
   const emitted = new Set<string>();
@@ -222,12 +247,27 @@ function rewriteOptionListMutationsPreservingSource(
   if (
     entriesToInsert.length === 0 &&
     sortedEntries.length > 0 &&
-    replacements.filter((replacement) => replacement.removesEntry).length === sortedEntries.length
+    replacements.filter((replacement) => replacement.removesEntry).length === sortedEntries.length &&
+    !containsLiveComment(original)
   ) {
     return format === "bracketed" || format === "bare" ? "" : wrapSerializedOptions("", format);
   }
 
-  const rewritten = normalizeTopLevelCommaSpacing(applyRelativeReplacements(original, replacements), format);
+  if (entriesToInsert.length > 0 && insertBeforeKey) {
+    const insertionAnchor = findInsertionAnchorEntry(sortedEntries, mutations, insertBeforeKey);
+    if (insertionAnchor) {
+      const anchorFrom = Math.max(0, insertionAnchor.span.from - optionsSpan.from);
+      replacements.push({
+        from: anchorFrom,
+        to: anchorFrom,
+        text: `${entriesToInsert.join(", ")}, `,
+        removesEntry: false
+      });
+      entriesToInsert.length = 0;
+    }
+  }
+
+  const rewritten = applyRelativeReplacements(original, replacements);
   if (entriesToInsert.length === 0) {
     return rewritten;
   }
@@ -235,64 +275,33 @@ function rewriteOptionListMutationsPreservingSource(
   return insertSerializedOptionEntries(rewritten, entriesToInsert, format);
 }
 
-function normalizeTopLevelCommaSpacing(source: string, format: PropertyTargetOptionsFormat): string {
-  if (source.includes("\n") || source.includes("\r")) {
-    return source;
-  }
-
-  let squareDepth = 0;
-  let curlyDepth = 0;
-  let parenDepth = 0;
-  let result = "";
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index] ?? "";
-    if (char === "," && isTopLevelComma(format, squareDepth, curlyDepth, parenDepth)) {
-      let nextIndex = index + 1;
-      while (source[nextIndex] === " " || source[nextIndex] === "\t") {
-        nextIndex += 1;
-      }
-      const next = source[nextIndex];
-      if (next !== undefined && next !== "]" && next !== "}") {
-        result += ", ";
-      }
-      index = nextIndex - 1;
-      continue;
-    }
-
-    result += char;
-    if (char === "[") {
-      squareDepth += 1;
-    } else if (char === "]") {
-      squareDepth = Math.max(0, squareDepth - 1);
-    } else if (char === "{") {
-      curlyDepth += 1;
-    } else if (char === "}") {
-      curlyDepth = Math.max(0, curlyDepth - 1);
-    } else if (char === "(") {
-      parenDepth += 1;
-    } else if (char === ")") {
-      parenDepth = Math.max(0, parenDepth - 1);
+function findInsertionAnchorEntry(
+  sortedEntries: readonly OptionEntry[],
+  mutations: ReadonlyMap<string, OptionMutation>,
+  beforeKey: string
+): OptionEntry | null {
+  const normalizedBeforeKey = normalizeOptionKey(beforeKey);
+  for (const entry of sortedEntries) {
+    const entryKey = optionEntryKey(entry);
+    if (entryKey === normalizedBeforeKey && !mutations.has(entryKey)) {
+      return entry;
     }
   }
-  return result;
+  return null;
 }
 
-function isTopLevelComma(
-  format: PropertyTargetOptionsFormat,
-  squareDepth: number,
-  curlyDepth: number,
-  parenDepth: number
-): boolean {
-  if (parenDepth !== 0) {
-    return false;
+function containsLiveComment(source: string): boolean {
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      return true;
+    }
   }
-  if (format === "bracketed") {
-    return squareDepth === 1 && curlyDepth === 0;
-  }
-  if (format === "braced") {
-    return squareDepth === 0 && curlyDepth === 1;
-  }
-  return squareDepth === 0 && curlyDepth === 0;
+  return false;
 }
 
 function applyRelativeReplacements(
@@ -385,7 +394,7 @@ function extendTerminalEmptyRemoval(
   protectedReplacements: readonly RelativeReplacement[]
 ): RelativeReplacement {
   let right = removal.to;
-  while (right < source.length && (source[right] === " " || source[right] === "\t")) {
+  while (right < source.length && isOptionListWhitespace(source[right])) {
     right += 1;
   }
   if (right < source.length && source[right] !== "]" && source[right] !== "}") {
@@ -393,7 +402,7 @@ function extendTerminalEmptyRemoval(
   }
 
   let left = removal.from;
-  while (left > 0 && (source[left - 1] === " " || source[left - 1] === "\t")) {
+  while (left > 0 && isOptionListWhitespace(source[left - 1])) {
     left -= 1;
   }
   if (source[left - 1] !== ",") {
@@ -413,6 +422,10 @@ function extendTerminalEmptyRemoval(
     ...removal,
     from: left
   };
+}
+
+function isOptionListWhitespace(char: string | undefined): boolean {
+  return char === " " || char === "\t" || char === "\n" || char === "\r";
 }
 
 function rangesOverlap(left: { from: number; to: number }, right: { from: number; to: number }): boolean {
@@ -454,7 +467,13 @@ function insertSerializedOptionEntries(
 ): string {
   const content = entries.join(", ");
   if (format === "bare") {
-    return source.trim().length === 0 ? content : `${source}, ${content}`;
+    if (source.trim().length === 0) {
+      return content;
+    }
+    const insertIndex = trailingHorizontalWhitespaceStart(source, source.length);
+    const beforeInsertion = source.slice(0, insertIndex);
+    const separator = endsWithLiveComma(beforeInsertion) ? " " : ", ";
+    return `${beforeInsertion}${separator}${content}${source.slice(insertIndex)}`;
   }
 
   const closeChar = format === "braced" ? "}" : "]";
@@ -463,13 +482,31 @@ function insertSerializedOptionEntries(
     return source.trim().length === 0 ? wrapSerializedOptions(content, format) : `${source}, ${content}`;
   }
 
+  if (source.includes("\n") && !hasOptionContent(source.slice(0, closeIndex), format)) {
+    return wrapSerializedOptions(content, format);
+  }
+
   if (!source.includes("\n")) {
-    const prefix = hasOptionContent(source.slice(0, closeIndex), format) ? `, ${content}` : content;
-    return `${source.slice(0, closeIndex)}${prefix}${source.slice(closeIndex)}`;
+    const insertIndex = trailingHorizontalWhitespaceStart(source, closeIndex);
+    const beforeInsertion = source.slice(0, insertIndex);
+    const prefix = hasOptionContent(beforeInsertion, format)
+      ? endsWithLiveComma(beforeInsertion)
+        ? ` ${content}`
+        : `, ${content}`
+      : content;
+    return `${source.slice(0, insertIndex)}${prefix}${source.slice(insertIndex)}`;
   }
 
   const insertion = multilineInsertion(source, closeIndex, content, format);
   return `${source.slice(0, insertion.index)}${insertion.text}${source.slice(insertion.index)}`;
+}
+
+function trailingHorizontalWhitespaceStart(source: string, end: number): number {
+  let index = end;
+  while (index > 0 && (source[index - 1] === " " || source[index - 1] === "\t")) {
+    index -= 1;
+  }
+  return index;
 }
 
 function multilineInsertion(
@@ -484,12 +521,60 @@ function multilineInsertion(
   const insertIndex = closingLineIsWhitespaceOnly ? closeLineStart : closeIndex;
   const beforeInsertion = source.slice(0, insertIndex);
   const indent = inferOptionEntryIndent(source, closeIndex);
-  const needsComma = hasOptionContent(beforeInsertion, format) && !/,\s*$/u.test(beforeInsertion);
+  const needsComma = hasOptionContent(beforeInsertion, format) && !endsWithLiveComma(beforeInsertion);
+  const commaStartsInsertedLine = needsComma && trailingLineHasComment(beforeInsertion);
   const separator = needsComma ? "," : "";
   return {
     index: insertIndex,
-    text: `${separator}\n${indent}${content}`
+    text: commaStartsInsertedLine
+      ? `\n${indent}, ${content}`
+      : `${separator}\n${indent}${content}`
   };
+}
+
+function endsWithLiveComma(source: string): boolean {
+  let inComment = false;
+  let lastLiveCharacter = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? "";
+    if (inComment) {
+      if (char === "\n" || char === "\r") {
+        inComment = false;
+      }
+      continue;
+    }
+    if (char === "\\") {
+      // An escaped comma (for example `\,`) is TeX content, not an option
+      // delimiter. Treat the escape as one live token without interpreting the
+      // escaped character structurally.
+      lastLiveCharacter = "\\";
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      inComment = true;
+      continue;
+    }
+    if (!/\s/u.test(char)) {
+      lastLiveCharacter = char;
+    }
+  }
+  return lastLiveCharacter === ",";
+}
+
+function trailingLineHasComment(source: string): boolean {
+  const lineStart = Math.max(source.lastIndexOf("\n"), source.lastIndexOf("\r")) + 1;
+  for (let index = lineStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      return true;
+    }
+  }
+  return false;
 }
 
 function inferOptionEntryIndent(source: string, closeIndex: number): string {

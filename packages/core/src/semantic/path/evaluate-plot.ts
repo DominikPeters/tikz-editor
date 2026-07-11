@@ -550,7 +550,7 @@ export function buildPlotExpressionEntries(params: {
   consumerStatementId: string;
   expressionRaw: string;
   settings: PlotSettings;
-  macroBindings: Map<string, MacroBinding>;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
 }): Array<{ raw: string }> {
   const { context, consumerStatementId, expressionRaw, settings, macroBindings } = params;
   const variableName = settings.variable;

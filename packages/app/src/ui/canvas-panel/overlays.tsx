@@ -1,9 +1,10 @@
 import { Fragment, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import type { EditHandle, NodeAnchorTarget } from "tikz-editor/semantic/types";
+import type { EditHandle, NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { ToolMode } from "../../store/types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
@@ -52,7 +53,6 @@ export type ToolPreview =
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "path"; d: string };
 
-const PT_PER_CM = 28.4527559055;
 const SNAP_GAP_LABEL_FONT_PX = 9;
 const SNAP_GAP_LABEL_HEIGHT_PX = 13;
 const SNAP_GAP_LABEL_CHAR_PX = 5.4;
@@ -422,6 +422,7 @@ export function ToolPreviewOverlay({
             strokeWidth={handleStrokeWidth}
           />
           <path
+            data-testid="canvas-tool-preview-bezier"
             d={`M ${fmt(toolPreview.x1)},${fmt(toolPreview.y1)} C ${fmt(toolPreview.c1x)},${fmt(toolPreview.c1y)} ${fmt(toolPreview.c2x)},${fmt(toolPreview.c2y)} ${fmt(toolPreview.x2)},${fmt(toolPreview.y2)}`}
             className={css.toolPreviewStroke}
             strokeWidth={handleStrokeWidth}
@@ -429,7 +430,7 @@ export function ToolPreviewOverlay({
         </g>
       )}
       {toolPreview.kind === "complex-path" && (
-        <g>
+        <g data-testid="canvas-tool-preview-complex-path">
           {toolPreview.segments.map((segment, index) =>
             segment.kind === "line" ? (
               <line

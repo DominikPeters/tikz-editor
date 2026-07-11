@@ -10,7 +10,7 @@ RiFontSerif,
 RiItalic
 } from "@remixicon/react";
 import { useCallback,useEffect,useMemo,useState,type FocusEvent,type JSX } from "react";
-import { CM_PER_PT, formatNumber } from "tikz-editor/edit/format";
+import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
 import {
 getInspectorDescriptor,
 NODE_INNER_SEP_DEFAULT,
@@ -21,7 +21,7 @@ type NodeFontSizePresetId,
 type NodeTextAlignInspectorValue,
 type SetPropertyWriteTarget,
 type ShadowPresetId
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import {
 buildNodeMinimumDimensionSetPropertyMutations,
 buildShadowMutationContextForPreset,
@@ -29,8 +29,8 @@ buildShadowSetPropertyMutations,
 buildTransformSetPropertyMutations,
 type NodeMinimumDimensionKey,
 type ShadowMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
 import { BASIC_PICKER_COLORS } from "../../colors/color-palette";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import { useEditorStore } from "../../store/store";

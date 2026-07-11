@@ -1,4 +1,4 @@
-import type { EditHandle } from "tikz-editor/semantic/types";
+import type { EditHandle } from "@tikz-editor/core/semantic/types";
 
 export type DragCapability = {
   draggableHandleIds: ReadonlySet<string>;

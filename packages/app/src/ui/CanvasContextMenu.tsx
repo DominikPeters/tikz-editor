@@ -8,32 +8,13 @@ import {
 import type { AppMenuCommandId, AppMenuItem } from "../app-menu";
 import type { CommandOrigin, CommandBindings } from "./editor-command-runtime";
 import { clampContextMenuAnchor, type ContextMenuAnchor } from "./canvas-panel/context-menu-target";
+import { formatAccelerator } from "./key-labels";
 import css from "./CanvasContextMenu.module.css";
-
-const IS_MAC_PLATFORM =
-  typeof navigator !== "undefined" &&
-  /(mac|iphone|ipad)/i.test(navigator.platform);
 
 type ContextMenuInheritedStyle = CSSProperties & {
   "--app-ui-font-size"?: string;
   "--app-ui-scale"?: string;
 };
-
-function formatAccelerator(accelerator: string | undefined): string {
-  if (!accelerator) {
-    return "";
-  }
-
-  return accelerator
-    .split("+")
-    .map((part) => {
-      if (part === "CmdOrCtrl") {
-        return IS_MAC_PLATFORM ? "Cmd" : "Ctrl";
-      }
-      return part;
-    })
-    .join(IS_MAC_PLATFORM ? " " : "+");
-}
 
 function ContextMenuPopup({
   items,

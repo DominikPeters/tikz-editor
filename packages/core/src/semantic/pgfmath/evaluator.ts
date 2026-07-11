@@ -1,5 +1,6 @@
 import { getCurrentPgfMathRuntime } from "./runtime.js";
 import type { PgfRandom } from "./rng.js";
+import { PT_PER_CM } from "../../coords/source.js";
 
 export type PgfMathQuantity = {
   kind: "scalar" | "length";
@@ -33,7 +34,7 @@ const UNIT_FACTORS: Record<string, number> = {
   pt: 1,
   bp: 72.27 / 72,
   px: 72.27 / 72,
-  cm: 28.4527559055,
+  cm: PT_PER_CM,
   mm: 2.84527559055,
   in: 72.27,
   ex: 4.3,

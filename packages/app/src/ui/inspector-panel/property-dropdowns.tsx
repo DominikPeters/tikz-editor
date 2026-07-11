@@ -14,7 +14,7 @@ import type {
   PathMorphingDecorationPresetId,
   ShadowPresetId,
   ShadowPresetOption
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import {
   ArrowTipPreview,
   DashStylePreview,

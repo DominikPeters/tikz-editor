@@ -452,6 +452,43 @@ in {right}`);
     expect(expanded.diagnostics.some((diagnostic) => diagnostic.code === "foreach-expansion-limit")).toBe(true);
   });
 
+  it("builds clause variants for node, child, and pic foreach forms", () => {
+    const source = String.raw`\begin{tikzpicture}
+\path (0,0)
+  node foreach \x in {0,1} foreach \y in {a,b} {\x\y};
+\draw (0,0)
+  child foreach \x in {0,1} {
+    node {\x}
+    edge from parent node {edge}
+    child { node {leaf} edge from parent }
+  };
+\pic foreach \x in {0,1} at (\x,0) {mark};
+\end{tikzpicture}`;
+
+    const expanded = expandForeachFigure(parseFigure(source), source);
+    const paths = expanded.figureBody.filter((statement) => statement.kind === "Path");
+    const nodes = paths.flatMap((path) => path.items.filter((item) => item.kind === "Node"));
+    const children = paths.flatMap((path) => path.items.filter((item) => item.kind === "ChildOperation"));
+    const pics = paths.flatMap((path) => path.items.filter((item) => item.kind === "PicOperation"));
+
+    expect(expanded.diagnostics).toEqual([]);
+    expect(nodes).toHaveLength(4);
+    expect(children).toHaveLength(2);
+    expect(pics).toHaveLength(2);
+    expect(nodes.map((item) => {
+      const foreachStack = expanded.pathItemForeachStack.get(item) ?? [];
+      expect(foreachStack).toHaveLength(2);
+      return `${foreachStack[0]?.bindings["\\x"]}${foreachStack[1]?.bindings["\\y"]}`;
+    })).toEqual(["0a", "0b", "1a", "1b"]);
+    for (const items of [children, pics]) {
+      expect(items.map((item) => {
+        const foreachStack = expanded.pathItemForeachStack.get(item) ?? [];
+        expect(foreachStack).toHaveLength(1);
+        return foreachStack[0]?.bindings["\\x"];
+      })).toEqual(["0", "1"]);
+    }
+  });
+
   it("reindexes non-path statements expanded from macro bodies", () => {
     const bodyRaw = String.raw`
   \tikzset{loop style/.style={draw}}

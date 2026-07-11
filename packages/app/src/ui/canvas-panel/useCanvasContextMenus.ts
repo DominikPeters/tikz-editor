@@ -9,8 +9,8 @@ import {
   type RefObject,
   type SetStateAction
 } from "react";
-import { px, viewportPoint } from "tikz-editor/coords/index";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
+import { px, viewportPoint } from "@tikz-editor/core/coords/index";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 
 import { APP_MENU_COMMAND_IDS } from "../../app-menu";
 import type { CommandBindings } from "../editor-command-runtime";

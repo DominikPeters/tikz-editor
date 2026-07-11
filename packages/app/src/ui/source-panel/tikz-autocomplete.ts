@@ -1,7 +1,7 @@
 import type { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete";
 import type { EditorState } from "@codemirror/state";
-import { NAMED_COLORS, NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "tikz-editor/semantic/style/constants";
-import type { DocumentSymbols } from "tikz-editor/completion/index";
+import { NAMED_COLORS, NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "@tikz-editor/core/semantic/style/constants";
+import type { DocumentSymbols } from "@tikz-editor/core/completion/index";
 
 // ── Value maps ──────────────────────────────────────────────────────────────
 

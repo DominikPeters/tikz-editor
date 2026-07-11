@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeColor, resolveDefineColorModel } from "../packages/core/src/semantic/style/colors.js";
 import { COLOR_HEX, NAMED_COLORS } from "../packages/core/src/semantic/style/constants.js";
+import { hexToRgb, rgbToHex } from "../packages/core/src/utils/color-convert.js";
 
 describe("color normalization", () => {
+  it("rounds fractional RGB components into valid two-digit hex channels", () => {
+    expect(rgbToHex({ r: 12.5, g: 128.4, b: 254.6 })).toBe("#0d80ff");
+    expect(hexToRgb("#0d80ff")).toEqual({ r: 13, g: 128, b: 255 });
+  });
+
   it("supports chained xcolor mixes left-to-right", () => {
     expect(normalizeColor("black!10!white!92!red")).toBe("#e8d3d3");
   });

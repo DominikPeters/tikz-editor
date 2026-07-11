@@ -1,5 +1,5 @@
-import { renderTikzToSvgAsync } from "tikz-editor/render/index";
-import { setWorkerFontLoader } from "tikz-editor/text/mathjax-engine";
+import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
+import { setWorkerFontLoader } from "@tikz-editor/core/text/mathjax-engine";
 
 // Map MathJax bare-specifier font names to Vite lazy chunks.
 // Each entry becomes a separate chunk — zero upfront cost, loaded on demand.

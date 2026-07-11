@@ -3,6 +3,7 @@ import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import { frameToWorldTransform } from "../packages/core/src/coords/transforms.js";
 import { scaleMatrix } from "../packages/core/src/semantic/transform.js";
 import { applyEditAction, preflightPositionNodeRelativeToAction } from "../packages/core/src/edit/actions.js";
+import { createEditAnalysisSession } from "../packages/core/src/edit/analysis.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { createMathJaxNodeTextEngine } from "../packages/core/src/text/mathjax-engine.js";
@@ -429,6 +430,28 @@ describe("applyEditAction – moveElement", () => {
     expect(result.newSource).not.toContain("at={");
   });
 
+  it("preserves matrix option comments while moving option-based placement inline", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes, % keep matrix layout
+    row sep=2mm, at={(0,0)}] {
+    A & B \\
+  };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(2))
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep matrix layout");
+    expect(result.newSource).toContain("    row sep=2mm");
+    expect(result.newSource).toContain(" at (1,2) {");
+    expect(result.newSource).not.toContain("at={(0,0)}");
+  });
+
   it("moves matrix statements without placement by inserting inline at (...)", () => {
     const source = String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes] {
@@ -446,6 +469,32 @@ describe("applyEditAction – moveElement", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain("\\matrix[matrix of nodes] at (1,2) {");
     expect(result.newSource).not.toContain("at=(");
+  });
+
+  it("rejects a matrix target whose cached body opening is missing", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {
+    A & B \\
+  };
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const target = analysisView.resolvePropertyTarget("path:0");
+    expect(target.kind).toBe("found");
+    if (target.kind !== "found") return;
+    delete target.target.matrixBodyOpenOffset;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(2))
+    }, {
+      parseOptions: { analysisView }
+    });
+
+    expect(result).toEqual({
+      kind: "unsupported",
+      reason: "Could not resolve matrix body opening for path:0"
+    });
   });
 
   it("moves matrix statements with ampersand replacement using inline placement syntax", () => {
@@ -1031,6 +1080,23 @@ describe("applyEditAction – moveElement", () => {
     }
   });
 
+  it("rejects child-operation paths that have no tree root node", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path (0,0) child { node {Leaf} };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(1))
+    });
+
+    expect(result).toEqual({
+      kind: "unsupported",
+      reason: "Tree root path:0 has no root node to move"
+    });
+  });
+
   it("prefers rewriting inline at when both inline and option placement are present", () => {
     const source = String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes,at={(10,10)}] at (0,0) {
@@ -1305,6 +1371,73 @@ describe("applyEditAction – node relative positioning conversions", () => {
     expect(result.newSource).toContain(" at (");
     expect(result.newSource).not.toContain("right=1cm of A");
     expectPointClose(nodeCenter(result.newSource, nodeId), before);
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("preserves comments and multiline layout when converting to absolute positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node (A) at (0,0) {A};
+\node[draw=red, % keep node styling
+    below=of A, thick] (B) {B};
+\end{tikzpicture}`;
+    const [, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "convertNodePositionToAbsolute",
+      nodeId: nodeId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep node styling");
+    expect(result.newSource).toContain("draw=red, % keep node styling\n    thick]");
+    expect(result.newSource).toContain(" at (");
+    expect(result.newSource).not.toContain("below=of A");
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("preserves comments when converting to relative positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw, % styled
+  thick] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% styled");
+    expect(result.newSource).toContain("of A");
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("keeps an explicit anchor after the inserted placement option", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw, anchor=west] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    const placementIndex = result.newSource.indexOf("of A");
+    const anchorIndex = result.newSource.indexOf("anchor=west");
+    expect(placementIndex).toBeGreaterThan(-1);
+    expect(anchorIndex).toBeGreaterThan(placementIndex);
     expectPatchesReconstructSource(source, result);
   });
 

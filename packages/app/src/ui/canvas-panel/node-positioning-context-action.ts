@@ -1,9 +1,9 @@
-import type { NodeItem, PathStatement, Statement } from "tikz-editor/ast/types";
-import { resolveEligibleExplicitPath } from "tikz-editor/edit/path-editing";
-import type { EditParseOptions } from "tikz-editor/edit/parse-options";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { resolveMatrixMode } from "tikz-editor/semantic/nodes/matrix";
-import type { NodeAnchorTarget, SceneElement } from "tikz-editor/semantic/types";
+import type { NodeItem, PathStatement, Statement } from "@tikz-editor/core/ast/types";
+import { resolveEligibleExplicitPath } from "@tikz-editor/core/edit/path-editing";
+import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { resolveMatrixMode } from "@tikz-editor/core/semantic/nodes/matrix";
+import type { NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { CanvasSnapshot } from "./types";
 
 export type NodePositioningContextMenuAction = "position-relative" | "convert-absolute";

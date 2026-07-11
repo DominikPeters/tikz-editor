@@ -7,7 +7,7 @@ import {
   type MutableRefObject,
   type RefObject
 } from "react";
-import { px, viewportPoint } from "tikz-editor/coords/index";
+import { px, viewportPoint } from "@tikz-editor/core/coords/index";
 
 import type { CanvasDragKind, CanvasTransform } from "../../store/types";
 import { clamp, viewportToSvgPoint } from "./geometry";

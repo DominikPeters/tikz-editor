@@ -107,40 +107,11 @@ export function resolvePropertyTarget(source: string, elementId: string, parseOp
   if (normalizedId.length === 0) {
     return { kind: "not-found", reason: "Missing element id" };
   }
-
-  if (normalizedId === TIKZPICTURE_GLOBAL_TARGET_ID) {
-    return resolveFigurePropertyTarget(source, parseOptions);
-  }
-
-  if (normalizedId.startsWith(STYLE_SOURCE_TARGET_PREFIX)) {
-    return resolveStyleSourceTarget(source, normalizedId);
-  }
-
-  const parseResult = parseTikzForEdit(source, {
-    ...parseOptions,
+  let parseResult: ParseTikzResult | undefined;
+  return resolveNormalizedPropertyTarget(source, normalizedId, () => {
+    parseResult ??= parseTikzForEdit(source, parseOptions);
+    return parseResult;
   });
-  const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
-  if (picTemplateTarget) {
-    return { kind: "found", target: picTemplateTarget };
-  }
-  const foreachTemplateTarget = resolveForeachTemplateTargetFromParseResult(parseResult, normalizedId);
-  if (foreachTemplateTarget) {
-    return { kind: "found", target: foreachTemplateTarget };
-  }
-  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, source, normalizedId);
-  if (matrixCellTarget) {
-    return { kind: "found", target: matrixCellTarget };
-  }
-  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, source, normalizedId);
-  if (treeChildTarget) {
-    return { kind: "found", target: treeChildTarget };
-  }
-  const target = findTargetInStatements(parseResult.figure.body, source, normalizedId);
-  if (!target) {
-    return { kind: "not-found", reason: `No editable source target found for ${normalizedId}` };
-  }
-
-  return { kind: "found", target };
 }
 
 export function resolvePropertyTargetFromParseResult(
@@ -153,15 +124,23 @@ export function resolvePropertyTargetFromParseResult(
   if (normalizedId.length === 0) {
     return { kind: "not-found", reason: "Missing element id" };
   }
+  return resolveNormalizedPropertyTarget(parseSource, normalizedId, () => parseResult);
+}
 
+function resolveNormalizedPropertyTarget(
+  source: string,
+  normalizedId: string,
+  getParseResult: () => ParseTikzResult
+): PropertyTargetResolution {
   if (normalizedId === TIKZPICTURE_GLOBAL_TARGET_ID) {
-    return resolveFigurePropertyTargetFromParseResult(parseSource, parseResult);
+    return resolveFigurePropertyTargetFromParseResult(source, getParseResult());
   }
 
   if (normalizedId.startsWith(STYLE_SOURCE_TARGET_PREFIX)) {
-    return resolveStyleSourceTarget(parseSource, normalizedId);
+    return resolveStyleSourceTarget(source, normalizedId);
   }
 
+  const parseResult = getParseResult();
   const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
   if (picTemplateTarget) {
     return { kind: "found", target: picTemplateTarget };
@@ -172,27 +151,20 @@ export function resolvePropertyTargetFromParseResult(
     return { kind: "found", target: foreachTemplateTarget };
   }
 
-  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
+  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, source, normalizedId);
   if (matrixCellTarget) {
     return { kind: "found", target: matrixCellTarget };
   }
-  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
+  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, source, normalizedId);
   if (treeChildTarget) {
     return { kind: "found", target: treeChildTarget };
   }
 
-  const target = findTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
+  const target = findTargetInStatements(parseResult.figure.body, source, normalizedId);
   if (!target) {
     return { kind: "not-found", reason: `No editable source target found for ${normalizedId}` };
   }
   return { kind: "found", target };
-}
-
-function resolveFigurePropertyTarget(source: string, parseOptions: EditParseOptions): PropertyTargetResolution {
-  const parseResult = parseTikzForEdit(source, {
-    ...parseOptions,
-  });
-  return resolveFigurePropertyTargetFromParseResult(source, parseResult);
 }
 
 export function resolveFigurePropertyTargetFromParseResult(

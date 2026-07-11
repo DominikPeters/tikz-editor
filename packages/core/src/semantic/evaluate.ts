@@ -106,6 +106,7 @@ import { withPgfMathRuntime } from "./pgfmath/runtime.js";
 import { worldPoint, worldBounds } from "../coords/points.js";
 import type { WorldBounds, WorldPoint } from "../coords/points.js";
 import { resolveNodePositionFraction } from "./nodes/placement.js";
+import { normalizeEveryShapeNodeStyleName } from "./nodes/options.js";
 import type {
   EditHandle,
   EvaluateOptions,
@@ -276,12 +277,12 @@ export function createSemanticEvaluationRun(
       styleChain: rootDelta.chain,
       transform: rootDelta.transform,
       layer: parent.layer,
-      clipChain: [...parent.clipChain],
+      clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: rootCustomStyles,
       picDefinitions: rootPicDefinitions,
-      colorAliases: new Map(parent.colorAliases),
-      macroBindings: new Map(parent.macroBindings),
+      colorAliases: parent.colorAliases.fork(),
+      macroBindings: parent.macroBindings.fork(),
       namePrefix: rootMeta.namePrefix,
       nameSuffix: rootMeta.nameSuffix,
       nodeLayerMode: rootMeta.nodeLayerMode,
@@ -971,12 +972,12 @@ function evaluateStatement(
       styleChain: resolved.chain,
       transform: resolved.transform,
       layer: parent.layer,
-      clipChain: [...parent.clipChain],
+      clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: scopedCustomStyles,
       picDefinitions: scopedPicDefinitions,
-      colorAliases: new Map(parent.colorAliases),
-      macroBindings: new Map(parent.macroBindings),
+      colorAliases: parent.colorAliases.fork(),
+      macroBindings: parent.macroBindings.fork(),
       namePrefix: frameMeta.namePrefix,
       nameSuffix: frameMeta.nameSuffix,
       nodeLayerMode: frameMeta.nodeLayerMode,
@@ -1144,12 +1145,12 @@ function evaluateStatement(
       styleChain: scopeResolved.chain,
       transform: scopeResolved.transform,
       layer: scopeLayer,
-      clipChain: [...parent.clipChain],
+      clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: scopedCustomStyles,
       picDefinitions: scopedPicDefinitions,
-      colorAliases: new Map(parent.colorAliases),
-      macroBindings: new Map(parent.macroBindings),
+      colorAliases: parent.colorAliases.fork(),
+      macroBindings: parent.macroBindings.fork(),
       namePrefix: frameMeta.namePrefix,
       nameSuffix: frameMeta.nameSuffix,
       nodeLayerMode: frameMeta.nodeLayerMode,
@@ -1427,11 +1428,11 @@ function evaluatePicOperationInStatement(
     style: resolvedPicStyle.style,
     styleChain: resolvedPicStyle.chain,
     transform: resolvedPicStyle.transform,
-    clipChain: [...parent.clipChain],
+    clipChain: parent.clipChain,
     customStyles: picCustomStyles,
     picDefinitions,
-    colorAliases: new Map(parent.colorAliases),
-    macroBindings: new Map(parent.macroBindings),
+    colorAliases: parent.colorAliases.fork(),
+    macroBindings: parent.macroBindings.fork(),
     namePrefix: item.name ? `${frameMeta.namePrefix}${item.name}` : frameMeta.namePrefix,
     nameSuffix: frameMeta.nameSuffix,
     treeLevelStyleLayers: frameMeta.treeLevelStyleLayers.map((entry) => ({
@@ -1751,7 +1752,8 @@ function applyTikzStyleStatement(
   });
 
   const legacyBucket = LEGACY_TIKZSTYLE_BUCKET_BY_NAME[styleName];
-  if (legacyBucket) {
+  const legacyShapeStyleName = parseLegacyEveryShapeNodeStyleName(styleName);
+  if (legacyBucket || legacyShapeStyleName) {
     const parsedLayer = parseProvenanceStyleLayer(
       {
         kind: "kv",
@@ -1770,10 +1772,18 @@ function applyTikzStyleStatement(
       }
     );
     if (parsedLayer) {
-      if (statement.definitionKind === "append") {
-        frame[legacyBucket] = [...frame[legacyBucket], parsedLayer];
-      } else {
-        frame[legacyBucket] = [parsedLayer];
+      if (legacyBucket) {
+        if (statement.definitionKind === "append") {
+          frame[legacyBucket] = [...frame[legacyBucket], parsedLayer];
+        } else {
+          frame[legacyBucket] = [parsedLayer];
+        }
+      } else if (legacyShapeStyleName) {
+        const existing = frame.everyShapeNodeStyles.get(legacyShapeStyleName) ?? [];
+        frame.everyShapeNodeStyles.set(
+          legacyShapeStyleName,
+          statement.definitionKind === "append" ? [...existing, parsedLayer] : [parsedLayer]
+        );
       }
     }
   }
@@ -2794,124 +2804,37 @@ type FrameStyleBuckets = {
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
   everyPicStyles: ProvenanceOptionList[];
-  everyRectangleNodeStyles: ProvenanceOptionList[];
-  everyCircleNodeStyles: ProvenanceOptionList[];
-  everyDiamondNodeStyles: ProvenanceOptionList[];
-  everyTrapeziumNodeStyles: ProvenanceOptionList[];
-  everyIsoscelesTriangleNodeStyles: ProvenanceOptionList[];
-  everyKiteNodeStyles: ProvenanceOptionList[];
-  everyDartNodeStyles: ProvenanceOptionList[];
-  everyCircularSectorNodeStyles: ProvenanceOptionList[];
-  everyCylinderNodeStyles: ProvenanceOptionList[];
-  everyCloudNodeStyles: ProvenanceOptionList[];
-  everyStarburstNodeStyles: ProvenanceOptionList[];
-  everySignalNodeStyles: ProvenanceOptionList[];
-  everyTapeNodeStyles: ProvenanceOptionList[];
-  everyRectangleCalloutNodeStyles: ProvenanceOptionList[];
-  everyEllipseCalloutNodeStyles: ProvenanceOptionList[];
-  everyCloudCalloutNodeStyles: ProvenanceOptionList[];
-  everySingleArrowNodeStyles: ProvenanceOptionList[];
-  everyDoubleArrowNodeStyles: ProvenanceOptionList[];
+  everyShapeNodeStyles: Map<string, ProvenanceOptionList[]>;
 };
 
-const FRAME_STYLE_BUCKET_KEYS = [
+type FrameStyleListBucketKey = Exclude<keyof FrameStyleBuckets, "everyShapeNodeStyles">;
+
+const FRAME_STYLE_LIST_BUCKET_KEYS = [
   "everyNodeStyles",
   "everyTextNodePartStyles",
   "everyFitStyles",
-  "everyPicStyles",
-  "everyRectangleNodeStyles",
-  "everyCircleNodeStyles",
-  "everyDiamondNodeStyles",
-  "everyTrapeziumNodeStyles",
-  "everyIsoscelesTriangleNodeStyles",
-  "everyKiteNodeStyles",
-  "everyDartNodeStyles",
-  "everyCircularSectorNodeStyles",
-  "everyCylinderNodeStyles",
-  "everyCloudNodeStyles",
-  "everyStarburstNodeStyles",
-  "everySignalNodeStyles",
-  "everyTapeNodeStyles",
-  "everyRectangleCalloutNodeStyles",
-  "everyEllipseCalloutNodeStyles",
-  "everyCloudCalloutNodeStyles",
-  "everySingleArrowNodeStyles",
-  "everyDoubleArrowNodeStyles"
-] as const satisfies readonly (keyof FrameStyleBuckets)[];
+  "everyPicStyles"
+] as const satisfies readonly FrameStyleListBucketKey[];
 
-const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, keyof FrameStyleBuckets> = {
+const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, FrameStyleListBucketKey> = {
   "every node/.style": "everyNodeStyles",
   "every text node part/.style": "everyTextNodePartStyles",
   "every fit/.style": "everyFitStyles",
-  "every pic/.style": "everyPicStyles",
-  "every rectangle node/.style": "everyRectangleNodeStyles",
-  "every circle node/.style": "everyCircleNodeStyles",
-  "every diamond node/.style": "everyDiamondNodeStyles",
-  "every trapezium node/.style": "everyTrapeziumNodeStyles",
-  "every isosceles triangle node/.style": "everyIsoscelesTriangleNodeStyles",
-  "every kite node/.style": "everyKiteNodeStyles",
-  "every dart node/.style": "everyDartNodeStyles",
-  "every circular sector node/.style": "everyCircularSectorNodeStyles",
-  "every cylinder node/.style": "everyCylinderNodeStyles",
-  "every cloud node/.style": "everyCloudNodeStyles",
-  "every starburst node/.style": "everyStarburstNodeStyles",
-  "every signal node/.style": "everySignalNodeStyles",
-  "every tape node/.style": "everyTapeNodeStyles",
-  "every rectangle callout node/.style": "everyRectangleCalloutNodeStyles",
-  "every ellipse callout node/.style": "everyEllipseCalloutNodeStyles",
-  "every cloud callout node/.style": "everyCloudCalloutNodeStyles",
-  "every single arrow node/.style": "everySingleArrowNodeStyles",
-  "every double arrow node/.style": "everyDoubleArrowNodeStyles"
+  "every pic/.style": "everyPicStyles"
 };
 
-const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof FrameStyleBuckets> = {
+const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, FrameStyleListBucketKey> = {
   "every node/.append style": "everyNodeStyles",
   "every text node part/.append style": "everyTextNodePartStyles",
   "every fit/.append style": "everyFitStyles",
-  "every pic/.append style": "everyPicStyles",
-  "every rectangle node/.append style": "everyRectangleNodeStyles",
-  "every circle node/.append style": "everyCircleNodeStyles",
-  "every diamond node/.append style": "everyDiamondNodeStyles",
-  "every trapezium node/.append style": "everyTrapeziumNodeStyles",
-  "every isosceles triangle node/.append style": "everyIsoscelesTriangleNodeStyles",
-  "every kite node/.append style": "everyKiteNodeStyles",
-  "every dart node/.append style": "everyDartNodeStyles",
-  "every circular sector node/.append style": "everyCircularSectorNodeStyles",
-  "every cylinder node/.append style": "everyCylinderNodeStyles",
-  "every cloud node/.append style": "everyCloudNodeStyles",
-  "every starburst node/.append style": "everyStarburstNodeStyles",
-  "every signal node/.append style": "everySignalNodeStyles",
-  "every tape node/.append style": "everyTapeNodeStyles",
-  "every rectangle callout node/.append style": "everyRectangleCalloutNodeStyles",
-  "every ellipse callout node/.append style": "everyEllipseCalloutNodeStyles",
-  "every cloud callout node/.append style": "everyCloudCalloutNodeStyles",
-  "every single arrow node/.append style": "everySingleArrowNodeStyles",
-  "every double arrow node/.append style": "everyDoubleArrowNodeStyles"
+  "every pic/.append style": "everyPicStyles"
 };
 
-const LEGACY_TIKZSTYLE_BUCKET_BY_NAME: Record<string, keyof FrameStyleBuckets> = {
+const LEGACY_TIKZSTYLE_BUCKET_BY_NAME: Record<string, FrameStyleListBucketKey> = {
   "every node": "everyNodeStyles",
   "every text node part": "everyTextNodePartStyles",
   "every fit": "everyFitStyles",
-  "every pic": "everyPicStyles",
-  "every rectangle node": "everyRectangleNodeStyles",
-  "every circle node": "everyCircleNodeStyles",
-  "every diamond node": "everyDiamondNodeStyles",
-  "every trapezium node": "everyTrapeziumNodeStyles",
-  "every isosceles triangle node": "everyIsoscelesTriangleNodeStyles",
-  "every kite node": "everyKiteNodeStyles",
-  "every dart node": "everyDartNodeStyles",
-  "every circular sector node": "everyCircularSectorNodeStyles",
-  "every cylinder node": "everyCylinderNodeStyles",
-  "every cloud node": "everyCloudNodeStyles",
-  "every starburst node": "everyStarburstNodeStyles",
-  "every signal node": "everySignalNodeStyles",
-  "every tape node": "everyTapeNodeStyles",
-  "every rectangle callout node": "everyRectangleCalloutNodeStyles",
-  "every ellipse callout node": "everyEllipseCalloutNodeStyles",
-  "every cloud callout node": "everyCloudCalloutNodeStyles",
-  "every single arrow node": "everySingleArrowNodeStyles",
-  "every double arrow node": "everyDoubleArrowNodeStyles"
+  "every pic": "everyPicStyles"
 };
 
 const INHERITED_NODE_LAYOUT_KEYS = new Set([
@@ -2946,17 +2869,37 @@ const TREE_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof Omit<TreeMetaBuckets
 };
 
 function cloneFrameStyleBuckets(base: FrameStyleBuckets): FrameStyleBuckets {
-  const buckets = {} as FrameStyleBuckets;
-  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+  const buckets = {
+    everyShapeNodeStyles: new Map(base.everyShapeNodeStyles)
+  } as FrameStyleBuckets;
+  for (const key of FRAME_STYLE_LIST_BUCKET_KEYS) {
     buckets[key] = [...base[key]];
   }
   return buckets;
 }
 
 function assignFrameStyleBuckets(target: FrameStyleBuckets, source: FrameStyleBuckets): void {
-  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+  for (const key of FRAME_STYLE_LIST_BUCKET_KEYS) {
     target[key] = source[key];
   }
+  target.everyShapeNodeStyles = source.everyShapeNodeStyles;
+}
+
+function parseEveryShapeNodeStyleOptionKey(
+  key: string,
+  operation: ".style" | ".append style"
+): string | null {
+  const prefix = "every ";
+  const suffix = ` node/${operation}`;
+  if (!key.startsWith(prefix) || !key.endsWith(suffix)) {
+    return null;
+  }
+  return normalizeEveryShapeNodeStyleName(key.slice(prefix.length, -suffix.length));
+}
+
+function parseLegacyEveryShapeNodeStyleName(styleName: string): string | null {
+  const match = styleName.match(/^every\s+(.+?)\s+node$/i);
+  return match ? normalizeEveryShapeNodeStyleName(match[1] ?? "") : null;
 }
 
 export function resolveFrameMeta(
@@ -3314,6 +3257,15 @@ export function resolveFrameMeta(
         continue;
       }
 
+      const replaceShapeStyle = parseEveryShapeNodeStyleOptionKey(entry.key, ".style");
+      if (replaceShapeStyle) {
+        const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
+        if (parsedLayer) {
+          styleBuckets.everyShapeNodeStyles.set(replaceShapeStyle, [parsedLayer]);
+        }
+        continue;
+      }
+
       const treeReplaceBucket = TREE_STYLE_BUCKET_BY_STYLE_KEY[entry.key];
       if (treeReplaceBucket) {
         const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
@@ -3342,6 +3294,16 @@ export function resolveFrameMeta(
         const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
         if (parsedLayer) {
           styleBuckets[appendBucket] = [...styleBuckets[appendBucket], parsedLayer];
+        }
+        continue;
+      }
+
+      const appendShapeStyle = parseEveryShapeNodeStyleOptionKey(entry.key, ".append style");
+      if (appendShapeStyle) {
+        const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
+        if (parsedLayer) {
+          const existing = styleBuckets.everyShapeNodeStyles.get(appendShapeStyle) ?? [];
+          styleBuckets.everyShapeNodeStyles.set(appendShapeStyle, [...existing, parsedLayer]);
         }
         continue;
       }

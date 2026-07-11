@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { clientPoint, px, pt, worldBounds, worldVector } from "tikz-editor/coords/index";
-import { buildSnapContext, collectSelectionGeometryFromBounds, collectSourceWorldBounds, type SnapBounds, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "tikz-editor/edit/snapping";
-import type { EditHandle, SceneElement } from "tikz-editor/semantic/types";
+import { clientPoint, px, pt, worldBounds, worldVector } from "@tikz-editor/core/coords/index";
+import { buildSnapContext, collectSelectionGeometryFromBounds, collectSourceWorldBounds, type SnapBounds, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import type { EditHandle, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { ClientPoint, WorldBounds, WorldPoint } from "../coords/types";
-import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "tikz-editor/edit/path-editing";
-import { closestPointOnLine, closestPointOnCubic } from "tikz-editor/edit/curve-math";
+import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "@tikz-editor/core/edit/path-editing";
+import { closestPointOnLine, closestPointOnCubic } from "@tikz-editor/core/edit/curve-math";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToWorldPoint } from "./geometry";
 import { makeMergeKey, selectionAnchorRatioFromPoint } from "./panel-helpers";

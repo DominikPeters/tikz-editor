@@ -12,9 +12,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@tikz-editor/core": path.resolve(__dirname, "../../packages/core/src"),
       "@tikz-editor/lang-tikz": path.resolve(__dirname, "../../packages/lang-tikz/src/index.ts"),
-      "@tikz-editor/lezer-tikz": path.resolve(__dirname, "../../packages/lezer-tikz/src/index.ts"),
-      "tikz-editor": path.resolve(__dirname, "../../packages/core/src")
+      "@tikz-editor/lezer-tikz": path.resolve(__dirname, "../../packages/lezer-tikz/src/index.ts")
     }
   },
   clearScreen: false,

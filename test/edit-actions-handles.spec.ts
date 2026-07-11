@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EditHandle } from "../packages/core/src/semantic/types.js";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
+import { createEditAnalysisSession } from "../packages/core/src/edit/analysis.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { wp } from "./coords-helpers.js";
 import { cm, expectPatchesReconstructSource, makeHandle } from "./edit-actions-helpers.js";
@@ -354,6 +355,39 @@ describe("applyEditAction – connectHandle", () => {
     const nodeIndex = result.newSource.indexOf("\\node[draw] (A) at (-1, -1) {A};");
     expect(drawIndex).toBeGreaterThan(nodeIndex);
     expect(result.changedSourceIds).toEqual([]);
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("keeps a successful connection when a cached producer ref is missing", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (-2.5, 2.5) -- (2.5, 2.5);
+  \node[draw] (A) at (-1, -1) {A};
+\end{tikzpicture}`;
+    const startRaw = "(-2.5, 2.5)";
+    const startFrom = source.indexOf(startRaw);
+    const handle = makeHandle(source, {
+      world: wp(cm(-2.5), cm(2.5)),
+      sourceSpan: { from: startFrom, to: startFrom + startRaw.length },
+      sourceId: "path:0"
+    });
+    const connectedSource = source.replace(startRaw, "(A)");
+    const analysisView = createEditAnalysisSession().ensure(connectedSource);
+    analysisView.statementSnapshot.byId.delete("path:1");
+
+    const result = applyEditAction(source, [handle], {
+      kind: "connectHandle",
+      handleId: handle.id,
+      nodeName: "A",
+      anchor: "center"
+    }, {
+      parseOptions: { analysisView }
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("\\draw (A) -- (2.5, 2.5);");
+    expect(result.newSource.indexOf("\\draw (A)")).toBeLessThan(result.newSource.indexOf("\\node[draw] (A)"));
+    expect(result.changedSourceIds).toEqual(["path:0"]);
     expectPatchesReconstructSource(source, result);
   });
 

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import type { AdornmentOwnerGeometry } from "tikz-editor/ast/types";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import type { AdornmentOwnerGeometry } from "@tikz-editor/core/ast/types";
 import {
   applyFrameTransform,
   frameLocalPoint,
@@ -10,22 +10,22 @@ import {
   clientPoint,
   pt,
   px
-} from "tikz-editor/coords/index";
-import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
-import { formatNumber } from "tikz-editor/edit/format";
-import { worldToLocal } from "tikz-editor/edit/coords";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { parseLength } from "tikz-editor/semantic/coords/parse-length";
-import { intersectRayWithPolygon } from "tikz-editor/semantic/nodes/shape-geometry";
+} from "@tikz-editor/core/coords/index";
+import { parseEditableTargetId } from "@tikz-editor/core/edit/editable-targets";
+import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { worldToLocal } from "@tikz-editor/core/edit/coords";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
 import {
   snapHandlePosition,
   snapSelectionTranslation,
   snapToolPointer,
   type SnapLine
-} from "tikz-editor/edit/snapping";
-import type { SceneElement } from "tikz-editor/semantic/types";
+} from "@tikz-editor/core/edit/snapping";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint, WorldVector } from "../coords/types";
-import { applyMatrix, applyMatrixToVector, inverseMatrix } from "tikz-editor/semantic/transform";
+import { applyMatrix, applyMatrixToVector, inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import {
   closestPointOnPlacementSegment,
   pointAtPlacementSegment,
@@ -33,8 +33,8 @@ import {
   resolvePathAttachedDirectionUnit,
   resolvePathPositionPreset,
   tangentAtPlacementSegment
-} from "tikz-editor/semantic/path/path-attached";
-import type { SvgViewBox } from "tikz-editor/svg/index";
+} from "@tikz-editor/core/semantic/path/path-attached";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 import type { ClientPoint, WorldBounds } from "../coords/types";
 
 import {
@@ -78,7 +78,14 @@ const ADORNMENT_CENTER_SNAP_THRESHOLD_PT = 1;
 const GRID_RESIZE_STEP_EPSILON = 1e-9;
 const SNAP_FEEDBACK_EPSILON = 1e-6;
 const ADORNMENT_OWNER_CENTER_EPSILON = 1e-6;
-const MIN_SHAPE_DRAG_DIMENSION_PT = 0.1 * 28.4527559055;
+const MIN_SHAPE_DRAG_DIMENSION_PT = 0.1 * PT_PER_CM;
+
+type CanvasWorldListeners = {
+  onPointerMove: (event: PointerEvent) => void;
+  onPointerUp: (event: PointerEvent) => void;
+  onKeyDown: (event: KeyboardEvent) => void;
+  onKeyUp: (event: KeyboardEvent) => void;
+};
 
 function clientPointFromEvent(event: Pick<PointerEvent, "clientX" | "clientY">): ClientPoint {
   return clientPoint(px(event.clientX), px(event.clientY));
@@ -136,8 +143,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     onSnapFeedback
   } = params;
   const wasSnappedRef = useRef(false);
+  const worldListenersRef = useRef<CanvasWorldListeners | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     function sameIdsAsCurrentSelection(ids: readonly string[]): boolean {
       const currentSelection = selectedElementIdsRef.current;
       if (currentSelection.size !== ids.length) {
@@ -1244,18 +1252,18 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       applyRotateModifierKeyTransition(event, false);
     }
 
-    window.addEventListener("pointermove", onWorldPointerMove);
-    window.addEventListener("pointerup", onWorldPointerUp);
-    window.addEventListener("pointercancel", onWorldPointerUp);
-    window.addEventListener("keydown", onWorldKeyDown, true);
-    window.addEventListener("keyup", onWorldKeyUp, true);
+    const listeners: CanvasWorldListeners = {
+      onPointerMove: onWorldPointerMove,
+      onPointerUp: onWorldPointerUp,
+      onKeyDown: onWorldKeyDown,
+      onKeyUp: onWorldKeyUp
+    };
+    worldListenersRef.current = listeners;
 
     return () => {
-      window.removeEventListener("pointermove", onWorldPointerMove);
-      window.removeEventListener("pointerup", onWorldPointerUp);
-      window.removeEventListener("pointercancel", onWorldPointerUp);
-      window.removeEventListener("keydown", onWorldKeyDown, true);
-      window.removeEventListener("keyup", onWorldKeyUp, true);
+      if (worldListenersRef.current === listeners) {
+        worldListenersRef.current = null;
+      }
     };
   }, [
     applyActionWithFeedback,
@@ -1299,6 +1307,27 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     svgResult,
     svgResultRef
   ]);
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => worldListenersRef.current?.onPointerMove(event);
+    const onPointerUp = (event: PointerEvent) => worldListenersRef.current?.onPointerUp(event);
+    const onKeyDown = (event: KeyboardEvent) => worldListenersRef.current?.onKeyDown(event);
+    const onKeyUp = (event: KeyboardEvent) => worldListenersRef.current?.onKeyUp(event);
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+    };
+  }, []);
 }
 
 function propertyCleanupElementIdsForDrag(drag: DragState): string[] {
