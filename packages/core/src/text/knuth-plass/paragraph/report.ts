@@ -33,6 +33,8 @@ export interface LineSegmentReport {
     detail?: string;
   };
   fontId?: string;
+  fontAtPt?: number;
+  color?: string;
   glyphCode?: number;
   mathSvgBody?: string;
   mathConstructRanges?: LineMathConstructRangeReport[];

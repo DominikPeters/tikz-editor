@@ -669,14 +669,14 @@ class TexMathParser {
   }
 
   private parseStackingCommand(
-    stackCommand: "overset" | "underset" | "overunderset",
+    stackCommand: "overset" | "underset" | "overunderset" | "stackrel",
     allowScripts: boolean
   ): TexMathAtom {
     const command = this.advance();
     const above = stackCommand === "underset"
       ? null
       : this.parseRequiredMathArgument(command.sourceSpan, `${command.text} superscript`);
-    const below = stackCommand === "overset"
+    const below = stackCommand === "overset" || stackCommand === "stackrel"
       ? null
       : this.parseRequiredMathArgument(command.sourceSpan, `${command.text} subscript`);
     const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`);
@@ -687,7 +687,7 @@ class TexMathParser {
     const baseList = base?.list ?? emptyList(command.sourceSpan.end);
     return this.maybeParseScripts({
       kind: "atom",
-      atomClass: atomClassForStackingBase(baseList),
+      atomClass: stackCommand === "stackrel" ? "rel" : atomClassForStackingBase(baseList),
       nucleus: {
         kind: "list",
         list: baseList,
@@ -5819,6 +5819,10 @@ function accentCommandName(command: string): TexMathAccentCommand | null {
       return "tilde";
     case "vec":
       return "vec";
+    case "widehat":
+      return "widehat";
+    case "widetilde":
+      return "widetilde";
     default:
       return null;
   }
@@ -5863,7 +5867,7 @@ function ellipsisCommandName(command: string): "ldots" | "cdots" | "dots" | null
   }
 }
 
-function stackingCommandName(command: string): "overset" | "underset" | "overunderset" | null {
+function stackingCommandName(command: string): "overset" | "underset" | "overunderset" | "stackrel" | null {
   switch (commandName(command)) {
     case "overset":
       return "overset";
@@ -5871,6 +5875,8 @@ function stackingCommandName(command: string): "overset" | "underset" | "overund
       return "underset";
     case "overunderset":
       return "overunderset";
+    case "stackrel":
+      return "stackrel";
     default:
       return null;
   }
@@ -5880,8 +5886,12 @@ function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
   switch (commandName(command)) {
     case "mathbf":
       return "mathbf";
+    case "mathbb":
+      return "mathbb";
     case "mathcal":
       return "mathcal";
+    case "mathfrak":
+      return "mathfrak";
     case "mathit":
       return "mathit";
     case "mathrm":

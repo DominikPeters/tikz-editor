@@ -42,6 +42,7 @@ export interface ResolvedTexFont {
   readonly id: string;
   readonly atPt: number;
   readonly data: GeneratedTexFont;
+  readonly color?: string;
 }
 
 export interface TexGlyphBox {
@@ -84,6 +85,8 @@ export interface ShapedTexTextRun {
 
 export interface ShapeTexTextOptions {
   readonly sourceStart?: number;
+  /** Source end for a synthesized single-character run (for example \\'{e}). */
+  readonly sourceEnd?: number;
 }
 
 export interface ResolveTexFontOptions {

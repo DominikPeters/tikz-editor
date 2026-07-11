@@ -302,6 +302,7 @@ function texLayoutLabelHBoxContent(
         code: item.code,
         fontId: item.font.id,
         atPt: item.font.atPt,
+        ...(item.font.color ? { color: item.font.color } : {}),
         x: roundTexPt(width),
       });
       width += glyphWidth;
@@ -319,6 +320,7 @@ function texLayoutLabelHBoxContent(
         text: item.text,
         fontId: item.font.id,
         atPt: item.font.atPt,
+        ...(item.font.color ? { color: item.font.color } : {}),
         x: roundTexPt(width),
       });
       width += shaped.width;
@@ -406,11 +408,17 @@ export function texLayoutTextBoxItemWidth(item: TexLayoutTextBoxItem): number {
 
 function texLayoutBoxSvgBody(box: TexMathBox): string | undefined {
   if (box.hlist && box.fontProfile) {
-    return renderTexMathHListSvgBody(box.hlist, {
+    const body = renderTexMathHListSvgBody(box.hlist, {
       fontProfile: box.fontProfile,
     });
+    return box.color ? wrapTexBoxColor(body, box.color) : body;
   }
-  return box.svgBody;
+  return box.svgBody && box.color ? wrapTexBoxColor(box.svgBody, box.color) : box.svgBody;
+}
+
+function wrapTexBoxColor(body: string, color: string): string {
+  const escaped = color.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  return `<g fill="${escaped}" stroke="${escaped}">${body}</g>`;
 }
 
 export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): number {

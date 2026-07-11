@@ -84,6 +84,9 @@ export const DEFAULT_COMPUTER_MODERN_MATH_FONTS = [
   "msbm10",
   "msbm7",
   "msbm5",
+  "eufm10",
+  "eufm7",
+  "eufm5",
 ] as const;
 
 export type DefaultComputerModernMathFont = typeof DEFAULT_COMPUTER_MODERN_MATH_FONTS[number];

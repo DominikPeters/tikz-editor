@@ -247,7 +247,7 @@ Exit criteria:
 Exit criteria: e2e test types an unsupported macro, observes neutral
 styling while caret is inside, error styling after clicking elsewhere.
 
-### Phase 3: Close remaining whole-node triggers (deferred, tracked)
+### Phase 3: Close remaining whole-node triggers (in progress)
 
 Each remaining `isSimpleTexTextEligible` rejection either gets real support
 or becomes a literal run:
@@ -262,6 +262,14 @@ or becomes a literal run:
 - monospace nodes — route to the existing `cmtt`/`lmmono` faces;
 - `mode: "math"` matrix cells — route to the TeX math engine (it already
   lays out matrices; the cells simply never reach it).
+
+Implemented 2026-07-11: common accented Latin Unicode and TeX prose accent
+commands; monospace nodes and bare font declarations; inline color and text
+size declarations; and native math support for `\mathbb`, `\mathfrak`,
+`\stackrel`, `\widehat`, and `\widetilde`. Unicode code points absent from the
+vendored Latin Modern catalog still fall back explicitly rather than emitting
+blank glyphs. A scoped text-size declaration around inline math does not yet
+rescale only that math island; leading/global node sizing does.
 
 ### Phase 4: Delete the fallback
 

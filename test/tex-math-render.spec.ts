@@ -431,6 +431,42 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(0 -894.445) scale(70)"');
   });
 
+  it("renders stackrel and wide accents through native TeX glyph paths", () => {
+    const parsed = parseTexMath(String.raw`x\stackrel{a}{b}y+\widehat{abc}+\widetilde{abc}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+
+    const supported = result as Extract<ReturnType<typeof layoutTexMathList>, { readonly supported: true }>;
+    const body = renderTexMathHListSvgBody(supported.hlist);
+    expect(body).toContain('data-tex-math-role="limit-superscript"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="97"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="99"');
+    expect(body).toContain('data-tex-font="cmex10" data-tex-glyph="102"');
+  });
+
+  it("keeps stackrel and wide accents on the native inline provider path", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    for (const content of [
+      String.raw`x\stackrel{a}{b}y`,
+      String.raw`\widehat{abc}`,
+      String.raw`\widetilde{abc}`,
+    ]) {
+      const source = `$${content}$`;
+      const box = provider.getInlineMathBox({
+        source,
+        content,
+        delimiter: "dollar",
+        sourceStart: 0,
+        sourceEnd: source.length,
+        contentStart: 1,
+        contentEnd: source.length - 1,
+      });
+
+      expect(box, content).not.toBeNull();
+      expect(box?.svgBody, content).toContain("data-tex-font=");
+    }
+  });
+
   it("renders TeX buildrel through positioned operator-limit glyph paths", () => {
     const parsed = parseTexMath(String.raw`\buildrel{a}\over =`);
     const result = layoutTexMathList(parsed.list);
@@ -600,6 +636,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="cmti10" data-tex-glyph="120"');
     expect(body).toContain('data-tex-font="cmtt10" data-tex-glyph="120"');
     expect(body).toContain('data-tex-font="cmsy10" data-tex-glyph="65"');
+  });
+
+  it("renders blackboard and fraktur glyphs through vendored AMS font paths", () => {
+    const parsed = parseTexMath(String.raw`\mathbb{R}+\mathfrak{g}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) {
+      return;
+    }
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="msbm10" data-tex-glyph="82"');
+    expect(body).toContain('data-tex-font="eufm10" data-tex-glyph="103"');
+    expect(body).toContain('data-source-start="8"');
+    expect(body).toContain('data-source-start="21"');
   });
 
   it("renders old-style math font declarations through vendored CM font paths", () => {
@@ -1156,6 +1207,25 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-source-start="7"');
     expect(box?.svgBody).toContain('data-source-end="10"');
     expect(box?.svgBody).toContain('data-tex-font="cmsy10" data-tex-glyph="0"');
+  });
+
+  it("keeps blackboard and fraktur alphabets on the native inline provider", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const content = String.raw`\mathbb{R}+\mathfrak{g}`;
+    const source = `$${content}$`;
+    const box = provider.getInlineMathBox({
+      source,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    });
+
+    expect(box).not.toBeNull();
+    expect(box?.svgBody).toContain('data-tex-font="msbm10" data-tex-glyph="82"');
+    expect(box?.svgBody).toContain('data-tex-font="eufm10" data-tex-glyph="103"');
   });
 
   it("reports TeX inline math breakpoints after normalized binary and relation atoms", () => {

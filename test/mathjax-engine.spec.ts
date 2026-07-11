@@ -185,9 +185,9 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    // Non-ASCII input still routes to the MathJax path (literal runs cannot
-    // absorb it), keeping this a MathJax-validation test.
-    const issue = engine.validate(String.raw`café $\ell^2$`);
+    // An uncatalogued script still routes to MathJax, keeping this a
+    // MathJax-validation test now that common accented Latin is native.
+    const issue = engine.validate(String.raw`漢 $\ell^2$`);
 
     expect(issue).toBeNull();
     const flushed = await engine.flushPending?.();
@@ -214,7 +214,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    const issue = engine.validate(String.raw`café $\unknownmacro$`);
+    const issue = engine.validate(String.raw`漢 $\unknownmacro$`);
 
     expect(issue).toEqual({
       code: "invalid-node-tex",
@@ -283,7 +283,7 @@ describe("mathjax node text engine", () => {
     const engine = await createMathJaxNodeTextEngine();
 
     const measured = engine.measure({
-      text: String.raw`$\ell^2$`,
+      text: String.raw`漢 $\ell^2$`,
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -350,7 +350,7 @@ describe("mathjax node text engine", () => {
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
 
-    expect(engine.validate(String.raw`Alpha é \\ Beta`)).toBeNull();
+    expect(engine.validate(String.raw`Alpha 漢 \\ Beta`)).toBeNull();
     const changedKeys = await engine.flushPending?.();
 
     expect(changedKeys?.length).toBe(1);
@@ -947,11 +947,12 @@ describe("mathjax node text engine", () => {
     expect(Number(tailLine?.[3])).toBeCloseTo(-25, 4);
   });
 
-  it("normalizes legacy font switches and records wrapped text gap metadata", async () => {
-    const { outputJax, texCalls } = installFakeBrowserMathJax();
+  it("keeps bare font switches and monospace requests on the native TeX path", async () => {
+    const { texCalls } = installFakeBrowserMathJax();
 
     const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
     const engine = await createMathJaxNodeTextEngine();
+    const callsBeforeMeasure = texCalls.length;
 
     const measured = engine.measure({
       text: String.raw`\ttfamily First.  Next \normalfont plain \bfseries bold \mdseries medium \itshape italic \upshape upright`,
@@ -963,21 +964,11 @@ describe("mathjax node text engine", () => {
       fontSizePt: 20
     });
 
-    expect(measured?.width).toBeCloseTo(20);
-    expect(outputJax.knuthPlassOptions?.alignment).toBe("center");
-    expect(outputJax.knuthPlassOptions?.layoutMode).toBe("wrap");
-    expect(outputJax.knuthPlassOptions?.wrappedTextGaps).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sourceStart: 7,
-          widthEm: 0.5
-        })
-      ])
-    );
-    expect(texCalls.at(-1)).toMatch(/\\parbox\[t\]\{35\.865504pt\}/);
-    expect(texCalls.at(-1)).not.toContain(String.raw`\ttfamily`);
-    expect(texCalls.at(-1)).not.toContain(String.raw`\bfseries`);
-    expect(texCalls.at(-1)).toContain(String.raw`\hspace{0.5em}`);
+    expect(measured?.paragraphId).toMatch(/^tex:/);
+    expect(texCalls).toHaveLength(callsBeforeMeasure);
+    const styledBody = engine.renderFromCache(measured?.cacheKey ?? "")?.body ?? "";
+    expect(styledBody).toContain('data-tex-font="lmmono10-regular"');
+    expect(styledBody).toContain('data-tex-font="lmroman10-bold"');
 
     const complex = engine.measure({
       text: String.raw`Alpha."  Beta $x y$ \% mark \\ Next \LaTeX command`,
@@ -989,20 +980,10 @@ describe("mathjax node text engine", () => {
       fontSizePt: 20
     });
 
-    expect(complex?.paragraphId).toBeTruthy();
-    expect(outputJax.knuthPlassOptions?.layoutMode).toBe("wrapped-explicit");
-    expect(outputJax.knuthPlassOptions?.wrappedTextGaps).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sourceStart: 7,
-          widthEm: 0.5
-        })
-      ])
-    );
-    expect(texCalls.at(-1)).toContain(String.raw`\texttt{`);
-    expect(texCalls.at(-1)).toContain(String.raw`\%`);
-    expect(texCalls.at(-1)).toContain(String.raw`$x y$`);
-    expect(texCalls.at(-1)).toContain(String.raw`\\`);
+    expect(complex?.paragraphId).toMatch(/^tex:/);
+    expect(texCalls).toHaveLength(callsBeforeMeasure);
+    expect(engine.renderFromCache(complex?.cacheKey ?? "")?.body)
+      .toContain('data-tex-font="lmmono10-regular"');
   });
 
   it("configures and loads MathJax through a browser startup script", async () => {
@@ -1081,7 +1062,7 @@ describe("mathjax node text engine", () => {
     );
     const engine = await createMathJaxNodeTextEngine({ font: "mathjax-stix2" });
     const measured = engine.measure({
-      text: "Loaded runtime",
+      text: "Loaded 漢 runtime",
       textWidthPt: 40,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -1194,7 +1175,7 @@ describe("mathjax node text engine", () => {
       }
     });
     expect(engine.measure({
-      text: "loaded marker",
+      text: "loaded 漢 marker",
       textWidthPt: 20,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -1240,7 +1221,7 @@ describe("mathjax node text engine", () => {
 
     expect(module.getActiveMathJaxOutputJax()).toBe(outputJax);
     expect(engine.measure({
-      text: "preloaded promise",
+      text: "preloaded 漢 promise",
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -1300,7 +1281,7 @@ describe("mathjax node text engine", () => {
     const engine = await enginePromise;
 
     expect(engine.measure({
-      text: "from existing script",
+      text: "from existing 漢 script",
       textWidthPt: 30,
       alignment: "ragged-left",
       fontStyle: "normal",
@@ -1351,7 +1332,7 @@ describe("mathjax node text engine", () => {
     const malformedModule = await import("../packages/core/src/text/mathjax-engine.js");
     const malformedEngine = await malformedModule.createMathJaxNodeTextEngine();
     expect(malformedEngine.measure({
-      text: "bad svg",
+      text: "bad 漢 svg",
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -1373,7 +1354,7 @@ describe("mathjax node text engine", () => {
     const noParagraphModule = await import("../packages/core/src/text/mathjax-engine.js");
     const noParagraphEngine = await noParagraphModule.createMathJaxNodeTextEngine();
     expect(() => noParagraphEngine.measure({
-      text: String.raw`A \\ B`,
+      text: String.raw`A 漢 \\ B`,
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -1396,7 +1377,7 @@ describe("mathjax node text engine", () => {
     const { KnuthPlassVisitor } = await import("../packages/core/src/text/knuth-plass/KnuthPlassVisitor.js");
     const fallbackEngine = await fallbackModule.createMathJaxNodeTextEngine();
     expect(fallbackEngine.measure({
-      text: "fallback options",
+      text: "fallback 漢 options",
       textWidthPt: 25,
       alignment: "center",
       fontStyle: "normal",
@@ -1574,7 +1555,7 @@ describe("mathjax node text engine", () => {
     };
     const diagnosticModule = await import("../packages/core/src/text/mathjax-engine.js");
     const diagnosticEngine = await diagnosticModule.createMathJaxNodeTextEngine();
-    expect(diagnosticEngine.validate(String.raw`café $\bad$`)).toEqual({
+    expect(diagnosticEngine.validate(String.raw`漢 $\bad$`)).toEqual({
       code: "invalid-node-tex",
       message: "object diagnostic"
     });
@@ -1598,7 +1579,7 @@ describe("mathjax node text engine", () => {
       const module = await import("../packages/core/src/text/mathjax-engine.js");
       const engine = await module.createMathJaxNodeTextEngine();
       return engine.measure({
-        text: "bad svg",
+        text: "bad 漢 svg",
         textWidthPt: null,
         fontStyle: "normal",
         fontWeight: "normal",
@@ -1648,7 +1629,7 @@ describe("mathjax node text engine", () => {
     const emptyAdaptorModule = await import("../packages/core/src/text/mathjax-engine.js");
     const emptyAdaptorEngine = await emptyAdaptorModule.createMathJaxNodeTextEngine();
     expect(emptyAdaptorEngine.measure({
-      text: "empty adaptor",
+      text: "empty 漢 adaptor",
       textWidthPt: null,
       fontStyle: "normal",
       fontWeight: "normal",
@@ -1699,7 +1680,7 @@ describe("mathjax node text engine", () => {
       };
       const diagnosticModule = await import("../packages/core/src/text/mathjax-engine.js");
       const diagnosticEngine = await diagnosticModule.createMathJaxNodeTextEngine();
-      expect(diagnosticEngine.validate(String.raw`café $\bad$`)).toEqual({
+      expect(diagnosticEngine.validate(String.raw`漢 $\bad$`)).toEqual({
         code: "invalid-node-tex",
         message: testCase.message
       });
@@ -1737,7 +1718,7 @@ describe("mathjax node text engine", () => {
     expect(module.getActiveMathJaxOutputJax()).toBe(directOutputJax);
     await expect(engine.flushPending?.()).resolves.toEqual([]);
     expect(() => engine.measure({
-      text: "missing paragraph metadata",
+      text: "missing 漢 paragraph metadata",
       textWidthPt: 30,
       alignment: undefined,
       fontStyle: "normal",

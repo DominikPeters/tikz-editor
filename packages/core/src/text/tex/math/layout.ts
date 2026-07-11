@@ -6088,6 +6088,10 @@ function defaultLuaLatexMathAccent(
       return { family: "operators", code: 126 };
     case "vec":
       return { family: "letters", code: 126 };
+    case "widehat":
+      return { family: "extension", code: 98 };
+    case "widetilde":
+      return { family: "extension", code: 101 };
   }
   return null;
 }
@@ -6119,6 +6123,14 @@ function defaultLuaLatexMathAlphabetFontId(
         return "cmbx5";
       }
       return "cmbx10";
+    case "mathbb":
+      if (style === "script") {
+        return "msbm7";
+      }
+      if (style === "scriptscript") {
+        return "msbm5";
+      }
+      return "msbm10";
     case "mathcal":
       if (style === "script") {
         return "cmsy7";
@@ -6127,6 +6139,14 @@ function defaultLuaLatexMathAlphabetFontId(
         return "cmsy5";
       }
       return "cmsy10";
+    case "mathfrak":
+      if (style === "script") {
+        return "eufm7";
+      }
+      if (style === "scriptscript") {
+        return "eufm5";
+      }
+      return "eufm10";
     case "mathit":
       if (style === "text" || style === "display") {
         return "cmti10";

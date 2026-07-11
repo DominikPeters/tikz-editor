@@ -104,6 +104,7 @@ export interface TexMathBox {
   readonly svgBody?: string;
   readonly hlist?: TexMathHList;
   readonly fontProfile?: TexMathFontProfile;
+  readonly color?: string;
   readonly rootBox?: TexMathBox;
 }
 
@@ -494,7 +495,13 @@ export function simpleTexSegmentToLayoutItems(
         sourceEnd: token.sourceEnd,
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
-        box,
+        box: token.fontState.color
+          ? {
+              ...box,
+              color: token.fontState.color,
+              ...(box.rootBox ? { rootBox: { ...box.rootBox, color: token.fontState.color } } : {}),
+            }
+          : box,
       });
       hasSeenText = true;
       spaceFactor = 1000;
@@ -1863,6 +1870,7 @@ export function texMBoxHListFromLayoutItems(params: {
     if (item.kind === "text") {
       const shaped = params.metricProvider.shapeText(item.text, item.font, {
         sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
       });
       for (const shapedItem of shaped.items) {
         const layoutItem = texTextShapedItemToMBoxItem(shapedItem, item.font, cursor);

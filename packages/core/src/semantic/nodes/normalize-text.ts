@@ -12,8 +12,7 @@ export function normalizeEscapedTextSpaces(text: string): string {
 }
 
 const FONT_SIZE_COMMAND_PATTERN = new RegExp(
-  String.raw`\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|pgfutil@font@tiny|pgfutil@font@scriptsize|pgfutil@font@footnotesize|pgfutil@font@small|pgfutil@font@normalsize|pgfutil@font@large|pgfutil@font@Large|pgfutil@font@LARGE|pgfutil@font@huge|pgfutil@font@Huge)\b|\\fontsize\s*\{\s*([^{}]+?)\s*\}\s*\{\s*[^{}]*?\s*\}(?:\s*\\selectfont)?`,
-  "g"
+  String.raw`^\s*(\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|pgfutil@font@tiny|pgfutil@font@scriptsize|pgfutil@font@footnotesize|pgfutil@font@small|pgfutil@font@normalsize|pgfutil@font@large|pgfutil@font@Large|pgfutil@font@LARGE|pgfutil@font@huge|pgfutil@font@Huge)\b|\\fontsize\s*\{\s*([^{}]+?)\s*\}\s*\{\s*[^{}]*?\s*\}\s*\\selectfont)\s*`
 );
 
 export type NormalizedNodeText = {
@@ -31,21 +30,25 @@ export function normalizeNodeTextFontSize(text: string, baseFontSizePt: number):
   }
 
   let fontSizePt = baseFontSizePt;
-  const normalizedText = text.replace(FONT_SIZE_COMMAND_PATTERN, (match, fontsizeValue?: string) => {
-    if (match.startsWith("\\fontsize")) {
-      const parsed = parseFontSizeValue(fontsizeValue);
-      if (parsed != null) {
-        fontSizePt = parsed;
+  const unwrappedText = stripWrappingBraces(text);
+  const normalizedText = unwrappedText.replace(
+    FONT_SIZE_COMMAND_PATTERN,
+    (_match, command: string, fontsizeValue?: string) => {
+      if (command.trimStart().startsWith("\\fontsize")) {
+        const parsed = parseFontSizeValue(fontsizeValue);
+        if (parsed != null) {
+          fontSizePt = parsed;
+        }
+        return "";
+      }
+
+      const factor = FONT_SIZE_COMMAND_FACTORS[command.trim()];
+      if (factor != null) {
+        fontSizePt = DEFAULT_TEXT_FONT_SIZE * factor;
       }
       return "";
     }
-
-    const factor = FONT_SIZE_COMMAND_FACTORS[match];
-    if (factor != null) {
-      fontSizePt = DEFAULT_TEXT_FONT_SIZE * factor;
-    }
-    return "";
-  });
+  );
 
   return {
     text: stripWrappingBraces(normalizedText),

@@ -38,12 +38,28 @@ const DEFAULT_FONTS = [
   "msbm10",
   "msbm7",
   "msbm5",
+  "eufm10",
+  "eufm7",
+  "eufm5",
+];
+// Keep the generated Latin Modern tables compact while covering the characters
+// people routinely type in prose.  U+0080..U+009F are controls, so deliberately
+// leave that hole between ASCII and Latin-1 Supplement.
+const LATIN_TEXT_CODE_RANGES = [
+  [0x20, 0x7e],
+];
+const COMMON_PROSE_CODES = [
+  ...Array.from({ length: 0x40 }, (_, index) => 0xc0 + index),
+  0x0106, 0x0107, 0x010c, 0x010d, 0x0110, 0x0111,
+  0x0141, 0x0142, 0x0143, 0x0144, 0x0152, 0x0153,
+  0x0160, 0x0161, 0x0178, 0x0179, 0x017a, 0x017d, 0x017e,
+  0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
 ];
 const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman10-regular",
     fileName: "lmroman10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013, 0x2022],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -56,7 +72,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman10-bold",
     fileName: "lmroman10-bold.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -69,7 +85,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman10-italic",
     fileName: "lmroman10-italic.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -82,7 +98,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman10-bolditalic",
     fileName: "lmroman10-bolditalic.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -95,7 +111,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman7-regular",
     fileName: "lmroman7-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013, 0x2022],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -108,7 +124,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman7-bold",
     fileName: "lmroman7-bold.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -121,7 +137,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman7-italic",
     fileName: "lmroman7-italic.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -134,7 +150,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman5-regular",
     fileName: "lmroman5-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013, 0x2022],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -147,7 +163,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmroman5-bold",
     fileName: "lmroman5-bold.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -160,7 +176,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmromanslant10-regular",
     fileName: "lmromanslant10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -173,7 +189,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmromanslant10-bold",
     fileName: "lmromanslant10-bold.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -186,7 +202,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmromanslant8-regular",
     fileName: "lmromanslant8-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -199,47 +215,47 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmromancaps10-regular",
     fileName: "lmromancaps10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmono10-regular",
     fileName: "lmmono10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmono10-italic",
     fileName: "lmmono10-italic.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmono8-regular",
     fileName: "lmmono8-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmonoslant10-regular",
     fileName: "lmmonoslant10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmonocaps10-regular",
     fileName: "lmmonocaps10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmonolt10-bold",
     fileName: "lmmonolt10-bold.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmmonolt10-boldoblique",
     fileName: "lmmonolt10-boldoblique.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
     fontName: "lmsans10-regular",
     fileName: "lmsans10-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -252,7 +268,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmsans10-bold",
     fileName: "lmsans10-bold.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -265,7 +281,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmsans10-oblique",
     fileName: "lmsans10-oblique.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -278,7 +294,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmsans10-boldoblique",
     fileName: "lmsans10-boldoblique.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -291,7 +307,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmsans8-regular",
     fileName: "lmsans8-regular.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -304,7 +320,7 @@ const DEFAULT_OTF_GLYPHS = [
   {
     fontName: "lmsans8-oblique",
     fileName: "lmsans8-oblique.otf",
-    codeRanges: [[0x20, 0x7e]],
+    codeRanges: LATIN_TEXT_CODE_RANGES,
     codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
     ligKerns: [
       ["lig", 0x66, 0x66, 0xfb00],
@@ -499,7 +515,8 @@ function parsePl(pl) {
 
 function generate(fontNames) {
   const fonts = {};
-  for (const fontName of fontNames) {
+  const deferredFontNames = fontNames.filter((fontName) => fontName.startsWith("eufm"));
+  const generateTfmFont = (fontName) => {
     const tfmPath = run("kpsewhich", [`${fontName}.tfm`]);
     if (!tfmPath) {
       throw new Error(`Could not resolve ${fontName}.tfm through kpsewhich`);
@@ -512,15 +529,23 @@ function generate(fontNames) {
     };
     font.glyphs = extractSvgGlyphPaths(fontName, Object.keys(font.chars).map(Number));
     fonts[fontName] = font;
+  };
+  for (const fontName of fontNames.filter((fontName) => !deferredFontNames.includes(fontName))) {
+    generateTfmFont(fontName);
   }
   for (const font of DEFAULT_OTF_GLYPHS) {
     fonts[font.fontName] = generateOtfGlyphFont(font);
+  }
+  // Newly added math-only fonts follow the established text-font table so
+  // regenerating them does not rewrite every vendored OpenType entry.
+  for (const fontName of deferredFontNames) {
+    generateTfmFont(fontName);
   }
   return fonts;
 }
 
 function otfCodesForFont(font) {
-  const codes = new Set(font.codes ?? []);
+  const codes = new Set([...COMMON_PROSE_CODES, ...(font.codes ?? [])]);
   for (const [start, end] of font.codeRanges ?? []) {
     for (let code = start; code <= end; code += 1) {
       codes.add(code);
@@ -738,15 +763,16 @@ function generateOtfGlyphFont(font) {
     throw new Error(`Could not resolve ${font.fileName} through kpsewhich`);
   }
   const cmap = parseOtfCmap(fontPath);
-  const codes = otfCodesForFont(font);
+  // Font variants do not all expose exactly the same extended-Latin cmap.
+  // Generate the useful intersection instead of making a broad prose range
+  // require every code point in every face.
+  const codes = otfCodesForFont(font).filter((code) => cmap.has(code));
   const metrics = extractOtfCharMetrics(fontPath, codes);
   const chars = {};
   const glyphs = {};
   for (const code of codes) {
     const glyphName = cmap.get(code);
-    if (!glyphName) {
-      throw new Error(`Could not resolve cmap entry for U+${code.toString(16).toUpperCase()} in ${font.fileName}`);
-    }
+    if (!glyphName) continue;
     const metric = metrics.get(code);
     if (!metric) {
       throw new Error(`Could not resolve LuaTeX character metric for ${glyphName} (U+${code.toString(16).toUpperCase()}) in ${font.fileName}`);
@@ -756,11 +782,23 @@ function generateOtfGlyphFont(font) {
       glyphs[code] = "";
     }
   }
-  Object.assign(glyphs, extractOtfSvgGlyphPaths(fontPath, Object.keys(glyphs).map(Number)));
+  const extractedGlyphs = extractOtfSvgGlyphPaths(fontPath, Object.keys(glyphs).map(Number));
+  for (const code of Object.keys(glyphs).map(Number)) {
+    const path = extractedGlyphs[code];
+    if (path) {
+      glyphs[code] = path;
+    } else {
+      delete glyphs[code];
+      delete chars[code];
+    }
+  }
   const ligKerns = [
     ...font.ligKerns ?? [],
     ...extractOtfKernPairs(fontPath, [
-      ...codes,
+      // Keep the generated table tractable: the shaping engine still applies
+      // the established ASCII kerning program, while extended prose glyphs
+      // use their OpenType advances without materializing an O(n²) pair table.
+      ...codes.filter((code) => code >= 0x20 && code <= 0x7e),
       ...((font.ligKerns ?? [])
         .filter((rule) => rule[0] === "lig")
         .map((rule) => rule[3])),
@@ -875,10 +913,7 @@ ${text}
     for (const [index, code] of sortedCodes.entries()) {
       const pathId = useIds[index];
       const path = pathId ? pathsById.get(pathId) : undefined;
-      if (!path) {
-        throw new Error(`Could not extract SVG path for U+${code.toString(16).toUpperCase()} from ${fontPath}`);
-      }
-      glyphs[code] = path;
+      if (path) glyphs[code] = path;
     }
     return glyphs;
   } finally {
