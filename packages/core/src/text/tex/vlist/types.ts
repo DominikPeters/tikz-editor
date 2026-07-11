@@ -93,6 +93,7 @@ export type TexRenderItem =
       readonly atPt: number;
       readonly x: number;
       readonly baseline: number;
+      readonly color?: string;
     }
   | {
       readonly kind: "tex-glyph";
@@ -102,6 +103,7 @@ export type TexRenderItem =
       readonly atPt: number;
       readonly x: number;
       readonly baseline: number;
+      readonly color?: string;
     }
   | {
       readonly kind: "tex-math-svg";

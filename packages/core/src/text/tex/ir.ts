@@ -1,6 +1,8 @@
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { parseTexDimensionText } from "./dimensions.js";
+import { normalizeColor, resolveDefineColorModel } from "../../semantic/style/colors.js";
+import { DEFAULT_TEXT_FONT_SIZE, FONT_SIZE_COMMAND_FACTORS } from "../../semantic/style/constants.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
@@ -90,6 +92,10 @@ export interface SimpleTexFontState {
   readonly family: TexFontFamily;
   readonly series: TexFontSeries;
   readonly shape: TexFontShape;
+  /** Absolute TeX point size selected by an inline declaration. */
+  readonly sizePt?: number;
+  /** CSS color normalized from the xcolor spelling in the source. */
+  readonly color?: string;
 }
 
 interface SimpleTexSourceRange {
@@ -158,6 +164,22 @@ export interface SimpleTexFontDeclarationNode extends SimpleTexSourceRange {
   readonly kind: "font-declaration";
   readonly text: string;
   readonly command: SimpleTexFontDeclarationName;
+}
+
+export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
+  readonly kind: "style-declaration";
+  readonly text: string;
+  readonly sizePt?: number;
+  readonly color?: string;
+}
+
+export interface SimpleTexColorCommandNode extends SimpleTexSourceRange {
+  readonly kind: "color-command";
+  readonly text: string;
+  readonly color: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexInlineNode[];
 }
 
 export interface SimpleTexGroupNode extends SimpleTexSourceRange {
@@ -340,6 +362,8 @@ export type SimpleTexInlineNode =
   | SimpleTexMathNode
   | SimpleTexFontCommandNode
   | SimpleTexFontDeclarationNode
+  | SimpleTexStyleDeclarationNode
+  | SimpleTexColorCommandNode
   | SimpleTexGroupNode
   | SimpleTexMBoxNode
   | SimpleTexRuleNode
@@ -633,7 +657,7 @@ export function analyzeSimpleTexParagraph(
     if (codePoint === undefined) {
       continue;
     }
-    if (codePoint > 0x7e || (codePoint < 0x20 && codePoint !== 0x0a)) {
+    if (codePoint < 0x20 && codePoint !== 0x0a) {
       return {
         ir,
         fallbackReason: `Paragraph contains unsupported OT1 character U+${codePoint.toString(16).toUpperCase()}.`,
@@ -763,6 +787,9 @@ function scanSimpleTexIrNodes(
       const dimensionBoxCommand = scanSimpleTexDimensionBoxCommand(text, index, sourceOffset);
       const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
+      const styleDeclaration = scanSimpleTexStyleDeclaration(text, index, sourceOffset);
+      const colorCommand = scanSimpleTexColorCommand(text, index, sourceOffset);
+      const accentCommand = scanSimpleTexAccentCommand(text, index, sourceOffset);
       if (boxEnvironment) {
         nodes.push(boxEnvironment.node);
         unsupportedCommand ||= boxEnvironment.unsupportedCommand;
@@ -883,6 +910,22 @@ function scanSimpleTexIrNodes(
       if (fontDeclaration) {
         nodes.push(fontDeclaration.node);
         index = skipSimpleTexControlWordSpaces(text, fontDeclaration.end);
+        continue;
+      }
+      if (styleDeclaration) {
+        nodes.push(styleDeclaration.node);
+        index = skipSimpleTexControlWordSpaces(text, styleDeclaration.end);
+        continue;
+      }
+      if (colorCommand) {
+        nodes.push(colorCommand.node);
+        unsupportedCommand ||= colorCommand.unsupportedCommand;
+        index = colorCommand.end;
+        continue;
+      }
+      if (accentCommand) {
+        nodes.push(accentCommand.node);
+        index = accentCommand.end;
         continue;
       }
 
@@ -2476,6 +2519,26 @@ function scanSimpleTexOptionalBracketArgument(
   };
 }
 
+function scanSimpleTexRequiredGroupArgument(
+  text: string,
+  start: number
+): {
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly end: number;
+} | null {
+  if (text[start] !== "{") return null;
+  const end = findBalancedSimpleTexGroupEnd(text, start);
+  if (end === null) return null;
+  return {
+    content: text.slice(start + 1, end - 1),
+    contentStart: start + 1,
+    contentEnd: end - 1,
+    end,
+  };
+}
+
 function scanSimpleTexRequiredDimensionGroupArgument(
   text: string,
   start: number
@@ -2588,6 +2651,224 @@ function scanSimpleTexFontDeclarationName(
     }
   }
   return null;
+}
+
+function scanSimpleTexStyleDeclaration(
+  text: string,
+  start: number,
+  sourceOffset: number
+): { node: SimpleTexStyleDeclarationNode; end: number } | null {
+  for (const name of [
+    "tiny", "scriptsize", "footnotesize", "small", "normalsize",
+    "large", "Large", "LARGE", "huge", "Huge",
+  ] as const) {
+    const end = scanSimpleTexControlWord(text, start, name);
+    if (end !== null) {
+      return {
+        node: {
+          kind: "style-declaration",
+          text: text.slice(start, end),
+          sizePt: DEFAULT_TEXT_FONT_SIZE * (FONT_SIZE_COMMAND_FACTORS[`\\${name}`] ?? 1),
+          sourceStart: sourceOffset + start,
+          sourceEnd: sourceOffset + end,
+        },
+        end,
+      };
+    }
+  }
+
+  const fontsizeEnd = scanSimpleTexControlWord(text, start, "fontsize");
+  if (fontsizeEnd === null) {
+    return scanSimpleTexColorDeclaration(text, start, sourceOffset);
+  }
+  let cursor = skipSimpleTexControlWordSpaces(text, fontsizeEnd);
+  const size = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!size) return null;
+  cursor = skipSimpleTexControlWordSpaces(text, size.end);
+  const baselineSkip = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!baselineSkip) return null;
+  cursor = skipSimpleTexControlWordSpaces(text, baselineSkip.end);
+  const selectfontEnd = scanSimpleTexControlWord(text, cursor, "selectfont");
+  if (selectfontEnd === null) return null;
+  const sizePt = parseTexDimensionText(size.content.trim());
+  if (sizePt === null || sizePt <= 0) return null;
+  return {
+    node: {
+      kind: "style-declaration",
+      text: text.slice(start, selectfontEnd),
+      sizePt,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + selectfontEnd,
+    },
+    end: selectfontEnd,
+  };
+}
+
+function scanSimpleTexColorDeclaration(
+  text: string,
+  start: number,
+  sourceOffset: number
+): { node: SimpleTexStyleDeclarationNode; end: number } | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "color");
+  if (commandEnd === null) return null;
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  let model: string | undefined;
+  if (text[cursor] === "[") {
+    const argument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!argument) return null;
+    model = argument.content.trim();
+    cursor = skipSimpleTexControlWordSpaces(text, argument.end);
+  }
+  const argument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!argument) return null;
+  const color = normalizeSimpleTexColor(argument.content, model);
+  if (!color) return null;
+  return {
+    node: {
+      kind: "style-declaration",
+      text: text.slice(start, argument.end),
+      color,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + argument.end,
+    },
+    end: argument.end,
+  };
+}
+
+function scanSimpleTexColorCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): { node: SimpleTexColorCommandNode; end: number; unsupportedCommand: boolean } | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "textcolor");
+  if (commandEnd === null) return null;
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  let model: string | undefined;
+  if (text[cursor] === "[") {
+    const argument = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!argument) return null;
+    model = argument.content.trim();
+    cursor = skipSimpleTexControlWordSpaces(text, argument.end);
+  }
+  const colorArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!colorArgument) return null;
+  cursor = skipSimpleTexControlWordSpaces(text, colorArgument.end);
+  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!contentArgument) return null;
+  const color = normalizeSimpleTexColor(colorArgument.content, model);
+  if (!color) return null;
+  const childScan = scanSimpleTexIrNodes(
+    contentArgument.content,
+    sourceOffset + contentArgument.contentStart
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  return {
+    node: {
+      kind: "color-command",
+      text: text.slice(start, contentArgument.end),
+      color,
+      contentStart: sourceOffset + contentArgument.contentStart,
+      contentEnd: sourceOffset + contentArgument.contentEnd,
+      children: childrenAreInline ? childScan.nodes.filter(isSimpleTexInlineNode) : [],
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + contentArgument.end,
+    },
+    end: contentArgument.end,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline,
+  };
+}
+
+function normalizeSimpleTexColor(specification: string, model?: string): string | null {
+  if (model) {
+    return resolveDefineColorModel(model, specification);
+  }
+  const normalized = normalizeColor(specification);
+  return normalized.length > 0 && normalized !== "none" ? normalized : null;
+}
+
+const SIMPLE_TEX_ACCENT_MARKS: Readonly<Record<string, string>> = {
+  "'": "\u0301",
+  "`": "\u0300",
+  "^": "\u0302",
+  '"': "\u0308",
+  "~": "\u0303",
+  "=": "\u0304",
+  ".": "\u0307",
+  u: "\u0306",
+  v: "\u030c",
+  H: "\u030b",
+  c: "\u0327",
+  k: "\u0328",
+  b: "\u0331",
+  d: "\u0323",
+  r: "\u030a",
+  t: "\u0361",
+};
+
+const SIMPLE_TEX_LETTER_COMMANDS: Readonly<Record<string, string>> = {
+  aa: "å", AA: "Å", ae: "æ", AE: "Æ", oe: "œ", OE: "Œ",
+  o: "ø", O: "Ø", l: "ł", L: "Ł", ss: "ß",
+};
+
+function scanSimpleTexAccentCommand(
+  text: string,
+  start: number,
+  sourceOffset: number
+): { readonly node: SimpleTexTextNode; readonly end: number } | null {
+  if (text[start] !== "\\") {
+    return null;
+  }
+  const letterMatch = /^\\([A-Za-z]+)/.exec(text.slice(start));
+  if (letterMatch) {
+    const replacement = SIMPLE_TEX_LETTER_COMMANDS[letterMatch[1] ?? ""];
+    if (replacement) {
+      const end = start + (letterMatch[0]?.length ?? 0);
+      return {
+        node: {
+          kind: "text",
+          text: replacement,
+          sourceStart: sourceOffset + start,
+          sourceEnd: sourceOffset + end,
+        },
+        end,
+      };
+    }
+  }
+
+  const command = text[start + 1] ?? "";
+  const mark = SIMPLE_TEX_ACCENT_MARKS[command];
+  if (!mark || (/[A-Za-z]/.test(command) && /[A-Za-z]/.test(text[start + 2] ?? ""))) {
+    return null;
+  }
+  let cursor = start + 2;
+  while (text[cursor] === " " || text[cursor] === "\n") cursor += 1;
+  let base: string;
+  if (text[cursor] === "{") {
+    const groupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
+    if (groupEnd === null) return null;
+    base = text.slice(cursor + 1, groupEnd - 1);
+    cursor = groupEnd;
+  } else {
+    const codePoint = text.codePointAt(cursor);
+    if (codePoint === undefined) return null;
+    const length = codePoint > 0xffff ? 2 : 1;
+    base = text.slice(cursor, cursor + length);
+    cursor += length;
+  }
+  // Accent primitives take one character. Avoid silently swallowing nested
+  // syntax or a multi-character group that needs fuller TeX expansion.
+  if ([...base].length !== 1 || base === "\\") {
+    return null;
+  }
+  return {
+    node: {
+      kind: "text",
+      text: `${base}${mark}`.normalize("NFC"),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + cursor,
+    },
+    end: cursor,
+  };
 }
 
 function scanSimpleTexGroup(
@@ -2821,6 +3102,8 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "math" ||
     node.kind === "font-command" ||
     node.kind === "font-declaration" ||
+    node.kind === "style-declaration" ||
+    node.kind === "color-command" ||
     node.kind === "group" ||
     node.kind === "mbox" ||
     node.kind === "rule" ||
@@ -3716,6 +3999,20 @@ export function simpleTexInlineNodesToTokens(
       continue;
     }
 
+    if (node.kind === "color-command") {
+      const childTokens = simpleTexInlineNodesToTokens(node.children, {
+        ...activeFontState,
+        color: node.color,
+      });
+      if (skipPostLineBreakSpace && childTokens[0]?.kind === "space") {
+        tokens.push(...childTokens.slice(1));
+      } else {
+        tokens.push(...childTokens);
+      }
+      skipPostLineBreakSpace = childTokens.at(-1)?.kind === "forced-break";
+      continue;
+    }
+
     if (node.kind === "math") {
       tokens.push({
         kind: "math",
@@ -3826,6 +4123,16 @@ export function simpleTexInlineNodesToTokens(
       continue;
     }
 
+
+    if (node.kind === "style-declaration") {
+      activeFontState = {
+        ...activeFontState,
+        ...(node.sizePt !== undefined ? { sizePt: node.sizePt } : {}),
+        ...(node.color !== undefined ? { color: node.color } : {}),
+      };
+      continue;
+    }
+
     if (node.kind === "group") {
       const childTokens = simpleTexInlineNodesToTokens(
         node.children,
@@ -3858,6 +4165,7 @@ export function simpleTexInlineNodesToTokens(
       // Literal source is displayed in the typewriter face; OT1 typewriter
       // keeps \ { } _ # % ^ ~ & at their ASCII positions, unlike roman.
       const literalFontState: SimpleTexFontState = {
+        ...activeFontState,
         family: "typewriter",
         series: "medium",
         shape: "upright",
@@ -3958,7 +4266,7 @@ export function simpleTexFontStateForCommand(
     };
   }
   if (command === "textnormal") {
-    return luaLatexNormalFontState;
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color };
   }
   if (command === "textsf") {
     return { ...current, family: "sans" };
@@ -4001,7 +4309,7 @@ function simpleTexFontStateForDeclaration(
     };
   }
   if (command === "normalfont") {
-    return luaLatexNormalFontState;
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color };
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };

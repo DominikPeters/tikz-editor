@@ -96,11 +96,6 @@ type MeasuredRenderRequest = {
   alignment: NodeTextParagraphAlignment | null;
 };
 
-type FontSwitchRule = {
-  pattern: RegExp;
-  apply: (font: TextFontOptions) => void;
-};
-
 export type MathJaxFont =
   | "mathjax-newcm"
   | "mathjax-asana"
@@ -127,53 +122,6 @@ const BROWSER_STARTUP_COMPONENT_URL = "https://cdn.jsdelivr.net/npm/mathjax@4/st
 const BROWSER_STARTUP_COMPONENT_ID = "tikz-editor-mathjax-startup";
 const SCRIPT_LOADED_MARKER = "__tikzMathJaxLoaded";
 const SCRIPT_ERROR_MARKER = "__tikzMathJaxLoadError";
-
-const FONT_SWITCH_RULES: FontSwitchRule[] = [
-  {
-    pattern: /\\(?:sffamily|pgfutil@font@sffamily)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontFamily = "sans";
-    }
-  },
-  {
-    pattern: /\\(?:ttfamily|pgfutil@font@ttfamily)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontFamily = "monospace";
-    }
-  },
-  {
-    pattern: /\\(?:rmfamily|pgfutil@font@rmfamily|normalfont)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontFamily = "serif";
-      font.fontStyle = "normal";
-      font.fontWeight = "normal";
-    }
-  },
-  {
-    pattern: /\\(?:bfseries|pgfutil@font@bfseries)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontWeight = "bold";
-    }
-  },
-  {
-    pattern: /\\(?:mdseries|pgfutil@font@mdseries)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontWeight = "normal";
-    }
-  },
-  {
-    pattern: /\\(?:itshape|slshape|pgfutil@font@itshape|pgfutil@font@slshape)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontStyle = "italic";
-    }
-  },
-  {
-    pattern: /\\(?:upshape|pgfutil@font@upshape)(?=(?:[^A-Za-z@]|$))/g,
-    apply: (font) => {
-      font.fontStyle = "normal";
-    }
-  }
-];
 
 let sharedEnginePromise: Promise<NodeTextEngine> | null = null;
 let browserRuntimePromise: Promise<MathJaxRuntime> | null = null;
@@ -1203,9 +1151,6 @@ function isSimpleTexTextEligible(params: {
   if (params.textWidthPt != null && !(Number.isFinite(params.textWidthPt) && params.textWidthPt > 0)) {
     return false;
   }
-  if (params.font.fontFamily === "monospace") {
-    return false;
-  }
   const wordCount = params.sourceText.trim().split(/\s+/).filter(Boolean).length;
   if (wordCount === 0) {
     return false;
@@ -1490,7 +1435,7 @@ function renderTexReportLineSvg(
     const segmentFont = segment.fontId
       ? options.metricProvider.resolveFont({
         fontId: segment.fontId,
-        atPt: TEX_TEXT_BASE_FONT_SIZE,
+        atPt: segment.fontAtPt ?? TEX_TEXT_BASE_FONT_SIZE,
       })
       : font;
     let segmentMarkup: string;
@@ -1525,6 +1470,9 @@ function renderTexReportLineSvg(
         `<g data-tex-literal="${escapeXmlAttribute(segment.literal.reason)}"${literalSpanAttrs}>` +
         segmentMarkup +
         "</g>";
+    }
+    if (segment.color) {
+      segmentMarkup = `<g fill="${escapeXmlAttribute(segment.color)}">${segmentMarkup}</g>`;
     }
     pieces.push(segmentMarkup);
   }
@@ -1801,16 +1749,16 @@ function renderTexHBoxRenderItemSvg(
     fontId: item.fontId,
     atPt: item.atPt,
   });
-  if (item.kind === "tex-glyph") {
-    return renderTexGlyphCode(item.code, font, item.x, item.baseline);
-  }
-  return renderTexGlyphRun(
+  const body = item.kind === "tex-glyph"
+    ? renderTexGlyphCode(item.code, font, item.x, item.baseline)
+    : renderTexGlyphRun(
     item.text,
     font,
     item.x,
     item.baseline,
     metricProvider
-  );
+    );
+  return item.color ? `<g fill="${escapeXmlAttribute(item.color)}">${body}</g>` : body;
 }
 
 function renderTexRuleSvgContent(
@@ -2695,22 +2643,13 @@ function normalizeMathJaxTextInput(
 ): { text: string; font: TextFontOptions; simpleTexEligible: boolean } {
   const resolvedFont: TextFontOptions = { ...font };
   let resolvedText = text;
-  let strippedFontSwitch = false;
-
-  for (const rule of FONT_SWITCH_RULES) {
-    resolvedText = resolvedText.replace(rule.pattern, () => {
-      strippedFontSwitch = true;
-      rule.apply(resolvedFont);
-      return "";
-    });
-  }
   resolvedText = resolvedText.replace(EXPLICIT_LINE_BREAK_CANONICAL_PATTERN, "$1");
   resolvedText = resolvedText.replace(/\r\n?/g, "\n").replace(/\n/g, " ");
 
   return {
     text: resolvedText,
     font: resolvedFont,
-    simpleTexEligible: !strippedFontSwitch
+    simpleTexEligible: true
   };
 }
 

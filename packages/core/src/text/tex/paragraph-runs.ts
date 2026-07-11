@@ -68,6 +68,7 @@ function layoutItemsToRuns(
       const nextItem = items[itemIndex + 1];
       const shapedBase = metricProvider.shapeText(item.text, item.font, {
         sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
       });
       const correction = item.italicCorrectionAfter
         ? trailingItalicCorrectionWidth(shapedBase)

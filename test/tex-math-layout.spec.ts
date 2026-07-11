@@ -1107,6 +1107,28 @@ describe("TeX math hlist layout", () => {
       .toEqual(["cmr10", "cmr10", "cmbx10", "cmr10", "cmss10"]);
   });
 
+  it("lays out blackboard and fraktur alphabets with AMS optical-size fonts", () => {
+    const result = layout(String.raw`\mathbb{R}+\mathfrak{g}+x_{\mathbb{N}}+x_{y_{\mathfrak{a}}}`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => ({
+      fontId: glyph.fontId,
+      atPt: glyph.atPt,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "msbm10", atPt: 10, code: 82 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "eufm10", atPt: 10, code: 103 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "msbm7", atPt: 7, code: 78 },
+      { fontId: "cmr10", atPt: 10, code: 43 },
+      { fontId: "cmmi10", atPt: 10, code: 120 },
+      { fontId: "cmmi7", atPt: 7, code: 121 },
+      { fontId: "eufm5", atPt: 5, code: 97 },
+    ]);
+  });
+
   it("lays out unbraced math alphabet commands as TeX math arguments", () => {
     const result = layout(String.raw`\mathit a+\mathsf x+\mathtt 7+\mathcal A`);
 
@@ -2223,6 +2245,31 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("lays out wide accents from TeX extension-font size chains", () => {
+    const result = layout(String.raw`\widehat{abc}^2+\widetilde{abc}`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 99,
+        text: String.raw`\widehat`,
+      }),
+      expect.objectContaining({
+        kind: "glyph",
+        fontId: "cmex10",
+        code: 102,
+        text: String.raw`\widetilde`,
+      }),
+    ]));
+    expect(result.hlist?.items.find((item) =>
+      item.kind === "hlist" && item.role === "superscript"
+    )).toMatchObject({
+      kind: "hlist",
+      role: "superscript",
+    });
+  });
+
   it("lays out TeX large operators with inline side scripts", () => {
     const sum = layout(String.raw`\sum_i^n`);
     expect(sum.supported).toBe(true);
@@ -2692,6 +2739,21 @@ describe("TeX math hlist layout", () => {
         y: expect.closeTo(6.527785, 5),
       },
     ]);
+  });
+
+  it("lays out stackrel as a relation with TeX operator limits", () => {
+    const result = layout(String.raw`x\stackrel{a}{b}y`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "hlist",
+        role: "limit-superscript",
+        items: [expect.objectContaining({ kind: "glyph", fontId: "cmmi7", code: 97 })],
+      }),
+    ]));
+    const relationGlue = result.hlist?.items.filter((item) => item.kind === "glue") ?? [];
+    expect(relationGlue).toHaveLength(2);
+    expect(relationGlue[0]).toMatchObject({ width: expect.closeTo(2.77779, 5) });
   });
 
   it("lays out TeX buildrel as a relation with operator limits", () => {

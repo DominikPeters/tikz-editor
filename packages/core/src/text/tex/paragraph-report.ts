@@ -125,6 +125,8 @@ function buildTexLineReport(
       sourceEndRaw: line.startPendingSourceEnd,
       sourceKind: "text",
       fontId: runFont.id,
+      fontAtPt: runFont.atPt,
+      ...(runFont.color ? { color: runFont.color } : {}),
       x,
       width: shaped.width,
       caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
@@ -177,6 +179,8 @@ function buildTexLineReport(
         sourceEndRaw: run.sourceStart + endOffset,
         sourceKind: "text",
         fontId: shaped.font.id,
+        fontAtPt: shaped.font.atPt,
+        ...(shaped.font.color ? { color: shaped.font.color } : {}),
         x,
         width,
         caretStops,
@@ -284,6 +288,8 @@ function buildTexLineReport(
       sourceEndRaw: line.break.sourceOffset,
       sourceKind: "text",
       fontId: runFont.id,
+      fontAtPt: runFont.atPt,
+      ...(runFont.color ? { color: runFont.color } : {}),
       x: segmentX,
       width: shaped.width,
       caretStops: shaped.caretStops.map((stop) => roundTexPt(segmentX + stop)),
@@ -308,6 +314,8 @@ function buildTexLineReport(
       sourceEndRaw: line.break.sourceOffset,
       sourceKind: "text",
       fontId: runFont.id,
+      fontAtPt: runFont.atPt,
+      ...(runFont.color ? { color: runFont.color } : {}),
       x: hyphenX,
       width,
       caretStops: [hyphenX, roundTexPt(hyphenX + width)],
@@ -548,6 +556,7 @@ function texMathBoxFromWrapper(
   readonly svgBody?: string;
   readonly hlist?: TexMathHList;
   readonly fontProfile?: TexMathFontProfile;
+  readonly color?: string;
   readonly rootBox?: TexMathBox;
 } | null {
   if (!wrapper || typeof wrapper !== "object") {
@@ -574,6 +583,7 @@ function texMathBoxFromWrapper(
     readonly svgBody?: unknown;
     readonly hlist?: unknown;
     readonly fontProfile?: unknown;
+    readonly color?: unknown;
     readonly rootBox?: unknown;
   };
   return {
@@ -603,6 +613,7 @@ function texMathBoxFromWrapper(
     fontProfile: typeof typedBox.fontProfile === "object" && typedBox.fontProfile !== null
       ? typedBox.fontProfile as TexMathFontProfile
       : undefined,
+    color: typeof typedBox.color === "string" ? typedBox.color : undefined,
     rootBox: typeof typedBox.rootBox === "object" && typedBox.rootBox !== null
       ? typedBox.rootBox as TexMathBox
       : undefined,
@@ -635,6 +646,8 @@ function buildTexLineLabelSegments(
         startOffset: 0,
         endOffset: item.text.length,
         fontId: item.font.id,
+        fontAtPt: item.font.atPt,
+        ...(item.font.color ? { color: item.font.color } : {}),
         glyphCode: item.code,
         x,
         width: glyphWidth,
@@ -659,6 +672,8 @@ function buildTexLineLabelSegments(
         startOffset: 0,
         endOffset: item.text.length,
         fontId: item.font.id,
+        fontAtPt: item.font.atPt,
+        ...(item.font.color ? { color: item.font.color } : {}),
         x,
         width: shaped.width,
         caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
@@ -746,6 +761,7 @@ function texMathBoxSvgBody(
     readonly svgBody?: string;
     readonly hlist?: TexMathHList;
     readonly fontProfile?: TexMathFontProfile;
+    readonly color?: string;
   } | null | undefined,
   width: number,
   options: { readonly omitLineInitialOperator?: boolean } = {}
@@ -760,12 +776,17 @@ function texMathBoxSvgBody(
     const hlist = options.omitLineInitialOperator
       ? omitLineInitialDiscardedMathOperator(resized, box.contentStart)
       : resized;
-    return renderTexMathHListSvgBody(
+    const body = renderTexMathHListSvgBody(
       hlist,
       { fontProfile: box.fontProfile }
     );
+    return box.color ? wrapTexSvgColor(body, box.color) : body;
   }
-  return box.svgBody;
+  return box.svgBody && box.color ? wrapTexSvgColor(box.svgBody, box.color) : box.svgBody;
+}
+
+function wrapTexSvgColor(body: string, color: string): string {
+  return `<g fill="${color.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}" stroke="${color.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}">${body}</g>`;
 }
 
 function omitLineInitialDiscardedMathOperator(

@@ -1577,6 +1577,56 @@ describe("Computer Modern OT1 text shaping", () => {
   });
 });
 
+describe("native Unicode prose", () => {
+  it("shapes precomposed and combining Latin accents without whole-node fallback", () => {
+    for (const source of ["Café déjà vu — naïve", "Cafe\u0301"] as const) {
+      const result = layoutSimpleTexParagraph(source, {
+        width: 160,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+      });
+      expect(result.supported, source).toBe(true);
+      expect(result.fallbackReason, source).toBeNull();
+      expect([...result.shapedRuns.values()].some((run) =>
+        run.items.some((item) => item.kind === "glyph" && item.code === 0xe9)
+      ), source).toBe(true);
+    }
+  });
+
+  it("lowers TeX accent and letter commands while retaining their source spans", () => {
+    const source = String.raw`Jos\'{e} Mu\~noz, \AA ngstr\"om`;
+    const ir = parseSimpleTexParagraphIr(source);
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "text").map((node) => node.text).join(""))
+      .toContain("é");
+    const result = layoutSimpleTexParagraph(source, {
+      width: 180,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(result.supported, source).toBe(true);
+    const accentStart = source.indexOf(String.raw`\'{e}`);
+    const accentEnd = accentStart + String.raw`\'{e}`.length;
+    const accentGlyph = [...result.shapedRuns.values()]
+      .flatMap((run) => run.items)
+      .find((item) => item.kind === "glyph" && item.code === 0xe9);
+    expect(accentGlyph).toMatchObject({ sourceStart: accentStart, sourceEnd: accentEnd });
+  });
+
+  it("keeps scoped and bare typewriter declarations on the native path", () => {
+    const source = String.raw`normal {\ttfamily mono} \texttt{also mono}`;
+    const result = layoutSimpleTexParagraph(source, {
+      width: 180,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(result.supported, source).toBe(true);
+    expect([...result.shapedRuns.values()].filter((run) =>
+      run.font.id.startsWith("lmmono")
+    ).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("simple TeX paragraph layout", () => {
   // These expected line arrays are cached LuaTeX oracle regressions. Refresh
   // them with `npm run compare:tex-paragraph` before changing the expectations.

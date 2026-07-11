@@ -638,6 +638,42 @@ describe("TeX math parser", () => {
     expect(mathRing.nucleus.kind === "accent" ? mathRing.nucleus.base.sourceSpan : null).toEqual({ start: 45, end: 46 });
   });
 
+  it("parses wide accents with command and base source spans", () => {
+    const result = parseTexMath(String.raw`\widehat{abc}^2+\widetilde x`, { sourceOffset: 4 });
+    const widehat = atomAt(result, 0);
+    const widetilde = atomAt(result, 2);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(widehat).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 4, end: 19 },
+      superscript: { sourceSpan: { start: 17, end: 19 } },
+      nucleus: {
+        kind: "accent",
+        command: "widehat",
+        commandSourceSpan: { start: 4, end: 12 },
+        sourceSpan: { start: 4, end: 17 },
+      },
+    });
+    expect(widehat.nucleus.kind === "accent" ? widehat.nucleus.base.sourceSpan : null).toEqual({
+      start: 13,
+      end: 16,
+    });
+    expect(widetilde).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 20, end: 32 },
+      nucleus: {
+        kind: "accent",
+        command: "widetilde",
+        commandSourceSpan: { start: 20, end: 30 },
+      },
+    });
+    expect(widetilde.nucleus.kind === "accent" ? widetilde.nucleus.base.sourceSpan : null).toEqual({
+      start: 31,
+      end: 32,
+    });
+  });
+
   it("parses overline and underline as structured line nuclei", () => {
     const result = parseTexMath(String.raw`\overline{x}+\underline y`, { sourceOffset: 30 });
     const overline = atomAt(result, 0);
@@ -872,6 +908,27 @@ describe("TeX math parser", () => {
       sourceSpan: { start: 32, end: 54 },
       superscript: { sourceSpan: { start: 45, end: 48 } },
       subscript: { sourceSpan: { start: 48, end: 51 } },
+    });
+  });
+
+  it("lowers stackrel through source-spanned relation limits", () => {
+    const result = parseTexMath(String.raw`x\stackrel{a}{b}y`, { sourceOffset: 3 });
+    const stackrel = atomAt(result, 1);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(stackrel).toMatchObject({
+      atomClass: "rel",
+      limits: "limits",
+      sourceSpan: { start: 4, end: 19 },
+      nucleus: {
+        kind: "list",
+        sourceSpan: { start: 16, end: 19 },
+        list: { items: [{ kind: "atom", atomClass: "ord", nucleus: { kind: "glyph", text: "b" } }] },
+      },
+      superscript: {
+        sourceSpan: { start: 13, end: 16 },
+        list: { items: [{ kind: "atom", nucleus: { kind: "glyph", text: "a" } }] },
+      },
     });
   });
 
@@ -1365,6 +1422,34 @@ describe("TeX math parser", () => {
         sourceSpan: { start: 11, end: 22 },
       },
     });
+  });
+
+  it("parses AMS blackboard and fraktur alphabets with source spans", () => {
+    const result = parseTexMath(String.raw`\mathbb{R}+\mathfrak{g}`, { sourceOffset: 40 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect([atomAt(result, 0), atomAt(result, 2)]).toMatchObject([
+      {
+        sourceSpan: { start: 40, end: 50 },
+        nucleus: {
+          kind: "alphabet",
+          alphabet: "mathbb",
+          commandSourceSpan: { start: 40, end: 47 },
+          sourceSpan: { start: 40, end: 50 },
+          list: { sourceSpan: { start: 48, end: 49 } },
+        },
+      },
+      {
+        sourceSpan: { start: 51, end: 63 },
+        nucleus: {
+          kind: "alphabet",
+          alphabet: "mathfrak",
+          commandSourceSpan: { start: 51, end: 60 },
+          sourceSpan: { start: 51, end: 63 },
+          list: { sourceSpan: { start: 61, end: 62 } },
+        },
+      },
+    ]);
   });
 
   it("parses unbraced math alphabet commands as single-token math arguments", () => {

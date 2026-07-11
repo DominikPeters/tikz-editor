@@ -271,7 +271,9 @@ export type TexMathAccentCommand =
   | "hat"
   | "mathring"
   | "tilde"
-  | "vec";
+  | "vec"
+  | "widehat"
+  | "widetilde";
 
 export interface TexMathAccentNucleus {
   readonly kind: "accent";
@@ -283,7 +285,9 @@ export interface TexMathAccentNucleus {
 
 export type TexMathAlphabetCommand =
   | "mathbf"
+  | "mathbb"
   | "mathcal"
+  | "mathfrak"
   | "mathit"
   | "mathrm"
   | "mathsf"

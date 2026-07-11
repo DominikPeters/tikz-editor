@@ -29,16 +29,17 @@ export function shapeOt1Text(
   options: ShapeTexTextOptions = {}
 ): ShapedTexTextRun {
   const sourceStart = options.sourceStart ?? 0;
-  const encoded = encodeOt1Text(text, sourceStart);
+  const encoded = encodeOt1Text(text, sourceStart, options.sourceEnd);
   const items = applyLigKernProgram(encoded, font);
   const width = roundTexPt(items.reduce((sum, item) => sum + item.width, 0));
-  const caretStops = buildCaretStops(text, sourceStart, font, items);
+  const sourceEnd = options.sourceEnd ?? sourceStart + text.length;
+  const caretStops = buildCaretStops(sourceStart, sourceEnd, font, items);
 
   return {
     text,
     font,
     sourceStart,
-    sourceEnd: sourceStart + text.length,
+    sourceEnd,
     width,
     items,
     caretStops: caretStops.map((stop) => stop.x),
@@ -146,12 +147,12 @@ function ruleKey(left: number, right: number): string {
 }
 
 function buildCaretStops(
-  text: string,
   sourceStart: number,
+  sourceEnd: number,
   font: ResolvedTexFont,
   items: readonly TexShapedItem[]
 ): TexCaretStop[] {
-  const stops = Array.from({ length: text.length + 1 }, (_, index) => ({
+  const stops = Array.from({ length: Math.max(0, sourceEnd - sourceStart) + 1 }, (_, index) => ({
     sourceOffset: sourceStart + index,
     x: 0,
   }));

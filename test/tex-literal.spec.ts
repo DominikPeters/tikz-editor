@@ -59,8 +59,14 @@ describe("simple TeX literal runs", () => {
     expect(analyzeSimpleTexParagraph("50% off & more_stuff", 200).fallbackReason).toBeNull();
   });
 
-  it("still reports a fallback reason for non-ASCII input", () => {
-    expect(analyzeSimpleTexParagraph("café", 200).fallbackReason).toMatch(/U\+E9/);
+  it("supports catalogued accented prose and falls back honestly for missing scripts", () => {
+    expect(analyzeSimpleTexParagraph("café", 200).fallbackReason).toBeNull();
+    const missingScript = layoutSimpleTexParagraph("漢", {
+      width: 200,
+      alignment: "ragged-right",
+    });
+    expect(missingScript.supported).toBe(false);
+    expect(missingScript.fallbackReason).toMatch(/no TFM metric/);
   });
 
   it("lowers literal nodes to typewriter tokens, splitting embedded spaces", () => {
