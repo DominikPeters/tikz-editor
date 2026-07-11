@@ -19,7 +19,7 @@
     "lint:no-unnecessary-condition": "eslint 'packages/*/src/**/*.{ts,tsx}' 'apps/*/src/**/*.{ts,tsx}' --no-cache --format json --output-file node_modules/.cache/eslint/no-unnecessary-condition.json --rule '@typescript-eslint/no-unnecessary-condition:warn'",
     "lint:dead-code": "knip --no-progress --reporter compact --max-issues 35",
     "lint:test": "eslint test apps/web/e2e apps/web/profiling apps/desktop/e2e --cache --cache-location node_modules/.cache/eslint/test/ --cache-strategy content --max-warnings=0",
-    "lint:ci": "npm run lint:prod && npm run lint:dead-code",
+    "lint:ci": "npm run lint:prod && npm run lint:test && npm run lint:dead-code",
     "typecheck": "tsc -p tsconfig.json --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo && node scripts/check-coordinate-typing.mjs",
     "build": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build && npm run -w @tikz-editor/core build",
     "test": "npm run generate:grammar && vitest run",
