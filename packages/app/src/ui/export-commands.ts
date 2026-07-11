@@ -55,38 +55,42 @@ export async function exportStandaloneLatexDownload(
   if (!artifact.complete) {
     console.warn("[tikz-editor] Standalone LaTeX export emitted with unresolved diagnostics.", artifact.diagnostics);
   }
-  const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
-    [artifact.text],
-    { fileName: artifact.fileName, mimeType: artifact.mimeType }
-  );
-  if (platformExportResult) {
-    return true;
-  }
-
-  if (typeof document === "undefined" || typeof Blob === "undefined") {
-    return reportExportFailure("Standalone LaTeX export is unavailable in this runtime.");
-  }
-  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    return reportExportFailure("Standalone LaTeX export requires object URL support.");
-  }
-  if (!document.body) {
-    return reportExportFailure("Standalone LaTeX export requires an active document.");
-  }
-
-  const blob = new Blob([artifact.text], { type: artifact.mimeType });
-  const objectUrl = URL.createObjectURL(blob);
-
   try {
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = artifact.fileName;
-    anchor.style.display = "none";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    return true;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
+    const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
+      [artifact.text],
+      { fileName: artifact.fileName, mimeType: artifact.mimeType }
+    );
+    if (platformExportResult) {
+      return true;
+    }
+
+    if (typeof document === "undefined" || typeof Blob === "undefined") {
+      return reportExportFailure("Standalone LaTeX export is unavailable in this runtime.");
+    }
+    if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
+      return reportExportFailure("Standalone LaTeX export requires object URL support.");
+    }
+    if (!document.body) {
+      return reportExportFailure("Standalone LaTeX export requires an active document.");
+    }
+
+    const blob = new Blob([artifact.text], { type: artifact.mimeType });
+    const objectUrl = URL.createObjectURL(blob);
+
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = artifact.fileName;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return true;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch (error) {
+    return reportExportFailure("Failed to export standalone LaTeX file.", error);
   }
 }
 
@@ -298,38 +302,42 @@ export async function downloadSvgMarkup(
     svg: svgMarkup,
     fileName: options.fileName
   });
-  const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
-    [artifact.text],
-    { fileName: artifact.fileName, mimeType: artifact.mimeType }
-  );
-  if (platformExportResult) {
-    return true;
-  }
-
-  if (typeof document === "undefined" || typeof Blob === "undefined") {
-    return reportExportFailure("SVG export is unavailable in this runtime.");
-  }
-  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    return reportExportFailure("SVG export requires object URL support.");
-  }
-  if (!document.body) {
-    return reportExportFailure("SVG export requires an active document.");
-  }
-
-  const blob = new Blob([artifact.text], { type: artifact.mimeType });
-  const objectUrl = URL.createObjectURL(blob);
-
   try {
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = artifact.fileName;
-    anchor.style.display = "none";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    return true;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
+    const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
+      [artifact.text],
+      { fileName: artifact.fileName, mimeType: artifact.mimeType }
+    );
+    if (platformExportResult) {
+      return true;
+    }
+
+    if (typeof document === "undefined" || typeof Blob === "undefined") {
+      return reportExportFailure("SVG export is unavailable in this runtime.");
+    }
+    if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
+      return reportExportFailure("SVG export requires object URL support.");
+    }
+    if (!document.body) {
+      return reportExportFailure("SVG export requires an active document.");
+    }
+
+    const blob = new Blob([artifact.text], { type: artifact.mimeType });
+    const objectUrl = URL.createObjectURL(blob);
+
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = artifact.fileName;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return true;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch (error) {
+    return reportExportFailure("Failed to export SVG.", error);
   }
 }
 

@@ -15,7 +15,9 @@ import {
   canExportSvg,
   copySvgMarkup,
   copySvgText,
+  downloadSvgMarkup,
   exportPdfDownload,
+  exportStandaloneLatexDownload,
   exportSvgDownload,
   validateSvgMarkup
 } from "../../packages/app/src/ui/export-commands.js";
@@ -169,6 +171,47 @@ describe("export commands", () => {
     expect(getUiNotificationSnapshot()).toMatchObject({
       kind: "error",
       message: "Clipboard access is unavailable; SVG was not copied."
+    });
+  });
+
+  it("reports standalone latex export failures from the platform file api", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const exportFile = vi.fn(async () => {
+      throw new Error("disk full");
+    });
+    setActiveEditorPlatform({
+      ...previousPlatform,
+      files: {
+        ...previousPlatform.files,
+        exportFile
+      }
+    });
+
+    await expect(exportStandaloneLatexDownload(SOURCE, null, { fileName: "figure.tex" })).resolves.toBe(false);
+    expect(warn).toHaveBeenCalled();
+    expect(getUiNotificationSnapshot()).toMatchObject({
+      kind: "error",
+      message: "Failed to export standalone LaTeX file."
+    });
+  });
+
+  it("reports svg download failures from the platform file api", async () => {
+    const exportFile = vi.fn(async () => {
+      throw new Error("disk full");
+    });
+    setActiveEditorPlatform({
+      ...previousPlatform,
+      files: {
+        ...previousPlatform.files,
+        exportFile
+      }
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(downloadSvgMarkup("<svg xmlns=\"http://www.w3.org/2000/svg\" />")).resolves.toBe(false);
+    expect(getUiNotificationSnapshot()).toMatchObject({
+      kind: "error",
+      message: "Failed to export SVG."
     });
   });
 
