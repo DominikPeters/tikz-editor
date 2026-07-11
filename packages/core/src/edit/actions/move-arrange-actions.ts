@@ -21,7 +21,11 @@ import { rewriteCoordinate } from "../rewrite.js";
 import { applyTextReplacements } from "../statement-ops.js";
 import type { SourcePatch } from "../types.js";
 import { planAlignDeltas, planDistributeDeltas, type AlignMode, type DistributeAxis } from "../arrange.js";
-import { applyOptionMutationsToTarget, rewriteOptionListMutations, type OptionMutation } from "../option-mutations.js";
+import {
+  applyOptionMutationsToTarget,
+  rewriteSourceBackedOptionListMutations,
+  type OptionMutation
+} from "../option-mutations.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "../parse-options.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
@@ -832,10 +836,11 @@ function rewriteSingleMatrixPlacement(
       if (!targetOptions || !targetOptionsSpan) {
         return { kind: "unsupported", reason: `Could not resolve matrix options for ${elementId}` };
       }
-      const optionReplacement = rewriteOptionListMutations(
+      const optionReplacement = rewriteSourceBackedOptionListMutations(
+        source,
+        targetOptionsSpan,
         targetOptions,
         new Map<string, OptionMutation>([["at", { kind: "remove" }]]),
-        undefined,
         matrixTarget.target.optionsFormat
       );
       const applied = applyTextReplacements(source, [

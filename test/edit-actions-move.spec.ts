@@ -430,6 +430,28 @@ describe("applyEditAction – moveElement", () => {
     expect(result.newSource).not.toContain("at={");
   });
 
+  it("preserves matrix option comments while moving option-based placement inline", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes, % keep matrix layout
+    row sep=2mm, at={(0,0)}] {
+    A & B \\
+  };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(2))
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep matrix layout");
+    expect(result.newSource).toContain("    row sep=2mm");
+    expect(result.newSource).toContain(" at (1,2) {");
+    expect(result.newSource).not.toContain("at={(0,0)}");
+  });
+
   it("moves matrix statements without placement by inserting inline at (...)", () => {
     const source = String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes] {

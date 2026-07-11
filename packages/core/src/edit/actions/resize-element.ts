@@ -42,7 +42,7 @@ import { resolveTransformInspectorMutationContextFromOptionEntries } from "../pr
 import {
   applyOptionMutationsToTarget,
   normalizeOptionKey,
-  rewriteOptionListMutations,
+  rewriteSourceBackedOptionListMutations,
   serializeOptionEntry,
   type OptionMutation,
   type OptionMutationApplyResult
@@ -632,20 +632,17 @@ function applyScopeTransformRewrite(
   }
 
   if (target.options && target.optionsSpan) {
-    const filteredOptions = {
-      ...target.options,
-      entries: target.options.entries.filter((entry) => {
-        if (entry.kind !== "kv" && entry.kind !== "flag") {
-          return true;
-        }
-        const key = normalizeOptionKey(entry.key);
-        return !SCOPE_TRANSFORM_OPTION_KEYS.has(key);
-      })
-    };
-    const replacement = rewriteOptionListMutations(
-      filteredOptions,
-      orderedSetMutations,
-      undefined,
+    const transformMutations = new Map<string, OptionMutation>(
+      [...SCOPE_TRANSFORM_OPTION_KEYS].map((key) => [key, { kind: "remove" }])
+    );
+    for (const [key, mutation] of orderedSetMutations) {
+      transformMutations.set(key, mutation);
+    }
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      target.optionsSpan,
+      target.options,
+      transformMutations,
       target.optionsFormat
     );
     const oldSpan = target.optionsSpan;
@@ -1180,7 +1177,12 @@ function applyResizePathCircleOrEllipse(
   const radiusMutations = buildShapeRadiusMutations(context, nextRxLocal, nextRyLocal);
   const optionTarget = pickPathShapeResizeOptionTarget(context.syntax.optionItems);
   if (optionTarget) {
-    const replacement = rewriteOptionListMutations(optionTarget.options, radiusMutations);
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      optionTarget.span,
+      optionTarget.options,
+      radiusMutations
+    );
     const rewritten = applySpanTextReplacement(source, optionTarget.span, replacement);
     if (!rewritten) {
       return { kind: "unsupported", reason: "Resize would not change node constraints." };

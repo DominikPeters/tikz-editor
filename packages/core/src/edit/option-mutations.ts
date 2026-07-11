@@ -41,7 +41,7 @@ export function applyOptionMutationsToTarget(
 
   if (target.options && target.optionsSpan) {
     const format = target.optionsFormat ?? "bracketed";
-    const replacement = rewriteOptionListMutationsPreservingSource(
+    const replacement = rewriteOptionListMutationsPreservingSourceInternal(
       source,
       target.optionsSpan,
       target.options,
@@ -158,9 +158,31 @@ export function rewriteOptionListMutations(
   return wrapSerializedOptions(parts.join(", "), format);
 }
 
+/**
+ * Rewrites an option list that is backed by an existing source span without
+ * normalizing unrelated entries or interstitial trivia. Use
+ * `rewriteOptionListMutations` only for synthesized/isolated option fragments.
+ */
+export function rewriteSourceBackedOptionListMutations(
+  source: string,
+  optionsSpan: Span,
+  options: OptionListAst,
+  mutations: ReadonlyMap<string, OptionMutation>,
+  format: PropertyTargetOptionsFormat = "bracketed"
+): string {
+  return rewriteOptionListMutationsPreservingSourceInternal(
+    source,
+    optionsSpan,
+    options,
+    mutations,
+    DEFAULT_OPTION_SERIALIZATION_CONTEXT,
+    format
+  );
+}
+
 export const normalizeOptionKey = normalizeSharedOptionKey;
 
-function rewriteOptionListMutationsPreservingSource(
+function rewriteOptionListMutationsPreservingSourceInternal(
   source: string,
   optionsSpan: Span,
   options: OptionListAst,
@@ -442,12 +464,60 @@ function multilineInsertion(
   const insertIndex = closingLineIsWhitespaceOnly ? closeLineStart : closeIndex;
   const beforeInsertion = source.slice(0, insertIndex);
   const indent = inferOptionEntryIndent(source, closeIndex);
-  const needsComma = hasOptionContent(beforeInsertion, format) && !/,\s*$/u.test(beforeInsertion);
+  const needsComma = hasOptionContent(beforeInsertion, format) && !endsWithLiveComma(beforeInsertion);
+  const commaStartsInsertedLine = needsComma && trailingLineHasComment(beforeInsertion);
   const separator = needsComma ? "," : "";
   return {
     index: insertIndex,
-    text: `${separator}\n${indent}${content}`
+    text: commaStartsInsertedLine
+      ? `\n${indent}, ${content}`
+      : `${separator}\n${indent}${content}`
   };
+}
+
+function endsWithLiveComma(source: string): boolean {
+  let inComment = false;
+  let lastLiveCharacter = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? "";
+    if (inComment) {
+      if (char === "\n" || char === "\r") {
+        inComment = false;
+      }
+      continue;
+    }
+    if (char === "\\") {
+      // An escaped comma (for example `\,`) is TeX content, not an option
+      // delimiter. Treat the escape as one live token without interpreting the
+      // escaped character structurally.
+      lastLiveCharacter = "\\";
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      inComment = true;
+      continue;
+    }
+    if (!/\s/u.test(char)) {
+      lastLiveCharacter = char;
+    }
+  }
+  return lastLiveCharacter === ",";
+}
+
+function trailingLineHasComment(source: string): boolean {
+  const lineStart = Math.max(source.lastIndexOf("\n"), source.lastIndexOf("\r")) + 1;
+  for (let index = lineStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      return true;
+    }
+  }
+  return false;
 }
 
 function inferOptionEntryIndent(source: string, closeIndex: number): string {

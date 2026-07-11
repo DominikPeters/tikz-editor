@@ -254,6 +254,27 @@ describe("applyEditAction – node adornments", () => {
     expect(result.newSource).not.toContain("draw=blue");
   });
 
+  it("preserves authored comments in generic adornment options", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node[draw,label={[fill=yellow, % keep adornment styling
+    text=green]right:L}] at (0,0) {A};
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "node-adornment:node:0:2:label:0",
+      level: "command",
+      key: "draw",
+      value: "red"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep adornment styling");
+    expect(result.newSource).toContain("    text=green");
+    expect(result.newSource).toContain("draw=red");
+  });
+
   it("removes generic adornment options and braces comma-containing label text", () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw,label={[fill=yellow]right:L}] at (0,0) {A};
@@ -545,9 +566,34 @@ describe("applyEditAction – adornment placement", () => {
     if (result.kind !== "success") {
       throw new Error("Expected pin-edge dash rewrite to succeed");
     }
-    expect(result.newSource).toContain("pin edge={draw=blue, line width=1pt, densely dotted}");
+    expect(result.newSource).toContain("pin edge={draw=blue,line width=1pt, densely dotted}");
     expect(result.newSource).not.toContain("pin edge={draw=blue,dashed");
     expect(result.newSource).toContain("fill=yellow");
+  });
+
+  it("preserves outer and nested comments while rewriting pin-edge options", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node[draw,pin={[pin edge={draw=blue, % keep nested edge note
+    dashed}, % keep outer pin note
+    fill=yellow]above:P}] at (0,0) {A};
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "node-adornment:node:0:2:pin:0",
+      level: "command",
+      key: PIN_EDGE_DASH_PROPERTY_KEY,
+      value: "densely dotted",
+      clearKeys: ["dashed"]
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep nested edge note");
+    expect(result.newSource).toContain("% keep outer pin note");
+    expect(result.newSource).toContain("densely dotted");
+    expect(result.newSource).toContain("fill=yellow");
+    expect(result.newSource).not.toMatch(/\bdashed\b/u);
   });
 
   it("removes pin-edge entirely when the last pin-edge style is cleared", () => {

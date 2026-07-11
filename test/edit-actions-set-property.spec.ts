@@ -1021,6 +1021,29 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
     expect(result.newSource).toContain("|[draw=red, fill=yellow]| B");
   });
 
+  it("preserves comments and layout in existing matrix-cell option prefixes", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {
+    A & |[draw=red, % keep cell styling
+      thick]| B \\
+  };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "node:0:0:matrix-cell:1:2",
+      level: "command",
+      key: "fill",
+      value: "yellow"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep cell styling");
+    expect(result.newSource).toContain("      thick");
+    expect(result.newSource).toContain("fill=yellow");
+  });
+
   it("normalizes matrix-cell clearKeys while setting a new primary option", () => {
     const source = String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes] {
@@ -1600,6 +1623,35 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
     }
     expect(result.newSource).toContain("child[level distance=5mm]");
     expect(result.newSource).toContain("node[draw] {leaf}");
+  });
+
+  it("preserves unrelated tree-child option trivia", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path node {root}
+    child[level distance=2mm, % keep child layout
+      sibling distance=3mm] { node[draw] {leaf} };
+\end{tikzpicture}`;
+    const rendered = renderTikzToSvg(source);
+    const leafText = rendered.semantic.scene.elements.find(
+      (entry) => entry.kind === "Text" && entry.text === "leaf"
+    );
+    if (!leafText || leafText.kind !== "Text" || !leafText.treeChild) {
+      throw new Error("Expected tree child text element");
+    }
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: leafText.treeChild.childSourceId,
+      level: "command",
+      key: "level distance",
+      value: "5mm"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep child layout");
+    expect(result.newSource).toContain("      sibling distance=3mm");
+    expect(result.newSource).toContain("level distance=5mm");
   });
 
   it("clears existing tree-child layout options", () => {

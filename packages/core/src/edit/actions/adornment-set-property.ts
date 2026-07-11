@@ -1,9 +1,17 @@
 import { parseStyleValueAsOptionList } from "../../semantic/style/option-utils.js";
+import { parseOptionListRaw } from "../../options/parse.js";
+import type { OptionEntry, OptionListAst } from "../../options/types.js";
+import type { Span } from "../../ast/types.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import { replaceSpan } from "../patch.js";
 import type { PropertyTarget } from "../property-target.js";
-import { normalizeOptionKey, rewriteOptionListMutations, type OptionMutation } from "../option-mutations.js";
+import {
+  normalizeOptionKey,
+  rewriteOptionListMutations,
+  rewriteSourceBackedOptionListMutations,
+  type OptionMutation
+} from "../option-mutations.js";
 import type { EditActionResult } from "../actions.js";
 import {
   ADORNMENT_ANGLE_PROPERTY_KEY,
@@ -124,18 +132,36 @@ export function applyAdornmentValueRewrite(
     });
   }
 
+  const authoredOptionSite = resolveAdornmentOptionSite(source, target.valueSpan);
   if (pinEdgeMutations && kind === "pin") {
-    const rewrittenPinEdge = rewriteAdornmentPinEdgeOptions(target.pinEdgeRaw ?? null, pinEdgeMutations);
+    const rewrittenPinEdge = rewriteAdornmentPinEdgeOptions(
+      source,
+      authoredOptionSite,
+      target.pinEdgeRaw ?? null,
+      pinEdgeMutations
+    );
     if (rewrittenPinEdge == null) {
       baseOptionMutations.set("pin edge", { kind: "remove" });
     } else {
       baseOptionMutations.set("pin edge", { kind: "set", value: formatPinEdgeOptionValue(rewrittenPinEdge) });
     }
-  } else if (kind === "pin" && target.pinEdgeRaw != null) {
-    baseOptionMutations.set("pin edge", { kind: "set", value: formatPinEdgeOptionValue(target.pinEdgeRaw) });
   }
 
-  const optionsRaw = rewriteOptionListMutations(target.options ?? emptyOptionListAt(target.valueSpan.from), baseOptionMutations).slice(1, -1);
+  const serializedOptions = authoredOptionSite
+    ? rewriteSourceBackedOptionListMutations(
+        source,
+        authoredOptionSite.span,
+        authoredOptionSite.options,
+        baseOptionMutations,
+        "bracketed"
+      )
+    // Without an authored leading option list, this is an isolated/synthesized
+    // fragment and canonical serialization cannot rewrite unrelated source.
+    : rewriteOptionListMutations(
+        target.options ?? emptyOptionListAt(target.valueSpan.from),
+        baseOptionMutations
+      );
+  const optionsRaw = unwrapOptionList(serializedOptions, "[", "]");
   const replacement = serializeAdornmentValue(
     kind,
     overrides?.angleRaw ?? target.angleRaw ?? "center",
@@ -162,15 +188,137 @@ export function applyAdornmentValueRewrite(
 }
 
 function rewriteAdornmentPinEdgeOptions(
+  source: string,
+  authoredOptionSite: SourceBackedAdornmentOptionSite | null,
   pinEdgeRaw: string | null,
   mutations: ReadonlyMap<string, OptionMutation>
 ): string | null {
+  const pinEdgeEntry = findAuthoredPinEdgeEntry(authoredOptionSite);
+  if (pinEdgeEntry?.valueSpan) {
+    const valueSpan = pinEdgeEntry.valueSpan;
+    const sourceRaw = source.slice(valueSpan.from, valueSpan.to);
+    const parsed = parseStyleValueAsOptionList(sourceRaw, valueSpan.from);
+    if (parsed) {
+      const format = sourceRaw.trim().startsWith("{") ? "braced" : "bare";
+      const rewritten = rewriteSourceBackedOptionListMutations(
+        source,
+        valueSpan,
+        parsed,
+        mutations,
+        format
+      ).trim();
+      if (rewritten.length === 0 || rewritten === "{}") {
+        return null;
+      }
+      return rewritten;
+    }
+  }
+
+  // No authored nested option span is available (for example, an inherited
+  // pin edge). Normalized serialization is safe for this isolated fragment.
   const parsed = pinEdgeRaw ? parseStyleValueAsOptionList(pinEdgeRaw) : null;
   const rewritten = rewriteOptionListMutations(
     parsed ?? emptyOptionListAt(0),
     mutations
   ).slice(1, -1).trim();
   return rewritten.length > 0 ? rewritten : null;
+}
+
+type SourceBackedAdornmentOptionSite = {
+  span: Span;
+  options: OptionListAst;
+};
+
+function findAuthoredPinEdgeEntry(
+  site: SourceBackedAdornmentOptionSite | null
+): Extract<OptionEntry, { kind: "kv" }> | null {
+  const entries = site?.options.entries ?? [];
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.kind === "kv" && normalizeOptionKey(entry.key) === "pin edge") {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function resolveAdornmentOptionSite(
+  source: string,
+  valueSpan: Span
+): SourceBackedAdornmentOptionSite | null {
+  let cursor = valueSpan.from;
+  while (cursor < valueSpan.to && /\s/u.test(source[cursor] ?? "")) {
+    cursor += 1;
+  }
+  if (source[cursor] === "{") {
+    cursor += 1;
+    while (cursor < valueSpan.to && /\s/u.test(source[cursor] ?? "")) {
+      cursor += 1;
+    }
+  }
+  if (source[cursor] !== "[") {
+    return null;
+  }
+
+  const close = findAdornmentOptionListClose(source, cursor, valueSpan.to);
+  if (close == null) {
+    return null;
+  }
+  const span = { from: cursor, to: close + 1 };
+  return {
+    span,
+    options: parseOptionListRaw(source.slice(span.from, span.to), span.from)
+  };
+}
+
+function findAdornmentOptionListClose(
+  source: string,
+  open: number,
+  limit: number
+): number | null {
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  for (let index = open; index < limit; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      while (index < limit && source[index] !== "\n") {
+        index += 1;
+      }
+      continue;
+    }
+    if (char === "{") {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+      continue;
+    }
+    if (braceDepth > 0) {
+      continue;
+    }
+    if (char === "[") {
+      bracketDepth += 1;
+      continue;
+    }
+    if (char === "]") {
+      bracketDepth -= 1;
+      if (bracketDepth === 0) {
+        return index;
+      }
+    }
+  }
+  return null;
+}
+
+function unwrapOptionList(source: string, open: string, close: string): string {
+  return source.startsWith(open) && source.endsWith(close)
+    ? source.slice(open.length, -close.length)
+    : source;
 }
 
 function formatPinEdgeOptionValue(raw: string): string {
