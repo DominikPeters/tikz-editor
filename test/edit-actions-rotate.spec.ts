@@ -297,7 +297,7 @@ function pathCommandPoints(source: string, sourceId: string): Array<{ x: number;
 function expectPathPointsClose(actual: Array<{ x: number; y: number }>, expected: Array<{ x: number; y: number }>): void {
   expect(actual).toHaveLength(expected.length);
   for (let index = 0; index < actual.length; index += 1) {
-    expect(Math.abs(actual[index]!.x - expected[index]!.x)).toBeLessThan(0.15);
-    expect(Math.abs(actual[index]!.y - expected[index]!.y)).toBeLessThan(0.15);
+    expect(Math.abs(actual[index].x - expected[index].x)).toBeLessThan(0.15);
+    expect(Math.abs(actual[index].y - expected[index].y)).toBeLessThan(0.15);
   }
 }

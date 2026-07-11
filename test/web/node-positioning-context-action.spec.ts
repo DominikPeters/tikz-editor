@@ -19,7 +19,7 @@ describe("resolveNodePositioningContextMenuAction", () => {
 
     const action = resolveNodePositioningContextMenuAction({
       source,
-      sourceId: nodeId!,
+      sourceId: nodeId,
       snapshot,
       parseOptions: {}
     });
@@ -37,7 +37,7 @@ describe("resolveNodePositioningContextMenuAction", () => {
 
     const action = resolveNodePositioningContextMenuAction({
       source,
-      sourceId: nodeId!,
+      sourceId: nodeId,
       snapshot,
       parseOptions: {}
     });
@@ -55,7 +55,7 @@ describe("resolveNodePositioningContextMenuAction", () => {
     const snapshot = renderSnapshot(source);
     const [, , nodeId] = pathIds(snapshot);
 
-    const targets = collectRelativePositionTargetAnchors({ snapshot, sourceId: nodeId! });
+    const targets = collectRelativePositionTargetAnchors({ snapshot, sourceId: nodeId });
 
     expect(targets.map((target) => target.nodeName)).toEqual(["A"]);
     expect(targets.every((target) => target.anchor === "center")).toBe(true);
@@ -71,7 +71,7 @@ describe("resolveNodePositioningContextMenuAction", () => {
 
     const action = resolveNodePositioningContextMenuAction({
       source,
-      sourceId: nodeId!,
+      sourceId: nodeId,
       snapshot,
       parseOptions: {}
     });
@@ -87,10 +87,10 @@ describe("resolveNodePositioningContextMenuAction", () => {
     const snapshot = renderSnapshot(source);
     const [, nodeId] = pathIds(snapshot);
 
-    const targets = collectRelativePositionTargetAnchors({ snapshot, sourceId: nodeId! });
+    const targets = collectRelativePositionTargetAnchors({ snapshot, sourceId: nodeId });
     const action = resolveNodePositioningContextMenuAction({
       source,
-      sourceId: nodeId!,
+      sourceId: nodeId,
       snapshot,
       parseOptions: {}
     });
@@ -112,7 +112,7 @@ describe("isPathContextMenuSource", () => {
     expect(
       isPathContextMenuSource({
         source,
-        sourceId: pathId!,
+        sourceId: pathId,
         snapshot,
         parseOptions: {}
       })
@@ -120,7 +120,7 @@ describe("isPathContextMenuSource", () => {
     expect(
       isPathContextMenuSource({
         source,
-        sourceId: nodeId!,
+        sourceId: nodeId,
         snapshot,
         parseOptions: {}
       })

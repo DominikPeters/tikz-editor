@@ -286,7 +286,7 @@ describe("svg emitter", () => {
     const secondEmitted = emitSvg(secondSemantic.scene, {
       reuse: {
         previousModel: firstEmitted.model,
-        affectedSourceIds: [firstSemantic.scene.elements[0]!.sourceRef.sourceId]
+        affectedSourceIds: [firstSemantic.scene.elements[0].sourceRef.sourceId]
       }
     });
 
