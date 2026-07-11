@@ -13,7 +13,7 @@ import {
 import { TREE_ROOT_LAYOUT_KEYS } from "../tree-editing.js";
 import { colorOptionsForValue } from "./color-syntax.js";
 import { findPathStatementInSource } from "./grid-state.js";
-import { createInspectorTargetResolver, type InspectorTargetResolver } from "./target-resolver.js";
+import type { InspectorTargetResolver } from "./target-resolver.js";
 import type { InspectorDescriptor, InspectorSnapshot } from "./types.js";
 
 export type TreeNodeDescriptorResolver = (
@@ -95,8 +95,8 @@ function resolveTreeGrowOption(options: OptionListAst | undefined): string {
 export function buildMatrixInspectorDescriptor(
   source: string,
   matrixId: string,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
+  parseOptions: EditParseOptions,
+  resolveTarget: InspectorTargetResolver
 ): InspectorDescriptor | null {
   const resolved = resolveTarget(matrixId);
   if (resolved.kind === "not-found" || resolved.target.kind !== "matrix-statement") {
@@ -291,8 +291,8 @@ export function buildTreeInspectorDescriptor(
   source: string,
   sourceId: string,
   element: SceneElement | null,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions),
+  parseOptions: EditParseOptions,
+  resolveTarget: InspectorTargetResolver,
   resolveNodeDescriptor?: TreeNodeDescriptorResolver
 ): InspectorDescriptor | null {
   const resolvedRootTarget = resolveTarget(sourceId);

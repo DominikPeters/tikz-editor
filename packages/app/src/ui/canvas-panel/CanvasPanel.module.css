@@ -756,75 +756,6 @@
   font-family: inherit;
 }
 
-.snapDebugOverlay {
-  position: absolute;
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  min-width: 280px;
-  min-height: 140px;
-  border: 1px solid rgba(55, 120, 145, 0.52);
-  background: var(--tooltip-dark-bg);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-  color: var(--tooltip-dark-text);
-  font-family: var(--font-mono);
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  pointer-events: auto;
-  user-select: text;
-}
-
-.snapDebugTitle {
-  padding: 4px 7px;
-  border-bottom: 1px solid var(--tooltip-dark-border);
-  color: var(--tooltip-dark-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 700;
-  cursor: move;
-  touch-action: none;
-}
-
-.snapDebugBody {
-  margin: 0;
-  padding: 6px 7px;
-  overflow: auto;
-  flex: 1;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.35;
-}
-
-.snapDebugResizeHandle {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  touch-action: none;
-}
-
-.snapDebugResizeHandle::after {
-  content: "";
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid rgba(159, 208, 229, 0.75);
-  border-bottom: 2px solid rgba(159, 208, 229, 0.75);
-}
-
-:global(body.is-dragging-snap-debug) {
-  cursor: move !important;
-  user-select: none !important;
-}
-
-:global(body.is-resizing-snap-debug) {
-  cursor: nwse-resize !important;
-  user-select: none !important;
-}
-
 :global(body.is-dragging-guide-horizontal) {
   cursor: ns-resize !important;
   user-select: none !important;
@@ -879,7 +810,6 @@
   .topRuler,
   .leftRuler,
   .warningBar,
-  .snapDebugOverlay,
   .interactionLayer,
   .noSvg {
     display: none !important;

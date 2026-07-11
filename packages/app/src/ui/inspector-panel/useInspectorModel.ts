@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildMatrixInspectorDescriptor,
   buildTreeInspectorDescriptor,
+  createInspectorTargetResolver,
   TIKZPICTURE_GLOBAL_TARGET_ID,
   type InspectorDescriptor,
   type InspectorSection,
   type SetPropertyWriteTarget,
-  type InspectorSnapshot
-} from "tikz-editor/edit/inspector";
+  type InspectorSnapshot,
+  type InspectorTargetResolver
+} from "@tikz-editor/core/edit/inspector";
 import {
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContextFromOptionEntries,
@@ -15,12 +17,12 @@ import {
   transformRotateInspectorLabel,
   type TransformInspectorKey,
   type TransformInspectorMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { buildStylesCascadeModel } from "tikz-editor/edit/styles-cascade";
-import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { buildStylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
+import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
@@ -174,7 +176,11 @@ type FrozenPropertyProvenanceView = {
 export function useInspectorModel(args: {
   selectedIds: ReadonlySet<string>;
   dispatch: (action: EditorAction) => void;
-  getInspectorDescriptor: (element: SceneElement, context: InspectorSnapshot) => InspectorDescriptor;
+  getInspectorDescriptor: (
+    element: SceneElement,
+    context: InspectorSnapshot,
+    resolveTarget: InspectorTargetResolver
+  ) => InspectorDescriptor;
 }) {
   const { selectedIds, dispatch, getInspectorDescriptor } = args;
   const [{ source, snapshot }, setSourceSnapshot] = useState(() => {
@@ -245,25 +251,20 @@ export function useInspectorModel(args: {
     activeCanvasDragKind === "rotate" ||
     activeCanvasDragKind === "handle";
   const frozenPropertyProvenanceRef = useRef<FrozenPropertyProvenanceView | null>(null);
-  const editAnalysisView = useMemo(
+  const parseOptions = useMemo(
     () =>
-      getSharedEditAnalysisView({
+      buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         source,
         activeFigureId,
-        snapshot
+        snapshot,
+        analysis: "shared",
+        overrides: {
+          colorAliases: snapshot.semanticResult?.colorAliases ?? null
+        }
       }),
     [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
-  );
-  const parseOptions = useMemo(
-    () => ({
-      activeFigureId,
-      analysisView: editAnalysisView,
-      analysisSession: getSharedEditAnalysisSession(),
-      colorAliases: snapshot.semanticResult?.colorAliases ?? null
-    }),
-    [activeFigureId, editAnalysisView, snapshot.semanticResult]
   );
   const globalTransformValues = useMemo(
     () => resolveTransformInspectorValues(source, TIKZPICTURE_GLOBAL_TARGET_ID, parseOptions),
@@ -301,14 +302,21 @@ export function useInspectorModel(args: {
   }, [selectedElementBySourceId, selectedSourceIds]);
 
   const descriptorEntries = useMemo(() => {
+    const resolveTarget = createInspectorTargetResolver(snapshot.source, parseOptions);
     return selectedSourceIds.map((sourceId) => {
-      const matrixDescriptor = buildMatrixInspectorDescriptor(snapshot.source, sourceId, parseOptions);
+      const matrixDescriptor = buildMatrixInspectorDescriptor(snapshot.source, sourceId, parseOptions, resolveTarget);
       if (matrixDescriptor) {
         return matrixDescriptor;
       }
 
       const selectedElement = selectedElementBySourceId.get(sourceId) ?? null;
-      const treeDescriptor = buildTreeInspectorDescriptor(snapshot.source, sourceId, selectedElement, parseOptions);
+      const treeDescriptor = buildTreeInspectorDescriptor(
+        snapshot.source,
+        sourceId,
+        selectedElement,
+        parseOptions,
+        resolveTarget
+      );
       if (treeDescriptor) {
         return treeDescriptor;
       }
@@ -322,11 +330,15 @@ export function useInspectorModel(args: {
         return null;
       }
 
-      return getInspectorDescriptor(element, {
-        source: snapshot.source,
-        editHandles: snapshot.editHandles,
-        parseOptions
-      });
+      return getInspectorDescriptor(
+        element,
+        {
+          source: snapshot.source,
+          editHandles: snapshot.editHandles,
+          parseOptions
+        },
+        resolveTarget
+      );
     });
   }, [getInspectorDescriptor, parseOptions, selectedElementBySourceId, selectedSourceIds, snapshot.editHandles, snapshot.source]);
 

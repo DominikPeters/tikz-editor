@@ -1,29 +1,29 @@
-import { applyEditAction, type ReorderDirection } from "tikz-editor/edit/actions";
-import { getEditActionAvailability } from "tikz-editor/edit/action-availability";
-import { pt, worldPoint } from "tikz-editor/coords/index";
-import { PT_PER_CM } from "tikz-editor/edit/format";
+import { applyEditAction, type ReorderDirection } from "@tikz-editor/core/edit/actions";
+import { getEditActionAvailability } from "@tikz-editor/core/edit/action-availability";
+import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 import type {
-  resolveTransformInspectorValues} from "tikz-editor/edit/property-write-builders";
+  resolveTransformInspectorValues} from "@tikz-editor/core/edit/property-write-builders";
 import {
   buildTransformSetPropertyMutations,
   resolveTransformInspectorMutationContext,
   type TransformInspectorKey
-} from "tikz-editor/edit/property-write-builders";
-import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
 import {
   parseStatementSnapshot,
   resolveStatementRefs,
   statementSnippet
-} from "tikz-editor/edit/statement-ops";
-import { parseTikzForEdit } from "tikz-editor/edit/parse-options";
-import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
-import type { EditParseOptions } from "tikz-editor/edit/parse-options";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { parseMatrixRowsForEdit, resolveMatrixMode } from "tikz-editor/semantic/nodes/matrix";
-import type { OptionListAst } from "tikz-editor/options/types";
-import type { EditHandle, SceneElement, SceneFigure } from "tikz-editor/semantic/types";
-import type { ForeachOriginFrame } from "tikz-editor/semantic/types";
-import type { PathStatement, Statement } from "tikz-editor/ast/types";
+} from "@tikz-editor/core/edit/statement-ops";
+import { parseTikzForEdit } from "@tikz-editor/core/edit/parse-options";
+import { parseEditableTargetId } from "@tikz-editor/core/edit/editable-targets";
+import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { parseMatrixRowsForEdit, resolveMatrixMode } from "@tikz-editor/core/semantic/nodes/matrix";
+import type { OptionListAst } from "@tikz-editor/core/options/types";
+import type { EditHandle, SceneElement, SceneFigure } from "@tikz-editor/core/semantic/types";
+import type { ForeachOriginFrame } from "@tikz-editor/core/semantic/types";
+import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { EditorAction } from "../store/types";
 import {
   buildSelectionPngBase64,

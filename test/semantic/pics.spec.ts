@@ -30,6 +30,25 @@ describe("semantic pic operations", () => {
     expect(elementsOfKind(result.scene.elements, "Path").filter((path) => path.origin?.picStack?.length)).toHaveLength(2);
   });
 
+  it("inherits pic definitions while isolating replacements between sibling scopes", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \tikzset{mark/.pic={\draw[red] (0,0) -- (.2,0);}}
+  \begin{scope}
+    \tikzset{mark/.pic={\draw[blue] (0,0) -- (.3,0);}}
+    \pic at (0,0) {mark};
+  \end{scope}
+  \begin{scope}
+    \pic at (1,0) {mark};
+  \end{scope}
+  \pic at (2,0) {mark};
+\end{tikzpicture}`;
+    const result = evaluateSemantic(source);
+    const picPaths = elementsOfKind(result.scene.elements, "Path").filter((path) => path.origin?.picStack?.length);
+
+    expect(picPaths).toHaveLength(3);
+    expect(picPaths.map((path) => path.style.stroke)).toEqual(["#0000ff", "#ff0000", "#ff0000"]);
+  });
+
   it("places path-attached pics using pos", () => {
     const source = String.raw`\begin{tikzpicture}
   \tikzset{mark/.pic={\draw (0,0) -- (.2,0);}}

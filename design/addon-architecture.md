@@ -128,6 +128,15 @@ reparse + checkpoint/replay semantic evaluation + SVG model reuse) keyed by
 
 ### What is closed today (the dispatch points to open)
 
+*Update 2026-07-11: three rows changed state with the quality branch.
+Inspector: `getInspectorDescriptor` is decomposed into per-section builders
+registered in `edit/inspector/section-builder.ts` — the provider registry
+now exists; Phase C only needs to open registration. Style keys:
+`apply-kv.ts` is a key→handler table (`createKvHandlerMap`). Capabilities:
+registries are derived from the matrix, so namespaced feature ids are a
+one-line widening. The "Needed change" column below reflects the original
+state.*
+
 | Dispatch point | Where | Needed change |
 |---|---|---|
 | Figure discovery | `parser/figure-scan.ts` (tikzpicture regex) | unchanged for v1 (axis lives inside tikzpicture) |
@@ -181,11 +190,18 @@ cannot be a black box that swallows `\begin{axis}...\end{axis}`:
 
 ### Intersections with the 2026-07-03 code review
 
-A full-codebase review (`CODE-REVIEW-2026-07-03.md`, repo root) surfaced
-findings that overlap this design. Each is justified on its own merits —
-none migrates core onto the add-on API, so the "design for it, don't do it
-yet" decision stands — but sequencing them before Phases A–C makes several
-hooks cheaper:
+A full-codebase review (`CODE-REVIEW-2026-07-03.md`, now in `design/`)
+surfaced findings that overlap this design. Each is justified on its own
+merits — none migrates core onto the add-on API, so the "design for it,
+don't do it yet" decision stands — but sequencing them before Phases A–C
+makes several hooks cheaper:
+
+**Status (2026-07-11): every item in this list landed with the
+`code-quality-2026-07-10` branch** (derived registries, inspector section
+builders with the provider-registry signature, the frame-meta map, COW
+registries + budget pattern, content-hash def ids, centralized parse
+options, and the `kind` result convention). Phase 0 below is therefore
+complete; Phase A can plug into existing registries.
 
 - **Derived capability registries** (review 3.6). The four lists in
   `capabilities/registries.ts` are hand-maintained but fully derivable from
@@ -857,15 +873,14 @@ validating the API end-to-end before breadth.
 
 Each phase lands independently and is verifiable in isolation.
 
-- **Phase 0 — data-driven core groundwork (recommended, not blocking).**
-  Derived capability registries, inspector section-builder decomposition
-  (using the signature Phase C's provider registry will adopt), the
-  frame-meta shape-style map, content-hash SVG def ids, and the shared
-  evaluation budget. Each is independently justified by
-  `CODE-REVIEW-2026-07-03.md`; none blocks Phase A, but doing them first
-  means Phases A and C plug into registries instead of retrofitting
-  monoliths. Validation: existing suites (`capabilities.spec.ts`, corpus
-  tests) pass unchanged.
+- **Phase 0 — data-driven core groundwork. Done (2026-07-11, via the
+  `code-quality-2026-07-10` branch).** Derived capability registries,
+  inspector section-builder decomposition (using the signature Phase C's
+  provider registry will adopt), the frame-meta shape-style map,
+  content-hash SVG def ids, and the shared evaluation budget all landed;
+  `apply-kv` additionally became a key→handler table
+  (`createKvHandlerMap`), so the "inverted" style-key decision below has a
+  registry to attach to if it is ever revisited. Existing suites pass.
 - **Phase A — addon-api + engine hooks.** Create `@tikz-editor/addon-api`
   (types, manifest, contexts) and the core `AddonRuntime`: statement routing
   in `mapStatementNode`, evaluation hook in `evaluateStatement`,

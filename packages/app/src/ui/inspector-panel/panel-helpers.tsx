@@ -1,4 +1,4 @@
-import { formatNumber } from "tikz-editor/edit/format";
+import { formatNumber } from "@tikz-editor/core/edit/format";
 import {
   LINE_WIDTH_PRESETS,
   ROUNDED_CORNERS_DEFAULT_RADIUS,
@@ -21,20 +21,20 @@ import {
   type SetPropertyWriteTarget,
   type ShadowPresetId,
   type ShadowPresetOption
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import type {
   ArrowTipWriteTarget,
   FillPatternOptionMutationContext,
   NodeFontMutationContext,
   NodeMinimumDimensionsMutationContext,
   ShadowMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import type { StylesCascadeModel } from "tikz-editor/edit/styles-cascade";
-import { makeDefaultArrowMarker } from "tikz-editor/semantic/style/arrows";
-import type { ArrowTipKind } from "tikz-editor/semantic/types";
-import { renderArrowTipPreviewPaths } from "tikz-editor/svg/arrows/preview";
-import { renderPathMorphingDecorationPreviewSvg } from "tikz-editor/svg/decorations/preview";
-import { renderFillPatternPreviewSvg } from "tikz-editor/svg/patterns/preview";
+} from "@tikz-editor/core/edit/property-write-builders";
+import type { StylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
+import { makeDefaultArrowMarker } from "@tikz-editor/core/semantic/style/arrows";
+import type { ArrowTipKind } from "@tikz-editor/core/semantic/types";
+import { renderArrowTipPreviewPaths } from "@tikz-editor/core/svg/arrows/preview";
+import { renderPathMorphingDecorationPreviewSvg } from "@tikz-editor/core/svg/decorations/preview";
+import { renderFillPatternPreviewSvg } from "@tikz-editor/core/svg/patterns/preview";
 import type { CustomDropdownItem, CustomDropdownOption } from "../CustomDropdown";
 import css from "./InspectorPanel.module.css";
 

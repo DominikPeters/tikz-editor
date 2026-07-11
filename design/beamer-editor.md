@@ -53,7 +53,9 @@ These were settled in design discussion and are treated as fixed below:
 - Support arbitrary `\setbeamertemplate` structural hacks (corpus: rare).
 - Frame transitions (`\transfade` etc.) and continuous animation.
 - Poster classes (`beamerposter`), `pgfpages` handout layouts, article mode.
-- Pixel-identical math rendering (MathJax islands remain the math engine).
+- Pixel-identical math rendering across the full LaTeX surface. Supported
+  math uses the native TeX math IR; unsupported constructs fall back at the
+  smallest source-backed box boundary.
 
 ## Corpus Evidence
 
@@ -78,7 +80,7 @@ but real. Construct frequencies:
 | `\scalebox` | 56 | 12/22 | scale-transform wrapper needed |
 | `\colorbox` | 52 | 19/22 | inline highlight boxes needed |
 | `tcolorbox` | 32 | 18/22 | subset or styled-box fallback (see below) |
-| `align` (display math) | 30 | 10/22 | display math islands needed |
+| `align` (display math) | 30 | 10/22 | native display-math boxes needed |
 | overlay angle specs `<...>` | 116 | — | explicit specs dominate |
 | `\only<` / `item<` / `\uncover<` | 32 / 21 / 6 | — | `\only` is the common form |
 | `\pause` | 4 | 4/22 | rare; renumbering concern is nearly moot |
@@ -181,8 +183,8 @@ frame-level constructs:
 - **`tabular`**: alignment IR per the text-layout doc, promoted into the
   core plan; slides use small, simple tables (no `multirow`/`longtable` in
   corpus).
-- **Display math** (`equation`, `align`, `\[...\]`): block-level MathJax
-  islands, measured as atomic vboxes.
+- **Display math** (`equation`, `align`, `\[...\]`): native TeX math boxes,
+  placed as atomic vboxes while retaining source-backed hit geometry.
 - **Embedded `tikzpicture`**: an atomic box rendered by the existing
   pipeline; see TikZ Integration.
 - **`\includegraphics`**: see Graphics.
@@ -207,9 +209,10 @@ metropolis/moloch uses Fira Sans when available; v1 renders it with the CM
 Sans profile and notes the substitution (metric-faithful Fira is a later
 font profile).
 
-Beamer's default math setup is sans-influenced; MathJax islands will render
-classic CM serif math. This is an accepted v1 fidelity gap (one corpus deck
-even opts out via `\usefonttheme{professionalfonts}`).
+Beamer's default math setup is sans-influenced. The native math font profile
+initially renders classic CM serif math, which remains an accepted v1
+fidelity gap (one corpus deck even opts out via
+`\usefonttheme{professionalfonts}`).
 
 ## Theme Engine
 
@@ -471,7 +474,7 @@ reordering frames produces correct minimal source diffs.
 
 - CM Sans font profile (metrics + glyphs, key sizes).
 - Block layout: frametitle, paragraphs, lists, blocks/theorems, columns,
-  center, vspace/vfill, scalebox, display-math islands, embedded
+  center, vspace/vfill, scalebox, native display-math boxes, embedded
   tikzpictures (existing renderer), `\includegraphics` (incl. PDF.js).
 - Theme engine with `default`, `Madrid`, `metropolis`, `moloch`(+options);
   titlepage and section pages; `\setbeamercolor`/`\definecolor` patches.
@@ -525,8 +528,8 @@ overlay]`; double-click-to-edit works in place.
 - **Two corpora biases**: 22 decks from one community. The scanner should be
   easy to point at other corpora (e.g. arXiv source of `beamer` decks)
   before locking the subset.
-- **MathJax serif math vs Beamer sans math** is a visible fidelity gap in
-  v1; acceptable, but should be stated in the UI (font profile note), not
+- **CM serif math vs Beamer sans-influenced math** is a visible fidelity gap
+  in v1; acceptable, but should be stated in the UI (font profile note), not
   silent.
 - **Per-step layout cost** is assumed cheap; if profiling disagrees,
   keep-space steps can share layout and only `\only`-bearing frames pay

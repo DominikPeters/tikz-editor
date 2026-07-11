@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { applyBreaks } from "../packages/core/src/text/knuth-plass/paragraph/applyBreaks.js";
 import {
@@ -8,7 +8,8 @@ import {
   buildAlignmentProfile
 } from "../packages/core/src/text/knuth-plass/alignment.js";
 import { collectBreakablePenalties, collectSpaceBreakpoints } from "../packages/core/src/text/knuth-plass/paragraph/breakpoints.js";
-import { breakWithDp } from "../packages/core/src/text/knuth-plass/paragraph/dp.js";
+import { selectMainParagraphPass } from "../packages/core/src/text/knuth-plass/KnuthPlassVisitor.js";
+import { breakWithDp, type DpResult } from "../packages/core/src/text/knuth-plass/paragraph/dp.js";
 import { greedyBreakParagraph } from "../packages/core/src/text/knuth-plass/paragraph/greedy.js";
 import {
   createEnglishHyphenator,
@@ -257,6 +258,72 @@ function glue(runIndex: number, stretch = 1, shrink = 1): GlueItem {
 }
 
 describe("knuth-plass paragraph helpers", () => {
+  it("does not construct the hyphenated pass when pretolerance succeeds", () => {
+    const pass1Model = { errors: [] } as unknown as ParagraphModel;
+    const pass1Dp: DpResult = {
+      lines: [{} as DpResult["lines"][number]],
+      errors: [],
+      canProceed: true,
+      totalCost: 0,
+      mode: "feasible"
+    };
+    const buildPass2 = vi.fn(() => {
+      throw new Error("pass 2 should not be constructed");
+    });
+
+    const selected = selectMainParagraphPass(
+      { model: pass1Model, dp: pass1Dp },
+      buildPass2
+    );
+
+    expect(buildPass2).not.toHaveBeenCalled();
+    expect(selected).toMatchObject({
+      model: pass1Model,
+      dp: pass1Dp,
+      passLabel: "pretolerance",
+      pass2: null
+    });
+  });
+
+  it("retains lazy overfull recovery after the hyphenated tolerance pass fails", () => {
+    const pass1Model = { errors: ["pass-1"] } as unknown as ParagraphModel;
+    const pass2Model = { errors: ["pass-2"] } as unknown as ParagraphModel;
+    const failedDp: DpResult = {
+      lines: [],
+      errors: ["no feasible lines"],
+      canProceed: false,
+      totalCost: Number.POSITIVE_INFINITY,
+      mode: "feasible"
+    };
+    const overfullDp: DpResult = {
+      lines: [{} as DpResult["lines"][number]],
+      errors: [],
+      canProceed: true,
+      totalCost: 10,
+      mode: "overfull"
+    };
+    const buildOverfullDp = vi.fn(() => overfullDp);
+    const buildPass2 = vi.fn(() => ({
+      model: pass2Model,
+      dp: failedDp,
+      buildOverfullDp
+    }));
+
+    const selected = selectMainParagraphPass(
+      { model: pass1Model, dp: failedDp },
+      buildPass2
+    );
+
+    expect(buildPass2).toHaveBeenCalledOnce();
+    expect(buildOverfullDp).toHaveBeenCalledOnce();
+    expect(selected).toMatchObject({
+      model: pass2Model,
+      dp: overfullDp,
+      passLabel: "overfull",
+      pass2: { model: pass2Model, dp: failedDp }
+    });
+  });
+
   it("skips linebreaking and reports an error for non-positive target widths", () => {
     const runs = [textRun(0, "Alpha", 0), spaceRun(1, 5), textRun(2, "Beta", 6)];
     const result = greedyBreakParagraph(model(runs, [5, 1, 4], [spacePenalty(1)]), 0);

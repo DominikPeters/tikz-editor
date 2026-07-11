@@ -88,6 +88,55 @@ describe("semantic incremental evaluation", () => {
     });
   });
 
+  it("defers checkpoint capture until an eligible drag and reuses it on later frames", () => {
+    let source = makeIsolatedNodeFigure();
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const changedSourceId = seededParsed.figure.body[8]?.id;
+    expect(changedSourceId).toBeDefined();
+    if (!changedSourceId) {
+      throw new Error("Expected isolated node statement");
+    }
+
+    const seeded = session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+    expect(seeded.stats.checkpointPreparation).toBe("deferred");
+    expect(seeded.stats.checkpointCount).toBe(0);
+
+    source = source.replace("(10,10)", "(10.4,10.2)");
+    const firstParsed = parseTikz(source, { recover: true });
+    const firstDrag = session.evaluate({
+      figure: firstParsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: [changedSourceId]
+      }
+    });
+    expect(firstDrag.semantic).toEqual(evaluateTikzFigure(firstParsed.figure, source));
+    expect(firstDrag.stats.strategy).toBe("incremental");
+    expect(firstDrag.stats.checkpointPreparation).toBe("captured-from-deferred");
+    expect(firstDrag.stats.checkpointCount).toBeGreaterThan(0);
+
+    source = source.replace("(10.4,10.2)", "(10.8,10.4)");
+    const secondParsed = parseTikz(source, { recover: true });
+    const secondDrag = session.evaluate({
+      figure: secondParsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: [changedSourceId]
+      }
+    });
+    expect(secondDrag.semantic).toEqual(evaluateTikzFigure(secondParsed.figure, source));
+    expect(secondDrag.stats.strategy).toBe("incremental");
+    expect(secondDrag.stats.checkpointPreparation).toBe("reused");
+    expect(secondDrag.stats.checkpointCount).toBe(firstDrag.stats.checkpointCount);
+  });
+
   it("keeps stateful graphics on the full-evaluation path", () => {
     const source = String.raw`\begin{tikzpicture}
   \clip (0,0) rectangle (1,1);
@@ -636,6 +685,95 @@ describe("semantic incremental evaluation", () => {
 
     for (const source of sources) {
       expectFullAndIncrementalEqualAfterMove(source);
+    }
+  });
+
+  it("keeps foreign style-chain provenance spans intact during selective drag replay", () => {
+    let source = String.raw`\begin{tikzpicture}
+\tikzset{box/.style={draw=red}}
+\node (target) at (5,5) {T};
+\node[box] (c) at (1,1) {C};
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const target = seededParsed.figure.body.find((statement) =>
+      source.slice(statement.span.from, statement.span.to).includes("(target)")
+    );
+    expect(target).toBeDefined();
+
+    session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+
+    // Each drag frame lengthens the dragged statement, so the reused
+    // trailing statement is span-shifted while the \tikzset it references
+    // stays put.
+    let previous = "(5,5)";
+    for (const next of ["(5.2,5.1)", "(5.45,5.15)", "(4.9,4.95)"]) {
+      source = source.replace(previous, next);
+      previous = next;
+      const parsed = parseTikz(source, { recover: true });
+      const result = session.evaluate({
+        figure: parsed.figure,
+        source,
+        hints: {
+          trigger: "drag-element",
+          changedSourceIds: [target!.id]
+        }
+      });
+      const full = evaluateTikzFigure(parsed.figure, source);
+      expect(result.semantic.scene.elements).toEqual(full.scene.elements);
+      expect(result.semantic.editHandles).toEqual(full.editHandles);
+    }
+  });
+
+  it("replays drags identically to full evaluation with registry writes across checkpoints", () => {
+    let source = String.raw`\begin{tikzpicture}
+\tikzset{mystyle/.style={draw=red}}
+\colorlet{mycol}{blue}
+\tikzset{pics/mypic/.style={code={\draw (0,0) circle (0.2);}}}
+\node[mystyle, fill=mycol] (a) at (0,0) {A};
+\tikzset{mystyle/.append style={fill=green}}
+\colorlet{mycol}{red}
+\node[mystyle] (b) at (1,1) {B};
+\pic at (2,0) {mypic};
+\node[mystyle, fill=mycol] (target) at (10,10) {T};
+\tikzset{mystyle/.style={draw=purple}}
+\node[mystyle] (c) at (3,3) {C};
+\node[fill=mycol] (d) at (4,4) {D};
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const target = seededParsed.figure.body.find((statement) =>
+      source.slice(statement.span.from, statement.span.to).includes("(target)")
+    );
+    expect(target).toBeDefined();
+
+    session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+
+    let previous = "(10,10)";
+    for (const next of ["(10.2,10.1)", "(10.4,10.2)", "(9.8,9.9)"]) {
+      source = source.replace(previous, next);
+      previous = next;
+      const parsed = parseTikz(source, { recover: true });
+      const result = session.evaluate({
+        figure: parsed.figure,
+        source,
+        hints: {
+          trigger: "drag-element",
+          changedSourceIds: [target!.id]
+        }
+      });
+      const full = evaluateTikzFigure(parsed.figure, source);
+      expect(result.semantic.scene.elements).toEqual(full.scene.elements);
+      expect(result.semantic.editHandles).toEqual(full.editHandles);
+      expect(new Map(result.semantic.colorAliases)).toEqual(new Map(full.colorAliases));
     }
   });
 

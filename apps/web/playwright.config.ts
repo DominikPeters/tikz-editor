@@ -44,7 +44,7 @@ export default defineConfig({
   expect: {
     timeout: 10_000
   },
-  fullyParallel: false,
+  fullyParallel: true,
   retries: 0,
   reporter: "list",
   use: {
@@ -55,7 +55,7 @@ export default defineConfig({
     command: `${withoutColorEnv} npm run build -- --base / && ${withoutColorEnv} npx vite preview --host 127.0.0.1 --port 4173`,
     cwd: ".",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000
   },
   projects: getBrowserProjects()

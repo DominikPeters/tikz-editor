@@ -20,7 +20,7 @@ const renderTikzToSvgAsync = vi.fn(async () => ({
   }
 }));
 
-vi.mock("tikz-editor/render/index", () => ({ renderTikzToSvgAsync }));
+vi.mock("@tikz-editor/core/render/index", () => ({ renderTikzToSvgAsync }));
 
 describe("OpenFromArxivModal", () => {
   let container: HTMLDivElement;

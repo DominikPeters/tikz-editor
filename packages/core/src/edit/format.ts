@@ -1,5 +1,4 @@
-export const PT_PER_CM = 28.4527559055;
-export const CM_PER_PT = 1 / PT_PER_CM;
+export { PT_PER_CM, CM_PER_PT } from "../coords/source.js";
 
 export type NumberFormatOptions = {
   fractionDigits?: number;

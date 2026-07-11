@@ -170,10 +170,69 @@ function nodeAdornmentControlSignature(options: OptionListAst | undefined): stri
     .join("\n");
 }
 
+type PendingLength = {
+  value: number;
+  applyFrameTransform: boolean;
+};
+
+type PendingRadii = {
+  rx: PendingLength;
+  ry: PendingLength;
+};
+
+type PathBuilderState = {
+  style: ResolvedStyle;
+  activePath: ScenePath | null;
+  currentOperator: "--" | "-|" | "|-" | null;
+  activeRoundedCorners: number | null;
+  pendingRectangleFrom: WorldPoint | null;
+  pendingCircleCenter: WorldPoint | null;
+  pendingCircleRadius: PendingLength | null;
+  pendingCircleRadii: PendingRadii | null;
+  pendingCircleRotation: number;
+  pendingEllipseCenter: WorldPoint | null;
+  pendingEllipseRadii: PendingRadii | null;
+  pendingArc: { from: WorldPoint } | null;
+  pendingGrid: { from: WorldPoint; stepX: number; stepY: number } | null;
+  pendingNamedCoordinate: { name: string } | null;
+  pendingSegmentPlacements: Array<{ name: string; fraction: number }>;
+  pendingSegmentNodes: NodeItem[];
+  pendingSegmentPics: Array<{ item: PicOperationItem; fraction: number }>;
+  pendingNodeNameForNodeCommand: string | null;
+  lastPlacementSegment: PlacementSegment | null;
+  previousSegmentRoundedCorners: number | null;
+  leadingToLikeOptions: OptionListAst | undefined;
+  currentPointLogical: WorldPoint | null;
+  currentPointCoordinate: Pick<CoordinateItem, "form" | "x"> | null;
+  pendingEdgeStartCoordinateRaw: string | null;
+  edgeOperationStart: { point: WorldPoint; coordinateRaw: string | null } | null;
+  treeParentCandidate: {
+    nameRaw: string | null;
+    point: WorldPoint;
+    span: { from: number; to: number };
+  } | null;
+  sawNonLeadingPathItem: boolean;
+  hasPathCurrentPoint: boolean;
+  treeFrameState: SemanticContext["stack"][number];
+  statementStyleChain: StyleChainEntry[];
+  plotSettings: ReturnType<typeof createDefaultPlotSettings>;
+  shouldCompoundFilledSubpaths: boolean;
+  currentItemIndex: number;
+};
+
+function computeShouldCompoundFilledSubpaths(candidateStyle: ResolvedStyle): boolean {
+  const hasFilledShadowLayer = candidateStyle.shadowLayers.some(
+    (layer) => layer.style.shadeEnabled || (layer.style.fill != null && layer.style.fill !== "none")
+  );
+  return candidateStyle.shadeEnabled
+    || (candidateStyle.fill != null && candidateStyle.fill !== "none")
+    || hasFilledShadowLayer;
+}
+
 export function evaluatePathStatement(
   statement: PathStatement,
   context: SemanticContext,
-  style: ResolvedStyle,
+  initialStyle: ResolvedStyle,
   markFeature: FeatureMarkFn,
   pushDiagnostic: DiagnosticPushFn,
   options: PathEvaluationOptions = {}
@@ -181,60 +240,57 @@ export function evaluatePathStatement(
   const geometryElements: SceneElement[] = [];
   const behindNodeElements: SceneElement[] = [];
   const frontNodeElements: SceneElement[] = [];
-  let activePath: ScenePath | null = null;
-  let currentOperator: "--" | "-|" | "|-" | null = null;
-  let activeRoundedCorners = style.roundedCorners;
-  let pendingRectangleFrom: WorldPoint | null = null;
-  let pendingCircleCenter: WorldPoint | null = null;
-  let pendingCircleRadius: { value: number; applyFrameTransform: boolean } | null = null;
-  let pendingCircleRadii:
-    | {
-        rx: { value: number; applyFrameTransform: boolean };
-        ry: { value: number; applyFrameTransform: boolean };
-      }
-    | null = null;
-  let pendingCircleRotation = 0;
-  let pendingEllipseCenter: WorldPoint | null = null;
-  let pendingEllipseRadii:
-    | {
-        rx: { value: number; applyFrameTransform: boolean };
-        ry: { value: number; applyFrameTransform: boolean };
-      }
-    | null = null;
-  let pendingArc: { from: WorldPoint } | null = null;
-  let pendingGrid: { from: WorldPoint; stepX: number; stepY: number } | null = null;
-  let pendingNamedCoordinate: { name: string } | null = null;
-  let pendingSegmentPlacements: Array<{ name: string; fraction: number }> = [];
-  let pendingSegmentNodes: NodeItem[] = [];
-  let pendingSegmentPics: Array<{ item: PicOperationItem; fraction: number }> = [];
-  let pendingNodeNameForNodeCommand: string | null = null;
-  let lastPlacementSegment: PlacementSegment | null = null;
-  let previousSegmentRoundedCorners: number | null = null;
-  let leadingToLikeOptions: OptionListAst | undefined;
-  let currentPointLogical: WorldPoint | null = context.currentPoint;
-  let currentPointCoordinate: Pick<CoordinateItem, "form" | "x"> | null = null;
-  let pendingEdgeStartCoordinateRaw: string | null = null;
-  let edgeOperationStart: { point: WorldPoint; coordinateRaw: string | null } | null = null;
-  let treeParentCandidate: { nameRaw: string | null; point: WorldPoint; span: { from: number; to: number } } | null = null;
-  let sawNonLeadingPathItem = false;
   const emittedTreeHookDiagnostics = new Set<string>();
   const honorInitialCurrentPoint = options.honorInitialCurrentPoint === true;
+  const initialCurrentPointLogical = context.currentPoint;
   if (!honorInitialCurrentPoint) {
     // Each standalone TikZ path starts from a fresh current point; leaking the
     // previous statement's endpoint breaks node placement for node-only paths.
     context.currentPoint = null;
     context.pathStartPoint = null;
   }
-  let hasPathCurrentPoint = honorInitialCurrentPoint && context.currentPoint != null;
   const frame = context.stack[context.stack.length - 1];
-  let treeFrameState = frame;
   const frameTransform = frame.transform;
-  let statementStyleChain = frame.styleChain;
-  let plotSettings = applyPlotSettingsFromStyleChain(
+  const initialPlotSettings = applyPlotSettingsFromStyleChain(
     createDefaultPlotSettings(),
-    statementStyleChain,
-    treeFrameState.macroBindings
+    frame.styleChain,
+    frame.macroBindings
   );
+  const builder: PathBuilderState = {
+    style: initialStyle,
+    activePath: null,
+    currentOperator: null,
+    activeRoundedCorners: initialStyle.roundedCorners,
+    pendingRectangleFrom: null,
+    pendingCircleCenter: null,
+    pendingCircleRadius: null,
+    pendingCircleRadii: null,
+    pendingCircleRotation: 0,
+    pendingEllipseCenter: null,
+    pendingEllipseRadii: null,
+    pendingArc: null,
+    pendingGrid: null,
+    pendingNamedCoordinate: null,
+    pendingSegmentPlacements: [],
+    pendingSegmentNodes: [],
+    pendingSegmentPics: [],
+    pendingNodeNameForNodeCommand: null,
+    lastPlacementSegment: null,
+    previousSegmentRoundedCorners: null,
+    leadingToLikeOptions: undefined,
+    currentPointLogical: initialCurrentPointLogical,
+    currentPointCoordinate: null,
+    pendingEdgeStartCoordinateRaw: null,
+    edgeOperationStart: null,
+    treeParentCandidate: null,
+    sawNonLeadingPathItem: false,
+    hasPathCurrentPoint: honorInitialCurrentPoint && context.currentPoint != null,
+    treeFrameState: frame,
+    statementStyleChain: frame.styleChain,
+    plotSettings: initialPlotSettings,
+    shouldCompoundFilledSubpaths: computeShouldCompoundFilledSubpaths(initialStyle),
+    currentItemIndex: -1
+  };
   const pointsClose = (left: WorldPoint, right: WorldPoint): boolean => Math.hypot(left.x - right.x, left.y - right.y) <= 1e-6;
   const defaultPathOrigin = applyMatrix(frameTransform, wp(0, 0));
   const setCurrentPoint = (
@@ -244,31 +300,31 @@ export function evaluatePathStatement(
   ): void => {
     context.currentPoint = point;
     if (!point) {
-      currentPointLogical = null;
-      currentPointCoordinate = null;
+      builder.currentPointLogical = null;
+      builder.currentPointCoordinate = null;
       return;
     }
-    currentPointLogical = logicalPoint ?? point;
-    currentPointCoordinate = coordinate;
-    hasPathCurrentPoint = true;
+    builder.currentPointLogical = logicalPoint ?? point;
+    builder.currentPointCoordinate = coordinate;
+    builder.hasPathCurrentPoint = true;
   };
   const flushPendingSegmentPlacements = (segment: PlacementSegment | null): void => {
-    if (!segment || pendingSegmentPlacements.length === 0) {
+    if (!segment || builder.pendingSegmentPlacements.length === 0) {
       return;
     }
-    for (const pending of pendingSegmentPlacements) {
+    for (const pending of builder.pendingSegmentPlacements) {
       const point = pointAtPlacementSegment(segment, pending.fraction);
       writeNamedCoordinate(context, applyNameScope(pending.name, context), point);
     }
-    pendingSegmentPlacements = [];
+    builder.pendingSegmentPlacements = [];
   };
   const flushPendingSegmentNodes = (segment: PlacementSegment | null): void => {
-    if (!segment || pendingSegmentNodes.length === 0) {
+    if (!segment || builder.pendingSegmentNodes.length === 0) {
       return;
     }
 
-    for (const node of pendingSegmentNodes) {
-      const scopedAutoSide = resolveScopedAutoSide(statementStyleChain);
+    for (const node of builder.pendingSegmentNodes) {
+      const scopedAutoSide = resolveScopedAutoSide(builder.statementStyleChain);
       const nodeOptionsWithScopedAuto =
         scopedAutoSide != null
           ? mergeOptionLists(parseOptionListRaw(`[auto=${scopedAutoSide}]`, node.span.from), node.options)
@@ -277,19 +333,19 @@ export function evaluatePathStatement(
         nodeOptionsWithScopedAuto === node.options ? node : { ...node, options: nodeOptionsWithScopedAuto, optionsSpan: nodeOptionsWithScopedAuto?.span },
         statement,
         context,
-        style,
+        builder.style,
         markFeature,
         pushDiagnostic,
         segment,
         undefined,
         0.5,
         undefined,
-        statementStyleChain
+        builder.statementStyleChain
       );
       behindNodeElements.push(...resolvedNode.behindElements);
       frontNodeElements.push(...resolvedNode.frontElements);
     }
-    pendingSegmentNodes = [];
+    builder.pendingSegmentNodes = [];
   };
   const emitPicOperation = (
     item: PicOperationItem,
@@ -307,97 +363,89 @@ export function evaluatePathStatement(
     frontNodeElements.push(...resolved.frontElements);
   };
   const flushPendingSegmentPics = (segment: PlacementSegment | null): void => {
-    if (!segment || pendingSegmentPics.length === 0) {
+    if (!segment || builder.pendingSegmentPics.length === 0) {
       return;
     }
-    for (const pending of pendingSegmentPics) {
+    for (const pending of builder.pendingSegmentPics) {
       emitPicOperation(pending.item, pointAtPlacementSegment(segment, pending.fraction), segment);
     }
-    pendingSegmentPics = [];
+    builder.pendingSegmentPics = [];
   };
   const flushPendingCircle = (sourceId: string, span: Span): void => {
-    if (!pendingCircleCenter) {
+    if (!builder.pendingCircleCenter) {
       return;
     }
-    const fallbackRadius = pendingCircleRadius ?? (style.radius != null ? { value: style.radius, applyFrameTransform: true } : null);
+    const fallbackRadius = builder.pendingCircleRadius ?? (builder.style.radius != null ? { value: builder.style.radius, applyFrameTransform: true } : null);
     if (fallbackRadius != null) {
       const circleTransform = resolveLengthTransform(
         fallbackRadius.applyFrameTransform,
         frameTransform,
-        statementStyleChain
+        builder.statementStyleChain
       );
-      activePath = emitCircleOrEllipse({
+      builder.activePath = emitCircleOrEllipse({
         geometry: transformCircleGeometry(fallbackRadius.value, circleTransform),
-        center: pendingCircleCenter,
+        center: builder.pendingCircleCenter,
         statementId: statement.id,
         itemId: sourceId,
         span,
-        style,
-        styleChain: statementStyleChain,
-        shouldCompoundFilledSubpaths,
-        activePath,
+        style: builder.style,
+        styleChain: builder.statementStyleChain,
+        shouldCompoundFilledSubpaths: builder.shouldCompoundFilledSubpaths,
+        activePath: builder.activePath,
         geometryElements,
         markFeature
       });
     } else {
-      const fallbackRadii = pendingCircleRadii ?? {
-        rx: { value: style.xRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: true },
-        ry: { value: style.yRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: true }
+      const fallbackRadii = builder.pendingCircleRadii ?? {
+        rx: { value: builder.style.xRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: true },
+        ry: { value: builder.style.yRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: true }
       };
       const ellipseTransform = resolveLengthTransform(
         fallbackRadii.rx.applyFrameTransform || fallbackRadii.ry.applyFrameTransform,
         frameTransform,
-        statementStyleChain
+        builder.statementStyleChain
       );
-      activePath = emitCircleOrEllipse({
+      builder.activePath = emitCircleOrEllipse({
         geometry: {
           kind: "ellipse",
           ...transformEllipseGeometry(
             fallbackRadii.rx.value,
             fallbackRadii.ry.value,
-            pendingCircleRotation,
+            builder.pendingCircleRotation,
             ellipseTransform
           )
         },
-        center: pendingCircleCenter,
+        center: builder.pendingCircleCenter,
         statementId: statement.id,
         itemId: sourceId,
         span,
-        style,
-        styleChain: statementStyleChain,
-        shouldCompoundFilledSubpaths,
-        activePath,
+        style: builder.style,
+        styleChain: builder.statementStyleChain,
+        shouldCompoundFilledSubpaths: builder.shouldCompoundFilledSubpaths,
+        activePath: builder.activePath,
         geometryElements,
         markFeature
       });
     }
-    pendingCircleCenter = null;
-    pendingCircleRadius = null;
-    pendingCircleRadii = null;
-    pendingCircleRotation = 0;
-    lastPlacementSegment = null;
+    builder.pendingCircleCenter = null;
+    builder.pendingCircleRadius = null;
+    builder.pendingCircleRadii = null;
+    builder.pendingCircleRotation = 0;
+    builder.lastPlacementSegment = null;
   };
-  const computeShouldCompoundFilledSubpaths = (candidateStyle: ResolvedStyle): boolean => {
-    const hasFilledShadowLayer = candidateStyle.shadowLayers.some(
-      (layer) => layer.style.shadeEnabled || (layer.style.fill != null && layer.style.fill !== "none")
-    );
-    return candidateStyle.shadeEnabled || (candidateStyle.fill != null && candidateStyle.fill !== "none") || hasFilledShadowLayer;
-  };
-  let shouldCompoundFilledSubpaths = computeShouldCompoundFilledSubpaths(style);
   const drawEdgeOptions = DRAW_EDGE_OPTIONS;
   const everyEdgeOptions = EVERY_EDGE_OPTIONS;
   const edgeFromParentStyleOptions = EDGE_FROM_PARENT_STYLE_OPTIONS;
-  let currentItemIndex = -1;
   const itemHandlers = new Map<PathItem["kind"], (item: PathItem) => void>([
     [
       "PlotOperation",
       (pathItem) => {
         const item = pathItem as PlotOperationItem;
-        const connectFrom = currentOperator === "--" ? context.currentPoint ?? currentPointLogical : null;
+        const connectFrom = builder.currentOperator === "--" ? context.currentPoint ?? builder.currentPointLogical : null;
         const localPlotSettings = applyPlotOptionLists(
-          { ...plotSettings },
+          { ...builder.plotSettings },
           item.options ? [item.options] : [],
-          treeFrameState.macroBindings
+          builder.treeFrameState.macroBindings
         );
 
         if (item.mode === "coordinates") {
@@ -409,7 +457,7 @@ export function evaluatePathStatement(
               item.span.from,
               item.span.to
             );
-            currentOperator = null;
+            builder.currentOperator = null;
             return;
           }
           const points = evaluatePlotCoordinatePoints({
@@ -423,27 +471,27 @@ export function evaluatePathStatement(
             pushDiagnostic,
             evaluateCoordinateRaw: (raw, relativePrefix) => evaluateRawCoordinate(raw, context, relativePrefix)
           });
-          activePath = flushDrawableActivePath(geometryElements, activePath);
+          builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
           const emitted = emitPlotPath({
             statementId: statement.id,
             item,
             points,
             settings: localPlotSettings,
             connectFrom,
-            style,
-            styleChain: statementStyleChain,
+            style: builder.style,
+            styleChain: builder.statementStyleChain,
             geometryElements,
             markFeature,
-            activeRoundedCorners,
+            activeRoundedCorners: builder.activeRoundedCorners,
             setCurrentPoint: (point) => { setCurrentPoint(point); },
             setPathStartPoint: (point) => {
               context.pathStartPoint = point;
             }
           });
-          lastPlacementSegment = emitted.lastPlacementSegment;
-          previousSegmentRoundedCorners = emitted.previousSegmentRoundedCorners;
+          builder.lastPlacementSegment = emitted.lastPlacementSegment;
+          builder.previousSegmentRoundedCorners = emitted.previousSegmentRoundedCorners;
           markFeature("plot_operation", "supported");
-          currentOperator = null;
+          builder.currentOperator = null;
           return;
         }
 
@@ -451,7 +499,7 @@ export function evaluatePathStatement(
           const expressionRaw = item.dataRaw?.trim() ?? "";
           if (expressionRaw.length === 0) {
             pushDiagnostic("invalid-plot-expression", "Plot expression requires a coordinate expression.", item.span.from, item.span.to);
-            currentOperator = null;
+            builder.currentOperator = null;
             return;
           }
 
@@ -460,7 +508,7 @@ export function evaluatePathStatement(
             consumerStatementId: statement.id,
             expressionRaw,
             settings: localPlotSettings,
-            macroBindings: treeFrameState.macroBindings
+            macroBindings: builder.treeFrameState.macroBindings
           });
 
           const points = evaluatePlotCoordinatePoints({
@@ -476,30 +524,30 @@ export function evaluatePathStatement(
           });
           if (points.length === 0) {
             pushDiagnostic("invalid-plot-expression", "Plot expression did not produce any valid coordinate points.", item.span.from, item.span.to);
-            currentOperator = null;
+            builder.currentOperator = null;
             return;
           }
-          activePath = flushDrawableActivePath(geometryElements, activePath);
+          builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
           const emitted = emitPlotPath({
             statementId: statement.id,
             item,
             points,
             settings: localPlotSettings,
             connectFrom,
-            style,
-            styleChain: statementStyleChain,
+            style: builder.style,
+            styleChain: builder.statementStyleChain,
             geometryElements,
             markFeature,
-            activeRoundedCorners,
+            activeRoundedCorners: builder.activeRoundedCorners,
             setCurrentPoint: (point) => { setCurrentPoint(point); },
             setPathStartPoint: (point) => {
               context.pathStartPoint = point;
             }
           });
-          lastPlacementSegment = emitted.lastPlacementSegment;
-          previousSegmentRoundedCorners = emitted.previousSegmentRoundedCorners;
+          builder.lastPlacementSegment = emitted.lastPlacementSegment;
+          builder.previousSegmentRoundedCorners = emitted.previousSegmentRoundedCorners;
           markFeature("plot_operation", "supported");
-          currentOperator = null;
+          builder.currentOperator = null;
           return;
         }
 
@@ -511,7 +559,7 @@ export function evaluatePathStatement(
             item.span.from,
             item.span.to
           );
-          currentOperator = null;
+          builder.currentOperator = null;
           return;
         }
 
@@ -522,7 +570,7 @@ export function evaluatePathStatement(
           item.span.from,
           item.span.to
         );
-        currentOperator = null;
+        builder.currentOperator = null;
       }
     ],
     [
@@ -587,7 +635,7 @@ export function evaluatePathStatement(
           });
         }
 
-        const sizeAwarePoints = resolveSizeAwareGraphNodePoints(runtimeGraphNodes, graphStatement, context, style);
+        const sizeAwarePoints = resolveSizeAwareGraphNodePoints(runtimeGraphNodes, graphStatement, context, builder.style);
         for (const runtimeNode of runtimeGraphNodes) {
           const defaultPoint = sizeAwarePoints.get(runtimeNode.nodeIndex) ?? runtimeNode.defaultPoint;
           const evaluatedNode = withDependencySource(context, graphStatement.id, () =>
@@ -595,14 +643,14 @@ export function evaluatePathStatement(
               runtimeNode.syntheticNode,
               graphStatement,
               context,
-              style,
+              builder.style,
               markFeature,
               pushDiagnostic,
               null,
               undefined,
               undefined,
               defaultPoint,
-              statementStyleChain
+              builder.statementStyleChain
             )
           );
           plannedBehindNodeElements.push(...evaluatedNode.behindElements);
@@ -708,12 +756,12 @@ export function evaluatePathStatement(
 
           const resolvedEdgeStyle = withDependencySource(context, graphStatement.id, () =>
             resolveContextDelta(
-              style,
+              builder.style,
               frameTransform,
               edgeOptionLayers,
               frame.customStyles,
               (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
-              statementStyleChain,
+              builder.statementStyleChain,
               (raw) => resolveContextColorAliasValue(context, raw)
             )
           );
@@ -748,86 +796,86 @@ export function evaluatePathStatement(
         markFeature("graph_operation", "supported");
         behindNodeElements.push(...plannedBehindNodeElements);
         frontNodeElements.push(...edgeElements, ...plannedFrontNodeElements);
-        currentOperator = null;
+        builder.currentOperator = null;
       }
     ],
     [
       "PathOption",
       (pathItem) => {
         const item = pathItem as Extract<PathItem, { kind: "PathOption" }>;
-        const expandedOptions = expandOptionListMacros([item.options], treeFrameState.macroBindings, context.macroTraceCollector ?? undefined)[0] ?? item.options;
+        const expandedOptions = expandOptionListMacros([item.options], builder.treeFrameState.macroBindings, context.macroTraceCollector ?? undefined)[0] ?? item.options;
         const expandedItem = expandedOptions === item.options ? item : { ...item, options: expandedOptions };
-        if (pendingCircleCenter) {
-          const parsed = extractCircleShapeOptions(expandedItem, treeFrameState.macroBindings, context.macroTraceCollector ?? undefined);
+        if (builder.pendingCircleCenter) {
+          const parsed = extractCircleShapeOptions(expandedItem, builder.treeFrameState.macroBindings, context.macroTraceCollector ?? undefined);
           if (parsed.radius != null) {
-            pendingCircleRadius = parsed.radius;
-            pendingCircleRadii = null;
+            builder.pendingCircleRadius = parsed.radius;
+            builder.pendingCircleRadii = null;
           } else if (parsed.rx != null && parsed.ry != null) {
-            pendingCircleRadius = null;
-            pendingCircleRadii = { rx: parsed.rx, ry: parsed.ry };
+            builder.pendingCircleRadius = null;
+            builder.pendingCircleRadii = { rx: parsed.rx, ry: parsed.ry };
           }
           if (parsed.rotation != null) {
-            pendingCircleRotation = parsed.rotation;
+            builder.pendingCircleRotation = parsed.rotation;
           }
         }
 
-        if (pendingEllipseCenter) {
-          pendingEllipseRadii = extractEllipseRadii(
+        if (builder.pendingEllipseCenter) {
+          builder.pendingEllipseRadii = extractEllipseRadii(
             expandedItem,
             pushDiagnostic,
-            treeFrameState.macroBindings,
+            builder.treeFrameState.macroBindings,
             context.macroTraceCollector ?? undefined
           );
         }
 
-        if (pendingArc) {
+        if (builder.pendingArc) {
           const arcParams = extractArcParameters(
             expandedItem,
             pushDiagnostic,
-            style,
-            treeFrameState.macroBindings,
+            builder.style,
+            builder.treeFrameState.macroBindings,
             context.macroTraceCollector ?? undefined
           );
           if (arcParams) {
-            let path: ScenePath | null = activePath;
+            let path: ScenePath | null = builder.activePath;
             if (!path) {
-              path = makePath(statement.id, item.id, style, statementStyleChain, item.span);
-              path.commands.push({ kind: "M", to: pendingArc.from });
+              path = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, item.span);
+              path.commands.push({ kind: "M", to: builder.pendingArc.from });
             }
-            const appended = appendArcCommand(path.commands, pendingArc.from, arcParams, frameTransform);
-            activePath = path;
+            const appended = appendArcCommand(path.commands, builder.pendingArc.from, arcParams, frameTransform);
+            builder.activePath = path;
             setCurrentPoint(appended.endpoint);
-            lastPlacementSegment = appended.segment;
-            previousSegmentRoundedCorners = activeRoundedCorners;
+            builder.lastPlacementSegment = appended.segment;
+            builder.previousSegmentRoundedCorners = builder.activeRoundedCorners;
             markFeature("keyword_arc", "supported");
             markFeature("svg_path", "supported");
-            pendingArc = null;
+            builder.pendingArc = null;
           }
         }
 
-        if (pendingGrid) {
+        if (builder.pendingGrid) {
           const parsed = extractGridSteps(
             expandedItem,
             pushDiagnostic,
-            treeFrameState.macroBindings,
-            treeFrameState.transform
+            builder.treeFrameState.macroBindings,
+            builder.treeFrameState.transform
           );
           if (parsed) {
             if (parsed.stepX != null && parsed.stepX >= 0) {
-              pendingGrid.stepX = parsed.stepX;
+              builder.pendingGrid.stepX = parsed.stepX;
             }
             if (parsed.stepY != null && parsed.stepY >= 0) {
-              pendingGrid.stepY = parsed.stepY;
+              builder.pendingGrid.stepY = parsed.stepY;
             }
           }
         }
 
-        const rounded = extractRoundedCorners(expandedOptions, activeRoundedCorners);
+        const rounded = extractRoundedCorners(expandedOptions, builder.activeRoundedCorners);
         if (rounded !== undefined) {
-          activeRoundedCorners = rounded;
+          builder.activeRoundedCorners = rounded;
         }
 
-        const isLeadingPathOption = !sawNonLeadingPathItem;
+        const isLeadingPathOption = !builder.sawNonLeadingPathItem;
         const mirrorsStatementOptions =
           isLeadingPathOption
           && item.span.from === statement.options?.span.from
@@ -841,12 +889,12 @@ export function evaluatePathStatement(
               sourceKind: "path-option-item",
               label: "path option"
             } as const;
-            const optionCustomStyles = cloneCustomStyleRegistry(treeFrameState.customStyles);
-            const optionPicDefinitions = clonePicDefinitionRegistry(treeFrameState.picDefinitions);
+            const optionCustomStyles = cloneCustomStyleRegistry(builder.treeFrameState.customStyles);
+            const optionPicDefinitions = clonePicDefinitionRegistry(builder.treeFrameState.picDefinitions);
             applyPicDefinitionsFromOptionLists(optionPicDefinitions, [expandedOptions], optionSourceRef);
             const optionResolved = resolveContextDelta(
-              treeFrameState.style,
-              treeFrameState.transform,
+              builder.treeFrameState.style,
+              builder.treeFrameState.transform,
               [
                 {
                   kind: "scope",
@@ -856,17 +904,17 @@ export function evaluatePathStatement(
               ],
               optionCustomStyles,
               (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
-              treeFrameState.styleChain,
+              builder.treeFrameState.styleChain,
               (raw) => resolveContextColorAliasValue(context, raw)
             );
             for (const diagnostic of optionResolved.diagnostics) {
               pushStyleDiagnostic(pushDiagnostic, diagnostic, "Path option issue", item.span);
             }
 
-            const optionMeta = resolveFrameMeta(treeFrameState, optionResolved.expandedOptionLists, optionSourceRef);
+            const optionMeta = resolveFrameMeta(builder.treeFrameState, optionResolved.expandedOptionLists, optionSourceRef);
 
-            treeFrameState = {
-              ...treeFrameState,
+            builder.treeFrameState = {
+              ...builder.treeFrameState,
               ...optionMeta,
               style: optionResolved.style,
               styleChain: optionResolved.chain,
@@ -874,21 +922,21 @@ export function evaluatePathStatement(
               customStyles: optionCustomStyles,
               picDefinitions: optionPicDefinitions
             };
-            style = treeFrameState.style;
-            statementStyleChain = treeFrameState.styleChain;
-            if (activePath) {
-              activePath.style = { ...style };
-              activePath.styleChain = cloneStyleChain(statementStyleChain);
+            builder.style = builder.treeFrameState.style;
+            builder.statementStyleChain = builder.treeFrameState.styleChain;
+            if (builder.activePath) {
+              builder.activePath.style = { ...builder.style };
+              builder.activePath.styleChain = cloneStyleChain(builder.statementStyleChain);
             }
-            plotSettings = applyPlotSettingsFromStyleChain(
+            builder.plotSettings = applyPlotSettingsFromStyleChain(
               createDefaultPlotSettings(),
-              treeFrameState.styleChain,
-              treeFrameState.macroBindings
+              builder.treeFrameState.styleChain,
+              builder.treeFrameState.macroBindings
             );
-            shouldCompoundFilledSubpaths = computeShouldCompoundFilledSubpaths(style);
+            builder.shouldCompoundFilledSubpaths = computeShouldCompoundFilledSubpaths(builder.style);
           }
           if (isLeadingPathOption) {
-            leadingToLikeOptions = mergeOptionLists(leadingToLikeOptions, expandedOptions);
+            builder.leadingToLikeOptions = mergeOptionLists(builder.leadingToLikeOptions, expandedOptions);
           }
         }
       }
@@ -897,25 +945,25 @@ export function evaluatePathStatement(
       "Node",
       (pathItem) => {
         const item = pathItem as Extract<PathItem, { kind: "Node" }>;
-        if (currentOperator) {
-          pendingSegmentNodes.push(item);
+        if (builder.currentOperator) {
+          builder.pendingSegmentNodes.push(item);
           return;
         }
-        const adornmentOptions = resolveOptionsForNodeAdornmentPlan(item.options, treeFrameState, context);
+        const adornmentOptions = resolveOptionsForNodeAdornmentPlan(item.options, builder.treeFrameState, context);
         const adornmentPlan = extractNodeAdornmentPlan(adornmentOptions, {
-          quoteMode: treeFrameState.nodeQuotesMode,
-          labelPosition: treeFrameState.labelPosition,
-          pinPosition: treeFrameState.pinPosition,
-          labelDistancePt: treeFrameState.labelDistancePt,
-          pinDistancePt: treeFrameState.pinDistancePt,
-          pinEdgeRaw: treeFrameState.pinEdgeRaw
+          quoteMode: builder.treeFrameState.nodeQuotesMode,
+          labelPosition: builder.treeFrameState.labelPosition,
+          pinPosition: builder.treeFrameState.pinPosition,
+          labelDistancePt: builder.treeFrameState.labelDistancePt,
+          pinDistancePt: builder.treeFrameState.pinDistancePt,
+          pinEdgeRaw: builder.treeFrameState.pinEdgeRaw
         });
-        const declaredNodeName = pendingNodeNameForNodeCommand ?? item.name ?? null;
-        const hasFollowingTreeChildren = hasFollowingChildOperation(statement.items, currentItemIndex + 1);
-        const existingTreeParent = treeParentCandidate;
+        const declaredNodeName = builder.pendingNodeNameForNodeCommand ?? item.name ?? null;
+        const hasFollowingTreeChildren = hasFollowingChildOperation(statement.items, builder.currentItemIndex + 1);
+        const existingTreeParent = builder.treeParentCandidate;
         const synthesizedTreeNodeName: string | null =
           hasFollowingTreeChildren && !declaredNodeName
-            ? makeTreeAutoName(existingTreeParent?.nameRaw ?? null, statement.id, item.id, currentItemIndex + 1, frame.treeLevel)
+            ? makeTreeAutoName(existingTreeParent?.nameRaw ?? null, statement.id, item.id, builder.currentItemIndex + 1, frame.treeLevel)
             : null;
         if (synthesizedTreeNodeName) {
           markFeature("tree_auto_naming", "supported");
@@ -923,45 +971,45 @@ export function evaluatePathStatement(
         const trailingCoordinateRaw = maybeResolveTrailingCoordinateFromNodeName(item.name);
         const synthesizedMainNodeName =
           adornmentPlan.adornments.length > 0 && !declaredNodeName
-            ? `adornment_main_${sanitizeGeneratedNodeName(statement.id)}_${currentItemIndex}`
+            ? `adornment_main_${sanitizeGeneratedNodeName(statement.id)}_${builder.currentItemIndex}`
             : null;
         const forcedMainNodeName: string | undefined =
-          pendingNodeNameForNodeCommand ?? synthesizedMainNodeName ?? synthesizedTreeNodeName ?? undefined;
+          builder.pendingNodeNameForNodeCommand ?? synthesizedMainNodeName ?? synthesizedTreeNodeName ?? undefined;
         const nodeBase = trailingCoordinateRaw ? { ...item, name: undefined } : item;
         const nodeItem = {
           ...nodeBase,
           options: adornmentPlan.mainOptions,
           optionsSpan: adornmentPlan.mainOptions?.span
         };
-        const standaloneNodeDefaultTarget = !hasPathCurrentPoint ? defaultPathOrigin : undefined;
+        const standaloneNodeDefaultTarget = !builder.hasPathCurrentPoint ? defaultPathOrigin : undefined;
         const allowImplicitOriginHandle =
           statement.command === "node"
-          && !hasPathCurrentPoint
+          && !builder.hasPathCurrentPoint
           && !isMatrixNodeOptions(nodeItem.options);
-        const scopedAutoSide = resolveScopedAutoSide(statementStyleChain);
+        const scopedAutoSide = resolveScopedAutoSide(builder.statementStyleChain);
         const nodeOptionsWithScopedAuto =
           scopedAutoSide != null
             ? mergeOptionLists(parseOptionListRaw(`[auto=${scopedAutoSide}]`, item.span.from), nodeItem.options)
             : nodeItem.options;
-        const explicitNodeAtSyntax = hasExplicitNodeAtSyntax(statement.items, currentItemIndex);
-        const explicitNodeAtTarget = explicitNodeAtSyntax ? (currentPointLogical ?? context.currentPoint ?? undefined) : undefined;
+        const explicitNodeAtSyntax = hasExplicitNodeAtSyntax(statement.items, builder.currentItemIndex);
+        const explicitNodeAtTarget = explicitNodeAtSyntax ? (builder.currentPointLogical ?? context.currentPoint ?? undefined) : undefined;
         const resolvedNode = evaluateNodeItem(
           nodeOptionsWithScopedAuto === nodeItem.options ? nodeItem : { ...nodeItem, options: nodeOptionsWithScopedAuto, optionsSpan: nodeOptionsWithScopedAuto?.span },
           statement,
           context,
-          style,
+          builder.style,
           markFeature,
           pushDiagnostic,
-          lastPlacementSegment,
+          builder.lastPlacementSegment,
           forcedMainNodeName,
           undefined,
           explicitNodeAtTarget ?? standaloneNodeDefaultTarget,
-          statementStyleChain,
+          builder.statementStyleChain,
           { allowImplicitOriginHandle, explicitAtSyntax: explicitNodeAtSyntax }
         );
-        pendingNodeNameForNodeCommand = null;
+        builder.pendingNodeNameForNodeCommand = null;
         const edgeStartName = declaredNodeName ?? forcedMainNodeName;
-        pendingEdgeStartCoordinateRaw = edgeStartName ? `(${edgeStartName.trim()})` : null;
+        builder.pendingEdgeStartCoordinateRaw = edgeStartName ? `(${edgeStartName.trim()})` : null;
         behindNodeElements.push(...resolvedNode.behindElements);
         frontNodeElements.push(...resolvedNode.frontElements);
 
@@ -973,7 +1021,7 @@ export function evaluatePathStatement(
             readNamedCoordinate(context, treeParentNameCandidate) ??
             existingTreeParent?.point;
           if (treeParentPoint) {
-            treeParentCandidate = {
+            builder.treeParentCandidate = {
               nameRaw: scopedTreeParentName,
               point: treeParentPoint,
               span: item.span
@@ -996,14 +1044,14 @@ export function evaluatePathStatement(
               materialized.node,
               statement,
               context,
-              style,
+              builder.style,
               markFeature,
               pushDiagnostic,
               null,
               materialized.node.name,
               undefined,
               undefined,
-              statementStyleChain
+              builder.statementStyleChain
             );
             behindNodeElements.push(...resolvedAdornment.behindElements);
             frontNodeElements.push(...resolvedAdornment.frontElements);
@@ -1051,12 +1099,12 @@ export function evaluatePathStatement(
                 });
               }
               const resolvedPinEdgeStyle = resolveContextDelta(
-                style,
+                builder.style,
                 frameTransform,
                 pinEdgeOptionLayers,
                 frame.customStyles,
                 (raw) => evaluateRawCoordinate(raw, context).world,
-                statementStyleChain,
+                builder.statementStyleChain,
                 (raw) => resolveContextColorAliasValue(context, raw)
               );
               for (const diagnostic of resolvedPinEdgeStyle.diagnostics) {
@@ -1124,13 +1172,13 @@ export function evaluatePathStatement(
         if (trailingCoordinateRaw) {
           const trailingCoordinate = evaluateRawCoordinate(trailingCoordinateRaw, context);
           if (trailingCoordinate.world) {
-            if (activePath) {
-              activePath.commands.push({ kind: "M", to: trailingCoordinate.world });
+            if (builder.activePath) {
+              builder.activePath.commands.push({ kind: "M", to: trailingCoordinate.world });
             }
             setCurrentPoint(trailingCoordinate.world);
             context.pathStartPoint = trailingCoordinate.world;
-            lastPlacementSegment = null;
-            previousSegmentRoundedCorners = null;
+            builder.lastPlacementSegment = null;
+            builder.previousSegmentRoundedCorners = null;
           } else {
             for (const code of trailingCoordinate.diagnostics) {
               pushDiagnostic(code, `Node trailing coordinate issue: ${code}`, item.span.from, item.span.to);
@@ -1144,17 +1192,17 @@ export function evaluatePathStatement(
       (pathItem) => {
         const item = pathItem as Extract<PathItem, { kind: "DecorateOperation" }>;
         markFeature("decorate_operation", "supported");
-        activePath = flushDrawableActivePath(geometryElements, activePath);
-        previousSegmentRoundedCorners = null;
-        pendingRectangleFrom = null;
-        pendingCircleCenter = null;
-        pendingCircleRadius = null;
-        pendingCircleRadii = null;
-        pendingCircleRotation = 0;
-        pendingEllipseCenter = null;
-        pendingEllipseRadii = null;
-        pendingArc = null;
-        pendingGrid = null;
+        builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
+        builder.previousSegmentRoundedCorners = null;
+        builder.pendingRectangleFrom = null;
+        builder.pendingCircleCenter = null;
+        builder.pendingCircleRadius = null;
+        builder.pendingCircleRadii = null;
+        builder.pendingCircleRotation = 0;
+        builder.pendingEllipseCenter = null;
+        builder.pendingEllipseRadii = null;
+        builder.pendingArc = null;
+        builder.pendingGrid = null;
 
         const raw = item.subpathRaw.trim();
         const subpathBody = raw.startsWith("{") && raw.endsWith("}") ? raw.slice(1, -1) : raw;
@@ -1191,10 +1239,10 @@ export function evaluatePathStatement(
           return;
         }
 
-        let operationStyle = style;
+        let operationStyle = builder.style;
         if (item.options) {
           const resolvedDecorateOptions = resolveContextDelta(
-            style,
+            builder.style,
             frameTransform,
             [
               {
@@ -1210,7 +1258,7 @@ export function evaluatePathStatement(
             ],
             frame.customStyles,
             (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
-            statementStyleChain,
+            builder.statementStyleChain,
             (raw) => resolveContextColorAliasValue(context, raw)
           );
           operationStyle = {
@@ -1226,11 +1274,11 @@ export function evaluatePathStatement(
           }
         } else {
           operationStyle = {
-            ...style,
+            ...builder.style,
             decoration: {
-              ...style.decoration,
+              ...builder.style.decoration,
               enabled: true,
-              params: { ...style.decoration.params }
+              params: { ...builder.style.decoration.params }
             }
           };
         }
@@ -1262,14 +1310,14 @@ export function evaluatePathStatement(
             return;
           }
 
-          const adornmentOptions = resolveOptionsForNodeAdornmentPlan(item.options, treeFrameState, context);
+          const adornmentOptions = resolveOptionsForNodeAdornmentPlan(item.options, builder.treeFrameState, context);
           const adornmentPlan = extractNodeAdornmentPlan(adornmentOptions, {
-            quoteMode: treeFrameState.nodeQuotesMode,
-            labelPosition: treeFrameState.labelPosition,
-            pinPosition: treeFrameState.pinPosition,
-            labelDistancePt: treeFrameState.labelDistancePt,
-            pinDistancePt: treeFrameState.pinDistancePt,
-            pinEdgeRaw: treeFrameState.pinEdgeRaw
+            quoteMode: builder.treeFrameState.nodeQuotesMode,
+            labelPosition: builder.treeFrameState.labelPosition,
+            pinPosition: builder.treeFrameState.pinPosition,
+            labelDistancePt: builder.treeFrameState.labelDistancePt,
+            pinDistancePt: builder.treeFrameState.pinDistancePt,
+            pinEdgeRaw: builder.treeFrameState.pinEdgeRaw
           });
           if (adornmentPlan.adornments.length === 0) {
             return;
@@ -1288,36 +1336,36 @@ export function evaluatePathStatement(
               materialized.node,
               statement,
               context,
-              style,
+              builder.style,
               markFeature,
               pushDiagnostic,
               null,
               materialized.node.name,
               undefined,
               undefined,
-              statementStyleChain
+              builder.statementStyleChain
             );
             behindNodeElements.push(...resolvedAdornment.behindElements);
             frontNodeElements.push(...resolvedAdornment.frontElements);
           }
         };
 
-        const nextItem = statement.items[currentItemIndex + 1];
-        const nextCoordinate = statement.items[currentItemIndex + 2];
+        const nextItem = statement.items[builder.currentItemIndex + 1];
+        const nextCoordinate = statement.items[builder.currentItemIndex + 2];
         if (nextItem?.kind === "PathKeyword" && nextItem.keyword === "at" && nextCoordinate?.kind === "Coordinate") {
-          pendingNamedCoordinate = { name: parsedName };
+          builder.pendingNamedCoordinate = { name: parsedName };
         } else {
           const placementFraction = resolveNodePositionFraction(item.options);
-          if (placementFraction != null && currentOperator) {
-            pendingSegmentPlacements.push({ name: parsedName, fraction: placementFraction });
+          if (placementFraction != null && builder.currentOperator) {
+            builder.pendingSegmentPlacements.push({ name: parsedName, fraction: placementFraction });
             markFeature("named_coordinates", "supported");
             return;
           }
 
           const capturePoint =
-            placementFraction != null && lastPlacementSegment
-              ? pointAtPlacementSegment(lastPlacementSegment, placementFraction)
-              : currentPointLogical ?? context.currentPoint;
+            placementFraction != null && builder.lastPlacementSegment
+              ? pointAtPlacementSegment(builder.lastPlacementSegment, placementFraction)
+              : builder.currentPointLogical ?? context.currentPoint;
           if (capturePoint) {
             writeNamedCoordinate(context, applyNameScope(parsedName, context), capturePoint);
             emitCoordinateAdornmentLabels(capturePoint);
@@ -1338,12 +1386,12 @@ export function evaluatePathStatement(
       (pathItem) => {
         const item = pathItem as PicOperationItem;
         const placementFraction = resolveNodePositionFraction(item.options);
-        if (placementFraction != null && currentOperator) {
-          pendingSegmentPics.push({ item, fraction: placementFraction });
+        if (placementFraction != null && builder.currentOperator) {
+          builder.pendingSegmentPics.push({ item, fraction: placementFraction });
           return;
         }
 
-        const segment = placementFraction != null ? lastPlacementSegment : null;
+        const segment = placementFraction != null ? builder.lastPlacementSegment : null;
         const explicitPlacement = item.atRaw ? evaluateRawCoordinate(item.atRaw, context, item.atRelativePrefix) : null;
         if (explicitPlacement) {
           for (const code of explicitPlacement.diagnostics) {
@@ -1369,7 +1417,7 @@ export function evaluatePathStatement(
           return;
         }
 
-        const placement = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        const placement = builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
         emitPicOperation(item, placement, null);
       }
     ],
@@ -1381,7 +1429,7 @@ export function evaluatePathStatement(
       "ToOperation",
       (pathItem) => {
         const item = pathItem as ToOperationItem;
-        const toPlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, leadingToLikeOptions));
+        const toPlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, builder.leadingToLikeOptions));
         const toItem: ToOperationItem =
           toPlan.generatedNodes.length > 0
             ? {
@@ -1390,8 +1438,8 @@ export function evaluatePathStatement(
               }
             : toPlan.item;
         let toStartCoordinateRaw: string | null = null;
-        if (currentPointCoordinate) {
-          const namedCoordinate = currentPointCoordinate as { form: string; x: string };
+        if (builder.currentPointCoordinate) {
+          const namedCoordinate = builder.currentPointCoordinate as { form: string; x: string };
           if (namedCoordinate.form === "named") {
             toStartCoordinateRaw = `(${namedCoordinate.x.trim()})`;
           }
@@ -1400,17 +1448,17 @@ export function evaluatePathStatement(
           toItem,
           context,
           statement,
-          style,
-          statementStyleChain,
-          activePath,
-          previousSegmentRoundedCorners,
+          builder.style,
+          builder.statementStyleChain,
+          builder.activePath,
+          builder.previousSegmentRoundedCorners,
           markFeature,
           pushDiagnostic,
           toStartCoordinateRaw
         );
-        activePath = handled.activePath;
+        builder.activePath = handled.activePath;
         if (handled.segment) {
-          lastPlacementSegment = handled.segment;
+          builder.lastPlacementSegment = handled.segment;
         }
         if (handled.segment) {
           for (const pic of toItem.pics ?? []) {
@@ -1421,7 +1469,7 @@ export function evaluatePathStatement(
         behindNodeElements.push(...handled.behindNodeElements);
         frontNodeElements.push(...handled.frontNodeElements);
         if (handled.previousSegmentRoundedCorners !== undefined) {
-          previousSegmentRoundedCorners = handled.previousSegmentRoundedCorners;
+          builder.previousSegmentRoundedCorners = handled.previousSegmentRoundedCorners;
         }
         setCurrentPoint(context.currentPoint);
       }
@@ -1430,7 +1478,7 @@ export function evaluatePathStatement(
       "EdgeOperation",
       (pathItem) => {
         const item = pathItem as EdgeOperationItem;
-        const edgePlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, leadingToLikeOptions));
+        const edgePlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, builder.leadingToLikeOptions));
         const edgeItem: EdgeOperationItem =
           edgePlan.generatedNodes.length > 0
             ? {
@@ -1438,10 +1486,10 @@ export function evaluatePathStatement(
                 nodes: [...(edgePlan.item.nodes ?? []), ...edgePlan.generatedNodes]
               }
             : edgePlan.item;
-        if (!edgeOperationStart) {
-          let coordinateRaw = pendingEdgeStartCoordinateRaw;
-          if (!coordinateRaw && currentPointCoordinate) {
-            const namedCoordinate = currentPointCoordinate as { form: string; x: string };
+        if (!builder.edgeOperationStart) {
+          let coordinateRaw = builder.pendingEdgeStartCoordinateRaw;
+          if (!coordinateRaw && builder.currentPointCoordinate) {
+            const namedCoordinate = builder.currentPointCoordinate as { form: string; x: string };
             if (namedCoordinate.form === "named") {
               coordinateRaw = `(${namedCoordinate.x.trim()})`;
             }
@@ -1460,7 +1508,7 @@ export function evaluatePathStatement(
             pushDiagnostic("edge-without-start", "`edge` operation requires a current point.", item.span.from, item.span.to);
             return;
           }
-          edgeOperationStart = {
+          builder.edgeOperationStart = {
             point: startPoint,
             coordinateRaw
           };
@@ -1504,12 +1552,12 @@ export function evaluatePathStatement(
           });
         }
         const resolvedEdgeStyle = resolveContextDelta(
-          style,
+          builder.style,
           frameTransform,
           edgeOptionLayers,
           frame.customStyles,
           (raw) => evaluateRawCoordinate(raw, context).world,
-          statementStyleChain,
+          builder.statementStyleChain,
           (raw) => resolveContextColorAliasValue(context, raw)
         );
         for (const diagnostic of resolvedEdgeStyle.diagnostics) {
@@ -1528,8 +1576,8 @@ export function evaluatePathStatement(
           resolvedEdgeStyle.chain,
           markFeature,
           pushDiagnostic,
-          edgeOperationStart.point,
-          edgeOperationStart.coordinateRaw
+          builder.edgeOperationStart.point,
+          builder.edgeOperationStart.coordinateRaw
         );
         if (handled.segment) {
           for (const pic of edgeItem.pics ?? []) {
@@ -1567,7 +1615,7 @@ export function evaluatePathStatement(
           markFeature("options_structured", "supported");
         }
 
-        let operationTransform = treeFrameState.transform;
+        let operationTransform = builder.treeFrameState.transform;
         if (item.options) {
           const optionSourceRef = {
             sourceId: item.id,
@@ -1575,10 +1623,10 @@ export function evaluatePathStatement(
             sourceKind: "svg-operation-options",
             label: "svg"
           } as const;
-          const optionCustomStyles = cloneCustomStyleRegistry(treeFrameState.customStyles);
+          const optionCustomStyles = cloneCustomStyleRegistry(builder.treeFrameState.customStyles);
           const optionResolved = resolveContextDelta(
-            style,
-            treeFrameState.transform,
+            builder.style,
+            builder.treeFrameState.transform,
             [
               {
                 kind: "scope",
@@ -1588,7 +1636,7 @@ export function evaluatePathStatement(
             ],
             optionCustomStyles,
             (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
-            statementStyleChain,
+            builder.statementStyleChain,
             (raw) => resolveContextColorAliasValue(context, raw)
           );
           operationTransform = optionResolved.transform;
@@ -1597,9 +1645,9 @@ export function evaluatePathStatement(
           }
         }
 
-        const fallbackStart = applyMatrix(treeFrameState.transform, wp(0, 0));
-        const startPoint = context.currentPoint ?? currentPointLogical ?? fallbackStart;
-        if (!context.currentPoint && !currentPointLogical) {
+        const fallbackStart = applyMatrix(builder.treeFrameState.transform, wp(0, 0));
+        const startPoint = context.currentPoint ?? builder.currentPointLogical ?? fallbackStart;
+        if (!context.currentPoint && !builder.currentPointLogical) {
           setCurrentPoint(startPoint);
         }
 
@@ -1609,29 +1657,29 @@ export function evaluatePathStatement(
           startPoint,
           subpathStartPoint: context.pathStartPoint
         });
-        if (!activePath && parsed.commands.length > 0) {
-          activePath = makePath(statement.id, item.id, style, statementStyleChain, statement.span);
+        if (!builder.activePath && parsed.commands.length > 0) {
+          builder.activePath = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, statement.span);
           if (parsed.commands[0]?.kind !== "M") {
-            activePath.commands.push({ kind: "M", to: startPoint });
+            builder.activePath.commands.push({ kind: "M", to: startPoint });
           }
         }
-        if (activePath && parsed.commands.length > 0) {
-          activePath.commands.push(...parsed.commands);
+        if (builder.activePath && parsed.commands.length > 0) {
+          builder.activePath.commands.push(...parsed.commands);
         }
 
         if (parsed.subpathStartPoint) {
           context.pathStartPoint = parsed.subpathStartPoint;
         }
         setCurrentPoint(parsed.endPoint);
-        currentOperator = null;
-        pendingEdgeStartCoordinateRaw = null;
+        builder.currentOperator = null;
+        builder.pendingEdgeStartCoordinateRaw = null;
 
         if (parsed.lastSegment) {
-          lastPlacementSegment = parsed.lastSegment;
-          previousSegmentRoundedCorners = activeRoundedCorners;
+          builder.lastPlacementSegment = parsed.lastSegment;
+          builder.previousSegmentRoundedCorners = builder.activeRoundedCorners;
         } else {
-          lastPlacementSegment = null;
-          previousSegmentRoundedCorners = null;
+          builder.lastPlacementSegment = null;
+          builder.previousSegmentRoundedCorners = null;
         }
 
         if (parsed.commands.some((command) => command.kind === "L" || command.kind === "C" || command.kind === "A")) {
@@ -1661,13 +1709,13 @@ export function evaluatePathStatement(
 
   for (let index = 0; index < statement.items.length; index += 1) {
     const item = statement.items[index];
-    currentItemIndex = index;
+    builder.currentItemIndex = index;
     if (item.kind !== "PathComment" && item.kind !== "PathOption") {
-      sawNonLeadingPathItem = true;
+      builder.sawNonLeadingPathItem = true;
     }
     if (item.kind !== "EdgeOperation" && item.kind !== "PathComment") {
-      edgeOperationStart = null;
-      pendingEdgeStartCoordinateRaw = null;
+      builder.edgeOperationStart = null;
+      builder.pendingEdgeStartCoordinateRaw = null;
     }
     if (
       item.kind !== "PathComment" &&
@@ -1676,7 +1724,7 @@ export function evaluatePathStatement(
       item.kind !== "Coordinate" &&
       item.kind !== "Node"
     ) {
-      treeParentCandidate = null;
+      builder.treeParentCandidate = null;
     }
 
       if (item.kind === "Coordinate") {
@@ -1684,78 +1732,78 @@ export function evaluatePathStatement(
         continue;
       }
 
-        if (pendingCircleCenter) {
+        if (builder.pendingCircleCenter) {
           const radius = parseCircleRadiusFromCoordinateRaw(expandPathItemRaw(item.raw, context));
           if (radius != null) {
-            const circleTransform = resolveLengthTransform(radius.applyFrameTransform, frameTransform, statementStyleChain);
-            activePath = emitCircleOrEllipse({
+            const circleTransform = resolveLengthTransform(radius.applyFrameTransform, frameTransform, builder.statementStyleChain);
+            builder.activePath = emitCircleOrEllipse({
               geometry: transformCircleGeometry(radius.value, circleTransform),
-              center: pendingCircleCenter,
+              center: builder.pendingCircleCenter,
               statementId: statement.id,
               itemId: item.id,
               span: item.span,
-              style,
-              styleChain: statementStyleChain,
-              shouldCompoundFilledSubpaths,
-              activePath,
+              style: builder.style,
+              styleChain: builder.statementStyleChain,
+              shouldCompoundFilledSubpaths: builder.shouldCompoundFilledSubpaths,
+              activePath: builder.activePath,
               geometryElements,
               markFeature
             });
-            pendingCircleCenter = null;
-            pendingCircleRadius = null;
-            pendingCircleRadii = null;
-            pendingCircleRotation = 0;
+            builder.pendingCircleCenter = null;
+            builder.pendingCircleRadius = null;
+            builder.pendingCircleRadii = null;
+            builder.pendingCircleRotation = 0;
             continue;
           }
           flushPendingCircle(item.id, item.span);
         }
 
-      if (pendingEllipseCenter) {
+      if (builder.pendingEllipseCenter) {
         const parsedRadii = parseEllipseRadiiFromCoordinateRaw(expandPathItemRaw(item.raw, context));
       if (parsedRadii) {
           const ellipseTransform = resolveLengthTransform(
             parsedRadii.rx.applyFrameTransform || parsedRadii.ry.applyFrameTransform,
             frameTransform,
-            statementStyleChain
+            builder.statementStyleChain
           );
           const geometry = transformEllipseGeometry(parsedRadii.rx.value, parsedRadii.ry.value, 0, ellipseTransform);
           markFeature("keyword_ellipse", "supported");
-          activePath = emitCircleOrEllipse({
+          builder.activePath = emitCircleOrEllipse({
             geometry: { kind: "ellipse", ...geometry },
-            center: pendingEllipseCenter,
+            center: builder.pendingEllipseCenter,
             statementId: statement.id,
             itemId: item.id,
             span: item.span,
-            style,
-            styleChain: statementStyleChain,
-            shouldCompoundFilledSubpaths,
-            activePath,
+            style: builder.style,
+            styleChain: builder.statementStyleChain,
+            shouldCompoundFilledSubpaths: builder.shouldCompoundFilledSubpaths,
+            activePath: builder.activePath,
             geometryElements,
             markFeature
           });
-          pendingEllipseCenter = null;
-          pendingEllipseRadii = null;
-          lastPlacementSegment = null;
+          builder.pendingEllipseCenter = null;
+          builder.pendingEllipseRadii = null;
+          builder.lastPlacementSegment = null;
           continue;
         }
       }
 
-      if (pendingArc) {
+      if (builder.pendingArc) {
         const shorthand = parseArcShorthand(expandPathItemRaw(item.raw, context));
         if (shorthand) {
-          let path: ScenePath | null = activePath;
+          let path: ScenePath | null = builder.activePath;
           if (!path) {
-            path = makePath(statement.id, item.id, style, statementStyleChain, item.span);
-            path.commands.push({ kind: "M", to: pendingArc.from });
+            path = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, item.span);
+            path.commands.push({ kind: "M", to: builder.pendingArc.from });
           }
-          const appended = appendArcCommand(path.commands, pendingArc.from, shorthand, frameTransform);
-          activePath = path;
+          const appended = appendArcCommand(path.commands, builder.pendingArc.from, shorthand, frameTransform);
+          builder.activePath = path;
           setCurrentPoint(appended.endpoint);
-          lastPlacementSegment = appended.segment;
-          previousSegmentRoundedCorners = activeRoundedCorners;
+          builder.lastPlacementSegment = appended.segment;
+          builder.previousSegmentRoundedCorners = builder.activeRoundedCorners;
           markFeature("keyword_arc", "supported");
           markFeature("svg_path", "supported");
-          pendingArc = null;
+          builder.pendingArc = null;
           continue;
         }
       }
@@ -1763,12 +1811,12 @@ export function evaluatePathStatement(
       if (
         statement.command === "node" &&
         item.form === "named" &&
-        pendingNodeNameForNodeCommand == null &&
+        builder.pendingNodeNameForNodeCommand == null &&
         shouldCaptureStandaloneNodeNameCoordinate(statement.items, index)
       ) {
         const rawName = item.x.trim();
         if (rawName.length > 0) {
-          pendingNodeNameForNodeCommand = rawName;
+          builder.pendingNodeNameForNodeCommand = rawName;
           markFeature("named_coordinates", "supported");
           continue;
         }
@@ -1777,7 +1825,7 @@ export function evaluatePathStatement(
       if (
         statement.command === "coordinate" &&
         item.form === "named" &&
-        pendingNamedCoordinate == null &&
+        builder.pendingNamedCoordinate == null &&
         shouldCaptureStandaloneNodeNameCoordinate(statement.items, index)
       ) {
         const rawName = item.x.trim();
@@ -1794,9 +1842,9 @@ export function evaluatePathStatement(
 
           const hasExplicitAtTarget = nextMeaningfulItem?.kind === "PathKeyword" && nextMeaningfulItem.keyword === "at";
           if (hasExplicitAtTarget) {
-            pendingNamedCoordinate = { name: rawName };
+            builder.pendingNamedCoordinate = { name: rawName };
           } else {
-            const fallbackPoint = hasPathCurrentPoint ? (currentPointLogical ?? context.currentPoint ?? defaultPathOrigin) : defaultPathOrigin;
+            const fallbackPoint = builder.hasPathCurrentPoint ? (builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin) : defaultPathOrigin;
             writeNamedCoordinate(context, applyNameScope(rawName, context), fallbackPoint);
             if (!context.currentPoint) {
               setCurrentPoint(fallbackPoint, fallbackPoint, {
@@ -1812,7 +1860,7 @@ export function evaluatePathStatement(
       }
 
       const evaluated: EvaluatedCoordinate =
-        evaluateTurnCoordinate(item, currentPointLogical ?? context.currentPoint, frameTransform, lastPlacementSegment) ??
+        evaluateTurnCoordinate(item, builder.currentPointLogical ?? context.currentPoint, frameTransform, builder.lastPlacementSegment) ??
         evaluateCoordinate(item, context);
       const handleKind = statement.command === "node" ? "node-position" : "path-point";
       const rewriteTargetHandleId =
@@ -1829,7 +1877,7 @@ export function evaluatePathStatement(
       if (!evaluated.world) {
         continue;
       }
-      treeParentCandidate = {
+      builder.treeParentCandidate = {
         nameRaw:
           item.form === "named" && !item.x.includes(".") && item.x.trim().length > 0
             ? item.x.trim()
@@ -1838,28 +1886,28 @@ export function evaluatePathStatement(
         span: item.span
       };
 
-      if (pendingNamedCoordinate) {
-        const scopedName = applyNameScope(pendingNamedCoordinate.name, context);
+      if (builder.pendingNamedCoordinate) {
+        const scopedName = applyNameScope(builder.pendingNamedCoordinate.name, context);
         writeNamedCoordinate(context, scopedName, evaluated.world);
         if (handle && handle.rewriteMode !== "unsupported" && !handle.rewriteTargetHandleId) {
           context.namedCoordinateRewriteHandles.set(scopedName, handle.id);
         }
-        pendingNamedCoordinate = null;
+        builder.pendingNamedCoordinate = null;
       }
 
-      if (pendingGrid) {
+      if (builder.pendingGrid) {
         markFeature("keyword_grid", "supported");
         markFeature("svg_path", "supported");
         geometryElements.push(
           ...makeGridElements(
             statement.id,
             item.id,
-            pendingGrid.from,
+            builder.pendingGrid.from,
             evaluated.world,
-              pendingGrid.stepX,
-              pendingGrid.stepY,
-              style,
-              statementStyleChain,
+              builder.pendingGrid.stepX,
+              builder.pendingGrid.stepY,
+              builder.style,
+              builder.statementStyleChain,
               item.span,
               frameTransform
             )
@@ -1868,38 +1916,38 @@ export function evaluatePathStatement(
           form: item.form,
           x: item.x
         });
-        pendingGrid = null;
+        builder.pendingGrid = null;
         continue;
       }
 
-      if (pendingRectangleFrom) {
+      if (builder.pendingRectangleFrom) {
         markFeature("shape_rectangle", "supported");
-        if (shouldCompoundFilledSubpaths) {
-          activePath = ensurePathForSubpath(activePath, statement.id, item.id, style, statementStyleChain, item.span);
-          markPathShapeHint(activePath, "rectangle");
-          appendRectangleSubpath(activePath.commands, pendingRectangleFrom, evaluated.world, activeRoundedCorners, frameTransform);
+        if (builder.shouldCompoundFilledSubpaths) {
+          builder.activePath = ensurePathForSubpath(builder.activePath, statement.id, item.id, builder.style, builder.statementStyleChain, item.span);
+          markPathShapeHint(builder.activePath, "rectangle");
+          appendRectangleSubpath(builder.activePath.commands, builder.pendingRectangleFrom, evaluated.world, builder.activeRoundedCorners, frameTransform);
         } else {
           geometryElements.push(
             makeRectangleElement(
               statement.id,
               item.id,
-                pendingRectangleFrom,
+                builder.pendingRectangleFrom,
                 evaluated.world,
-                style,
-                statementStyleChain,
+                builder.style,
+                builder.statementStyleChain,
                 item.span,
-                activeRoundedCorners,
+                builder.activeRoundedCorners,
                 frameTransform
             )
           );
         }
-        lastPlacementSegment = {
+        builder.lastPlacementSegment = {
           kind: "line",
-          from: pendingRectangleFrom,
+          from: builder.pendingRectangleFrom,
           to: evaluated.world
         };
         markFeature("svg_path", "supported");
-        pendingRectangleFrom = null;
+        builder.pendingRectangleFrom = null;
         setCurrentPoint(evaluated.world, evaluated.world, {
           form: item.form,
           x: item.x
@@ -1912,70 +1960,70 @@ export function evaluatePathStatement(
         form: item.form,
         x: item.x
       };
-      const sourceLogicalPoint = currentPointLogical ?? context.currentPoint;
-      const hasOperatorSegment = currentOperator != null && context.currentPoint != null && sourceLogicalPoint != null;
+      const sourceLogicalPoint = builder.currentPointLogical ?? context.currentPoint;
+      const hasOperatorSegment = builder.currentOperator != null && context.currentPoint != null && sourceLogicalPoint != null;
       // For -| and |- operators, compute border intersections using the bend point
       // direction rather than the direct source→target direction.
       // -| means horizontal-then-vertical: bend at (target.x, source.y)
       // |- means vertical-then-horizontal: bend at (source.x, target.y)
-      const sourceBorderRef = hasOperatorSegment && currentOperator === "-|"
+      const sourceBorderRef = hasOperatorSegment && builder.currentOperator === "-|"
         ? wp(evaluated.world.x, sourceLogicalPoint.y)
-        : hasOperatorSegment && currentOperator === "|-"
+        : hasOperatorSegment && builder.currentOperator === "|-"
           ? wp(sourceLogicalPoint.x, evaluated.world.y)
           : evaluated.world;
-      const targetBorderRef = hasOperatorSegment && currentOperator === "-|"
+      const targetBorderRef = hasOperatorSegment && builder.currentOperator === "-|"
         ? wp(evaluated.world.x, sourceLogicalPoint.y)
-        : hasOperatorSegment && currentOperator === "|-"
+        : hasOperatorSegment && builder.currentOperator === "|-"
           ? wp(sourceLogicalPoint.x, evaluated.world.y)
           : sourceLogicalPoint;
       const pathSourcePoint = hasOperatorSegment
-        ? currentPointCoordinate
-          ? maybeResolveNamedCoordinateBorderPoint(currentPointCoordinate, sourceLogicalPoint, sourceBorderRef, context)
+        ? builder.currentPointCoordinate
+          ? maybeResolveNamedCoordinateBorderPoint(builder.currentPointCoordinate, sourceLogicalPoint, sourceBorderRef, context)
           : sourceLogicalPoint
         : null;
       const pathTargetPoint = hasOperatorSegment
         ? maybeResolveNamedCoordinateBorderPoint(item, evaluated.world, targetBorderRef, context)
         : evaluated.world;
       const advancedPoint = hasOperatorSegment ? pathTargetPoint : evaluated.world;
-      if (!hasOperatorSegment && pendingSegmentPlacements.length > 0) {
-        for (const pending of pendingSegmentPlacements) {
+      if (!hasOperatorSegment && builder.pendingSegmentPlacements.length > 0) {
+        for (const pending of builder.pendingSegmentPlacements) {
           writeNamedCoordinate(context, applyNameScope(pending.name, context), evaluated.world);
         }
-        pendingSegmentPlacements = [];
+        builder.pendingSegmentPlacements = [];
       }
 
-      if (!activePath) {
-        activePath = makePath(statement.id, item.id, style, statementStyleChain, statement.span);
+      if (!builder.activePath) {
+        builder.activePath = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, statement.span);
         if (hasOperatorSegment && pathSourcePoint) {
-          activePath.commands.push({ kind: "M", to: pathSourcePoint });
+          builder.activePath.commands.push({ kind: "M", to: pathSourcePoint });
           const appended = appendPathPoint(
-            activePath.commands,
-            currentOperator,
+            builder.activePath.commands,
+            builder.currentOperator,
             pathSourcePoint,
             pathTargetPoint,
-            previousSegmentRoundedCorners,
-            activeRoundedCorners
+            builder.previousSegmentRoundedCorners,
+            builder.activeRoundedCorners
           );
-          lastPlacementSegment = appended.segment;
+          builder.lastPlacementSegment = appended.segment;
           flushPendingSegmentNodes(appended.segment);
           flushPendingSegmentPlacements(appended.segment);
           flushPendingSegmentPics(appended.segment);
-          previousSegmentRoundedCorners = appended.nextRoundedCorners;
+          builder.previousSegmentRoundedCorners = appended.nextRoundedCorners;
           context.pathStartPoint = pathSourcePoint;
         } else {
-          activePath.commands.push({ kind: "M", to: pathTargetPoint });
+          builder.activePath.commands.push({ kind: "M", to: pathTargetPoint });
           context.pathStartPoint = pathTargetPoint;
-          lastPlacementSegment = null;
-          previousSegmentRoundedCorners = null;
+          builder.lastPlacementSegment = null;
+          builder.previousSegmentRoundedCorners = null;
         }
         markFeature("svg_path", "supported");
-      } else if (!currentOperator) {
-        activePath.commands.push({ kind: "M", to: pathTargetPoint });
+      } else if (!builder.currentOperator) {
+        builder.activePath.commands.push({ kind: "M", to: pathTargetPoint });
         context.pathStartPoint = pathTargetPoint;
-        lastPlacementSegment = null;
-        previousSegmentRoundedCorners = null;
+        builder.lastPlacementSegment = null;
+        builder.previousSegmentRoundedCorners = null;
       } else if (hasOperatorSegment && pathSourcePoint) {
-        const lastCommand = activePath.commands[activePath.commands.length - 1];
+        const lastCommand = builder.activePath.commands[builder.activePath.commands.length - 1];
         if (lastCommand?.kind === "M") {
           lastCommand.to = pathSourcePoint;
           context.pathStartPoint = pathSourcePoint;
@@ -1985,50 +2033,50 @@ export function evaluatePathStatement(
               ? lastCommand.to
               : null;
           if (!lastPoint || !pointsClose(lastPoint, pathSourcePoint)) {
-            activePath.commands.push({ kind: "M", to: pathSourcePoint });
+            builder.activePath.commands.push({ kind: "M", to: pathSourcePoint });
             context.pathStartPoint = pathSourcePoint;
           }
         }
         const appended = appendPathPoint(
-          activePath.commands,
-          currentOperator,
+          builder.activePath.commands,
+          builder.currentOperator,
           pathSourcePoint,
           pathTargetPoint,
-          previousSegmentRoundedCorners,
-          activeRoundedCorners
+          builder.previousSegmentRoundedCorners,
+          builder.activeRoundedCorners
         );
-        lastPlacementSegment = appended.segment;
+        builder.lastPlacementSegment = appended.segment;
         flushPendingSegmentNodes(appended.segment);
         flushPendingSegmentPlacements(appended.segment);
         flushPendingSegmentPics(appended.segment);
-        previousSegmentRoundedCorners = appended.nextRoundedCorners;
+        builder.previousSegmentRoundedCorners = appended.nextRoundedCorners;
       } else {
-        activePath.commands.push({ kind: "M", to: pathTargetPoint });
+        builder.activePath.commands.push({ kind: "M", to: pathTargetPoint });
         context.pathStartPoint = pathTargetPoint;
-        lastPlacementSegment = null;
-        previousSegmentRoundedCorners = null;
+        builder.lastPlacementSegment = null;
+        builder.previousSegmentRoundedCorners = null;
       }
 
       const shouldAdvancePoint = item.relativePrefix ? item.relativePrefix === "++" : true;
       if (shouldAdvancePoint) {
         setCurrentPoint(advancedPoint, evaluated.world, coordinateRef);
       } else if (context.currentPoint) {
-        setCurrentPoint(context.currentPoint, advancedPoint, currentPointCoordinate);
+        setCurrentPoint(context.currentPoint, advancedPoint, builder.currentPointCoordinate);
       }
       if (!context.currentPoint) {
         setCurrentPoint(advancedPoint, evaluated.world, coordinateRef);
       }
-      currentOperator = null;
+      builder.currentOperator = null;
       continue;
     }
 
       if (item.kind === "PathKeyword") {
-        if (pendingCircleCenter) {
+        if (builder.pendingCircleCenter) {
           flushPendingCircle(item.id, item.span);
         }
 
       if (item.keyword === "--" || item.keyword === "-|" || item.keyword === "|-") {
-        currentOperator = item.keyword;
+        builder.currentOperator = item.keyword;
         markFeature("path_operators_basic", "supported");
         continue;
       }
@@ -2046,15 +2094,15 @@ export function evaluatePathStatement(
           continue;
         }
 
-        if (!activePath) {
+        if (!builder.activePath) {
           if (!context.currentPoint) {
             markFeature("path_operator_curves", "unsupported");
             pushDiagnostic("curve-without-start", "Curve operator requires a current point.", item.span.from, item.span.to);
             index = parsedCurve.consumedIndex;
             continue;
           }
-          activePath = makePath(statement.id, item.id, style, statementStyleChain, statement.span);
-          activePath.commands.push({ kind: "M", to: context.currentPoint });
+          builder.activePath = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, statement.span);
+          builder.activePath.commands.push({ kind: "M", to: context.currentPoint });
           context.pathStartPoint = context.pathStartPoint ?? context.currentPoint;
           markFeature("svg_path", "supported");
         }
@@ -2105,7 +2153,7 @@ export function evaluatePathStatement(
         addCurveHandle(parsedCurve.endCoordinate, parsedCurve.endEvaluation, "path-point");
 
         const curveFrom = context.currentPoint;
-        activePath.commands.push({
+        builder.activePath.commands.push({
           kind: "C",
           c1: parsedCurve.control1,
           c2: parsedCurve.control2,
@@ -2122,9 +2170,9 @@ export function evaluatePathStatement(
               }
             : null;
         if (curveSegment) {
-          lastPlacementSegment = curveSegment;
+          builder.lastPlacementSegment = curveSegment;
         }
-        previousSegmentRoundedCorners = activeRoundedCorners;
+        builder.previousSegmentRoundedCorners = builder.activeRoundedCorners;
         markFeature("path_operator_curves", "supported");
         markFeature("keyword_controls", "supported");
         if (parsedCurve.usedAnd) {
@@ -2137,14 +2185,14 @@ export function evaluatePathStatement(
             node,
             statement,
             context,
-            style,
+            builder.style,
             markFeature,
             pushDiagnostic,
             curveSegment,
             undefined,
             0.5,
             undefined,
-            statementStyleChain
+            builder.statementStyleChain
           );
           behindNodeElements.push(...resolvedNode.behindElements);
           frontNodeElements.push(...resolvedNode.frontElements);
@@ -2154,147 +2202,147 @@ export function evaluatePathStatement(
           setCurrentPoint(parsedCurve.endPoint);
         }
         if (parsedCurve.endClosesPath) {
-          activePath.commands.push({ kind: "Z" });
-          if (hasDrawablePathSegments(activePath)) {
-            geometryElements.push(activePath);
+          builder.activePath.commands.push({ kind: "Z" });
+          if (hasDrawablePathSegments(builder.activePath)) {
+            geometryElements.push(builder.activePath);
           }
-          activePath = null;
-          previousSegmentRoundedCorners = null;
+          builder.activePath = null;
+          builder.previousSegmentRoundedCorners = null;
           if (context.pathStartPoint) {
             setCurrentPoint(context.pathStartPoint);
           }
-          lastPlacementSegment = null;
+          builder.lastPlacementSegment = null;
           markFeature("path_cycle", "supported");
         }
-        currentOperator = null;
+        builder.currentOperator = null;
         index = parsedCurve.consumedIndex;
         continue;
       }
 
       if (item.keyword === "cycle") {
-        if (activePath) {
-          const logicalCurrentPoint = currentPointLogical ?? context.currentPoint;
+        if (builder.activePath) {
+          const logicalCurrentPoint = builder.currentPointLogical ?? context.currentPoint;
           if (logicalCurrentPoint && context.pathStartPoint) {
             const closingFrom = logicalCurrentPoint;
             const pathStart = context.pathStartPoint;
-            const operator: "--" | "-|" | "|-" = currentOperator ?? "--";
+            const operator: "--" | "-|" | "|-" = builder.currentOperator ?? "--";
             const appended = appendPathPoint(
-              activePath.commands,
+              builder.activePath.commands,
               operator,
               closingFrom,
               pathStart,
-              previousSegmentRoundedCorners,
-              activeRoundedCorners
+              builder.previousSegmentRoundedCorners,
+              builder.activeRoundedCorners
             );
-            previousSegmentRoundedCorners = appended.nextRoundedCorners;
+            builder.previousSegmentRoundedCorners = appended.nextRoundedCorners;
             setCurrentPoint(pathStart);
-            roundClosedPathStartCorner(activePath.commands, closingFrom, pathStart, activeRoundedCorners);
+            roundClosedPathStartCorner(builder.activePath.commands, closingFrom, pathStart, builder.activeRoundedCorners);
           }
-          activePath.commands.push({ kind: "Z" });
-          if (shouldCompoundFilledSubpaths) {
-            previousSegmentRoundedCorners = null;
+          builder.activePath.commands.push({ kind: "Z" });
+          if (builder.shouldCompoundFilledSubpaths) {
+            builder.previousSegmentRoundedCorners = null;
           } else {
-            if (hasDrawablePathSegments(activePath)) {
-              geometryElements.push(activePath);
+            if (hasDrawablePathSegments(builder.activePath)) {
+              geometryElements.push(builder.activePath);
             }
-            activePath = null;
-            previousSegmentRoundedCorners = null;
+            builder.activePath = null;
+            builder.previousSegmentRoundedCorners = null;
           }
           markFeature("path_cycle", "supported");
         }
         if (context.pathStartPoint) {
           setCurrentPoint(context.pathStartPoint);
         }
-        lastPlacementSegment = null;
-        currentOperator = null;
+        builder.lastPlacementSegment = null;
+        builder.currentOperator = null;
         continue;
       }
 
       if (item.keyword === "rectangle") {
-        const rectangleStart = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
-        const effectiveRectangleStart = hasPathCurrentPoint ? rectangleStart : defaultPathOrigin;
-        if (!context.currentPoint && !currentPointLogical) {
+        const rectangleStart = builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        const effectiveRectangleStart = builder.hasPathCurrentPoint ? rectangleStart : defaultPathOrigin;
+        if (!context.currentPoint && !builder.currentPointLogical) {
           setCurrentPoint(effectiveRectangleStart);
         }
-        if (!shouldCompoundFilledSubpaths) {
-          activePath = flushDrawableActivePath(geometryElements, activePath);
+        if (!builder.shouldCompoundFilledSubpaths) {
+          builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
         }
-        previousSegmentRoundedCorners = null;
-        pendingRectangleFrom = effectiveRectangleStart;
-        lastPlacementSegment = null;
+        builder.previousSegmentRoundedCorners = null;
+        builder.pendingRectangleFrom = effectiveRectangleStart;
+        builder.lastPlacementSegment = null;
         markFeature("shape_rectangle", "supported");
         continue;
       }
 
       if (item.keyword === "circle") {
-        const circleCenter = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
-        const effectiveCircleCenter = hasPathCurrentPoint ? circleCenter : defaultPathOrigin;
-        if (!context.currentPoint && !currentPointLogical) {
+        const circleCenter = builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        const effectiveCircleCenter = builder.hasPathCurrentPoint ? circleCenter : defaultPathOrigin;
+        if (!context.currentPoint && !builder.currentPointLogical) {
           setCurrentPoint(effectiveCircleCenter);
         }
-        if (!shouldCompoundFilledSubpaths) {
-          activePath = flushDrawableActivePath(geometryElements, activePath);
+        if (!builder.shouldCompoundFilledSubpaths) {
+          builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
         }
-        previousSegmentRoundedCorners = null;
-        pendingCircleCenter = effectiveCircleCenter;
-        pendingCircleRadius = null;
-        pendingCircleRadii = null;
-        pendingCircleRotation = 0;
-        lastPlacementSegment = null;
+        builder.previousSegmentRoundedCorners = null;
+        builder.pendingCircleCenter = effectiveCircleCenter;
+        builder.pendingCircleRadius = null;
+        builder.pendingCircleRadii = null;
+        builder.pendingCircleRotation = 0;
+        builder.lastPlacementSegment = null;
         markFeature("shape_circle", "supported");
         continue;
       }
 
       if (item.keyword === "ellipse") {
-        const ellipseCenter = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
-        const effectiveEllipseCenter = hasPathCurrentPoint ? ellipseCenter : defaultPathOrigin;
-        if (!context.currentPoint && !currentPointLogical) {
+        const ellipseCenter = builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        const effectiveEllipseCenter = builder.hasPathCurrentPoint ? ellipseCenter : defaultPathOrigin;
+        if (!context.currentPoint && !builder.currentPointLogical) {
           setCurrentPoint(effectiveEllipseCenter);
         }
-        if (!shouldCompoundFilledSubpaths) {
-          activePath = flushDrawableActivePath(geometryElements, activePath);
+        if (!builder.shouldCompoundFilledSubpaths) {
+          builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
         }
-        previousSegmentRoundedCorners = null;
-        pendingEllipseCenter = effectiveEllipseCenter;
-        pendingEllipseRadii = null;
-        lastPlacementSegment = null;
+        builder.previousSegmentRoundedCorners = null;
+        builder.pendingEllipseCenter = effectiveEllipseCenter;
+        builder.pendingEllipseRadii = null;
+        builder.lastPlacementSegment = null;
         markFeature("keyword_ellipse", "supported");
         markFeature("shape_ellipse", "supported");
         continue;
       }
 
       if (item.keyword === "arc") {
-        const arcStart = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
-        const effectiveArcStart = hasPathCurrentPoint ? arcStart : defaultPathOrigin;
-        if (!context.currentPoint && !currentPointLogical) {
+        const arcStart = builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        const effectiveArcStart = builder.hasPathCurrentPoint ? arcStart : defaultPathOrigin;
+        if (!context.currentPoint && !builder.currentPointLogical) {
           setCurrentPoint(effectiveArcStart);
         }
-        pendingArc = { from: effectiveArcStart };
-        lastPlacementSegment = null;
+        builder.pendingArc = { from: effectiveArcStart };
+        builder.lastPlacementSegment = null;
         markFeature("keyword_arc", "supported");
         continue;
       }
 
       if (item.keyword === "grid") {
-        const gridStart = currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
-        const effectiveGridStart = hasPathCurrentPoint ? gridStart : defaultPathOrigin;
-        if (!context.currentPoint && !currentPointLogical) {
+        const gridStart = builder.currentPointLogical ?? context.currentPoint ?? defaultPathOrigin;
+        const effectiveGridStart = builder.hasPathCurrentPoint ? gridStart : defaultPathOrigin;
+        if (!context.currentPoint && !builder.currentPointLogical) {
           setCurrentPoint(effectiveGridStart);
         }
-        activePath = flushDrawableActivePath(geometryElements, activePath);
-        previousSegmentRoundedCorners = null;
+        builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
+        builder.previousSegmentRoundedCorners = null;
         const gridStepDefaults = extractGridStepsFromOptionLists(
-          statementStyleChain.flatMap((entry) => entry.rawOptions),
+          builder.statementStyleChain.flatMap((entry) => entry.rawOptions),
           pushDiagnostic,
-          treeFrameState.macroBindings,
-          treeFrameState.transform
+          builder.treeFrameState.macroBindings,
+          builder.treeFrameState.transform
         );
-        pendingGrid = {
+        builder.pendingGrid = {
           from: effectiveGridStart,
-          stepX: gridStepDefaults?.stepX ?? resolveDefaultGridStep(treeFrameState.transform, "x"),
-          stepY: gridStepDefaults?.stepY ?? resolveDefaultGridStep(treeFrameState.transform, "y")
+          stepX: gridStepDefaults?.stepX ?? resolveDefaultGridStep(builder.treeFrameState.transform, "x"),
+          stepY: gridStepDefaults?.stepY ?? resolveDefaultGridStep(builder.treeFrameState.transform, "y")
         };
-        lastPlacementSegment = null;
+        builder.lastPlacementSegment = null;
         continue;
       }
 
@@ -2320,23 +2368,23 @@ export function evaluatePathStatement(
           continue;
         }
 
-        if (!activePath) {
-          activePath = makePath(statement.id, item.id, style, statementStyleChain, statement.span);
-          activePath.commands.push({ kind: "M", to: context.currentPoint });
+        if (!builder.activePath) {
+          builder.activePath = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, statement.span);
+          builder.activePath.commands.push({ kind: "M", to: context.currentPoint });
           context.pathStartPoint = context.pathStartPoint ?? context.currentPoint;
           markFeature("svg_path", "supported");
         }
 
         for (const command of parsed.commands) {
-          activePath.commands.push(command);
+          builder.activePath.commands.push(command);
         }
-        previousSegmentRoundedCorners = activeRoundedCorners;
+        builder.previousSegmentRoundedCorners = builder.activeRoundedCorners;
         const lastCommand = parsed.commands[parsed.commands.length - 1];
         if (lastCommand?.kind === "C") {
           const previousCommand = parsed.commands.length > 1 ? parsed.commands[parsed.commands.length - 2] : null;
           const from = previousCommand?.kind === "C" ? previousCommand.to : context.currentPoint;
           if (from) {
-            lastPlacementSegment = {
+            builder.lastPlacementSegment = {
               kind: "cubic",
               from,
               c1: lastCommand.c1,
@@ -2348,7 +2396,7 @@ export function evaluatePathStatement(
         setCurrentPoint(parsed.endPoint);
         markFeature("svg_path", "supported");
         index = parsed.consumedIndex;
-        currentOperator = null;
+        builder.currentOperator = null;
         continue;
       }
 
@@ -2373,9 +2421,9 @@ export function evaluatePathStatement(
           continue;
         }
 
-        let path: ScenePath | null = activePath;
+        let path: ScenePath | null = builder.activePath;
         if (!path) {
-          path = makePath(statement.id, item.id, style, statementStyleChain, statement.span);
+          path = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, statement.span);
           path.commands.push({ kind: "M", to: context.currentPoint });
           context.pathStartPoint = context.pathStartPoint ?? context.currentPoint;
           markFeature("svg_path", "supported");
@@ -2384,9 +2432,9 @@ export function evaluatePathStatement(
         const from = context.currentPoint;
         const to = maybeResolveNamedCoordinateBorderPoint(targetItem, evaluatedTarget.world, from, context);
         const segment = appendSinCosSegment(path.commands, from, to, item.keyword);
-        activePath = path;
-        lastPlacementSegment = segment;
-        previousSegmentRoundedCorners = activeRoundedCorners;
+        builder.activePath = path;
+        builder.lastPlacementSegment = segment;
+        builder.previousSegmentRoundedCorners = builder.activeRoundedCorners;
         markFeature("path_operator_curves", "supported");
         markFeature("svg_path", "supported");
 
@@ -2402,7 +2450,7 @@ export function evaluatePathStatement(
           });
         }
 
-        currentOperator = null;
+        builder.currentOperator = null;
         index += 1;
         continue;
       }
@@ -2456,8 +2504,8 @@ export function evaluatePathStatement(
       const handled = handleChildOperationCluster({
         statement,
         index,
-        treeParentCandidate,
-        treeFrameState,
+        treeParentCandidate: builder.treeParentCandidate,
+        treeFrameState: builder.treeFrameState,
         context,
         defaultPathOrigin,
         drawEdgeOptions,
@@ -2472,7 +2520,7 @@ export function evaluatePathStatement(
       if (handled.consumed <= 0) {
         continue;
       }
-      treeParentCandidate = handled.treeParentCandidate;
+      builder.treeParentCandidate = handled.treeParentCandidate;
       index += handled.consumed - 1;
       continue;
     }
@@ -2497,54 +2545,54 @@ export function evaluatePathStatement(
     }
   }
 
-  if (pendingCircleCenter) {
+  if (builder.pendingCircleCenter) {
     flushPendingCircle(statement.id, statement.span);
   }
 
-  if (pendingEllipseCenter) {
-    const radii = pendingEllipseRadii ?? {
+  if (builder.pendingEllipseCenter) {
+    const radii = builder.pendingEllipseRadii ?? {
       rx: { value: DEFAULT_GRID_STEP, applyFrameTransform: true },
       ry: { value: DEFAULT_GRID_STEP, applyFrameTransform: true }
     };
     const ellipseTransform = resolveLengthTransform(
       radii.rx.applyFrameTransform || radii.ry.applyFrameTransform,
       frameTransform,
-      statementStyleChain
+      builder.statementStyleChain
     );
     const geometry = transformEllipseGeometry(radii.rx.value, radii.ry.value, 0, ellipseTransform);
-    activePath = emitCircleOrEllipse({
+    builder.activePath = emitCircleOrEllipse({
       geometry: { kind: "ellipse", ...geometry },
-      center: pendingEllipseCenter,
+      center: builder.pendingEllipseCenter,
       statementId: statement.id,
       itemId: statement.id,
       span: statement.span,
-      style,
-      styleChain: statementStyleChain,
-      shouldCompoundFilledSubpaths,
-      activePath,
+      style: builder.style,
+      styleChain: builder.statementStyleChain,
+      shouldCompoundFilledSubpaths: builder.shouldCompoundFilledSubpaths,
+      activePath: builder.activePath,
       geometryElements,
       markFeature
     });
-    lastPlacementSegment = null;
+    builder.lastPlacementSegment = null;
   }
 
-  if (pendingArc) {
+  if (builder.pendingArc) {
     pushDiagnostic("invalid-arc-parameters", "Arc requires either option parameters or shorthand coordinates.", statement.span.from, statement.span.to);
   }
 
-  if (activePath && hasDrawablePathSegments(activePath)) {
-    geometryElements.push(activePath);
+  if (builder.activePath && hasDrawablePathSegments(builder.activePath)) {
+    geometryElements.push(builder.activePath);
   }
 
   const preActionElements: SceneElement[] = [];
   const postActionElements: SceneElement[] = [];
-  for (const preAction of style.decorationPreActions) {
+  for (const preAction of builder.style.decorationPreActions) {
     markFeature("decorate_option", "supported");
     preActionElements.push(
       ...decoratePathElements(geometryElements, preAction, "collect", statement.id, context.mathRandom, markFeature, pushDiagnostic)
     );
   }
-  for (const postAction of style.decorationPostActions) {
+  for (const postAction of builder.style.decorationPostActions) {
     markFeature("decorate_option", "supported");
     postActionElements.push(
       ...decoratePathElements(geometryElements, postAction, "collect", statement.id, context.mathRandom, markFeature, pushDiagnostic)
@@ -2552,11 +2600,11 @@ export function evaluatePathStatement(
   }
 
   let mainGeometry = geometryElements;
-  if (style.decoration.enabled) {
+  if (builder.style.decoration.enabled) {
     markFeature("decorate_option", "supported");
     mainGeometry = decoratePathElements(
       geometryElements,
-      style.decoration,
+      builder.style.decoration,
       "replace",
       statement.id,
       context.mathRandom,
@@ -2568,9 +2616,9 @@ export function evaluatePathStatement(
   const inheritedClipChain = frame.clipChain;
   let outputClipChain = inheritedClipChain;
 
-  if (style.clip) {
+  if (builder.style.clip) {
     markFeature("path_clipping", "supported");
-    const clipPath = buildClipPath(statement, geometryElements, style.fillRule);
+    const clipPath = buildClipPath(statement, geometryElements, builder.style.fillRule);
     if (clipPath) {
       outputClipChain = [...inheritedClipChain, clipPath];
       frame.clipChain = outputClipChain;
@@ -2581,7 +2629,7 @@ export function evaluatePathStatement(
     frame.pictureSizeRelevant = false;
   }
 
-  if (style.useAsBoundingBox) {
+  if (builder.style.useAsBoundingBox) {
     markFeature("use_as_bounding_box", "supported");
     if (currentPathBounds) {
       extendPictureBounds(context, currentPathBounds);
@@ -2591,7 +2639,7 @@ export function evaluatePathStatement(
 
   let statementElements = [...preActionElements, ...behindNodeElements, ...mainGeometry, ...frontNodeElements, ...postActionElements];
   statementElements = attachClipChainToElements(statementElements, outputClipChain);
-  if (!style.clip && !style.useAsBoundingBox && frame.pictureSizeRelevant) {
+  if (!builder.style.clip && !builder.style.useAsBoundingBox && frame.pictureSizeRelevant) {
     extendPictureBounds(context, computeBounds(statementElements));
   }
 

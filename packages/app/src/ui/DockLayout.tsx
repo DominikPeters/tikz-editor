@@ -12,7 +12,7 @@ import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { StylesPanel } from "./StylesPanel";
 import { AssistantPanel } from "./AssistantPanel";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
-import type { SvgRenderModel } from "tikz-editor/svg";
+import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
 

@@ -1,10 +1,10 @@
-import type { Statement } from "tikz-editor/ast/types";
+import type { Statement } from "@tikz-editor/core/ast/types";
 import {
   createIncrementalParseSession,
   type IncrementalParseSession,
   type IncrementalParseStats,
   type ParseTikzResult
-} from "tikz-editor/parser/index";
+} from "@tikz-editor/core/parser/index";
 import {
   collectGeometryInvalidation,
   createIncrementalSemanticSession,
@@ -12,16 +12,16 @@ import {
   type IncrementalSemanticStats,
   type IncrementalSemanticTrigger,
   type EvaluateTikzResult
-} from "tikz-editor/semantic/index";
-import { emitSvg, type EmitSvgOptions, type EmitSvgResult, type SvgRenderModel } from "tikz-editor/svg/index";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import type { EditHandle, SceneFigure } from "tikz-editor/semantic/types";
-import { renderTikzToSvgAsync, type RenderDiagnostic } from "tikz-editor/render/index";
-import type { NodeTextEngine } from "tikz-editor/text/types";
-import type { MathJaxFont } from "tikz-editor/text/mathjax-engine";
-import type { SourcePatch } from "tikz-editor/edit/types";
-import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
-import { recordProfilingComputeTiming } from "tikz-editor/profiling";
+} from "@tikz-editor/core/semantic/index";
+import { emitSvg, type EmitSvgOptions, type EmitSvgResult, type SvgRenderModel } from "@tikz-editor/core/svg/index";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import type { EditHandle, SceneFigure } from "@tikz-editor/core/semantic/types";
+import { renderTikzToSvgAsync, type RenderDiagnostic } from "@tikz-editor/core/render/index";
+import type { NodeTextEngine } from "@tikz-editor/core/text/types";
+import type { MathJaxFont } from "@tikz-editor/core/text/mathjax-engine";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
+import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
+import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
 import { prepareImageAssetResolver } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
@@ -221,6 +221,10 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     const maybeTextEngine = getOptionalTextEngine();
     const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
     phases.textEngine = performance.now() - phaseStartedAt;
+    // Full renders also seed the incremental cache. Route their one semantic
+    // evaluation through the session instead of evaluating again after render.
+    incrementalSemanticSession?.reset();
+    const semanticSession = getIncrementalSemanticSession();
     phaseStartedAt = performance.now();
     const graphicsResolver = await prepareImageAssetResolver({
       source: request.source,
@@ -235,13 +239,17 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         includeContextDefinitions: true
       },
       evaluate: { sourceFingerprint, graphicsResolver },
+      semanticEvaluator: (figure, source, options) =>
+        semanticSession.evaluate({
+          figure,
+          source,
+          options,
+          hints: { trigger: "other" }
+        }).semantic,
       svg: { padding: resolveSvgPadding(request.source, request.activeFigureId) },
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
-    // Non-drag requests currently bypass the incremental session.
-    // Reset to avoid reusing stale cached prefixes on the next drag.
-    incrementalSemanticSession?.reset();
     incrementalWarmSource = request.source;
     phaseStartedAt = performance.now();
     const parseSession = getIncrementalParseSession();
@@ -251,15 +259,6 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       sourceRevision: request.sourceRevision ?? null
     });
     phases.primeParse = performance.now() - phaseStartedAt;
-    phaseStartedAt = performance.now();
-    const semanticSession = getIncrementalSemanticSession();
-    semanticSession.evaluate({
-      figure: result.parse.figure,
-      source: request.source,
-      options: { sourceFingerprint, textEngine, graphicsResolver },
-      hints: { trigger: "other" }
-    });
-    phases.primeSemantic = performance.now() - phaseStartedAt;
     previousSvgModel = result.svg.model;
 
     const snapshot: SessionSnapshot = {
@@ -644,7 +643,7 @@ function getOptionalTextEngine(): NodeTextEngine | null | Promise<NodeTextEngine
     const font = currentMathJaxFont;
     textEnginePromise = (async () => {
       try {
-        const { createMathJaxNodeTextEngine } = await import("tikz-editor/text/mathjax-engine");
+        const { createMathJaxNodeTextEngine } = await import("@tikz-editor/core/text/mathjax-engine");
         return await createMathJaxNodeTextEngine({ font });
       } catch {
         return null;

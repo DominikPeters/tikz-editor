@@ -1,5 +1,6 @@
 import type { MathDelimiterKind, MathSourceSpan } from './sourceParser.js';
 import { extendTeXControlWordPrefixEnd } from '../../prefix-width.js';
+import { clamp } from '../../../utils/math.js';
 
 const TRAILING_ESCAPE_DISCHARGE_SUFFIX = 'phantom{}';
 const MATH_MODE_NONE = 'none';
@@ -42,10 +43,6 @@ export interface MathPrefixCache {
     outputJax: unknown,
     span: MathSourceSpan
   ): Promise<number[]>;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function normalizeIndex(value: number, max: number): number {

@@ -50,10 +50,52 @@ describe("applyEditAction – setProperty", () => {
     }
   });
 
+  it("preserves unrelated inline option spacing when inserting a property", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red,     thick] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected inline option insertion to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[red,     thick, line width=2pt] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
+  it("updates the first duplicate property and removes later duplicates without reflowing siblings", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red,  line width=.4pt,     dashed, line width=.8pt] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected duplicate option update to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[red,  line width=2pt,     dashed] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
   it("preserves comments and multiline formatting when updating command options", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[
-    red, % main color
+    red,     % main color
     thick
   ] (0,0) -- (1,0);
 \end{tikzpicture}`;
@@ -71,7 +113,7 @@ describe("applyEditAction – setProperty", () => {
     }
     expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
   \draw[
-    red, % main color
+    red,     % main color
     thick,
     line width=2pt
   ] (0,0) -- (1,0);
@@ -979,6 +1021,29 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
     expect(result.newSource).toContain("|[draw=red, fill=yellow]| B");
   });
 
+  it("preserves comments and layout in existing matrix-cell option prefixes", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {
+    A & |[draw=red, % keep cell styling
+      thick]| B \\
+  };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "node:0:0:matrix-cell:1:2",
+      level: "command",
+      key: "fill",
+      value: "yellow"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep cell styling");
+    expect(result.newSource).toContain("      thick");
+    expect(result.newSource).toContain("fill=yellow");
+  });
+
   it("normalizes matrix-cell clearKeys while setting a new primary option", () => {
     const source = String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes] {
@@ -1558,6 +1623,35 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
     }
     expect(result.newSource).toContain("child[level distance=5mm]");
     expect(result.newSource).toContain("node[draw] {leaf}");
+  });
+
+  it("preserves unrelated tree-child option trivia", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path node {root}
+    child[level distance=2mm, % keep child layout
+      sibling distance=3mm] { node[draw] {leaf} };
+\end{tikzpicture}`;
+    const rendered = renderTikzToSvg(source);
+    const leafText = rendered.semantic.scene.elements.find(
+      (entry) => entry.kind === "Text" && entry.text === "leaf"
+    );
+    if (!leafText || leafText.kind !== "Text" || !leafText.treeChild) {
+      throw new Error("Expected tree child text element");
+    }
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: leafText.treeChild.childSourceId,
+      level: "command",
+      key: "level distance",
+      value: "5mm"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep child layout");
+    expect(result.newSource).toContain("      sibling distance=3mm");
+    expect(result.newSource).toContain("level distance=5mm");
   });
 
   it("clears existing tree-child layout options", () => {

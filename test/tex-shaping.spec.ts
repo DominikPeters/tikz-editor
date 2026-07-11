@@ -830,9 +830,7 @@ function buildTexDocumentMathHitMapFuzzCase(index: number): TexDocumentMathHitMa
   let body = pickFuzzItem(["Intro", "Before", "Lead", "Start"], random);
 
   const appendSpace = () => {
-    if (!/\s$/.test(body)) {
-      body += " ";
-    }
+    body += /\s$/.test(body) ? "" : " ";
   };
   const appendInlineMath = () => {
     appendSpace();
@@ -2712,8 +2710,8 @@ describe("simple TeX paragraph layout", () => {
     expect(items[0]?.sourceSpan).toEqual({ start: 0, end: 5 });
     expect(items[1]?.sourceSpan?.start).toBe(source.indexOf(String.raw`\unsupportedgraphics`));
     expect(items[2]?.sourceSpan).toEqual({ start: source.indexOf("Beta"), end: source.length });
-    expect(items[0]!.y).toBeLessThan(items[1]!.y);
-    expect(items[1]!.y).toBeLessThan(items[2]!.y);
+    expect(items[0].y).toBeLessThan(items[1].y);
+    expect(items[1].y).toBeLessThan(items[2].y);
 
     const segments = supported.report?.lines.flatMap((line) => line.segments) ?? [];
     const literalSegments = segments.filter((segment) => segment.literal);
@@ -4991,8 +4989,8 @@ describe("simple TeX paragraph layout", () => {
     expect(Number(numeratorSelection.rects[0]?.bounds.maxX)).toBeLessThan(fractionConstruct?.xEnd ?? Number.POSITIVE_INFINITY);
     expectSelectionContainsLineLocalBounds(
       numeratorSelection,
-      report!.lines[0]!,
-      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "1234")
+      report!.lines[0],
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0], sourceText, "1234")
     );
 
     const denominatorSelection = await getKnuthPlassSelectionRects(outputJax, {
@@ -5010,8 +5008,8 @@ describe("simple TeX paragraph layout", () => {
     );
     expectSelectionContainsLineLocalBounds(
       denominatorSelection,
-      report!.lines[0]!,
-      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "98765")
+      report!.lines[0],
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0], sourceText, "98765")
     );
 
     const crossRowSelection = await getKnuthPlassSelectionRects(outputJax, {
@@ -5026,13 +5024,13 @@ describe("simple TeX paragraph layout", () => {
     expect(crossRowSelection.rects).toHaveLength(2);
     expectSelectionContainsLineLocalBounds(
       crossRowSelection,
-      report!.lines[0]!,
-      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "34")
+      report!.lines[0],
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0], sourceText, "34")
     );
     expectSelectionContainsLineLocalBounds(
       crossRowSelection,
-      report!.lines[0]!,
-      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0]!, sourceText, "98")
+      report!.lines[0],
+      renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0], sourceText, "98")
     );
     expect(Math.min(...crossRowSelection.rects.map((rect) => Number(rect.bounds.maxY)))).toBeLessThan(
       Math.max(...crossRowSelection.rects.map((rect) => Number(rect.bounds.minY)))
@@ -5098,7 +5096,7 @@ describe("simple TeX paragraph layout", () => {
     expect(sourceGapSelection.ok).toBe(true);
     expect(sourceGapSelection.rects).toHaveLength(1);
     expect(
-      Number(sourceGapSelection.rects[0]!.bounds.maxY) - Number(sourceGapSelection.rects[0]!.bounds.minY)
+      Number(sourceGapSelection.rects[0].bounds.maxY) - Number(sourceGapSelection.rects[0].bounds.minY)
     ).toBeGreaterThan(4);
   });
 
@@ -5573,7 +5571,7 @@ unordered.`;
     const hit = getKnuthPlassVListItemFromPoint({
       outputJax,
       paragraphId: "tex:display-align-row-hitmap",
-      containerElement: containerElement as any,
+      containerElement: containerElement,
       clientPoint: clientPoint(
         px(((secondRow?.clientLeft ?? 0) + (secondRow?.clientRight ?? 0)) / 2),
         px(((secondRow?.clientTop ?? 0) + (secondRow?.clientBottom ?? 0)) / 2)
@@ -5591,7 +5589,7 @@ unordered.`;
     const snapshot = getKnuthPlassVListGeometrySnapshot({
       outputJax,
       paragraphId: "tex:display-align-row-hitmap",
-      containerElement: containerElement as any,
+      containerElement: containerElement,
     });
     const sourceHit = getKnuthPlassVListSourceHitFromSnapshot({
       snapshot,
@@ -5637,7 +5635,7 @@ unordered.`;
     const snapshot = getKnuthPlassVListGeometrySnapshot({
       outputJax,
       paragraphId: "tex:display-math-caret",
-      containerElement: containerElement as any,
+      containerElement: containerElement,
     });
     const displayItem = snapshot.items.find((item) => item.kind === "display-math");
     expect(displayItem).toBeTruthy();
@@ -5976,7 +5974,7 @@ unordered.`;
       const snapshot = getKnuthPlassVListGeometrySnapshot({
         outputJax,
         paragraphId: testCase.id,
-        containerElement: containerElement as any,
+        containerElement: containerElement,
       });
       const alignRows = snapshot.items.filter((item) => item.hboxRole === "display-align-row");
       expect(alignRows.length, testCase.source).toBe(testCase.rows.length);
@@ -5997,7 +5995,7 @@ unordered.`;
         const hit = getKnuthPlassVListItemFromPoint({
           outputJax,
           paragraphId: testCase.id,
-          containerElement: containerElement as any,
+          containerElement: containerElement,
           clientPoint: clientPoint(
             px((row.clientLeft + row.clientRight) / 2),
             px((row.clientTop + row.clientBottom) / 2)
@@ -6109,7 +6107,7 @@ unordered.`;
       const snapshot = getKnuthPlassVListGeometrySnapshot({
         outputJax,
         paragraphId: testCase.id,
-        containerElement: containerElement as any,
+        containerElement: containerElement,
       });
       expect(snapshot.source, testCase.source).toBe("registered");
       expect(snapshot.paragraphs.length, testCase.source).toBeGreaterThan(0);
@@ -6193,7 +6191,7 @@ unordered.`;
         const hit = getKnuthPlassVListItemFromPoint({
           outputJax,
           paragraphId: testCase.id,
-          containerElement: containerElement as any,
+          containerElement: containerElement,
           clientPoint: clientPoint(
             px((row.clientLeft + row.clientRight) / 2),
             px((row.clientTop + row.clientBottom) / 2)

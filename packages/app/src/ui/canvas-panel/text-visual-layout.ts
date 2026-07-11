@@ -1,4 +1,5 @@
 import { createSourceRenderOffsetMap } from "./text-offset-map";
+import { clampFinite as clamp } from "./geometry";
 
 export type LogicalLineRange = {
   start: number;
@@ -42,13 +43,6 @@ const STRUCTURAL_MATH_COMMANDS = new Set([
   "scriptstyle",
   "scriptscriptstyle"
 ]);
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-  return Math.min(max, Math.max(min, value));
-}
 
 function isEscapedCharacter(text: string, index: number): boolean {
   let slashCount = 0;

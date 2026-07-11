@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, type MutableRefObject, type RefObject } from "react";
-import { viewportPoint as makeViewportPoint, clientPoint, px } from "tikz-editor/coords/index";
+import { viewportPoint as makeViewportPoint, clientPoint, px } from "@tikz-editor/core/coords/index";
 import { clamp, distanceSquared, viewportToSvgPoint } from "./geometry";
 import { resolveToolCreateCurrentWorld } from "./interaction-helpers";
 import type { ClientPoint, SvgPoint, ViewportPoint, WorldPoint } from "../coords/types";
 import type { CanvasTransform } from "../../store/types";
-import type { CanvasSnapshot, DragState, PendingTouchViewport, SourceBoundsMap, StateSetter, ValueSetter } from "./types";
-import type { ResizeFrame } from "./resize-frames";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { CanvasSnapshot, DragState, PendingTouchViewport, StateSetter, ValueSetter } from "./types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 
 export type UseCanvasViewportEffectsArgs = {
   dragRef: MutableRefObject<DragState | null>;
@@ -16,18 +15,10 @@ export type UseCanvasViewportEffectsArgs = {
   setToolCursorWorld: StateSetter<WorldPoint | null>;
   viewportRef: RefObject<HTMLDivElement | null>;
   setViewportSize: StateSetter<{ width: number; height: number }>;
-  canvasTransform: CanvasTransform;
   canvasTransformRef: MutableRefObject<CanvasTransform>;
-  selectedElementIds: ReadonlySet<string>;
-  selectedElementIdsRef: MutableRefObject<ReadonlySet<string>>;
   svgResult: CanvasSnapshot["svg"];
   svgResultRef: MutableRefObject<CanvasSnapshot["svg"]>;
-  fitToContentModeActive: boolean;
   fitToContentModeActiveRef: MutableRefObject<boolean>;
-  sourceBoundsSvg: SourceBoundsMap;
-  sourceBoundsSvgRef: MutableRefObject<SourceBoundsMap>;
-  resizeFramesBySource: ReadonlyMap<string, ResizeFrame | null>;
-  liveResizeFramesRef: MutableRefObject<ReadonlyMap<string, ResizeFrame | null>>;
   previousViewBoxRef: MutableRefObject<SvgViewBox | null>;
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   zoomSpeed: number;
@@ -45,18 +36,10 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     setToolCursorWorld,
     viewportRef,
     setViewportSize,
-    canvasTransform,
     canvasTransformRef,
-    selectedElementIds,
-    selectedElementIdsRef,
     svgResult,
     svgResultRef,
-    fitToContentModeActive,
     fitToContentModeActiveRef,
-    sourceBoundsSvg,
-    sourceBoundsSvgRef,
-    resizeFramesBySource,
-    liveResizeFramesRef,
     previousViewBoxRef,
     dispatchCanvasTransform,
     zoomSpeed,
@@ -118,30 +101,6 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
 
     return () => { observer.disconnect(); };
   }, [setViewportSize, viewportRef]);
-
-  useLayoutEffect(() => {
-    canvasTransformRef.current = canvasTransform;
-  }, [canvasTransform, canvasTransformRef]);
-
-  useEffect(() => {
-    selectedElementIdsRef.current = selectedElementIds;
-  }, [selectedElementIds, selectedElementIdsRef]);
-
-  useEffect(() => {
-    svgResultRef.current = svgResult;
-  }, [svgResult, svgResultRef]);
-
-  useLayoutEffect(() => {
-    fitToContentModeActiveRef.current = fitToContentModeActive;
-  }, [fitToContentModeActive, fitToContentModeActiveRef]);
-
-  useEffect(() => {
-    sourceBoundsSvgRef.current = sourceBoundsSvg;
-  }, [sourceBoundsSvg, sourceBoundsSvgRef]);
-
-  useEffect(() => {
-    liveResizeFramesRef.current = resizeFramesBySource;
-  }, [liveResizeFramesRef, resizeFramesBySource]);
 
   useLayoutEffect(() => {
     if (!svgResult) {

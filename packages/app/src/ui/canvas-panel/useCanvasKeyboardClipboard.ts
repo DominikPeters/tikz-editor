@@ -5,11 +5,11 @@ import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
-import { pt, worldPoint } from "tikz-editor/coords/index";
-import { snapKeyboardNudge, type SnapLine } from "tikz-editor/edit/snapping";
-import type { EditAction } from "tikz-editor/edit/actions";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { snapKeyboardNudge, type SnapLine } from "@tikz-editor/core/edit/snapping";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditorPlatform } from "../../platform/types";
 import type { ToolMode } from "../../store/types";
 import type { WorldPoint } from "../coords/types";
@@ -53,6 +53,7 @@ export type UseCanvasKeyboardClipboardArgs = {
   setContextMenuState: StateSetter<CanvasContextMenuState | null>;
   toolMode: ToolMode;
   finalizePathDraft: (closed: boolean) => void;
+  undoTransientCanvasStep: () => boolean;
   setWarning: StateSetter<string | null>;
   setFreehandDraft: StateSetter<FreehandToolDraft | null>;
   dragRef: MutableRefObject<DragState | null>;
@@ -133,6 +134,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     setContextMenuState,
     toolMode,
     finalizePathDraft,
+    undoTransientCanvasStep,
     setWarning,
     setFreehandDraft,
     dragRef,
@@ -231,6 +233,19 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         finalizePathDraft(false);
         setWarning(null);
         event.preventDefault();
+        return;
+      }
+
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "z" &&
+        undoTransientCanvasStep()
+      ) {
+        setWarning(null);
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -357,7 +372,8 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       snapshot,
       source,
       textEditingSession,
-      toolMode
+      toolMode,
+      undoTransientCanvasStep
     ]
   );
 

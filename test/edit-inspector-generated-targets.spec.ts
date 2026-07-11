@@ -261,7 +261,7 @@ describe("getInspectorDescriptor – generated targets", () => {
     if (updated.kind !== "success") {
       throw new Error("Expected pic template edit to succeed");
     }
-    expect(updated.newSource).toContain(String.raw`\draw[line width=2pt, blue] (0,0) -- (1,0);`);
+    expect(updated.newSource).toContain(String.raw`\draw[line width=2pt,blue] (0,0) -- (1,0);`);
     const rerendered = renderTikzToSvg(updated.newSource);
     const picPaths = rerendered.semantic.scene.elements.filter((entry) => entry.kind === "Path" && entry.origin?.picStack?.length);
     expect(picPaths).toHaveLength(2);

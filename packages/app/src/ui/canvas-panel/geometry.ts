@@ -1,7 +1,10 @@
-import { PT_PER_CM } from "tikz-editor/edit/format";
-import { GRID_MINOR_TARGET_PX } from "tikz-editor/edit/snapping/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { svgPoint, viewportPoint, pt, px } from "tikz-editor/coords/index";
+import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { clamp as clampValue } from "@tikz-editor/core/utils/math";
+export { clamp, distanceSquared } from "@tikz-editor/core/utils/math";
+import { pickGridStepPt } from "@tikz-editor/core/edit/snapping";
+import { GRID_MINOR_TARGET_PX } from "@tikz-editor/core/edit/snapping/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { svgPoint, viewportPoint, pt, px } from "@tikz-editor/core/coords/index";
 import type { CanvasTransform } from "../../store/types";
 import {
   clientToSvg as typedClientToSvg,
@@ -12,7 +15,7 @@ import {
   worldToSvg as typedWorldToSvg
 } from "../coords/convert";
 import type { ClientPoint, SvgPoint, TextRectLocalPoint, ViewportPoint, WorldPoint } from "../coords/types";
-import type { WorldVector } from "tikz-editor/coords/index";
+import type { WorldVector } from "@tikz-editor/core/coords/index";
 
 export type RulerTick = {
   viewportPos: number;
@@ -210,20 +213,8 @@ export function svgToWorldPoint(point: SvgPoint, viewBox: Pick<SvgViewBox, "y" |
   return typedSvgToWorld(point, viewBox as SvgViewBox);
 }
 
-export function pickStepPt(scale: number, targetPixels: number): number {
-  const cmSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
-  const minStepPt = targetPixels / Math.max(scale, 1e-6);
-
-  for (const cmStep of cmSteps) {
-    const pt = cmStep * PT_PER_CM;
-    if (pt >= minStepPt) return pt;
-  }
-
-  return cmSteps[cmSteps.length - 1] * PT_PER_CM;
-}
-
 export function resolveOverlayGridSteps(scale: number, minorTargetPx: number = GRID_MINOR_TARGET_PX): OverlayGridSteps {
-  const minorStep = pickStepPt(scale, minorTargetPx);
+  const minorStep = pickGridStepPt(scale, minorTargetPx);
   return {
     minorStep,
     majorStep: minorStep * OVERLAY_MAJOR_STEP_MULTIPLE
@@ -251,12 +242,12 @@ function formatCm(valueCm: number): string {
   return rounded2.toFixed(2);
 }
 
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+export function clampFinite(value: number, min: number, max: number): number {
+  return Number.isFinite(value) ? clampValue(value, min, max) : min;
 }
 
 export function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
+  return formatNumber(value, { fractionDigits: 4 });
 }
 
 export function resizeCursorForVector(vector: WorldVector): string {
@@ -284,10 +275,4 @@ export function resizeCursorForVector(vector: WorldVector): string {
 
 export function vectorLengthSquared(vector: Pick<WorldPoint, "x" | "y">): number {
   return vector.x * vector.x + vector.y * vector.y;
-}
-
-export function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }

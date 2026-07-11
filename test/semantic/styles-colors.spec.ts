@@ -460,6 +460,32 @@ describe("semantic evaluator / styles and colors", () => {
       ]));
     });
 
+    it("keeps exact key aliases on the same key-value handler paths", () => {
+      const identity = worldTransform(1, 0, 0, 1, 0, 0);
+      const applyOptionEntry = (entry: OptionEntry, style = defaultStyle(), transform = identity): ApplyOutcome => {
+        if (entry.kind !== "kv") {
+          return { style, transform, diagnostics: [] };
+        }
+        return applyKvEntry(entry.key, entry.valueRaw, style, transform, applyOptionEntry);
+      };
+      const apply = (key: string, valueRaw: string) =>
+        applyKvEntry(key, valueRaw, defaultStyle(), identity, applyOptionEntry);
+
+      for (const [canonical, alias, valueRaw] of [
+        ["line cap", "cap", "projecting"],
+        ["line join", "join", "bevel"],
+        ["node font", "font", String.raw`\bfseries\small`],
+        ["shorten <", "shorten <=", "2pt"],
+        ["shorten >", "shorten >=", "3pt"],
+        ["rotate around", "/tikz/rotate around", "{30:(1,2)}"],
+        ["cm", "/tikz/cm", "{1,0,0,1,(1,2)}"],
+        ["decorate", "/tikz/decorate", "true"],
+        ["decoration", "/pgf/decoration", "{name=zigzag,segment length=4pt}"]
+      ]) {
+        expect(apply(alias, valueRaw)).toEqual(apply(canonical, valueRaw));
+      }
+    });
+
     it("resolves pattern and pattern color keys without unsupported-option diagnostics", () => {
       const source = String.raw`\begin{tikzpicture}
     \draw[pattern=grid,pattern color=red] (0,0) rectangle (1,1);
@@ -879,6 +905,31 @@ describe("semantic evaluator / styles and colors", () => {
         expect(circle.style.stroke).toBe("#acacac");
         expect(circle.style.fill).toBeNull();
       }
+    });
+
+    it("inherits custom styles while isolating replacement and append writes between scopes", () => {
+      const source = String.raw`\begin{tikzpicture}
+    \tikzset{shared/.style={draw=red}}
+    \begin{scope}
+      \tikzset{shared/.append style={dashed}}
+      \draw[shared] (0,0) -- (1,0);
+    \end{scope}
+    \begin{scope}
+      \tikzset{shared/.style={draw=blue}}
+      \draw[shared] (0,1) -- (1,1);
+    \end{scope}
+    \draw[shared] (0,2) -- (1,2);
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      const paths = elementsOfKind(result.scene.elements, "Path");
+
+      expect(paths).toHaveLength(3);
+      expect(paths[0]?.style.stroke).toBe("#ff0000");
+      expect(paths[0]?.style.dashArray).toEqual([3, 3]);
+      expect(paths[1]?.style.stroke).toBe("#0000ff");
+      expect(paths[1]?.style.dashArray).not.toEqual([3, 3]);
+      expect(paths[2]?.style.stroke).toBe("#ff0000");
+      expect(paths[2]?.style.dashArray).not.toEqual([3, 3]);
     });
 
     it("applies custom styles defined via \\tikzset, \\tikzstyle, and \\pgfkeys", () => {

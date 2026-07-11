@@ -1,15 +1,14 @@
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { getDockLayoutHandle } from "./DockLayout";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import type { EditAnalysisView } from "tikz-editor/edit/analysis";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { SessionSnapshot } from "../compute";
-import { getSharedEditAnalysisView } from "../edit-analysis-manager";
+import { buildEditParseOptions } from "../edit-parse-options";
 import { getActiveEditorPlatform } from "../platform/current";
+import { isMacLikePlatform } from "./key-labels";
 import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
-import { buildSnapshotEditSourceFingerprint } from "../source-identity";
 import { useEditorStore } from "../store/store";
 import type { DocumentFileRef, EditorAction, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
@@ -87,7 +86,6 @@ type RuntimeInput = {
   source: string;
   activeFigureId: string | null;
   sourceRevision?: number;
-  editAnalysisView: EditAnalysisView | null;
   snapshot: SessionSnapshot;
   toolMode: ToolMode;
   selectedElementIds: ReadonlySet<string>;
@@ -156,7 +154,6 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     source,
     activeFigureId,
     sourceRevision,
-    editAnalysisView,
     snapshot,
     toolMode,
     selectedElementIds,
@@ -210,17 +207,17 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onShowAbout,
     updateCheckBusy
   } = input;
-  const parseOptions = {
+  const parseOptions = buildEditParseOptions({
+    documentId: activeDocumentId,
+    sourceRevision,
+    source,
     activeFigureId,
-    analysisView: editAnalysisView,
-    indentSize: indentSize ?? 2,
-    sourceFingerprint: buildSnapshotEditSourceFingerprint({
-      documentId: activeDocumentId,
-      sourceRevision,
-      sourceLength: source.length,
-      sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
-    })
-  };
+    snapshot,
+    analysis: "shared",
+    overrides: {
+      indentSize: indentSize ?? 2
+    }
+  });
 
   const commandContext = {
     source,
@@ -256,8 +253,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     typeof getActiveEditorPlatform().updates?.relaunch === "function";
   const isMacDesktop =
     getActiveEditorPlatform().id.startsWith("desktop") &&
-    typeof navigator !== "undefined" &&
-    /(mac|iphone|ipad)/i.test(navigator.platform);
+    isMacLikePlatform();
 
   const insertBinding = (mode: ToolMode): CommandBinding => {
     const capability = getToolCapabilityStatus(mode);
@@ -1162,37 +1158,20 @@ export function useEditorCommandRuntime(
   );
   const frozenCommandInputsRef = useRef(liveCommandInputs);
   const snapshotMatchesSource = snapshot.source === source;
-  if (!activeCanvasDragKind && snapshotMatchesSource) {
-    frozenCommandInputsRef.current = liveCommandInputs;
-  }
   const effectiveCommandInputs = activeCanvasDragKind || !snapshotMatchesSource
     ? frozenCommandInputsRef.current
     : liveCommandInputs;
-  const editAnalysisView = useMemo(
-    () =>
-      getSharedEditAnalysisView({
-        documentId: activeDocumentId,
-        sourceRevision: effectiveCommandInputs.sourceRevision,
-        source: effectiveCommandInputs.source,
-        activeFigureId: effectiveCommandInputs.activeFigureId,
-        snapshot: effectiveCommandInputs.snapshot
-      }),
-    [
-      activeDocumentId,
-      effectiveCommandInputs.activeFigureId,
-      effectiveCommandInputs.snapshot,
-      effectiveCommandInputs.source,
-      effectiveCommandInputs.sourceRevision
-    ]
-  );
-
+  useLayoutEffect(() => {
+    if (!activeCanvasDragKind && snapshotMatchesSource) {
+      frozenCommandInputsRef.current = liveCommandInputs;
+    }
+  }, [activeCanvasDragKind, liveCommandInputs, snapshotMatchesSource]);
   return useMemo(
     () =>
       createEditorCommandRuntime({
         source: effectiveCommandInputs.source,
         activeFigureId: effectiveCommandInputs.activeFigureId,
         sourceRevision: effectiveCommandInputs.sourceRevision,
-        editAnalysisView,
         snapshot: effectiveCommandInputs.snapshot,
         toolMode,
         selectedElementIds: effectiveCommandInputs.selectedElementIds,
@@ -1247,7 +1226,6 @@ export function useEditorCommandRuntime(
         onOpenManageWorkspaces: options.onOpenManageWorkspaces
       }),
     [
-      editAnalysisView,
       effectiveCommandInputs,
       toolMode,
       historyIndex,

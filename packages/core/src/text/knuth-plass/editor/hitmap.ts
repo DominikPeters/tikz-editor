@@ -28,6 +28,7 @@ import type {
 } from '../../tex/vlist/types.js';
 import type { TexMathBox } from '../../tex/layout-inline-items.js';
 import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
+import { clamp } from '../../../utils/math.js';
 
 // The core package builds without the DOM lib; keep the editor hit-testing
 // helpers structurally typed so they remain importable in Node-only builds.
@@ -542,34 +543,16 @@ function sameContainerGeometry(
   );
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function invalidParamsResult<T extends ResultBase>(
-  paragraphId: string,
-  base: Omit<T, keyof ResultBase>,
-  message: string
-): T {
-  return {
-    ...(base as object),
-    ok: false,
-    paragraphId,
-    error: {
-      code: 'invalid-params',
-      paragraphId,
-      message,
-    },
-  } as T;
-}
-
-function errorResult<T extends ResultBase>(
-  paragraphId: string,
-  base: Omit<T, keyof ResultBase>,
+type CaretMappingErrorFactory<T extends ResultBase> = (
   code: CaretMappingErrorCode,
   message: string
-): T {
-  return {
+) => T;
+
+function createCaretMappingErrorFactory<T extends ResultBase>(
+  paragraphId: string,
+  base: Omit<T, keyof ResultBase>
+): CaretMappingErrorFactory<T> {
+  return (code, message) => ({
     ...(base as object),
     ok: false,
     paragraphId,
@@ -578,7 +561,7 @@ function errorResult<T extends ResultBase>(
       paragraphId,
       message,
     },
-  } as T;
+  } as T);
 }
 
 function readReportsFromOutputJax(outputJax: unknown): ParagraphLayoutReport[] {
@@ -3659,50 +3642,79 @@ function mapBuildFailureCode(message: string): CaretMappingErrorCode {
   return 'alignment-error';
 }
 
+type HitMapResolution<T extends ResultBase> =
+  | { kind: 'resolved'; hitMap: ParagraphHitMap }
+  | { kind: 'error'; result: T };
+
+async function resolveHitMap<T extends ResultBase>(
+  outputJax: unknown,
+  params: CaretBaseParams,
+  createError: CaretMappingErrorFactory<T>
+): Promise<HitMapResolution<T>> {
+  const { paragraphId, sourceText, containerElement } = params;
+  const { report } = findReportByParagraphId(outputJax, paragraphId);
+  if (!report) {
+    return {
+      kind: 'error',
+      result: createError(
+        'paragraph-not-found',
+        `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
+      ),
+    };
+  }
+
+  let hitMap: ParagraphHitMap;
+  try {
+    hitMap = await getParagraphHitMap(outputJax, report, sourceText, containerElement);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
+    return {
+      kind: 'error',
+      result: createError(mapBuildFailureCode(message), message),
+    };
+  }
+
+  if (!hitMap.lines.length) {
+    return {
+      kind: 'error',
+      result: createError('alignment-error', 'Paragraph hitmap contains no line data.'),
+    };
+  }
+
+  return { kind: 'resolved', hitMap };
+}
+
 export async function getKnuthPlassCaretFromPoint(
   outputJax: unknown,
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<CaretHitResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory<CaretHitResult>(paragraphId, {
+    offset: null,
+    lineIndex: null,
+    kind: null,
+    snappedToMathPrefix: false,
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement || !params.clientPoint) {
-    return invalidParamsResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, and clientPoint.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<CaretHitResult>(
+  const resolution = await resolveHitMap(
+    outputJax,
+    {
       paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
-
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
+  const { hitMap } = resolution;
 
   const line = inferLineByClientPoint(hitMap, params.clientPoint);
   const reportLine = line.reportLine;
@@ -3712,9 +3724,7 @@ export async function getKnuthPlassCaretFromPoint(
   const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathPoint);
   const stop = mathEntry ? stopFromMathCaretEntry(mathEntry) : nearestStopByX(line.stopsByX, linePoint.x);
   if (stop.offset < 0 || stop.offset > params.sourceText.length) {
-    return errorResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
+    return createError(
       'alignment-error',
       `Measured stop offset ${stop.offset} is outside source bounds.`
     );
@@ -3736,93 +3746,41 @@ export async function getKnuthPlassPointFromOffset(
   params: Partial<PointFromOffsetParams> | null | undefined
 ): Promise<CaretPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory<CaretPointResult>(paragraphId, {
+    offset: null,
+    lineIndex: null,
+    lineLocalX: null,
+    clientPoint: null,
+    rotationDeg: null,
+    kind: null,
+    snappedToMathPrefix: false,
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement) {
-    return invalidParamsResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, and offset.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<CaretPointResult>(
+  const resolution = await resolveHitMap(
+    outputJax,
+    {
       paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
-
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
+  const { hitMap } = resolution;
 
   const targetOffset = clamp(Math.floor(params.offset ?? 0), 0, params.sourceText.length);
   const exact = findBestStopForOffset(hitMap.lines, targetOffset);
   const selected = exact ?? findNearestStopForOffset(hitMap.lines, targetOffset);
   if (!selected) {
-    return errorResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
+    return createError(
       'alignment-error',
       `Offset ${targetOffset} has no measured caret stop.`
     );
@@ -3869,61 +3827,31 @@ export async function getKnuthPlassSelectionRects(
   params: Partial<SelectionRectsParams> | null | undefined
 ): Promise<SelectionRectsResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory<SelectionRectsResult>(paragraphId, {
+    startOffset: 0,
+    endOffset: 0,
+    rects: [],
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement) {
-    return invalidParamsResult<SelectionRectsResult>(
-      paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, startOffset, and endOffset.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<SelectionRectsResult>(
+  const resolution = await resolveHitMap(
+    outputJax,
+    {
       paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
-
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<SelectionRectsResult>(
-      paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<SelectionRectsResult>(
-      paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
+  const { hitMap } = resolution;
 
   const start = clamp(Math.floor(params.startOffset ?? 0), 0, params.sourceText.length);
   const end = clamp(Math.floor(params.endOffset ?? 0), 0, params.sourceText.length);
@@ -4022,61 +3950,31 @@ export async function getKnuthPlassLineRangeFromPoint(
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<LineRangeFromPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory<LineRangeFromPointResult>(paragraphId, {
+    lineIndex: null,
+    lineStartOffset: null,
+    lineEndOffset: null,
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement || !params.clientPoint) {
-    return invalidParamsResult<LineRangeFromPointResult>(
-      paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, and clientPoint.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<LineRangeFromPointResult>(
+  const resolution = await resolveHitMap(
+    outputJax,
+    {
       paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
-
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<LineRangeFromPointResult>(
-      paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<LineRangeFromPointResult>(
-      paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
+  const { hitMap } = resolution;
 
   const line = inferLineByClientPoint(hitMap, params.clientPoint);
   const lineStartOffset = clamp(Math.floor(line.minOffset), 0, params.sourceText.length);

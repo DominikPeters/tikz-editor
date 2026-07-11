@@ -1,15 +1,15 @@
 import { useCallback, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { clientPoint as makeClientPoint, px } from "tikz-editor/coords/index";
+import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import {
   resolveTransformInspectorMutationContext,
   resolveTransformInspectorMutationContextFromOptionEntries
-} from "tikz-editor/edit/property-write-builders";
-import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "tikz-editor/edit/snapping";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { EditHandle, SceneElement, ScenePath } from "tikz-editor/semantic/types";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { EditHandle, SceneElement, ScenePath } from "@tikz-editor/core/semantic/types";
 import type { WorldBounds, WorldPoint } from "../coords/types";
-import type { NodeItem } from "tikz-editor/ast/types";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
+import type { NodeItem } from "@tikz-editor/core/ast/types";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToWorldPoint } from "./geometry";
 import { isAdditiveSelectionModifier, isResizeHandleAdditiveSelectionModifier } from "./selection-modifiers";

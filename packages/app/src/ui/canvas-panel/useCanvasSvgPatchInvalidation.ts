@@ -1,7 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
-import { collectGeometryInvalidation } from "tikz-editor/semantic/index";
-import type { SceneElement } from "tikz-editor/semantic/types";
+import { collectGeometryInvalidation } from "@tikz-editor/core/semantic/index";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 
 import type { CanvasDragKind } from "../../store/types";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";

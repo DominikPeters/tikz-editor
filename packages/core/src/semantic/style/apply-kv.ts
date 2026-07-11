@@ -30,6 +30,24 @@ import { parsePatternValue } from "./patterns.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
 import { isPicCodeOptionKey, isPicDefinitionOptionKey } from "../pics/registry.js";
 import type { StyleDiagnosticInput } from "./diagnostics.js";
+
+type KvHandlerContext = {
+  key: string;
+  valueRaw: string;
+  style: ResolvedStyle;
+  transform: WorldTransform;
+  applyOptionEntry: ApplyEntryFn;
+  resolveCoordinate?: (raw: string) => WorldPoint | null;
+  resolveColorAlias?: ColorAliasResolver;
+};
+
+type KvHandler = (context: KvHandlerContext) => ApplyOutcome;
+
+type KvHandlerRegistration = {
+  keys: readonly string[];
+  handle: KvHandler;
+};
+
 function normalizeOptionColor(valueRaw: string, style: ResolvedStyle, resolveColorAlias?: ColorAliasResolver): string {
   const currentColor = style.textColor ?? style.stroke ?? style.fill ?? "black";
   return normalizeColor(valueRaw, { currentColor, resolveAlias: resolveColorAlias });
@@ -44,146 +62,21 @@ export function applyKvEntry(
   resolveCoordinate?: (raw: string) => WorldPoint | null,
   resolveColorAlias?: ColorAliasResolver
 ): ApplyOutcome {
-  if (key === "pic type" || isPicCodeOptionKey(key) || isPicDefinitionOptionKey(key)) {
+  if (isPicCodeOptionKey(key) || isPicDefinitionOptionKey(key)) {
     return { style, transform, diagnostics: [] };
   }
 
-  if (key === "every path/.style" || key === "every path/.append style") {
-    const nested = parseStyleValueAsOptionList(valueRaw);
-    if (!nested) {
-      return { style, transform, diagnostics: [`invalid-style-value:${valueRaw}`] };
-    }
-
-    let nextStyle = style;
-    let nextTransform = transform;
-    const diagnostics: StyleDiagnosticInput[] = [];
-    for (const entry of nested.entries) {
-      const outcome = applyOptionEntry(entry, nextStyle, nextTransform);
-      nextStyle = outcome.style;
-      nextTransform = outcome.transform;
-      diagnostics.push(...outcome.diagnostics);
-    }
-
-    return { style: nextStyle, transform: nextTransform, diagnostics };
-  }
-
-  if (key === "every shadow/.style" || key === "every shadow/.append style") {
-    const nested = parseStyleValueAsOptionList(valueRaw);
-    if (!nested) {
-      return { style, transform, diagnostics: [`invalid-style-value:${valueRaw}`] };
-    }
-
-    const everyShadowStyles = key === "every shadow/.style" ? [nested] : [...style.everyShadowStyles, nested];
-    return { style: { ...style, everyShadowStyles }, transform, diagnostics: [] };
-  }
-
-  if (key === "shadow scale") {
-    const scale = Number(normalizeOptionValue(valueRaw));
-    if (!Number.isFinite(scale)) {
-      return { style, transform, diagnostics: [`invalid-shadow-scale:${valueRaw}`] };
-    }
-    return { style: { ...style, shadowScale: scale }, transform, diagnostics: [] };
-  }
-
-  if (key === "shadow xshift") {
-    const shift = parseLength(valueRaw, "pt");
-    if (shift == null) {
-      return { style, transform, diagnostics: [`invalid-shadow-xshift:${valueRaw}`] };
-    }
-    return { style: { ...style, shadowXShift: shift }, transform, diagnostics: [] };
-  }
-
-  if (key === "shadow yshift") {
-    const shift = parseLength(valueRaw, "pt");
-    if (shift == null) {
-      return { style, transform, diagnostics: [`invalid-shadow-yshift:${valueRaw}`] };
-    }
-    return { style: { ...style, shadowYShift: shift }, transform, diagnostics: [] };
-  }
-
-  if (key === "path fading") {
-    const fading = parseShadowFadeKind(valueRaw);
-    if (!fading) {
-      return { style, transform, diagnostics: [`unsupported-path-fading:${normalizeOptionValue(valueRaw)}`] };
-    }
-    return { style: { ...style, shadowFade: fading }, transform, diagnostics: [] };
-  }
-
-  if (key === "general shadow") {
-    return appendShadowLayers(style, transform, valueRaw, applyOptionEntry, {
-      preset: null,
-      applyEveryShadow: false
-    });
-  }
-
-  if (key === "drop shadow") {
-    return appendShadowLayers(style, transform, valueRaw, applyOptionEntry, {
-      preset: "shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex,opacity=.5,fill=black!50",
-      applyEveryShadow: true
-    });
-  }
-
-  if (key === "copy shadow") {
-    return appendShadowLayers(style, transform, valueRaw, applyOptionEntry, {
-      preset: "shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex",
-      applyEveryShadow: true,
-      copyMainPaint: true
-    });
-  }
-
-  if (key === "double copy shadow") {
-    return appendShadowLayers(style, transform, valueRaw, applyOptionEntry, {
-      preset: "shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex",
-      applyEveryShadow: true,
-      duplicateWithDoubleShift: true,
-      copyMainPaint: true
-    });
-  }
-
-  if (key === "circular drop shadow") {
-    return appendShadowLayers(style, transform, valueRaw, applyOptionEntry, {
-      preset:
-        "shadow scale=1.1,shadow xshift=.3ex,shadow yshift=-.3ex,fill=black,path fading={circle with fuzzy edge 15 percent}",
-      applyEveryShadow: true
-    });
-  }
-
-  if (key === "circular glow") {
-    return appendShadowLayers(style, transform, valueRaw, applyOptionEntry, {
-      preset:
-        "shadow scale=1.25,shadow xshift=0pt,shadow yshift=0pt,fill=black,path fading={circle with fuzzy edge 15 percent}",
-      applyEveryShadow: true
-    });
-  }
-
-  if (key === "decorate" || key === "/tikz/decorate") {
-    const parsed = parseDecorationBoolean(valueRaw);
-    if (parsed == null) {
-      return { style, transform, diagnostics: [`invalid-decorate-flag:${valueRaw}`] };
-    }
-    return {
-      style: {
-        ...style,
-        decoration: {
-          ...style.decoration,
-          enabled: parsed
-        }
-      },
+  const exactHandler = EXACT_KV_HANDLERS.get(key);
+  if (exactHandler) {
+    return exactHandler({
+      key,
+      valueRaw,
+      style,
       transform,
-      diagnostics: []
-    };
-  }
-
-  if (key === "decoration" || key === "/pgf/decoration") {
-    const parsed = parseDecorationOptionValue(style.decoration, valueRaw);
-    return {
-      style: {
-        ...style,
-        decoration: parsed.decoration
-      },
-      transform,
-      diagnostics: parsed.diagnostics
-    };
+      applyOptionEntry,
+      resolveCoordinate,
+      resolveColorAlias
+    });
   }
 
   if (key.startsWith("/pgf/decoration/") || key.startsWith("/pgf/decorations/")) {
@@ -197,661 +90,6 @@ export function applyKvEntry(
       transform,
       diagnostics: parsed.diagnostics
     };
-  }
-
-  if (key === "preaction" || key === "postaction") {
-    const action = parseDecorationAction(style.decoration, valueRaw);
-    if (!action) {
-      return { style, transform, diagnostics: [] };
-    }
-    return {
-      style: {
-        ...style,
-        decorationPreActions: key === "preaction" ? [...style.decorationPreActions, action] : style.decorationPreActions,
-        decorationPostActions: key === "postaction" ? [...style.decorationPostActions, action] : style.decorationPostActions
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-
-  if (key === "arrows") {
-    const parsed = parseArrowSpecification(valueRaw, style);
-    if (!parsed) {
-      return { style, transform, diagnostics: [] };
-    }
-    return { style: { ...style, markerStart: parsed.start, markerEnd: parsed.end }, transform, diagnostics: [] };
-  }
-  if (key === ">") {
-    const parsed = parseArrowSideSpecification(valueRaw, "end", style);
-    if (!parsed) {
-      return { style, transform, diagnostics: [] };
-    }
-    return { style: { ...style, arrowShorthandEnd: parsed }, transform, diagnostics: [] };
-  }
-  if (key === "<") {
-    const parsed = parseArrowSideSpecification(valueRaw, "start", style);
-    if (!parsed) {
-      return { style, transform, diagnostics: [] };
-    }
-    return { style: { ...style, arrowShorthandStart: parsed }, transform, diagnostics: [] };
-  }
-  if (key === "tips") {
-    const parsed = parseTipsMode(valueRaw);
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-tips:${valueRaw}`] };
-    }
-    return { style: { ...style, tipsMode: parsed }, transform, diagnostics: [] };
-  }
-  if (key === "shade") {
-    const normalized = normalizeOptionValue(valueRaw).toLowerCase();
-    if (normalized === "" || normalized === "true") {
-      return { style: { ...style, fill: style.fill ?? "black", shadeEnabled: true }, transform, diagnostics: [] };
-    }
-    if (normalized === "false" || normalized === "none") {
-      return { style: { ...style, shadeEnabled: false }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-shade:${valueRaw}`] };
-  }
-  if (key === "pattern") {
-    const parsedPattern = parsePatternValue(valueRaw, style);
-    if (parsedPattern.disabled) {
-      return {
-        style: {
-          ...style,
-          fill: null,
-          fillPattern: null,
-          shadeEnabled: false
-        },
-        transform,
-        diagnostics: parsedPattern.diagnostics
-      };
-    }
-
-    if (parsedPattern.recognized && parsedPattern.pattern) {
-      return {
-        style: {
-          ...style,
-          fill: style.fill ?? "black",
-          fillPattern: parsedPattern.pattern,
-          shadeEnabled: false
-        },
-        transform,
-        diagnostics: parsedPattern.diagnostics
-      };
-    }
-
-    return {
-      style: {
-        ...style,
-        fill: style.fill ?? "black",
-        fillPattern: null,
-        shadeEnabled: false
-      },
-      transform,
-      diagnostics: parsedPattern.diagnostics
-    };
-  }
-  if (key === "pattern color") {
-    return {
-      style: {
-        ...style,
-        patternColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "shading") {
-    const shading = normalizeShadingName(valueRaw);
-    if (!shading) {
-      return { style, transform, diagnostics: [`invalid-shading:${valueRaw}`] };
-    }
-    return { style: { ...style, shading, shadeEnabled: true }, transform, diagnostics: [] };
-  }
-  if (key === "shading angle") {
-    const angle = Number(valueRaw);
-    if (!Number.isFinite(angle)) {
-      return { style, transform, diagnostics: [`invalid-shading-angle:${valueRaw}`] };
-    }
-    return { style: { ...style, shadingAngle: angle, shadeEnabled: true }, transform, diagnostics: [] };
-  }
-  if (key === "top color") {
-    const topColor = normalizeOptionColor(valueRaw, style, resolveColorAlias);
-    const middleColor = mixNormalizedColors(topColor, style.axisBottomColor, 0.5) ?? style.axisMiddleColor;
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "axis",
-        shadingAngle: 0,
-        axisTopColor: topColor,
-        axisMiddleColor: middleColor
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "bottom color") {
-    const bottomColor = normalizeOptionColor(valueRaw, style, resolveColorAlias);
-    const middleColor = mixNormalizedColors(style.axisTopColor, bottomColor, 0.5) ?? style.axisMiddleColor;
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "axis",
-        shadingAngle: 0,
-        axisBottomColor: bottomColor,
-        axisMiddleColor: middleColor
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "middle color") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "axis",
-        axisMiddleColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "left color") {
-    const topColor = normalizeOptionColor(valueRaw, style, resolveColorAlias);
-    const middleColor = mixNormalizedColors(topColor, style.axisBottomColor, 0.5) ?? style.axisMiddleColor;
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "axis",
-        shadingAngle: 90,
-        axisTopColor: topColor,
-        axisMiddleColor: middleColor
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "right color") {
-    const bottomColor = normalizeOptionColor(valueRaw, style, resolveColorAlias);
-    const middleColor = mixNormalizedColors(style.axisTopColor, bottomColor, 0.5) ?? style.axisMiddleColor;
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "axis",
-        shadingAngle: 90,
-        axisBottomColor: bottomColor,
-        axisMiddleColor: middleColor
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "ball color") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "ball",
-        ballColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "inner color") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "radial",
-        radialInnerColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "outer color") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "radial",
-        radialOuterColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "lower left") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "bilinear interpolation",
-        bilinearLowerLeft: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "lower right") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "bilinear interpolation",
-        bilinearLowerRight: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "upper left") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "bilinear interpolation",
-        bilinearUpperLeft: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "upper right") {
-    return {
-      style: {
-        ...style,
-        shadeEnabled: true,
-        shading: "bilinear interpolation",
-        bilinearUpperRight: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-
-  if (key === "fill") {
-    return {
-      style: {
-        ...style,
-        fill: normalizeOptionColor(valueRaw, style, resolveColorAlias),
-        fillPattern: null
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "draw") {
-    if (valueRaw.trim().toLowerCase() === "none") {
-      return { style: { ...style, stroke: null, drawExplicit: false }, transform, diagnostics: [] };
-    }
-    return { style: { ...style, stroke: normalizeOptionColor(valueRaw, style, resolveColorAlias), drawExplicit: true }, transform, diagnostics: [] };
-  }
-  if (key === "color") {
-    if (valueRaw.trim().toLowerCase() === "none") {
-      return {
-        style: {
-          ...style,
-          stroke: style.drawExplicit || style.stroke != null ? null : style.stroke,
-          fill: style.fill != null ? null : style.fill,
-          fillPattern: style.fill != null ? null : style.fillPattern,
-          textColor: null
-        },
-        transform,
-        diagnostics: []
-      };
-    }
-    const normalizedColor = normalizeOptionColor(valueRaw, style, resolveColorAlias);
-    return {
-      style: {
-        ...style,
-        stroke: style.drawExplicit || style.stroke != null ? normalizedColor : style.stroke,
-        fill: style.fill != null ? normalizedColor : style.fill,
-        textColor: normalizedColor
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "text") {
-    return { style: { ...style, textColor: normalizeOptionColor(valueRaw, style, resolveColorAlias) }, transform, diagnostics: [] };
-  }
-  if (key === "text opacity") {
-    const value = Number(valueRaw);
-    if (Number.isFinite(value)) {
-      return { style: { ...style, textOpacity: clamp01(value) }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-text-opacity:${valueRaw}`] };
-  }
-  if (key === "align") {
-    const normalized = valueRaw.trim().toLowerCase();
-    if (
-      normalized === "left" ||
-      normalized === "flush left" ||
-      normalized === "right" ||
-      normalized === "flush right" ||
-      normalized === "center" ||
-      normalized === "flush center" ||
-      normalized === "justify" ||
-      normalized === "none"
-    ) {
-      return { style: { ...style, textAlign: normalized }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-align:${valueRaw}`] };
-  }
-  if (key === "line width") {
-    const length = parseLength(valueRaw, "pt");
-    if (length == null) {
-      return { style, transform, diagnostics: [`invalid-line-width:${valueRaw}`] };
-    }
-    return { style: { ...style, lineWidth: length }, transform, diagnostics: [] };
-  }
-  if (key === "double distance") {
-    const length = parseLength(valueRaw, "pt");
-    if (length == null || length < 0) {
-      return { style, transform, diagnostics: [`invalid-double-distance:${valueRaw}`] };
-    }
-    return { style: { ...style, doubleStroke: true, doubleDistance: length, doubleLineCenterDistance: null }, transform, diagnostics: [] };
-  }
-  if (key === "double distance between line centers") {
-    const length = parseLength(valueRaw, "pt");
-    if (length == null || length < 0) {
-      return { style, transform, diagnostics: [`invalid-double-distance-between-line-centers:${valueRaw}`] };
-    }
-    return { style: { ...style, doubleStroke: true, doubleLineCenterDistance: length }, transform, diagnostics: [] };
-  }
-  if (key === "double") {
-    if (valueRaw.trim().toLowerCase() === "none") {
-      return { style: { ...style, doubleStroke: false }, transform, diagnostics: [] };
-    }
-    return {
-      style: {
-        ...style,
-        doubleStroke: true,
-        doubleColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "node font" || key === "font") {
-    const parsed = parseFontStyle(valueRaw);
-    if (!parsed) {
-      return { style, transform, diagnostics: [] };
-    }
-    return {
-      style: {
-        ...style,
-        fontStyle: parsed.fontStyle ?? "normal",
-        fontWeight: parsed.fontWeight ?? "normal",
-        fontFamily: parsed.fontFamily ?? "serif",
-        fontSize: parsed.fontSize ?? DEFAULT_TEXT_FONT_SIZE
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "radius") {
-    const radius = parseLength(valueRaw, "cm");
-    if (radius == null) {
-      return { style, transform, diagnostics: [`invalid-radius:${valueRaw}`] };
-    }
-    return { style: { ...style, radius }, transform, diagnostics: [] };
-  }
-  if (key === "x radius") {
-    const xRadius = parseLength(valueRaw, "cm");
-    if (xRadius == null) {
-      return { style, transform, diagnostics: [`invalid-x-radius:${valueRaw}`] };
-    }
-    return { style: { ...style, xRadius }, transform, diagnostics: [] };
-  }
-  if (key === "y radius") {
-    const yRadius = parseLength(valueRaw, "cm");
-    if (yRadius == null) {
-      return { style, transform, diagnostics: [`invalid-y-radius:${valueRaw}`] };
-    }
-    return { style: { ...style, yRadius }, transform, diagnostics: [] };
-  }
-  if (key === "rounded corners") {
-    const roundedCorners = parseLength(valueRaw, "pt");
-    if (roundedCorners == null) {
-      return { style, transform, diagnostics: [`invalid-rounded-corners:${valueRaw}`] };
-    }
-    return { style: { ...style, roundedCorners }, transform, diagnostics: [] };
-  }
-  if (key === "transparent") {
-    return {
-      style: {
-        ...style,
-        strokeOpacity: 0,
-        fillOpacity: 0,
-        textOpacity: 0
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "opacity") {
-    const value = Number(valueRaw);
-    if (Number.isFinite(value)) {
-      return {
-        style: {
-          ...style,
-          strokeOpacity: clamp01(value),
-          fillOpacity: clamp01(value),
-          textOpacity: clamp01(value)
-        },
-        transform,
-        diagnostics: []
-      };
-    }
-    return { style, transform, diagnostics: [`invalid-opacity:${valueRaw}`] };
-  }
-  if (key === "draw opacity") {
-    const value = Number(valueRaw);
-    if (Number.isFinite(value)) {
-      return { style: { ...style, strokeOpacity: clamp01(value) }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-draw-opacity:${valueRaw}`] };
-  }
-  if (key === "fill opacity") {
-    const value = Number(valueRaw);
-    if (Number.isFinite(value)) {
-      return { style: { ...style, fillOpacity: clamp01(value) }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-fill-opacity:${valueRaw}`] };
-  }
-  if (key === "line cap" || key === "cap") {
-    const normalized = valueRaw.trim().toLowerCase();
-    if (normalized === "round" || normalized === "butt") {
-      return { style: { ...style, lineCap: normalized }, transform, diagnostics: [] };
-    }
-    if (normalized === "rect" || normalized === "projecting") {
-      return { style: { ...style, lineCap: "square" }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-line-cap:${valueRaw}`] };
-  }
-  if (key === "line join" || key === "join") {
-    const normalized = valueRaw.trim().toLowerCase();
-    if (normalized === "round" || normalized === "bevel" || normalized === "miter") {
-      return { style: { ...style, lineJoin: normalized }, transform, diagnostics: [] };
-    }
-    return { style, transform, diagnostics: [`invalid-line-join:${valueRaw}`] };
-  }
-  if (key === "shorten <" || key === "shorten <=") {
-    const length = parseLength(valueRaw, "pt");
-    if (length == null) {
-      return { style, transform, diagnostics: [`invalid-shorten-start:${valueRaw}`] };
-    }
-    return { style: { ...style, shortenStart: length }, transform, diagnostics: [] };
-  }
-  if (key === "shorten >" || key === "shorten >=") {
-    const length = parseLength(valueRaw, "pt");
-    if (length == null) {
-      return { style, transform, diagnostics: [`invalid-shorten-end:${valueRaw}`] };
-    }
-    return { style: { ...style, shortenEnd: length }, transform, diagnostics: [] };
-  }
-  if (key === "dash pattern") {
-    const parsed = parseDashPattern(valueRaw);
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-dash-pattern:${valueRaw}`] };
-    }
-    return { style: { ...style, dashArray: parsed }, transform, diagnostics: [] };
-  }
-  if (key === "dash phase") {
-    const phase = parseLength(normalizeOptionValue(valueRaw), "pt");
-    if (phase == null) {
-      return { style, transform, diagnostics: [`invalid-dash-phase:${valueRaw}`] };
-    }
-    return { style: { ...style, dashOffset: phase }, transform, diagnostics: [] };
-  }
-  if (key === "dash") {
-    const parsed = parseDashValue(valueRaw);
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-dash:${valueRaw}`] };
-    }
-    return {
-      style: {
-        ...style,
-        dashArray: parsed.pattern,
-        dashOffset: parsed.phase ?? style.dashOffset
-      },
-      transform,
-      diagnostics: []
-    };
-  }
-  if (key === "xshift") {
-    const shift = parseLength(valueRaw, "pt");
-    if (shift == null) {
-      return { style, transform, diagnostics: [`invalid-xshift:${valueRaw}`] };
-    }
-    return { style, transform: multiplyMatrix(transform, translationMatrix(shift, 0)), diagnostics: [] };
-  }
-  if (key === "yshift") {
-    const shift = parseLength(valueRaw, "pt");
-    if (shift == null) {
-      return { style, transform, diagnostics: [`invalid-yshift:${valueRaw}`] };
-    }
-    return { style, transform: multiplyMatrix(transform, translationMatrix(0, shift)), diagnostics: [] };
-  }
-  if (key === "shift") {
-    const normalizedShift = normalizeOptionValue(valueRaw);
-    const vector = parseCoordinateLike(normalizedShift);
-    if (vector) {
-      const x = parseLength(vector.x, "cm");
-      const y = parseLength(vector.y, "cm");
-      if (x != null && y != null) {
-        return { style, transform: multiplyMatrix(transform, translationMatrix(x, y)), diagnostics: [] };
-      }
-    }
-
-    if (resolveCoordinate) {
-      const resolved = resolveCoordinate(normalizedShift);
-      if (resolved) {
-        return {
-          style,
-          transform: multiplyMatrix(transform, translationMatrix(resolved.x, resolved.y)),
-          diagnostics: []
-        };
-      }
-    }
-
-    return { style, transform, diagnostics: [`invalid-shift:${valueRaw}`] };
-  }
-  if (key === "scale") {
-    const factor = Number(valueRaw);
-    if (!Number.isFinite(factor)) {
-      return { style, transform, diagnostics: [`invalid-scale:${valueRaw}`] };
-    }
-    return { style, transform: multiplyMatrix(transform, scaleMatrix(factor, factor)), diagnostics: [] };
-  }
-  if (key === "xscale") {
-    const factor = Number(valueRaw);
-    if (!Number.isFinite(factor)) {
-      return { style, transform, diagnostics: [`invalid-xscale:${valueRaw}`] };
-    }
-    return { style, transform: multiplyMatrix(transform, scaleMatrix(factor, 1)), diagnostics: [] };
-  }
-  if (key === "yscale") {
-    const factor = Number(valueRaw);
-    if (!Number.isFinite(factor)) {
-      return { style, transform, diagnostics: [`invalid-yscale:${valueRaw}`] };
-    }
-    return { style, transform: multiplyMatrix(transform, scaleMatrix(1, factor)), diagnostics: [] };
-  }
-  if (key === "rotate") {
-    const degrees = Number(valueRaw);
-    if (!Number.isFinite(degrees)) {
-      return { style, transform, diagnostics: [`invalid-rotate:${valueRaw}`] };
-    }
-    return { style, transform: multiplyMatrix(transform, rotationMatrix(degrees)), diagnostics: [] };
-  }
-  if (key === "rotate around" || key === "/tikz/rotate around") {
-    const parsed = parseRotateAroundValue(valueRaw, resolveCoordinate);
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-rotate-around:${valueRaw}`] };
-    }
-    const { angleDeg, pivot } = parsed;
-    const aroundMatrix = multiplyMatrix(
-      translationMatrix(pivot.x, pivot.y),
-      multiplyMatrix(rotationMatrix(angleDeg), translationMatrix(pt(-1 * pivot.x), pt(-1 * pivot.y)))
-    );
-    return { style, transform: multiplyMatrix(transform, aroundMatrix), diagnostics: [] };
-  }
-  if (key === "cm" || key === "/tikz/cm") {
-    const parsed = parseCmTransformValue(valueRaw, resolveCoordinate);
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-cm:${valueRaw}`] };
-    }
-    return {
-      style,
-      transform: multiplyMatrix(transform, parsed),
-      diagnostics: []
-    };
-  }
-  if (key === "x") {
-    const parsed = parseAxisVector(valueRaw, "x");
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-x-axis:${valueRaw}`] };
-    }
-    const matrix = {
-      ...transform,
-      a: parsed.x / PT_PER_CM,
-      b: parsed.y / PT_PER_CM
-    };
-    return { style, transform: matrix, diagnostics: [] };
-  }
-  if (key === "y") {
-    const parsed = parseAxisVector(valueRaw, "y");
-    if (!parsed) {
-      return { style, transform, diagnostics: [`invalid-y-axis:${valueRaw}`] };
-    }
-    const matrix = {
-      ...transform,
-      c: parsed.x / PT_PER_CM,
-      d: parsed.y / PT_PER_CM
-    };
-    return { style, transform: matrix, diagnostics: [] };
-  }
-
-  if (
-    key === "label position" ||
-    key === "pin position" ||
-    key === "label distance" ||
-    key === "pin distance" ||
-    key === "pin edge" ||
-    key === "quotes mean label" ||
-    key === "quotes mean pin"
-  ) {
-    return { style, transform, diagnostics: [] };
   }
 
   if (/^level\s+\d+\s*\/\.(style|append style)$/.test(key)) {
@@ -871,6 +109,965 @@ export function applyKvEntry(
     transform,
     diagnostics: [`unsupported-option-key:${key}`]
   };
+}
+
+const EXACT_KV_HANDLERS = createKvHandlerMap([
+  {
+    keys: ["pic type", "label position", "pin position", "label distance", "pin distance", "pin edge", "quotes mean label", "quotes mean pin"],
+    handle: ({ style, transform }) => ({ style, transform, diagnostics: [] })
+  },
+  {
+    keys: ["every path/.style", "every path/.append style"],
+    handle: ({ valueRaw, style, transform, applyOptionEntry }) => {
+      const nested = parseStyleValueAsOptionList(valueRaw);
+      if (!nested) {
+        return { style, transform, diagnostics: [`invalid-style-value:${valueRaw}`] };
+      }
+
+      let nextStyle = style;
+      let nextTransform = transform;
+      const diagnostics: StyleDiagnosticInput[] = [];
+      for (const entry of nested.entries) {
+        const outcome = applyOptionEntry(entry, nextStyle, nextTransform);
+        nextStyle = outcome.style;
+        nextTransform = outcome.transform;
+        diagnostics.push(...outcome.diagnostics);
+      }
+      return { style: nextStyle, transform: nextTransform, diagnostics };
+    }
+  },
+  {
+    keys: ["every shadow/.style", "every shadow/.append style"],
+    handle: ({ key, valueRaw, style, transform }) => {
+      const nested = parseStyleValueAsOptionList(valueRaw);
+      if (!nested) {
+        return { style, transform, diagnostics: [`invalid-style-value:${valueRaw}`] };
+      }
+      const everyShadowStyles = key === "every shadow/.style"
+        ? [nested]
+        : [...style.everyShadowStyles, nested];
+      return { style: { ...style, everyShadowStyles }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["shadow scale"],
+    handle: ({ valueRaw, style, transform }) => {
+      const scale = Number(normalizeOptionValue(valueRaw));
+      if (!Number.isFinite(scale)) {
+        return { style, transform, diagnostics: [`invalid-shadow-scale:${valueRaw}`] };
+      }
+      return { style: { ...style, shadowScale: scale }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["shadow xshift"],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-shadow-xshift",
+      (style, shadowXShift) => ({ ...style, shadowXShift })
+    )
+  },
+  {
+    keys: ["shadow yshift"],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-shadow-yshift",
+      (style, shadowYShift) => ({ ...style, shadowYShift })
+    )
+  },
+  {
+    keys: ["path fading"],
+    handle: ({ valueRaw, style, transform }) => {
+      const fading = parseShadowFadeKind(valueRaw);
+      if (!fading) {
+        return {
+          style,
+          transform,
+          diagnostics: [`unsupported-path-fading:${normalizeOptionValue(valueRaw)}`]
+        };
+      }
+      return { style: { ...style, shadowFade: fading }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["general shadow"],
+    handle: shadowHandler({ preset: null, applyEveryShadow: false })
+  },
+  {
+    keys: ["drop shadow"],
+    handle: shadowHandler({
+      preset: "shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex,opacity=.5,fill=black!50",
+      applyEveryShadow: true
+    })
+  },
+  {
+    keys: ["copy shadow"],
+    handle: shadowHandler({
+      preset: "shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex",
+      applyEveryShadow: true,
+      copyMainPaint: true
+    })
+  },
+  {
+    keys: ["double copy shadow"],
+    handle: shadowHandler({
+      preset: "shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex",
+      applyEveryShadow: true,
+      duplicateWithDoubleShift: true,
+      copyMainPaint: true
+    })
+  },
+  {
+    keys: ["circular drop shadow"],
+    handle: shadowHandler({
+      preset: "shadow scale=1.1,shadow xshift=.3ex,shadow yshift=-.3ex,fill=black,path fading={circle with fuzzy edge 15 percent}",
+      applyEveryShadow: true
+    })
+  },
+  {
+    keys: ["circular glow"],
+    handle: shadowHandler({
+      preset: "shadow scale=1.25,shadow xshift=0pt,shadow yshift=0pt,fill=black,path fading={circle with fuzzy edge 15 percent}",
+      applyEveryShadow: true
+    })
+  },
+  {
+    keys: ["decorate", "/tikz/decorate"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseDecorationBoolean(valueRaw);
+      if (parsed == null) {
+        return { style, transform, diagnostics: [`invalid-decorate-flag:${valueRaw}`] };
+      }
+      return {
+        style: {
+          ...style,
+          decoration: {
+            ...style.decoration,
+            enabled: parsed
+          }
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["decoration", "/pgf/decoration"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseDecorationOptionValue(style.decoration, valueRaw);
+      return {
+        style: { ...style, decoration: parsed.decoration },
+        transform,
+        diagnostics: parsed.diagnostics
+      };
+    }
+  },
+  {
+    keys: ["preaction", "postaction"],
+    handle: ({ key, valueRaw, style, transform }) => {
+      const action = parseDecorationAction(style.decoration, valueRaw);
+      if (!action) {
+        return { style, transform, diagnostics: [] };
+      }
+      return {
+        style: {
+          ...style,
+          decorationPreActions: key === "preaction"
+            ? [...style.decorationPreActions, action]
+            : style.decorationPreActions,
+          decorationPostActions: key === "postaction"
+            ? [...style.decorationPostActions, action]
+            : style.decorationPostActions
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["arrows"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseArrowSpecification(valueRaw, style);
+      if (!parsed) {
+        return { style, transform, diagnostics: [] };
+      }
+      return {
+        style: { ...style, markerStart: parsed.start, markerEnd: parsed.end },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: [">"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseArrowSideSpecification(valueRaw, "end", style);
+      if (!parsed) {
+        return { style, transform, diagnostics: [] };
+      }
+      return { style: { ...style, arrowShorthandEnd: parsed }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["<"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseArrowSideSpecification(valueRaw, "start", style);
+      if (!parsed) {
+        return { style, transform, diagnostics: [] };
+      }
+      return { style: { ...style, arrowShorthandStart: parsed }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["tips"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseTipsMode(valueRaw);
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-tips:${valueRaw}`] };
+      }
+      return { style: { ...style, tipsMode: parsed }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["shade"],
+    handle: ({ valueRaw, style, transform }) => {
+      const normalized = normalizeOptionValue(valueRaw).toLowerCase();
+      if (normalized === "" || normalized === "true") {
+        return {
+          style: { ...style, fill: style.fill ?? "black", shadeEnabled: true },
+          transform,
+          diagnostics: []
+        };
+      }
+      if (normalized === "false" || normalized === "none") {
+        return { style: { ...style, shadeEnabled: false }, transform, diagnostics: [] };
+      }
+      return { style, transform, diagnostics: [`invalid-shade:${valueRaw}`] };
+    }
+  },
+  {
+    keys: ["pattern"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsedPattern = parsePatternValue(valueRaw, style);
+      if (parsedPattern.disabled) {
+        return {
+          style: { ...style, fill: null, fillPattern: null, shadeEnabled: false },
+          transform,
+          diagnostics: parsedPattern.diagnostics
+        };
+      }
+      if (parsedPattern.recognized && parsedPattern.pattern) {
+        return {
+          style: {
+            ...style,
+            fill: style.fill ?? "black",
+            fillPattern: parsedPattern.pattern,
+            shadeEnabled: false
+          },
+          transform,
+          diagnostics: parsedPattern.diagnostics
+        };
+      }
+      return {
+        style: {
+          ...style,
+          fill: style.fill ?? "black",
+          fillPattern: null,
+          shadeEnabled: false
+        },
+        transform,
+        diagnostics: parsedPattern.diagnostics
+      };
+    }
+  },
+  {
+    keys: ["pattern color"],
+    handle: normalizedColorStyleHandler(
+      (style, patternColor) => ({ ...style, patternColor })
+    )
+  },
+  {
+    keys: ["shading"],
+    handle: ({ valueRaw, style, transform }) => {
+      const shading = normalizeShadingName(valueRaw);
+      if (!shading) {
+        return { style, transform, diagnostics: [`invalid-shading:${valueRaw}`] };
+      }
+      return { style: { ...style, shading, shadeEnabled: true }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["shading angle"],
+    handle: ({ valueRaw, style, transform }) => {
+      const angle = Number(valueRaw);
+      if (!Number.isFinite(angle)) {
+        return { style, transform, diagnostics: [`invalid-shading-angle:${valueRaw}`] };
+      }
+      return {
+        style: { ...style, shadingAngle: angle, shadeEnabled: true },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["top color"],
+    handle: axisShadingColorHandler("top", 0)
+  },
+  {
+    keys: ["bottom color"],
+    handle: axisShadingColorHandler("bottom", 0)
+  },
+  {
+    keys: ["middle color"],
+    handle: normalizedColorStyleHandler(
+      (style, axisMiddleColor) => ({
+        ...style,
+        shadeEnabled: true,
+        shading: "axis",
+        axisMiddleColor
+      })
+    )
+  },
+  {
+    keys: ["left color"],
+    handle: axisShadingColorHandler("top", 90)
+  },
+  {
+    keys: ["right color"],
+    handle: axisShadingColorHandler("bottom", 90)
+  },
+  {
+    keys: ["ball color"],
+    handle: normalizedColorStyleHandler(
+      (style, ballColor) => ({ ...style, shadeEnabled: true, shading: "ball", ballColor })
+    )
+  },
+  {
+    keys: ["inner color"],
+    handle: normalizedColorStyleHandler(
+      (style, radialInnerColor) => ({
+        ...style,
+        shadeEnabled: true,
+        shading: "radial",
+        radialInnerColor
+      })
+    )
+  },
+  {
+    keys: ["outer color"],
+    handle: normalizedColorStyleHandler(
+      (style, radialOuterColor) => ({
+        ...style,
+        shadeEnabled: true,
+        shading: "radial",
+        radialOuterColor
+      })
+    )
+  },
+  {
+    keys: ["lower left"],
+    handle: bilinearShadingColorHandler("bilinearLowerLeft")
+  },
+  {
+    keys: ["lower right"],
+    handle: bilinearShadingColorHandler("bilinearLowerRight")
+  },
+  {
+    keys: ["upper left"],
+    handle: bilinearShadingColorHandler("bilinearUpperLeft")
+  },
+  {
+    keys: ["upper right"],
+    handle: bilinearShadingColorHandler("bilinearUpperRight")
+  },
+  {
+    keys: ["fill"],
+    handle: ({ valueRaw, style, transform, resolveColorAlias }) => ({
+      style: {
+        ...style,
+        fill: normalizeOptionColor(valueRaw, style, resolveColorAlias),
+        fillPattern: null
+      },
+      transform,
+      diagnostics: []
+    })
+  },
+  {
+    keys: ["draw"],
+    handle: ({ valueRaw, style, transform, resolveColorAlias }) => {
+      if (valueRaw.trim().toLowerCase() === "none") {
+        return { style: { ...style, stroke: null, drawExplicit: false }, transform, diagnostics: [] };
+      }
+      return {
+        style: {
+          ...style,
+          stroke: normalizeOptionColor(valueRaw, style, resolveColorAlias),
+          drawExplicit: true
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["color"],
+    handle: ({ valueRaw, style, transform, resolveColorAlias }) => {
+      if (valueRaw.trim().toLowerCase() === "none") {
+        return {
+          style: {
+            ...style,
+            stroke: style.drawExplicit || style.stroke != null ? null : style.stroke,
+            fill: style.fill != null ? null : style.fill,
+            fillPattern: style.fill != null ? null : style.fillPattern,
+            textColor: null
+          },
+          transform,
+          diagnostics: []
+        };
+      }
+      const normalizedColor = normalizeOptionColor(valueRaw, style, resolveColorAlias);
+      return {
+        style: {
+          ...style,
+          stroke: style.drawExplicit || style.stroke != null ? normalizedColor : style.stroke,
+          fill: style.fill != null ? normalizedColor : style.fill,
+          textColor: normalizedColor
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["text"],
+    handle: ({ valueRaw, style, transform, resolveColorAlias }) => ({
+      style: {
+        ...style,
+        textColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
+      },
+      transform,
+      diagnostics: []
+    })
+  },
+  {
+    keys: ["text opacity"],
+    handle: finiteNumberStyleHandler(
+      "invalid-text-opacity",
+      (style, value) => ({ ...style, textOpacity: clamp01(value) })
+    )
+  },
+  {
+    keys: ["align"],
+    handle: ({ valueRaw, style, transform }) => {
+      const normalized = valueRaw.trim().toLowerCase();
+      if (
+        normalized === "left" ||
+        normalized === "flush left" ||
+        normalized === "right" ||
+        normalized === "flush right" ||
+        normalized === "center" ||
+        normalized === "flush center" ||
+        normalized === "justify" ||
+        normalized === "none"
+      ) {
+        return { style: { ...style, textAlign: normalized }, transform, diagnostics: [] };
+      }
+      return { style, transform, diagnostics: [`invalid-align:${valueRaw}`] };
+    }
+  },
+  {
+    keys: ["line width"],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-line-width",
+      (style, length) => ({ ...style, lineWidth: length })
+    )
+  },
+  {
+    keys: ["double distance"],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-double-distance",
+      (style, length) => ({
+        ...style,
+        doubleStroke: true,
+        doubleDistance: length,
+        doubleLineCenterDistance: null
+      }),
+      (length) => length >= 0
+    )
+  },
+  {
+    keys: ["double distance between line centers"],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-double-distance-between-line-centers",
+      (style, length) => ({
+        ...style,
+        doubleStroke: true,
+        doubleLineCenterDistance: length
+      }),
+      (length) => length >= 0
+    )
+  },
+  {
+    keys: ["double"],
+    handle: ({ valueRaw, style, transform, resolveColorAlias }) => {
+      if (valueRaw.trim().toLowerCase() === "none") {
+        return { style: { ...style, doubleStroke: false }, transform, diagnostics: [] };
+      }
+      return {
+        style: {
+          ...style,
+          doubleStroke: true,
+          doubleColor: normalizeOptionColor(valueRaw, style, resolveColorAlias)
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["node font", "font"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseFontStyle(valueRaw);
+      if (!parsed) {
+        return { style, transform, diagnostics: [] };
+      }
+      return {
+        style: {
+          ...style,
+          fontStyle: parsed.fontStyle ?? "normal",
+          fontWeight: parsed.fontWeight ?? "normal",
+          fontFamily: parsed.fontFamily ?? "serif",
+          fontSize: parsed.fontSize ?? DEFAULT_TEXT_FONT_SIZE
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["radius"],
+    handle: styleLengthHandler(
+      "cm",
+      "invalid-radius",
+      (style, radius) => ({ ...style, radius })
+    )
+  },
+  {
+    keys: ["x radius"],
+    handle: styleLengthHandler(
+      "cm",
+      "invalid-x-radius",
+      (style, xRadius) => ({ ...style, xRadius })
+    )
+  },
+  {
+    keys: ["y radius"],
+    handle: styleLengthHandler(
+      "cm",
+      "invalid-y-radius",
+      (style, yRadius) => ({ ...style, yRadius })
+    )
+  },
+  {
+    keys: ["rounded corners"],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-rounded-corners",
+      (style, roundedCorners) => ({ ...style, roundedCorners })
+    )
+  },
+  {
+    keys: ["transparent"],
+    handle: ({ style, transform }) => ({
+      style: {
+        ...style,
+        strokeOpacity: 0,
+        fillOpacity: 0,
+        textOpacity: 0
+      },
+      transform,
+      diagnostics: []
+    })
+  },
+  {
+    keys: ["opacity"],
+    handle: finiteNumberStyleHandler(
+      "invalid-opacity",
+      (style, value) => ({
+        ...style,
+        strokeOpacity: clamp01(value),
+        fillOpacity: clamp01(value),
+        textOpacity: clamp01(value)
+      })
+    )
+  },
+  {
+    keys: ["draw opacity"],
+    handle: finiteNumberStyleHandler(
+      "invalid-draw-opacity",
+      (style, value) => ({ ...style, strokeOpacity: clamp01(value) })
+    )
+  },
+  {
+    keys: ["fill opacity"],
+    handle: finiteNumberStyleHandler(
+      "invalid-fill-opacity",
+      (style, value) => ({ ...style, fillOpacity: clamp01(value) })
+    )
+  },
+  {
+    keys: ["line cap", "cap"],
+    handle: ({ valueRaw, style, transform }) => {
+      const normalized = valueRaw.trim().toLowerCase();
+      if (normalized === "round" || normalized === "butt") {
+        return { style: { ...style, lineCap: normalized }, transform, diagnostics: [] };
+      }
+      if (normalized === "rect" || normalized === "projecting") {
+        return { style: { ...style, lineCap: "square" }, transform, diagnostics: [] };
+      }
+      return { style, transform, diagnostics: [`invalid-line-cap:${valueRaw}`] };
+    }
+  },
+  {
+    keys: ["line join", "join"],
+    handle: ({ valueRaw, style, transform }) => {
+      const normalized = valueRaw.trim().toLowerCase();
+      if (normalized === "round" || normalized === "bevel" || normalized === "miter") {
+        return { style: { ...style, lineJoin: normalized }, transform, diagnostics: [] };
+      }
+      return { style, transform, diagnostics: [`invalid-line-join:${valueRaw}`] };
+    }
+  },
+  {
+    keys: ["shorten <", "shorten <="],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-shorten-start",
+      (style, shortenStart) => ({ ...style, shortenStart })
+    )
+  },
+  {
+    keys: ["shorten >", "shorten >="],
+    handle: styleLengthHandler(
+      "pt",
+      "invalid-shorten-end",
+      (style, shortenEnd) => ({ ...style, shortenEnd })
+    )
+  },
+  {
+    keys: ["dash pattern"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseDashPattern(valueRaw);
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-dash-pattern:${valueRaw}`] };
+      }
+      return { style: { ...style, dashArray: parsed }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["dash phase"],
+    handle: ({ valueRaw, style, transform }) => {
+      const phase = parseLength(normalizeOptionValue(valueRaw), "pt");
+      if (phase == null) {
+        return { style, transform, diagnostics: [`invalid-dash-phase:${valueRaw}`] };
+      }
+      return { style: { ...style, dashOffset: phase }, transform, diagnostics: [] };
+    }
+  },
+  {
+    keys: ["dash"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseDashValue(valueRaw);
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-dash:${valueRaw}`] };
+      }
+      return {
+        style: {
+          ...style,
+          dashArray: parsed.pattern,
+          dashOffset: parsed.phase ?? style.dashOffset
+        },
+        transform,
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["xshift"],
+    handle: transformLengthHandler(
+      "invalid-xshift",
+      (transform, shift) => multiplyMatrix(transform, translationMatrix(shift, 0))
+    )
+  },
+  {
+    keys: ["yshift"],
+    handle: transformLengthHandler(
+      "invalid-yshift",
+      (transform, shift) => multiplyMatrix(transform, translationMatrix(0, shift))
+    )
+  },
+  {
+    keys: ["shift"],
+    handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
+      const normalizedShift = normalizeOptionValue(valueRaw);
+      const vector = parseCoordinateLike(normalizedShift);
+      if (vector) {
+        const x = parseLength(vector.x, "cm");
+        const y = parseLength(vector.y, "cm");
+        if (x != null && y != null) {
+          return {
+            style,
+            transform: multiplyMatrix(transform, translationMatrix(x, y)),
+            diagnostics: []
+          };
+        }
+      }
+
+      const resolved = resolveCoordinate?.(normalizedShift);
+      if (resolved) {
+        return {
+          style,
+          transform: multiplyMatrix(transform, translationMatrix(resolved.x, resolved.y)),
+          diagnostics: []
+        };
+      }
+
+      return { style, transform, diagnostics: [`invalid-shift:${valueRaw}`] };
+    }
+  },
+  {
+    keys: ["scale"],
+    handle: finiteNumberTransformHandler(
+      "invalid-scale",
+      (transform, factor) => multiplyMatrix(transform, scaleMatrix(factor, factor))
+    )
+  },
+  {
+    keys: ["xscale"],
+    handle: finiteNumberTransformHandler(
+      "invalid-xscale",
+      (transform, factor) => multiplyMatrix(transform, scaleMatrix(factor, 1))
+    )
+  },
+  {
+    keys: ["yscale"],
+    handle: finiteNumberTransformHandler(
+      "invalid-yscale",
+      (transform, factor) => multiplyMatrix(transform, scaleMatrix(1, factor))
+    )
+  },
+  {
+    keys: ["rotate"],
+    handle: finiteNumberTransformHandler(
+      "invalid-rotate",
+      (transform, degrees) => multiplyMatrix(transform, rotationMatrix(degrees))
+    )
+  },
+  {
+    keys: ["rotate around", "/tikz/rotate around"],
+    handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
+      const parsed = parseRotateAroundValue(valueRaw, resolveCoordinate);
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-rotate-around:${valueRaw}`] };
+      }
+      const { angleDeg, pivot } = parsed;
+      const aroundMatrix = multiplyMatrix(
+        translationMatrix(pivot.x, pivot.y),
+        multiplyMatrix(
+          rotationMatrix(angleDeg),
+          translationMatrix(pt(-1 * pivot.x), pt(-1 * pivot.y))
+        )
+      );
+      return {
+        style,
+        transform: multiplyMatrix(transform, aroundMatrix),
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["cm", "/tikz/cm"],
+    handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
+      const parsed = parseCmTransformValue(valueRaw, resolveCoordinate);
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-cm:${valueRaw}`] };
+      }
+      return {
+        style,
+        transform: multiplyMatrix(transform, parsed),
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["x"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseAxisVector(valueRaw, "x");
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-x-axis:${valueRaw}`] };
+      }
+      return {
+        style,
+        transform: {
+          ...transform,
+          a: parsed.x / PT_PER_CM,
+          b: parsed.y / PT_PER_CM
+        },
+        diagnostics: []
+      };
+    }
+  },
+  {
+    keys: ["y"],
+    handle: ({ valueRaw, style, transform }) => {
+      const parsed = parseAxisVector(valueRaw, "y");
+      if (!parsed) {
+        return { style, transform, diagnostics: [`invalid-y-axis:${valueRaw}`] };
+      }
+      return {
+        style,
+        transform: {
+          ...transform,
+          c: parsed.x / PT_PER_CM,
+          d: parsed.y / PT_PER_CM
+        },
+        diagnostics: []
+      };
+    }
+  }
+]);
+
+function createKvHandlerMap(
+  registrations: readonly KvHandlerRegistration[]
+): ReadonlyMap<string, KvHandler> {
+  const handlers = new Map<string, KvHandler>();
+  for (const registration of registrations) {
+    for (const key of registration.keys) {
+      if (handlers.has(key)) {
+        throw new Error(`Duplicate key-value style handler: ${key}`);
+      }
+      handlers.set(key, registration.handle);
+    }
+  }
+  return handlers;
+}
+
+function styleLengthHandler(
+  unit: "pt" | "cm",
+  diagnosticCode: string,
+  update: (style: ResolvedStyle, length: number) => ResolvedStyle,
+  validate: (length: number) => boolean = () => true
+): KvHandler {
+  return ({ valueRaw, style, transform }) => {
+    const length = parseLength(valueRaw, unit);
+    if (length == null || !validate(length)) {
+      return { style, transform, diagnostics: [`${diagnosticCode}:${valueRaw}`] };
+    }
+    return { style: update(style, length), transform, diagnostics: [] };
+  };
+}
+
+function finiteNumberStyleHandler(
+  diagnosticCode: string,
+  update: (style: ResolvedStyle, value: number) => ResolvedStyle
+): KvHandler {
+  return ({ valueRaw, style, transform }) => {
+    const value = Number(valueRaw);
+    if (!Number.isFinite(value)) {
+      return { style, transform, diagnostics: [`${diagnosticCode}:${valueRaw}`] };
+    }
+    return { style: update(style, value), transform, diagnostics: [] };
+  };
+}
+
+function transformLengthHandler(
+  diagnosticCode: string,
+  update: (transform: WorldTransform, length: number) => WorldTransform
+): KvHandler {
+  return ({ valueRaw, style, transform }) => {
+    const length = parseLength(valueRaw, "pt");
+    if (length == null) {
+      return { style, transform, diagnostics: [`${diagnosticCode}:${valueRaw}`] };
+    }
+    return { style, transform: update(transform, length), diagnostics: [] };
+  };
+}
+
+function finiteNumberTransformHandler(
+  diagnosticCode: string,
+  update: (transform: WorldTransform, value: number) => WorldTransform
+): KvHandler {
+  return ({ valueRaw, style, transform }) => {
+    const value = Number(valueRaw);
+    if (!Number.isFinite(value)) {
+      return { style, transform, diagnostics: [`${diagnosticCode}:${valueRaw}`] };
+    }
+    return { style, transform: update(transform, value), diagnostics: [] };
+  };
+}
+
+function shadowHandler(options: AppendShadowOptions): KvHandler {
+  return ({ valueRaw, style, transform, applyOptionEntry }) =>
+    appendShadowLayers(style, transform, valueRaw, applyOptionEntry, options);
+}
+
+function normalizedColorStyleHandler(
+  update: (style: ResolvedStyle, color: string) => ResolvedStyle
+): KvHandler {
+  return ({ valueRaw, style, transform, resolveColorAlias }) => ({
+    style: update(style, normalizeOptionColor(valueRaw, style, resolveColorAlias)),
+    transform,
+    diagnostics: []
+  });
+}
+
+function axisShadingColorHandler(
+  side: "top" | "bottom",
+  shadingAngle: number
+): KvHandler {
+  return normalizedColorStyleHandler((style, color) => {
+    if (side === "top") {
+      return {
+        ...style,
+        shadeEnabled: true,
+        shading: "axis",
+        shadingAngle,
+        axisTopColor: color,
+        axisMiddleColor:
+          mixNormalizedColors(color, style.axisBottomColor, 0.5)
+          ?? style.axisMiddleColor
+      };
+    }
+    return {
+      ...style,
+      shadeEnabled: true,
+      shading: "axis",
+      shadingAngle,
+      axisBottomColor: color,
+      axisMiddleColor:
+        mixNormalizedColors(style.axisTopColor, color, 0.5)
+        ?? style.axisMiddleColor
+    };
+  });
+}
+
+function bilinearShadingColorHandler(
+  property:
+    | "bilinearLowerLeft"
+    | "bilinearLowerRight"
+    | "bilinearUpperLeft"
+    | "bilinearUpperRight"
+): KvHandler {
+  return normalizedColorStyleHandler((style, color) => ({
+    ...style,
+    shadeEnabled: true,
+    shading: "bilinear interpolation",
+    [property]: color
+  }));
 }
 
 type AppendShadowOptions = {

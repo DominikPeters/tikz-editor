@@ -1,7 +1,7 @@
 import { useCallback, useEffect, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { viewportPoint, clientPoint as makeClientPoint, worldPoint, pt, px } from "tikz-editor/coords/index";
-import { buildSnapContext, resolveSnapSettings, snapToolPointer, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "tikz-editor/edit/snapping";
-import type { NodeAnchorTarget } from "tikz-editor/semantic/types";
+import { viewportPoint, clientPoint as makeClientPoint, worldPoint, pt, px } from "@tikz-editor/core/coords/index";
+import { buildSnapContext, resolveSnapSettings, snapToolPointer, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import type { NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { ClientPoint, WorldBounds, WorldPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { resolveEndpointAnchorSnap } from "./endpoint-anchor-snap";

@@ -1,6 +1,12 @@
 import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
-import { applyOptionMutationsToTarget, normalizeOptionKey, rewriteOptionListMutations, type OptionMutation } from "../option-mutations.js";
+import {
+  applyOptionMutationsToTarget,
+  normalizeOptionKey,
+  rewriteOptionListMutations,
+  rewriteSourceBackedOptionListMutations,
+  type OptionMutation
+} from "../option-mutations.js";
 import { TREE_CHILD_LAYOUT_WRITABLE_KEYS } from "../tree-editing.js";
 import { resolvePropertyTarget } from "../property-target.js";
 import type { PropertyTarget, PropertyTargetOptionsFormat } from "../property-target.js";
@@ -541,7 +547,13 @@ function applyMatrixCellSetProperty(
   if (target.optionSpan) {
     const optionSpan = target.optionSpan;
     const currentOptions = parseOptionListRaw(source.slice(optionSpan.from, optionSpan.to), optionSpan.from);
-    const replacement = rewriteOptionListMutations(currentOptions, mutations, undefined, "bracketed");
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      optionSpan,
+      currentOptions,
+      mutations,
+      "bracketed"
+    );
     if (replacement.length > 0) {
       if (source.slice(optionSpan.from, optionSpan.to) === replacement) {
         return { kind: "unsupported", reason: "setProperty would not change the source." };
@@ -575,6 +587,8 @@ function applyMatrixCellSetProperty(
     return { kind: "unsupported", reason: "setProperty would not change the source." };
   }
 
+  // This list is synthesized for a new matrix-cell prefix, so normalized
+  // serialization cannot disturb authored trivia.
   const seedOptions = parseOptionListRaw("[]", textSpan.from);
   const serializedOptions = rewriteOptionListMutations(seedOptions, setMutations, undefined, "bracketed");
   const insertion = `|${serializedOptions}| `;
@@ -652,7 +666,13 @@ function applyOptionMutationsAtSite(
   const { options, optionsSpan, insertOffset } = site;
   if (optionsSpan) {
     const parsedOptions = options ?? parseOptionListRaw(source.slice(optionsSpan.from, optionsSpan.to), optionsSpan.from);
-    const replacement = rewriteOptionListMutations(parsedOptions, mutations, undefined, "bracketed");
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      optionsSpan,
+      parsedOptions,
+      mutations,
+      "bracketed"
+    );
     if (source.slice(optionsSpan.from, optionsSpan.to) === replacement) {
       return { kind: "unsupported", reason: "setProperty would not change the source." };
     }
@@ -679,6 +699,8 @@ function applyOptionMutationsAtSite(
     }
   }
 
+  // No source-backed list exists at this insertion site; serialize the new
+  // option fragment canonically before inserting it.
   const seedOptions = parseOptionListRaw("[]", insertOffset);
   const serializedOptions = rewriteOptionListMutations(seedOptions, setMutations, undefined, "bracketed");
   const updated = replaceSpan(source, { from: insertOffset, to: insertOffset }, serializedOptions);

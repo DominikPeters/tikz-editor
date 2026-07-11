@@ -20,14 +20,24 @@ describe("getInspectorDescriptor – attachments", () => {
       source,
       editHandles: rendered.semantic.editHandles
     });
+    expect(descriptor.sections.map((section) => section.id)).toEqual([
+      "transform",
+      "node",
+      "stroke",
+      "fill",
+      "shadow",
+      "path-attached-node"
+    ]);
     const attachmentSection = descriptor.sections.find((section) => section.id === "path-attached-node");
     expect(attachmentSection).toBeDefined();
     if (!attachmentSection) {
       throw new Error("Expected attachment inspector section");
     }
-    expect(attachmentSection.properties.some((property) => property.id === "path-attached-node-position")).toBe(true);
-    expect(attachmentSection.properties.some((property) => property.id === "path-attached-node-side")).toBe(true);
-    expect(attachmentSection.properties.some((property) => property.id === "path-attached-node-sloped")).toBe(true);
+    expect(attachmentSection.properties.map((property) => property.id)).toEqual([
+      "path-attached-node-position",
+      "path-attached-node-side",
+      "path-attached-node-sloped"
+    ]);
   });
 
   it("adapts path-attached node controls for neutral, auto, base, and mid regimes", () => {
@@ -167,7 +177,7 @@ describe("getInspectorDescriptor – attachments", () => {
       editHandles: rendered.semantic.editHandles
     });
 
-    expect(descriptor.sections.some((section) => section.id === "adornment")).toBe(true);
+    expect(descriptor.sections.map((section) => section.id)).toEqual(["adornment", "pin-edge"]);
     const pinEdgeSection = descriptor.sections.find((section) => section.id === "pin-edge");
     expect(pinEdgeSection).toBeDefined();
     if (!pinEdgeSection) {

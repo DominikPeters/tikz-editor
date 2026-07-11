@@ -27,6 +27,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@tikz-editor/core": path.resolve(rootDir, "./packages/core/src"),
       "@tikz-editor/lang-tikz": path.resolve(rootDir, "./packages/lang-tikz/src/index.ts"),
       "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": path.resolve(
         rootDir,
@@ -36,9 +37,7 @@ export default defineConfig({
         rootDir,
         "./packages/lezer-tikz/src/grammar/tikz-parser.ts"
       ),
-      "@tikz-editor/lezer-tikz": path.resolve(rootDir, "./packages/lezer-tikz/src/index.ts"),
-      // Mirror the Vite alias so tests can import from "tikz-editor/..."
-      "tikz-editor": path.resolve(rootDir, "./packages/core/src")
+      "@tikz-editor/lezer-tikz": path.resolve(rootDir, "./packages/lezer-tikz/src/index.ts")
     }
   }
 });

@@ -1202,6 +1202,166 @@ test("multi-segment path tool finalizes on Enter", async ({ page }) => {
   await expect.poll(async () => readSource(page)).toContain("--");
 });
 
+test("multi-segment path draft does not follow document tab switches", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+  await toolbarButton(page, "Path").click();
+
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+
+  await page.mouse.click(box.x + 120, box.y + 120);
+  await page.mouse.click(box.x + 200, box.y + 120);
+  await expect(page.getByTestId("canvas-tool-preview-complex-path")).toBeVisible();
+
+  await page.getByTestId("tab-new").click();
+
+  await expect(page.getByTestId("canvas-tool-preview-complex-path")).toHaveCount(0);
+  await expect(toolbarButton(page, "Path")).toHaveClass(/btnActive/);
+});
+
+test("Ctrl-Z undoes the latest path draft segment without leaving the tool", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+  await toolbarButton(page, "Path").click();
+
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+
+  await page.mouse.click(box.x + 100, box.y + 100);
+  await page.mouse.click(box.x + 160, box.y + 100);
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await readSource(page)).match(/\\draw/g)?.length ?? 0).toBe(1);
+  const sourceBeforeDraft = await readSource(page);
+
+  await toolbarButton(page, "Path").click();
+  await page.mouse.click(box.x + 120, box.y + 160);
+  await page.mouse.click(box.x + 200, box.y + 160);
+  await page.mouse.click(box.x + 200, box.y + 220);
+  await page.keyboard.press("ControlOrMeta+z");
+
+  await expect.poll(async () => readSource(page)).toBe(sourceBeforeDraft);
+  await expect(toolbarButton(page, "Path")).toHaveClass(/btnActive/);
+  await page.keyboard.press("Enter");
+
+  await expect.poll(async () => (await readSource(page)).match(/\\draw/g)?.length ?? 0).toBe(2);
+  await expect.poll(async () => (await readSource(page)).match(/--/g)?.length ?? 0).toBe(2);
+});
+
+test("pending Bezier draft is cleared when switching document tabs", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+  await toolbarButton(page, "Bezier").click();
+
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+
+  await page.mouse.move(box.x + 100, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 200, box.y + 140);
+  await page.mouse.up();
+  await expect(page.getByTestId("canvas-tool-preview-bezier")).toBeVisible();
+
+  await page.getByTestId("tab-new").click();
+
+  await expect(page.getByTestId("canvas-tool-preview-bezier")).toHaveCount(0);
+  await expect(toolbarButton(page, "Bezier")).toHaveClass(/btnActive/);
+});
+
+test("keyboard document switch cancels an active one-drag tool gesture", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+  await toolbarButton(page, "Line").click();
+
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+  await page.mouse.move(box.x + 100, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 200, box.y + 160);
+
+  await page.keyboard.press("ControlOrMeta+n");
+  await expect(page.locator("[data-testid^='tab-switch-']")).toHaveCount(2);
+  await page.mouse.up();
+
+  await expect.poll(async () => readSource(page)).not.toContain("\\draw");
+  await expect(toolbarButton(page, "Line")).toHaveClass(/btnActive/);
+});
+
+test("Ctrl-Z cancels a pending Bezier without undoing document history", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\end{tikzpicture}`);
+
+  await toolbarButton(page, "Path").click();
+  const layer = interactionLayer(page);
+  const box = await layer.boundingBox();
+  if (!box) {
+    throw new Error("Canvas interaction layer bounds missing.");
+  }
+  await page.mouse.click(box.x + 100, box.y + 100);
+  await page.mouse.click(box.x + 160, box.y + 100);
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await readSource(page)).match(/\\draw/g)?.length ?? 0).toBe(1);
+  const sourceBeforeBezier = await readSource(page);
+
+  await toolbarButton(page, "Bezier").click();
+  await page.mouse.move(box.x + 120, box.y + 160);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 200, box.y + 200);
+  await page.mouse.up();
+  await expect(page.getByTestId("canvas-tool-preview-bezier")).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+z");
+
+  await expect.poll(async () => readSource(page)).toBe(sourceBeforeBezier);
+  await expect(page.getByTestId("canvas-tool-preview-bezier")).toHaveCount(0);
+  await expect(toolbarButton(page, "Bezier")).toHaveClass(/btnActive/);
+
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(async () => (await readSource(page)).match(/\\draw/g)?.length ?? 0).toBe(0);
+});
+
+test("bucket hover preview restores its originating document on tab switch", async ({ page }) => {
+  await gotoApp(page);
+  const source = String.raw`\begin{tikzpicture}
+  \filldraw[fill=blue!20] (0,0) rectangle (2,2);
+\end{tikzpicture}`;
+  await setSource(page, source);
+  await page.getByTestId("toolbar-bucket-color-caret").click();
+  await page.getByRole("button", { name: "Bucket fill color red" }).click();
+
+  await waitForHitRegions(page, 1);
+  const region = page.locator("[data-hit-region-target-id]").first();
+  const box = await region.boundingBox();
+  if (!box) {
+    throw new Error("Bucket target bounds missing.");
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(async () => readSource(page)).toContain("fill=red!60");
+
+  await page.getByTestId("tab-new").click();
+  await expect.poll(async () => readSource(page)).not.toContain("fill=red!60");
+
+  await page.locator("[data-testid^='tab-switch-']").first().click();
+  await expect.poll(async () => normalizeSourceWhitespace(await readSource(page))).toBe(normalizeSourceWhitespace(source));
+});
+
 test("multi-segment path tool keeps named anchors when clicking anchor dots", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}

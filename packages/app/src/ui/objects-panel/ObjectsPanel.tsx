@@ -18,7 +18,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from "react";
-import { getSharedEditAnalysisView } from "../../edit-analysis-manager";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { useEditorStore } from "../../store/store";
 import { SidePanel } from "../SidePanel";
 import {
@@ -62,16 +62,19 @@ export function ObjectsPanel() {
   const selectedIds = useEditorStore((s) => s.selectedElementIds);
   const dispatch = useEditorStore((s) => s.dispatch);
 
-  const analysisView = useMemo(
-    () => getSharedEditAnalysisView({
-      documentId: activeDocumentId,
-      sourceRevision,
-      source,
-      activeFigureId,
-      snapshot
-    }),
+  const parseOptions = useMemo(
+    () =>
+      buildEditParseOptions({
+        documentId: activeDocumentId,
+        sourceRevision,
+        source,
+        activeFigureId,
+        snapshot,
+        analysis: "shared"
+      }),
     [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
   );
+  const { analysisView } = parseOptions;
   const model = useMemo(
     () => buildObjectsPanelModel({ analysisView, scene: snapshot.scene, selectedIds }),
     [analysisView, selectedIds, snapshot.scene]
@@ -105,10 +108,7 @@ export function ObjectsPanel() {
     () => ({
       source,
       activeFigureId,
-      parseOptions: {
-        activeFigureId,
-        analysisView
-      },
+      parseOptions,
       figureCount: snapshot.figures.length,
       snapshotSource: snapshot.source,
       scene: snapshot.scene,
@@ -119,9 +119,9 @@ export function ObjectsPanel() {
     }),
     [
       activeFigureId,
-      analysisView,
       activeHandleId,
       dispatch,
+      parseOptions,
       selectedIds,
       snapshot.editHandles,
       snapshot.figures.length,

@@ -26,6 +26,7 @@ import {
 } from "./shape-geometry.js";
 import type { NodeLayout, NodeShape } from "./types.js";
 import { normalizeOptionValue } from "./utils.js";
+import { clamp } from "../../utils/math.js";
 
 function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
@@ -379,10 +380,6 @@ function resolveRectangleSplitSharedBaseline(splitLayout: RectangleSplitLayoutGe
     return (lower + upper) / 2;
   }
   return lower;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function resolveRectangleSplitPartTextStyle(baseStyle: ResolvedStyle, options: OptionListAst | undefined): ResolvedStyle {

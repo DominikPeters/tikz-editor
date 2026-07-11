@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@tikz-editor/app": ["./packages/app/src/index.ts"],
+      "@tikz-editor/app/app-menu": ["./packages/app/src/app-menu/index.ts"],
+      "@tikz-editor/app/landing-assets": ["./packages/app/src/landing-assets.ts"],
+      "@tikz-editor/app/linked-file-sync": ["./packages/app/src/linked-file-sync.ts"],
+      "@tikz-editor/app/platform/current": ["./packages/app/src/platform/current.ts"],
+      "@tikz-editor/app/platform/types": ["./packages/app/src/platform/types.ts"],
+      "@tikz-editor/app/store/types": ["./packages/app/src/store/types.ts"],
+      "@tikz-editor/app/workspace": ["./packages/app/src/ui/workspace-apply.ts"],
+      "@tikz-editor/core": ["./packages/core/src/index.ts"],
+      "@tikz-editor/core/*": ["./packages/core/src/*"],
+      "@tikz-editor/lang-tikz": ["./packages/lang-tikz/src/index.ts"],
+      "@tikz-editor/lezer-tikz": ["./packages/lezer-tikz/src/index.ts"],
+      "@tikz-editor/lezer-tikz/grammar/tikz-parser": ["./packages/lezer-tikz/src/grammar/tikz-parser.ts"],
+      "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": ["./packages/lezer-tikz/src/grammar/tikz-parser.terms.ts"]
+    }
+  }
+}

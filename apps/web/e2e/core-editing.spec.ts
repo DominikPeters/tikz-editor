@@ -199,6 +199,33 @@ test("node context menu can position a node relative to an earlier named node", 
   await expect(page.getByTestId("node-position-link")).toHaveCount(0);
 });
 
+test("pending node-position targeting cancels on undo and document switch", async ({ page }) => {
+  await gotoApp(page);
+  const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw] (B) at (2,0) {B};
+\end{tikzpicture}`;
+  await setSource(page, source);
+
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
+  await expect(page.getByTestId("canvas-selection-hint")).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+z");
+
+  await expect(page.getByTestId("canvas-selection-hint")).toHaveCount(0);
+  await expect.poll(async () => readSource(page)).toBe(source);
+
+  await clickHitRegionByTargetId(page, "path:1", { button: "right" });
+  await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
+  await expect(page.getByTestId("canvas-selection-hint")).toBeVisible();
+
+  await page.getByTestId("tab-new").click();
+
+  await expect(page.getByTestId("canvas-selection-hint")).toHaveCount(0);
+  await expect(page.getByTestId("node-anchor-dot")).toHaveCount(0);
+});
+
 test("node relative positioning target reports negative spacing when visual placement cannot be preserved", async ({ page }) => {
   await gotoApp(page);
   const source = String.raw`\begin{tikzpicture}
@@ -210,11 +237,13 @@ test("node relative positioning target reports negative spacing when visual plac
   await clickHitRegionByTargetId(page, "path:1", { button: "right" });
   await page.getByTestId("canvas-context-cmd-node.position-relative-to").click();
   const targetDot = page.getByTestId("node-anchor-dot");
-  await expect(targetDot).toHaveAttribute("data-anchor-disabled", "true");
+  // Target validity is preflighted lazily when the target is hovered.
+  await expect(targetDot).not.toHaveAttribute("data-anchor-disabled", "true");
   await expect(targetDot.locator("title")).toHaveCount(0);
   await expect(page.locator("[data-hit-region-target-id='path:0'] title")).toHaveCount(0);
   await targetDot.hover();
 
+  await expect(targetDot).toHaveAttribute("data-anchor-disabled", "true");
   await expect.poll(async () => targetDot.evaluate((el) => getComputedStyle(el).cursor)).toBe("not-allowed");
   await expect(page.getByTestId("node-position-target-tooltip")).toContainText("overlap vertically");
   await expect(page.getByTestId("canvas-selection-hint")).toHaveText(

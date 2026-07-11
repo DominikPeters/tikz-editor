@@ -1,5 +1,6 @@
 import { worldTransform } from "../../coords/transforms.js";
 import { pt } from "../../coords/scalars.js";
+import { PT_PER_CM } from "../../coords/source.js";
 import { worldPoint as makeWorldPoint, worldVector as makeWorldVector, type WorldPoint, type WorldVector } from "../../coords/points.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import type { Span } from "../../ast/types.js";
@@ -69,8 +70,6 @@ const DIRECTION_META: Record<PositioningDirection, DirectionMeta> = {
 };
 
 const IDENTITY_MATRIX = worldTransform(1, 0, 0, 1, 0, 0);
-
-const PT_PER_CM = parseLength("1cm", "cm") ?? 28.4527559055;
 
 function worldPoint(x: number, y: number): WorldPoint {
   return makeWorldPoint(pt(x), pt(y));

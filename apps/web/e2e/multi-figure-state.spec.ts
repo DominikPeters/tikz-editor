@@ -142,6 +142,31 @@ test("viewport is remembered per figure and first visit auto-fits", async ({ pag
   }).toBe(true);
 });
 
+test("guides are stored independently for each figure", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, figuresSource(2, "Guide figure"));
+  await expect.poll(async () => readFigureCount(page)).toBe(2);
+
+  const ruler = page.getByTestId("canvas-top-ruler");
+  const viewport = page.getByTestId("canvas-viewport");
+  const rulerBox = await ruler.boundingBox();
+  const viewportBox = await viewport.boundingBox();
+  if (!rulerBox || !viewportBox) {
+    throw new Error("Canvas ruler or viewport bounds missing.");
+  }
+  await page.mouse.move(rulerBox.x + rulerBox.width / 2, rulerBox.y + rulerBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+  await page.mouse.up();
+  await expect(page.getByTestId("canvas-guide-horizontal")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Figure 2" }).click();
+  await expect(page.getByTestId("canvas-guide-horizontal")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Figure 1" }).click();
+  await expect(page.getByTestId("canvas-guide-horizontal")).toHaveCount(1);
+});
+
 test("carousel remembers scroll position per document across tab switches", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, figuresSource(14, "Doc A"));

@@ -1,17 +1,18 @@
 import { useMemo } from "react";
-import { svgBounds, svgPoint, worldBounds, worldPoint, worldVector, pt } from "tikz-editor/coords/index";
-import type { NodeItem, PathItem, PathStatement, Statement } from "tikz-editor/ast/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "tikz-editor/edit/fit";
-import { resolvePropertyTargetFromParseResult } from "tikz-editor/edit/property-target";
-import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
-import { collectSourceWorldBounds } from "tikz-editor/edit/snapping";
-import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
-import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "tikz-editor/semantic/types";
+import { svgBounds, svgPoint, worldBounds, worldPoint, worldVector, pt } from "@tikz-editor/core/coords/index";
+import type { NodeItem, PathItem, PathStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "@tikz-editor/core/edit/fit";
+import { resolvePropertyTargetFromParseResult } from "@tikz-editor/core/edit/property-target";
+import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
+import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
+import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import {
   computeVisibleRanges,
+  distanceSquared,
   resizeCursorForVector,
   vectorLengthSquared,
   worldToSvgPoint,
@@ -986,12 +987,6 @@ function nodeItemSourceId(
     isSyntheticTreeChildStatement
     ? statement.id
     : item.id;
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }
 
 function collectPathAttachedNodeSourceIds(statements: readonly Statement[]): Set<string> {

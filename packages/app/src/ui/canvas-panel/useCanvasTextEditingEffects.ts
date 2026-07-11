@@ -1,7 +1,7 @@
 import { useEffect, type RefObject } from "react";
-import { svgPoint, svgBounds, viewportBounds, pt, px } from "tikz-editor/coords/index";
-import { getActiveMathJaxOutputJax } from "tikz-editor/text/mathjax-engine";
-import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "tikz-editor/text/knuth-plass";
+import { svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
+import { getActiveMathJaxOutputJax } from "@tikz-editor/core/text/mathjax-engine";
+import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
 import type { SvgBounds, SvgPoint, ViewportPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToViewport, svgToViewport } from "../coords/convert";

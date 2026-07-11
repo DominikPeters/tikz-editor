@@ -1,13 +1,12 @@
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
+import { PT_PER_CM } from "../../coords/source.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { SNAP_EPSILON } from "./geometry.js";
 import { roundSnapValue } from "./point-snaps.js";
 import type { Axis, AxisMinOffset, AxisSnapBuckets } from "./types.js";
 
 const GRID_STEPS_CM = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
-const PT_PER_CM = 28.4527559055;
-
 export function pickGridStepPt(scale: number, targetPixels: number): number {
   const minStepPt = targetPixels / Math.max(scale, 1e-6);
 

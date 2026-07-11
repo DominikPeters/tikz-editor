@@ -1,4 +1,4 @@
-import { svgPoint, textareaLocalPoint, viewportBounds, px } from "tikz-editor/coords/index";
+import { svgPoint, textareaLocalPoint, viewportBounds, px } from "@tikz-editor/core/coords/index";
 import type { ClientBounds, ClientPoint, SvgBounds, SvgPoint, TextareaLocalPoint, ViewportBounds, ViewportPoint } from "./types";
 
 export function clientPointToTextareaLocal(point: ClientPoint, textareaRect: DOMRect): TextareaLocalPoint {

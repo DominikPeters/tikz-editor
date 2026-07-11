@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { capabilityMatrix, type CapabilityRow } from "tikz-editor/capabilities";
-import type { Diagnostic } from "tikz-editor/diagnostics/types";
-import type { SemanticDependencyGraph } from "tikz-editor/semantic";
-import type { EditHandle, FeatureUsage, SceneElement } from "tikz-editor/semantic/types";
+import { capabilityMatrix, type CapabilityRow } from "@tikz-editor/core/capabilities";
+import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
+import type { SemanticDependencyGraph } from "@tikz-editor/core/semantic";
+import type { EditHandle, FeatureUsage, SceneElement } from "@tikz-editor/core/semantic/types";
 import { useEditorStore } from "../store/store";
 import { TreeView } from "./TreeView";
 import { Modal } from "./Modal";
@@ -370,7 +370,6 @@ function EditingTab({
               ["kind", currentHistoryEntry.kind],
               ["label", currentHistoryEntry.label],
               ["merge key", currentHistoryEntry.mergeKey ?? "none"],
-              ["backward patches", String(currentHistoryEntry.backward.length)],
               ["forward patches", String(currentHistoryEntry.forward.length)],
               ["source before", `${currentHistoryEntry.sourceBefore.length} chars`],
               ["source after", `${currentHistoryEntry.sourceAfter.length} chars`]

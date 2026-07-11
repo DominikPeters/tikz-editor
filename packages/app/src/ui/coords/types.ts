@@ -11,4 +11,4 @@ export type {
   WorldBounds,
   WorldPoint,
   WorldVector
-} from "tikz-editor/coords/index";
+} from "@tikz-editor/core/coords/index";

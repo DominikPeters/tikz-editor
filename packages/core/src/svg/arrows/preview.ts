@@ -4,6 +4,7 @@ import type { ArrowTip } from "../../semantic/types.js";
 import { buildArrowTipMetrics, normalizeArrowTip } from "./metrics.js";
 import { buildLocalTipPaths } from "./shapes.js";
 import type { ArrowLocalPathCommand, NormalizedArrowTip } from "./types.js";
+import { formatSvgNumber as fmt } from "../format.js";
 
 export type ArrowTipPreviewPath = {
   d: string;
@@ -164,12 +165,4 @@ function collectPathXBounds(paths: ArrowLocalPathCommand[][]): { min: number; ma
     return { min: 0, max: 0 };
   }
   return { min, max };
-}
-
-function fmt(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0";
-  }
-  const rounded = Math.abs(value) < 1e-9 ? 0 : value;
-  return Number(rounded.toFixed(4)).toString();
 }

@@ -6,17 +6,20 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/desktop",
+    "apps/landing",
+    "apps/web"
   ],
   "scripts": {
     "codespaces:startup": "bash scripts/codespaces/startup.sh",
     "version:bump": "node scripts/bump-version.mjs",
     "generate:grammar": "npm run -w @tikz-editor/lezer-tikz generate:grammar",
     "lint": "eslint . --cache --cache-location node_modules/.cache/eslint/full/ --cache-strategy content",
-    "lint:prod": "eslint . --cache --cache-location node_modules/.cache/eslint/prod/ --cache-strategy content --max-warnings=0 --ignore-pattern 'coverage/**' --ignore-pattern 'test/**' --ignore-pattern 'apps/desktop/e2e/**' --ignore-pattern 'apps/web/e2e/**' --ignore-pattern 'apps/web/profiling/**' --ignore-pattern 'scripts/**' --ignore-pattern 'tools/**' --ignore-pattern 'apps/*/scripts/**' --ignore-pattern 'apps/*/src-tauri/target/**' --ignore-pattern 'packages/lezer-tikz/src/grammar/tikz-parser*.ts' --ignore-pattern '**/*.config.*' --ignore-pattern '**/tmp-*'",
-    "lint:no-unnecessary-condition": "eslint . --no-cache --format json --output-file node_modules/.cache/eslint/no-unnecessary-condition.json --rule '@typescript-eslint/no-unnecessary-condition:warn' --ignore-pattern 'coverage/**' --ignore-pattern 'test/**' --ignore-pattern 'apps/desktop/e2e/**' --ignore-pattern 'apps/web/e2e/**' --ignore-pattern 'apps/web/profiling/**' --ignore-pattern 'scripts/**' --ignore-pattern 'tools/**' --ignore-pattern 'apps/*/scripts/**' --ignore-pattern 'apps/*/src-tauri/target/**' --ignore-pattern 'packages/lezer-tikz/src/grammar/tikz-parser*.ts' --ignore-pattern '**/*.config.*' --ignore-pattern '**/tmp-*'",
+    "lint:prod": "eslint 'packages/*/src/**/*.{ts,tsx}' 'apps/*/src/**/*.{ts,tsx}' --cache --cache-location node_modules/.cache/eslint/prod/ --cache-strategy content --max-warnings=0",
+    "lint:no-unnecessary-condition": "eslint 'packages/*/src/**/*.{ts,tsx}' 'apps/*/src/**/*.{ts,tsx}' --no-cache --format json --output-file node_modules/.cache/eslint/no-unnecessary-condition.json --rule '@typescript-eslint/no-unnecessary-condition:warn'",
+    "lint:dead-code": "knip --no-progress --reporter compact --max-issues 35",
     "lint:test": "eslint test apps/web/e2e apps/web/profiling apps/desktop/e2e --cache --cache-location node_modules/.cache/eslint/test/ --cache-strategy content --max-warnings=0",
-    "lint:ci": "npm run lint:prod",
+    "lint:ci": "npm run lint:prod && npm run lint:test && npm run lint:dead-code",
     "typecheck": "tsc -p tsconfig.json --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo && node scripts/check-coordinate-typing.mjs",
     "build": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build && npm run -w @tikz-editor/core build",
     "test": "npm run generate:grammar && vitest run",
@@ -116,8 +119,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@eslint-react/eslint-plugin": "^5.8.5",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.13.0",
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/eslint-plugin": "^1.6.16",
@@ -126,10 +129,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-unicorn": "^64.0.0",
     "globals": "^17.5.0",
+    "knip": "^6.26.0",
     "typescript-eslint": "^8.59.1",
     "vitest": "^3.0.5"
-  },
-  "dependencies": {
-    "keynote-clipboard": "^1.2.0"
   }
 }

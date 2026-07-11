@@ -578,6 +578,27 @@ describe("applyEditAction – resizeElement", () => {
     expect(result.newSource).toContain("y radius=1cm");
   });
 
+  it("preserves unrelated shape-option comments while resizing radii", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) ellipse [draw=blue, % keep shape styling
+    x radius=1cm, y radius=0.5cm];
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "resizeElement",
+      elementId: "path:0",
+      role: "bottom-right",
+      newWorld: wp(cm(2), cm(1))
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep shape styling");
+    expect(result.newSource).toContain("draw=blue");
+    expect(result.newSource).toContain("x radius=2cm");
+    expect(result.newSource).toContain("y radius=1cm");
+  });
+
   it("resizes filled ellipse statements that are emitted as path geometry", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[fill=yellow] (0,0) ellipse [x radius=1cm, y radius=0.5cm];
@@ -1574,6 +1595,30 @@ describe("applyEditAction – resizeElement", () => {
     expect(result.newSource).not.toContain("yshift=5pt");
     expect(result.newSource).toContain("xscale=");
     expect(result.newSource).toContain("yscale=");
+  });
+
+  it("preserves scope option comments while replacing transform entries", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \begin{scope}[draw=blue, % keep scope styling
+    xscale=2, yshift=5pt]
+    \draw (0,0) rectangle (2,1);
+  \end{scope}
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "resizeElement",
+      elementId: "scope:0",
+      role: "bottom-right",
+      newWorld: wp(cm(3), cm(-2))
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep scope styling");
+    expect(result.newSource).toContain("draw=blue");
+    expect(result.newSource).toContain("xscale=");
+    expect(result.newSource).toContain("yscale=");
+    expect(result.newSource).not.toContain("yshift=5pt");
   });
 
   it("resizes scopes while preserving unknown entries in existing option lists", () => {

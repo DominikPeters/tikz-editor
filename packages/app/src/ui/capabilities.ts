@@ -3,8 +3,8 @@ import {
   type CapabilityMatrix,
   type CapabilityRow,
   type FeatureId
-} from "tikz-editor/capabilities";
-import type { InspectorProperty } from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/capabilities";
+import type { InspectorProperty } from "@tikz-editor/core/edit/inspector";
 import type { ToolMode } from "../store/types";
 
 type LayerKey = keyof Pick<CapabilityRow, "parser" | "semantic" | "svg" | "edit">;

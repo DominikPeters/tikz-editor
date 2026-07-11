@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { hexToRgb, rgbToHex } from "@tikz-editor/core/utils/color-convert";
+import { clamp01 } from "@tikz-editor/core/utils/math";
 import { rgbToXcolorExpression, type RgbColor, type RgbToXcolorMode } from "xcolor-rgb-convert";
-import { normalizeColor } from "tikz-editor/semantic/style/colors";
+import { normalizeColor } from "@tikz-editor/core/semantic/style/colors";
 import { BASIC_PICKER_COLORS, BASIC_PICKER_COLOR_SET } from "../colors/color-palette";
 import type { NamedColorSwatch } from "../colors/project-named-colors";
 import { useSettingsStore } from "../settings/useSettingsStore";
@@ -1361,37 +1363,6 @@ function isHexColor(input: string): boolean {
   return /^#[0-9a-f]{3}$/iu.test(input) || /^#[0-9a-f]{6}$/iu.test(input);
 }
 
-function normalizeHex(input: string): string {
-  const raw = input.trim().toLowerCase().replace(/^#/, "");
-  if (raw.length === 3) {
-    return `#${raw
-      .split("")
-      .map((char) => `${char}${char}`)
-      .join("")}`;
-  }
-  return `#${raw}`;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = normalizeHex(hex).replace(/^#/, "");
-  const parsed = Number.parseInt(normalized, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  return (
-    "#" +
-    [rgb.r, rgb.g, rgb.b]
-      .map((component) => Math.round(Math.max(0, Math.min(255, component))))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
 function hsvToRgb(hueDegrees: number, saturationRaw: number, valueRaw: number): RgbColor {
   const h = normalizeHueDegrees(hueDegrees);
   const s = clamp01(saturationRaw);
@@ -1518,14 +1489,4 @@ function tonePositionFromHitRatio(ratio: number): number {
     }
   }
   return TONE_MAX;
-}
-
-function clamp01(value: number): number {
-  if (value <= 0) {
-    return 0;
-  }
-  if (value >= 1) {
-    return 1;
-  }
-  return value;
 }

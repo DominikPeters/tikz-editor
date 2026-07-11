@@ -85,6 +85,17 @@ type TextFontOptions = {
   fontFamily: "serif" | "sans" | "monospace";
 };
 
+type MathJaxTextMode = "text" | "math";
+type MaybePromise<T> = T | Promise<T>;
+
+type MeasuredRenderRequest = {
+  sourceText: string;
+  textWidthPt: number | null;
+  font: TextFontOptions;
+  mode: MathJaxTextMode;
+  alignment: NodeTextParagraphAlignment | null;
+};
+
 type FontSwitchRule = {
   pattern: RegExp;
   apply: (font: TextFontOptions) => void;
@@ -851,6 +862,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {
   return isRecord(value) && typeof value.then === "function";
+}
+
+function mapMaybePromise<T, R>(
+  value: MaybePromise<T>,
+  map: (resolved: T) => MaybePromise<R>
+): MaybePromise<R> {
+  return isPromiseLike(value) ? value.then((resolved) => map(resolved)) : map(value);
 }
 
 function toStringArray(value: unknown): string[] {
@@ -1936,32 +1954,38 @@ function escapeXmlAttribute(value: string): string {
   return escapeXmlText(value).replaceAll('"', "&quot;");
 }
 
-function buildMeasuredCacheEntry(params: {
+function prepareMeasuredRender(params: MeasuredRenderRequest) {
+  const explicitMultiline = hasExplicitMultilineBreaks(params.sourceText);
+  return {
+    ...params,
+    explicitMultiline,
+    layoutMode: resolveKnuthPlassLayoutMode(params.textWidthPt, explicitMultiline),
+    wrappedTextGaps:
+      params.mode === "text" ? collectWrappedTextGaps(params.sourceText, params.alignment) : []
+  };
+}
+
+function buildMeasuredCacheEntry(params: MeasuredRenderRequest & {
   runtime: MathJaxRuntime;
   exactSingleLineWidthCache: Map<string, number>;
   cacheKey: string;
-  sourceText: string;
-  textWidthPt: number | null;
-  font: TextFontOptions;
-  mode: "text" | "math";
-  alignment: NodeTextParagraphAlignment | null;
 }): CachedRenderEntry | null {
   const { runtime, exactSingleLineWidthCache, cacheKey, sourceText, textWidthPt, font, mode, alignment } = params;
+  const plan = prepareMeasuredRender({ sourceText, textWidthPt, font, mode, alignment });
   const adaptor = runtime.startup?.adaptor ?? null;
-  const explicitMultiline = hasExplicitMultilineBreaks(sourceText);
-  const layoutMode = resolveKnuthPlassLayoutMode(textWidthPt, explicitMultiline);
-  const wrappedTextGaps = mode === "text" ? collectWrappedTextGaps(sourceText, alignment) : [];
 
   const measuredWidth =
     textWidthPt ??
-    (explicitMultiline
-      ? measureFixedLinesParagraphWidth(runtime, exactSingleLineWidthCache, sourceText, font, mode)
-      : measureNaturalWidth(runtime, sourceText, font, mode));
+    (plan.explicitMultiline
+      ? measureFixedLinesParagraphWidth(sourceText, (line) =>
+          measureExactSingleLineWidth(runtime, exactSingleLineWidthCache, line, font, mode)
+        ) as number | null
+      : measureNaturalWidth(runtime, sourceText, font, mode) as number);
   if (measuredWidth == null || !Number.isFinite(measuredWidth) || measuredWidth <= 0) {
     return null;
   }
   const resolvedWidth = measuredWidth;
-  if (textWidthPt == null && !explicitMultiline) {
+  if (textWidthPt == null && !plan.explicitMultiline) {
     return buildExactSingleLineCacheEntry({
       runtime,
       cacheKey,
@@ -1973,10 +1997,10 @@ function buildMeasuredCacheEntry(params: {
     });
   }
   const tex = buildWrappedTeX(sourceText, resolvedWidth, font, alignment, mode);
-  applyKnuthPlassRuntimeOptions(runtime, alignment, layoutMode, wrappedTextGaps);
+  applyKnuthPlassRuntimeOptions(runtime, alignment, plan.layoutMode, plan.wrappedTextGaps);
   const node = runtime.tex2svg(tex, { display: false });
   const entry = buildCacheEntryWithMetadata(cacheKey, node, adaptor, sourceText, null);
-  if (explicitMultiline && entry?.paragraphId == null) {
+  if (plan.explicitMultiline && entry?.paragraphId == null) {
     throw new Error("Multiline MathJax render did not produce a paragraph report.");
   }
   return entry;
@@ -1986,61 +2010,34 @@ function measureNaturalWidth(
   runtime: MathJaxRuntime,
   sourceText: string,
   font: TextFontOptions,
-  mode: "text" | "math"
-): number {
+  mode: MathJaxTextMode,
+  asyncRender = false
+): MaybePromise<number> {
   const adaptor = runtime.startup?.adaptor ?? null;
   const naturalTex = buildWrappedTeX(sourceText, null, font, null, mode);
-  const node = runtime.tex2svg(naturalTex, { display: false });
-  const entry = buildCacheEntryWithMetadata("__measure__", node, adaptor, sourceText, null);
-  return entry?.baseWidthPt ?? Number.NaN;
+  const rendered = asyncRender
+    ? runtime.tex2svgPromise!(naturalTex, { display: false })
+    : runtime.tex2svg(naturalTex, { display: false });
+  return mapMaybePromise(rendered, (node) => {
+    const entry = buildCacheEntryWithMetadata("__measure__", node, adaptor, sourceText, null);
+    return entry?.baseWidthPt ?? Number.NaN;
+  });
 }
 
 function measureFixedLinesParagraphWidth(
-  runtime: MathJaxRuntime,
-  exactSingleLineWidthCache: Map<string, number>,
   sourceText: string,
-  font: TextFontOptions,
-  mode: "text" | "math"
-): number | null {
+  measureLine: (line: string) => MaybePromise<number>
+): MaybePromise<number | null> {
   const lines = splitExplicitMultilineSource(sourceText);
-  let maxWidth = 0;
+  let maxWidth: MaybePromise<number> = 0;
   for (const line of lines) {
-    const width = measureExactSingleLineWidth(runtime, exactSingleLineWidthCache, line, font, mode);
-    if (Number.isFinite(width)) {
-      maxWidth = Math.max(maxWidth, width);
-    }
+    maxWidth = mapMaybePromise(maxWidth, (currentMax) =>
+      mapMaybePromise(measureLine(line), (width) =>
+        Number.isFinite(width) ? Math.max(currentMax, width) : currentMax
+      )
+    );
   }
-  return maxWidth > 0 ? maxWidth : null;
-}
-
-async function measureNaturalWidthWithPromise(
-  runtime: MathJaxRuntime,
-  sourceText: string,
-  font: TextFontOptions,
-  mode: "text" | "math"
-): Promise<number> {
-  const adaptor = runtime.startup?.adaptor ?? null;
-  const naturalTex = buildWrappedTeX(sourceText, null, font, null, mode);
-  const node = await runtime.tex2svgPromise!(naturalTex, { display: false });
-  const entry = buildCacheEntryWithMetadata("__measure__", node, adaptor, sourceText, null);
-  return entry?.baseWidthPt ?? Number.NaN;
-}
-
-async function measureFixedLinesParagraphWidthWithPromise(
-  runtime: MathJaxRuntime,
-  sourceText: string,
-  font: TextFontOptions,
-  mode: "text" | "math"
-): Promise<number | null> {
-  const lines = splitExplicitMultilineSource(sourceText);
-  let maxWidth = 0;
-  for (const line of lines) {
-    const width = await measureExactSingleLineWidthWithPromise(runtime, line, font, mode);
-    if (Number.isFinite(width)) {
-      maxWidth = Math.max(maxWidth, width);
-    }
-  }
-  return maxWidth > 0 ? maxWidth : null;
+  return mapMaybePromise(maxWidth, (resolvedMax) => resolvedMax > 0 ? resolvedMax : null);
 }
 
 function measureParagraphRunWidth(report: ParagraphLayoutReport | null): number | null {
@@ -2086,7 +2083,7 @@ function measureExactSingleLineWidth(
   if (cached !== undefined) {
     return cached;
   }
-  const measuredWidthPt = measureNaturalWidth(runtime, sourceText, font, mode);
+  const measuredWidthPt = measureNaturalWidth(runtime, sourceText, font, mode) as number;
   if (!(Number.isFinite(measuredWidthPt) && measuredWidthPt > 0)) {
     setCappedMapValue(exactSingleLineWidthCache, cacheKey, Number.NaN, EXACT_WIDTH_CACHE_LIMIT);
     return Number.NaN;
@@ -2119,9 +2116,9 @@ async function measureExactSingleLineWidthWithPromise(
   runtime: MathJaxRuntime,
   sourceText: string,
   font: TextFontOptions,
-  mode: "text" | "math"
+  mode: MathJaxTextMode
 ): Promise<number> {
-  const measuredWidthPt = await measureNaturalWidthWithPromise(runtime, sourceText, font, mode);
+  const measuredWidthPt = await measureNaturalWidth(runtime, sourceText, font, mode, true);
   if (!(Number.isFinite(measuredWidthPt) && measuredWidthPt > 0)) {
     return Number.NaN;
   }
@@ -2157,18 +2154,9 @@ async function waitForParagraphRunWidth(
 
 function renderMeasuredNodeWithPromise(
   runtime: MathJaxRuntime,
-  params: {
-    sourceText: string;
-    textWidthPt: number | null;
-    font: TextFontOptions;
-    mode: "text" | "math";
-    alignment: NodeTextParagraphAlignment | null;
-  }
+  params: MeasuredRenderRequest
 ): Promise<unknown> {
-  const explicitMultiline = hasExplicitMultilineBreaks(params.sourceText);
-  const layoutMode = resolveKnuthPlassLayoutMode(params.textWidthPt, explicitMultiline);
-  const wrappedTextGaps =
-    params.mode === "text" ? collectWrappedTextGaps(params.sourceText, params.alignment) : [];
+  const plan = prepareMeasuredRender(params);
 
   const runMeasuredRender = (resolvedWidthPt: number): Promise<unknown> => {
     const tex = buildWrappedTeX(
@@ -2178,9 +2166,9 @@ function renderMeasuredNodeWithPromise(
       params.alignment,
       params.mode
     );
-    applyKnuthPlassRuntimeOptions(runtime, params.alignment, layoutMode, wrappedTextGaps);
+    applyKnuthPlassRuntimeOptions(runtime, params.alignment, plan.layoutMode, plan.wrappedTextGaps);
     return runtime.tex2svgPromise!(tex, { display: false }).then((node) => {
-      if (explicitMultiline) {
+      if (plan.explicitMultiline) {
         const entry = buildCacheEntryWithMetadata(
           "__measure__",
           node,
@@ -2196,19 +2184,20 @@ function renderMeasuredNodeWithPromise(
     });
   };
 
-  const measuredWidthPromise =
-    params.textWidthPt != null
-      ? Promise.resolve(params.textWidthPt)
-      : explicitMultiline
-        ? measureFixedLinesParagraphWidthWithPromise(runtime, params.sourceText, params.font, params.mode)
-        : measureNaturalWidthWithPromise(runtime, params.sourceText, params.font, params.mode);
+  const measuredWidth =
+    params.textWidthPt ??
+    (plan.explicitMultiline
+      ? measureFixedLinesParagraphWidth(params.sourceText, (line) =>
+          measureExactSingleLineWidthWithPromise(runtime, line, params.font, params.mode)
+        )
+      : measureNaturalWidth(runtime, params.sourceText, params.font, params.mode, true));
 
-  return measuredWidthPromise.then((measuredWidthPt) => {
+  return Promise.resolve(measuredWidth).then((measuredWidthPt) => {
     if (measuredWidthPt == null || !Number.isFinite(measuredWidthPt) || measuredWidthPt <= 0) {
       throw new Error("Unable to measure paragraph width.");
     }
     const resolvedWidthPt = measuredWidthPt;
-    if (params.textWidthPt != null || explicitMultiline) {
+    if (params.textWidthPt != null || plan.explicitMultiline) {
       return runMeasuredRender(resolvedWidthPt);
     }
     return renderExactSingleLineNodeWithPromise(runtime, runMeasuredRender, params.sourceText, resolvedWidthPt);
@@ -2571,12 +2560,17 @@ function computeWrappedTextGap(
   };
 }
 
-function collectWrappedTextGaps(
+type WrappedTextSpacingToken =
+  | { kind: "text"; value: string }
+  | { kind: "gap"; gap: WrappedTextGap };
+
+function tokenizeWrappedTextSpacing(
   text: string,
   alignment: NodeTextParagraphAlignment | null
-): WrappedTextGap[] {
-  const gaps: WrappedTextGap[] = [];
+): WrappedTextSpacingToken[] {
+  const tokens: WrappedTextSpacingToken[] = [];
   let index = 0;
+  let textStart = 0;
   let inMath = false;
   let spaceFactor = 1000;
 
@@ -2621,10 +2615,17 @@ function collectWrappedTextGaps(
       while (index < text.length && /\s/.test(text[index])) {
         index += 1;
       }
-      gaps.push({
-        sourceStart: start,
-        ...computeWrappedTextGap(spaceFactor, alignment),
+      if (start > textStart) {
+        tokens.push({ kind: "text", value: text.slice(textStart, start) });
+      }
+      tokens.push({
+        kind: "gap",
+        gap: {
+          sourceStart: start,
+          ...computeWrappedTextGap(spaceFactor, alignment),
+        },
       });
+      textStart = index;
       spaceFactor = 1000;
       continue;
     }
@@ -2635,77 +2636,25 @@ function collectWrappedTextGaps(
     index += 1;
   }
 
-  return gaps;
+  if (textStart < text.length) {
+    tokens.push({ kind: "text", value: text.slice(textStart) });
+  }
+  return tokens;
 }
 
-function encodeWrappedTextSpaces(
+function collectWrappedTextGaps(
   text: string,
   alignment: NodeTextParagraphAlignment | null
-): string {
-  let encoded = "";
-  let index = 0;
-  let inMath = false;
-  let spaceFactor = 1000;
+): WrappedTextGap[] {
+  return tokenizeWrappedTextSpacing(text, alignment)
+    .filter((token): token is Extract<WrappedTextSpacingToken, { kind: "gap" }> => token.kind === "gap")
+    .map((token) => token.gap);
+}
 
-  while (index < text.length) {
-    const char = text[index];
-
-    if (char === "$") {
-      encoded += char;
-      const escaped = index > 0 && text[index - 1] === "\\";
-      if (!escaped) {
-        inMath = !inMath;
-        spaceFactor = 1000;
-      }
-      index += 1;
-      continue;
-    }
-
-    if (char === "\\") {
-      const next = text[index + 1] ?? "";
-      if (next === "\\") {
-        encoded += "\\\\";
-        index += 2;
-        continue;
-      }
-      if (isAsciiLetter(next)) {
-        let end = index + 2;
-        while (end < text.length && isAsciiLetter(text[end])) {
-          end += 1;
-        }
-        encoded += text.slice(index, end);
-        if (!inMath && text[end] === " ") {
-          encoded += " ";
-          end += 1;
-        }
-        spaceFactor = 1000;
-        index = end;
-        continue;
-      }
-      encoded += text.slice(index, Math.min(text.length, index + 2));
-      spaceFactor = 1000;
-      index += Math.min(2, text.length - index);
-      continue;
-    }
-
-    if (!inMath && /\s/.test(char)) {
-      while (index < text.length && /\s/.test(text[index])) {
-        index += 1;
-      }
-      const { widthEm } = computeWrappedTextGap(spaceFactor, alignment);
-      encoded += encodedGapCommand(widthEm);
-      spaceFactor = 1000;
-      continue;
-    }
-
-    encoded += char;
-    if (!inMath) {
-      spaceFactor = texSpaceFactorAfterChar(char, spaceFactor);
-    }
-    index += 1;
-  }
-
-  return encoded;
+function encodeWrappedTextSpaces(text: string, alignment: NodeTextParagraphAlignment | null): string {
+  return tokenizeWrappedTextSpacing(text, alignment)
+    .map((token) => (token.kind === "text" ? token.value : encodedGapCommand(token.gap.widthEm)))
+    .join("");
 }
 
 function buildWrappedTeX(

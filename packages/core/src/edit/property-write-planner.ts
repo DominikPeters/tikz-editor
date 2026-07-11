@@ -212,9 +212,11 @@ function buildCleanupCandidates(
     candidates.push({ source: removal, reason: "remove default-equivalent local property" });
   }
 
-  for (const candidate of buildPaintCommandCleanupCandidates(conservativeSource, action, parseOptions)) {
-    if (candidate.source !== conservativeSource && candidate.source !== originalSource) {
-      candidates.push(candidate);
+  if (!isPureComplementaryPaintAppend(originalSource, action, parseOptions)) {
+    for (const candidate of buildPaintCommandCleanupCandidates(conservativeSource, action, parseOptions)) {
+      if (candidate.source !== conservativeSource && candidate.source !== originalSource) {
+        candidates.push(candidate);
+      }
     }
   }
 
@@ -308,6 +310,32 @@ function chooseCandidateCommands(paint: PaintOptions): Array<"path" | "draw" | "
     candidates.push("draw");
   }
   return candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+}
+
+function isPureComplementaryPaintAppend(
+  source: string,
+  action: SetPropertyAction,
+  parseOptions: EditParseOptions
+): boolean {
+  if (action.clearKeys && action.clearKeys.length > 0) {
+    return false;
+  }
+  const value = normalizeOptionValue(action.value);
+  if (value.length === 0 || isDisabledPaintValue(value)) {
+    return false;
+  }
+  const resolved = resolvePropertyTarget(source, action.elementId, parseOptions);
+  if (resolved.kind !== "found" || resolved.target.kind !== "path-statement") {
+    return false;
+  }
+  const command = normalizedPaintCommand(resolved.target.pathCommand);
+  const key = normalizeOptionKey(action.key);
+  const paint = resolvePaintOptions(source, action.elementId, parseOptions);
+  return (command === "draw" && key === "fill" && paint.fill == null && !paint.drawDisabled)
+    || (command === "fill"
+      && (key === "draw" || key === "color")
+      && paint.draw == null
+      && !paint.fillDisabled);
 }
 
 function commandRemovesExplicitDrawSuppression(command: "path" | "draw" | "fill"): boolean {
