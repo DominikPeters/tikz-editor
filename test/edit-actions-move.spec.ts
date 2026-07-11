@@ -1374,6 +1374,73 @@ describe("applyEditAction – node relative positioning conversions", () => {
     expectPatchesReconstructSource(source, result);
   });
 
+  it("preserves comments and multiline layout when converting to absolute positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node (A) at (0,0) {A};
+\node[draw=red, % keep node styling
+    below=of A, thick] (B) {B};
+\end{tikzpicture}`;
+    const [, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "convertNodePositionToAbsolute",
+      nodeId: nodeId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep node styling");
+    expect(result.newSource).toContain("draw=red, % keep node styling\n    thick]");
+    expect(result.newSource).toContain(" at (");
+    expect(result.newSource).not.toContain("below=of A");
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("preserves comments when converting to relative positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw, % styled
+  thick] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% styled");
+    expect(result.newSource).toContain("of A");
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("keeps an explicit anchor after the inserted placement option", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw, anchor=west] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    const placementIndex = result.newSource.indexOf("of A");
+    const anchorIndex = result.newSource.indexOf("anchor=west");
+    expect(placementIndex).toBeGreaterThan(-1);
+    expect(anchorIndex).toBeGreaterThan(placementIndex);
+    expectPatchesReconstructSource(source, result);
+  });
+
   it("round trips cardinal absolute positioning through relative positioning", () => {
     expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
 \node[draw] (A) at (0,0) {A};

@@ -168,7 +168,8 @@ export function rewriteSourceBackedOptionListMutations(
   optionsSpan: Span,
   options: OptionListAst,
   mutations: ReadonlyMap<string, OptionMutation>,
-  format: PropertyTargetOptionsFormat = "bracketed"
+  format: PropertyTargetOptionsFormat = "bracketed",
+  insert: { beforeKey: string } | null = null
 ): string {
   return rewriteOptionListMutationsPreservingSourceInternal(
     source,
@@ -176,7 +177,8 @@ export function rewriteSourceBackedOptionListMutations(
     options,
     mutations,
     DEFAULT_OPTION_SERIALIZATION_CONTEXT,
-    format
+    format,
+    insert?.beforeKey ?? null
   );
 }
 
@@ -188,7 +190,8 @@ function rewriteOptionListMutationsPreservingSourceInternal(
   options: OptionListAst,
   mutations: ReadonlyMap<string, OptionMutation>,
   serializationContext: OptionSerializationContext,
-  format: PropertyTargetOptionsFormat
+  format: PropertyTargetOptionsFormat,
+  insertBeforeKey: string | null = null
 ): string {
   const original = source.slice(optionsSpan.from, optionsSpan.to);
   const emitted = new Set<string>();
@@ -244,9 +247,24 @@ function rewriteOptionListMutationsPreservingSourceInternal(
   if (
     entriesToInsert.length === 0 &&
     sortedEntries.length > 0 &&
-    replacements.filter((replacement) => replacement.removesEntry).length === sortedEntries.length
+    replacements.filter((replacement) => replacement.removesEntry).length === sortedEntries.length &&
+    !containsLiveComment(original)
   ) {
     return format === "bracketed" || format === "bare" ? "" : wrapSerializedOptions("", format);
+  }
+
+  if (entriesToInsert.length > 0 && insertBeforeKey) {
+    const insertionAnchor = findInsertionAnchorEntry(sortedEntries, mutations, insertBeforeKey);
+    if (insertionAnchor) {
+      const anchorFrom = Math.max(0, insertionAnchor.span.from - optionsSpan.from);
+      replacements.push({
+        from: anchorFrom,
+        to: anchorFrom,
+        text: `${entriesToInsert.join(", ")}, `,
+        removesEntry: false
+      });
+      entriesToInsert.length = 0;
+    }
   }
 
   const rewritten = applyRelativeReplacements(original, replacements);
@@ -255,6 +273,35 @@ function rewriteOptionListMutationsPreservingSourceInternal(
   }
 
   return insertSerializedOptionEntries(rewritten, entriesToInsert, format);
+}
+
+function findInsertionAnchorEntry(
+  sortedEntries: readonly OptionEntry[],
+  mutations: ReadonlyMap<string, OptionMutation>,
+  beforeKey: string
+): OptionEntry | null {
+  const normalizedBeforeKey = normalizeOptionKey(beforeKey);
+  for (const entry of sortedEntries) {
+    const entryKey = optionEntryKey(entry);
+    if (entryKey === normalizedBeforeKey && !mutations.has(entryKey)) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function containsLiveComment(source: string): boolean {
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "%") {
+      return true;
+    }
+  }
+  return false;
 }
 
 function applyRelativeReplacements(
@@ -347,7 +394,7 @@ function extendTerminalEmptyRemoval(
   protectedReplacements: readonly RelativeReplacement[]
 ): RelativeReplacement {
   let right = removal.to;
-  while (right < source.length && (source[right] === " " || source[right] === "\t")) {
+  while (right < source.length && isOptionListWhitespace(source[right])) {
     right += 1;
   }
   if (right < source.length && source[right] !== "]" && source[right] !== "}") {
@@ -355,7 +402,7 @@ function extendTerminalEmptyRemoval(
   }
 
   let left = removal.from;
-  while (left > 0 && (source[left - 1] === " " || source[left - 1] === "\t")) {
+  while (left > 0 && isOptionListWhitespace(source[left - 1])) {
     left -= 1;
   }
   if (source[left - 1] !== ",") {
@@ -375,6 +422,10 @@ function extendTerminalEmptyRemoval(
     ...removal,
     from: left
   };
+}
+
+function isOptionListWhitespace(char: string | undefined): boolean {
+  return char === " " || char === "\t" || char === "\n" || char === "\r";
 }
 
 function rangesOverlap(left: { from: number; to: number }, right: { from: number; to: number }): boolean {
@@ -421,7 +472,8 @@ function insertSerializedOptionEntries(
     }
     const insertIndex = trailingHorizontalWhitespaceStart(source, source.length);
     const beforeInsertion = source.slice(0, insertIndex);
-    return `${beforeInsertion}, ${content}${source.slice(insertIndex)}`;
+    const separator = endsWithLiveComma(beforeInsertion) ? " " : ", ";
+    return `${beforeInsertion}${separator}${content}${source.slice(insertIndex)}`;
   }
 
   const closeChar = format === "braced" ? "}" : "]";
@@ -436,7 +488,12 @@ function insertSerializedOptionEntries(
 
   if (!source.includes("\n")) {
     const insertIndex = trailingHorizontalWhitespaceStart(source, closeIndex);
-    const prefix = hasOptionContent(source.slice(0, insertIndex), format) ? `, ${content}` : content;
+    const beforeInsertion = source.slice(0, insertIndex);
+    const prefix = hasOptionContent(beforeInsertion, format)
+      ? endsWithLiveComma(beforeInsertion)
+        ? ` ${content}`
+        : `, ${content}`
+      : content;
     return `${source.slice(0, insertIndex)}${prefix}${source.slice(insertIndex)}`;
   }
 

@@ -36,6 +36,70 @@ bar
 ]`);
   });
 
+  it("keeps authored comments when removing the last entry", () => {
+    const source = "[red % important\n]";
+    const mutations = new Map([["red", { kind: "remove" } as const]]);
+
+    expect(rewriteSourceBackedOptionListMutations(
+      source,
+      { from: 0, to: source.length },
+      parseOptionListRaw(source),
+      mutations
+    )).toBe("[ % important\n]");
+  });
+
+  it("removes the dangling comma when deleting the last multiline entry", () => {
+    const source = "[red,\n  thick\n]";
+    const mutations = new Map([["thick", { kind: "remove" } as const]]);
+
+    expect(rewriteSourceBackedOptionListMutations(
+      source,
+      { from: 0, to: source.length },
+      parseOptionListRaw(source),
+      mutations
+    )).toBe("[red\n]");
+  });
+
+  it("does not double the separator when inserting after a trailing comma", () => {
+    const source = "[red,]";
+    const mutations = new Map([["thick", { kind: "set", value: "true" } as const]]);
+
+    expect(rewriteSourceBackedOptionListMutations(
+      source,
+      { from: 0, to: source.length },
+      parseOptionListRaw(source),
+      mutations
+    )).toBe("[red, thick]");
+  });
+
+  it("inserts new entries before the requested key", () => {
+    const source = "[draw=red, anchor=west, thick]";
+    const mutations = new Map([["below", { kind: "set", value: "of a" } as const]]);
+
+    expect(rewriteSourceBackedOptionListMutations(
+      source,
+      { from: 0, to: source.length },
+      parseOptionListRaw(source),
+      mutations,
+      "bracketed",
+      { beforeKey: "anchor" }
+    )).toBe("[draw=red, below=of a, anchor=west, thick]");
+  });
+
+  it("falls back to appending when the requested insertion key is absent", () => {
+    const source = "[draw=red]";
+    const mutations = new Map([["below", { kind: "set", value: "of a" } as const]]);
+
+    expect(rewriteSourceBackedOptionListMutations(
+      source,
+      { from: 0, to: source.length },
+      parseOptionListRaw(source),
+      mutations,
+      "bracketed",
+      { beforeKey: "anchor" }
+    )).toBe("[draw=red, below=of a]");
+  });
+
   it("serializes bare draw colors only for color-like values", () => {
     const drawContext = { bareColorKey: "draw" as const };
 
