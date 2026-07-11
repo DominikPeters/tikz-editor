@@ -1129,6 +1129,67 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out mathrsfs uppercase letters at optical script sizes", () => {
+    const result = layout(String.raw`\mathscr{F}+x_{\mathscr{G}}+x_{y_{\mathscr{H}}}`);
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])
+      .filter((glyph) => glyph.text === "F" || glyph.text === "G" || glyph.text === "H")
+      .map((glyph) => glyph.fontId)).toEqual(["rsfs10", "rsfs7", "rsfs5"]);
+  });
+
+  it("rejects glyphs absent from the uppercase-only mathrsfs font", () => {
+    expect(layout(String.raw`\mathscr{x}`).supported).toBe(false);
+  });
+
+  it("keeps ordinary symbols and digits ordinary inside composite mathrsfs contents", () => {
+    const result = layout(String.raw`\mathscr{F+G_2}`);
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => [glyph.text, glyph.fontId]))
+      .toEqual([
+        ["F", "rsfs10"],
+        ["+", "cmr10"],
+        ["G", "rsfs10"],
+        ["2", "cmr7"],
+      ]);
+  });
+
+  it("uses the bold math version recursively without synthesizing unavailable faces", () => {
+    const result = layout(String.raw`\boldsymbol{x+1=\alpha\leq\hat y+\mathrm{R}+\mathcal{A}+\mathbb{N}+\sum}`);
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    const fontFor = (text: string) => glyphs.find((glyph) => glyph.text === text)?.fontId;
+    expect(fontFor("x")).toBe("cmmib10");
+    expect(fontFor("1")).toBe("cmbx10");
+    expect(fontFor("+")).toBe("cmbx10");
+    expect(fontFor("\\alpha")).toBe("cmmib10");
+    expect(fontFor("\\leq")).toBe("cmbsy10");
+    expect(fontFor("\\hat")).toBe("cmbx10");
+    expect(fontFor("R")).toBe("cmbx10");
+    expect(fontFor("A")).toBe("cmbsy10");
+    expect(fontFor("N")).toBe("msbm10");
+    // Computer Modern has no bold extension font; amsbsy leaves large operators alone.
+    expect(fontFor("\\sum")).toBe("cmex10");
+  });
+
+  it("keeps boldsymbol active in scripts", () => {
+    const result = layout(String.raw`\boldsymbol{x_{\alpha}^{2}}`);
+    expect(result.supported).toBe(true);
+    const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+    expect(glyphs.map((glyph) => [glyph.text, glyph.fontId])).toEqual([
+      ["x", "cmmib10"],
+      ["2", "cmbx7"],
+      ["\\alpha", "cmmib7"],
+    ]);
+  });
+
+  it("uses genuine bold Euler Fraktur at all optical sizes inside boldsymbol", () => {
+    const result = layout(String.raw`\boldsymbol{\mathfrak{g}+x_{\mathfrak{h}}+x_{y_{\mathfrak{k}}}}`);
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? [])
+      .filter((glyph) => glyph.text === "g" || glyph.text === "h" || glyph.text === "k")
+      .map((glyph) => glyph.fontId)).toEqual(["eufb10", "eufb7", "eufb5"]);
+  });
+
   it("lays out unbraced math alphabet commands as TeX math arguments", () => {
     const result = layout(String.raw`\mathit a+\mathsf x+\mathtt 7+\mathcal A`);
 
@@ -4041,5 +4102,38 @@ describe("TeX math hlist layout", () => {
       expect(result.hlist).toBeNull();
       expect(result.errors[0]?.message).toMatch(/Unsupported TeX math item|Only simple glyph math atoms/);
     }
+  });
+
+  it("lays out vertical, diagonal, and semantic AMS dots natively", () => {
+    const dots = layout(String.raw`\vdots+\ddots+\dotsc)+\dotsb,\dotsm)\dotsi+\dotso.`);
+    expect(dots.errors).toEqual([]);
+    expect(dots.supported).toBe(true);
+    const glyphs = flattenGlyphItems(dots.hlist?.items ?? []);
+    expect(glyphs.filter((glyph) => glyph.text === String.raw`\vdots`)).toHaveLength(3);
+    expect(glyphs.filter((glyph) => glyph.text === String.raw`\ddots`)).toHaveLength(3);
+    expect(glyphs.filter((glyph) => glyph.code === 1)).toHaveLength(9);
+    expect(glyphs.filter((glyph) => glyph.code === 58).length).toBeGreaterThanOrEqual(9);
+  });
+
+  it("lays out dcases cells in display style and braces with CMEX fills and limits", () => {
+    const ordinary = layout(String.raw`\begin{cases}\frac12&x\end{cases}`);
+    const display = layout(String.raw`\begin{dcases}\frac12&x\end{dcases}`);
+    expect(display.supported).toBe(true);
+    expect((display.hlist?.height ?? 0) + (display.hlist?.depth ?? 0)).toBeGreaterThan(
+      (ordinary.hlist?.height ?? 0) + (ordinary.hlist?.depth ?? 0)
+    );
+
+    const braces = layout(String.raw`\overbrace{a+b}^{n}+\underbrace{x+y}_{m}`);
+    expect(braces.supported).toBe(true);
+    const glyphs = flattenGlyphItems(braces.hlist?.items ?? []);
+    for (const code of [122, 123, 124, 125]) {
+      expect(glyphs).toEqual(expect.arrayContaining([expect.objectContaining({ fontId: "cmex10", code })]));
+    }
+    const items = flattenMathItems(braces.hlist?.items ?? []);
+    expect(items.filter((item) => item.kind === "rule" && item.role === "brace-rule")).toHaveLength(4);
+    expect(items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "hlist", role: "limit-superscript" }),
+      expect.objectContaining({ kind: "hlist", role: "limit-subscript" }),
+    ]));
   });
 });

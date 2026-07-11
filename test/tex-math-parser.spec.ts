@@ -1452,6 +1452,20 @@ describe("TeX math parser", () => {
     ]);
   });
 
+  it("parses boldsymbol and mathrsfs script alphabets with source spans", () => {
+    const result = parseTexMath(String.raw`\boldsymbol{\alpha+x_1}+\mathscr{F}`, { sourceOffset: 12 });
+    expect(result.diagnostics).toEqual([]);
+    const alphabets = result.list.items.filter((item) =>
+      item.kind === "atom" && item.nucleus.kind === "alphabet"
+    );
+    expect(alphabets.map((item) => item.kind === "atom" && item.nucleus.kind === "alphabet"
+      ? { alphabet: item.nucleus.alphabet, span: item.nucleus.sourceSpan }
+      : null)).toEqual([
+      { alphabet: "boldsymbol", span: { start: 12, end: 35 } },
+      { alphabet: "mathscr", span: { start: 36, end: 47 } },
+    ]);
+  });
+
   it("parses unbraced math alphabet commands as single-token math arguments", () => {
     const result = parseTexMath(String.raw`\mathit a+\mathsf x+\mathtt 7+\mathcal A`);
 
@@ -3695,5 +3709,40 @@ describe("TeX math parser", () => {
       "missing-group",
       "missing-group",
     ]);
+  });
+
+  it("parses standard and AMS matrix dots with their TeX classes", () => {
+    const result = parseTexMath(String.raw`\vdots+\ddots+\dotsc;\dotsb,\dotsm)\dotsi+\dotso.`);
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({ atomClass: "ord", nucleus: { kind: "vertical-dots" } });
+    expect(atomAt(result, 2)).toMatchObject({ atomClass: "inner", nucleus: { kind: "diagonal-dots" } });
+    const ellipses = result.list.items.filter(
+      (item) => item.kind === "atom" && item.nucleus.kind === "list" && item.nucleus.role === "ellipsis"
+    );
+    expect(ellipses.map((item) => item.kind === "atom" && item.nucleus.kind === "list"
+      ? item.nucleus.ellipsisCommand
+      : null)).toEqual(["dotsc", "dotsb", "dotsm", "dotsi", "dotso"]);
+  });
+
+  it("parses display cases and extensible brace operators with source-spanned limits", () => {
+    const source = String.raw`\begin{dcases}\frac12&x\\y&z\end{dcases}+\overbrace{a+b}^{n}+\underbrace{x}_{m}`;
+    const result = parseTexMath(source, { sourceOffset: 3 });
+    expect(result.diagnostics).toEqual([]);
+    const dcases = atomAt(result, 0);
+    expect(dcases).toMatchObject({ nucleus: { kind: "cases", displayStyle: true, rows: [{}, {}] } });
+    const over = atomAt(result, 2);
+    expect(over).toMatchObject({
+      atomClass: "op",
+      limits: "limits",
+      nucleus: { kind: "brace", command: "overbrace" },
+      superscript: {},
+    });
+    const under = atomAt(result, 4);
+    expect(under).toMatchObject({
+      atomClass: "op",
+      limits: "limits",
+      nucleus: { kind: "brace", command: "underbrace" },
+      subscript: {},
+    });
   });
 });

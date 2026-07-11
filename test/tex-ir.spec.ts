@@ -113,6 +113,37 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("parses colorbox and fcolorbox colors with source-backed contents", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\colorbox{yellow}{b \textbf{c} $x$}D\fcolorbox[rgb]{1,0,0}[HTML]{00FF00}{e}F`
+    );
+    const boxes = parsed.nodes.filter((node) => node.kind === "mbox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(boxes).toMatchObject([
+      {
+        command: "colorbox",
+        content: String.raw`b \textbf{c} $x$`,
+        backgroundColor: "#ffff00",
+        frameColor: undefined,
+        children: [
+          { kind: "text", text: "b" },
+          { kind: "space" },
+          { kind: "font-command", command: "textbf" },
+          { kind: "space" },
+          { kind: "math", content: "x" },
+        ],
+      },
+      {
+        command: "fcolorbox",
+        content: "e",
+        backgroundColor: "#00ff00",
+        frameColor: "#ff0000",
+      },
+    ]);
+    expect(boxes[0]).toMatchObject({ contentStart: 19, contentEnd: 35 });
+  });
+
   it("parses inline rule and raisebox commands", () => {
     const source = String.raw`A\rule[1pt]{2pt}{3pt}B\raisebox{4pt}[5pt][6pt]{x \textbf{y}}C`;
     const parsed = parseSimpleTexParagraphIr(source);

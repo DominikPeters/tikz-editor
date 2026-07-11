@@ -1275,6 +1275,44 @@ describe("TeX vlist lowering", () => {
       .toBeCloseTo(20 - 6 - (natural?.width ?? 0), 6);
   });
 
+  it("lays out colored LR boxes with fboxsep and an optional fboxrule frame", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\mbox{g}\colorbox{yellow}{g}\fcolorbox{red}{blue}{g}`
+    );
+    const block = parsed.blocks[0];
+    const boxes = block
+      ? simpleTexInlineNodesToLayoutItems(
+          block.nodes,
+          block.sourceStart,
+          block.sourceEnd,
+          10,
+          computerModernTexMetricProvider,
+          "font",
+          undefined,
+          undefined,
+          luaLatexDefaultTextFontProfile
+        ).filter((item) => item.kind === "text-box")
+      : [];
+    const natural = boxes[0]?.box;
+    const colorbox = boxes[1]?.box;
+    const fcolorbox = boxes[2]?.box;
+    const colorRules = colorbox?.hlist?.items.filter((item) => item.kind === "rule") ?? [];
+    const framedRules = fcolorbox?.hlist?.items.filter((item) => item.kind === "rule") ?? [];
+
+    expect(colorbox?.width).toBeCloseTo((natural?.width ?? 0) + 6, 6);
+    expect(colorbox?.height).toBeCloseTo((natural?.height ?? 0) + 3, 6);
+    expect(colorbox?.depth).toBeCloseTo((natural?.depth ?? 0) + 3, 6);
+    expect(colorRules).toMatchObject([
+      { role: "colorbox-background", color: "#ffff00", x: 0 },
+    ]);
+    expect(fcolorbox?.width).toBeCloseTo((natural?.width ?? 0) + 6.8, 6);
+    expect(fcolorbox?.height).toBeCloseTo((natural?.height ?? 0) + 3.4, 6);
+    expect(fcolorbox?.depth).toBeCloseTo((natural?.depth ?? 0) + 3.4, 6);
+    expect(framedRules[0]).toMatchObject({ role: "colorbox-background", color: "#0000ff" });
+    expect(framedRules.slice(1)).toHaveLength(4);
+    expect(framedRules.slice(1).every((rule) => rule.color === "#ff0000")).toBe(true);
+  });
+
   it("keeps unsupported makebox dimensions outside the simple text path", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`A\makebox[\width]{b}Z`, 120);
     const framebox = analyzeSimpleTexParagraph(String.raw`A\framebox[\width]{b}Z`, 120);

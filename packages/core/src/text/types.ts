@@ -21,6 +21,13 @@ export type NodeTextMeasureRequest = {
   fontSizePt: number;
   sourceMap?: TextSourceMap;
   graphicsResolver?: NodeTextGraphicsResolver;
+  colorResolver?: NodeTextColorResolver;
+};
+
+/** Resolves document-local xcolor names without rewriting the TeX source. */
+export type NodeTextColorResolver = {
+  readonly cacheKey: string;
+  resolve(name: string): string | null;
 };
 
 export type NodeTextGraphicsOptionValue = string | boolean;

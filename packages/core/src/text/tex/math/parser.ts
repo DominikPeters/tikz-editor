@@ -460,6 +460,14 @@ class TexMathParser {
       if (varLimit) {
         return this.parseVarLimit(varLimit, allowScripts);
       }
+      const braceCommand = braceCommandName(token.text);
+      if (braceCommand) {
+        return this.parseBrace(braceCommand, allowScripts);
+      }
+      const dotsCommand = verticalDotsCommandName(token.text);
+      if (dotsCommand) {
+        return this.parseVerticalDots(dotsCommand, allowScripts);
+      }
       if (mathTextCommandName(token.text)) {
         return this.parseText(allowScripts);
       }
@@ -1552,6 +1560,39 @@ class TexMathParser {
     }, allowScripts);
   }
 
+  private parseBrace(commandNameValue: "overbrace" | "underbrace", allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const body = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} body`);
+    const sourceSpan = spanUnion(command.sourceSpan, body?.sourceSpan ?? command.sourceSpan);
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: "op",
+      nucleus: {
+        kind: "brace",
+        command: commandNameValue,
+        body: body?.list ?? emptyList(command.sourceSpan.end),
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan,
+      },
+      limits: "limits",
+      sourceSpan,
+    }, allowScripts);
+  }
+
+  private parseVerticalDots(commandNameValue: "vdots" | "ddots", allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    return this.maybeParseScripts({
+      kind: "atom",
+      atomClass: commandNameValue === "ddots" ? "inner" : "ord",
+      nucleus: {
+        kind: commandNameValue === "ddots" ? "diagonal-dots" : "vertical-dots",
+        commandSourceSpan: command.sourceSpan,
+        sourceSpan: command.sourceSpan,
+      },
+      sourceSpan: command.sourceSpan,
+    }, allowScripts);
+  }
+
   private parseOperator(commandNameValue: TexMathOperatorCommand, allowScripts: boolean): TexMathAtom {
     const command = this.advance();
     const atom = this.parseOperatorLimitSwitch({
@@ -1812,19 +1853,26 @@ class TexMathParser {
   }
 
   private parseEllipsis(
-    ellipsis: "ldots" | "cdots" | "dots",
+    ellipsis: "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso",
     allowScripts: boolean,
     suppressTrailingGlueBeforeAlignmentTab: boolean,
     suppressTerminalEllipsisGlue: boolean
   ): TexMathAtom {
     const command = this.advance();
-    const resolved = ellipsis === "dots" ? this.amsDotsKind() : ellipsis;
+    const resolved = ellipsis === "dots" ? this.amsDotsKind()
+      : ellipsis === "cdots" ? "cdots"
+      : ellipsis === "dotsb" || ellipsis === "dotsm" || ellipsis === "dotsi" ? "cdots"
+      : "ldots";
     const dotText: "." | "\\cdot" = resolved === "cdots" ? "\\cdot" : ".";
-    const items: TexMathItem[] = [
+    const items: TexMathItem[] = [];
+    if (ellipsis === "dotsi") {
+      items.push({ kind: "glue", command: "!", sourceSpan: command.sourceSpan });
+    }
+    items.push(
       ellipsisDotAtom(dotText, command.sourceSpan),
       ellipsisDotAtom(dotText, command.sourceSpan),
       ellipsisDotAtom(dotText, command.sourceSpan),
-    ];
+    );
     if (shouldAddAmsEllipsisTrailingGlue(
       ellipsis,
       this.peekSignificantToken(),
@@ -2187,7 +2235,7 @@ class TexMathParser {
     if (environmentName?.name === "array") {
       return this.parseArrayEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
-    if (environmentName?.name === "cases") {
+    if (environmentName?.name === "cases" || environmentName?.name === "dcases") {
       return this.parseCasesEnvironment(beginCommand.sourceSpan, environmentName, allowScripts);
     }
     if (environmentName?.name === "subarray") {
@@ -2416,6 +2464,7 @@ class TexMathParser {
     return this.parseCasesBody({
       beginSourceSpan,
       initialSourceSpan: spanUnion(beginSourceSpan, environmentName.sourceSpan),
+      environment: environmentName.name === "dcases" ? "dcases" : "cases",
       allowScripts,
     });
   }
@@ -3391,6 +3440,7 @@ class TexMathParser {
   private parseCasesBody(params: {
     readonly beginSourceSpan: TexMathSourceSpan;
     readonly initialSourceSpan: TexMathSourceSpan;
+    readonly environment: "cases" | "dcases";
     readonly allowScripts: boolean;
   }): TexMathAtom {
     const rows: TexMathAlignedRow[] = [];
@@ -3398,11 +3448,11 @@ class TexMathParser {
     let sourceSpan = params.initialSourceSpan;
 
     while (!this.isAtEnd()) {
-      if (this.isEnvironmentEnd("cases")) {
-        endSourceSpan = this.consumeEnvironmentEnd("cases");
+      if (this.isEnvironmentEnd(params.environment)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.environment);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
-          casesAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          casesAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan, params.environment === "dcases"),
           params.allowScripts
         );
       }
@@ -3415,7 +3465,7 @@ class TexMathParser {
           stopAtGroupClose: false,
           stopAtAlignmentTab: true,
           stopAtRowBreak: true,
-          stopAtEnvironmentEnd: "cases",
+          stopAtEnvironmentEnd: params.environment,
         });
         cells.push({
           list: cellList,
@@ -3458,15 +3508,15 @@ class TexMathParser {
         });
         continue;
       }
-      if (this.isEnvironmentEnd("cases")) {
-        endSourceSpan = this.consumeEnvironmentEnd("cases");
+      if (this.isEnvironmentEnd(params.environment)) {
+        endSourceSpan = this.consumeEnvironmentEnd(params.environment);
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         rows.push({
           cells,
           sourceSpan: pendingRowSourceSpan ?? endSourceSpan,
         });
         return this.maybeParseScripts(
-          casesAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan),
+          casesAtom(rows, params.beginSourceSpan, endSourceSpan, sourceSpan, params.environment === "dcases"),
           params.allowScripts
         );
       }
@@ -3481,11 +3531,11 @@ class TexMathParser {
     this.addDiagnostic(
       "error",
       "missing-environment-end",
-      "Expected \\end{cases} to close math environment.",
+      `Expected \\end{${params.environment}} to close math environment.`,
       params.beginSourceSpan
     );
     return this.maybeParseScripts(
-      casesAtom(rows, params.beginSourceSpan, undefined, sourceSpan),
+      casesAtom(rows, params.beginSourceSpan, undefined, sourceSpan, params.environment === "dcases"),
       params.allowScripts
     );
   }
@@ -5011,12 +5061,12 @@ function ellipsisDotAtom(
 }
 
 function shouldAddAmsEllipsisTrailingGlue(
-  ellipsis: "ldots" | "cdots" | "dots",
+  ellipsis: "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso",
   next: TexMathToken | null,
   suppressBeforeAlignmentTab = false,
   suppressAtEnd = false
 ): boolean {
-  if (ellipsis === "ldots") {
+  if (ellipsis === "ldots" || ellipsis === "dotsi") {
     return false;
   }
   if (!next) {
@@ -5025,7 +5075,10 @@ function shouldAddAmsEllipsisTrailingGlue(
   if (next.kind === "character" && next.text === "&") {
     return !suppressBeforeAlignmentTab;
   }
-  if (ellipsis === "cdots" && next.kind === "character" && [",", ";", "."].includes(next.text)) {
+  if (["cdots", "dotsb", "dotsm", "dotso"].includes(ellipsis) && next.kind === "character" && [",", ";", "."].includes(next.text)) {
+    return true;
+  }
+  if (ellipsis === "dotsc" && next.kind === "character" && [";", "."].includes(next.text)) {
     return true;
   }
   return isAmsDotsRightDelimiter(next);
@@ -5138,7 +5191,8 @@ function casesAtom(
   rows: readonly TexMathAlignedRow[],
   beginSourceSpan: TexMathSourceSpan,
   endSourceSpan: TexMathSourceSpan | undefined,
-  sourceSpan: TexMathSourceSpan
+  sourceSpan: TexMathSourceSpan,
+  displayStyle = false
 ): TexMathAtom {
   return {
     kind: "atom",
@@ -5146,6 +5200,7 @@ function casesAtom(
     nucleus: {
       kind: "cases",
       rows,
+      ...(displayStyle ? { displayStyle: true } : {}),
       beginSourceSpan,
       ...(endSourceSpan ? { endSourceSpan } : {}),
       sourceSpan,
@@ -5854,7 +5909,7 @@ function varLimitCommandName(command: string): TexMathVarLimitCommand | null {
   }
 }
 
-function ellipsisCommandName(command: string): "ldots" | "cdots" | "dots" | null {
+function ellipsisCommandName(command: string): "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso" | null {
   switch (commandName(command)) {
     case "dots":
       return "dots";
@@ -5862,9 +5917,29 @@ function ellipsisCommandName(command: string): "ldots" | "cdots" | "dots" | null
       return "ldots";
     case "cdots":
       return "cdots";
+    case "dotsc":
+      return "dotsc";
+    case "dotsb":
+      return "dotsb";
+    case "dotsm":
+      return "dotsm";
+    case "dotsi":
+      return "dotsi";
+    case "dotso":
+      return "dotso";
     default:
       return null;
   }
+}
+
+function braceCommandName(command: string): "overbrace" | "underbrace" | null {
+  const name = commandName(command);
+  return name === "overbrace" || name === "underbrace" ? name : null;
+}
+
+function verticalDotsCommandName(command: string): "vdots" | "ddots" | null {
+  const name = commandName(command);
+  return name === "vdots" || name === "ddots" ? name : null;
 }
 
 function stackingCommandName(command: string): "overset" | "underset" | "overunderset" | "stackrel" | null {
@@ -5884,6 +5959,8 @@ function stackingCommandName(command: string): "overset" | "underset" | "overund
 
 function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
   switch (commandName(command)) {
+    case "boldsymbol":
+      return "boldsymbol";
     case "mathbf":
       return "mathbf";
     case "mathbb":
@@ -5892,6 +5969,8 @@ function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
       return "mathcal";
     case "mathfrak":
       return "mathfrak";
+    case "mathscr":
+      return "mathscr";
     case "mathit":
       return "mathit";
     case "mathrm":

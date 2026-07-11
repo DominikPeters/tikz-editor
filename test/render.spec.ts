@@ -1523,8 +1523,28 @@ World};
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
-      expect(label.text).toContain(String.raw`\textcolor{blue}{this}`);
+      expect(label.text).toContain(String.raw`\textcolor{mycolor}{this}`);
     }
+    expect(result.svg.svg).toContain('fill="#0000ff"');
+  });
+
+  it("resolves color aliases in native colorbox and fcolorbox contents", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \definecolor{paper}{HTML}{FFF4CC}
+  \colorlet{edge}{blue}
+  \node at (0,0) {\colorbox{paper}{one} \fcolorbox{edge}{paper}{two}};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
+    expect(label?.kind).toBe("Text");
+    if (label?.kind === "Text") {
+      expect(label.text).toContain(String.raw`\colorbox{paper}{one}`);
+      expect(label.text).toContain(String.raw`\fcolorbox{edge}{paper}{two}`);
+    }
+    expect(result.svg.svg).toContain('data-tex-rule="colorbox-background"');
+    expect(result.svg.svg).toContain('fill="#fff4cc"');
+    expect(result.svg.svg).toContain('fill="#0000ff"');
   });
 
   it("skips node TeX validation when pgfmath parsing commands define runtime macros", async () => {
@@ -1572,8 +1592,9 @@ World};
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
-      expect(label.text).toContain(String.raw`\textcolor{#1a2b3c}{this}`);
+      expect(label.text).toContain(String.raw`\textcolor{brand}{this}`);
     }
+    expect(result.svg.svg).toContain('fill="#1a2b3c"');
   });
 
   it("resolves definecolor rgb aliases before MathJax text rendering", async () => {
@@ -1587,8 +1608,9 @@ World};
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
-      expect(label.text).toContain(String.raw`\textcolor{#1a334d}{this}`);
+      expect(label.text).toContain(String.raw`\textcolor{brand}{this}`);
     }
+    expect(result.svg.svg).toContain('fill="#1a334d"');
   });
 
   it("renders foreach \\textsf labels through MathJax in async mode", async () => {

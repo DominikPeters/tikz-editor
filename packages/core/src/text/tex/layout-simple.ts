@@ -1,7 +1,7 @@
 import type { Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
 import type { TextSourceMap } from "../source-map.js";
-import type { NodeTextGraphicsResolver } from "../types.js";
+import type { NodeTextColorResolver, NodeTextGraphicsResolver } from "../types.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import {
   defaultTexTextFontProfile,
@@ -45,6 +45,7 @@ export interface TexParagraphLayoutOptions {
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly colorResolver?: NodeTextColorResolver;
   readonly textFontProfile?: TexTextFontProfile;
   readonly sourceMap?: TextSourceMap;
 }
@@ -62,7 +63,7 @@ export function layoutSimpleTexParagraph(
   text: string,
   options: TexParagraphLayoutOptions
 ): TexParagraphLayoutResult {
-  const analysis = analyzeSimpleTexParagraph(text, options.width);
+  const analysis = analyzeSimpleTexParagraph(text, options.width, options.colorResolver?.resolve.bind(options.colorResolver));
   const fallbackReason = analysis.fallbackReason;
   const usePlaceholderFallback =
     fallbackReason !== null &&

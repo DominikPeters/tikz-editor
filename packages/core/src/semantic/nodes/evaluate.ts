@@ -5,7 +5,9 @@ import { worldTransform } from "../../coords/transforms.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindingsMapped } from "../../macros/index.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { mapTransformedTextWithFallback, type MappedText } from "../../text/source-map.js";
+import type { NodeTextColorResolver } from "../../text/types.js";
 import {
+  currentFrame,
   readNamedNodeGeometry,
   resolveContextColorAliasValue,
   type ProvenanceOptionList,
@@ -202,14 +204,9 @@ export function measureNodeAnchorExtents(
     trace: context.macroTraceCollector ?? undefined,
     sourceOffset: item.textSpan.from
   });
-  const colorResolvedNodeText = mapTransformedTextWithFallback(
-    expandedNodeText,
-    resolveTextColorAliases(expandedNodeText.text, context, statement.id),
-    "text color alias resolution"
-  );
   const resolvedNodeText = mapTransformedTextWithFallback(
-    colorResolvedNodeText,
-    normalizeEscapedTextSpaces(colorResolvedNodeText.text),
+    expandedNodeText,
+    normalizeEscapedTextSpaces(expandedNodeText.text),
     "escaped text space normalization"
   );
   const normalizedText = normalizeNodeTextFontSize(resolvedNodeText.text, nodeLocalStyle.fontSize);
@@ -229,7 +226,8 @@ export function measureNodeAnchorExtents(
     context.textEngine,
     "text",
     normalizedMappedText.sourceMap,
-    context.graphicsResolver
+    context.graphicsResolver,
+    createNodeTextColorResolver(context, statement.id)
   );
   const nodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const anchor = resolveNodeAnchor(expandedNodeOptions);
@@ -410,14 +408,9 @@ export function evaluateNodeItem(
     trace: context.macroTraceCollector ?? undefined,
     sourceOffset: item.textSpan.from
   });
-  const colorResolvedNodeText = mapTransformedTextWithFallback(
-    expandedNodeText,
-    resolveTextColorAliases(expandedNodeText.text, context, statement.id),
-    "text color alias resolution"
-  );
   const resolvedNodeText = mapTransformedTextWithFallback(
-    colorResolvedNodeText,
-    normalizeEscapedTextSpaces(colorResolvedNodeText.text),
+    expandedNodeText,
+    normalizeEscapedTextSpaces(expandedNodeText.text),
     "escaped text space normalization"
   );
   const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText.text) : [{ name: "text", text: resolvedNodeText.text }];
@@ -512,7 +505,8 @@ export function evaluateNodeItem(
     context.textEngine,
     placementOptions.textMode ?? "text",
     layoutNodeMappedText.sourceMap,
-    context.graphicsResolver
+    context.graphicsResolver,
+    createNodeTextColorResolver(context, statement.id)
   );
   const adjustedNodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const shapeGeometry = resolveNodeShapeGeometryParams(expandedNodeOptions, () => context.mathRandom.nextRaw());
@@ -778,7 +772,8 @@ export function evaluateNodeItem(
             context.textEngine,
             placementOptions.textMode ?? "text",
             undefined,
-            context.graphicsResolver
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -818,7 +813,8 @@ export function evaluateNodeItem(
             context.textEngine,
             placementOptions.textMode ?? "text",
             undefined,
-            context.graphicsResolver
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -859,7 +855,8 @@ export function evaluateNodeItem(
             context.textEngine,
             placementOptions.textMode ?? "text",
             undefined,
-            context.graphicsResolver
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -894,7 +891,8 @@ export function evaluateNodeItem(
             context.textEngine,
             placementOptions.textMode ?? "text",
             undefined,
-            context.graphicsResolver
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -1498,31 +1496,15 @@ function directionToAnchor(direction: WorldPoint): string {
   return "south west";
 }
 
-function resolveTextColorAliases(text: string, context: SemanticContext, consumerStatementId: string): string {
-  if (text.length === 0) {
-    return text;
-  }
-
-  let resolved = replaceColorCommandAliases(text, "\\textcolor", context, consumerStatementId);
-  resolved = replaceColorCommandAliases(resolved, "\\color", context, consumerStatementId);
-  return resolved;
-}
-
-function replaceColorCommandAliases(
-  text: string,
-  command: "\\textcolor" | "\\color",
+function createNodeTextColorResolver(
   context: SemanticContext,
   consumerStatementId: string
-): string {
-  const escapedCommand = command.replace("\\", "\\\\");
-  const pattern = new RegExp(`${escapedCommand}(\\s*\\[[^\\]]*\\])?\\s*\\{([^{}]+)\\}`, "g");
-  return text.replace(pattern, (fullMatch: string, modelPart = "", rawColorName: string = "") => {
-    const resolved = resolveContextColorAliasValue(context, String(rawColorName), consumerStatementId);
-    if (!resolved) {
-      return fullMatch;
-    }
-    return `${command}${modelPart}{${resolved}}`;
-  });
+): NodeTextColorResolver {
+  const aliases = [...currentFrame(context).colorAliases.entries()];
+  return {
+    cacheKey: `xcolor:${JSON.stringify(aliases)}`,
+    resolve: (name) => resolveContextColorAliasValue(context, name, consumerStatementId),
+  };
 }
 
 function resolveNodeElementTransform(center: WorldPoint, nodeTransform: WorldTransform): WorldTransform | undefined {

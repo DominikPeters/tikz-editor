@@ -70,6 +70,8 @@ export interface TexLayoutSpaceItem {
   readonly font: ResolvedTexFont;
   readonly spaceFactor: number;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
+  /** Preserve interword stretch/shrink while prohibiting a break at TeX `~`. */
+  readonly nonBreaking?: boolean;
 }
 
 export interface TexLayoutForcedBreakItem {
@@ -520,6 +522,8 @@ export function simpleTexSegmentToLayoutItems(
         children: token.children ?? [],
         boxWidth: token.boxWidth,
         boxAlign: token.boxAlign,
+        backgroundColor: token.backgroundColor,
+        frameColor: token.frameColor,
         fontState: token.fontState,
         atPt,
         metricProvider,
@@ -602,6 +606,7 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "raisebox") {
+      const surroundingSizePt = token.fontState.sizePt ?? atPt;
       const box = texRaiseBoxFromInlineNodes({
         source: token.text,
         content: token.content ?? "",
@@ -610,10 +615,11 @@ export function simpleTexSegmentToLayoutItems(
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
-        lift: token.lift ?? 0,
+        lift: roundTexPt((token.lift ?? 0) + (token.relativeLiftEm ?? 0) * surroundingSizePt),
         boxHeight: token.boxHeight,
         boxDepth: token.boxDepth,
         fontState: token.fontState,
+        childFontScale: token.childFontScale,
         atPt,
         metricProvider,
         spaceGlueProfile,
@@ -694,6 +700,19 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
+    if (token.nonBreaking) {
+      items.push({
+        kind: "space",
+        text: " ",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        font,
+        spaceFactor,
+        spaceGlueProfile,
+        nonBreaking: true,
+      });
+      continue;
+    }
     items.push({
       kind: "space",
       text: " ",
@@ -725,6 +744,8 @@ function texMBoxFromInlineNodes(params: {
   readonly children: readonly SimpleTexInlineNode[];
   readonly boxWidth?: number;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
+  readonly backgroundColor?: string;
+  readonly frameColor?: string;
   readonly fontState: SimpleTexFontState;
   readonly atPt: number;
   readonly metricProvider: TexMetricProvider;
@@ -754,7 +775,8 @@ function texMBoxFromInlineNodes(params: {
   if (!hlist) {
     return null;
   }
-  const boxedHList = params.command === "fbox" || params.command === "framebox"
+  const boxedHList = params.command === "fbox" || params.command === "framebox" ||
+      params.command === "colorbox" || params.command === "fcolorbox"
     ? texFrameMBoxHList(hlist, {
         sourceSpan: {
           start: params.sourceStart,
@@ -766,8 +788,16 @@ function texMBoxFromInlineNodes(params: {
         },
         boxWidth: params.command === "framebox" ? params.boxWidth : undefined,
         boxAlign: params.boxAlign,
+        frame: params.command !== "colorbox",
+        backgroundColor: params.backgroundColor,
+        frameColor: params.frameColor,
       })
-    : texReboxMBoxHList(hlist, {
+    : params.command === "underline"
+      ? texUnderlineMBoxHList(hlist, {
+          start: params.sourceStart,
+          end: params.sourceEnd,
+        })
+      : texReboxMBoxHList(hlist, {
         boxWidth: params.boxWidth,
         boxAlign: params.boxAlign,
       });
@@ -800,6 +830,32 @@ function texMBoxFromInlineNodes(params: {
   };
 }
 
+function texUnderlineMBoxHList(
+  body: TexMathHList,
+  sourceSpan: { readonly start: number; readonly end: number }
+): TexMathHList {
+  const thickness = TEX_LATEX_FBOX_RULE_PT;
+  const gap = roundTexPt(thickness * 1.5);
+  const depth = roundTexPt(body.depth + gap + thickness);
+  return {
+    ...body,
+    depth,
+    sourceSpan,
+    items: [
+      ...body.items,
+      {
+        kind: "rule",
+        role: "underline-rule",
+        x: 0,
+        y: roundTexPt(body.depth + gap),
+        width: body.width,
+        height: thickness,
+        sourceSpan,
+      },
+    ],
+  };
+}
+
 export function texFrameMBoxHList(
   body: TexMathHList,
   params: {
@@ -807,9 +863,12 @@ export function texFrameMBoxHList(
     readonly contentSourceSpan: { readonly start: number; readonly end: number };
     readonly boxWidth?: number;
     readonly boxAlign?: SimpleTexTextBoxAlignment;
+    readonly frame?: boolean;
+    readonly backgroundColor?: string;
+    readonly frameColor?: string;
   }
 ): TexMathHList {
-  const rule = TEX_LATEX_FBOX_RULE_PT;
+  const rule = params.frame === false ? 0 : TEX_LATEX_FBOX_RULE_PT;
   const sep = TEX_LATEX_FBOX_SEP_PT;
   const hasExplicitWidth = params.boxWidth !== undefined && Number.isFinite(params.boxWidth);
   const framedBody = hasExplicitWidth
@@ -843,7 +902,7 @@ export function texFrameMBoxHList(
     sourceSpan: params.sourceSpan,
     items: [kernItem(0, width)],
   });
-  const rules: TexMathRuleLayoutItem[] = [
+  const frameRules: TexMathRuleLayoutItem[] = rule > 0 ? [
     {
       kind: "rule",
       role: "boxed-rule",
@@ -851,6 +910,7 @@ export function texFrameMBoxHList(
       y: -height,
       width,
       height: rule,
+      color: params.frameColor,
       sourceSpan: params.sourceSpan,
     },
     {
@@ -860,6 +920,7 @@ export function texFrameMBoxHList(
       y: -height,
       width: rule,
       height: sideHeight,
+      color: params.frameColor,
       sourceSpan: params.sourceSpan,
     },
     {
@@ -869,6 +930,7 @@ export function texFrameMBoxHList(
       y: -height,
       width: rule,
       height: sideHeight,
+      color: params.frameColor,
       sourceSpan: params.sourceSpan,
     },
     {
@@ -878,9 +940,22 @@ export function texFrameMBoxHList(
       y: roundTexPt(framedBody.depth + sep),
       width,
       height: rule,
+      color: params.frameColor,
       sourceSpan: params.sourceSpan,
     },
-  ];
+  ] : [];
+  const backgroundRule: TexMathRuleLayoutItem | null = params.backgroundColor
+    ? {
+        kind: "rule",
+        role: "colorbox-background",
+        x: 0,
+        y: -height,
+        width,
+        height: sideHeight,
+        color: params.backgroundColor,
+        sourceSpan: params.sourceSpan,
+      }
+    : null;
   const bodyChild: TexMathChildHListLayoutItem = {
     kind: "hlist",
     role: "boxed-body",
@@ -912,7 +987,12 @@ export function texFrameMBoxHList(
     height,
     depth,
     sourceSpan: params.sourceSpan,
-    items: [rules[0], rules[1], ...contentItems, rules[2], rules[3]],
+    items: [
+      ...(backgroundRule ? [backgroundRule] : []),
+      ...frameRules.slice(0, 2),
+      ...contentItems,
+      ...frameRules.slice(2),
+    ],
   };
 }
 
@@ -1295,6 +1375,7 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly boxHeight?: number;
   readonly boxDepth?: number;
   readonly fontState: SimpleTexFontState;
+  readonly childFontScale?: number;
   readonly atPt: number;
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
@@ -1302,8 +1383,14 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
 }): TexMathBox | null {
+  const childFontState = params.childFontScale === undefined
+    ? params.fontState
+    : {
+        ...params.fontState,
+        sizePt: roundTexPt((params.fontState.sizePt ?? params.atPt) * params.childFontScale),
+      };
   const innerItems = simpleTexInlineTokensToLayoutItems({
-    tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
+    tokens: simpleTexInlineNodesToTokens(params.children, childFontState),
     atPt: params.atPt,
     metricProvider: params.metricProvider,
     spaceGlueProfile: params.spaceGlueProfile,
@@ -1698,6 +1785,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     }
 
     if (token.kind === "raisebox") {
+      const surroundingSizePt = token.fontState.sizePt ?? params.atPt;
       const box = texRaiseBoxFromInlineNodes({
         source: token.text,
         content: token.content ?? "",
@@ -1706,10 +1794,11 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
-        lift: token.lift ?? 0,
+        lift: roundTexPt((token.lift ?? 0) + (token.relativeLiftEm ?? 0) * surroundingSizePt),
         boxHeight: token.boxHeight,
         boxDepth: token.boxDepth,
         fontState: token.fontState,
+        childFontScale: token.childFontScale,
         atPt: params.atPt,
         metricProvider: params.metricProvider,
         spaceGlueProfile: params.spaceGlueProfile,
@@ -1790,6 +1879,19 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     }
 
     const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
+    if (token.nonBreaking) {
+      items.push({
+        kind: "space",
+        text: " ",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        font,
+        spaceFactor,
+        spaceGlueProfile: params.spaceGlueProfile,
+        nonBreaking: true,
+      });
+      continue;
+    }
     items.push({
       kind: "space",
       text: " ",
@@ -2059,6 +2161,7 @@ function texTextShapedItemToMBoxItem(
     height: item.height,
     depth: item.depth,
     italicCorrection: item.italicCorrection,
+    ...(font.color ? { color: font.color } : {}),
     sourceSpan: {
       start: item.sourceStart,
       end: item.sourceEnd,
@@ -2138,6 +2241,7 @@ function texMBoxChildHListItem(
       start: sourceStart,
       end: sourceEnd,
     },
+    ...(box.color ? { color: box.color } : {}),
     items: box.hlist.items,
   };
 }
