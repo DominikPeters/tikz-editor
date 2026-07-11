@@ -67,14 +67,14 @@ These counts come from `npm run check:mathjax-tex-corpus:slices`. The aggregate 
 | `latex-oracle-candidates` | 997 | 647 | 64.9% | 346 | 0 | 4 |
 | `extra-oracle-candidates` | 108 | 60 | 55.6% | 44 | 0 | 4 |
 | `display-environments` | 209 | 74 | 35.4% | 116 | 17 | 2 |
-| `font-symbol-text` | 295 | 8 | 2.7% | 273 | 14 | 0 |
-| `macro-diagnostics` | 244 | 9 | 3.7% | 166 | 62 | 7 |
+| `font-symbol-text` | 295 | 66 | 22.4% | 212 | 17 | 0 |
+| `macro-diagnostics` | 244 | 9 | 3.7% | 169 | 59 | 7 |
 | `extension-inventory` | 821 | 66 | 8.0% | 735 | 20 | 0 |
 | `html-color-action` | 87 | 1 | 1.1% | 64 | 17 | 5 |
 
 The dominant current failure classes are:
 
-- Unsupported AMS/package control-sequence atoms and macros beyond the first vendored AMS font/operator slices, such as additional AMS symbol-table commands, `\boldsymbol`, and package commands like `\bra`.
+- Unsupported AMS/package control-sequence atoms and macros beyond the vendored font/operator slices, such as additional AMS symbol-table commands and package commands like `\bra`.
 - Richer array and matrix preambles, including package-specific environments such as `CD`, `numcases`, and color/table extensions.
 - Macro expansion and scoping, such as `\def`, `\let`, `\newcommand`, `\begingroup`, and `\endgroup`.
 - Diagnostic-policy gaps where MathJax expects an error but the current parser only reports unsupported-command warnings.

@@ -93,6 +93,8 @@ export type TexMathNucleus =
   | TexMathRuleNucleus
   | TexMathLineNucleus
   | TexMathVarLimitNucleus
+  | TexMathBraceNucleus
+  | TexMathDotsNucleus
   | TexMathAccentNucleus
   | TexMathAlphabetNucleus
   | TexMathTextNucleus
@@ -158,7 +160,7 @@ export interface TexMathListNucleus {
   readonly kind: "list";
   readonly list: TexMathList;
   readonly role?: "ellipsis";
-  readonly ellipsisCommand?: "ldots" | "cdots" | "dots";
+  readonly ellipsisCommand?: "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso";
   readonly leadingKern?: number;
   readonly sourceSpan: TexMathSourceSpan;
 }
@@ -262,6 +264,20 @@ export interface TexMathVarLimitNucleus {
   readonly sourceSpan: TexMathSourceSpan;
 }
 
+export interface TexMathBraceNucleus {
+  readonly kind: "brace";
+  readonly command: "overbrace" | "underbrace";
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathDotsNucleus {
+  readonly kind: "vertical-dots" | "diagonal-dots";
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
 export type TexMathAccentCommand =
   | "bar"
   | "dot"
@@ -284,10 +300,16 @@ export interface TexMathAccentNucleus {
 }
 
 export type TexMathAlphabetCommand =
+  /** Internal effective alphabet for \mathcal inside a bold math version. */
+  | "boldmathcal"
+  /** Internal effective alphabet for \mathfrak inside a bold math version. */
+  | "boldmathfrak"
+  | "boldsymbol"
   | "mathbf"
   | "mathbb"
   | "mathcal"
   | "mathfrak"
+  | "mathscr"
   | "mathit"
   | "mathrm"
   | "mathsf"
@@ -530,6 +552,7 @@ export interface TexMathArrayNucleus {
 export interface TexMathCasesNucleus {
   readonly kind: "cases";
   readonly rows: readonly TexMathAlignedRow[];
+  readonly displayStyle?: boolean;
   readonly beginSourceSpan: TexMathSourceSpan;
   readonly endSourceSpan?: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;

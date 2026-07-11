@@ -41,6 +41,18 @@ const DEFAULT_FONTS = [
   "eufm10",
   "eufm7",
   "eufm5",
+  "eufb10",
+  "eufb7",
+  "eufb5",
+  "cmmib10",
+  "cmmib7",
+  "cmmib5",
+  "cmbsy10",
+  "cmbsy7",
+  "cmbsy5",
+  "rsfs10",
+  "rsfs7",
+  "rsfs5",
 ];
 // Keep the generated Latin Modern tables compact while covering the characters
 // people routinely type in prose.  U+0080..U+009F are controls, so deliberately
@@ -50,10 +62,12 @@ const LATIN_TEXT_CODE_RANGES = [
 ];
 const COMMON_PROSE_CODES = [
   ...Array.from({ length: 0x40 }, (_, index) => 0xc0 + index),
-  0x0106, 0x0107, 0x010c, 0x010d, 0x0110, 0x0111,
-  0x0141, 0x0142, 0x0143, 0x0144, 0x0152, 0x0153,
-  0x0160, 0x0161, 0x0178, 0x0179, 0x017a, 0x017d, 0x017e,
-  0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
+  // Latin Extended-A is the practical next tier for European prose. Each
+  // face still emits only its cmap intersection (see generateOtfGlyphFont).
+  ...Array.from({ length: 0x80 }, (_, index) => 0x0100 + index),
+  // Frequently cited UTF-8 examples just beyond Extended-A: E/e with tilde.
+  0x1ebc, 0x1ebd,
+  0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2026,
 ];
 const DEFAULT_OTF_GLYPHS = [
   {
@@ -515,7 +529,9 @@ function parsePl(pl) {
 
 function generate(fontNames) {
   const fonts = {};
-  const deferredFontNames = fontNames.filter((fontName) => fontName.startsWith("eufm"));
+  const deferredFontNames = fontNames.filter((fontName) =>
+    ["eufm", "eufb", "cmmib", "cmbsy", "rsfs"].some((prefix) => fontName.startsWith(prefix))
+  );
   const generateTfmFont = (fontName) => {
     const tfmPath = run("kpsewhich", [`${fontName}.tfm`]);
     if (!tfmPath) {

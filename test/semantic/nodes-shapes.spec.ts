@@ -2357,7 +2357,7 @@ describe("semantic evaluator / nodes and shapes", () => {
       const label = result.scene.elements.find((element) => element.kind === "Text" && element.text.includes("favorite color"));
       expect(label?.kind).toBe("Text");
       if (label?.kind === "Text") {
-        expect(label.text).toContain(String.raw`\textcolor{blue}{this}`);
+        expect(label.text).toContain(String.raw`\textcolor{mycolor}{this}`);
       }
     });
 
@@ -2381,7 +2381,7 @@ describe("semantic evaluator / nodes and shapes", () => {
       const label = result.scene.elements.find((element) => element.kind === "Text" && element.text.includes("Brand is"));
       expect(label?.kind).toBe("Text");
       if (label?.kind === "Text") {
-        expect(label.text).toContain(String.raw`\textcolor{#1a2b3c}{this}`);
+        expect(label.text).toContain(String.raw`\textcolor{brand}{this}`);
       }
     });
 

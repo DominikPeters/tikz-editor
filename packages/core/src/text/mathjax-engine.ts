@@ -37,6 +37,7 @@ import type {
 import type {
   NodeTextEngine,
   NodeTextGraphicsResolver,
+  NodeTextColorResolver,
   NodeTextMeasureRequest,
   NodeTextMetrics,
   NodeTextParagraphAlignment,
@@ -275,7 +276,10 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const requiresParagraphGeometry =
         normalizedWidth != null || hasExplicitMultilineBreaks(prepared.text);
       const graphicsCacheKey = request.graphicsResolver?.cacheKey ?? null;
-      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, graphicsCacheKey);
+      const resolverCacheKey = [graphicsCacheKey, request.colorResolver?.cacheKey ?? null]
+        .filter((value): value is string => value !== null)
+        .join("|") || null;
+      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, resolverCacheKey);
 
       let entry: CachedRenderEntry | null = cache.get(cacheKey) ?? null;
       if (!entry) {
@@ -290,7 +294,8 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
           eligible: prepared.simpleTexEligible,
           mode,
           sourceMap: request.sourceMap,
-          graphicsResolver: request.graphicsResolver
+          graphicsResolver: request.graphicsResolver,
+          colorResolver: request.colorResolver
         });
         if (entry) {
           cache.set(cacheKey, entry);
@@ -1026,6 +1031,7 @@ function buildSimpleTexTextCacheEntry(params: {
   mode: "text" | "math";
   sourceMap?: TextSourceMap;
   graphicsResolver?: NodeTextGraphicsResolver;
+  colorResolver?: NodeTextColorResolver;
 }): CachedRenderEntry | null {
   if (!isSimpleTexTextEligible(params)) {
     return null;
@@ -1055,6 +1061,7 @@ function buildSimpleTexTextCacheEntry(params: {
       }),
       ...(params.sourceMap ? { sourceMap: params.sourceMap } : {}),
       ...(params.graphicsResolver ? { graphicsResolver: params.graphicsResolver } : {}),
+      ...(params.colorResolver ? { colorResolver: params.colorResolver } : {}),
     });
   } catch {
     return null;

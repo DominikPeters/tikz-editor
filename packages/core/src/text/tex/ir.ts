@@ -1,7 +1,7 @@
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { parseTexDimensionText } from "./dimensions.js";
-import { normalizeColor, resolveDefineColorModel } from "../../semantic/style/colors.js";
+import { normalizeColor, resolveDefineColorModel, type ColorAliasResolver } from "../../semantic/style/colors.js";
 import { DEFAULT_TEXT_FONT_SIZE, FONT_SIZE_COMMAND_FACTORS } from "../../semantic/style/constants.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
@@ -10,7 +10,7 @@ export type TexSpaceGlueProfile = "font" | "tikz-fixed";
 export type TexFontFamily = "roman" | "sans" | "typewriter" | "normal";
 export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
-export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap" | "fbox" | "framebox";
+export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap" | "fbox" | "framebox" | "colorbox" | "fcolorbox" | "underline";
 export type SimpleTexTextBoxAlignment = "natural" | "left" | "center" | "right" | "stretch";
 export type SimpleTexDimensionBoxCommandName = "phantom" | "hphantom" | "vphantom" | "smash";
 const TEX_GRAPHICS_BARE_NUMBER_UNIT_PT = 72.27 / 72;
@@ -111,6 +111,8 @@ export interface SimpleTexTextNode extends SimpleTexSourceRange {
 export interface SimpleTexSpaceNode extends SimpleTexSourceRange {
   readonly kind: "space";
   readonly text: string;
+  /** TeX's active `~` space: visible glue without a line-break opportunity. */
+  readonly nonBreaking?: boolean;
 }
 
 export interface SimpleTexLineBreakNode extends SimpleTexSourceRange {
@@ -200,6 +202,9 @@ export interface SimpleTexMBoxNode extends SimpleTexSourceRange {
   readonly children: readonly SimpleTexInlineNode[];
   readonly boxWidth?: number;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
+  /** Background and frame colors normalized from xcolor syntax. */
+  readonly backgroundColor?: string;
+  readonly frameColor?: string;
 }
 
 export interface SimpleTexRuleNode extends SimpleTexSourceRange {
@@ -248,6 +253,10 @@ export interface SimpleTexRaiseBoxNode extends SimpleTexSourceRange {
   readonly kind: "raisebox";
   readonly text: string;
   readonly lift: number;
+  /** Lift relative to the surrounding text size, used by text super/subscripts. */
+  readonly relativeLiftEm?: number;
+  /** Child font scale relative to the surrounding text size. */
+  readonly childFontScale?: number;
   readonly boxHeight?: number;
   readonly boxDepth?: number;
   readonly content: string;
@@ -401,6 +410,8 @@ export interface SimpleTexToken {
   readonly dimensionCommand?: SimpleTexDimensionBoxCommandName;
   readonly boxWidth?: number;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
+  readonly backgroundColor?: string;
+  readonly frameColor?: string;
   readonly ruleRaise?: number;
   readonly ruleWidth?: number;
   readonly ruleHeight?: number;
@@ -409,10 +420,13 @@ export interface SimpleTexToken {
   readonly graphicsFilenameEnd?: number;
   readonly graphicsOptions?: SimpleTexGraphicsOptions;
   readonly lift?: number;
+  readonly relativeLiftEm?: number;
+  readonly childFontScale?: number;
   readonly boxHeight?: number;
   readonly boxDepth?: number;
   readonly lineLeading?: string;
   readonly fontState: SimpleTexFontState;
+  readonly nonBreaking?: boolean;
   readonly italicCorrectionAfter?: boolean;
   readonly literal?: SimpleTexTokenLiteralInfo;
 }
@@ -637,7 +651,8 @@ export function getSimpleTexFallbackReason(text: string, width: number): string 
 
 export function analyzeSimpleTexParagraph(
   text: string,
-  width: number
+  width: number,
+  resolveColorAlias?: ColorAliasResolver
 ): SimpleTexParagraphAnalysis {
   if (!Number.isFinite(width) || width <= 0) {
     return {
@@ -645,7 +660,7 @@ export function analyzeSimpleTexParagraph(
       fallbackReason: "Paragraph width must be positive.",
     };
   }
-  const ir = buildSimpleTexParagraphIr(text);
+  const ir = buildSimpleTexParagraphIr(text, resolveColorAlias);
   if (ir.unsupportedCommand) {
     return {
       ir,
@@ -667,8 +682,11 @@ export function analyzeSimpleTexParagraph(
   return { ir, fallbackReason: null };
 }
 
-export function parseSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
-  return buildSimpleTexParagraphIr(text);
+export function parseSimpleTexParagraphIr(
+  text: string,
+  resolveColorAlias?: ColorAliasResolver
+): SimpleTexParagraphIr {
+  return buildSimpleTexParagraphIr(text, resolveColorAlias);
 }
 
 export function parseSimpleTexInlineNodes(
@@ -682,19 +700,24 @@ export function parseSimpleTexInlineNodes(
   };
 }
 
-function buildSimpleTexParagraphIr(text: string): SimpleTexParagraphIr {
-  return buildSimpleTexParagraphIrForRange(text, 0, text.length, 0);
+function buildSimpleTexParagraphIr(
+  text: string,
+  resolveColorAlias?: ColorAliasResolver
+): SimpleTexParagraphIr {
+  return buildSimpleTexParagraphIrForRange(text, 0, text.length, 0, resolveColorAlias);
 }
 
 function buildSimpleTexParagraphIrForRange(
   text: string,
   start: number,
   end: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): SimpleTexParagraphIr {
   const nodeScan = scanSimpleTexIrNodes(
     text.slice(start, end),
-    sourceOffset + start
+    sourceOffset + start,
+    resolveColorAlias
   );
   const blockScan = buildSimpleTexParagraphBlocksFromNodes(
     text,
@@ -716,7 +739,8 @@ function buildSimpleTexParagraphIrForRange(
 
 function scanSimpleTexIrNodes(
   text: string,
-  sourceOffset = 0
+  sourceOffset = 0,
+  resolveColorAlias?: ColorAliasResolver
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
   let unsupportedCommand = false;
@@ -772,23 +796,32 @@ function scanSimpleTexIrNodes(
         continue;
       }
 
+      const proseControl = scanSimpleTexProseControl(text, index, sourceOffset, resolveColorAlias);
+      if (proseControl) {
+        nodes.push(proseControl.node);
+        unsupportedCommand ||= proseControl.unsupportedCommand;
+        index = proseControl.end;
+        continue;
+      }
+
       const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
       const environmentBoundary = scanSimpleTexEnvironmentBoundary(text, index);
-      const itemCommand = scanSimpleTexItemCommand(text, index, sourceOffset);
+      const itemCommand = scanSimpleTexItemCommand(text, index, sourceOffset, resolveColorAlias);
       const verticalGlue = scanSimpleTexVerticalGlueCommand(text, index, sourceOffset);
       const verticalRule = scanSimpleTexVerticalRuleCommand(text, index, sourceOffset);
       const penalty = scanSimpleTexPenaltyCommand(text, index, sourceOffset);
-      const boxCommand = scanSimpleTexBoxCommand(text, index, sourceOffset);
-      const boxEnvironment = scanSimpleTexBoxEnvironment(text, index, sourceOffset);
-      const mboxCommand = scanSimpleTexMBoxCommand(text, index, sourceOffset);
+      const boxCommand = scanSimpleTexBoxCommand(text, index, sourceOffset, resolveColorAlias);
+      const boxEnvironment = scanSimpleTexBoxEnvironment(text, index, sourceOffset, resolveColorAlias);
+      const colorBoxCommand = scanSimpleTexColorBoxCommand(text, index, sourceOffset, resolveColorAlias);
+      const mboxCommand = scanSimpleTexMBoxCommand(text, index, sourceOffset, resolveColorAlias);
       const ruleCommand = scanSimpleTexRuleCommand(text, index, sourceOffset);
       const includeGraphicsCommand = scanSimpleTexIncludeGraphicsCommand(text, index, sourceOffset);
-      const raiseBoxCommand = scanSimpleTexRaiseBoxCommand(text, index, sourceOffset);
-      const dimensionBoxCommand = scanSimpleTexDimensionBoxCommand(text, index, sourceOffset);
-      const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset);
+      const raiseBoxCommand = scanSimpleTexRaiseBoxCommand(text, index, sourceOffset, resolveColorAlias);
+      const dimensionBoxCommand = scanSimpleTexDimensionBoxCommand(text, index, sourceOffset, resolveColorAlias);
+      const fontCommand = scanSimpleTexFontCommand(text, index, sourceOffset, resolveColorAlias);
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
-      const styleDeclaration = scanSimpleTexStyleDeclaration(text, index, sourceOffset);
-      const colorCommand = scanSimpleTexColorCommand(text, index, sourceOffset);
+      const styleDeclaration = scanSimpleTexStyleDeclaration(text, index, sourceOffset, resolveColorAlias);
+      const colorCommand = scanSimpleTexColorCommand(text, index, sourceOffset, resolveColorAlias);
       const accentCommand = scanSimpleTexAccentCommand(text, index, sourceOffset);
       if (boxEnvironment) {
         nodes.push(boxEnvironment.node);
@@ -836,6 +869,12 @@ function scanSimpleTexIrNodes(
         nodes.push(boxCommand.node);
         unsupportedCommand ||= boxCommand.unsupportedCommand;
         index = boxCommand.end;
+        continue;
+      }
+      if (colorBoxCommand) {
+        nodes.push(colorBoxCommand.node);
+        unsupportedCommand ||= colorBoxCommand.unsupportedCommand;
+        index = colorBoxCommand.end;
         continue;
       }
       if (mboxCommand) {
@@ -944,7 +983,7 @@ function scanSimpleTexIrNodes(
     }
 
     if (char === "{") {
-      const group = scanSimpleTexGroup(text, index, sourceOffset);
+      const group = scanSimpleTexGroup(text, index, sourceOffset, resolveColorAlias);
       if (group) {
         nodes.push(group.node);
         unsupportedCommand ||= group.unsupportedCommand;
@@ -983,6 +1022,13 @@ function scanSimpleTexIrNodes(
         sourceEnd: sourceStart + 1,
       });
       index += 1;
+      continue;
+    }
+
+    const proseConvention = scanSimpleTexProseConvention(text, index, sourceOffset);
+    if (proseConvention) {
+      nodes.push(proseConvention.node);
+      index = proseConvention.end;
       continue;
     }
 
@@ -1035,6 +1081,7 @@ function scanSimpleTexIrNodes(
       text[index] !== "{" &&
       text[index] !== "}" &&
       text[index] !== "$" &&
+      scanSimpleTexProseConvention(text, index, sourceOffset) === null &&
       !unsupportedDirectTextCharPattern.test(text[index] ?? "") &&
       !whitespacePattern.test(text[index] ?? "")
     ) {
@@ -1049,6 +1096,252 @@ function scanSimpleTexIrNodes(
   }
 
   return { nodes, unsupportedCommand };
+}
+
+function scanSimpleTexColorBoxCommand(
+  text: string,
+  start: number,
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
+): {
+  readonly node: SimpleTexMBoxNode;
+  readonly end: number;
+  readonly unsupportedCommand: boolean;
+} | null {
+  const colorboxEnd = scanSimpleTexControlWord(text, start, "colorbox");
+  const fcolorboxEnd = scanSimpleTexControlWord(text, start, "fcolorbox");
+  const command = colorboxEnd !== null
+    ? { name: "colorbox" as const, end: colorboxEnd }
+    : fcolorboxEnd !== null
+      ? { name: "fcolorbox" as const, end: fcolorboxEnd }
+      : null;
+  if (!command) return null;
+
+  let cursor = skipSimpleTexControlWordSpaces(text, command.end);
+  const scanColorArgument = (): { readonly color: string } | null => {
+    let model: string | undefined;
+    if (text[cursor] === "[") {
+      const modelArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
+      if (!modelArgument) return null;
+      model = modelArgument.content.trim();
+      cursor = skipSimpleTexControlWordSpaces(text, modelArgument.end);
+    }
+    const colorArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+    if (!colorArgument) return null;
+    const color = normalizeSimpleTexColor(colorArgument.content, model, resolveColorAlias);
+    if (!color) return null;
+    cursor = skipSimpleTexControlWordSpaces(text, colorArgument.end);
+    return { color };
+  };
+
+  const firstColor = scanColorArgument();
+  if (!firstColor) return null;
+  const secondColor = command.name === "fcolorbox" ? scanColorArgument() : null;
+  if (command.name === "fcolorbox" && !secondColor) return null;
+  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!contentArgument) return null;
+  const childScan = scanSimpleTexIrNodes(
+    contentArgument.content,
+    sourceOffset + contentArgument.contentStart,
+    resolveColorAlias
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
+  return {
+    node: {
+      kind: "mbox",
+      command: command.name,
+      text: text.slice(start, contentArgument.end),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + contentArgument.end,
+      content: contentArgument.content,
+      contentStart: sourceOffset + contentArgument.contentStart,
+      contentEnd: sourceOffset + contentArgument.contentEnd,
+      children: childrenAreInline ? childScan.nodes.filter(isSimpleTexInlineNode) : [],
+      backgroundColor: command.name === "colorbox" ? firstColor.color : secondColor?.color,
+      frameColor: command.name === "fcolorbox" ? firstColor.color : undefined,
+    },
+    end: contentArgument.end,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+  };
+}
+
+function scanSimpleTexProseConvention(
+  text: string,
+  start: number,
+  sourceOffset: number
+): { readonly node: SimpleTexTextNode | SimpleTexSpaceNode; readonly end: number } | null {
+  const sourceStart = sourceOffset + start;
+  if (text[start] === "~") {
+    return {
+      node: {
+        kind: "space",
+        text: "~",
+        nonBreaking: true,
+        sourceStart,
+        sourceEnd: sourceStart + 1,
+      },
+      end: start + 1,
+    };
+  }
+  const replacements: readonly [string, string][] = [
+    ["---", "\u2014"],
+    ["--", "\u2013"],
+    ["``", "\u201c"],
+    ["''", "\u201d"],
+    ["`", "\u2018"],
+    ["'", "\u2019"],
+  ];
+  for (const [source, replacement] of replacements) {
+    if (text.startsWith(source, start)) {
+      return {
+        node: {
+          kind: "text",
+          text: replacement,
+          sourceStart,
+          sourceEnd: sourceStart + source.length,
+        },
+        end: start + source.length,
+      };
+    }
+  }
+  return null;
+}
+
+function scanSimpleTexProseControl(
+  text: string,
+  start: number,
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
+): {
+  readonly node: SimpleTexInlineNode;
+  readonly end: number;
+  readonly unsupportedCommand: boolean;
+} | null {
+  const sourceStart = sourceOffset + start;
+  const escaped = text[start + 1];
+  const escapedReplacements: Readonly<Record<string, string>> = {
+    "%": "%",
+    "&": "&",
+    "_": "_",
+    "#": "#",
+    "$": "$",
+    "{": "{",
+    "}": "}",
+  };
+  const escapedReplacement = escaped === undefined ? undefined : escapedReplacements[escaped];
+  if (escapedReplacement !== undefined) {
+    return {
+      node: {
+        kind: "text",
+        text: escapedReplacement,
+        sourceStart,
+        sourceEnd: sourceStart + 2,
+      },
+      end: start + 2,
+      unsupportedCommand: false,
+    };
+  }
+  if (escaped === " ") {
+    return {
+      node: {
+        kind: "space",
+        text: text.slice(start, start + 2),
+        sourceStart,
+        sourceEnd: sourceStart + 2,
+      },
+      end: start + 2,
+      unsupportedCommand: false,
+    };
+  }
+
+  for (const [name, replacement] of [
+    ["textbackslash", "\\"],
+    ["textellipsis", "\u2026"],
+    ["ldots", "\u2026"],
+  ] as const) {
+    const commandEnd = scanSimpleTexControlWord(text, start, name);
+    if (commandEnd !== null) {
+      const end = skipSimpleTexControlWordSpaces(text, commandEnd);
+      return {
+        node: {
+          kind: "text",
+          text: replacement,
+          sourceStart,
+          // TeX consumes one delimiter space after a control word. Attach
+          // that invisible source to the replacement glyph for caret coverage.
+          sourceEnd: sourceOffset + end,
+        },
+        end,
+        unsupportedCommand: false,
+      };
+    }
+  }
+
+  const ensureMathEnd = scanSimpleTexControlWord(text, start, "ensuremath");
+  if (ensureMathEnd !== null) {
+    const groupStart = skipSimpleTexControlWordSpaces(text, ensureMathEnd);
+    const groupEnd = text[groupStart] === "{" ? findBalancedSimpleTexGroupEnd(text, groupStart) : null;
+    if (groupEnd === null) {
+      return null;
+    }
+    return {
+      node: {
+        kind: "math",
+        text: text.slice(start, groupEnd),
+        delimiter: "paren",
+        content: text.slice(groupStart + 1, groupEnd - 1),
+        sourceStart,
+        sourceEnd: sourceOffset + groupEnd,
+        contentStart: sourceOffset + groupStart + 1,
+        contentEnd: sourceOffset + groupEnd - 1,
+      },
+      end: groupEnd,
+      unsupportedCommand: false,
+    };
+  }
+
+  for (const [name, relativeLiftEm] of [
+    ["textsuperscript", 0.45],
+    ["textsubscript", -0.2],
+  ] as const) {
+    const commandEnd = scanSimpleTexControlWord(text, start, name);
+    if (commandEnd === null) {
+      continue;
+    }
+    const groupStart = skipSimpleTexControlWordSpaces(text, commandEnd);
+    const groupEnd = text[groupStart] === "{" ? findBalancedSimpleTexGroupEnd(text, groupStart) : null;
+    if (groupEnd === null) {
+      return null;
+    }
+    const contentStart = groupStart + 1;
+    const contentEnd = groupEnd - 1;
+    const childScan = scanSimpleTexIrNodes(
+      text.slice(contentStart, contentEnd),
+      sourceOffset + contentStart,
+      resolveColorAlias
+    );
+    const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+    const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
+    return {
+      node: {
+        kind: "raisebox",
+        text: text.slice(start, groupEnd),
+        lift: 0,
+        relativeLiftEm,
+        childFontScale: 0.7,
+        sourceStart,
+        sourceEnd: sourceOffset + groupEnd,
+        content: text.slice(contentStart, contentEnd),
+        contentStart: sourceOffset + contentStart,
+        contentEnd: sourceOffset + contentEnd,
+        children: childrenAreInline ? childScan.nodes.filter(isSimpleTexInlineNode) : [],
+      },
+      end: groupEnd,
+      unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+    };
+  }
+  return null;
 }
 
 function scanSimpleTexDisplayMath(
@@ -1563,7 +1856,8 @@ function scanSimpleTexPenaltyCommand(
 function scanSimpleTexBoxCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexBoxNode;
   end: number;
@@ -1631,7 +1925,8 @@ function scanSimpleTexBoxCommand(
     text,
     contentStart,
     contentEnd,
-    sourceOffset
+    sourceOffset,
+    resolveColorAlias
   );
   unsupportedCommand ||= body.unsupportedCommand;
 
@@ -1658,7 +1953,8 @@ function scanSimpleTexBoxCommand(
 function scanSimpleTexBoxEnvironment(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexBoxNode;
   end: number;
@@ -1725,7 +2021,8 @@ function scanSimpleTexBoxEnvironment(
     text,
     contentStart,
     environmentEnd.contentEnd,
-    sourceOffset
+    sourceOffset,
+    resolveColorAlias
   );
   unsupportedCommand ||= body.unsupportedCommand;
 
@@ -1853,7 +2150,8 @@ function simpleTexTrivlistAlignment(
 function scanSimpleTexItemCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexItemNode;
   end: number;
@@ -1878,7 +2176,8 @@ function scanSimpleTexItemCommand(
     const contentEnd = labelEnd - 1;
     const labelScan = scanSimpleTexIrNodes(
       text.slice(contentStart, contentEnd),
-      sourceOffset + contentStart
+      sourceOffset + contentStart,
+      resolveColorAlias
     );
     const labelIsInline = labelScan.nodes.every(isSimpleTexInlineNode);
     labelNodes = labelIsInline
@@ -1908,7 +2207,8 @@ function scanSimpleTexItemCommand(
 function scanSimpleTexFontCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexFontCommandNode;
   end: number;
@@ -1935,7 +2235,8 @@ function scanSimpleTexFontCommand(
   const contentEnd = groupEnd - 1;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
-    sourceOffset + contentStart
+    sourceOffset + contentStart,
+    resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   return {
@@ -1959,7 +2260,8 @@ function scanSimpleTexFontCommand(
 function scanSimpleTexMBoxCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexMBoxNode;
   end: number;
@@ -2017,7 +2319,8 @@ function scanSimpleTexMBoxCommand(
   const contentEnd = groupEnd - 1;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
-    sourceOffset + contentStart
+    sourceOffset + contentStart,
+    resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
@@ -2330,7 +2633,8 @@ function stripSingleSimpleTexBraceLayer(raw: string): string {
 function scanSimpleTexRaiseBoxCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexRaiseBoxNode;
   end: number;
@@ -2404,7 +2708,8 @@ function scanSimpleTexRaiseBoxCommand(
   const contentEnd = groupEnd - 1;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
-    sourceOffset + contentStart
+    sourceOffset + contentStart,
+    resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
@@ -2432,7 +2737,8 @@ function scanSimpleTexRaiseBoxCommand(
 function scanSimpleTexDimensionBoxCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexDimensionBoxNode;
   end: number;
@@ -2456,7 +2762,8 @@ function scanSimpleTexDimensionBoxCommand(
   const contentEnd = groupEnd - 1;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
-    sourceOffset + contentStart
+    sourceOffset + contentStart,
+    resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
@@ -2496,7 +2803,7 @@ function scanSimpleTexTextBoxCommandName(
   text: string,
   start: number
 ): { readonly name: SimpleTexTextBoxCommandName; readonly end: number } | null {
-  for (const name of ["framebox", "makebox", "mbox", "fbox", "llap", "rlap"] satisfies readonly SimpleTexTextBoxCommandName[]) {
+  for (const name of ["framebox", "makebox", "underline", "mbox", "fbox", "llap", "rlap"] satisfies readonly SimpleTexTextBoxCommandName[]) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
@@ -2656,7 +2963,8 @@ function scanSimpleTexFontDeclarationName(
 function scanSimpleTexStyleDeclaration(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): { node: SimpleTexStyleDeclarationNode; end: number } | null {
   for (const name of [
     "tiny", "scriptsize", "footnotesize", "small", "normalsize",
@@ -2679,7 +2987,7 @@ function scanSimpleTexStyleDeclaration(
 
   const fontsizeEnd = scanSimpleTexControlWord(text, start, "fontsize");
   if (fontsizeEnd === null) {
-    return scanSimpleTexColorDeclaration(text, start, sourceOffset);
+    return scanSimpleTexColorDeclaration(text, start, sourceOffset, resolveColorAlias);
   }
   let cursor = skipSimpleTexControlWordSpaces(text, fontsizeEnd);
   const size = scanSimpleTexRequiredGroupArgument(text, cursor);
@@ -2707,7 +3015,8 @@ function scanSimpleTexStyleDeclaration(
 function scanSimpleTexColorDeclaration(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): { node: SimpleTexStyleDeclarationNode; end: number } | null {
   const commandEnd = scanSimpleTexControlWord(text, start, "color");
   if (commandEnd === null) return null;
@@ -2721,7 +3030,7 @@ function scanSimpleTexColorDeclaration(
   }
   const argument = scanSimpleTexRequiredGroupArgument(text, cursor);
   if (!argument) return null;
-  const color = normalizeSimpleTexColor(argument.content, model);
+  const color = normalizeSimpleTexColor(argument.content, model, resolveColorAlias);
   if (!color) return null;
   return {
     node: {
@@ -2738,7 +3047,8 @@ function scanSimpleTexColorDeclaration(
 function scanSimpleTexColorCommand(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): { node: SimpleTexColorCommandNode; end: number; unsupportedCommand: boolean } | null {
   const commandEnd = scanSimpleTexControlWord(text, start, "textcolor");
   if (commandEnd === null) return null;
@@ -2755,11 +3065,12 @@ function scanSimpleTexColorCommand(
   cursor = skipSimpleTexControlWordSpaces(text, colorArgument.end);
   const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
   if (!contentArgument) return null;
-  const color = normalizeSimpleTexColor(colorArgument.content, model);
+  const color = normalizeSimpleTexColor(colorArgument.content, model, resolveColorAlias);
   if (!color) return null;
   const childScan = scanSimpleTexIrNodes(
     contentArgument.content,
-    sourceOffset + contentArgument.contentStart
+    sourceOffset + contentArgument.contentStart,
+    resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   return {
@@ -2778,11 +3089,15 @@ function scanSimpleTexColorCommand(
   };
 }
 
-function normalizeSimpleTexColor(specification: string, model?: string): string | null {
+function normalizeSimpleTexColor(
+  specification: string,
+  model?: string,
+  resolveColorAlias?: ColorAliasResolver
+): string | null {
   if (model) {
     return resolveDefineColorModel(model, specification);
   }
-  const normalized = normalizeColor(specification);
+  const normalized = normalizeColor(specification, { resolveAlias: resolveColorAlias });
   return normalized.length > 0 && normalized !== "none" ? normalized : null;
 }
 
@@ -2874,7 +3189,8 @@ function scanSimpleTexAccentCommand(
 function scanSimpleTexGroup(
   text: string,
   start: number,
-  sourceOffset: number
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexGroupNode;
   end: number;
@@ -2889,7 +3205,8 @@ function scanSimpleTexGroup(
   const contentEnd = groupEnd - 1;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
-    sourceOffset + contentStart
+    sourceOffset + contentStart,
+    resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   return {
@@ -4040,6 +4357,8 @@ export function simpleTexInlineNodesToTokens(
         command: node.command,
         boxWidth: node.boxWidth,
         boxAlign: node.boxAlign,
+        backgroundColor: node.backgroundColor,
+        frameColor: node.frameColor,
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
@@ -4088,6 +4407,8 @@ export function simpleTexInlineNodesToTokens(
         contentEnd: node.contentEnd,
         children: node.children,
         lift: node.lift,
+        relativeLiftEm: node.relativeLiftEm,
+        childFontScale: node.childFontScale,
         boxHeight: node.boxHeight,
         boxDepth: node.boxDepth,
         sourceStart: node.sourceStart,
@@ -4157,6 +4478,7 @@ export function simpleTexInlineNodesToTokens(
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
+        nonBreaking: node.nonBreaking,
       });
       continue;
     }

@@ -1,6 +1,7 @@
 import type { PathOptionItem } from "../../ast/types.js";
 import type {
   NodeTextEngine,
+  NodeTextColorResolver,
   NodeTextGraphicsResolver,
   NodeTextLayoutKind,
   NodeTextParagraphAlignment,
@@ -36,7 +37,8 @@ export function resolveNodeLayout(
   textEngine: NodeTextEngine | null = null,
   textMode: "text" | "math" = "text",
   textSourceMap?: TextSourceMap,
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: NodeTextGraphicsResolver,
+  colorResolver?: NodeTextColorResolver
 ): NodeLayout {
   void _transformScale;
   const fontSize = style.fontSize;
@@ -174,7 +176,8 @@ export function resolveNodeLayout(
         fontFamily: style.fontFamily,
         fontSizePt: style.fontSize,
         ...(normalizedTextSourceMap ? { sourceMap: normalizedTextSourceMap } : {}),
-        ...(graphicsResolver ? { graphicsResolver } : {})
+        ...(graphicsResolver ? { graphicsResolver } : {}),
+        ...(colorResolver ? { colorResolver } : {})
       }) ?? null;
     } catch {
       return null;

@@ -78,7 +78,11 @@ function renderMathHListItems(
       pieces.push([
         `<g data-tex-math-role="${escapeXmlAttribute(item.role)}"`,
         ` data-source-start="${item.sourceSpan.start}"`,
-        ` data-source-end="${item.sourceSpan.end}">`,
+        ` data-source-end="${item.sourceSpan.end}"`,
+        item.color
+          ? ` fill="${escapeXmlAttribute(item.color)}" stroke="${escapeXmlAttribute(item.color)}"`
+          : "",
+        ">",
       ].join(""));
       pieces.push(...renderMathHListItems(
         item.items,
@@ -120,7 +124,11 @@ function renderMathRule(
     ` x="${formatSvgNumber((originX + item.x) * SVG_UNIT_SCALE)}"`,
     ` y="${formatSvgNumber((originY + item.y) * SVG_UNIT_SCALE)}"`,
     ` width="${formatSvgNumber(item.width * SVG_UNIT_SCALE)}"`,
-    ` height="${formatSvgNumber(item.height * SVG_UNIT_SCALE)}" />`,
+    ` height="${formatSvgNumber(item.height * SVG_UNIT_SCALE)}"`,
+    item.color
+      ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
+      : "",
+    " />",
   ].join("");
 }
 
@@ -140,6 +148,9 @@ function renderMathGlyphPath(
     ` data-tex-glyph="${item.code}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
+    item.color
+      ? ` fill="${escapeXmlAttribute(item.color)}" stroke="${escapeXmlAttribute(item.color)}"`
+      : "",
     ` d="${escapeXmlAttribute(d)}"`,
     ` transform="translate(${formatSvgNumber((originX + item.x) * SVG_UNIT_SCALE)} ${formatSvgNumber((originY + item.y) * SVG_UNIT_SCALE)}) scale(${formatSvgNumber(scale)})" />`,
   ].join("");

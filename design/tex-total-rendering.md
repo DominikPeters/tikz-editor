@@ -271,6 +271,20 @@ vendored Latin Modern catalog still fall back explicitly rather than emitting
 blank glyphs. A scoped text-size declaration around inline math does not yet
 rescale only that math island; leading/global node sizing does.
 
+Also implemented 2026-07-11: escaped reserved characters, TeX quotes/dashes
+and ellipses, non-breaking `~` glue, `\textsuperscript`, `\textsubscript`,
+prose `\underline`, and `\ensuremath`. The vendored Latin Modern prose catalog
+now includes each face's available Latin Extended-A glyphs plus the common
+E/e-with-tilde examples; absent per-face glyphs retain the explicit fallback.
+
+The same coverage pass added native `\colorbox` and `\fcolorbox`; genuine
+Computer Modern `\boldsymbol` through the `cmmib`, `cmbsy`, and `cmbx` math
+versions; RSFS `\mathscr`; vertical, diagonal, and AMS semantic dots;
+Mathtools `dcases`; and extensible `\overbrace`/`\underbrace` layouts. Symbols
+without a real bold face remain unchanged rather than receiving synthetic
+`\pmb` overprinting. Lower-priority `\oldstylenums`, `\mathnormal`, `\pmb`, and
+package-specific text-decoration commands remain outside this tranche.
+
 ### Phase 4: Delete the fallback
 
 - Remove the MathJax measure/render path from `mathjax-engine.ts`;

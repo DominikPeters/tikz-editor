@@ -242,7 +242,10 @@ function layoutItemsToRuns(
         forced,
         forced ? item.lineLeading : undefined
       ),
-      texGlue: glue,
+      texGlue: {
+        ...glue,
+        ...(item.kind === "space" && item.nonBreaking ? { breakPenalty: 10_000 } : {}),
+      },
     } satisfies SpaceRun);
   }
   return { runs, shapedRuns };

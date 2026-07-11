@@ -78,7 +78,7 @@ but real. Construct frequencies:
 | `theorem` | 58 | 13/22 | theorem-style blocks core for math talks |
 | `\footnote` | 57 | 16/22 | needed, medium priority |
 | `\scalebox` | 56 | 12/22 | scale-transform wrapper needed |
-| `\colorbox` | 52 | 19/22 | inline highlight boxes needed |
+| `\colorbox` | 52 | 19/22 | native inline highlight boxes implemented in node text |
 | `tcolorbox` | 32 | 18/22 | subset or styled-box fallback (see below) |
 | `align` (display math) | 30 | 10/22 | native display-math boxes needed |
 | overlay angle specs `<...>` | 116 | — | explicit specs dominate |

@@ -100,6 +100,8 @@ export interface TexMathGlyphLayoutItem {
   readonly depth: number;
   readonly italicCorrection: number;
   readonly sourceSpan: TexMathSourceSpan;
+  /** Optional glyph-local paint for styled prose embedded in an LR box. */
+  readonly color?: string;
 }
 
 export interface TexMathGlueLayoutItem {
@@ -123,11 +125,13 @@ export interface TexMathKernLayoutItem {
 
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
-  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "array-rule" | "boxed-rule" | "var-limit-rule" | "literal-rule";
+  readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "brace-rule" | "array-rule" | "boxed-rule" | "colorbox-background" | "var-limit-rule" | "literal-rule";
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  /** Optional rule-local paint, used when a colored box must not inherit text color. */
+  readonly color?: string;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -177,6 +181,8 @@ export interface TexMathChildHListLayoutItem {
   readonly height: number;
   readonly depth: number;
   readonly sourceSpan: TexMathSourceSpan;
+  /** Optional paint inherited by this child only. */
+  readonly color?: string;
   readonly items: readonly TexMathHListItem[];
   readonly multlineShove?: "left" | "right";
   readonly intertextsBefore?: readonly TexMathAlignedIntertext[];
@@ -579,6 +585,9 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
       texMathListNeedsAmsMath(nucleus.radicand);
   }
   if (nucleus.kind === "line") {
+    return texMathListNeedsAmsMath(nucleus.body);
+  }
+  if (nucleus.kind === "brace") {
     return texMathListNeedsAmsMath(nucleus.body);
   }
   if (nucleus.kind === "smash") {
@@ -1019,6 +1028,12 @@ function layoutNucleus(
   if (nucleus.kind === "var-limit") {
     return layoutVarLimitNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
+  if (nucleus.kind === "brace") {
+    return layoutBraceNucleus(nucleus, fontProfile, baseAtPt, alphabet);
+  }
+  if (nucleus.kind === "vertical-dots" || nucleus.kind === "diagonal-dots") {
+    return layoutVerticalDotsNucleus(nucleus, fontProfile, style, baseAtPt);
+  }
   if (nucleus.kind === "accent") {
     return layoutAccentNucleus(
       nucleus,
@@ -1031,16 +1046,16 @@ function layoutNucleus(
     );
   }
   if (nucleus.kind === "alphabet") {
-    return layoutAlphabetNucleus(nucleus, fontProfile, style, cramped, baseAtPt);
+    return layoutAlphabetNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "text") {
     return layoutTextNucleus(nucleus, fontProfile, style, baseAtPt);
   }
   if (nucleus.kind === "operator") {
-    return layoutOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
+    return layoutOperatorNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "operator-name") {
-    return layoutOperatorNameNucleus(nucleus, fontProfile, style, baseAtPt);
+    return layoutOperatorNameNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "extensible-arrow") {
     return layoutExtensibleArrowNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -1449,19 +1464,21 @@ function layoutAlphabetNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number
+  baseAtPt: number,
+  outerAlphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
+  const alphabet = nestedMathAlphabet(nucleus.alphabet, outerAlphabet);
   const result = layoutTexMathList(nucleus.list, {
     fontProfile,
     style,
     cramped,
     baseAtPt,
-    alphabet: nucleus.alphabet,
+    alphabet,
   });
   if (!result.supported) {
     return null;
   }
-  const hlist = normalizeAlphabetHList(result.hlist, nucleus.alphabet);
+  const hlist = normalizeAlphabetHList(result.hlist, alphabet);
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
   return {
     items: [child],
@@ -1472,6 +1489,37 @@ function layoutAlphabetNucleus(
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
   };
+}
+
+/** LaTeX's bold math version remains active through ordinary alphabet switches. */
+function nestedMathAlphabet(
+  alphabet: TexMathAlphabetCommand,
+  outerAlphabet?: TexMathAlphabetCommand
+): TexMathAlphabetCommand {
+  if (outerAlphabet !== "boldsymbol") {
+    return alphabet;
+  }
+  switch (alphabet) {
+    case "mathrm":
+    case "mathbf":
+      return "mathbf";
+    case "mathit":
+      return "boldsymbol";
+    case "mathcal":
+      return "boldmathcal";
+    case "mathfrak":
+      return "boldmathfrak";
+    case "boldmathcal":
+    case "boldmathfrak":
+    case "boldsymbol":
+    case "mathbb":
+    case "mathscr":
+    case "mathsf":
+    case "mathtt":
+      // Blackboard, RSFS, sans, and typewriter do not acquire a
+      // synthetic bold face merely because the surrounding math version is bold.
+      return alphabet;
+  }
 }
 
 function normalizeAlphabetHList(
@@ -2309,7 +2357,15 @@ function layoutCasesBody(
   const rowHeight = roundTexPt(TEX_ALIGNED_ROW_HEIGHT_PT * TEX_CASES_ARRAY_STRETCH);
   const rowDepth = roundTexPt(TEX_ALIGNED_ROW_DEPTH_PT * TEX_CASES_ARRAY_STRETCH);
   const rows = nucleus.rows.map((row) =>
-    layoutMatrixRow(row, fontProfile, baseAtPt, alphabet, rowHeight, rowDepth)
+    layoutMatrixRow(
+      row,
+      fontProfile,
+      baseAtPt,
+      alphabet,
+      rowHeight,
+      rowDepth,
+      nucleus.displayStyle ? "display" : "text"
+    )
   );
   if (
     rows.some((row): row is null => row === null) ||
@@ -3106,9 +3162,9 @@ function layoutMatrixRow(
   baseAtPt: number,
   alphabet?: TexMathAlphabetCommand,
   minimumHeight = TEX_ALIGNED_ROW_HEIGHT_PT,
-  minimumDepth = TEX_ALIGNED_ROW_DEPTH_PT
+  minimumDepth = TEX_ALIGNED_ROW_DEPTH_PT,
+  cellStyle: TexMathStyle = "text"
 ): TexMathAlignedRowLayout | null {
-  const cellStyle: TexMathStyle = "text";
   const cells = row.cells.map((cell) => {
     const result = layoutTexMathList(cell.list, { fontProfile, style: cellStyle, baseAtPt, alphabet });
     return result.supported
@@ -4132,6 +4188,150 @@ function layoutLineBody(
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 
+function layoutVerticalDotsNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "vertical-dots" | "diagonal-dots" }>,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: number
+): TexMathAtomLayout {
+  const font = fontProfile.resolveMathFont({ family: "letters", style, baseAtPt });
+  const metric = requiredCharMetric(font, 58);
+  const dotWidth = roundTexPt(tfmToPt(font, metric.width));
+  const dotHeight = roundTexPt(tfmToPt(font, metric.height));
+  const dotDepth = roundTexPt(tfmToPt(font, metric.depth));
+  const makeDot = (x: number, y: number): TexMathGlyphLayoutItem => ({
+    kind: "glyph",
+    fontId: font.id,
+    atPt: font.atPt,
+    family: "letters",
+    code: 58,
+    text: nucleus.kind === "vertical-dots" ? "\\vdots" : "\\ddots",
+    x: roundTexPt(x),
+    y: roundTexPt(y),
+    width: dotWidth,
+    height: dotHeight,
+    depth: dotDepth,
+    italicCorrection: 0,
+    sourceSpan: nucleus.commandSourceSpan,
+  });
+  if (nucleus.kind === "vertical-dots") {
+    return {
+      items: [makeDot(0, -8), makeDot(0, -4), makeDot(0, 0)],
+      width: dotWidth,
+      height: roundTexPt(14 + dotHeight),
+      depth: dotDepth,
+      italicCorrection: 0,
+      isCharacterNucleus: false,
+      sourceSpan: nucleus.sourceSpan,
+    };
+  }
+  const oneMu = muToPt(fontProfile, style, baseAtPt, 1);
+  const twoMu = muToPt(fontProfile, style, baseAtPt, 2);
+  const firstX = oneMu;
+  const secondX = roundTexPt(firstX + dotWidth + twoMu);
+  const thirdX = roundTexPt(secondX + dotWidth + twoMu);
+  return {
+    items: [makeDot(firstX, -7), makeDot(secondX, -4), makeDot(thirdX, -1)],
+    width: roundTexPt(thirdX + dotWidth + oneMu),
+    height: roundTexPt(14 + dotHeight),
+    depth: Math.max(0, roundTexPt(dotDepth - 1)),
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
+function layoutBraceNucleus(
+  nucleus: Extract<TexMathNucleus, { readonly kind: "brace" }>,
+  fontProfile: TexMathFontProfile,
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
+): TexMathAtomLayout | null {
+  // LaTeX's definitions explicitly typeset the braced body in display style.
+  const bodyResult = layoutTexMathList(nucleus.body, {
+    fontProfile,
+    style: "display",
+    baseAtPt,
+    alphabet,
+  });
+  if (!bodyResult.supported) {
+    return null;
+  }
+  const body = omitSingleCharacterCleanBoxItalicCorrection(bodyResult.hlist, nucleus.body);
+  const font = fontProfile.resolveMathFont({ family: "extension", style: "display", baseAtPt });
+  const codes = nucleus.command === "overbrace" ? [122, 125, 124, 123] : [124, 123, 122, 125];
+  const metrics = codes.map((code) => requiredCharMetric(font, code));
+  const widths = metrics.map((metric) => roundTexPt(tfmToPt(font, metric.width)));
+  const minimumWidth = roundTexPt(widths.reduce((sum, width) => sum + width, 0));
+  const width = roundTexPt(Math.max(body.width, minimumWidth));
+  const bodyX = roundTexPt((width - body.width) / 2);
+  const braceHeight = Math.max(...metrics.map((metric) => roundTexPt(tfmToPt(font, metric.height))));
+  const braceDepth = Math.max(...metrics.map((metric) => roundTexPt(tfmToPt(font, metric.depth))));
+  const braceY = nucleus.command === "overbrace"
+    ? roundTexPt(-(body.height + body.depth + 3 + braceDepth))
+    : roundTexPt(body.depth + 3 + braceHeight);
+  const halfWidth = roundTexPt(width / 2);
+  const leftRuleWidth = roundTexPt(Math.max(0, halfWidth - widths[0] - widths[1]));
+  const rightRuleWidth = roundTexPt(Math.max(0, width - halfWidth - widths[2] - widths[3]));
+  const positions = [
+    0,
+    roundTexPt(widths[0] + leftRuleWidth),
+    halfWidth,
+    roundTexPt(width - widths[3]),
+  ];
+  const glyphs = codes.map((code, index): TexMathGlyphLayoutItem => ({
+    kind: "glyph",
+    fontId: font.id,
+    atPt: font.atPt,
+    family: "extension",
+    code,
+    text: `\\${nucleus.command}`,
+    x: positions[index] ?? 0,
+    y: braceY,
+    width: widths[index] ?? 0,
+    height: roundTexPt(tfmToPt(font, metrics[index]?.height ?? 0)),
+    depth: roundTexPt(tfmToPt(font, metrics[index]?.depth ?? 0)),
+    italicCorrection: 0,
+    sourceSpan: nucleus.commandSourceSpan,
+  }));
+  const ruleY = roundTexPt(braceY - braceHeight);
+  const rules: TexMathRuleLayoutItem[] = [
+    {
+      kind: "rule",
+      role: "brace-rule",
+      x: widths[0] ?? 0,
+      y: ruleY,
+      width: leftRuleWidth,
+      height: braceHeight,
+      sourceSpan: nucleus.commandSourceSpan,
+    },
+    {
+      kind: "rule",
+      role: "brace-rule",
+      x: roundTexPt(halfWidth + (widths[2] ?? 0)),
+      y: ruleY,
+      width: rightRuleWidth,
+      height: braceHeight,
+      sourceSpan: nucleus.commandSourceSpan,
+    },
+  ];
+  // \overbrace uses a vbox, whose reference point is its bottom; \underbrace
+  // uses a vtop, whose reference point is the first (body) row baseline.
+  const bodyY = nucleus.command === "overbrace" ? -body.depth : 0;
+  const bodyChild = childHList("nucleus", bodyX, bodyY, body, nucleus.body.sourceSpan);
+  return {
+    items: [bodyChild, ...rules, ...glyphs],
+    width,
+    height: nucleus.command === "overbrace"
+      ? roundTexPt(body.height + body.depth + 3 + braceHeight + braceDepth)
+      : body.height,
+    depth: nucleus.command === "underbrace" ? roundTexPt(body.depth + 3 + braceHeight + braceDepth) : 0,
+    italicCorrection: 0,
+    isCharacterNucleus: false,
+    sourceSpan: nucleus.sourceSpan,
+  };
+}
+
 function layoutVarLimitNucleus(
   nucleus: TexMathVarLimitNucleus,
   fontProfile: TexMathFontProfile,
@@ -4402,7 +4602,14 @@ function layoutAccentNucleus(
   if (!base) {
     return null;
   }
-  const accent = resolveMathAccent(nucleus.command, fontProfile, style, baseAtPt, nucleus.commandSourceSpan);
+  const accent = resolveMathAccent(
+    nucleus.command,
+    fontProfile,
+    style,
+    baseAtPt,
+    nucleus.commandSourceSpan,
+    alphabet
+  );
   if (!accent) {
     return null;
   }
@@ -4780,10 +4987,11 @@ function layoutOperatorNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   if (nucleus.command === "lim") {
-    return layoutTextOperatorNucleus(nucleus, fontProfile, style, baseAtPt, "lim");
+    return layoutTextOperatorNucleus(nucleus, fontProfile, style, baseAtPt, "lim", alphabet);
   }
   return layoutLargeOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
 }
@@ -4793,9 +5001,12 @@ function layoutTextOperatorNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: number,
-  text: string
+  text: string,
+  alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const font = fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
+  const font = alphabet === "boldsymbol"
+    ? resolveBoldMathFont(fontProfile, "operators", style, baseAtPt)
+    : fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
   const items: TexMathGlyphLayoutItem[] = [];
   let cursor = 0;
   let height = 0;
@@ -4839,9 +5050,12 @@ function layoutOperatorNameNucleus(
   nucleus: TexMathOperatorNameNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: number,
+  alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const font = fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
+  const font = alphabet === "boldsymbol"
+    ? resolveBoldMathFont(fontProfile, "operators", style, baseAtPt)
+    : fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
   const items: TexMathHListItem[] = [];
   let cursor = 0;
   let height = 0;
@@ -5976,7 +6190,14 @@ function resolveMathSymbolParts(
   baseAtPt = 10,
   alphabet?: TexMathAlphabetCommand
 ): readonly ResolvedMathSymbolPart[] {
-  const alphabetGlyph = alphabet
+  // The RSFS family supplied by mathrsfs contains only uppercase Latin letters.
+  // Lowercase letters must trigger an honest fallback; digits and symbols are
+  // not part of the alphabet selection and retain their ordinary math fonts.
+  if (alphabet === "mathscr" && /^[a-z]$/.test(nucleus.text)) {
+    return [];
+  }
+  const appliesAlphabet = alphabet !== "mathscr" || /^[A-Z]$/.test(nucleus.text);
+  const alphabetGlyph = alphabet && appliesAlphabet
     ? defaultLuaLatexMathAlphabetGlyph(nucleus.text, alphabet, style)
     : null;
   if (alphabetGlyph) {
@@ -6012,11 +6233,9 @@ function resolveMathSymbolParts(
         sourceSpan: nucleus.sourceSpan,
       };
     }
-    const font = fontProfile.resolveMathFont({
-      family: glyph.family,
-      style,
-      baseAtPt,
-    });
+    const font = alphabet === "boldsymbol"
+      ? resolveBoldMathFont(fontProfile, glyph.family, style, baseAtPt)
+      : fontProfile.resolveMathFont({ family: glyph.family, style, baseAtPt });
     const metric = requiredCharMetric(font, glyph.code);
     const width = roundTexPt(tfmToPt(font, metric.width));
     return {
@@ -6039,12 +6258,34 @@ function resolveMathSymbolParts(
   });
 }
 
+function resolveBoldMathFont(
+  fontProfile: TexMathFontProfile,
+  family: TexMathFontFamily,
+  style: TexMathStyle,
+  baseAtPt: number
+): ResolvedTexFont {
+  let fontId: string | null = null;
+  if (family === "operators") {
+    fontId = style === "script" ? "cmbx7" : style === "scriptscript" ? "cmbx5" : "cmbx10";
+  } else if (family === "letters") {
+    fontId = style === "script" ? "cmmib7" : style === "scriptscript" ? "cmmib5" : "cmmib10";
+  } else if (family === "symbols") {
+    fontId = style === "script" ? "cmbsy7" : style === "scriptscript" ? "cmbsy5" : "cmbsy10";
+  }
+  // CM has no genuine bold extension or AMS symbol fonts. amsbsy leaves those
+  // families alone; \pmb is the explicitly synthetic alternative.
+  return fontId
+    ? fontProfile.metricProvider.resolveFont({ fontId, atPt: textStyleAtPt(style, baseAtPt) })
+    : fontProfile.resolveMathFont({ family, style, baseAtPt });
+}
+
 function resolveMathAccent(
   command: TexMathAccentCommand,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: number,
-  sourceSpan: TexMathSourceSpan
+  sourceSpan: TexMathSourceSpan,
+  alphabet?: TexMathAlphabetCommand
 ): ResolvedMathGlyph | null {
   const resolved = defaultLuaLatexMathAccent(command);
   if (!resolved) {
@@ -6052,11 +6293,9 @@ function resolveMathAccent(
   }
   return {
     kind: "glyph",
-    font: fontProfile.resolveMathFont({
-      family: resolved.family,
-      style,
-      baseAtPt,
-    }),
+    font: alphabet === "boldsymbol"
+      ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt)
+      : fontProfile.resolveMathFont({ family: resolved.family, style, baseAtPt }),
     family: resolved.family,
     code: resolved.code,
     text: `\\${command}`,
@@ -6105,16 +6344,34 @@ function defaultLuaLatexMathAlphabetGlyph(
     return null;
   }
   return {
-    fontId: defaultLuaLatexMathAlphabetFontId(alphabet, style),
+    fontId: defaultLuaLatexMathAlphabetFontId(alphabet, style, text),
     code: text.charCodeAt(0),
   };
 }
 
 function defaultLuaLatexMathAlphabetFontId(
   alphabet: TexMathAlphabetCommand,
-  style: TexMathStyle
+  style: TexMathStyle,
+  text?: string
 ): string {
   switch (alphabet) {
+    case "boldmathcal":
+      if (style === "script") return "cmbsy7";
+      if (style === "scriptscript") return "cmbsy5";
+      return "cmbsy10";
+    case "boldmathfrak":
+      if (style === "script") return "eufb7";
+      if (style === "scriptscript") return "eufb5";
+      return "eufb10";
+    case "boldsymbol":
+      if (text !== undefined && /^\d$/.test(text)) {
+        if (style === "script") return "cmbx7";
+        if (style === "scriptscript") return "cmbx5";
+        return "cmbx10";
+      }
+      if (style === "script") return "cmmib7";
+      if (style === "scriptscript") return "cmmib5";
+      return "cmmib10";
     case "mathbf":
       if (style === "script") {
         return "cmbx7";
@@ -6147,6 +6404,10 @@ function defaultLuaLatexMathAlphabetFontId(
         return "eufm5";
       }
       return "eufm10";
+    case "mathscr":
+      if (style === "script") return "rsfs7";
+      if (style === "scriptscript") return "rsfs5";
+      return "rsfs10";
     case "mathit":
       if (style === "text" || style === "display") {
         return "cmti10";

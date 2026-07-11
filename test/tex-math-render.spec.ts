@@ -653,6 +653,29 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-source-start="21"');
   });
 
+  it("renders bold math-version and RSFS glyphs through their vendored paths", () => {
+    const parsed = parseTexMath(String.raw`\boldsymbol{x+\alpha\leq 2}+\mathscr{F}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmib10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmmib10" data-tex-glyph="11"');
+    expect(body).toContain('data-tex-font="cmbsy10" data-tex-glyph="20"');
+    expect(body).toContain('data-tex-font="cmbx10" data-tex-glyph="50"');
+    expect(body).toContain('data-tex-font="rsfs10" data-tex-glyph="70"');
+  });
+
+  it("renders bold Fraktur through the genuine Euler bold face", () => {
+    const parsed = parseTexMath(String.raw`\boldsymbol{\mathfrak{g}}`);
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(renderTexMathHListSvgBody(result.hlist))
+      .toContain('data-tex-font="eufb10" data-tex-glyph="103"');
+  });
+
   it("renders old-style math font declarations through vendored CM font paths", () => {
     const parsed = parseTexMath(String.raw`\rm a+\it b+\bf c+\sf d+\tt e+\cal A`);
     const result = layoutTexMathList(parsed.list);
@@ -1226,6 +1249,22 @@ describe("TeX math SVG rendering", () => {
     expect(box).not.toBeNull();
     expect(box?.svgBody).toContain('data-tex-font="msbm10" data-tex-glyph="82"');
     expect(box?.svgBody).toContain('data-tex-font="eufm10" data-tex-glyph="103"');
+  });
+
+  it("keeps boldsymbol and supported mathrsfs letters on the native inline provider", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const content = String.raw`\boldsymbol{x+\alpha}+\mathscr{F}`;
+    const box = provider.getInlineMathBox({
+      source: `$${content}$`,
+      content,
+      delimiter: "dollar",
+      sourceStart: 0,
+      sourceEnd: content.length + 2,
+      contentStart: 1,
+      contentEnd: content.length + 1,
+    });
+    expect(box?.svgBody).toContain('data-tex-font="cmmib10"');
+    expect(box?.svgBody).toContain('data-tex-font="rsfs10"');
   });
 
   it("reports TeX inline math breakpoints after normalized binary and relation atoms", () => {
@@ -3455,5 +3494,20 @@ describe("TeX math SVG rendering", () => {
     expect(rowLefts?.[0]).toBeCloseTo(10, 6);
     expect(rowLefts?.[1]).toBeCloseTo(10, 6);
     expect(rowLefts?.[2]).toBeGreaterThan(100);
+  });
+
+  it("renders Wikibook structural math additions through native SVG metadata", () => {
+    const source = String.raw`\vdots+\ddots+\overbrace{a+b}^{n}+\underbrace{x}_{m}+\begin{dcases}\frac12&x\end{dcases}`;
+    const parsed = parseTexMath(source);
+    const result = layoutTexMathList(parsed.list);
+    expect(parsed.diagnostics).toEqual([]);
+    expect(result.supported).toBe(true);
+    const body = renderTexMathHListSvgBody(result.hlist!);
+    expect(body.match(/data-tex-glyph="58"/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(body).toContain('data-tex-glyph="122"');
+    expect(body).toContain('data-tex-rule="brace-rule"');
+    expect(body).toContain('data-tex-math-role="limit-superscript"');
+    expect(body).toContain('data-tex-math-role="limit-subscript"');
+    expect(body).toContain('data-tex-math-role="cases-cell"');
   });
 });
