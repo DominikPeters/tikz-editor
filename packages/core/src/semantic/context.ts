@@ -421,6 +421,9 @@ export function popFrame(context: SemanticContext): void {
 }
 
 function forkSemanticContextFrame(frame: SemanticContextFrame): SemanticContextFrame {
+  // The four registries must be excluded from structuredClone: it would strip
+  // their class prototypes (PersistentMap and the copy-on-write registries)
+  // and silently break layered lookups. They fork through their own APIs.
   const { customStyles, picDefinitions, colorAliases, macroBindings, ...cloneable } = frame;
   return {
     ...structuredClone(cloneable),
