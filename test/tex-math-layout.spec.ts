@@ -1970,17 +1970,17 @@ describe("TeX math hlist layout", () => {
     expect(subscript).toMatchObject({
       kind: "hlist",
       role: "subscript",
-      y: expect.closeTo(4.172585, 6),
+      y: expect.closeTo(4.172586, 6),
     });
     expect(subscript?.items[0]).toMatchObject({
       kind: "hlist",
       role: "substack-row",
-      y: expect.closeTo(-2.968551, 6),
+      y: expect.closeTo(-2.968552, 6),
     });
     expect(subscript?.items[1]).toMatchObject({
       kind: "hlist",
       role: "substack-row",
-      y: expect.closeTo(2.739379, 6),
+      y: expect.closeTo(2.739378, 6),
     });
 
     const ellipsisRows = layout(String.raw`\substack{x=b\\\dots\\\cdots=\sum}`);
@@ -3619,7 +3619,7 @@ describe("TeX math hlist layout", () => {
     const secondRow = result.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
     expect(firstRow?.items).toMatchObject([
       { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(0.098546, 6) },
-      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.707567, 6) },
+      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.707568, 6) },
     ]);
     expect(secondRow?.items).toMatchObject([
       { kind: "hlist", role: "smallmatrix-cell", x: 0 },

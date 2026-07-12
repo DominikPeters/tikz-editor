@@ -124,8 +124,14 @@ function getCharMetric(font: ResolvedTexFont, code: number): GeneratedTexCharMet
   return metric;
 }
 
-function buildLigKernMap(rules: readonly GeneratedTexLigKern[]): Map<string, LigKernRule> {
-  const map = new Map<string, LigKernRule>();
+const ligKernMapCache = new WeakMap<readonly GeneratedTexLigKern[], Map<number, LigKernRule>>();
+
+function buildLigKernMap(rules: readonly GeneratedTexLigKern[]): Map<number, LigKernRule> {
+  const cached = ligKernMapCache.get(rules);
+  if (cached) {
+    return cached;
+  }
+  const map = new Map<number, LigKernRule>();
   for (const rule of rules) {
     const [, left, right, value] = rule;
     const key = ruleKey(left, right);
@@ -139,11 +145,12 @@ function buildLigKernMap(rules: readonly GeneratedTexLigKern[]): Map<string, Lig
         : { kind: "kern", width: value }
     );
   }
+  ligKernMapCache.set(rules, map);
   return map;
 }
 
-function ruleKey(left: number, right: number): string {
-  return `${left}:${right}`;
+function ruleKey(left: number, right: number): number {
+  return left * 0x10000 + right;
 }
 
 function buildCaretStops(

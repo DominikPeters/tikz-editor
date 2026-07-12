@@ -1149,6 +1149,11 @@ function isSimpleTexTextEligible(params: {
   eligible?: boolean;
   mode?: "text" | "math";
 }): boolean {
+  // Profiling escape hatch: forces the MathJax fallback so benchmarks can
+  // compare it against the native simple-TeX path (see scripts/bench-text-engine.mts).
+  if ((globalThis as { __TIKZ_EDITOR_FORCE_MATHJAX_TEXT__?: boolean }).__TIKZ_EDITOR_FORCE_MATHJAX_TEXT__ === true) {
+    return false;
+  }
   if (params.eligible === false) {
     return false;
   }
