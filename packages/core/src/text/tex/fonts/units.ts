@@ -5,5 +5,7 @@ export function tfmToPt(font: ResolvedTexFont, value: number | undefined): numbe
 }
 
 export function roundTexPt(value: number): number {
-  return Number(value.toFixed(6));
+  // Arithmetic form of Number(value.toFixed(6)); this helper is on the
+  // shaping hot path and the string round-trip dominated its cost.
+  return Math.round(value * 1e6) / 1e6;
 }
