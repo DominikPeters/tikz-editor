@@ -75,7 +75,11 @@ const CASES: BenchCase[] = [
     template: "first line {i}\\\\second line\\\\third and final line",
     textWidthPt: null,
   },
-  { name: "math mode label", template: "\\sum_{k=1}^{n} k^2 + {i}", textWidthPt: null, mode: "math" },
+  // Matrix-of-math-nodes cells reach the engine as `$...$` text since the
+  // semantic layer desugars mode:"math" (see resolveNodeLayout); keep a raw
+  // math-mode case too — it exercises the engine's MathJax compatibility path.
+  { name: "matrix math cell", template: "$\\sum_{k=1}^{n} k^2 + {i}$", textWidthPt: null },
+  { name: "math mode label (raw)", template: "\\sum_{k=1}^{n} k^2 + {i}", textWidthPt: null, mode: "math" },
 ];
 
 function instantiate(template: string, i: number): string {

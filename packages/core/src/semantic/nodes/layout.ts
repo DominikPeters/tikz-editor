@@ -7,7 +7,14 @@ import type {
   NodeTextParagraphAlignment,
   NodeTextRenderInfo
 } from "../../text/types.js";
-import { mapTransformedTextWithFallback, type TextSourceMap } from "../../text/source-map.js";
+import {
+  concatMappedText,
+  createGeneratedMappedText,
+  mapTransformedTextWithFallback,
+  projectInputOffset,
+  type TextSourceMap,
+  type TextSourceRange
+} from "../../text/source-map.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { ResolvedStyle } from "../types.js";
 import type { NodeLayout, NodeShape } from "./types.js";
@@ -155,6 +162,18 @@ export function resolveNodeLayout(
       ).sourceMap
     : undefined;
 
+  // TikZ's `matrix of math nodes` implements math-mode cells as
+  // `execute at begin node=$` / `execute at end node=$` (tikzlibrarymatrix.code.tex),
+  // i.e. plain `$` toggles around the node text — so a cell that contains its own
+  // `$...$` escapes back to text. Mirror that desugaring here and measure the
+  // wrapped text in text mode, which routes it through the native TeX engine.
+  const mathModeWrap = textMode === "math" && normalizedText.trim().length > 0;
+  const measureText = mathModeWrap ? `$${normalizedText}$` : normalizedText;
+  const measureMode = mathModeWrap ? "text" : textMode;
+  const measureSourceMap = mathModeWrap
+    ? wrapMathModeSourceMap(normalizedText, normalizedTextSourceMap)
+    : normalizedTextSourceMap;
+
   let textRenderInfo: NodeTextRenderInfo = { mode: "plain" };
   let textLines = computeNodeTextLines(normalizedText, textWidth, charWidth);
   let textNaturalWidth: number;
@@ -167,15 +186,15 @@ export function resolveNodeLayout(
   const measuredText = (() => {
     try {
       return textEngine?.measure({
-        text: normalizedText,
-        mode: textMode,
+        text: measureText,
+        mode: measureMode,
         textWidthPt: textWidth,
         alignment: paragraphAlignment,
         fontStyle: style.fontStyle,
         fontWeight: style.fontWeight,
         fontFamily: style.fontFamily,
         fontSizePt: style.fontSize,
-        ...(normalizedTextSourceMap ? { sourceMap: normalizedTextSourceMap } : {}),
+        ...(measureSourceMap ? { sourceMap: measureSourceMap } : {}),
         ...(graphicsResolver ? { graphicsResolver } : {}),
         ...(colorResolver ? { colorResolver } : {})
       }) ?? null;
@@ -252,6 +271,40 @@ export function resolveNodeLayout(
     baseLineY,
     midLineY
   };
+}
+
+const MATH_MODE_DELIMITER_REASON = "math-mode node delimiter";
+
+/**
+ * Extends the node's source map across the synthetic `$` delimiters so caret
+ * and hit mapping keep pointing at the user's cell text rather than shifting
+ * by one for the generated dollars.
+ */
+function wrapMathModeSourceMap(
+  text: string,
+  sourceMap: TextSourceMap | undefined
+): TextSourceMap | undefined {
+  if (!sourceMap) {
+    return undefined;
+  }
+  const openOwner = zeroLengthOwnerAt(sourceMap, 0);
+  const closeOwner = zeroLengthOwnerAt(sourceMap, text.length);
+  return concatMappedText([
+    createGeneratedMappedText("$", MATH_MODE_DELIMITER_REASON, openOwner),
+    { text, sourceMap },
+    createGeneratedMappedText("$", MATH_MODE_DELIMITER_REASON, closeOwner)
+  ]).sourceMap;
+}
+
+function zeroLengthOwnerAt(sourceMap: TextSourceMap, inputOffset: number): TextSourceRange | undefined {
+  const hit = projectInputOffset(sourceMap, inputOffset);
+  if (hit.kind === "source-offset") {
+    return { from: hit.offset, to: hit.offset };
+  }
+  if (hit.kind === "source-range") {
+    return { from: hit.from, to: hit.to };
+  }
+  return undefined;
 }
 
 function resolveTextLayoutKind(text: string, textWidth: number | null, explicitLineBreaksActive: boolean): NodeTextLayoutKind {
