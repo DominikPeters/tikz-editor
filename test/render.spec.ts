@@ -6,6 +6,7 @@ import type { SceneCircle, SceneEllipse, ScenePath, SceneText } from "../package
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
 import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
+import { getTexVListLayoutFromOutputJax } from "../packages/core/src/text/tex/vlist/registry.js";
 import { projectInputRange } from "../packages/core/src/text/source-map.js";
 import type { NodeTextEngine, NodeTextGraphicsResolver, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
 
@@ -184,6 +185,42 @@ describe("render pipeline", () => {
     ).toBe("$a $\\text{plus}$ b$");
     const inlineMathGroups = result.svg.svg.split('data-tex-inline-math="true"').length - 1;
     expect(inlineMathGroups).toBe(2);
+  });
+
+  it("registers per-node paragraph geometry for identical labels at different source positions", async () => {
+    // Identical label text shares the expensive layout, but the registered
+    // report/vlist geometry embeds source offsets projected through each
+    // node's own source map — sharing one registration would bake the first
+    // node's offsets into caret mapping for the second.
+    const label = "cost $O(n)$ here";
+    const source = `\\begin{tikzpicture}
+  \\node at (0,0) {${label}};
+  \\node at (0,-2) {${label}};
+\\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const cells = result.semantic.scene.elements.filter(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    expect(cells).toHaveLength(2);
+    const paragraphIds = cells.map((cell) =>
+      cell.textRenderInfo?.mode === "mathjax" ? cell.textRenderInfo.paragraphId : null
+    );
+    expect(paragraphIds[0]).toMatch(/^tex:/);
+    expect(paragraphIds[1]).toMatch(/^tex:/);
+    expect(paragraphIds[0]).not.toBe(paragraphIds[1]);
+
+    const expectedSpans = [source.indexOf(label), source.lastIndexOf(label)];
+    const outputJax = getActiveMathJaxOutputJax();
+    for (const [index, paragraphId] of paragraphIds.entries()) {
+      const layout = getTexVListLayoutFromOutputJax(outputJax, paragraphId);
+      expect(layout, `registered vlist layout for node ${index}`).not.toBeNull();
+      const spanStart = expectedSpans[index];
+      expect(layout?.paragraphPlacements[0]?.sourceSpan).toEqual({
+        start: spanStart,
+        end: spanStart + label.length,
+      });
+    }
   });
 
   it("renders includegraphics placeholders through the TeX text engine without local paths", async () => {
