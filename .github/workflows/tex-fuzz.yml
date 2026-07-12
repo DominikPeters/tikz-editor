@@ -1,0 +1,73 @@
+name: TeX adversarial fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+    - cron: "43 3 * * 0"
+
+concurrency:
+  group: tex-adversarial-fuzz-${{ github.event.schedule || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 2 * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:tex-fuzz
+      - name: Install LuaLaTeX dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended
+      - name: Shared generator, invariants, coverage, and oracle canary
+        run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed ${{ github.run_number }} --profile document --malformed-cases 500 --prefix-base-cases 8 --prefix-limit-per-case 128 --metamorphic-cases 200 --projection-control-cases 128 --supported-cases 128 --supported-max-attempts 16384 --oracle-sample-cases 128 --oracle-geometry-policy fail --out artifacts/tex-fuzz/nightly-bundle.json --coverage-out artifacts/tex-fuzz/nightly-coverage.json
+      - name: Oracle batching, cache, timeout, and isolation tests
+        run: TEX_FUZZ_ORACLE_TESTS=1 npx vitest run test/tex-fuzz-kernel.spec.ts test/tex-fuzz-oracle-hardening.spec.ts test/tex-fuzz-paragraph-oracle.spec.ts
+      - name: Math differential diagnostic sample
+        continue-on-error: true
+        run: node scripts/compare-tex-math.mjs --math-fuzz 80 --seed ${{ github.run_number }} --summary-only
+      - name: Inline differential diagnostic sample
+        continue-on-error: true
+        run: node scripts/compare-tex-inline-math-paragraph.mjs --fuzz 40 --seed ${{ github.run_number }} --formula-mode mixed --widths 80,120,160 --summary-only --oracle-cache-dir artifacts/tex-fuzz/inline-oracle-cache
+      - name: Display differential diagnostic sample
+        continue-on-error: true
+        run: node scripts/compare-tex-display-math.mjs --display-fuzz 40 --seed ${{ github.run_number }} --summary-only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tex-fuzz-nightly-${{ github.run_id }}
+          path: artifacts/tex-fuzz
+          if-no-files-found: warn
+          retention-days: 14
+
+  weekly-soak:
+    if: github.event.schedule == '43 3 * * 0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:tex-fuzz
+      - name: Aggressive valid soak
+        run: node scripts/run-tex-fuzz.mjs --cases 30000 --seed ${{ github.run_number }} --profile aggressive --no-oracle --malformed-cases 2000 --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 500 --projection-control-cases 256 --supported-cases 256 --supported-max-attempts 32768 --out artifacts/tex-fuzz/soak-valid-bundle.json --coverage-out artifacts/tex-fuzz/soak-valid-coverage.json
+      - name: Malformed typing-state soak
+        run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed 20290713 --profile malformed --no-oracle --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 200 --out artifacts/tex-fuzz/soak-malformed-bundle.json --coverage-out artifacts/tex-fuzz/soak-malformed-coverage.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tex-fuzz-soak-${{ github.run_id }}
+          path: artifacts/tex-fuzz
+          if-no-files-found: warn
+          retention-days: 30

@@ -113,15 +113,29 @@ export function layoutSimpleTexParagraph(
     };
   }
 
-  const layoutPreparation = prepareSimpleTexLayoutScope({
-    blocks,
-    items: analysis.ir?.items,
-    defaultAlignment,
-    font,
-    metricProvider,
-    options: layoutOptions,
-  });
-  const layoutIr = createSimpleTexLayoutScopeIrFromPreparation(layoutPreparation);
+  let layoutIr: ReturnType<typeof createSimpleTexLayoutScopeIrFromPreparation>;
+  try {
+    const layoutPreparation = prepareSimpleTexLayoutScope({
+      blocks,
+      items: analysis.ir?.items,
+      defaultAlignment,
+      font,
+      metricProvider,
+      options: layoutOptions,
+    });
+    layoutIr = createSimpleTexLayoutScopeIrFromPreparation(layoutPreparation);
+  } catch (error) {
+    const reason = error instanceof Error && error.message
+      ? error.message
+      : "TeX paragraph preparation failed.";
+    return {
+      supported: false,
+      report: null,
+      fallbackReason: reason,
+      shapedRuns: new Map(),
+      errors: [reason],
+    };
+  }
   const errors: string[] = usePlaceholderFallback && fallbackReason
     ? [fallbackReason]
     : [];

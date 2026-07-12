@@ -489,6 +489,12 @@ function adjustedTexGlueWidth(
   texGlue: { readonly stretch: number; readonly shrink: number } | undefined,
   ratio: number
 ): number {
+  // An overfull line with no available shrink has TeX's sentinel ratio
+  // -Infinity. Multiplying it by a zero glue component would turn a valid
+  // natural width into NaN and poison all following caret geometry.
+  if (!Number.isFinite(ratio)) {
+    return naturalWidth;
+  }
   if (ratio > 0 && typeof texGlue?.stretch === "number" && Number.isFinite(texGlue.stretch)) {
     return roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.stretch));
   }

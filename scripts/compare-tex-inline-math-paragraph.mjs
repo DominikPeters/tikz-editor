@@ -5,6 +5,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { runTexOracleDocument } from "./lib/tex-oracle.mjs";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
+
+const { generateTexMathFuzzCase } = await loadTexFuzzModules();
 
 const distEntry = resolve(process.cwd(), "packages/core/dist/text/tex/index.js");
 if (!existsSync(distEntry)) {
@@ -670,7 +673,6 @@ function generateFuzzCases(count, seed, widths, formulaMode) {
     "text",
     "width",
   ];
-  const variables = ["a", "b", "c", "d", "x", "y", "m", "n"];
   return Array.from({ length: count }, (_, index) => {
     const wordCount = 5 + Math.floor(random() * 8);
     const mathSpanCount = formulaMode === "mixed" && random() < 0.35 ? 2 : 1;
@@ -678,7 +680,8 @@ function generateFuzzCases(count, seed, widths, formulaMode) {
     const parts = [];
     for (let wordIndex = 0; wordIndex < wordCount; wordIndex += 1) {
       if (insertions.includes(wordIndex)) {
-        const formula = randomFormula(random, variables, formulaMode);
+        const formulaSeed = deriveFormulaSeed(seed, index, wordIndex);
+        const formula = sharedFormulaForMode(formulaSeed, formulaMode);
         parts.push(random() < 0.2 ? String.raw`\(` + formula + String.raw`\)` : `$${formula}$`);
       }
       parts.push(choice(random, words));
@@ -699,193 +702,34 @@ function uniqueSortedInsertions(random, wordCount, count) {
   return [...indices].sort((a, b) => a - b);
 }
 
-function randomFormula(random, variables, formulaMode) {
-  if ((formulaMode === "mixed" || formulaMode === "scripts") && random() < 0.16) {
-    return randomMBoxFormula(random, variables);
-  }
-  if ((formulaMode === "mixed" || formulaMode === "scripts") && random() < 0.12) {
-    return randomTextCommandFormula(random, variables);
-  }
-  if (formulaMode === "constructs") {
-    return randomConstructFormula(random, variables);
+function sharedFormulaForMode(seed, formulaMode) {
+  if (formulaMode === "basic") {
+    return generateTexMathFuzzCase(seed, { depth: 0 }).source;
   }
   if (formulaMode === "spacing") {
-    return randomSpacingFormula(random, variables);
+    const left = generateTexMathFuzzCase(seed, { depth: 1 }).source;
+    const right = generateTexMathFuzzCase(deriveFormulaSeed(seed, 1, 0), { depth: 1 }).source;
+    const spaces = [String.raw`\:`, String.raw`\;`, String.raw`\!`, String.raw`\quad `];
+    return `${left}${spaces[seed % spaces.length]}${right}`;
   }
-  if (formulaMode === "mixed" && random() < 0.25) {
-    return randomPairFormula(random, variables);
+  if (formulaMode === "scripts") {
+    for (let offset = 0; offset < 64; offset += 1) {
+      const generated = generateTexMathFuzzCase(deriveFormulaSeed(seed, offset, 1), { depth: 3 });
+      if (generated.features.includes("math.script")) {
+        return generated.source;
+      }
+    }
   }
-  const lhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
-  const rhs = `${randomTerm(random, variables, formulaMode)}+${randomTerm(random, variables, formulaMode)}`;
-  return random() < 0.7 ? `${lhs}=${rhs}` : lhs;
+  return generateTexMathFuzzCase(seed, {
+    depth: formulaMode === "constructs" ? 4 : 3,
+  }).source;
 }
 
-function randomMBoxFormula(random, variables) {
-  const variable = choice(random, variables);
-  const content = choice(random, [
-    "if",
-    "for all",
-    " node ",
-    "case A",
-    String.raw`\textbf{Bold} text`,
-    String.raw`\texttt{if}`,
-    String.raw`\textit{\textup{if}}`,
-    String.raw`\rule[1pt]{8pt}{0.8pt}`,
-    String.raw`\raisebox{2pt}{up}`,
-    String.raw`a\phantom{b}c`,
-    String.raw`a\hphantom{b}c`,
-    String.raw`a\vphantom{g}c`,
-    String.raw`a\smash{g}c`,
-  ]);
-  const command = randomTextBoxMathCommand(random, content);
-  if (random() < 0.5) {
-    return `${variable}_{${command}}`;
-  }
-  return `${variable}+${command}`;
-}
-
-function randomTextBoxMathCommand(random, content) {
-  const variant = Math.floor(random() * 9);
-  if (variant === 0) {
-    return `\\makebox{${content}}`;
-  }
-  if (variant === 1) {
-    const width = choice(random, ["12pt", "20pt", "0.4in"]);
-    const align = choice(random, ["l", "c", "r"]);
-    return `\\makebox[${width}][${align}]{${content}}`;
-  }
-  if (variant === 2) {
-    return "\\makebox[24pt][s]{a b}";
-  }
-  if (variant === 3) {
-    return `\\llap{${content}}`;
-  }
-  if (variant === 4) {
-    return `\\rlap{${content}}`;
-  }
-  if (variant === 5) {
-    return `\\fbox{${content}}`;
-  }
-  if (variant === 6) {
-    return `\\framebox{${content}}`;
-  }
-  if (variant === 7) {
-    const width = choice(random, ["20pt", "28pt", "0.5in"]);
-    const align = choice(random, ["l", "c", "r"]);
-    return `\\framebox[${width}][${align}]{${content}}`;
-  }
-  return `\\mbox{${content}}`;
-}
-
-function randomTextCommandFormula(random, variables) {
-  const variable = choice(random, variables);
-  const command = choice(random, [
-    String.raw`\textrm`,
-    String.raw`\textsf`,
-    String.raw`\texttt`,
-    String.raw`\textnormal`,
-    String.raw`\textbf`,
-    String.raw`\textmd`,
-    String.raw`\textit`,
-    String.raw`\textsl`,
-    String.raw`\textsc`,
-    String.raw`\textup`,
-    String.raw`\emph`,
-  ]);
-  const content = choice(random, [
-    "if",
-    "case A",
-    String.raw`\textbf{\textmd{if}}`,
-    String.raw`\textit{\textup{if}}`,
-    String.raw`\texttt{if}`,
-  ]);
-  return random() < 0.5
-    ? `${variable}_{${command}{${content}}}`
-    : `${variable}+${command}{${content}}`;
-}
-
-function randomSpacingFormula(random, variables) {
-  const variable = choice(random, variables);
-  const left = random() < 0.25
-    ? choice(random, ["+", "="])
-    : choice(random, [`${choice(random, variables)}+`, `${choice(random, variables)}=`]);
-  const explicitSpace = choice(random, [
-    String.raw`\:`,
-    String.raw`\;`,
-    String.raw`\!`,
-    String.raw`\quad `,
-    String.raw`\kern2pt`,
-    String.raw`\kern-1pt`,
-    String.raw`\mkern3mu`,
-    String.raw`\mkern-2mu`,
-    String.raw`\hskip2pt`,
-    String.raw`\hskip-1pt`,
-    String.raw`\mskip3mu`,
-    String.raw`\mskip-2mu`,
-    String.raw`\mskip3mu plus2mu minus1mu`,
-  ]);
-  const maybeRight = random() < 0.3 ? `+${choice(random, variables)}` : "";
-  return `${left}${explicitSpace}${variable}${maybeRight}`;
-}
-
-function randomConstructFormula(random, variables) {
-  const lhs = randomConstructTerm(random, variables);
-  const rhs = randomConstructTerm(random, variables);
-  if (random() < 0.7) {
-    return `${lhs}${choice(random, ["+", "="])}${rhs}`;
-  }
-  return lhs;
-}
-
-function randomConstructTerm(random, variables) {
-  const a = choice(random, variables);
-  const b = choice(random, variables.filter((variable) => variable !== a));
-  switch (Math.floor(random() * 8)) {
-    case 0:
-      return `${a}_${1 + Math.floor(random() * 3)}^${1 + Math.floor(random() * 3)}`;
-    case 1:
-      return String.raw`\frac{` + `${a}` + String.raw`}{` + `${b}` + String.raw`}`;
-    case 2:
-      return String.raw`\sqrt{` + `${a}+${b}` + String.raw`}`;
-    case 3:
-      return String.raw`\left(` + `${a}+${b}` + String.raw`\right)`;
-    case 4:
-      return String.raw`\overline{` + `${a}` + String.raw`}`;
-    case 5:
-      return String.raw`\underline{` + `${a}` + String.raw`}`;
-    case 6:
-      return String.raw`\binom{` + `${a}` + String.raw`}{` + `${b}` + String.raw`}`;
-    default:
-      return randomTerm(random, variables, "scripts");
-  }
-}
-
-function randomPairFormula(random, variables) {
-  const left = `${choice(random, variables)}_${1 + Math.floor(random() * 3)}`;
-  const x = choice(random, variables);
-  const y = choice(random, variables.filter((variable) => variable !== x));
-  const pair = random() < 0.5
-    ? `(${x},${y})`
-    : String.raw`\{` + `${x},${y}` + String.raw`\}`;
-  return `${left}=${pair}`;
-}
-
-function randomTerm(random, variables, formulaMode) {
-  const variable = choice(random, variables);
-  if (formulaMode === "basic") {
-    return variable;
-  }
-  const suffixRoll = random();
-  if (suffixRoll < 0.3) {
-    return `${variable}_${1 + Math.floor(random() * 3)}`;
-  }
-  if (suffixRoll < 0.6) {
-    return `${variable}^${1 + Math.floor(random() * 3)}`;
-  }
-  if (suffixRoll < 0.75) {
-    return `${variable}_${1 + Math.floor(random() * 3)}^${1 + Math.floor(random() * 3)}`;
-  }
-  return variable;
+function deriveFormulaSeed(seed, first, second) {
+  let value = (seed ^ Math.imul(first + 1, 0x9E3779B1) ^ Math.imul(second + 1, 0x85EBCA77)) >>> 0;
+  value = Math.imul(value ^ (value >>> 16), 0x7FEB352D);
+  value = Math.imul(value ^ (value >>> 15), 0x846CA68B);
+  return (value ^ (value >>> 16)) >>> 0;
 }
 
 function choice(random, values) {

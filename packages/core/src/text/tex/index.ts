@@ -24,6 +24,13 @@ export {
   type TexParagraphLayoutResult,
 } from "./paragraph.js";
 export {
+  SIMPLE_TEX_CONTROL_NODE_KINDS,
+  SIMPLE_TEX_DIMENSION_BOX_COMMAND_NAMES,
+  SIMPLE_TEX_DISPLAY_MATH_DELIMITERS,
+  SIMPLE_TEX_FONT_COMMAND_NAMES,
+  SIMPLE_TEX_FONT_DECLARATION_NAMES,
+  SIMPLE_TEX_INLINE_NODE_KINDS,
+  SIMPLE_TEX_TEXT_BOX_COMMAND_NAMES,
   parseSimpleTexParagraphIr,
   type SimpleTexAlignmentNode,
   type SimpleTexBoxAlignment,
@@ -35,6 +42,7 @@ export {
   type SimpleTexDimensionBoxCommandName,
   type SimpleTexDimensionBoxNode,
   type SimpleTexDisplayMathBlockItem,
+  type SimpleTexDisplayMathDelimiter,
   type SimpleTexDisplayMathNode,
   type SimpleTexEnvironmentBoundaryNode,
   type SimpleTexFontCommandName,

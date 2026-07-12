@@ -684,6 +684,16 @@ export function simpleTexSegmentToLayoutItems(
       continue;
     }
 
+    if (token.kind === "penalty") {
+      items.push({
+        kind: "penalty",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        penalty: token.penalty ?? 0,
+      });
+      continue;
+    }
+
     if (token.kind === "forced-break") {
       const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
       items.push({
@@ -1860,6 +1870,16 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       });
       hasSeenText = true;
       spaceFactor = 1000;
+      continue;
+    }
+
+    if (token.kind === "penalty") {
+      items.push({
+        kind: "penalty",
+        sourceStart: token.sourceStart,
+        sourceEnd: token.sourceEnd,
+        penalty: token.penalty ?? 0,
+      });
       continue;
     }
 

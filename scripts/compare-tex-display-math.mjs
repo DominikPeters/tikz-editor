@@ -9,12 +9,12 @@ import {
   layoutSimpleTexParagraph,
 } from "../packages/core/dist/text/tex/index.js";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
+
+const { generateTexMathFuzzCase } = await loadTexFuzzModules();
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
-const fractionCommands = [String.raw`\frac`, String.raw`\dfrac`, String.raw`\tfrac`];
-const lineCommands = [String.raw`\overline`, String.raw`\underline`];
-const accentCommands = [String.raw`\bar`, String.raw`\dot`, String.raw`\ddot`, String.raw`\hat`, String.raw`\tilde`, String.raw`\vec`];
 
 const args = readArgs();
 const generatedDocumentMathFuzzCases = args.documentMathFuzzCases > 0
@@ -608,9 +608,12 @@ function texSource(caseSpec) {
   const amsmathPreamble = requiresAmsmath(caseSpec.source)
     ? String.raw`\usepackage{amsmath}` + "\n"
     : "";
+  const amssymbPreamble = requiresAmssymb(caseSpec.source)
+    ? String.raw`\usepackage{amssymb}` + "\n"
+    : "";
   if (caseSpec.compareMode === "document-math-glyphs") {
     return String.raw`\documentclass{article}
-` + amsmathPreamble + String.raw`
+` + amsmathPreamble + amssymbPreamble + String.raw`
 \newbox\tikzdisplaybox
 \begin{document}
 \setbox\tikzdisplaybox=\vbox{\fontencoding{TU}\fontfamily{lmr}\selectfont \language=-1 \hsize=` + caseSpec.width + String.raw`pt \linewidth=\hsize \columnwidth=\hsize \pretolerance=100 \tolerance=200 \parindent=0pt \rightskip=0pt plus ` + caseSpec.width + String.raw`pt ` + caseSpec.source + String.raw`\par}
@@ -619,13 +622,17 @@ function texSource(caseSpec) {
 `;
   }
   return String.raw`\documentclass{article}
-` + amsmathPreamble + String.raw`
+` + amsmathPreamble + amssymbPreamble + String.raw`
 \newbox\tikzdisplaybox
 \begin{document}
 \setbox\tikzdisplaybox=\vbox{\hsize=` + caseSpec.width + String.raw`pt \linewidth=\hsize \columnwidth=\hsize \noindent ` + caseSpec.source + String.raw`\par}
 \directlua{dofile('trace.lua')}
 \end{document}
 `;
+}
+
+function requiresAmssymb(source) {
+  return source.includes(String.raw`\mathbb`) || source.includes(String.raw`\mathfrak`);
 }
 
 function requiresAmsmath(source) {
@@ -986,41 +993,16 @@ function generateDocumentMathFuzzCases(count, seed) {
   });
 }
 
+function sharedMathFormula(rng, depth = 4) {
+  return generateTexMathFuzzCase(randomInt(rng, 0x100000000), { depth }).source;
+}
+
 function randomDocumentInlineFormula(rng) {
-  const left = choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomLeftRight(rng),
-    randomOperatorName(rng),
-  ]);
-  if (rng() < 0.45) {
-    return left;
-  }
-  return `${left}${choice(rng, ["+", "-", "="])}${choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomRadical(rng),
-  ])}`;
+  return sharedMathFormula(rng, 3);
 }
 
 function randomDocumentDisplayFormula(rng) {
-  return choice(rng, [
-    `${randomDocumentMathTerm(rng)}${choice(rng, ["+", "-", "="])}${randomDocumentMathTerm(rng)}`,
-    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}=${randomMathAtom(rng)}`,
-    `${randomFraction(rng)}+${randomRadical(rng)}`,
-    `${randomLineTerm(rng)}=${randomAccentTerm(rng)}`,
-    randomNestedAlignedFormula(rng),
-    randomNestedAlignedatFormula(rng),
-    randomMatrix(rng),
-    randomArray(rng),
-    randomCases(rng),
-    randomSmallMatrix(rng),
-  ]);
+  return sharedMathFormula(rng);
 }
 
 function randomDocumentDisplaySource(rng, index) {
@@ -1046,39 +1028,7 @@ function randomDocumentAlignStarSource(rng, tagMode = 0) {
 }
 
 function randomDocumentAlignmentCell(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomArray(rng),
-    randomCases(rng),
-    randomSmallMatrix(rng),
-    randomMatrix(rng),
-    randomOperatorName(rng),
-    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
-  ]);
-}
-
-function randomDocumentMathTerm(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomLeftRight(rng),
-    randomArray(rng),
-    randomCases(rng),
-    randomSmallMatrix(rng),
-    randomMatrix(rng),
-    randomOperatorName(rng),
-  ]);
+  return sharedMathFormula(rng, 3);
 }
 
 function alignMatrixCases() {
@@ -1424,29 +1374,7 @@ function randomMixedVListDisplaySource(rng, displayKind, index) {
 }
 
 function randomMixedVListDisplayFormula(rng) {
-  const left = choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomLeftRight(rng),
-    randomBigDelimiterTerm(rng),
-    randomTextMathTerm(rng),
-  ]);
-  const right = choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-  ]);
-  if (rng() < 0.25) {
-    return `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}+${right}`;
-  }
-  return `${left}${choice(rng, ["+", "-", "="])}${right}`;
+  return sharedMathFormula(rng);
 }
 
 function randomMixedVListAlignStarSource(rng, tagMode = 0) {
@@ -1464,15 +1392,7 @@ function randomMixedVListAlignStarSource(rng, tagMode = 0) {
 }
 
 function randomMixedVListAlignCell(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomRadical(rng),
-    randomBigDelimiterTerm(rng),
-    randomTextMathTerm(rng),
-    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
-  ]);
+  return sharedMathFormula(rng, 3);
 }
 
 function randomAlignStarSource(rng, tagMode = 0) {
@@ -1546,7 +1466,7 @@ function randomNumberedGatherSource(rng, tagMode = 0) {
   const rowCount = 2 + randomInt(rng, 3);
   const rows = [];
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const row = `${randomMathTerm(rng)}${choice(rng, ["+", "-", "="])}${randomMathTerm(rng)}`;
+    const row = sharedMathFormula(rng);
     rows.push(numberedRowWithGeneratedMetadata(row, rowIndex, tagMode));
   }
   return String.raw`\begin{gather}` + rows.join(String.raw`\\`) + String.raw`\end{gather}`;
@@ -1556,9 +1476,7 @@ function randomNumberedMultlineSource(rng, tagMode = 0) {
   const rowCount = 2 + randomInt(rng, 3);
   const rows = [];
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const row = rowIndex === 0
-      ? `${randomMathTerm(rng)}${choice(rng, ["+", "-", "="])}${randomMathTerm(rng)}`
-      : randomMathTerm(rng);
+    const row = sharedMathFormula(rng);
     rows.push(numberedRowWithGeneratedMetadata(row, rowIndex, tagMode));
   }
   return String.raw`\begin{multline}` + rows.join(String.raw`\\`) + String.raw`\end{multline}`;
@@ -1588,17 +1506,7 @@ function numberedRowWithGeneratedMetadata(row, rowIndex, tagMode) {
 }
 
 function randomDisplayFormula(rng) {
-  const left = randomMathTerm(rng);
-  const right = randomMathTerm(rng);
-  const operator = choice(rng, ["+", "-", "="]);
-  if (rng() < 0.25) {
-    return `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}${operator}${right}`;
-  }
-  return choice(rng, [
-    `${left}${operator}${right}`,
-    randomNestedAlignedFormula(rng),
-    randomNestedAlignedatFormula(rng),
-  ]);
+  return sharedMathFormula(rng);
 }
 
 function randomNestedAlignedFormula(rng) {
@@ -1628,257 +1536,15 @@ function randomNestedAlignmentEnvironment(rng, environment) {
 }
 
 function randomConstructHeavyAlignmentCell(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomTextTerm(rng),
-    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
-  ]);
+  return sharedMathFormula(rng, 3);
 }
 
 function randomAlignmentLeftCell(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomTextTerm(rng),
-    randomTextMathTerm(rng),
-    randomBigDelimiterTerm(rng),
-    randomArray(rng),
-    randomCases(rng),
-    randomSmallMatrix(rng),
-    randomMatrix(rng),
-    randomOperatorName(rng),
-    `${randomLargeOperator(rng)}_${randomScriptAtom(rng)}^${randomScriptAtom(rng)}`,
-  ]);
+  return sharedMathFormula(rng, 3);
 }
 
 function randomAlignmentRightCell(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomTextTerm(rng),
-    randomTextMathTerm(rng),
-    randomBigDelimiterTerm(rng),
-    randomArray(rng),
-    randomCases(rng),
-    randomSmallMatrix(rng),
-    randomMatrix(rng),
-    randomOperatorName(rng),
-  ]);
-}
-
-function randomMathTerm(rng) {
-  return choice(rng, [
-    randomMathAtom(rng),
-    randomScriptTerm(rng),
-    randomFraction(rng),
-    randomBinomial(rng),
-    randomRadical(rng),
-    randomLineTerm(rng),
-    randomAccentTerm(rng),
-    randomLeftRight(rng),
-    randomTextTerm(rng),
-    randomTextMathTerm(rng),
-    randomBigDelimiterTerm(rng),
-    randomArray(rng),
-    randomCases(rng),
-    randomSmallMatrix(rng),
-    randomMatrix(rng),
-    randomOperatorName(rng),
-  ]);
-}
-
-function randomTextTerm(rng) {
-  return String.raw`\text{` + choice(rng, ["if", "off", "on", "min", "max"]) + "}";
-}
-
-function randomTextMathTerm(rng) {
-  return String.raw`\text{` + choice(rng, [
-    String.raw`if $Ax \ge b$,`,
-    String.raw`when $x_i=y$,`,
-    String.raw`for $n \ge 1$`,
-  ]) + "}";
-}
-
-function randomBigDelimiterTerm(rng) {
-  const command = choice(rng, [String.raw`\big`, String.raw`\Big`, String.raw`\bigg`, String.raw`\Bigg`]);
-  const pair = choice(rng, [
-    ["(", ")"],
-    ["[", "]"],
-    [String.raw`\langle`, String.raw`\rangle`],
-  ]);
-  return command + sizedDelimiterOpenToken(pair[0]) + choice(rng, [
-    `${randomSimpleDelimiterAtom(rng)}+${randomSimpleDelimiterAtom(rng)}`,
-    randomFraction(rng),
-  ]) + command + pair[1];
-}
-
-function sizedDelimiterOpenToken(delimiter) {
-  return /\\[A-Za-z]+$/u.test(delimiter) ? `${delimiter} ` : delimiter;
-}
-
-function randomSimpleDelimiterAtom(rng) {
-  return choice(rng, ["a", "b", "c", "x", "y", "1", "2"]);
-}
-
-function randomScriptTerm(rng) {
-  const base = randomMathAtom(rng);
-  const sub = randomScriptAtom(rng);
-  const sup = randomScriptAtom(rng);
-  return choice(rng, [`${base}_${sub}`, `${base}^${sup}`, `${base}_${sub}^${sup}`]);
-}
-
-function randomFraction(rng) {
-  const command = choice(rng, fractionCommands);
-  return command + "{" + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
-}
-
-function randomBinomial(rng) {
-  const command = choice(rng, binomialCommands);
-  return command + "{" + randomMathAtom(rng) + String.raw`}{` + randomMathAtom(rng) + "}";
-}
-
-function randomRadical(rng) {
-  return String.raw`\sqrt{` + choice(rng, [
-    randomMathAtom(rng),
-    `${randomMathAtom(rng)}+${randomMathAtom(rng)}`,
-    randomFraction(rng),
-  ]) + "}";
-}
-
-function randomLineTerm(rng) {
-  const command = choice(rng, lineCommands);
-  return command + "{" + choice(rng, [
-    randomMathAtom(rng),
-    `${randomMathAtom(rng)}+${randomMathAtom(rng)}`,
-    randomFraction(rng),
-  ]) + "}";
-}
-
-function randomAccentTerm(rng) {
-  const command = choice(rng, accentCommands);
-  const base = choice(rng, [
-    randomMathAtom(rng),
-    randomMathAtom(rng) + "+" + randomMathAtom(rng),
-    randomFraction(rng),
-  ]);
-  return command + "{" + base + "}";
-}
-
-function randomLeftRight(rng) {
-  const delimiterPair = choice(rng, [
-    ["(", ")"],
-    ["[", "]"],
-    [String.raw`\langle`, String.raw`\rangle`],
-    [String.raw`\lfloor`, String.raw`\rfloor`],
-    [String.raw`\lceil`, String.raw`\rceil`],
-    [String.raw`\lbrace`, String.raw`\rbrace`],
-    [String.raw`\Vert`, String.raw`\Vert`],
-  ]);
-  return String.raw`\left` + delimiterPair[0] + randomFraction(rng) + String.raw`\right` + delimiterPair[1];
-}
-
-function randomMatrix(rng) {
-  const environment = choice(rng, matrixEnvironments);
-  const rowCount = 1 + randomInt(rng, 2);
-  const columnCount = 1 + randomInt(rng, 3);
-  const rows = [];
-  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const cells = [];
-    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-      cells.push(choice(rng, [
-        randomMathAtom(rng),
-        randomScriptTerm(rng),
-        randomFraction(rng),
-        randomBinomial(rng),
-      ]));
-    }
-    rows.push(cells.join("&"));
-  }
-  return String.raw`\begin{` + environment + "}" + rows.join(String.raw`\\`) + String.raw`\end{` + environment + "}";
-}
-
-function randomArray(rng) {
-  const columnCount = 1 + randomInt(rng, 3);
-  const preamble = Array.from({ length: columnCount }, () =>
-    choice(rng, ["l", "c", "r"])
-  ).join("");
-  const rowCount = 1 + randomInt(rng, 2);
-  const rows = [];
-  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const cells = [];
-    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-      cells.push(choice(rng, [
-        randomMathAtom(rng),
-        randomScriptTerm(rng),
-        randomFraction(rng),
-        randomBinomial(rng),
-      ]));
-    }
-    rows.push(cells.join("&"));
-  }
-  return String.raw`\begin{array}{` + preamble + "}" + rows.join(String.raw`\\`) + String.raw`\end{array}`;
-}
-
-function randomCases(rng) {
-  const rowCount = 1 + randomInt(rng, 2);
-  const rows = [];
-  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const left = choice(rng, [
-      randomMathAtom(rng),
-      randomScriptTerm(rng),
-      randomFraction(rng),
-      randomBinomial(rng),
-    ]);
-    const right = choice(rng, [
-      randomMathAtom(rng),
-      randomScriptTerm(rng),
-      randomFraction(rng),
-      randomBinomial(rng),
-    ]);
-    rows.push(left + "&" + right);
-  }
-  return String.raw`\begin{cases}` + rows.join(String.raw`\\`) + String.raw`\end{cases}`;
-}
-
-function randomSmallMatrix(rng) {
-  const rowCount = 1 + randomInt(rng, 2);
-  const columnCount = 1 + randomInt(rng, 3);
-  const rows = [];
-  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const cells = [];
-    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-      cells.push(choice(rng, [
-        randomMathAtom(rng),
-        randomScriptTerm(rng),
-        randomFraction(rng),
-        randomBinomial(rng),
-      ]));
-    }
-    rows.push(cells.join("&"));
-  }
-  return String.raw`\begin{smallmatrix}` + rows.join(String.raw`\\`) + String.raw`\end{smallmatrix}`;
-}
-
-function randomOperatorName(rng) {
-  const names = ["rank", "cone", "span", String.raw`arg\,max`, String.raw`proj\,lim`];
-  const command = randomInt(rng, 4) === 0 ? String.raw`\operatorname*` : String.raw`\operatorname`;
-  return command + "{" + choice(rng, names) + "}";
+  return sharedMathFormula(rng, 3);
 }
 
 function hasMatrixEnvironment(source) {
@@ -1915,34 +1581,6 @@ function hasEllipsisCommand(source) {
   return source.includes(String.raw`\dots`) ||
     source.includes(String.raw`\ldots`) ||
     source.includes(String.raw`\cdots`);
-}
-
-function randomLargeOperator(rng) {
-  return choice(rng, [String.raw`\sum`, String.raw`\prod`, String.raw`\bigcup`, String.raw`\bigcap`]);
-}
-
-function randomMathAtom(rng) {
-  return choice(rng, [
-    "a",
-    "b",
-    "c",
-    "i",
-    "j",
-    "m",
-    "n",
-    "x",
-    "y",
-    "z",
-    "1",
-    "2",
-    String.raw`\ldots`,
-    String.raw`\cdots`,
-    String.raw`\dots`,
-  ]);
-}
-
-function randomScriptAtom(rng) {
-  return choice(rng, ["a", "b", "c", "i", "j", "m", "n", "x", "y", "z", "1", "2"]);
 }
 
 function choice(rng, values) {

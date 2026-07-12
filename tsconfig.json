@@ -5,6 +5,6 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vitest/globals"]
   },
-  "include": ["test", "scripts", "packages/core/src", "packages/app/src", "packages/lezer-tikz/src", "packages/lang-tikz/src", "apps/web/src", "apps/landing/src", "apps/desktop/src", "apps/desktop/e2e"],
+  "include": ["test", "scripts", "packages/core/src", "packages/tex-fuzz/src", "packages/app/src", "packages/lezer-tikz/src", "packages/lang-tikz/src", "apps/web/src", "apps/landing/src", "apps/desktop/src", "apps/desktop/e2e"],
   "exclude": ["node_modules", "packages/core/dist", "apps/web/dist"]
 }

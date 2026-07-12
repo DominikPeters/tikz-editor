@@ -24,6 +24,7 @@ import {
   createSimpleTexLayoutDocumentIr,
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
+  parseTexMath,
   type TexMathBoxProvider,
 } from "../packages/core/src/text/tex/index.js";
 import {
@@ -38,6 +39,12 @@ import {
   type TexVBoxBaseline,
 } from "../packages/core/src/text/tex/vlist/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
+import {
+  caseFromTexFuzzAst,
+  generateTexFuzzCase,
+  generateTexMathFuzzCase,
+  type TexFuzzNode,
+} from "../packages/tex-fuzz/src/index.js";
 
 function relayoutFromExistingVListLayout(
   document: TexVListDocument,
@@ -588,123 +595,81 @@ type TexDocumentMathHitMapFuzzCase = {
   readonly rows: readonly string[];
 };
 
-function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
-  const random = makeDeterministicRandom(0x54584d00 + index);
-  const words = [
-    "Alpha",
-    "beta",
-    "canvas",
-    "delta",
-    "editor",
-    "focus",
-    "gamma",
-    "layout",
-    "metric",
-    "stable",
-    "test",
-    "vector",
-  ];
-  const commands = ["textsf", "textbf", "textit", "textsc"] as const;
-  const declarations = ["it", "bf", "sf", "sc"] as const;
-  const offsets: number[] = [];
-  let source = "";
-
-  const appendSeparator = () => {
-    if (source.length > 0 && !/[\s{]$/.test(source)) {
-      source += " ";
-    }
-  };
-  const appendTrackedWord = (word: string) => {
-    const start = source.length;
-    source += word;
-    if (word.length > 1) {
-      offsets.push(start + 1);
-    }
-    if (word.length > 3) {
-      offsets.push(start + Math.floor(word.length / 2));
-      offsets.push(start + word.length - 1);
-    }
-  };
-  const appendPlainWord = () => {
-    appendSeparator();
-    appendTrackedWord(pickFuzzItem(words, random));
-  };
-  const appendCommand = () => {
-    appendSeparator();
-    const command = pickFuzzItem(commands, random);
-    source += `\\${command}{`;
-    appendTrackedWord(pickFuzzItem(words, random));
-    if (random() < 0.55) {
-      source += " ";
-      appendTrackedWord(pickFuzzItem(words, random));
-    }
-    source += "}";
-  };
-  const appendNestedCommand = () => {
-    appendSeparator();
-    const outer = pickFuzzItem(commands, random);
-    const inner = pickFuzzItem(commands, random);
-    source += `\\${outer}{`;
-    appendTrackedWord(pickFuzzItem(words, random));
-    source += ` \\${inner}{`;
-    appendTrackedWord(pickFuzzItem(words, random));
-    source += "}}";
-  };
-  const appendDeclarationGroup = () => {
-    appendSeparator();
-    const declaration = pickFuzzItem(declarations, random);
-    source += `{\\${declaration} `;
-    appendTrackedWord(pickFuzzItem(words, random));
-    if (random() < 0.45) {
-      source += " ";
-      appendTrackedWord(pickFuzzItem(words, random));
-    }
-    source += "}";
-  };
-  const appendMBox = () => {
-    appendSeparator();
-    source += "\\mbox{";
-    source += random() < 0.5 ? " " : "";
-    source += pickFuzzItem(words, random);
-    source += " ";
-    source += pickFuzzItem(words, random);
-    source += random() < 0.5 ? " " : "";
-    source += "}";
-  };
-  const appendForcedBreak = () => {
-    appendSeparator();
-    source += random() < 0.5 ? String.raw`\\` : String.raw`\\[7pt]`;
-    source += " ";
-  };
-
-  const tokenCount = 5 + Math.floor(random() * 4);
-  const breakAt = 1 + Math.floor(random() * (tokenCount - 2));
-  for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
-    if (tokenIndex === breakAt || (tokenIndex > 1 && tokenIndex < tokenCount - 1 && random() < 0.12)) {
-      appendForcedBreak();
-    }
-    const variant = random();
-    if (variant < 0.3) {
-      appendPlainWord();
-    } else if (variant < 0.62) {
-      appendCommand();
-    } else if (variant < 0.78) {
-      appendNestedCommand();
-    } else if (variant < 0.92) {
-      appendDeclarationGroup();
-    } else {
-      appendMBox();
-    }
+function projectSharedHitMapTextNode(node: TexFuzzNode): TexFuzzNode {
+  if (node.kind === "math" || node.kind === "display-math" || node.kind === "oracle-command") {
+    return { kind: "text", value: "math" };
   }
-
-  return {
-    id: `tex-hitmap-fuzz-${index}`,
-    source,
-    width: pickFuzzItem([70, 90, 120, 150], random),
-    offsets: [...new Set(offsets)].sort((left, right) => left - right),
-  };
+  if (node.kind === "line-break") {
+    return { kind: "space", nonBreaking: false };
+  }
+  if ("children" in node) {
+    return { ...node, children: node.children.map(projectSharedHitMapTextNode) };
+  }
+  if (node.kind === "item" && node.label) {
+    return { ...node, label: node.label.map(projectSharedHitMapTextNode) };
+  }
+  return node;
 }
 
+function buildTexHitMapFuzzCase(index: number): TexHitMapFuzzCase {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const generated = generateTexFuzzCase(0x54584d00 + index * 200 + attempt, {
+      profile: "vertical-slice",
+      depth: 3,
+      size: 9,
+    });
+    const projectedAst = generated.ast.map(projectSharedHitMapTextNode);
+    const split = 1 + ((index + attempt) % (generated.ast.length - 1));
+    const withBreak = caseFromTexFuzzAst([
+      { kind: "text", value: "Anchor" },
+      { kind: "space", nonBreaking: false },
+      ...projectedAst.slice(0, split),
+      { kind: "line-break", command: "\\", starred: false },
+      { kind: "text", value: "Anchor" },
+      { kind: "space", nonBreaking: false },
+      ...projectedAst.slice(split),
+    ], { seed: generated.seed, profile: generated.profile, choices: generated.choices });
+    const offsets = withBreak.sourceMap
+      .filter((span) => span.kind === "text" && span.end - span.start > 1)
+      .flatMap((span) => [
+        span.start + 1,
+        span.start + Math.floor((span.end - span.start) / 2),
+        span.end - 1,
+      ])
+      .filter((offset, offsetIndex, all) =>
+        offset > 0 && offset < withBreak.source.length && all.indexOf(offset) === offsetIndex
+      )
+      .sort((left, right) => left - right);
+    if (offsets.length === 0) {
+      continue;
+    }
+    const width = [70, 90, 120, 150][index % 4] ?? 120;
+    const calibration = layoutSimpleTexParagraph(withBreak.source, {
+      paragraphId: `tex-hitmap-fuzz-calibration-${index}`,
+      width,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+    });
+    if (!calibration.supported || !calibration.report || calibration.report.lines.length < 2) {
+      continue;
+    }
+    // This hard round-trip test has a registered scalar-line domain. Cases
+    // producing non-scalar/nested line geometry remain in the broader shared
+    // generator and diagnostic fuzz runners, but require the vlist hit path.
+    if (calibration.report.lines.some((line) =>
+      !Number.isFinite(Number(line.xStart)) || !Number.isFinite(Number(line.xEnd))
+    )) {
+      continue;
+    }
+    return {
+      id: `tex-hitmap-fuzz-${index}`,
+      source: withBreak.source,
+      width,
+      offsets,
+    };
+  }
+  throw new Error(`Unable to generate supported shared TeX hit-map case ${index}.`);
+}
 function buildTexMathHitMapFuzzCase(index: number): TexMathHitMapFuzzCase {
   const random = makeDeterministicRandom(0x4d415448 + index);
   const words = [
@@ -936,28 +901,45 @@ function buildTexDocumentMathHitMapFuzzCase(index: number): TexDocumentMathHitMa
   };
 }
 
-function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
-  return [
-    trackedMathFormula("x-y", ["x", "-", "y"], { exactRoundTrip: false }),
-    trackedMathFormula("x^2", ["x", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("a_b^c", ["a", "_", "b", "^", "c"], { exactRoundTrip: false }),
-    trackedMathFormula("\\frac{1}{2}", ["\\frac", "1", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\frac{x_i}{y^2}", ["\\frac", "x", "_", "i", "y", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\sqrt{x}", ["\\sqrt", "x"], { exactRoundTrip: false }),
-    trackedMathFormula("\\sqrt{x_1+y^2}", ["\\sqrt", "x", "_", "1", "+", "y", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\hat{x}^2", ["\\hat", "x", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\vec{z}_y", ["\\vec", "z", "_", "y"], { exactRoundTrip: false }),
-    trackedMathFormula("\\binom{n}{k}", ["\\binom", "n", "k"], { exactRoundTrip: false }),
-    trackedMathFormula("\\binom{n_1}{k^2}", ["\\binom", "n", "_", "1", "k", "^", "2"], { exactRoundTrip: false }),
-    trackedMathFormula("\\sum_{i=1}^{n} i", ["\\sum", "i", "=", "1", "n"], { exactRoundTrip: false }),
-    trackedMathFormula("\\sum_{i=1}^{n}\\frac{i}{n}", ["\\sum", "i", "=", "1", "n", "\\frac", "i", "n"], { exactRoundTrip: false }),
-    trackedMathFormula("\\left(x+y\\right)", ["\\left", "x", "+", "y", "\\right"], { exactRoundTrip: false }),
-    trackedMathFormula("\\left(\\frac{x}{y}+z\\right)", ["\\left", "\\frac", "x", "y", "+", "z", "\\right"], { exactRoundTrip: false }),
-    trackedMathFormula("\\mbox{if}", ["\\mbox", "if"], { exactRoundTrip: false }),
-    trackedMathFormula("x_{\\mbox{ node }}", ["x", "_", "\\mbox", "node"], { exactRoundTrip: false }),
-  ];
-}
+let sharedTexMathHitMapFuzzFormulas: readonly TexMathHitMapFuzzFormula[] | undefined;
 
+function texMathHitMapFuzzFormulas(): readonly TexMathHitMapFuzzFormula[] {
+  if (sharedTexMathHitMapFuzzFormulas) {
+    return sharedTexMathHitMapFuzzFormulas;
+  }
+  const formulas: TexMathHitMapFuzzFormula[] = [];
+  for (let seed = 0; seed < 2_000 && formulas.length < 32; seed += 1) {
+    const generated = generateTexMathFuzzCase(0x4d415448 + seed, { depth: 2 });
+    if (generated.features.includes("math.matrix") || generated.source.length > 120) {
+      continue;
+    }
+    const parsed = parseTexMath(generated.source);
+    if (parsed.diagnostics.some((diagnostic) =>
+      diagnostic.severity === "error" || diagnostic.code === "unsupported-command"
+    )) {
+      continue;
+    }
+    const trackedOffsets = [...generated.source.matchAll(/\\[A-Za-z]+|[A-Za-z0-9]|[=+-]/gu)]
+      .slice(0, 16)
+      .map((match) => ({
+        offset: match.index,
+        label: match[0],
+        exactRoundTrip: false,
+      }));
+    if (trackedOffsets.length === 0) {
+      continue;
+    }
+    const visibleSource = generated.source.replaceAll(/\\[A-Za-z]+/gu, "");
+    formulas.push(...(/[A-Za-z0-9]/u.test(visibleSource)
+      ? [{ source: generated.source, trackedOffsets }]
+      : []));
+  }
+  if (formulas.length < 32) {
+    throw new Error(`Shared math generator yielded only ${formulas.length} supported hit-map formulas.`);
+  }
+  sharedTexMathHitMapFuzzFormulas = formulas;
+  return formulas;
+}
 function documentHitMapDisplayRows(
   random: () => number,
   delimiter: "align" | "align-star" | "gather" | "gather-star" | "multline" | "multline-star"
@@ -1131,32 +1113,6 @@ function buildTexDisplayAlignHitMapFuzzCase(index: number): TexDisplayAlignHitMa
       .filter((entry) => entry.offset > 0 && entry.offset < source.length)
       .sort((left, right) => left.offset - right.offset),
   };
-}
-
-function trackedMathFormula(
-  source: string,
-  needles: readonly string[],
-  options: { readonly exactRoundTrip: boolean }
-): TexMathHitMapFuzzFormula {
-  const trackedOffsets: { offset: number; label: string; exactRoundTrip: boolean }[] = [];
-  let searchStart = 0;
-  for (const needle of needles) {
-    const offset = source.indexOf(needle, searchStart);
-    if (offset < 0) {
-      throw new Error(`Missing tracked math token ${needle} in ${source}.`);
-    }
-    trackedOffsets.push({
-      offset,
-      label: needle,
-      exactRoundTrip: options.exactRoundTrip && offset > 0 && isVisibleMathSourceToken(needle),
-    });
-    searchStart = offset + needle.length;
-  }
-  return { source, trackedOffsets };
-}
-
-function isVisibleMathSourceToken(token: string): boolean {
-  return !token.startsWith("\\") && token !== "^" && token !== "_";
 }
 
 const texParagraphRegressionCases = [
@@ -1628,6 +1584,32 @@ describe("native Unicode prose", () => {
 });
 
 describe("simple TeX paragraph layout", () => {
+  it("reports unsupported Unicode in a list label without throwing", () => {
+    const source = String.raw`\begin{itemize}\item[Ωmega] Body\end{itemize}`;
+    const result = layoutSimpleTexParagraph(source, {
+      width: 160,
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(result.supported).toBe(false);
+    expect(result.fallbackReason).toContain("no TFM metric");
+  });
+
+  it("keeps overfull inline math geometry finite in a narrow minipage", () => {
+    const source = String.raw`\begin{minipage}[t]{5bp}$x$\end{minipage}`;
+    const result = layoutSimpleTexParagraph(source, {
+      width: 160,
+      fallbackPolicy: "placeholder",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    expect(result.supported).toBe(true);
+    const line = result.report?.lines[0];
+    expect(Number.isFinite(line?.xEnd)).toBe(true);
+    for (const segment of line?.segments ?? []) {
+      expect(Number.isFinite(segment.width)).toBe(true);
+      expect(segment.caretStops?.every(Number.isFinite) ?? true).toBe(true);
+    }
+  });
   // These expected line arrays are cached LuaTeX oracle regressions. Refresh
   // them with `npm run compare:tex-paragraph` before changing the expectations.
   it.each(texParagraphRegressionCases)("matches cached LuaTeX paragraph oracle for $id", async ({ text, width, lines }) => {
@@ -1759,6 +1741,53 @@ describe("simple TeX paragraph layout", () => {
       kind: "forced",
       lineLeading: "7pt",
     });
+  });
+
+  it("consumes the star and optional leading on starred TeX line breaks", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \\*[7pt] Beta`, {
+      paragraphId: "tex:starred-forced-break-leading",
+      width: 150,
+      tolerance: 200,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
+    expect(result.report?.lines[0]?.break).toMatchObject({
+      kind: "forced",
+      lineLeading: "7pt",
+    });
+  });
+
+  it("treats the LaTeX newline control word as a forced line break", () => {
+    const result = layoutSimpleTexParagraph(String.raw`Alpha \newline Beta`, {
+      paragraphId: "tex:newline-control-word",
+      width: 150,
+      hyphenator: { hyphenate: () => [] },
+    });
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
+    expect(result.report?.lines[0]?.break).toMatchObject({ kind: "forced" });
+    expect(result.report?.lines.flatMap((line) => line.segments).some((segment) => segment.literal)).toBe(false);
+  });
+
+  it("consumes LaTeX linebreak priorities without swallowing following prose", () => {
+    const optional = layoutSimpleTexParagraph(String.raw`Alpha\linebreak[0]{Beta}`, {
+      paragraphId: "tex:linebreak-priority-zero",
+      width: 150,
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(optional.supported).toBe(true);
+    expect(lineTexts(optional.report)).toEqual(["AlphaBeta"]);
+    expect(optional.report?.lines.flatMap((line) => line.segments).some((segment) => segment.literal)).toBe(false);
+
+    const forced = layoutSimpleTexParagraph(String.raw`Alpha\linebreak[4]Beta`, {
+      paragraphId: "tex:linebreak-priority-four",
+      width: 150,
+      hyphenator: { hyphenate: () => [] },
+    });
+    expect(lineTexts(forced.report)).toEqual(["Alpha", "Beta"]);
   });
 
   it("models TikZ text-width node indentation around par and forced line breaks", () => {
