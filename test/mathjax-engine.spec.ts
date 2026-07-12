@@ -423,6 +423,41 @@ describe("mathjax node text engine", () => {
     expect(report?.layoutMode).toBe("wrapped-explicit");
   });
 
+  it("keeps actively rendered cache entries alive under eviction churn", async () => {
+    installFakeBrowserMathJax();
+    const { createMathJaxNodeTextEngine } = await import("../packages/core/src/text/mathjax-engine.js");
+    const engine = await createMathJaxNodeTextEngine();
+
+    const measured = engine.measure({
+      text: "Anchor label",
+      textWidthPt: null,
+      fontStyle: "normal",
+      fontWeight: "normal",
+      fontFamily: "serif",
+      fontSizePt: 10
+    });
+    expect(measured).not.toBeNull();
+    const cacheKey = measured?.cacheKey ?? "";
+
+    // Insert more distinct entries than the render cache holds — drag frames
+    // do this via position-anchored keys. Entries the scene still renders
+    // from (read via renderFromCache) must survive the churn.
+    for (let index = 0; index < 2200; index += 1) {
+      engine.measure({
+        text: `w${index}`,
+        textWidthPt: null,
+        fontStyle: "normal",
+        fontWeight: "normal",
+        fontFamily: "serif",
+        fontSizePt: 10
+      });
+      if (index % 16 === 0) {
+        expect(engine.renderFromCache(cacheKey), `entry evicted after ${index} inserts`).not.toBeNull();
+      }
+    }
+    expect(engine.renderFromCache(cacheKey)).not.toBeNull();
+  }, 30000);
+
   it("routes simple wrapped serif text through the TeX paragraph path", async () => {
     const { texCalls } = installFakeBrowserMathJax();
 
