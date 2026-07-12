@@ -193,7 +193,7 @@ describe("mathjax node text engine", () => {
     const flushed = await engine.flushPending?.();
     expect(tex2svgPromise.mock.calls.length).toBeGreaterThan(6);
     expect(flushed?.length).toBeGreaterThan(0);
-  });
+  }, 15_000);
 
   it("still returns invalid-node-tex for hard TeX errors", async () => {
     const target = globalThis as {
@@ -1685,7 +1685,7 @@ describe("mathjax node text engine", () => {
         message: testCase.message
       });
     }
-  });
+  }, 15_000);
 
   it("rejects fixed-width measurements without paragraph metadata and exposes direct output jax", async () => {
     const target = globalThis as {

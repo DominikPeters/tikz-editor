@@ -2,6 +2,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
 
 const distEntry = resolve(process.cwd(), "packages/core/dist/text/tex/math/index.js");
 
@@ -10,6 +11,7 @@ if (!existsSync(distEntry)) {
 }
 
 const { parseTexMath } = await import(distEntry);
+const { generateTexMathFuzzCase } = await loadTexFuzzModules();
 
 const args = readArgs();
 if (!args.parserOnly) {
@@ -21,7 +23,11 @@ const failures = [];
 let diagnostics = 0;
 let unsupported = 0;
 for (let index = 0; index < args.cases; index += 1) {
-  const source = randomMathSource(rng);
+  // Parser fuzzing deliberately keeps recovery paths hot. The comparison
+  // runner uses the same shared generator with malformed input disabled.
+  const source = generateTexMathFuzzCase(caseSeed(args.seed, index), {
+    malformed: index % 5 === 0,
+  }).source;
   const sourceOffset = args.randomSourceOffset ? randomInt(rng, 1000) : args.sourceOffset;
   try {
     const parsed = parseTexMath(source, { sourceOffset });
@@ -118,190 +124,8 @@ function isSourceSpan(value) {
     Object.keys(value).every((key) => key === "start" || key === "end");
 }
 
-function randomMathSource(rng) {
-  const mode = randomInt(rng, 10);
-  if (mode === 0) {
-    return randomMalformedSource(rng);
-  }
-  if (mode === 1) {
-    return randomEnvironmentSource(rng);
-  }
-  if (mode === 2) {
-    return randomDelimitedSource(rng);
-  }
-  return randomExpression(rng, 0);
-}
-
-function randomExpression(rng, depth) {
-  const count = 1 + randomInt(rng, depth > 1 ? 2 : 4);
-  const parts = [randomTerm(rng, depth)];
-  for (let index = 1; index < count; index += 1) {
-    parts.push(randomInfix(rng));
-    parts.push(randomTerm(rng, depth));
-  }
-  return parts.join(randomInt(rng, 4) === 0 ? " " : "");
-}
-
-function randomTerm(rng, depth) {
-  const choices = depth >= 3
-    ? ["atom", "group", "command"]
-    : ["atom", "group", "command", "frac", "sqrt", "script", "accent", "text", "operatorname", "xarrow"];
-  const choice = choices[randomInt(rng, choices.length)] ?? "atom";
-  if (choice === "group") {
-    return "{" + randomExpression(rng, depth + 1) + "}";
-  }
-  if (choice === "frac") {
-    const command = randomChoice(rng, ["\\frac", "\\dfrac", "\\tfrac", "\\binom"]);
-    return command + randomArgument(rng, depth) + randomArgument(rng, depth);
-  }
-  if (choice === "sqrt") {
-    return "\\sqrt" + randomArgument(rng, depth);
-  }
-  if (choice === "script") {
-    return randomScriptableBase(rng, depth) + randomScriptSuffix(rng, depth);
-  }
-  if (choice === "accent") {
-    return randomChoice(rng, [
-      "\\hat",
-      "\\bar",
-      "\\tilde",
-      "\\vec",
-      "\\dot",
-      "\\ddot",
-    ]) + randomArgument(rng, depth);
-  }
-  if (choice === "text") {
-    return randomChoice(rng, ["\\text", "\\mathrm", "\\mathit", "\\mathbf"]) +
-      "{" + randomChoice(rng, ["if", "office", "ABC", "x+y", "\\bad"]) + "}";
-  }
-  if (choice === "operatorname") {
-    return randomChoice(rng, ["\\operatorname", "\\operatorname*"]) +
-      "{" + randomChoice(rng, ["rank", "arg\\,max", "\\bad"]) + "}";
-  }
-  if (choice === "xarrow") {
-    const below = randomInt(rng, 2) === 0 ? "[" + randomExpression(rng, depth + 1) + "]" : "";
-    return randomChoice(rng, ["\\xleftarrow", "\\xrightarrow"]) +
-      below +
-      randomArgument(rng, depth);
-  }
-  if (choice === "command") {
-    return randomCommand(rng);
-  }
-  return randomAtom(rng);
-}
-
-function randomScriptableBase(rng, depth) {
-  return randomChoice(rng, [
-    randomAtom(rng),
-    "{" + randomExpression(rng, depth + 1) + "}",
-    "\\sqrt" + randomArgument(rng, depth),
-    "\\frac" + randomArgument(rng, depth) + randomArgument(rng, depth),
-  ]);
-}
-
-function randomScriptSuffix(rng, depth) {
-  const sub = "_" + randomScriptArgument(rng, depth);
-  const sup = "^" + randomScriptArgument(rng, depth);
-  if (randomInt(rng, 2) === 0) {
-    return sub + (randomInt(rng, 2) === 0 ? sup : "");
-  }
-  return sup + (randomInt(rng, 2) === 0 ? sub : "");
-}
-
-function randomArgument(rng, depth) {
-  if (randomInt(rng, 4) === 0) {
-    return randomTerm(rng, depth + 1);
-  }
-  return "{" + randomExpression(rng, depth + 1) + "}";
-}
-
-function randomScriptArgument(rng, depth) {
-  if (randomInt(rng, 3) === 0) {
-    return randomAtom(rng);
-  }
-  return "{" + randomExpression(rng, depth + 1) + "}";
-}
-
-function randomDelimitedSource(rng) {
-  const pairs = [
-    ["(", ")"],
-    ["[", "]"],
-    ["\\lbrace", "\\rbrace"],
-    ["\\lfloor", "\\rfloor"],
-    ["\\langle", "\\rangle"],
-    ["|", "|"],
-  ];
-  const [left, right] = randomChoice(rng, pairs);
-  return "\\left" + left + " " + randomExpression(rng, 1) + "\\right" + right;
-}
-
-function randomEnvironmentSource(rng) {
-  const environment = randomChoice(rng, ["aligned", "matrix", "pmatrix", "array", "cases", "smallmatrix"]);
-  const rows = [];
-  const rowCount = 1 + randomInt(rng, 3);
-  const columnCount = environment === "cases" ? 2 : 1 + randomInt(rng, 3);
-  for (let row = 0; row < rowCount; row += 1) {
-    const cells = [];
-    for (let column = 0; column < columnCount; column += 1) {
-      cells.push(randomExpression(rng, 2));
-    }
-    rows.push(cells.join("&"));
-  }
-  const preamble = environment === "array" ? "{lcr".slice(0, columnCount + 1) + "}" : "";
-  return "\\begin{" + environment + "}" + preamble + rows.join("\\\\") + "\\end{" + environment + "}";
-}
-
-function randomMalformedSource(rng) {
-  return randomChoice(rng, [
-    "{",
-    "}",
-    "x_",
-    "^",
-    "\\frac{1}",
-    "\\sqrt{",
-    "\\left(x",
-    "\\right)",
-    "\\begin{matrix}a&b",
-    "\\xrightarrow[abc{d}",
-    randomExpression(rng, 1) + randomChoice(rng, ["{", "}", "_", "^", "\\unknown"]),
-  ]);
-}
-
-function randomAtom(rng) {
-  return randomChoice(rng, [
-    "x",
-    "y",
-    "z",
-    "A",
-    "B",
-    "1",
-    "2",
-    "3",
-    "\\alpha",
-    "\\beta",
-    "\\Gamma",
-    "\\infty",
-  ]);
-}
-
-function randomCommand(rng) {
-  return randomChoice(rng, [
-    "\\sin",
-    "\\lim",
-    "\\sum",
-    "\\int",
-    "\\to",
-    "\\Longrightarrow",
-    "\\iff",
-    "\\colon",
-    "\\,",
-    "\\ ",
-    "\\unknown",
-  ]);
-}
-
-function randomInfix(rng) {
-  return randomChoice(rng, ["+", "-", "=", ",", "\\leq", "\\to", "\\implies"]);
+function caseSeed(seed, index) {
+  return (seed + Math.imul(index, 0x9e3779b1)) >>> 0;
 }
 
 function readArgs() {
@@ -348,10 +172,6 @@ function readNonNegativeInteger(raw, label) {
     throw new Error(`Expected ${label} to be a non-negative integer.`);
   }
   return value;
-}
-
-function randomChoice(rng, values) {
-  return values[randomInt(rng, values.length)] ?? values[0];
 }
 
 function randomInt(rng, maxExclusive) {

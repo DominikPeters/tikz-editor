@@ -6,8 +6,11 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
+
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const distEntry = join(repoRoot, "packages/core/dist/text/tex/index.js");
+const mathDistEntry = join(repoRoot, "packages/core/dist/text/tex/math/index.js");
 const parseLengthEntry = join(repoRoot, "packages/core/dist/semantic/coords/parse-length.js");
 const defaultOutDir = join(repoRoot, "artifacts", "tex-text-visual-fuzz");
 const defaultCacheDir = join(repoRoot, "artifacts", "tex-text-visual-fuzz-cache");
@@ -67,6 +70,8 @@ Options:
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
   --flag-visual-diff      Treat raster AE ratio differences as failures. By default raster metrics are diagnostic only.
+  --raster-control-sample <n>
+                          Stage raster comparison: rasterize every structural finding plus n deterministic, diverse control cases. By default every case is rasterized.
   --glyph-dx-tolerance <pt>
                           Max glyph x delta for structural pass. Checks absolute, block-normalized, line-edge, and line-internal deltas. Default: ${defaultGlyphDxTolerance}.
   --glyph-dy-tolerance <pt>
@@ -87,6 +92,7 @@ function parseArgs(argv) {
     refreshCache: false,
     thresholdRatio: defaultThresholdRatio,
     flagVisualDiff: false,
+    rasterControlSample: null,
     glyphDxTolerance: defaultGlyphDxTolerance,
     glyphDyTolerance: defaultGlyphDyTolerance,
     help: false,
@@ -146,6 +152,11 @@ function parseArgs(argv) {
       options.flagVisualDiff = true;
       continue;
     }
+    if (arg === "--raster-control-sample" && next != null) {
+      options.rasterControlSample = Number(next);
+      index += 1;
+      continue;
+    }
     if (arg === "--glyph-dx-tolerance" && next != null) {
       options.glyphDxTolerance = Number(next);
       index += 1;
@@ -176,6 +187,12 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(options.glyphDyTolerance) || options.glyphDyTolerance < 0) {
     throw new Error("--glyph-dy-tolerance must be non-negative.");
+  }
+  if (
+    options.rasterControlSample !== null &&
+    (!Number.isInteger(options.rasterControlSample) || options.rasterControlSample < 0)
+  ) {
+    throw new Error("--raster-control-sample must be a non-negative integer.");
   }
   if (![
     "broad",
@@ -223,6 +240,50 @@ function mulberry32(seed) {
     value ^= value + Math.imul(value ^ value >>> 7, value | 61);
     return ((value ^ value >>> 14) >>> 0) / 4294967296;
   };
+}
+
+function deterministicDiversitySample(cases, count, seed) {
+  if (count === null || count >= cases.length) {
+    return new Set(cases.map((caseData) => caseData.id));
+  }
+  if (count === 0) {
+    return new Set();
+  }
+
+  const rank = (value) => createHash("sha256")
+    .update(`${seed}:${value}`)
+    .digest("hex");
+  const strata = new Map();
+  for (const caseData of cases) {
+    const stratum = [caseData.feature, caseData.alignment.label, caseData.width].join(":");
+    const entries = strata.get(stratum) ?? [];
+    entries.push(caseData);
+    strata.set(stratum, entries);
+  }
+  const queues = [...strata.entries()]
+    .sort(([left], [right]) => rank(left).localeCompare(rank(right)))
+    .map(([, entries]) => entries.sort((left, right) =>
+      rank(left.id).localeCompare(rank(right.id))
+    ));
+  const selected = new Set();
+  while (selected.size < count) {
+    let advanced = false;
+    for (const queue of queues) {
+      const caseData = queue.shift();
+      if (!caseData) {
+        continue;
+      }
+      selected.add(caseData.id);
+      advanced = true;
+      if (selected.size === count) {
+        break;
+      }
+    }
+    if (!advanced) {
+      break;
+    }
+  }
+  return selected;
 }
 
 function choice(random, values) {
@@ -976,7 +1037,43 @@ function inlineFrameBox(random) {
   return `\\framebox{${content}}`;
 }
 
-function generateCaseForMode(index, random, mode) {
+function texFuzzMetadata(generated) {
+  return {
+    schemaVersion: generated.schemaVersion,
+    generatorVersion: generated.generatorVersion,
+    seed: generated.seed,
+    profile: generated.profile,
+    features: generated.features,
+    choices: generated.choices,
+  };
+}
+
+// This visual runner already has dedicated geometry cases for boxes, rules,
+// breaks, and vertical material. Project the shared aggressive AST to prose
+// and math so broad/mixed mode can compose those constructs without turning
+// every case into another copy of the specialized geometry matrix.
+function projectGeneratedProseCase(texFuzz, generated) {
+  const projectNodes = (nodes) => nodes.flatMap((node) => {
+    if (node.kind === "text") return [{ ...node, value: node.value.replaceAll("Ω", "Omega") }];
+    if (["space", "accent", "math"].includes(node.kind)) return [node];
+    if (["group", "font", "font-declaration", "color"].includes(node.kind)) {
+      return [{ ...node, children: projectNodes(node.children) }];
+    }
+    if (node.kind === "style-declaration" && node.command !== "fontsize") {
+      return [{ ...node, children: projectNodes(node.children) }];
+    }
+    return "children" in node ? projectNodes(node.children) : [];
+  });
+  const ast = projectNodes(generated.ast);
+  if (!ast.some((node) => node.kind !== "space")) ast.push({ kind: "text", value: "Alpha" });
+  return texFuzz.caseFromTexFuzzAst(ast, {
+    seed: generated.seed,
+    profile: generated.profile,
+    choices: generated.choices,
+  });
+}
+
+function generateCaseForMode(index, random, mode, generatedTexFuzzCase) {
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
   }
@@ -1014,9 +1111,21 @@ function generateCaseForMode(index, random, mode) {
     return generateBoxHardCase(index, random);
   }
   if (mode === "mixed") {
-    return generateMixedFeatureCase(index, random);
+    const specialized = generateMixedFeatureCase(index, random);
+    return {
+      ...specialized,
+      feature: `${specialized.feature}+shared-aggressive`,
+      text: `${specialized.text} \\par ${generatedTexFuzzCase.source}`,
+      texFuzz: texFuzzMetadata(generatedTexFuzzCase),
+    };
   }
-  return generateCase(index, random);
+  const geometry = generateCase(index, random);
+  return {
+    ...geometry,
+    feature: "shared-aggressive",
+    text: generatedTexFuzzCase.source,
+    texFuzz: texFuzzMetadata(generatedTexFuzzCase),
+  };
 }
 
 function formatPt(value) {
@@ -1494,22 +1603,8 @@ function parseTexGlyphTrace(tsv) {
   return { lines: lines.filter((line) => line && line.glyphs.length > 0) };
 }
 
-function runTexGlyphTrace(caseData, caseDir) {
-  const traceTexPath = join(caseDir, "trace.tex");
-  const traceLuaPath = join(caseDir, "trace.lua");
+function readTexGlyphTrace(caseDir) {
   const traceOutputPath = join(caseDir, "tex-glyph-trace.tsv");
-  writeFileSync(traceTexPath, buildTexTraceDocument(caseData), "utf8");
-  writeFileSync(traceLuaPath, texTraceLuaSource(), "utf8");
-  execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", traceTexPath], {
-    cwd: caseDir,
-    env: {
-      ...process.env,
-      TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
-      TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
-    },
-    maxBuffer: 20 * 1024 * 1024,
-    stdio: "ignore",
-  });
   return parseTexGlyphTrace(readFileSync(traceOutputPath, "utf8"));
 }
 
@@ -1702,12 +1797,22 @@ function lineEndX(line) {
 function buildTexDocument(caseData, pageWidth, pageHeight) {
   return String.raw`\documentclass{article}
 \usepackage[paperwidth=${formatPt(pageWidth)}pt,paperheight=${formatPt(pageHeight)}pt,margin=0pt]{geometry}
+\usepackage{amsmath,amssymb}
 \usepackage{tikz}
 \pagestyle{empty}
+\makeatletter
+\newbox\tracebox
+\let\trace@orig@fig@continue\tikz@fig@continue
+\def\tikz@fig@continue{%
+  \global\setbox\tracebox=\copy\pgfnodeparttextbox%
+  \trace@orig@fig@continue%
+}
+\makeatother
 \begin{document}
 \noindent\begin{tikzpicture}[x=1pt,y=1pt]
 \node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
 \end{tikzpicture}
+\directlua{dofile("trace.lua")}
 \end{document}
 `;
 }
@@ -1715,13 +1820,15 @@ function buildTexDocument(caseData, pageWidth, pageHeight) {
 function texOracleCacheKey(caseData, pageWidth, pageHeight) {
   return createHash("sha256")
     .update(JSON.stringify({
-      version: 4,
+      version: 6,
       text: caseData.text,
       width: caseData.width,
       parindent: caseData.parindent,
       alignment: caseData.alignment.tikz,
       pageWidth,
       pageHeight,
+      texFuzzGeneratorVersion: caseData.texFuzz?.generatorVersion ?? null,
+      texFuzzFeatures: caseData.texFuzz?.features ?? [],
     }))
     .digest("hex")
     .slice(0, 24);
@@ -1753,10 +1860,12 @@ function copyTexOracleArtifacts(from, to) {
   copyFileSync(from.pdfPath, to.pdfPath);
   copyFileSync(from.texPdfToCairoSvgPath, to.texPdfToCairoSvgPath);
   copyFileSync(from.texDvisvgmSvgPath, to.texDvisvgmSvgPath);
+  copyFileSync(from.traceOutputPath, to.traceOutputPath);
 }
 
 function ensureTexOracle(caseData, pageWidth, pageHeight, paths, options) {
   const texSource = buildTexDocument(caseData, pageWidth, pageHeight);
+  writeFileSync(join(paths.caseDir, "trace.lua"), texTraceLuaSource(), "utf8");
   if (!options.cache) {
     writeFileSync(paths.texPath, texSource, "utf8");
     runTexOracle(
@@ -1776,12 +1885,14 @@ function ensureTexOracle(caseData, pageWidth, pageHeight, paths, options) {
     pdfPath: join(cacheDir, "case.pdf"),
     texPdfToCairoSvgPath: join(cacheDir, "tex-pdftocairo.svg"),
     texDvisvgmSvgPath: join(cacheDir, "tex-dvisvgm.svg"),
+    traceOutputPath: join(cacheDir, "tex-glyph-trace.tsv"),
   };
   const cacheComplete =
     existsSync(cachedPaths.texPath) &&
     existsSync(cachedPaths.pdfPath) &&
     existsSync(cachedPaths.texPdfToCairoSvgPath) &&
-    existsSync(cachedPaths.texDvisvgmSvgPath);
+    existsSync(cachedPaths.texDvisvgmSvgPath) &&
+    existsSync(cachedPaths.traceOutputPath);
 
   if (cacheComplete && !options.refreshCache) {
     copyTexOracleArtifacts(cachedPaths, paths);
@@ -1799,27 +1910,6 @@ function ensureTexOracle(caseData, pageWidth, pageHeight, paths, options) {
   mkdirSync(cacheDir, { recursive: true });
   copyTexOracleArtifacts(paths, cachedPaths);
   return { status: "miss", key };
-}
-
-function buildTexTraceDocument(caseData) {
-  return String.raw`\documentclass{article}
-\usepackage{tikz}
-\pagestyle{empty}
-\makeatletter
-\newbox\tracebox
-\let\trace@orig@fig@continue\tikz@fig@continue
-\def\tikz@fig@continue{%
-  \global\setbox\tracebox=\copy\pgfnodeparttextbox%
-  \trace@orig@fig@continue%
-}
-\makeatother
-\begin{document}
-\noindent\begin{tikzpicture}[x=1pt,y=1pt]
-\node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
-\end{tikzpicture}
-\directlua{dofile("trace.lua")}
-\end{document}
-`;
 }
 
 function texTraceLuaSource() {
@@ -2092,6 +2182,8 @@ function writeCsv(rows, path) {
     "maxLineLeftDx",
     "maxLineRightDx",
     "texOracleCache",
+    "rasterSelected",
+    "rasterSelectionReason",
     "traceFlagged",
     "visualFlagged",
     "flagged",
@@ -2117,7 +2209,7 @@ function aggregateBy(rows, key) {
       cases: group.length,
       flagged: group.filter((row) => row.flagged).length,
       meanRatio: mean(ratios),
-      maxRatio: Math.max(...ratios),
+      maxRatio: ratios.length > 0 ? Math.max(...ratios) : null,
       meanOursAeNorm: mean(ours),
       meanTexNoiseAeNorm: mean(noise),
     };
@@ -2134,25 +2226,40 @@ async function main() {
     console.log(usage());
     return;
   }
-  if (!existsSync(distEntry) || !existsSync(parseLengthEntry)) {
+  if (!existsSync(distEntry) || !existsSync(mathDistEntry) || !existsSync(parseLengthEntry)) {
     throw new Error("Missing core dist files. Run `npm run -w @tikz-editor/core build` first.");
   }
   requireCommands(["lualatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
 
   const deps = {
     ...(await import(distEntry)),
+    ...(await import(mathDistEntry)),
     ...(await import(parseLengthEntry)),
   };
+  const texFuzz = await loadTexFuzzModules();
   const runDir = join(resolve(options.outDir), `seed-${options.seed}-cases-${options.cases}-scale-${options.scale}-${timestampSlug()}`);
   mkdirSync(runDir, { recursive: true });
 
   const random = mulberry32(options.seed);
   const cases = Array.from(
     { length: options.cases },
-    (_, index) => generateCaseForMode(index, random, options.caseMode)
+    (_, index) => {
+      const caseSeed = (options.seed + Math.imul(index + 1, 0x9E3779B1)) >>> 0;
+      const generated = projectGeneratedProseCase(texFuzz, texFuzz.generateTexFuzzCase(caseSeed, {
+        profile: "aggressive",
+        depth: 4,
+        size: 6,
+      }));
+      return generateCaseForMode(index, random, options.caseMode, generated);
+    }
   );
   const rows = [];
   const errors = [];
+  const rasterControlIds = deterministicDiversitySample(
+    cases,
+    options.rasterControlSample,
+    options.seed
+  );
   const texOracleCache = {
     hits: 0,
     misses: 0,
@@ -2172,6 +2279,7 @@ async function main() {
       alignment: caseData.alignment.layout,
       parindent: caseData.parindent,
       tikzTextWidthNode: true,
+      mathBoxProvider: deps.createTexDerivedInlineMathBoxProvider(),
     });
     if (!layout.supported || !layout.report) {
       errors.push({ id: caseData.id, error: layout.fallbackReason ?? "unsupported" });
@@ -2190,6 +2298,7 @@ async function main() {
     const oursSvgPath = join(caseDir, "ours.svg");
     const texPdfToCairoSvgPath = join(caseDir, "tex-pdftocairo.svg");
     const texDvisvgmSvgPath = join(caseDir, "tex-dvisvgm.svg");
+    const traceOutputPath = join(caseDir, "tex-glyph-trace.tsv");
     const oursPngPath = join(caseDir, "ours.png");
     const texPdfToCairoPngPath = join(caseDir, "tex-pdftocairo.png");
     const texDvisvgmPngPath = join(caseDir, "tex-dvisvgm.png");
@@ -2199,6 +2308,7 @@ async function main() {
       pdfPath,
       texPdfToCairoSvgPath,
       texDvisvgmSvgPath,
+      traceOutputPath,
     };
 
     writeFileSync(join(caseDir, "input.json"), JSON.stringify({
@@ -2228,10 +2338,7 @@ async function main() {
       } else {
         texOracleCache.bypassed += 1;
       }
-      rasterize(oursSvgPath, oursPngPath, widthPx, heightPx);
-      rasterize(texPdfToCairoSvgPath, texPdfToCairoPngPath, widthPx, heightPx);
-      rasterize(texDvisvgmSvgPath, texDvisvgmPngPath, widthPx, heightPx);
-      const texNodeTrace = runTexGlyphTrace(caseData, caseDir);
+      const texNodeTrace = readTexGlyphTrace(caseDir);
       const texSvgTrace = buildTexSvgTrace(readFileSync(texDvisvgmSvgPath, "utf8"), texNodeTrace, oursTrace);
       const traceComparison = compareGlyphTraces(oursTrace, texNodeTrace);
       const svgTraceComparison = texSvgTrace.lines.length > 0
@@ -2242,17 +2349,15 @@ async function main() {
       writeFileSync(join(caseDir, "tex-node-glyph-trace.json"), JSON.stringify(texNodeTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "tex-svg-glyph-trace.json"), JSON.stringify(texSvgTrace, null, 2), "utf8");
       writeFileSync(join(caseDir, "trace-comparison.json"), JSON.stringify(traceComparison, null, 2), "utf8");
+      writeFileSync(join(caseDir, "structural-trace.json"), JSON.stringify({
+        ours: oursTrace,
+        tex: texNodeTrace,
+        comparison: traceComparison,
+      }, null, 2), "utf8");
       if (svgTraceComparison) {
         writeFileSync(join(caseDir, "svg-trace-comparison.json"), JSON.stringify(svgTraceComparison, null, 2), "utf8");
       }
 
-      const texNoiseAe = compareMetric("AE", texPdfToCairoPngPath, texDvisvgmPngPath);
-      const oursAe = compareMetric("AE", texPdfToCairoPngPath, oursPngPath);
-      const texNoiseRmse = compareMetric("RMSE", texPdfToCairoPngPath, texDvisvgmPngPath);
-      const oursRmse = compareMetric("RMSE", texPdfToCairoPngPath, oursPngPath);
-      const ratio = texNoiseAe.normalized && texNoiseAe.normalized > 0
-        ? oursAe.normalized / texNoiseAe.normalized
-        : null;
       const texRows = extractSvgRows(readFileSync(texPdfToCairoSvgPath, "utf8"));
       // The Lua node trace descends into parbox/minipage vlists before TikZ's
       // outer hlist shift is visible, so generated box cases check
@@ -2274,9 +2379,35 @@ async function main() {
         (!ignoreAbsoluteTraceX && traceComparison.maxAbsoluteLineRightDx > options.glyphDxTolerance) ||
         traceComparison.maxLineLeftDx > options.glyphDxTolerance ||
         traceComparison.maxLineRightDx > options.glyphDxTolerance;
-      const visualFlagged = ratio !== null && ratio > options.thresholdRatio;
+      const isControl = rasterControlIds.has(caseData.id);
+      const rasterSelected = options.rasterControlSample === null || traceFlagged || isControl;
+      const rasterSelectionReason = options.rasterControlSample === null
+        ? "all"
+        : traceFlagged
+          ? "structural-finding"
+          : isControl
+            ? "diversity-control"
+            : "skipped";
+      let texNoiseAe = null;
+      let oursAe = null;
+      let texNoiseRmse = null;
+      let oursRmse = null;
+      let ratio = null;
+      if (rasterSelected) {
+        rasterize(oursSvgPath, oursPngPath, widthPx, heightPx);
+        rasterize(texPdfToCairoSvgPath, texPdfToCairoPngPath, widthPx, heightPx);
+        rasterize(texDvisvgmSvgPath, texDvisvgmPngPath, widthPx, heightPx);
+        texNoiseAe = compareMetric("AE", texPdfToCairoPngPath, texDvisvgmPngPath);
+        oursAe = compareMetric("AE", texPdfToCairoPngPath, oursPngPath);
+        texNoiseRmse = compareMetric("RMSE", texPdfToCairoPngPath, texDvisvgmPngPath);
+        oursRmse = compareMetric("RMSE", texPdfToCairoPngPath, oursPngPath);
+        ratio = texNoiseAe.normalized && texNoiseAe.normalized > 0
+          ? oursAe.normalized / texNoiseAe.normalized
+          : null;
+      }
+      const visualFlagged = rasterSelected && ratio !== null && ratio > options.thresholdRatio;
       const flagged = traceFlagged || (options.flagVisualDiff && visualFlagged);
-      if (flagged || visualFlagged) {
+      if (rasterSelected && (flagged || visualFlagged)) {
         execFileSync("magick", [
           texPdfToCairoPngPath,
           oursPngPath,
@@ -2300,11 +2431,11 @@ async function main() {
         oursReportLines: layout.report.lines.length,
         glyphlessListLabelLines: glyphlessListLabelLines.length,
         texRows: texRows.length,
-        texNoiseAeNorm: texNoiseAe.normalized,
-        oursAeNorm: oursAe.normalized,
+        texNoiseAeNorm: texNoiseAe?.normalized ?? null,
+        oursAeNorm: oursAe?.normalized ?? null,
         ratio,
-        texNoiseRmseNorm: texNoiseRmse.normalized,
-        oursRmseNorm: oursRmse.normalized,
+        texNoiseRmseNorm: texNoiseRmse?.normalized ?? null,
+        oursRmseNorm: oursRmse?.normalized ?? null,
         lineTextMatch: traceComparison.lineTextMatch,
         glyphCodeMatch: traceComparison.glyphCodeMatch,
         fontMatch: traceComparison.fontMatch,
@@ -2317,6 +2448,8 @@ async function main() {
         maxLineLeftDx: traceComparison.maxLineLeftDx,
         maxLineRightDx: traceComparison.maxLineRightDx,
         texOracleCache: oracle.status,
+        rasterSelected,
+        rasterSelectionReason,
         traceFlagged,
         visualFlagged,
         flagged,
@@ -2332,7 +2465,7 @@ async function main() {
         `fonts=${row.fontMatch ? "ok" : "diff"} ` +
         `dxAbs=${row.maxAbsoluteGlyphDx.toFixed(3)} dxBlock=${row.maxGlyphDx.toFixed(3)} ` +
         `dxLineInternal=${row.maxLineInternalGlyphDx.toFixed(3)} ` +
-        `cache=${row.texOracleCache}`
+        `raster=${row.rasterSelectionReason} cache=${row.texOracleCache}`
       );
     } catch (error) {
       errors.push({ id: caseData.id, error: error instanceof Error ? error.message : String(error) });
@@ -2343,14 +2476,24 @@ async function main() {
   const summary = {
     runDir,
     seed: options.seed,
+    texFuzzGeneratorVersion: texFuzz.TEX_FUZZ_GENERATOR_VERSION,
+    texFuzzFeatures: [...new Set(cases.flatMap((entry) => entry.texFuzz?.features ?? []))].sort(),
     casesRequested: options.cases,
     casesCompleted: rows.length,
     errors,
     thresholdRatio: options.thresholdRatio,
     flagVisualDiff: options.flagVisualDiff,
+    rasterControlSample: options.rasterControlSample,
     glyphDxTolerance: options.glyphDxTolerance,
     glyphDyTolerance: options.glyphDyTolerance,
     texOracleCache,
+    raster: {
+      selected: rows.filter((row) => row.rasterSelected).length,
+      skipped: rows.filter((row) => !row.rasterSelected).length,
+      structuralFindings: rows.filter((row) => row.rasterSelectionReason === "structural-finding").length,
+      diversityControls: rows.filter((row) => row.rasterSelectionReason === "diversity-control").length,
+      allMode: rows.filter((row) => row.rasterSelectionReason === "all").length,
+    },
     cacheDir: options.cache ? options.cacheDir : null,
     flagged: rows.filter((row) => row.flagged),
     aggregate: {

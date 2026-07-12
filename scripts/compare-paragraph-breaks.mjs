@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DEFAULT_OUT_DIR = join(repoRoot, "artifacts", "paragraph-break-compare");
@@ -24,7 +25,7 @@ const DEFAULT_WIDTHS = [120, 160, 220, 280, 360];
 const DEFAULT_CASE_COUNT = 25;
 const DEFAULT_MIN_WORDS = 20;
 const DEFAULT_MAX_WORDS = 90;
-const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v7-lualatex-tu-inline-math";
+const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v8-shared-tex-fuzz-amsmath";
 const DEFAULT_WORD_BANK_TEXT = `
 Lorem ipsum dolor sit amet consectetuer adipiscing elit Aenean commodo ligula eget dolor
 Aenean massa Cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus
@@ -341,6 +342,30 @@ function buildRandomParagraph(rng, wordBank, options) {
   return pieces.join(" ");
 }
 
+// Paragraph wrapping has separate focused fuzzers for boxes and vertical
+// layout. Keep the shared generator's prose/style/math subtree here so this
+// runner remains a line-breaking oracle instead of duplicating those suites.
+function projectGeneratedProseCase(texFuzz, generated) {
+  const projectNodes = (nodes) => nodes.flatMap((node) => {
+    if (node.kind === "text") return [{ ...node, value: node.value.replaceAll("Ω", "Omega") }];
+    if (["space", "accent", "math"].includes(node.kind)) return [node];
+    if (["group", "font", "font-declaration", "color"].includes(node.kind)) {
+      return [{ ...node, children: projectNodes(node.children) }];
+    }
+    if (node.kind === "style-declaration" && node.command !== "fontsize") {
+      return [{ ...node, children: projectNodes(node.children) }];
+    }
+    return "children" in node ? projectNodes(node.children) : [];
+  });
+  const ast = projectNodes(generated.ast);
+  if (!ast.some((node) => node.kind !== "space")) ast.push({ kind: "text", value: "Alpha" });
+  return texFuzz.caseFromTexFuzzAst(ast, {
+    seed: generated.seed,
+    profile: generated.profile,
+    choices: generated.choices,
+  });
+}
+
 function luaStringLiteral(value) {
   return `[=[${value.replaceAll("]=]", "]=] .. ']=]' .. [=[")}]=]`;
 }
@@ -595,6 +620,7 @@ function buildLuaTeXOracleDocument({ text, align, widthPt, fontEncoding, textIsT
 
   return String.raw`\documentclass{standalone}
 ${fontEncodingLine}
+\usepackage{amsmath,amssymb}
 \usepackage{tikz}
 \begin{document}
 \makeatletter
@@ -621,6 +647,8 @@ function oracleCacheKey(caseSpec) {
     fontEncoding: caseSpec.fontEncoding,
     textIsTex: caseSpec.textIsTex === true,
     text: caseSpec.text,
+    texFuzzGeneratorVersion: caseSpec.texFuzz?.generatorVersion ?? null,
+    texFuzzFeatures: caseSpec.texFuzz?.features ?? [],
   };
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
@@ -907,6 +935,7 @@ async function runCase(caseSpec, renderer, runDir, index, oracleCacheDir) {
       widthPt: caseSpec.widthPt,
       textIsTex: caseSpec.textIsTex === true,
       text: caseSpec.text,
+      texFuzz: caseSpec.texFuzz ?? null,
       oracle,
       ours,
       comparison,
@@ -923,13 +952,14 @@ async function runCase(caseSpec, renderer, runDir, index, oracleCacheDir) {
       align: caseSpec.align,
       widthPt: caseSpec.widthPt,
       text: caseSpec.text,
+      texFuzz: caseSpec.texFuzz ?? null,
     };
     writeFileSync(join(caseDir, "case.json"), JSON.stringify(payload, null, 2), "utf8");
     return payload;
   }
 }
 
-function summarizeCases(cases, seed) {
+function summarizeCases(cases, seed, generatorVersion = null) {
   const comparableCases = cases.filter((entry) => entry.status === "ok");
   const totalComparable = comparableCases.length || 1;
   const exactLineMatches = comparableCases.filter((entry) => entry.comparison.exactLineTextAgreement).length;
@@ -961,6 +991,8 @@ function summarizeCases(cases, seed) {
 
   return {
     seed,
+    texFuzzGeneratorVersion: generatorVersion,
+    texFuzzFeatures: [...new Set(cases.flatMap((entry) => entry.texFuzz?.features ?? []))].sort(),
     cases: cases.length,
     inlineMathCases: cases.filter((entry) => entry.textIsTex === true && /(?:\$|\\\()/u.test(entry.text)).length,
     comparableCases: comparableCases.length,
@@ -990,6 +1022,7 @@ async function main() {
   mkdirSync(oracleCacheDir, { recursive: true });
 
   const renderer = await loadRendererModules();
+  const texFuzz = await loadTexFuzzModules();
   const cases = [];
 
   if (options.fuzzCount > 0) {
@@ -1003,13 +1036,29 @@ async function main() {
     }
 
     for (let index = 0; index < options.fuzzCount; index += 1) {
+      const caseSeed = (options.seed + Math.imul(index + 1, 0x9E3779B1)) >>> 0;
+      const generated = options.inlineMathFuzz
+        ? projectGeneratedProseCase(
+          texFuzz,
+          texFuzz.generateTexFuzzCase(caseSeed, { profile: "aggressive", depth: 3, size: 4 })
+        )
+        : null;
+      const randomParagraph = buildRandomParagraph(rng, wordBank, options);
       const caseSpec = {
         id: `fuzz-${index + 1}`,
         align: sampleOne(rng, options.alignments),
         widthPt: sampleOne(rng, options.widths),
         fontEncoding: options.fontEncoding,
         textIsTex: options.inlineMathFuzz,
-        text: buildRandomParagraph(rng, wordBank, options),
+        text: generated ? `${randomParagraph} ${generated.source}` : randomParagraph,
+        texFuzz: generated ? {
+          schemaVersion: generated.schemaVersion,
+          generatorVersion: generated.generatorVersion,
+          seed: generated.seed,
+          profile: generated.profile,
+          features: generated.features,
+          choices: generated.choices,
+        } : null,
       };
       const payload = await runCase(caseSpec, renderer, runDir, index, oracleCacheDir);
       cases.push(payload);
@@ -1047,7 +1096,7 @@ async function main() {
     console.log(JSON.stringify(payload, null, 2));
   }
 
-  const summary = summarizeCases(cases, options.seed);
+  const summary = summarizeCases(cases, options.seed, texFuzz.TEX_FUZZ_GENERATOR_VERSION);
   writeFileSync(join(runDir, "summary.json"), JSON.stringify(summary, null, 2), "utf8");
   writeHtmlReport(runDir, summary, cases);
   console.log(`[paragraph-compare] wrote report to ${runDir}`);

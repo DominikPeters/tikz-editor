@@ -27,6 +27,8 @@ jobs:
         run: |
           npm run lint:ci
           npm run typecheck
+      - name: Deterministic adversarial TeX fuzz smoke
+        run: npm run fuzz:tex-adversarial:pr
       - run: npm test
       - run: npm run -w @tikz-editor/desktop test:e2e:mock
       - run: npx playwright install --with-deps chromium

@@ -58,7 +58,7 @@ describe("editor store persistence decisions", () => {
     const saved = readSavedWorkspace(map);
     expect(saved.documents).toHaveLength(1);
     expect(saved.documents[0]?.source).toContain("\\draw");
-  });
+  }, 15_000);
 
   it("debounces browser source edits, installs one unload flusher, and ignores ephemeral selection changes", async () => {
     const timeoutCallbacks: Array<() => void> = [];

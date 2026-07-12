@@ -17,6 +17,8 @@
       "@tikz-editor/app/workspace": ["./packages/app/src/ui/workspace-apply.ts"],
       "@tikz-editor/core": ["./packages/core/src/index.ts"],
       "@tikz-editor/core/*": ["./packages/core/src/*"],
+      "@tikz-editor/tex-fuzz": ["./packages/tex-fuzz/src/index.ts"],
+      "@tikz-editor/tex-fuzz/*": ["./packages/tex-fuzz/src/*"],
       "@tikz-editor/lang-tikz": ["./packages/lang-tikz/src/index.ts"],
       "@tikz-editor/lezer-tikz": ["./packages/lezer-tikz/src/index.ts"],
       "@tikz-editor/lezer-tikz/grammar/tikz-parser": ["./packages/lezer-tikz/src/grammar/tikz-parser.ts"],

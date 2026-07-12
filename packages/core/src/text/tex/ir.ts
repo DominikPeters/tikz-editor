@@ -10,41 +10,62 @@ export type TexSpaceGlueProfile = "font" | "tikz-fixed";
 export type TexFontFamily = "roman" | "sans" | "typewriter" | "normal";
 export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
-export type SimpleTexTextBoxCommandName = "mbox" | "makebox" | "llap" | "rlap" | "fbox" | "framebox" | "colorbox" | "fcolorbox" | "underline";
+export const SIMPLE_TEX_TEXT_BOX_COMMAND_NAMES = [
+  "framebox",
+  "fcolorbox",
+  "colorbox",
+  "makebox",
+  "underline",
+  "mbox",
+  "fbox",
+  "llap",
+  "rlap",
+] as const;
+export type SimpleTexTextBoxCommandName = (typeof SIMPLE_TEX_TEXT_BOX_COMMAND_NAMES)[number];
 export type SimpleTexTextBoxAlignment = "natural" | "left" | "center" | "right" | "stretch";
-export type SimpleTexDimensionBoxCommandName = "phantom" | "hphantom" | "vphantom" | "smash";
+export const SIMPLE_TEX_DIMENSION_BOX_COMMAND_NAMES = [
+  "hphantom",
+  "vphantom",
+  "phantom",
+  "smash",
+] as const;
+export type SimpleTexDimensionBoxCommandName = (typeof SIMPLE_TEX_DIMENSION_BOX_COMMAND_NAMES)[number];
 const TEX_GRAPHICS_BARE_NUMBER_UNIT_PT = 72.27 / 72;
-export type SimpleTexFontCommandName =
-  | "textit"
-  | "textbf"
-  | "textmd"
-  | "textsl"
-  | "texttt"
-  | "textup"
-  | "emph"
-  | "textrm"
-  | "textsf"
-  | "textsc"
-  | "textnormal";
-export type SimpleTexFontDeclarationName =
-  | "it"
-  | "bf"
-  | "rm"
-  | "sf"
-  | "sl"
-  | "sc"
-  | "tt"
-  | "em"
-  | "itshape"
-  | "bfseries"
-  | "mdseries"
-  | "rmfamily"
-  | "sffamily"
-  | "ttfamily"
-  | "slshape"
-  | "upshape"
-  | "scshape"
-  | "normalfont";
+export const SIMPLE_TEX_FONT_COMMAND_NAMES = [
+  "textnormal",
+  "textit",
+  "textbf",
+  "textmd",
+  "textsl",
+  "texttt",
+  "textup",
+  "textrm",
+  "textsf",
+  "textsc",
+  "emph",
+] as const;
+export type SimpleTexFontCommandName = (typeof SIMPLE_TEX_FONT_COMMAND_NAMES)[number];
+export const SIMPLE_TEX_FONT_DECLARATION_NAMES = [
+  "normalfont",
+  "bfseries",
+  "mdseries",
+  "rmfamily",
+  "sffamily",
+  "ttfamily",
+  "itshape",
+  "slshape",
+  "upshape",
+  "scshape",
+  "it",
+  "bf",
+  "rm",
+  "sf",
+  "sl",
+  "sc",
+  "tt",
+  "em",
+] as const;
+export type SimpleTexFontDeclarationName = (typeof SIMPLE_TEX_FONT_DECLARATION_NAMES)[number];
 export type SimpleTexQuoteEnvironmentName = "quote" | "quotation";
 export type SimpleTexTrivlistEnvironmentName = "center" | "flushleft" | "flushright";
 export type SimpleTexEnvironmentName =
@@ -119,6 +140,8 @@ export interface SimpleTexLineBreakNode extends SimpleTexSourceRange {
   readonly kind: "line-break";
   readonly text: string;
   readonly lineLeading?: string;
+  /** LaTeX `\linebreak[n]`; omitted for forced `\\` and `\newline`. */
+  readonly priority?: 0 | 1 | 2 | 3 | 4;
 }
 
 export interface SimpleTexMathNode extends SimpleTexSourceRange {
@@ -130,19 +153,21 @@ export interface SimpleTexMathNode extends SimpleTexSourceRange {
   readonly contentEnd: number;
 }
 
-export type SimpleTexDisplayMathDelimiter =
-  | "bracket"
-  | "double-dollar"
-  | "equation"
-  | "equation-star"
-  | "align"
-  | "align-star"
-  | "flalign"
-  | "flalign-star"
-  | "gather"
-  | "gather-star"
-  | "multline"
-  | "multline-star";
+export const SIMPLE_TEX_DISPLAY_MATH_DELIMITERS = [
+  "bracket",
+  "double-dollar",
+  "equation",
+  "equation-star",
+  "align",
+  "align-star",
+  "flalign",
+  "flalign-star",
+  "gather",
+  "gather-star",
+  "multline",
+  "multline-star",
+] as const;
+export type SimpleTexDisplayMathDelimiter = (typeof SIMPLE_TEX_DISPLAY_MATH_DELIMITERS)[number];
 
 export interface SimpleTexDisplayMathNode extends SimpleTexSourceRange {
   readonly kind: "display-math";
@@ -396,8 +421,54 @@ export type SimpleTexControlNode =
 
 export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 
+export const SIMPLE_TEX_INLINE_NODE_KINDS = [
+  "text",
+  "space",
+  "line-break",
+  "math",
+  "font-command",
+  "font-declaration",
+  "style-declaration",
+  "color-command",
+  "group",
+  "mbox",
+  "rule",
+  "includegraphics",
+  "raisebox",
+  "dimension-box",
+  "literal",
+] as const satisfies readonly SimpleTexInlineNode["kind"][];
+
+export const SIMPLE_TEX_CONTROL_NODE_KINDS = [
+  "paragraph-break",
+  "display-math",
+  "noindent",
+  "alignment",
+  "environment-boundary",
+  "item",
+  "vertical-glue",
+  "vertical-rule",
+  "penalty",
+  "box",
+  "unsupported-command",
+] as const satisfies readonly SimpleTexControlNode["kind"][];
+
+type MissingSimpleTexInlineNodeKind = Exclude<
+  SimpleTexInlineNode["kind"],
+  (typeof SIMPLE_TEX_INLINE_NODE_KINDS)[number]
+>;
+type MissingSimpleTexControlNodeKind = Exclude<
+  SimpleTexControlNode["kind"],
+  (typeof SIMPLE_TEX_CONTROL_NODE_KINDS)[number]
+>;
+const SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE: [
+  MissingSimpleTexInlineNodeKind,
+  MissingSimpleTexControlNodeKind,
+] extends [never, never] ? true : never = true;
+void SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE;
+
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box";
+  readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -425,6 +496,7 @@ export interface SimpleTexToken {
   readonly boxHeight?: number;
   readonly boxDepth?: number;
   readonly lineLeading?: string;
+  readonly penalty?: number;
   readonly fontState: SimpleTexFontState;
   readonly nonBreaking?: boolean;
   readonly italicCorrectionAfter?: boolean;
@@ -791,6 +863,7 @@ function scanSimpleTexIrNodes(
           sourceStart,
           sourceEnd: sourceOffset + lineBreak.end,
           lineLeading: lineBreak.lineLeading,
+          priority: lineBreak.priority,
         });
         index = lineBreak.end;
         continue;
@@ -2790,7 +2863,7 @@ function scanSimpleTexDimensionBoxCommandName(
   text: string,
   start: number
 ): { readonly name: SimpleTexDimensionBoxCommandName; readonly end: number } | null {
-  for (const name of ["hphantom", "vphantom", "phantom", "smash"] satisfies readonly SimpleTexDimensionBoxCommandName[]) {
+  for (const name of SIMPLE_TEX_DIMENSION_BOX_COMMAND_NAMES) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
@@ -2803,7 +2876,7 @@ function scanSimpleTexTextBoxCommandName(
   text: string,
   start: number
 ): { readonly name: SimpleTexTextBoxCommandName; readonly end: number } | null {
-  for (const name of ["framebox", "makebox", "underline", "mbox", "fbox", "llap", "rlap"] satisfies readonly SimpleTexTextBoxCommandName[]) {
+  for (const name of SIMPLE_TEX_TEXT_BOX_COMMAND_NAMES) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
@@ -2883,19 +2956,7 @@ function scanSimpleTexFontCommandName(
   text: string,
   start: number
 ): { name: SimpleTexFontCommandName; end: number } | null {
-  for (const name of [
-    "textnormal",
-    "textit",
-    "textbf",
-    "textmd",
-    "textsl",
-    "texttt",
-    "textup",
-    "textrm",
-    "textsf",
-    "textsc",
-    "emph",
-  ] as const) {
+  for (const name of SIMPLE_TEX_FONT_COMMAND_NAMES) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
@@ -2932,26 +2993,7 @@ function scanSimpleTexFontDeclarationName(
   text: string,
   start: number
 ): { name: SimpleTexFontDeclarationName; end: number } | null {
-  for (const name of [
-    "normalfont",
-    "bfseries",
-    "mdseries",
-    "rmfamily",
-    "sffamily",
-    "ttfamily",
-    "itshape",
-    "slshape",
-    "upshape",
-    "scshape",
-    "it",
-    "bf",
-    "rm",
-    "sf",
-    "sl",
-    "sc",
-    "tt",
-    "em",
-  ] as const) {
+  for (const name of SIMPLE_TEX_FONT_DECLARATION_NAMES) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {
       return { name, end };
@@ -3302,12 +3344,34 @@ function skipSimpleTexControlWordSpaces(text: string, start: number): number {
 export function scanSimpleTexLineBreak(
   text: string,
   start: number
-): { end: number; lineLeading?: string } | null {
-  if (text[start] !== "\\" || text[start + 1] !== "\\") {
+): { end: number; lineLeading?: string; priority?: 0 | 1 | 2 | 3 | 4 } | null {
+  if (text[start] !== "\\") {
+    return null;
+  }
+
+  const newlineEnd = scanSimpleTexControlWord(text, start, "newline");
+  if (newlineEnd !== null) {
+    return { end: newlineEnd };
+  }
+  const linebreakEnd = scanSimpleTexControlWord(text, start, "linebreak");
+  if (linebreakEnd !== null) {
+    const option = /^\[\s*([0-4])\s*\]/.exec(text.slice(linebreakEnd));
+    return {
+      end: linebreakEnd + (option?.[0].length ?? 0),
+      priority: Number.parseInt(option?.[1] ?? "4", 10) as 0 | 1 | 2 | 3 | 4,
+    };
+  }
+  if (text[start + 1] !== "\\") {
     return null;
   }
 
   let end = start + 2;
+  // LaTeX's starred form suppresses a page break after this forced line. The
+  // distinction is irrelevant inside a single node paragraph, but the star
+  // is still command syntax and must not leak into painted prose.
+  if (text[end] === "*") {
+    end += 1;
+  }
   const rest = text.slice(end);
   if (rest.startsWith("[")) {
     const match = rest.match(lineLeadingOptionPattern);
@@ -4216,7 +4280,7 @@ export function splitSimpleTexParagraphSegments(
 
   for (let index = 0; index < block.nodes.length; index += 1) {
     const node = block.nodes[index];
-    if (node.kind !== "line-break") {
+    if (node.kind !== "line-break" || (node.priority !== undefined && node.priority < 4)) {
       continue;
     }
 
@@ -4282,15 +4346,27 @@ export function simpleTexInlineNodesToTokens(
       while (tokens.at(-1)?.kind === "space") {
         tokens.pop();
       }
-      tokens.push({
-        kind: "forced-break",
-        text: node.text,
-        sourceStart: node.sourceStart,
-        sourceEnd: node.sourceEnd,
-        lineLeading: node.lineLeading,
-        fontState: activeFontState,
-      });
-      skipPostLineBreakSpace = true;
+      if (node.priority !== undefined && node.priority < 4) {
+        const penalties = [0, -51, -151, -301] as const;
+        tokens.push({
+          kind: "penalty",
+          text: node.text,
+          sourceStart: node.sourceStart,
+          sourceEnd: node.sourceEnd,
+          penalty: penalties[node.priority as 0 | 1 | 2 | 3],
+          fontState: activeFontState,
+        });
+      } else {
+        tokens.push({
+          kind: "forced-break",
+          text: node.text,
+          sourceStart: node.sourceStart,
+          sourceEnd: node.sourceEnd,
+          lineLeading: node.lineLeading,
+          fontState: activeFontState,
+        });
+        skipPostLineBreakSpace = true;
+      }
       continue;
     }
 

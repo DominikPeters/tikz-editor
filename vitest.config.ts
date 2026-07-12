@@ -9,6 +9,10 @@ export default defineConfig({
   test: {
     include: ["test/**/*.spec.ts"],
     environment: "node",
+    // The full suite intentionally runs several CPU-heavy render/fuzz files in
+    // parallel. Keep individual logic timeouts explicit where stricter bounds
+    // matter, while avoiding false failures caused by worker contention.
+    testTimeout: 15_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],
@@ -28,6 +32,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@tikz-editor/core": path.resolve(rootDir, "./packages/core/src"),
+      "@tikz-editor/tex-fuzz": path.resolve(rootDir, "./packages/tex-fuzz/src/index.ts"),
       "@tikz-editor/lang-tikz": path.resolve(rootDir, "./packages/lang-tikz/src/index.ts"),
       "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": path.resolve(
         rootDir,

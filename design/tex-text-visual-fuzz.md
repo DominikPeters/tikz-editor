@@ -1,5 +1,9 @@
 # TeX Text Visual Fuzz Harness
 
+This document describes the current visual-oracle harness. The proposed shared,
+adversarial generator, shrinker, replay, CI, and ephemeral corpus-mining system
+is specified in `design/tex-text-adversarial-fuzzing.md`.
+
 The TeX-derived paragraph path is validated against a TeX oracle with:
 
 - Exact line text and glyph sequence comparison.
@@ -38,7 +42,13 @@ Run the alignment-environment matrix:
 npm run compare:tex-text-visual-fuzz:alignment-env
 ```
 
-Both commands use `artifacts/tex-text-svgtrace-cache` for TeX oracle artifacts. The first run for a new seed or matrix compiles TeX; later runs reuse cached `case.tex`, `case.pdf`, `tex-pdftocairo.svg`, and `tex-dvisvgm.svg`.
+Both commands use `artifacts/tex-text-svgtrace-cache` for TeX oracle artifacts. The first run for a new seed or matrix compiles TeX; later runs reuse cached `case.tex`, `case.pdf`, `tex-glyph-trace.tsv`, `tex-pdftocairo.svg`, and `tex-dvisvgm.svg`. PDF generation and the Lua node trace share one LuaLaTeX compilation.
+
+For broad diagnostics, `--raster-control-sample <n>` enables the staged funnel:
+all cases receive the structural trace comparison, while raster comparison runs
+only for structural findings and a deterministic, diversity-stratified control
+sample of `n` otherwise-clean cases. Omitting the option preserves the original
+all-raster behavior.
 
 ## Current Matrix
 
