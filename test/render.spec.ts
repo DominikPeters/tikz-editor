@@ -143,9 +143,47 @@ describe("render pipeline", () => {
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
-    expect(result.svg.svg).toContain('data-latex="x^2"');
-    expect(result.svg.svg).toContain('data-latex="\\frac{1}{y}"');
+    // Cells desugar to `$...$` text (PGF's execute at begin/end node=$) and render
+    // through the native TeX engine rather than the MathJax fallback.
+    expect(result.svg.svg).toContain('data-tex-inline-math="true"');
     expect(result.svg.svg).not.toContain('\\mbox{x^2}');
+    const cells = result.semantic.scene.elements.filter(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    expect(cells.map((cell) => cell.text)).toEqual(["x^2", "\\frac{1}{y}"]);
+    for (const cell of cells) {
+      expect(cell.textRenderInfo?.mode).toBe("mathjax");
+      expect(
+        cell.textRenderInfo?.mode === "mathjax" ? cell.textRenderInfo.renderSourceText : null
+      ).toBe(`$${cell.text}$`);
+      expect(
+        cell.textRenderInfo?.mode === "mathjax" ? cell.textRenderInfo.paragraphId : null
+      ).toMatch(/^tex:/);
+    }
+  });
+
+  it("keeps $-toggle semantics for math-node cells that escape back to text", async () => {
+    // PGF implements math cells as `execute at begin node=$`/`execute at end node=$`,
+    // so a cell's own `$...$` toggles back OUT of math: `a $\text{plus}$ b` becomes
+    // `$a $\text{plus}$ b$` — math `a`, text `plus`, math `b`.
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of math nodes] {
+    a $\text{plus}$ b & \\
+  };
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const cells = result.semantic.scene.elements.filter(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    expect(cells).toHaveLength(1);
+    expect(
+      cells[0]?.textRenderInfo?.mode === "mathjax"
+        ? cells[0].textRenderInfo.renderSourceText
+        : null
+    ).toBe("$a $\\text{plus}$ b$");
+    const inlineMathGroups = result.svg.svg.split('data-tex-inline-math="true"').length - 1;
+    expect(inlineMathGroups).toBe(2);
   });
 
   it("renders includegraphics placeholders through the TeX text engine without local paths", async () => {
