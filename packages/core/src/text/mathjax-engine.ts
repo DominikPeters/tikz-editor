@@ -29,6 +29,10 @@ import type {
 import {
   registerTexVListLayoutsOnOutputJax,
 } from "./tex/vlist/index.js";
+import {
+  remapParagraphLayoutReportSourceMap,
+  remapTexVListLayoutSourceMap,
+} from "./tex/source-map-report.js";
 import type {
   PositionedTexVListItem,
   TexRenderItem,
@@ -182,6 +186,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
   await hyphenatorPreload;
 
   const cache = new Map<string, CachedRenderEntry>();
+  const simpleTexLayoutCache = new Map<string, SimpleTexSharedLayout>();
   const exactSingleLineWidthCache = new Map<string, number>();
   const validationCache = new Map<string, NodeTextValidationIssue | null>();
   const pendingAsyncRenders = new Set<Promise<void>>();
@@ -203,6 +208,8 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const simpleTexEntry = buildSimpleTexTextCacheEntry({
         runtime,
         cacheKey: defaultMeasureKey,
+        layoutCacheKey: defaultMeasureKey,
+        layoutCache: simpleTexLayoutCache,
         sourceText: prepared.text,
         textWidthPt: null,
         font: prepared.font,
@@ -279,13 +286,27 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const resolverCacheKey = [graphicsCacheKey, request.colorResolver?.cacheKey ?? null]
         .filter((value): value is string => value !== null)
         .join("|") || null;
-      const cacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, resolverCacheKey);
+      const layoutCacheKey = measurementKey(mode, prepared.text, normalizedWidth, prepared.font, alignment, resolverCacheKey);
+      // Native entries embed source offsets projected through the request's
+      // source map, so they are cached per source location; the MathJax
+      // fallback is position-independent and keeps the shared key.
+      const sourceMapAnchor = request.sourceMap ? simpleTexSourceMapAnchor(request.sourceMap) : null;
+      const texCacheKey = sourceMapAnchor == null ? layoutCacheKey : `${layoutCacheKey}|sm:${sourceMapAnchor}`;
+      const cacheKey = layoutCacheKey;
 
-      let entry: CachedRenderEntry | null = cache.get(cacheKey) ?? null;
+      let entry: CachedRenderEntry | null = cache.get(texCacheKey) ?? null;
+      if (!entry && texCacheKey !== layoutCacheKey) {
+        const sharedEntry = cache.get(layoutCacheKey) ?? null;
+        if (sharedEntry && !isSimpleTexCacheEntry(sharedEntry)) {
+          entry = sharedEntry;
+        }
+      }
       if (!entry) {
         entry = buildSimpleTexTextCacheEntry({
           runtime,
-          cacheKey,
+          cacheKey: texCacheKey,
+          layoutCacheKey,
+          layoutCache: simpleTexLayoutCache,
           sourceText: prepared.text,
           textWidthPt: normalizedWidth,
           font: prepared.font,
@@ -298,7 +319,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
           colorResolver: request.colorResolver
         });
         if (entry) {
-          cache.set(cacheKey, entry);
+          setCappedMapValue(cache, texCacheKey, entry, RENDER_CACHE_LIMIT);
           validationCache.set(request.text, null);
         }
       }
@@ -351,7 +372,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       }
 
       return {
-        cacheKey,
+        cacheKey: entry.payload.cacheKey,
         width: entry.baseWidthPt * scale,
         height: entry.baseHeightPt * scale,
         baselineY: entry.baseLineYPt * scale,
@@ -1019,22 +1040,31 @@ function buildCacheEntryWithMetadata(
   };
 }
 
-function buildSimpleTexTextCacheEntry(params: {
-  runtime: MathJaxRuntime;
-  cacheKey: string;
+/**
+ * Position-independent part of a simple-TeX render: the expensive layout and
+ * shrink results with offsets relative to the layout input text. Shared across
+ * nodes with identical text; the per-node source-map remap happens on top.
+ */
+type SimpleTexSharedLayout = {
+  report: ParagraphLayoutReport;
+  vlistLayout: TexVListLayout;
+  contentWidthPt: number;
+  renderFont: ResolvedTexFont;
+};
+
+function buildSimpleTexSharedLayout(params: {
+  layoutCacheKey: string;
+  layoutCache: Map<string, SimpleTexSharedLayout>;
   sourceText: string;
   textWidthPt: number | null;
   font: TextFontOptions;
   alignment: NodeTextParagraphAlignment | null;
-  requestedAlignment: NodeTextParagraphAlignment | null;
-  eligible: boolean;
-  mode: "text" | "math";
-  sourceMap?: TextSourceMap;
   graphicsResolver?: NodeTextGraphicsResolver;
   colorResolver?: NodeTextColorResolver;
-}): CachedRenderEntry | null {
-  if (!isSimpleTexTextEligible(params)) {
-    return null;
+}): SimpleTexSharedLayout | null {
+  const cached = params.layoutCache.get(params.layoutCacheKey);
+  if (cached) {
+    return cached;
   }
   const isNaturalWidthLayout = params.textWidthPt == null;
   const layoutWidthPt = params.textWidthPt ?? TEX_NATURAL_TEXT_LAYOUT_WIDTH_PT;
@@ -1045,7 +1075,7 @@ function buildSimpleTexTextCacheEntry(params: {
     TEX_TEXT_BASE_FONT_SIZE,
     metricProvider
   );
-  const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
+  const paragraphId = `tex:${stableHashString(params.layoutCacheKey)}`;
   let layout: ReturnType<typeof layoutSimpleTexParagraph>;
   try {
     layout = layoutSimpleTexParagraph(params.sourceText, {
@@ -1059,7 +1089,6 @@ function buildSimpleTexTextCacheEntry(params: {
       mathBoxProvider: createTexDerivedInlineMathBoxProvider({
         baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
       }),
-      ...(params.sourceMap ? { sourceMap: params.sourceMap } : {}),
       ...(params.graphicsResolver ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.colorResolver ? { colorResolver: params.colorResolver } : {}),
     });
@@ -1082,6 +1111,55 @@ function buildSimpleTexTextCacheEntry(params: {
   const vlistLayout = isNaturalWidthLayout
     ? shrinkTexVListLayoutToWidth(layout.vlistLayout, contentWidthPt, report)
     : layout.vlistLayout;
+  const shared: SimpleTexSharedLayout = { report, vlistLayout, contentWidthPt, renderFont };
+  setCappedMapValue(params.layoutCache, params.layoutCacheKey, shared, RENDER_CACHE_LIMIT);
+  return shared;
+}
+
+function buildSimpleTexTextCacheEntry(params: {
+  runtime: MathJaxRuntime;
+  cacheKey: string;
+  layoutCacheKey: string;
+  layoutCache: Map<string, SimpleTexSharedLayout>;
+  sourceText: string;
+  textWidthPt: number | null;
+  font: TextFontOptions;
+  alignment: NodeTextParagraphAlignment | null;
+  requestedAlignment: NodeTextParagraphAlignment | null;
+  eligible: boolean;
+  mode: "text" | "math";
+  sourceMap?: TextSourceMap;
+  graphicsResolver?: NodeTextGraphicsResolver;
+  colorResolver?: NodeTextColorResolver;
+}): CachedRenderEntry | null {
+  if (!isSimpleTexTextEligible(params)) {
+    return null;
+  }
+  const isNaturalWidthLayout = params.textWidthPt == null;
+  const metricProvider = computerModernTexMetricProvider;
+  const shared = buildSimpleTexSharedLayout(params);
+  if (!shared) {
+    return null;
+  }
+  const { contentWidthPt, renderFont } = shared;
+  // The remap projects layout-relative offsets to the node's own source
+  // positions, so the remapped report/vlist (and the paragraph id) must be
+  // per node — sharing them across identical labels at different source
+  // locations would bake the first node's offsets into every copy.
+  const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
+  const report = {
+    ...remapParagraphLayoutReportSourceMap(shared.report, params.sourceMap),
+    paragraphId,
+  };
+  const remappedVList = remapTexVListLayoutSourceMap(shared.vlistLayout, params.sourceMap);
+  const vlistLayout = {
+    ...remappedVList,
+    reports: remappedVList.reports.map((vlistReport) =>
+      "paragraphId" in vlistReport && vlistReport.paragraphId === shared.report.paragraphId
+        ? report
+        : vlistReport
+    ),
+  };
   const outputJax = getRuntimeOutputJax(params.runtime);
   registerKnuthPlassReportsOnOutputJax(outputJax, [report]);
   registerTexVListLayoutsOnOutputJax(outputJax, [{
@@ -2401,6 +2479,20 @@ function measurementKey(
     fontWeight: font.fontWeight,
     fontFamily: font.fontFamily
   });
+}
+
+/**
+ * Discriminates cache entries per source location: the same label text mapped
+ * from a different document position (or after upstream edits shifted it)
+ * needs its own remapped geometry, while the expensive layout stays shared
+ * via the layout cache.
+ */
+function simpleTexSourceMapAnchor(sourceMap: TextSourceMap): string {
+  return stableHashString(JSON.stringify([sourceMap.charOrigins, sourceMap.boundaryOrigins]));
+}
+
+function isSimpleTexCacheEntry(entry: CachedRenderEntry): boolean {
+  return entry.paragraphId?.startsWith("tex:") ?? false;
 }
 
 function resolveParagraphAlignment(

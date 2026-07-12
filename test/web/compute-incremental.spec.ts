@@ -12,6 +12,17 @@ function normalizeForSceneComparison<T>(value: T): T {
       if (key === "id" || key === "runtimeId" || key === "sourceId") {
         return undefined;
       }
+      // Native text cache keys are anchored to the node's source-map position
+      // (`|sm:<hash>`), and the paragraph id is derived from the anchored key.
+      // Selective replay reuses measures taken at the pre-edit position, so
+      // these anchors legitimately differ from a canonical recompute; the
+      // unanchored key still compares mode/text/width/font identity.
+      if (key === "cacheKey" && typeof currentValue === "string") {
+        return currentValue.replace(/\|sm:[a-z0-9]+$/, "");
+      }
+      if (key === "paragraphId" && typeof currentValue === "string" && currentValue.startsWith("tex:")) {
+        return "tex:<anchor-normalized>";
+      }
       return currentValue;
     })
   ) as T;
