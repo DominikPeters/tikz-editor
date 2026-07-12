@@ -294,9 +294,9 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       const texCacheKey = sourceMapAnchor == null ? layoutCacheKey : `${layoutCacheKey}|sm:${sourceMapAnchor}`;
       const cacheKey = layoutCacheKey;
 
-      let entry: CachedRenderEntry | null = cache.get(texCacheKey) ?? null;
+      let entry: CachedRenderEntry | null = getCappedMapValue(cache, texCacheKey) ?? null;
       if (!entry && texCacheKey !== layoutCacheKey) {
-        const sharedEntry = cache.get(layoutCacheKey) ?? null;
+        const sharedEntry = getCappedMapValue(cache, layoutCacheKey) ?? null;
         if (sharedEntry && !isSimpleTexCacheEntry(sharedEntry)) {
           entry = sharedEntry;
         }
@@ -382,7 +382,7 @@ async function initializeEngine(font: MathJaxFont): Promise<NodeTextEngine> {
       };
     },
     renderFromCache(cacheKey: string): NodeTextRenderPayload | null {
-      return cache.get(cacheKey)?.payload ?? null;
+      return getCappedMapValue(cache, cacheKey)?.payload ?? null;
     },
     async flushPending(): Promise<readonly string[]> {
       if (pendingAsyncRenders.size > 0) {
@@ -943,6 +943,21 @@ function setCappedMapValue<K, V>(map: Map<K, V>, key: K, value: V, limit: number
   }
 }
 
+/**
+ * Reads a capped map entry and refreshes its recency so eviction targets
+ * genuinely stale entries. Without this, drag frames — which insert a fresh
+ * position-anchored entry per frame for the dragged label — would age out
+ * entries that the live scene still renders from.
+ */
+function getCappedMapValue<K, V>(map: Map<K, V>, key: K): V | undefined {
+  const value = map.get(key);
+  if (value !== undefined) {
+    map.delete(key);
+    map.set(key, value);
+  }
+  return value;
+}
+
 function queueAsyncCachePopulate(
   runtime: MathJaxRuntime,
   cache: Map<string, CachedRenderEntry>,
@@ -1062,7 +1077,7 @@ function buildSimpleTexSharedLayout(params: {
   graphicsResolver?: NodeTextGraphicsResolver;
   colorResolver?: NodeTextColorResolver;
 }): SimpleTexSharedLayout | null {
-  const cached = params.layoutCache.get(params.layoutCacheKey);
+  const cached = getCappedMapValue(params.layoutCache, params.layoutCacheKey);
   if (cached) {
     return cached;
   }
@@ -1112,7 +1127,7 @@ function buildSimpleTexSharedLayout(params: {
     ? shrinkTexVListLayoutToWidth(layout.vlistLayout, contentWidthPt, report)
     : layout.vlistLayout;
   const shared: SimpleTexSharedLayout = { report, vlistLayout, contentWidthPt, renderFont };
-  setCappedMapValue(params.layoutCache, params.layoutCacheKey, shared, RENDER_CACHE_LIMIT);
+  setCappedMapValue(params.layoutCache, params.layoutCacheKey, shared, SIMPLE_TEX_LAYOUT_CACHE_LIMIT);
   return shared;
 }
 
@@ -2543,7 +2558,14 @@ const WRAPPED_TEXT_SPACE_WIDTH_EM = TEX_INTERWORD_SPACE_EM;
 const WRAPPED_TEXT_SENTENCE_SPACE_WIDTH_EM = 0.5;
 const TEX_SENTENCE_EXTRA_SPACE_EM = 1 / 9;
 const SPACEFACTOR_NEUTRAL_CHARS = new Set(['"', "'", ")", "]", "}"]);
-const RENDER_CACHE_LIMIT = 512;
+// Render entries are keyed per source location (see simpleTexSourceMapAnchor),
+// so a document costs one entry per label INSTANCE rather than per distinct
+// text; the cap must comfortably exceed the label count of large documents or
+// svg emit reports missing-mathjax-text-render for evicted entries.
+const RENDER_CACHE_LIMIT = 2048;
+// Shared layouts are keyed per distinct text (deduplicated across instances)
+// and hold full report/vlist trees, so a tighter cap suffices.
+const SIMPLE_TEX_LAYOUT_CACHE_LIMIT = 512;
 const EXACT_WIDTH_CACHE_LIMIT = 512;
 const VALIDATION_CACHE_LIMIT = 512;
 const SPACEFACTOR_OPENING_CHARS = new Set(["(", "[", "{"]);

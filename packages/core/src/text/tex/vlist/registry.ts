@@ -7,6 +7,11 @@ export interface RegisteredTexVListLayout {
 
 const texVListLayoutsByOutputJax = new WeakMap<object, Map<string, TexVListLayout>>();
 
+// Paragraph ids derive from position-anchored cache keys, so edits and drag
+// frames register fresh ids continually; cap the registry (evicting the least
+// recently registered ids) instead of growing for the session lifetime.
+const TEX_VLIST_REGISTRY_LIMIT = 4096;
+
 export function registerTexVListLayoutsOnOutputJax(
   outputJax: unknown,
   layouts: readonly RegisteredTexVListLayout[]
@@ -17,8 +22,16 @@ export function registerTexVListLayoutsOnOutputJax(
   const existing = texVListLayoutsByOutputJax.get(outputJax) ?? new Map<string, TexVListLayout>();
   for (const entry of layouts) {
     if (entry.paragraphId.length > 0) {
+      existing.delete(entry.paragraphId);
       existing.set(entry.paragraphId, entry.layout);
     }
+  }
+  while (existing.size > TEX_VLIST_REGISTRY_LIMIT) {
+    const oldest = existing.keys().next();
+    if (oldest.done) {
+      break;
+    }
+    existing.delete(oldest.value);
   }
   texVListLayoutsByOutputJax.set(outputJax, existing);
 }
