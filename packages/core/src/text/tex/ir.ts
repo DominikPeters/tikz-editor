@@ -3,6 +3,12 @@ import { parseLength } from "../../semantic/coords/parse-length.js";
 import { parseTexDimensionText } from "./dimensions.js";
 import { normalizeColor, resolveDefineColorModel, type ColorAliasResolver } from "../../semantic/style/colors.js";
 import { DEFAULT_TEXT_FONT_SIZE, FONT_SIZE_COMMAND_FACTORS } from "../../semantic/style/constants.js";
+import {
+  texHBoxOffsetY,
+  texLength,
+  type TexHBoxOffsetY,
+  type TexLength,
+} from "./coordinates.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
@@ -114,7 +120,7 @@ export interface SimpleTexFontState {
   readonly series: TexFontSeries;
   readonly shape: TexFontShape;
   /** Absolute TeX point size selected by an inline declaration. */
-  readonly sizePt?: number;
+  readonly sizePt?: TexLength;
   /** CSS color normalized from the xcolor spelling in the source. */
   readonly color?: string;
 }
@@ -196,7 +202,7 @@ export interface SimpleTexFontDeclarationNode extends SimpleTexSourceRange {
 export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
   readonly kind: "style-declaration";
   readonly text: string;
-  readonly sizePt?: number;
+  readonly sizePt?: TexLength;
   readonly color?: string;
 }
 
@@ -225,7 +231,7 @@ export interface SimpleTexMBoxNode extends SimpleTexSourceRange {
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly children: readonly SimpleTexInlineNode[];
-  readonly boxWidth?: number;
+  readonly boxWidth?: TexLength;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
   /** Background and frame colors normalized from xcolor syntax. */
   readonly backgroundColor?: string;
@@ -235,9 +241,9 @@ export interface SimpleTexMBoxNode extends SimpleTexSourceRange {
 export interface SimpleTexRuleNode extends SimpleTexSourceRange {
   readonly kind: "rule";
   readonly text: string;
-  readonly raise: number;
-  readonly width: number;
-  readonly height: number;
+  readonly raise: TexHBoxOffsetY;
+  readonly width: TexLength;
+  readonly height: TexLength;
 }
 
 export interface SimpleTexIncludeGraphicsNode extends SimpleTexSourceRange {
@@ -250,8 +256,8 @@ export interface SimpleTexIncludeGraphicsNode extends SimpleTexSourceRange {
 }
 
 export interface SimpleTexGraphicsOptions {
-  readonly width?: number;
-  readonly height?: number;
+  readonly width?: TexLength;
+  readonly height?: TexLength;
   readonly scale?: number;
   readonly keepAspectRatio?: boolean;
   readonly trim?: SimpleTexGraphicsTrim;
@@ -261,29 +267,29 @@ export interface SimpleTexGraphicsOptions {
 }
 
 export interface SimpleTexGraphicsTrim {
-  readonly left: number;
-  readonly bottom: number;
-  readonly right: number;
-  readonly top: number;
+  readonly left: TexLength;
+  readonly bottom: TexLength;
+  readonly right: TexLength;
+  readonly top: TexLength;
 }
 
 export interface SimpleTexGraphicsViewport {
-  readonly llx: number;
-  readonly lly: number;
-  readonly urx: number;
-  readonly ury: number;
+  readonly llx: TexLength;
+  readonly lly: TexLength;
+  readonly urx: TexLength;
+  readonly ury: TexLength;
 }
 
 export interface SimpleTexRaiseBoxNode extends SimpleTexSourceRange {
   readonly kind: "raisebox";
   readonly text: string;
-  readonly lift: number;
+  readonly lift: TexHBoxOffsetY;
   /** Lift relative to the surrounding text size, used by text super/subscripts. */
   readonly relativeLiftEm?: number;
   /** Child font scale relative to the surrounding text size. */
   readonly childFontScale?: number;
-  readonly boxHeight?: number;
-  readonly boxDepth?: number;
+  readonly boxHeight?: TexLength;
+  readonly boxDepth?: TexLength;
   readonly content: string;
   readonly contentStart: number;
   readonly contentEnd: number;
@@ -355,9 +361,9 @@ export interface SimpleTexVerticalGlueNode extends SimpleTexSourceRange {
   readonly kind: "vertical-glue";
   readonly text: string;
   readonly command: SimpleTexVerticalGlueCommandName;
-  readonly size: number;
-  readonly stretch?: number;
-  readonly shrink?: number;
+  readonly size: TexLength;
+  readonly stretch?: TexLength;
+  readonly shrink?: TexLength;
   readonly stretchOrder?: "normal" | "fil" | "fill" | "filll";
   readonly shrinkOrder?: "normal" | "fil" | "fill" | "filll";
 }
@@ -365,9 +371,9 @@ export interface SimpleTexVerticalGlueNode extends SimpleTexSourceRange {
 export interface SimpleTexVerticalRuleNode extends SimpleTexSourceRange {
   readonly kind: "vertical-rule";
   readonly text: string;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
 }
 
 export interface SimpleTexPenaltyNode extends SimpleTexSourceRange {
@@ -380,8 +386,8 @@ export interface SimpleTexBoxNode extends SimpleTexSourceRange {
   readonly kind: "box";
   readonly text: string;
   readonly command: SimpleTexBoxCommandName;
-  readonly width: number;
-  readonly height?: number;
+  readonly width: TexLength;
+  readonly height?: TexLength;
   readonly alignment: SimpleTexBoxAlignment;
   readonly content: string;
   readonly contentStart: number;
@@ -479,22 +485,22 @@ export interface SimpleTexToken {
   readonly children?: readonly SimpleTexInlineNode[];
   readonly command?: SimpleTexTextBoxCommandName;
   readonly dimensionCommand?: SimpleTexDimensionBoxCommandName;
-  readonly boxWidth?: number;
+  readonly boxWidth?: TexLength;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly backgroundColor?: string;
   readonly frameColor?: string;
-  readonly ruleRaise?: number;
-  readonly ruleWidth?: number;
-  readonly ruleHeight?: number;
+  readonly ruleRaise?: TexHBoxOffsetY;
+  readonly ruleWidth?: TexLength;
+  readonly ruleHeight?: TexLength;
   readonly graphicsFilename?: string;
   readonly graphicsFilenameStart?: number;
   readonly graphicsFilenameEnd?: number;
   readonly graphicsOptions?: SimpleTexGraphicsOptions;
-  readonly lift?: number;
+  readonly lift?: TexHBoxOffsetY;
   readonly relativeLiftEm?: number;
   readonly childFontScale?: number;
-  readonly boxHeight?: number;
-  readonly boxDepth?: number;
+  readonly boxHeight?: TexLength;
+  readonly boxDepth?: TexLength;
   readonly lineLeading?: string;
   readonly penalty?: number;
   readonly fontState: SimpleTexFontState;
@@ -535,9 +541,9 @@ export interface SimpleTexVerticalGlueBlockItem extends SimpleTexSourceRange {
   readonly kind: "vertical-glue";
   readonly text: string;
   readonly command: SimpleTexVerticalGlueCommandName;
-  readonly size: number;
-  readonly stretch?: number;
-  readonly shrink?: number;
+  readonly size: TexLength;
+  readonly stretch?: TexLength;
+  readonly shrink?: TexLength;
   readonly stretchOrder?: "normal" | "fil" | "fill" | "filll";
   readonly shrinkOrder?: "normal" | "fil" | "fill" | "filll";
   readonly quoteDepth: number;
@@ -548,9 +554,9 @@ export interface SimpleTexVerticalGlueBlockItem extends SimpleTexSourceRange {
 export interface SimpleTexVerticalRuleBlockItem extends SimpleTexSourceRange {
   readonly kind: "vertical-rule";
   readonly text: string;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly quoteDepth: number;
   readonly listScope?: SimpleTexListScope;
   readonly scopePath?: readonly SimpleTexScopePathRole[];
@@ -590,8 +596,8 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   readonly kind: "box";
   readonly text: string;
   readonly command: SimpleTexBoxCommandName;
-  readonly width: number;
-  readonly height?: number;
+  readonly width: TexLength;
+  readonly height?: TexLength;
   readonly alignment: SimpleTexBoxAlignment;
   readonly contentStart: number;
   readonly contentEnd: number;
@@ -688,7 +694,7 @@ export interface SimpleTexParagraphAnalysis {
 }
 
 interface SimpleTexIrOptions {
-  readonly parindent?: number;
+  readonly parindent?: TexLength;
   readonly tikzTextWidthNode?: boolean;
 }
 
@@ -703,6 +709,12 @@ const vskipGluePattern = new RegExp(
   String.raw`^\\vskip\s*(${texLengthPattern})(?:\s+plus\s+(${texLengthPattern}))?(?:\s+minus\s+(${texLengthPattern}))?`,
   "i"
 );
+
+function parseTexSemanticLength(text: string): TexLength | null {
+  const value = parseLength(text, "pt");
+  return value === null ? null : texLength(value);
+}
+
 export const latexArticleQuotationFirstLineIndentEm = 1.5;
 const defaultSimpleTexFontState: SimpleTexFontState = {
   family: "roman",
@@ -1400,7 +1412,7 @@ function scanSimpleTexProseControl(
       node: {
         kind: "raisebox",
         text: text.slice(start, groupEnd),
-        lift: 0,
+        lift: texHBoxOffsetY(0),
         relativeLiftEm,
         childFontScale: 0.7,
         sourceStart,
@@ -1714,9 +1726,9 @@ function scanSimpleTexVerticalGlueCommand(
         command: preset.command,
         sourceStart: sourceOffset + start,
         sourceEnd: sourceOffset + end,
-        size: preset.size,
-        stretch: preset.stretch,
-        shrink: preset.shrink,
+        size: texLength(preset.size),
+        stretch: texLength(preset.stretch),
+        shrink: texLength(preset.shrink),
         stretchOrder: "normal",
         shrinkOrder: "normal",
       },
@@ -1734,8 +1746,8 @@ function scanSimpleTexVerticalGlueCommand(
         command: "vfill",
         sourceStart: sourceOffset + start,
         sourceEnd: sourceOffset + vfillEnd,
-        size: 0,
-        stretch: 1,
+        size: texLength(0),
+        stretch: texLength(1),
         stretchOrder: "fill",
       },
       end: vfillEnd,
@@ -1760,7 +1772,7 @@ function scanSimpleTexVerticalGlueCommand(
       return null;
     }
     const rawLength = text.slice(argumentStart + 1, argumentEnd - 1);
-    const parsed = parseLength(rawLength, "pt");
+    const parsed = parseTexSemanticLength(rawLength);
     return {
       node: {
         kind: "vertical-glue",
@@ -1768,7 +1780,7 @@ function scanSimpleTexVerticalGlueCommand(
         command: "vspace",
         sourceStart: sourceOffset + start,
         sourceEnd: sourceOffset + argumentEnd,
-        size: parsed ?? 0,
+        size: parsed ?? texLength(0),
         stretchOrder: "normal",
         shrinkOrder: "normal",
       },
@@ -1780,9 +1792,9 @@ function scanSimpleTexVerticalGlueCommand(
   const vskipMatch = vskipGluePattern.exec(text.slice(start));
   if (vskipMatch) {
     const full = vskipMatch[0] ?? "";
-    const size = parseLength(vskipMatch[1] ?? "", "pt");
-    const stretch = vskipMatch[2] ? parseLength(vskipMatch[2], "pt") : undefined;
-    const shrink = vskipMatch[3] ? parseLength(vskipMatch[3], "pt") : undefined;
+    const size = parseTexSemanticLength(vskipMatch[1] ?? "");
+    const stretch = vskipMatch[2] ? parseTexSemanticLength(vskipMatch[2]) : undefined;
+    const shrink = vskipMatch[3] ? parseTexSemanticLength(vskipMatch[3]) : undefined;
     return {
       node: {
         kind: "vertical-glue",
@@ -1790,7 +1802,7 @@ function scanSimpleTexVerticalGlueCommand(
         command: "vskip",
         sourceStart: sourceOffset + start,
         sourceEnd: sourceOffset + start + full.length,
-        size: size ?? 0,
+        size: size ?? texLength(0),
         stretch: stretch ?? undefined,
         shrink: shrink ?? undefined,
         stretchOrder: stretch !== undefined ? "normal" : undefined,
@@ -1823,9 +1835,9 @@ function scanSimpleTexVerticalRuleCommand(
 
   let cursor = skipSimpleTexControlWordSpaces(text, hruleEnd);
   const dimensions: {
-    width?: number | null;
-    height?: number | null;
-    depth?: number | null;
+    width?: TexLength | null;
+    height?: TexLength | null;
+    depth?: TexLength | null;
   } = {};
   let parsedAnyDimension = false;
   while (cursor < text.length) {
@@ -1844,16 +1856,16 @@ function scanSimpleTexVerticalRuleCommand(
           text: text.slice(start, cursor),
           sourceStart: sourceOffset + start,
           sourceEnd: sourceOffset + cursor,
-          width: 0,
-          height: 0,
-          depth: 0,
+          width: texLength(0),
+          height: texLength(0),
+          depth: texLength(0),
         },
         end: cursor,
         unsupportedCommand: true,
       };
     }
     const rawLength = lengthMatch[1] ?? "";
-    dimensions[keyword] = parseLength(rawLength, "pt");
+    dimensions[keyword] = parseTexSemanticLength(rawLength);
     cursor += rawLength.length;
     cursor = skipSimpleTexControlWordSpaces(text, cursor);
     parsedAnyDimension = true;
@@ -1872,9 +1884,9 @@ function scanSimpleTexVerticalRuleCommand(
       text: text.slice(start, cursor),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + cursor,
-      width: dimensions.width ?? 0,
-      height: dimensions.height ?? 0,
-      depth: dimensions.depth ?? 0,
+      width: dimensions.width ?? texLength(0),
+      height: dimensions.height ?? texLength(0),
+      depth: dimensions.depth ?? texLength(0),
     },
     end: cursor,
     unsupportedCommand: !supported,
@@ -1952,14 +1964,14 @@ function scanSimpleTexBoxCommand(
     cursor = skipSimpleTexControlWordSpaces(text, optionEnd);
   }
 
-  let height: number | undefined;
+  let height: TexLength | undefined;
   let unsupportedCommand = false;
   if (text[cursor] === "[") {
     const heightEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
     if (heightEnd === null) {
       return null;
     }
-    const parsedHeight = parseLength(text.slice(cursor + 1, heightEnd - 1), "pt");
+    const parsedHeight = parseTexSemanticLength(text.slice(cursor + 1, heightEnd - 1));
     height = parsedHeight ?? undefined;
     unsupportedCommand ||= parsedHeight === null;
     cursor = skipSimpleTexControlWordSpaces(text, heightEnd);
@@ -1981,7 +1993,7 @@ function scanSimpleTexBoxCommand(
   if (widthGroupEnd === null) {
     return null;
   }
-  const parsedWidth = parseLength(text.slice(cursor + 1, widthGroupEnd - 1), "pt");
+  const parsedWidth = parseTexSemanticLength(text.slice(cursor + 1, widthGroupEnd - 1));
   unsupportedCommand ||= parsedWidth === null;
   cursor = skipSimpleTexControlWordSpaces(text, widthGroupEnd);
 
@@ -2010,7 +2022,7 @@ function scanSimpleTexBoxCommand(
       command: "parbox",
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + contentGroupEnd,
-      width: parsedWidth ?? 0,
+      width: parsedWidth ?? texLength(0),
       ...(height !== undefined ? { height } : {}),
       alignment,
       content: text.slice(contentStart, contentEnd),
@@ -2049,14 +2061,14 @@ function scanSimpleTexBoxEnvironment(
     cursor = skipSimpleTexControlWordSpaces(text, optionEnd);
   }
 
-  let height: number | undefined;
+  let height: TexLength | undefined;
   let unsupportedCommand = false;
   if (text[cursor] === "[") {
     const heightEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
     if (heightEnd === null) {
       return null;
     }
-    const parsedHeight = parseLength(text.slice(cursor + 1, heightEnd - 1), "pt");
+    const parsedHeight = parseTexSemanticLength(text.slice(cursor + 1, heightEnd - 1));
     height = parsedHeight ?? undefined;
     unsupportedCommand ||= parsedHeight === null;
     cursor = skipSimpleTexControlWordSpaces(text, heightEnd);
@@ -2078,7 +2090,7 @@ function scanSimpleTexBoxEnvironment(
   if (widthGroupEnd === null) {
     return null;
   }
-  const parsedWidth = parseLength(text.slice(cursor + 1, widthGroupEnd - 1), "pt");
+  const parsedWidth = parseTexSemanticLength(text.slice(cursor + 1, widthGroupEnd - 1));
   unsupportedCommand ||= parsedWidth === null;
 
   const contentStart = widthGroupEnd;
@@ -2106,7 +2118,7 @@ function scanSimpleTexBoxEnvironment(
       command: "minipage",
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + environmentEnd.end,
-      width: parsedWidth ?? 0,
+      width: parsedWidth ?? texLength(0),
       ...(height !== undefined ? { height } : {}),
       alignment,
       content: text.slice(contentStart, environmentEnd.contentEnd),
@@ -2346,7 +2358,7 @@ function scanSimpleTexMBoxCommand(
   }
 
   let cursor = skipSimpleTexControlWordSpaces(text, command.end);
-  let boxWidth: number | undefined;
+  let boxWidth: TexLength | undefined;
   let boxAlign: SimpleTexTextBoxAlignment | undefined;
   let unsupportedDimension = false;
   if ((command.name === "makebox" || command.name === "framebox") && text[cursor] === "[") {
@@ -2357,7 +2369,7 @@ function scanSimpleTexMBoxCommand(
     const parsedWidth = parseTexDimensionText(widthArgument.content.trim());
     if (parsedWidth === null) {
       unsupportedDimension = true;
-      boxWidth = 0;
+      boxWidth = texLength(0);
     } else {
       boxWidth = parsedWidth;
     }
@@ -2372,10 +2384,10 @@ function scanSimpleTexMBoxCommand(
       cursor = skipSimpleTexControlWordSpaces(text, alignArgument.end);
     }
   } else if (command.name === "llap") {
-    boxWidth = 0;
+    boxWidth = texLength(0);
     boxAlign = "right";
   } else if (command.name === "rlap") {
-    boxWidth = 0;
+    boxWidth = texLength(0);
     boxAlign = "left";
   }
 
@@ -2433,7 +2445,7 @@ function scanSimpleTexRuleCommand(
   }
 
   let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
-  let raise = 0;
+  let raise = texHBoxOffsetY(0);
   let unsupportedDimension = false;
   if (text[cursor] === "[") {
     const raiseArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
@@ -2444,7 +2456,7 @@ function scanSimpleTexRuleCommand(
     if (parsedRaise === null) {
       unsupportedDimension = true;
     } else {
-      raise = parsedRaise;
+      raise = texHBoxOffsetY(parsedRaise);
     }
     cursor = skipSimpleTexControlWordSpaces(text, raiseArgument.end);
   }
@@ -2453,7 +2465,7 @@ function scanSimpleTexRuleCommand(
   if (!widthArgument) {
     return null;
   }
-  const width = widthArgument.value ?? 0;
+  const width = widthArgument.value ?? texLength(0);
   unsupportedDimension ||= widthArgument.value === null;
   cursor = skipSimpleTexControlWordSpaces(text, widthArgument.end);
 
@@ -2461,7 +2473,7 @@ function scanSimpleTexRuleCommand(
   if (!heightArgument) {
     return null;
   }
-  const height = heightArgument.value ?? 0;
+  const height = heightArgument.value ?? texLength(0);
   unsupportedDimension ||= heightArgument.value === null;
 
   const end = heightArgument.end;
@@ -2531,8 +2543,8 @@ function scanSimpleTexIncludeGraphicsCommand(
 }
 
 function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
-  let width: number | undefined;
-  let height: number | undefined;
+  let width: TexLength | undefined;
+  let height: TexLength | undefined;
   let scale: number | undefined;
   let keepAspectRatio = false;
   let trim: SimpleTexGraphicsTrim | undefined;
@@ -2639,7 +2651,7 @@ function simpleTexBooleanOptionValue(value: string): boolean {
   return normalized !== "false" && normalized !== "0" && normalized !== "no";
 }
 
-function parseSimpleTexGraphicsQuad(raw: string): [number, number, number, number] | null {
+function parseSimpleTexGraphicsQuad(raw: string): [TexLength, TexLength, TexLength, TexLength] | null {
   const parts = splitSimpleTexGraphicsDimensionList(stripSingleSimpleTexBraceLayer(raw));
   if (parts.length !== 4) {
     return null;
@@ -2650,10 +2662,10 @@ function parseSimpleTexGraphicsQuad(raw: string): [number, number, number, numbe
   if (parsed.includes(null)) {
     return null;
   }
-  return parsed as [number, number, number, number];
+  return parsed as [TexLength, TexLength, TexLength, TexLength];
 }
 
-function parseSimpleTexGraphicsDimension(raw: string): number | null {
+function parseSimpleTexGraphicsDimension(raw: string): TexLength | null {
   const trimmed = raw.trim();
   const explicit = parseTexDimensionText(trimmed);
   if (explicit !== null) {
@@ -2664,7 +2676,9 @@ function parseSimpleTexGraphicsDimension(raw: string): number | null {
     return null;
   }
   const value = Number(bare[1]);
-  return Number.isFinite(value) ? value * TEX_GRAPHICS_BARE_NUMBER_UNIT_PT : null;
+  return Number.isFinite(value)
+    ? texLength(value * TEX_GRAPHICS_BARE_NUMBER_UNIT_PT)
+    : null;
 }
 
 function splitSimpleTexGraphicsDimensionList(raw: string): string[] {
@@ -2723,12 +2737,12 @@ function scanSimpleTexRaiseBoxCommand(
   if (!liftArgument) {
     return null;
   }
-  const lift = liftArgument.value ?? 0;
+  const lift = texHBoxOffsetY(liftArgument.value ?? 0);
   let unsupportedDimension = liftArgument.value === null;
   cursor = skipSimpleTexControlWordSpaces(text, liftArgument.end);
 
-  let boxHeight: number | undefined;
-  let boxDepth: number | undefined;
+  let boxHeight: TexLength | undefined;
+  let boxDepth: TexLength | undefined;
   let hasHeightArgument = false;
   let heightArgumentIsEmpty = false;
   if (text[cursor] === "[") {
@@ -2922,7 +2936,7 @@ function scanSimpleTexRequiredGroupArgument(
 function scanSimpleTexRequiredDimensionGroupArgument(
   text: string,
   start: number
-): { readonly value: number | null; readonly end: number } | null {
+): { readonly value: TexLength | null; readonly end: number } | null {
   if (text[start] !== "{") {
     return null;
   }
@@ -3018,7 +3032,7 @@ function scanSimpleTexStyleDeclaration(
         node: {
           kind: "style-declaration",
           text: text.slice(start, end),
-          sizePt: DEFAULT_TEXT_FONT_SIZE * (FONT_SIZE_COMMAND_FACTORS[`\\${name}`] ?? 1),
+          sizePt: texLength(DEFAULT_TEXT_FONT_SIZE * (FONT_SIZE_COMMAND_FACTORS[`\\${name}`] ?? 1)),
           sourceStart: sourceOffset + start,
           sourceEnd: sourceOffset + end,
         },

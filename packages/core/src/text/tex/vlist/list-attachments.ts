@@ -20,8 +20,12 @@ import type {
 } from "../layout-inline-items.js";
 import { renderTexMathHListSvgBody } from "../math/render-svg.js";
 import {
+  texHBoxX,
+  texHBoxY,
+  texLength,
   texVListLocalXFromOrigin,
   texVListX,
+  type TexLength,
   type TexVListX,
 } from "../coordinates.js";
 import type {
@@ -36,7 +40,7 @@ export type TexInlineNodesToLayoutItems = (
   nodes: readonly SimpleTexInlineNode[],
   sourceStart: number,
   sourceEnd: number,
-  atPt: number,
+  atPt: TexLength,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
@@ -47,7 +51,7 @@ export type TexInlineNodesToLayoutItems = (
 
 export interface TexListItemParagraphAttachments {
   readonly inlineLabelItems: readonly TexLayoutInlineItem[];
-  readonly firstLineIndentWidth?: number;
+  readonly firstLineIndentWidth?: TexLength;
   readonly marginLabel?: TexLayoutLabel;
   readonly marginLabelHBox?: TexHBoxItem;
 }
@@ -130,7 +134,7 @@ function texArticleDescriptionFirstLineIndentWidth(
   listContext: SimpleTexListContext | undefined,
   listItemLayout: TexVBoxListItemLayout | undefined,
   hasDescriptionLabel: boolean
-): number | undefined {
+): TexLength | undefined {
   if (listContext?.kind !== "description") {
     return undefined;
   }
@@ -281,7 +285,7 @@ function texMarginListLabelHBoxFromLayoutLabel(
       blockIndex,
     },
     x: texVListLocalXFromOrigin(labelLeft, paragraphOriginX),
-    advance: 0,
+    advance: texLength(0),
     affectsVBoxBaseline: false,
     box: {
       metrics: box.metrics,
@@ -297,9 +301,9 @@ function texLayoutLabelHBoxContent(
   readonly metrics: TexBoxMetrics;
   readonly renderItems: readonly TexRenderItem[];
 } {
-  let width = 0;
-  let height = 0;
-  let depth = 0;
+  let width = texLength(0);
+  let height = texLength(0);
+  let depth = texLength(0);
   const pendingItems: Array<
     | Omit<Extract<TexRenderItem, { kind: "tex-glyph-run" }>, "baseline">
     | Omit<Extract<TexRenderItem, { kind: "tex-glyph" }>, "baseline">
@@ -315,11 +319,11 @@ function texLayoutLabelHBoxContent(
         fontId: item.font.id,
         atPt: item.font.atPt,
         ...(item.font.color ? { color: item.font.color } : {}),
-        x: roundTexPt(width),
+        x: texHBoxX(roundTexPt(width)),
       });
-      width += glyphWidth;
-      height = Math.max(height, texLayoutGlyphItemHeight(item));
-      depth = Math.max(depth, texLayoutGlyphItemDepth(item));
+      width = texLength(width + glyphWidth);
+      height = texLength(Math.max(height, texLayoutGlyphItemHeight(item)));
+      depth = texLength(Math.max(depth, texLayoutGlyphItemDepth(item)));
       continue;
     }
     if (item.kind === "forced-break") {
@@ -333,20 +337,20 @@ function texLayoutLabelHBoxContent(
         fontId: item.font.id,
         atPt: item.font.atPt,
         ...(item.font.color ? { color: item.font.color } : {}),
-        x: roundTexPt(width),
+        x: texHBoxX(roundTexPt(width)),
       });
-      width += shaped.width;
+      width = texLength(width + shaped.width);
       for (const shapedItem of shaped.items) {
         if (shapedItem.kind !== "glyph") {
           continue;
         }
-        height = Math.max(height, shapedItem.height);
-        depth = Math.max(depth, shapedItem.depth);
+        height = texLength(Math.max(height, shapedItem.height));
+        depth = texLength(Math.max(depth, shapedItem.depth));
       }
       continue;
     }
     if (item.kind === "kern") {
-      width += item.width;
+      width = texLength(width + item.width);
       continue;
     }
     if (item.kind === "math") {
@@ -356,12 +360,12 @@ function texLayoutLabelHBoxContent(
         pendingItems.push({
           kind: "tex-math-svg",
           svgBody,
-          x: roundTexPt(width),
+          x: texHBoxX(roundTexPt(width)),
         });
       }
-      width += mathWidth;
-      height = Math.max(height, item.box.height);
-      depth = Math.max(depth, item.box.depth);
+      width = texLength(width + mathWidth);
+      height = texLength(Math.max(height, item.box.height));
+      depth = texLength(Math.max(depth, item.box.depth));
       continue;
     }
     if (item.kind === "text-box") {
@@ -371,25 +375,25 @@ function texLayoutLabelHBoxContent(
         pendingItems.push({
           kind: "tex-math-svg",
           svgBody,
-          x: roundTexPt(width),
+          x: texHBoxX(roundTexPt(width)),
         });
       }
-      width += boxWidth;
-      height = Math.max(height, item.box.height);
-      depth = Math.max(depth, item.box.depth);
+      width = texLength(width + boxWidth);
+      height = texLength(Math.max(height, item.box.height));
+      depth = texLength(Math.max(depth, item.box.depth));
       continue;
     }
     if (item.kind === "penalty") {
       continue;
     }
-    width += texLayoutSpaceItemWidth(item);
+    width = texLength(width + texLayoutSpaceItemWidth(item));
   }
-  const baseline = roundTexPt(height);
+  const baseline = texHBoxY(roundTexPt(height));
   return {
     metrics: {
-      width: roundTexPt(width),
-      height: baseline,
-      depth: roundTexPt(depth),
+      width: texLength(roundTexPt(width)),
+      height: texLength(baseline),
+      depth: texLength(roundTexPt(depth)),
     },
     renderItems: pendingItems.map((item) => ({
       ...item,
@@ -398,24 +402,24 @@ function texLayoutLabelHBoxContent(
   };
 }
 
-function texLayoutSpaceItemWidth(item: TexLayoutSpaceItem): number {
+function texLayoutSpaceItemWidth(item: TexLayoutSpaceItem): TexLength {
   const normalized = Number.isFinite(item.spaceFactor) && item.spaceFactor > 0
     ? item.spaceFactor
     : 1000;
   if (item.spaceGlueProfile === "tikz-fixed") {
-    return roundTexPt((normalized >= 2000 ? 0.5 : 0.3333) * item.font.atPt);
+    return texLength(roundTexPt((normalized >= 2000 ? 0.5 : 0.3333) * item.font.atPt));
   }
   const baseSpace = tfmToPt(item.font, item.font.data.fontdimen.space);
   const extraSpace = tfmToPt(item.font, item.font.data.fontdimen.extraspace ?? 0);
-  return roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0));
+  return texLength(roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0)));
 }
 
-export function texLayoutMathItemWidth(item: TexLayoutMathItem): number {
-  return roundTexPt(item.box.width);
+export function texLayoutMathItemWidth(item: TexLayoutMathItem): TexLength {
+  return texLength(roundTexPt(item.box.width));
 }
 
-export function texLayoutTextBoxItemWidth(item: TexLayoutTextBoxItem): number {
-  return roundTexPt(item.box.width);
+export function texLayoutTextBoxItemWidth(item: TexLayoutTextBoxItem): TexLength {
+  return texLength(roundTexPt(item.box.width));
 }
 
 function texLayoutBoxSvgBody(box: TexMathBox): string | undefined {
@@ -433,23 +437,23 @@ function wrapTexBoxColor(body: string, color: string): string {
   return `<g fill="${escaped}" stroke="${escaped}">${body}</g>`;
 }
 
-export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): number {
-  return roundTexPt(tfmToPt(
+export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): TexLength {
+  return texLength(roundTexPt(tfmToPt(
     item.font,
     item.font.data.chars[String(item.code)]?.width
-  ));
+  )));
 }
 
-export function texLayoutGlyphItemHeight(item: TexLayoutGlyphItem): number {
-  return roundTexPt(tfmToPt(
+export function texLayoutGlyphItemHeight(item: TexLayoutGlyphItem): TexLength {
+  return texLength(roundTexPt(tfmToPt(
     item.font,
     item.font.data.chars[String(item.code)]?.height
-  ));
+  )));
 }
 
-export function texLayoutGlyphItemDepth(item: TexLayoutGlyphItem): number {
-  return roundTexPt(tfmToPt(
+export function texLayoutGlyphItemDepth(item: TexLayoutGlyphItem): TexLength {
+  return texLength(roundTexPt(tfmToPt(
     item.font,
     item.font.data.chars[String(item.code)]?.depth
-  ));
+  )));
 }

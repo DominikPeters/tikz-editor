@@ -31,12 +31,13 @@ import type {
 } from "./types.js";
 import type { TexMathBoxProvider, TexMathDisplayLabel } from "../layout-inline-items.js";
 import { parseTexMathAlignedBody } from "../math/index.js";
+import { texLength, type TexLength } from "../coordinates.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly font?: ResolvedTexFont;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
-  readonly width?: number;
+  readonly width?: TexLength;
   readonly tikzTextWidthNode?: boolean;
 }
 
@@ -142,8 +143,8 @@ function vboxItemFromSimpleTexBox(
     ...(item.height !== undefined ? { height: item.height } : {}),
     alignment: item.alignment,
     layout: {
-      leftMarginWidth: 0,
-      rightMarginWidth: 0,
+      leftMarginWidth: texLength(0),
+      rightMarginWidth: texLength(0),
       paragraphPolicy: {
         resetInheritedAlignment: true,
         resetAlignment: "justified",
@@ -187,7 +188,7 @@ function displayMathItemFromSimpleTexDisplayMath(
       sourceEnd: item.sourceEnd,
       contentStart: item.contentStart,
       contentEnd: item.contentEnd,
-      targetWidth: targetWidth ?? 0,
+      targetWidth: targetWidth ?? texLength(0),
       ...(displayLabels ? { displayLabels } : {}),
     }) ?? null;
     if (!alignment) {
@@ -324,7 +325,7 @@ function displayLabelForEquationNumberAt(
 function scopedDisplayMathTargetWidth(
   scopePath: readonly TexVBoxRole[] | undefined,
   options: LowerSimpleTexBlockItemsToVListOptions
-): number | undefined {
+): TexLength | undefined {
   const width = options.width;
   if (width === undefined) {
     return undefined;
@@ -335,9 +336,9 @@ function scopedDisplayMathTargetWidth(
   }
   const marginWidth = scopePath.reduce((sum, role) => {
     const layout = texVBoxLayoutForScopeRole(role, font);
-    return sum + layout.leftMarginWidth + layout.rightMarginWidth;
-  }, 0);
-  return Math.max(0, width - marginWidth);
+    return texLength(sum + layout.leftMarginWidth + layout.rightMarginWidth);
+  }, texLength(0));
+  return texLength(Math.max(0, width - marginWidth));
 }
 
 function unsupportedDisplayMathPlaceholder(
@@ -354,9 +355,9 @@ function unsupportedDisplayMathPlaceholder(
     scopePath: scopePathForVerticalBlockItem(item),
     literalText: item.text,
     estimated: {
-      width: 5.25 * item.text.length,
-      height: 10,
-      depth: 4,
+      width: texLength(5.25 * item.text.length),
+      height: texLength(10),
+      depth: texLength(4),
     },
   };
 }
@@ -373,9 +374,9 @@ function placeholderItemFromSimpleTexPlaceholder(
     reason: item.reason,
     scopePath: scopePathForVerticalBlockItem(item),
     estimated: {
-      width: 0,
-      height: 8.5,
-      depth: 3.5,
+      width: texLength(0),
+      height: texLength(8.5),
+      depth: texLength(3.5),
     },
   };
 }

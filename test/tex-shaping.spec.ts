@@ -32,12 +32,8 @@ import {
   layoutTexVListFromMeasuredParagraphs,
   registerTexVListLayoutsOnOutputJax,
   texVListBoxLayoutReport,
-  type PositionedTexVListItem,
-  type TexBoxMetrics,
   type TexVListDocument,
   type TexVListLayout,
-  type TexVListParagraphBoxMeasurement,
-  type TexVBoxBaseline,
 } from "../packages/core/src/text/tex/vlist/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
 import {
@@ -46,6 +42,17 @@ import {
   generateTexMathFuzzCase,
   type TexFuzzNode,
 } from "../packages/tex-fuzz/src/index.js";
+
+type RawTexFixture<T> =
+  T extends number ? number
+    : T extends (...args: never[]) => unknown ? T
+      : T extends readonly (infer Item)[] ? readonly RawTexFixture<Item>[]
+        : T extends object ? { readonly [Key in keyof T]: RawTexFixture<T[Key]> }
+          : T;
+
+function texFixture<T>(value: RawTexFixture<T>): T {
+  return value as T;
+}
 
 function relayoutFromExistingVListLayout(
   document: TexVListDocument,
@@ -64,8 +71,9 @@ function relayoutFromExistingVListLayout(
   const linePlacementsByIndex = new Map(
     layout.linePlacements.map((placement) => [placement.lineIndex, placement])
   );
-  const paragraphMeasurements: TexVListParagraphBoxMeasurement[] =
-    layout.paragraphPlacements.map((placement) => {
+  const paragraphMeasurements = texFixture<
+    Parameters<typeof layoutTexVListFromMeasuredParagraphs>[1]["paragraphMeasurements"]
+  >(layout.paragraphPlacements.map((placement) => {
       const advance = placement.metrics.height + placement.metrics.depth;
       return {
         blockIndex: placement.blockIndex,
@@ -80,8 +88,10 @@ function relayoutFromExistingVListLayout(
         standardAdvance: advance,
         ruleLeadingAdvance: advance,
       };
-    });
-  return layoutTexVListFromMeasuredParagraphs(document, {
+    }));
+  return layoutTexVListFromMeasuredParagraphs(document, texFixture<
+    Parameters<typeof layoutTexVListFromMeasuredParagraphs>[1]
+  >({
     width: options.width,
     height: options.height,
     verticalAlign: options.verticalAlign,
@@ -91,7 +101,7 @@ function relayoutFromExistingVListLayout(
     paragraphMeasurements,
     reports: layout.reports,
     errors: layout.errors,
-  });
+  }));
 }
 
 function mathSegmentGlyphSpans(
@@ -329,14 +339,19 @@ function svgPathControlPoints(d: string): PathPoint[] {
   return points;
 }
 
-function registeredLayoutWithBoxReport<T extends {
-  readonly items: readonly PositionedTexVListItem[];
-  readonly metrics: TexBoxMetrics;
-  readonly baseline: TexVBoxBaseline;
-}>(layout: T): T & { readonly boxReport: ReturnType<typeof texVListBoxLayoutReport> } {
+type TexVListLayoutWithoutBoxReport = Omit<TexVListLayout, "boxReport">;
+
+function registeredLayoutWithBoxReport(
+  layout: RawTexFixture<TexVListLayoutWithoutBoxReport>
+): TexVListLayout {
+  const brandedLayout = texFixture<TexVListLayoutWithoutBoxReport>(layout);
   return {
-    ...layout,
-    boxReport: texVListBoxLayoutReport(layout.items, layout.metrics, layout.baseline),
+    ...brandedLayout,
+    boxReport: texVListBoxLayoutReport(
+      brandedLayout.items,
+      brandedLayout.metrics,
+      brandedLayout.baseline
+    ),
   };
 }
 
@@ -406,7 +421,7 @@ function makeVListBoxElement(
 
 function makeShapedTextReport(text: string): ParagraphLayoutReport {
   const shaped = computerModernTexMetricProvider.shapeText(text);
-  return {
+  return texFixture<ParagraphLayoutReport>({
     paragraphId: "tex:paragraph",
     width: shaped.width,
     alignment: "ragged-right",
@@ -457,7 +472,7 @@ function makeShapedTextReport(text: string): ParagraphLayoutReport {
     internalDegradeReason: null,
     externalFallbackUsed: false,
     linebreakingMode: "feasible",
-  };
+  });
 }
 
 function lineTexts(report: ParagraphLayoutReport | null | undefined): string[] {
@@ -519,7 +534,9 @@ function makeFakeInlineMathBoxProvider(
   widthForContent: (content: string) => number = (content) => 8 + content.length * 4
 ): TexMathBoxProvider {
   return {
-    getInlineMathBox: (params) => ({
+    getInlineMathBox: (params) => texFixture<
+      NonNullable<ReturnType<TexMathBoxProvider["getInlineMathBox"]>>
+    >({
       source: params.source,
       content: params.content,
       sourceStart: params.sourceStart,
@@ -4608,10 +4625,12 @@ describe("simple TeX paragraph layout", () => {
     const line = result.report?.lines[0];
     const hiddenKern = line?.segments.find((segment) => segment.kind === "space" && segment.text === "");
     const fontId = line?.segments.find((segment) => segment.kind === "text")?.fontId;
-    const font = computerModernTexMetricProvider.resolveFont({
+    const font = computerModernTexMetricProvider.resolveFont(texFixture<
+      NonNullable<Parameters<typeof computerModernTexMetricProvider.resolveFont>[0]>
+    >({
       fontId,
       atPt: 10,
-    });
+    }));
     const expectedKern =
       computerModernTexMetricProvider.shapeText("y.", font).width -
       computerModernTexMetricProvider.shapeText("y", font).width -

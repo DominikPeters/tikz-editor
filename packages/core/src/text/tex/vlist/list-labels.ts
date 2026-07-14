@@ -1,5 +1,10 @@
 import { roundTexPt } from "../fonts/units.js";
-import { texVListX, type TexVListX } from "../coordinates.js";
+import {
+  texLength,
+  texVListX,
+  type TexLength,
+  type TexVListX,
+} from "../coordinates.js";
 import type {
   TexParagraphInput,
   TexVBoxLayout,
@@ -206,12 +211,12 @@ function texLowerRomanCounter(value: number): string {
 function texListItemLabelRightEdge(
   stack: readonly TexListItemLabelScopeFrame[]
 ): TexVListX | undefined {
-  let leftMarginWidth = 0;
+  let leftMarginWidth = texLength(0);
   let labelRightEdge: TexVListX | undefined;
   for (const frame of stack) {
     const layout = frame.layout;
     const leftBefore = leftMarginWidth;
-    leftMarginWidth += layout.leftMarginWidth;
+    leftMarginWidth = texLength(leftMarginWidth + layout.leftMarginWidth);
     if (layout.list) {
       labelRightEdge = texVListX(
         roundTexPt(leftBefore + layout.list.labelRightEdge)
@@ -225,8 +230,8 @@ function texListItemDescriptionIndent(
   stack: readonly TexListItemLabelScopeFrame[],
   paragraph: TexParagraphInput
 ): {
-  readonly labelFirstLineIndentWidth: number;
-  readonly bodyFirstLineIndentWidth: number;
+  readonly labelFirstLineIndentWidth: TexLength;
+  readonly bodyFirstLineIndentWidth: TexLength;
 } | undefined {
   if (paragraph.listContext?.kind !== "description") {
     return undefined;
@@ -236,10 +241,10 @@ function texListItemDescriptionIndent(
     return undefined;
   }
   return {
-    labelFirstLineIndentWidth: roundTexPt(
-      -listLayout.ownLeftMarginWidth + listLayout.descriptionLabelSepWidth
-    ),
-    bodyFirstLineIndentWidth: roundTexPt(-listLayout.ownLeftMarginWidth),
+    labelFirstLineIndentWidth: texLength(roundTexPt(
+      0 - listLayout.ownLeftMarginWidth + listLayout.descriptionLabelSepWidth
+    )),
+    bodyFirstLineIndentWidth: texLength(roundTexPt(0 - listLayout.ownLeftMarginWidth)),
   };
 }
 

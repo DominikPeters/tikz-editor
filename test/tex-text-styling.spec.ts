@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 import { normalizeNodeTextFontSize } from "../packages/core/src/semantic/nodes/normalize-text.js";
 import {
   parseSimpleTexParagraphIr,
@@ -163,7 +164,7 @@ describe("native TeX text styling", () => {
     const tokens = simpleTexInlineNodesToTokens(ir.nodes as readonly SimpleTexInlineNode[]);
     const items = simpleTexInlineTokensToLayoutItems({
       tokens,
-      atPt: 10,
+      atPt: texLength(10),
       metricProvider: computerModernTexMetricProvider,
       spaceGlueProfile: "font",
       textFontProfile: defaultTexTextFontProfile,

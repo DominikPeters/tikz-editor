@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
-import { texVListX } from "../packages/core/src/text/tex/coordinates.js";
+import {
+  texLength,
+  texVListX,
+  texVListY,
+} from "../packages/core/src/text/tex/coordinates.js";
 
 const RETRY_MESSAGE =
   "MathJax retry -- an asynchronous action is required; try using one of the promise-based functions and await its resolution.";
@@ -781,26 +785,26 @@ describe("mathjax node text engine", () => {
             blockIndex: 7,
           },
           box: {
-            metrics: { width: 24, height: 6, depth: 2 },
+            metrics: { width: texLength(24), height: texLength(6), depth: texLength(2) },
             renderItems: [],
           },
         },
         path: [0],
         x: texVListX(3),
-        y: 5,
-        metrics: { width: 24, height: 6, depth: 2 },
+        y: texVListY(5),
+        metrics: { width: texLength(24), height: texLength(6), depth: texLength(2) },
       },
       {
         item: {
           kind: "rule",
-          width: 12,
-          height: 4,
-          depth: 1,
+          width: texLength(12),
+          height: texLength(4),
+          depth: texLength(1),
         },
         path: [1],
         x: texVListX(0),
-        y: 14,
-        metrics: { width: 12, height: 4, depth: 1 },
+        y: texVListY(14),
+        metrics: { width: texLength(12), height: texLength(4), depth: texLength(1) },
       },
       {
         item: {
@@ -810,20 +814,28 @@ describe("mathjax node text engine", () => {
         },
         path: [2],
         x: texVListX(0),
-        y: 19,
-        metrics: { width: 0, height: 0, depth: 0 },
+        y: texVListY(19),
+        metrics: { width: texLength(0), height: texLength(0), depth: texLength(0) },
       },
       {
         item: {
           kind: "placeholder",
           sourceSpan: { start: 20, end: 34 },
           reason: "Unsupported TeX command in vertical mode.",
-          estimated: { width: 0, height: 8.5, depth: 3.5 },
+          estimated: {
+            width: texLength(0),
+            height: texLength(8.5),
+            depth: texLength(3.5),
+          },
         },
         path: [3],
         x: texVListX(0),
-        y: 20,
-        metrics: { width: 0, height: 8.5, depth: 3.5 },
+        y: texVListY(20),
+        metrics: {
+          width: texLength(0),
+          height: texLength(8.5),
+          depth: texLength(3.5),
+        },
       },
     ], 80);
 
@@ -849,21 +861,29 @@ describe("mathjax node text engine", () => {
         },
         path: [0],
         x: texVListX(10),
-        y: 20,
-        metrics: { width: 40, height: 7, depth: 13 },
+        y: texVListY(20),
+        metrics: { width: texLength(40), height: texLength(7), depth: texLength(13) },
         children: [
           {
             item: {
               kind: "hbox",
               box: {
-                metrics: { width: 12, height: 4, depth: 2 },
+                metrics: {
+                  width: texLength(12),
+                  height: texLength(4),
+                  depth: texLength(2),
+                },
                 renderItems: [],
               },
             },
             path: [0, 0],
             x: texVListX(15),
-            y: 32,
-            metrics: { width: 12, height: 4, depth: 2 },
+            y: texVListY(32),
+            metrics: {
+              width: texLength(12),
+              height: texLength(4),
+              depth: texLength(2),
+            },
           },
         ],
       },

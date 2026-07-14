@@ -7,6 +7,7 @@ import type {
   ResolvedTexFont,
   TexMetricProvider,
 } from "./types.js";
+import { texLength, type TexLength } from "../coordinates.js";
 
 export interface TexTextFontProfile {
   readonly id: string;
@@ -15,10 +16,10 @@ export interface TexTextFontProfile {
   readonly encoding: "OT1" | "TU";
   readonly metricProvider: TexMetricProvider;
   readonly defaultFontState: SimpleTexFontState;
-  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: number) => DefaultComputerModernTextFont;
+  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: TexLength) => DefaultComputerModernTextFont;
   readonly resolveTextFont: (
     state: SimpleTexFontState,
-    atPt: number,
+    atPt: TexLength,
     metricProvider?: TexMetricProvider
   ) => ResolvedTexFont;
 }
@@ -41,7 +42,7 @@ function makeTextFontProfile(params: {
   readonly engine: TexTextFontProfile["engine"];
   readonly encoding: TexTextFontProfile["encoding"];
   readonly defaultFontState: SimpleTexFontState;
-  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: number) => DefaultComputerModernTextFont;
+  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: TexLength) => DefaultComputerModernTextFont;
 }): TexTextFontProfile {
   return {
     ...params,
@@ -78,7 +79,7 @@ export const defaultTexTextFontProfile = luaLatexDefaultTextFontProfile;
 
 export function classicComputerModernFontIdForState(
   state: SimpleTexFontState,
-  _atPt = 10
+  _atPt = texLength(10)
 ): DefaultComputerModernTextFont {
   if (
     state.family === "normal" &&
@@ -128,7 +129,7 @@ export function classicComputerModernFontIdForState(
 
 export function luaLatexDefaultFontIdForState(
   state: SimpleTexFontState,
-  atPt = 10
+  atPt = texLength(10)
 ): DefaultComputerModernTextFont {
   if (state.shape === "small-caps" && state.series === "bold") {
     if (state.family === "typewriter") {

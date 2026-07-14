@@ -6,12 +6,13 @@ import type {
 import type { ShapedTexTextRun } from "../fonts/types.js";
 import type { SimpleTexParagraphSegment } from "../ir.js";
 import type { TexLayoutLabel } from "../layout-inline-items.js";
+import type { TexLength } from "../coordinates.js";
 import { texVListPathKey } from "./paths.js";
 
 export interface TexParagraphBreakResult {
   readonly lines: readonly GreedyLine[];
   readonly runs: readonly ParagraphRun[];
-  readonly runWidths: ReadonlyMap<number, number>;
+  readonly runWidths: ReadonlyMap<number, TexLength>;
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly errors: readonly string[];
   readonly linebreakingMode: "feasible" | "overfull";
@@ -43,7 +44,7 @@ export interface TexCombinedParagraphLineSpan {
 export interface TexCombinedParagraphBreaks {
   readonly runs: readonly ParagraphRun[];
   readonly lines: readonly GreedyLine[];
-  readonly runWidths: ReadonlyMap<number, number>;
+  readonly runWidths: ReadonlyMap<number, TexLength>;
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly lineLabels: ReadonlyMap<number, TexLineLabel>;
   readonly paragraphLineSpans: readonly TexCombinedParagraphLineSpan[];
@@ -57,7 +58,7 @@ export function combineTexBrokenLayoutParagraphs(params: {
 }): TexCombinedParagraphBreaks {
   const combinedRuns: ParagraphRun[] = [];
   const combinedLines: GreedyLine[] = [];
-  const combinedRunWidths = new Map<number, number>();
+  const combinedRunWidths = new Map<number, TexLength>();
   const combinedShapedRuns = new Map<number, ShapedTexTextRun>();
   const combinedLineLabels = new Map<number, TexLineLabel>();
   const paragraphLineSpans: TexCombinedParagraphLineSpan[] = [];

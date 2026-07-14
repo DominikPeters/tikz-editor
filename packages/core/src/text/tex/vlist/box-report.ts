@@ -1,4 +1,5 @@
 import { roundTexPt } from "../fonts/units.js";
+import { texLength } from "../coordinates.js";
 import type {
   PositionedTexVListItem,
   TexBoxMetrics,
@@ -45,7 +46,7 @@ function texVListBoxReportItem(
     width: item.metrics.width,
     height: item.metrics.height,
     depth: item.metrics.depth,
-    totalHeight: roundTexPt(item.metrics.height + item.metrics.depth),
+    totalHeight: texLength(roundTexPt(item.metrics.height + item.metrics.depth)),
     ...(item.item.kind === "paragraph" ? { blockIndex: item.item.blockIndex } : {}),
     ...(item.item.kind === "vbox" && item.baseline ? { baseline: item.baseline } : {}),
     ...(item.item.kind === "hbox" && item.item.role ? { hboxRole: item.item.role } : {}),

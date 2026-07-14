@@ -4,6 +4,11 @@ import type {
   SimpleTexTextBoxAlignment,
   SimpleTexTextBoxCommandName,
 } from "../ir.js";
+import type {
+  TexHBoxOffsetY,
+  TexLength,
+  TexMuLength,
+} from "../coordinates.js";
 
 export interface TexMathSourceSpan {
   readonly start: number;
@@ -161,7 +166,7 @@ export interface TexMathListNucleus {
   readonly list: TexMathList;
   readonly role?: "ellipsis";
   readonly ellipsisCommand?: "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso";
-  readonly leadingKern?: number;
+  readonly leadingKern?: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -171,7 +176,7 @@ export interface TexMathFractionNucleus {
   readonly denominator: TexMathList;
   readonly leftDelimiter?: TexMathDelimiter;
   readonly rightDelimiter?: TexMathDelimiter;
-  readonly ruleThickness?: number;
+  readonly ruleThickness?: TexLength;
   readonly style?: TexMathStyle;
   readonly continued?: {
     readonly numeratorAlignment: "left" | "center" | "right";
@@ -216,7 +221,7 @@ export interface TexMathPhantomNucleus {
 export interface TexMathShiftBoxNucleus {
   readonly kind: "shift-box";
   readonly direction: "raise" | "lower";
-  readonly amount: number;
+  readonly amount: TexLength;
   readonly body: TexMathList;
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly amountSourceSpan: TexMathSourceSpan;
@@ -232,9 +237,9 @@ export interface TexMathVCenterNucleus {
 
 export interface TexMathRuleNucleus {
   readonly kind: "rule";
-  readonly width: number;
-  readonly height: number;
-  readonly raise: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly raise: TexHBoxOffsetY;
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
 }
@@ -343,7 +348,7 @@ export interface TexMathTextNucleus {
   readonly text: string;
   readonly nodes?: readonly SimpleTexInlineNode[];
   readonly parts?: readonly TexMathTextPart[];
-  readonly boxWidth?: number;
+  readonly boxWidth?: TexLength;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly textSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
@@ -623,10 +628,10 @@ export interface TexMathGlue {
 
 export interface TexMathMuGlue {
   readonly kind: "mu-glue";
-  readonly mu: number;
-  readonly displayMu?: number;
-  readonly stretchMu?: number;
-  readonly shrinkMu?: number;
+  readonly mu: TexMuLength;
+  readonly displayMu?: TexMuLength;
+  readonly stretchMu?: TexMuLength;
+  readonly shrinkMu?: TexMuLength;
   readonly omitInScript?: boolean;
   readonly sourceSpan: TexMathSourceSpan;
 }
@@ -635,7 +640,7 @@ export type TexMathKern =
   | {
       readonly kind: "kern";
       readonly command: "kern";
-      readonly widthPt: number;
+      readonly widthPt: TexLength;
       readonly commandSourceSpan: TexMathSourceSpan;
       readonly amountSourceSpan: TexMathSourceSpan;
       readonly sourceSpan: TexMathSourceSpan;
@@ -643,7 +648,7 @@ export type TexMathKern =
   | {
       readonly kind: "kern";
       readonly command: "mkern";
-      readonly mu: number;
+      readonly mu: TexMuLength;
       readonly commandSourceSpan: TexMathSourceSpan;
       readonly amountSourceSpan: TexMathSourceSpan;
       readonly sourceSpan: TexMathSourceSpan;
@@ -653,9 +658,9 @@ export type TexMathSkipGlue =
   | {
       readonly kind: "skip-glue";
       readonly command: "hskip";
-      readonly widthPt: number;
-      readonly stretchPt?: number;
-      readonly shrinkPt?: number;
+      readonly widthPt: TexLength;
+      readonly stretchPt?: TexLength;
+      readonly shrinkPt?: TexLength;
       readonly commandSourceSpan: TexMathSourceSpan;
       readonly amountSourceSpan: TexMathSourceSpan;
       readonly sourceSpan: TexMathSourceSpan;
@@ -663,9 +668,9 @@ export type TexMathSkipGlue =
   | {
       readonly kind: "skip-glue";
       readonly command: "mskip";
-      readonly mu: number;
-      readonly stretchMu?: number;
-      readonly shrinkMu?: number;
+      readonly mu: TexMuLength;
+      readonly stretchMu?: TexMuLength;
+      readonly shrinkMu?: TexMuLength;
       readonly commandSourceSpan: TexMathSourceSpan;
       readonly amountSourceSpan: TexMathSourceSpan;
       readonly sourceSpan: TexMathSourceSpan;

@@ -13,6 +13,7 @@ import {
   type TextSourceMap
 } from "../source-map.js";
 import type { TexMathBox } from "./layout-inline-items.js";
+import { texLength } from "./coordinates.js";
 import type {
   PositionedTexVListItem,
   TexHitMap,
@@ -147,7 +148,7 @@ function splitRemappedTextSegmentReport(
       sourceStartRaw: sourceSpan.start,
       sourceEndRaw: sourceSpan.end,
       x: xStart,
-      width: xEnd - xStart,
+      width: texLength(xEnd - xStart),
       caretStops: segment.caretStops?.slice(start, end + 1)
     };
   });

@@ -14,7 +14,15 @@ import type {
 } from "../ir.js";
 import type { TexMathBox } from "../layout-inline-items.js";
 import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
-import type { TexVListLocalX, TexVListX } from "../coordinates.js";
+import type {
+  TexHBoxX,
+  TexHBoxY,
+  TexLength,
+  TexVListLocalX,
+  TexVListLocalY,
+  TexVListX,
+  TexVListY,
+} from "../coordinates.js";
 
 export interface TexSourceSpan {
   readonly start: number;
@@ -22,19 +30,23 @@ export interface TexSourceSpan {
 }
 
 export interface TexBoxMetrics {
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
 }
 
 export type TexVBoxBaseline =
   | { readonly kind: "first-line" }
   | { readonly kind: "center" }
-  | { readonly kind: "explicit"; readonly y: number }
+  | { readonly kind: "explicit"; readonly y: TexVListLocalY }
+  | { readonly kind: "none" };
+
+export type TexVListBaseline =
+  | { readonly kind: "explicit"; readonly y: TexVListY }
   | { readonly kind: "none" };
 
 export type TexGlueOrder = "normal" | "fil" | "fill" | "filll";
-export type TexDimenExpr = number | string;
+export type TexDimenExpr = TexLength | string;
 export type TexDisplayMathSkipVariant = "normal" | "short";
 
 export type TexGlueOrigin =
@@ -79,11 +91,11 @@ export type TexGlueOrigin =
 export interface TexLineBox {
   readonly lineIndex: number;
   readonly sourceSpan?: TexSourceSpan;
-  readonly y: number;
-  readonly targetWidth: number;
+  readonly y: TexVListLocalY;
+  readonly targetWidth: TexLength;
   readonly metrics: TexBoxMetrics;
   readonly lineLeading?: string;
-  readonly preDisplaySize?: number;
+  readonly preDisplaySize?: TexLength;
 }
 
 export type TexRenderItem =
@@ -91,9 +103,9 @@ export type TexRenderItem =
       readonly kind: "tex-glyph-run";
       readonly text: string;
       readonly fontId: string;
-      readonly atPt: number;
-      readonly x: number;
-      readonly baseline: number;
+      readonly atPt: TexLength;
+      readonly x: TexHBoxX;
+      readonly baseline: TexHBoxY;
       readonly color?: string;
     }
   | {
@@ -101,16 +113,16 @@ export type TexRenderItem =
       readonly text: string;
       readonly code: number;
       readonly fontId: string;
-      readonly atPt: number;
-      readonly x: number;
-      readonly baseline: number;
+      readonly atPt: TexLength;
+      readonly x: TexHBoxX;
+      readonly baseline: TexHBoxY;
       readonly color?: string;
     }
   | {
       readonly kind: "tex-math-svg";
       readonly svgBody: string;
-      readonly x: number;
-      readonly baseline: number;
+      readonly x: TexHBoxX;
+      readonly baseline: TexHBoxY;
     };
 
 export interface TexHitMap {
@@ -119,10 +131,10 @@ export interface TexHitMap {
   readonly sourceEnd?: number;
   readonly contentStart?: number;
   readonly contentEnd?: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly depth?: number;
-  readonly caretStops?: readonly number[];
+  readonly width?: TexLength;
+  readonly height?: TexLength;
+  readonly depth?: TexLength;
+  readonly caretStops?: readonly TexHBoxX[];
   readonly constructRanges?: TexMathBox["constructRanges"];
   readonly breakpoints?: TexMathBox["breakpoints"];
 }
@@ -184,7 +196,7 @@ export interface TexHBoxItem {
   readonly role?: TexHBoxRole;
   /** Inline displacement relative to the containing VList origin. */
   readonly x?: TexVListLocalX;
-  readonly advance?: number;
+  readonly advance?: TexLength;
   readonly affectsVBoxBaseline?: boolean;
   readonly box: TexHorizontalLayout;
 }
@@ -214,17 +226,17 @@ export type TexVBoxRole =
     };
 
 export interface TexVBoxLayout {
-  readonly leftMarginWidth: number;
-  readonly rightMarginWidth: number;
+  readonly leftMarginWidth: TexLength;
+  readonly rightMarginWidth: TexLength;
   readonly list?: TexVBoxListLayout;
   readonly listItem?: TexVBoxListItemLayout;
   readonly paragraphPolicy?: TexVBoxParagraphPolicy;
 }
 
 export interface TexVBoxListLayout {
-  readonly ownLeftMarginWidth: number;
-  readonly labelRightEdge: number;
-  readonly descriptionLabelSepWidth: number;
+  readonly ownLeftMarginWidth: TexLength;
+  readonly labelRightEdge: TexLength;
+  readonly descriptionLabelSepWidth: TexLength;
 }
 
 export type TexVBoxListItemLabelKind = "default" | "custom" | "description";
@@ -250,8 +262,8 @@ export interface TexVBoxListItemLabelBox {
 }
 
 export interface TexVBoxListItemDescriptionLayout {
-  readonly labelFirstLineIndentWidth: number;
-  readonly bodyFirstLineIndentWidth: number;
+  readonly labelFirstLineIndentWidth: TexLength;
+  readonly bodyFirstLineIndentWidth: TexLength;
 }
 
 export interface TexVBoxListItemLayout {
@@ -296,9 +308,9 @@ export interface TexGlueItem {
   readonly sourceSpan?: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];
   readonly origin?: TexGlueOrigin;
-  readonly size: number;
-  readonly stretch?: number;
-  readonly shrink?: number;
+  readonly size: TexLength;
+  readonly stretch?: TexLength;
+  readonly shrink?: TexLength;
   readonly stretchOrder?: TexGlueOrder;
   readonly shrinkOrder?: TexGlueOrder;
 }
@@ -314,9 +326,9 @@ export interface TexRuleItem {
   readonly kind: "rule";
   readonly sourceSpan?: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
 }
 
 export interface TexPlaceholderItem {
@@ -342,7 +354,7 @@ export interface TexDisplayMathItem {
   readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly contentStart: number;
   readonly contentEnd: number;
-  readonly targetWidth: number;
+  readonly targetWidth: TexLength;
   readonly box: TexMathBox;
 }
 
@@ -355,7 +367,7 @@ export interface TexDisplayAlignmentItem {
   readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly contentStart: number;
   readonly contentEnd: number;
-  readonly targetWidth: number;
+  readonly targetWidth: TexLength;
   readonly alignment: TexMathDisplayAlignment;
 }
 
@@ -381,7 +393,7 @@ export interface PositionedTexVListItem {
   readonly path: readonly number[];
   /** Absolute inline position in the root VList coordinate space. */
   readonly x: TexVListX;
-  readonly y: number;
+  readonly y: TexVListY;
   readonly metrics: TexBoxMetrics;
   readonly baseline?: TexVBoxBaseline;
   readonly children?: readonly PositionedTexVListItem[];
@@ -392,21 +404,21 @@ export interface TexVListBoxReportItem {
   readonly path: readonly number[];
   readonly children?: readonly TexVListBoxReportItem[];
   readonly sourceSpan?: TexSourceSpan;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-  readonly totalHeight: number;
+  readonly x: TexVListX;
+  readonly y: TexVListY;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+  readonly totalHeight: TexLength;
   readonly blockIndex?: number;
   readonly baseline?: TexVBoxBaseline;
   readonly role?: TexVBoxRole;
   readonly hboxRole?: TexHBoxRole;
   readonly listItem?: TexVBoxListItemLayout;
   readonly glue?: {
-    readonly size: number;
-    readonly stretch?: number;
-    readonly shrink?: number;
+    readonly size: TexLength;
+    readonly stretch?: TexLength;
+    readonly shrink?: TexLength;
     readonly stretchOrder?: TexGlueOrder;
     readonly shrinkOrder?: TexGlueOrder;
     readonly origin?: TexGlueOrigin;
@@ -423,7 +435,7 @@ export interface TexVListBoxReportItem {
 export interface TexVListBoxLayoutReport {
   readonly kind: "tex-vlist-boxes";
   readonly metrics: TexBoxMetrics;
-  readonly baseline: TexVBoxBaseline;
+  readonly baseline: TexVListBaseline;
   readonly tree: readonly TexVListBoxReportItem[];
   readonly items: readonly TexVListBoxReportItem[];
 }
@@ -432,7 +444,7 @@ export type TexLayoutReport = TexVListBoxLayoutReport;
 
 export interface TexVListLayout {
   readonly metrics: TexBoxMetrics;
-  readonly baseline: TexVBoxBaseline;
+  readonly baseline: TexVListBaseline;
   readonly items: readonly PositionedTexVListItem[];
   readonly boxReport: TexVListBoxLayoutReport;
   readonly paragraphPlacements: readonly TexVListParagraphPlacement[];
@@ -442,8 +454,8 @@ export interface TexVListLayout {
 }
 
 export interface TexVListLayoutOptions {
-  readonly width: number;
-  readonly height?: number;
+  readonly width: TexLength;
+  readonly height?: TexLength;
   readonly verticalAlign?: "top" | "center" | "bottom";
   readonly paragraphAlignment?: TexParagraphAlignment;
 }
@@ -456,7 +468,7 @@ export interface TexVListParagraphLineAssignment {
 
 export interface TexVListParagraphLineOffset {
   readonly lineIndex: number;
-  readonly y: number;
+  readonly y: TexVListLocalY;
   readonly metrics?: TexBoxMetrics;
 }
 
@@ -465,12 +477,12 @@ export interface TexVListParagraphBoxMeasurement {
   readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
   readonly lineOffsets: readonly TexVListParagraphLineOffset[];
-  readonly lastLinePreDisplaySize?: number;
+  readonly lastLinePreDisplaySize?: TexLength;
   readonly standardMetrics: TexBoxMetrics;
   readonly ruleLeadingMetrics: TexBoxMetrics;
   readonly lastLineMetrics?: TexBoxMetrics;
-  readonly standardAdvance: number;
-  readonly ruleLeadingAdvance: number;
+  readonly standardAdvance: TexLength;
+  readonly ruleLeadingAdvance: TexLength;
 }
 
 export interface TexVListParagraphPlacement {
@@ -479,14 +491,14 @@ export interface TexVListParagraphPlacement {
   readonly sourceSpan: TexSourceSpan;
   readonly sourceHitPolicy: "caret" | "source-range";
   readonly lineIndices: readonly number[];
-  readonly x: number;
-  readonly y: number;
+  readonly x: TexVListX;
+  readonly y: TexVListY;
   readonly metrics: TexBoxMetrics;
 }
 
 export interface TexVListLinePlacement {
   readonly lineIndex: number;
-  readonly x: number;
-  readonly y: number;
-  readonly height: number;
+  readonly x: TexVListX;
+  readonly y: TexVListY;
+  readonly height: TexLength;
 }

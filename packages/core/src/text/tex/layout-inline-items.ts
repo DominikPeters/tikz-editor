@@ -41,12 +41,31 @@ import {
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import { roundTexPt } from "./fonts/units.js";
-import type { TexVListX } from "./coordinates.js";
+import {
+  offsetTexHBoxLocalX,
+  texHBoxLocalX,
+  texHBoxLocalY,
+  texHBoxOffsetX,
+  texHBoxOffsetY,
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texMuLength,
+  type TexHBoxLocalX,
+  type TexHBoxLocalY,
+  type TexHBoxOffsetX,
+  type TexHBoxOffsetY,
+  type TexHBoxX,
+  type TexHBoxY,
+  type TexLength,
+  type TexVListLocalX,
+  type TexVListX,
+} from "./coordinates.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
-const TEX_LATEX_FBOX_RULE_PT = 0.4;
-const TEX_LATEX_FBOX_SEP_PT = 3;
-const TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT = 28.4527559055;
+const TEX_LATEX_FBOX_RULE_PT = texLength(0.4);
+const TEX_LATEX_FBOX_SEP_PT = texLength(3);
+const TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT = texLength(28.4527559055);
 const TEX_SVG_UNIT_SCALE = 100;
 
 export interface TexLayoutTextItem {
@@ -95,13 +114,13 @@ export interface TexMathBox {
   readonly sourceEnd: number;
   readonly contentStart: number;
   readonly contentEnd: number;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-  readonly stretch?: number;
-  readonly shrink?: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+  readonly stretch?: TexLength;
+  readonly shrink?: TexLength;
   readonly caretMap?: TexMathCaretMap;
-  readonly caretStops?: readonly number[];
+  readonly caretStops?: readonly TexHBoxX[];
   readonly constructRanges?: readonly TexMathConstructRange[];
   readonly breakpoints?: readonly TexMathBreakpoint[];
   readonly svgBody?: string;
@@ -120,18 +139,18 @@ export type TexMathCaretEntryKind =
   | "synthetic-boundary";
 
 export interface TexMathCaretBounds {
-  readonly xStart: number;
-  readonly xEnd: number;
-  readonly yStart: number;
-  readonly yEnd: number;
+  readonly xStart: TexHBoxX;
+  readonly xEnd: TexHBoxX;
+  readonly yStart: TexHBoxY;
+  readonly yEnd: TexHBoxY;
 }
 
 export interface TexMathCaretEntry {
   readonly sourceOffset: number;
-  readonly x: number;
-  readonly y: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly x: TexHBoxX;
+  readonly y: TexHBoxY;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly hitBounds: TexMathCaretBounds;
   readonly kind: TexMathCaretEntryKind;
   readonly sourceSpan?: {
@@ -179,27 +198,27 @@ export interface TexMathDisplayLabel {
 export interface TexMathConstructRange {
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly xStart: number;
-  readonly xEnd: number;
+  readonly xStart: TexHBoxX;
+  readonly xEnd: TexHBoxX;
 }
 
 export interface TexMathBreakpoint {
   readonly kind: "binary" | "relation" | "penalty";
   readonly sourceOffset: number;
-  readonly x: number;
+  readonly x: TexHBoxX;
   readonly penalty: number;
-  readonly stretchBefore?: number;
-  readonly shrinkBefore?: number;
+  readonly stretchBefore?: TexLength;
+  readonly shrinkBefore?: TexLength;
   readonly postBreakGlue?: {
-    readonly width: number;
-    readonly stretch: number;
-    readonly shrink: number;
+    readonly width: TexLength;
+    readonly stretch: TexLength;
+    readonly shrink: TexLength;
   };
 }
 
 export interface TexMathDisplayAlignmentRowBox extends TexMathBox {
   readonly rowIndex: number;
-  readonly x: number;
+  readonly x: TexVListLocalX;
 }
 
 export interface TexMathDisplayAlignmentIntertext {
@@ -220,7 +239,7 @@ export interface TexMathDisplayAlignment {
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly delimiter: SimpleTexDisplayMathDelimiter;
-  readonly width: number;
+  readonly width: TexLength;
   readonly rows: readonly TexMathDisplayAlignmentRowBox[];
   readonly intertexts?: readonly TexMathDisplayAlignmentIntertext[];
 }
@@ -243,7 +262,7 @@ export interface TexMathBoxProvider {
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
-    readonly targetWidth?: number;
+    readonly targetWidth?: TexLength;
     readonly displayLabel?: TexMathDisplayLabel;
   }) => TexMathBox | null;
   readonly getDisplayMathAlignment?: (params: {
@@ -254,7 +273,7 @@ export interface TexMathBoxProvider {
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
-    readonly targetWidth: number;
+    readonly targetWidth: TexLength;
     readonly displayLabels?: readonly (TexMathDisplayLabel | null)[];
   }) => TexMathDisplayAlignment | null;
 }
@@ -306,7 +325,7 @@ export interface TexLayoutKernItem {
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly font: ResolvedTexFont;
-  readonly width: number;
+  readonly width: TexLength;
 }
 
 export type TexLayoutInlineItem =
@@ -347,7 +366,7 @@ function texLiteralItemsForSource(params: {
   readonly source: string;
   readonly sourceStart: number;
   readonly literal: SimpleTexTokenLiteralInfo;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly textFontProfile: TexTextFontProfile;
@@ -394,7 +413,7 @@ export function simpleTexInlineNodesToLayoutItems(
   nodes: readonly SimpleTexInlineNode[],
   sourceStart: number,
   sourceEnd: number,
-  atPt: number,
+  atPt: TexLength,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
@@ -422,7 +441,7 @@ export function simpleTexInlineNodesToLayoutItems(
 
 export function simpleTexSegmentToLayoutItems(
   segment: SimpleTexParagraphSegment,
-  atPt: number,
+  atPt: TexLength,
   metricProvider: TexMetricProvider,
   spaceGlueProfile: TexSpaceGlueProfile,
   mathBoxProvider?: TexMathBoxProvider,
@@ -557,9 +576,9 @@ export function simpleTexSegmentToLayoutItems(
         source: token.text,
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
-        raise: token.ruleRaise ?? 0,
-        width: token.ruleWidth ?? 0,
-        height: token.ruleHeight ?? 0,
+        raise: token.ruleRaise ?? texHBoxOffsetY(0),
+        width: token.ruleWidth ?? texLength(0),
+        height: token.ruleHeight ?? texLength(0),
         metricProvider,
         textFontProfile,
       });
@@ -616,7 +635,10 @@ export function simpleTexSegmentToLayoutItems(
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
-        lift: roundTexPt((token.lift ?? 0) + (token.relativeLiftEm ?? 0) * surroundingSizePt),
+        lift: texHBoxOffsetY(roundTexPt(
+          (token.lift ?? texHBoxOffsetY(0)) +
+          (token.relativeLiftEm ?? 0) * surroundingSizePt
+        )),
         boxHeight: token.boxHeight,
         boxDepth: token.boxDepth,
         fontState: token.fontState,
@@ -753,12 +775,12 @@ function texMBoxFromInlineNodes(params: {
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly children: readonly SimpleTexInlineNode[];
-  readonly boxWidth?: number;
+  readonly boxWidth?: TexLength;
   readonly boxAlign?: SimpleTexTextBoxAlignment;
   readonly backgroundColor?: string;
   readonly frameColor?: string;
   readonly fontState: SimpleTexFontState;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
@@ -833,8 +855,8 @@ function texMBoxFromInlineNodes(params: {
     constructRanges: [{
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
-      xStart: 0,
-      xEnd: boxedHList.width,
+      xStart: texHBoxX(0),
+      xEnd: texHBoxX(boxedHList.width),
     }],
     hlist: boxedHList,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
@@ -846,8 +868,8 @@ function texUnderlineMBoxHList(
   sourceSpan: { readonly start: number; readonly end: number }
 ): TexMathHList {
   const thickness = TEX_LATEX_FBOX_RULE_PT;
-  const gap = roundTexPt(thickness * 1.5);
-  const depth = roundTexPt(body.depth + gap + thickness);
+  const gap = texLength(roundTexPt(thickness * 1.5));
+  const depth = texLength(roundTexPt(body.depth + gap + thickness));
   return {
     ...body,
     depth,
@@ -857,8 +879,8 @@ function texUnderlineMBoxHList(
       {
         kind: "rule",
         role: "underline-rule",
-        x: 0,
-        y: roundTexPt(body.depth + gap),
+        x: texHBoxLocalX(0),
+        y: texHBoxLocalY(roundTexPt(body.depth + gap)),
         width: body.width,
         height: thickness,
         sourceSpan,
@@ -872,53 +894,57 @@ export function texFrameMBoxHList(
   params: {
     readonly sourceSpan: { readonly start: number; readonly end: number };
     readonly contentSourceSpan: { readonly start: number; readonly end: number };
-    readonly boxWidth?: number;
+    readonly boxWidth?: TexLength;
     readonly boxAlign?: SimpleTexTextBoxAlignment;
     readonly frame?: boolean;
     readonly backgroundColor?: string;
     readonly frameColor?: string;
   }
 ): TexMathHList {
-  const rule = params.frame === false ? 0 : TEX_LATEX_FBOX_RULE_PT;
+  const rule = params.frame === false ? texLength(0) : TEX_LATEX_FBOX_RULE_PT;
   const sep = TEX_LATEX_FBOX_SEP_PT;
   const hasExplicitWidth = params.boxWidth !== undefined && Number.isFinite(params.boxWidth);
   const framedBody = hasExplicitWidth
     ? texReboxMBoxHList(body, {
-        boxWidth: roundTexPt((params.boxWidth ?? 0) - 2 * sep),
+        boxWidth: texLength(roundTexPt((params.boxWidth ?? texLength(0)) - 2 * sep)),
         boxAlign: params.boxAlign ?? "center",
       })
     : body;
   const width = hasExplicitWidth
-    ? roundTexPt(params.boxWidth ?? 0)
-    : roundTexPt(framedBody.width + 2 * (rule + sep));
-  const bodyX = hasExplicitWidth ? sep : roundTexPt(rule + sep);
-  const height = roundTexPt(framedBody.height + sep + rule);
-  const depth = roundTexPt(framedBody.depth + sep + rule);
-  const sideHeight = roundTexPt(height + depth);
-  const kernItem = (x: number, width: number): TexMathKernLayoutItem => ({
+    ? texLength(roundTexPt(params.boxWidth ?? texLength(0)))
+    : texLength(roundTexPt(framedBody.width + 2 * (rule + sep)));
+  const bodyX = texHBoxLocalX(hasExplicitWidth ? sep : roundTexPt(rule + sep));
+  const height = texLength(roundTexPt(framedBody.height + sep + rule));
+  const depth = texLength(roundTexPt(framedBody.depth + sep + rule));
+  const sideHeight = texLength(roundTexPt(height + depth));
+  const kernItem = (x: TexHBoxLocalX, width: TexLength): TexMathKernLayoutItem => ({
     kind: "kern",
     x: roundTexPt(x),
     width: roundTexPt(width),
     reason: "text-kern",
     sourceSpan: params.sourceSpan,
   });
-  const liftedKernItem = (x: number, y: number, width: number): TexMathChildHListLayoutItem => ({
+  const liftedKernItem = (
+    x: TexHBoxLocalX,
+    y: TexHBoxLocalY,
+    width: TexLength
+  ): TexMathChildHListLayoutItem => ({
     kind: "hlist",
     role: "boxed-kern",
     x: roundTexPt(x),
     y: roundTexPt(y),
     width: roundTexPt(width),
-    height: 0,
-    depth: 0,
+    height: texLength(0),
+    depth: texLength(0),
     sourceSpan: params.sourceSpan,
-    items: [kernItem(0, width)],
+    items: [kernItem(texHBoxLocalX(0), width)],
   });
   const frameRules: TexMathRuleLayoutItem[] = rule > 0 ? [
     {
       kind: "rule",
       role: "boxed-rule",
-      x: 0,
-      y: -height,
+      x: texHBoxLocalX(0),
+      y: texHBoxLocalY(0 - height),
       width,
       height: rule,
       color: params.frameColor,
@@ -927,8 +953,8 @@ export function texFrameMBoxHList(
     {
       kind: "rule",
       role: "boxed-rule",
-      x: 0,
-      y: -height,
+      x: texHBoxLocalX(0),
+      y: texHBoxLocalY(0 - height),
       width: rule,
       height: sideHeight,
       color: params.frameColor,
@@ -937,8 +963,8 @@ export function texFrameMBoxHList(
     {
       kind: "rule",
       role: "boxed-rule",
-      x: roundTexPt(width - rule),
-      y: -height,
+      x: texHBoxLocalX(roundTexPt(width - rule)),
+      y: texHBoxLocalY(0 - height),
       width: rule,
       height: sideHeight,
       color: params.frameColor,
@@ -947,8 +973,8 @@ export function texFrameMBoxHList(
     {
       kind: "rule",
       role: "boxed-rule",
-      x: 0,
-      y: roundTexPt(framedBody.depth + sep),
+      x: texHBoxLocalX(0),
+      y: texHBoxLocalY(roundTexPt(framedBody.depth + sep)),
       width,
       height: rule,
       color: params.frameColor,
@@ -959,8 +985,8 @@ export function texFrameMBoxHList(
     ? {
         kind: "rule",
         role: "colorbox-background",
-        x: 0,
-        y: -height,
+        x: texHBoxLocalX(0),
+        y: texHBoxLocalY(0 - height),
         width,
         height: sideHeight,
         color: params.backgroundColor,
@@ -971,7 +997,7 @@ export function texFrameMBoxHList(
     kind: "hlist",
     role: "boxed-body",
     x: bodyX,
-    y: 0,
+    y: texHBoxLocalY(0),
     width: framedBody.width,
     height: framedBody.height,
     depth: framedBody.depth,
@@ -980,16 +1006,16 @@ export function texFrameMBoxHList(
   };
   const contentItems: TexMathHListItem[] = hasExplicitWidth
     ? [
-        liftedKernItem(rule, sep, -rule),
-        kernItem(0, sep),
+        liftedKernItem(texHBoxLocalX(rule), texHBoxLocalY(sep), texLength(0 - rule)),
+        kernItem(texHBoxLocalX(0), sep),
         bodyChild,
-        kernItem(roundTexPt(sep + framedBody.width), sep),
-        liftedKernItem(width, sep, -rule),
+        kernItem(texHBoxLocalX(roundTexPt(sep + framedBody.width)), sep),
+        liftedKernItem(texHBoxLocalX(width), texHBoxLocalY(sep), texLength(0 - rule)),
       ]
     : [
-        kernItem(rule, sep),
+        kernItem(texHBoxLocalX(rule), sep),
         bodyChild,
-        kernItem(roundTexPt(rule + sep + framedBody.width), sep),
+        kernItem(texHBoxLocalX(roundTexPt(rule + sep + framedBody.width)), sep),
       ];
   return {
     kind: "math-hlist",
@@ -1011,9 +1037,9 @@ function texRuleBox(params: {
   readonly source: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly raise: number;
-  readonly width: number;
-  readonly height: number;
+  readonly raise: TexHBoxOffsetY;
+  readonly width: TexLength;
+  readonly height: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly textFontProfile: TexTextFontProfile;
 }): TexMathBox {
@@ -1021,13 +1047,13 @@ function texRuleBox(params: {
   const width = roundTexPt(params.width);
   const ruleHeight = roundTexPt(params.height);
   const raisedHeight = params.height + params.raise;
-  const height = roundTexPt(Math.max(0, raisedHeight));
-  const depth = roundTexPt(Math.max(0, -params.raise));
+  const height = texLength(roundTexPt(Math.max(0, raisedHeight)));
+  const depth = texLength(roundTexPt(Math.max(0, 0 - params.raise)));
   const rule = {
     kind: "rule",
     role: "literal-rule",
-    x: 0,
-    y: roundTexPt(-raisedHeight),
+    x: texHBoxLocalX(0),
+    y: texHBoxLocalY(roundTexPt(0 - raisedHeight)),
     width,
     height: ruleHeight,
     sourceSpan,
@@ -1062,8 +1088,8 @@ function texRuleBox(params: {
     constructRanges: [{
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
-      xStart: 0,
-      xEnd: width,
+      xStart: texHBoxX(0),
+      xEnd: texHBoxX(width),
     }],
     hlist,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
@@ -1094,8 +1120,8 @@ function texIncludeGraphicsBox(params: {
     resolution.naturalWidthPt > 0 &&
     resolution.naturalHeightPt > 0
       ? {
-          width: resolution.naturalWidthPt,
-          height: resolution.naturalHeightPt,
+          width: texLength(resolution.naturalWidthPt),
+          height: texLength(resolution.naturalHeightPt),
         }
       : null;
   const cropRect = assetNatural
@@ -1103,8 +1129,8 @@ function texIncludeGraphicsBox(params: {
     : null;
   const displayNatural = assetNatural
     ? {
-        width: (cropRect?.width ?? assetNatural.width) * (params.options.scale ?? 1),
-        height: (cropRect?.height ?? assetNatural.height) * (params.options.scale ?? 1),
+        width: texLength((cropRect?.width ?? assetNatural.width) * (params.options.scale ?? 1)),
+        height: texLength((cropRect?.height ?? assetNatural.height) * (params.options.scale ?? 1)),
       }
     : null;
   const size = texIncludeGraphicsTargetSize(params.options, displayNatural);
@@ -1146,7 +1172,7 @@ function texIncludeGraphicsBox(params: {
     contentEnd: params.filenameEnd,
     width,
     height,
-    depth: 0,
+    depth: texLength(0),
     caretStops: texMBoxCaretStops(
       params.sourceStart,
       params.sourceEnd,
@@ -1157,8 +1183,8 @@ function texIncludeGraphicsBox(params: {
     constructRanges: [{
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
-      xStart: 0,
-      xEnd: width,
+      xStart: texHBoxX(0),
+      xEnd: texHBoxX(width),
     }],
     svgBody,
   };
@@ -1179,64 +1205,64 @@ function nodeTextGraphicsOptions(options: SimpleTexGraphicsOptions): NodeTextGra
 
 function texIncludeGraphicsTargetSize(
   options: {
-    readonly width?: number;
-    readonly height?: number;
+    readonly width?: TexLength;
+    readonly height?: TexLength;
     readonly scale?: number;
     readonly keepAspectRatio?: boolean;
   },
-  natural: { readonly width: number; readonly height: number } | null
-): { readonly width: number; readonly height: number } {
+  natural: { readonly width: TexLength; readonly height: TexLength } | null
+): { readonly width: TexLength; readonly height: TexLength } {
   const requestedWidth = finitePositive(options.width);
   const requestedHeight = finitePositive(options.height);
   const base = natural ?? {
-    width: TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1),
-    height: TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1),
+    width: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1)),
+    height: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1)),
   };
   if (requestedWidth !== null && requestedHeight !== null) {
     if (options.keepAspectRatio && base.width > 0 && base.height > 0) {
       const scale = Math.min(requestedWidth / base.width, requestedHeight / base.height);
       return {
-        width: roundTexPt(base.width * scale),
-        height: roundTexPt(base.height * scale),
+        width: texLength(roundTexPt(base.width * scale)),
+        height: texLength(roundTexPt(base.height * scale)),
       };
     }
     return {
-      width: roundTexPt(requestedWidth),
-      height: roundTexPt(requestedHeight),
+      width: texLength(roundTexPt(requestedWidth)),
+      height: texLength(roundTexPt(requestedHeight)),
     };
   }
   if (requestedWidth !== null) {
     return {
-      width: roundTexPt(requestedWidth),
-      height: roundTexPt(natural ? requestedWidth * (base.height / base.width) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT),
+      width: texLength(roundTexPt(requestedWidth)),
+      height: texLength(roundTexPt(natural ? requestedWidth * (base.height / base.width) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT)),
     };
   }
   if (requestedHeight !== null) {
     return {
-      width: roundTexPt(natural ? requestedHeight * (base.width / base.height) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT),
-      height: roundTexPt(requestedHeight),
+      width: texLength(roundTexPt(natural ? requestedHeight * (base.width / base.height) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT)),
+      height: texLength(roundTexPt(requestedHeight)),
     };
   }
   return {
-    width: roundTexPt(base.width),
-    height: roundTexPt(base.height),
+    width: texLength(roundTexPt(base.width)),
+    height: texLength(roundTexPt(base.height)),
   };
 }
 
-function finitePositive(value: number | undefined): number | null {
+function finitePositive<T extends number>(value: T | undefined): T | null {
   return value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 type TexIncludeGraphicsCropRect = {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
+  readonly x: TexHBoxX;
+  readonly y: TexHBoxY;
+  readonly width: TexLength;
+  readonly height: TexLength;
 };
 
 function texIncludeGraphicsCropRect(
   options: SimpleTexGraphicsOptions,
-  natural: { readonly width: number; readonly height: number }
+  natural: { readonly width: TexLength; readonly height: TexLength }
 ): TexIncludeGraphicsCropRect | null {
   if (options.viewport) {
     const crop = texIncludeGraphicsViewportCropRect(options.viewport, natural);
@@ -1247,10 +1273,10 @@ function texIncludeGraphicsCropRect(
   }
   if (options.trim) {
     const crop = {
-      x: options.trim.left,
-      y: options.trim.top,
-      width: natural.width - options.trim.left - options.trim.right,
-      height: natural.height - options.trim.bottom - options.trim.top,
+      x: texHBoxX(options.trim.left),
+      y: texHBoxY(options.trim.top),
+      width: texLength(natural.width - options.trim.left - options.trim.right),
+      height: texLength(natural.height - options.trim.bottom - options.trim.top),
     };
     if (validTexIncludeGraphicsCropRect(crop)) {
       return crop;
@@ -1261,13 +1287,13 @@ function texIncludeGraphicsCropRect(
 
 function texIncludeGraphicsViewportCropRect(
   viewport: SimpleTexGraphicsViewport,
-  natural: { readonly width: number; readonly height: number }
+  natural: { readonly width: TexLength; readonly height: TexLength }
 ): TexIncludeGraphicsCropRect {
   return {
-    x: viewport.llx,
-    y: natural.height - viewport.ury,
-    width: viewport.urx - viewport.llx,
-    height: viewport.ury - viewport.lly,
+    x: texHBoxX(viewport.llx),
+    y: texHBoxY(natural.height - viewport.ury),
+    width: texLength(viewport.urx - viewport.llx),
+    height: texLength(viewport.ury - viewport.lly),
   };
 }
 
@@ -1285,10 +1311,10 @@ function validTexIncludeGraphicsCropRect(crop: TexIncludeGraphicsCropRect): bool
 function renderTexIncludeGraphicsImageSvgBody(params: {
   readonly sourceSpan: { readonly start: number; readonly end: number };
   readonly filename: string;
-  readonly width: number;
-  readonly height: number;
-  readonly naturalWidth: number;
-  readonly naturalHeight: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly naturalWidth: TexLength;
+  readonly naturalHeight: TexLength;
   readonly cropRect: TexIncludeGraphicsCropRect | null;
   readonly clip: boolean;
   readonly mimeType: string;
@@ -1322,8 +1348,8 @@ function renderTexIncludeGraphicsImageSvgBody(params: {
 function renderTexIncludeGraphicsPlaceholderSvgBody(params: {
   readonly sourceSpan: { readonly start: number; readonly end: number };
   readonly filename: string;
-  readonly width: number;
-  readonly height: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
   readonly status: "missing" | "unsupported";
   readonly reason?: string;
 }): string {
@@ -1382,12 +1408,12 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly children: readonly SimpleTexInlineNode[];
-  readonly lift: number;
-  readonly boxHeight?: number;
-  readonly boxDepth?: number;
+  readonly lift: TexHBoxOffsetY;
+  readonly boxHeight?: TexLength;
+  readonly boxDepth?: TexLength;
   readonly fontState: SimpleTexFontState;
   readonly childFontScale?: number;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
@@ -1398,7 +1424,9 @@ function texRaiseBoxFromInlineNodes(params: {
     ? params.fontState
     : {
         ...params.fontState,
-        sizePt: roundTexPt((params.fontState.sizePt ?? params.atPt) * params.childFontScale),
+        sizePt: texLength(roundTexPt(
+          (params.fontState.sizePt ?? params.atPt) * params.childFontScale
+        )),
       };
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, childFontState),
@@ -1422,10 +1450,10 @@ function texRaiseBoxFromInlineNodes(params: {
     return null;
   }
   const lift = roundTexPt(params.lift);
-  const naturalHeight = roundTexPt(Math.max(0, body.height + lift));
-  const naturalDepth = roundTexPt(Math.max(0, body.depth - lift));
-  const height = roundTexPt(params.boxHeight ?? naturalHeight);
-  const depth = roundTexPt(params.boxDepth ?? naturalDepth);
+  const naturalHeight = texLength(roundTexPt(Math.max(0, body.height + lift)));
+  const naturalDepth = texLength(roundTexPt(Math.max(0, body.depth - lift)));
+  const height = texLength(roundTexPt(params.boxHeight ?? naturalHeight));
+  const depth = texLength(roundTexPt(params.boxDepth ?? naturalDepth));
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
   const hlist: TexMathHList = {
     kind: "math-hlist",
@@ -1437,8 +1465,8 @@ function texRaiseBoxFromInlineNodes(params: {
     items: [{
       kind: "hlist",
       role: "nucleus",
-      x: 0,
-      y: roundTexPt(-lift),
+      x: texHBoxLocalX(0),
+      y: texHBoxLocalY(roundTexPt(0 - lift)),
       width: body.width,
       height: body.height,
       depth: body.depth,
@@ -1470,8 +1498,8 @@ function texRaiseBoxFromInlineNodes(params: {
     constructRanges: [{
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
-      xStart: 0,
-      xEnd: body.width,
+      xStart: texHBoxX(0),
+      xEnd: texHBoxX(body.width),
     }],
     hlist,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
@@ -1488,7 +1516,7 @@ function texDimensionBoxFromInlineNodes(params: {
   readonly contentEnd: number;
   readonly children: readonly SimpleTexInlineNode[];
   readonly fontState: SimpleTexFontState;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
@@ -1521,9 +1549,9 @@ function texDimensionBoxFromInlineNodes(params: {
     params.command === "smash";
   const preserveVertical = params.command === "phantom" || params.command === "vphantom";
   const renderBody = params.command === "smash";
-  const width = preserveWidth ? body.width : 0;
-  const height = preserveVertical ? body.height : 0;
-  const depth = preserveVertical ? body.depth : 0;
+  const width = preserveWidth ? body.width : texLength(0);
+  const height = preserveVertical ? body.height : texLength(0);
+  const depth = preserveVertical ? body.depth : texLength(0);
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
   const hlist: TexMathHList = {
     kind: "math-hlist",
@@ -1555,8 +1583,8 @@ function texDimensionBoxFromInlineNodes(params: {
     constructRanges: [{
       sourceStart: params.sourceStart,
       sourceEnd: params.sourceEnd,
-      xStart: 0,
-      xEnd: width,
+      xStart: texHBoxX(0),
+      xEnd: texHBoxX(width),
     }],
     hlist,
     fontProfile: texMBoxFontProfile(params.metricProvider, params.textFontProfile),
@@ -1571,11 +1599,11 @@ function texMBoxFontProfile(
     ...defaultTexMathFontProfile,
     textFontProfile,
     metricProvider,
-    resolveMathFont: ({ family, style, baseAtPt = 10 }) => {
+    resolveMathFont: ({ family, style, baseAtPt = texLength(10) }) => {
       const fontId = defaultTexMathFontProfile.resolveMathFontId(family, style);
       return metricProvider.resolveFont({
         fontId,
-        atPt: texMBoxMathFontAtPt(family, fontId, style, baseAtPt),
+        atPt: texMBoxMathFontAtPt(family, fontId, style, texLength(baseAtPt)),
       });
     },
   };
@@ -1585,16 +1613,16 @@ function texMBoxMathFontAtPt(
   family: TexMathFontFamily,
   fontId: string,
   style: TexMathStyle,
-  baseAtPt: number
-): number {
+  baseAtPt: TexLength
+): TexLength {
   if (family === "extension" && fontId === "cmex10") {
     return baseAtPt;
   }
   if (style === "script") {
-    return baseAtPt * 0.7;
+    return texLength(baseAtPt * 0.7);
   }
   if (style === "scriptscript") {
-    return baseAtPt * 0.5;
+    return texLength(baseAtPt * 0.5);
   }
   return baseAtPt;
 }
@@ -1604,25 +1632,25 @@ function texMBoxCaretStops(
   sourceEnd: number,
   contentStart: number,
   contentEnd: number,
-  width: number
-): readonly number[] {
+  width: TexLength
+): readonly TexHBoxX[] {
   const length = Math.max(0, sourceEnd - sourceStart);
   const contentLength = Math.max(1, contentEnd - contentStart);
   return Array.from({ length: length + 1 }, (_, index) => {
     const sourceOffset = sourceStart + index;
     if (sourceOffset <= contentStart) {
-      return 0;
+      return texHBoxX(0);
     }
     if (sourceOffset >= contentEnd) {
-      return roundTexPt(width);
+      return texHBoxX(roundTexPt(width));
     }
-    return roundTexPt(((sourceOffset - contentStart) / contentLength) * width);
+    return texHBoxX(roundTexPt(((sourceOffset - contentStart) / contentLength) * width));
   });
 }
 
 export function simpleTexInlineTokensToLayoutItems(params: {
   readonly tokens: ReturnType<typeof simpleTexInlineNodesToTokens>;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
@@ -1746,9 +1774,9 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         source: token.text,
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
-        raise: token.ruleRaise ?? 0,
-        width: token.ruleWidth ?? 0,
-        height: token.ruleHeight ?? 0,
+        raise: token.ruleRaise ?? texHBoxOffsetY(0),
+        width: token.ruleWidth ?? texLength(0),
+        height: token.ruleHeight ?? texLength(0),
         metricProvider: params.metricProvider,
         textFontProfile: params.textFontProfile,
       });
@@ -1805,7 +1833,10 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
-        lift: roundTexPt((token.lift ?? 0) + (token.relativeLiftEm ?? 0) * surroundingSizePt),
+        lift: texHBoxOffsetY(roundTexPt(
+          (token.lift ?? texHBoxOffsetY(0)) +
+          (token.relativeLiftEm ?? 0) * surroundingSizePt
+        )),
         boxHeight: token.boxHeight,
         boxDepth: token.boxDepth,
         fontState: token.fontState,
@@ -1960,23 +1991,23 @@ function textBoundaryKernWidth(
   left: TexLayoutTextItem,
   right: TexLayoutTextItem,
   metricProvider: TexMetricProvider
-): number {
+): TexLength {
   if (left.font.id !== right.font.id || left.text.length === 0 || right.text.length === 0) {
-    return 0;
+    return texLength(0);
   }
   const leftChar = left.text.at(-1) ?? "";
   const rightChar = right.text[0] ?? "";
   if (!leftChar || !rightChar) {
-    return 0;
+    return texLength(0);
   }
   const shapedPair = metricProvider.shapeText(`${leftChar}${rightChar}`, left.font);
   if (!shapedPair.items.some((item) => item.kind === "kern")) {
-    return 0;
+    return texLength(0);
   }
   const separateWidth =
     metricProvider.shapeText(leftChar, left.font).width +
     metricProvider.shapeText(rightChar, right.font).width;
-  return roundTexPt(shapedPair.width - separateWidth);
+  return texLength(roundTexPt(shapedPair.width - separateWidth));
 }
 
 export function texMBoxHListFromLayoutItems(params: {
@@ -1985,9 +2016,9 @@ export function texMBoxHListFromLayoutItems(params: {
   readonly metricProvider: TexMetricProvider;
 }): TexMathHList | null {
   const items: TexMathHListItem[] = [];
-  let cursor = 0;
-  let height = 0;
-  let depth = 0;
+  let cursor = texHBoxLocalX(0);
+  let height = texLength(0);
+  let depth = texLength(0);
 
   for (const item of params.items) {
     if (item.kind === "text") {
@@ -1998,19 +2029,19 @@ export function texMBoxHListFromLayoutItems(params: {
       for (const shapedItem of shaped.items) {
         const layoutItem = texTextShapedItemToMBoxItem(shapedItem, item.font, cursor);
         items.push(layoutItem);
-        cursor = roundTexPt(cursor + layoutItem.width);
+        cursor = texHBoxLocalX(roundTexPt(cursor + layoutItem.width));
         if (layoutItem.kind === "glyph") {
-          height = Math.max(height, layoutItem.height);
-          depth = Math.max(depth, layoutItem.depth);
+          height = texLength(Math.max(height, layoutItem.height));
+          depth = texLength(Math.max(depth, layoutItem.depth));
         }
       }
       const correction = item.italicCorrectionAfter
         ? texMBoxTrailingItalicCorrectionWidth(shaped.items)
-        : 0;
+        : texLength(0);
       if (item.italicCorrectionAfter) {
         const kern = texMBoxKernItem(cursor, correction, item.sourceEnd, item.sourceEnd);
         items.push(kern);
-        cursor = roundTexPt(cursor + kern.width);
+        cursor = texHBoxLocalX(roundTexPt(cursor + kern.width));
       }
       continue;
     }
@@ -2023,14 +2054,14 @@ export function texMBoxHListFromLayoutItems(params: {
       );
       const layoutGlue = texMBoxGlueItem(cursor, glue, item.sourceStart, item.sourceEnd);
       items.push(layoutGlue);
-      cursor = roundTexPt(cursor + layoutGlue.width);
+      cursor = texHBoxLocalX(roundTexPt(cursor + layoutGlue.width));
       continue;
     }
 
     if (item.kind === "kern") {
       const kern = texMBoxKernItem(cursor, item.width, item.sourceStart, item.sourceEnd);
       items.push(kern);
-      cursor = roundTexPt(cursor + kern.width);
+      cursor = texHBoxLocalX(roundTexPt(cursor + kern.width));
       continue;
     }
 
@@ -2040,9 +2071,9 @@ export function texMBoxHListFromLayoutItems(params: {
         return null;
       }
       items.push(child);
-      cursor = roundTexPt(cursor + child.width);
-      height = Math.max(height, child.height);
-      depth = Math.max(depth, child.depth);
+      cursor = texHBoxLocalX(roundTexPt(cursor + child.width));
+      height = texLength(Math.max(height, child.height));
+      depth = texLength(Math.max(depth, child.depth));
       continue;
     }
 
@@ -2056,9 +2087,9 @@ export function texMBoxHListFromLayoutItems(params: {
   return {
     kind: "math-hlist",
     style: "text",
-    width: roundTexPt(cursor),
-    height: roundTexPt(height),
-    depth: roundTexPt(depth),
+    width: texLength(roundTexPt(cursor)),
+    height: texLength(roundTexPt(height)),
+    depth: texLength(roundTexPt(depth)),
     sourceSpan: params.sourceSpan,
     items,
   };
@@ -2067,7 +2098,7 @@ export function texMBoxHListFromLayoutItems(params: {
 export function texReboxMBoxHList(
   hlist: TexMathHList,
   params: {
-    readonly boxWidth?: number;
+    readonly boxWidth?: TexLength;
     readonly boxAlign?: SimpleTexTextBoxAlignment;
   }
 ): TexMathHList {
@@ -2090,31 +2121,31 @@ export function texReboxMBoxHList(
     width: targetWidth,
     items: hlist.items.map((item): TexMathHListItem => ({
       ...item,
-      x: roundTexPt(item.x + offset),
+      x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, offset))),
     })),
   };
 }
 
 function texMBoxAlignmentOffset(
-  naturalWidth: number,
-  targetWidth: number,
+  naturalWidth: TexLength,
+  targetWidth: TexLength,
   alignment: SimpleTexTextBoxAlignment
-): number {
+): TexHBoxOffsetX {
   switch (alignment) {
     case "left":
     case "natural":
     case "stretch":
-      return 0;
+      return texHBoxOffsetX(0);
     case "right":
-      return roundTexPt(targetWidth - naturalWidth);
+      return texHBoxOffsetX(roundTexPt(targetWidth - naturalWidth));
     case "center":
-      return roundTexPt((targetWidth - naturalWidth) / 2);
+      return texHBoxOffsetX(roundTexPt((targetWidth - naturalWidth) / 2));
   }
 }
 
 function texSetMBoxHListWidth(
   hlist: TexMathHList,
-  targetWidth: number
+  targetWidth: TexLength
 ): TexMathHList {
   const roundedTargetWidth = roundTexPt(targetWidth);
   const delta = roundTexPt(roundedTargetWidth - hlist.width);
@@ -2136,18 +2167,18 @@ function texSetMBoxHListWidth(
   const ratio = sign === "stretch"
     ? delta / total
     : Math.min(-delta / total, 1);
-  let offset = 0;
+  let offset = texHBoxOffsetX(0);
   const items = hlist.items.map((item): TexMathHListItem => {
-    const shiftedX = roundTexPt(item.x + offset);
+    const shiftedX = texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, offset)));
     if (item.kind !== "glue") {
       return {
         ...item,
         x: shiftedX,
       };
     }
-    const adjustment = (sign === "stretch" ? item.stretch : -item.shrink) * ratio;
-    const adjustedWidth = roundTexPt(item.width + adjustment);
-    offset = roundTexPt(offset + adjustedWidth - item.width);
+    const adjustment = (sign === "stretch" ? item.stretch : 0 - item.shrink) * ratio;
+    const adjustedWidth = texLength(roundTexPt(item.width + adjustment));
+    offset = texHBoxOffsetX(roundTexPt(offset + adjustedWidth - item.width));
     return {
       ...item,
       x: shiftedX,
@@ -2164,7 +2195,7 @@ function texSetMBoxHListWidth(
 function texTextShapedItemToMBoxItem(
   item: ReturnType<TexMetricProvider["shapeText"]>["items"][number],
   font: ResolvedTexFont,
-  x: number
+  x: TexHBoxLocalX
 ): TexMathGlyphLayoutItem | TexMathKernLayoutItem {
   if (item.kind === "kern") {
     return texMBoxKernItem(x, item.width, item.sourceStart, item.sourceEnd);
@@ -2177,7 +2208,7 @@ function texTextShapedItemToMBoxItem(
     code: item.code,
     text: String.fromCharCode(item.code),
     x,
-    y: 0,
+    y: texHBoxLocalY(0),
     width: item.width,
     height: item.height,
     depth: item.depth,
@@ -2191,8 +2222,8 @@ function texTextShapedItemToMBoxItem(
 }
 
 function texMBoxKernItem(
-  x: number,
-  width: number,
+  x: TexHBoxLocalX,
+  width: TexLength,
   sourceStart: number,
   sourceEnd: number
 ): TexMathKernLayoutItem {
@@ -2209,8 +2240,12 @@ function texMBoxKernItem(
 }
 
 function texMBoxGlueItem(
-  x: number,
-  glue: { readonly width: number; readonly stretch: number; readonly shrink: number },
+  x: TexHBoxLocalX,
+  glue: {
+    readonly width: TexLength;
+    readonly stretch: TexLength;
+    readonly shrink: TexLength;
+  },
   sourceStart: number,
   sourceEnd: number
 ): TexMathGlueLayoutItem {
@@ -2218,7 +2253,7 @@ function texMBoxGlueItem(
     kind: "glue",
     x,
     width: roundTexPt(glue.width),
-    mu: 0,
+    mu: texMuLength(0),
     stretch: roundTexPt(glue.stretch),
     shrink: roundTexPt(glue.shrink),
     source: "explicit",
@@ -2231,19 +2266,19 @@ function texMBoxGlueItem(
 
 function texMBoxTrailingItalicCorrectionWidth(
   items: ReturnType<TexMetricProvider["shapeText"]>["items"]
-): number {
+): TexLength {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item?.kind === "glyph") {
       return item.italicCorrection;
     }
   }
-  return 0;
+  return texLength(0);
 }
 
 function texMBoxChildHListItem(
   box: TexMathBox,
-  x: number,
+  x: TexHBoxLocalX,
   sourceStart: number,
   sourceEnd: number
 ): TexMathChildHListLayoutItem | null {
@@ -2254,7 +2289,7 @@ function texMBoxChildHListItem(
     kind: "hlist",
     role: "nucleus",
     x,
-    y: 0,
+    y: texHBoxLocalY(0),
     width: roundTexPt(box.width),
     height: roundTexPt(box.height),
     depth: roundTexPt(box.depth),

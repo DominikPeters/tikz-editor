@@ -1,10 +1,16 @@
 import { roundTexPt } from "../fonts/units.js";
 import {
+  texLength,
   texVListLocalX,
+  texVListLocalY,
   texVListX,
+  texVListY,
   translateTexVListX,
+  type TexLength,
   type TexVListLocalX,
+  type TexVListLocalY,
   type TexVListX,
+  type TexVListY,
 } from "../coordinates.js";
 import type { TexParagraphAlignment } from "../ir.js";
 import type {
@@ -28,39 +34,41 @@ export interface MeasuredTexVListItem {
   readonly metrics: TexBoxMetrics;
   /** Inline displacement relative to the containing VList origin. */
   readonly x?: TexVListLocalX;
-  readonly y?: number;
-  readonly advance?: number;
+  readonly y?: TexVListY;
+  readonly advance?: TexLength;
 }
 
 export type TexVListItemMeasurer = (
   item: TexVListItem,
-  cursor: number,
+  cursor: TexVListY,
   index: number,
   items: readonly TexVListItem[],
   path: readonly number[]
 ) => MeasuredTexVListItem | null;
 
 interface TexVListLayoutContext {
-  readonly inlineScopeWidth?: number;
+  readonly inlineScopeWidth?: TexLength;
   readonly paragraphAlignment?: TexParagraphAlignment;
 }
 
 export function computeTexVListNaturalTotalHeight(
   items: readonly TexVListItem[],
   measureItem: TexVListItemMeasurer
-): number {
-  return layoutTexVListItems(items, measureItem, null, 0).cursor;
+): TexLength {
+  return texLength(
+    layoutTexVListItems(items, measureItem, null, texVListY(0)).cursor
+  );
 }
 
 export function layoutTexVListItems(
   items: readonly TexVListItem[],
   measureItem: TexVListItemMeasurer,
   glueSet: TexVListGlueSet | null,
-  startCursor: number,
+  startCursor: TexVListY,
   pathPrefix: readonly number[] = [],
   xOffset: TexVListX = texVListX(0),
   context: TexVListLayoutContext = {}
-): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: number } {
+): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: TexVListY } {
   const positioned: PositionedTexVListItem[] = [];
   let cursor = startCursor;
   for (let index = 0; index < items.length; index += 1) {
@@ -77,12 +85,12 @@ export function layoutTexVListItems(
         x: xOffset,
         y: cursor,
         metrics: {
-          width: 0,
-          height: Math.max(0, size),
-          depth: 0,
+          width: texLength(0),
+          height: texLength(Math.max(0, size)),
+          depth: texLength(0),
         },
       });
-      cursor = roundTexPt(cursor + size);
+      cursor = texVListY(roundTexPt(cursor + size));
       continue;
     }
 
@@ -100,7 +108,7 @@ export function layoutTexVListItems(
         y,
         metrics: measured.metrics,
       });
-      cursor = roundTexPt(y + advance);
+      cursor = texVListY(roundTexPt(y + advance));
       continue;
     }
 
@@ -133,7 +141,7 @@ export function layoutTexVListItems(
 function layoutTexVBoxItem(
   item: TexVBoxItem,
   measureItem: TexVListItemMeasurer,
-  top: number,
+  top: TexVListY,
   path: readonly number[],
   xOffset: TexVListX,
   context: TexVListLayoutContext
@@ -141,10 +149,10 @@ function layoutTexVBoxItem(
   readonly children: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
   readonly baseline: TexVBoxBaseline;
-  readonly cursor: number;
+  readonly cursor: TexVListY;
 } {
-  const leftMarginWidth = item.layout?.leftMarginWidth ?? 0;
-  const rightMarginWidth = item.layout?.rightMarginWidth ?? 0;
+  const leftMarginWidth = item.layout?.leftMarginWidth ?? texLength(0);
+  const rightMarginWidth = item.layout?.rightMarginWidth ?? texLength(0);
   const targetWidth = finiteTexDimen(item.width);
   const childXOffset = texVListX(roundTexPt(translateTexVListX(
     xOffset,
@@ -168,7 +176,7 @@ function layoutTexVBoxItem(
       ...(childScopeWidth !== undefined ? { inlineScopeWidth: childScopeWidth } : {}),
     }
   );
-  const naturalHeight = roundTexPt(natural.cursor - top);
+  const naturalHeight = texLength(roundTexPt(natural.cursor - top));
   const targetHeight = finiteTexDimen(item.height);
   const glueSet = texVListGlueSetForTargetHeight(
     item.items,
@@ -189,13 +197,13 @@ function layoutTexVBoxItem(
         }
       )
     : natural;
-  const laidOutHeight = roundTexPt(laidOut.cursor - top);
+  const laidOutHeight = texLength(roundTexPt(laidOut.cursor - top));
   const advance = targetHeight ?? laidOutHeight;
   const childOffset = targetHeight === undefined
-    ? 0
+    ? texVListLocalY(0)
     : texVListRootVerticalOffset(laidOutHeight, targetHeight, item.alignment);
   const children = offsetPositionedTexVListItems(laidOut.positioned, childOffset);
-  const cursor = roundTexPt(top + advance);
+  const cursor = texVListY(roundTexPt(top + advance));
   const baselineY = baselineYForVBox(children, top);
   return {
     children,
@@ -210,7 +218,7 @@ function layoutTexVBoxItem(
     ),
     baseline: baselineY === null
       ? { kind: "none" }
-      : { kind: "explicit", y: roundTexPt(baselineY - top) },
+      : { kind: "explicit", y: texVListLocalY(roundTexPt(baselineY - top)) },
     cursor,
   };
 }
@@ -218,36 +226,36 @@ function layoutTexVBoxItem(
 function materialVBoxInlineX(
   item: TexVBoxItem,
   context: TexVListLayoutContext
-): number {
+): TexVListLocalX {
   if (!item.material) {
-    return 0;
+    return texVListLocalX(0);
   }
   const scopeWidth = context.inlineScopeWidth;
   const boxWidth = finiteTexDimen(item.width);
   if (scopeWidth === undefined || boxWidth === undefined) {
-    return 0;
+    return texVListLocalX(0);
   }
   const available = Math.max(0, scopeWidth - boxWidth);
   const alignment = context.paragraphAlignment;
   if (alignment === "ragged-left") {
-    return roundTexPt(available);
+    return texVListLocalX(roundTexPt(available));
   }
   if (alignment === "center") {
-    return roundTexPt(available / 2);
+    return texVListLocalX(roundTexPt(available / 2));
   }
-  return 0;
+  return texVListLocalX(0);
 }
 
 function texVListChildInlineScopeWidth(
-  inheritedWidth: number | undefined,
-  targetWidth: number | undefined,
-  leftMarginWidth: number,
-  rightMarginWidth: number
-): number | undefined {
+  inheritedWidth: TexLength | undefined,
+  targetWidth: TexLength | undefined,
+  leftMarginWidth: TexLength,
+  rightMarginWidth: TexLength
+): TexLength | undefined {
   const outerWidth = targetWidth ?? inheritedWidth;
   return outerWidth === undefined
     ? undefined
-    : Math.max(0, outerWidth - leftMarginWidth - rightMarginWidth);
+    : texLength(Math.max(0, outerWidth - leftMarginWidth - rightMarginWidth));
 }
 
 export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexVListItem | null {
@@ -274,9 +282,9 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
   if (item.kind === "penalty") {
     return {
       metrics: {
-        width: 0,
-        height: 0,
-        depth: 0,
+        width: texLength(0),
+        height: texLength(0),
+        depth: texLength(0),
       },
     };
   }
@@ -293,30 +301,30 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
 }
 
 export function texVListRootVerticalOffset(
-  naturalHeight: number,
-  targetHeight: number,
+  naturalHeight: TexLength,
+  targetHeight: TexLength,
   verticalAlign: TexVListLayoutOptions["verticalAlign"]
-): number {
+): TexVListLocalY {
   const extra = Math.max(0, targetHeight - naturalHeight);
   if (extra === 0 || !verticalAlign || verticalAlign === "top") {
-    return 0;
+    return texVListLocalY(0);
   }
   if (verticalAlign === "center") {
-    return roundTexPt(extra / 2);
+    return texVListLocalY(roundTexPt(extra / 2));
   }
-  return roundTexPt(extra);
+  return texVListLocalY(roundTexPt(extra));
 }
 
 export function offsetPositionedTexVListItems(
   items: readonly PositionedTexVListItem[],
-  dy: number
+  dy: TexVListLocalY
 ): readonly PositionedTexVListItem[] {
   if (dy === 0) {
     return items;
   }
   return items.map((item) => ({
     ...item,
-    y: roundTexPt(item.y + dy),
+    y: texVListY(roundTexPt(item.y + dy)),
     children: item.children
       ? offsetPositionedTexVListItems(item.children, dy)
       : undefined,
@@ -325,13 +333,13 @@ export function offsetPositionedTexVListItems(
 
 export function texVListGlueSetForTargetHeight(
   items: readonly TexVListItem[],
-  naturalHeight: number,
-  targetHeight: number | undefined
+  naturalHeight: TexLength,
+  targetHeight: TexLength | undefined
 ): TexVListGlueSet | null {
   if (!Number.isFinite(targetHeight) || targetHeight === undefined) {
     return null;
   }
-  const delta = roundTexPt(targetHeight - naturalHeight);
+  const delta = texLength(roundTexPt(targetHeight - naturalHeight));
   if (delta === 0) {
     return null;
   }
@@ -352,7 +360,7 @@ export function texVListGlueSetForTargetHeight(
   }
   const amount = texVListGlueAmount(items, "shrink", order);
   return amount > 0
-    ? { sign: "shrink", order, ratio: Math.min(-delta / amount, 1) }
+    ? { sign: "shrink", order, ratio: Math.min((0 - delta) / amount, 1) }
     : null;
 }
 
@@ -380,16 +388,18 @@ function texVListGlueAmount(
   items: readonly TexVListItem[],
   sign: "stretch" | "shrink",
   order: TexGlueOrder
-): number {
-  return texVListGlueItems(items).reduce((sum, item) => {
+): TexLength {
+  return texVListGlueItems(items).reduce<TexLength>((sum, item) => {
     const itemOrder = sign === "stretch"
       ? item.stretchOrder ?? "normal"
       : item.shrinkOrder ?? "normal";
     if (itemOrder !== order) {
       return sum;
     }
-    return sum + Math.max(0, sign === "stretch" ? item.stretch ?? 0 : item.shrink ?? 0);
-  }, 0);
+    return texLength(
+      sum + Math.max(0, sign === "stretch" ? item.stretch ?? 0 : item.shrink ?? 0)
+    );
+  }, texLength(0));
 }
 
 function texVListGlueItems(items: readonly TexVListItem[]): TexGlueItem[] {
@@ -405,7 +415,7 @@ function texVListGlueItems(items: readonly TexVListItem[]): TexGlueItem[] {
 function texVListAdjustedGlueSize(
   item: TexGlueItem,
   glueSet: TexVListGlueSet | null
-): number {
+): TexLength {
   if (!glueSet) {
     return item.size;
   }
@@ -414,13 +424,13 @@ function texVListAdjustedGlueSize(
     if (order !== glueSet.order) {
       return item.size;
     }
-    return item.size + Math.max(0, item.stretch ?? 0) * glueSet.ratio;
+    return texLength(item.size + Math.max(0, item.stretch ?? 0) * glueSet.ratio);
   }
   const order = item.shrinkOrder ?? "normal";
   if (order !== glueSet.order) {
     return item.size;
   }
-  return item.size - Math.max(0, item.shrink ?? 0) * glueSet.ratio;
+  return texLength(item.size - Math.max(0, item.shrink ?? 0) * glueSet.ratio);
 }
 
 function texGlueOrderRank(order: TexGlueOrder): number {
@@ -436,7 +446,7 @@ function texGlueOrderRank(order: TexGlueOrder): number {
   return 0;
 }
 
-function finiteTexDimen(value: number | string | undefined): number | undefined {
+function finiteTexDimen(value: TexLength | string | undefined): TexLength | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
@@ -444,31 +454,31 @@ function finiteTexDimen(value: number | string | undefined): number | undefined 
 
 function metricsForVBox(
   positioned: readonly PositionedTexVListItem[],
-  top: number,
-  bottom: number,
-  xOffset = 0,
-  leftMarginWidth = 0,
-  rightMarginWidth = 0,
-  targetWidth: number | undefined = undefined
+  top: TexVListY,
+  bottom: TexVListY,
+  xOffset: TexVListX = texVListX(0),
+  leftMarginWidth: TexLength = texLength(0),
+  rightMarginWidth: TexLength = texLength(0),
+  targetWidth: TexLength | undefined = undefined
 ): TexBoxMetrics {
   const baselineY = baselineYForVBox(positioned, top) ?? top;
   const contentRight = Math.max(
     leftMarginWidth,
     ...positioned.map((item) => item.x - xOffset + item.metrics.width)
   );
-  const naturalWidth = roundTexPt(contentRight + rightMarginWidth);
+  const naturalWidth = texLength(roundTexPt(contentRight + rightMarginWidth));
   const width = targetWidth ?? naturalWidth;
   return {
     width,
-    height: roundTexPt(Math.max(0, baselineY - top)),
-    depth: roundTexPt(Math.max(0, bottom - baselineY)),
+    height: texLength(roundTexPt(Math.max(0, baselineY - top))),
+    depth: texLength(roundTexPt(Math.max(0, bottom - baselineY))),
   };
 }
 
 function baselineYForVBox(
   positioned: readonly PositionedTexVListItem[],
-  top: number
-): number | null {
+  top: TexVListY
+): TexVListY | null {
   const firstBox = positioned.find((item) =>
     item.item.kind !== "glue" &&
     (item.item.kind !== "hbox" || item.item.affectsVBoxBaseline !== false)
@@ -477,35 +487,35 @@ function baselineYForVBox(
     return null;
   }
   if (firstBox.baseline?.kind === "explicit") {
-    return roundTexPt(firstBox.y + firstBox.baseline.y);
+    return texVListY(roundTexPt(firstBox.y + firstBox.baseline.y));
   }
   if (firstBox.baseline?.kind === "none") {
     return top;
   }
-  return roundTexPt(firstBox.y + firstBox.metrics.height);
+  return texVListY(roundTexPt(firstBox.y + firstBox.metrics.height));
 }
 
 export function texVListBaselineY(
-  firstLineTop: number | null,
-  firstLineAscent: number | null | undefined
-): number | null {
+  firstLineTop: TexVListY | null,
+  firstLineAscent: TexLength | null | undefined
+): TexVListY | null {
   if (firstLineTop === null) {
     return null;
   }
-  return roundTexPt(firstLineTop + (firstLineAscent ?? 0));
+  return texVListY(roundTexPt(firstLineTop + (firstLineAscent ?? texLength(0))));
 }
 
 export function metricsForRootBox(
-  width: number,
-  totalHeight: number,
-  baselineY: number | null
+  width: TexLength,
+  totalHeight: TexLength,
+  baselineY: TexVListY | null
 ): TexBoxMetrics {
   if (baselineY === null) {
-    return { width, height: 0, depth: totalHeight };
+    return { width, height: texLength(0), depth: totalHeight };
   }
   return {
     width,
-    height: baselineY,
-    depth: roundTexPt(Math.max(0, totalHeight - baselineY)),
+    height: texLength(baselineY),
+    depth: texLength(roundTexPt(Math.max(0, totalHeight - baselineY))),
   };
 }

@@ -28,8 +28,21 @@ import type {
 } from '../../tex/vlist/types.js';
 import type { TexMathBox } from '../../tex/layout-inline-items.js';
 import {
+  projectTexHBoxXToLine,
+  projectTexHBoxYToLine,
+  projectTexVListXToLine,
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texLineX,
+  texLineY,
   texVListX,
   texVListY,
+  type TexHBoxX,
+  type TexHBoxY,
+  type TexLength,
+  type TexLineX,
+  type TexLineY,
   type TexVListX,
   type TexVListY,
 } from '../../tex/coordinates.js';
@@ -66,14 +79,12 @@ type Element = {
   querySelectorAll?(selector: string): ArrayLike<Element>;
 };
 type LineDirectionUnit = Readonly<{ x: number; y: number }>;
-type LineReportCoord = CoordinateBrand<'KnuthPlassLineReportCoord'>;
-type LineReportY = CoordinateBrand<'KnuthPlassLineReportY'>;
 type MathBaselineCoord = CoordinateBrand<'KnuthPlassMathBaselineCoord'>;
-type LineReportPoint = Readonly<{ x: LineReportCoord; y: LineReportY }>;
-type MathBaselinePoint = Readonly<{ x: LineReportCoord; y: MathBaselineCoord }>;
+type LineReportPoint = Readonly<{ x: TexLineX; y: TexLineY }>;
+type MathBaselinePoint = Readonly<{ x: TexLineX; y: MathBaselineCoord }>;
 type MathCaretBounds = Readonly<{
-  xStart: LineReportCoord;
-  xEnd: LineReportCoord;
+  xStart: TexLineX;
+  xEnd: TexLineX;
   yStart: MathBaselineCoord;
   yEnd: MathBaselineCoord;
 }>;
@@ -82,12 +93,12 @@ function lineDirectionUnit(x: number, y: number): LineDirectionUnit {
   return { x, y };
 }
 
-function lineReportCoord(value: number): LineReportCoord {
-  return value as LineReportCoord;
+function lineReportCoord(value: number): TexLineX {
+  return texLineX(value);
 }
 
-function lineReportY(value: number): LineReportY {
-  return value as LineReportY;
+function lineReportY(value: number): TexLineY {
+  return texLineY(value);
 }
 
 function mathBaselineCoord(value: number): MathBaselineCoord {
@@ -374,7 +385,7 @@ export interface SelectionRectsResult extends ResultBase {
 
 interface Stop {
   offset: number;
-  x: LineReportCoord;
+  x: TexLineX;
   y?: MathBaselineCoord;
   kind: 'text' | 'space' | 'math';
   snappedToMathPrefix: boolean;
@@ -434,15 +445,15 @@ interface AlignedSegment {
 interface MathConstructRange {
   sourceStartRaw: number;
   sourceEndRaw: number;
-  xStart: LineReportCoord;
-  xEnd: LineReportCoord;
+  xStart: TexLineX;
+  xEnd: TexLineX;
 }
 
 interface MathCaretEntry {
   sourceOffsetRaw: number;
   sourceStartRaw?: number;
   sourceEndRaw?: number;
-  x: LineReportCoord;
+  x: TexLineX;
   y: MathBaselineCoord;
   height: MathBaselineCoord;
   depth: MathBaselineCoord;
@@ -1595,8 +1606,8 @@ function inverseScreenMatrixForLine(
 function lineLocalClientPoint(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number],
-  x: LineReportCoord,
-  y: LineReportY = lineReportY(0)
+  x: TexLineX,
+  y: TexLineY = lineReportY(0)
 ): ClientPoint {
   const lineStart = Number(reportLine.xStart);
   const localReportX = x - lineStart;
@@ -1629,7 +1640,7 @@ function lineBaselineOriginPoint(
   return lineLocalClientPoint(line, reportLine, lineReportCoord(lineStart));
 }
 
-function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): LineReportY {
+function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): TexLineY {
   const ascent = Number(reportLine.ascent);
   return lineReportY(Number.isFinite(ascent) ? ascent : 0);
 }
@@ -1637,7 +1648,7 @@ function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): Line
 function mathBaselineYToLineY(
   reportLine: ParagraphLayoutReport['lines'][number],
   y: MathBaselineCoord
-): LineReportY {
+): TexLineY {
   return lineReportY(lineBaselineY(reportLine) + y);
 }
 
@@ -2207,7 +2218,7 @@ function alignSegmentsToSource(
       if (segment.kind === 'math') {
         const mathGroupStartIndex = segmentIndex;
         const groupStartX = segment.x;
-        let groupEndX = segment.x + Math.max(0, segment.width);
+        let groupEndX = texLineX(segment.x + Math.max(0, segment.width));
         let groupRawStart = runRange.rawStart;
         let groupRawEnd = runRange.rawEnd;
 
@@ -2216,7 +2227,7 @@ function alignSegmentsToSource(
           line.segments[segmentIndex + 1]?.kind === 'math'
         ) {
           const next = line.segments[segmentIndex + 1];
-          groupEndX = Math.max(groupEndX, next.x + Math.max(0, next.width));
+          groupEndX = texLineX(Math.max(groupEndX, next.x + Math.max(0, next.width)));
           const nextRange = runRaw.runRawByIndex.get(next.runIndex);
           if (!nextRange) {
             return {
@@ -2244,7 +2255,7 @@ function alignSegmentsToSource(
         const groupCaretStops = mathGroupStartIndex === segmentIndex &&
           Array.isArray(segment.caretStops)
           ? segment.caretStops
-          : [groupStartX, Math.max(groupStartX, groupEndX)];
+          : [groupStartX, texLineX(Math.max(groupStartX, groupEndX))];
         const groupConstructRanges = mathGroupStartIndex === segmentIndex
           ? normalizeMathConstructRanges(segment.mathConstructRanges)
           : undefined;
@@ -2259,7 +2270,7 @@ function alignSegmentsToSource(
             runIndex: line.segments[mathGroupStartIndex]?.runIndex ?? segment.runIndex,
             kind: 'math',
             x: groupStartX,
-            width: Math.max(0, groupEndX - groupStartX),
+            width: texLength(Math.max(0, groupEndX - groupStartX)),
             caretStops: groupCaretStops,
           },
           rawStart: groupRawStart,
@@ -2361,7 +2372,7 @@ function alignExplicitMathSegmentGroup(
   let groupRawStart = firstRange.rawStart;
   let groupRawEnd = firstRange.rawEnd;
   let groupStartX = first.x;
-  let groupEndX = first.x + Math.max(0, first.width);
+  let groupEndX = texLineX(first.x + Math.max(0, first.width));
   let endSegmentIndex = startSegmentIndex;
   let mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
 
@@ -2384,8 +2395,8 @@ function alignExplicitMathSegmentGroup(
     segments.push(next);
     groupRawStart = Math.min(groupRawStart, nextRange.rawStart);
     groupRawEnd = Math.max(groupRawEnd, nextRange.rawEnd);
-    groupStartX = Math.min(groupStartX, next.x);
-    groupEndX = Math.max(groupEndX, next.x + Math.max(0, next.width));
+    groupStartX = texLineX(Math.min(groupStartX, next.x));
+    groupEndX = texLineX(Math.max(groupEndX, next.x + Math.max(0, next.width)));
     endSegmentIndex = nextSegmentIndex;
     mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
   }
@@ -2419,7 +2430,7 @@ function alignExplicitMathSegmentGroup(
         runIndex: first.runIndex,
         kind: 'math',
         x: groupStartX,
-        width: Math.max(0, groupEndX - groupStartX),
+        width: texLength(Math.max(0, groupEndX - groupStartX)),
         caretStops,
       },
       rawStart: groupRawStart,
@@ -2449,9 +2460,9 @@ function combineExplicitMathGroupCaretStops(
   segments: readonly LineSegmentReport[],
   groupRawStart: number,
   groupRawEnd: number,
-  groupStartX: number,
-  groupEndX: number
-): number[] {
+  groupStartX: TexLineX,
+  groupEndX: TexLineX
+): TexLineX[] {
   const stops = Array.from({ length: Math.max(0, groupRawEnd - groupRawStart) + 1 }, () => Number.NaN);
   stops[0] = groupStartX;
   stops[stops.length - 1] = groupEndX;
@@ -2474,7 +2485,7 @@ function combineExplicitMathGroupCaretStops(
     }
   }
   interpolateLineStops(stops, groupStartX, groupEndX);
-  return stops;
+  return stops.map(texLineX);
 }
 
 function interpolateLineStops(stops: number[], startX: number, endX: number): void {
@@ -2767,24 +2778,28 @@ function displayMathLineHitMapFromPositionedItem(params: {
   }
   const metrics = params.item.metrics;
   const totalHeight = Math.max(1, metrics.height + metrics.depth);
-  const width = Math.max(0, metrics.width);
+  const width = texLength(Math.max(0, metrics.width));
   const sourceStart = Math.max(0, Math.floor(source.sourceStart));
   const sourceEnd = Math.max(sourceStart, Math.floor(source.sourceEnd));
   if (sourceEnd <= sourceStart || width <= EPSILON) {
     return [];
   }
 
-  const xStart = params.item.x;
-  const y = texVListY(params.item.y);
+  const xStart = projectTexVListXToLine(
+    params.item.x,
+    texVListX(0),
+    texLineX(0)
+  );
+  const y = params.item.y;
   if (!Number.isFinite(xStart) || !Number.isFinite(y)) {
     return [];
   }
-  const xEnd = texVListX(xStart + width);
+  const xEnd = texLineX(xStart + width);
   const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y + metrics.height);
   const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, params.lineIndex);
   const bounds = clientRectForLocalBox(
     0,
-    -metrics.height,
+    0 - metrics.height,
     width,
     totalHeight,
     lineMatrix
@@ -2843,10 +2858,10 @@ function displayMathSyntheticReportLine(params: {
   readonly lineIndex: number;
   readonly source: TexMathBox;
   readonly metrics: TexBoxMetrics;
-  readonly xStart: number;
-  readonly xEnd: number;
+  readonly xStart: TexLineX;
+  readonly xEnd: TexLineX;
 }): ParagraphLayoutReport['lines'][number] {
-  const width = Math.max(0, params.xEnd - params.xStart);
+  const width = texLength(Math.max(0, params.xEnd - params.xStart));
   return {
     lineIndex: params.lineIndex,
     startRun: -1,
@@ -2857,7 +2872,7 @@ function displayMathSyntheticReportLine(params: {
     glueSetRatio: 0,
     badness: 0,
     spaceCount: 0,
-    spaceDeltaPerGap: 0,
+    spaceDeltaPerGap: texLength(0),
     ascent: params.metrics.height,
     descent: params.metrics.depth,
     xStart: params.xStart,
@@ -2917,9 +2932,9 @@ function displayMathSourceForHBox(item: TexHBoxItem): TexMathBox | null {
     sourceEnd: hitMap.sourceEnd as number,
     contentStart: hitMap.contentStart as number,
     contentEnd: hitMap.contentEnd as number,
-    width: hitMap.width as number,
-    height: hitMap.height as number,
-    depth: hitMap.depth as number,
+    width: texLength(hitMap.width as number),
+    height: texLength(hitMap.height as number),
+    depth: texLength(hitMap.depth as number),
     caretStops: hitMap.caretStops,
     constructRanges: hitMap.constructRanges,
     breakpoints: hitMap.breakpoints,
@@ -2928,8 +2943,8 @@ function displayMathSourceForHBox(item: TexHBoxItem): TexMathBox | null {
 
 function displayMathStopsForBox(
   box: TexMathBox,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): Stop[] {
   const stops = displayMathCaretStopsForBox(box, x, width);
   const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
@@ -2945,26 +2960,32 @@ function displayMathStopsForBox(
 
 function displayMathCaretStopsForBox(
   box: Pick<TexMathBox, 'sourceStart' | 'sourceEnd' | 'caretStops'>,
-  x: number,
-  width: number
-): number[] {
+  x: TexLineX,
+  width: TexLength
+): TexLineX[] {
   const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
   const localStops = box.caretStops;
   if (Array.isArray(localStops) && localStops.length === rawLength + 1) {
     return localStops.map((stop) => {
       const numericStop = Number(stop);
-      return x + Math.max(0, Math.min(width, Number.isFinite(numericStop) ? numericStop : 0));
+      return projectDisplayMathHBoxXToLine(
+        texHBoxX(Math.max(
+          0,
+          Math.min(width, Number.isFinite(numericStop) ? numericStop : 0)
+        )),
+        x
+      );
     });
   }
   return Array.from({ length: rawLength + 1 }, (_, index) =>
-    x + (rawLength > 0 ? (width * index) / rawLength : 0)
+    texLineX(x + (rawLength > 0 ? (width * index) / rawLength : 0))
   );
 }
 
 function displayMathConstructRangesForBox(
   box: Pick<TexMathBox, 'constructRanges'>,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): LineSegmentReport['mathConstructRanges'] {
   const ranges = box.constructRanges;
   if (!ranges?.length) {
@@ -2973,15 +2994,21 @@ function displayMathConstructRangesForBox(
   return ranges.map((range) => ({
     sourceStartRaw: range.sourceStart,
     sourceEndRaw: range.sourceEnd,
-    xStart: x + Math.max(0, Math.min(width, range.xStart)),
-    xEnd: x + Math.max(0, Math.min(width, range.xEnd)),
+    xStart: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, range.xStart))),
+      x
+    ),
+    xEnd: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, range.xEnd))),
+      x
+    ),
   }));
 }
 
 function displayMathCaretEntriesForBox(
   box: Pick<TexMathBox, 'caretMap'>,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): LineSegmentReport['mathCaretEntries'] {
   const entries = box.caretMap?.entries;
   if (!entries?.length) {
@@ -2993,25 +3020,34 @@ function displayMathCaretEntriesForBox(
       sourceStartRaw: entry.sourceSpan.start,
       sourceEndRaw: entry.sourceSpan.end,
     } : {}),
-    x: x + Math.max(0, Math.min(width, entry.x)),
-    y: entry.y,
+    x: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, entry.x))),
+      x
+    ),
+    y: projectDisplayMathHBoxYToLine(entry.y),
     height: entry.height,
     depth: entry.depth,
     kind: entry.kind,
     ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
     hitBounds: {
-      xStart: x + Math.max(0, Math.min(width, entry.hitBounds.xStart)),
-      xEnd: x + Math.max(0, Math.min(width, entry.hitBounds.xEnd)),
-      yStart: entry.hitBounds.yStart,
-      yEnd: entry.hitBounds.yEnd,
+      xStart: projectDisplayMathHBoxXToLine(
+        texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xStart))),
+        x
+      ),
+      xEnd: projectDisplayMathHBoxXToLine(
+        texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xEnd))),
+        x
+      ),
+      yStart: projectDisplayMathHBoxYToLine(entry.hitBounds.yStart),
+      yEnd: projectDisplayMathHBoxYToLine(entry.hitBounds.yEnd),
     },
   }));
 }
 
 function displayMathBreakpointsForBox(
   box: Pick<TexMathBox, 'breakpoints'>,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): LineSegmentReport['mathBreakpoints'] {
   const breakpoints = box.breakpoints;
   if (!breakpoints?.length) {
@@ -3020,9 +3056,23 @@ function displayMathBreakpointsForBox(
   return breakpoints.map((breakpoint) => ({
     kind: breakpoint.kind,
     sourceOffsetRaw: breakpoint.sourceOffset,
-    x: x + Math.max(0, Math.min(width, breakpoint.x)),
+    x: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, breakpoint.x))),
+      x
+    ),
     penalty: breakpoint.penalty,
   }));
+}
+
+function projectDisplayMathHBoxXToLine(
+  position: TexHBoxX,
+  lineOrigin: TexLineX
+): TexLineX {
+  return projectTexHBoxXToLine(position, texHBoxX(0), lineOrigin);
+}
+
+function projectDisplayMathHBoxYToLine(position: TexHBoxY): TexLineY {
+  return projectTexHBoxYToLine(position, texHBoxY(0), texLineY(0));
 }
 
 function buildMathConstructRangesByLine(
@@ -3275,8 +3325,8 @@ function mathCaretOffsetAnchorScore(entry: MathCaretEntry, offset: number): numb
 }
 
 interface MathSelectionLocalBox {
-  xStart: LineReportCoord;
-  xEnd: LineReportCoord;
+  xStart: TexLineX;
+  xEnd: TexLineX;
   yStart: MathBaselineCoord;
   yEnd: MathBaselineCoord;
 }
@@ -3383,7 +3433,7 @@ function mathSelectionContainedBySingleSegment(
 function mathSelectionClientHeight(
   line: LineHitMap,
   reportLine: ParagraphLayoutReport['lines'][number],
-  localX: LineReportCoord,
+  localX: TexLineX,
   box: MathSelectionLocalBox
 ): Px {
   const top = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yStart));
@@ -3396,9 +3446,9 @@ function selectionRectForLineLocalSpan(
   reportLine: ParagraphLayoutReport['lines'][number],
   startOffset: number,
   endOffset: number,
-  localStartX: LineReportCoord,
-  localEndX: LineReportCoord,
-  localCenterY: LineReportY,
+  localStartX: TexLineX,
+  localEndX: TexLineX,
+  localCenterY: TexLineY,
   height: Px,
   normalOffset: Px
 ): SelectionRect | null {

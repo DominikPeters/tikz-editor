@@ -1,5 +1,6 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { articleListLeftMarginEmByDepth, type SimpleTexListKind } from "../ir.js";
+import { texLength, type TexLength } from "../coordinates.js";
 import type {
   TexParagraphInput,
   TexVBoxLayout,
@@ -44,15 +45,15 @@ export function texVBoxLayoutForScopeRole(
 
   if (role.kind === "list-item") {
     return {
-      leftMarginWidth: 0,
-      rightMarginWidth: 0,
+      leftMarginWidth: texLength(0),
+      rightMarginWidth: texLength(0),
     };
   }
 
   if (role.kind === "trivlist") {
     return {
-      leftMarginWidth: 0,
-      rightMarginWidth: 0,
+      leftMarginWidth: texLength(0),
+      rightMarginWidth: texLength(0),
       paragraphPolicy: {
         resetInheritedAlignment: true,
         resetAlignment: role.alignment,
@@ -63,14 +64,14 @@ export function texVBoxLayoutForScopeRole(
     };
   }
 
-  const leftMarginWidth = role.totalLeftMarginEm * font.atPt;
+  const leftMarginWidth = texLength(role.totalLeftMarginEm * font.atPt);
   return {
     leftMarginWidth,
-    rightMarginWidth: 0,
+    rightMarginWidth: texLength(0),
     list: {
-      ownLeftMarginWidth: role.ownLeftMarginEm * font.atPt,
-      labelRightEdge: role.totalLeftMarginEm * font.atPt - 0.5 * font.atPt,
-      descriptionLabelSepWidth: 0.5 * font.atPt,
+      ownLeftMarginWidth: texLength(role.ownLeftMarginEm * font.atPt),
+      labelRightEdge: texLength(role.totalLeftMarginEm * font.atPt - 0.5 * font.atPt),
+      descriptionLabelSepWidth: texLength(0.5 * font.atPt),
     },
     paragraphPolicy: {
       resetInheritedAlignment: true,
@@ -175,9 +176,9 @@ export function texVBoxScopeKeyForRole(role: TexVBoxRole): string {
   ].join(":");
 }
 
-function texArticleQuoteOwnMarginWidth(depth: number, font: ResolvedTexFont): number {
+function texArticleQuoteOwnMarginWidth(depth: number, font: ResolvedTexFont): TexLength {
   const em = articleListLeftMarginEmByDepth[
     Math.max(0, Math.min(depth - 1, articleListLeftMarginEmByDepth.length - 1))
   ] ?? 1;
-  return em * font.atPt;
+  return texLength(em * font.atPt);
 }

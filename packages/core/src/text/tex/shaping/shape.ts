@@ -1,4 +1,9 @@
 import { encodeOt1Text, type Ot1EncodedChar } from "../encoding/ot1.js";
+import {
+  texHBoxX,
+  texLength,
+  type TexHBoxX,
+} from "../coordinates.js";
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import type {
   GeneratedTexCharMetric,
@@ -31,7 +36,7 @@ export function shapeOt1Text(
   const sourceStart = options.sourceStart ?? 0;
   const encoded = encodeOt1Text(text, sourceStart, options.sourceEnd);
   const items = applyLigKernProgram(encoded, font);
-  const width = roundTexPt(items.reduce((sum, item) => sum + item.width, 0));
+  const width = roundTexPt(texLength(items.reduce((sum, item) => sum + item.width, 0)));
   const sourceEnd = options.sourceEnd ?? sourceStart + text.length;
   const caretStops = buildCaretStops(sourceStart, sourceEnd, font, items);
 
@@ -161,13 +166,13 @@ function buildCaretStops(
 ): TexCaretStop[] {
   const stops = Array.from({ length: Math.max(0, sourceEnd - sourceStart) + 1 }, (_, index) => ({
     sourceOffset: sourceStart + index,
-    x: 0,
+    x: texHBoxX(0),
   }));
-  let x = 0;
+  let x: TexHBoxX = texHBoxX(0);
   for (const item of items) {
     if (item.kind === "kern") {
       const local = item.sourceStart - sourceStart;
-      x = roundTexPt(x + item.width);
+      x = roundTexPt(texHBoxX(x + item.width));
       if (local >= 0 && local < stops.length) {
         stops[local] = { sourceOffset: item.sourceStart, x };
       }
@@ -184,19 +189,19 @@ function buildCaretStops(
     if (internalStops > 0) {
       const componentWidths = item.components.map((code) => tfmToPt(font, getCharMetric(font, code).width));
       const componentTotal = componentWidths.reduce((sum, width) => sum + width, 0);
-      let internalX = x;
+      let internalX: TexHBoxX = x;
       for (let index = 1; index <= internalStops; index++) {
         const componentWidth = componentWidths[index - 1] ?? (item.width / internalStops);
-        internalX += componentTotal > 0
+        internalX = texHBoxX(internalX + (componentTotal > 0
           ? item.width * (componentWidth / componentTotal)
-          : item.width / internalStops;
+          : item.width / internalStops));
         const local = localStart + index;
         if (local >= 0 && local < stops.length) {
           stops[local] = { sourceOffset: sourceStart + local, x: roundTexPt(internalX) };
         }
       }
     }
-    x = roundTexPt(x + item.width);
+    x = roundTexPt(texHBoxX(x + item.width));
   }
   return stops;
 }

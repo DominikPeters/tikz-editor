@@ -51,6 +51,12 @@ import {
   type SimpleTexInlineNode,
 } from "../ir.js";
 import { parseTexDimensionText, texDimensionUnitFactor } from "../dimensions.js";
+import {
+  texHBoxOffsetY,
+  texLength,
+  texMuLength,
+  type TexLength,
+} from "../coordinates.js";
 
 interface ParseListOptions {
   readonly stopAtGroupClose: boolean;
@@ -746,7 +752,7 @@ class TexMathParser {
       nucleus: {
         kind: "list",
         list: baseList,
-        leadingKern: 0,
+        leadingKern: texLength(0),
         sourceSpan: base?.sourceSpan ?? over.sourceSpan,
       },
       superscript: {
@@ -834,7 +840,9 @@ class TexMathParser {
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
       ...(leftDelimiter.delimiter ? { leftDelimiter: leftDelimiter.delimiter } : {}),
       ...(rightDelimiter.delimiter ? { rightDelimiter: rightDelimiter.delimiter } : {}),
-      ...(thickness.ruleThickness !== undefined ? { ruleThickness: thickness.ruleThickness } : {}),
+      ...(thickness.ruleThickness !== undefined
+        ? { ruleThickness: texLength(thickness.ruleThickness) }
+        : {}),
       ...(style.style ? { style: style.style } : {}),
       sourceSpan,
     };
@@ -863,7 +871,7 @@ class TexMathParser {
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
       leftDelimiter: "(",
       rightDelimiter: ")",
-      ruleThickness: 0,
+      ruleThickness: texLength(0),
       ...(style ? { style } : {}),
       sourceSpan,
     };
@@ -1029,7 +1037,7 @@ class TexMathParser {
       return {
         kind: "kern",
         command: "kern",
-        widthPt: amount.valuePt,
+        widthPt: texLength(amount.valuePt),
         commandSourceSpan: command.sourceSpan,
         amountSourceSpan: amount.sourceSpan,
         sourceSpan: spanUnion(command.sourceSpan, amount.sourceSpan),
@@ -1043,7 +1051,7 @@ class TexMathParser {
     return {
       kind: "kern",
       command: "mkern",
-      mu: amount.valueMu,
+      mu: texMuLength(amount.valueMu),
       commandSourceSpan: command.sourceSpan,
       amountSourceSpan: amount.sourceSpan,
       sourceSpan: spanUnion(command.sourceSpan, amount.sourceSpan),
@@ -1071,9 +1079,9 @@ class TexMathParser {
       return {
         kind: "skip-glue",
         command: "hskip",
-        widthPt: amount.valuePt,
-        ...(stretch ? { stretchPt: stretch.valuePt } : {}),
-        ...(shrink ? { shrinkPt: shrink.valuePt } : {}),
+        widthPt: texLength(amount.valuePt),
+        ...(stretch ? { stretchPt: texLength(stretch.valuePt) } : {}),
+        ...(shrink ? { shrinkPt: texLength(shrink.valuePt) } : {}),
         commandSourceSpan: command.sourceSpan,
         amountSourceSpan: amount.sourceSpan,
         sourceSpan: spanUnion(command.sourceSpan, shrink?.sourceSpan ?? stretch?.sourceSpan ?? amount.sourceSpan),
@@ -1089,9 +1097,9 @@ class TexMathParser {
     return {
       kind: "skip-glue",
       command: "mskip",
-      mu: amount.valueMu,
-      ...(stretch ? { stretchMu: stretch.valueMu } : {}),
-      ...(shrink ? { shrinkMu: shrink.valueMu } : {}),
+      mu: texMuLength(amount.valueMu),
+      ...(stretch ? { stretchMu: texMuLength(stretch.valueMu) } : {}),
+      ...(shrink ? { shrinkMu: texMuLength(shrink.valueMu) } : {}),
       commandSourceSpan: command.sourceSpan,
       amountSourceSpan: amount.sourceSpan,
       sourceSpan: spanUnion(command.sourceSpan, shrink?.sourceSpan ?? stretch?.sourceSpan ?? amount.sourceSpan),
@@ -1221,9 +1229,9 @@ class TexMathParser {
       atomClass: "ord",
       nucleus: {
         kind: "rule",
-        width: width?.valuePt ?? 0,
-        height: height?.valuePt ?? 0,
-        raise: raise?.valuePt ?? 0,
+        width: texLength(width?.valuePt ?? 0),
+        height: texLength(height?.valuePt ?? 0),
+        raise: texHBoxOffsetY(raise?.valuePt ?? 0),
         commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },
@@ -1265,7 +1273,7 @@ class TexMathParser {
       nucleus: {
         kind: "shift-box",
         direction,
-        amount: amount?.valuePt ?? 0,
+        amount: texLength(amount?.valuePt ?? 0),
         body,
         commandSourceSpan: command.sourceSpan,
         amountSourceSpan: amount?.sourceSpan ?? command.sourceSpan,
@@ -1295,7 +1303,7 @@ class TexMathParser {
   private parseText(allowScripts: boolean): TexMathAtom {
     const command = this.advance();
     const name = mathTextCommandName(command.text) ?? "text";
-    let boxWidth: number | undefined;
+    let boxWidth: TexLength | undefined;
     let boxAlign: SimpleTexTextBoxAlignment | undefined;
     let argumentSpan = command.sourceSpan;
     if (name === "makebox" || name === "framebox") {
@@ -1304,7 +1312,7 @@ class TexMathParser {
         `${command.text} width`
       );
       if (widthArgument) {
-        boxWidth = widthArgument.valuePt;
+        boxWidth = texLength(widthArgument.valuePt);
         boxAlign = "center";
         argumentSpan = spanUnion(argumentSpan, widthArgument.sourceSpan);
         const alignArgument = this.parseOptionalBracketTextArgument(
@@ -1317,10 +1325,10 @@ class TexMathParser {
         }
       }
     } else if (name === "llap") {
-      boxWidth = 0;
+      boxWidth = texLength(0);
       boxAlign = "right";
     } else if (name === "rlap") {
-      boxWidth = 0;
+      boxWidth = texLength(0);
       boxAlign = "left";
     }
     const content = this.parseRequiredTextGroup(command.sourceSpan, `${command.text} content`);
@@ -2980,7 +2988,9 @@ class TexMathParser {
         denominator,
         ...(delimiters.leftDelimiter ? { leftDelimiter: delimiters.leftDelimiter } : {}),
         ...(delimiters.rightDelimiter ? { rightDelimiter: delimiters.rightDelimiter } : {}),
-        ...(delimiters.ruleThickness !== undefined ? { ruleThickness: delimiters.ruleThickness } : {}),
+        ...(delimiters.ruleThickness !== undefined
+          ? { ruleThickness: texLength(delimiters.ruleThickness) }
+          : {}),
         sourceSpan,
       },
       sourceSpan,
@@ -5414,10 +5424,10 @@ function explicitMu(
 ): TexMathMuGlue {
   return {
     kind: "mu-glue",
-    mu,
-    ...(options.displayMu !== undefined ? { displayMu: options.displayMu } : {}),
-    ...(options.stretchMu !== undefined ? { stretchMu: options.stretchMu } : {}),
-    ...(options.shrinkMu !== undefined ? { shrinkMu: options.shrinkMu } : {}),
+    mu: texMuLength(mu),
+    ...(options.displayMu !== undefined ? { displayMu: texMuLength(options.displayMu) } : {}),
+    ...(options.stretchMu !== undefined ? { stretchMu: texMuLength(options.stretchMu) } : {}),
+    ...(options.shrinkMu !== undefined ? { shrinkMu: texMuLength(options.shrinkMu) } : {}),
     ...(options.omitInScript === true ? { omitInScript: true } : {}),
     sourceSpan,
   };

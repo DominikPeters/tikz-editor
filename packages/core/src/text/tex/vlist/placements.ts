@@ -1,5 +1,6 @@
 import type { LineReport } from "../../knuth-plass/paragraph/report.js";
 import { roundTexPt } from "../fonts/units.js";
+import { texLength, texVListY, type TexLength } from "../coordinates.js";
 import type {
   PositionedTexVListItem,
   TexParagraphItem,
@@ -18,7 +19,7 @@ interface MeasuredPositionedTexParagraph {
 export function texVListLinePlacements(
   items: readonly PositionedTexVListItem[],
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
-  lineHeight: number
+  lineHeight: TexLength
 ): readonly TexVListLinePlacement[] {
   const linePlacementsByIndex = new Map<number, TexVListLinePlacement>();
   for (const { item, measurement } of measuredPositionedTexParagraphs(
@@ -32,9 +33,9 @@ export function texVListLinePlacements(
       linePlacementsByIndex.set(line.lineIndex, {
         lineIndex: line.lineIndex,
         x: item.x,
-        y: roundTexPt(item.y + line.y),
+        y: texVListY(roundTexPt(item.y + line.y)),
         height: line.metrics
-          ? roundTexPt(line.metrics.height + line.metrics.depth)
+          ? texLength(roundTexPt(line.metrics.height + line.metrics.depth))
           : lineHeight,
       });
     }

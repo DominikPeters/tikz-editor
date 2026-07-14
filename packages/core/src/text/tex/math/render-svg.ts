@@ -2,6 +2,8 @@ import type { ResolvedTexFont } from "../fonts/types.js";
 import {
   texHBoxX,
   texHBoxY,
+  translateTexHBoxX,
+  translateTexHBoxY,
   type TexHBoxX,
   type TexHBoxY,
 } from "../coordinates.js";
@@ -64,9 +66,11 @@ export function texMathGlyphVisualBounds(
   const hboxOriginX = texHBoxX(originX);
   const hboxOriginY = texHBoxY(originY);
   const scale = font.atPt / 10;
+  const glyphX = translateTexHBoxX(hboxOriginX, item.x);
+  const glyphY = translateTexHBoxY(hboxOriginY, item.y);
   const points = svgPathControlPoints(d).map((point) => ({
-    x: hboxOriginX + item.x + point.x * scale,
-    y: hboxOriginY + item.y + point.y * scale,
+    x: glyphX + point.x * scale,
+    y: glyphY + point.y * scale,
   }));
   if (!points.length) {
     return null;
@@ -100,8 +104,8 @@ function renderMathHListItems(
       pieces.push(...renderMathHListItems(
         item.items,
         fontProfile,
-        texHBoxX(originX + item.x),
-        texHBoxY(originY + item.y)
+        translateTexHBoxX(originX, item.x),
+        translateTexHBoxY(originY, item.y)
       ));
       pieces.push("</g>");
       continue;
@@ -130,12 +134,14 @@ function renderMathRule(
   originX: TexHBoxX,
   originY: TexHBoxY
 ): string {
+  const x = translateTexHBoxX(originX, item.x);
+  const y = translateTexHBoxY(originY, item.y);
   return [
     `<rect data-tex-rule="${escapeXmlAttribute(item.role)}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
-    ` x="${formatSvgNumber((originX + item.x) * SVG_UNIT_SCALE)}"`,
-    ` y="${formatSvgNumber((originY + item.y) * SVG_UNIT_SCALE)}"`,
+    ` x="${formatSvgNumber(x * SVG_UNIT_SCALE)}"`,
+    ` y="${formatSvgNumber(y * SVG_UNIT_SCALE)}"`,
     ` width="${formatSvgNumber(item.width * SVG_UNIT_SCALE)}"`,
     ` height="${formatSvgNumber(item.height * SVG_UNIT_SCALE)}"`,
     item.color
@@ -156,6 +162,8 @@ function renderMathGlyphPath(
     return "";
   }
   const scale = (font.atPt / 10) * SVG_UNIT_SCALE;
+  const x = translateTexHBoxX(originX, item.x);
+  const y = translateTexHBoxY(originY, item.y);
   return [
     `<path data-tex-font="${escapeXmlAttribute(font.id)}"`,
     ` data-tex-glyph="${item.code}"`,
@@ -165,7 +173,7 @@ function renderMathGlyphPath(
       ? ` fill="${escapeXmlAttribute(item.color)}" stroke="${escapeXmlAttribute(item.color)}"`
       : "",
     ` d="${escapeXmlAttribute(d)}"`,
-    ` transform="translate(${formatSvgNumber((originX + item.x) * SVG_UNIT_SCALE)} ${formatSvgNumber((originY + item.y) * SVG_UNIT_SCALE)}) scale(${formatSvgNumber(scale)})" />`,
+    ` transform="translate(${formatSvgNumber(x * SVG_UNIT_SCALE)} ${formatSvgNumber(y * SVG_UNIT_SCALE)}) scale(${formatSvgNumber(scale)})" />`,
   ].join("");
 }
 

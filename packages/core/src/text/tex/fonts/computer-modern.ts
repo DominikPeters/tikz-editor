@@ -8,6 +8,7 @@ import type {
   TexMetricProvider,
 } from "./types.js";
 import { shapeOt1Text } from "../shaping/shape.js";
+import { texLength } from "../coordinates.js";
 
 export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmr10",
@@ -114,7 +115,7 @@ export class ComputerModernTexMetricProvider implements TexMetricProvider {
     }
     return {
       id,
-      atPt: options.atPt ?? data.designSize,
+      atPt: options.atPt ?? texLength(data.designSize),
       data,
     };
   }

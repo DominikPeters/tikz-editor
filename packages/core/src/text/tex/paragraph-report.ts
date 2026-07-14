@@ -1,5 +1,6 @@
 import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
 import type {
+  BreakReport,
   LineReport,
   ParagraphLayoutReport,
 } from "../knuth-plass/paragraph/report.js";
@@ -37,6 +38,21 @@ import {
 import type { TexLineLabel } from "./vlist/index.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 import type { TexLineBox } from "./vlist/index.js";
+import {
+  projectTexHBoxXToLine,
+  projectTexHBoxYToLine,
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texLineX,
+  texLineY,
+  texVListLocalY,
+  type TexHBoxX,
+  type TexHBoxY,
+  type TexLength,
+  type TexLineX,
+  type TexLineY,
+} from "./coordinates.js";
 
 export interface TexParagraphReportBuildResult {
   readonly report: ParagraphLayoutReport;
@@ -45,12 +61,12 @@ export interface TexParagraphReportBuildResult {
 
 export function buildTexParagraphReport(params: {
   paragraphId: string;
-  width: number;
+  width: TexLength;
   alignment: TexParagraphAlignment;
   runs: readonly ParagraphRun[];
   lines: readonly GreedyLine[];
   shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
-  runWidths: ReadonlyMap<number, number>;
+  runWidths: ReadonlyMap<number, TexLength>;
   lineLabels: ReadonlyMap<number, TexLineLabel>;
   linebreakingMode: "feasible" | "overfull";
   layoutMode: KnuthPlassLayoutMode;
@@ -63,7 +79,7 @@ export function buildTexParagraphReport(params: {
     kind: run.kind,
     sourceStart: run.sourceStart,
     sourceEnd: run.sourceEnd,
-    width: params.runWidths.get(run.runIndex) ?? 0,
+    width: params.runWidths.get(run.runIndex) ?? texLength(0),
     text: run.kind === "text" || run.kind === "space" ? run.text : undefined,
   }));
   const builtLines = params.lines.map((line) => buildTexLineReport(line, params));
@@ -88,32 +104,32 @@ export function buildTexParagraphReport(params: {
 function buildTexLineReport(
   line: GreedyLine,
   params: {
-    width: number;
+    width: TexLength;
     runs: readonly ParagraphRun[];
     shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
     metricProvider: TexMetricProvider;
-    runWidths: ReadonlyMap<number, number>;
+    runWidths: ReadonlyMap<number, TexLength>;
     lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
   }
 ): { readonly report: LineReport; readonly lineBox: TexLineBox } {
   const segments: LineReport["segments"] = [];
-  let x = line.xOffset ?? 0;
-  let ascent = 0;
-  let descent = 0;
+  let x = texLineX(line.xOffset ?? 0);
+  let ascent = texLength(0);
+  let descent = texLength(0);
   const label = params.lineLabels.get(line.lineIndex);
   if (label) {
     const labelReport = buildTexLineLabelSegments(label, params.metricProvider);
     segments.push(...labelReport.segments);
-    ascent = Math.max(ascent, labelReport.ascent);
-    descent = Math.max(descent, labelReport.descent);
+    ascent = texLength(Math.max(ascent, labelReport.ascent));
+    descent = texLength(Math.max(descent, labelReport.descent));
   }
   if (line.startPendingText) {
     const runFont = params.shapedRuns.get(line.startRun)?.font ?? params.font;
     const shaped = params.metricProvider.shapeText(line.startPendingText, runFont);
     const metrics = texShapedRunMetrics(shaped);
-    ascent = Math.max(ascent, metrics.ascent);
-    descent = Math.max(descent, metrics.descent);
+    ascent = texLength(Math.max(ascent, metrics.ascent));
+    descent = texLength(Math.max(descent, metrics.descent));
     segments.push({
       runIndex: line.startRun,
       kind: "text",
@@ -129,9 +145,13 @@ function buildTexLineReport(
       ...(runFont.color ? { color: runFont.color } : {}),
       x,
       width: shaped.width,
-      caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
+      caretStops: shaped.caretStops.map((stop) => projectRoundedTexHBoxXToLine(
+        stop,
+        texHBoxX(0),
+        x
+      )),
     });
-    x = roundTexPt(x + shaped.width);
+    x = texLineX(roundTexPt(x + shaped.width));
   }
   for (let runIndex = line.startRun; runIndex <= line.endRun; runIndex++) {
     const run = params.runs[runIndex];
@@ -161,12 +181,12 @@ function buildTexLineReport(
           `Missing TeX caret stop while building report segment ${run.runIndex}:${startOffset}-${endOffset}.`
         );
       }
-      const width = roundTexPt(endX - startX);
+      const width = texLength(roundTexPt(endX - startX));
       const caretStops = shaped.caretStops.slice(startOffset, endOffset + 1)
-        .map((stop) => roundTexPt(x + stop - startX));
+        .map((stop) => projectRoundedTexHBoxXToLine(stop, startX, x));
       const metrics = texShapedSliceMetrics(shaped, startOffset, endOffset);
-      ascent = Math.max(ascent, metrics.ascent);
-      descent = Math.max(descent, metrics.descent);
+      ascent = texLength(Math.max(ascent, metrics.ascent));
+      descent = texLength(Math.max(descent, metrics.descent));
       segments.push({
         runIndex: run.runIndex,
         kind: "text",
@@ -185,7 +205,7 @@ function buildTexLineReport(
         width,
         caretStops,
       });
-      x = roundTexPt(x + width);
+      x = texLineX(roundTexPt(x + width));
       continue;
     }
 
@@ -194,17 +214,17 @@ function buildTexLineReport(
       const coalesced = coalescedSameLineMathSegment(runIndex, line, params, x, continuationLineStart);
       if (coalesced) {
         segments.push(coalesced.segment);
-        ascent = Math.max(ascent, coalesced.ascent);
-        descent = Math.max(descent, coalesced.descent);
-        x = roundTexPt(x + coalesced.segment.width);
+        ascent = texLength(Math.max(ascent, coalesced.ascent));
+        descent = texLength(Math.max(descent, coalesced.descent));
+        x = texLineX(roundTexPt(x + coalesced.segment.width));
         runIndex = coalesced.endRunIndex;
         continue;
       }
-      const naturalWidth = params.runWidths.get(run.runIndex) ?? 0;
+      const naturalWidth = params.runWidths.get(run.runIndex) ?? texLength(0);
       const width = adjustedTexGlueWidth(naturalWidth, run.texGlue, line.glueSetRatio ?? 0);
       const box = texMathBoxFromWrapper(run.wrapper);
-      ascent = Math.max(ascent, box?.height ?? 0);
-      descent = Math.max(descent, box?.depth ?? 0);
+      ascent = texLength(Math.max(ascent, box?.height ?? texLength(0)));
+      descent = texLength(Math.max(descent, box?.depth ?? texLength(0)));
       segments.push({
         runIndex: run.runIndex,
         kind: "math",
@@ -223,7 +243,7 @@ function buildTexLineReport(
           omitLineInitialOperator: continuationLineStart && box?.sourceStart === box?.contentStart,
         }),
       });
-      x = roundTexPt(x + width);
+      x = texLineX(roundTexPt(x + width));
       continue;
     }
 
@@ -231,7 +251,7 @@ function buildTexLineReport(
       continue;
     }
 
-    const naturalWidth = params.runWidths.get(run.runIndex) ?? 0;
+    const naturalWidth = params.runWidths.get(run.runIndex) ?? texLength(0);
     const width = isTexTextKernSpace(run.wrapper)
       ? naturalWidth
       : adjustedTexGlueWidth(
@@ -250,9 +270,9 @@ function buildTexLineReport(
       sourceKind: isHiddenGlue ? "math" : "text",
       x,
       width,
-      caretStops: [x, roundTexPt(x + width)],
+      caretStops: [x, texLineX(roundTexPt(x + width))],
     });
-    x = roundTexPt(x + width);
+    x = texLineX(roundTexPt(x + width));
   }
 
   if (line.break?.kind === "hyphen" && line.break.discretionary) {
@@ -266,8 +286,8 @@ function buildTexLineReport(
       runFont
     );
     const metrics = texShapedRunMetrics(shaped);
-    ascent = Math.max(ascent, metrics.ascent);
-    descent = Math.max(descent, metrics.descent);
+    ascent = texLength(Math.max(ascent, metrics.ascent));
+    descent = texLength(Math.max(descent, metrics.descent));
     const isSimpleInsertedDiscretionary =
       discretionary.replaceStart === splitOffset &&
       discretionary.replaceEnd === splitOffset &&
@@ -275,7 +295,7 @@ function buildTexLineReport(
       discretionary.postBreakText.length === 0;
     const insertedWidth = line.break.width ?? discretionary.insertedWidth;
     const segmentX = isSimpleInsertedDiscretionary
-      ? roundTexPt(x + insertedWidth - shaped.width)
+      ? texLineX(roundTexPt(x + insertedWidth - shaped.width))
       : x;
     segments.push({
       runIndex: line.break.runIndex,
@@ -292,17 +312,23 @@ function buildTexLineReport(
       ...(runFont.color ? { color: runFont.color } : {}),
       x: segmentX,
       width: shaped.width,
-      caretStops: shaped.caretStops.map((stop) => roundTexPt(segmentX + stop)),
+      caretStops: shaped.caretStops.map((stop) => projectRoundedTexHBoxXToLine(
+        stop,
+        texHBoxX(0),
+        segmentX
+      )),
     });
-    x = roundTexPt(x + (isSimpleInsertedDiscretionary ? insertedWidth : shaped.width));
+    x = texLineX(roundTexPt(
+      x + (isSimpleInsertedDiscretionary ? insertedWidth : shaped.width)
+    ));
   } else if (line.break?.kind === "hyphen" && line.break.visibleHyphen) {
     const runFont = params.shapedRuns.get(line.break.runIndex)?.font ?? params.font;
     const width = params.metricProvider.shapeText("-", runFont).width;
     const metrics = texShapedRunMetrics(params.metricProvider.shapeText("-", runFont));
-    ascent = Math.max(ascent, metrics.ascent);
-    descent = Math.max(descent, metrics.descent);
+    ascent = texLength(Math.max(ascent, metrics.ascent));
+    descent = texLength(Math.max(descent, metrics.descent));
     const insertedWidth = line.break.width ?? width;
-    const hyphenX = roundTexPt(x + insertedWidth - width);
+    const hyphenX = texLineX(roundTexPt(x + insertedWidth - width));
     segments.push({
       runIndex: line.break.runIndex,
       kind: "text",
@@ -318,40 +344,51 @@ function buildTexLineReport(
       ...(runFont.color ? { color: runFont.color } : {}),
       x: hyphenX,
       width,
-      caretStops: [hyphenX, roundTexPt(hyphenX + width)],
+      caretStops: [hyphenX, texLineX(roundTexPt(hyphenX + width))],
     });
-    x = roundTexPt(x + insertedWidth);
+    x = texLineX(roundTexPt(x + insertedWidth));
   }
 
-  const xStart = line.xOffset ?? 0;
+  const xStart = texLineX(line.xOffset ?? 0);
+  const breakReport: BreakReport | null = line.break
+    ? (() => {
+        const { width: breakWidth, ...breakFields } = line.break;
+        return {
+          ...breakFields,
+          ...(breakWidth !== undefined
+            ? { width: texLength(breakWidth) }
+            : {}),
+        };
+      })()
+    : null;
   const report: LineReport = {
     lineIndex: line.lineIndex,
     startRun: line.startRun,
     endRun: line.endRun,
-    width: line.lineNaturalWidth ?? line.width,
-    targetWidth: line.targetWidth ?? params.width,
-    naturalWidth: line.lineNaturalWidth ?? line.width,
+    width: texLength(line.lineNaturalWidth ?? line.width),
+    targetWidth: texLength(line.targetWidth ?? params.width),
+    naturalWidth: texLength(line.lineNaturalWidth ?? line.width),
     glueSetRatio: line.glueSetRatio ?? 0,
     badness: line.badness ?? 0,
     spaceCount: line.spaceCount ?? 0,
-    spaceDeltaPerGap: line.spaceDeltaPerGap ?? 0,
-    ascent: roundTexPt(ascent),
-    descent: roundTexPt(descent),
+    spaceDeltaPerGap: texLength(line.spaceDeltaPerGap ?? 0),
+    ascent: texLength(roundTexPt(ascent)),
+    descent: texLength(roundTexPt(descent)),
     xStart,
     xEnd: x,
-    break: line.break,
+    break: breakReport,
     segments,
   };
   return {
     report,
     lineBox: {
       lineIndex: report.lineIndex,
-      y: 0,
-      targetWidth: report.targetWidth,
+      y: texVListLocalY(0),
+      targetWidth: texLength(report.targetWidth),
       metrics: {
-        width: report.targetWidth,
-        height: report.ascent,
-        depth: report.descent,
+        width: texLength(report.targetWidth),
+        height: texLength(report.ascent),
+        depth: texLength(report.descent),
       },
       lineLeading: report.break?.lineLeading,
       preDisplaySize: texLinePreDisplaySize(report, params.font),
@@ -364,14 +401,14 @@ function coalescedSameLineMathSegment(
   line: GreedyLine,
   params: {
     runs: readonly ParagraphRun[];
-    runWidths: ReadonlyMap<number, number>;
+    runWidths: ReadonlyMap<number, TexLength>;
   },
-  x: number,
+  x: TexLineX,
   omitLineInitialOperator: boolean
 ): {
   readonly segment: LineReport["segments"][number];
-  readonly ascent: number;
-  readonly descent: number;
+  readonly ascent: TexLength;
+  readonly descent: TexLength;
   readonly endRunIndex: number;
 } | null {
   const firstRun = params.runs[startRunIndex];
@@ -389,7 +426,7 @@ function coalescedSameLineMathSegment(
 
   let runIndex = startRunIndex;
   let endRunIndex = startRunIndex;
-  let width = 0;
+  let width = texLength(0);
   let sourceEnd = firstBox.sourceEnd;
   while (runIndex <= line.endRun) {
     const run = params.runs[runIndex];
@@ -402,11 +439,11 @@ function coalescedSameLineMathSegment(
       continue;
     }
     if (run.kind === "space" && isTexMathGlueSpace(run.wrapper)) {
-      width = roundTexPt(width + adjustedTexGlueWidth(
-        params.runWidths.get(run.runIndex) ?? 0,
+      width = texLength(roundTexPt(width + adjustedTexGlueWidth(
+        params.runWidths.get(run.runIndex) ?? texLength(0),
         (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
         line.glueSetRatio ?? 0
-      ));
+      )));
       endRunIndex = runIndex;
       runIndex += 1;
       continue;
@@ -418,11 +455,11 @@ function coalescedSameLineMathSegment(
     if (box?.rootBox !== rootBox) {
       break;
     }
-    width = roundTexPt(width + adjustedTexGlueWidth(
-      params.runWidths.get(run.runIndex) ?? 0,
+    width = texLength(roundTexPt(width + adjustedTexGlueWidth(
+      params.runWidths.get(run.runIndex) ?? texLength(0),
       run.texGlue,
       line.glueSetRatio ?? 0
-    ));
+    )));
     sourceEnd = Math.max(sourceEnd, box.sourceEnd);
     endRunIndex = runIndex;
     runIndex += 1;
@@ -457,7 +494,7 @@ function coalescedSameLineMathSegment(
 function isContinuationLineStartMath(
   line: GreedyLine,
   runIndex: number,
-  x: number
+  x: TexLineX
 ): boolean {
   return line.lineIndex > 0 &&
     runIndex === line.startRun &&
@@ -485,10 +522,13 @@ function isTexTextKernSpace(wrapper: unknown): boolean {
 }
 
 function adjustedTexGlueWidth(
-  naturalWidth: number,
-  texGlue: { readonly stretch: number; readonly shrink: number } | undefined,
+  naturalWidth: TexLength,
+  texGlue: {
+    readonly stretch: number;
+    readonly shrink: number;
+  } | undefined,
   ratio: number
-): number {
+): TexLength {
   // An overfull line with no available shrink has TeX's sentinel ratio
   // -Infinity. Multiplying it by a zero glue component would turn a valid
   // natural width into NaN and poison all following caret geometry.
@@ -496,10 +536,10 @@ function adjustedTexGlueWidth(
     return naturalWidth;
   }
   if (ratio > 0 && typeof texGlue?.stretch === "number" && Number.isFinite(texGlue.stretch)) {
-    return roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.stretch));
+    return texLength(roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.stretch)));
   }
   if (ratio < 0 && typeof texGlue?.shrink === "number" && Number.isFinite(texGlue.shrink)) {
-    return roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.shrink));
+    return texLength(roundTexPt(Math.max(0, naturalWidth + ratio * texGlue.shrink)));
   }
   return naturalWidth;
 }
@@ -507,15 +547,17 @@ function adjustedTexGlueWidth(
 function texLinePreDisplaySize(
   line: LineReport,
   font: ResolvedTexFont
-): number {
+): TexLength {
   const latexArticleListLeftMarginEm = 2.5;
   if (line.spaceCount > 0 && Math.abs(line.glueSetRatio) > 1e-9) {
-    return Number.POSITIVE_INFINITY;
+    return texLength(Number.POSITIVE_INFINITY);
   }
   if (texLineHasInlineListLabel(line)) {
-    return roundTexPt(Math.max(0, line.xEnd + 2 * font.atPt - latexArticleListLeftMarginEm * font.atPt));
+    return texLength(roundTexPt(
+      Math.max(0, line.xEnd + 2 * font.atPt - latexArticleListLeftMarginEm * font.atPt)
+    ));
   }
-  return roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * font.atPt);
+  return texLength(roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * font.atPt));
 }
 
 function texLineHasInlineListLabel(line: LineReport): boolean {
@@ -535,36 +577,7 @@ function texLineHasInlineListLabel(line: LineReport): boolean {
 
 function texMathBoxFromWrapper(
   wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"]
-): {
-  readonly content: string;
-  readonly sourceStart: number;
-  readonly sourceEnd: number;
-  readonly contentStart: number;
-  readonly contentEnd: number;
-  readonly sourceKind?: "text" | "math";
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-  readonly caretMap?: TexMathBox["caretMap"];
-  readonly caretStops?: readonly number[];
-  readonly constructRanges?: readonly {
-    readonly sourceStart: number;
-    readonly sourceEnd: number;
-    readonly xStart: number;
-    readonly xEnd: number;
-  }[];
-  readonly breakpoints?: readonly {
-    readonly kind: "binary" | "relation" | "penalty";
-    readonly sourceOffset: number;
-    readonly x: number;
-    readonly penalty: number;
-  }[];
-  readonly svgBody?: string;
-  readonly hlist?: TexMathHList;
-  readonly fontProfile?: TexMathFontProfile;
-  readonly color?: string;
-  readonly rootBox?: TexMathBox;
-} | null {
+): TexMathBox | null {
   if (!wrapper || typeof wrapper !== "object") {
     return null;
   }
@@ -573,6 +586,7 @@ function texMathBoxFromWrapper(
     return null;
   }
   const typedBox = box as {
+    readonly source?: unknown;
     readonly content?: unknown;
     readonly sourceStart?: unknown;
     readonly sourceEnd?: unknown;
@@ -593,6 +607,7 @@ function texMathBoxFromWrapper(
     readonly rootBox?: unknown;
   };
   return {
+    source: typeof typedBox.source === "string" ? typedBox.source : "",
     content: typeof typedBox.content === "string" ? typedBox.content : "",
     sourceStart: Number(typedBox.sourceStart) || 0,
     sourceEnd: Number(typedBox.sourceEnd) || 0,
@@ -601,14 +616,16 @@ function texMathBoxFromWrapper(
     sourceKind: typedBox.sourceKind === "text" || typedBox.sourceKind === "math"
       ? typedBox.sourceKind
       : undefined,
-    width: Number(typedBox.width) || 0,
-    height: Number(typedBox.height) || 0,
-    depth: Number(typedBox.depth) || 0,
+    width: texLength(Number(typedBox.width) || 0),
+    height: texLength(Number(typedBox.height) || 0),
+    depth: texLength(Number(typedBox.depth) || 0),
     caretMap: typeof typedBox.caretMap === "object" && typedBox.caretMap !== null
       ? typedBox.caretMap as TexMathBox["caretMap"]
       : undefined,
     caretStops: Array.isArray(typedBox.caretStops)
-      ? typedBox.caretStops.filter((stop): stop is number => Number.isFinite(stop))
+      ? typedBox.caretStops
+          .filter((stop): stop is number => Number.isFinite(stop))
+          .map(texHBoxX)
       : undefined,
     constructRanges: parseTexMathConstructRanges(typedBox.constructRanges),
     breakpoints: parseTexMathBreakpoints(typedBox.breakpoints),
@@ -631,19 +648,19 @@ function buildTexLineLabelSegments(
   metricProvider: TexMetricProvider
 ): {
   readonly segments: LineReport["segments"];
-  readonly ascent: number;
-  readonly descent: number;
+  readonly ascent: TexLength;
+  readonly descent: TexLength;
 } {
   const segments: LineReport["segments"] = [];
   const width = texLayoutItemsNaturalWidth(label.label.items, metricProvider);
-  let x = roundTexPt(label.label.rightEdge - width);
-  let ascent = 0;
-  let descent = 0;
+  let x = texLineX(roundTexPt(label.label.rightEdge - width));
+  let ascent = texLength(0);
+  let descent = texLength(0);
   for (const item of label.label.items) {
     if (item.kind === "glyph") {
       const glyphWidth = texLayoutGlyphItemWidth(item);
-      ascent = Math.max(ascent, texLayoutGlyphItemHeight(item));
-      descent = Math.max(descent, texLayoutGlyphItemDepth(item));
+      ascent = texLength(Math.max(ascent, texLayoutGlyphItemHeight(item)));
+      descent = texLength(Math.max(descent, texLayoutGlyphItemDepth(item)));
       segments.push({
         runIndex: label.lineRunIndex,
         kind: "text",
@@ -657,9 +674,9 @@ function buildTexLineLabelSegments(
         glyphCode: item.code,
         x,
         width: glyphWidth,
-        caretStops: [x, roundTexPt(x + glyphWidth)],
+        caretStops: [x, texLineX(roundTexPt(x + glyphWidth))],
       });
-      x = roundTexPt(x + glyphWidth);
+      x = texLineX(roundTexPt(x + glyphWidth));
       continue;
     }
     if (item.kind === "forced-break") {
@@ -668,8 +685,8 @@ function buildTexLineLabelSegments(
     if (item.kind === "text") {
       const shaped = metricProvider.shapeText(item.text, item.font);
       const metrics = texShapedRunMetrics(shaped);
-      ascent = Math.max(ascent, metrics.ascent);
-      descent = Math.max(descent, metrics.descent);
+      ascent = texLength(Math.max(ascent, metrics.ascent));
+      descent = texLength(Math.max(descent, metrics.descent));
       segments.push({
         runIndex: label.lineRunIndex,
         kind: "text",
@@ -682,19 +699,23 @@ function buildTexLineLabelSegments(
         ...(item.font.color ? { color: item.font.color } : {}),
         x,
         width: shaped.width,
-        caretStops: shaped.caretStops.map((stop) => roundTexPt(x + stop)),
+        caretStops: shaped.caretStops.map((stop) => projectRoundedTexHBoxXToLine(
+          stop,
+          texHBoxX(0),
+          x
+        )),
       });
-      x = roundTexPt(x + shaped.width);
+      x = texLineX(roundTexPt(x + shaped.width));
       continue;
     }
     if (item.kind === "kern") {
-      x = roundTexPt(x + item.width);
+      x = texLineX(roundTexPt(x + item.width));
       continue;
     }
     if (item.kind === "math") {
       const mathWidth = texLayoutMathItemWidth(item);
-      ascent = Math.max(ascent, item.box.height);
-      descent = Math.max(descent, item.box.depth);
+      ascent = texLength(Math.max(ascent, item.box.height));
+      descent = texLength(Math.max(descent, item.box.depth));
       segments.push({
         runIndex: label.lineRunIndex,
         kind: "math",
@@ -711,13 +732,13 @@ function buildTexLineLabelSegments(
         mathBreakpoints: texMathBoxBreakpoints(item.box, x, mathWidth),
         mathSvgBody: texMathBoxSvgBody(item.box, mathWidth),
       });
-      x = roundTexPt(x + mathWidth);
+      x = texLineX(roundTexPt(x + mathWidth));
       continue;
     }
     if (item.kind === "text-box") {
       const boxWidth = texLayoutTextBoxItemWidth(item);
-      ascent = Math.max(ascent, item.box.height);
-      descent = Math.max(descent, item.box.depth);
+      ascent = texLength(Math.max(ascent, item.box.height));
+      descent = texLength(Math.max(descent, item.box.depth));
       segments.push({
         runIndex: label.lineRunIndex,
         kind: "math",
@@ -734,7 +755,7 @@ function buildTexLineLabelSegments(
         mathBreakpoints: texMathBoxBreakpoints(item.box, x, boxWidth),
         mathSvgBody: texMathBoxSvgBody(item.box, boxWidth),
       });
-      x = roundTexPt(x + boxWidth);
+      x = texLineX(roundTexPt(x + boxWidth));
       continue;
     }
     if (item.kind === "penalty") {
@@ -753,9 +774,9 @@ function buildTexLineLabelSegments(
       text: " ",
       x,
       width: glue.width,
-      caretStops: [x, roundTexPt(x + glue.width)],
+      caretStops: [x, texLineX(roundTexPt(x + glue.width))],
     });
-    x = roundTexPt(x + glue.width);
+    x = texLineX(roundTexPt(x + glue.width));
   }
   return { segments, ascent, descent };
 }
@@ -763,13 +784,13 @@ function buildTexLineLabelSegments(
 function texMathBoxSvgBody(
   box: {
     readonly contentStart: number;
-    readonly width: number;
+    readonly width: TexLength;
     readonly svgBody?: string;
     readonly hlist?: TexMathHList;
     readonly fontProfile?: TexMathFontProfile;
     readonly color?: string;
   } | null | undefined,
-  width: number,
+  width: TexLength,
   options: { readonly omitLineInitialOperator?: boolean } = {}
 ): string | undefined {
   if (!box) {
@@ -893,15 +914,19 @@ function isGeneratedDelimiterGlyph(item: TexMathHListItem): boolean {
 }
 
 function texMathBoxCaretStops(
-  box: { readonly caretStops?: readonly number[] } | null | undefined,
-  x: number,
-  width: number
-): number[] {
+  box: { readonly caretStops?: readonly TexHBoxX[] } | null | undefined,
+  x: TexLineX,
+  width: TexLength
+): TexLineX[] {
   const localStops = box?.caretStops;
   if (!isFiniteNumberArray(localStops) || localStops.length === 0) {
-    return [x, roundTexPt(x + width)];
+    return [x, texLineX(roundTexPt(x + width))];
   }
-  return localStops.map((stop) => roundTexPt(x + Math.max(0, Math.min(width, stop))));
+  return localStops.map((stop) => projectRoundedTexHBoxXToLine(
+    texHBoxX(Math.max(0, Math.min(width, stop))),
+    texHBoxX(0),
+    x
+  ));
 }
 
 function isFiniteNumberArray(value: unknown): value is readonly number[] {
@@ -913,12 +938,12 @@ function texMathBoxConstructRanges(
     readonly constructRanges?: readonly {
       readonly sourceStart: number;
       readonly sourceEnd: number;
-      readonly xStart: number;
-      readonly xEnd: number;
+      readonly xStart: TexHBoxX;
+      readonly xEnd: TexHBoxX;
     }[];
   } | null | undefined,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): LineReport["segments"][number]["mathConstructRanges"] {
   const ranges = box?.constructRanges;
   if (!ranges?.length) {
@@ -927,8 +952,16 @@ function texMathBoxConstructRanges(
   return ranges.map((range) => ({
     sourceStartRaw: range.sourceStart,
     sourceEndRaw: range.sourceEnd,
-    xStart: roundTexPt(x + Math.max(0, Math.min(width, range.xStart))),
-    xEnd: roundTexPt(x + Math.max(0, Math.min(width, range.xEnd))),
+    xStart: projectRoundedTexHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, range.xStart))),
+      texHBoxX(0),
+      x
+    ),
+    xEnd: projectRoundedTexHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, range.xEnd))),
+      texHBoxX(0),
+      x
+    ),
   }));
 }
 
@@ -936,8 +969,8 @@ function texMathBoxCaretEntries(
   box: {
     readonly caretMap?: TexMathBox["caretMap"];
   } | null | undefined,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): LineReport["segments"][number]["mathCaretEntries"] {
   const entries = box?.caretMap?.entries;
   if (!entries?.length) {
@@ -949,17 +982,29 @@ function texMathBoxCaretEntries(
       sourceStartRaw: entry.sourceSpan.start,
       sourceEndRaw: entry.sourceSpan.end,
     } : {}),
-    x: roundTexPt(x + Math.max(0, Math.min(width, entry.x))),
-    y: roundTexPt(entry.y),
-    height: roundTexPt(entry.height),
-    depth: roundTexPt(entry.depth),
+    x: projectRoundedTexHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, entry.x))),
+      texHBoxX(0),
+      x
+    ),
+    y: projectRoundedTexMathHBoxYToLine(entry.y),
+    height: texLength(roundTexPt(entry.height)),
+    depth: texLength(roundTexPt(entry.depth)),
     kind: entry.kind,
     ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
     hitBounds: {
-      xStart: roundTexPt(x + Math.max(0, Math.min(width, entry.hitBounds.xStart))),
-      xEnd: roundTexPt(x + Math.max(0, Math.min(width, entry.hitBounds.xEnd))),
-      yStart: roundTexPt(entry.hitBounds.yStart),
-      yEnd: roundTexPt(entry.hitBounds.yEnd),
+      xStart: projectRoundedTexHBoxXToLine(
+        texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xStart))),
+        texHBoxX(0),
+        x
+      ),
+      xEnd: projectRoundedTexHBoxXToLine(
+        texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xEnd))),
+        texHBoxX(0),
+        x
+      ),
+      yStart: projectRoundedTexMathHBoxYToLine(entry.hitBounds.yStart),
+      yEnd: projectRoundedTexMathHBoxYToLine(entry.hitBounds.yEnd),
     },
   }));
 }
@@ -969,12 +1014,12 @@ function texMathBoxBreakpoints(
     readonly breakpoints?: readonly {
       readonly kind: "binary" | "relation" | "penalty";
       readonly sourceOffset: number;
-      readonly x: number;
+      readonly x: TexHBoxX;
       readonly penalty: number;
     }[];
   } | null | undefined,
-  x: number,
-  width: number
+  x: TexLineX,
+  width: TexLength
 ): LineReport["segments"][number]["mathBreakpoints"] {
   const breakpoints = box?.breakpoints;
   if (!breakpoints?.length) {
@@ -983,16 +1028,40 @@ function texMathBoxBreakpoints(
   return breakpoints.map((breakpoint) => ({
     kind: breakpoint.kind,
     sourceOffsetRaw: breakpoint.sourceOffset,
-    x: roundTexPt(x + Math.max(0, Math.min(width, breakpoint.x))),
+    x: projectRoundedTexHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, breakpoint.x))),
+      texHBoxX(0),
+      x
+    ),
     penalty: breakpoint.penalty,
   }));
+}
+
+function projectRoundedTexHBoxXToLine(
+  position: TexHBoxX,
+  hboxOrigin: TexHBoxX,
+  lineOrigin: TexLineX
+): TexLineX {
+  return texLineX(roundTexPt(projectTexHBoxXToLine(
+    position,
+    hboxOrigin,
+    lineOrigin
+  )));
+}
+
+function projectRoundedTexMathHBoxYToLine(position: TexHBoxY): TexLineY {
+  return texLineY(roundTexPt(projectTexHBoxYToLine(
+    position,
+    texHBoxY(0),
+    texLineY(0)
+  )));
 }
 
 function parseTexMathConstructRanges(value: unknown): {
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly xStart: number;
-  readonly xEnd: number;
+  readonly xStart: TexHBoxX;
+  readonly xEnd: TexHBoxX;
 }[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -1017,7 +1086,12 @@ function parseTexMathConstructRanges(value: unknown): {
       Number.isFinite(xEnd) &&
       sourceEnd > sourceStart &&
       xEnd > xStart
-      ? [{ sourceStart, sourceEnd, xStart, xEnd }]
+      ? [{
+          sourceStart,
+          sourceEnd,
+          xStart: texHBoxX(xStart),
+          xEnd: texHBoxX(xEnd),
+        }]
       : [];
   });
   return ranges.length > 0 ? ranges : undefined;
@@ -1026,7 +1100,7 @@ function parseTexMathConstructRanges(value: unknown): {
 function parseTexMathBreakpoints(value: unknown): {
   readonly kind: "binary" | "relation" | "penalty";
   readonly sourceOffset: number;
-  readonly x: number;
+  readonly x: TexHBoxX;
   readonly penalty: number;
 }[] | undefined {
   if (!Array.isArray(value)) {
@@ -1053,7 +1127,7 @@ function parseTexMathBreakpoints(value: unknown): {
       Number.isFinite(sourceOffset) &&
       Number.isFinite(x) &&
       Number.isFinite(penalty)
-      ? [{ kind, sourceOffset, x, penalty }]
+      ? [{ kind, sourceOffset, x: texHBoxX(x), penalty }]
       : [];
   });
   return breakpoints.length > 0 ? breakpoints : undefined;
@@ -1063,9 +1137,9 @@ function texShapedSliceMetrics(
   shaped: ShapedTexTextRun,
   startOffset: number,
   endOffset: number
-): { readonly ascent: number; readonly descent: number } {
-  let ascent = 0;
-  let descent = 0;
+): { readonly ascent: TexLength; readonly descent: TexLength } {
+  let ascent = texLength(0);
+  let descent = texLength(0);
   for (const item of shaped.items) {
     if (
       item.kind !== "glyph" ||
@@ -1074,23 +1148,23 @@ function texShapedSliceMetrics(
     ) {
       continue;
     }
-    ascent = Math.max(ascent, item.height);
-    descent = Math.max(descent, item.depth);
+    ascent = texLength(Math.max(ascent, item.height));
+    descent = texLength(Math.max(descent, item.depth));
   }
   return { ascent, descent };
 }
 
 function texShapedRunMetrics(
   shaped: ShapedTexTextRun
-): { readonly ascent: number; readonly descent: number } {
-  let ascent = 0;
-  let descent = 0;
+): { readonly ascent: TexLength; readonly descent: TexLength } {
+  let ascent = texLength(0);
+  let descent = texLength(0);
   for (const item of shaped.items) {
     if (item.kind !== "glyph") {
       continue;
     }
-    ascent = Math.max(ascent, item.height);
-    descent = Math.max(descent, item.depth);
+    ascent = texLength(Math.max(ascent, item.height));
+    descent = texLength(Math.max(descent, item.depth));
   }
   return { ascent, descent };
 }
@@ -1098,40 +1172,40 @@ function texShapedRunMetrics(
 function texLayoutItemsNaturalWidth(
   items: readonly TexLayoutLabelItem[],
   metricProvider: TexMetricProvider
-): number {
-  let width = 0;
+): TexLength {
+  let width = texLength(0);
   for (const item of items) {
     if (item.kind === "glyph") {
-      width += texLayoutGlyphItemWidth(item);
+      width = texLength(width + texLayoutGlyphItemWidth(item));
       continue;
     }
     if (item.kind === "forced-break") {
       continue;
     }
     if (item.kind === "text") {
-      width += metricProvider.shapeText(item.text, item.font).width;
+      width = texLength(width + metricProvider.shapeText(item.text, item.font).width);
       continue;
     }
     if (item.kind === "kern") {
-      width += item.width;
+      width = texLength(width + item.width);
       continue;
     }
     if (item.kind === "math") {
-      width += texLayoutMathItemWidth(item);
+      width = texLength(width + texLayoutMathItemWidth(item));
       continue;
     }
     if (item.kind === "text-box") {
-      width += texLayoutTextBoxItemWidth(item);
+      width = texLength(width + texLayoutTextBoxItemWidth(item));
       continue;
     }
     if (item.kind === "penalty") {
       continue;
     }
-    width += texInterwordGlueForSpaceFactor(
+    width = texLength(width + texInterwordGlueForSpaceFactor(
       item.font,
       item.spaceFactor,
       item.spaceGlueProfile
-    ).width;
+    ).width);
   }
-  return roundTexPt(width);
+  return texLength(roundTexPt(width));
 }
