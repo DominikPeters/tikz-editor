@@ -29,7 +29,8 @@
 }
 
 .submenu:hover > .submenuPopup,
-.submenu:focus-within > .submenuPopup {
+.submenu:focus-within > .submenuPopup,
+.submenu[data-open="true"] > .submenuPopup {
   display: block;
 }
 
@@ -99,4 +100,36 @@
   height: 1px;
   margin: 4px 2px;
   background: var(--border-lighter);
+}
+
+/* Touch-sized menu on the iPad shell; desktop keeps the dense layout. */
+:global(html[data-editor-platform="ipad"]) .menu {
+  min-width: 250px;
+  padding: 6px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.10);
+}
+
+:global(html[data-editor-platform="ipad"]) .item {
+  min-height: 42px;
+  gap: 10px;
+  padding: 0 12px 0 6px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+:global(html[data-editor-platform="ipad"]) .itemNoCheck {
+  padding-left: 12px;
+}
+
+:global(html[data-editor-platform="ipad"]) .shortcut {
+  display: none;
+}
+
+:global(html[data-editor-platform="ipad"]) .submenuArrow {
+  font-size: 17px;
+}
+
+:global(html[data-editor-platform="ipad"]) .separator {
+  margin: 5px 4px;
 }

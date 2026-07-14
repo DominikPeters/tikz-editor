@@ -148,6 +148,7 @@ import { useCanvasSelectionInteractions } from "./useCanvasSelectionInteractions
 import { useCanvasSvgPatchInvalidation } from "./useCanvasSvgPatchInvalidation";
 import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
 import { useCanvasToolInteractions } from "./useCanvasToolInteractions";
+import { useCanvasTouchLongPress } from "./useCanvasTouchLongPress";
 import { useCanvasViewportEffects } from "./useCanvasViewportEffects";
 import { useCanvasViewportPersistence } from "./useCanvasViewportPersistence";
 import { useBucketFillPreview,type BucketPreviewSession } from "./useBucketFillPreview";
@@ -3354,6 +3355,13 @@ export const CanvasPanel = memo(function CanvasPanel({
     setFitToContentModeActive,
     requestFitToContent
   });
+
+  // Touch long-press opens the same context menu as right-click. iOS WebKit
+  // never fires `contextmenu` for touch, so only the iPad shell needs this.
+  useCanvasTouchLongPress(
+    viewportRef,
+    typeof document !== "undefined" && document.documentElement.dataset.editorPlatform === "ipad"
+  );
 
   useCanvasGuideEffects({
     guideDragRef,

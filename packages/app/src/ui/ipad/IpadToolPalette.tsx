@@ -17,6 +17,7 @@ import { ColorPicker } from "../ColorPicker";
 import { GENERATED_NODE_SHAPE_PREVIEWS } from "../generated-node-shape-previews";
 import { ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } from "../ToolbarToolPopup";
 import { TOOL_BUTTONS, TOOL_COLOR_OPTIONS, type ToolButtonDef } from "../tool-config";
+import { readSafeAreaBottom } from "./ipad-safe-area";
 import css from "./IpadToolPalette.module.css";
 
 export type PaletteEdge = "top" | "bottom" | "left" | "right";
@@ -46,7 +47,6 @@ const TAP_SLOP = 8;
 const MOMENTUM_SECONDS = 0.42;
 const MOMENTUM_MAX_DISTANCE = 900;
 const DOCK_STORAGE_KEY = "tikz-editor-ipad-tool-palette-dock";
-const SAFE_AREA_BOTTOM_CSS_VALUE = "var(--ipad-safe-area-bottom, env(safe-area-inset-bottom, 0px))";
 
 const EXPANDED_MAIN =
   (PALETTE_PADDING * 2) +
@@ -109,33 +109,6 @@ function storeDock(dock: PaletteDock): void {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
-}
-
-function parseCssPixelValue(value: string): number | null {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
-}
-
-function readSafeAreaBottom(): number {
-  if (typeof document === "undefined") {
-    return 0;
-  }
-  const direct = parseCssPixelValue(getComputedStyle(document.documentElement).getPropertyValue("--ipad-safe-area-bottom"));
-  if (direct != null) {
-    return direct;
-  }
-  if (!document.body) {
-    return 0;
-  }
-  const probe = document.createElement("div");
-  probe.style.position = "fixed";
-  probe.style.visibility = "hidden";
-  probe.style.pointerEvents = "none";
-  probe.style.paddingBottom = SAFE_AREA_BOTTOM_CSS_VALUE;
-  document.body.append(probe);
-  const resolved = parseCssPixelValue(getComputedStyle(probe).paddingBottom) ?? 0;
-  probe.remove();
-  return resolved;
 }
 
 function restRect(dock: PaletteDock, parentWidth: number, parentHeight: number, safeAreaBottom: number): Rect {

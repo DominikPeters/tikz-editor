@@ -121,6 +121,8 @@
   position: relative;
   overflow: hidden;
   touch-action: none;
+  /* No iOS long-press callout: long-press opens the app context menu instead. */
+  -webkit-touch-callout: none;
   outline: none;
   background-color: var(--bg-canvas-area);
   background-image:

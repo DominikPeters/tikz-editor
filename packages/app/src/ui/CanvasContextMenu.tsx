@@ -48,6 +48,9 @@ function ContextMenuPopup({
   origin: CommandOrigin;
   onCommandRun: (commandId: AppMenuCommandId, origin: CommandOrigin) => void;
 }) {
+  // Tap-toggled submenu (one per level); hover still opens submenus via CSS
+  // for mouse users, but touch needs an explicit open state.
+  const [openSubmenuKey, setOpenSubmenuKey] = useState<string | null>(null);
   const hasCheckItems = items.some(
     (item) => item.kind === "command" && bindings[item.commandId].checked != null
   );
@@ -61,19 +64,29 @@ function ContextMenuPopup({
         }
 
         if (item.kind === "submenu") {
+          const submenuOpen = openSubmenuKey === itemKey;
           return (
-            <div key={`${itemKey}-submenu`} className={css.submenu}>
-              <div
+            <div
+              key={`${itemKey}-submenu`}
+              className={css.submenu}
+              data-open={submenuOpen ? "true" : "false"}
+            >
+              <button
+                type="button"
                 className={[css.item, css.submenuTrigger, hasCheckItems ? "" : css.itemNoCheck]
                   .filter(Boolean)
                   .join(" ")}
                 role="menuitem"
                 aria-haspopup="menu"
+                aria-expanded={submenuOpen}
+                onClick={() => {
+                  setOpenSubmenuKey((current) => (current === itemKey ? null : itemKey));
+                }}
               >
                 {hasCheckItems ? <span className={css.check} /> : null}
                 <span className={css.label}>{item.label}</span>
                 <span className={css.submenuArrow}>›</span>
-              </div>
+              </button>
 
               <div className={css.submenuPopup}>
                 <ContextMenuPopup
@@ -143,15 +156,6 @@ export function CanvasContextMenu({
   const menuRootRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<ContextMenuAnchor>(anchor);
   const [inheritedStyle, setInheritedStyle] = useState<ContextMenuInheritedStyle>({});
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setPosition((current) =>
-      current.x === anchor.x && current.y === anchor.y ? current : anchor
-    );
-  }, [anchor, open, target]);
 
   useLayoutEffect(() => {
     if (!open) {

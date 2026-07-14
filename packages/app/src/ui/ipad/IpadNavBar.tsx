@@ -1,12 +1,9 @@
 import { useCallback, useState } from "react";
 import {
-  RiAddLine,
   RiArrowDownSLine,
   RiArrowGoBackLine,
   RiArrowGoForwardLine,
-  RiCloseLine,
   RiCodeLine,
-  RiFolderOpenLine,
   RiFunctionLine,
   RiLayoutRightLine,
   RiMoreLine,
@@ -19,11 +16,13 @@ import type { EditorCommandRuntime } from "../editor-command-runtime";
 import { IpadMenu, IpadMenuItem, IpadMenuSeparator, IpadPopover } from "./IpadPopover";
 import css from "./IpadNavBar.module.css";
 
-type NavPopoverId = "documents" | "title" | "share" | "more";
+type NavPopoverId = "title" | "share" | "more";
 
 export type IpadNavBarProps = {
   commandRuntime: EditorCommandRuntime;
   onRequestCloseDocument: (documentId: string) => void;
+  documentsOpen: boolean;
+  onShowDocuments: () => void;
   showSourcePanel: boolean;
   onToggleSource: () => void;
   sourceToggleEnabled: boolean;
@@ -39,6 +38,8 @@ export type IpadNavBarProps = {
 export function IpadNavBar({
   commandRuntime,
   onRequestCloseDocument,
+  documentsOpen,
+  onShowDocuments,
   showSourcePanel,
   onToggleSource,
   sourceToggleEnabled,
@@ -51,11 +52,9 @@ export function IpadNavBar({
   updateChip = null
 }: IpadNavBarProps) {
   const [openPopover, setOpenPopover] = useState<NavPopoverId | null>(null);
-  const { documents, tabOrder, activeDocumentId, dispatch } = useEditorStore(useShallow((s) => ({
+  const { documents, activeDocumentId } = useEditorStore(useShallow((s) => ({
     documents: s.documents,
-    tabOrder: s.tabOrder,
-    activeDocumentId: s.activeDocumentId,
-    dispatch: s.dispatch
+    activeDocumentId: s.activeDocumentId
   })));
   const activeDocument = documents[activeDocumentId] ?? null;
 
@@ -80,87 +79,21 @@ export function IpadNavBar({
   return (
     <header className={css.navBar} data-select="chrome" data-testid="ipad-nav-bar">
       <div className={[css.cluster, css.clusterLeading].join(" ")}>
-        <IpadPopover
-          open={openPopover === "documents"}
-          onClose={closePopover}
-          align="start"
-          ariaLabel="Documents"
-          testId="ipad-documents-popover"
-          trigger={
-            <button
-              type="button"
-              className={[css.iconButton, openPopover === "documents" ? css.iconButtonActive : ""].filter(Boolean).join(" ")}
-              aria-label="Documents"
-              title="Documents"
-              aria-haspopup="dialog"
-              aria-expanded={openPopover === "documents"}
-              onClick={() => { togglePopover("documents"); }}
-              data-testid="ipad-documents-button"
-            >
-              <RiFunctionLine size={22} aria-hidden />
-            </button>
-          }
+        <button
+          type="button"
+          className={[css.iconButton, documentsOpen ? css.iconButtonActive : ""].filter(Boolean).join(" ")}
+          aria-label="Documents"
+          title="Documents"
+          aria-haspopup="dialog"
+          aria-expanded={documentsOpen}
+          onClick={() => {
+            closePopover();
+            onShowDocuments();
+          }}
+          data-testid="ipad-documents-button"
         >
-          <div className={css.documentList} role="list" aria-label="Open documents">
-            {tabOrder.map((id) => {
-              const doc = documents[id];
-              if (!doc) {
-                return null;
-              }
-              const active = id === activeDocumentId;
-              return (
-                <div
-                  key={id}
-                  className={[css.documentRow, active ? css.documentRowActive : ""].filter(Boolean).join(" ")}
-                  role="listitem"
-                >
-                  <button
-                    type="button"
-                    className={css.documentSwitch}
-                    onClick={() => {
-                      dispatch({ type: "SWITCH_DOCUMENT", documentId: id });
-                      closePopover();
-                    }}
-                    data-testid={`ipad-document-switch-${id}`}
-                  >
-                    <span className={css.documentTitle}>{doc.title}</span>
-                    {doc.dirty ? <span className={css.dirtyDot} aria-label="Unsaved changes" /> : null}
-                  </button>
-                  <button
-                    type="button"
-                    className={css.documentClose}
-                    aria-label={`Close ${doc.title}`}
-                    onClick={() => { onRequestCloseDocument(id); }}
-                    data-testid={`ipad-document-close-${id}`}
-                  >
-                    <RiCloseLine size={17} aria-hidden />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <IpadMenu ariaLabel="Document actions">
-            <IpadMenuSeparator />
-            <IpadMenuItem
-              label="New Document"
-              icon={<RiAddLine size={18} />}
-              disabled={!commandEnabled(APP_MENU_COMMAND_IDS.NEW_DOCUMENT)}
-              onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.NEW_DOCUMENT); }}
-              testId="ipad-menu-new-document"
-            />
-            <IpadMenuItem
-              label="Open…"
-              icon={<RiFolderOpenLine size={18} />}
-              disabled={!commandEnabled(APP_MENU_COMMAND_IDS.OPEN_DOCUMENT)}
-              onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.OPEN_DOCUMENT); }}
-            />
-            <IpadMenuItem
-              label="Open Example…"
-              disabled={!commandEnabled(APP_MENU_COMMAND_IDS.OPEN_EXAMPLE)}
-              onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.OPEN_EXAMPLE); }}
-            />
-          </IpadMenu>
-        </IpadPopover>
+          <RiFunctionLine size={22} aria-hidden />
+        </button>
         <button
           type="button"
           className={[css.iconButton, showSourcePanel ? css.iconButtonActive : ""].filter(Boolean).join(" ")}

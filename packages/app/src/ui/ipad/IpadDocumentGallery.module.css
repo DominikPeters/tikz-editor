@@ -1,0 +1,226 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-app) 90%, transparent);
+  -webkit-backdrop-filter: var(--ipad-material-blur);
+  backdrop-filter: var(--ipad-material-blur);
+  color: var(--text);
+  font-family: var(--ipad-chrome-font);
+  outline: none;
+  animation: galleryIn 240ms cubic-bezier(0.22, 1.1, 0.36, 1);
+}
+
+@keyframes galleryIn {
+  from {
+    opacity: 0;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px 16px 10px 20px;
+  flex-wrap: wrap;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actionButton {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ipad-control-fill);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.actionButton:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.actionButton:disabled {
+  background: var(--ipad-control-fill-disabled);
+  color: var(--btn-disabled-text);
+}
+
+.actionPrimary {
+  background: var(--accent-btn-bg);
+  color: var(--accent-dark);
+}
+
+.actionPrimary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-btn-bg) 80%, var(--accent-dark));
+}
+
+.closeButton {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.closeButton:active {
+  color: var(--text);
+  background: var(--ipad-control-fill);
+}
+
+.grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 18px;
+  align-content: start;
+  padding: 8px 20px calc(24px + var(--ipad-bottom-touch-inset));
+  overscroll-behavior: contain;
+}
+
+.card {
+  position: relative;
+  animation: cardIn 260ms cubic-bezier(0.22, 1.1, 0.36, 1);
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+.cardButton {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--ipad-radius-card);
+  background: var(--bg-pane);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.10);
+}
+
+.cardButton:active {
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.16);
+}
+
+.cardActive .cardButton {
+  border-color: var(--accent-dark);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent-dark) 55%, transparent),
+    0 1px 5px rgba(0, 0, 0, 0.10);
+}
+
+.thumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #fff;
+  color: var(--text-faint);
+}
+
+.thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.cardLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-lighter);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cardTitle {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dirtyDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-dark);
+  flex-shrink: 0;
+}
+
+.cardClose {
+  appearance: none;
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-pane);
+  color: var(--text-muted);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.18);
+}
+
+.cardClose:active {
+  color: var(--text);
+  background: var(--btn-hover-bg);
+}
+
+@media (max-width: 700px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
+  }
+}

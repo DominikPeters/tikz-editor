@@ -21,7 +21,7 @@
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-opener": "^2.0.0",
-    "@tikz-editor/app": "0.2.0",
+    "@tikz-editor/app": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

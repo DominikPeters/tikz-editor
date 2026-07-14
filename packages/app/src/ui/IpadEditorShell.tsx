@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -26,9 +27,11 @@ import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { SourcePanel } from "./source-panel/SourcePanel";
 import { StylesPanel } from "./StylesPanel";
+import { IpadDocumentGallery } from "./ipad/IpadDocumentGallery";
 import { IpadNavBar } from "./ipad/IpadNavBar";
 import { IpadMenu, IpadMenuItem, IpadPopover } from "./ipad/IpadPopover";
 import { IpadToolPalette, type PaletteDock } from "./ipad/IpadToolPalette";
+import { useSourceFloat } from "./ipad/useSourceFloat";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { requestSourceAccessoryCommand, type SourceAccessoryCommandDetail } from "./source-sync";
 import { resolveToolbarToolMode } from "./tool-config";
@@ -146,6 +149,7 @@ export function IpadEditorShell({
   const [sourceColumnWidth, setSourceColumnWidth] = useState(readStoredSourceWidth);
   const [sourceResizing, setSourceResizing] = useState(false);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const [documentGalleryOpen, setDocumentGalleryOpen] = useState(false);
   const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const {
     toolMode,
@@ -293,6 +297,41 @@ export function IpadEditorShell({
       return !pinned;
     });
   }, []);
+
+  const dockSourcePanel = useCallback((width: number) => {
+    const columnWidth = Math.min(Math.max(width, MIN_SOURCE_COLUMN_WIDTH), MAX_SOURCE_COLUMN_WIDTH);
+    setSourceColumnWidth(columnWidth);
+    storeSourceWidth(columnWidth);
+    setSourcePinned(true);
+    storeSourcePinned(true);
+  }, []);
+
+  const undockSourcePanel = useCallback(() => {
+    setSourcePinned(false);
+    storeSourcePinned(false);
+  }, []);
+
+  const sourceLineCount = useMemo(() => snapshot.source.split("\n").length, [snapshot.source]);
+
+  const sourceFloat = useSourceFloat({
+    workspaceRef,
+    visible: showSourcePanel,
+    pinned: sourcePinned,
+    lineCount: sourceLineCount,
+    onDock: dockSourcePanel,
+    onUndock: undockSourcePanel
+  });
+
+  // Move the zoom chip out from underneath the floating source panel when the
+  // panel covers the bottom-left corner of the workspace.
+  const floatRect = showSourcePanel && !sourcePinned ? sourceFloat.rect : null;
+  const floatWorkspace = sourceFloat.workspaceSize;
+  const zoomChipShiftLeft =
+    floatRect && floatWorkspace &&
+    floatRect.x < 200 &&
+    floatRect.y + floatRect.height > floatWorkspace.height - 140
+      ? Math.round(Math.min(floatRect.x + floatRect.width + 12, floatWorkspace.width - 100))
+      : null;
 
   const moveSourceResizeTo = useCallback((pointerId: number, clientX: number) => {
     const resize = sourceResizeRef.current;
@@ -446,10 +485,23 @@ export function IpadEditorShell({
   const sourceDocked = showSourcePanel && sourcePinned;
   const sourceOverlay = showSourcePanel && !sourcePinned;
 
+  // Stable elements so per-frame drag re-renders of the shell skip these subtrees.
+  const sourcePanelElement = useMemo(() => <SourcePanel />, []);
+  const canvasPanelElement = useMemo(
+    () => <CanvasPanel repeatPreviewModel={repeatPreviewModel} />,
+    [repeatPreviewModel]
+  );
+
   const sourceSurface = (
     <div className={css.sourcePanelStack}>
-      <div className={css.sourceHeader} data-select="chrome">
+      <div
+        className={css.sourceHeader}
+        data-select="chrome"
+        data-testid="ipad-source-header"
+        onPointerDown={sourceFloat.onHeaderPointerDown}
+      >
         <span className={css.sourceHeaderTitle}>Source</span>
+        <span className={css.sourceHeaderGrip} aria-hidden />
         <div className={css.sourceHeaderActions}>
           <button
             type="button"
@@ -475,7 +527,7 @@ export function IpadEditorShell({
         </div>
       </div>
       <div className={css.sourcePanelContent}>
-        <SourcePanel />
+        {sourcePanelElement}
       </div>
       <SourceAccessoryBar />
     </div>
@@ -486,6 +538,8 @@ export function IpadEditorShell({
       <IpadNavBar
         commandRuntime={commandRuntime}
         onRequestCloseDocument={onRequestCloseDocument}
+        documentsOpen={documentGalleryOpen}
+        onShowDocuments={() => { setDocumentGalleryOpen(true); }}
         showSourcePanel={showSourcePanel}
         onToggleSource={toggleSourcePanel}
         sourceToggleEnabled={commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL]?.enabled === true}
@@ -546,13 +600,48 @@ export function IpadEditorShell({
             </>
           ) : null}
           <section className={css.canvasFrame}>
-            <CanvasPanel repeatPreviewModel={repeatPreviewModel} />
+            {canvasPanelElement}
           </section>
         </main>
 
-        {sourceOverlay ? (
-          <section className={css.sourceDrawer} aria-label="Source" data-testid="ipad-source-drawer">
+        {sourceOverlay && sourceFloat.dockPreview ? (
+          <div
+            className={css.dockPreviewZone}
+            style={{
+              width: Math.round(Math.min(
+                sourceColumnWidth,
+                (sourceFloat.workspaceSize?.width ?? sourceColumnWidth) * MAX_SOURCE_COLUMN_FRACTION
+              ))
+            }}
+            aria-hidden
+            data-testid="ipad-source-dock-preview"
+          />
+        ) : null}
+
+        {sourceOverlay && sourceFloat.rect ? (
+          <section
+            className={css.sourceDrawer}
+            aria-label="Source"
+            data-testid="ipad-source-drawer"
+            data-dragging={sourceFloat.dragging ? "true" : "false"}
+            data-settling={sourceFloat.settling && !sourceFloat.dragging && !sourceFloat.resizing ? "true" : "false"}
+            style={{
+              left: Math.round(sourceFloat.rect.x),
+              top: Math.round(sourceFloat.rect.y),
+              width: Math.round(sourceFloat.rect.width),
+              height: Math.round(sourceFloat.rect.height)
+            }}
+            onTransitionEnd={sourceFloat.onSettled}
+          >
             {sourceSurface}
+            <button
+              type="button"
+              className={css.floatResizeHandle}
+              aria-label="Resize source panel"
+              title="Resize source panel"
+              data-testid="ipad-source-float-resize"
+              onPointerDown={sourceFloat.onResizePointerDown}
+            />
           </section>
         ) : null}
 
@@ -611,6 +700,7 @@ export function IpadEditorShell({
               ? css.zoomChipRaised
               : ""
           ].filter(Boolean).join(" ")}
+          style={zoomChipShiftLeft != null ? { left: zoomChipShiftLeft } : undefined}
           data-select="chrome"
         >
           <IpadPopover
@@ -658,6 +748,13 @@ export function IpadEditorShell({
           </IpadPopover>
         </div>
       </div>
+
+      <IpadDocumentGallery
+        open={documentGalleryOpen}
+        onClose={() => { setDocumentGalleryOpen(false); }}
+        commandRuntime={commandRuntime}
+        onRequestCloseDocument={onRequestCloseDocument}
+      />
     </div>
   );
 }
