@@ -1,4 +1,5 @@
 import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
+import type { SourceCoordinateSpace } from "../../source-coordinates.js";
 import type {
   SimpleTexListKind,
   SimpleTexListContext,
@@ -446,14 +447,14 @@ export interface TexVListBoxLayoutReport {
 
 export type TexLayoutReport = TexVListBoxLayoutReport;
 
-export interface TexVListLayout {
+export interface TexVListLayout<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   readonly metrics: TexBoxMetrics;
   readonly baseline: TexVListBaseline;
   readonly items: readonly PositionedTexVListItem[];
   readonly boxReport: TexVListBoxLayoutReport;
   readonly paragraphPlacements: readonly TexVListParagraphPlacement[];
   readonly linePlacements: readonly TexVListLinePlacement[];
-  readonly reports: readonly (TexLayoutReport | ParagraphLayoutReport)[];
+  readonly reports: readonly (TexLayoutReport | ParagraphLayoutReport<Space>)[];
   readonly errors: readonly string[];
 }
 

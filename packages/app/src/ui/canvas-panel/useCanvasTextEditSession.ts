@@ -26,6 +26,10 @@ import {
   getKnuthPlassVListSourceHitFromSnapshot,
   type VListSourceHit
 } from "@tikz-editor/core/text/knuth-plass";
+import {
+  documentOffsetToTextarea,
+  documentSourceOffset
+} from "@tikz-editor/core/text/source-coordinates";
 import { getActiveMathJaxOutputJax } from "@tikz-editor/core/text/mathjax-engine";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
 import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
@@ -42,7 +46,6 @@ import type {
 } from "./CanvasTextEditPopup";
 import { clamp, clientToSvgPoint, viewportToSvgPoint } from "./geometry";
 import { makeMergeKey, mapPointToRectRegionLocal } from "./panel-helpers";
-import { createSourceRenderOffsetMap } from "./text-offset-map";
 import { expandSelectionToMathDelimiters } from "./text-selection-ranges";
 import {
   applyTextMeasureFont,
@@ -69,6 +72,11 @@ type TextSelectionDragMode = "char" | "word" | "line";
 type TextLineRange = {
   start: number;
   end: number;
+};
+
+type ResolvedTextSourceHit = {
+  offset: number;
+  selectionRange: TextLineRange | null;
 };
 
 type TextSelectionDrag = {
@@ -580,8 +588,8 @@ export function useCanvasTextEditSession(
     []
   );
 
-  const resolveTextOffsetFromClient = useCallback(
-    async (target: EditableTextTarget, clientPoint: ClientPoint): Promise<number | null> => {
+  const resolveTextSourceHitFromClient = useCallback(
+    async (target: EditableTextTarget, clientPoint: ClientPoint): Promise<ResolvedTextSourceHit | null> => {
       if (target.isForeachTemplateEdit) {
         return null;
       }
@@ -597,7 +605,7 @@ export function useCanvasTextEditSession(
           });
           return null;
         }
-        return estimateTextOffsetFromClient(
+        const offset = estimateTextOffsetFromClient(
           target,
           clientPoint,
           interactionSvgRef.current,
@@ -605,22 +613,35 @@ export function useCanvasTextEditSession(
           svgResult,
           canvasTransform
         );
-      }
-      const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-      const vlistHit = resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement);
-      if (vlistHit) {
-        return clamp(offsetMap.renderToSource(vlistHit.offset), 0, target.text.length);
+        return { offset, selectionRange: null };
       }
       const result = await getKnuthPlassCaretFromPoint(outputJax, {
         paragraphId: target.paragraphId,
-        sourceText: target.renderSourceText,
+        sourceText: target.text,
+        sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
+        sourceCoordinateSpace: "document",
         containerElement,
         clientPoint
       });
-      if (!result.ok || result.offset == null) {
+      if (result.ok && result.offset != null) {
+        return {
+          offset: documentOffsetToTextarea(result.offset, target.sourceSpan),
+          selectionRange: null,
+        };
+      }
+      console.error("[canvas-text-edit] Paragraph source hit failed.", result.error);
+      const vlistHit = resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement);
+      if (!vlistHit) {
         return null;
       }
-      return clamp(offsetMap.renderToSource(result.offset), 0, target.text.length);
+      return {
+        offset: documentOffsetToTextarea(documentSourceOffset(vlistHit.offset), target.sourceSpan),
+        selectionRange: textLineRangeFromVListSourceHit(
+          vlistHit,
+          (offset) => documentOffsetToTextarea(documentSourceOffset(offset), target.sourceSpan),
+          target.text.length
+        ),
+      };
     },
     [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, viewportRef]
   );
@@ -634,26 +655,27 @@ export function useCanvasTextEditSession(
       const containerElement = resolveRenderedMathTextElement(target);
       const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
       if (target.paragraphId && outputJax && containerElement) {
-        const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-        const vlistLineRange = textLineRangeFromVListSourceHit(
-          resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement),
-          (offset) => offsetMap.renderToSource(offset),
-          target.text.length
-        );
-        if (vlistLineRange) {
-          return vlistLineRange;
-        }
         const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
           paragraphId: target.paragraphId,
-          sourceText: target.renderSourceText,
+          sourceText: target.text,
+          sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
+          sourceCoordinateSpace: "document",
           containerElement,
           clientPoint
         });
         if (result.ok && result.lineStartOffset != null && result.lineEndOffset != null) {
           return normalizeTextLineRange({
-            start: offsetMap.renderToSource(result.lineStartOffset),
-            end: offsetMap.renderToSource(result.lineEndOffset)
+            start: documentOffsetToTextarea(result.lineStartOffset, target.sourceSpan),
+            end: documentOffsetToTextarea(result.lineEndOffset, target.sourceSpan)
           }, target.text.length);
+        }
+        const vlistLineRange = textLineRangeFromVListSourceHit(
+          resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement),
+          (offset) => documentOffsetToTextarea(documentSourceOffset(offset), target.sourceSpan),
+          target.text.length
+        );
+        if (vlistLineRange) {
+          return vlistLineRange;
         }
       }
       if (requiresParagraphGeometry) {
@@ -760,24 +782,12 @@ export function useCanvasTextEditSession(
       };
       const pointerId = event.pointerId;
       const pointerCaptureTarget = event.currentTarget;
-      const outputJax = getActiveMathJaxOutputJax();
-      const containerElement = outputJax ? resolveRenderedMathTextElement(target) : null;
-      const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-      const vlistSourceHit = outputJax && containerElement
-        ? resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement)
-        : null;
-      const vlistSourceSelection = textLineRangeFromVListSourceHit(
-        vlistSourceHit,
-        (offset) => offsetMap.renderToSource(offset),
-        target.text.length
-      );
-      const offsetPromise = vlistSourceHit
-        ? Promise.resolve(clamp(offsetMap.renderToSource(vlistSourceHit.offset), 0, target.text.length))
-        : resolveTextOffsetFromClient(target, clientPoint);
+      const sourceHitPromise = resolveTextSourceHitFromClient(target, clientPoint);
       const lineRangePromise = mode === "line"
         ? resolveTextLineRangeFromClient(target, clientPoint)
         : Promise.resolve<TextLineRange | null>(null);
-      void Promise.all([offsetPromise, lineRangePromise]).then(([offset, lineRange]) => {
+      void Promise.all([sourceHitPromise, lineRangePromise]).then(([sourceHit, lineRange]) => {
+        const offset = sourceHit?.offset ?? null;
         const resolvedOffset = offset == null ? provisionalOffset : clamp(offset, 0, target.text.length);
         const resolvedLineRange = mode === "line"
           ? (
@@ -789,8 +799,8 @@ export function useCanvasTextEditSession(
                 : provisionalLineRange
             )
           : null;
-        const selection = (mode === "char" || mode === "line") && vlistSourceSelection
-          ? vlistSourceSelection
+        const selection = (mode === "char" || mode === "line") && sourceHit?.selectionRange
+          ? sourceHit.selectionRange
           : resolveTextSelectionRangeForMode(target.text, mode, resolvedOffset, resolvedLineRange);
         const expandedSelection = expandSelectionToMathDelimiters(target.text, selection);
         dispatchCanvasTextEditAction({
@@ -826,10 +836,8 @@ export function useCanvasTextEditSession(
       canvasTransform,
       dispatchCanvasTextEditAction,
       interactionSvgRef,
-      resolveRenderedMathTextElement,
       resolveTextLineRangeFromClient,
-      resolveTextOffsetFromClient,
-      resolveTexVListSourceHitFromClient,
+      resolveTextSourceHitFromClient,
       source,
       startTextEditingSession,
       state.asyncRequestRevision,
@@ -1102,7 +1110,8 @@ export function useCanvasTextEditSession(
       const requestRevision = stateRef.current.asyncRequestRevision;
       const baseInputRevision = stateRef.current.inputRevision;
       const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
-      const offsetPromise = resolveTextOffsetFromClient(target, clientPoint);
+      const offsetPromise = resolveTextSourceHitFromClient(target, clientPoint)
+        .then((hit) => hit?.offset ?? null);
       const lineRangePromise = drag.mode === "line"
         ? resolveTextLineRangeFromClient(target, clientPoint)
         : Promise.resolve<TextLineRange | null>(null);
@@ -1146,7 +1155,7 @@ export function useCanvasTextEditSession(
     dispatchCanvasTextEditAction,
     resolveEditableTextTargetById,
     resolveTextLineRangeFromClient,
-    resolveTextOffsetFromClient,
+    resolveTextSourceHitFromClient,
   ]);
 
   useEffect(() => {

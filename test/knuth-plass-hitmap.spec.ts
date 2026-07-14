@@ -48,8 +48,17 @@ function coordinateFixture<T>(value: NumericFixture<T>): T {
   return value as unknown as T;
 }
 
-function paragraphReportFixture(value: NumericFixture<ParagraphLayoutReport>): ParagraphLayoutReport {
-  return coordinateFixture<ParagraphLayoutReport>(value);
+function paragraphReportFixture(
+  value: Omit<
+    NumericFixture<ParagraphLayoutReport<"layout">>,
+    "sourceCoordinateSpace" | "sourceMappingMode"
+  >
+): ParagraphLayoutReport<"layout"> {
+  return coordinateFixture<ParagraphLayoutReport<"layout">>({
+    ...value,
+    sourceCoordinateSpace: "layout",
+    sourceMappingMode: "reconstructed",
+  });
 }
 
 function texVListBoxReportFixture(
@@ -89,7 +98,7 @@ function makeLineElement(
   };
 }
 
-function makeTwoLineReport(): ParagraphLayoutReport {
+function makeTwoLineReport(): ParagraphLayoutReport<"layout"> {
   return paragraphReportFixture({
     paragraphId: "paragraph:1",
     width: 17,
@@ -173,7 +182,7 @@ function makeTwoLineReport(): ParagraphLayoutReport {
   });
 }
 
-function makeSingleLineReport(): ParagraphLayoutReport {
+function makeSingleLineReport(): ParagraphLayoutReport<"layout"> {
   const report = makeTwoLineReport();
   return paragraphReportFixture({
     ...report,
@@ -192,7 +201,7 @@ function makeSingleLineReport(): ParagraphLayoutReport {
   });
 }
 
-function makeExplicitMultilineMathReport(): ParagraphLayoutReport {
+function makeExplicitMultilineMathReport(): ParagraphLayoutReport<"layout"> {
   return paragraphReportFixture({
     paragraphId: "paragraph:math",
     width: 3.478,
@@ -293,7 +302,7 @@ function makeSegmentedSingleLineReport(
   width: number,
   runs: NumericFixture<ParagraphLayoutReport["runs"]>,
   segments: NumericFixture<ParagraphLayoutReport["lines"][number]["segments"]>
-): ParagraphLayoutReport {
+): ParagraphLayoutReport<"layout"> {
   return paragraphReportFixture({
     paragraphId,
     width,
@@ -1944,6 +1953,28 @@ describe("knuth-plass hitmap line ranges", () => {
       );
       expect(result.error?.code).toBe("alignment-error");
     }
+
+    const explicitReportWithoutSegmentRanges = coordinateFixture<ParagraphLayoutReport<"layout">>({
+      ...baseReport,
+      sourceCoordinateSpace: "layout",
+      sourceMappingMode: "explicit",
+    });
+    const missingExplicitRange = await getKnuthPlassPointFromOffset(
+      { linebreaks: { getReports: () => [explicitReportWithoutSegmentRanges] } },
+      {
+        paragraphId: explicitReportWithoutSegmentRanges.paragraphId,
+        sourceText: "Hello World",
+        containerElement,
+        offset: 0,
+      }
+    );
+    expect(missingExplicitRange).toMatchObject({
+      ok: false,
+      error: {
+        code: "alignment-error",
+        message: expect.stringContaining("has no source range"),
+      },
+    });
 
     const mathReport = makeExplicitMultilineMathReport();
     const mathMeasurement = await getKnuthPlassPointFromOffset(

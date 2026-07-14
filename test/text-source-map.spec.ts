@@ -5,6 +5,7 @@ import {
   createGeneratedMappedText,
   createIdentityMappedText,
   createMappedText,
+  mapTransformedTextWithFallback,
   projectInputOffset,
   projectInputRange,
   sliceMappedText,
@@ -72,6 +73,33 @@ describe("text source maps", () => {
       to: 29,
       policy: "generated",
       reason: "optional macro default"
+    });
+  });
+
+  it("preserves direct coordinates around localized text normalization", () => {
+    const source = "Alpha \\\\[4pt] Beta";
+    const mapped = createIdentityMappedText(source, 50);
+    const transformed = mapTransformedTextWithFallback(
+      mapped,
+      "Alpha\\\\[4pt]Beta",
+      "line-break normalization"
+    );
+
+    expect(projectInputRange(transformed.sourceMap, 0, 5)).toEqual({
+      kind: "source-range",
+      from: 50,
+      to: 55,
+      policy: "caret"
+    });
+    expect(projectInputRange(
+      transformed.sourceMap,
+      transformed.text.indexOf("Beta"),
+      transformed.text.length
+    )).toEqual({
+      kind: "source-range",
+      from: 50 + source.indexOf("Beta"),
+      to: 50 + source.length,
+      policy: "caret"
     });
   });
 

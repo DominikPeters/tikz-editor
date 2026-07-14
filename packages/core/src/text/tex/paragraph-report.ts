@@ -8,6 +8,14 @@ import type {
   GreedyLine,
   ParagraphRun,
 } from "../knuth-plass/paragraph/types.js";
+import {
+  layoutSourceOffset,
+  type LayoutSourceOffset,
+} from "../source-coordinates.js";
+
+function optionalLayoutSourceOffset(value: number | undefined): LayoutSourceOffset | undefined {
+  return value === undefined ? undefined : layoutSourceOffset(value);
+}
 import { roundTexPt } from "./fonts/units.js";
 import type {
   ResolvedTexFont,
@@ -55,7 +63,7 @@ import {
 } from "./coordinates.js";
 
 export interface TexParagraphReportBuildResult {
-  readonly report: ParagraphLayoutReport;
+  readonly report: ParagraphLayoutReport<"layout">;
   readonly lineBoxes: readonly TexLineBox[];
 }
 
@@ -77,8 +85,8 @@ export function buildTexParagraphReport(params: {
   const runReports = params.runs.map((run) => ({
     runIndex: run.runIndex,
     kind: run.kind,
-    sourceStart: run.sourceStart,
-    sourceEnd: run.sourceEnd,
+    sourceStart: layoutSourceOffset(run.sourceStart),
+    sourceEnd: layoutSourceOffset(run.sourceEnd),
     width: params.runWidths.get(run.runIndex) ?? texLength(0),
     text: run.kind === "text" || run.kind === "space" ? run.text : undefined,
   }));
@@ -86,6 +94,8 @@ export function buildTexParagraphReport(params: {
   return {
     report: {
       paragraphId: params.paragraphId,
+      sourceCoordinateSpace: "layout",
+      sourceMappingMode: "explicit",
       width: params.width,
       alignment: params.alignment,
       layoutMode: params.layoutMode,
@@ -112,8 +122,8 @@ function buildTexLineReport(
     lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
   }
-): { readonly report: LineReport; readonly lineBox: TexLineBox } {
-  const segments: LineReport["segments"] = [];
+): { readonly report: LineReport<"layout">; readonly lineBox: TexLineBox } {
+  const segments: LineReport<"layout">["segments"] = [];
   let x = texLineX(line.xOffset ?? 0);
   let ascent = texLength(0);
   let descent = texLength(0);
@@ -137,8 +147,8 @@ function buildTexLineReport(
       text: line.startPendingText,
       startOffset: 0,
       endOffset: line.startPendingText.length,
-      sourceStartRaw: line.startPendingSourceStart,
-      sourceEndRaw: line.startPendingSourceEnd,
+      sourceStartRaw: optionalLayoutSourceOffset(line.startPendingSourceStart),
+      sourceEndRaw: optionalLayoutSourceOffset(line.startPendingSourceEnd),
       sourceKind: "text",
       fontId: runFont.id,
       fontAtPt: runFont.atPt,
@@ -195,8 +205,8 @@ function buildTexLineReport(
         text: run.text.slice(startOffset, endOffset),
         startOffset,
         endOffset,
-        sourceStartRaw: run.sourceStart + startOffset,
-        sourceEndRaw: run.sourceStart + endOffset,
+        sourceStartRaw: layoutSourceOffset(run.sourceStart + startOffset),
+        sourceEndRaw: layoutSourceOffset(run.sourceStart + endOffset),
         sourceKind: "text",
         fontId: shaped.font.id,
         fontAtPt: shaped.font.atPt,
@@ -230,8 +240,8 @@ function buildTexLineReport(
         kind: "math",
         role: run.role,
         text: box?.content ?? "",
-        sourceStartRaw: run.sourceStart,
-        sourceEndRaw: run.sourceEnd,
+        sourceStartRaw: layoutSourceOffset(run.sourceStart),
+        sourceEndRaw: layoutSourceOffset(run.sourceEnd),
         sourceKind: box?.sourceKind ?? "math",
         x,
         width,
@@ -265,8 +275,8 @@ function buildTexLineReport(
       kind: "space",
       role: run.role,
       text: isHiddenGlue ? "" : " ",
-      sourceStartRaw: run.sourceStart,
-      sourceEndRaw: run.sourceEnd,
+      sourceStartRaw: layoutSourceOffset(run.sourceStart),
+      sourceEndRaw: layoutSourceOffset(run.sourceEnd),
       sourceKind: isHiddenGlue ? "math" : "text",
       x,
       width,
@@ -304,8 +314,8 @@ function buildTexLineReport(
       text: discretionary.preBreakText,
       startOffset: discretionary.replaceStart,
       endOffset: splitOffset,
-      sourceStartRaw,
-      sourceEndRaw: line.break.sourceOffset,
+      sourceStartRaw: layoutSourceOffset(sourceStartRaw),
+      sourceEndRaw: layoutSourceOffset(line.break.sourceOffset),
       sourceKind: "text",
       fontId: runFont.id,
       fontAtPt: runFont.atPt,
@@ -336,8 +346,8 @@ function buildTexLineReport(
       text: "-",
       startOffset: line.break.splitOffset ?? 0,
       endOffset: line.break.splitOffset ?? 0,
-      sourceStartRaw: line.break.sourceOffset,
-      sourceEndRaw: line.break.sourceOffset,
+      sourceStartRaw: layoutSourceOffset(line.break.sourceOffset),
+      sourceEndRaw: layoutSourceOffset(line.break.sourceOffset),
       sourceKind: "text",
       fontId: runFont.id,
       fontAtPt: runFont.atPt,
@@ -350,18 +360,19 @@ function buildTexLineReport(
   }
 
   const xStart = texLineX(line.xOffset ?? 0);
-  const breakReport: BreakReport | null = line.break
+  const breakReport: BreakReport<"layout"> | null = line.break
     ? (() => {
         const { width: breakWidth, ...breakFields } = line.break;
         return {
           ...breakFields,
+          sourceOffset: layoutSourceOffset(breakFields.sourceOffset),
           ...(breakWidth !== undefined
             ? { width: texLength(breakWidth) }
             : {}),
         };
       })()
     : null;
-  const report: LineReport = {
+  const report: LineReport<"layout"> = {
     lineIndex: line.lineIndex,
     startRun: line.startRun,
     endRun: line.endRun,
@@ -406,7 +417,7 @@ function coalescedSameLineMathSegment(
   x: TexLineX,
   omitLineInitialOperator: boolean
 ): {
-  readonly segment: LineReport["segments"][number];
+  readonly segment: LineReport<"layout">["segments"][number];
   readonly ascent: TexLength;
   readonly descent: TexLength;
   readonly endRunIndex: number;
@@ -474,8 +485,8 @@ function coalescedSameLineMathSegment(
       kind: "math",
       role: firstRun.role,
       text: rootBox.content,
-      sourceStartRaw: rootBox.contentStart,
-      sourceEndRaw: rootBox.contentEnd,
+      sourceStartRaw: layoutSourceOffset(rootBox.contentStart),
+      sourceEndRaw: layoutSourceOffset(rootBox.contentEnd),
       sourceKind: rootBox.sourceKind ?? "math",
       x,
       width,
@@ -545,7 +556,7 @@ function adjustedTexGlueWidth(
 }
 
 function texLinePreDisplaySize(
-  line: LineReport,
+  line: LineReport<"layout">,
   font: ResolvedTexFont
 ): TexLength {
   const latexArticleListLeftMarginEm = 2.5;
@@ -560,7 +571,7 @@ function texLinePreDisplaySize(
   return texLength(roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * font.atPt));
 }
 
-function texLineHasInlineListLabel(line: LineReport): boolean {
+function texLineHasInlineListLabel(line: LineReport<"layout">): boolean {
   const labelIndex = line.segments.findIndex((segment) => segment.role === "list-label");
   if (labelIndex < 0) {
     return false;
@@ -647,11 +658,11 @@ function buildTexLineLabelSegments(
   label: TexLineLabel,
   metricProvider: TexMetricProvider
 ): {
-  readonly segments: LineReport["segments"];
+  readonly segments: LineReport<"layout">["segments"];
   readonly ascent: TexLength;
   readonly descent: TexLength;
 } {
-  const segments: LineReport["segments"] = [];
+  const segments: LineReport<"layout">["segments"] = [];
   const width = texLayoutItemsNaturalWidth(label.label.items, metricProvider);
   let x = texLineX(roundTexPt(label.label.rightEdge - width));
   let ascent = texLength(0);
@@ -721,8 +732,8 @@ function buildTexLineLabelSegments(
         kind: "math",
         role: "list-label",
         text: item.content,
-        sourceStartRaw: item.sourceStart,
-        sourceEndRaw: item.sourceEnd,
+        sourceStartRaw: layoutSourceOffset(item.sourceStart),
+        sourceEndRaw: layoutSourceOffset(item.sourceEnd),
         sourceKind: item.box.sourceKind ?? "math",
         x,
         width: mathWidth,
@@ -744,8 +755,8 @@ function buildTexLineLabelSegments(
         kind: "math",
         role: "list-label",
         text: item.content,
-        sourceStartRaw: item.sourceStart,
-        sourceEndRaw: item.sourceEnd,
+        sourceStartRaw: layoutSourceOffset(item.sourceStart),
+        sourceEndRaw: layoutSourceOffset(item.sourceEnd),
         sourceKind: item.box.sourceKind ?? "text",
         x,
         width: boxWidth,
@@ -944,14 +955,14 @@ function texMathBoxConstructRanges(
   } | null | undefined,
   x: TexLineX,
   width: TexLength
-): LineReport["segments"][number]["mathConstructRanges"] {
+): LineReport<"layout">["segments"][number]["mathConstructRanges"] {
   const ranges = box?.constructRanges;
   if (!ranges?.length) {
     return undefined;
   }
   return ranges.map((range) => ({
-    sourceStartRaw: range.sourceStart,
-    sourceEndRaw: range.sourceEnd,
+    sourceStartRaw: layoutSourceOffset(range.sourceStart),
+    sourceEndRaw: layoutSourceOffset(range.sourceEnd),
     xStart: projectRoundedTexHBoxXToLine(
       texHBoxX(Math.max(0, Math.min(width, range.xStart))),
       texHBoxX(0),
@@ -971,16 +982,16 @@ function texMathBoxCaretEntries(
   } | null | undefined,
   x: TexLineX,
   width: TexLength
-): LineReport["segments"][number]["mathCaretEntries"] {
+): LineReport<"layout">["segments"][number]["mathCaretEntries"] {
   const entries = box?.caretMap?.entries;
   if (!entries?.length) {
     return undefined;
   }
   return entries.map((entry) => ({
-    sourceOffsetRaw: entry.sourceOffset,
+    sourceOffsetRaw: layoutSourceOffset(entry.sourceOffset),
     ...(entry.sourceSpan ? {
-      sourceStartRaw: entry.sourceSpan.start,
-      sourceEndRaw: entry.sourceSpan.end,
+      sourceStartRaw: layoutSourceOffset(entry.sourceSpan.start),
+      sourceEndRaw: layoutSourceOffset(entry.sourceSpan.end),
     } : {}),
     x: projectRoundedTexHBoxXToLine(
       texHBoxX(Math.max(0, Math.min(width, entry.x))),
@@ -1020,14 +1031,14 @@ function texMathBoxBreakpoints(
   } | null | undefined,
   x: TexLineX,
   width: TexLength
-): LineReport["segments"][number]["mathBreakpoints"] {
+): LineReport<"layout">["segments"][number]["mathBreakpoints"] {
   const breakpoints = box?.breakpoints;
   if (!breakpoints?.length) {
     return undefined;
   }
   return breakpoints.map((breakpoint) => ({
     kind: breakpoint.kind,
-    sourceOffsetRaw: breakpoint.sourceOffset,
+    sourceOffsetRaw: layoutSourceOffset(breakpoint.sourceOffset),
     x: projectRoundedTexHBoxXToLine(
       texHBoxX(Math.max(0, Math.min(width, breakpoint.x))),
       texHBoxX(0),

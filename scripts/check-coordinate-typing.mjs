@@ -51,6 +51,16 @@ const directTexCoordinateAssertion = new RegExp(
 );
 const texCoordinateConstructorFile =
   "packages/core/src/text/tex/coordinates.ts";
+const sourceOffsetTypeNames = [
+  "LayoutSourceOffset",
+  "DocumentSourceOffset",
+  "TextareaOffset"
+];
+const directSourceOffsetAssertion = new RegExp(
+  `\\bas\\s+(?:(?:${sourceOffsetTypeNames.join("|")})\\b|SourceOffset\\s*<)`
+);
+const sourceOffsetConstructorFile =
+  "packages/core/src/text/source-coordinates.ts";
 
 const violations = [];
 
@@ -87,6 +97,15 @@ function walk(path) {
     violations.push({
       file: relativePath,
       reason: "direct TeX coordinate assertion outside coordinate constructors"
+    });
+  }
+  if (
+    relativePath !== sourceOffsetConstructorFile &&
+    directSourceOffsetAssertion.test(content)
+  ) {
+    violations.push({
+      file: relativePath,
+      reason: "direct source-offset assertion outside source-coordinate constructors"
     });
   }
 }
@@ -209,6 +228,138 @@ function checkTexCoordinateOperations() {
   }
 }
 
+/**
+ * Source offsets are positions, not lengths. The only meaningful arithmetic
+ * between two branded offsets is subtracting positions in the same source
+ * space. Cross-space arithmetic, adding positions, and feeding an already
+ * branded offset to another space's constructor are almost always a missing
+ * explicit conversion.
+ */
+function checkSourceOffsetOperations() {
+  const configPath = ts.findConfigFile(root, ts.sys.fileExists, "tsconfig.json");
+  if (!configPath) {
+    throw new Error("Unable to locate tsconfig.json for source-offset typing guard");
+  }
+  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (configFile.error) {
+    throw new Error(formatTypeScriptDiagnostic(configFile.error));
+  }
+  const parsedConfig = ts.parseJsonConfigFileContent(
+    configFile.config,
+    ts.sys,
+    root,
+    undefined,
+    configPath
+  );
+  const guardedPrefixes = [
+    join(root, "packages/core/src/text/"),
+    join(root, "packages/app/src/ui/canvas-panel/")
+  ];
+  const program = ts.createProgram({
+    rootNames: parsedConfig.fileNames.filter((fileName) =>
+      guardedPrefixes.some((prefix) => fileName.startsWith(prefix))
+    ),
+    options: parsedConfig.options,
+    projectReferences: parsedConfig.projectReferences
+  });
+  const checker = program.getTypeChecker();
+
+  for (const sourceFile of program.getSourceFiles()) {
+    const relativePath = relative(root, sourceFile.fileName);
+    if (
+      sourceFile.isDeclarationFile ||
+      !guardedPrefixes.some((prefix) => sourceFile.fileName.startsWith(prefix)) ||
+      relativePath === sourceOffsetConstructorFile
+    ) {
+      continue;
+    }
+    visit(sourceFile, sourceFile);
+  }
+
+  function visit(node, sourceFile) {
+    if (ts.isBinaryExpression(node)) {
+      checkBinaryExpression(node, sourceFile);
+    } else if (ts.isCallExpression(node)) {
+      checkSourceOffsetConstructorCall(node, sourceFile);
+    }
+    ts.forEachChild(node, (child) => visit(child, sourceFile));
+  }
+
+  function checkBinaryExpression(node, sourceFile) {
+    const operator = node.operatorToken.kind;
+    if (
+      operator !== ts.SyntaxKind.PlusToken &&
+      operator !== ts.SyntaxKind.MinusToken
+    ) {
+      return;
+    }
+    const left = sourceOffsetSpace(checker.getTypeAtLocation(node.left), checker);
+    const right = sourceOffsetSpace(checker.getTypeAtLocation(node.right), checker);
+    if (!left || !right) {
+      return;
+    }
+    if (operator === ts.SyntaxKind.MinusToken && left === right) {
+      return;
+    }
+    addTypeScriptViolation(
+      sourceFile,
+      node.operatorToken,
+      `unsafe source-offset arithmetic (${left} ${node.operatorToken.getText(sourceFile)} ${right})`
+    );
+  }
+
+  function checkSourceOffsetConstructorCall(node, sourceFile) {
+    if (!ts.isIdentifier(node.expression) || node.arguments.length === 0) {
+      return;
+    }
+    const target = sourceOffsetConstructorSpaces.get(node.expression.text);
+    if (!target) {
+      return;
+    }
+    const source = sourceOffsetSpace(
+      checker.getTypeAtLocation(node.arguments[0]),
+      checker
+    );
+    if (!source || source === target) {
+      return;
+    }
+    addTypeScriptViolation(
+      sourceFile,
+      node.expression,
+      `direct source-offset rebranding (${source} to ${target}); use an explicit conversion`
+    );
+  }
+}
+
+const sourceOffsetConstructorSpaces = new Map([
+  ["layoutSourceOffset", "layout"],
+  ["documentSourceOffset", "document"],
+  ["textareaOffset", "textarea"]
+]);
+
+function sourceOffsetSpace(type, checker) {
+  const aliasName = type.aliasSymbol?.getName();
+  if (aliasName === "LayoutSourceOffset") {
+    return "layout";
+  }
+  if (aliasName === "DocumentSourceOffset") {
+    return "document";
+  }
+  if (aliasName === "TextareaOffset") {
+    return "textarea";
+  }
+  const rendered = checker.typeToString(
+    type,
+    undefined,
+    ts.TypeFormatFlags.NoTruncation
+  );
+  const genericMatch = rendered.match(/SourceOffset<\"([^\"]+)\">/);
+  if (genericMatch) {
+    return genericMatch[1];
+  }
+  return null;
+}
+
 const texCoordinateConstructorTypes = new Map([
   ["texLength", "TexLength"],
   ["texVListX", "TexVListX"],
@@ -327,6 +478,7 @@ function formatTypeScriptDiagnostic(diagnostic) {
 }
 
 checkTexCoordinateOperations();
+checkSourceOffsetOperations();
 
 if (violations.length > 0) {
   console.error("Coordinate typing guard failed:");

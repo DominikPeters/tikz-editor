@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { layoutSimpleTexParagraph } from "../packages/core/src/text/tex/index.js";
+import { sourceOffsetForSpace } from "../packages/core/src/text/source-coordinates.js";
 import {
   applyTexFuzzMutations,
   caseFromTexFuzzAst,
@@ -164,7 +165,10 @@ describe("TeX fuzz mutations and relations", () => {
           result.report.lines[0].break = {
             kind: "space",
             runIndex: 1,
-            sourceOffset: source.indexOf("~") + 1,
+            sourceOffset: sourceOffsetForSpace(
+              source.indexOf("~") + 1,
+              result.report.sourceCoordinateSpace
+            ),
             visibleHyphen: false,
           };
         }

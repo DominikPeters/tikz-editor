@@ -389,6 +389,40 @@ async function readMathJaxSourceClientPoint(
   }, options);
 }
 
+async function readMathJaxDocumentSourceClientPoint(
+  page: Page,
+  options: { sourceId: string; documentOffset: number }
+): Promise<{ x: number; y: number }> {
+  return await page.evaluate(({ sourceId, documentOffset }) => {
+    const rendered = document.querySelector(
+      `svg[data-text-renderer="mathjax"][data-source-id="${sourceId}"]`
+    );
+    if (!rendered) {
+      throw new Error(`Rendered MathJax SVG not found for ${sourceId}.`);
+    }
+    const candidates = Array.from(
+      rendered.querySelectorAll<SVGGraphicsElement>("[data-source-start][data-source-end]")
+    ).filter((element) => {
+      const start = Number(element.getAttribute("data-source-start"));
+      const end = Number(element.getAttribute("data-source-end"));
+      return start <= documentOffset && documentOffset < Math.max(start + 1, end);
+    }).sort((left, right) => {
+      const leftSpan = Number(left.getAttribute("data-source-end")) - Number(left.getAttribute("data-source-start"));
+      const rightSpan = Number(right.getAttribute("data-source-end")) - Number(right.getAttribute("data-source-start"));
+      return leftSpan - rightSpan;
+    });
+    const glyph = candidates.find((element) => element.hasAttribute("data-tex-glyph")) ?? candidates[0];
+    const rect = glyph?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      throw new Error(`Rendered MathJax document source glyph not found at offset ${documentOffset}.`);
+    }
+    return {
+      x: rect.left + rect.width * 0.05,
+      y: rect.top + rect.height / 2,
+    };
+  }, options);
+}
+
 test("single-line node text enters canvas edit mode and closes when CodeMirror takes focus", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
@@ -1015,6 +1049,44 @@ test("wrapped TeX-derived mixed math and styled text keeps canvas caret mapping"
   await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(0);
   await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(1);
   await expect(geometryErrors).toEqual([]);
+});
+
+test("enumerate canvas clicks keep the floating textarea caret in node-local coordinates", async ({ page }) => {
+  const text = String.raw`\begin{enumerate}
+\item Hello
+\item World
+\end{enumerate}`;
+  const documentSource = String.raw`\begin{tikzpicture}
+  \node[align=left, text width=100pt] (start) at (0,0) {\begin{enumerate}
+\item Hello
+\item World
+\end{enumerate}};
+\end{tikzpicture}`;
+  await gotoApp(page);
+  await setSource(page, documentSource);
+
+  await waitForHitRegions(page, 1);
+  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+    "data-paragraph-id",
+    /.+/
+  );
+  const helloOffset = text.indexOf("Hello") + 2;
+  const point = await readMathJaxDocumentSourceClientPoint(page, {
+    sourceId: "path:0",
+    documentOffset: documentSource.indexOf("Hello") + 2,
+  });
+  await page.mouse.click(point.x, point.y);
+
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toBeVisible();
+  await expect(textarea).toHaveValue(text);
+  await expect.poll(async () => await readTextareaSelection(page)).toEqual({
+    start: helloOffset,
+    end: helloOffset,
+  });
+
+  await setTextareaSelection(page, helloOffset, helloOffset + 3);
+  await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(0);
 });
 
 test("wrapped TeX-derived align display rows and tags keep canvas caret mapping", async ({ page }) => {

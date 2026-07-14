@@ -24,12 +24,12 @@ import { texVListParagraphEntries } from "./traversal.js";
 const latexNormalLineSkipPt = texLength(1);
 
 export interface TexVListParagraphHorizontalLayouts {
-  readonly report: ParagraphLayoutReport;
+  readonly report: ParagraphLayoutReport<"layout">;
   readonly paragraphLayouts: readonly TexVListParagraphHorizontalLayout[];
 }
 
 export function createTexVListParagraphHorizontalLayoutsFromLineBoxes(params: {
-  readonly report: ParagraphLayoutReport;
+  readonly report: ParagraphLayoutReport<"layout">;
   readonly lineBoxes: readonly TexLineBox[];
   readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
   readonly lineHeight: TexLength;
