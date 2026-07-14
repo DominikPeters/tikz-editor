@@ -27,8 +27,24 @@ import type {
   TexShapedItem,
 } from "./tex/index.js";
 import {
+  projectTexLineXToHBox,
+  projectTexLineXToVList,
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texLineX,
+  texVListLocalX,
+  texVListLocalXFromOrigin,
+  texVListLocalYFromOrigin,
   texVListX,
   texVListY,
+  translateTexVListX,
+  type TexHBoxX,
+  type TexHBoxY,
+  type TexLength,
+  type TexLineX,
+  type TexVListLocalX,
+  type TexVListLocalY,
   type TexVListX,
   type TexVListY,
 } from "./tex/coordinates.js";
@@ -1069,7 +1085,7 @@ function buildCacheEntryWithMetadata(
 type SimpleTexSharedLayout = {
   report: ParagraphLayoutReport;
   vlistLayout: TexVListLayout;
-  contentWidthPt: number;
+  contentWidthPt: TexLength;
   renderFont: ResolvedTexFont;
 };
 
@@ -1088,12 +1104,14 @@ function buildSimpleTexSharedLayout(params: {
     return cached;
   }
   const isNaturalWidthLayout = params.textWidthPt == null;
-  const layoutWidthPt = params.textWidthPt ?? TEX_NATURAL_TEXT_LAYOUT_WIDTH_PT;
+  const layoutWidthPt = texLength(
+    params.textWidthPt ?? TEX_NATURAL_TEXT_LAYOUT_WIDTH_PT
+  );
   const metricProvider = computerModernTexMetricProvider;
   const textFontProfile = texTextFontProfileForNodeFont(params.font);
   const renderFont = textFontProfile.resolveTextFont(
     textFontProfile.defaultFontState,
-    TEX_TEXT_BASE_FONT_SIZE,
+    texLength(TEX_TEXT_BASE_FONT_SIZE),
     metricProvider
   );
   const paragraphId = `tex:${stableHashString(params.layoutCacheKey)}`;
@@ -1200,16 +1218,16 @@ function buildSimpleTexTextCacheEntry(params: {
     vlistLayout,
     report.lines[0]?.lineIndex ?? 0
   );
-  const firstLineAscent = vlistLayout.baseline.kind === "explicit"
+  const firstLineAscent = texLength(vlistLayout.baseline.kind === "explicit"
     ? vlistLayout.baseline.y - firstLineTop
-    : baselineMetrics.strutHeight;
-  const measuredFirstLineAscent = singleNaturalLine?.ascent ?? firstLineAscent;
-  const heightPt = singleNaturalLine
+    : baselineMetrics.strutHeight);
+  const measuredFirstLineAscent = texLength(singleNaturalLine?.ascent ?? firstLineAscent);
+  const heightPt = texLength(singleNaturalLine
     ? Math.max(0, singleNaturalLine.ascent + singleNaturalLine.descent)
     : Math.max(
         lineHeightPt,
         vlistLayout.metrics.height + vlistLayout.metrics.depth
-      );
+      ));
   const widthPt = contentWidthPt;
   const body = renderSimpleTexSvgBody(report, {
     lineHeightPt,
@@ -1287,21 +1305,21 @@ function texTextFontProfileForNodeFont(font: TextFontOptions): TexTextFontProfil
   };
 }
 
-function texParagraphNaturalContentWidth(report: ParagraphLayoutReport): number {
-  let width = 0;
+function texParagraphNaturalContentWidth(report: ParagraphLayoutReport): TexLength {
+  let width = texLength(0);
   for (const line of report.lines) {
     const lineRight = Math.max(
       line.xEnd,
       ...line.segments.map((segment) => segment.x + segment.width)
     );
-    width = Math.max(width, lineRight - Math.min(0, line.xStart));
+    width = texLength(Math.max(width, lineRight - Math.min(0, line.xStart)));
   }
-  return Math.max(SINGLE_LINE_WIDTH_EPSILON_PT, width);
+  return texLength(Math.max(SINGLE_LINE_WIDTH_EPSILON_PT, width));
 }
 
 function shrinkTexParagraphReportToWidth(
   report: ParagraphLayoutReport,
-  width: number,
+  width: TexLength,
   layoutMode?: KnuthPlassLayoutMode
 ): ParagraphLayoutReport {
   return {
@@ -1310,14 +1328,14 @@ function shrinkTexParagraphReportToWidth(
     layoutMode: layoutMode ?? report.layoutMode,
     lines: report.lines.map((line) => ({
       ...line,
-      targetWidth: Math.min(line.targetWidth, width)
+      targetWidth: texLength(Math.min(line.targetWidth, width))
     }))
   };
 }
 
 function shrinkTexVListLayoutToWidth(
   layout: TexVListLayout,
-  width: number,
+  width: TexLength,
   report: ParagraphLayoutReport
 ): TexVListLayout {
   return {
@@ -1335,8 +1353,8 @@ function shrinkTexVListLayoutToWidth(
 function renderSimpleTexSvgBody(
   report: ParagraphLayoutReport,
   options: {
-    lineHeightPt: number;
-    firstLineAscent: number;
+    lineHeightPt: TexLength;
+    firstLineAscent: TexLength;
     vlistLayout?: TexVListLayout;
     metricProvider: TexMetricProvider;
     requestedAlignment: NodeTextParagraphAlignment | null;
@@ -1367,8 +1385,8 @@ function renderSimpleTexSvgBody(
 function renderTexVListSvgContent(
   report: ParagraphLayoutReport,
   options: {
-    lineHeightPt: number;
-    firstLineAscent: number;
+    lineHeightPt: TexLength;
+    firstLineAscent: TexLength;
     vlistLayout: TexVListLayout;
     metricProvider: TexMetricProvider;
   }
@@ -1409,8 +1427,8 @@ function renderTexVListSvgContent(
 }
 
 type TexVListRenderOptions = {
-  lineHeightPt: number;
-  firstLineAscent: number;
+  lineHeightPt: TexLength;
+  firstLineAscent: TexLength;
   metricProvider: TexMetricProvider;
   linePlacementByIndex: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   lineByIndex: ReadonlyMap<number, ParagraphLayoutReport["lines"][number]>;
@@ -1452,7 +1470,12 @@ function renderTexVListItemsSvgContent(
       continue;
     }
     if (item.item.kind === "placeholder") {
-      pieces.push(renderTexPlaceholderSvgMetadata(item, report.width, options, options.metricProvider));
+      pieces.push(renderTexPlaceholderSvgMetadata(
+        item,
+        texLength(report.width),
+        options,
+        options.metricProvider
+      ));
       continue;
     }
     if (item.item.kind === "rule") {
@@ -1468,7 +1491,7 @@ function renderTexVListItemsSvgContent(
       continue;
     }
     if (item.item.kind === "vbox") {
-      pieces.push(renderTexVBoxSvgMetadata(item, report.width, {
+      pieces.push(renderTexVBoxSvgMetadata(item, texLength(report.width), {
         ...options,
         close: false,
       }));
@@ -1479,7 +1502,7 @@ function renderTexVListItemsSvgContent(
           {
             ...options,
             originX: item.x,
-            originY: texVListY(item.y),
+            originY: item.y,
           },
           renderedLines
         ));
@@ -1498,8 +1521,8 @@ function renderTexReportLineSvg(
   report: ParagraphLayoutReport,
   line: ParagraphLayoutReport["lines"][number],
   options: {
-    lineHeightPt: number;
-    firstLineAscent: number;
+    lineHeightPt: TexLength;
+    firstLineAscent: TexLength;
     linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
     metricProvider: TexMetricProvider;
     skipListLabelSegments?: boolean;
@@ -1509,18 +1532,25 @@ function renderTexReportLineSvg(
   renderedLines: Set<number>
 ): string {
   renderedLines.add(line.lineIndex);
-  const font = options.metricProvider.resolveFont({ atPt: TEX_TEXT_BASE_FONT_SIZE });
+  const font = options.metricProvider.resolveFont({ atPt: texLength(TEX_TEXT_BASE_FONT_SIZE) });
   const lineTop = texReportLineTop(report.paragraphId, line.lineIndex, options);
-  const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
+  const lineLeft = texLineX(Number.isFinite(line.xStart) ? line.xStart : 0);
   const lineXOffset = texReportLineXOffset(line, lineLeft, options);
-  const baseline = lineTop + line.ascent;
-  const lineBoxHeight = options.linePlacementByIndex?.get(line.lineIndex)?.height ?? options.lineHeightPt;
+  const baseline = texHBoxY(line.ascent);
+  const lineBoxHeight = texLength(
+    options.linePlacementByIndex?.get(line.lineIndex)?.height ?? options.lineHeightPt
+  );
+  const lineRootX = translateTexVListX(
+    projectTexLineXToVList(lineLeft, texLineX(0), texVListX(0)),
+    lineXOffset
+  );
+  const lineBoxLeft = texVListLocalXFromOrigin(texVListX(0), lineRootX);
   const lineLeadingAttr = line.break?.lineLeading
     ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
     : "";
   const pieces = [
-    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(texVListSvgTranslateX(texVListX(lineXOffset + lineLeft), options.originX))} ${formatPt(texVListSvgTranslateY(lineTop, options.originY))})">`,
-    `<rect x="${formatPt(-lineXOffset - lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
+    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(texVListSvgTranslateX(lineRootX, options.originX))} ${formatPt(texVListSvgTranslateY(lineTop, options.originY))})">`,
+    `<rect x="${formatPt(lineBoxLeft)}" y="0" width="${formatPt(texLength(report.width))}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
     if (options.skipListLabelSegments && segment.role === "list-label") {
@@ -1530,8 +1560,8 @@ function renderTexReportLineSvg(
       if (segment.mathSvgBody) {
         pieces.push(renderTexInlineMathSvg(
           segment.mathSvgBody,
-          segment.x - lineLeft,
-          baseline - lineTop
+          projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
+          baseline
         ));
       }
       continue;
@@ -1546,7 +1576,7 @@ function renderTexReportLineSvg(
     const segmentFont = segment.fontId
       ? options.metricProvider.resolveFont({
         fontId: segment.fontId,
-        atPt: segment.fontAtPt ?? TEX_TEXT_BASE_FONT_SIZE,
+        atPt: texLength(segment.fontAtPt ?? TEX_TEXT_BASE_FONT_SIZE),
       })
       : font;
     let segmentMarkup: string;
@@ -1554,8 +1584,8 @@ function renderTexReportLineSvg(
       segmentMarkup = renderTexGlyphCode(
         segment.glyphCode,
         segmentFont,
-        segment.x - lineLeft,
-        baseline - lineTop,
+        projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
+        baseline,
         typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
           ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
           : undefined
@@ -1564,8 +1594,8 @@ function renderTexReportLineSvg(
       segmentMarkup = renderTexGlyphRun(
         text,
         segmentFont,
-        segment.x - lineLeft,
-        baseline - lineTop,
+        projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
+        baseline,
         options.metricProvider,
         typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
           ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
@@ -1593,22 +1623,30 @@ function renderTexReportLineSvg(
 
 function texReportLineXOffset(
   line: ParagraphLayoutReport["lines"][number],
-  lineLeft: number,
+  lineLeft: TexLineX,
   options: {
     readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   }
-): number {
+): TexVListLocalX {
   if (line.segments.some((segment) => segment.role === "list-label")) {
-    return 0;
+    return texVListLocalX(0);
   }
   const placement = options.linePlacementByIndex?.get(line.lineIndex);
   if (!placement) {
-    return 0;
+    return texVListLocalX(0);
   }
-  return Math.max(0, placement.x - lineLeft);
+  const lineRootLeft = projectTexLineXToVList(
+    lineLeft,
+    texLineX(0),
+    texVListX(0)
+  );
+  return texVListLocalX(Math.max(
+    0,
+    texVListLocalXFromOrigin(placement.x, lineRootLeft)
+  ));
 }
 
-function renderTexInlineMathSvg(body: string, x: number, baseline: number): string {
+function renderTexInlineMathSvg(body: string, x: TexHBoxX, baseline: TexHBoxY): string {
   return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(TEX_TEXT_BASE_FONT_SIZE / 1000)})">${body}</g>`;
 }
 
@@ -1616,7 +1654,7 @@ function texReportLineTop(
   paragraphId: string,
   lineIndex: number,
   options: {
-    readonly lineHeightPt?: number;
+    readonly lineHeightPt?: TexLength;
     readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   }
 ): TexVListY {
@@ -1627,7 +1665,7 @@ function texReportLineTop(
         `TeX vlist layout for paragraph '${paragraphId}' is missing line placement ${lineIndex}.`
       );
     }
-    return texVListY(placement.y);
+    return placement.y;
   }
   return texVListY(lineIndex * (options.lineHeightPt ?? 0));
 }
@@ -1637,7 +1675,7 @@ function texVListPlacedLineTop(layout: TexVListLayout, lineIndex: number): TexVL
   if (!placement) {
     throw new Error(`TeX vlist layout is missing line placement ${lineIndex}.`);
   }
-  return texVListY(placement.y);
+  return placement.y;
 }
 
 export function renderSimpleTexParagraphDebugSvgBody(params: {
@@ -1648,12 +1686,12 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
   const metricProvider = computerModernTexMetricProvider;
   const renderFont = luaLatexDefaultTextFontProfile.resolveTextFont(
     luaLatexDefaultTextFontProfile.defaultFontState,
-    TEX_TEXT_BASE_FONT_SIZE,
+    texLength(TEX_TEXT_BASE_FONT_SIZE),
     metricProvider
   );
   const layout = layoutSimpleTexParagraph(params.text, {
     paragraphId: "tex:debug-placeholder",
-    width: params.width,
+    width: texLength(params.width),
     alignment: params.alignment ?? "ragged-right",
     font: renderFont,
     metricProvider,
@@ -1673,9 +1711,9 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
     layout.vlistLayout,
     layout.report.lines[0]?.lineIndex ?? 0
   );
-  const firstLineAscent = layout.vlistLayout.baseline.kind === "explicit"
+  const firstLineAscent = texLength(layout.vlistLayout.baseline.kind === "explicit"
     ? layout.vlistLayout.baseline.y - firstLineTop
-    : baselineMetrics.strutHeight;
+    : baselineMetrics.strutHeight);
   return renderSimpleTexSvgBody(layout.report, {
     lineHeightPt: baselineMetrics.baselineskip,
     firstLineAscent,
@@ -1689,7 +1727,7 @@ export function renderTexVListSvgMetadata(
   items: readonly PositionedTexVListItem[],
   width: number
 ): string {
-  return renderTexVListSvgMetadataItems(items, width, {
+  return renderTexVListSvgMetadataItems(items, texLength(width), {
     originX: texVListX(0),
     originY: texVListY(0),
   });
@@ -1700,17 +1738,23 @@ type TexVListSvgOrigin = {
   readonly originY?: TexVListY;
 };
 
-function texVListSvgTranslateX(position: TexVListX, origin?: TexVListX): number {
-  return position - (origin ?? texVListX(0));
+function texVListSvgTranslateX(
+  position: TexVListX,
+  origin?: TexVListX
+): TexVListLocalX {
+  return texVListLocalXFromOrigin(position, origin ?? texVListX(0));
 }
 
-function texVListSvgTranslateY(position: TexVListY, origin?: TexVListY): number {
-  return position - (origin ?? texVListY(0));
+function texVListSvgTranslateY(
+  position: TexVListY,
+  origin?: TexVListY
+): TexVListLocalY {
+  return texVListLocalYFromOrigin(position, origin ?? texVListY(0));
 }
 
 function renderTexVListSvgMetadataItems(
   items: readonly PositionedTexVListItem[],
-  width: number,
+  width: TexLength,
   origin: TexVListSvgOrigin
 ): string {
   const pieces: string[] = [];
@@ -1745,14 +1789,14 @@ function renderTexVListSvgMetadataItems(
 
 function renderTexVBoxSvgMetadata(
   item: PositionedTexVListItem,
-  width: number,
+  width: TexLength,
   options: TexVListSvgOrigin & { readonly close?: boolean } = {}
 ): string {
   if (item.item.kind !== "vbox") {
     return "";
   }
-  const boxWidth = Math.max(width, item.metrics.width);
-  const boxHeight = item.metrics.height + item.metrics.depth;
+  const boxWidth = texLength(Math.max(width, item.metrics.width));
+  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
   const pieces = [
     `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, options.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), options.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
@@ -1765,15 +1809,15 @@ function renderTexVBoxSvgMetadata(
 
 function renderTexPlaceholderSvgMetadata(
   item: PositionedTexVListItem,
-  width: number,
+  width: TexLength,
   origin: TexVListSvgOrigin = {},
   metricProvider?: TexMetricProvider
 ): string {
   if (item.item.kind !== "placeholder") {
     return "";
   }
-  const boxHeight = item.metrics.height + item.metrics.depth;
-  const boxWidth = Math.max(width, item.metrics.width);
+  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
+  const boxWidth = texLength(Math.max(width, item.metrics.width));
   const pieces = [
     `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
@@ -1783,7 +1827,7 @@ function renderTexPlaceholderSvgMetadata(
     pieces.push(renderTexPlaceholderLiteralSvg(
       literalText,
       item.item.sourceSpan,
-      item.metrics.height,
+      texHBoxY(item.metrics.height),
       metricProvider
     ));
   }
@@ -1794,30 +1838,30 @@ function renderTexPlaceholderSvgMetadata(
 function renderTexPlaceholderLiteralSvg(
   literalText: string,
   sourceSpan: { readonly start: number; readonly end: number },
-  baseline: number,
+  baseline: TexHBoxY,
   metricProvider: TexMetricProvider
 ): string {
   const font = luaLatexDefaultTextFontProfile.resolveTextFont(
     { family: "typewriter", series: "medium", shape: "upright" },
-    TEX_TEXT_BASE_FONT_SIZE,
+    texLength(TEX_TEXT_BASE_FONT_SIZE),
     metricProvider
   );
   // The literal face is monospaced, so a single shaped character gives the
   // advance used for word spacing.
-  const spaceAdvance = metricProvider.shapeText("x", font).width;
+  const spaceAdvance = texLength(metricProvider.shapeText("x", font).width);
   const pieces = [
     `<g data-tex-literal="display-math-unsupported" data-source-start="${sourceSpan.start}" data-source-end="${sourceSpan.end}">`,
   ];
-  let cursor = 0;
+  let cursor = texHBoxX(0);
   const pattern = /([ \n]+)|([^ \n]+)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(literalText)) !== null) {
     if (match[1] !== undefined) {
-      cursor += spaceAdvance * match[1].length;
+      cursor = texHBoxX(cursor + spaceAdvance * match[1].length);
       continue;
     }
     pieces.push(renderTexGlyphRun(match[0], font, cursor, baseline, metricProvider));
-    cursor += metricProvider.shapeText(match[0], font).width;
+    cursor = texHBoxX(cursor + metricProvider.shapeText(match[0], font).width);
   }
   pieces.push("</g>");
   return pieces.join("");
@@ -1831,10 +1875,10 @@ function renderTexVListLeafBoxSvgMetadata(
   if (item.item.kind !== "hbox" && item.item.kind !== "penalty" && item.item.kind !== "rule") {
     return "";
   }
-  const boxHeight = item.metrics.height + item.metrics.depth;
+  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
   return [
     `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
+    `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
     ...(item.item.kind === "hbox" && metricProvider
       ? item.item.box.renderItems.map((renderItem) =>
           renderTexHBoxRenderItemSvg(renderItem, metricProvider)
@@ -1851,11 +1895,15 @@ function renderTexDisplayMathSvgContent(
   if (item.item.kind !== "display-math") {
     return "";
   }
-  const boxHeight = item.metrics.height + item.metrics.depth;
+  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
   return [
     `<g data-tex-display-math="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
-    renderTexInlineMathSvg(item.item.box.svgBody ?? "", 0, item.metrics.height),
+    `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
+    renderTexInlineMathSvg(
+      item.item.box.svgBody ?? "",
+      texHBoxX(0),
+      texHBoxY(item.metrics.height)
+    ),
     `</g>`,
   ].join("");
 }
@@ -1865,19 +1913,23 @@ function renderTexHBoxRenderItemSvg(
   metricProvider: TexMetricProvider
 ): string {
   if (item.kind === "tex-math-svg") {
-    return renderTexInlineMathSvg(item.svgBody, item.x, item.baseline);
+    return renderTexInlineMathSvg(
+      item.svgBody,
+      texHBoxX(item.x),
+      texHBoxY(item.baseline)
+    );
   }
   const font = metricProvider.resolveFont({
     fontId: item.fontId,
-    atPt: item.atPt,
+    atPt: texLength(item.atPt),
   });
   const body = item.kind === "tex-glyph"
-    ? renderTexGlyphCode(item.code, font, item.x, item.baseline)
+    ? renderTexGlyphCode(item.code, font, texHBoxX(item.x), texHBoxY(item.baseline))
     : renderTexGlyphRun(
     item.text,
     font,
-    item.x,
-    item.baseline,
+    texHBoxX(item.x),
+    texHBoxY(item.baseline),
     metricProvider
     );
   return item.color ? `<g fill="${escapeXmlAttribute(item.color)}">${body}</g>` : body;
@@ -1890,29 +1942,29 @@ function renderTexRuleSvgContent(
   if (item.item.kind !== "rule") {
     return "";
   }
-  const boxHeight = item.metrics.height + item.metrics.depth;
+  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
   return [
     `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
+    `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
     `</g>`,
   ].join("");
 }
 
 function texNormalBaselineMetrics(font: ResolvedTexFont): {
-  readonly baselineskip: number;
-  readonly strutHeight: number;
+  readonly baselineskip: TexLength;
+  readonly strutHeight: TexLength;
 } {
   return {
-    baselineskip: font.atPt * LATEX_NORMAL_BASELINESKIP_EM,
-    strutHeight: font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
+    baselineskip: texLength(font.atPt * LATEX_NORMAL_BASELINESKIP_EM),
+    strutHeight: texLength(font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM),
   };
 }
 
 function renderTexGlyphRun(
   text: string,
   font: ResolvedTexFont,
-  x: number,
-  baseline: number,
+  x: TexHBoxX,
+  baseline: TexHBoxY,
   metricProvider: TexMetricProvider,
   sourceSpan?: { readonly start: number; readonly end: number }
 ): string {
@@ -1922,10 +1974,10 @@ function renderTexGlyphRun(
     sourceSpan ? { sourceStart: sourceSpan.start } : undefined
   );
   const pieces: string[] = [];
-  let cursor = x;
+  let cursor = texHBoxX(x);
   for (const item of shaped.items) {
     if (item.kind === "kern") {
-      cursor += item.width;
+      cursor = texHBoxX(cursor + item.width);
       continue;
     }
     const glyphItem = sourceSpan && text.length === 1
@@ -1938,7 +1990,7 @@ function renderTexGlyphRun(
       baseline,
       Boolean(sourceSpan)
     ));
-    cursor += item.width;
+    cursor = texHBoxX(cursor + item.width);
   }
   return pieces.join("");
 }
@@ -1946,8 +1998,8 @@ function renderTexGlyphRun(
 function renderTexGlyphCode(
   code: number,
   font: ResolvedTexFont,
-  x: number,
-  baseline: number,
+  x: TexHBoxX,
+  baseline: TexHBoxY,
   sourceSpan?: { readonly start: number; readonly end: number }
 ): string {
   return renderTexGlyphPath({
@@ -1956,10 +2008,10 @@ function renderTexGlyphCode(
     code,
     sourceStart: sourceSpan?.start ?? 0,
     sourceEnd: sourceSpan?.end ?? 0,
-    width: 0,
-    height: 0,
-    depth: 0,
-    italicCorrection: 0,
+    width: texLength(0),
+    height: texLength(0),
+    depth: texLength(0),
+    italicCorrection: texLength(0),
     components: [code],
   }, font, x, baseline, Boolean(sourceSpan));
 }
@@ -1967,8 +2019,8 @@ function renderTexGlyphCode(
 function renderTexGlyphPath(
   item: Extract<TexShapedItem, { kind: "glyph" }>,
   font: ResolvedTexFont,
-  x: number,
-  baseline: number,
+  x: TexHBoxX,
+  baseline: TexHBoxY,
   sourceBacked = false
 ): string {
   if (item.code === 32) {

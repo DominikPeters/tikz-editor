@@ -34,7 +34,12 @@ import {
   texVListGlueSetForTargetHeight,
   texVListRootVerticalOffset,
 } from "./layout.js";
-import { texVListX } from "../coordinates.js";
+import {
+  texLength,
+  texVListX,
+  texVListY,
+  type TexLength,
+} from "../coordinates.js";
 import {
   createMeasuredParagraphVListMeasurer,
   createTexVListParagraphHorizontalLayoutsFromLineBoxes,
@@ -53,18 +58,18 @@ import {
 } from "./placements.js";
 
 export interface TexVListMeasuredParagraphLayoutOptions extends TexVListLayoutOptions {
-  readonly lineHeight: number;
+  readonly lineHeight: TexLength;
   readonly firstLineIndex?: number;
-  readonly firstLineAscent?: number;
+  readonly firstLineAscent?: TexLength;
   readonly paragraphMeasurements: readonly TexVListParagraphBoxMeasurement[];
   readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport)[];
   readonly errors?: readonly string[];
 }
 
 export interface TexVListHorizontalParagraphLayoutOptions extends TexVListLayoutOptions {
-  readonly lineHeight: number;
+  readonly lineHeight: TexLength;
   readonly firstLineIndex?: number;
-  readonly firstLineAscent?: number;
+  readonly firstLineAscent?: TexLength;
   readonly paragraphLayouts: readonly TexVListParagraphHorizontalLayout[];
   readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport)[];
   readonly errors?: readonly string[];
@@ -79,7 +84,7 @@ export interface TexVListCombinedParagraphReportInput {
   readonly runs: readonly ParagraphRun[];
   readonly lines: readonly GreedyLine[];
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
-  readonly runWidths: ReadonlyMap<number, number>;
+  readonly runWidths: ReadonlyMap<number, TexLength>;
   readonly lineLabels: ReadonlyMap<number, {
     readonly label: TexLayoutLabel;
     readonly lineRunIndex: number;
@@ -220,18 +225,18 @@ function texVListParagraphLineAssignmentsFromSpans(
   }));
 }
 
-function texLatexNormalParagraphLineHeight(font: ResolvedTexFont): number {
-  return font.atPt * LATEX_NORMAL_BASELINESKIP_EM;
+function texLatexNormalParagraphLineHeight(font: ResolvedTexFont): TexLength {
+  return texLength(font.atPt * LATEX_NORMAL_BASELINESKIP_EM);
 }
 
 function texLatexNormalFirstLineAscent(
   report: ParagraphLayoutReport,
   font: ResolvedTexFont
-): number {
-  return Math.max(
+): TexLength {
+  return texLength(Math.max(
     font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
     ...report.lines.map((line) => Number(line.ascent) || 0)
-  );
+  ));
 }
 
 export function layoutTexVListFromHorizontalParagraphs(
@@ -271,7 +276,7 @@ export function layoutTexVListFromMeasuredParagraphs(
     resolvedDocument.items,
     measurer,
     glueSet,
-    0,
+    texVListY(0),
     [],
     texVListX(0),
     {
@@ -282,9 +287,9 @@ export function layoutTexVListFromMeasuredParagraphs(
     }
   );
 
-  const naturalLaidOutHeight = laidOut.cursor;
+  const naturalLaidOutHeight = texLength(laidOut.cursor);
   const totalHeight = Number.isFinite(options.height) && options.height !== undefined
-    ? Math.max(options.height, naturalLaidOutHeight)
+    ? texLength(Math.max(options.height, naturalLaidOutHeight))
     : naturalLaidOutHeight;
   const rootOffset = texVListRootVerticalOffset(
     naturalLaidOutHeight,
@@ -302,7 +307,7 @@ export function layoutTexVListFromMeasuredParagraphs(
     : null;
   const shiftedBaselineY = texVListBaselineY(
     firstLineTop,
-    options.firstLineAscent ?? 0
+    options.firstLineAscent ?? texLength(0)
   );
   const metrics = metricsForRootBox(options.width, totalHeight, shiftedBaselineY);
   const baseline = shiftedBaselineY === null ? { kind: "none" } as const : { kind: "explicit", y: shiftedBaselineY } as const;

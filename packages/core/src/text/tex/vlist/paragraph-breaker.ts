@@ -16,6 +16,7 @@ import {
 } from "./combined-paragraph-breaks.js";
 import { texLayoutItemsForParagraphPlan } from "./paragraph-items.js";
 import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
+import { texLength, type TexLength } from "../coordinates.js";
 
 export type TexLayoutParagraphBreakEntriesResult =
   | {
@@ -97,7 +98,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
     });
     const broadOverfullTolerance = breakContext.width === undefined
       ? intertextBroadOverfullTolerance(runs)
-      : 0;
+      : texLength(0);
     const overfullFallback = normalBreak && plan.overfullSingleLineFallback === true
       ? breakTexParagraphWithIntertextOverfullFallback({
           normalBreak,
@@ -142,17 +143,17 @@ function breakTexParagraphAsSingleLine(params: {
   readonly runs: ParagraphRun[];
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"];
-  readonly width: number;
+  readonly width: TexLength;
 }): NonNullable<ReturnType<typeof breakTexParagraphRuns>> {
   params.measurement.primeRuns(params.runs);
-  const runWidths = new Map<number, number>();
-  let naturalWidth = 0;
-  let totalShrink = 0;
+  const runWidths = new Map<number, TexLength>();
+  let naturalWidth = texLength(0);
+  let totalShrink = texLength(0);
   for (const run of params.runs) {
     const width = texParagraphRunWidth(run, params.measurement);
     runWidths.set(run.runIndex, width);
-    naturalWidth += width;
-    totalShrink += texParagraphRunShrink(run);
+    naturalWidth = texLength(naturalWidth + width);
+    totalShrink = texLength(totalShrink + texParagraphRunShrink(run));
   }
   const lastRun = params.runs.at(-1);
   const rawDelta = params.width - naturalWidth;
@@ -189,9 +190,9 @@ function breakTexParagraphWithIntertextOverfullFallback(params: {
   readonly runs: ParagraphRun[];
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"];
-  readonly width: number;
+  readonly width: TexLength;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
-  readonly broadOverfullTolerance: number;
+  readonly broadOverfullTolerance: TexLength;
 }): NonNullable<ReturnType<typeof breakTexParagraphRuns>> | null {
   if (shouldUseSingleLineOverfullFallback(
     params.normalBreak,
@@ -217,11 +218,11 @@ function breakTexParagraphAsGreedyOverfullLines(params: {
   readonly runs: ParagraphRun[];
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"];
-  readonly width: number;
-  readonly overfullTolerance: number;
+  readonly width: TexLength;
+  readonly overfullTolerance: TexLength;
 }): NonNullable<ReturnType<typeof breakTexParagraphRuns>> {
   params.measurement.primeRuns(params.runs);
-  const runWidths = new Map<number, number>();
+  const runWidths = new Map<number, TexLength>();
   for (const run of params.runs) {
     runWidths.set(run.runIndex, texParagraphRunWidth(run, params.measurement));
   }
@@ -231,14 +232,16 @@ function breakTexParagraphAsGreedyOverfullLines(params: {
   while (startRun < params.runs.length) {
     let cursor = startRun;
     let candidateEnd = startRun;
-    let candidateWidth = runWidths.get(params.runs[startRun]?.runIndex ?? startRun) ?? 0;
-    let currentWidth = 0;
+    let candidateWidth = runWidths.get(params.runs[startRun]?.runIndex ?? startRun) ?? texLength(0);
+    let currentWidth = texLength(0);
     while (cursor < params.runs.length) {
       const run = params.runs[cursor];
       if (!run) {
         break;
       }
-      currentWidth += runWidths.get(run.runIndex) ?? 0;
+      currentWidth = texLength(
+        currentWidth + (runWidths.get(run.runIndex) ?? texLength(0))
+      );
       if (run.kind !== "space") {
         if (
           currentWidth <= params.width + params.overfullTolerance ||
@@ -280,11 +283,11 @@ function breakTexParagraphAsGreedyOverfullLines(params: {
 function greedyOverfullLine(params: {
   readonly lineIndex: number;
   readonly runs: readonly ParagraphRun[];
-  readonly runWidths: ReadonlyMap<number, number>;
+  readonly runWidths: ReadonlyMap<number, TexLength>;
   readonly startRun: number;
   readonly endRun: number;
-  readonly width: number;
-  readonly naturalWidth: number;
+  readonly width: TexLength;
+  readonly naturalWidth: TexLength;
 }): NonNullable<ReturnType<typeof breakTexParagraphRuns>>["lines"][number] {
   const runs = params.runs.slice(params.startRun, params.endRun + 1);
   const stretch = runs.reduce((sum, run) => sum + texParagraphRunStretch(run), 0);
@@ -321,12 +324,12 @@ function nextNonSpaceRunIndex(runs: readonly ParagraphRun[], start: number): num
   return index;
 }
 
-function intertextBroadOverfullTolerance(runs: readonly ParagraphRun[]): number {
+function intertextBroadOverfullTolerance(runs: readonly ParagraphRun[]): TexLength {
   const mathRuns = runs.filter((run) => run.kind === "math");
   if (mathRuns.length === 0) {
-    return 15;
+    return texLength(15);
   }
-  return mathRuns.every(isTextHeightMathRun) ? 6 : 0;
+  return texLength(mathRuns.every(isTextHeightMathRun) ? 6 : 0);
 }
 
 function isTextHeightMathRun(run: ParagraphRun): boolean {
@@ -342,19 +345,19 @@ function isTextHeightMathRun(run: ParagraphRun): boolean {
 
 function shouldUseSingleLineOverfullFallback(
   broken: NonNullable<ReturnType<typeof breakTexParagraphRuns>>,
-  width: number,
+  width: TexLength,
   scopePolicy: TexParagraphBreakScopePolicy
 ): boolean {
   if (broken.lines.length <= 1) {
     return false;
   }
   const naturalWidth = Array.from(broken.runWidths.values()).reduce(
-    (sum, width) => sum + width,
-    0
+    (sum, width) => texLength(sum + width),
+    texLength(0)
   );
   const totalShrink = broken.runs.reduce(
-    (sum, run) => sum + texParagraphRunShrink(run),
-    0
+    (sum, run) => texLength(sum + texParagraphRunShrink(run)),
+    texLength(0)
   );
   const fallbackWidth = Math.max(
     0,
@@ -367,27 +370,27 @@ function shouldUseSingleLineOverfullFallback(
 function texParagraphRunWidth(
   run: ParagraphRun,
   measurement: ReturnType<typeof createTexParagraphRunAdapter>["measurement"]
-): number {
+): TexLength {
   if (run.kind === "text") {
-    return measurement.measureText(run.text, run.wrapper);
+    return texLength(measurement.measureText(run.text, run.wrapper));
   }
   if (run.kind === "math") {
-    return measurement.measureMath(run.wrapper);
+    return texLength(measurement.measureMath(run.wrapper));
   }
   if (run.kind === "space") {
-    return run.texGlue?.width ?? 0;
+    return texLength(run.texGlue?.width ?? 0);
   }
-  return 0;
+  return texLength(0);
 }
 
-function texParagraphRunShrink(run: ParagraphRun): number {
-  return (run.kind === "space" || run.kind === "math")
+function texParagraphRunShrink(run: ParagraphRun): TexLength {
+  return texLength((run.kind === "space" || run.kind === "math")
     ? run.texGlue?.shrink ?? 0
-    : 0;
+    : 0);
 }
 
-function texParagraphRunStretch(run: ParagraphRun): number {
-  return (run.kind === "space" || run.kind === "math")
+function texParagraphRunStretch(run: ParagraphRun): TexLength {
+  return texLength((run.kind === "space" || run.kind === "math")
     ? run.texGlue?.stretch ?? 0
-    : 0;
+    : 0);
 }

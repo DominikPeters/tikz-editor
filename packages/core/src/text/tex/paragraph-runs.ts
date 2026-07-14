@@ -20,6 +20,18 @@ import type { TexLayoutInlineItem } from "./layout-inline-items.js";
 import type { TexMathBox } from "./layout-inline-items.js";
 import type { TexMathHList, TexMathHListItem } from "./math/layout.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
+import {
+  offsetTexHBoxLocalX,
+  texHBoxLocalX,
+  texHBoxLocalXFromOrigin,
+  texHBoxOffsetX,
+  texHBoxX,
+  texLength,
+  type TexHBoxLocalX,
+  type TexHBoxOffsetX,
+  type TexHBoxX,
+  type TexLength,
+} from "./coordinates.js";
 
 export interface TexParagraphRunsLayout {
   readonly runs: ParagraphRun[];
@@ -60,7 +72,7 @@ function layoutItemsToRuns(
 ): TexParagraphRunsLayout {
   const runs: ParagraphRun[] = [];
   const shapedRuns = new Map<number, ShapedTexTextRun>();
-  let pendingItalicCorrection = 0;
+  let pendingItalicCorrection = texLength(0);
   for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
     const item = items[itemIndex];
     const runIndex = runs.length;
@@ -72,7 +84,7 @@ function layoutItemsToRuns(
       });
       const correction = item.italicCorrectionAfter
         ? trailingItalicCorrectionWidth(shapedBase)
-        : 0;
+        : texLength(0);
       const moveCorrectionToSpace =
         correction > 0 &&
         nextItem?.kind === "space";
@@ -81,7 +93,7 @@ function layoutItemsToRuns(
         correction,
         !moveCorrectionToSpace
       );
-      pendingItalicCorrection = moveCorrectionToSpace ? correction : 0;
+      pendingItalicCorrection = moveCorrectionToSpace ? correction : texLength(0);
       const wrapper: AnyWrapper = {};
       shapedRunByWrapper.set(wrapper, shaped);
       shapedRuns.set(runIndex, shaped);
@@ -102,7 +114,7 @@ function layoutItemsToRuns(
     }
 
     if (item.kind === "kern") {
-      pendingItalicCorrection = 0;
+      pendingItalicCorrection = texLength(0);
       const wrapper: AnyWrapper = { texTextKernSpace: true };
       runs.push({
         kind: "space",
@@ -118,8 +130,8 @@ function layoutItemsToRuns(
         },
         texGlue: {
           width: item.width,
-          stretch: 0,
-          shrink: 0,
+          stretch: texLength(0),
+          shrink: texLength(0),
           breakPenalty: 10_000,
         },
       } satisfies SpaceRun);
@@ -127,7 +139,7 @@ function layoutItemsToRuns(
     }
 
     if (item.kind === "math") {
-      pendingItalicCorrection = 0;
+      pendingItalicCorrection = texLength(0);
       const fragments = mathBoxFragments(item.box);
       if (fragments.length > 1) {
         for (const [fragmentIndex, fragment] of fragments.entries()) {
@@ -185,15 +197,15 @@ function layoutItemsToRuns(
         sourceEnd: item.sourceEnd,
         wrapper,
         texGlue: {
-          stretch: item.box.stretch ?? 0,
-          shrink: item.box.shrink ?? 0,
+          stretch: item.box.stretch ?? texLength(0),
+          shrink: item.box.shrink ?? texLength(0),
         },
       } satisfies MathRun);
       continue;
     }
 
     if (item.kind === "text-box") {
-      pendingItalicCorrection = 0;
+      pendingItalicCorrection = texLength(0);
       runs.push(mathRunForBox(
         item.box,
         runIndex,
@@ -205,7 +217,7 @@ function layoutItemsToRuns(
     }
 
     if (item.kind === "penalty") {
-      pendingItalicCorrection = 0;
+      pendingItalicCorrection = texLength(0);
       runs.push({
         kind: "penalty",
         runIndex,
@@ -219,16 +231,23 @@ function layoutItemsToRuns(
 
     const forced = item.kind === "forced-break";
     const baseGlue = forced
-      ? { width: 0, stretch: 0, shrink: 0 }
+      ? {
+          width: texLength(0),
+          stretch: texLength(0),
+          shrink: texLength(0),
+        }
       : texInterwordGlueForSpaceFactor(
         item.font,
         item.spaceFactor,
         item.spaceGlueProfile
       );
     const glue = pendingItalicCorrection > 0 && !forced
-      ? { ...baseGlue, width: roundTexPt(baseGlue.width + pendingItalicCorrection) }
+      ? {
+          ...baseGlue,
+          width: texLength(roundTexPt(baseGlue.width + pendingItalicCorrection)),
+        }
       : baseGlue;
-    pendingItalicCorrection = 0;
+    pendingItalicCorrection = texLength(0);
     runs.push({
       kind: "space",
       runIndex,
@@ -283,8 +302,8 @@ function mathRunForBox(
     sourceEnd,
     wrapper,
     texGlue: {
-      stretch: box.stretch ?? 0,
-      shrink: box.shrink ?? 0,
+      stretch: box.stretch ?? texLength(0),
+      shrink: box.shrink ?? texLength(0),
     },
   };
 }
@@ -309,7 +328,11 @@ function mathGlueRun(
   runIndex: number,
   role: TexLayoutInlineItem["role"],
   sourceOffset: number,
-  glue: { readonly width: number; readonly stretch: number; readonly shrink: number }
+  glue: {
+    readonly width: TexLength;
+    readonly stretch: TexLength;
+    readonly shrink: TexLength;
+  }
 ): SpaceRun {
   const wrapper: AnyWrapper = { texMathGlueSpace: true };
   return {
@@ -341,9 +364,9 @@ interface TexMathBoxFragment {
     readonly sourceOffset: number;
     readonly penalty: number;
     readonly postBreakGlue?: {
-      readonly width: number;
-      readonly stretch: number;
-      readonly shrink: number;
+      readonly width: TexLength;
+      readonly stretch: TexLength;
+      readonly shrink: TexLength;
     };
   };
 }
@@ -365,7 +388,7 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
   }
 
   const fragments: TexMathBoxFragment[] = [];
-  let previousX = 0;
+  let previousX = texHBoxX(0);
   let previousSource = contentStart;
   for (const breakpoint of breakpoints) {
     const fragment = mathBoxFragment(box, previousX, breakpoint.x, previousSource, breakpoint.sourceOffset);
@@ -381,11 +404,19 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
         },
       });
     }
-    previousX = roundTexPt(breakpoint.x + (breakpoint.postBreakGlue?.width ?? 0));
+    previousX = texHBoxX(roundTexPt(
+      breakpoint.x + (breakpoint.postBreakGlue?.width ?? texLength(0))
+    ));
     previousSource = breakpoint.sourceOffset;
   }
 
-  const tail = mathBoxFragment(box, previousX, box.width, previousSource, contentEnd);
+  const tail = mathBoxFragment(
+    box,
+    previousX,
+    texHBoxX(box.width),
+    previousSource,
+    contentEnd
+  );
   if (tail) {
     fragments.push({
       box: tail,
@@ -401,12 +432,12 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
 
 function mathBoxFragment(
   box: TexMathBox,
-  xStart: number,
-  xEnd: number,
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX,
   sourceStart: number,
   sourceEnd: number
 ): TexMathBox | null {
-  const width = roundTexPt(xEnd - xStart);
+  const width = texLength(roundTexPt(xEnd - xStart));
   if (width <= 0) {
     return null;
   }
@@ -434,24 +465,24 @@ function mathBoxFragment(
 
 function fragmentMathFlex(
   box: TexMathBox,
-  xStart: number,
-  xEnd: number,
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX,
   key: "stretch" | "shrink"
-): number | undefined {
-  const value = roundTexPt(
+): TexLength | undefined {
+  const value = texLength(roundTexPt(
     mathFlexAtX(box, xEnd, key) - mathFlexAtX(box, xStart, key)
-  );
+  ));
   return value > 0 ? value : undefined;
 }
 
 function mathFlexAtX(
   box: TexMathBox,
-  x: number,
+  x: TexHBoxX,
   key: "stretch" | "shrink"
-): number {
-  const total = box[key] ?? 0;
+): TexLength {
+  const total = box[key] ?? texLength(0);
   if (x <= 0 || total <= 0) {
-    return 0;
+    return texLength(0);
   }
   if (x >= box.width) {
     return total;
@@ -461,8 +492,8 @@ function mathFlexAtX(
   );
   if (breakpoint) {
     return key === "stretch"
-      ? breakpoint.stretchBefore ?? 0
-      : breakpoint.shrinkBefore ?? 0;
+      ? breakpoint.stretchBefore ?? texLength(0)
+      : breakpoint.shrinkBefore ?? texLength(0);
   }
   const postBreakGlueBoundary = box.breakpoints?.find((candidate) =>
     candidate.postBreakGlue &&
@@ -470,71 +501,75 @@ function mathFlexAtX(
   );
   if (postBreakGlueBoundary?.postBreakGlue) {
     const before = key === "stretch"
-      ? postBreakGlueBoundary.stretchBefore ?? 0
-      : postBreakGlueBoundary.shrinkBefore ?? 0;
+      ? postBreakGlueBoundary.stretchBefore ?? texLength(0)
+      : postBreakGlueBoundary.shrinkBefore ?? texLength(0);
     const glue = key === "stretch"
       ? postBreakGlueBoundary.postBreakGlue.stretch
       : postBreakGlueBoundary.postBreakGlue.shrink;
-    return roundTexPt(before + glue);
+    return texLength(roundTexPt(before + glue));
   }
   if (box.width <= 0) {
-    return 0;
+    return texLength(0);
   }
   const ratio = Math.max(0, Math.min(1, x / box.width));
-  return roundTexPt(total * ratio);
+  return texLength(roundTexPt(total * ratio));
 }
 
 function fragmentMathCaretStops(
   box: TexMathBox,
-  xStart: number,
-  xEnd: number,
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX,
   sourceStart: number,
   sourceEnd: number
-): readonly number[] {
+): readonly TexHBoxX[] {
   const length = Math.max(0, sourceEnd - sourceStart);
   if (!box.caretStops?.length) {
-    return [0, roundTexPt(xEnd - xStart)];
+    return [texHBoxX(0), texHBoxX(roundTexPt(xEnd - xStart))];
   }
   return Array.from({ length: length + 1 }, (_, offset) => {
     const rawOffset = sourceStart + offset;
     const originalIndex = rawOffset - box.sourceStart;
     const originalStop = box.caretStops?.[originalIndex] ?? xStart;
-    return roundTexPt(Math.max(0, Math.min(xEnd - xStart, originalStop - xStart)));
+    return texHBoxX(roundTexPt(
+      Math.max(0, Math.min(xEnd - xStart, originalStop - xStart))
+    ));
   });
 }
 
 function fragmentMathConstructRanges(
   box: TexMathBox,
-  xStart: number,
-  xEnd: number
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX
 ): TexMathBox["constructRanges"] {
   return box.constructRanges
     ?.map((range) => ({
       ...range,
-      xStart: roundTexPt(Math.max(0, range.xStart - xStart)),
-      xEnd: roundTexPt(Math.min(xEnd - xStart, range.xEnd - xStart)),
+      xStart: texHBoxX(roundTexPt(Math.max(0, range.xStart - xStart))),
+      xEnd: texHBoxX(roundTexPt(Math.min(xEnd - xStart, range.xEnd - xStart))),
     }))
     .filter((range) => range.xEnd > range.xStart);
 }
 
 function fragmentMathBreakpoints(
   box: TexMathBox,
-  xStart: number,
-  xEnd: number
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX
 ): TexMathBox["breakpoints"] {
   return box.breakpoints
     ?.filter((breakpoint) => breakpoint.x > xStart && breakpoint.x <= xEnd)
     .map((breakpoint) => ({
       ...breakpoint,
-      x: roundTexPt(Math.max(0, Math.min(xEnd - xStart, breakpoint.x - xStart))),
+      x: texHBoxX(roundTexPt(
+        Math.max(0, Math.min(xEnd - xStart, breakpoint.x - xStart))
+      )),
     }));
 }
 
 function fragmentMathHList(
   hlist: TexMathHList,
-  xStart: number,
-  xEnd: number,
-  width: number,
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX,
+  width: TexLength,
   sourceStart: number,
   sourceEnd: number
 ): TexMathHList {
@@ -543,9 +578,9 @@ function fragmentMathHList(
     width,
     items: fragmentMathHListItems(
       hlist.items,
-      xStart,
-      xEnd,
-      -xStart,
+      texHBoxLocalXFromOrigin(xStart, texHBoxX(0)),
+      texHBoxLocalXFromOrigin(xEnd, texHBoxX(0)),
+      texHBoxOffsetX(0 - xStart),
       sourceStart,
       sourceEnd
     ),
@@ -554,9 +589,9 @@ function fragmentMathHList(
 
 function fragmentMathHListItems(
   items: readonly TexMathHListItem[],
-  xStart: number,
-  xEnd: number,
-  xOffset: number,
+  xStart: TexHBoxLocalX,
+  xEnd: TexHBoxLocalX,
+  xOffset: TexHBoxOffsetX,
   sourceStart: number,
   sourceEnd: number
 ): readonly TexMathHListItem[] {
@@ -572,14 +607,14 @@ function fragmentMathHListItems(
       }
       return [{
         ...item,
-        x: roundTexPt(item.x + xOffset),
+        x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, xOffset))),
       }];
     }
     const childItems = fragmentMathHListItems(
       item.items,
-      xStart - item.x,
-      xEnd - item.x,
-      0,
+      texHBoxLocalX(xStart - item.x),
+      texHBoxLocalX(xEnd - item.x),
+      texHBoxOffsetX(0),
       sourceStart,
       sourceEnd
     );
@@ -588,7 +623,7 @@ function fragmentMathHListItems(
     }
     return [{
       ...item,
-      x: roundTexPt(item.x + xOffset),
+      x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, xOffset))),
       items: childItems,
     }];
   });
@@ -611,13 +646,13 @@ function mathSourceSpanOverlaps(
 
 function fragmentMathSvgBody(
   box: TexMathBox,
-  xStart: number,
-  xEnd: number
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX
 ): string | undefined {
   if (!box.svgBody) {
     return undefined;
   }
-  const width = roundTexPt(xEnd - xStart);
+  const width = texLength(roundTexPt(xEnd - xStart));
   const yStart = -roundTexPt(box.height + 2) * 100;
   const height = roundTexPt(box.height + box.depth + 4) * 100;
   return [
@@ -647,20 +682,20 @@ function texTextFontAllowsAutomaticHyphenation(font: ResolvedTexFont): boolean {
 
 function withTrailingItalicCorrection(
   shaped: ShapedTexTextRun,
-  correction: number,
+  correction: TexLength,
   enabled: boolean
 ): ShapedTexTextRun {
   if (!enabled || correction <= 0) {
     return shaped;
   }
 
-  const width = roundTexPt(shaped.width + correction);
+  const width = texLength(roundTexPt(shaped.width + correction));
   const caretStops = [...shaped.caretStops];
-  caretStops[caretStops.length - 1] = width;
+  caretStops[caretStops.length - 1] = texHBoxX(width);
   const sourceCaretStops = [...shaped.sourceCaretStops];
   sourceCaretStops[sourceCaretStops.length - 1] = {
     sourceOffset: shaped.sourceEnd,
-    x: width,
+    x: texHBoxX(width),
   };
   return {
     ...shaped,
@@ -679,8 +714,8 @@ function withTrailingItalicCorrection(
   };
 }
 
-function trailingItalicCorrectionWidth(shaped: ShapedTexTextRun): number {
-  return findLastTexGlyph(shaped.items)?.italicCorrection ?? 0;
+function trailingItalicCorrectionWidth(shaped: ShapedTexTextRun): TexLength {
+  return findLastTexGlyph(shaped.items)?.italicCorrection ?? texLength(0);
 }
 
 function findLastTexGlyph(items: readonly ShapedTexTextRun["items"][number][]): TexGlyphBox | null {

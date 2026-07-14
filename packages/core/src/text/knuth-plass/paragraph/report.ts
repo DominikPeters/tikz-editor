@@ -3,10 +3,17 @@ import type { AppliedBreak } from './applyBreaks.js';
 import type { AnyWrapper, GreedyLine, ParagraphRun } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
 import type { KnuthPlassLayoutMode } from '../install.js';
+import {
+  texLength,
+  texLineX,
+  type TexLength,
+  type TexLineX,
+  type TexLineY,
+} from '../../tex/coordinates.js';
 
 export interface ParagraphLayoutReport {
   paragraphId: string;
-  width: number;
+  width: TexLength;
   alignment: ParagraphAlignment;
   layoutMode: KnuthPlassLayoutMode;
   lines: LineReport[];
@@ -33,16 +40,16 @@ export interface LineSegmentReport {
     detail?: string;
   };
   fontId?: string;
-  fontAtPt?: number;
+  fontAtPt?: TexLength;
   color?: string;
   glyphCode?: number;
   mathSvgBody?: string;
   mathConstructRanges?: LineMathConstructRangeReport[];
   mathCaretEntries?: LineMathCaretEntryReport[];
   mathBreakpoints?: LineMathBreakpointReport[];
-  x: number;
-  width: number;
-  caretStops?: number[];
+  x: TexLineX;
+  width: TexLength;
+  caretStops?: TexLineX[];
 }
 
 export type LineMathCaretEntryKind =
@@ -57,31 +64,31 @@ export interface LineMathCaretEntryReport {
   sourceOffsetRaw: number;
   sourceStartRaw?: number;
   sourceEndRaw?: number;
-  x: number;
-  y: number;
-  height: number;
-  depth: number;
+  x: TexLineX;
+  y: TexLineY;
+  height: TexLength;
+  depth: TexLength;
   kind: LineMathCaretEntryKind;
   priority?: number;
   hitBounds: {
-    xStart: number;
-    xEnd: number;
-    yStart: number;
-    yEnd: number;
+    xStart: TexLineX;
+    xEnd: TexLineX;
+    yStart: TexLineY;
+    yEnd: TexLineY;
   };
 }
 
 export interface LineMathConstructRangeReport {
   sourceStartRaw: number;
   sourceEndRaw: number;
-  xStart: number;
-  xEnd: number;
+  xStart: TexLineX;
+  xEnd: TexLineX;
 }
 
 export interface LineMathBreakpointReport {
   kind: 'binary' | 'relation' | 'penalty';
   sourceOffsetRaw: number;
-  x: number;
+  x: TexLineX;
   penalty: number;
 }
 
@@ -89,17 +96,17 @@ export interface LineReport {
   lineIndex: number;
   startRun: number;
   endRun: number;
-  width: number;
-  targetWidth: number;
-  naturalWidth: number;
+  width: TexLength;
+  targetWidth: TexLength;
+  naturalWidth: TexLength;
   glueSetRatio: number;
   badness: number;
   spaceCount: number;
-  spaceDeltaPerGap: number;
-  ascent: number;
-  descent: number;
-  xStart: number;
-  xEnd: number;
+  spaceDeltaPerGap: TexLength;
+  ascent: TexLength;
+  descent: TexLength;
+  xStart: TexLineX;
+  xEnd: TexLineX;
   break: BreakReport | null;
   segments: LineSegmentReport[];
 }
@@ -112,7 +119,7 @@ export interface BreakReport {
   lineLeading?: string;
   hyphenSource?: 'automatic' | 'explicit';
   splitOffset?: number;
-  width?: number;
+  width?: TexLength;
 }
 
 export interface RunReport {
@@ -120,7 +127,7 @@ export interface RunReport {
   kind: 'text' | 'space' | 'math' | 'penalty';
   sourceStart?: number;
   sourceEnd?: number;
-  width: number;
+  width: TexLength;
   text?: string;
 }
 
@@ -143,7 +150,7 @@ export interface BuildReportInput {
 }
 
 const textSegmentWrapperBySegment = new WeakMap<object, AnyWrapper>();
-const textSegmentCaretStopsCache = new WeakMap<object, number[]>();
+const textSegmentCaretStopsCache = new WeakMap<object, TexLineX[]>();
 
 function textSliceWidth(
   measurement: MeasurementService | undefined,
@@ -151,27 +158,27 @@ function textSliceWidth(
   start: number,
   end: number,
   fullWidth: number
-): number {
+): TexLength {
   if (end <= start) {
-    return 0;
+    return texLength(0);
   }
 
   if (measurement) {
     const endWidth = measurement.measurePrefix(run.text, end, run.wrapper);
     const startWidth = measurement.measurePrefix(run.text, start, run.wrapper);
-    return endWidth - startWidth;
+    return texLength(endWidth - startWidth);
   }
 
   if (!run.text.length) {
-    return 0;
+    return texLength(0);
   }
 
-  return (fullWidth * (end - start)) / run.text.length;
+  return texLength((fullWidth * (end - start)) / run.text.length);
 }
 
 export function getOrBuildTextSegmentCaretStops(
   segment: LineSegmentReport
-): number[] | null {
+): TexLineX[] | null {
   if (segment.kind !== 'text') {
     return Array.isArray(segment.caretStops) ? segment.caretStops : null;
   }
@@ -190,11 +197,14 @@ export function getOrBuildTextSegmentCaretStops(
     return null;
   }
 
-  const stops = Array.from({ length: segment.text.length + 1 }, () => 0);
+  const stops = Array.from(
+    { length: segment.text.length + 1 },
+    () => texLineX(0)
+  );
   stops[0] = segment.x;
   for (let i = 1; i <= segment.text.length; i++) {
     const width = Number(wrapper.textWidth(segment.text.slice(0, i))) || 0;
-    stops[i] = segment.x + width;
+    stops[i] = texLineX(segment.x + width);
   }
   segment.caretStops = stops;
   textSegmentCaretStopsCache.set(segment, stops);
@@ -228,7 +238,7 @@ export function buildParagraphLayoutReport({
     kind: run.kind,
     sourceStart: run.sourceStart,
     sourceEnd: run.sourceEnd,
-    width: runWidths.get(run.runIndex) ?? 0,
+    width: texLength(runWidths.get(run.runIndex) ?? 0),
     text: run.kind === 'text' || run.kind === 'space' ? run.text : undefined,
   }));
 
@@ -236,8 +246,8 @@ export function buildParagraphLayoutReport({
     const appliedBreak = breakByLine.get(line.lineIndex) ?? null;
     const resolvedBreak = appliedBreak ?? line.break ?? null;
     const segments: LineSegmentReport[] = [];
-    const xStart = line.xOffset ?? 0;
-    let x = xStart;
+    const xStart = texLineX(line.xOffset ?? 0);
+    let x: TexLineX = xStart;
 
     for (let i = line.startRun; i <= line.endRun && i < runReports.length; i++) {
       const run = runs.at(i);
@@ -274,24 +284,24 @@ export function buildParagraphLayoutReport({
         };
         textSegmentWrapperBySegment.set(segment, run.wrapper);
         segments.push(segment);
-        x += segmentWidth;
+        x = texLineX(x + segmentWidth);
         continue;
       }
 
-      let segmentWidth = runWidths.get(run.runIndex) ?? 0;
+      let segmentWidth = texLength(runWidths.get(run.runIndex) ?? 0);
       if (run.kind === 'space' && (line.spaceCount ?? 0) > 0) {
         const ratio = line.glueSetRatio ?? 0;
         const stretch = run.texGlue?.stretch;
         const shrink = run.texGlue?.shrink;
         if (ratio > 0 && typeof stretch === 'number' && Number.isFinite(stretch)) {
-          segmentWidth = Math.max(0, segmentWidth + ratio * stretch);
+          segmentWidth = texLength(Math.max(0, segmentWidth + ratio * stretch));
         } else if (ratio < 0 && typeof shrink === 'number' && Number.isFinite(shrink)) {
-          segmentWidth = Math.max(0, segmentWidth + ratio * shrink);
+          segmentWidth = texLength(Math.max(0, segmentWidth + ratio * shrink));
         } else if (Number.isFinite(line.spaceDeltaPerGap ?? 0)) {
-          segmentWidth = Math.max(
+          segmentWidth = texLength(Math.max(
             0,
             segmentWidth + (line.spaceDeltaPerGap ?? 0)
-          );
+          ));
         }
       }
       segments.push({
@@ -302,30 +312,31 @@ export function buildParagraphLayoutReport({
         width: segmentWidth,
         caretStops:
           run.kind === 'space'
-            ? [x, x + segmentWidth]
-            : [x, x + segmentWidth],
+            ? [x, texLineX(x + segmentWidth)]
+            : [x, texLineX(x + segmentWidth)],
       });
-      x += segmentWidth;
+      x = texLineX(x + segmentWidth);
     }
 
     if (resolvedBreak?.kind === 'hyphen' && resolvedBreak.visibleHyphen) {
       const hyphenRun = runs.at(resolvedBreak.runIndex);
-      const hyphenWidth =
+      const hyphenWidth = texLength(
         hyphenRun?.kind === 'text' && measurement
           ? measurement.measureText('-', hyphenRun.wrapper)
-          : 0;
+          : 0
+      );
       if (hyphenWidth > 0) {
-        const insertedWidth = resolvedBreak.width ?? hyphenWidth;
-        const hyphenX = x + insertedWidth - hyphenWidth;
+        const insertedWidth = texLength(resolvedBreak.width ?? hyphenWidth);
+        const hyphenX = texLineX(x + insertedWidth - hyphenWidth);
         segments.push({
           runIndex: resolvedBreak.runIndex,
           kind: 'text',
           text: '-',
           x: hyphenX,
           width: hyphenWidth,
-          caretStops: [hyphenX, hyphenX + hyphenWidth],
+          caretStops: [hyphenX, texLineX(hyphenX + hyphenWidth)],
         });
-        x += insertedWidth;
+        x = texLineX(x + insertedWidth);
       }
     }
 
@@ -335,15 +346,15 @@ export function buildParagraphLayoutReport({
       lineIndex: line.lineIndex,
       startRun: line.startRun,
       endRun: line.endRun,
-      width: line.lineNaturalWidth ?? line.width,
-      targetWidth: line.targetWidth ?? width,
-      naturalWidth: line.lineNaturalWidth ?? line.width,
+      width: texLength(line.lineNaturalWidth ?? line.width),
+      targetWidth: texLength(line.targetWidth ?? width),
+      naturalWidth: texLength(line.lineNaturalWidth ?? line.width),
       glueSetRatio: line.glueSetRatio ?? 0,
       badness: line.badness ?? 0,
       spaceCount: line.spaceCount ?? 0,
-      spaceDeltaPerGap: line.spaceDeltaPerGap ?? 0,
-      ascent: Number.isFinite(metrics.ascent) ? metrics.ascent : 0,
-      descent: Number.isFinite(metrics.descent) ? metrics.descent : 0,
+      spaceDeltaPerGap: texLength(line.spaceDeltaPerGap ?? 0),
+      ascent: texLength(Number.isFinite(metrics.ascent) ? metrics.ascent : 0),
+      descent: texLength(Number.isFinite(metrics.descent) ? metrics.descent : 0),
       xStart,
       xEnd: x,
       segments,
@@ -356,7 +367,9 @@ export function buildParagraphLayoutReport({
             lineLeading: resolvedBreak.lineLeading,
             hyphenSource: resolvedBreak.hyphenSource,
             splitOffset: resolvedBreak.splitOffset,
-            width: resolvedBreak.width,
+            width: resolvedBreak.width === undefined
+              ? undefined
+              : texLength(resolvedBreak.width),
           }
         : null,
     };
@@ -364,7 +377,7 @@ export function buildParagraphLayoutReport({
 
   return {
     paragraphId,
-    width,
+    width: texLength(width),
     alignment,
     layoutMode,
     lines: lineReports,

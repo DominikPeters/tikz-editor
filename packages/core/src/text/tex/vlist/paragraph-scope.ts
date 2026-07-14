@@ -7,6 +7,7 @@ import type {
   TexVBoxItem,
   TexVBoxListItemLayout,
 } from "./types.js";
+import { texLength, type TexLength } from "../coordinates.js";
 
 export interface TexParagraphScopePolicy {
   readonly fallbackAlignment?: TexParagraphAlignment;
@@ -25,12 +26,12 @@ export interface TexParagraphScopePolicy {
 }
 
 export interface TexParagraphScopeLayout {
-  readonly leftMarginWidth: number;
-  readonly rightMarginWidth: number;
-  readonly scopedWidth?: number;
-  readonly scopedLineWidth?: number;
-  readonly scopedLeftMarginWidth?: number;
-  readonly scopedRightMarginWidth?: number;
+  readonly leftMarginWidth: TexLength;
+  readonly rightMarginWidth: TexLength;
+  readonly scopedWidth?: TexLength;
+  readonly scopedLineWidth?: TexLength;
+  readonly scopedLeftMarginWidth?: TexLength;
+  readonly scopedRightMarginWidth?: TexLength;
 }
 
 export interface TexParagraphScopeContext {
@@ -159,16 +160,16 @@ function texParagraphScopePolicy(
 function texParagraphScopeLayout(
   ancestors: readonly TexVBoxItem[]
 ): TexParagraphScopeLayout {
-  let leftMarginWidth = 0;
-  let rightMarginWidth = 0;
-  let scopedWidth: number | undefined;
-  let scopedLeftMarginWidth = 0;
-  let scopedRightMarginWidth = 0;
+  let leftMarginWidth = texLength(0);
+  let rightMarginWidth = texLength(0);
+  let scopedWidth: TexLength | undefined;
+  let scopedLeftMarginWidth = texLength(0);
+  let scopedRightMarginWidth = texLength(0);
   for (const ancestor of ancestors) {
-    const left = ancestor.layout?.leftMarginWidth ?? 0;
-    const right = ancestor.layout?.rightMarginWidth ?? 0;
-    leftMarginWidth += left;
-    rightMarginWidth += right;
+    const left = ancestor.layout?.leftMarginWidth ?? texLength(0);
+    const right = ancestor.layout?.rightMarginWidth ?? texLength(0);
+    leftMarginWidth = texLength(leftMarginWidth + left);
+    rightMarginWidth = texLength(rightMarginWidth + right);
     const width = finiteTexScopeWidth(ancestor.width);
     if (width !== undefined) {
       scopedWidth = width;
@@ -177,13 +178,13 @@ function texParagraphScopeLayout(
       continue;
     }
     if (scopedWidth !== undefined) {
-      scopedLeftMarginWidth += left;
-      scopedRightMarginWidth += right;
+      scopedLeftMarginWidth = texLength(scopedLeftMarginWidth + left);
+      scopedRightMarginWidth = texLength(scopedRightMarginWidth + right);
     }
   }
   const scopedLineWidth = scopedWidth === undefined
     ? undefined
-    : Math.max(0, scopedWidth - scopedLeftMarginWidth - scopedRightMarginWidth);
+    : texLength(Math.max(0, scopedWidth - scopedLeftMarginWidth - scopedRightMarginWidth));
   return {
     leftMarginWidth,
     rightMarginWidth,
@@ -198,7 +199,7 @@ function texParagraphScopeLayout(
   };
 }
 
-function finiteTexScopeWidth(value: TexVBoxItem["width"]): number | undefined {
+function finiteTexScopeWidth(value: TexVBoxItem["width"]): TexLength | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;

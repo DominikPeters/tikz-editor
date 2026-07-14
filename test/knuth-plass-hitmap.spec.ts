@@ -36,6 +36,34 @@ import {
 } from "../packages/core/src/text/tex/index.js";
 import { registerTexVListLayoutsOnOutputJax, texVListBoxLayoutReport } from "../packages/core/src/text/tex/vlist/index.js";
 
+type NumericFixture<T> = T extends number
+  ? number
+  : T extends readonly (infer Item)[]
+    ? NumericFixture<Item>[]
+    : T extends object
+      ? { [Key in keyof T]: NumericFixture<T[Key]> }
+      : T;
+
+function coordinateFixture<T>(value: NumericFixture<T>): T {
+  return value as unknown as T;
+}
+
+function paragraphReportFixture(value: NumericFixture<ParagraphLayoutReport>): ParagraphLayoutReport {
+  return coordinateFixture<ParagraphLayoutReport>(value);
+}
+
+function texVListBoxReportFixture(
+  items: NumericFixture<Parameters<typeof texVListBoxLayoutReport>[0]>,
+  metrics: NumericFixture<Parameters<typeof texVListBoxLayoutReport>[1]>,
+  baseline: NumericFixture<Parameters<typeof texVListBoxLayoutReport>[2]>
+): ReturnType<typeof texVListBoxLayoutReport> {
+  return texVListBoxLayoutReport(
+    coordinateFixture<Parameters<typeof texVListBoxLayoutReport>[0]>(items),
+    coordinateFixture<Parameters<typeof texVListBoxLayoutReport>[1]>(metrics),
+    coordinateFixture<Parameters<typeof texVListBoxLayoutReport>[2]>(baseline)
+  );
+}
+
 function makeLineElement(
   bounds: { left: number; top: number; right: number; bottom: number },
   viewBoxWidth: number,
@@ -62,7 +90,7 @@ function makeLineElement(
 }
 
 function makeTwoLineReport(): ParagraphLayoutReport {
-  return {
+  return paragraphReportFixture({
     paragraphId: "paragraph:1",
     width: 17,
     alignment: "ragged-right",
@@ -142,12 +170,12 @@ function makeTwoLineReport(): ParagraphLayoutReport {
     internalDegradeReason: null,
     externalFallbackUsed: false,
     linebreakingMode: "feasible"
-  };
+  });
 }
 
 function makeSingleLineReport(): ParagraphLayoutReport {
   const report = makeTwoLineReport();
-  return {
+  return paragraphReportFixture({
     ...report,
     width: 11,
     lines: [report.lines[0]],
@@ -161,11 +189,11 @@ function makeSingleLineReport(): ParagraphLayoutReport {
         text: "Hello World"
       }
     ]
-  };
+  });
 }
 
 function makeExplicitMultilineMathReport(): ParagraphLayoutReport {
-  return {
+  return paragraphReportFixture({
     paragraphId: "paragraph:math",
     width: 3.478,
     alignment: "center",
@@ -257,16 +285,16 @@ function makeExplicitMultilineMathReport(): ParagraphLayoutReport {
     internalDegradeReason: null,
     externalFallbackUsed: false,
     linebreakingMode: "feasible"
-  };
+  });
 }
 
 function makeSegmentedSingleLineReport(
   paragraphId: string,
   width: number,
-  runs: ParagraphLayoutReport["runs"],
-  segments: ParagraphLayoutReport["lines"][number]["segments"]
+  runs: NumericFixture<ParagraphLayoutReport["runs"]>,
+  segments: NumericFixture<ParagraphLayoutReport["lines"][number]["segments"]>
 ): ParagraphLayoutReport {
-  return {
+  return paragraphReportFixture({
     paragraphId,
     width,
     alignment: "ragged-right",
@@ -297,7 +325,7 @@ function makeSegmentedSingleLineReport(
     internalDegradeReason: null,
     externalFallbackUsed: false,
     linebreakingMode: "feasible"
-  };
+  });
 }
 
 function makeTex2Svg(width: number): () => { querySelector: () => { getAttribute: (name: string) => string | null } } {
@@ -1428,28 +1456,31 @@ describe("knuth-plass hitmap line ranges", () => {
     const shiftedLine = report.lines[1];
     const shiftedSegment = shiftedLine?.segments[0];
     if (shiftedLine && shiftedSegment?.kind === "text") {
-      shiftedLine.xStart = 5;
-      shiftedLine.xEnd = 11;
-      shiftedSegment.x = 5;
-      shiftedSegment.caretStops = Array.from({ length: 7 }, (_, index) => 5 + index);
+      shiftedLine.xStart = coordinateFixture<typeof shiftedLine.xStart>(5);
+      shiftedLine.xEnd = coordinateFixture<typeof shiftedLine.xEnd>(11);
+      shiftedSegment.x = coordinateFixture<typeof shiftedSegment.x>(5);
+      shiftedSegment.caretStops = coordinateFixture<typeof shiftedSegment.caretStops>(
+        Array.from({ length: 7 }, (_, index) => 5 + index)
+      );
     }
     const outputJax = {
       linebreaks: {
         getReports: () => [report]
       }
     };
+    type RegisteredLayout = Parameters<typeof registerTexVListLayoutsOnOutputJax>[1][number]["layout"];
     registerTexVListLayoutsOnOutputJax(outputJax, [{
       paragraphId: report.paragraphId,
       layout: {
-        metrics: { width: report.width, height: 8, depth: 16 },
-        baseline: { kind: "explicit", y: 8 },
+        metrics: coordinateFixture<RegisteredLayout["metrics"]>({ width: report.width, height: 8, depth: 16 }),
+        baseline: coordinateFixture<RegisteredLayout["baseline"]>({ kind: "explicit", y: 8 }),
         items: [],
-        boxReport: texVListBoxLayoutReport(
+        boxReport: texVListBoxReportFixture(
           [],
           { width: report.width, height: 8, depth: 16 },
           { kind: "explicit", y: 8 }
         ),
-        paragraphPlacements: [
+        paragraphPlacements: coordinateFixture<RegisteredLayout["paragraphPlacements"]>([
           {
             blockIndex: 0,
             vlistPath: [0],
@@ -1460,11 +1491,11 @@ describe("knuth-plass hitmap line ranges", () => {
             y: 0,
             metrics: { width: report.width, height: 8, depth: 16 }
           }
-        ],
-        linePlacements: [
+        ]),
+        linePlacements: coordinateFixture<RegisteredLayout["linePlacements"]>([
           { lineIndex: 0, x: 0, y: 0, height: 10 },
           { lineIndex: 1, x: 5, y: 12, height: 10 }
-        ],
+        ]),
         reports: [report],
         errors: []
       }
@@ -1789,7 +1820,7 @@ describe("knuth-plass hitmap line ranges", () => {
       },
       {
         name: "invalid report width",
-        report: { ...baseReport, width: 0 },
+        report: paragraphReportFixture({ ...baseReport, width: 0 }),
         element: {
           getBoundingClientRect: () => ({ left: 0, top: 0, right: 11, bottom: 10, width: 11, height: 10 }),
           getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
@@ -1806,10 +1837,10 @@ describe("knuth-plass hitmap line ranges", () => {
       },
       {
         name: "invalid line metadata",
-        report: {
+        report: paragraphReportFixture({
           ...baseReport,
           lines: [{ ...baseReport.lines[0], xStart: 5, xEnd: 4 }]
-        },
+        }),
         element: {
           getBoundingClientRect: () => ({ left: 0, top: 0, right: 11, bottom: 10, width: 11, height: 10 }),
           getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
@@ -1846,7 +1877,7 @@ describe("knuth-plass hitmap line ranges", () => {
     const containerElement = {
       querySelectorAll: () => [lineElement]
     };
-    const missingCaretStops: ParagraphLayoutReport = {
+    const missingCaretStops = paragraphReportFixture({
       ...baseReport,
       lines: [
         {
@@ -1854,8 +1885,8 @@ describe("knuth-plass hitmap line ranges", () => {
           segments: [{ ...baseReport.lines[0].segments[0], caretStops: undefined }]
         }
       ]
-    };
-    const missingTextOffsets: ParagraphLayoutReport = {
+    });
+    const missingTextOffsets = paragraphReportFixture({
       ...baseReport,
       lines: [
         {
@@ -1871,8 +1902,8 @@ describe("knuth-plass hitmap line ranges", () => {
           ]
         }
       ]
-    };
-    const mismatchedSpace: ParagraphLayoutReport = {
+    });
+    const mismatchedSpace = paragraphReportFixture({
       ...baseReport,
       runs: [
         { runIndex: 0, kind: "space", sourceStart: 0, sourceEnd: 1, width: 1, text: " " }
@@ -1883,8 +1914,8 @@ describe("knuth-plass hitmap line ranges", () => {
           segments: [{ runIndex: 0, kind: "space", text: " ", x: 0, width: 1, caretStops: [0, 1] }]
         }
       ]
-    };
-    const mismatchedMath: ParagraphLayoutReport = {
+    });
+    const mismatchedMath = paragraphReportFixture({
       ...baseReport,
       runs: [
         { runIndex: 0, kind: "math", sourceStart: 0, sourceEnd: 1, width: 1 }
@@ -1895,7 +1926,7 @@ describe("knuth-plass hitmap line ranges", () => {
           segments: [{ runIndex: 0, kind: "math", x: 0, width: 1, caretStops: [0, 1] }]
         }
       ]
-    };
+    });
 
     for (const report of [missingCaretStops, missingTextOffsets, mismatchedSpace, mismatchedMath]) {
       const result = await getKnuthPlassPointFromOffset(
@@ -1977,7 +2008,7 @@ describe("knuth-plass hitmap line ranges", () => {
       clientPoint: clientPoint(px(0), px(0))
     })).resolves.toMatchObject({ ok: false, error: { code: "alignment-error" } });
 
-    const outOfBoundsReport: ParagraphLayoutReport = {
+    const outOfBoundsReport = paragraphReportFixture({
       ...makeSingleLineReport(),
       width: 1,
       lines: [
@@ -2011,7 +2042,7 @@ describe("knuth-plass hitmap line ranges", () => {
           text: "A"
         }
       ]
-    };
+    });
     await expect(getKnuthPlassCaretFromPoint({
       linebreaks: {
         getReports: () => [outOfBoundsReport]
@@ -2063,7 +2094,7 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(reversed.endOffset).toBe(15);
     expect(reversed.rects.map((rect) => rect.lineIndex)).toEqual([0, 1]);
 
-    const collapsedLineReport: ParagraphLayoutReport = {
+    const collapsedLineReport = paragraphReportFixture({
       ...makeSingleLineReport(),
       lines: [
         {
@@ -2071,7 +2102,7 @@ describe("knuth-plass hitmap line ranges", () => {
           xEnd: 0
         }
       ]
-    };
+    });
     const collapsedLineSelection = await getKnuthPlassSelectionRects({
       linebreaks: {
         getReports: () => [collapsedLineReport]
@@ -2090,7 +2121,7 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(collapsedLineSelection.ok).toBe(true);
     expect(collapsedLineSelection.rects[0]?.bounds.maxY).toBe(10);
 
-    const zeroSegmentReport: ParagraphLayoutReport = {
+    const zeroSegmentReport = paragraphReportFixture({
       ...makeSingleLineReport(),
       lines: [
         {
@@ -2103,7 +2134,7 @@ describe("knuth-plass hitmap line ranges", () => {
           ]
         }
       ]
-    };
+    });
     const zeroSegmentSelection = await getKnuthPlassSelectionRects({
       linebreaks: {
         getReports: () => [zeroSegmentReport]
@@ -2160,7 +2191,7 @@ describe("knuth-plass hitmap line ranges", () => {
   });
 
   it("prefers visible hyphen line-end stops and rotated selection geometry", async () => {
-    const hyphenReport: ParagraphLayoutReport = {
+    const hyphenReport = paragraphReportFixture({
       paragraphId: "paragraph:hyphen",
       width: 11,
       alignment: "ragged-right",
@@ -2216,7 +2247,7 @@ describe("knuth-plass hitmap line ranges", () => {
       internalDegradeReason: null,
       externalFallbackUsed: false,
       linebreakingMode: "feasible"
-    };
+    });
     const hyphenOutput = {
       linebreaks: {
         getReports: () => [hyphenReport]

@@ -12,10 +12,22 @@ import type {
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
 import {
+  texHBoxLocalX,
+  texHBoxLocalXFromOrigin,
+  texHBoxOffsetX,
+  texHBoxOffsetY,
   texHBoxX,
   texHBoxY,
+  texLength,
+  texVListLocalX,
+  translateTexHBoxX,
+  translateTexHBoxY,
+  type TexHBoxLocalX,
+  type TexHBoxOffsetX,
+  type TexHBoxOffsetY,
   type TexHBoxX,
   type TexHBoxY,
+  type TexLength,
 } from "../coordinates.js";
 import type { TexMathFontProfile } from "./font-profile.js";
 import type {
@@ -28,6 +40,7 @@ import type {
 } from "./ir.js";
 import {
   layoutTexMathList,
+  offsetTexMathHListItem,
   resolveDefaultTexMathFontProfileForList,
   setTexMathHListWidth,
   type TexMathChildHListLayoutItem,
@@ -68,7 +81,7 @@ export function createTexDerivedInlineMathBoxProvider(
   options: TexDerivedInlineMathBoxProviderOptions = {}
 ): TexMathBoxProvider {
   const configuredFontProfile = options.fontProfile;
-  const baseAtPt = options.baseAtPt ?? 10;
+  const baseAtPt = texLength(options.baseAtPt ?? 10);
   const cache = new Map<string, TexMathBox | null>();
   return {
     getInlineMathBox: (params) => {
@@ -92,13 +105,13 @@ function getMathBox(
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
-    readonly targetWidth?: number;
+    readonly targetWidth?: TexLength;
     readonly displayLabel?: TexMathDisplayLabel;
   },
   style: "text" | "display",
   cache: Map<string, TexMathBox | null>,
   configuredFontProfile: TexMathFontProfile | undefined,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathBox | null {
   const key = `${style}:${params.delimiter}:${params.contentStart}:${params.targetWidth ?? "natural"}:${params.displayLabel?.text ?? ""}:${params.content}`;
   const cached = cache.get(key);
@@ -142,7 +155,7 @@ function getMathBox(
     width: hlist.width,
     height: hlist.height,
     depth: hlist.depth,
-    ...mathHListFlex(hlist.items, texHBoxX(0), texHBoxX(hlist.width)),
+    ...mathHListFlex(hlist.items, texHBoxLocalX(0), texHBoxLocalX(hlist.width)),
     caretMap,
     caretStops: projectInlineMathCaretStops(caretMap, hlist.width),
     constructRanges: buildInlineMathConstructRanges(hlist),
@@ -185,9 +198,9 @@ function displayTagSuppressedForMathList(list: TexMathList): boolean {
 function addDisplayMathTag(
   hlist: TexMathHList,
   label: TexMathAlignedRowLabel,
-  targetWidth: number,
+  targetWidth: TexLength,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathHList {
   const tag = layoutDisplayAlignmentTag(label, hlist.sourceSpan.start, fontProfile, baseAtPt);
   if (!tag) {
@@ -199,7 +212,7 @@ function addDisplayMathTag(
   ));
   const mathX = roundTexPt(Math.max(0, (width - hlist.width) / 2));
   const tagX = roundTexPt(Math.max(0, width - tag.width));
-  const mathItems = offsetMathHListItems(hlist.items, mathX);
+  const mathItems = offsetMathHListItems(hlist.items, texHBoxOffsetX(mathX));
   const mathRight = mathItemsRightEdge(mathItems);
   const tagCollides = mathRight + TEX_DISPLAY_ALIGNMENT_MIN_TAG_SEP_PT > tagX;
   const tagRenderShiftY = tagCollides
@@ -210,21 +223,25 @@ function addDisplayMathTag(
     : 0;
   return {
     ...hlist,
-    width,
-    height: Math.max(hlist.height, tag.height),
-    depth: Math.max(hlist.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    width: texLength(width),
+    height: texLength(Math.max(hlist.height, tag.height)),
+    depth: texLength(Math.max(hlist.depth + tagMetricShiftY, tagMetricShiftY + tag.depth)),
     items: [
       ...mathItems,
-      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+      ...offsetMathHListItems(
+        tag.items,
+        texHBoxOffsetX(tagX),
+        texHBoxOffsetY(tagRenderShiftY)
+      ),
     ],
   };
 }
 
 function mathHListFlex(
   items: readonly TexMathHListItem[],
-  xStart: TexHBoxX,
-  xEnd: TexHBoxX
-): { readonly stretch?: number; readonly shrink?: number } {
+  xStart: TexHBoxLocalX,
+  xEnd: TexHBoxLocalX
+): { readonly stretch?: TexLength; readonly shrink?: TexLength } {
   let stretch = 0;
   let shrink = 0;
   for (const item of items) {
@@ -235,16 +252,20 @@ function mathHListFlex(
     shrink += item.shrink;
   }
   return {
-    ...(stretch > 0 ? { stretch: roundTexPt(stretch) } : {}),
-    ...(shrink > 0 ? { shrink: roundTexPt(shrink) } : {}),
+    ...(stretch > 0 ? { stretch: texLength(roundTexPt(stretch)) } : {}),
+    ...(shrink > 0 ? { shrink: texLength(roundTexPt(shrink)) } : {}),
   };
 }
 
 function mathHListFlexBeforeX(
   items: readonly TexMathHListItem[],
   x: TexHBoxX
-): { readonly stretchBefore?: number; readonly shrinkBefore?: number } {
-  const flex = mathHListFlex(items, texHBoxX(0), x);
+): { readonly stretchBefore?: TexLength; readonly shrinkBefore?: TexLength } {
+  const flex = mathHListFlex(
+    items,
+    texHBoxLocalX(0),
+    texHBoxLocalXFromOrigin(x, texHBoxX(0))
+  );
   return {
     ...(flex.stretch ? { stretchBefore: flex.stretch } : {}),
     ...(flex.shrink ? { shrinkBefore: flex.shrink } : {}),
@@ -277,8 +298,8 @@ function buildInlineMathConstructRanges(hlist: TexMathHList): readonly TexMathCo
     return {
       sourceStart: construct.sourceStart,
       sourceEnd: construct.sourceEnd,
-      xStart: roundTexPt(Math.max(0, Math.min(hlist.width, xStart))),
-      xEnd: roundTexPt(Math.max(0, Math.min(hlist.width, xEnd))),
+      xStart: texHBoxX(roundTexPt(Math.max(0, Math.min(hlist.width, xStart)))),
+      xEnd: texHBoxX(roundTexPt(Math.max(0, Math.min(hlist.width, xEnd)))),
     };
   }).filter((range, index, ranges) =>
     range.sourceEnd > range.sourceStart &&
@@ -385,7 +406,12 @@ function discardableMathGlueAfterSourceOffset(
   items: readonly TexMathHListItem[],
   sourceOffset: number,
   x: TexHBoxX
-): { readonly width: number; readonly stretch: number; readonly shrink: number } | null {
+): {
+  readonly width: TexLength;
+  readonly stretch: TexLength;
+  readonly shrink: TexLength;
+} | null {
+  const localX = texHBoxLocalXFromOrigin(x, texHBoxX(0));
   let width = 0;
   let stretch = 0;
   let shrink = 0;
@@ -394,7 +420,7 @@ function discardableMathGlueAfterSourceOffset(
       item.kind !== "glue" ||
       item.sourceSpan.start !== sourceOffset ||
       item.sourceSpan.end !== sourceOffset ||
-      item.x < x - 1e-6
+      item.x < localX - 1e-6
     ) {
       continue;
     }
@@ -407,9 +433,9 @@ function discardableMathGlueAfterSourceOffset(
     return null;
   }
   return {
-    width: roundedWidth,
-    stretch: roundTexPt(stretch),
-    shrink: roundTexPt(shrink),
+    width: texLength(roundedWidth),
+    stretch: texLength(roundTexPt(stretch)),
+    shrink: texLength(roundTexPt(shrink)),
   };
 }
 
@@ -419,7 +445,7 @@ function collectMathItemExtents(
 ): readonly MathItemExtent[] {
   const extents: MathItemExtent[] = [];
   for (const item of items) {
-    const xStart = texHBoxX(roundTexPt(originX + item.x));
+    const xStart = translateTexHBoxX(originX, item.x);
     const xEnd = texHBoxX(roundTexPt(xStart + Math.max(0, item.width)));
     extents.push({
       sourceStart: item.sourceSpan.start,
@@ -453,10 +479,10 @@ function buildInlineMathCaretMap(
     entries.push({
       ...entry,
       sourceOffset: Math.max(params.sourceStart, Math.min(params.sourceEnd, Math.floor(entry.sourceOffset))),
-      x: roundTexPt(Math.max(0, Math.min(hlist.width, entry.x))),
-      y: roundTexPt(entry.y),
-      height: roundTexPt(Math.max(0, entry.height)),
-      depth: roundTexPt(Math.max(0, entry.depth)),
+      x: texHBoxX(roundTexPt(Math.max(0, Math.min(hlist.width, entry.x)))),
+      y: texHBoxY(roundTexPt(entry.y)),
+      height: texLength(roundTexPt(Math.max(0, entry.height))),
+      depth: texLength(roundTexPt(Math.max(0, entry.depth))),
       hitBounds: normalizeCaretHitBounds(entry.hitBounds, hlist.width),
     });
   };
@@ -464,12 +490,18 @@ function buildInlineMathCaretMap(
   addLinearMathCaretMapEntries({
     sourceStart: params.sourceStart,
     sourceEnd: params.contentStart,
-    xStart: 0,
-    xEnd: 0,
-    y: 0,
+    xStart: texHBoxX(0),
+    xEnd: texHBoxX(0),
+    y: texHBoxY(0),
     height: hlist.height,
     depth: hlist.depth,
-    hitBounds: boxCaretHitBounds(0, 0, hlist.width, hlist.height, hlist.depth),
+    hitBounds: boxCaretHitBounds(
+      texHBoxX(0),
+      texHBoxY(0),
+      hlist.width,
+      hlist.height,
+      hlist.depth
+    ),
     kind: "math-boundary",
     priority: 0,
     addEntry,
@@ -477,12 +509,18 @@ function buildInlineMathCaretMap(
   addLinearMathCaretMapEntries({
     sourceStart: params.contentEnd,
     sourceEnd: params.sourceEnd,
-    xStart: hlist.width,
-    xEnd: hlist.width,
-    y: 0,
+    xStart: texHBoxX(hlist.width),
+    xEnd: texHBoxX(hlist.width),
+    y: texHBoxY(0),
     height: hlist.height,
     depth: hlist.depth,
-    hitBounds: boxCaretHitBounds(0, 0, hlist.width, hlist.height, hlist.depth),
+    hitBounds: boxCaretHitBounds(
+      texHBoxX(0),
+      texHBoxY(0),
+      hlist.width,
+      hlist.height,
+      hlist.depth
+    ),
     kind: "math-boundary",
     priority: 0,
     addEntry,
@@ -517,9 +555,9 @@ function addMathItemCaretMapEntries(
   addEnclosureConstructCaretMapEntries(items, originX, originY, fontProfile, addEntry);
   addFractionCaretMapEntries(items, originX, originY, addEntry);
   for (const item of items) {
-    const x = texHBoxX(roundTexPt(originX + item.x));
+    const x = texHBoxX(roundTexPt(translateTexHBoxX(originX, item.x)));
     if (item.kind === "hlist") {
-      const y = texHBoxY(roundTexPt(originY + item.y));
+      const y = texHBoxY(roundTexPt(translateTexHBoxY(originY, item.y)));
       const kind = mathCaretEntryKindForHListRole(item.role);
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       addEntry(mathCaretEntry(item.sourceSpan.start, x, y, item.height, item.depth, hitBounds, kind, item.sourceSpan, 50));
@@ -541,7 +579,7 @@ function addMathItemCaretMapEntries(
       if (mathGlyphCoversConstructSpan(item)) {
         continue;
       }
-      const y = texHBoxY(roundTexPt(originY + item.y));
+      const y = texHBoxY(roundTexPt(translateTexHBoxY(originY, item.y)));
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       const caretY = texHBoxY(roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd)));
       addLinearMathCaretMapEntries({
@@ -550,8 +588,8 @@ function addMathItemCaretMapEntries(
         xStart: x,
         xEnd: texHBoxX(roundTexPt(x + item.width)),
         y: caretY,
-        height: Math.max(0, caretY - hitBounds.yStart),
-        depth: Math.max(0, hitBounds.yEnd - caretY),
+        height: texLength(Math.max(0, caretY - hitBounds.yStart)),
+        depth: texLength(Math.max(0, hitBounds.yEnd - caretY)),
         hitBounds,
         kind: "glyph-boundary",
         sourceSpan: item.sourceSpan,
@@ -564,13 +602,19 @@ function addMathItemCaretMapEntries(
       continue;
     }
     if (item.kind === "middle-delimiter") {
-      const hitBounds = boxCaretHitBounds(x, originY, 0, 0, 0);
+      const hitBounds = boxCaretHitBounds(
+        x,
+        originY,
+        texLength(0),
+        texLength(0),
+        texLength(0)
+      );
       addEntry(mathCaretEntry(
         item.commandSourceSpan.start,
         x,
         originY,
-        0,
-        0,
+        texLength(0),
+        texLength(0),
         hitBounds,
         "command",
         item.commandSourceSpan,
@@ -580,8 +624,8 @@ function addMathItemCaretMapEntries(
         item.delimiterSourceSpan.end,
         x,
         originY,
-        0,
-        0,
+        texLength(0),
+        texLength(0),
         hitBounds,
         "command",
         item.delimiterSourceSpan,
@@ -597,9 +641,15 @@ function addMathItemCaretMapEntries(
       xStart: x,
       xEnd: texHBoxX(roundTexPt(x + item.width)),
       y: originY,
-      height: 0,
-      depth: 0,
-      hitBounds: boxCaretHitBounds(x, originY, item.width, 0, 0),
+      height: texLength(0),
+      depth: texLength(0),
+      hitBounds: boxCaretHitBounds(
+        x,
+        originY,
+        item.width,
+        texLength(0),
+        texLength(0)
+      ),
       kind,
       sourceSpan: item.sourceSpan,
       priority: kind === "command" ? 40 : 10,
@@ -639,10 +689,10 @@ function addEnclosureConstructCaretMapEntries(
       sourceStart: item.sourceSpan.start,
       sourceEnd: commandEnd,
       xStart: constructBounds.xStart,
-      xEnd: roundTexPt(originX + body.x),
+      xEnd: texHBoxX(roundTexPt(translateTexHBoxX(originX, body.x))),
       y,
-      height: Math.max(0, y - constructBounds.yStart),
-      depth: Math.max(0, constructBounds.yEnd - y),
+      height: texLength(Math.max(0, y - constructBounds.yStart)),
+      depth: texLength(Math.max(0, constructBounds.yEnd - y)),
       hitBounds: constructBounds,
       kind: "command",
       sourceSpan: {
@@ -721,25 +771,42 @@ function mathItemCaretHitBounds(
   originY: TexHBoxY,
   fontProfile: TexMathFontProfile
 ): TexMathCaretEntry["hitBounds"] {
-  const x = originX + item.x;
+  const x = translateTexHBoxX(originX, item.x);
   if (item.kind === "rule") {
-    return ruleCaretHitBounds(x, originY + item.y, item.width, item.height);
+    return ruleCaretHitBounds(
+      x,
+      translateTexHBoxY(originY, item.y),
+      item.width,
+      item.height
+    );
   }
   if (item.kind === "glyph") {
     const visualBounds = texMathGlyphVisualBounds(item, fontProfile, originX, originY);
     return visualBounds
       ? {
-        xStart: roundTexPt(Math.min(x, visualBounds.xStart)),
-        xEnd: roundTexPt(Math.max(x + item.width, visualBounds.xEnd)),
-        yStart: roundTexPt(visualBounds.yStart),
-        yEnd: roundTexPt(visualBounds.yEnd),
+        xStart: texHBoxX(roundTexPt(Math.min(x, visualBounds.xStart))),
+        xEnd: texHBoxX(roundTexPt(Math.max(x + item.width, visualBounds.xEnd))),
+        yStart: texHBoxY(roundTexPt(visualBounds.yStart)),
+        yEnd: texHBoxY(roundTexPt(visualBounds.yEnd)),
       }
-      : boxCaretHitBounds(x, originY + item.y, item.width, item.height, item.depth);
+      : boxCaretHitBounds(
+          x,
+          translateTexHBoxY(originY, item.y),
+          item.width,
+          item.height,
+          item.depth
+        );
   }
   if (item.kind === "hlist") {
-    return boxCaretHitBounds(x, originY + item.y, item.width, item.height, item.depth);
+    return boxCaretHitBounds(
+      x,
+      translateTexHBoxY(originY, item.y),
+      item.width,
+      item.height,
+      item.depth
+    );
   }
-  return boxCaretHitBounds(x, originY, item.width, 0, 0);
+  return boxCaretHitBounds(x, originY, item.width, texLength(0), texLength(0));
 }
 
 function addFractionCaretMapEntries(
@@ -758,21 +825,33 @@ function addFractionCaretMapEntries(
     if (!numerator || !denominator) {
       continue;
     }
-    const xStart = texHBoxX(roundTexPt(originX + item.x));
+    const xStart = texHBoxX(roundTexPt(translateTexHBoxX(originX, item.x)));
     const xEnd = texHBoxX(roundTexPt(xStart + item.width));
-    const y = texHBoxY(roundTexPt(originY + item.y));
+    const y = texHBoxY(roundTexPt(translateTexHBoxY(originY, item.y)));
     const hitBounds = unionCaretHitBounds(
-      boxCaretHitBounds(originX + numerator.x, originY + numerator.y, numerator.width, numerator.height, numerator.depth),
+      boxCaretHitBounds(
+        translateTexHBoxX(originX, numerator.x),
+        translateTexHBoxY(originY, numerator.y),
+        numerator.width,
+        numerator.height,
+        numerator.depth
+      ),
       ruleCaretHitBounds(xStart, y, item.width, item.height),
-      boxCaretHitBounds(originX + denominator.x, originY + denominator.y, denominator.width, denominator.height, denominator.depth)
+      boxCaretHitBounds(
+        translateTexHBoxX(originX, denominator.x),
+        translateTexHBoxY(originY, denominator.y),
+        denominator.width,
+        denominator.height,
+        denominator.depth
+      )
     );
     for (let rawOffset = item.sourceSpan.start; rawOffset <= numerator.sourceSpan.start; rawOffset += 1) {
       addEntry(mathCaretEntry(
         rawOffset,
         xStart,
         originY,
-        originY - hitBounds.yStart,
-        hitBounds.yEnd - originY,
+        texLength(originY - hitBounds.yStart),
+        texLength(hitBounds.yEnd - originY),
         hitBounds,
         "command",
         item.sourceSpan,
@@ -780,13 +859,13 @@ function addFractionCaretMapEntries(
       ));
     }
     for (let rawOffset = numerator.sourceSpan.end; rawOffset <= denominator.sourceSpan.start; rawOffset += 1) {
-      const x = texHBoxX(roundTexPt((xStart + xEnd) / 2));
+      const x = texHBoxX(roundTexPt(xStart + (xEnd - xStart) / 2));
       addEntry(mathCaretEntry(
         rawOffset,
         x,
         originY,
-        originY - hitBounds.yStart,
-        hitBounds.yEnd - originY,
+        texLength(originY - hitBounds.yStart),
+        texLength(hitBounds.yEnd - originY),
         hitBounds,
         "group-boundary",
         item.sourceSpan,
@@ -798,8 +877,8 @@ function addFractionCaretMapEntries(
         rawOffset,
         xEnd,
         originY,
-        originY - hitBounds.yStart,
-        hitBounds.yEnd - originY,
+        texLength(originY - hitBounds.yStart),
+        texLength(hitBounds.yEnd - originY),
         hitBounds,
         "construct-boundary",
         item.sourceSpan,
@@ -837,11 +916,11 @@ function adjacentFractionCaretChild(
 function addLinearMathCaretMapEntries(params: {
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly xStart: number;
-  readonly xEnd: number;
-  readonly y: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly xStart: TexHBoxX;
+  readonly xEnd: TexHBoxX;
+  readonly y: TexHBoxY;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly hitBounds: TexMathCaretEntry["hitBounds"];
   readonly kind: TexMathCaretEntry["kind"];
   readonly sourceSpan?: TexMathSourceSpan;
@@ -867,7 +946,7 @@ function addLinearMathCaretMapEntries(params: {
     const t = (rawOffset - params.sourceStart) / spanLength;
     params.addEntry(mathCaretEntry(
       rawOffset,
-      roundTexPt(params.xStart + (params.xEnd - params.xStart) * t),
+      texHBoxX(roundTexPt(params.xStart + (params.xEnd - params.xStart) * t)),
       params.y,
       params.height,
       params.depth,
@@ -881,10 +960,10 @@ function addLinearMathCaretMapEntries(params: {
 
 function mathCaretEntry(
   sourceOffset: number,
-  x: number,
-  y: number,
-  height: number,
-  depth: number,
+  x: TexHBoxX,
+  y: TexHBoxY,
+  height: TexLength,
+  depth: TexLength,
   hitBounds: TexMathCaretEntry["hitBounds"],
   kind: TexMathCaretEntry["kind"],
   sourceSpan: TexMathSourceSpan | undefined,
@@ -921,31 +1000,31 @@ const mathConstructBoundaryHListRoles: ReadonlySet<TexMathChildHListLayoutItem["
 ]);
 
 function boxCaretHitBounds(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  depth: number
+  x: TexHBoxX,
+  y: TexHBoxY,
+  width: TexLength,
+  height: TexLength,
+  depth: TexLength
 ): TexMathCaretEntry["hitBounds"] {
   return {
-    xStart: roundTexPt(x),
-    xEnd: roundTexPt(x + Math.max(0, width)),
-    yStart: roundTexPt(y - Math.max(0, height)),
-    yEnd: roundTexPt(y + Math.max(0, depth)),
+    xStart: texHBoxX(roundTexPt(x)),
+    xEnd: texHBoxX(roundTexPt(x + Math.max(0, width))),
+    yStart: texHBoxY(roundTexPt(y - Math.max(0, height))),
+    yEnd: texHBoxY(roundTexPt(y + Math.max(0, depth))),
   };
 }
 
 function ruleCaretHitBounds(
-  x: number,
-  y: number,
-  width: number,
-  height: number
+  x: TexHBoxX,
+  y: TexHBoxY,
+  width: TexLength,
+  height: TexLength
 ): TexMathCaretEntry["hitBounds"] {
   return {
-    xStart: roundTexPt(x),
-    xEnd: roundTexPt(x + Math.max(0, width)),
-    yStart: roundTexPt(y),
-    yEnd: roundTexPt(y + Math.max(0, height)),
+    xStart: texHBoxX(roundTexPt(x)),
+    xEnd: texHBoxX(roundTexPt(x + Math.max(0, width))),
+    yStart: texHBoxY(roundTexPt(y)),
+    yEnd: texHBoxY(roundTexPt(y + Math.max(0, height))),
   };
 }
 
@@ -953,26 +1032,26 @@ function unionCaretHitBounds(
   ...bounds: readonly TexMathCaretEntry["hitBounds"][]
 ): TexMathCaretEntry["hitBounds"] {
   return {
-    xStart: roundTexPt(Math.min(...bounds.map((bound) => bound.xStart))),
-    xEnd: roundTexPt(Math.max(...bounds.map((bound) => bound.xEnd))),
-    yStart: roundTexPt(Math.min(...bounds.map((bound) => bound.yStart))),
-    yEnd: roundTexPt(Math.max(...bounds.map((bound) => bound.yEnd))),
+    xStart: texHBoxX(roundTexPt(Math.min(...bounds.map((bound) => bound.xStart)))),
+    xEnd: texHBoxX(roundTexPt(Math.max(...bounds.map((bound) => bound.xEnd)))),
+    yStart: texHBoxY(roundTexPt(Math.min(...bounds.map((bound) => bound.yStart)))),
+    yEnd: texHBoxY(roundTexPt(Math.max(...bounds.map((bound) => bound.yEnd)))),
   };
 }
 
 function normalizeCaretHitBounds(
   bounds: TexMathCaretEntry["hitBounds"],
-  hlistWidth: number
+  hlistWidth: TexLength
 ): TexMathCaretEntry["hitBounds"] {
   const xStart = Math.max(0, Math.min(hlistWidth, bounds.xStart));
   const xEnd = Math.max(xStart, Math.min(hlistWidth, bounds.xEnd));
   const yStart = Math.min(bounds.yStart, bounds.yEnd);
   const yEnd = Math.max(bounds.yStart, bounds.yEnd);
   return {
-    xStart: roundTexPt(xStart),
-    xEnd: roundTexPt(xEnd),
-    yStart: roundTexPt(yStart),
-    yEnd: roundTexPt(yEnd),
+    xStart: texHBoxX(roundTexPt(xStart)),
+    xEnd: texHBoxX(roundTexPt(xEnd)),
+    yStart: texHBoxY(roundTexPt(yStart)),
+    yEnd: texHBoxY(roundTexPt(yEnd)),
   };
 }
 
@@ -1045,7 +1124,7 @@ function mathCaretMapCoverageDiagnostics(
 function projectInlineMathCaretStops(
   caretMap: TexMathCaretMap,
   width: number
-): readonly number[] {
+): readonly TexHBoxX[] {
   const rawLength = Math.max(0, caretMap.sourceEnd - caretMap.sourceStart);
   const stops = Array.from({ length: rawLength + 1 }, () => Number.NaN);
   const entriesByOffset = new Map<number, TexMathCaretEntry[]>();
@@ -1065,7 +1144,7 @@ function projectInlineMathCaretStops(
   }
 
   enforceMonotoneProjectedCaretStops(stops, width);
-  return stops.map((stop) => roundTexPt(stop));
+  return stops.map((stop) => texHBoxX(roundTexPt(stop)));
 }
 
 function projectedMathCaretEntry(
@@ -1171,11 +1250,11 @@ function getDisplayMathAlignment(
     readonly sourceEnd: number;
     readonly contentStart: number;
     readonly contentEnd: number;
-    readonly targetWidth: number;
+    readonly targetWidth: TexLength;
     readonly displayLabels?: readonly (TexMathDisplayLabel | null)[];
   },
   configuredFontProfile: TexMathFontProfile | undefined,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathDisplayAlignment | null {
   if (!texMathDisplayAlignmentDelimiter(params.delimiter)) {
     return null;
@@ -1235,9 +1314,9 @@ function getDisplayMathAlignment(
       );
       const packedRow = packMultlineRowToDisplayWidth(
         row,
-        Math.max(0, params.targetWidth - rowOffset)
+        texLength(Math.max(0, params.targetWidth - rowOffset))
       );
-      const rowItems = offsetMathHListItems(packedRow.items, rowOffset);
+      const rowItems = offsetMathHListItems(packedRow.items, texHBoxOffsetX(rowOffset));
       const taggedRow = tag
         ? addMultlineDisplayTag(
           row,
@@ -1248,7 +1327,7 @@ function getDisplayMathAlignment(
           displayAlignmentRowLineDepth(alignedRows, rowIndex)
         )
         : {
-          width: params.targetWidth,
+          width: texLength(params.targetWidth),
           height: row.height,
           depth: row.depth,
           items: rowItems,
@@ -1256,7 +1335,7 @@ function getDisplayMathAlignment(
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
-        width: taggedRow.width,
+        width: texLength(taggedRow.width),
         height: taggedRow.height,
         depth: taggedRow.depth,
         sourceSpan: rowSourceSpan,
@@ -1270,7 +1349,7 @@ function getDisplayMathAlignment(
       }, fontProfile);
       return {
         rowIndex,
-        x: 0,
+        x: texVListLocalX(0),
         source: params.source,
         content: params.content,
         sourceStart: rowSourceSpan.start,
@@ -1297,7 +1376,7 @@ function getDisplayMathAlignment(
       contentStart: params.contentStart,
       contentEnd: params.contentEnd,
       delimiter: params.delimiter,
-      width: params.targetWidth,
+      width: texLength(params.targetWidth),
       rows,
       ...(intertexts.length > 0 ? { intertexts } : {}),
     };
@@ -1312,7 +1391,10 @@ function getDisplayMathAlignment(
         ? layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt)
         : null;
       const tagPlacement = gatherRowPlacement(row.items, tag?.width ?? 0, params.targetWidth);
-      const rowItems = offsetMathHListItems(row.items, tagPlacement.rowOffset);
+      const rowItems = offsetMathHListItems(
+        row.items,
+        texHBoxOffsetX(tagPlacement.rowOffset)
+      );
       const taggedRow = params.delimiter === "gather"
         ? addGatherDisplayTag(
           row,
@@ -1322,7 +1404,7 @@ function getDisplayMathAlignment(
           params.targetWidth
         )
         : {
-          width: params.targetWidth,
+          width: texLength(params.targetWidth),
           height: row.height,
           depth: row.depth,
           items: rowItems,
@@ -1330,7 +1412,7 @@ function getDisplayMathAlignment(
       const rowHList: TexMathHList = {
         kind: "math-hlist",
         style: laidOut.hlist.style,
-        width: taggedRow.width,
+        width: texLength(taggedRow.width),
         height: taggedRow.height,
         depth: taggedRow.depth,
         sourceSpan: row.sourceSpan,
@@ -1344,7 +1426,7 @@ function getDisplayMathAlignment(
       }, fontProfile);
       return {
         rowIndex,
-        x: 0,
+        x: texVListLocalX(0),
         source: params.source,
         content: params.content,
         sourceStart: row.sourceSpan.start,
@@ -1371,7 +1453,7 @@ function getDisplayMathAlignment(
       contentStart: params.contentStart,
       contentEnd: params.contentEnd,
       delimiter: params.delimiter,
-      width: params.targetWidth,
+      width: texLength(params.targetWidth),
       rows,
       ...(intertexts.length > 0 ? { intertexts } : {}),
     };
@@ -1447,7 +1529,7 @@ function getDisplayMathAlignment(
     const rowHList: TexMathHList = {
       kind: "math-hlist",
       style: laidOut.hlist.style,
-      width: taggedRow.width,
+      width: texLength(taggedRow.width),
       height: taggedRow.height,
       depth: taggedRow.depth,
       sourceSpan: row.sourceSpan,
@@ -1461,7 +1543,7 @@ function getDisplayMathAlignment(
     }, fontProfile);
     return {
       rowIndex,
-      x: 0,
+      x: texVListLocalX(0),
       source: params.source,
       content: params.content,
       sourceStart: row.sourceSpan.start,
@@ -1488,10 +1570,10 @@ function getDisplayMathAlignment(
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
     delimiter: params.delimiter,
-    width: Math.max(
+    width: texLength(Math.max(
       hasAlignmentTags ? dimensions.targetWidth : dimensions.rowWidth,
       ...rows.map((row) => row.width)
-    ),
+    )),
     rows,
     ...(intertexts.length > 0 ? { intertexts } : {}),
   };
@@ -1499,13 +1581,13 @@ function getDisplayMathAlignment(
 
 function packMultlineRowToDisplayWidth(
   row: TexMathChildHListLayoutItem,
-  targetWidth: number
+  targetWidth: TexLength
 ): TexMathHList {
   const rowWidth = mathItemsRightEdge(row.items);
   const hlist: TexMathHList = {
     kind: "math-hlist",
     style: "display",
-    width: rowWidth,
+    width: texLength(rowWidth),
     height: row.height,
     depth: row.depth,
     sourceSpan: row.sourceSpan,
@@ -1519,7 +1601,7 @@ function packMultlineRowToDisplayWidth(
 
 function packTexMathHListToWidthThroughSingleChild(
   hlist: TexMathHList,
-  targetWidth: number
+  targetWidth: TexLength
 ): TexMathHList {
   if (texMathHListHasGlueFlex(hlist)) {
     return setTexMathHListWidth(hlist, targetWidth);
@@ -1532,17 +1614,17 @@ function packTexMathHListToWidthThroughSingleChild(
     {
       kind: "math-hlist",
       style: hlist.style,
-      width: child.width,
+      width: texLength(child.width),
       height: child.height,
       depth: child.depth,
       sourceSpan: child.sourceSpan,
       items: child.items,
     },
-    Math.max(0, targetWidth - child.x)
+    texLength(Math.max(0, targetWidth - child.x))
   );
   return {
     ...hlist,
-    width: roundTexPt(targetWidth),
+    width: texLength(roundTexPt(targetWidth)),
     items: [{
       ...child,
       width: packedChild.width,
@@ -1637,7 +1719,7 @@ function multlineRowOffset(
   rowWidth: number,
   rowIndex: number,
   rowCount: number,
-  targetWidth: number,
+  targetWidth: TexLength,
   shove?: "left" | "right",
   rightTagWidth = 0,
   shiftedRightTag = false
@@ -1675,7 +1757,7 @@ function multlineDisplayLabel(
 function gatherRowPlacement(
   items: readonly TexMathHListItem[],
   tagWidth: number,
-  targetWidth: number
+  targetWidth: TexLength
 ): {
   readonly rowOffset: number;
   readonly shiftTag: boolean;
@@ -1705,7 +1787,7 @@ function displayAlignmentRowTagWidths(
   alignedNucleus: TexMathAlignedNucleus | null,
   displayLabels: readonly (TexMathDisplayLabel | null)[] | undefined,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): readonly number[] {
   const rowCount = Math.max(alignedNucleus?.rows.length ?? 0, displayLabels?.length ?? 0);
   return Array.from({ length: rowCount }, (_, rowIndex) => {
@@ -1728,7 +1810,7 @@ function layoutDisplayAlignmentTag(
   label: TexMathAlignedRowLabel,
   rowStart: number,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathHList | null {
   const tagSource = String.raw`\text{(` + label.text + ")}";
   const parsedTag = parseTexMath(tagSource, {
@@ -1792,7 +1874,7 @@ function addDisplayAlignmentTag(
   label: TexMathAlignedRowLabel | null,
   dimensions: TexDisplayAlignmentDimensions,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   forcedRowWidth: number | null = null,
   rowCount = 1,
   tagLineDepth = row.depth
@@ -1801,7 +1883,7 @@ function addDisplayAlignmentTag(
   const baseWidth = forcedRowWidth ?? dimensions.rowWidth;
   if (!label) {
     return {
-      width: baseWidth,
+      width: texLength(baseWidth),
       height: row.height,
       depth: row.depth,
       items: rowItems,
@@ -1810,7 +1892,7 @@ function addDisplayAlignmentTag(
   const tag = layoutDisplayAlignmentTag(label, row.sourceSpan.start, fontProfile, baseAtPt);
   if (!tag) {
     return {
-      width: baseWidth,
+      width: texLength(baseWidth),
       height: row.height,
       depth: row.depth,
       items: rowItems,
@@ -1824,7 +1906,10 @@ function addDisplayAlignmentTag(
       ? roundTexPt(Math.max(0, (dimensions.targetWidth - rowFieldWidth - tag.width) / 2))
       : null;
     if (tagAdjustedEqnShift !== null && tagAdjustedEqnShift < dimensions.eqnShift) {
-      rowItems = offsetMathHListItems(rowItems, tagAdjustedEqnShift - dimensions.eqnShift);
+      rowItems = offsetMathHListItems(
+        rowItems,
+        texHBoxOffsetX(tagAdjustedEqnShift - dimensions.eqnShift)
+      );
     }
   }
   const tagX = Math.max(0, roundTexPt(dimensions.targetWidth - tag.width));
@@ -1838,12 +1923,16 @@ function addDisplayAlignmentTag(
     ? displayAlignmentShiftedTagMetricShift(row.depth, tagLineDepth)
     : 0;
   return {
-    width,
-    height: Math.max(row.height, tag.height),
-    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    width: texLength(width),
+    height: texLength(Math.max(row.height, tag.height)),
+    depth: texLength(Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth)),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+      ...offsetMathHListItems(
+        tag.items,
+        texHBoxOffsetX(tagX),
+        texHBoxOffsetY(tagRenderShiftY)
+      ),
     ],
   };
 }
@@ -1853,11 +1942,11 @@ function addGatherDisplayTag(
   rowItems: readonly TexMathHListItem[],
   tag: TexMathHList | null,
   shiftTag: boolean | null,
-  targetWidth: number
+  targetWidth: TexLength
 ): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
   if (!tag) {
     return {
-      width: targetWidth,
+      width: texLength(targetWidth),
       height: row.height,
       depth: row.depth,
       items: rowItems,
@@ -1877,12 +1966,16 @@ function addGatherDisplayTag(
       )
     : row.depth;
   return {
-    width: targetWidth,
+    width: texLength(targetWidth),
     height: row.height,
-    depth: roundTexPt(depth),
+    depth: texLength(roundTexPt(depth)),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+      ...offsetMathHListItems(
+        tag.items,
+        texHBoxOffsetX(tagX),
+        texHBoxOffsetY(tagRenderShiftY)
+      ),
     ],
   };
 }
@@ -1890,7 +1983,7 @@ function addGatherDisplayTag(
 function multlineRightTagCollides(
   rowWidth: number,
   tagWidth: number,
-  targetWidth: number
+  targetWidth: TexLength
 ): boolean {
   return rowWidth + tagWidth + TEX_MULTLINE_TAG_GAP_PT > targetWidth;
 }
@@ -1899,7 +1992,7 @@ function addMultlineDisplayTag(
   row: TexMathChildHListLayoutItem,
   rowItems: readonly TexMathHListItem[],
   tag: TexMathHList,
-  targetWidth: number,
+  targetWidth: TexLength,
   shiftTag: boolean,
   tagLineDepth = row.depth
 ): Pick<TexMathHList, "width" | "height" | "depth" | "items"> {
@@ -1911,12 +2004,16 @@ function addMultlineDisplayTag(
     ? displayAlignmentShiftedTagMetricShift(row.depth, tagLineDepth)
     : 0;
   return {
-    width: Math.max(targetWidth, mathItemsRightEdge(rowItems), roundTexPt(tagX + tag.width)),
-    height: Math.max(row.height, tag.height),
-    depth: Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth),
+    width: texLength(Math.max(targetWidth, mathItemsRightEdge(rowItems), roundTexPt(tagX + tag.width))),
+    height: texLength(Math.max(row.height, tag.height)),
+    depth: texLength(Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth)),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(tag.items, tagX, tagRenderShiftY),
+      ...offsetMathHListItems(
+        tag.items,
+        texHBoxOffsetX(tagX),
+        texHBoxOffsetY(tagRenderShiftY)
+      ),
     ],
   };
 }
@@ -1924,14 +2021,14 @@ function addMultlineDisplayTag(
 function displayAlignmentRowLineDepth(
   rows: readonly TexMathChildHListLayoutItem[],
   rowIndex: number
-): number {
+): TexLength {
   const rowDepth = rows[rowIndex]?.depth ?? 0;
   if (rowIndex !== 0) {
-    return rowDepth;
+    return texLength(rowDepth);
   }
   // amsmath's measuring pass leaves \lineht@ at the maximum measured row depth.
   // The first real row inherits that value until its fields exceed it.
-  return Math.max(rowDepth, ...rows.map((row) => row.depth));
+  return texLength(Math.max(rowDepth, ...rows.map((row) => row.depth)));
 }
 
 function displayAlignmentShiftedTagRenderShift(lineDepth: number): number {
@@ -1951,12 +2048,12 @@ function displayAlignmentShiftedTagMetricShift(rowDepth: number, lineDepth: numb
 }
 
 interface TexDisplayAlignmentDimensions {
-  readonly eqnShift: number;
-  readonly alignSep: number;
+  readonly eqnShift: TexHBoxOffsetX;
+  readonly alignSep: TexLength;
   readonly pairCount: number;
-  readonly rowWidth: number;
-  readonly targetWidth: number;
-  readonly maxColumnWidths: readonly number[];
+  readonly rowWidth: TexLength;
+  readonly targetWidth: TexLength;
+  readonly maxColumnWidths: readonly TexLength[];
 }
 
 function displayAlignmentDimensions(params: {
@@ -1966,7 +2063,7 @@ function displayAlignmentDimensions(params: {
   readonly rowCount: number;
   readonly rows: readonly TexMathChildHListLayoutItem[];
   readonly rowTagWidths: readonly number[];
-  readonly targetWidth: number;
+  readonly targetWidth: TexLength;
 }): TexDisplayAlignmentDimensions {
   const alignSepCount = Math.max(0, params.pairCount - 1);
   const maxColumnWidths = displayAlignmentMaxColumnWidths(params.rows);
@@ -1984,12 +2081,12 @@ function displayAlignmentDimensions(params: {
       alignSep = TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT;
     }
     return {
-      eqnShift: 0,
-      alignSep,
+      eqnShift: texHBoxOffsetX(0),
+      alignSep: texLength(alignSep),
       pairCount: params.pairCount,
-      maxColumnWidths,
-      rowWidth: roundTexPt(totalFieldWidth + alignSepCount * alignSep),
-      targetWidth: params.targetWidth,
+      maxColumnWidths: maxColumnWidths.map(texLength),
+      rowWidth: texLength(roundTexPt(totalFieldWidth + alignSepCount * alignSep)),
+      targetWidth: texLength(params.targetWidth),
     };
   }
 
@@ -2018,12 +2115,12 @@ function displayAlignmentDimensions(params: {
     }));
   }
   return {
-    eqnShift,
-    alignSep,
+    eqnShift: texHBoxOffsetX(eqnShift),
+    alignSep: texLength(alignSep),
     pairCount: params.pairCount,
-    maxColumnWidths,
-    rowWidth: roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep),
-    targetWidth: params.targetWidth,
+    maxColumnWidths: maxColumnWidths.map(texLength),
+    rowWidth: texLength(roundTexPt(eqnShift + totalFieldWidth + alignSepCount * alignSep)),
+    targetWidth: texLength(params.targetWidth),
   };
 }
 
@@ -2034,8 +2131,8 @@ function applyAmsmathCenteredRightTagClearance(params: {
   readonly maxColumnWidths: readonly number[];
   readonly rows: readonly TexMathChildHListLayoutItem[];
   readonly rowTagWidths: readonly number[];
-  readonly targetWidth: number;
-}): { readonly eqnShift: number; readonly alignSep: number } {
+  readonly targetWidth: TexLength;
+}): { readonly eqnShift: TexHBoxOffsetX; readonly alignSep: TexLength } {
   let eqnShift = params.eqnShift;
   let alignSep = params.alignSep;
   const alignSepCount = Math.max(0, params.pairCount - 1);
@@ -2085,7 +2182,10 @@ function applyAmsmathCenteredRightTagClearance(params: {
       alignSep = candidate;
     }
   }
-  return { eqnShift, alignSep };
+  return {
+    eqnShift: texHBoxOffsetX(eqnShift),
+    alignSep: texLength(alignSep),
+  };
 }
 
 function displayAlignmentRightTagMustShift(
@@ -2184,31 +2284,10 @@ function amsmathRightTagRowWidth(
 
 function offsetMathHListItems(
   items: readonly TexMathHListItem[],
-  offsetX: number,
-  offsetY = 0
+  offsetX: TexHBoxOffsetX,
+  offsetY: TexHBoxOffsetY = texHBoxOffsetY(0)
 ): readonly TexMathHListItem[] {
-  return items.map((item) => {
-    const x = roundTexPt(item.x + offsetX);
-    if (item.kind === "glyph" || item.kind === "rule") {
-      return {
-        ...item,
-        x,
-        y: roundTexPt(item.y + offsetY),
-      };
-    }
-    if (item.kind === "hlist") {
-      return {
-        ...item,
-        x,
-        y: roundTexPt(item.y + offsetY),
-        items: offsetMathHListItems(item.items, 0, 0),
-      };
-    }
-    return {
-      ...item,
-      x,
-    };
-  });
+  return items.map((item) => offsetTexMathHListItem(item, offsetX, offsetY));
 }
 
 function mathItemsRightEdge(items: readonly TexMathHListItem[]): number {
@@ -2251,18 +2330,14 @@ function displayAlignmentRowItems(
     if (item.kind === "hlist" && item.role === "aligned-cell") {
       const pairIndex = Math.floor(cellIndex / 2);
       cellIndex += 1;
-      return {
-        ...item,
-        x: roundTexPt(
-          item.x +
+      return offsetTexMathHListItem(
+        item,
+        texHBoxOffsetX(roundTexPt(
           dimensions.eqnShift +
           pairIndex * (dimensions.alignSep - TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT)
-        ),
-      };
+        ))
+      );
     }
-    return {
-      ...item,
-      x: roundTexPt(item.x + dimensions.eqnShift),
-    };
+    return offsetTexMathHListItem(item, texHBoxOffsetX(dimensions.eqnShift));
   });
 }

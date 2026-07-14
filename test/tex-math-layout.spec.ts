@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 import {
   computerModernTexMetricProvider,
   layoutTexMathList,
@@ -127,7 +128,10 @@ describe("TeX math hlist layout", () => {
       x: expect.closeTo(7.508129, 6),
     });
 
-    const shrunk = setTexMathHListWidth(result.hlist, result.hlist.width - 10);
+    const shrunk = setTexMathHListWidth(
+      result.hlist,
+      texLength(result.hlist.width - 10)
+    );
     const shrunkPlus = shrunk.items.find((item) =>
       item.kind === "glyph" && item.fontId === "cmr10" && item.code === 43
     );
@@ -4074,8 +4078,8 @@ describe("TeX math hlist layout", () => {
 
   it("matches vendored metrics for the generated glyph boxes", () => {
     const [minus, comma] = glyphItems("-,");
-    const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
-    const cmmi = computerModernTexMetricProvider.resolveFont({ fontId: "cmmi10", atPt: 10 });
+    const cmsy = computerModernTexMetricProvider.resolveFont({ fontId: "cmsy10", atPt: texLength(10) });
+    const cmmi = computerModernTexMetricProvider.resolveFont({ fontId: "cmmi10", atPt: texLength(10) });
 
     expect(minus).toMatchObject({
       fontId: "cmsy10",

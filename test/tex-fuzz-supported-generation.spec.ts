@@ -6,6 +6,7 @@ import {
   generateFullySupportedTexFuzzCases,
   TexFuzzSupportedQuotaError,
 } from "../packages/tex-fuzz/src/index.js";
+import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 
 describe("support-aware TeX fuzz generation", () => {
   it("rejects literal-degraded output even when the top-level result claims support", () => {
@@ -29,7 +30,7 @@ describe("support-aware TeX fuzz generation", () => {
       shapedRuns: new Map(),
       report: {
         paragraphId: "mutation",
-        width: 160,
+        width: texLength(160),
         alignment: "ragged-right" as const,
         layoutMode: "wrap" as const,
         lines: [],

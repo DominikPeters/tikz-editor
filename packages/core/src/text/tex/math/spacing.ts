@@ -17,15 +17,16 @@ import type {
   TexMathStyle,
   TexMathUnsupportedItem,
 } from "./ir.js";
+import { texMuLength, type TexMuLength } from "../coordinates.js";
 
 export type TexMathGlueSource = "inter-atom" | "explicit";
 
 export interface TexMathResolvedGlue {
   readonly kind: "resolved-glue";
   readonly source: TexMathGlueSource;
-  readonly mu: number;
-  readonly stretchMu: number;
-  readonly shrinkMu: number;
+  readonly mu: TexMuLength;
+  readonly stretchMu: TexMuLength;
+  readonly shrinkMu: TexMuLength;
   readonly fixedTextSpace?: boolean;
   readonly sourceSpan: TexMathSourceSpan;
   readonly command?: TexMathGlue["command"];
@@ -217,9 +218,9 @@ export function resolveExplicitMuGlue(
     kind: "resolved-glue",
     source: "explicit",
     explicitMu: true,
-    mu: style === "display" && glue.displayMu !== undefined ? glue.displayMu : glue.mu,
-    stretchMu: glue.stretchMu ?? 0,
-    shrinkMu: glue.shrinkMu ?? 0,
+    mu: texMuLength(style === "display" && glue.displayMu !== undefined ? glue.displayMu : glue.mu),
+    stretchMu: texMuLength(glue.stretchMu ?? 0),
+    shrinkMu: texMuLength(glue.shrinkMu ?? 0),
     sourceSpan: glue.sourceSpan,
   };
 }
@@ -411,13 +412,13 @@ function interAtomGlueDimensions(
     case "*":
       return null;
     case "1":
-      return isScriptStyle(style) ? null : { mu: 3, stretchMu: 0, shrinkMu: 0 };
+      return isScriptStyle(style) ? null : muGlueDimensions(3, 0, 0);
     case "2":
-      return { mu: 3, stretchMu: 0, shrinkMu: 0 };
+      return muGlueDimensions(3, 0, 0);
     case "3":
-      return isScriptStyle(style) ? null : { mu: 4, stretchMu: 2, shrinkMu: 4 };
+      return isScriptStyle(style) ? null : muGlueDimensions(4, 2, 4);
     case "4":
-      return isScriptStyle(style) ? null : { mu: 5, stretchMu: 5, shrinkMu: 0 };
+      return isScriptStyle(style) ? null : muGlueDimensions(5, 5, 0);
   }
 }
 
@@ -435,11 +436,11 @@ function namedMuGlueDimensions(
 ): Pick<TexMathResolvedGlue, "mu" | "stretchMu" | "shrinkMu"> {
   switch (name) {
     case "thin":
-      return { mu: 3, stretchMu: 0, shrinkMu: 0 };
+      return muGlueDimensions(3, 0, 0);
     case "med":
-      return { mu: 4, stretchMu: 2, shrinkMu: 4 };
+      return muGlueDimensions(4, 2, 4);
     case "thick":
-      return { mu: 5, stretchMu: 5, shrinkMu: 0 };
+      return muGlueDimensions(5, 5, 0);
   }
 }
 
@@ -454,18 +455,30 @@ function explicitGlueDimensions(
     case ";":
       return namedMuGlueDimensions("thick");
     case "!":
-      return { mu: -3, stretchMu: 0, shrinkMu: 0 };
+      return muGlueDimensions(-3, 0, 0);
     case "nobreakspace":
-      return { mu: 0, stretchMu: 0, shrinkMu: 0, fixedTextSpace: true };
+      return { ...muGlueDimensions(0, 0, 0), fixedTextSpace: true };
     case "negmedspace":
-      return { mu: -4, stretchMu: -2, shrinkMu: -4 };
+      return muGlueDimensions(-4, -2, -4);
     case "negthickspace":
-      return { mu: -5, stretchMu: -5, shrinkMu: 0 };
+      return muGlueDimensions(-5, -5, 0);
     case "quad":
-      return { mu: 18, stretchMu: 0, shrinkMu: 0 };
+      return muGlueDimensions(18, 0, 0);
     case "qquad":
-      return { mu: 36, stretchMu: 0, shrinkMu: 0 };
+      return muGlueDimensions(36, 0, 0);
   }
+}
+
+function muGlueDimensions(
+  mu: number,
+  stretchMu: number,
+  shrinkMu: number
+): Pick<TexMathResolvedGlue, "mu" | "stretchMu" | "shrinkMu"> {
+  return {
+    mu: texMuLength(mu),
+    stretchMu: texMuLength(stretchMu),
+    shrinkMu: texMuLength(shrinkMu),
+  };
 }
 
 function isScriptStyle(style: TexMathStyle): boolean {

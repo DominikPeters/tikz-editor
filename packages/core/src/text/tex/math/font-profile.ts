@@ -182,7 +182,8 @@ function createComputerModernMathFontProfile(options: {
     manifest: options.manifest,
     parameters: createLuaLatexDefaultMathParameters(computerModernTexMetricProvider),
     resolveMathFontId: options.resolveMathFontId,
-    resolveMathFont: ({ family, style, baseAtPt = 10 }) => {
+    resolveMathFont: ({ family, style, baseAtPt: requestedBaseAtPt }) => {
+      const baseAtPt = texLength(requestedBaseAtPt ?? 10);
       const fontId = options.resolveMathFontId(family, style);
       const atPt = mathFontAtPt(family, fontId, style, baseAtPt);
       return computerModernTexMetricProvider.resolveFont({ fontId, atPt });
@@ -212,19 +213,19 @@ function mathFontAtPt(
   family: TexMathFontFamily,
   fontId: DefaultComputerModernMathFont,
   style: TexMathStyle,
-  baseAtPt: number
-): number {
+  baseAtPt: TexLength
+): TexLength {
   if (family === "extension" && fontId === "cmex10") {
-    return baseAtPt;
+    return texLength(baseAtPt);
   }
-  return baseAtPt * mathStyleScale(style);
+  return texLength(baseAtPt * mathStyleScale(style));
 }
 
 function createLuaLatexDefaultMathParameters(
   metricProvider: TexMetricProvider
 ): TexMathParameters {
-  const symbols = metricProvider.resolveFont({ fontId: "cmsy10", atPt: 10 });
-  const extension = metricProvider.resolveFont({ fontId: "cmex10", atPt: 10 });
+  const symbols = metricProvider.resolveFont({ fontId: "cmsy10", atPt: texLength(10) });
+  const extension = metricProvider.resolveFont({ fontId: "cmex10", atPt: texLength(10) });
   return {
     axisHeight: requiredFontdimen(symbols, "axisheight"),
     num1: requiredFontdimen(symbols, "num1"),

@@ -1,3 +1,5 @@
+import { texLength, type TexLength } from "./coordinates.js";
+
 export function texDimensionUnitFactor(unit: string): number | null {
   switch (unit) {
     case "pt":
@@ -23,12 +25,14 @@ export function texDimensionUnitFactor(unit: string): number | null {
   }
 }
 
-export function parseTexDimensionText(text: string): number | null {
+export function parseTexDimensionText(text: string): TexLength | null {
   const match = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([A-Za-z]{2})\s*$/.exec(text);
   if (!match) {
     return null;
   }
   const number = Number(match[1]);
   const factor = texDimensionUnitFactor(match[2] ?? "");
-  return Number.isFinite(number) && factor !== null ? number * factor : null;
+  return Number.isFinite(number) && factor !== null
+    ? texLength(number * factor)
+    : null;
 }

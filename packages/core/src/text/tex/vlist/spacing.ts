@@ -1,6 +1,12 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { roundTexPt } from "../fonts/units.js";
-import { texVListLocalX } from "../coordinates.js";
+import {
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texVListY,
+  type TexLength,
+} from "../coordinates.js";
 import {
   parseSimpleTexInlineNodes,
   type SimpleTexInlineNode,
@@ -68,11 +74,11 @@ const latexArticleDisplaySkipsPt = {
   },
 } as const;
 
-const latexNormalLineSkipPt = 1;
-const latexAmsmathAlignTopCorrectionPt = -3;
-const latexAmsmathOpenBaselineSkipPt = 15;
-const latexAmsmathOpenLineSkipPt = 4;
-const latexAmsmathOpenLineSkipLimitPt = 3;
+const latexNormalLineSkipPt = texLength(1);
+const latexAmsmathAlignTopCorrectionPt = texLength(-3);
+const latexAmsmathOpenBaselineSkipPt = texLength(15);
+const latexAmsmathOpenLineSkipPt = texLength(4);
+const latexAmsmathOpenLineSkipLimitPt = texLength(3);
 
 type DisplayAlignmentGluePurpose =
   | "align-top-correction"
@@ -83,10 +89,10 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
   readonly segmentIndex: number;
-  readonly size: number;
-  readonly quoteSize: number;
-  readonly listSize: number;
-  readonly trivlistSize?: number;
+  readonly size: TexLength;
+  readonly quoteSize: TexLength;
+  readonly listSize: TexLength;
+  readonly trivlistSize?: TexLength;
 }
 
 export function planSimpleTexParagraphVerticalSkips(
@@ -181,7 +187,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const exitsTrivlistScope =
       state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
     const listVerticalSkipBefore = followsDisplay
-      ? 0
+      ? texLength(0)
       : texArticleListVerticalSkipBefore(
           state,
           state.previousEmittedListContext,
@@ -192,7 +198,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           font
         );
     const quoteVerticalSkipBefore = followsDisplay
-      ? 0
+      ? texLength(0)
       : texArticleQuoteVerticalSkipBefore(
           state,
           state.previousEmittedQuoteDepth,
@@ -204,7 +210,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           font
         );
     const trivlistVerticalSkipBefore = followsDisplay
-      ? 0
+      ? texLength(0)
       : texArticleTrivlistVerticalSkipBefore(
           state,
           state.previousEmittedTrivlistScopes,
@@ -222,7 +228,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       ...(trivlistVerticalSkipBefore > 0
         ? { trivlistSize: trivlistVerticalSkipBefore }
         : {}),
-      size: quoteVerticalSkipBefore + listVerticalSkipBefore + trivlistVerticalSkipBefore,
+      size: texLength(
+        quoteVerticalSkipBefore + listVerticalSkipBefore + trivlistVerticalSkipBefore
+      ),
     });
 
     state.previousEmittedQuoteDepth = scope.quoteDepth;
@@ -405,7 +413,7 @@ function paragraphBoundaryGlueItems(
       size: skip.listSize,
     });
   }
-  if ((skip.trivlistSize ?? 0) > 0) {
+  if ((skip.trivlistSize ?? texLength(0)) > 0) {
     glues.push({
       kind: "glue",
       ...shared,
@@ -413,7 +421,7 @@ function paragraphBoundaryGlueItems(
         kind: "trivlist-boundary",
         beforeBlockIndex: item.paragraph.blockIndex,
       },
-      size: skip.trivlistSize ?? 0,
+      size: skip.trivlistSize ?? texLength(0),
     });
   }
   return glues;
@@ -480,9 +488,9 @@ function displayMathBoundaryGlueItem(
       kind: "display-math-boundary",
       side,
     },
-    size: skip.size,
-    stretch: skip.stretch,
-    shrink: skip.shrink,
+    size: texLength(skip.size),
+    stretch: texLength(skip.stretch),
+    shrink: texLength(skip.shrink),
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
@@ -492,7 +500,7 @@ export function resolveDisplayMathVerticalGlueInVList(
   vlist: TexVListDocument,
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
   options: {
-    readonly lineHeight: number;
+    readonly lineHeight: TexLength;
   }
 ): TexVListDocument {
   const resolved = resolveDisplayMathVerticalGlueInItems(
@@ -511,7 +519,7 @@ function resolveDisplayMathVerticalGlueInItems(
   sourceItems: readonly TexVListItem[],
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
   options: {
-    readonly lineHeight: number;
+    readonly lineHeight: TexLength;
   },
   pathPrefix: readonly number[],
   state: {
@@ -723,7 +731,7 @@ function resolveDisplayMathVerticalGlueInItems(
         const previousDepth = previousParagraphMeasurement
           ? displayAlignmentPreviousDepth(previousParagraphMeasurement)
           : previousDisplayMaterialMetrics?.depth ??
-          0;
+          texLength(0);
         items.push({
           ...item,
           size: texOpenedInterlineGlueSize(previousDepth, nextRow.box.metrics.height),
@@ -782,7 +790,7 @@ function resolveDisplayMathVerticalGlueInItems(
       items.push({
         ...item,
         size: displayAlignmentIntertextLeadingSize(
-          previousDisplayMaterialMetrics?.depth ?? 0,
+          previousDisplayMaterialMetrics?.depth ?? texLength(0),
           nextParagraph
         ),
       });
@@ -853,7 +861,7 @@ function materialVBoxMetrics(
     [item],
     createMeasuredParagraphVListMeasurer(paragraphMeasurements),
     null,
-    0
+    texVListY(0)
   );
   return laidOut.positioned[0]?.metrics;
 }
@@ -890,7 +898,7 @@ function isExplicitVerticalSeparator(item: TexVListItem): boolean {
 function explicitVerticalPreviousDepth(
   previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined,
   previousDisplayMaterialMetrics: TexBoxMetrics | undefined
-): number | undefined {
+): TexLength | undefined {
   return previousParagraphMeasurement
     ? texParagraphLastLineDepth(previousParagraphMeasurement)
     : previousDisplayMaterialMetrics?.depth;
@@ -901,24 +909,24 @@ function displayAlignmentMaterialItems(
 ): readonly TexVListItem[] {
   const rows: TexVListItem[] = [];
   rows.push(displayAlignmentGlueItem(item, displayAlignmentTopCorrection(item), "align-top-correction"));
-  rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
-  rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
+  rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+  rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
   for (const row of item.alignment.rows) {
     if (row.rowIndex > 0) {
-      rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
-      rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
     }
     for (const intertext of item.alignment.intertexts?.filter((candidate) => candidate.beforeRowIndex === row.rowIndex) ?? []) {
       rows.push(displayAlignmentIntertextSkipItem(item, intertext, "below"));
       rows.push(displayAlignmentIntertextLeadingItem(item, intertext));
       rows.push(displayAlignmentIntertextParagraph(item, intertext));
       rows.push(displayAlignmentIntertextSkipItem(item, intertext, "above"));
-      rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
-      rows.push(displayAlignmentGlueItem(item, 0, "align-row-baseline"));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
     }
     rows.push(displayAlignmentRowHBox(item, row));
   }
-  rows.push(displayAlignmentGlueItem(item, 0, "align-structural"));
+  rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
   return rows;
 }
 
@@ -936,7 +944,7 @@ function displayAlignmentIntertextLeadingItem(
     origin: {
       kind: "display-alignment-intertext-leading",
     },
-    size: 0,
+    size: texLength(0),
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
@@ -959,9 +967,9 @@ function displayAlignmentIntertextSkipItem(
       kind: "display-alignment-intertext-skip",
       side,
     },
-    size: skip.size,
-    stretch: skip.stretch,
-    shrink: skip.shrink,
+    size: texLength(skip.size),
+    stretch: texLength(skip.stretch),
+    shrink: texLength(skip.shrink),
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
@@ -1052,11 +1060,11 @@ function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
 }
 
 function displayAlignmentIntertextLeadingSize(
-  previousDepth: number,
+  previousDepth: TexLength,
   paragraph: TexVListParagraphBoxMeasurement | undefined
-): number {
+): TexLength {
   if (!paragraph) {
-    return 0;
+    return texLength(0);
   }
   const vboxHeight = paragraph.lineIndices.length > 1
     ? paragraph.ruleLeadingAdvance
@@ -1066,13 +1074,13 @@ function displayAlignmentIntertextLeadingSize(
 
 function displayAlignmentPreviousDepth(
   paragraph: TexVListParagraphBoxMeasurement
-): number {
+): TexLength {
   return texParagraphLastLineDepth(paragraph);
 }
 
 function texParagraphLastLineDepth(
   paragraph: TexVListParagraphBoxMeasurement
-): number {
+): TexLength {
   if (paragraph.lastLineMetrics) {
     return paragraph.lastLineMetrics.depth;
   }
@@ -1083,19 +1091,19 @@ function texParagraphLastLineDepth(
   if (lastLine?.y === undefined) {
     return paragraph.ruleLeadingMetrics.depth;
   }
-  return Math.max(0, roundTexPt(
+  return texLength(Math.max(0, roundTexPt(
     paragraph.ruleLeadingAdvance - lastLine.y - paragraph.ruleLeadingMetrics.height
-  ));
+  )));
 }
 
 function texMaterialBoundaryPreviousDepth(
   paragraph: TexVListParagraphBoxMeasurement,
-  lineHeight: number
-): number {
-  return Math.max(
+  lineHeight: TexLength
+): TexLength {
+  return texLength(Math.max(
     texParagraphLastLineDepth(paragraph),
     lineHeight / 3
-  );
+  ));
 }
 
 function displayAlignmentPlainTextNodes(
@@ -1144,15 +1152,15 @@ function displayAlignmentIntertextRawText(parts: readonly TexMathTextPart[]): st
   ).join("");
 }
 
-function displayAlignmentTopCorrection(item: TexDisplayAlignmentItem): number {
+function displayAlignmentTopCorrection(item: TexDisplayAlignmentItem): TexLength {
   return item.delimiter === "multline" || item.delimiter === "multline-star"
-    ? 0
+    ? texLength(0)
     : latexAmsmathAlignTopCorrectionPt;
 }
 
 function displayAlignmentGlueItem(
   item: TexDisplayAlignmentItem,
-  size: number,
+  size: TexLength,
   purpose: DisplayAlignmentGluePurpose
 ): TexGlueItem {
   return {
@@ -1186,7 +1194,7 @@ function displayAlignmentRowHBox(
       delimiter: item.delimiter,
       rowIndex: row.rowIndex,
     },
-    x: texVListLocalX(row.x),
+    x: row.x,
     box: {
       metrics: {
         width: row.width,
@@ -1210,8 +1218,8 @@ function displayAlignmentRowHBox(
         ? [{
             kind: "tex-math-svg",
             svgBody: row.svgBody,
-            x: 0,
-            baseline: row.height,
+            x: texHBoxX(0),
+            baseline: texHBoxY(row.height),
           }]
         : [],
     },
@@ -1252,10 +1260,12 @@ function displayMathSkipVariant(
   previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined
 ): TexDisplayMathSkipVariant {
   const preDisplaySize = previousParagraphMeasurement?.lastLinePreDisplaySize ??
-    Number.NEGATIVE_INFINITY;
+    texLength(Number.NEGATIVE_INFINITY);
   // TeX.web chooses the normal skips when the centered display overlaps the
   // preceding line's pre-display size; otherwise it uses the short skips.
-  const displayLeftEdge = roundTexPt(Math.max(0, (item.targetWidth - item.box.width) / 2));
+  const displayLeftEdge = texLength(roundTexPt(
+    Math.max(0, (item.targetWidth - item.box.width) / 2)
+  ));
   return displayLeftEdge <= preDisplaySize ? "normal" : "short";
 }
 
@@ -1273,16 +1283,16 @@ function resolveDisplayMathBoundaryGlueItem(
       ...item.origin,
       variant,
     },
-    size: skip.size,
-    stretch: skip.stretch,
-    shrink: skip.shrink,
+    size: texLength(skip.size),
+    stretch: texLength(skip.stretch),
+    shrink: texLength(skip.shrink),
   };
 }
 
 function displayMathInterlineGlueItem(
   item: TexGlueItem,
   side: "above" | "below",
-  size: number
+  size: TexLength
 ): TexGlueItem {
   return {
     kind: "glue",
@@ -1300,7 +1310,7 @@ function displayMathInterlineGlueItem(
 
 function paragraphBoundaryInterlineGlueItem(
   item: TexGlueItem,
-  size: number
+  size: TexLength
 ): TexGlueItem {
   return {
     kind: "glue",
@@ -1330,7 +1340,7 @@ function paragraphBoundaryInterlineKind(
 
 function plainParagraphBoundaryInterlineGlueItem(
   item: TexParagraphItem | TexVBoxItem,
-  size: number
+  size: TexLength
 ): TexGlueItem {
   const scopePath = item.kind === "paragraph"
     ? texVBoxRolePathForParagraph(item.paragraph)
@@ -1351,7 +1361,7 @@ function plainParagraphBoundaryInterlineGlueItem(
 
 function plainVerticalInterlineGlueItem(
   item: TexGlueItem,
-  size: number
+  size: TexLength
 ): TexGlueItem {
   return {
     kind: "glue",
@@ -1394,19 +1404,21 @@ function isBoundaryTransparentHBox(item: TexVListItem): boolean {
 }
 
 function texInterlineGlueSize(
-  previousDepth: number,
-  nextHeight: number,
-  lineHeight: number
-): number {
-  const baselineGlue = roundTexPt(lineHeight - previousDepth - nextHeight);
+  previousDepth: TexLength,
+  nextHeight: TexLength,
+  lineHeight: TexLength
+): TexLength {
+  const baselineGlue = texLength(roundTexPt(lineHeight - previousDepth - nextHeight));
   return baselineGlue < 0 ? latexNormalLineSkipPt : baselineGlue;
 }
 
 function texOpenedInterlineGlueSize(
-  previousDepth: number,
-  nextHeight: number
-): number {
-  const baselineGlue = roundTexPt(latexAmsmathOpenBaselineSkipPt - previousDepth - nextHeight);
+  previousDepth: TexLength,
+  nextHeight: TexLength
+): TexLength {
+  const baselineGlue = texLength(roundTexPt(
+    latexAmsmathOpenBaselineSkipPt - previousDepth - nextHeight
+  ));
   return baselineGlue < latexAmsmathOpenLineSkipLimitPt
     ? latexAmsmathOpenLineSkipPt
     : baselineGlue;
@@ -1421,16 +1433,16 @@ function texArticleQuoteVerticalSkipBefore(
   startsListInVerticalMode: boolean,
   listTransitionActive = false,
   font: ResolvedTexFont
-): number {
+): TexLength {
   if (listTransitionActive) {
-    return 0;
+    return texLength(0);
   }
   if (previousQuoteDepth === quoteDepth) {
     if (quoteDepth <= 0) {
-      return 0;
+      return texLength(0);
     }
     return previousQuotationDepth > 0 && quotationDepth > 0
-      ? 0
+      ? texLength(0)
       : texEmSkip(articleQuoteSpacingEm.parsep, font);
   }
   if (quoteDepth > previousQuoteDepth) {
@@ -1455,7 +1467,7 @@ function texArticleQuoteVerticalSkipBefore(
       font
     );
   }
-  return 0;
+  return texLength(0);
 }
 
 function texArticleTrivlistVerticalSkipBefore(
@@ -1464,7 +1476,7 @@ function texArticleTrivlistVerticalSkipBefore(
   currentScopes: readonly TexTrivlistScopeRole[],
   startsListInVerticalMode: boolean,
   font: ResolvedTexFont
-): number {
+): TexLength {
   const commonPrefixLength = commonTrivlistScopePrefixLength(
     previousScopes,
     currentScopes
@@ -1473,7 +1485,7 @@ function texArticleTrivlistVerticalSkipBefore(
     commonPrefixLength === previousScopes.length &&
     commonPrefixLength === currentScopes.length
   ) {
-    return 0;
+    return texLength(0);
   }
   let size = texArticleTrivlistExitBoundarySkip(
     state,
@@ -1489,14 +1501,14 @@ function texArticleTrivlistVerticalSkipBefore(
     const usesPartopsep =
       index === 0 && commonPrefixLength === 0 && startsListInVerticalMode;
     state.trivlistPartopsepByScope.set(scope, usesPartopsep);
-    size = Math.max(
+    size = texLength(Math.max(
       size,
       texEmSkip(
         articleListSpacingEm.topsep +
           (usesPartopsep ? articleListSpacingEm.partopsep : 0),
         font
       )
-    );
+    ));
   }
   return size;
 }
@@ -1509,9 +1521,9 @@ function texArticleListVerticalSkipBefore(
   startsListInVerticalMode: boolean,
   exitsTrivlistScope: boolean,
   font: ResolvedTexFont
-): number {
+): TexLength {
   if (!previous && !current) {
-    return 0;
+    return texLength(0);
   }
   if (!hasPreviousEmittedParagraph && current) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
@@ -1528,7 +1540,7 @@ function texArticleListVerticalSkipBefore(
     return texArticleListExitBoundarySkip(state, previous.depth, 0, font);
   }
   if (!previous || !current) {
-    return 0;
+    return texLength(0);
   }
   if (current.depth > previous.depth) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
@@ -1542,7 +1554,7 @@ function texArticleListVerticalSkipBefore(
     current.labelDepth === previous.labelDepth &&
     current.itemIndex === previous.itemIndex
   ) {
-    return current.showLabel ? 0 : texArticleListParagraphSkip(current.depth, font);
+    return current.showLabel ? texLength(0) : texArticleListParagraphSkip(current.depth, font);
   }
   if (exitsTrivlistScope && current.depth === previous.depth) {
     return texArticleListItemSepSkip(current.depth, font);
@@ -1555,8 +1567,8 @@ function texArticleTrivlistExitBoundarySkip(
   previousScopes: readonly TexTrivlistScopeRole[],
   commonPrefixLength: number,
   font: ResolvedTexFont
-): number {
-  let size = 0;
+): TexLength {
+  let size = texLength(0);
   for (let index = previousScopes.length - 1; index >= commonPrefixLength; index -= 1) {
     const scope = previousScopes[index];
     if (!scope) {
@@ -1569,7 +1581,7 @@ function texArticleTrivlistExitBoundarySkip(
         (usesPartopsep ? articleListSpacingEm.partopsep : 0),
       font
     );
-    size = Math.max(size, depthSize);
+    size = texLength(Math.max(size, depthSize));
   }
   return size;
 }
@@ -1590,7 +1602,7 @@ function commonTrivlistScopePrefixLength(
 function texArticleInitialListSkip(
   startsListInVerticalMode: boolean,
   font: ResolvedTexFont
-): number {
+): TexLength {
   return texEmSkip(
     articleListSpacingEm.topsep +
       (startsListInVerticalMode ? articleListSpacingEm.partopsep : 0) +
@@ -1602,7 +1614,7 @@ function texArticleInitialListSkip(
 function texArticleOutsideListBoundarySkip(
   usesPartopsep: boolean,
   font: ResolvedTexFont
-): number {
+): TexLength {
   return texEmSkip(
     articleListSpacingEm.topsep +
       (usesPartopsep
@@ -1617,25 +1629,28 @@ function texArticleListExitBoundarySkip(
   previousDepth: number,
   currentDepth: number,
   font: ResolvedTexFont
-): number {
+): TexLength {
   if (currentDepth <= 0) {
-    let size = 0;
+    let size = texLength(0);
     for (let depth = previousDepth; depth > 0; depth -= 1) {
       const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
       state.listPartopsepByDepth.delete(depth);
-      size = Math.max(size, texArticleOutsideListBoundarySkip(usesPartopsep, font));
+      size = texLength(Math.max(
+        size,
+        texArticleOutsideListBoundarySkip(usesPartopsep, font)
+      ));
     }
     return size;
   }
 
-  let size = 0;
+  let size = texLength(0);
   for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
     const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
     state.listPartopsepByDepth.delete(depth);
     const depthSize = depth <= 1
       ? texArticleOutsideListBoundarySkip(usesPartopsep, font)
       : texArticleNestedListBoundarySkip(depth, depth - 1, font);
-    size = Math.max(size, depthSize);
+    size = texLength(Math.max(size, depthSize));
   }
   return size;
 }
@@ -1644,7 +1659,7 @@ function texArticleNestedListBoundarySkip(
   previousDepth: number,
   currentDepth: number,
   font: ResolvedTexFont
-): number {
+): TexLength {
   return texEmSkip(
     texDepthIndexedEm(
       articleListSpacingEm.nestedTopsepByDepth,
@@ -1654,7 +1669,7 @@ function texArticleNestedListBoundarySkip(
   );
 }
 
-function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): number {
+function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): TexLength {
   return texEmSkip(
     texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth) +
       texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth),
@@ -1662,11 +1677,11 @@ function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): n
   );
 }
 
-function texArticleListItemSepSkip(depth: number, font: ResolvedTexFont): number {
+function texArticleListItemSepSkip(depth: number, font: ResolvedTexFont): TexLength {
   return texEmSkip(texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth), font);
 }
 
-function texArticleListParagraphSkip(depth: number, font: ResolvedTexFont): number {
+function texArticleListParagraphSkip(depth: number, font: ResolvedTexFont): TexLength {
   return texEmSkip(texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth), font);
 }
 
@@ -1674,6 +1689,6 @@ function texDepthIndexedEm(values: readonly number[], depth: number): number {
   return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
 }
 
-function texEmSkip(value: number, font: ResolvedTexFont): number {
-  return roundTexPt(value * font.atPt);
+function texEmSkip(value: number, font: ResolvedTexFont): TexLength {
+  return texLength(roundTexPt(value * font.atPt));
 }

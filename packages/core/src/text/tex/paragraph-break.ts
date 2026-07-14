@@ -18,6 +18,7 @@ import type {
 } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import type { TexParagraphBreakResult } from "./vlist/index.js";
+import { texLength, type TexLength } from "./coordinates.js";
 
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;
@@ -29,8 +30,8 @@ export type TexParagraphRightskipStretchMode =
   | "ragged-right-infinite-center-zero";
 
 export interface TexParagraphBreakScopePolicy {
-  readonly leftMarginWidth: number;
-  readonly rightMarginWidth: number;
+  readonly leftMarginWidth: TexLength;
+  readonly rightMarginWidth: TexLength;
   readonly automaticHyphenPenalty?: number;
   readonly finalHyphenDemerits?: number;
   readonly allowParagraphIndent: boolean;
@@ -41,8 +42,8 @@ export interface TexParagraphBreakScopePolicy {
 }
 
 export const DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY: TexParagraphBreakScopePolicy = {
-  leftMarginWidth: 0,
-  rightMarginWidth: 0,
+  leftMarginWidth: texLength(0),
+  rightMarginWidth: texLength(0),
   allowParagraphIndent: true,
   allowForcedBreakIndent: true,
   forceParfillStretch: false,
@@ -51,13 +52,13 @@ export const DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY: TexParagraphBreakScopePol
 };
 
 export interface TexParagraphBreakOptions {
-  readonly width: number;
+  readonly width: TexLength;
   readonly font?: ResolvedTexFont;
   readonly metricProvider?: TexMetricProvider;
   readonly tolerance?: number;
   readonly pretolerance?: number;
-  readonly parindent?: number;
-  readonly rightskipStretch?: number;
+  readonly parindent?: TexLength;
+  readonly rightskipStretch?: TexLength;
   readonly tikzTextWidthNode?: boolean;
   readonly hyphenator?: Hyphenator | null;
   readonly mathBoxProvider?: TexMathBoxProvider;
@@ -75,8 +76,8 @@ export function breakTexParagraphRuns(params: {
   readonly inheritedAlignment: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly noIndent: boolean;
-  readonly firstLineIndentWidth?: number;
-  readonly forcedBreakIndentWidth?: number;
+  readonly firstLineIndentWidth?: TexLength;
+  readonly forcedBreakIndentWidth?: TexLength;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
 }): TexParagraphBreakResult | null {
   const pass1Model = runsToItems(params.runs, params.measurement, {
@@ -152,7 +153,7 @@ export function breakTexParagraphRuns(params: {
     const unindentedPass = breakWithDp(selectedModel, params.options.width, {
       ...dpOptions,
       ...selectedDpPassOptions,
-      forcedBreakIndentWidth: 0,
+      forcedBreakIndentWidth: texLength(0),
     });
     if (unindentedPass.canProceed && unindentedPass.lines.length > 0) {
       lines = mergeForcedBreakIndentedSuffixLines(
@@ -165,7 +166,12 @@ export function breakTexParagraphRuns(params: {
   return {
     lines,
     runs: params.runs,
-    runWidths: selectedModel.runWidths,
+    runWidths: new Map(
+      [...selectedModel.runWidths].map(([runIndex, width]) => [
+        runIndex,
+        texLength(width),
+      ])
+    ),
     shapedRuns: params.shapedRuns,
     errors: [...selectedModel.errors, ...selectedPass.errors],
     linebreakingMode: selectedPass.mode,
@@ -202,8 +208,8 @@ interface TexParagraphDpOptionParams {
   readonly options: TexParagraphBreakOptions;
   readonly alignment: TexParagraphAlignment;
   readonly noIndent: boolean;
-  readonly firstLineIndentWidth?: number;
-  readonly forcedBreakIndentWidth?: number;
+  readonly firstLineIndentWidth?: TexLength;
+  readonly forcedBreakIndentWidth?: TexLength;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly inheritedAlignment?: TexParagraphAlignment;
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
@@ -227,14 +233,14 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
     inheritedAlignment === "ragged-right" || inheritedAlignment === "ragged-left";
   const latexDeclaration = alignmentProfile === "latex-declaration";
   const latexQuote = alignmentProfile === "latex-quote";
-  const skipStretch = 2 * (
+  const skipStretch = texLength(2 * (
     options.font?.atPt ??
     options.metricProvider?.resolveFont().atPt ??
     computerModernTexMetricProvider.resolveFont().atPt
-  );
+  ));
   const inheritedParfillStretch =
     inheritedAlignment === undefined
-      ? Number.POSITIVE_INFINITY
+      ? texLength(Number.POSITIVE_INFINITY)
       : texParfillStretchForAlignment(inheritedAlignment, inheritedAlignmentProfile);
   return {
     linepenalty: englishDefaults.linepenalty,
@@ -252,10 +258,10 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
         scopePolicy,
         skipStretch
       ),
-    leftskipShrink: 0,
+    leftskipShrink: texLength(0),
     rightskipWidth: scopePolicy.rightMarginWidth,
     rightskipStretch: Number.isFinite(options.rightskipStretch)
-      ? Math.max(0, options.rightskipStretch ?? 0)
+      ? texLength(Math.max(0, options.rightskipStretch ?? texLength(0)))
       : texDeclarationRightskipStretch(
         alignment,
         latexDeclaration,
@@ -263,7 +269,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
         scopePolicy,
         skipStretch
       ),
-    rightskipShrink: 0,
+    rightskipShrink: texLength(0),
     firstLineIndentWidth:
       Number.isFinite(firstLineIndentWidth)
         ? firstLineIndentWidth
@@ -273,7 +279,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
             options.parindent &&
             options.parindent > 0
           ? options.parindent
-          : 0,
+          : texLength(0),
     forcedBreakIndentWidth:
       Number.isFinite(forcedBreakIndentWidth) && scopePolicy.allowForcedBreakIndent
         ? forcedBreakIndentWidth
@@ -286,10 +292,10 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
               options.parindent &&
               options.parindent > 0
             ? options.parindent
-            : 0,
+            : texLength(0),
     forcedBreakUsesParfill: true,
     forcedBreakTerminalDemerits: true,
-    parfillskipWidth: 0,
+    parfillskipWidth: texLength(0),
     parfillskipStretch: texParfillStretchForAlignment(
       alignment,
       alignmentProfile,
@@ -297,7 +303,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       inheritedParfillStretch,
       scopePolicy
     ),
-    parfillskipShrink: 0,
+    parfillskipShrink: texLength(0),
     preventOverflow: false,
   };
 }
@@ -306,19 +312,21 @@ function texDeclarationLeftskipStretch(
   alignment: TexParagraphAlignment,
   latexDeclaration: boolean,
   scopePolicy: TexParagraphBreakScopePolicy,
-  fallbackStretch: number
-): number {
+  fallbackStretch: TexLength
+): TexLength {
   if (
     scopePolicy.suppressRaggedLeftCenterLeftskipStretch &&
     !latexDeclaration &&
     (alignment === "ragged-left" || alignment === "center")
   ) {
-    return 0;
+    return texLength(0);
   }
   if (latexDeclaration && (alignment === "ragged-left" || alignment === "center")) {
-    return Number.POSITIVE_INFINITY;
+    return texLength(Number.POSITIVE_INFINITY);
   }
-  return alignment === "ragged-left" || alignment === "center" ? fallbackStretch : 0;
+  return alignment === "ragged-left" || alignment === "center"
+    ? fallbackStretch
+    : texLength(0);
 }
 
 function texDeclarationRightskipStretch(
@@ -326,52 +334,56 @@ function texDeclarationRightskipStretch(
   latexDeclaration: boolean,
   latexQuote: boolean,
   scopePolicy: TexParagraphBreakScopePolicy,
-  fallbackStretch: number
-): number {
+  fallbackStretch: TexLength
+): TexLength {
   if (scopePolicy.rightskipStretchMode === "ragged-right-infinite-otherwise-zero") {
-    return alignment === "ragged-right" ? Number.POSITIVE_INFINITY : 0;
+    return alignment === "ragged-right"
+      ? texLength(Number.POSITIVE_INFINITY)
+      : texLength(0);
   }
   if (scopePolicy.rightskipStretchMode === "ragged-right-infinite-center-zero") {
     if (alignment === "ragged-right") {
-      return Number.POSITIVE_INFINITY;
+      return texLength(Number.POSITIVE_INFINITY);
     }
     if (alignment === "center" && !latexDeclaration) {
-      return 0;
+      return texLength(0);
     }
   }
   if (
     (latexDeclaration || latexQuote) &&
     (alignment === "ragged-right" || alignment === "center")
   ) {
-    return Number.POSITIVE_INFINITY;
+    return texLength(Number.POSITIVE_INFINITY);
   }
-  return alignment === "ragged-right" || alignment === "center" ? fallbackStretch : 0;
+  return alignment === "ragged-right" || alignment === "center"
+    ? fallbackStretch
+    : texLength(0);
 }
 
 function texParfillStretchForAlignment(
   alignment: TexParagraphAlignment,
   alignmentProfile?: TexAlignmentProfile,
   tikzTextWidthNode = false,
-  inheritedParfillStretch = Number.POSITIVE_INFINITY,
+  inheritedParfillStretch: TexLength = texLength(Number.POSITIVE_INFINITY),
   scopePolicy: TexParagraphBreakScopePolicy = DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY
-): number {
+): TexLength {
   if (alignmentProfile === "latex-declaration") {
     if (alignment === "center" || alignment === "ragged-left") {
-      return 0;
+      return texLength(0);
     }
     if (alignment === "ragged-right") {
       if (tikzTextWidthNode) {
-        return Number.POSITIVE_INFINITY;
+        return texLength(Number.POSITIVE_INFINITY);
       }
       return inheritedParfillStretch;
     }
   }
   if (scopePolicy.forceParfillStretch) {
-    return Number.POSITIVE_INFINITY;
+    return texLength(Number.POSITIVE_INFINITY);
   }
   return alignment === "ragged-right" || alignment === "justified"
-    ? Number.POSITIVE_INFINITY
-    : 0;
+    ? texLength(Number.POSITIVE_INFINITY)
+    : texLength(0);
 }
 
 function texParagraphTolerance(): number {
@@ -382,7 +394,7 @@ function texParagraphTolerance(): number {
   return LATEX_PARBOX_SLOPPY_TOLERANCE;
 }
 
-function texParagraphEmergencyStretch(options: TexParagraphBreakOptions): number {
+function texParagraphEmergencyStretch(options: TexParagraphBreakOptions): TexLength {
   const font = options.font ?? options.metricProvider?.resolveFont() ?? computerModernTexMetricProvider.resolveFont();
-  return LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM * font.atPt;
+  return texLength(LATEX_PARBOX_SLOPPY_EMERGENCY_STRETCH_EM * font.atPt);
 }

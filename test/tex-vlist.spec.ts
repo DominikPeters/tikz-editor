@@ -3,14 +3,29 @@ import {
   analyzeSimpleTexParagraph,
   computerModernTexMetricProvider,
   createTexDerivedInlineMathBoxProvider,
-  createSimpleTexLayoutDocumentIr,
-  layoutSimpleTexParagraph,
+  createSimpleTexLayoutDocumentIr as createSimpleTexLayoutDocumentIrCore,
+  layoutSimpleTexParagraph as layoutSimpleTexParagraphCore,
   luaLatexDefaultTextFontProfile,
   parseSimpleTexParagraphIr,
+  texLength,
   texVListX,
 } from "../packages/core/src/text/tex/index.js";
+import type {
+  TexHBoxOffsetX,
+  TexHBoxOffsetY,
+  TexHBoxX,
+  TexHBoxY,
+  TexLength,
+  TexLineLocalX,
+  TexLineX,
+  TexMuLength,
+  TexVListLocalX,
+  TexVListLocalY,
+  TexVListX,
+  TexVListY,
+} from "../packages/core/src/text/tex/coordinates.js";
 import {
-  simpleTexInlineNodesToLayoutItems,
+  simpleTexInlineNodesToLayoutItems as simpleTexInlineNodesToLayoutItemsCore,
 } from "../packages/core/src/text/tex/layout-inline-items.js";
 import type { NodeTextGraphicsResolver } from "../packages/core/src/text/types.js";
 import { texInterwordGlueForSpaceFactor } from "../packages/core/src/text/tex/space-glue.js";
@@ -18,38 +33,186 @@ import {
   addParagraphVerticalGlueToVList,
   attachTexHBoxesBeforeVListParagraphs,
   breakSimpleTexLayoutDocumentParagraphs,
-  computeTexVListNaturalTotalHeight,
+  computeTexVListNaturalTotalHeight as computeTexVListNaturalTotalHeightCore,
   findPositionedTexVListItemByPath,
   flattenPositionedTexVListItems,
   getTexVListLayoutFromOutputJax,
   getTexVListLayoutsFromOutputJax,
   groupSimpleTexVListScopes,
-  layoutTexVListItems,
-  layoutTexVListFromBrokenParagraphs,
-  layoutTexVListFromCombinedParagraphReport,
-  layoutTexVListFromHorizontalParagraphs,
-  layoutTexVListFromMeasuredParagraphs,
-  lowerSimpleTexBlockItemsToVList,
-  lowerSimpleTexBlocksToVList,
+  layoutTexVListItems as layoutTexVListItemsCore,
+  layoutTexVListFromBrokenParagraphs as layoutTexVListFromBrokenParagraphsCore,
+  layoutTexVListFromCombinedParagraphReport as layoutTexVListFromCombinedParagraphReportCore,
+  layoutTexVListFromHorizontalParagraphs as layoutTexVListFromHorizontalParagraphsCore,
+  layoutTexVListFromMeasuredParagraphs as layoutTexVListFromMeasuredParagraphsCore,
+  lowerSimpleTexBlockItemsToVList as lowerSimpleTexBlockItemsToVListCore,
+  lowerSimpleTexBlocksToVList as lowerSimpleTexBlocksToVListCore,
   materializeDisplayMathVerticalGlueInVList,
   materializeParagraphVerticalGlueInVList,
   normalizeSimpleTexVList,
   planSimpleTexParagraphVerticalSkips,
   prepareTexLayoutParagraphsFromVList,
-  prepareSimpleTexLayoutDocument,
+  prepareSimpleTexLayoutDocument as prepareSimpleTexLayoutDocumentCore,
   prepareSimpleTexVList,
   registerTexVListLayoutsOnOutputJax,
   texListItemParagraphAttachments,
-  texVListBoxLayoutReport,
+  texVListBoxLayoutReport as texVListBoxLayoutReportCore,
   texParagraphScopeContext,
-  texVListGlueSetForTargetHeight,
+  texVListGlueSetForTargetHeight as texVListGlueSetForTargetHeightCore,
   texVListParagraphItems,
   combineTexBrokenLayoutParagraphs,
   validateTexVListParagraphMeasurements,
   type TexVListParagraphBoxMeasurement,
-  type TexVListItemMeasurer,
+  type TexVListLayout,
+  type TexVListItemMeasurer as CoreTexVListItemMeasurer,
   type TexVListItem,
 } from "../packages/core/src/text/tex/vlist/index.js";
+
+type TexFixtureCoordinate =
+  | TexLength
+  | TexVListX
+  | TexVListLocalX
+  | TexVListY
+  | TexVListLocalY
+  | TexLineX
+  | TexLineLocalX
+  | TexHBoxX
+  | TexHBoxY
+  | TexHBoxOffsetX
+  | TexHBoxOffsetY
+  | TexMuLength;
+
+type RawTexFixture<T> = T extends TexFixtureCoordinate
+  ? number
+  : T extends (...args: infer TArgs) => infer TResult
+    ? (...args: TArgs) => RawTexFixture<TResult>
+  : T extends readonly (infer TItem)[]
+    ? readonly RawTexFixture<TItem>[]
+    : T extends object
+      ? { [TKey in keyof T]: RawTexFixture<T[TKey]> }
+      : T;
+
+type TexVListItemMeasurer = RawTexFixture<CoreTexVListItemMeasurer>;
+
+/** Brands literal-only test data at the fixture boundary. */
+function texFixture<T>(value: RawTexFixture<T>): T {
+  return value as unknown as T;
+}
+
+function createSimpleTexLayoutDocumentIr(
+  ...args: RawTexFixture<Parameters<typeof createSimpleTexLayoutDocumentIrCore>>
+) {
+  return createSimpleTexLayoutDocumentIrCore(
+    ...texFixture<Parameters<typeof createSimpleTexLayoutDocumentIrCore>>(args)
+  );
+}
+
+function layoutSimpleTexParagraph(
+  ...args: RawTexFixture<Parameters<typeof layoutSimpleTexParagraphCore>>
+) {
+  return layoutSimpleTexParagraphCore(
+    ...texFixture<Parameters<typeof layoutSimpleTexParagraphCore>>(args)
+  );
+}
+
+function simpleTexInlineNodesToLayoutItems(
+  ...args: RawTexFixture<Parameters<typeof simpleTexInlineNodesToLayoutItemsCore>>
+) {
+  return simpleTexInlineNodesToLayoutItemsCore(
+    ...texFixture<Parameters<typeof simpleTexInlineNodesToLayoutItemsCore>>(args)
+  );
+}
+
+function lowerSimpleTexBlockItemsToVList(
+  ...args: RawTexFixture<Parameters<typeof lowerSimpleTexBlockItemsToVListCore>>
+) {
+  return lowerSimpleTexBlockItemsToVListCore(
+    ...texFixture<Parameters<typeof lowerSimpleTexBlockItemsToVListCore>>(args)
+  );
+}
+
+function lowerSimpleTexBlocksToVList(
+  ...args: RawTexFixture<Parameters<typeof lowerSimpleTexBlocksToVListCore>>
+) {
+  return lowerSimpleTexBlocksToVListCore(
+    ...texFixture<Parameters<typeof lowerSimpleTexBlocksToVListCore>>(args)
+  );
+}
+
+function computeTexVListNaturalTotalHeight(
+  ...args: RawTexFixture<Parameters<typeof computeTexVListNaturalTotalHeightCore>>
+) {
+  return computeTexVListNaturalTotalHeightCore(
+    ...texFixture<Parameters<typeof computeTexVListNaturalTotalHeightCore>>(args)
+  );
+}
+
+function layoutTexVListItems(
+  ...args: RawTexFixture<Parameters<typeof layoutTexVListItemsCore>>
+) {
+  return layoutTexVListItemsCore(
+    ...texFixture<Parameters<typeof layoutTexVListItemsCore>>(args)
+  );
+}
+
+function prepareSimpleTexLayoutDocument(
+  ...args: RawTexFixture<Parameters<typeof prepareSimpleTexLayoutDocumentCore>>
+) {
+  return prepareSimpleTexLayoutDocumentCore(
+    ...texFixture<Parameters<typeof prepareSimpleTexLayoutDocumentCore>>(args)
+  );
+}
+
+function texVListBoxLayoutReport(
+  ...args: RawTexFixture<Parameters<typeof texVListBoxLayoutReportCore>>
+) {
+  return texVListBoxLayoutReportCore(
+    ...texFixture<Parameters<typeof texVListBoxLayoutReportCore>>(args)
+  );
+}
+
+function texVListGlueSetForTargetHeight(
+  ...args: RawTexFixture<Parameters<typeof texVListGlueSetForTargetHeightCore>>
+) {
+  return texVListGlueSetForTargetHeightCore(
+    ...texFixture<Parameters<typeof texVListGlueSetForTargetHeightCore>>(args)
+  );
+}
+
+function layoutTexVListFromBrokenParagraphs(
+  ...args: RawTexFixture<Parameters<typeof layoutTexVListFromBrokenParagraphsCore>>
+) {
+  return layoutTexVListFromBrokenParagraphsCore(
+    ...texFixture<Parameters<typeof layoutTexVListFromBrokenParagraphsCore>>(args)
+  );
+}
+
+function layoutTexVListFromCombinedParagraphReport(
+  ...args: RawTexFixture<Parameters<typeof layoutTexVListFromCombinedParagraphReportCore>>
+) {
+  return layoutTexVListFromCombinedParagraphReportCore(
+    ...texFixture<Parameters<typeof layoutTexVListFromCombinedParagraphReportCore>>(args)
+  );
+}
+
+function layoutTexVListFromMeasuredParagraphs(
+  document: RawTexFixture<Parameters<typeof layoutTexVListFromMeasuredParagraphsCore>[0]>,
+  options: RawTexFixture<Parameters<typeof layoutTexVListFromMeasuredParagraphsCore>[1]>
+) {
+  return layoutTexVListFromMeasuredParagraphsCore(
+    texFixture<Parameters<typeof layoutTexVListFromMeasuredParagraphsCore>[0]>(document),
+    texFixture<Parameters<typeof layoutTexVListFromMeasuredParagraphsCore>[1]>(options)
+  );
+}
+
+function layoutTexVListFromHorizontalParagraphs(
+  document: RawTexFixture<Parameters<typeof layoutTexVListFromHorizontalParagraphsCore>[0]>,
+  options: RawTexFixture<Parameters<typeof layoutTexVListFromHorizontalParagraphsCore>[1]>
+) {
+  return layoutTexVListFromHorizontalParagraphsCore(
+    texFixture<Parameters<typeof layoutTexVListFromHorizontalParagraphsCore>[0]>(document),
+    texFixture<Parameters<typeof layoutTexVListFromHorizontalParagraphsCore>[1]>(options)
+  );
+}
 
 describe("TeX vlist lowering", () => {
   it("lowers parsed paragraph blocks into V0 vlist paragraph items", () => {
@@ -1109,7 +1272,7 @@ describe("TeX vlist lowering", () => {
     );
     const font = luaLatexDefaultTextFontProfile.resolveTextFont(
       luaLatexDefaultTextFontProfile.defaultFontState,
-      10,
+      texLength(10),
       computerModernTexMetricProvider
     );
     const spaceWidth = texInterwordGlueForSpaceFactor(font, 1000, "font").width;
@@ -2243,7 +2406,7 @@ describe("TeX vlist scopes", () => {
       layoutIr: preparation,
       font,
       metricProvider: computerModernTexMetricProvider,
-      options: { width: 90 },
+      options: { width: texLength(90) },
     });
 
     expect(result.status).toBe("broken");
@@ -2328,7 +2491,7 @@ describe("TeX vlist scopes", () => {
       lowerSimpleTexBlocksToVList(parsed.blocks),
       font
     );
-    const label = {
+    const label = texFixture<Extract<TexVListItem, { kind: "hbox" }>>({
       kind: "hbox",
       role: {
         kind: "list-label",
@@ -2344,7 +2507,7 @@ describe("TeX vlist scopes", () => {
         metrics: { width: 5, height: 7, depth: 2 },
         renderItems: [],
       },
-    } as const;
+    });
 
     const attached = attachTexHBoxesBeforeVListParagraphs(
       prepared.normalized,
@@ -2370,12 +2533,12 @@ describe("TeX vlist spacing", () => {
     const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta \par Gamma`);
     const vlist = addParagraphVerticalGlueToVList(
       lowerSimpleTexBlocksToVList(parsed.blocks),
-      [
+      texFixture<Parameters<typeof addParagraphVerticalGlueToVList>[1]>([
         { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
         { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
         { blockIndex: 1, vlistPath: [1], segmentIndex: 1, quoteSize: 99, listSize: 0, size: 99 },
         { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 0, listSize: 4, size: 4 },
-      ]
+      ])
     );
 
     expect(vlist.items.map((item) =>
@@ -2924,7 +3087,7 @@ describe("TeX vlist layout", () => {
     if (!paragraph || paragraph.kind !== "paragraph") {
       throw new Error("expected paragraph vlist item");
     }
-    const items: readonly TexVListItem[] = [
+    const items = texFixture<readonly TexVListItem[]>([
       paragraph,
       {
         kind: "glue",
@@ -2938,7 +3101,7 @@ describe("TeX vlist layout", () => {
         height: 2,
         depth: 1,
       },
-    ];
+    ]);
     const measureItem: TexVListItemMeasurer = (item, cursor) =>
       item.kind === "paragraph"
         ? {
@@ -3031,7 +3194,9 @@ describe("TeX vlist layout", () => {
     if (!paragraph || paragraph.kind !== "paragraph") {
       throw new Error("expected paragraph vlist item");
     }
-    const document = {
+    const document = texFixture<Parameters<
+      typeof layoutTexVListFromMeasuredParagraphsCore
+    >[0]>({
       kind: "vlist",
       items: [
         {
@@ -3043,10 +3208,7 @@ describe("TeX vlist layout", () => {
           items: [paragraph],
         },
       ],
-    } satisfies {
-      readonly kind: "vlist";
-      readonly items: readonly TexVListItem[];
-    };
+    });
 
     const layout = layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
@@ -3127,7 +3289,9 @@ describe("TeX vlist layout", () => {
     if (!paragraph || paragraph.kind !== "paragraph") {
       throw new Error("expected paragraph vlist item");
     }
-    const document = {
+    const document = texFixture<Parameters<
+      typeof layoutTexVListFromMeasuredParagraphsCore
+    >[0]>({
       kind: "vlist",
       items: [
         paragraph,
@@ -3146,10 +3310,7 @@ describe("TeX vlist layout", () => {
           },
         },
       ],
-    } satisfies {
-      readonly kind: "vlist";
-      readonly items: readonly TexVListItem[];
-    };
+    });
 
     const layout = layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
@@ -3351,7 +3512,7 @@ describe("TeX vlist layout", () => {
   });
 
   it("keeps parent vlist glue setting out of nested vboxes", () => {
-    const items: readonly TexVListItem[] = [
+    const items = texFixture<readonly TexVListItem[]>([
       {
         kind: "glue",
         size: 2,
@@ -3375,7 +3536,7 @@ describe("TeX vlist layout", () => {
           },
         ],
       },
-    ];
+    ]);
 
     const naturalHeight = computeTexVListNaturalTotalHeight(items, () => null);
     const glueSet = texVListGlueSetForTargetHeight(items, naturalHeight, 18);
@@ -3422,7 +3583,7 @@ describe("TeX vlist layout", () => {
   });
 
   it("sets local glue inside explicit-height vboxes", () => {
-    const items: readonly TexVListItem[] = [
+    const items = texFixture<readonly TexVListItem[]>([
       {
         kind: "vbox",
         height: 20,
@@ -3453,7 +3614,7 @@ describe("TeX vlist layout", () => {
         stretch: 99,
         stretchOrder: "normal",
       },
-    ];
+    ]);
 
     const laidOut = layoutTexVListItems(items, () => null, null, 0);
     const nested = laidOut.positioned[0];
@@ -3477,7 +3638,7 @@ describe("TeX vlist layout", () => {
   });
 
   it("reports local baselines for nested explicit-height vboxes", () => {
-    const items: readonly TexVListItem[] = [
+    const items = texFixture<readonly TexVListItem[]>([
       {
         kind: "vbox",
         height: 10,
@@ -3491,7 +3652,7 @@ describe("TeX vlist layout", () => {
           },
         ],
       },
-    ];
+    ]);
 
     const laidOut = layoutTexVListItems(items, () => null, null, 0);
     const vbox = laidOut.positioned[0];
@@ -3518,7 +3679,7 @@ describe("TeX vlist layout", () => {
   });
 
   it("aligns natural children inside explicit-height vboxes without stretch glue", () => {
-    const items: readonly TexVListItem[] = [
+    const items = texFixture<readonly TexVListItem[]>([
       {
         kind: "vbox",
         height: 10,
@@ -3532,7 +3693,7 @@ describe("TeX vlist layout", () => {
           },
         ],
       },
-    ];
+    ]);
 
     const laidOut = layoutTexVListItems(items, () => null, null, 0);
     const nested = laidOut.positioned[0];
@@ -3651,7 +3812,7 @@ describe("TeX vlist report assembly", () => {
     const rawVList = lowerSimpleTexBlocksToVList(parsed.blocks);
     const font = computerModernTexMetricProvider.resolveFont({
       fontId: "cmr10",
-      atPt: 20,
+      atPt: texLength(20),
     });
     const document = prepareSimpleTexVList(rawVList, font).normalized;
     const layout = layoutTexVListFromHorizontalParagraphs(document, {
@@ -3725,7 +3886,7 @@ describe("TeX vlist report assembly", () => {
       blockIndex: number,
       lineIndex = blockIndex,
       vlistPath: readonly number[] = [blockIndex]
-    ) => ({
+    ): TexVListParagraphBoxMeasurement => texFixture<TexVListParagraphBoxMeasurement>({
       blockIndex,
       vlistPath,
       lineIndices: [lineIndex],
@@ -4107,8 +4268,11 @@ describe("TeX vlist layout registry", () => {
   it("registers positioned vlist layouts by paragraph id on an output jax", () => {
     const outputJax = {};
     const items = [] as const;
-    const baseline = { kind: "explicit", y: 7 } as const;
-    const layout = {
+    const baseline = texFixture<TexVListLayout["baseline"]>({
+      kind: "explicit",
+      y: 7,
+    });
+    const layout = texFixture<TexVListLayout>({
       metrics: { width: 42, height: 7, depth: 3 },
       baseline,
       items,
@@ -4117,12 +4281,12 @@ describe("TeX vlist layout registry", () => {
       linePlacements: [],
       reports: [],
       errors: [],
-    };
-    const replacement = {
+    });
+    const replacement = texFixture<TexVListLayout>({
       ...layout,
       metrics: { width: 24, height: 5, depth: 2 },
       boxReport: texVListBoxLayoutReport(items, { width: 24, height: 5, depth: 2 }, baseline),
-    };
+    });
 
     expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([]);
     registerTexVListLayoutsOnOutputJax(outputJax, [
@@ -4203,11 +4367,11 @@ function stripParagraphScopeMetadata(items: readonly TexVListItem[]): readonly T
 function paragraphMeasurement(
   blockIndex: number,
   lineIndices: readonly number[],
-  metrics: TexVListParagraphBoxMeasurement["standardMetrics"],
+  metrics: RawTexFixture<TexVListParagraphBoxMeasurement["standardMetrics"]>,
   vlistPath: readonly number[] = [blockIndex]
 ): TexVListParagraphBoxMeasurement {
   const advance = metrics.height + metrics.depth;
-  return {
+  return texFixture<TexVListParagraphBoxMeasurement>({
     blockIndex,
     vlistPath,
     lineIndices,
@@ -4219,7 +4383,7 @@ function paragraphMeasurement(
     ruleLeadingMetrics: metrics,
     standardAdvance: advance,
     ruleLeadingAdvance: advance,
-  };
+  });
 }
 
 function horizontalParagraphLayout(
@@ -4230,7 +4394,7 @@ function horizontalParagraphLayout(
   depth: number,
   vlistPath: readonly number[] = [blockIndex]
 ) {
-  return {
+  return texFixture<Parameters<typeof layoutTexVListFromHorizontalParagraphsCore>[1]["paragraphLayouts"][number]>({
     blockIndex,
     vlistPath,
     lineIndices,
@@ -4252,5 +4416,5 @@ function horizontalParagraphLayout(
       })),
       renderItems: [],
     },
-  };
+  });
 }

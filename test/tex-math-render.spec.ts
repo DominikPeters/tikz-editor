@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ParagraphLayoutReport } from "../packages/core/src/text/knuth-plass/paragraph/report.js";
 import {
+  texHBoxX,
+  texHBoxY,
+  texLength,
+} from "../packages/core/src/text/tex/coordinates.js";
+import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
   layoutTexMathList,
@@ -109,15 +114,15 @@ describe("TeX math SVG rendering", () => {
       entries: [
         {
           sourceOffset: 2,
-          x: 3,
-          y: -4,
-          height: 5,
-          depth: 1,
+          x: texHBoxX(3),
+          y: texHBoxY(-4),
+          height: texLength(5),
+          depth: texLength(1),
           hitBounds: {
-            xStart: 2,
-            xEnd: 4,
-            yStart: -9,
-            yEnd: 1,
+            xStart: texHBoxX(2),
+            xEnd: texHBoxX(4),
+            yStart: texHBoxY(-9),
+            yEnd: texHBoxY(1),
           },
           kind: "glyph-boundary",
           sourceSpan: {
@@ -1582,7 +1587,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: 0,
       contentEnd: source.length,
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
 
     expect(box?.width).toBeCloseTo(120, 6);
@@ -1609,7 +1614,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: explicitTagSource.length,
       contentStart: 0,
       contentEnd: explicitTagSource.length,
-      targetWidth: 120,
+      targetWidth: texLength(120),
       displayLabel: {
         text: "1",
         sourceSpan: { start: explicitTagSource.length, end: explicitTagSource.length },
@@ -1629,7 +1634,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: suppressedSource.length,
       contentStart: 0,
       contentEnd: suppressedSource.length,
-      targetWidth: 120,
+      targetWidth: texLength(120),
       displayLabel: {
         text: "1",
         sourceSpan: { start: suppressedSource.length, end: suppressedSource.length },
@@ -1688,7 +1693,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: 2,
       contentEnd: source.length - 2,
-      targetWidth: 30,
+      targetWidth: texLength(30),
     });
 
     expect(natural?.width).toBeGreaterThan(30);
@@ -2784,7 +2789,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
     expect(directAlignment?.rows[0]?.svgBody).toContain('data-tex-math-hlist="true"');
     expect(directAlignment?.rows[0]?.svgBody).toContain(`data-source-start="${source.indexOf("a&=b")}"`);
@@ -2830,7 +2835,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{flalign*}`) + String.raw`\end{flalign*}`.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{flalign*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
     const align = provider.getDisplayMathAlignment?.({
       source,
@@ -2840,7 +2845,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{flalign*}`) + String.raw`\end{flalign*}`.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{flalign*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
 
     expect(flalign?.rows).toHaveLength(2);
@@ -2894,7 +2899,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{gather*}`) + String.raw`\end{gather*}`.length,
       contentStart: source.indexOf("a=b"),
       contentEnd: source.indexOf(String.raw`\end{gather*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
     expect(directAlignment?.delimiter).toBe("gather-star");
     expect(directAlignment?.rows).toHaveLength(2);
@@ -2918,7 +2923,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
       contentStart: source.indexOf(String.raw`\overline`),
       contentEnd: source.indexOf(String.raw`\end{gather}`),
-      targetWidth: 100,
+      targetWidth: texLength(100),
       displayLabels: [
         {
           text: "1",
@@ -2949,7 +2954,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{gather}`) + String.raw`\end{gather}`.length,
       contentStart: source.indexOf(String.raw`\begin{matrix}`),
       contentEnd,
-      targetWidth: 100,
+      targetWidth: texLength(100),
       displayLabels: [
         {
           text: "1",
@@ -3000,7 +3005,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{multline*}`) + String.raw`\end{multline*}`.length,
       contentStart: source.indexOf("a=b"),
       contentEnd: source.indexOf(String.raw`\end{multline*}`),
-      targetWidth: 140,
+      targetWidth: texLength(140),
     });
     expect(directAlignment?.delimiter).toBe("multline-star");
     expect(directAlignment?.rows).toHaveLength(3);
@@ -3024,7 +3029,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf(String.raw`\operatorname`),
       contentEnd,
-      targetWidth: 140,
+      targetWidth: texLength(140),
       displayLabels: [
         null,
         null,
@@ -3055,7 +3060,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart,
       contentEnd: contentStart + content.length,
-      targetWidth: 140,
+      targetWidth: texLength(140),
       displayLabels: [
         null,
         null,
@@ -3082,7 +3087,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
 
     expect(directAlignment?.rows[0]).toMatchObject({
@@ -3103,7 +3108,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf(String.raw`\cdots`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
 
     expect(directAlignment?.rows).toHaveLength(3);
@@ -3122,7 +3127,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf(String.raw`\sqrt`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 160,
+      targetWidth: texLength(160),
     });
 
     expect(directAlignment?.rows).toHaveLength(1);
@@ -3140,7 +3145,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 300,
+      targetWidth: texLength(300),
     });
 
     expect(directAlignment?.rows[0]?.depth).toBeCloseTo(15.600037, 5);
@@ -3157,7 +3162,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 300,
+      targetWidth: texLength(300),
     });
 
     expect(directAlignment?.rows[0]?.depth).toBeCloseTo(15.600037, 5);
@@ -3174,7 +3179,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf(String.raw`\dfrac`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 100,
+      targetWidth: texLength(100),
     });
     const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
       item.kind === "glyph" &&
@@ -3201,7 +3206,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf(String.raw`\tilde`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
     const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
       item.kind === "glyph" &&
@@ -3229,7 +3234,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf(String.raw`\sqrt`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 170,
+      targetWidth: texLength(170),
     });
     const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
       item.kind === "glyph" &&
@@ -3255,7 +3260,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf("a&=b"),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 300,
+      targetWidth: texLength(300),
     });
 
     expect(directAlignment?.rows[0]?.depth).toBeLessThan(4);
@@ -3273,7 +3278,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf(String.raw`\text{for`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 220,
+      targetWidth: texLength(220),
     });
     const firstRow = directAlignment?.rows.at(0);
     const secondRow = directAlignment?.rows.at(1);
@@ -3315,7 +3320,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
       contentStart: source.indexOf("y&="),
       contentEnd,
-      targetWidth: 120,
+      targetWidth: texLength(120),
       displayLabels: [
         {
           text: "1",
@@ -3354,7 +3359,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
       contentStart: source.indexOf(String.raw`\tilde`),
       contentEnd,
-      targetWidth: 140,
+      targetWidth: texLength(140),
       displayLabels: [
         null,
         {
@@ -3389,7 +3394,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align*}`) + String.raw`\end{align*}`.length,
       contentStart: source.indexOf(String.raw`\begin{cases}`),
       contentEnd: source.indexOf(String.raw`\end{align*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
 
     expect(directAlignment?.rows).toHaveLength(2);
@@ -3414,7 +3419,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.indexOf(String.raw`\end{align}`) + String.raw`\end{align}`.length,
       contentStart: source.indexOf(String.raw`\operatorname`),
       contentEnd,
-      targetWidth: 160,
+      targetWidth: texLength(160),
     });
 
     expect(directAlignment?.rows).toHaveLength(4);
@@ -3466,7 +3471,7 @@ describe("TeX math SVG rendering", () => {
         sourceEnd: testCase.source.length,
         contentStart: testCase.source.indexOf(testCase.content),
         contentEnd: testCase.source.indexOf(testCase.content) + testCase.content.length,
-        targetWidth: 180,
+      targetWidth: texLength(180),
       });
 
       expect(box, testCase.source).not.toBeNull();
@@ -3486,7 +3491,7 @@ describe("TeX math SVG rendering", () => {
       sourceEnd: source.length,
       contentStart: source.indexOf("a"),
       contentEnd: source.indexOf(String.raw`\end{multline*}`),
-      targetWidth: 120,
+      targetWidth: texLength(120),
     });
 
     expect(box?.rows).toHaveLength(3);

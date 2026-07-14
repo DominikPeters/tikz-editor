@@ -28,6 +28,7 @@ import {
   prepareSimpleTexLayoutScope,
   type TexVListLayout,
 } from "./vlist/index.js";
+import { texLength } from "./coordinates.js";
 
 export interface TexParagraphLayoutOptions {
   readonly paragraphId?: string;
@@ -87,7 +88,24 @@ export function layoutSimpleTexParagraph(
     defaultAtPt,
     metricProvider
   );
-  const layoutOptions: TexParagraphLayoutOptions = { ...options, font, metricProvider };
+  const {
+    width: inputWidth,
+    parindent: inputParindent,
+    rightskipStretch: inputRightskipStretch,
+    ...otherOptions
+  } = options;
+  const layoutOptions = {
+    ...otherOptions,
+    width: texLength(inputWidth),
+    ...(inputParindent !== undefined
+      ? { parindent: texLength(inputParindent) }
+      : {}),
+    ...(inputRightskipStretch !== undefined
+      ? { rightskipStretch: texLength(inputRightskipStretch) }
+      : {}),
+    font,
+    metricProvider,
+  };
   const paragraphId = options.paragraphId ?? "tex:paragraph";
   const defaultAlignment = options.alignment ?? "ragged-right";
   const blocks = analysis.ir?.blocks ?? [];
@@ -173,7 +191,7 @@ export function layoutSimpleTexParagraph(
 
   const reportAssembly = layoutTexVListFromBrokenParagraphs(layoutIr.vlist, {
     paragraphId,
-    width: options.width,
+    width: texLength(options.width),
     alignment: layoutIr.reportAlignment,
     layoutMode: layoutIr.layoutMode,
     font,

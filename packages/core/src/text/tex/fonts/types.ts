@@ -1,3 +1,5 @@
+import type { TexHBoxX, TexLength } from "../coordinates.js";
+
 export type GeneratedTexLigKern =
   | readonly ["lig", number, number, number]
   | readonly ["kern", number, number, number];
@@ -40,7 +42,7 @@ export type GeneratedTexFontTable = Readonly<Record<string, GeneratedTexFont>>;
 
 export interface ResolvedTexFont {
   readonly id: string;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly data: GeneratedTexFont;
   readonly color?: string;
 }
@@ -51,10 +53,10 @@ export interface TexGlyphBox {
   readonly code: number;
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-  readonly italicCorrection: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+  readonly italicCorrection: TexLength;
   readonly components: readonly number[];
 }
 
@@ -62,14 +64,14 @@ export interface TexKern {
   readonly kind: "kern";
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly width: number;
+  readonly width: TexLength;
 }
 
 export type TexShapedItem = TexGlyphBox | TexKern;
 
 export interface TexCaretStop {
   readonly sourceOffset: number;
-  readonly x: number;
+  readonly x: TexHBoxX;
 }
 
 export interface ShapedTexTextRun {
@@ -77,9 +79,9 @@ export interface ShapedTexTextRun {
   readonly font: ResolvedTexFont;
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly width: number;
+  readonly width: TexLength;
   readonly items: readonly TexShapedItem[];
-  readonly caretStops: readonly number[];
+  readonly caretStops: readonly TexHBoxX[];
   readonly sourceCaretStops: readonly TexCaretStop[];
 }
 
@@ -91,7 +93,7 @@ export interface ShapeTexTextOptions {
 
 export interface ResolveTexFontOptions {
   readonly fontId?: string;
-  readonly atPt?: number;
+  readonly atPt?: TexLength;
 }
 
 export interface TexMetricProvider {

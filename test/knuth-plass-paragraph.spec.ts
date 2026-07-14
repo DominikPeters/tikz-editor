@@ -26,6 +26,7 @@ import {
 import { flattenParagraph } from "../packages/core/src/text/knuth-plass/paragraph/tokenize.js";
 import type { GlueItem, Item, ParagraphModel, PenaltyItem } from "../packages/core/src/text/knuth-plass/paragraph/items.js";
 import type { ParagraphRun, SpaceRun, TextRun } from "../packages/core/src/text/knuth-plass/paragraph/types.js";
+import { texLength, texLineX } from "../packages/core/src/text/tex/coordinates.js";
 
 const wrapper = {};
 
@@ -1460,8 +1461,20 @@ describe("knuth-plass paragraph helpers", () => {
       expect(getOrBuildTextSegmentCaretStops(textSegment)).toEqual([2, 3, 4, 5, 6, 7]);
       expect(getOrBuildTextSegmentCaretStops(textSegment)).toBe(textSegment.caretStops);
     }
-    expect(getOrBuildTextSegmentCaretStops({ runIndex: 1, kind: "space", x: 0, width: 1, caretStops: [0, 1] })).toEqual([0, 1]);
-    expect(getOrBuildTextSegmentCaretStops({ runIndex: 99, kind: "text", text: "x", x: 0, width: 1 })).toBeNull();
+    expect(getOrBuildTextSegmentCaretStops({
+      runIndex: 1,
+      kind: "space",
+      x: texLineX(0),
+      width: texLength(1),
+      caretStops: [texLineX(0), texLineX(1)],
+    })).toEqual([0, 1]);
+    expect(getOrBuildTextSegmentCaretStops({
+      runIndex: 99,
+      kind: "text",
+      text: "x",
+      x: texLineX(0),
+      width: texLength(1),
+    })).toBeNull();
   });
 
   it("builds paragraph reports with fallback widths, defaults, and cached caret stops", () => {
@@ -1547,7 +1560,12 @@ describe("knuth-plass paragraph helpers", () => {
       delete textSegment.caretStops;
       expect(getOrBuildTextSegmentCaretStops(textSegment)).toEqual([0, 0, 4, 6, 8, 10]);
     }
-    expect(getOrBuildTextSegmentCaretStops({ runIndex: 3, kind: "math", x: 0, width: 5 })).toBeNull();
+    expect(getOrBuildTextSegmentCaretStops({
+      runIndex: 3,
+      kind: "math",
+      x: texLineX(0),
+      width: texLength(5),
+    })).toBeNull();
   });
 
   it("builds paragraph reports for zero-width hyphen fallback and missing runs", () => {

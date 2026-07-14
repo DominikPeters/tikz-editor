@@ -1,5 +1,21 @@
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import {
+  offsetTexHBoxLocalX,
+  offsetTexHBoxLocalY,
+  texHBoxOffsetX,
+  texHBoxOffsetY,
+  texHBoxLocalX,
+  texHBoxLocalY,
+  texLength,
+  texMuLength,
+  type TexHBoxOffsetX,
+  type TexHBoxOffsetY,
+  type TexHBoxLocalX,
+  type TexHBoxLocalY,
+  type TexLength,
+  type TexMuLength,
+} from "../coordinates.js";
+import {
   simpleTexInlineTokensToLayoutItems,
   texFrameMBoxHList,
   texMBoxHListFromLayoutItems,
@@ -89,16 +105,16 @@ export type TexMathHListItem =
 export interface TexMathGlyphLayoutItem {
   readonly kind: "glyph";
   readonly fontId: string;
-  readonly atPt: number;
+  readonly atPt: TexLength;
   readonly family: TexMathFontFamily | "alphabet" | "text";
   readonly code: number;
   readonly text: string;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-  readonly italicCorrection: number;
+  readonly x: TexHBoxLocalX;
+  readonly y: TexHBoxLocalY;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+  readonly italicCorrection: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
   /** Optional glyph-local paint for styled prose embedded in an LR box. */
   readonly color?: string;
@@ -106,19 +122,19 @@ export interface TexMathGlyphLayoutItem {
 
 export interface TexMathGlueLayoutItem {
   readonly kind: "glue";
-  readonly x: number;
-  readonly width: number;
-  readonly mu: number;
-  readonly stretch: number;
-  readonly shrink: number;
+  readonly x: TexHBoxLocalX;
+  readonly width: TexLength;
+  readonly mu: TexMuLength;
+  readonly stretch: TexLength;
+  readonly shrink: TexLength;
   readonly source: TexMathResolvedGlue["source"];
   readonly sourceSpan: TexMathSourceSpan;
 }
 
 export interface TexMathKernLayoutItem {
   readonly kind: "kern";
-  readonly x: number;
-  readonly width: number;
+  readonly x: TexHBoxLocalX;
+  readonly width: TexLength;
   readonly reason: "explicit-kern" | "fraction-kern" | "italic-correction" | "operator-kern" | "text-kern";
   readonly sourceSpan: TexMathSourceSpan;
 }
@@ -126,10 +142,10 @@ export interface TexMathKernLayoutItem {
 export interface TexMathRuleLayoutItem {
   readonly kind: "rule";
   readonly role: "fraction-rule" | "radical-rule" | "overline-rule" | "underline-rule" | "brace-rule" | "array-rule" | "boxed-rule" | "colorbox-background" | "var-limit-rule" | "literal-rule";
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
+  readonly x: TexHBoxLocalX;
+  readonly y: TexHBoxLocalY;
+  readonly width: TexLength;
+  readonly height: TexLength;
   /** Optional rule-local paint, used when a colored box must not inherit text color. */
   readonly color?: string;
   readonly sourceSpan: TexMathSourceSpan;
@@ -138,8 +154,8 @@ export interface TexMathRuleLayoutItem {
 export interface TexMathMiddleDelimiterLayoutItem {
   readonly kind: "middle-delimiter";
   readonly delimiter: TexMathDelimiter;
-  readonly x: number;
-  readonly width: 0;
+  readonly x: TexHBoxLocalX;
+  readonly width: TexLength;
   readonly commandSourceSpan: TexMathSourceSpan;
   readonly delimiterSourceSpan: TexMathSourceSpan;
   readonly sourceSpan: TexMathSourceSpan;
@@ -175,11 +191,11 @@ export interface TexMathChildHListLayoutItem {
     | "matrix-cell"
     | "smallmatrix-row"
     | "smallmatrix-cell";
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly x: TexHBoxLocalX;
+  readonly y: TexHBoxLocalY;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
   /** Optional paint inherited by this child only. */
   readonly color?: string;
@@ -191,11 +207,137 @@ export interface TexMathChildHListLayoutItem {
 export interface TexMathHList {
   readonly kind: "math-hlist";
   readonly style: TexMathStyle;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
   readonly items: readonly TexMathHListItem[];
+}
+
+type NumericGeometry<T, TKeys extends keyof T> = Omit<T, TKeys> & {
+  readonly [TKey in TKeys]: number;
+};
+
+function mathGlyphLayoutItem(
+  item: NumericGeometry<
+    TexMathGlyphLayoutItem,
+    "atPt" | "x" | "y" | "width" | "height" | "depth" | "italicCorrection"
+  >
+): TexMathGlyphLayoutItem {
+  return {
+    ...item,
+    atPt: texLength(item.atPt),
+    x: texHBoxLocalX(item.x),
+    y: texHBoxLocalY(item.y),
+    width: texLength(item.width),
+    height: texLength(item.height),
+    depth: texLength(item.depth),
+    italicCorrection: texLength(item.italicCorrection),
+  };
+}
+
+function mathGlueLayoutItem(
+  item: NumericGeometry<TexMathGlueLayoutItem, "x" | "width" | "mu" | "stretch" | "shrink">
+): TexMathGlueLayoutItem {
+  return {
+    ...item,
+    x: texHBoxLocalX(item.x),
+    width: texLength(item.width),
+    mu: texMuLength(item.mu),
+    stretch: texLength(item.stretch),
+    shrink: texLength(item.shrink),
+  };
+}
+
+function mathKernLayoutItem(
+  item: NumericGeometry<TexMathKernLayoutItem, "x" | "width">
+): TexMathKernLayoutItem {
+  return {
+    ...item,
+    x: texHBoxLocalX(item.x),
+    width: texLength(item.width),
+  };
+}
+
+function mathRuleLayoutItem(
+  item: NumericGeometry<TexMathRuleLayoutItem, "x" | "y" | "width" | "height">
+): TexMathRuleLayoutItem {
+  return {
+    ...item,
+    x: texHBoxLocalX(item.x),
+    y: texHBoxLocalY(item.y),
+    width: texLength(item.width),
+    height: texLength(item.height),
+  };
+}
+
+function mathMiddleDelimiterLayoutItem(
+  item: NumericGeometry<TexMathMiddleDelimiterLayoutItem, "x" | "width">
+): TexMathMiddleDelimiterLayoutItem {
+  return {
+    ...item,
+    x: texHBoxLocalX(item.x),
+    width: texLength(item.width),
+  };
+}
+
+function mathChildHListLayoutItem(
+  item: NumericGeometry<
+    TexMathChildHListLayoutItem,
+    "x" | "y" | "width" | "height" | "depth"
+  >
+): TexMathChildHListLayoutItem {
+  return {
+    ...item,
+    x: texHBoxLocalX(item.x),
+    y: texHBoxLocalY(item.y),
+    width: texLength(item.width),
+    height: texLength(item.height),
+    depth: texLength(item.depth),
+  };
+}
+
+function mathHList(
+  hlist: NumericGeometry<TexMathHList, "width" | "height" | "depth">
+): TexMathHList {
+  return {
+    ...hlist,
+    width: texLength(hlist.width),
+    height: texLength(hlist.height),
+    depth: texLength(hlist.depth),
+  };
+}
+
+type NumericMathHListItem =
+  | Parameters<typeof mathGlyphLayoutItem>[0]
+  | Parameters<typeof mathGlueLayoutItem>[0]
+  | Parameters<typeof mathKernLayoutItem>[0]
+  | Parameters<typeof mathRuleLayoutItem>[0]
+  | Parameters<typeof mathMiddleDelimiterLayoutItem>[0]
+  | Parameters<typeof mathChildHListLayoutItem>[0];
+
+function mathLayoutItem(item: Parameters<typeof mathGlyphLayoutItem>[0]): TexMathGlyphLayoutItem;
+function mathLayoutItem(item: Parameters<typeof mathGlueLayoutItem>[0]): TexMathGlueLayoutItem;
+function mathLayoutItem(item: Parameters<typeof mathKernLayoutItem>[0]): TexMathKernLayoutItem;
+function mathLayoutItem(item: Parameters<typeof mathRuleLayoutItem>[0]): TexMathRuleLayoutItem;
+function mathLayoutItem(item: Parameters<typeof mathMiddleDelimiterLayoutItem>[0]): TexMathMiddleDelimiterLayoutItem;
+function mathLayoutItem(item: Parameters<typeof mathChildHListLayoutItem>[0]): TexMathChildHListLayoutItem;
+function mathLayoutItem(item: NumericMathHListItem): TexMathHListItem;
+function mathLayoutItem(item: NumericMathHListItem): TexMathHListItem {
+  switch (item.kind) {
+    case "glyph":
+      return mathGlyphLayoutItem(item);
+    case "glue":
+      return mathGlueLayoutItem(item);
+    case "kern":
+      return mathKernLayoutItem(item);
+    case "rule":
+      return mathRuleLayoutItem(item);
+    case "middle-delimiter":
+      return mathMiddleDelimiterLayoutItem(item);
+    case "hlist":
+      return mathChildHListLayoutItem(item);
+  }
 }
 
 export interface TexMathLayoutOptions {
@@ -231,9 +373,9 @@ export interface ResolvedMathGlyph {
   readonly font: ResolvedTexFont;
   readonly code: number;
   readonly text: string;
-  readonly xOffset: number;
-  readonly yOffset: number;
-  readonly advance: number;
+  readonly xOffset: TexHBoxOffsetX;
+  readonly yOffset: TexHBoxOffsetY;
+  readonly advance: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -252,10 +394,36 @@ type MathGlyphSpec = {
 
 type ResolvedMathSymbolPart = ResolvedMathGlyph | {
   readonly kind: "kern";
+  readonly width: TexLength;
+  readonly xOffset: TexHBoxOffsetX;
+  readonly sourceSpan: TexMathSourceSpan;
+};
+
+function resolvedMathGlyph(glyph: Omit<ResolvedMathGlyph, "xOffset" | "yOffset" | "advance"> & {
+  readonly xOffset: number;
+  readonly yOffset: number;
+  readonly advance: number;
+}): ResolvedMathGlyph {
+  return {
+    ...glyph,
+    xOffset: texHBoxOffsetX(glyph.xOffset),
+    yOffset: texHBoxOffsetY(glyph.yOffset),
+    advance: texLength(glyph.advance),
+  };
+}
+
+function resolvedMathKern(kern: {
+  readonly kind: "kern";
   readonly width: number;
   readonly xOffset: number;
   readonly sourceSpan: TexMathSourceSpan;
-};
+}): Extract<ResolvedMathSymbolPart, { readonly kind: "kern" }> {
+  return {
+    ...kern,
+    width: texLength(kern.width),
+    xOffset: texHBoxOffsetX(kern.xOffset),
+  };
+}
 
 const TEX_SCRIPT_SPACE_PT = 0.5;
 const TEX_NULL_DELIMITER_SPACE_PT = 1.2;
@@ -274,22 +442,75 @@ const TEX_DEFAULT_SKEW_CHAR = 127;
 
 interface TexMathAtomLayout {
   readonly items: readonly TexMathHListItem[];
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-  readonly italicCorrection: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+  readonly italicCorrection: TexLength;
   readonly isCharacterNucleus: boolean;
   readonly scriptShiftsAsCharacter?: boolean;
-  readonly scriptBaseWidth?: number;
-  readonly scriptSuperscriptOffset?: number;
+  readonly scriptBaseWidth?: TexLength;
+  readonly scriptSuperscriptOffset?: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
 }
 
 interface TexMathDelimiterLayout {
   readonly items: readonly TexMathGlyphLayoutItem[];
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+}
+
+type NumericMathAtomLayout = Omit<
+  TexMathAtomLayout,
+  | "width"
+  | "height"
+  | "depth"
+  | "italicCorrection"
+  | "scriptBaseWidth"
+  | "scriptSuperscriptOffset"
+> & {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+  readonly italicCorrection: number;
+  readonly scriptBaseWidth?: number;
+  readonly scriptSuperscriptOffset?: number;
+};
+
+function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
+  const {
+    width,
+    height,
+    depth,
+    italicCorrection,
+    scriptBaseWidth,
+    scriptSuperscriptOffset,
+    ...rest
+  } = layout;
+  return {
+    ...rest,
+    width: texLength(width),
+    height: texLength(height),
+    depth: texLength(depth),
+    italicCorrection: texLength(italicCorrection),
+    ...(scriptBaseWidth !== undefined
+      ? { scriptBaseWidth: texLength(scriptBaseWidth) }
+      : {}),
+    ...(scriptSuperscriptOffset !== undefined
+      ? { scriptSuperscriptOffset: texLength(scriptSuperscriptOffset) }
+      : {}),
+  };
+}
+
+function mathDelimiterLayout(
+  layout: NumericGeometry<TexMathDelimiterLayout, "width" | "height" | "depth">
+): TexMathDelimiterLayout {
+  return {
+    ...layout,
+    width: texLength(layout.width),
+    height: texLength(layout.height),
+    depth: texLength(layout.depth),
+  };
 }
 
 export function layoutTexMathList(
@@ -301,7 +522,7 @@ export function layoutTexMathList(
   let currentStyle = style;
   let currentCramped = cramped;
   const fontProfile = options.fontProfile ?? resolveDefaultTexMathFontProfileForList(list);
-  const baseAtPt = options.baseAtPt ?? 10;
+  const baseAtPt = texLength(options.baseAtPt ?? 10);
   const alphabet = options.alphabet;
   const suppressAmsNestedAccentAdjustment = options.suppressAmsNestedAccentAdjustment === true;
   let currentAlphabet = alphabet;
@@ -321,7 +542,7 @@ export function layoutTexMathList(
       const width = textSpace ?? muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
       const stretch = textSpace !== null ? 0 : muToPt(fontProfile, currentStyle, baseAtPt, item.stretchMu);
       const shrink = textSpace !== null ? 0 : muToPt(fontProfile, currentStyle, baseAtPt, item.shrinkMu);
-      items.push({
+      items.push(mathLayoutItem({
         kind: "glue",
         x: roundTexPt(cursor),
         width,
@@ -330,7 +551,7 @@ export function layoutTexMathList(
         shrink,
         source: item.source,
         sourceSpan: item.sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + width);
       continue;
     }
@@ -338,13 +559,13 @@ export function layoutTexMathList(
       const width = item.command === "kern"
         ? roundTexPt(item.widthPt)
         : muToPt(fontProfile, currentStyle, baseAtPt, item.mu);
-      items.push({
+      items.push(mathLayoutItem({
         kind: "kern",
         x: roundTexPt(cursor),
         width,
         reason: "explicit-kern",
         sourceSpan: item.sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + width);
       continue;
     }
@@ -358,7 +579,7 @@ export function layoutTexMathList(
       const shrink = item.command === "hskip"
         ? roundTexPt(item.shrinkPt ?? 0)
         : muToPt(fontProfile, currentStyle, baseAtPt, item.shrinkMu ?? 0);
-      items.push({
+      items.push(mathLayoutItem({
         kind: "glue",
         x: roundTexPt(cursor),
         width,
@@ -367,7 +588,7 @@ export function layoutTexMathList(
         shrink,
         source: "explicit",
         sourceSpan: item.sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + width);
       continue;
     }
@@ -386,7 +607,7 @@ export function layoutTexMathList(
     }
     if (item.kind === "middle-delimiter") {
       if (options.allowMiddleDelimiters === true) {
-        items.push({
+        items.push(mathLayoutItem({
           kind: "middle-delimiter",
           delimiter: item.delimiter,
           x: roundTexPt(cursor),
@@ -394,7 +615,7 @@ export function layoutTexMathList(
           commandSourceSpan: item.commandSourceSpan,
           delimiterSourceSpan: item.delimiterSourceSpan,
           sourceSpan: item.sourceSpan,
-        });
+        }));
       } else {
         errors.push({
           message: "Unsupported TeX math item \\middle.",
@@ -427,7 +648,7 @@ export function layoutTexMathList(
       continue;
     }
     for (const atomItem of atomLayout.items) {
-      items.push(offsetMathLayoutItem(atomItem, cursor));
+      items.push(offsetMathLayoutItem(atomItem, texHBoxOffsetX(cursor)));
     }
     cursor = roundTexPt(cursor + atomLayout.width);
     height = Math.max(height, atomLayout.height);
@@ -442,7 +663,7 @@ export function layoutTexMathList(
     };
   }
 
-  const hlist = {
+  const hlist = mathHList({
     kind: "math-hlist",
     style,
     width: roundTexPt(cursor),
@@ -450,7 +671,7 @@ export function layoutTexMathList(
     depth: roundTexPt(depth),
     sourceSpan: list.sourceSpan,
     items,
-  } satisfies TexMathHList;
+  });
   return {
     supported: true,
     hlist: alphabet || sawMathitAlphabetDeclaration ? normalizeAlphabetHList(hlist, alphabet ?? "mathit") : hlist,
@@ -460,7 +681,7 @@ export function layoutTexMathList(
 
 export function setTexMathHListWidth(
   hlist: TexMathHList,
-  targetWidth: number
+  targetWidth: TexLength
 ): TexMathHList {
   if (!Number.isFinite(targetWidth)) {
     return hlist;
@@ -470,7 +691,7 @@ export function setTexMathHListWidth(
   if (delta === 0) {
     return hlist.width === roundedTargetWidth
       ? hlist
-      : { ...hlist, width: roundedTargetWidth };
+      : { ...hlist, width: texLength(roundedTargetWidth) };
   }
   const sign = delta > 0 ? "stretch" : "shrink";
   const total = hlist.items.reduce((sum, item) => {
@@ -480,40 +701,41 @@ export function setTexMathHListWidth(
     return sum + Math.max(0, sign === "stretch" ? item.stretch : item.shrink);
   }, 0);
   if (total <= 0) {
-    return { ...hlist, width: roundedTargetWidth };
+    return { ...hlist, width: texLength(roundedTargetWidth) };
   }
   const ratio = sign === "stretch"
     ? delta / total
     : Math.min(-delta / total, 1);
-  let offset = 0;
+  let offset = texHBoxOffsetX(0);
   const items = hlist.items.map((item): TexMathHListItem => {
     if (item.kind === "middle-delimiter") {
-      return {
+      return mathMiddleDelimiterLayoutItem({
         ...item,
-        x: roundTexPt(item.x + offset),
+        x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, offset))),
         width: 0,
-      };
+      });
     }
-    const shifted = {
+    const shifted = mathLayoutItem({
       ...item,
-      x: roundTexPt(item.x + offset),
-    };
+      x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, offset))),
+    });
     if (item.kind !== "glue") {
       return shifted;
     }
-    const adjustment = (sign === "stretch" ? item.stretch : -item.shrink) * ratio;
+    const adjustment = (sign === "stretch" ? item.stretch : 0 - item.shrink) * ratio;
     const adjustedWidth = roundTexPt(item.width + adjustment);
-    offset = roundTexPt(offset + adjustedWidth - item.width);
-    return {
-      ...shifted,
+    offset = texHBoxOffsetX(roundTexPt(offset + adjustedWidth - item.width));
+    return mathGlueLayoutItem({
+      ...item,
+      x: shifted.x,
       width: adjustedWidth,
-    };
+    });
   });
-  return {
+  return mathHList({
     ...hlist,
     width: roundedTargetWidth,
     items,
-  };
+  });
 }
 
 export function resolveDefaultTexMathFontProfileForList(list: TexMathList): TexMathFontProfile {
@@ -716,7 +938,7 @@ function layoutAtom(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
   suppressAmsNestedAccentAdjustment = false
 ): TexMathAtomLayout | null {
@@ -745,23 +967,23 @@ function layoutAtom(
 
   const items: TexMathHListItem[] = [...nucleus.items];
   const hasSubscript = Boolean(atom.subscript);
-  let scriptStartX = hasSubscript && nucleus.scriptBaseWidth !== undefined
+  let scriptStartX: number = hasSubscript && nucleus.scriptBaseWidth !== undefined
     ? nucleus.scriptBaseWidth
     : nucleus.width;
-  let atomWidth = scriptStartX;
-  let height = nucleus.height;
-  let depth = nucleus.depth;
-  const delta = atom.subscript
+  let atomWidth: number = scriptStartX;
+  let height: number = nucleus.height;
+  let depth: number = nucleus.depth;
+  const delta: number = atom.subscript
     ? nucleus.scriptSuperscriptOffset ?? (nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0)
     : 0;
   if (!atom.subscript && nucleus.isCharacterNucleus && nucleus.italicCorrection !== 0) {
-    items.push({
+    items.push(mathLayoutItem({
       kind: "kern",
       x: nucleus.width,
       width: nucleus.italicCorrection,
       reason: "italic-correction",
       sourceSpan: nucleus.sourceSpan,
-    });
+    }));
     scriptStartX = roundTexPt(scriptStartX + nucleus.italicCorrection);
     atomWidth = scriptStartX;
   } else if (
@@ -770,13 +992,13 @@ function layoutAtom(
     nucleus.scriptSuperscriptOffset !== undefined &&
     nucleus.scriptSuperscriptOffset !== 0
   ) {
-    items.push({
+    items.push(mathLayoutItem({
       kind: "kern",
       x: nucleus.scriptBaseWidth ?? nucleus.width,
       width: nucleus.scriptSuperscriptOffset,
       reason: "italic-correction",
       sourceSpan: nucleus.sourceSpan,
-    });
+    }));
   }
 
   const sup = atom.superscript
@@ -792,29 +1014,29 @@ function layoutAtom(
   const baseShifts = initialScriptShifts(nucleus, style, fontProfile, baseAtPt);
   if (sup && !sub) {
     const shiftUp = superscriptShiftUp(sup, baseShifts.shiftUp, style, cramped, fontProfile, baseAtPt);
-    const child = childHList("superscript", scriptStartX, -shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
+    const child = childHList("superscript", scriptStartX, 0 - shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(child);
     atomWidth = roundTexPt(scriptStartX + child.width);
-    height = Math.max(height, -child.y + child.height);
+    height = Math.max(height, 0 - child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sub && !sup) {
     const shiftDown = subscriptShiftDown(sub, baseShifts.shiftDown, false, style, fontProfile, baseAtPt);
     const child = childHList("subscript", scriptStartX, shiftDown, sub, atom.subscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(child);
     atomWidth = roundTexPt(scriptStartX + child.width);
-    height = Math.max(height, -child.y + child.height);
+    height = Math.max(height, 0 - child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sup && sub) {
     const shifts = combinedScriptShifts(sup, sub, baseShifts, style, cramped, fontProfile, baseAtPt);
-    const supChild = childHList("superscript", roundTexPt(scriptStartX + delta), -shifts.shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
+    const supChild = childHList("superscript", roundTexPt(scriptStartX + delta), 0 - shifts.shiftUp, sup, atom.superscript?.sourceSpan ?? nucleus.sourceSpan);
     const subChild = childHList("subscript", scriptStartX, shifts.shiftDown, sub, atom.subscript?.sourceSpan ?? nucleus.sourceSpan);
     items.push(supChild, subChild);
     atomWidth = roundTexPt(scriptStartX + Math.max(delta + sup.width, sub.width));
-    height = Math.max(height, -supChild.y + supChild.height, -subChild.y + subChild.height);
+    height = Math.max(height, 0 - supChild.y + supChild.height, 0 - subChild.y + subChild.height);
     depth = Math.max(depth, supChild.y + supChild.depth, subChild.y + subChild.depth);
   }
 
-  return {
+  return mathAtomLayout({
     items,
     width: atomWidth,
     height: roundTexPt(height),
@@ -822,7 +1044,7 @@ function layoutAtom(
     italicCorrection: nucleus.italicCorrection,
     isCharacterNucleus: nucleus.isCharacterNucleus,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function shouldUseOperatorLimits(
@@ -866,7 +1088,7 @@ function layoutOperatorLimitsAtom(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const sup = atom.superscript
@@ -882,9 +1104,11 @@ function layoutOperatorLimitsAtom(
   const width = roundTexPt(Math.max(nucleus.width, sup?.width ?? 0, sub?.width ?? 0));
   const delta = nucleus.italicCorrection;
   const operatorX = roundTexPt((width - nucleus.width) / 2);
-  const items: TexMathHListItem[] = nucleus.items.map((item) => offsetMathLayoutItem(item, operatorX));
-  let height = nucleus.height;
-  let depth = nucleus.depth;
+  const items: TexMathHListItem[] = nucleus.items.map((item) =>
+    offsetMathLayoutItem(item, texHBoxOffsetX(operatorX))
+  );
+  let height: number = nucleus.height;
+  let depth: number = nucleus.depth;
 
   if (sup) {
     const shiftUp = roundTexPt(Math.max(
@@ -926,7 +1150,7 @@ function layoutOperatorLimitsAtom(
       mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt));
   }
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height: roundTexPt(height),
@@ -934,7 +1158,7 @@ function layoutOperatorLimitsAtom(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: atom.sourceSpan,
-  };
+  });
 }
 
 function layoutNucleus(
@@ -942,7 +1166,7 @@ function layoutNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
   suppressAmsNestedAccentAdjustment = false
 ): TexMathAtomLayout | null {
@@ -956,10 +1180,10 @@ function layoutNucleus(
     if (nucleus.leadingKern === undefined) {
       const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet);
       if (unwrapped) {
-        return {
+        return mathAtomLayout({
           ...unwrapped,
           sourceSpan: nucleus.sourceSpan,
-        };
+        });
       }
     }
     const result = layoutTexMathList(nucleus.list, { fontProfile, style, cramped, baseAtPt, alphabet });
@@ -968,16 +1192,18 @@ function layoutNucleus(
     }
     if (nucleus.leadingKern !== undefined) {
       const leadingKern = roundTexPt(nucleus.leadingKern);
-      return {
+      return mathAtomLayout({
         items: [
-          {
+          mathLayoutItem({
             kind: "kern",
             x: 0,
             width: leadingKern,
             reason: "operator-kern",
             sourceSpan: nucleus.sourceSpan,
-          },
-          ...result.hlist.items.map((item) => offsetMathLayoutItem(item, leadingKern)),
+          }),
+          ...result.hlist.items.map((item) =>
+            offsetMathLayoutItem(item, texHBoxOffsetX(leadingKern))
+          ),
         ],
         width: roundTexPt(leadingKern + result.hlist.width),
         height: result.hlist.height,
@@ -985,10 +1211,10 @@ function layoutNucleus(
         italicCorrection: 0,
         isCharacterNucleus: false,
         sourceSpan: nucleus.sourceSpan,
-      };
+      });
     }
     const child = childHList("nucleus", 0, 0, result.hlist, nucleus.sourceSpan);
-    return {
+    return mathAtomLayout({
       items: [child],
       width: child.width,
       height: child.height,
@@ -996,7 +1222,7 @@ function layoutNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
   if (nucleus.kind === "fraction") {
     return layoutFractionNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -1095,7 +1321,7 @@ function layoutSingleAtomGroupNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   if (list.items.length !== 1) {
@@ -1117,7 +1343,7 @@ function layoutSizedDelimiterNucleus(
   nucleus: TexMathSizedDelimiterNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
   const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
@@ -1133,7 +1359,7 @@ function layoutSizedDelimiterNucleus(
   if (!delimiter) {
     return null;
   }
-  return {
+  return mathAtomLayout({
     items: delimiter.items,
     width: delimiter.width,
     height: sizedDelimiterBoxHeight(nucleus.command),
@@ -1141,7 +1367,7 @@ function layoutSizedDelimiterNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function sizedDelimiterTargetHeight(command: TexMathSizedDelimiterNucleus["command"]): number {
@@ -1187,7 +1413,7 @@ function layoutTextNucleus(
   nucleus: TexMathTextNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathAtomLayout | null {
   const isTextBoxCommand = isTextBoxNucleusCommand(nucleus.command);
   const atPt = isTextBoxCommand
@@ -1204,7 +1430,7 @@ function layoutTextNucleus(
     );
     const layoutItems = simpleTexInlineTokensToLayoutItems({
       tokens,
-      atPt,
+      atPt: texLength(atPt),
       metricProvider: fontProfile.metricProvider,
       spaceGlueProfile: "font",
       mathBoxProvider: nestedMathProvider,
@@ -1223,14 +1449,16 @@ function layoutTextNucleus(
       ? texFrameMBoxHList(hlist, {
           sourceSpan: nucleus.sourceSpan,
           contentSourceSpan: nucleus.textSourceSpan,
-          boxWidth: nucleus.command === "framebox" ? nucleus.boxWidth : undefined,
+          boxWidth: nucleus.command === "framebox" && nucleus.boxWidth !== undefined
+            ? texLength(nucleus.boxWidth)
+            : undefined,
           boxAlign: nucleus.boxAlign,
         })
       : texReboxMBoxHList(hlist, {
-          boxWidth: nucleus.boxWidth,
+          boxWidth: nucleus.boxWidth !== undefined ? texLength(nucleus.boxWidth) : undefined,
           boxAlign: nucleus.boxAlign,
         });
-    return {
+    return mathAtomLayout({
       items: boxedHList.items,
       width: boxedHList.width,
       height: boxedHList.height,
@@ -1238,11 +1466,11 @@ function layoutTextNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
   const font = fontProfile.textFontProfile.resolveTextFont(
     fontProfile.textFontProfile.defaultFontState,
-    atPt,
+    texLength(atPt),
     fontProfile.metricProvider
   );
   const items: TexMathHListItem[] = [];
@@ -1294,7 +1522,7 @@ function layoutTextNucleus(
     depth = Math.max(depth, child.depth);
   }
 
-  return {
+  return mathAtomLayout({
     items,
     width: cursor,
     height: roundTexPt(height),
@@ -1302,7 +1530,7 @@ function layoutTextNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function textNucleusInitialFontState(
@@ -1365,7 +1593,7 @@ function simpleTexFontStateMayHaveItalicCorrection(
 function textNucleusMathBoxProvider(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathBoxProvider {
   return {
     getInlineMathBox: (params): TexMathBox | null => {
@@ -1412,16 +1640,16 @@ function textShapedItemToMathLayoutItem(
     end: item.sourceEnd,
   };
   if (item.kind === "kern") {
-    return {
+    return mathKernLayoutItem({
       kind: "kern",
       x,
       width: item.width,
       reason: "text-kern",
       sourceSpan,
-    };
+    });
   }
   if (item.code === 32) {
-    return {
+    return mathGlueLayoutItem({
       kind: "glue",
       x,
       width: item.width,
@@ -1430,9 +1658,9 @@ function textShapedItemToMathLayoutItem(
       shrink: 0,
       source: "explicit",
       sourceSpan,
-    };
+    });
   }
-  return {
+  return mathGlyphLayoutItem({
     kind: "glyph",
     fontId: font.id,
     atPt: font.atPt,
@@ -1446,17 +1674,17 @@ function textShapedItemToMathLayoutItem(
     depth: item.depth,
     italicCorrection: item.italicCorrection,
     sourceSpan,
-  };
+  });
 }
 
-function textStyleAtPt(style: TexMathStyle, baseAtPt: number): number {
+function textStyleAtPt(style: TexMathStyle, baseAtPt: TexLength): TexLength {
   if (style === "script") {
-    return baseAtPt * 0.7;
+    return texLength(baseAtPt * 0.7);
   }
   if (style === "scriptscript") {
-    return baseAtPt * 0.5;
+    return texLength(baseAtPt * 0.5);
   }
-  return baseAtPt;
+  return texLength(baseAtPt);
 }
 
 function layoutAlphabetNucleus(
@@ -1464,7 +1692,7 @@ function layoutAlphabetNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   outerAlphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const alphabet = nestedMathAlphabet(nucleus.alphabet, outerAlphabet);
@@ -1480,7 +1708,7 @@ function layoutAlphabetNucleus(
   }
   const hlist = normalizeAlphabetHList(result.hlist, alphabet);
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
-  return {
+  return mathAtomLayout({
     items: [child],
     width: child.width,
     height: child.height,
@@ -1488,7 +1716,7 @@ function layoutAlphabetNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 /** LaTeX's bold math version remains active through ordinary alphabet switches. */
@@ -1546,17 +1774,17 @@ function collapseInternalMathitItalicKerns(hlist: TexMathHList): TexMathHList {
       continue;
     }
     if (item) {
-      items.push(offsetMathLayoutItem(item, -removedWidth));
+      items.push(offsetMathLayoutItem(item, texHBoxOffsetX(-removedWidth)));
     }
   }
   if (removedWidth === 0) {
     return omitScriptAlphabetTrailingItalicKern(hlist);
   }
-  return omitScriptAlphabetTrailingItalicKern({
+  return omitScriptAlphabetTrailingItalicKern(mathHList({
     ...hlist,
     width: roundTexPt(hlist.width - removedWidth),
     items,
-  });
+  }));
 }
 
 function omitScriptAlphabetTrailingItalicKern(hlist: TexMathHList): TexMathHList {
@@ -1567,10 +1795,10 @@ function omitScriptAlphabetTrailingItalicKern(hlist: TexMathHList): TexMathHList
   if (last?.kind !== "kern" || last.reason !== "italic-correction") {
     return hlist;
   }
-  return {
+  return mathHList({
     ...hlist,
     items: hlist.items.slice(0, -1),
-  };
+  });
 }
 
 const TEX_ALIGNED_ROW_HEIGHT_PT = 8.399963;
@@ -1596,17 +1824,27 @@ interface TexMathAlignedCellLayout {
 interface TexMathAlignedRowLayout {
   readonly cells: readonly TexMathAlignedCellLayout[];
   readonly sourceSpan: TexMathSourceSpan;
-  readonly height: number;
-  readonly depth: number;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly intertextsBefore?: readonly TexMathAlignedIntertext[];
   readonly multlineShove?: "left" | "right";
+}
+
+function mathAlignedRowLayout(
+  row: NumericGeometry<TexMathAlignedRowLayout, "height" | "depth">
+): TexMathAlignedRowLayout {
+  return {
+    ...row,
+    height: texLength(row.height),
+    depth: texLength(row.depth),
+  };
 }
 
 function layoutAlignedNucleus(
   nucleus: TexMathAlignedNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
@@ -1617,7 +1855,7 @@ function layoutAlignedNucleus(
   }
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   if (concreteRows.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: 0,
       height: 0,
@@ -1625,7 +1863,7 @@ function layoutAlignedNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const columnCount = Math.max(...concreteRows.map((row) => row.cells.length));
@@ -1685,7 +1923,7 @@ function layoutAlignedNucleus(
         cursor = roundTexPt(cursor + TEX_LATEX_EQNARRAY_COLUMN_GAP_PT);
       }
     }
-    rowItems.push({
+    rowItems.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "aligned-row",
       x: 0,
@@ -1697,11 +1935,11 @@ function layoutAlignedNucleus(
       items: rowChildren,
       ...(row.intertextsBefore ? { intertextsBefore: row.intertextsBefore } : {}),
       ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
-    });
+    }));
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
-  return {
+  return mathAtomLayout({
     items: rowItems,
     width,
     height,
@@ -1709,7 +1947,7 @@ function layoutAlignedNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutAlignedRow(
@@ -1717,7 +1955,7 @@ function layoutAlignedRow(
   columnSeparation: TexMathAlignedNucleus["columnSeparation"],
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
   const cellStyle = alignedCellStyle();
@@ -1743,14 +1981,14 @@ function layoutAlignedRow(
     return null;
   }
   const concreteCells = cells as readonly TexMathAlignedCellLayout[];
-  return {
+  return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
     ...(row.intertextsBefore ? { intertextsBefore: row.intertextsBefore } : {}),
     ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
-  };
+  });
 }
 
 function addMultlineLeadingEmptyOrdGlue(
@@ -1758,7 +1996,7 @@ function addMultlineLeadingEmptyOrdGlue(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathHList {
   const firstItem = normalizeTexMathAtomClasses(list).items[0];
   if (firstItem?.kind !== "atom") {
@@ -1777,11 +2015,11 @@ function addMultlineLeadingEmptyOrdGlue(
   if (Math.abs(width) < 1e-9) {
     return hlist;
   }
-  return {
+  return mathHList({
     ...hlist,
     width: roundTexPt(hlist.width + width),
     items: [
-      {
+      mathGlueLayoutItem({
         kind: "glue",
         x: 0,
         width,
@@ -1790,10 +2028,10 @@ function addMultlineLeadingEmptyOrdGlue(
         shrink: muToPt(fontProfile, style, baseAtPt, leadingGlue.shrinkMu),
         source: leadingGlue.source,
         sourceSpan: leadingGlue.sourceSpan,
-      },
-      ...hlist.items.map((item) => offsetMathLayoutItem(item, width)),
+      }),
+      ...hlist.items.map((item) => offsetMathLayoutItem(item, texHBoxOffsetX(width))),
     ],
-  };
+  });
 }
 
 function alignedCellStyle(): TexMathStyle {
@@ -1886,7 +2124,7 @@ function layoutSubstackNucleus(
   nucleus: TexMathSubstackNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
@@ -1897,7 +2135,7 @@ function layoutSubstackNucleus(
   }
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   if (concreteRows.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: 0,
       height: 0,
@@ -1905,7 +2143,7 @@ function layoutSubstackNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const width = roundTexPt(Math.max(...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
@@ -1933,7 +2171,7 @@ function layoutSubstackNucleus(
           cell.sourceSpan
         )]
       : [];
-    rowItems.push({
+    rowItems.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "substack-row",
       x: 0,
@@ -1943,11 +2181,11 @@ function layoutSubstackNucleus(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
-    });
+    }));
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
-  return {
+  return mathAtomLayout({
     items: rowItems,
     width,
     height,
@@ -1955,13 +2193,13 @@ function layoutSubstackNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutSubstackRow(
   row: TexMathAlignedRow,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
   const cell = row.cells[0];
@@ -1971,7 +2209,7 @@ function layoutSubstackRow(
   if (!result?.supported) {
     return null;
   }
-  return {
+  return mathAlignedRowLayout({
     cells: [{
       hlist: result.hlist,
       sourceSpan: cell.sourceSpan,
@@ -1979,14 +2217,14 @@ function layoutSubstackRow(
     sourceSpan: row.sourceSpan,
     height: result.hlist.height,
     depth: result.hlist.depth,
-  };
+  });
 }
 
 function layoutSubarrayNucleus(
   nucleus: TexMathSubarrayNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
@@ -1997,7 +2235,7 @@ function layoutSubarrayNucleus(
   }
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   if (concreteRows.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: 0,
       height: 0,
@@ -2005,7 +2243,7 @@ function layoutSubarrayNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const width = roundTexPt(Math.max(...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
@@ -2036,7 +2274,7 @@ function layoutSubarrayNucleus(
           cell.sourceSpan
         )]
       : [];
-    rowItems.push({
+    rowItems.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "subarray-row",
       x: 0,
@@ -2046,11 +2284,11 @@ function layoutSubarrayNucleus(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
-    });
+    }));
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
-  return {
+  return mathAtomLayout({
     items: rowItems,
     width,
     height,
@@ -2058,7 +2296,7 @@ function layoutSubarrayNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function subarrayCellX(
@@ -2072,7 +2310,7 @@ function subarrayCellX(
 function layoutSidesetNucleus(
   nucleus: TexMathSidesetNucleus,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const base = layoutTexMathList(nucleus.base, {
@@ -2118,7 +2356,7 @@ function layoutSidesetNucleus(
     postBase.hlist.depth
   );
 
-  return {
+  return mathAtomLayout({
     items,
     width: roundTexPt((preChild?.width ?? 0) + postBase.hlist.width + mathOperatorThinSpace(fontProfile, baseAtPt)),
     height: roundTexPt(height),
@@ -2126,14 +2364,14 @@ function layoutSidesetNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutSidesetPrescript(
   list: TexMathList,
   base: TexMathHList,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const scriptAtom = list.items[0];
@@ -2153,7 +2391,7 @@ function layoutSidesetPrescript(
     return result.supported ? result.hlist : null;
   }
 
-  const phantomBase: TexMathAtomLayout = {
+  const phantomBase = mathAtomLayout({
     items: [],
     width: 0,
     height: base.height,
@@ -2161,7 +2399,7 @@ function layoutSidesetPrescript(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: scriptAtom.nucleus.sourceSpan,
-  };
+  });
   const sup = scriptAtom.superscript
     ? layoutScriptList(scriptAtom.superscript.list, fontProfile, "script", false, baseAtPt, alphabet)
     : null;
@@ -2175,33 +2413,33 @@ function layoutSidesetPrescript(
   const baseShifts = initialScriptShifts(phantomBase, "display", fontProfile, baseAtPt);
   const items: TexMathHListItem[] = [];
   let width = 0;
-  let height = phantomBase.height;
-  let depth = phantomBase.depth;
+  let height: number = phantomBase.height;
+  let depth: number = phantomBase.depth;
   if (sup && !sub) {
     const shiftUp = superscriptShiftUp(sup, baseShifts.shiftUp, "display", false, fontProfile, baseAtPt);
-    const child = childHList("superscript", 0, -shiftUp, sup, scriptAtom.superscript?.sourceSpan ?? list.sourceSpan);
+    const child = childHList("superscript", 0, 0 - shiftUp, sup, scriptAtom.superscript?.sourceSpan ?? list.sourceSpan);
     items.push(child);
     width = Math.max(width, child.width);
-    height = Math.max(height, -child.y + child.height);
+    height = Math.max(height, 0 - child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sub && !sup) {
     const shiftDown = subscriptShiftDown(sub, baseShifts.shiftDown, false, "display", fontProfile, baseAtPt);
     const child = childHList("subscript", 0, shiftDown, sub, scriptAtom.subscript?.sourceSpan ?? list.sourceSpan);
     items.push(child);
     width = Math.max(width, child.width);
-    height = Math.max(height, -child.y + child.height);
+    height = Math.max(height, 0 - child.y + child.height);
     depth = Math.max(depth, child.y + child.depth);
   } else if (sup && sub) {
     const shifts = combinedScriptShifts(sup, sub, baseShifts, "display", false, fontProfile, baseAtPt);
-    const supChild = childHList("superscript", 0, -shifts.shiftUp, sup, scriptAtom.superscript?.sourceSpan ?? list.sourceSpan);
+    const supChild = childHList("superscript", 0, 0 - shifts.shiftUp, sup, scriptAtom.superscript?.sourceSpan ?? list.sourceSpan);
     const subChild = childHList("subscript", 0, shifts.shiftDown, sub, scriptAtom.subscript?.sourceSpan ?? list.sourceSpan);
     items.push(supChild, subChild);
     width = Math.max(width, supChild.width, subChild.width);
-    height = Math.max(height, -supChild.y + supChild.height, -subChild.y + subChild.height);
+    height = Math.max(height, 0 - supChild.y + supChild.height, 0 - subChild.y + subChild.height);
     depth = Math.max(depth, supChild.y + supChild.depth, subChild.y + subChild.depth);
   }
 
-  return {
+  return mathHList({
     kind: "math-hlist",
     style: "display",
     width: roundTexPt(width),
@@ -2209,12 +2447,12 @@ function layoutSidesetPrescript(
     depth: roundTexPt(Math.max(0, depth)),
     sourceSpan: list.sourceSpan,
     items,
-  };
+  });
 }
 
 function mathOperatorThinSpace(
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   return muToPt(fontProfile, "display", baseAtPt, 3);
 }
@@ -2297,7 +2535,7 @@ function sidesetBaseWithPostscript(
 function substackRowBaselineOffsets(
   rows: readonly TexMathAlignedRowLayout[],
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): readonly number[] {
   const baselineSkip = roundTexPt(
     mathStyleParameterToPt(fontProfile, "stackNumUp", TEX_SUBSTACK_STYLE, baseAtPt) +
@@ -2321,7 +2559,7 @@ function layoutMatrixNucleus(
   nucleus: TexMathMatrixNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutMatrixBody(nucleus, fontProfile, baseAtPt, alphabet);
@@ -2338,7 +2576,7 @@ function layoutCasesNucleus(
   nucleus: TexMathCasesNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutCasesBody(nucleus, fontProfile, baseAtPt, alphabet);
@@ -2351,7 +2589,7 @@ function layoutCasesNucleus(
 function layoutCasesBody(
   nucleus: TexMathCasesNucleus,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rowHeight = roundTexPt(TEX_ALIGNED_ROW_HEIGHT_PT * TEX_CASES_ARRAY_STRETCH);
@@ -2375,7 +2613,7 @@ function layoutCasesBody(
   }
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   if (concreteRows.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: 0,
       height: 0,
@@ -2383,7 +2621,7 @@ function layoutCasesBody(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const firstColumnWidth = roundTexPt(Math.max(0, ...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
@@ -2425,7 +2663,7 @@ function layoutCasesBody(
         secondCell.sourceSpan
       ));
     }
-    rowItems.push({
+    rowItems.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "cases-row",
       x: 0,
@@ -2435,11 +2673,11 @@ function layoutCasesBody(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
-    });
+    }));
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
-  return {
+  return mathAtomLayout({
     items: rowItems,
     width,
     height,
@@ -2447,13 +2685,13 @@ function layoutCasesBody(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutArrayNucleus(
   nucleus: TexMathArrayNucleus,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const preambleItems = arrayPreambleItems(nucleus);
@@ -2476,7 +2714,7 @@ function layoutArrayNucleus(
   }
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   if (concreteRows.length === 0 || nucleus.columnAlignments.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: 0,
       height: 0,
@@ -2484,7 +2722,7 @@ function layoutArrayNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const columnCount = nucleus.columnAlignments.length;
@@ -2544,7 +2782,7 @@ function layoutArrayNucleus(
       cursor = roundTexPt(cursor + columnWidth);
     }
     appendArrayBoundaryItems(rowChildren, preambleItems, columnCount, columnCount, cursor, row, insertLayouts);
-    rowItems.push({
+    rowItems.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "array-row",
       x: 0,
@@ -2554,7 +2792,7 @@ function layoutArrayNucleus(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
-    });
+    }));
   }
   appendArrayRowRules(
     rowItems,
@@ -2564,7 +2802,7 @@ function layoutArrayNucleus(
     arrayRowRuleBoundaryStartY(concreteRows, baselineOffsets, rowRules, concreteRows.length, firstBaselineY),
   );
 
-  return {
+  return mathAtomLayout({
     items: rowItems,
     width,
     height,
@@ -2572,7 +2810,7 @@ function layoutArrayNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function arrayRowBaselineOffsets(
@@ -2627,7 +2865,7 @@ function appendArrayRowRules(
     if (rule.beforeRow !== beforeRow) {
       continue;
     }
-    items.push({
+    items.push(mathRuleLayoutItem({
       kind: "rule",
       role: "array-rule",
       x: 0,
@@ -2635,7 +2873,7 @@ function appendArrayRowRules(
       width,
       height: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
       sourceSpan: rule.sourceSpan,
-    });
+    }));
     cursorY = roundTexPt(cursorY + TEX_LATEX_ARRAY_RULE_WIDTH_PT);
   }
 }
@@ -2656,7 +2894,7 @@ function layoutArrayRow(
   cellInserts: readonly TexMathArrayCellInsert[],
   cellInsertLayouts: ReadonlyMap<TexMathArrayCellInsert, TexMathHList>,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
   const baseRow = layoutMatrixRow(row, fontProfile, baseAtPt, alphabet);
@@ -2667,18 +2905,18 @@ function layoutArrayRow(
     hlist: wrapArrayCellWithInserts(cell.hlist, cell.sourceSpan, columnIndex, cellInserts, cellInsertLayouts),
     sourceSpan: cell.sourceSpan,
   }));
-  return {
+  return mathAlignedRowLayout({
     cells,
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...cells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...cells.map((cell) => cell.hlist.depth))),
-  };
+  });
 }
 
 function layoutArrayCellInserts(
   inserts: readonly TexMathArrayCellInsert[],
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): ReadonlyMap<TexMathArrayCellInsert, TexMathHList> | null {
   const layouts = new Map<TexMathArrayCellInsert, TexMathHList>();
@@ -2706,8 +2944,8 @@ function wrapArrayCellWithInserts(
   }
   const items: TexMathHListItem[] = [];
   let cursor = 0;
-  let height = hlist.height;
-  let depth = hlist.depth;
+  let height: number = hlist.height;
+  let depth: number = hlist.depth;
   for (const insert of before) {
     const insertHList = layouts.get(insert);
     if (!insertHList) {
@@ -2730,7 +2968,7 @@ function wrapArrayCellWithInserts(
     height = Math.max(height, insertHList.height);
     depth = Math.max(depth, insertHList.depth);
   }
-  return {
+  return mathHList({
     kind: "math-hlist",
     style: hlist.style,
     width: roundTexPt(cursor),
@@ -2738,13 +2976,13 @@ function wrapArrayCellWithInserts(
     depth: roundTexPt(depth),
     sourceSpan,
     items,
-  };
+  });
 }
 
 function layoutArrayPreambleInserts(
   items: readonly TexMathArrayPreambleItem[],
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): ReadonlyMap<TexMathArrayPreambleInsert, TexMathHList> | null {
   const layouts = new Map<TexMathArrayPreambleInsert, TexMathHList>();
@@ -2778,15 +3016,15 @@ function appendArrayBoundaryItems(
   for (const [index, item] of boundaryItems.entries()) {
     if (item.kind === "vertical-rule") {
       const consumesRuleWidth = arrayBoundaryRuleConsumesWidth(boundaryItems[index - 1], item, boundaryItems[index + 1]);
-      items.push({
+      items.push(mathRuleLayoutItem({
         kind: "rule",
         role: "array-rule",
         x: roundTexPt(consumesRuleWidth ? cursor : cursor - TEX_LATEX_ARRAY_RULE_WIDTH_PT / 2),
-        y: roundTexPt(-row.height),
+        y: roundTexPt(0 - row.height),
         width: TEX_LATEX_ARRAY_RULE_WIDTH_PT,
         height: roundTexPt(row.height + row.depth),
         sourceSpan: item.sourceSpan,
-      });
+      }));
       if (consumesRuleWidth) {
         cursor = roundTexPt(cursor + TEX_LATEX_ARRAY_RULE_WIDTH_PT);
       }
@@ -2859,7 +3097,7 @@ function layoutSmallMatrixNucleus(
   nucleus: TexMathSmallMatrixNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutSmallMatrixBody(nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -2883,7 +3121,7 @@ function layoutSmallMatrixBody(
   nucleus: TexMathSmallMatrixNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
@@ -2895,7 +3133,7 @@ function layoutSmallMatrixBody(
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   const outerGap = muToPt(fontProfile, style, baseAtPt, 3);
   if (concreteRows.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: roundTexPt(outerGap * 2),
       height: 0,
@@ -2903,7 +3141,7 @@ function layoutSmallMatrixBody(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const columnCount = Math.max(...concreteRows.map((row) => row.cells.length));
@@ -2927,7 +3165,7 @@ function layoutSmallMatrixBody(
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   let baselineY = roundTexPt(-height + concreteRows[0].height);
-  const items: TexMathHListItem[] = [{
+  const items: TexMathHListItem[] = [mathGlueLayoutItem({
     kind: "glue",
     x: 0,
     width: outerGap,
@@ -2936,7 +3174,7 @@ function layoutSmallMatrixBody(
     shrink: 0,
     source: "explicit",
     sourceSpan: nucleus.beginSourceSpan,
-  }];
+  })];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
     const rowChildren: TexMathHListItem[] = [];
@@ -2958,7 +3196,7 @@ function layoutSmallMatrixBody(
         cursor = roundTexPt(cursor + columnGap);
       }
     }
-    items.push({
+    items.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "smallmatrix-row",
       x: outerGap,
@@ -2968,11 +3206,11 @@ function layoutSmallMatrixBody(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
-    });
+    }));
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
-  items.push({
+  items.push(mathGlueLayoutItem({
     kind: "glue",
     x: roundTexPt(outerGap + bodyWidth),
     width: outerGap,
@@ -2981,9 +3219,9 @@ function layoutSmallMatrixBody(
     shrink: 0,
     source: "explicit",
     sourceSpan: nucleus.endSourceSpan ?? nucleus.sourceSpan,
-  });
+  }));
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height,
@@ -2991,13 +3229,13 @@ function layoutSmallMatrixBody(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutMatrixBody(
   nucleus: TexMathMatrixNucleus,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const rows = nucleus.rows.map((row) =>
@@ -3008,7 +3246,7 @@ function layoutMatrixBody(
   }
   const concreteRows = rows as readonly TexMathAlignedRowLayout[];
   if (concreteRows.length === 0) {
-    return {
+    return mathAtomLayout({
       items: [],
       width: 0,
       height: 0,
@@ -3016,7 +3254,7 @@ function layoutMatrixBody(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
 
   const columnCount = Math.max(...concreteRows.map((row) => row.cells.length));
@@ -3060,7 +3298,7 @@ function layoutMatrixBody(
         cursor = roundTexPt(cursor + 2 * TEX_MATRIX_ARRAY_COL_SEP_PT);
       }
     }
-    rowItems.push({
+    rowItems.push(mathChildHListLayoutItem({
       kind: "hlist",
       role: "matrix-row",
       x: 0,
@@ -3070,11 +3308,11 @@ function layoutMatrixBody(
       depth: row.depth,
       sourceSpan: row.sourceSpan,
       items: rowChildren,
-    });
+    }));
     baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
-  return {
+  return mathAtomLayout({
     items: rowItems,
     width,
     height,
@@ -3082,7 +3320,7 @@ function layoutMatrixBody(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function matrixCellOffset(
@@ -3103,7 +3341,7 @@ function matrixCellOffset(
 function layoutSmallMatrixRow(
   row: TexMathAlignedRow,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
   const cells = row.cells.map((cell) => {
@@ -3119,12 +3357,12 @@ function layoutSmallMatrixRow(
     return null;
   }
   const concreteCells = cells as readonly TexMathAlignedCellLayout[];
-  return {
+  return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(0, ...concreteCells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(0, ...concreteCells.map((cell) => cell.hlist.depth))),
-  };
+  });
 }
 
 function smallMatrixRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
@@ -3159,7 +3397,7 @@ function arrayCellOffset(
 function layoutMatrixRow(
   row: TexMathAlignedRow,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
   minimumHeight = TEX_ALIGNED_ROW_HEIGHT_PT,
   minimumDepth = TEX_ALIGNED_ROW_DEPTH_PT,
@@ -3178,12 +3416,12 @@ function layoutMatrixRow(
     return null;
   }
   const concreteCells = cells as readonly TexMathAlignedCellLayout[];
-  return {
+  return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(minimumHeight, ...concreteCells.map((cell) => cell.hlist.height))),
     depth: roundTexPt(Math.max(minimumDepth, ...concreteCells.map((cell) => cell.hlist.depth))),
-  };
+  });
 }
 
 function matrixRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
@@ -3205,7 +3443,7 @@ function wrapMatrixWithDelimiters(
   environment: TexMathMatrixEnvironment,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   nucleus: Pick<TexMathMatrixNucleus | TexMathSmallMatrixNucleus, "beginSourceSpan" | "endSourceSpan" | "sourceSpan">
 ): TexMathAtomLayout | null {
   const delimiters = matrixDelimiters(environment);
@@ -3237,7 +3475,7 @@ function wrapMatrixWithDelimiters(
     return null;
   }
 
-  const bodyHList: TexMathHList = {
+  const bodyHList = mathHList({
     kind: "math-hlist",
     style: "text",
     items: body.items,
@@ -3245,7 +3483,7 @@ function wrapMatrixWithDelimiters(
     height: body.height,
     depth: body.depth,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
   const bodyChild = childHList("nucleus", left.width, 0, bodyHList, nucleus.sourceSpan);
   const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + body.width), 0);
   const items = [
@@ -3256,8 +3494,8 @@ function wrapMatrixWithDelimiters(
   const width = roundTexPt(left.width + body.width + right.width);
   const height = Math.max(
     body.height,
-    ...left.items.map((item) => -item.y + item.height),
-    ...shiftedRight.map((item) => -item.y + item.height)
+    ...left.items.map((item) => 0 - item.y + item.height),
+    ...shiftedRight.map((item) => 0 - item.y + item.height)
   );
   const depth = Math.max(
     body.depth,
@@ -3265,7 +3503,7 @@ function wrapMatrixWithDelimiters(
     ...shiftedRight.map((item) => item.y + item.depth)
   );
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height: roundTexPt(height),
@@ -3273,7 +3511,7 @@ function wrapMatrixWithDelimiters(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function smallMatrixDelimiterEnvironment(environment: TexMathSmallMatrixEnvironment): TexMathMatrixEnvironment {
@@ -3298,7 +3536,7 @@ function wrapCasesWithDelimiters(
   nucleus: TexMathCasesNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
   const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
@@ -3325,7 +3563,7 @@ function wrapCasesWithDelimiters(
     return null;
   }
 
-  const bodyHList: TexMathHList = {
+  const bodyHList = mathHList({
     kind: "math-hlist",
     style: "text",
     items: body.items,
@@ -3333,7 +3571,7 @@ function wrapCasesWithDelimiters(
     height: body.height,
     depth: body.depth,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
   const bodyChild = childHList("nucleus", left.width, 0, bodyHList, nucleus.sourceSpan);
   const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + body.width), 0);
   const items = [
@@ -3344,8 +3582,8 @@ function wrapCasesWithDelimiters(
   const width = roundTexPt(left.width + body.width + right.width);
   const height = Math.max(
     body.height,
-    ...left.items.map((item) => -item.y + item.height),
-    ...shiftedRight.map((item) => -item.y + item.height)
+    ...left.items.map((item) => 0 - item.y + item.height),
+    ...shiftedRight.map((item) => 0 - item.y + item.height)
   );
   const depth = Math.max(
     body.depth,
@@ -3353,7 +3591,7 @@ function wrapCasesWithDelimiters(
     ...shiftedRight.map((item) => item.y + item.depth)
   );
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height: roundTexPt(height),
@@ -3361,7 +3599,7 @@ function wrapCasesWithDelimiters(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function matrixDelimiters(
@@ -3389,7 +3627,7 @@ function alignCellHList(
   columnIndex: number,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathHList {
   if (columnIndex % 2 === 0) {
     return hlist;
@@ -3416,11 +3654,11 @@ function alignCellHList(
     return hlist;
   }
   const width = muToPt(fontProfile, style, baseAtPt, glue.mu);
-  return {
+  return mathHList({
     ...hlist,
     width: roundTexPt(hlist.width + width),
     items: [
-      {
+      mathGlueLayoutItem({
         kind: "glue",
         x: 0,
         width,
@@ -3429,10 +3667,10 @@ function alignCellHList(
         shrink: muToPt(fontProfile, style, baseAtPt, glue.shrinkMu),
         source: glue.source,
         sourceSpan: glue.sourceSpan,
-      },
-      ...hlist.items.map((item) => offsetMathLayoutItem(item, width)),
+      }),
+      ...hlist.items.map((item) => offsetMathLayoutItem(item, texHBoxOffsetX(width))),
     ],
-  };
+  });
 }
 
 function emptyListForSpan(sourceSpan: TexMathSourceSpan): TexMathList {
@@ -3451,7 +3689,7 @@ function layoutFractionNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const fractionStyle = nucleus.style ?? style;
@@ -3521,8 +3759,14 @@ function layoutFractionNucleus(
     }
   }
 
-  const reboxedNumerator = reboxSingleCharacterItalicCorrection(numeratorWithStrut, fractionWidth);
-  const reboxedDenominator = reboxSingleCharacterItalicCorrection(denominator, fractionWidth);
+  const reboxedNumerator = reboxSingleCharacterItalicCorrection(
+    numeratorWithStrut,
+    texLength(fractionWidth)
+  );
+  const reboxedDenominator = reboxSingleCharacterItalicCorrection(
+    denominator,
+    texLength(fractionWidth)
+  );
   const numeratorX = numeratorAlignmentOffset(
     nucleus.continued?.numeratorAlignment ?? "center",
     fractionWidth,
@@ -3545,7 +3789,7 @@ function layoutFractionNucleus(
   );
   const bodyItems: TexMathHListItem[] = [numeratorChild];
   if (thickness !== 0) {
-    bodyItems.push({
+    bodyItems.push(mathRuleLayoutItem({
       kind: "rule",
       role: "fraction-rule",
       x: bodyX,
@@ -3553,7 +3797,7 @@ function layoutFractionNucleus(
       width: fractionWidth,
       height: roundTexPt(thickness),
       sourceSpan: nucleus.sourceSpan,
-    } satisfies TexMathRuleLayoutItem);
+    }));
   }
   bodyItems.push(denominatorChild);
 
@@ -3564,9 +3808,9 @@ function layoutFractionNucleus(
   if (hasVisibleDelimiters) {
     return wrapFractionWithDelimiters({
       items: bodyItems,
-      width: bodyWidth,
-      height,
-      depth,
+      width: texLength(bodyWidth),
+      height: texLength(height),
+      depth: texLength(depth),
       leftDelimiter,
       rightDelimiter,
       fontProfile,
@@ -3577,16 +3821,16 @@ function layoutFractionNucleus(
   }
 
   if (nucleus.continued) {
-    bodyItems.push({
+    bodyItems.push(mathKernLayoutItem({
       kind: "kern",
       x: bodyWidth,
       width: -TEX_NULL_DELIMITER_SPACE_PT,
       reason: "fraction-kern",
       sourceSpan: nucleus.sourceSpan,
-    });
+    }));
   }
 
-  return {
+  return mathAtomLayout({
     items: bodyItems,
     width: roundTexPt(bodyWidth + (nucleus.continued ? -TEX_NULL_DELIMITER_SPACE_PT : 0)),
     height,
@@ -3594,19 +3838,19 @@ function layoutFractionNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function wrapFractionWithDelimiters(params: {
   readonly items: readonly TexMathHListItem[];
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
   readonly leftDelimiter: TexMathDelimiter;
   readonly rightDelimiter: TexMathDelimiter;
   readonly fontProfile: TexMathFontProfile;
   readonly style: TexMathStyle;
-  readonly baseAtPt: number;
+  readonly baseAtPt: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
 }): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(params.style);
@@ -3639,7 +3883,7 @@ function wrapFractionWithDelimiters(params: {
     return null;
   }
 
-  const bodyHList: TexMathHList = {
+  const bodyHList = mathHList({
     kind: "math-hlist",
     style: params.style,
     items: params.items,
@@ -3647,7 +3891,7 @@ function wrapFractionWithDelimiters(params: {
     height: params.height,
     depth: params.depth,
     sourceSpan: params.sourceSpan,
-  };
+  });
   const bodyChild = childHList("nucleus", left.width, 0, bodyHList, params.sourceSpan);
   const shiftedRight = offsetDelimiterItems(right.items, roundTexPt(left.width + params.width), 0);
   const items = [
@@ -3658,8 +3902,8 @@ function wrapFractionWithDelimiters(params: {
   const width = roundTexPt(left.width + params.width + right.width);
   const height = Math.max(
     params.height,
-    ...left.items.map((item) => -item.y + item.height),
-    ...shiftedRight.map((item) => -item.y + item.height)
+    ...left.items.map((item) => 0 - item.y + item.height),
+    ...shiftedRight.map((item) => 0 - item.y + item.height)
   );
   const depth = Math.max(
     params.depth,
@@ -3667,7 +3911,7 @@ function wrapFractionWithDelimiters(params: {
     ...shiftedRight.map((item) => item.y + item.depth)
   );
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height: roundTexPt(height),
@@ -3675,7 +3919,7 @@ function wrapFractionWithDelimiters(params: {
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: params.sourceSpan,
-  };
+  });
 }
 
 function layoutFractionList(
@@ -3683,7 +3927,7 @@ function layoutFractionList(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
@@ -3695,11 +3939,11 @@ function hlistWithMinimumHeightDepth(
   minHeight: number,
   minDepth: number
 ): TexMathHList {
-  return {
+  return mathHList({
     ...hlist,
     height: roundTexPt(Math.max(hlist.height, minHeight)),
     depth: roundTexPt(Math.max(hlist.depth, minDepth)),
-  };
+  });
 }
 
 function numeratorAlignmentOffset(
@@ -3721,7 +3965,7 @@ function layoutRadicalNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   _cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, true, baseAtPt, alphabet);
@@ -3743,11 +3987,11 @@ function layoutRadicalNucleus(
   const overbarThickness = delimiter.height;
   const radicalY = roundTexPt(-(radicand.height + clearance));
   const ruleY = roundTexPt(radicalY - overbarThickness);
-  const radicalItems = delimiter.items.map((item) => ({
+  const radicalItems = delimiter.items.map((item) => mathGlyphLayoutItem({
     ...item,
     y: roundTexPt(item.y + radicalY),
-  })) satisfies readonly TexMathGlyphLayoutItem[];
-  const rule = {
+  }));
+  const rule = mathRuleLayoutItem({
     kind: "rule",
     role: "radical-rule",
     x: delimiter.width,
@@ -3755,7 +3999,7 @@ function layoutRadicalNucleus(
     width: radicand.width,
     height: roundTexPt(overbarThickness),
     sourceSpan: nucleus.sourceSpan,
-  } satisfies TexMathRuleLayoutItem;
+  });
   const radicandChild = childHList(
     "nucleus",
     delimiter.width,
@@ -3765,14 +4009,14 @@ function layoutRadicalNucleus(
   );
   const height = Math.max(
     radicand.height,
-    ...radicalItems.map((item) => -item.y + item.height),
-    -rule.y + rule.height
+    ...radicalItems.map((item) => 0 - item.y + item.height),
+    0 - rule.y + rule.height
   );
   const depth = Math.max(
     radicand.depth,
     ...radicalItems.map((item) => item.y + item.depth)
   );
-  const squareRootLayout = {
+  const squareRootLayout = mathAtomLayout({
     items: [...radicalItems, rule, radicandChild],
     width: roundTexPt(delimiter.width + radicand.width),
     height: roundTexPt(height),
@@ -3780,7 +4024,7 @@ function layoutRadicalNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  } satisfies TexMathAtomLayout;
+  });
 
   if (!nucleus.degree) {
     return squareRootLayout;
@@ -3803,25 +4047,27 @@ function layoutRadicalNucleus(
   const degreeRaise = roundTexPt(0.6 * (squareRootLayout.height - squareRootLayout.depth));
   const radicalX = roundTexPt(leadKern + degreeHList.width + backKern);
   const items = [
-    {
+    mathKernLayoutItem({
       kind: "kern",
       x: 0,
       width: leadKern,
       reason: "operator-kern",
       sourceSpan: nucleus.degree.sourceSpan,
-    } satisfies TexMathKernLayoutItem,
+    }),
     childHList("radical-degree", leadKern, -degreeRaise, degreeHList, nucleus.degree.sourceSpan),
-    {
+    mathKernLayoutItem({
       kind: "kern",
       x: roundTexPt(leadKern + degreeHList.width),
       width: backKern,
       reason: "operator-kern",
       sourceSpan: nucleus.degree.sourceSpan,
-    } satisfies TexMathKernLayoutItem,
-    ...squareRootLayout.items.map((item) => offsetMathLayoutItem(item, radicalX)),
+    }),
+    ...squareRootLayout.items.map((item) =>
+      offsetMathLayoutItem(item, texHBoxOffsetX(radicalX))
+    ),
   ];
 
-  return {
+  return mathAtomLayout({
     items,
     width: roundTexPt(radicalX + squareRootLayout.width),
     height: roundTexPt(Math.max(squareRootLayout.height, degreeRaise + degreeHList.height)),
@@ -3829,7 +4075,7 @@ function layoutRadicalNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutRadicandList(
@@ -3837,7 +4083,7 @@ function layoutRadicandList(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
@@ -3847,7 +4093,7 @@ function layoutRadicandList(
 function layoutBoxedNucleus(
   nucleus: TexMathBoxedNucleus,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutTexMathList(nucleus.body, {
@@ -3874,7 +4120,7 @@ function layoutBoxedNucleus(
     nucleus.body.sourceSpan
   );
   const frameRules: TexMathRuleLayoutItem[] = [
-    {
+    mathRuleLayoutItem({
       kind: "rule",
       role: "boxed-rule",
       x: 0,
@@ -3882,8 +4128,8 @@ function layoutBoxedNucleus(
       width,
       height: rule,
       sourceSpan: nucleus.commandSourceSpan,
-    },
-    {
+    }),
+    mathRuleLayoutItem({
       kind: "rule",
       role: "boxed-rule",
       x: 0,
@@ -3891,8 +4137,8 @@ function layoutBoxedNucleus(
       width: rule,
       height: sideHeight,
       sourceSpan: nucleus.commandSourceSpan,
-    },
-    {
+    }),
+    mathRuleLayoutItem({
       kind: "rule",
       role: "boxed-rule",
       x: roundTexPt(width - rule),
@@ -3900,8 +4146,8 @@ function layoutBoxedNucleus(
       width: rule,
       height: sideHeight,
       sourceSpan: nucleus.commandSourceSpan,
-    },
-    {
+    }),
+    mathRuleLayoutItem({
       kind: "rule",
       role: "boxed-rule",
       x: 0,
@@ -3909,9 +4155,9 @@ function layoutBoxedNucleus(
       width,
       height: rule,
       sourceSpan: nucleus.commandSourceSpan,
-    },
+    }),
   ];
-  return {
+  return mathAtomLayout({
     items: [frameRules[0], frameRules[1], bodyChild, frameRules[2], frameRules[3]],
     width,
     height,
@@ -3919,7 +4165,7 @@ function layoutBoxedNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutSmashNucleus(
@@ -3927,7 +4173,7 @@ function layoutSmashNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutTexMathList(nucleus.body, {
@@ -3941,7 +4187,7 @@ function layoutSmashNucleus(
     return null;
   }
   const bodyChild = childHList("nucleus", 0, 0, body.hlist, nucleus.body.sourceSpan);
-  return {
+  return mathAtomLayout({
     items: [bodyChild],
     width: body.hlist.width,
     height: nucleus.smashHeight ? 0 : body.hlist.height,
@@ -3949,7 +4195,7 @@ function layoutSmashNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutPhantomNucleus(
@@ -3957,7 +4203,7 @@ function layoutPhantomNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutTexMathList(nucleus.body, {
@@ -3970,7 +4216,7 @@ function layoutPhantomNucleus(
   if (!body.supported) {
     return null;
   }
-  return {
+  return mathAtomLayout({
     items: [],
     width: nucleus.preserveWidth ? body.hlist.width : 0,
     height: nucleus.preserveVertical ? body.hlist.height : 0,
@@ -3978,7 +4224,7 @@ function layoutPhantomNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutShiftBoxNucleus(
@@ -3986,7 +4232,7 @@ function layoutShiftBoxNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const body = layoutTexMathList(nucleus.body, {
@@ -3999,17 +4245,17 @@ function layoutShiftBoxNucleus(
   if (!body.supported) {
     return null;
   }
-  const shift = nucleus.direction === "raise" ? -nucleus.amount : nucleus.amount;
+  const shift = nucleus.direction === "raise" ? 0 - nucleus.amount : nucleus.amount;
   const bodyChild = childHList("nucleus", 0, roundTexPt(shift), body.hlist, nucleus.body.sourceSpan);
-  return {
+  return mathAtomLayout({
     items: [bodyChild],
     width: body.hlist.width,
-    height: roundTexPt(Math.max(0, -bodyChild.y + body.hlist.height)),
+    height: roundTexPt(Math.max(0, 0 - bodyChild.y + body.hlist.height)),
     depth: roundTexPt(Math.max(0, bodyChild.y + body.hlist.depth)),
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutVCenterNucleus(
@@ -4017,7 +4263,7 @@ function layoutVCenterNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   if (!isSupportedVCenterHBoxBody(nucleus.body)) {
@@ -4044,7 +4290,7 @@ function layoutVCenterNucleus(
     body.hlist,
     nucleus.body.sourceSpan
   );
-  return {
+  return mathAtomLayout({
     items: [bodyChild],
     width: body.hlist.width,
     height,
@@ -4052,7 +4298,7 @@ function layoutVCenterNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function isSupportedVCenterHBoxBody(list: TexMathList): boolean {
@@ -4071,24 +4317,24 @@ function layoutRuleNucleus(nucleus: TexMathRuleNucleus): TexMathAtomLayout {
   const width = roundTexPt(nucleus.width);
   const ruleHeight = roundTexPt(nucleus.height);
   const raisedHeight = nucleus.height + nucleus.raise;
-  const rule = {
+  const rule = mathRuleLayoutItem({
     kind: "rule",
     role: "literal-rule",
     x: 0,
-    y: roundTexPt(-raisedHeight),
+    y: roundTexPt(0 - raisedHeight),
     width,
     height: ruleHeight,
     sourceSpan: nucleus.sourceSpan,
-  } satisfies TexMathRuleLayoutItem;
-  return {
+  });
+  return mathAtomLayout({
     items: [rule],
     width,
     height: roundTexPt(Math.max(0, raisedHeight)),
-    depth: roundTexPt(Math.max(0, -nucleus.raise)),
+    depth: roundTexPt(Math.max(0, 0 - nucleus.raise)),
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutLineNucleus(
@@ -4096,7 +4342,7 @@ function layoutLineNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const thickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
@@ -4110,7 +4356,7 @@ function layoutOverlineNucleus(
   nucleus: TexMathLineNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   thickness: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -4120,7 +4366,7 @@ function layoutOverlineNucleus(
   }
   const ruleY = roundTexPt(-(body.height + 4 * thickness));
   const height = roundTexPt(body.height + 5 * thickness);
-  const rule = {
+  const rule = mathRuleLayoutItem({
     kind: "rule",
     role: "overline-rule",
     x: 0,
@@ -4128,9 +4374,9 @@ function layoutOverlineNucleus(
     width: body.width,
     height: roundTexPt(thickness),
     sourceSpan: nucleus.commandSourceSpan,
-  } satisfies TexMathRuleLayoutItem;
+  });
   const bodyChild = childHList("nucleus", 0, 0, body, nucleus.body.sourceSpan);
-  return {
+  return mathAtomLayout({
     items: [rule, bodyChild],
     width: body.width,
     height,
@@ -4138,7 +4384,7 @@ function layoutOverlineNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutUnderlineNucleus(
@@ -4146,7 +4392,7 @@ function layoutUnderlineNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   thickness: number,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -4155,7 +4401,7 @@ function layoutUnderlineNucleus(
     return null;
   }
   const ruleY = roundTexPt(body.depth + 3 * thickness);
-  const rule = {
+  const rule = mathRuleLayoutItem({
     kind: "rule",
     role: "underline-rule",
     x: 0,
@@ -4163,9 +4409,9 @@ function layoutUnderlineNucleus(
     width: body.width,
     height: roundTexPt(thickness),
     sourceSpan: nucleus.commandSourceSpan,
-  } satisfies TexMathRuleLayoutItem;
+  });
   const bodyChild = childHList("nucleus", 0, 0, body, nucleus.body.sourceSpan);
-  return {
+  return mathAtomLayout({
     items: [bodyChild, rule],
     width: body.width,
     height: body.height,
@@ -4173,7 +4419,7 @@ function layoutUnderlineNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutLineBody(
@@ -4181,7 +4427,7 @@ function layoutLineBody(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
@@ -4192,14 +4438,14 @@ function layoutVerticalDotsNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "vertical-dots" | "diagonal-dots" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathAtomLayout {
   const font = fontProfile.resolveMathFont({ family: "letters", style, baseAtPt });
   const metric = requiredCharMetric(font, 58);
   const dotWidth = roundTexPt(tfmToPt(font, metric.width));
   const dotHeight = roundTexPt(tfmToPt(font, metric.height));
   const dotDepth = roundTexPt(tfmToPt(font, metric.depth));
-  const makeDot = (x: number, y: number): TexMathGlyphLayoutItem => ({
+  const makeDot = (x: number, y: number): TexMathGlyphLayoutItem => mathGlyphLayoutItem({
     kind: "glyph",
     fontId: font.id,
     atPt: font.atPt,
@@ -4215,7 +4461,7 @@ function layoutVerticalDotsNucleus(
     sourceSpan: nucleus.commandSourceSpan,
   });
   if (nucleus.kind === "vertical-dots") {
-    return {
+    return mathAtomLayout({
       items: [makeDot(0, -8), makeDot(0, -4), makeDot(0, 0)],
       width: dotWidth,
       height: roundTexPt(14 + dotHeight),
@@ -4223,14 +4469,14 @@ function layoutVerticalDotsNucleus(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
   const oneMu = muToPt(fontProfile, style, baseAtPt, 1);
   const twoMu = muToPt(fontProfile, style, baseAtPt, 2);
   const firstX = oneMu;
   const secondX = roundTexPt(firstX + dotWidth + twoMu);
   const thirdX = roundTexPt(secondX + dotWidth + twoMu);
-  return {
+  return mathAtomLayout({
     items: [makeDot(firstX, -7), makeDot(secondX, -4), makeDot(thirdX, -1)],
     width: roundTexPt(thirdX + dotWidth + oneMu),
     height: roundTexPt(14 + dotHeight),
@@ -4238,13 +4484,13 @@ function layoutVerticalDotsNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutBraceNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "brace" }>,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   // LaTeX's definitions explicitly typeset the braced body in display style.
@@ -4279,7 +4525,7 @@ function layoutBraceNucleus(
     halfWidth,
     roundTexPt(width - widths[3]),
   ];
-  const glyphs = codes.map((code, index): TexMathGlyphLayoutItem => ({
+  const glyphs = codes.map((code, index): TexMathGlyphLayoutItem => mathGlyphLayoutItem({
     kind: "glyph",
     fontId: font.id,
     atPt: font.atPt,
@@ -4296,7 +4542,7 @@ function layoutBraceNucleus(
   }));
   const ruleY = roundTexPt(braceY - braceHeight);
   const rules: TexMathRuleLayoutItem[] = [
-    {
+    mathRuleLayoutItem({
       kind: "rule",
       role: "brace-rule",
       x: widths[0] ?? 0,
@@ -4304,8 +4550,8 @@ function layoutBraceNucleus(
       width: leftRuleWidth,
       height: braceHeight,
       sourceSpan: nucleus.commandSourceSpan,
-    },
-    {
+    }),
+    mathRuleLayoutItem({
       kind: "rule",
       role: "brace-rule",
       x: roundTexPt(halfWidth + (widths[2] ?? 0)),
@@ -4313,13 +4559,13 @@ function layoutBraceNucleus(
       width: rightRuleWidth,
       height: braceHeight,
       sourceSpan: nucleus.commandSourceSpan,
-    },
+    }),
   ];
   // \overbrace uses a vbox, whose reference point is its bottom; \underbrace
   // uses a vtop, whose reference point is the first (body) row baseline.
-  const bodyY = nucleus.command === "overbrace" ? -body.depth : 0;
+  const bodyY = nucleus.command === "overbrace" ? 0 - body.depth : 0;
   const bodyChild = childHList("nucleus", bodyX, bodyY, body, nucleus.body.sourceSpan);
-  return {
+  return mathAtomLayout({
     items: [bodyChild, ...rules, ...glyphs],
     width,
     height: nucleus.command === "overbrace"
@@ -4329,14 +4575,14 @@ function layoutBraceNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutVarLimitNucleus(
   nucleus: TexMathVarLimitNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const lim = layoutVarLimitLimHList(nucleus.commandSourceSpan, fontProfile, style, baseAtPt);
@@ -4360,7 +4606,7 @@ function layoutVarLimitLimHList(
   sourceSpan: TexMathSourceSpan,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathHList | null {
   const lim = layoutOperatorNameNucleus({
     kind: "operator-name",
@@ -4384,9 +4630,9 @@ function layoutVarLimitInfSup(
 ): TexMathAtomLayout {
   if (command === "overline") {
     const ruleY = roundTexPt(-(lim.height + 4 * thickness));
-    return {
+    return mathAtomLayout({
       items: [
-        {
+        mathRuleLayoutItem({
           kind: "rule",
           role: "var-limit-rule",
           x: 0,
@@ -4394,7 +4640,7 @@ function layoutVarLimitInfSup(
           width: lim.width,
           height: roundTexPt(thickness),
           sourceSpan: nucleus.commandSourceSpan,
-        },
+        }),
         childHList("var-limit-row", 0, 0, lim, nucleus.commandSourceSpan),
       ],
       width: lim.width,
@@ -4403,13 +4649,13 @@ function layoutVarLimitInfSup(
       italicCorrection: 0,
       isCharacterNucleus: false,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   }
   const ruleY = roundTexPt(lim.depth + 3.5 * thickness);
-  return {
+  return mathAtomLayout({
     items: [
       childHList("var-limit-row", 0, 0, lim, nucleus.commandSourceSpan),
-      {
+      mathRuleLayoutItem({
         kind: "rule",
         role: "var-limit-rule",
         x: 0,
@@ -4417,7 +4663,7 @@ function layoutVarLimitInfSup(
         width: lim.width,
         height: roundTexPt(thickness),
         sourceSpan: nucleus.commandSourceSpan,
-      },
+      }),
     ],
     width: lim.width,
     height: lim.height,
@@ -4425,7 +4671,7 @@ function layoutVarLimitInfSup(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutVarLimitArrow(
@@ -4433,7 +4679,7 @@ function layoutVarLimitArrow(
   lim: TexMathHList,
   command: TexMathExtensibleArrowNucleus["command"],
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   void alphabet;
@@ -4442,7 +4688,7 @@ function layoutVarLimitArrow(
   const xHeight = mathXHeight(fontProfile, "text", baseAtPt);
   const arrowY = roundTexPt(1.2 * xHeight);
   const width = lim.width;
-  return {
+  return mathAtomLayout({
     items: [
       childHList("var-limit-row", 0, 0, lim, nucleus.commandSourceSpan),
       childHList("var-limit-row", 0, arrowY, arrowHList, nucleus.commandSourceSpan),
@@ -4456,13 +4702,13 @@ function layoutVarLimitArrow(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutVarLimitArrowBody(
   command: TexMathExtensibleArrowNucleus["command"],
   fontProfile: TexMathFontProfile,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   sourceSpan: TexMathSourceSpan
 ): TexMathAtomLayout {
   const font = fontProfile.resolveMathFont({ family: "symbols", style: "text", baseAtPt });
@@ -4473,7 +4719,7 @@ function layoutVarLimitArrowBody(
   const items: TexMathHListItem[] = [];
   const glyph = (code: number, text: string, x: number): TexMathGlyphLayoutItem => {
     const metric = requiredCharMetric(font, code);
-    return {
+    return mathGlyphLayoutItem({
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
@@ -4487,9 +4733,9 @@ function layoutVarLimitArrowBody(
       depth: roundTexPt(tfmToPt(font, metric.depth)),
       italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
       sourceSpan,
-    };
+    });
   };
-  const kern = (x: number): TexMathKernLayoutItem => ({
+  const kern = (x: number): TexMathKernLayoutItem => mathKernLayoutItem({
     kind: "kern",
     x: roundTexPt(x),
     width: joinRel,
@@ -4517,7 +4763,7 @@ function layoutVarLimitArrowBody(
     );
   }
   const rightEdge = Math.max(...items.map((item) => item.x + (item.kind === "glyph" ? item.width : 0)));
-  return {
+  return mathAtomLayout({
     items,
     width: roundTexPt(rightEdge),
     height: roundTexPt(Math.max(...items.map((item) => item.kind === "glyph" ? item.height : 0))),
@@ -4525,7 +4771,7 @@ function layoutVarLimitArrowBody(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan,
-  };
+  });
 }
 
 function atomLayoutToHList(
@@ -4533,7 +4779,7 @@ function atomLayoutToHList(
   style: TexMathStyle,
   sourceSpan: TexMathSourceSpan
 ): TexMathHList {
-  return {
+  return mathHList({
     kind: "math-hlist",
     style,
     width: layout.width,
@@ -4541,7 +4787,7 @@ function atomLayoutToHList(
     depth: layout.depth,
     sourceSpan,
     items: layout.items,
-  };
+  });
 }
 
 function layoutAccentBase(
@@ -4549,7 +4795,7 @@ function layoutAccentBase(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
   suppressAmsNestedAccentAdjustment = false
 ): TexMathHList | null {
@@ -4564,7 +4810,7 @@ function layoutAccentBase(
     if (!nucleus) {
       return null;
     }
-    return {
+    return mathHList({
       kind: "math-hlist",
       style,
       width: roundTexPt(nucleus.width + nucleus.italicCorrection),
@@ -4572,7 +4818,7 @@ function layoutAccentBase(
       depth: nucleus.depth,
       sourceSpan: list.sourceSpan,
       items: nucleus.items,
-    };
+    });
   }
 
   const result = layoutTexMathList(list, {
@@ -4591,7 +4837,7 @@ function layoutAccentNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   _cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
   suppressAmsNestedAccentAdjustment = false
 ): TexMathAtomLayout | null {
@@ -4622,14 +4868,14 @@ function layoutAccentNucleus(
   const accentItalicCorrection = roundTexPt(tfmToPt(accent.font, metric.italicCorrection));
   const skew = accentBaseSkew(nucleus.base, fontProfile, style, baseAtPt, alphabet);
   const amsNestedAdjustment = suppressAmsNestedAccentAdjustment
-    ? { overlayXShift: 0, baseGlue: null }
+    ? { overlayXShift: texHBoxOffsetX(0), baseGlue: null }
     : amsNestedAccentAdjustment(nucleus, fontProfile, style, baseAtPt, alphabet);
   const scriptGlyphBase = amsNestedAccentScriptGlyphMetrics(nucleus, fontProfile, style, baseAtPt, alphabet) ??
     accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
   const delta = Math.min(base.height, accentXHeight(accent.font));
   const accentX = roundTexPt(skew + amsNestedAdjustment.overlayXShift + (base.width - accentCenterWidth) / 2);
   const accentY = roundTexPt(delta - base.height);
-  const accentItem = {
+  const accentItem = mathGlyphLayoutItem({
     kind: "glyph",
     fontId: accent.font.id,
     atPt: accent.font.atPt,
@@ -4643,11 +4889,11 @@ function layoutAccentNucleus(
     depth: accentDepth,
     italicCorrection: accentItalicCorrection,
     sourceSpan: nucleus.commandSourceSpan,
-  } satisfies TexMathGlyphLayoutItem;
+  });
   const adjustedBase = applyAmsNestedAccentAdjustment(base, amsNestedAdjustment);
   const baseChild = childHList("nucleus", 0, 0, adjustedBase, nucleus.base.sourceSpan);
 
-  return {
+  return mathAtomLayout({
     items: [accentItem, baseChild],
     width: adjustedBase.width,
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
@@ -4660,11 +4906,11 @@ function layoutAccentNucleus(
       scriptSuperscriptOffset: scriptGlyphBase.italicCorrection,
     } : {}),
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 interface AmsNestedAccentAdjustment {
-  readonly overlayXShift: number;
+  readonly overlayXShift: TexHBoxOffsetX;
   readonly baseGlue: TexMathGlueLayoutItem | null;
 }
 
@@ -4672,18 +4918,18 @@ function amsNestedAccentAdjustment(
   nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): AmsNestedAccentAdjustment {
   if (fontProfile.id !== luaLatexAmsMathFontProfile.id || !hasNestedAccentBase(nucleus.base)) {
-    return { overlayXShift: 0, baseGlue: null };
+    return { overlayXShift: texHBoxOffsetX(0), baseGlue: null };
   }
   const deepestBase = innermostNestedAccentBase(nucleus.base);
   const skewKern = hasMultipleLayoutAtoms(deepestBase)
     ? trailingSkewKern(deepestBase, fontProfile, style, baseAtPt, alphabet)
     : 0;
   return {
-    overlayXShift: skewKern,
+    overlayXShift: texHBoxOffsetX(skewKern),
     baseGlue: amsNestedAccentBaseGlue(deepestBase, fontProfile, style, baseAtPt),
   };
 }
@@ -4716,7 +4962,7 @@ function trailingSkewKern(
   list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): number {
   for (let index = list.items.length - 1; index >= 0; index -= 1) {
@@ -4754,7 +5000,7 @@ function amsNestedAccentBaseGlue(
   deepestBase: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathGlueLayoutItem | null {
   const firstAtom = deepestBase.items.find((item): item is TexMathAtom => item.kind === "atom");
   if (!firstAtom) {
@@ -4772,7 +5018,7 @@ function amsNestedAccentBaseGlue(
   if (!glue) {
     return null;
   }
-  return {
+  return mathGlueLayoutItem({
     kind: "glue",
     x: 0,
     width: muToPt(fontProfile, style, baseAtPt, glue.mu),
@@ -4781,16 +5027,16 @@ function amsNestedAccentBaseGlue(
     shrink: muToPt(fontProfile, style, baseAtPt, glue.shrinkMu),
     source: glue.source,
     sourceSpan: glue.sourceSpan,
-  };
+  });
 }
 
 function amsNestedAccentScriptGlyphMetrics(
   nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
-): { readonly width: number; readonly italicCorrection: number } | null {
+): { readonly width: TexLength; readonly italicCorrection: TexLength } | null {
   if (fontProfile.id !== luaLatexAmsMathFontProfile.id || !hasNestedAccentBase(nucleus.base)) {
     return null;
   }
@@ -4830,7 +5076,10 @@ function applyAmsNestedAccentAdjustment(
     : overlayShifted;
 }
 
-function shiftNestedAccentOverlay(hlist: TexMathHList, xShift: number): TexMathHList {
+function shiftNestedAccentOverlay(
+  hlist: TexMathHList,
+  xShift: TexHBoxOffsetX
+): TexMathHList {
   return {
     ...hlist,
     items: shiftNestedAccentOverlayItems(hlist.items, xShift),
@@ -4839,7 +5088,7 @@ function shiftNestedAccentOverlay(hlist: TexMathHList, xShift: number): TexMathH
 
 function shiftNestedAccentOverlayItems(
   items: readonly TexMathHListItem[],
-  xShift: number
+  xShift: TexHBoxOffsetX
 ): readonly TexMathHListItem[] {
   const isAccentOverlay = isNestedAccentOverlayItems(items);
   return items.map((item): TexMathHListItem => {
@@ -4847,10 +5096,10 @@ function shiftNestedAccentOverlayItems(
       return offsetMathLayoutItem(item, xShift);
     }
     if (item.kind === "hlist" && item.role === "nucleus") {
-      return {
+      return mathChildHListLayoutItem({
         ...item,
         items: shiftNestedAccentOverlayItems(item.items, xShift),
-      };
+      });
     }
     return item;
   });
@@ -4860,11 +5109,11 @@ function insertNestedAccentBaseGlue(
   hlist: TexMathHList,
   glue: TexMathGlueLayoutItem
 ): TexMathHList {
-  return {
+  return mathHList({
     ...hlist,
     width: roundTexPt(hlist.width + glue.width),
     items: insertNestedAccentBaseGlueItems(hlist.items, glue),
-  };
+  });
 }
 
 function insertNestedAccentBaseGlueItems(
@@ -4877,17 +5126,17 @@ function insertNestedAccentBaseGlueItems(
   for (const item of items) {
     if (isAccentOverlay && item.kind === "hlist" && item.role === "nucleus") {
       if (isNestedAccentOverlayItems(item.items)) {
-        adjusted.push({
+        adjusted.push(mathChildHListLayoutItem({
           ...item,
           width: roundTexPt(item.width + glue.width),
           items: insertNestedAccentBaseGlueItems(item.items, glue),
-        });
+        }));
       } else {
-        adjusted.push({ ...glue });
-        adjusted.push({
+        adjusted.push(glue);
+        adjusted.push(mathChildHListLayoutItem({
           ...item,
           x: roundTexPt(item.x + glue.width),
-        });
+        }));
       }
       inserted = true;
       continue;
@@ -4906,7 +5155,7 @@ function layoutMultiDotAccentNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "accent" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const base = layoutAccentBase(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
@@ -4942,19 +5191,19 @@ function layoutMultiDotAccentNucleus(
   const accentX = roundTexPt((width - accentWidth) / 2);
   const textEx = roundTexPt(tfmToPt(font, font.data.fontdimen.xheight));
   const accentY = roundTexPt(
-    -base.height - 0.6 * textEx + dotHeight - TEX_AMSMATH_MULTIDOT_LIMIT_CORRECTION_PT
+    0 - base.height - 0.6 * textEx + dotHeight - TEX_AMSMATH_MULTIDOT_LIMIT_CORRECTION_PT
   );
   const baseX = roundTexPt((width - base.width) / 2);
   const items: TexMathHListItem[] = [];
-  items.push({
+  items.push(mathKernLayoutItem({
     kind: "kern",
     x: accentX,
     width: leadingThinSpace,
     reason: "operator-kern",
     sourceSpan: nucleus.commandSourceSpan,
-  });
+  }));
   for (let index = 0; index < dotCount; index++) {
-    items.push({
+    items.push(mathGlyphLayoutItem({
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
@@ -4968,11 +5217,11 @@ function layoutMultiDotAccentNucleus(
       depth: dotDepth,
       italicCorrection: dotItem.italicCorrection,
       sourceSpan: nucleus.commandSourceSpan,
-    });
+    }));
   }
   const baseChild = childHList("nucleus", baseX, 0, base, nucleus.base.sourceSpan);
 
-  return {
+  return mathAtomLayout({
     items: [...items, baseChild],
     width,
     height: roundTexPt(Math.max(base.height, -accentY + dotHeight)),
@@ -4980,14 +5229,14 @@ function layoutMultiDotAccentNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutOperatorNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   if (nucleus.command === "lim") {
@@ -5000,7 +5249,7 @@ function layoutTextOperatorNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   text: string,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -5015,7 +5264,7 @@ function layoutTextOperatorNucleus(
     const code = char.charCodeAt(0);
     const metric = requiredCharMetric(font, code);
     const width = roundTexPt(tfmToPt(font, metric.width));
-    const item = {
+    const item = mathGlyphLayoutItem({
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
@@ -5029,13 +5278,13 @@ function layoutTextOperatorNucleus(
       depth: roundTexPt(tfmToPt(font, metric.depth)),
       italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
       sourceSpan: nucleus.sourceSpan,
-    } satisfies TexMathGlyphLayoutItem;
+    });
     items.push(item);
     cursor = roundTexPt(cursor + width);
     height = Math.max(height, item.height);
     depth = Math.max(depth, item.depth);
   }
-  return {
+  return mathAtomLayout({
     items,
     width: cursor,
     height: roundTexPt(height),
@@ -5043,14 +5292,14 @@ function layoutTextOperatorNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutOperatorNameNucleus(
   nucleus: TexMathOperatorNameNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const font = alphabet === "boldsymbol"
@@ -5096,13 +5345,13 @@ function layoutOperatorNameNucleus(
       }
       const previous = items.at(-1);
       if (previous?.kind === "glyph" && previous.italicCorrection !== 0) {
-        items.push({
+        items.push(mathKernLayoutItem({
           kind: "kern",
           x: cursor,
           width: previous.italicCorrection,
           reason: "italic-correction",
           sourceSpan: previous.sourceSpan,
-        });
+        }));
         cursor = roundTexPt(cursor + previous.italicCorrection);
       }
       const dimensions = resolveExplicitMathGlue({
@@ -5114,7 +5363,7 @@ function layoutOperatorNameNucleus(
         return null;
       }
       const width = muToPt(fontProfile, style, baseAtPt, dimensions.mu);
-      items.push({
+      items.push(mathGlueLayoutItem({
         kind: "glue",
         x: cursor,
         width,
@@ -5123,7 +5372,7 @@ function layoutOperatorNameNucleus(
         shrink: muToPt(fontProfile, style, baseAtPt, dimensions.shrinkMu),
         source: "explicit",
         sourceSpan: part.sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + width);
       continue;
     }
@@ -5137,16 +5386,16 @@ function layoutOperatorNameNucleus(
   }
   const previous = items.at(-1);
   if (previous?.kind === "glyph" && previous.italicCorrection !== 0) {
-    items.push({
+    items.push(mathKernLayoutItem({
       kind: "kern",
       x: cursor,
       width: previous.italicCorrection,
       reason: "italic-correction",
       sourceSpan: previous.sourceSpan,
-    });
+    }));
     cursor = roundTexPt(cursor + previous.italicCorrection);
   }
-  return {
+  return mathAtomLayout({
     items,
     width: cursor,
     height: roundTexPt(height),
@@ -5154,14 +5403,14 @@ function layoutOperatorNameNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutExtensibleArrowNucleus(
   nucleus: TexMathExtensibleArrowNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const above = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, alphabet);
@@ -5177,14 +5426,23 @@ function layoutExtensibleArrowNucleus(
     above.width + padding.measureLeft + padding.measureRight,
     (below?.width ?? 0) + padding.measureLeft + padding.measureRight
   ));
-  const body = layoutExtensibleArrowBody(nucleus.command, fontProfile, "display", baseAtPt, targetWidth, nucleus.commandSourceSpan);
+  const body = layoutExtensibleArrowBody(
+    nucleus.command,
+    fontProfile,
+    "display",
+    baseAtPt,
+    texLength(targetWidth),
+    nucleus.commandSourceSpan
+  );
   const width = roundTexPt(Math.max(
     body.width,
     above.width + padding.limitLeft + padding.limitRight,
     (below?.width ?? 0) + padding.limitLeft + padding.limitRight
   ));
   const bodyX = roundTexPt((width - body.width) / 2);
-  const items: TexMathHListItem[] = body.items.map((item) => offsetMathLayoutItem(item, bodyX));
+  const items: TexMathHListItem[] = body.items.map((item) =>
+    offsetMathLayoutItem(item, texHBoxOffsetX(bodyX))
+  );
 
   const aboveShift = roundTexPt(Math.max(
     mathExtensionParameterToPt(fontProfile, "bigOpSpacing3", style, baseAtPt) - above.depth,
@@ -5226,7 +5484,7 @@ function layoutExtensibleArrowNucleus(
       mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt))
     : body.depth;
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height,
@@ -5234,14 +5492,14 @@ function layoutExtensibleArrowNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutLargeOperatorNucleus(
   nucleus: Extract<TexMathNucleus, { readonly kind: "operator" }>,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): TexMathAtomLayout | null {
   const spec = largeOperatorSpec(nucleus.command);
   if (!spec) {
@@ -5257,13 +5515,13 @@ function layoutLargeOperatorNucleus(
   for (const part of spec.parts) {
     if (part.kind === "kern") {
       const width = multiIntegralKernPt(fontProfile, style, baseAtPt);
-      items.push({
+      items.push(mathKernLayoutItem({
         kind: "kern",
         x: cursor,
         width,
         reason: "operator-kern",
         sourceSpan: nucleus.sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + width);
       continue;
     }
@@ -5281,7 +5539,7 @@ function layoutLargeOperatorNucleus(
     const glyphHeight = roundTexPt(tfmToPt(font, metric.height));
     const glyphDepth = roundTexPt(tfmToPt(font, metric.depth));
     const y = roundTexPt((glyphHeight - glyphDepth) / 2 - axis);
-    items.push({
+    items.push(mathGlyphLayoutItem({
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
@@ -5295,13 +5553,13 @@ function layoutLargeOperatorNucleus(
       depth: glyphDepth,
       italicCorrection: glyphItalicCorrection,
       sourceSpan: nucleus.sourceSpan,
-    } satisfies TexMathGlyphLayoutItem);
+    }));
     cursor = roundTexPt(cursor + glyphWidth);
     height = Math.max(height, Math.max(0, -y + glyphHeight));
     depth = Math.max(depth, Math.max(0, y + glyphDepth));
     italicCorrection = glyphItalicCorrection;
   }
-  return {
+  return mathAtomLayout({
     items,
     width: roundTexPt(cursor + italicCorrection),
     height: roundTexPt(height),
@@ -5311,7 +5569,7 @@ function layoutLargeOperatorNucleus(
     scriptBaseWidth: roundTexPt(cursor),
     scriptSuperscriptOffset: italicCorrection,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutLeftRightNucleus(
@@ -5319,7 +5577,7 @@ function layoutLeftRightNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
@@ -5372,8 +5630,8 @@ function layoutLeftRightNucleus(
   const width = roundTexPt(left.width + body.width + right.width);
   const height = Math.max(
     body.height,
-    ...left.items.map((item) => -item.y + item.height),
-    ...shiftedRight.map((item) => -item.y + item.height)
+    ...left.items.map((item) => 0 - item.y + item.height),
+    ...shiftedRight.map((item) => 0 - item.y + item.height)
   );
   const depth = Math.max(
     body.depth,
@@ -5381,7 +5639,7 @@ function layoutLeftRightNucleus(
     ...shiftedRight.map((item) => item.y + item.depth)
   );
 
-  return {
+  return mathAtomLayout({
     items,
     width,
     height: roundTexPt(height),
@@ -5389,7 +5647,7 @@ function layoutLeftRightNucleus(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 function layoutLeftRightBody(
@@ -5397,7 +5655,7 @@ function layoutLeftRightBody(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, {
@@ -5415,7 +5673,7 @@ function expandMiddleDelimitersInHList(
   hlist: TexMathHList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   targetHeight: number,
   axis: number
 ): TexMathHList | null {
@@ -5424,11 +5682,11 @@ function expandMiddleDelimitersInHList(
   }
   const items: TexMathHListItem[] = [];
   let addedWidth = 0;
-  let height = hlist.height;
-  let depth = hlist.depth;
+  let height: number = hlist.height;
+  let depth: number = hlist.depth;
   for (const item of hlist.items) {
     if (item.kind !== "middle-delimiter") {
-      items.push(offsetMathLayoutItem(item, addedWidth));
+      items.push(offsetMathLayoutItem(item, texHBoxOffsetX(addedWidth)));
       continue;
     }
     const delimiter = layoutMathDelimiter(
@@ -5447,22 +5705,22 @@ function expandMiddleDelimitersInHList(
     const delimiterItems = offsetDelimiterItems(delimiter.items, x, 0);
     items.push(...delimiterItems);
     addedWidth = roundTexPt(addedWidth + delimiter.width);
-    height = Math.max(height, ...delimiterItems.map((delimiterItem) => -delimiterItem.y + delimiterItem.height));
+    height = Math.max(height, ...delimiterItems.map((delimiterItem) => 0 - delimiterItem.y + delimiterItem.height));
     depth = Math.max(depth, ...delimiterItems.map((delimiterItem) => delimiterItem.y + delimiterItem.depth));
   }
-  return {
+  return mathHList({
     ...hlist,
     items,
     width: roundTexPt(hlist.width + addedWidth),
     height: roundTexPt(height),
     depth: roundTexPt(Math.max(0, depth)),
-  };
+  });
 }
 
 function selectRadicalDelimiter(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   targetHeight: number,
   sourceSpan: TexMathSourceSpan
 ): TexMathDelimiterLayout | null {
@@ -5489,18 +5747,18 @@ function layoutMathDelimiter(
   delimiter: TexMathDelimiter,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   targetHeight: number,
   _axis: number,
   sourceSpan: TexMathSourceSpan
 ): TexMathDelimiterLayout | null {
   if (delimiter === ".") {
-    return {
+    return mathDelimiterLayout({
       items: [],
       width: TEX_NULL_DELIMITER_SPACE_PT,
       height: 0,
       depth: 0,
-    };
+    });
   }
   const spec = delimiterSpec(delimiter);
   if (!spec) {
@@ -5537,10 +5795,10 @@ function layoutMathDelimiter(
   }
   const shiftAxis = mathParameterToPt(fontProfile, "axisHeight", selected.style, baseAtPt);
   const shift = roundTexPt((selected.delimiter.height - selected.delimiter.depth) / 2 - shiftAxis);
-  return {
+  return mathDelimiterLayout({
     ...selected.delimiter,
     items: offsetDelimiterItems(selected.delimiter.items, 0, shift),
-  };
+  });
 }
 
 function selectDelimiterFromStyleLadder(
@@ -5548,7 +5806,7 @@ function selectDelimiterFromStyleLadder(
   family: TexMathFontFamily,
   code: number,
   styles: readonly TexMathStyle[],
-  baseAtPt: number,
+  baseAtPt: TexLength,
   targetHeight: number,
   sourceSpan: TexMathSourceSpan
 ): {
@@ -5728,7 +5986,7 @@ function multiIntegralSpec(count: 2 | 3 | 4): NonNullable<ReturnType<typeof larg
 function multiIntegralKernPt(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   const extraDisplayMu = style === "display" ? -3 : 0;
   return muToPt(fontProfile, style, baseAtPt, -6 + extraDisplayMu);
@@ -5738,10 +5996,10 @@ function appendIntegralDots(
   items: TexMathHListItem[],
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   sourceSpan: TexMathSourceSpan,
   startX: number
-): { readonly width: number; readonly height: number; readonly depth: number } {
+): { readonly width: TexLength; readonly height: TexLength; readonly depth: TexLength } {
   const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
   const dotMetric = requiredCharMetric(font, 1);
   const dotWidth = roundTexPt(tfmToPt(font, dotMetric.width));
@@ -5752,7 +6010,7 @@ function appendIntegralDots(
   const kernWidth = muToPt(fontProfile, style, baseAtPt, kernMu);
   let cursor = startX;
   for (let index = 0; index < 3; index += 1) {
-    items.push({
+    items.push(mathGlyphLayoutItem({
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
@@ -5766,23 +6024,23 @@ function appendIntegralDots(
       depth: dotDepth,
       italicCorrection: dotItalicCorrection,
       sourceSpan,
-    });
+    }));
     cursor = roundTexPt(cursor + dotWidth);
     if (index < 2) {
-      items.push({
+      items.push(mathKernLayoutItem({
         kind: "kern",
         x: cursor,
         width: kernWidth,
         reason: "operator-kern",
         sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + kernWidth);
     }
   }
   return {
-    width: roundTexPt(cursor - startX),
-    height: dotHeight,
-    depth: dotDepth,
+    width: texLength(roundTexPt(cursor - startX)),
+    height: texLength(dotHeight),
+    depth: texLength(dotDepth),
   };
 }
 
@@ -5790,33 +6048,33 @@ function extensibleArrowPadding(
   command: TexMathExtensibleArrowNucleus["command"],
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): {
-  readonly measureLeft: number;
-  readonly measureRight: number;
-  readonly limitLeft: number;
-  readonly limitRight: number;
+  readonly measureLeft: TexLength;
+  readonly measureRight: TexLength;
+  readonly limitLeft: TexLength;
+  readonly limitRight: TexLength;
 } {
   if (command === "xleftarrow") {
     return {
-      measureLeft: muToPt(fontProfile, style, baseAtPt, 9),
-      measureRight: muToPt(fontProfile, style, baseAtPt, 5),
-      limitLeft: muToPt(fontProfile, style, baseAtPt, 3),
-      limitRight: 0,
+      measureLeft: texLength(muToPt(fontProfile, style, baseAtPt, 9)),
+      measureRight: texLength(muToPt(fontProfile, style, baseAtPt, 5)),
+      limitLeft: texLength(muToPt(fontProfile, style, baseAtPt, 3)),
+      limitRight: texLength(0),
     };
   }
   return {
-    measureLeft: muToPt(fontProfile, style, baseAtPt, 5),
-    measureRight: muToPt(fontProfile, style, baseAtPt, 9),
-    limitLeft: 0,
-    limitRight: muToPt(fontProfile, style, baseAtPt, 3),
+    measureLeft: texLength(muToPt(fontProfile, style, baseAtPt, 5)),
+    measureRight: texLength(muToPt(fontProfile, style, baseAtPt, 9)),
+    limitLeft: texLength(0),
+    limitRight: texLength(muToPt(fontProfile, style, baseAtPt, 3)),
   };
 }
 
 function extensibleArrowMinimumWidth(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
   const relbarWidth = roundTexPt(tfmToPt(font, requiredCharMetric(font, 0).width));
@@ -5828,8 +6086,8 @@ function layoutExtensibleArrowBody(
   command: TexMathExtensibleArrowNucleus["command"],
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
-  targetWidth: number,
+  baseAtPt: TexLength,
+  targetWidth: TexLength,
   sourceSpan: TexMathSourceSpan
 ): TexMathAtomLayout {
   const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
@@ -5856,7 +6114,7 @@ function layoutExtensibleArrowBody(
 
   const appendGlyph = (code: number, text: string): void => {
     const metric = requiredCharMetric(font, code);
-    const item = {
+    const item = mathGlyphLayoutItem({
       kind: "glyph",
       fontId: font.id,
       atPt: font.atPt,
@@ -5870,20 +6128,20 @@ function layoutExtensibleArrowBody(
       depth: roundTexPt(tfmToPt(font, metric.depth)),
       italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
       sourceSpan,
-    } satisfies TexMathGlyphLayoutItem;
+    });
     items.push(item);
     cursor = roundTexPt(cursor + item.width);
     height = Math.max(height, item.height);
     depth = Math.max(depth, item.depth);
   };
   const appendKern = (width: number): void => {
-    items.push({
+    items.push(mathKernLayoutItem({
       kind: "kern",
       x: roundTexPt(cursor),
       width,
       reason: "operator-kern",
       sourceSpan,
-    });
+    }));
     cursor = roundTexPt(cursor + width);
   };
   const appendLeader = (): void => {
@@ -5914,7 +6172,7 @@ function layoutExtensibleArrowBody(
   if (extra > 0) {
     appendKern(extra);
   }
-  return {
+  return mathAtomLayout({
     items,
     width: roundTexPt(Math.max(targetWidth, cursor)),
     height: roundTexPt(height),
@@ -5922,7 +6180,7 @@ function layoutExtensibleArrowBody(
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan,
-  };
+  });
 }
 
 function largeOperatorCode(
@@ -5942,7 +6200,7 @@ function offsetDelimiterItems(
   x: number,
   y: number
 ): readonly TexMathGlyphLayoutItem[] {
-  return items.map((item) => ({
+  return items.map((item) => mathGlyphLayoutItem({
     ...item,
     x: roundTexPt(item.x + x),
     y: roundTexPt(item.y + y),
@@ -6001,12 +6259,12 @@ function layoutSingleDelimiterGlyph(
   const width = roundTexPt(tfmToPt(font, metric.width) + tfmToPt(font, metric.italicCorrection));
   const height = roundTexPt(tfmToPt(font, metric.height));
   const depth = roundTexPt(tfmToPt(font, metric.depth));
-  return {
+  return mathDelimiterLayout({
     items: [delimiterGlyphItem(font, family, code, metric, 0, sourceSpan)],
     width,
     height,
     depth,
-  };
+  });
 }
 
 function layoutExtensibleDelimiter(
@@ -6018,7 +6276,7 @@ function layoutExtensibleDelimiter(
 ): TexMathDelimiterLayout {
   const repCode = recipe.rep;
   if (repCode === undefined) {
-    return { items: [], width: 0, height: 0, depth: 0 };
+    return mathDelimiterLayout({ items: [], width: 0, height: 0, depth: 0 });
   }
   const repMetric = requiredCharMetric(font, repCode);
   const repSize = charHeightPlusDepth(font, repMetric);
@@ -6056,7 +6314,7 @@ function layoutExtensibleDelimiter(
   const firstMetric = requiredCharMetric(font, componentCodes[0] ?? repCode);
   const boxHeight = roundTexPt(tfmToPt(font, firstMetric.height));
   const items: TexMathGlyphLayoutItem[] = [];
-  let currentTop = -boxHeight;
+  let currentTop = 0 - boxHeight;
   for (const code of componentCodes) {
     const metric = requiredCharMetric(font, code);
     const y = roundTexPt(currentTop + tfmToPt(font, metric.height));
@@ -6064,12 +6322,12 @@ function layoutExtensibleDelimiter(
     currentTop = roundTexPt(currentTop + charHeightPlusDepth(font, metric));
   }
 
-  return {
+  return mathDelimiterLayout({
     items,
     width,
     height: boxHeight,
     depth: roundTexPt(totalSize - boxHeight),
-  };
+  });
 }
 
 function delimiterGlyphItem(
@@ -6080,7 +6338,7 @@ function delimiterGlyphItem(
   y: number,
   sourceSpan: TexMathSourceSpan
 ): TexMathGlyphLayoutItem {
-  return {
+  return mathGlyphLayoutItem({
     kind: "glyph",
     fontId: font.id,
     atPt: font.atPt,
@@ -6094,14 +6352,14 @@ function delimiterGlyphItem(
     depth: roundTexPt(tfmToPt(font, metric.depth)),
     italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
     sourceSpan,
-  };
+  });
 }
 
 function layoutGlyphNucleus(
   nucleus: TexMathGlyphNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const parts = resolveMathSymbolParts(nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -6116,13 +6374,13 @@ function layoutGlyphNucleus(
   let glyphCount = 0;
   for (const glyph of parts) {
     if (glyph.kind === "kern") {
-      items.push({
+      items.push(mathKernLayoutItem({
         kind: "kern",
         x: roundTexPt(cursor + glyph.xOffset),
         width: glyph.width,
         reason: "italic-correction",
         sourceSpan: glyph.sourceSpan,
-      });
+      }));
       cursor = roundTexPt(cursor + glyph.width);
       continue;
     }
@@ -6132,7 +6390,7 @@ function layoutGlyphNucleus(
     const glyphDepth = roundTexPt(tfmToPt(glyph.font, metric.depth));
     italicCorrection = roundTexPt(tfmToPt(glyph.font, metric.italicCorrection));
     glyphCount += 1;
-    items.push({
+    items.push(mathGlyphLayoutItem({
       kind: "glyph",
       fontId: glyph.font.id,
       atPt: glyph.font.atPt,
@@ -6146,12 +6404,12 @@ function layoutGlyphNucleus(
       depth: glyphDepth,
       italicCorrection,
       sourceSpan: glyph.sourceSpan,
-    });
+    }));
     cursor = roundTexPt(cursor + glyph.advance);
-    height = Math.max(height, roundTexPt(-glyph.yOffset + glyphHeight));
+    height = Math.max(height, roundTexPt(0 - glyph.yOffset + glyphHeight));
     depth = Math.max(depth, roundTexPt(glyph.yOffset + glyphDepth));
   }
-  return {
+  return mathAtomLayout({
     items,
     width: cursor,
     height: roundTexPt(height),
@@ -6159,7 +6417,7 @@ function layoutGlyphNucleus(
     italicCorrection: glyphCount === 1 ? italicCorrection : 0,
     isCharacterNucleus: glyphCount === 1,
     sourceSpan: nucleus.sourceSpan,
-  };
+  });
 }
 
 export function resolveMathGlyph(
@@ -6179,7 +6437,13 @@ export function resolveMathGlyphs(
   baseAtPt = 10,
   alphabet?: TexMathAlphabetCommand
 ): readonly ResolvedMathGlyph[] {
-  return resolveMathSymbolParts(nucleus, fontProfile, style, baseAtPt, alphabet)
+  return resolveMathSymbolParts(
+    nucleus,
+    fontProfile,
+    style,
+    texLength(baseAtPt),
+    alphabet
+  )
     .filter((part): part is ResolvedMathGlyph => part.kind !== "kern");
 }
 
@@ -6187,7 +6451,7 @@ function resolveMathSymbolParts(
   nucleus: TexMathGlyphNucleus,
   fontProfile: TexMathFontProfile = defaultTexMathFontProfile,
   style: TexMathStyle = "text",
-  baseAtPt = 10,
+  baseAtPt: TexLength = texLength(10),
   alphabet?: TexMathAlphabetCommand
 ): readonly ResolvedMathSymbolPart[] {
   // The RSFS family supplied by mathrsfs contains only uppercase Latin letters.
@@ -6207,7 +6471,7 @@ function resolveMathSymbolParts(
     });
     const metric = requiredCharMetric(font, alphabetGlyph.code);
     const width = roundTexPt(tfmToPt(font, metric.width));
-    return [{
+    return [resolvedMathGlyph({
       kind: "glyph",
       font,
       family: "alphabet",
@@ -6217,7 +6481,7 @@ function resolveMathSymbolParts(
       yOffset: 0,
       advance: width,
       sourceSpan: nucleus.sourceSpan,
-    }];
+    })];
   }
   const resolved = defaultLuaLatexMathSymbols(nucleus.text);
   if (resolved.length === 0) {
@@ -6226,19 +6490,19 @@ function resolveMathSymbolParts(
   return resolved.map((glyph) => {
     if (glyph.kind === "kern") {
       const scale = textStyleAtPt(style, baseAtPt) / 10;
-      return {
+      return resolvedMathKern({
         kind: "kern",
         width: roundTexPt(glyph.width * scale),
         xOffset: roundTexPt((glyph.xOffset ?? 0) * scale),
         sourceSpan: nucleus.sourceSpan,
-      };
+      });
     }
     const font = alphabet === "boldsymbol"
       ? resolveBoldMathFont(fontProfile, glyph.family, style, baseAtPt)
       : fontProfile.resolveMathFont({ family: glyph.family, style, baseAtPt });
     const metric = requiredCharMetric(font, glyph.code);
     const width = roundTexPt(tfmToPt(font, metric.width));
-    return {
+    return resolvedMathGlyph({
       kind: "glyph",
       font,
       family: glyph.family,
@@ -6254,7 +6518,7 @@ function resolveMathSymbolParts(
         ? roundTexPt(glyph.advance * (textStyleAtPt(style, baseAtPt) / 10))
         : width,
       sourceSpan: nucleus.sourceSpan,
-    };
+    });
   });
 }
 
@@ -6262,7 +6526,7 @@ function resolveBoldMathFont(
   fontProfile: TexMathFontProfile,
   family: TexMathFontFamily,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): ResolvedTexFont {
   let fontId: string | null = null;
   if (family === "operators") {
@@ -6283,7 +6547,7 @@ function resolveMathAccent(
   command: TexMathAccentCommand,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   sourceSpan: TexMathSourceSpan,
   alphabet?: TexMathAlphabetCommand
 ): ResolvedMathGlyph | null {
@@ -6291,7 +6555,7 @@ function resolveMathAccent(
   if (!resolved) {
     return null;
   }
-  return {
+  return resolvedMathGlyph({
     kind: "glyph",
     font: alphabet === "boldsymbol"
       ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt)
@@ -6303,7 +6567,7 @@ function resolveMathAccent(
     yOffset: 0,
     advance: 0,
     sourceSpan,
-  };
+  });
 }
 
 function defaultLuaLatexMathAccent(
@@ -6458,7 +6722,7 @@ function accentBaseSkew(
   base: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): number {
   if (base.items.length !== 1) {
@@ -6494,9 +6758,9 @@ function accentBaseSingleGlyphMetrics(
   base: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
-): { readonly width: number; readonly italicCorrection: number } | null {
+): { readonly width: TexLength; readonly italicCorrection: TexLength } | null {
   if (base.items.length !== 1) {
     return null;
   }
@@ -7017,24 +7281,24 @@ function defaultLuaLatexMathSymbols(
 function muToPt(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   mu: number
 ): number {
   const symbols = fontProfile.resolveMathFont({
     family: "symbols",
     style,
-    baseAtPt,
+    baseAtPt: texLength(baseAtPt),
   });
   return roundTexPt((tfmToPt(symbols, symbols.data.fontdimen.quad) / 18) * mu);
 }
 
 function texMathTextSpaceWidth(
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   const textFont = fontProfile.textFontProfile.resolveTextFont(
     fontProfile.textFontProfile.defaultFontState,
-    baseAtPt,
+    texLength(baseAtPt),
     fontProfile.metricProvider
   );
   return roundTexPt(tfmToPt(textFont, textFont.data.fontdimen.space));
@@ -7045,7 +7309,7 @@ function layoutScriptList(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
@@ -7054,10 +7318,10 @@ function layoutScriptList(
   }
   const clean = omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list);
   const width = roundTexPt(clean.width + TEX_SCRIPT_SPACE_PT);
-  return {
+  return mathHList({
     ...expandSingleLineRuleCleanBox(clean, list, width),
     width,
-  };
+  });
 }
 
 function expandSingleLineRuleCleanBox(
@@ -7075,18 +7339,18 @@ function expandSingleLineRuleCleanBox(
     return hlist;
   }
 
-  return {
+  return mathHList({
     ...hlist,
     items: hlist.items.map((layoutItem) => {
       if (layoutItem.kind !== "rule" || (layoutItem.role !== "overline-rule" && layoutItem.role !== "underline-rule")) {
         return layoutItem;
       }
-      return {
+      return mathRuleLayoutItem({
         ...layoutItem,
         width,
-      };
+      });
     }),
-  };
+  });
 }
 
 function layoutLimitList(
@@ -7094,7 +7358,7 @@ function layoutLimitList(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
   const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
@@ -7112,13 +7376,13 @@ function omitSingleCharacterCleanBoxItalicCorrection(
   if (last?.kind !== "kern" || last.reason !== "italic-correction") {
     return hlist;
   }
-  return {
+  return mathHList({
     ...hlist,
     items: hlist.items.slice(0, -1),
-  };
+  });
 }
 
-function reboxSingleCharacterItalicCorrection(hlist: TexMathHList, targetWidth: number): TexMathHList {
+function reboxSingleCharacterItalicCorrection(hlist: TexMathHList, targetWidth: TexLength): TexMathHList {
   if (hlist.width === targetWidth || hlist.items.length !== 1) {
     return hlist;
   }
@@ -7130,19 +7394,19 @@ function reboxSingleCharacterItalicCorrection(hlist: TexMathHList, targetWidth: 
   if (italicCorrection === 0) {
     return hlist;
   }
-  return {
+  return mathHList({
     ...hlist,
     items: [
       glyph,
-      {
+      mathKernLayoutItem({
         kind: "kern",
         x: roundTexPt(glyph.x + glyph.width),
         width: italicCorrection,
         reason: "italic-correction",
         sourceSpan: glyph.sourceSpan,
-      },
+      }),
     ],
-  };
+  });
 }
 
 function isSingleCharacterCleanBoxList(list: TexMathList): boolean {
@@ -7161,7 +7425,7 @@ function childHList(
   hlist: TexMathHList,
   sourceSpan: TexMathSourceSpan
 ): TexMathChildHListLayoutItem {
-  return {
+  return mathChildHListLayoutItem({
     kind: "hlist",
     role,
     x: roundTexPt(x),
@@ -7171,7 +7435,7 @@ function childHList(
     depth: hlist.depth,
     sourceSpan,
     items: hlist.items,
-  };
+  });
 }
 
 function appendTrailingItalicCorrection(
@@ -7182,27 +7446,42 @@ function appendTrailingItalicCorrection(
   if (italicCorrection === 0) {
     return layout;
   }
-  return {
+  return mathAtomLayout({
     ...layout,
     items: [
       ...layout.items,
-      {
+      mathKernLayoutItem({
         kind: "kern",
         x: layout.width,
         width: italicCorrection,
         reason: "italic-correction",
         sourceSpan,
-      } satisfies TexMathKernLayoutItem,
+      }),
     ],
     width: roundTexPt(layout.width + italicCorrection),
-  };
+  });
 }
 
-function offsetMathLayoutItem(item: TexMathHListItem, x: number): TexMathHListItem {
-  return {
+function offsetMathLayoutItem(item: TexMathHListItem, x: TexHBoxOffsetX): TexMathHListItem {
+  return mathLayoutItem({
     ...item,
-    x: roundTexPt(item.x + x),
-  };
+    x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, x))),
+  });
+}
+
+/** Repositions an already-laid-out item within its containing math HBox. */
+export function offsetTexMathHListItem(
+  item: TexMathHListItem,
+  offsetX: TexHBoxOffsetX,
+  offsetY: TexHBoxOffsetY = texHBoxOffsetY(0)
+): TexMathHListItem {
+  return mathLayoutItem({
+    ...item,
+    x: texHBoxLocalX(roundTexPt(offsetTexHBoxLocalX(item.x, offsetX))),
+    ...(item.kind === "glyph" || item.kind === "rule" || item.kind === "hlist"
+      ? { y: texHBoxLocalY(roundTexPt(offsetTexHBoxLocalY(item.y, offsetY))) }
+      : {}),
+  });
 }
 
 function spanUnion(
@@ -7221,7 +7500,7 @@ function superscriptShiftUp(
   style: TexMathStyle,
   cramped: boolean,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   let shiftUp = Math.max(initialShiftUp, superscriptMinimumShift(fontProfile, style, cramped, baseAtPt));
   shiftUp = Math.max(shiftUp, sup.depth + mathXHeight(fontProfile, style, baseAtPt) / 4);
@@ -7234,7 +7513,7 @@ function subscriptShiftDown(
   hasSuperscript: boolean,
   style: TexMathStyle,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   let shiftDown = Math.max(initialShiftDown, mathParameterToPt(fontProfile, hasSuperscript ? "sub2" : "sub1", style, baseAtPt));
   if (!hasSuperscript) {
@@ -7246,12 +7525,12 @@ function subscriptShiftDown(
 function combinedScriptShifts(
   sup: TexMathHList,
   sub: TexMathHList,
-  initialShifts: { readonly shiftUp: number; readonly shiftDown: number },
+  initialShifts: { readonly shiftUp: TexLength; readonly shiftDown: TexLength },
   style: TexMathStyle,
   cramped: boolean,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
-): { readonly shiftUp: number; readonly shiftDown: number } {
+  baseAtPt: TexLength
+): { readonly shiftUp: TexLength; readonly shiftDown: TexLength } {
   let shiftUp = superscriptShiftUp(sup, initialShifts.shiftUp, style, cramped, fontProfile, baseAtPt);
   let shiftDown = subscriptShiftDown(sub, initialShifts.shiftDown, true, style, fontProfile, baseAtPt);
   const defaultRuleThickness = mathExtensionParameterToPt(fontProfile, "defaultRuleThickness", style, baseAtPt);
@@ -7265,8 +7544,8 @@ function combinedScriptShifts(
     }
   }
   return {
-    shiftUp: roundTexPt(shiftUp),
-    shiftDown: roundTexPt(shiftDown),
+    shiftUp: texLength(roundTexPt(shiftUp)),
+    shiftDown: texLength(roundTexPt(shiftDown)),
   };
 }
 
@@ -7274,14 +7553,20 @@ function initialScriptShifts(
   nucleus: TexMathAtomLayout,
   style: TexMathStyle,
   fontProfile: TexMathFontProfile,
-  baseAtPt: number
-): { readonly shiftUp: number; readonly shiftDown: number } {
+  baseAtPt: TexLength
+): { readonly shiftUp: TexLength; readonly shiftDown: TexLength } {
   if (nucleus.isCharacterNucleus || nucleus.scriptShiftsAsCharacter) {
-    return { shiftUp: 0, shiftDown: 0 };
+    return { shiftUp: texLength(0), shiftDown: texLength(0) };
   }
   return {
-    shiftUp: roundTexPt(Math.max(0, nucleus.height - mathParameterToPt(fontProfile, "supDrop", scriptSizeStyle(style), baseAtPt))),
-    shiftDown: roundTexPt(Math.max(0, nucleus.depth + mathParameterToPt(fontProfile, "subDrop", scriptSizeStyle(style), baseAtPt))),
+    shiftUp: texLength(roundTexPt(Math.max(
+      0,
+      nucleus.height - mathParameterToPt(fontProfile, "supDrop", scriptSizeStyle(style), baseAtPt)
+    ))),
+    shiftDown: texLength(roundTexPt(Math.max(
+      0,
+      nucleus.depth + mathParameterToPt(fontProfile, "subDrop", scriptSizeStyle(style), baseAtPt)
+    ))),
   };
 }
 
@@ -7289,7 +7574,7 @@ function superscriptMinimumShift(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   cramped: boolean,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   if (cramped) {
     return mathParameterToPt(fontProfile, "sup3", style, baseAtPt);
@@ -7319,7 +7604,7 @@ function mathParameterToPt(
     | "supDrop"
     | "subDrop",
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   const symbols = fontProfile.resolveMathFont({
     family: "symbols",
@@ -7339,7 +7624,7 @@ function mathExtensionParameterToPt(
     | "bigOpSpacing4"
     | "bigOpSpacing5",
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   const extension = fontProfile.resolveMathFont({
     family: "extension",
@@ -7353,7 +7638,7 @@ function mathStyleParameterToPt(
   fontProfile: TexMathFontProfile,
   name: "stackNumUp" | "stackDenomDown" | "stackVGap",
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   return roundTexPt(fontProfile.parameters[name][style] * (baseAtPt / 10));
 }
@@ -7387,7 +7672,7 @@ function charHeightPlusDepth(
 function mathXHeight(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number
+  baseAtPt: TexLength
 ): number {
   const symbols = fontProfile.resolveMathFont({
     family: "symbols",
@@ -7400,7 +7685,7 @@ function mathXHeight(
 function radicalInitialClearance(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
-  baseAtPt: number,
+  baseAtPt: TexLength,
   defaultRuleThickness: number
 ): number {
   if (style === "display") {

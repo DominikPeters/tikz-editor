@@ -6,7 +6,12 @@ import type {
   TexLayoutLabel,
 } from "../layout-inline-items.js";
 import type { TexLayoutIrOptions } from "../layout-options.js";
-import { texVListX } from "../coordinates.js";
+import {
+  texHBoxX,
+  texLength,
+  texVListX,
+  type TexLength,
+} from "../coordinates.js";
 import {
   TexParagraphLayoutState,
 } from "../layout-state.js";
@@ -66,9 +71,9 @@ export interface TexLayoutParagraphPlan {
 export interface TexLayoutParagraphBreakContext {
   readonly blockIndex: number;
   readonly segmentIndex: number;
-  readonly width?: number;
-  readonly firstLineIndentWidth?: number;
-  readonly forcedBreakIndentWidth?: number;
+  readonly width?: TexLength;
+  readonly firstLineIndentWidth?: TexLength;
+  readonly forcedBreakIndentWidth?: TexLength;
   readonly scopePolicy: TexParagraphBreakScopePolicy;
 }
 
@@ -119,8 +124,8 @@ export function prepareTexLayoutParagraphsFromVList(
       : scopedBreakWidth !== undefined && scopeContext.layout.scopedWidth !== undefined
         ? texParagraphScopeContextWithBreakMargins(
             scopeContext,
-            scopeContext.layout.scopedLeftMarginWidth ?? 0,
-            scopeContext.layout.scopedRightMarginWidth ?? 0
+            scopeContext.layout.scopedLeftMarginWidth ?? texLength(0),
+            scopeContext.layout.scopedRightMarginWidth ?? texLength(0)
           )
       : scopeContext;
     const blockIndex = paragraph.blockIndex;
@@ -230,18 +235,18 @@ export function prepareTexLayoutParagraphsFromVList(
 
 function texParagraphScopedLineWidth(
   scopeContext: ReturnType<typeof texParagraphScopeContext>,
-  rootWidth: number | undefined,
+  rootWidth: TexLength | undefined,
   useScopedLineWidth: boolean
-): number | undefined {
+): TexLength | undefined {
   if (useScopedLineWidth) {
     return rootWidth === undefined
       ? undefined
-      : Math.max(
+      : texLength(Math.max(
           0,
           rootWidth -
             scopeContext.layout.leftMarginWidth -
             scopeContext.layout.rightMarginWidth
-        );
+        ));
   }
   return scopeContext.layout.scopedLineWidth;
 }
@@ -251,12 +256,12 @@ function texQuotationFirstLinePrefix(params: {
   readonly font: ResolvedTexFont;
 }): {
   readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
-  readonly firstLineIndentWidth?: number;
-  readonly forcedBreakIndentWidth?: number;
+  readonly firstLineIndentWidth?: TexLength;
+  readonly forcedBreakIndentWidth?: TexLength;
 } {
   const indentWidth = params.segment.firstLineIndentEm === undefined
     ? undefined
-    : params.segment.firstLineIndentEm * params.font.atPt;
+    : texLength(params.segment.firstLineIndentEm * params.font.atPt);
   if (indentWidth === undefined) {
     return { inlinePrefixItems: [] };
   }
@@ -282,9 +287,9 @@ function texQuotationFirstLinePrefix(params: {
             contentStart: sourceStart,
             contentEnd: sourceStart,
             width: indentWidth,
-            height: 0,
-            depth: 0,
-            caretStops: [0, indentWidth],
+            height: texLength(0),
+            depth: texLength(0),
+            caretStops: [texHBoxX(0), texHBoxX(indentWidth)],
           },
         },
         {
@@ -310,8 +315,8 @@ function texParagraphScopeContextWithoutBreakMargins(
   return {
     ...scopeContext,
     layout: {
-      leftMarginWidth: 0,
-      rightMarginWidth: 0,
+      leftMarginWidth: texLength(0),
+      rightMarginWidth: texLength(0),
     },
     quoteContextActive: false,
     listContextActive: false,
@@ -321,8 +326,8 @@ function texParagraphScopeContextWithoutBreakMargins(
 
 function texParagraphScopeContextWithBreakMargins(
   scopeContext: ReturnType<typeof texParagraphScopeContext>,
-  leftMarginWidth: number,
-  rightMarginWidth: number
+  leftMarginWidth: TexLength,
+  rightMarginWidth: TexLength
 ): ReturnType<typeof texParagraphScopeContext> {
   return {
     ...scopeContext,

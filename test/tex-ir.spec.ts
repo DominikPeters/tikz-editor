@@ -9,6 +9,7 @@ import {
   prepareSimpleTexLayoutDocument,
   prepareTexLayoutParagraphsFromVList,
   parseSimpleTexParagraphIr,
+  texLength,
   texLayoutItemsForParagraphPlan,
 } from "../packages/core/src/text/tex/index.js";
 import {
@@ -784,13 +785,13 @@ describe("simple TeX paragraph IR", () => {
       blocks: listInsideCenter.blocks,
       defaultAlignment: "justified",
       font,
-      options: { width: 120 },
+      options: { width: texLength(120) },
     });
     const centerInsideListLayout = createSimpleTexLayoutDocumentIr({
       blocks: centerInsideList.blocks,
       defaultAlignment: "justified",
       font,
-      options: { width: 120 },
+      options: { width: texLength(120) },
     });
 
     expect(listInsideCenterLayout.paragraphPlans.map((plan) => ({
@@ -1186,7 +1187,7 @@ describe("simple TeX paragraph IR", () => {
     const parsed = parseSimpleTexParagraphIr(String.raw`A \textnormal{B}`);
     const font = luaLatexDefaultTextFontProfile.resolveTextFont(
       luaLatexDefaultTextFontProfile.defaultFontState,
-      10,
+      texLength(10),
       computerModernTexMetricProvider
     );
     const layout = createSimpleTexLayoutDocumentIr({
@@ -1214,7 +1215,7 @@ describe("simple TeX paragraph IR", () => {
     );
     const font = luaLatexDefaultTextFontProfile.resolveTextFont(
       luaLatexDefaultTextFontProfile.defaultFontState,
-      10,
+      texLength(10),
       computerModernTexMetricProvider
     );
     const layout = createSimpleTexLayoutDocumentIr({
@@ -1255,7 +1256,7 @@ describe("simple TeX paragraph IR", () => {
     );
     const font = luaLatexDefaultTextFontProfile.resolveTextFont(
       luaLatexDefaultTextFontProfile.defaultFontState,
-      10,
+      texLength(10),
       computerModernTexMetricProvider
     );
     const layout = createSimpleTexLayoutDocumentIr({
@@ -1332,7 +1333,7 @@ describe("simple TeX paragraph IR", () => {
     );
     const font = luaLatexDefaultTextFontProfile.resolveTextFont(
       luaLatexDefaultTextFontProfile.defaultFontState,
-      10,
+      texLength(10),
       computerModernTexMetricProvider
     );
     const layout = createSimpleTexLayoutDocumentIr({
@@ -1463,10 +1464,10 @@ describe("simple TeX paragraph IR", () => {
       defaultAlignment: "justified",
       font,
       options: {
-        parindent: 0,
+        parindent: texLength(0),
         textFontProfile: classicComputerModernTextFontProfile,
         tikzTextWidthNode: true,
-        width: 90,
+        width: texLength(90),
       },
     });
 
@@ -1982,7 +1983,7 @@ describe("simple TeX paragraph IR", () => {
       blocks: parsed.blocks,
       defaultAlignment: "center",
       font,
-      options: { tikzTextWidthNode: true, parindent: 10 },
+      options: { tikzTextWidthNode: true, parindent: texLength(10) },
     });
 
     expect(layout.paragraphPlans).toHaveLength(1);

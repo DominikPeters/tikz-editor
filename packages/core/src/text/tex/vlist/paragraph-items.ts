@@ -7,11 +7,12 @@ import {
   type TexLayoutInlineItem,
 } from "../layout-inline-items.js";
 import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
+import type { TexLength } from "../coordinates.js";
 
 export function texLayoutItemsForParagraphPlan(
   plan: TexLayoutParagraphPlan,
   params: {
-    readonly atPt: number;
+    readonly atPt: TexLength;
     readonly metricProvider: TexMetricProvider;
     readonly mathBoxProvider?: TexMathBoxProvider;
     readonly graphicsResolver?: NodeTextGraphicsResolver;

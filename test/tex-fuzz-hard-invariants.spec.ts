@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
+  texLength,
+  texLineX,
 } from "@tikz-editor/core/text/tex/index.js";
 import {
   caseFromTexFuzzAst,
@@ -37,7 +39,9 @@ describe("TeX fuzz renderer hard invariants", () => {
     if (!line) throw new Error("Expected one laid-out line.");
     line.segments.pop();
     const remainingLast = line.segments.at(-1);
-    line.xEnd = remainingLast ? remainingLast.x + remainingLast.width : line.xStart;
+    line.xEnd = remainingLast
+      ? texLineX(remainingLast.x + remainingLast.width)
+      : line.xStart;
 
     expect(checkTexFuzzLayoutResultInvariants(caseData, 160, corrupted).map(
       (finding) => finding.fingerprint.code
@@ -53,7 +57,7 @@ describe("TeX fuzz renderer hard invariants", () => {
     const corrupted = structuredClone(layout(caseData.source));
     const segment = corrupted.report?.lines[0]?.segments[1];
     if (!segment) throw new Error("Expected multiple laid-out segments.");
-    segment.width /= 2;
+    segment.width = texLength(segment.width / 2);
 
     expect(checkTexFuzzLayoutResultInvariants(caseData, 160, corrupted).map(
       (finding) => finding.fingerprint.code
