@@ -58,8 +58,13 @@ function usage() {
   return `
 Usage:
   node scripts/compare-tex-text-visual-fuzz.mjs [--cases 32] [--seed 20260608] [--scale 8]
+  node scripts/compare-tex-text-visual-fuzz.mjs --input node-body.tex --width 100 --align left
 
 Options:
+  --input <file>         Compare exact TeX node content instead of generated fuzz cases.
+  --width <pt>           Text width for --input. Default: 100.
+  --align <mode>         Alignment for --input: left, right, center, or justify. Default: left.
+  --parindent <pt>       Paragraph indent for --input. Default: 0.
   --cases <n>             Number of fuzz cases. Default: ${defaultCases}.
   --seed <n>              Deterministic fuzz seed. Default: ${defaultSeed}.
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
@@ -82,6 +87,10 @@ Options:
 
 function parseArgs(argv) {
   const options = {
+    inputPath: null,
+    width: 100,
+    alignment: "left",
+    parindent: 0,
     cases: defaultCases,
     seed: defaultSeed,
     scale: defaultScale,
@@ -103,6 +112,26 @@ function parseArgs(argv) {
     const next = argv[index + 1];
     if (arg === "--help" || arg === "-h") {
       options.help = true;
+      continue;
+    }
+    if (arg === "--input" && next != null) {
+      options.inputPath = resolve(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--width" && next != null) {
+      options.width = Number(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--align" && next != null) {
+      options.alignment = next;
+      index += 1;
+      continue;
+    }
+    if (arg === "--parindent" && next != null) {
+      options.parindent = Number(next);
+      index += 1;
       continue;
     }
     if (arg === "--cases" && next != null) {
@@ -172,6 +201,15 @@ function parseArgs(argv) {
 
   if (!Number.isInteger(options.cases) || options.cases <= 0) {
     throw new Error("--cases must be a positive integer.");
+  }
+  if (!Number.isFinite(options.width) || options.width <= 0) {
+    throw new Error("--width must be positive.");
+  }
+  if (!alignments.some((alignment) => alignment.label === options.alignment)) {
+    throw new Error("--align must be left, right, center, or justify.");
+  }
+  if (!Number.isFinite(options.parindent) || options.parindent < 0) {
+    throw new Error("--parindent must be non-negative.");
   }
   if (!Number.isInteger(options.seed)) {
     throw new Error("--seed must be an integer.");
@@ -2237,22 +2275,33 @@ async function main() {
     ...(await import(parseLengthEntry)),
   };
   const texFuzz = await loadTexFuzzModules();
-  const runDir = join(resolve(options.outDir), `seed-${options.seed}-cases-${options.cases}-scale-${options.scale}-${timestampSlug()}`);
+  const requestedCaseCount = options.inputPath ? 1 : options.cases;
+  const runLabel = options.inputPath ? "focused-input" : `seed-${options.seed}`;
+  const runDir = join(resolve(options.outDir), `${runLabel}-cases-${requestedCaseCount}-scale-${options.scale}-${timestampSlug()}`);
   mkdirSync(runDir, { recursive: true });
 
   const random = mulberry32(options.seed);
-  const cases = Array.from(
-    { length: options.cases },
-    (_, index) => {
-      const caseSeed = (options.seed + Math.imul(index + 1, 0x9E3779B1)) >>> 0;
-      const generated = projectGeneratedProseCase(texFuzz, texFuzz.generateTexFuzzCase(caseSeed, {
-        profile: "aggressive",
-        depth: 4,
-        size: 6,
-      }));
-      return generateCaseForMode(index, random, options.caseMode, generated);
-    }
-  );
+  const cases = options.inputPath
+    ? [{
+        id: "case-001",
+        feature: "focused-input",
+        text: readFileSync(options.inputPath, "utf8"),
+        width: options.width,
+        parindent: options.parindent,
+        alignment: alignments.find((alignment) => alignment.label === options.alignment),
+      }]
+    : Array.from(
+        { length: options.cases },
+        (_, index) => {
+          const caseSeed = (options.seed + Math.imul(index + 1, 0x9E3779B1)) >>> 0;
+          const generated = projectGeneratedProseCase(texFuzz, texFuzz.generateTexFuzzCase(caseSeed, {
+            profile: "aggressive",
+            depth: 4,
+            size: 6,
+          }));
+          return generateCaseForMode(index, random, options.caseMode, generated);
+        }
+      );
   const rows = [];
   const errors = [];
   const rasterControlIds = deterministicDiversitySample(
@@ -2478,7 +2527,7 @@ async function main() {
     seed: options.seed,
     texFuzzGeneratorVersion: texFuzz.TEX_FUZZ_GENERATOR_VERSION,
     texFuzzFeatures: [...new Set(cases.flatMap((entry) => entry.texFuzz?.features ?? []))].sort(),
-    casesRequested: options.cases,
+    casesRequested: requestedCaseCount,
     casesCompleted: rows.length,
     errors,
     thresholdRatio: options.thresholdRatio,
