@@ -287,6 +287,10 @@ function texMarginListLabelHBoxFromLayoutLabel(
     x: texVListLocalXFromOrigin(labelLeft, paragraphOriginX),
     advance: texLength(0),
     affectsVBoxBaseline: false,
+    verticalPlacement: {
+      kind: "paragraph-first-line-baseline",
+      blockIndex,
+    },
     box: {
       metrics: box.metrics,
       renderItems: box.renderItems,

@@ -978,11 +978,42 @@ describe("mathjax node text engine", () => {
       alignment: "ragged-right",
     }) ?? "";
     const firstLabel = body.match(
-      /<g transform="translate\(([-\d.]+) [-\d.]+\)" pointer-events="none"><rect[^>]+><path[^>]+data-tex-glyph="8226"/
+      /<g data-tex-hbox-role="list-label" transform="translate\(([-\d.]+) [-\d.]+\)"/
     );
 
     expect(firstLabel).not.toBeNull();
     expect(Number(firstLabel?.[1])).toBeCloseTo(-12.78, 4);
+  });
+
+  it("aligns list-label hbox glyph baselines with their item lines", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`\begin{itemize}\item Hello!\item World\end{itemize}`,
+      width: 100,
+      alignment: "ragged-right",
+    }) ?? "";
+    const labelGroups = [...body.matchAll(
+      /<g data-tex-hbox-role="list-label" transform="translate\(([-\d.]+) ([-\d.]+)\)" pointer-events="none"><rect[^>]+><path[^>]+data-tex-glyph="8226"[^>]+transform="translate\(([-\d.]+) ([-\d.]+)\)"/g
+    )];
+    const lineGroups = [...body.matchAll(
+      /<g data-mjx-linebox="true" data-line-index="(\d+)"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)"><rect[^>]+><path[^>]+transform="translate\(([-\d.]+) ([-\d.]+)\)"/g
+    )];
+
+    expect(labelGroups).toHaveLength(2);
+    expect(lineGroups).toHaveLength(2);
+    for (let index = 0; index < 2; index += 1) {
+      const label = labelGroups[index];
+      const line = lineGroups[index];
+      expect(label).toBeDefined();
+      expect(line).toBeDefined();
+      const labelBaseline = Number(label?.[2]) + Number(label?.[4]);
+      const textBaseline = Number(line?.[3]) + Number(line?.[5]);
+      expect(labelBaseline).toBeCloseTo(textBaseline, 4);
+    }
   });
 
   it("renders nested list lineboxes relative to their vbox groups", async () => {

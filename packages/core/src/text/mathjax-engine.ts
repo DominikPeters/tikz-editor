@@ -1876,8 +1876,11 @@ function renderTexVListLeafBoxSvgMetadata(
     return "";
   }
   const boxHeight = texLength(item.metrics.height + item.metrics.depth);
+  const roleAttribute = item.item.kind === "hbox" && item.item.role
+    ? ` data-tex-hbox-role="${item.item.role.kind}"`
+    : "";
   return [
-    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
+    `<g${roleAttribute} transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
     ...(item.item.kind === "hbox" && metricProvider
       ? item.item.box.renderItems.map((renderItem) =>

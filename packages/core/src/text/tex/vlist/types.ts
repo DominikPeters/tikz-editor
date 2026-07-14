@@ -198,6 +198,10 @@ export interface TexHBoxItem {
   readonly x?: TexVListLocalX;
   readonly advance?: TexLength;
   readonly affectsVBoxBaseline?: boolean;
+  readonly verticalPlacement?: {
+    readonly kind: "paragraph-first-line-baseline";
+    readonly blockIndex: number;
+  };
   readonly box: TexHorizontalLayout;
 }
 
