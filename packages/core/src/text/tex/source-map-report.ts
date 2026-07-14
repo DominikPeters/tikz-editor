@@ -12,6 +12,10 @@ import {
   projectInputRange,
   type TextSourceMap
 } from "../source-map.js";
+import {
+  documentSourceOffset,
+  type SourceCoordinateSpace,
+} from "../source-coordinates.js";
 import type { TexMathBox } from "./layout-inline-items.js";
 import { texLength } from "./coordinates.js";
 import type {
@@ -27,15 +31,28 @@ import type {
   TexVListParagraphPlacement
 } from "./vlist/types.js";
 
+export function remapParagraphLayoutReportSourceMap<Space extends SourceCoordinateSpace>(
+  report: ParagraphLayoutReport<Space>,
+  sourceMap: undefined
+): ParagraphLayoutReport<Space>;
 export function remapParagraphLayoutReportSourceMap(
-  report: ParagraphLayoutReport,
+  report: ParagraphLayoutReport<"layout">,
+  sourceMap: TextSourceMap
+): ParagraphLayoutReport<"document">;
+export function remapParagraphLayoutReportSourceMap(
+  report: ParagraphLayoutReport<"layout">,
   sourceMap: TextSourceMap | undefined
-): ParagraphLayoutReport {
+): ParagraphLayoutReport<"layout"> | ParagraphLayoutReport<"document">;
+export function remapParagraphLayoutReportSourceMap<Space extends SourceCoordinateSpace>(
+  report: ParagraphLayoutReport<Space>,
+  sourceMap: TextSourceMap | undefined
+): ParagraphLayoutReport<Space> | ParagraphLayoutReport<"document"> {
   if (!sourceMap) {
     return report;
   }
   return {
     ...report,
+    sourceCoordinateSpace: "document",
     runs: report.runs.map((run) => remapRunReport(run, sourceMap)),
     lines: report.lines.map((line) => ({
       ...line,
@@ -46,9 +63,21 @@ export function remapParagraphLayoutReportSourceMap(
 }
 
 export function remapTexVListLayoutSourceMap(
-  layout: TexVListLayout,
+  layout: TexVListLayout<"layout">,
+  sourceMap: undefined
+): TexVListLayout<"layout">;
+export function remapTexVListLayoutSourceMap(
+  layout: TexVListLayout<"layout">,
+  sourceMap: TextSourceMap
+): TexVListLayout<"document">;
+export function remapTexVListLayoutSourceMap(
+  layout: TexVListLayout<"layout">,
   sourceMap: TextSourceMap | undefined
-): TexVListLayout {
+): TexVListLayout<"layout"> | TexVListLayout<"document">;
+export function remapTexVListLayoutSourceMap(
+  layout: TexVListLayout<"layout">,
+  sourceMap: TextSourceMap | undefined
+): TexVListLayout<"layout"> | TexVListLayout<"document"> {
   if (!sourceMap) {
     return layout;
   }
@@ -72,30 +101,49 @@ export function remapTexVListLayoutSourceMap(
   };
 }
 
-function remapRunReport(run: RunReport, sourceMap: TextSourceMap): RunReport {
+function remapRunReport<Space extends SourceCoordinateSpace>(
+  run: RunReport<Space>,
+  sourceMap: TextSourceMap
+): RunReport<"document"> {
   const sourceSpan = run.sourceStart == null || run.sourceEnd == null
     ? null
     : mapInputSpan(sourceMap, run.sourceStart, run.sourceEnd);
+  const { sourceStart: _sourceStart, sourceEnd: _sourceEnd, ...rest } = run;
   return {
-    ...run,
-    ...(sourceSpan ? { sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end } : {})
+    ...rest,
+    ...(sourceSpan ? {
+      sourceStart: documentSourceOffset(sourceSpan.start),
+      sourceEnd: documentSourceOffset(sourceSpan.end),
+    } : {})
   };
 }
 
-function remapLineSegmentReport(
-  segment: LineSegmentReport,
+function remapLineSegmentReport<Space extends SourceCoordinateSpace>(
+  segment: LineSegmentReport<Space>,
   sourceMap: TextSourceMap
-): readonly LineSegmentReport[] {
+): readonly LineSegmentReport<"document">[] {
   const split = splitRemappedTextSegmentReport(segment, sourceMap);
   if (split) {
     return split;
   }
-  const sourceSpan = segment.sourceStartRaw == null || segment.sourceEndRaw == null
+  const sourceProjection = segment.sourceStartRaw == null || segment.sourceEndRaw == null
     ? null
-    : mapInputSpan(sourceMap, segment.sourceStartRaw, segment.sourceEndRaw);
+    : mapInputSpanWithPolicy(sourceMap, segment.sourceStartRaw, segment.sourceEndRaw);
+  const {
+    sourceStartRaw: _sourceStartRaw,
+    sourceEndRaw: _sourceEndRaw,
+    mathConstructRanges: _mathConstructRanges,
+    mathCaretEntries: _mathCaretEntries,
+    mathBreakpoints: _mathBreakpoints,
+    ...rest
+  } = segment;
   return [{
-    ...segment,
-    ...(sourceSpan ? { sourceStartRaw: sourceSpan.start, sourceEndRaw: sourceSpan.end } : {}),
+    ...rest,
+    ...(sourceProjection ? {
+      sourceStartRaw: documentSourceOffset(sourceProjection.start),
+      sourceEndRaw: documentSourceOffset(sourceProjection.end),
+      sourceRangePolicy: sourceProjection.policy,
+    } : {}),
     mathConstructRanges: segment.mathConstructRanges?.map((range) =>
       remapLineMathConstructRangeReport(range, sourceMap)
     ),
@@ -111,10 +159,10 @@ function remapLineSegmentReport(
   }];
 }
 
-function splitRemappedTextSegmentReport(
-  segment: LineSegmentReport,
+function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
+  segment: LineSegmentReport<Space>,
   sourceMap: TextSourceMap
-): readonly LineSegmentReport[] | null {
+): readonly LineSegmentReport<"document">[] | null {
   const text = segment.text;
   if (
     (segment.kind !== "text" && segment.kind !== "space") ||
@@ -137,19 +185,41 @@ function splitRemappedTextSegmentReport(
   }
 
   return groups.map(({ start, end }) => {
-    const sourceSpan = mapInputSpan(sourceMap, segment.sourceStartRaw! + start, segment.sourceStartRaw! + end);
+    const sourceProjection = mapInputSpanWithPolicy(
+      sourceMap,
+      segment.sourceStartRaw! + start,
+      segment.sourceStartRaw! + end
+    );
     const xStart = segment.caretStops?.[start] ?? segment.x;
     const xEnd = segment.caretStops?.[end] ?? xStart;
+    const {
+      sourceStartRaw: _sourceStartRaw,
+      sourceEndRaw: _sourceEndRaw,
+      mathConstructRanges: _mathConstructRanges,
+      mathCaretEntries: _mathCaretEntries,
+      mathBreakpoints: _mathBreakpoints,
+      ...rest
+    } = segment;
     return {
-      ...segment,
+      ...rest,
       text: text.slice(start, end),
       startOffset: segment.startOffset == null ? undefined : segment.startOffset + start,
       endOffset: segment.startOffset == null ? undefined : segment.startOffset + end,
-      sourceStartRaw: sourceSpan.start,
-      sourceEndRaw: sourceSpan.end,
+      sourceStartRaw: documentSourceOffset(sourceProjection.start),
+      sourceEndRaw: documentSourceOffset(sourceProjection.end),
+      sourceRangePolicy: sourceProjection.policy,
       x: xStart,
       width: texLength(xEnd - xStart),
-      caretStops: segment.caretStops?.slice(start, end + 1)
+      caretStops: segment.caretStops?.slice(start, end + 1),
+      mathConstructRanges: segment.mathConstructRanges?.map((range) =>
+        remapLineMathConstructRangeReport(range, sourceMap)
+      ),
+      mathCaretEntries: segment.mathCaretEntries?.map((entry) =>
+        remapLineMathCaretEntryReport(entry, sourceMap)
+      ),
+      mathBreakpoints: segment.mathBreakpoints?.map((breakpoint) =>
+        remapLineMathBreakpointReport(breakpoint, sourceMap)
+      ),
     };
   });
 }
@@ -171,46 +241,50 @@ function canMergeProjectedTextChars(
     projectInputRange(sourceMap, inputBase + groupStart, inputBase + nextIndex + 1).kind === "source-range";
 }
 
-function remapLineMathConstructRangeReport(
-  range: LineMathConstructRangeReport,
+function remapLineMathConstructRangeReport<Space extends SourceCoordinateSpace>(
+  range: LineMathConstructRangeReport<Space>,
   sourceMap: TextSourceMap
-): LineMathConstructRangeReport {
+): LineMathConstructRangeReport<"document"> {
   const sourceSpan = mapInputSpan(sourceMap, range.sourceStartRaw, range.sourceEndRaw);
   return {
     ...range,
-    sourceStartRaw: sourceSpan.start,
-    sourceEndRaw: sourceSpan.end
+    sourceStartRaw: documentSourceOffset(sourceSpan.start),
+    sourceEndRaw: documentSourceOffset(sourceSpan.end)
   };
 }
 
-function remapLineMathCaretEntryReport(
-  entry: LineMathCaretEntryReport,
+function remapLineMathCaretEntryReport<Space extends SourceCoordinateSpace>(
+  entry: LineMathCaretEntryReport<Space>,
   sourceMap: TextSourceMap
-): LineMathCaretEntryReport {
+): LineMathCaretEntryReport<"document"> {
   const sourceSpan = entry.sourceStartRaw == null || entry.sourceEndRaw == null
     ? null
     : mapInputSpan(sourceMap, entry.sourceStartRaw, entry.sourceEndRaw);
+  const { sourceStartRaw: _sourceStartRaw, sourceEndRaw: _sourceEndRaw, ...rest } = entry;
   return {
-    ...entry,
+    ...rest,
     sourceOffsetRaw: mapInputOffset(sourceMap, entry.sourceOffsetRaw),
-    ...(sourceSpan ? { sourceStartRaw: sourceSpan.start, sourceEndRaw: sourceSpan.end } : {})
+    ...(sourceSpan ? {
+      sourceStartRaw: documentSourceOffset(sourceSpan.start),
+      sourceEndRaw: documentSourceOffset(sourceSpan.end),
+    } : {})
   };
 }
 
-function remapLineMathBreakpointReport(
-  breakpoint: LineMathBreakpointReport,
+function remapLineMathBreakpointReport<Space extends SourceCoordinateSpace>(
+  breakpoint: LineMathBreakpointReport<Space>,
   sourceMap: TextSourceMap
-): LineMathBreakpointReport {
+): LineMathBreakpointReport<"document"> {
   return {
     ...breakpoint,
     sourceOffsetRaw: mapInputOffset(sourceMap, breakpoint.sourceOffsetRaw)
   };
 }
 
-function remapBreakReport(
-  report: BreakReport | null,
+function remapBreakReport<Space extends SourceCoordinateSpace>(
+  report: BreakReport<Space> | null,
   sourceMap: TextSourceMap
-): BreakReport | null {
+): BreakReport<"document"> | null {
   return report ? { ...report, sourceOffset: mapInputOffset(sourceMap, report.sourceOffset) } : null;
 }
 
@@ -423,15 +497,30 @@ function mapInputSpan(sourceMap: TextSourceMap, start: number, end: number): Tex
   return { start, end };
 }
 
-function mapInputOffset(sourceMap: TextSourceMap, offset: number): number {
-  const hit = projectInputOffset(sourceMap, offset);
+function mapInputSpanWithPolicy(
+  sourceMap: TextSourceMap,
+  start: number,
+  end: number
+): TexSourceSpan & { readonly policy: "caret" | "select" | "macro" | "generated" | "unmapped" } {
+  const hit = projectInputRange(sourceMap, start, end);
   if (hit.kind === "source-offset") {
-    return hit.offset;
+    return { start: hit.offset, end: hit.offset, policy: "caret" };
   }
   if (hit.kind === "source-range") {
-    return hit.from;
+    return { start: hit.from, end: hit.to, policy: hit.policy };
   }
-  return offset;
+  return { start, end, policy: "unmapped" };
+}
+
+function mapInputOffset(sourceMap: TextSourceMap, offset: number) {
+  const hit = projectInputOffset(sourceMap, offset);
+  if (hit.kind === "source-offset") {
+    return documentSourceOffset(hit.offset);
+  }
+  if (hit.kind === "source-range") {
+    return documentSourceOffset(hit.from);
+  }
+  return documentSourceOffset(offset);
 }
 
 function remapSvgSourceDataAttributes(svgBody: string, sourceMap: TextSourceMap): string {

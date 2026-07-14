@@ -36,6 +36,8 @@ import {
   type TexVListLayout,
 } from "../packages/core/src/text/tex/vlist/index.js";
 import { preloadEnglishHyphenator } from "../packages/core/src/text/knuth-plass/paragraph/hyphenate.js";
+import { createIdentityMappedText } from "../packages/core/src/text/source-map.js";
+import { documentSourceOffset } from "../packages/core/src/text/source-coordinates.js";
 import {
   caseFromTexFuzzAst,
   generateTexFuzzCase,
@@ -56,7 +58,7 @@ function texFixture<T>(value: RawTexFixture<T>): T {
 
 function relayoutFromExistingVListLayout(
   document: TexVListDocument,
-  layout: TexVListLayout | null | undefined,
+  layout: TexVListLayout<"layout"> | null | undefined,
   options: {
     readonly width: number;
     readonly height?: number;
@@ -64,7 +66,7 @@ function relayoutFromExistingVListLayout(
     readonly lineHeight: number;
     readonly firstLineAscent: number;
   }
-): TexVListLayout | null {
+): TexVListLayout<"layout"> | null {
   if (!layout) {
     return null;
   }
@@ -423,6 +425,8 @@ function makeShapedTextReport(text: string): ParagraphLayoutReport {
   const shaped = computerModernTexMetricProvider.shapeText(text);
   return texFixture<ParagraphLayoutReport>({
     paragraphId: "tex:paragraph",
+    sourceCoordinateSpace: "layout",
+    sourceMappingMode: "reconstructed",
     width: shaped.width,
     alignment: "ragged-right",
     layoutMode: "wrap",
@@ -5556,7 +5560,6 @@ unordered.`;
 
   it("uses registered vlist geometry for nested quote/list text editing", async () => {
     const sourceText = String.raw`\begin{quote}\begin{itemize}\item Alpha\end{itemize}\end{quote}`;
-    const hitmapSourceText = "Alpha";
     const result = layoutSimpleTexParagraph(sourceText, {
       paragraphId: "tex:nested-vlist-hitmap",
       width: 160,
@@ -5595,10 +5598,10 @@ unordered.`;
         throw new Error("registered nested vlist geometry should avoid rendered linebox queries");
       },
     };
-    const alphaOffset = 2;
+    const alphaOffset = sourceText.indexOf("Alpha") + 2;
     const point = await getKnuthPlassPointFromOffset(outputJax, {
       paragraphId: "tex:nested-vlist-hitmap",
-      sourceText: hitmapSourceText,
+      sourceText,
       containerElement,
       offset: alphaOffset,
     });
@@ -5619,7 +5622,7 @@ unordered.`;
 
     const caret = await getKnuthPlassCaretFromPoint(outputJax, {
       paragraphId: "tex:nested-vlist-hitmap",
-      sourceText: hitmapSourceText,
+      sourceText,
       containerElement,
       clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
     });
@@ -5628,6 +5631,84 @@ unordered.`;
       lineIndex: 0,
       offset: alphaOffset,
       kind: "text",
+    });
+  });
+
+  it("keeps enumerate hit maps in document coordinates across the textarea boundary", async () => {
+    const nodeText = String.raw`\begin{enumerate}
+\item Hello
+\item World
+\end{enumerate}`;
+    const prefix = String.raw`\begin{tikzpicture}
+  \node[align=left, text width=100pt] (start) at (0,0) {`;
+    const suffix = String.raw`};
+\end{tikzpicture}`;
+    const documentSource = `${prefix}${nodeText}${suffix}`;
+    const mapped = createIdentityMappedText(nodeText, prefix.length);
+    const result = layoutSimpleTexParagraph(nodeText, {
+      paragraphId: "tex:enumerate-document-hitmap",
+      width: 100,
+      alignment: "ragged-right",
+      sourceMap: mapped.sourceMap,
+      hyphenator: { hyphenate: () => [] },
+    });
+    const report = result.report;
+    const vlistLayout = result.vlistLayout;
+    expect(report?.sourceCoordinateSpace).toBe("document");
+    expect(report?.sourceMappingMode).toBe("explicit");
+    expect(vlistLayout).toBeDefined();
+
+    const outputJax = { linebreaks: { getReports: () => [report!] } };
+    registerTexVListLayoutsOnOutputJax(outputJax, [{
+      paragraphId: "tex:enumerate-document-hitmap",
+      layout: vlistLayout!,
+    }]);
+    const containerElement = {
+      getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      viewBox: { baseVal: { width: report?.width ?? 1 } },
+      querySelectorAll: () => {
+        throw new Error("registered enumerate geometry should avoid rendered linebox queries");
+      },
+    };
+    const documentOffset = documentSource.indexOf("Hello") + 2;
+    const point = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:enumerate-document-hitmap",
+      sourceText: nodeText,
+      sourceTextStartOffset: documentSourceOffset(prefix.length),
+      sourceCoordinateSpace: "document",
+      containerElement,
+      offset: documentOffset,
+    });
+    expect(point).toMatchObject({
+      ok: true,
+      offset: documentOffset,
+      lineIndex: 0,
+      kind: "text",
+    });
+
+    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      paragraphId: "tex:enumerate-document-hitmap",
+      sourceText: nodeText,
+      sourceTextStartOffset: documentSourceOffset(prefix.length),
+      sourceCoordinateSpace: "document",
+      containerElement,
+      clientPoint: point.clientPoint!,
+    });
+    expect(caret).toMatchObject({ ok: true, offset: documentOffset, kind: "text" });
+
+    const wrongSpace = await getKnuthPlassPointFromOffset(outputJax, {
+      paragraphId: "tex:enumerate-document-hitmap",
+      sourceText: nodeText,
+      sourceCoordinateSpace: "document",
+      containerElement,
+      offset: 2,
+    });
+    expect(wrongSpace).toMatchObject({
+      ok: false,
+      error: {
+        code: "alignment-error",
+        message: expect.stringContaining("invalid for source view 0"),
+      },
     });
   });
 

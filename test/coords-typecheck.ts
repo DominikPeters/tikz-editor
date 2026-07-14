@@ -7,6 +7,17 @@ import type {
   WorldVector
 } from "../packages/core/src/coords/index";
 import type { ParagraphLayoutReport } from "../packages/core/src/text/knuth-plass/paragraph/report";
+import type {
+  CaretBaseParams,
+  CaretHitResult
+} from "../packages/core/src/text/knuth-plass/editor/hitmap";
+import {
+  documentOffsetToTextarea,
+  textareaOffsetToDocument,
+  type DocumentSourceOffset,
+  type LayoutSourceOffset,
+  type TextareaOffset
+} from "../packages/core/src/text/source-coordinates";
 import {
   offsetTexHBoxLocalX,
   offsetTexHBoxLocalY,
@@ -67,6 +78,8 @@ type TexMathText = Extract<TexMathNucleus, { readonly kind: "text" }>;
 type LineMathCaretEntry = NonNullable<
   ParagraphLayoutReport["lines"][number]["segments"][number]["mathCaretEntries"]
 >[number];
+type DocumentCaretSourceStart =
+  CaretBaseParams<"document">["sourceTextStartOffset"];
 
 declare const frameLocalPointValue: FrameLocalPoint;
 declare const svgPointValue: SvgPoint;
@@ -90,6 +103,12 @@ declare const texVListLocalYValue: TexVListLocalY;
 declare const texVListXValue: TexVListX;
 declare const texVListYValue: TexVListY;
 declare const paragraphReportValue: ParagraphLayoutReport;
+declare const layoutParagraphReportValue: ParagraphLayoutReport<"layout">;
+declare const documentParagraphReportValue: ParagraphLayoutReport<"document">;
+declare const layoutSourceOffsetValue: LayoutSourceOffset;
+declare const documentSourceOffsetValue: DocumentSourceOffset;
+declare const textareaOffsetValue: TextareaOffset;
+declare const documentCaretHitResultValue: CaretHitResult<"document">;
 declare const lineReportValue: ParagraphLayoutReport["lines"][number];
 declare const lineSegmentValue: ParagraphLayoutReport["lines"][number]["segments"][number];
 declare const lineMathCaretEntryValue: LineMathCaretEntry;
@@ -110,6 +129,22 @@ const sameWorldVector: WorldVector = worldVectorValue;
 const sameWorldBounds: WorldBounds = worldBoundsValue;
 const sameTexLength: TexLength = texLengthValue;
 const reportWidth: TexLength = paragraphReportValue.width;
+const layoutReportSourceStart: LayoutSourceOffset | undefined =
+  layoutParagraphReportValue.lines[0]?.segments[0]?.sourceStartRaw;
+const documentReportSourceStart: DocumentSourceOffset | undefined =
+  documentParagraphReportValue.lines[0]?.segments[0]?.sourceStartRaw;
+const convertedDocumentOffset: DocumentSourceOffset = textareaOffsetToDocument(
+  textareaOffsetValue,
+  { from: 10, to: 20 }
+);
+const convertedTextareaOffset: TextareaOffset = documentOffsetToTextarea(
+  documentSourceOffsetValue,
+  { from: 10, to: 20 }
+);
+const documentCaretSourceStart: DocumentCaretSourceStart =
+  documentSourceOffsetValue;
+const documentCaretHitOffset: DocumentSourceOffset | null =
+  documentCaretHitResultValue.offset;
 const reportLineX: TexLineX = lineReportValue.xStart;
 const reportLineWidth: TexLength = lineReportValue.width;
 const reportLineAscent: TexLength = lineReportValue.ascent;
@@ -200,6 +235,28 @@ const worldVectorAsPoint: WorldPoint = worldVectorValue;
 // @ts-expect-error raw numbers must be branded at a TeX geometry boundary
 const rawNumberAsTexLength: TexLength = 12;
 
+// @ts-expect-error raw numbers must be branded at a source-coordinate boundary
+const rawNumberAsDocumentSourceOffset: DocumentSourceOffset = 12;
+
+// @ts-expect-error caret source views require a branded start offset
+const rawNumberAsDocumentCaretSourceStart: DocumentCaretSourceStart = 12;
+
+// @ts-expect-error layout and document source-coordinate spaces are distinct
+const layoutOffsetAsDocumentOffset: DocumentSourceOffset = layoutSourceOffsetValue;
+
+// @ts-expect-error textarea and layout source-coordinate spaces are distinct
+const textareaOffsetAsLayoutOffset: LayoutSourceOffset = textareaOffsetValue;
+
+const invalidDocumentToTextarea = documentOffsetToTextarea(
+  // @ts-expect-error explicit conversions require an offset in the declared source space
+  layoutSourceOffsetValue,
+  { from: 10, to: 20 }
+);
+
+// @ts-expect-error report source offsets retain the report's coordinate-space parameter
+const documentReportAsLayoutReport: ParagraphLayoutReport<"layout"> =
+  documentParagraphReportValue;
+
 // @ts-expect-error raw numbers cannot enter HList-local geometry
 const rawNumberAsTexHBoxLocalX: TexHBoxLocalX = 12;
 
@@ -283,6 +340,12 @@ void sameWorldVector;
 void sameWorldBounds;
 void sameTexLength;
 void reportWidth;
+void layoutReportSourceStart;
+void documentReportSourceStart;
+void convertedDocumentOffset;
+void convertedTextareaOffset;
+void documentCaretSourceStart;
+void documentCaretHitOffset;
 void reportLineX;
 void reportLineWidth;
 void reportLineAscent;
@@ -326,6 +389,12 @@ void frameLocalAsWorldPoint;
 void worldPointAsVector;
 void worldVectorAsPoint;
 void rawNumberAsTexLength;
+void rawNumberAsDocumentSourceOffset;
+void rawNumberAsDocumentCaretSourceStart;
+void layoutOffsetAsDocumentOffset;
+void textareaOffsetAsLayoutOffset;
+void invalidDocumentToTextarea;
+void documentReportAsLayoutReport;
 void rawNumberAsTexHBoxLocalX;
 void rawNumberAsMathRuleWidth;
 void texLengthAsMuLength;

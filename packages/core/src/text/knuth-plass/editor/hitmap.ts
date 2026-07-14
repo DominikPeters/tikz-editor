@@ -48,6 +48,16 @@ import {
 } from '../../tex/coordinates.js';
 import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
 import { clamp } from '../../../utils/math.js';
+import {
+  sourceOffsetForSpace,
+  type SourceCoordinateSpace,
+  type SourceOffset,
+} from '../../source-coordinates.js';
+
+type CaretSourceCoordinateSpace = Extract<
+  SourceCoordinateSpace,
+  'layout' | 'document'
+>;
 
 // The core package builds without the DOM lib; keep the editor hit-testing
 // helpers structurally typed so they remain importable in Node-only builds.
@@ -105,21 +115,33 @@ function mathBaselineCoord(value: number): MathBaselineCoord {
   return value as MathBaselineCoord;
 }
 
-export interface CaretBaseParams {
+export interface CaretBaseParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> {
   paragraphId: string;
   sourceText: string;
+  /** Offset represented by `sourceText[0]` in the declared coordinate space. */
+  sourceTextStartOffset?: SourceOffset<Space>;
+  /** Defaults to `layout` for backwards-compatible direct layout callers. */
+  sourceCoordinateSpace?: Space;
   containerElement: Element;
 }
 
-export interface CaretFromPointParams extends CaretBaseParams {
+export interface CaretFromPointParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends CaretBaseParams<Space> {
   clientPoint: ClientPoint;
 }
 
-export interface PointFromOffsetParams extends CaretBaseParams {
+export interface PointFromOffsetParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends CaretBaseParams<Space> {
   offset: number;
 }
 
-export interface SelectionRectsParams extends CaretBaseParams {
+export interface SelectionRectsParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends CaretBaseParams<Space> {
   startOffset: number;
   endOffset: number;
 }
@@ -144,15 +166,19 @@ interface ResultBase {
   error: CaretMappingError | null;
 }
 
-export interface CaretHitResult extends ResultBase {
-  offset: number | null;
+export interface CaretHitResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
+  offset: SourceOffset<Space> | null;
   lineIndex: number | null;
   kind: 'text' | 'space' | 'math' | null;
   snappedToMathPrefix: boolean;
 }
 
-export interface CaretPointResult extends ResultBase {
-  offset: number | null;
+export interface CaretPointResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
+  offset: SourceOffset<Space> | null;
   lineIndex: number | null;
   lineLocalX: number | null;
   clientPoint: ClientPoint | null;
@@ -161,10 +187,12 @@ export interface CaretPointResult extends ResultBase {
   snappedToMathPrefix: boolean;
 }
 
-export interface LineRangeFromPointResult extends ResultBase {
+export interface LineRangeFromPointResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
   lineIndex: number | null;
-  lineStartOffset: number | null;
-  lineEndOffset: number | null;
+  lineStartOffset: SourceOffset<Space> | null;
+  lineEndOffset: SourceOffset<Space> | null;
 }
 
 export interface VListBoxGeometry {
@@ -377,9 +405,11 @@ export interface SelectionRect {
   rotationDeg: number;
 }
 
-export interface SelectionRectsResult extends ResultBase {
-  startOffset: number;
-  endOffset: number;
+export interface SelectionRectsResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
+  startOffset: SourceOffset<Space>;
+  endOffset: SourceOffset<Space>;
   rects: SelectionRect[];
 }
 
@@ -464,6 +494,7 @@ interface MathCaretEntry {
 
 interface CachedParagraphEntry {
   sourceText: string;
+  sourceTextStartOffset: number;
   report: ParagraphLayoutReport;
   containerElement: Element;
   containerGeometry: ContainerGeometrySnapshot | null;
@@ -1727,34 +1758,53 @@ function annotateSegmentSource(
   segment: LineSegmentReport,
   rawStart: number,
   rawEnd: number,
-  sourceKind: 'text' | 'math'
+  sourceKind: 'text' | 'math',
+  sourceCoordinateSpace: SourceCoordinateSpace
 ): void {
-  const writable = segment as LineSegmentReport & {
-    sourceStartRaw?: number;
-    sourceEndRaw?: number;
-    sourceKind?: 'text' | 'math';
-  };
-  writable.sourceStartRaw = rawStart;
-  writable.sourceEndRaw = rawEnd;
-  writable.sourceKind = sourceKind;
+  segment.sourceStartRaw = sourceOffsetForSpace(rawStart, sourceCoordinateSpace);
+  segment.sourceEndRaw = sourceOffsetForSpace(rawEnd, sourceCoordinateSpace);
+  segment.sourceKind = sourceKind;
 }
+
+type ExplicitSegmentSourceRange =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'invalid'; readonly error: string }
+  | {
+      readonly kind: 'valid';
+      readonly rawStart: number;
+      readonly rawEnd: number;
+      readonly sourceKind: 'text' | 'math';
+    };
 
 function explicitSegmentSourceRange(
   segment: LineSegmentReport,
-  sourceText: string
-): { rawStart: number; rawEnd: number; sourceKind: 'text' | 'math' } | null {
+  sourceText: string,
+  sourceTextStartOffset: number
+): ExplicitSegmentSourceRange {
+  const hasStart = segment.sourceStartRaw !== undefined;
+  const hasEnd = segment.sourceEndRaw !== undefined;
+  if (!hasStart && !hasEnd) {
+    return { kind: 'absent' };
+  }
   const rawStart = Number(segment.sourceStartRaw);
   const rawEnd = Number(segment.sourceEndRaw);
   if (
     !Number.isFinite(rawStart) ||
     !Number.isFinite(rawEnd) ||
-    rawStart < 0 ||
+    rawStart < sourceTextStartOffset ||
     rawEnd < rawStart ||
-    rawEnd > sourceText.length
+    rawEnd > sourceTextStartOffset + sourceText.length
   ) {
-    return null;
+    return {
+      kind: 'invalid',
+      error:
+        `Explicit segment source range ${String(segment.sourceStartRaw)}:${String(segment.sourceEndRaw)} ` +
+        `is invalid for source view ${sourceTextStartOffset}:` +
+        `${sourceTextStartOffset + sourceText.length}.`,
+    };
   }
   return {
+    kind: 'valid',
     rawStart,
     rawEnd,
     sourceKind: segment.sourceKind === 'math' ? 'math' : 'text',
@@ -2097,18 +2147,36 @@ function buildRunRawRanges(
 
 function alignSegmentsToSource(
   report: ParagraphLayoutReport,
-  sourceText: string
+  sourceText: string,
+  sourceTextStartOffset: number
 ): { aligned: AlignedSegment[]; error: string | null } {
   const parsed = parseSourceSpans(sourceText);
   if (parsed.error) {
     return {
       aligned: [],
-      error: `${parsed.error.message} (index=${parsed.error.index})`,
+      error: `${parsed.error.message} (index=${sourceTextStartOffset + parsed.error.index})`,
     };
   }
 
+  if (report.sourceMappingMode === 'reconstructed' && sourceTextStartOffset !== 0) {
+    return {
+      aligned: [],
+      error: 'Reconstructed source mappings require a zero-origin layout source view.',
+    };
+  }
+
+  const sourceSpans = parsed.spans.map((span): SourceSpan => ({
+    ...span,
+    rawStart: span.rawStart + sourceTextStartOffset,
+    rawEnd: span.rawEnd + sourceTextStartOffset,
+    ...(span.kind === 'math' ? {
+      contentStart: span.contentStart + sourceTextStartOffset,
+      contentEnd: span.contentEnd + sourceTextStartOffset,
+    } : {}),
+  }));
+
   const mathSpanByRange = new Map<string, MathSourceSpan>();
-  for (const span of parsed.spans) {
+  for (const span of sourceSpans) {
     if (span.kind === 'math') {
       mathSpanByRange.set(`${span.rawStart}:${span.rawEnd}`, span);
     }
@@ -2116,7 +2184,7 @@ function alignSegmentsToSource(
 
   let fallbackRunRaw: ReturnType<typeof buildRunRawRanges> | null = null;
   const getFallbackRunRaw = () => {
-    fallbackRunRaw ??= buildRunRawRanges(report, parsed.spans, sourceText);
+    fallbackRunRaw ??= buildRunRawRanges(report, sourceSpans, sourceText);
     return fallbackRunRaw;
   };
 
@@ -2127,8 +2195,11 @@ function alignSegmentsToSource(
     const line = sortedLines[lineCursor];
     for (let segmentIndex = 0; segmentIndex < line.segments.length; segmentIndex++) {
       const segment = line.segments[segmentIndex];
-      const explicitRange = explicitSegmentSourceRange(segment, sourceText);
-      if (explicitRange) {
+      const explicitRange = explicitSegmentSourceRange(segment, sourceText, sourceTextStartOffset);
+      if (explicitRange.kind === 'invalid') {
+        return { aligned: [], error: explicitRange.error };
+      }
+      if (explicitRange.kind === 'valid') {
         if (
           explicitRange.sourceKind === 'math' &&
           isTransparentMathFragmentSeparator(segment)
@@ -2143,7 +2214,9 @@ function alignSegmentsToSource(
             line,
             segmentIndex,
             sourceText,
-            mathSpanByRange
+            mathSpanByRange,
+            report.sourceCoordinateSpace,
+            sourceTextStartOffset
           );
           if (grouped.error) {
             const containingMathSpan = findContainingMathSpan(
@@ -2152,7 +2225,13 @@ function alignSegmentsToSource(
               explicitRange.rawEnd
             );
             if (containingMathSpan) {
-              annotateSegmentSource(segment, explicitRange.rawStart, explicitRange.rawEnd, 'math');
+              annotateSegmentSource(
+                segment,
+                explicitRange.rawStart,
+                explicitRange.rawEnd,
+                'math',
+                report.sourceCoordinateSpace
+              );
               aligned.push({
                 lineIndex: line.lineIndex,
                 line,
@@ -2178,7 +2257,13 @@ function alignSegmentsToSource(
             error: `Failed to align math segment ${explicitRange.rawStart}:${explicitRange.rawEnd} to parsed source span.`,
           };
         }
-        annotateSegmentSource(segment, explicitRange.rawStart, explicitRange.rawEnd, explicitRange.sourceKind);
+        annotateSegmentSource(
+          segment,
+          explicitRange.rawStart,
+          explicitRange.rawEnd,
+          explicitRange.sourceKind,
+          report.sourceCoordinateSpace
+        );
         aligned.push({
           lineIndex: line.lineIndex,
           line,
@@ -2198,6 +2283,15 @@ function alignSegmentsToSource(
       }
       if (segment.role === 'list-label') {
         continue;
+      }
+
+      if (report.sourceMappingMode === 'explicit') {
+        return {
+          aligned: [],
+          error:
+            `Explicit paragraph '${report.paragraphId}' has no source range for ` +
+            `line ${line.lineIndex}, segment ${segmentIndex}.`,
+        };
       }
 
       const runRaw = getFallbackRunRaw();
@@ -2241,7 +2335,13 @@ function alignSegmentsToSource(
         }
 
         for (let i = mathGroupStartIndex; i <= segmentIndex; i++) {
-          annotateSegmentSource(line.segments[i], groupRawStart, groupRawEnd, 'math');
+          annotateSegmentSource(
+            line.segments[i],
+            groupRawStart,
+            groupRawEnd,
+            'math',
+            report.sourceCoordinateSpace
+          );
         }
 
         const mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
@@ -2284,7 +2384,13 @@ function alignSegmentsToSource(
       }
 
       if (segment.kind === 'space') {
-        annotateSegmentSource(segment, runRange.rawStart, runRange.rawEnd, 'text');
+        annotateSegmentSource(
+          segment,
+          runRange.rawStart,
+          runRange.rawEnd,
+          'text',
+          report.sourceCoordinateSpace
+        );
         aligned.push({
           lineIndex: line.lineIndex,
           line,
@@ -2321,7 +2427,13 @@ function alignSegmentsToSource(
           error: `Text segment raw range exceeds run-aligned range for runIndex=${segment.runIndex}.`,
         };
       }
-      annotateSegmentSource(segment, rawStart, rawEnd, 'text');
+      annotateSegmentSource(
+        segment,
+        rawStart,
+        rawEnd,
+        'text',
+        report.sourceCoordinateSpace
+      );
       aligned.push({
         lineIndex: line.lineIndex,
         line,
@@ -2353,7 +2465,9 @@ function alignExplicitMathSegmentGroup(
   line: ParagraphLayoutReport['lines'][number],
   startSegmentIndex: number,
   sourceText: string,
-  mathSpanByRange: ReadonlyMap<string, MathSourceSpan>
+  mathSpanByRange: ReadonlyMap<string, MathSourceSpan>,
+  sourceCoordinateSpace: SourceCoordinateSpace,
+  sourceTextStartOffset: number
 ): {
   readonly entry?: AlignedSegment;
   readonly endSegmentIndex?: number;
@@ -2363,8 +2477,8 @@ function alignExplicitMathSegmentGroup(
   if (first.kind !== 'math') {
     return {};
   }
-  const firstRange = explicitSegmentSourceRange(first, sourceText);
-  if (firstRange?.sourceKind !== 'math') {
+  const firstRange = explicitSegmentSourceRange(first, sourceText, sourceTextStartOffset);
+  if (firstRange.kind !== 'valid' || firstRange.sourceKind !== 'math') {
     return {};
   }
 
@@ -2388,8 +2502,11 @@ function alignExplicitMathSegmentGroup(
     if (next?.kind !== 'math') {
       break;
     }
-    const nextRange = explicitSegmentSourceRange(next, sourceText);
-    if (nextRange?.sourceKind !== 'math') {
+    const nextRange = explicitSegmentSourceRange(next, sourceText, sourceTextStartOffset);
+    if (nextRange.kind === 'invalid') {
+      return { error: nextRange.error };
+    }
+    if (nextRange.kind !== 'valid' || nextRange.sourceKind !== 'math') {
       break;
     }
     segments.push(next);
@@ -2401,12 +2518,6 @@ function alignExplicitMathSegmentGroup(
     mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
   }
 
-  if (!mathSpan) {
-    return {
-      error: `Failed to align math segment ${groupRawStart}:${groupRawEnd} to parsed source span.`,
-    };
-  }
-
   const caretStops = combineExplicitMathGroupCaretStops(
     segments,
     groupRawStart,
@@ -2416,9 +2527,29 @@ function alignExplicitMathSegmentGroup(
   );
   const mathConstructRanges = combineExplicitMathConstructRanges(segments);
   const mathCaretEntries = combineExplicitMathCaretEntries(segments);
+  const sourceRangePolicy = segments.find(
+    (segment) => segment.sourceRangePolicy && segment.sourceRangePolicy !== 'caret'
+  )?.sourceRangePolicy;
+  if (
+    !mathSpan &&
+    sourceRangePolicy == null &&
+    caretStops.length !== groupRawEnd - groupRawStart + 1
+  ) {
+    return {
+      error:
+        `Explicit math segment ${groupRawStart}:${groupRawEnd} has neither a parsed math span ` +
+        'nor a complete caret-stop map.',
+    };
+  }
 
   for (const groupedSegment of segments) {
-    annotateSegmentSource(groupedSegment, groupRawStart, groupRawEnd, 'math');
+    annotateSegmentSource(
+      groupedSegment,
+      groupRawStart,
+      groupRawEnd,
+      'math',
+      sourceCoordinateSpace
+    );
   }
 
   return {
@@ -2432,6 +2563,7 @@ function alignExplicitMathSegmentGroup(
         x: groupStartX,
         width: texLength(Math.max(0, groupEndX - groupStartX)),
         caretStops,
+        ...(sourceRangePolicy ? { sourceRangePolicy } : {}),
       },
       rawStart: groupRawStart,
       rawEnd: groupRawEnd,
@@ -2560,11 +2692,32 @@ async function buildStopsByLine(
 
     if (aligned.sourceKind === 'math') {
       const span = aligned.mathSpan;
-      if (!span) {
-        throw new Error(`Missing parsed math span for line ${aligned.lineIndex}.`);
-      }
       const providedStops = (getOrBuildTextSegmentCaretStops(aligned.segment) ?? [])
         .map((value) => Number(value));
+      if (aligned.segment.sourceRangePolicy && aligned.segment.sourceRangePolicy !== 'caret') {
+        if (providedStops.length < 2 || !providedStops.every((value) => Number.isFinite(value))) {
+          throw new Error(
+            `Source-range math segment ${aligned.rawStart}:${aligned.rawEnd} has no endpoint caret stops.`
+          );
+        }
+        addStop(aligned.lineIndex, {
+          offset: aligned.rawStart,
+          x: lineReportCoord(providedStops[0] ?? segLeft),
+          kind: 'math',
+          snappedToMathPrefix: false,
+          lineStart: false,
+          lineEnd: false,
+        });
+        addStop(aligned.lineIndex, {
+          offset: aligned.rawEnd,
+          x: lineReportCoord(providedStops.at(-1) ?? segLeft + segWidth),
+          kind: 'math',
+          snappedToMathPrefix: false,
+          lineStart: false,
+          lineEnd: false,
+        });
+        continue;
+      }
       if (
         providedStops.length === rawLength + 1 &&
         providedStops.every((value) => Number.isFinite(value))
@@ -2583,6 +2736,11 @@ async function buildStopsByLine(
           });
         }
         continue;
+      }
+      if (!span) {
+        throw new Error(
+          `Explicit math source range ${aligned.rawStart}:${aligned.rawEnd} has no complete caret-stop map.`
+        );
       }
       const spanRawLength = Math.max(0, span.rawEnd - span.rawStart);
       if (
@@ -2641,12 +2799,38 @@ async function buildStopsByLine(
 
     const providedStops = (getOrBuildTextSegmentCaretStops(aligned.segment) ?? [])
       .map((value) => Number(value));
+    if (aligned.segment.sourceRangePolicy && aligned.segment.sourceRangePolicy !== 'caret') {
+      if (providedStops.length < 2 || !providedStops.every((value) => Number.isFinite(value))) {
+        throw new Error(
+          `Source-range text segment ${aligned.rawStart}:${aligned.rawEnd} has no endpoint caret stops.`
+        );
+      }
+      addStop(aligned.lineIndex, {
+        offset: aligned.rawStart,
+        x: lineReportCoord(providedStops[0] ?? segLeft),
+        kind: 'text',
+        snappedToMathPrefix: false,
+        lineStart: false,
+        lineEnd: false,
+      });
+      addStop(aligned.lineIndex, {
+        offset: aligned.rawEnd,
+        x: lineReportCoord(providedStops.at(-1) ?? segLeft + segWidth),
+        kind: 'text',
+        snappedToMathPrefix: false,
+        lineStart: false,
+        lineEnd: false,
+      });
+      continue;
+    }
     if (
       providedStops.length !== rawLength + 1 ||
       !providedStops.every((value) => Number.isFinite(value))
     ) {
       throw new Error(
-        `Text segment for runIndex=${aligned.segment.runIndex} is missing valid caretStops.`
+        `Text segment for runIndex=${aligned.segment.runIndex} range ` +
+        `${aligned.rawStart}:${aligned.rawEnd} has ${providedStops.length} caret stops; ` +
+        `expected ${rawLength + 1} for ${JSON.stringify(aligned.segment.text ?? '')}.`
       );
     }
 
@@ -2814,6 +2998,7 @@ function displayMathLineHitMapFromPositionedItem(params: {
     metrics,
     xStart,
     xEnd,
+    sourceCoordinateSpace: params.report.sourceCoordinateSpace,
   });
   const stops = displayMathStopsForBox(source, xStart, width);
   const exact = new Map<number, Stop[]>();
@@ -2822,9 +3007,19 @@ function displayMathLineHitMapFromPositionedItem(params: {
     list.push(stop);
     exact.set(stop.offset, list);
   }
-  const constructRangeReports = displayMathConstructRangesForBox(source, xStart, width);
+  const constructRangeReports = displayMathConstructRangesForBox(
+    source,
+    xStart,
+    width,
+    params.report.sourceCoordinateSpace
+  );
   const constructRanges = normalizeMathConstructRanges(constructRangeReports) ?? [];
-  const mathCaretEntryReports = displayMathCaretEntriesForBox(source, xStart, width);
+  const mathCaretEntryReports = displayMathCaretEntriesForBox(
+    source,
+    xStart,
+    width,
+    params.report.sourceCoordinateSpace
+  );
   const mathCaretEntries = normalizeMathCaretEntries(mathCaretEntryReports) ?? [];
   return [{
     lineIndex: params.lineIndex,
@@ -2854,13 +3049,14 @@ function displayMathLineHitMapFromPositionedItem(params: {
   }];
 }
 
-function displayMathSyntheticReportLine(params: {
+function displayMathSyntheticReportLine<Space extends SourceCoordinateSpace>(params: {
   readonly lineIndex: number;
   readonly source: TexMathBox;
   readonly metrics: TexBoxMetrics;
   readonly xStart: TexLineX;
   readonly xEnd: TexLineX;
-}): ParagraphLayoutReport['lines'][number] {
+  readonly sourceCoordinateSpace: Space;
+}): ParagraphLayoutReport<Space>['lines'][number] {
   const width = texLength(Math.max(0, params.xEnd - params.xStart));
   return {
     lineIndex: params.lineIndex,
@@ -2882,15 +3078,30 @@ function displayMathSyntheticReportLine(params: {
       runIndex: -1,
       kind: 'math',
       text: params.source.content,
-      sourceStartRaw: params.source.sourceStart,
-      sourceEndRaw: params.source.sourceEnd,
+      sourceStartRaw: sourceOffsetForSpace(params.source.sourceStart, params.sourceCoordinateSpace),
+      sourceEndRaw: sourceOffsetForSpace(params.source.sourceEnd, params.sourceCoordinateSpace),
       sourceKind: 'math',
       x: params.xStart,
       width,
       caretStops: displayMathCaretStopsForBox(params.source, params.xStart, width),
-      mathConstructRanges: displayMathConstructRangesForBox(params.source, params.xStart, width),
-      mathCaretEntries: displayMathCaretEntriesForBox(params.source, params.xStart, width),
-      mathBreakpoints: displayMathBreakpointsForBox(params.source, params.xStart, width),
+      mathConstructRanges: displayMathConstructRangesForBox(
+        params.source,
+        params.xStart,
+        width,
+        params.sourceCoordinateSpace
+      ),
+      mathCaretEntries: displayMathCaretEntriesForBox(
+        params.source,
+        params.xStart,
+        width,
+        params.sourceCoordinateSpace
+      ),
+      mathBreakpoints: displayMathBreakpointsForBox(
+        params.source,
+        params.xStart,
+        width,
+        params.sourceCoordinateSpace
+      ),
       mathSvgBody: params.source.svgBody,
     }],
   };
@@ -2982,18 +3193,19 @@ function displayMathCaretStopsForBox(
   );
 }
 
-function displayMathConstructRangesForBox(
+function displayMathConstructRangesForBox<Space extends SourceCoordinateSpace>(
   box: Pick<TexMathBox, 'constructRanges'>,
   x: TexLineX,
-  width: TexLength
-): LineSegmentReport['mathConstructRanges'] {
+  width: TexLength,
+  sourceCoordinateSpace: Space
+): LineSegmentReport<Space>['mathConstructRanges'] {
   const ranges = box.constructRanges;
   if (!ranges?.length) {
     return undefined;
   }
   return ranges.map((range) => ({
-    sourceStartRaw: range.sourceStart,
-    sourceEndRaw: range.sourceEnd,
+    sourceStartRaw: sourceOffsetForSpace(range.sourceStart, sourceCoordinateSpace),
+    sourceEndRaw: sourceOffsetForSpace(range.sourceEnd, sourceCoordinateSpace),
     xStart: projectDisplayMathHBoxXToLine(
       texHBoxX(Math.max(0, Math.min(width, range.xStart))),
       x
@@ -3005,20 +3217,21 @@ function displayMathConstructRangesForBox(
   }));
 }
 
-function displayMathCaretEntriesForBox(
+function displayMathCaretEntriesForBox<Space extends SourceCoordinateSpace>(
   box: Pick<TexMathBox, 'caretMap'>,
   x: TexLineX,
-  width: TexLength
-): LineSegmentReport['mathCaretEntries'] {
+  width: TexLength,
+  sourceCoordinateSpace: Space
+): LineSegmentReport<Space>['mathCaretEntries'] {
   const entries = box.caretMap?.entries;
   if (!entries?.length) {
     return undefined;
   }
   return entries.map((entry) => ({
-    sourceOffsetRaw: entry.sourceOffset,
+    sourceOffsetRaw: sourceOffsetForSpace(entry.sourceOffset, sourceCoordinateSpace),
     ...(entry.sourceSpan ? {
-      sourceStartRaw: entry.sourceSpan.start,
-      sourceEndRaw: entry.sourceSpan.end,
+      sourceStartRaw: sourceOffsetForSpace(entry.sourceSpan.start, sourceCoordinateSpace),
+      sourceEndRaw: sourceOffsetForSpace(entry.sourceSpan.end, sourceCoordinateSpace),
     } : {}),
     x: projectDisplayMathHBoxXToLine(
       texHBoxX(Math.max(0, Math.min(width, entry.x))),
@@ -3044,18 +3257,19 @@ function displayMathCaretEntriesForBox(
   }));
 }
 
-function displayMathBreakpointsForBox(
+function displayMathBreakpointsForBox<Space extends SourceCoordinateSpace>(
   box: Pick<TexMathBox, 'breakpoints'>,
   x: TexLineX,
-  width: TexLength
-): LineSegmentReport['mathBreakpoints'] {
+  width: TexLength,
+  sourceCoordinateSpace: Space
+): LineSegmentReport<Space>['mathBreakpoints'] {
   const breakpoints = box.breakpoints;
   if (!breakpoints?.length) {
     return undefined;
   }
   return breakpoints.map((breakpoint) => ({
     kind: breakpoint.kind,
-    sourceOffsetRaw: breakpoint.sourceOffset,
+    sourceOffsetRaw: sourceOffsetForSpace(breakpoint.sourceOffset, sourceCoordinateSpace),
     x: projectDisplayMathHBoxXToLine(
       texHBoxX(Math.max(0, Math.min(width, breakpoint.x))),
       x
@@ -3137,9 +3351,10 @@ async function buildParagraphHitMap(
   outputJax: unknown,
   report: ParagraphLayoutReport,
   sourceText: string,
+  sourceTextStartOffset: number,
   containerElement: Element
 ): Promise<ParagraphHitMap> {
-  const aligned = alignSegmentsToSource(report, sourceText);
+  const aligned = alignSegmentsToSource(report, sourceText, sourceTextStartOffset);
   if (aligned.error) {
     throw new Error(aligned.error);
   }
@@ -3172,10 +3387,11 @@ async function getParagraphHitMap(
   outputJax: unknown,
   report: ParagraphLayoutReport,
   sourceText: string,
+  sourceTextStartOffset: number,
   containerElement: Element
 ): Promise<ParagraphHitMap> {
   if (!outputJax || typeof outputJax !== 'object') {
-    return buildParagraphHitMap(outputJax, report, sourceText, containerElement);
+    return buildParagraphHitMap(outputJax, report, sourceText, sourceTextStartOffset, containerElement);
   }
 
   let map = paragraphCacheByOutput.get(outputJax);
@@ -3189,13 +3405,20 @@ async function getParagraphHitMap(
   if (
     existing?.report === report &&
     existing.sourceText === sourceText &&
+    existing.sourceTextStartOffset === sourceTextStartOffset &&
     existing.containerElement === containerElement &&
     sameContainerGeometry(existing.containerGeometry, containerGeometry)
   ) {
     return existing.mapPromise;
   }
 
-  const mapPromise = buildParagraphHitMap(outputJax, report, sourceText, containerElement).catch((error) => {
+  const mapPromise = buildParagraphHitMap(
+    outputJax,
+    report,
+    sourceText,
+    sourceTextStartOffset,
+    containerElement
+  ).catch((error) => {
     const current = map.get(report.paragraphId);
     if (current?.mapPromise === mapPromise) {
       map.delete(report.paragraphId);
@@ -3205,6 +3428,7 @@ async function getParagraphHitMap(
 
   map.set(report.paragraphId, {
     sourceText,
+    sourceTextStartOffset,
     report,
     containerElement,
     containerGeometry,
@@ -3724,6 +3948,13 @@ async function resolveHitMap<T extends ResultBase>(
   createError: CaretMappingErrorFactory<T>
 ): Promise<HitMapResolution<T>> {
   const { paragraphId, sourceText, containerElement } = params;
+  const sourceTextStartOffset = Math.floor(params.sourceTextStartOffset ?? 0);
+  if (!Number.isFinite(sourceTextStartOffset) || sourceTextStartOffset < 0) {
+    return {
+      kind: 'error',
+      result: createError('invalid-params', 'sourceTextStartOffset must be a non-negative integer.'),
+    };
+  }
   const { report } = findReportByParagraphId(outputJax, paragraphId);
   if (!report) {
     return {
@@ -3734,10 +3965,27 @@ async function resolveHitMap<T extends ResultBase>(
       ),
     };
   }
+  const requestedSourceSpace = params.sourceCoordinateSpace ?? 'layout';
+  if (report.sourceCoordinateSpace !== requestedSourceSpace) {
+    return {
+      kind: 'error',
+      result: createError(
+        'alignment-error',
+        `Paragraph '${paragraphId}' uses ${report.sourceCoordinateSpace} source coordinates, ` +
+          `but the hit-test source was declared as ${requestedSourceSpace}.`
+      ),
+    };
+  }
 
   let hitMap: ParagraphHitMap;
   try {
-    hitMap = await getParagraphHitMap(outputJax, report, sourceText, containerElement);
+    hitMap = await getParagraphHitMap(
+      outputJax,
+      report,
+      sourceText,
+      sourceTextStartOffset,
+      containerElement
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
     return {
@@ -3756,6 +4004,14 @@ async function resolveHitMap<T extends ResultBase>(
   return { kind: 'resolved', hitMap };
 }
 
+export function getKnuthPlassCaretFromPoint(
+  outputJax: unknown,
+  params: Partial<CaretFromPointParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<CaretHitResult<'document'>>;
+export function getKnuthPlassCaretFromPoint(
+  outputJax: unknown,
+  params: (Partial<CaretFromPointParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<CaretHitResult<'layout'>>;
 export async function getKnuthPlassCaretFromPoint(
   outputJax: unknown,
   params: Partial<CaretFromPointParams> | null | undefined
@@ -3779,6 +4035,8 @@ export async function getKnuthPlassCaretFromPoint(
     {
       paragraphId,
       sourceText: params.sourceText,
+      sourceTextStartOffset: params.sourceTextStartOffset,
+      sourceCoordinateSpace: params.sourceCoordinateSpace,
       containerElement: params.containerElement,
     },
     createError
@@ -3795,7 +4053,9 @@ export async function getKnuthPlassCaretFromPoint(
   const mathPoint = linePointToMathBaselinePoint(reportLine, linePoint);
   const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathPoint);
   const stop = mathEntry ? stopFromMathCaretEntry(mathEntry) : nearestStopByX(line.stopsByX, linePoint.x);
-  if (stop.offset < 0 || stop.offset > params.sourceText.length) {
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  if (stop.offset < sourceStart || stop.offset > sourceEnd) {
     return createError(
       'alignment-error',
       `Measured stop offset ${stop.offset} is outside source bounds.`
@@ -3805,7 +4065,10 @@ export async function getKnuthPlassCaretFromPoint(
   return {
     ok: true,
     paragraphId,
-    offset: stop.offset,
+    offset: sourceOffsetForSpace(
+      stop.offset,
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
     lineIndex: line.lineIndex,
     kind: stop.kind,
     snappedToMathPrefix: stop.snappedToMathPrefix,
@@ -3813,6 +4076,14 @@ export async function getKnuthPlassCaretFromPoint(
   };
 }
 
+export function getKnuthPlassPointFromOffset(
+  outputJax: unknown,
+  params: Partial<PointFromOffsetParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<CaretPointResult<'document'>>;
+export function getKnuthPlassPointFromOffset(
+  outputJax: unknown,
+  params: (Partial<PointFromOffsetParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<CaretPointResult<'layout'>>;
 export async function getKnuthPlassPointFromOffset(
   outputJax: unknown,
   params: Partial<PointFromOffsetParams> | null | undefined
@@ -3839,6 +4110,8 @@ export async function getKnuthPlassPointFromOffset(
     {
       paragraphId,
       sourceText: params.sourceText,
+      sourceTextStartOffset: params.sourceTextStartOffset,
+      sourceCoordinateSpace: params.sourceCoordinateSpace,
       containerElement: params.containerElement,
     },
     createError
@@ -3848,7 +4121,9 @@ export async function getKnuthPlassPointFromOffset(
   }
   const { hitMap } = resolution;
 
-  const targetOffset = clamp(Math.floor(params.offset ?? 0), 0, params.sourceText.length);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  const targetOffset = clamp(Math.floor(params.offset ?? sourceStart), sourceStart, sourceEnd);
   const exact = findBestStopForOffset(hitMap.lines, targetOffset);
   const selected = exact ?? findNearestStopForOffset(hitMap.lines, targetOffset);
   if (!selected) {
@@ -3883,7 +4158,10 @@ export async function getKnuthPlassPointFromOffset(
   return {
     ok: true,
     paragraphId,
-    offset: selected.stop.offset,
+    offset: sourceOffsetForSpace(
+      selected.stop.offset,
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
     lineIndex: selected.line.lineIndex,
     lineLocalX: pointX,
     clientPoint,
@@ -3894,14 +4172,23 @@ export async function getKnuthPlassPointFromOffset(
   };
 }
 
+export function getKnuthPlassSelectionRects(
+  outputJax: unknown,
+  params: Partial<SelectionRectsParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<SelectionRectsResult<'document'>>;
+export function getKnuthPlassSelectionRects(
+  outputJax: unknown,
+  params: (Partial<SelectionRectsParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<SelectionRectsResult<'layout'>>;
 export async function getKnuthPlassSelectionRects(
   outputJax: unknown,
   params: Partial<SelectionRectsParams> | null | undefined
 ): Promise<SelectionRectsResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const sourceCoordinateSpace = params?.sourceCoordinateSpace ?? 'layout';
   const createError = createCaretMappingErrorFactory<SelectionRectsResult>(paragraphId, {
-    startOffset: 0,
-    endOffset: 0,
+    startOffset: sourceOffsetForSpace(0, sourceCoordinateSpace),
+    endOffset: sourceOffsetForSpace(0, sourceCoordinateSpace),
     rects: [],
   });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement) {
@@ -3916,6 +4203,8 @@ export async function getKnuthPlassSelectionRects(
     {
       paragraphId,
       sourceText: params.sourceText,
+      sourceTextStartOffset: params.sourceTextStartOffset,
+      sourceCoordinateSpace: params.sourceCoordinateSpace,
       containerElement: params.containerElement,
     },
     createError
@@ -3925,16 +4214,18 @@ export async function getKnuthPlassSelectionRects(
   }
   const { hitMap } = resolution;
 
-  const start = clamp(Math.floor(params.startOffset ?? 0), 0, params.sourceText.length);
-  const end = clamp(Math.floor(params.endOffset ?? 0), 0, params.sourceText.length);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  const start = clamp(Math.floor(params.startOffset ?? sourceStart), sourceStart, sourceEnd);
+  const end = clamp(Math.floor(params.endOffset ?? sourceStart), sourceStart, sourceEnd);
   const rangeStart = Math.min(start, end);
   const rangeEnd = Math.max(start, end);
   if (rangeStart === rangeEnd) {
     return {
       ok: true,
       paragraphId,
-      startOffset: rangeStart,
-      endOffset: rangeEnd,
+      startOffset: sourceOffsetForSpace(rangeStart, sourceCoordinateSpace),
+      endOffset: sourceOffsetForSpace(rangeEnd, sourceCoordinateSpace),
       rects: [],
       error: null,
     };
@@ -4010,13 +4301,21 @@ export async function getKnuthPlassSelectionRects(
   return {
     ok: true,
     paragraphId,
-    startOffset: rangeStart,
-    endOffset: rangeEnd,
+    startOffset: sourceOffsetForSpace(rangeStart, sourceCoordinateSpace),
+    endOffset: sourceOffsetForSpace(rangeEnd, sourceCoordinateSpace),
     rects,
     error: null,
   };
 }
 
+export function getKnuthPlassLineRangeFromPoint(
+  outputJax: unknown,
+  params: Partial<CaretFromPointParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<LineRangeFromPointResult<'document'>>;
+export function getKnuthPlassLineRangeFromPoint(
+  outputJax: unknown,
+  params: (Partial<CaretFromPointParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<LineRangeFromPointResult<'layout'>>;
 export async function getKnuthPlassLineRangeFromPoint(
   outputJax: unknown,
   params: Partial<CaretFromPointParams> | null | undefined
@@ -4039,6 +4338,8 @@ export async function getKnuthPlassLineRangeFromPoint(
     {
       paragraphId,
       sourceText: params.sourceText,
+      sourceTextStartOffset: params.sourceTextStartOffset,
+      sourceCoordinateSpace: params.sourceCoordinateSpace,
       containerElement: params.containerElement,
     },
     createError
@@ -4049,14 +4350,22 @@ export async function getKnuthPlassLineRangeFromPoint(
   const { hitMap } = resolution;
 
   const line = inferLineByClientPoint(hitMap, params.clientPoint);
-  const lineStartOffset = clamp(Math.floor(line.minOffset), 0, params.sourceText.length);
-  const lineEndOffset = clamp(Math.floor(line.maxOffset), 0, params.sourceText.length);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  const lineStartOffset = clamp(Math.floor(line.minOffset), sourceStart, sourceEnd);
+  const lineEndOffset = clamp(Math.floor(line.maxOffset), sourceStart, sourceEnd);
   return {
     ok: true,
     paragraphId,
     lineIndex: line.lineIndex,
-    lineStartOffset: Math.min(lineStartOffset, lineEndOffset),
-    lineEndOffset: Math.max(lineStartOffset, lineEndOffset),
+    lineStartOffset: sourceOffsetForSpace(
+      Math.min(lineStartOffset, lineEndOffset),
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
+    lineEndOffset: sourceOffsetForSpace(
+      Math.max(lineStartOffset, lineEndOffset),
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
     error: null,
   };
 }

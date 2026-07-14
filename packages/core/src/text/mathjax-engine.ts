@@ -1083,8 +1083,8 @@ function buildCacheEntryWithMetadata(
  * nodes with identical text; the per-node source-map remap happens on top.
  */
 type SimpleTexSharedLayout = {
-  report: ParagraphLayoutReport;
-  vlistLayout: TexVListLayout;
+  report: ParagraphLayoutReport<"layout">;
+  vlistLayout: TexVListLayout<"layout">;
   contentWidthPt: TexLength;
   renderFont: ResolvedTexFont;
 };
@@ -1318,10 +1318,10 @@ function texParagraphNaturalContentWidth(report: ParagraphLayoutReport): TexLeng
 }
 
 function shrinkTexParagraphReportToWidth(
-  report: ParagraphLayoutReport,
+  report: ParagraphLayoutReport<"layout">,
   width: TexLength,
   layoutMode?: KnuthPlassLayoutMode
-): ParagraphLayoutReport {
+): ParagraphLayoutReport<"layout"> {
   return {
     ...report,
     width,
@@ -1334,10 +1334,10 @@ function shrinkTexParagraphReportToWidth(
 }
 
 function shrinkTexVListLayoutToWidth(
-  layout: TexVListLayout,
+  layout: TexVListLayout<"layout">,
   width: TexLength,
-  report: ParagraphLayoutReport
-): TexVListLayout {
+  report: ParagraphLayoutReport<"layout">
+): TexVListLayout<"layout"> {
   return {
     ...layout,
     metrics: {

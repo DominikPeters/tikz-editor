@@ -2,13 +2,18 @@ import { useEffect, type RefObject } from "react";
 import { svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
 import { getActiveMathJaxOutputJax } from "@tikz-editor/core/text/mathjax-engine";
 import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
+import {
+  documentSourceOffset,
+  textareaOffset,
+  textareaOffsetToDocument,
+  type DocumentSourceOffset
+} from "@tikz-editor/core/text/source-coordinates";
 import type { SvgBounds, SvgPoint, ViewportPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToViewport, svgToViewport } from "../coords/convert";
 import { clientBoundsToViewport, svgBoundsToViewportBounds } from "../coords/text";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
 import { clamp } from "./geometry";
-import { createSourceRenderOffsetMap } from "./text-offset-map";
 import { applyTextMeasureFont, createVisualTextLayout, resolveVisualLineLeft } from "./text-visual-layout";
 import type { CanvasSnapshot, EditableTextTarget, StateSetter, TextEditingSession, TextSelectionOverlay, TextSelectionOverlayBox } from "./types";
 import type { CanvasTextEditAction } from "./canvas-text-edit-machine";
@@ -199,11 +204,13 @@ async function estimateCaretHeight(
   outputJax: unknown,
   paragraphId: string,
   sourceText: string,
+  sourceTextStartOffset: DocumentSourceOffset,
   containerElement: SVGSVGElement,
   offset: number
 ): Promise<number | null> {
-  const nextOffset = Math.min(sourceText.length, offset + 1);
-  const prevOffset = Math.max(0, offset - 1);
+  const sourceEndOffset = sourceTextStartOffset + sourceText.length;
+  const nextOffset = Math.min(sourceEndOffset, offset + 1);
+  const prevOffset = Math.max(sourceTextStartOffset, offset - 1);
   const probes: Array<[number, number]> = [];
   if (nextOffset > offset) {
     probes.push([offset, nextOffset]);
@@ -215,6 +222,8 @@ async function estimateCaretHeight(
     const rects = await getKnuthPlassSelectionRects(outputJax, {
       paragraphId,
       sourceText,
+      sourceTextStartOffset,
+      sourceCoordinateSpace: "document",
       containerElement,
       startOffset,
       endOffset
@@ -334,11 +343,10 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
 
     const requestRef = { cancelled: false };
     const viewportRect = viewport.getBoundingClientRect();
-    const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-    const renderAnchor = clamp(offsetMap.sourceToRender(boundedStart), 0, target.renderSourceText.length);
-    const renderFocus = clamp(offsetMap.sourceToRender(boundedEnd), 0, target.renderSourceText.length);
-    const renderStart = Math.min(renderAnchor, renderFocus);
-    const renderEnd = Math.max(renderAnchor, renderFocus);
+    const documentAnchor = textareaOffsetToDocument(textareaOffset(boundedStart), target.sourceSpan);
+    const documentFocus = textareaOffsetToDocument(textareaOffset(boundedEnd), target.sourceSpan);
+    const documentStart = documentSourceOffset(Math.min(documentAnchor, documentFocus));
+    const documentEnd = documentSourceOffset(Math.max(documentAnchor, documentFocus));
 
     void (async () => {
       const requiresParagraphGeometry =
@@ -387,12 +395,14 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           return;
         }
 
-        if (renderStart === renderEnd) {
+        if (documentStart === documentEnd) {
           const point = await getKnuthPlassPointFromOffset(outputJax, {
             paragraphId: target.paragraphId,
-            sourceText: target.renderSourceText,
+            sourceText: target.text,
+            sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
+            sourceCoordinateSpace: "document",
             containerElement,
-            offset: renderStart
+            offset: documentStart
           });
           if (requestRef.cancelled) {
             return;
@@ -405,9 +415,10 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
             (await estimateCaretHeight(
               outputJax,
               target.paragraphId,
-              target.renderSourceText,
+              target.text,
+              documentSourceOffset(target.sourceSpan.from),
               containerElement,
-              point.offset ?? renderStart
+              point.offset ?? documentStart
             )) ?? Math.max(1, target.region.height);
           if (requestRef.cancelled) {
             return;
@@ -436,10 +447,12 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
 
         const rects = await getKnuthPlassSelectionRects(outputJax, {
           paragraphId: target.paragraphId,
-          sourceText: target.renderSourceText,
+          sourceText: target.text,
+          sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
+          sourceCoordinateSpace: "document",
           containerElement,
-          startOffset: renderStart,
-          endOffset: renderEnd
+          startOffset: documentStart,
+          endOffset: documentEnd
         });
         if (requestRef.cancelled) {
           return;

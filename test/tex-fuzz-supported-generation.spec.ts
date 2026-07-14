@@ -30,6 +30,8 @@ describe("support-aware TeX fuzz generation", () => {
       shapedRuns: new Map(),
       report: {
         paragraphId: "mutation",
+        sourceCoordinateSpace: "layout" as const,
+        sourceMappingMode: "reconstructed" as const,
         width: texLength(160),
         alignment: "ragged-right" as const,
         layoutMode: "wrap" as const,

@@ -2476,7 +2476,7 @@ describe("TeX math SVG rendering", () => {
 
     expect(result.supported).toBe(true);
     const paragraphReport = result.vlistLayout?.reports.find(
-      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+      (report): report is ParagraphLayoutReport<"layout"> => Array.isArray((report as ParagraphLayoutReport).lines)
     );
     const intertextLine = paragraphReport?.lines.find((line) =>
       line.segments.some((segment) =>
@@ -2623,7 +2623,7 @@ describe("TeX math SVG rendering", () => {
 
     expect(result.supported).toBe(true);
     const paragraphReport = result.vlistLayout?.reports.find(
-      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+      (report): report is ParagraphLayoutReport<"layout"> => Array.isArray((report as ParagraphLayoutReport).lines)
     );
     const lineTexts = paragraphReport?.lines.map((line) =>
       line.segments.map((segment) => segment.text ?? "").join("")
@@ -2647,7 +2647,7 @@ describe("TeX math SVG rendering", () => {
 
     expect(result.supported).toBe(true);
     const paragraphReport = result.vlistLayout?.reports.find(
-      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+      (report): report is ParagraphLayoutReport<"layout"> => Array.isArray((report as ParagraphLayoutReport).lines)
     );
     const lineTexts = paragraphReport?.lines.map((line) =>
       line.segments.map((segment) => segment.text ?? "").join("")
@@ -2671,7 +2671,7 @@ describe("TeX math SVG rendering", () => {
 
     expect(result.supported).toBe(true);
     const paragraphReport = result.vlistLayout?.reports.find(
-      (report): report is ParagraphLayoutReport => Array.isArray((report as ParagraphLayoutReport).lines)
+      (report): report is ParagraphLayoutReport<"layout"> => Array.isArray((report as ParagraphLayoutReport).lines)
     );
     const lineTexts = paragraphReport?.lines.map((line) =>
       line.segments.map((segment) => segment.text ?? "").join("")

@@ -1,6 +1,7 @@
 import type { Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
 import type { TextSourceMap } from "../source-map.js";
+import type { SourceCoordinateSpace } from "../source-coordinates.js";
 import type { NodeTextColorResolver, NodeTextGraphicsResolver } from "../types.js";
 import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import {
@@ -51,15 +52,23 @@ export interface TexParagraphLayoutOptions {
   readonly sourceMap?: TextSourceMap;
 }
 
-export interface TexParagraphLayoutResult {
+export interface TexParagraphLayoutResult<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   readonly supported: boolean;
-  readonly report: ParagraphLayoutReport | null;
-  readonly vlistLayout?: TexVListLayout;
+  readonly report: ParagraphLayoutReport<Space> | null;
+  readonly vlistLayout?: TexVListLayout<Space>;
   readonly fallbackReason: string | null;
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly errors: readonly string[];
 }
 
+export function layoutSimpleTexParagraph(
+  text: string,
+  options: TexParagraphLayoutOptions & { readonly sourceMap: TextSourceMap }
+): TexParagraphLayoutResult<"document">;
+export function layoutSimpleTexParagraph(
+  text: string,
+  options: TexParagraphLayoutOptions & { readonly sourceMap?: undefined }
+): TexParagraphLayoutResult<"layout">;
 export function layoutSimpleTexParagraph(
   text: string,
   options: TexParagraphLayoutOptions

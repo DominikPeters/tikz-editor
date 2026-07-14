@@ -117,6 +117,22 @@ export { createEnglishHyphenator, EnglishHyphenator } from './paragraph/hyphenat
 export { englishDefaults, ENGLISH_LANGUAGE_CODE } from './languages/en.js';
 
 export {
+  documentOffsetToTextarea,
+  documentSourceOffset,
+  layoutSourceOffset,
+  sourceOffsetForSpace,
+  sourceSpanForSpace,
+  textareaOffset,
+  textareaOffsetToDocument,
+  type DocumentSourceOffset,
+  type LayoutSourceOffset,
+  type SourceCoordinateSpace,
+  type SourceOffset,
+  type SourceSpan as BrandedSourceSpan,
+  type TextareaOffset,
+} from '../source-coordinates.js';
+
+export {
   parseSourceSpans,
   type SourceParseError,
   type SourceParseResult,

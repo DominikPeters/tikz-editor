@@ -62,7 +62,7 @@ export interface TexVListMeasuredParagraphLayoutOptions extends TexVListLayoutOp
   readonly firstLineIndex?: number;
   readonly firstLineAscent?: TexLength;
   readonly paragraphMeasurements: readonly TexVListParagraphBoxMeasurement[];
-  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport)[];
+  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport<"layout">)[];
   readonly errors?: readonly string[];
 }
 
@@ -71,13 +71,13 @@ export interface TexVListHorizontalParagraphLayoutOptions extends TexVListLayout
   readonly firstLineIndex?: number;
   readonly firstLineAscent?: TexLength;
   readonly paragraphLayouts: readonly TexVListParagraphHorizontalLayout[];
-  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport)[];
+  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport<"layout">)[];
   readonly errors?: readonly string[];
 }
 
 export interface TexVListParagraphReportAssemblyResult {
-  readonly report: ParagraphLayoutReport;
-  readonly layout: TexVListLayout;
+  readonly report: ParagraphLayoutReport<"layout">;
+  readonly layout: TexVListLayout<"layout">;
 }
 
 export interface TexVListCombinedParagraphReportInput {
@@ -230,7 +230,7 @@ function texLatexNormalParagraphLineHeight(font: ResolvedTexFont): TexLength {
 }
 
 function texLatexNormalFirstLineAscent(
-  report: ParagraphLayoutReport,
+  report: ParagraphLayoutReport<"layout">,
   font: ResolvedTexFont
 ): TexLength {
   return texLength(Math.max(
@@ -242,7 +242,7 @@ function texLatexNormalFirstLineAscent(
 export function layoutTexVListFromHorizontalParagraphs(
   document: TexVListDocument,
   options: TexVListHorizontalParagraphLayoutOptions
-): TexVListLayout {
+): TexVListLayout<"layout"> {
   return layoutTexVListFromMeasuredParagraphs(document, {
     ...options,
     paragraphMeasurements: options.paragraphLayouts.map(
@@ -254,7 +254,7 @@ export function layoutTexVListFromHorizontalParagraphs(
 export function layoutTexVListFromMeasuredParagraphs(
   document: TexVListDocument,
   options: TexVListMeasuredParagraphLayoutOptions
-): TexVListLayout {
+): TexVListLayout<"layout"> {
   validateTexVListParagraphMeasurements(document, options.paragraphMeasurements);
   const paragraphMeasurements = texVListParagraphMeasurementMap(options.paragraphMeasurements);
   const resolvedDocument = resolveDisplayMathVerticalGlueInVList(

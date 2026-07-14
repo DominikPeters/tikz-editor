@@ -171,14 +171,55 @@ export function mapTransformedTextWithFallback(
     return mapped;
   }
 
-  const hit = projectInputRange(mapped.sourceMap, 0, mapped.text.length);
+  const origins: TextSourceProjection[] = [];
+  let inputIndex = 0;
+  let outputIndex = 0;
+  while (outputIndex < transformedText.length) {
+    if (
+      inputIndex < mapped.text.length &&
+      mapped.text.charAt(inputIndex) === transformedText.charAt(outputIndex)
+    ) {
+      origins.push(mapped.sourceMap.charOrigins[inputIndex] ?? {
+        kind: "unmapped",
+        reason: "Missing source origin."
+      });
+      inputIndex += 1;
+      outputIndex += 1;
+      continue;
+    }
+
+    const outputChar = transformedText.charAt(outputIndex);
+    const inputChar = mapped.text.charAt(inputIndex);
+    const nextInputMatch = outputChar ? mapped.text.indexOf(outputChar, inputIndex + 1) : -1;
+    const nextOutputMatch = inputChar ? transformedText.indexOf(inputChar, outputIndex + 1) : -1;
+    if (
+      nextInputMatch >= 0 &&
+      (nextOutputMatch < 0 || nextInputMatch - inputIndex <= nextOutputMatch - outputIndex)
+    ) {
+      inputIndex = nextInputMatch;
+      continue;
+    }
+
+    origins.push(generatedProjectionForTransform(mapped, inputIndex, reason));
+    outputIndex += 1;
+  }
+
+  return createMappedText(transformedText, origins);
+}
+
+function generatedProjectionForTransform(
+  mapped: MappedText,
+  inputIndex: number,
+  reason: string
+): TextSourceProjection {
+  const hit = projectInputOffset(mapped.sourceMap, inputIndex);
   if (hit.kind === "source-offset") {
-    return createGeneratedMappedText(transformedText, reason, { from: hit.offset, to: hit.offset });
+    return { kind: "generated", reason, owner: { from: hit.offset, to: hit.offset } };
   }
   if (hit.kind === "source-range") {
-    return createGeneratedMappedText(transformedText, reason, { from: hit.from, to: hit.to });
+    return { kind: "generated", reason, owner: { from: hit.from, to: hit.to } };
   }
-  return createGeneratedMappedText(transformedText, reason);
+  return { kind: "unmapped", reason };
 }
 
 export function projectInputOffset(sourceMap: TextSourceMap | undefined, inputOffset: number): TextSourceHit {
