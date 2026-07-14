@@ -1,4 +1,5 @@
 import { roundTexPt } from "../fonts/units.js";
+import { texVListX, type TexVListX } from "../coordinates.js";
 import type {
   TexParagraphInput,
   TexVBoxLayout,
@@ -204,15 +205,17 @@ function texLowerRomanCounter(value: number): string {
 
 function texListItemLabelRightEdge(
   stack: readonly TexListItemLabelScopeFrame[]
-): number | undefined {
+): TexVListX | undefined {
   let leftMarginWidth = 0;
-  let labelRightEdge: number | undefined;
+  let labelRightEdge: TexVListX | undefined;
   for (const frame of stack) {
     const layout = frame.layout;
     const leftBefore = leftMarginWidth;
     leftMarginWidth += layout.leftMarginWidth;
     if (layout.list) {
-      labelRightEdge = leftBefore + layout.list.labelRightEdge;
+      labelRightEdge = texVListX(
+        roundTexPt(leftBefore + layout.list.labelRightEdge)
+      );
     }
   }
   return labelRightEdge;

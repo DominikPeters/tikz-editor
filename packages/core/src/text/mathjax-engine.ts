@@ -27,6 +27,12 @@ import type {
   TexShapedItem,
 } from "./tex/index.js";
 import {
+  texVListX,
+  texVListY,
+  type TexVListX,
+  type TexVListY,
+} from "./tex/coordinates.js";
+import {
   registerTexVListLayoutsOnOutputJax,
 } from "./tex/vlist/index.js";
 import {
@@ -1383,8 +1389,8 @@ function renderTexVListSvgContent(
     lineByIndex,
     linePlacementByIndex,
     paragraphLineIndicesByPath,
-    originX: 0,
-    originY: 0,
+    originX: texVListX(0),
+    originY: texVListY(0),
   };
   const pieces = renderTexVListItemsSvgContent(
     options.vlistLayout.items,
@@ -1409,8 +1415,8 @@ type TexVListRenderOptions = {
   linePlacementByIndex: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   lineByIndex: ReadonlyMap<number, ParagraphLayoutReport["lines"][number]>;
   paragraphLineIndicesByPath: ReadonlyMap<string, readonly number[]>;
-  originX: number;
-  originY: number;
+  originX: TexVListX;
+  originY: TexVListY;
 };
 
 function renderTexVListItemsSvgContent(
@@ -1473,7 +1479,7 @@ function renderTexVListItemsSvgContent(
           {
             ...options,
             originX: item.x,
-            originY: item.y,
+            originY: texVListY(item.y),
           },
           renderedLines
         ));
@@ -1497,8 +1503,8 @@ function renderTexReportLineSvg(
     linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
     metricProvider: TexMetricProvider;
     skipListLabelSegments?: boolean;
-    originX?: number;
-    originY?: number;
+    originX?: TexVListX;
+    originY?: TexVListY;
   },
   renderedLines: Set<number>
 ): string {
@@ -1513,7 +1519,7 @@ function renderTexReportLineSvg(
     ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
     : "";
   const pieces = [
-    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(lineXOffset + lineLeft - (options.originX ?? 0))} ${formatPt(lineTop - (options.originY ?? 0))})">`,
+    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(texVListSvgTranslateX(texVListX(lineXOffset + lineLeft), options.originX))} ${formatPt(texVListSvgTranslateY(lineTop, options.originY))})">`,
     `<rect x="${formatPt(-lineXOffset - lineLeft)}" y="0" width="${formatPt(report.width)}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
@@ -1613,7 +1619,7 @@ function texReportLineTop(
     readonly lineHeightPt?: number;
     readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
   }
-): number {
+): TexVListY {
   if (options.linePlacementByIndex) {
     const placement = options.linePlacementByIndex.get(lineIndex);
     if (!placement) {
@@ -1621,17 +1627,17 @@ function texReportLineTop(
         `TeX vlist layout for paragraph '${paragraphId}' is missing line placement ${lineIndex}.`
       );
     }
-    return placement.y;
+    return texVListY(placement.y);
   }
-  return lineIndex * (options.lineHeightPt ?? 0);
+  return texVListY(lineIndex * (options.lineHeightPt ?? 0));
 }
 
-function texVListPlacedLineTop(layout: TexVListLayout, lineIndex: number): number {
+function texVListPlacedLineTop(layout: TexVListLayout, lineIndex: number): TexVListY {
   const placement = layout.linePlacements.find((entry) => entry.lineIndex === lineIndex);
   if (!placement) {
     throw new Error(`TeX vlist layout is missing line placement ${lineIndex}.`);
   }
-  return placement.y;
+  return texVListY(placement.y);
 }
 
 export function renderSimpleTexParagraphDebugSvgBody(params: {
@@ -1683,13 +1689,24 @@ export function renderTexVListSvgMetadata(
   items: readonly PositionedTexVListItem[],
   width: number
 ): string {
-  return renderTexVListSvgMetadataItems(items, width, { originX: 0, originY: 0 });
+  return renderTexVListSvgMetadataItems(items, width, {
+    originX: texVListX(0),
+    originY: texVListY(0),
+  });
 }
 
 type TexVListSvgOrigin = {
-  readonly originX?: number;
-  readonly originY?: number;
+  readonly originX?: TexVListX;
+  readonly originY?: TexVListY;
 };
+
+function texVListSvgTranslateX(position: TexVListX, origin?: TexVListX): number {
+  return position - (origin ?? texVListX(0));
+}
+
+function texVListSvgTranslateY(position: TexVListY, origin?: TexVListY): number {
+  return position - (origin ?? texVListY(0));
+}
 
 function renderTexVListSvgMetadataItems(
   items: readonly PositionedTexVListItem[],
@@ -1718,7 +1735,7 @@ function renderTexVListSvgMetadataItems(
       pieces.push(renderTexVListSvgMetadataItems(
         item.children,
         width,
-        { originX: item.x, originY: item.y }
+        { originX: item.x, originY: texVListY(item.y) }
       ));
     }
     pieces.push("</g>");
@@ -1737,7 +1754,7 @@ function renderTexVBoxSvgMetadata(
   const boxWidth = Math.max(width, item.metrics.width);
   const boxHeight = item.metrics.height + item.metrics.depth;
   const pieces = [
-    `<g transform="translate(${formatPt(item.x - (options.originX ?? 0))} ${formatPt(item.y - (options.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, options.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), options.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
   ];
   if (options.close ?? true) {
@@ -1758,7 +1775,7 @@ function renderTexPlaceholderSvgMetadata(
   const boxHeight = item.metrics.height + item.metrics.depth;
   const boxWidth = Math.max(width, item.metrics.width);
   const pieces = [
-    `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
   ];
   const literalText = item.item.literalText;
@@ -1816,7 +1833,7 @@ function renderTexVListLeafBoxSvgMetadata(
   }
   const boxHeight = item.metrics.height + item.metrics.depth;
   return [
-    `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
     ...(item.item.kind === "hbox" && metricProvider
       ? item.item.box.renderItems.map((renderItem) =>
@@ -1836,7 +1853,7 @@ function renderTexDisplayMathSvgContent(
   }
   const boxHeight = item.metrics.height + item.metrics.depth;
   return [
-    `<g data-tex-display-math="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g data-tex-display-math="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="none" />`,
     renderTexInlineMathSvg(item.item.box.svgBody ?? "", 0, item.metrics.height),
     `</g>`,
@@ -1875,7 +1892,7 @@ function renderTexRuleSvgContent(
   }
   const boxHeight = item.metrics.height + item.metrics.depth;
   return [
-    `<g transform="translate(${formatPt(item.x - (origin.originX ?? 0))} ${formatPt(item.y - (origin.originY ?? 0))})" pointer-events="none">`,
+    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
     `<rect x="0" y="0" width="${formatPt(item.metrics.width)}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
     `</g>`,
   ].join("");

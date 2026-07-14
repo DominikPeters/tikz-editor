@@ -11,6 +11,12 @@ import type {
   TexMathDisplayLabel,
 } from "../layout-inline-items.js";
 import { roundTexPt } from "../fonts/units.js";
+import {
+  texHBoxX,
+  texHBoxY,
+  type TexHBoxX,
+  type TexHBoxY,
+} from "../coordinates.js";
 import type { TexMathFontProfile } from "./font-profile.js";
 import type {
   TexMathAlignedNucleus,
@@ -136,7 +142,7 @@ function getMathBox(
     width: hlist.width,
     height: hlist.height,
     depth: hlist.depth,
-    ...mathHListFlex(hlist.items, 0, hlist.width),
+    ...mathHListFlex(hlist.items, texHBoxX(0), texHBoxX(hlist.width)),
     caretMap,
     caretStops: projectInlineMathCaretStops(caretMap, hlist.width),
     constructRanges: buildInlineMathConstructRanges(hlist),
@@ -216,8 +222,8 @@ function addDisplayMathTag(
 
 function mathHListFlex(
   items: readonly TexMathHListItem[],
-  xStart: number,
-  xEnd: number
+  xStart: TexHBoxX,
+  xEnd: TexHBoxX
 ): { readonly stretch?: number; readonly shrink?: number } {
   let stretch = 0;
   let shrink = 0;
@@ -236,9 +242,9 @@ function mathHListFlex(
 
 function mathHListFlexBeforeX(
   items: readonly TexMathHListItem[],
-  x: number
+  x: TexHBoxX
 ): { readonly stretchBefore?: number; readonly shrinkBefore?: number } {
-  const flex = mathHListFlex(items, 0, x);
+  const flex = mathHListFlex(items, texHBoxX(0), x);
   return {
     ...(flex.stretch ? { stretchBefore: flex.stretch } : {}),
     ...(flex.shrink ? { shrinkBefore: flex.shrink } : {}),
@@ -248,13 +254,13 @@ function mathHListFlexBeforeX(
 interface MathItemExtent {
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly xStart: number;
-  readonly xEnd: number;
+  readonly xStart: TexHBoxX;
+  readonly xEnd: TexHBoxX;
   readonly isConstructMarker: boolean;
 }
 
 function buildInlineMathConstructRanges(hlist: TexMathHList): readonly TexMathConstructRange[] {
-  const extents = collectMathItemExtents(hlist.items, 0);
+  const extents = collectMathItemExtents(hlist.items, texHBoxX(0));
   const constructSpans = extents.filter((extent) => extent.isConstructMarker);
   return constructSpans.map((construct) => {
     let xStart = construct.xStart;
@@ -264,8 +270,8 @@ function buildInlineMathConstructRanges(hlist: TexMathHList): readonly TexMathCo
         extent.sourceStart >= construct.sourceStart &&
         extent.sourceEnd <= construct.sourceEnd
       ) {
-        xStart = Math.min(xStart, extent.xStart);
-        xEnd = Math.max(xEnd, extent.xEnd);
+        xStart = texHBoxX(Math.min(xStart, extent.xStart));
+        xEnd = texHBoxX(Math.max(xEnd, extent.xEnd));
       }
     }
     return {
@@ -297,7 +303,7 @@ function buildInlineMathBreakpoints(
     return [];
   }
 
-  const extents = collectMathItemExtents(hlist.items, 0);
+  const extents = collectMathItemExtents(hlist.items, texHBoxX(0));
   const breakpoints: TexMathBreakpoint[] = [];
   for (let index = 0; index < atomItems.length - 1; index += 1) {
     const atom = atomItems[index];
@@ -340,8 +346,8 @@ function mathSourceSpanEndX(
   sourceEnd: number,
   extents: readonly MathItemExtent[],
   hlistWidth: number
-): number | null {
-  let xEnd: number | null = null;
+): TexHBoxX | null {
+  let xEnd: TexHBoxX | null = null;
   for (const extent of extents) {
     if (extent.sourceEnd < extent.sourceStart) {
       continue;
@@ -352,31 +358,33 @@ function mathSourceSpanEndX(
     if (extent.sourceStart === sourceEnd && extent.sourceEnd === sourceEnd) {
       continue;
     }
-    xEnd = xEnd === null ? extent.xEnd : Math.max(xEnd, extent.xEnd);
+    xEnd = xEnd === null
+      ? extent.xEnd
+      : texHBoxX(Math.max(xEnd, extent.xEnd));
   }
   return xEnd === null
     ? null
-    : roundTexPt(Math.max(0, Math.min(hlistWidth, xEnd)));
+    : texHBoxX(roundTexPt(Math.max(0, Math.min(hlistWidth, xEnd))));
 }
 
 function mathSourceOffsetX(
   sourceOffset: number,
   extents: readonly MathItemExtent[],
   hlistWidth: number
-): number {
-  let x = 0;
+): TexHBoxX {
+  let x = texHBoxX(0);
   for (const extent of extents) {
     if (extent.sourceEnd <= sourceOffset) {
-      x = Math.max(x, extent.xEnd);
+      x = texHBoxX(Math.max(x, extent.xEnd));
     }
   }
-  return roundTexPt(Math.max(0, Math.min(hlistWidth, x)));
+  return texHBoxX(roundTexPt(Math.max(0, Math.min(hlistWidth, x))));
 }
 
 function discardableMathGlueAfterSourceOffset(
   items: readonly TexMathHListItem[],
   sourceOffset: number,
-  x: number
+  x: TexHBoxX
 ): { readonly width: number; readonly stretch: number; readonly shrink: number } | null {
   let width = 0;
   let stretch = 0;
@@ -407,12 +415,12 @@ function discardableMathGlueAfterSourceOffset(
 
 function collectMathItemExtents(
   items: readonly TexMathHListItem[],
-  originX: number
+  originX: TexHBoxX
 ): readonly MathItemExtent[] {
   const extents: MathItemExtent[] = [];
   for (const item of items) {
-    const xStart = roundTexPt(originX + item.x);
-    const xEnd = roundTexPt(xStart + Math.max(0, item.width));
+    const xStart = texHBoxX(roundTexPt(originX + item.x));
+    const xEnd = texHBoxX(roundTexPt(xStart + Math.max(0, item.width)));
     extents.push({
       sourceStart: item.sourceSpan.start,
       sourceEnd: item.sourceSpan.end,
@@ -479,7 +487,13 @@ function buildInlineMathCaretMap(
     priority: 0,
     addEntry,
   });
-  addMathItemCaretMapEntries(hlist.items, 0, 0, fontProfile, addEntry);
+  addMathItemCaretMapEntries(
+    hlist.items,
+    texHBoxX(0),
+    texHBoxY(0),
+    fontProfile,
+    addEntry
+  );
 
   const dedupedEntries = dedupeMathCaretEntries(entries);
   const diagnostics = mathCaretMapCoverageDiagnostics(dedupedEntries, params);
@@ -495,23 +509,23 @@ function buildInlineMathCaretMap(
 
 function addMathItemCaretMapEntries(
   items: readonly TexMathHListItem[],
-  originX: number,
-  originY: number,
+  originX: TexHBoxX,
+  originY: TexHBoxY,
   fontProfile: TexMathFontProfile,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
   addEnclosureConstructCaretMapEntries(items, originX, originY, fontProfile, addEntry);
   addFractionCaretMapEntries(items, originX, originY, addEntry);
   for (const item of items) {
-    const x = roundTexPt(originX + item.x);
+    const x = texHBoxX(roundTexPt(originX + item.x));
     if (item.kind === "hlist") {
-      const y = roundTexPt(originY + item.y);
+      const y = texHBoxY(roundTexPt(originY + item.y));
       const kind = mathCaretEntryKindForHListRole(item.role);
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       addEntry(mathCaretEntry(item.sourceSpan.start, x, y, item.height, item.depth, hitBounds, kind, item.sourceSpan, 50));
       addEntry(mathCaretEntry(
         item.sourceSpan.end,
-        roundTexPt(x + item.width),
+        texHBoxX(roundTexPt(x + item.width)),
         y,
         item.height,
         item.depth,
@@ -527,14 +541,14 @@ function addMathItemCaretMapEntries(
       if (mathGlyphCoversConstructSpan(item)) {
         continue;
       }
-      const y = roundTexPt(originY + item.y);
+      const y = texHBoxY(roundTexPt(originY + item.y));
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
-      const caretY = roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd));
+      const caretY = texHBoxY(roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd)));
       addLinearMathCaretMapEntries({
         sourceStart: item.sourceSpan.start,
         sourceEnd: item.sourceSpan.end,
         xStart: x,
-        xEnd: roundTexPt(x + item.width),
+        xEnd: texHBoxX(roundTexPt(x + item.width)),
         y: caretY,
         height: Math.max(0, caretY - hitBounds.yStart),
         depth: Math.max(0, hitBounds.yEnd - caretY),
@@ -581,7 +595,7 @@ function addMathItemCaretMapEntries(
       sourceStart: item.sourceSpan.start,
       sourceEnd: item.sourceSpan.end,
       xStart: x,
-      xEnd: roundTexPt(x + item.width),
+      xEnd: texHBoxX(roundTexPt(x + item.width)),
       y: originY,
       height: 0,
       depth: 0,
@@ -596,8 +610,8 @@ function addMathItemCaretMapEntries(
 
 function addEnclosureConstructCaretMapEntries(
   items: readonly TexMathHListItem[],
-  originX: number,
-  originY: number,
+  originX: TexHBoxX,
+  originY: TexHBoxY,
   fontProfile: TexMathFontProfile,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
@@ -679,8 +693,8 @@ function enclosureConstructHitBounds(
   items: readonly TexMathHListItem[],
   rule: Extract<TexMathHListItem, { readonly kind: "rule" }>,
   body: TexMathChildHListLayoutItem,
-  originX: number,
-  originY: number,
+  originX: TexHBoxX,
+  originY: TexHBoxY,
   fontProfile: TexMathFontProfile
 ): TexMathCaretEntry["hitBounds"] {
   const bounds: TexMathCaretEntry["hitBounds"][] = [];
@@ -703,8 +717,8 @@ function enclosureConstructHitBounds(
 
 function mathItemCaretHitBounds(
   item: TexMathHListItem,
-  originX: number,
-  originY: number,
+  originX: TexHBoxX,
+  originY: TexHBoxY,
   fontProfile: TexMathFontProfile
 ): TexMathCaretEntry["hitBounds"] {
   const x = originX + item.x;
@@ -730,8 +744,8 @@ function mathItemCaretHitBounds(
 
 function addFractionCaretMapEntries(
   items: readonly TexMathHListItem[],
-  originX: number,
-  originY: number,
+  originX: TexHBoxX,
+  originY: TexHBoxY,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
   for (let index = 0; index < items.length; index += 1) {
@@ -744,9 +758,9 @@ function addFractionCaretMapEntries(
     if (!numerator || !denominator) {
       continue;
     }
-    const xStart = roundTexPt(originX + item.x);
-    const xEnd = roundTexPt(xStart + item.width);
-    const y = roundTexPt(originY + item.y);
+    const xStart = texHBoxX(roundTexPt(originX + item.x));
+    const xEnd = texHBoxX(roundTexPt(xStart + item.width));
+    const y = texHBoxY(roundTexPt(originY + item.y));
     const hitBounds = unionCaretHitBounds(
       boxCaretHitBounds(originX + numerator.x, originY + numerator.y, numerator.width, numerator.height, numerator.depth),
       ruleCaretHitBounds(xStart, y, item.width, item.height),
@@ -766,7 +780,7 @@ function addFractionCaretMapEntries(
       ));
     }
     for (let rawOffset = numerator.sourceSpan.end; rawOffset <= denominator.sourceSpan.start; rawOffset += 1) {
-      const x = roundTexPt((xStart + xEnd) / 2);
+      const x = texHBoxX(roundTexPt((xStart + xEnd) / 2));
       addEntry(mathCaretEntry(
         rawOffset,
         x,

@@ -41,6 +41,7 @@ import {
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import { roundTexPt } from "./fonts/units.js";
+import type { TexVListX } from "./coordinates.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
 
 const TEX_LATEX_FBOX_RULE_PT = 0.4;
@@ -330,7 +331,7 @@ export interface TexLayoutLabel {
   readonly items: readonly TexLayoutLabelItem[];
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly rightEdge: number;
+  readonly rightEdge: TexVListX;
 }
 
 const TEX_LITERAL_FONT_STATE: SimpleTexFontState = {

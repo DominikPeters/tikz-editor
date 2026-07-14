@@ -19,6 +19,11 @@ import type {
   TexMathBoxProvider,
 } from "../layout-inline-items.js";
 import { renderTexMathHListSvgBody } from "../math/render-svg.js";
+import {
+  texVListLocalXFromOrigin,
+  texVListX,
+  type TexVListX,
+} from "../coordinates.js";
 import type {
   TexBoxMetrics,
   TexHBoxItem,
@@ -58,6 +63,8 @@ export function texListItemParagraphAttachments(params: {
   readonly inlineNodesToItems: TexInlineNodesToLayoutItems;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
+  /** Absolute origin of the paragraph's containing VList. */
+  readonly paragraphOriginX: TexVListX;
 }): TexListItemParagraphAttachments {
   const listItemLabel = params.segmentIndex === 0 && params.listContext?.showLabel === true
     ? params.listItemLayout?.label
@@ -98,7 +105,8 @@ export function texListItemParagraphAttachments(params: {
         params.listContext,
         params.blockIndex,
         listItemLabel,
-        params.metricProvider
+        params.metricProvider,
+        params.paragraphOriginX
       )
     : undefined;
   return {
@@ -111,7 +119,7 @@ export function texListItemParagraphAttachments(params: {
 
 function requiredTexListItemLabelRightEdge(
   labelBox: TexVBoxListItemLabelBox
-): number {
+): TexVListX {
   if (labelBox.rightEdge === undefined) {
     throw new Error("TeX list-item vbox label attachment is missing rightEdge.");
   }
@@ -245,9 +253,13 @@ function texMarginListLabelHBoxFromLayoutLabel(
   listContext: SimpleTexListContext,
   blockIndex: number,
   labelBox: TexVBoxListItemLabelBox,
-  metricProvider: TexMetricProvider
+  metricProvider: TexMetricProvider,
+  paragraphOriginX: TexVListX
 ): TexHBoxItem {
   const box = texLayoutLabelHBoxContent(label, metricProvider);
+  const labelLeft = texVListX(
+    roundTexPt(label.rightEdge - box.metrics.width)
+  );
   return {
     kind: "hbox",
     ...(label.sourceStart !== 0 || label.sourceEnd !== 0
@@ -268,7 +280,7 @@ function texMarginListLabelHBoxFromLayoutLabel(
       itemIndex: listContext.itemIndex,
       blockIndex,
     },
-    x: roundTexPt(label.rightEdge - box.metrics.width),
+    x: texVListLocalXFromOrigin(labelLeft, paragraphOriginX),
     advance: 0,
     affectsVBoxBaseline: false,
     box: {

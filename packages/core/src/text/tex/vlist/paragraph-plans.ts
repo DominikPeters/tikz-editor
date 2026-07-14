@@ -6,6 +6,7 @@ import type {
   TexLayoutLabel,
 } from "../layout-inline-items.js";
 import type { TexLayoutIrOptions } from "../layout-options.js";
+import { texVListX } from "../coordinates.js";
 import {
   TexParagraphLayoutState,
 } from "../layout-state.js";
@@ -156,6 +157,7 @@ export function prepareTexLayoutParagraphsFromVList(
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
         graphicsResolver: params.options.graphicsResolver,
         textFontProfile: params.options.textFontProfile,
+        paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
       });
       if (listAttachments.marginLabelHBox) {
         marginLabelHBoxAttachments.push({
