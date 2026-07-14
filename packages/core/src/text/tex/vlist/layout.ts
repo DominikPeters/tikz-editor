@@ -36,6 +36,8 @@ export interface MeasuredTexVListItem {
   readonly x?: TexVListLocalX;
   readonly y?: TexVListY;
   readonly advance?: TexLength;
+  /** Cursor movement measured from the incoming cursor, independent of y. */
+  readonly cursorAdvance?: TexLength;
 }
 
 export type TexVListItemMeasurer = (
@@ -108,7 +110,9 @@ export function layoutTexVListItems(
         y,
         metrics: measured.metrics,
       });
-      cursor = texVListY(roundTexPt(y + advance));
+      cursor = measured.cursorAdvance === undefined
+        ? texVListY(roundTexPt(y + advance))
+        : texVListY(roundTexPt(cursor + measured.cursorAdvance));
       continue;
     }
 

@@ -4,6 +4,7 @@ import { roundTexPt } from "../fonts/units.js";
 import {
   texLength,
   texVListLocalY,
+  texVListY,
   type TexLength,
 } from "../coordinates.js";
 import type { TexVListItemMeasurer } from "./layout.js";
@@ -178,6 +179,35 @@ export function createMeasuredParagraphVListMeasurer(
     paragraphMeasurements
   );
   return (item, cursor, index, items, path) => {
+    if (
+      item.kind === "hbox" &&
+      item.verticalPlacement?.kind === "paragraph-first-line-baseline"
+    ) {
+      const blockIndex = item.verticalPlacement.blockIndex;
+      const nextItem = items[index + 1];
+      if (nextItem?.kind !== "paragraph" || nextItem.blockIndex !== blockIndex) {
+        throw new Error(
+          `TeX paragraph-baseline hbox for block ${blockIndex} is not immediately before its paragraph.`
+        );
+      }
+      const measurement = paragraphMeasurementsByBlockIndex.get(blockIndex);
+      const firstLine = measurement?.lineOffsets[0];
+      if (!measurement || !firstLine) {
+        throw new Error(
+          `TeX paragraph-baseline hbox for block ${blockIndex} is missing its first-line measurement.`
+        );
+      }
+      const paragraphBaseline = roundTexPt(
+        firstLine.y + (firstLine.metrics?.height ?? measurement.standardMetrics.height)
+      );
+      return {
+        x: item.x,
+        y: texVListY(roundTexPt(cursor + paragraphBaseline - item.box.metrics.height)),
+        metrics: item.box.metrics,
+        advance: item.advance ?? texLength(0),
+        cursorAdvance: texLength(0),
+      };
+    }
     if (item.kind !== "paragraph") {
       return null;
     }

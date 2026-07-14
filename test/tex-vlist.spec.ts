@@ -2321,6 +2321,10 @@ describe("TeX vlist scopes", () => {
       x: expect.any(Number),
       advance: 0,
       affectsVBoxBaseline: false,
+      verticalPlacement: {
+        kind: "paragraph-first-line-baseline",
+        blockIndex: 0,
+      },
       box: {
         metrics: {
           width: expect.any(Number),
