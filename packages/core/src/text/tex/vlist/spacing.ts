@@ -1,5 +1,6 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import { roundTexPt } from "../fonts/units.js";
+import { texVListLocalX } from "../coordinates.js";
 import {
   parseSimpleTexInlineNodes,
   type SimpleTexInlineNode,
@@ -1185,7 +1186,7 @@ function displayAlignmentRowHBox(
       delimiter: item.delimiter,
       rowIndex: row.rowIndex,
     },
-    x: row.x,
+    x: texVListLocalX(row.x),
     box: {
       metrics: {
         width: row.width,

@@ -6,6 +6,7 @@ import {
   luaLatexDefaultTextFontProfile,
   type TexTextFontProfile,
 } from "../fonts/text-profile.js";
+import { texLength, type TexLength } from "../coordinates.js";
 import type {
   ResolvedTexFont,
   TexMetricProvider,
@@ -34,37 +35,37 @@ export interface TexMathFontManifestEntry {
 }
 
 export interface TexMathParameters {
-  readonly axisHeight: number;
-  readonly num1: number;
-  readonly num2: number;
-  readonly num3: number;
-  readonly denom1: number;
-  readonly denom2: number;
-  readonly sup1: number;
-  readonly sup2: number;
-  readonly sup3: number;
-  readonly sub1: number;
-  readonly sub2: number;
-  readonly supDrop: number;
-  readonly subDrop: number;
-  readonly delim1: number;
-  readonly delim2: number;
-  readonly defaultRuleThickness: number;
-  readonly bigOpSpacing1: number;
-  readonly bigOpSpacing2: number;
-  readonly bigOpSpacing3: number;
-  readonly bigOpSpacing4: number;
-  readonly bigOpSpacing5: number;
+  readonly axisHeight: TexLength;
+  readonly num1: TexLength;
+  readonly num2: TexLength;
+  readonly num3: TexLength;
+  readonly denom1: TexLength;
+  readonly denom2: TexLength;
+  readonly sup1: TexLength;
+  readonly sup2: TexLength;
+  readonly sup3: TexLength;
+  readonly sub1: TexLength;
+  readonly sub2: TexLength;
+  readonly supDrop: TexLength;
+  readonly subDrop: TexLength;
+  readonly delim1: TexLength;
+  readonly delim2: TexLength;
+  readonly defaultRuleThickness: TexLength;
+  readonly bigOpSpacing1: TexLength;
+  readonly bigOpSpacing2: TexLength;
+  readonly bigOpSpacing3: TexLength;
+  readonly bigOpSpacing4: TexLength;
+  readonly bigOpSpacing5: TexLength;
   readonly stackNumUp: TexMathStyleParameterValues;
   readonly stackDenomDown: TexMathStyleParameterValues;
   readonly stackVGap: TexMathStyleParameterValues;
 }
 
 export interface TexMathStyleParameterValues {
-  readonly display: number;
-  readonly text: number;
-  readonly script: number;
-  readonly scriptscript: number;
+  readonly display: TexLength;
+  readonly text: TexLength;
+  readonly script: TexLength;
+  readonly scriptscript: TexLength;
 }
 
 export interface TexMathFontProfile {
@@ -246,33 +247,47 @@ function createLuaLatexDefaultMathParameters(
     bigOpSpacing3: requiredFontdimen(extension, "bigopspacing3"),
     bigOpSpacing4: requiredFontdimen(extension, "bigopspacing4"),
     bigOpSpacing5: requiredFontdimen(extension, "bigopspacing5"),
-    stackNumUp: {
+    stackNumUp: texMathStyleParameterValues({
       display: 6.76508,
       text: 4.4373,
       script: 3.29843,
       scriptscript: 2.52066,
-    },
-    stackDenomDown: {
+    }),
+    stackDenomDown: texMathStyleParameterValues({
       display: 6.85951,
       text: 3.44841,
       script: 2.4095,
       scriptscript: 2.65953,
-    },
-    stackVGap: {
+    }),
+    stackVGap: texMathStyleParameterValues({
       display: 2.79985,
       text: 1.19994,
       script: 1.01994,
       scriptscript: 0.72853,
-    },
+    }),
   };
 }
 
-function requiredFontdimen(font: ResolvedTexFont, name: string): number {
+function requiredFontdimen(font: ResolvedTexFont, name: string): TexLength {
   const value = font.data.fontdimen[name];
   if (value === undefined) {
     throw new Error(`Font '${font.id}' is missing required math fontdimen '${name}'.`);
   }
-  return value;
+  return texLength(value);
+}
+
+function texMathStyleParameterValues(values: {
+  readonly display: number;
+  readonly text: number;
+  readonly script: number;
+  readonly scriptscript: number;
+}): TexMathStyleParameterValues {
+  return {
+    display: texLength(values.display),
+    text: texLength(values.text),
+    script: texLength(values.script),
+    scriptscript: texLength(values.scriptscript),
+  };
 }
 
 function mathStyleScale(style: TexMathStyle): number {

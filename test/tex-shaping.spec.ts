@@ -27,6 +27,7 @@ import {
   parseTexMath,
   type TexMathBoxProvider,
 } from "../packages/core/src/text/tex/index.js";
+import { texVListX } from "../packages/core/src/text/tex/coordinates.js";
 import {
   layoutTexVListFromMeasuredParagraphs,
   registerTexVListLayoutsOnOutputJax,
@@ -2957,7 +2958,7 @@ describe("simple TeX paragraph layout", () => {
               items: [],
             },
             path: [0],
-            x: 3,
+            x: texVListX(3),
             y: 5,
             metrics: { width: 40, height: 8, depth: 4 },
             children: [
@@ -2976,7 +2977,7 @@ describe("simple TeX paragraph layout", () => {
                   items: [],
                 },
                 path: [0, 0],
-                x: 11,
+                x: texVListX(11),
                 y: 17,
                 metrics: { width: 20, height: 6, depth: 2 },
                 children: [
@@ -2994,7 +2995,7 @@ describe("simple TeX paragraph layout", () => {
                       items: [],
                     },
                     path: [0, 0, 0],
-                    x: 13,
+                    x: texVListX(13),
                     y: 19,
                     metrics: { width: 16, height: 3, depth: 2 },
                   },
@@ -3238,7 +3239,7 @@ describe("simple TeX paragraph layout", () => {
               items: [],
             },
             path: [0],
-            x: 0,
+            x: texVListX(0),
             y: 0,
             metrics: { width: 30, height: 10, depth: 5 },
             children: [
@@ -3250,7 +3251,7 @@ describe("simple TeX paragraph layout", () => {
                   estimated: { width: 12, height: 4, depth: 2 },
                 },
                 path: [0, 0],
-                x: 18,
+                x: texVListX(18),
                 y: 21,
                 metrics: { width: 12, height: 4, depth: 2 },
               },
@@ -3480,7 +3481,7 @@ describe("simple TeX paragraph layout", () => {
               },
             },
             path: [0],
-            x: 2,
+            x: texVListX(2),
             y: 3,
             metrics: { width: 12, height: 3, depth: 1 },
           },
@@ -3490,7 +3491,7 @@ describe("simple TeX paragraph layout", () => {
               items: [],
             },
             path: [1],
-            x: 0,
+            x: texVListX(0),
             y: 0,
             metrics: { width: 30, height: 10, depth: 5 },
             children: [
@@ -3502,7 +3503,7 @@ describe("simple TeX paragraph layout", () => {
                   depth: 1,
                 },
                 path: [1, 0],
-                x: 10,
+                x: texVListX(10),
                 y: 12,
                 metrics: { width: 7, height: 2, depth: 1 },
               },
@@ -3513,7 +3514,7 @@ describe("simple TeX paragraph layout", () => {
                   penalty: -50,
                 },
                 path: [1, 1],
-                x: 14,
+                x: texVListX(14),
                 y: 16,
                 metrics: { width: 0, height: 0, depth: 0 },
               },
@@ -3525,7 +3526,7 @@ describe("simple TeX paragraph layout", () => {
                   estimated: { width: 9, height: 4, depth: 2 },
                 },
                 path: [1, 2],
-                x: 18,
+                x: texVListX(18),
                 y: 21,
                 metrics: { width: 9, height: 4, depth: 2 },
               },
@@ -3708,7 +3709,7 @@ describe("simple TeX paragraph layout", () => {
               estimated: { width: 20, height: 8, depth: 2 },
             },
             path: [0],
-            x: 4,
+            x: texVListX(4),
             y: 5,
             metrics: { width: 20, height: 8, depth: 2 },
             children: [
@@ -3721,7 +3722,7 @@ describe("simple TeX paragraph layout", () => {
                   depth: 2,
                 },
                 path: [0, 0],
-                x: 4,
+                x: texVListX(4),
                 y: 5,
                 metrics: { width: 20, height: 8, depth: 2 },
               },
@@ -3789,7 +3790,7 @@ describe("simple TeX paragraph layout", () => {
               },
             },
             path: [0],
-            x: 2,
+            x: texVListX(2),
             y: 3,
             metrics: { width: 12, height: 3, depth: 1 },
           },
@@ -3866,7 +3867,7 @@ describe("simple TeX paragraph layout", () => {
               items: [],
             },
             path: [0],
-            x: 0,
+            x: texVListX(0),
             y: 0,
             metrics: { width: 30, height: 10, depth: 5 },
             children: [
@@ -3889,7 +3890,7 @@ describe("simple TeX paragraph layout", () => {
                   },
                 },
                 path: [0, 0],
-                x: 2,
+                x: texVListX(2),
                 y: 3,
                 metrics: { width: 12, height: 3, depth: 1 },
               },
@@ -3901,7 +3902,7 @@ describe("simple TeX paragraph layout", () => {
                   estimated: { width: 9, height: 4, depth: 2 },
                 },
                 path: [0, 1],
-                x: 18,
+                x: texVListX(18),
                 y: 21,
                 metrics: { width: 9, height: 4, depth: 2 },
               },
@@ -3920,7 +3921,7 @@ describe("simple TeX paragraph layout", () => {
                   },
                 },
                 path: [0, 2],
-                x: 25,
+                x: texVListX(25),
                 y: 3,
                 metrics: { width: 60, height: 7, depth: 3 },
               },
@@ -4396,6 +4397,16 @@ describe("simple TeX paragraph layout", () => {
       fontId: "lmroman10-regular",
       glyphCode: 0x2022,
     });
+    const reportLabelXs = result.report?.lines.map((line) =>
+      line.segments.find((segment) => segment.role === "list-label")?.x
+    ) ?? [];
+    const positionedLabelXs = result.vlistLayout?.boxReport.items
+      .filter((item) => item.hboxRole?.kind === "list-label")
+      .map((item) => item.x) ?? [];
+    expect(positionedLabelXs).toHaveLength(2);
+    expect(positionedLabelXs).toEqual(
+      reportLabelXs.map((x) => expect.closeTo(x ?? Number.NaN, 6))
+    );
   });
 
   it("renders nested itemize labels with LaTeX article font/code choices", () => {
@@ -4423,6 +4434,15 @@ describe("simple TeX paragraph layout", () => {
       expect.closeTo(65.7, 6),
       expect.closeTo(82.7, 6),
     ]);
+    const reportLabelXs = result.report?.lines.map((line) =>
+      line.segments.find((segment) => segment.role === "list-label")?.x
+    ) ?? [];
+    const positionedLabelXs = result.vlistLayout?.boxReport.items
+      .filter((item) => item.hboxRole?.kind === "list-label")
+      .map((item) => item.x) ?? [];
+    expect(positionedLabelXs).toEqual(
+      reportLabelXs.map((x) => expect.closeTo(x ?? Number.NaN, 6))
+    );
   });
 
   it("positions natural LaTeX article list vertical spacing", () => {

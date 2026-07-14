@@ -34,6 +34,7 @@ import {
   texVListGlueSetForTargetHeight,
   texVListRootVerticalOffset,
 } from "./layout.js";
+import { texVListX } from "../coordinates.js";
 import {
   createMeasuredParagraphVListMeasurer,
   createTexVListParagraphHorizontalLayoutsFromLineBoxes,
@@ -272,7 +273,7 @@ export function layoutTexVListFromMeasuredParagraphs(
     glueSet,
     0,
     [],
-    0,
+    texVListX(0),
     {
       inlineScopeWidth: options.width,
       ...(options.paragraphAlignment

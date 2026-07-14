@@ -27,6 +27,12 @@ import type {
   TexVListLayout,
 } from '../../tex/vlist/types.js';
 import type { TexMathBox } from '../../tex/layout-inline-items.js';
+import {
+  texVListX,
+  texVListY,
+  type TexVListX,
+  type TexVListY,
+} from '../../tex/coordinates.js';
 import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
 import { clamp } from '../../../utils/math.js';
 
@@ -61,8 +67,9 @@ type Element = {
 };
 type LineDirectionUnit = Readonly<{ x: number; y: number }>;
 type LineReportCoord = CoordinateBrand<'KnuthPlassLineReportCoord'>;
+type LineReportY = CoordinateBrand<'KnuthPlassLineReportY'>;
 type MathBaselineCoord = CoordinateBrand<'KnuthPlassMathBaselineCoord'>;
-type LineReportPoint = Readonly<{ x: LineReportCoord; y: LineReportCoord }>;
+type LineReportPoint = Readonly<{ x: LineReportCoord; y: LineReportY }>;
 type MathBaselinePoint = Readonly<{ x: LineReportCoord; y: MathBaselineCoord }>;
 type MathCaretBounds = Readonly<{
   xStart: LineReportCoord;
@@ -77,6 +84,10 @@ function lineDirectionUnit(x: number, y: number): LineDirectionUnit {
 
 function lineReportCoord(value: number): LineReportCoord {
   return value as LineReportCoord;
+}
+
+function lineReportY(value: number): LineReportY {
+  return value as LineReportY;
 }
 
 function mathBaselineCoord(value: number): MathBaselineCoord {
@@ -946,13 +957,14 @@ function registeredVListParagraphGeometry(
 ): VListParagraphGeometry[] {
   const paragraphs: VListParagraphGeometry[] = [];
   for (const placement of layout.paragraphPlacements) {
-    const localLeft = Number(placement.x);
-    if (!Number.isFinite(localLeft)) {
+    const localLeft = texVListX(placement.x);
+    const localTop = texVListY(placement.y);
+    if (!Number.isFinite(localLeft) || !Number.isFinite(localTop)) {
       continue;
     }
-    const bounds = clientRectForLocalBox(
+    const bounds = clientRectForTexVListBox(
       localLeft,
-      placement.y,
+      localTop,
       placement.metrics.width,
       placement.metrics.height + placement.metrics.depth,
       matrix
@@ -965,8 +977,8 @@ function registeredVListParagraphGeometry(
       vlistPath: placement.vlistPath,
       localLeft,
       localRight: localLeft + placement.metrics.width,
-      localTop: placement.y,
-      localBottom: placement.y + placement.metrics.height + placement.metrics.depth,
+      localTop,
+      localBottom: localTop + placement.metrics.height + placement.metrics.depth,
       lineIndices: placement.lineIndices,
       sourceHitPolicy: placement.sourceHitPolicy,
       sourceStart: placement.sourceSpan.start,
@@ -1247,7 +1259,23 @@ function clientRectForVListBoxReportItem(
   ) {
     return null;
   }
-  return clientRectForLocalBox(item.x, item.y, item.width, item.totalHeight, matrix);
+  return clientRectForTexVListBox(
+    texVListX(item.x),
+    texVListY(item.y),
+    item.width,
+    item.totalHeight,
+    matrix
+  );
+}
+
+function clientRectForTexVListBox(
+  x: TexVListX,
+  y: TexVListY,
+  width: number,
+  height: number,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  return clientRectForLocalBox(x, y, width, height, matrix);
 }
 
 function clientRectForLocalBox(
@@ -1277,12 +1305,7 @@ function clientRectForLocalBox(
 }
 
 function clientRectForLocalBounds(
-  bounds: {
-    readonly localLeft: number;
-    readonly localRight: number;
-    readonly localTop: number;
-    readonly localBottom: number;
-  },
+  bounds: TexVListRootBounds,
   matrix: ScreenMatrixLike
 ): NormalizedClientRect | null {
   return clientRectForLocalBox(
@@ -1305,29 +1328,28 @@ function transformLocalPoint(
   };
 }
 
-function texVListLocalBoundsForBoxReportItem(item: TexVListBoxReportItem): {
-  readonly localLeft: number;
-  readonly localRight: number;
-  readonly localTop: number;
-  readonly localBottom: number;
-} {
+type TexVListRootBounds = Readonly<{
+  localLeft: TexVListX;
+  localRight: TexVListX;
+  localTop: TexVListY;
+  localBottom: TexVListY;
+}>;
+
+function texVListLocalBoundsForBoxReportItem(
+  item: TexVListBoxReportItem
+): TexVListRootBounds {
   return {
-    localLeft: item.x,
-    localRight: item.x + item.width,
-    localTop: item.y,
-    localBottom: item.y + item.totalHeight,
+    localLeft: texVListX(item.x),
+    localRight: texVListX(item.x + item.width),
+    localTop: texVListY(item.y),
+    localBottom: texVListY(item.y + item.totalHeight),
   };
 }
 
 function texVListLocalBoundsForItemGeometry(
   item: TexVListBoxReportItem,
   layout: TexVListLayout
-): {
-  readonly localLeft: number;
-  readonly localRight: number;
-  readonly localTop: number;
-  readonly localBottom: number;
-} {
+): TexVListRootBounds {
   const bounds = texVListLocalBoundsForBoxReportItem(item);
   if (item.itemKind !== 'glue' || item.totalHeight <= EPSILON) {
     return bounds;
@@ -1335,7 +1357,7 @@ function texVListLocalBoundsForItemGeometry(
   const hitWidth = Math.max(item.width, layout.metrics.width);
   return {
     ...bounds,
-    localRight: bounds.localLeft + hitWidth,
+    localRight: texVListX(bounds.localLeft + hitWidth),
   };
 }
 
@@ -1574,7 +1596,7 @@ function lineLocalClientPoint(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number],
   x: LineReportCoord,
-  y: LineReportCoord = lineReportCoord(0)
+  y: LineReportY = lineReportY(0)
 ): ClientPoint {
   const lineStart = Number(reportLine.xStart);
   const localReportX = x - lineStart;
@@ -1607,16 +1629,16 @@ function lineBaselineOriginPoint(
   return lineLocalClientPoint(line, reportLine, lineReportCoord(lineStart));
 }
 
-function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): LineReportCoord {
+function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): LineReportY {
   const ascent = Number(reportLine.ascent);
-  return lineReportCoord(Number.isFinite(ascent) ? ascent : 0);
+  return lineReportY(Number.isFinite(ascent) ? ascent : 0);
 }
 
 function mathBaselineYToLineY(
   reportLine: ParagraphLayoutReport['lines'][number],
   y: MathBaselineCoord
-): LineReportCoord {
-  return lineReportCoord(lineBaselineY(reportLine) + y);
+): LineReportY {
+  return lineReportY(lineBaselineY(reportLine) + y);
 }
 
 function linePointToMathBaselinePoint(
@@ -1686,7 +1708,7 @@ function clientToLineLocalPoint(
     line.inverseScreenMatrix.f;
   return {
     x: lineReportCoord(localX / line.reportToSvgScaleX + lineStart),
-    y: lineReportCoord(localY / line.reportToSvgScaleX),
+    y: lineReportY(localY / line.reportToSvgScaleX),
   };
 }
 
@@ -2752,12 +2774,12 @@ function displayMathLineHitMapFromPositionedItem(params: {
     return [];
   }
 
-  const xStart = Number(params.item.x);
-  const y = Number(params.item.y);
+  const xStart = params.item.x;
+  const y = texVListY(params.item.y);
   if (!Number.isFinite(xStart) || !Number.isFinite(y)) {
     return [];
   }
-  const xEnd = xStart + width;
+  const xEnd = texVListX(xStart + width);
   const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y + metrics.height);
   const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, params.lineIndex);
   const bounds = clientRectForLocalBox(
@@ -3376,7 +3398,7 @@ function selectionRectForLineLocalSpan(
   endOffset: number,
   localStartX: LineReportCoord,
   localEndX: LineReportCoord,
-  localCenterY: LineReportCoord,
+  localCenterY: LineReportY,
   height: Px,
   normalOffset: Px
 ): SelectionRect | null {
@@ -3798,7 +3820,7 @@ export async function getKnuthPlassPointFromOffset(
       : null;
   const pointX = mathPointEntry?.x ?? selected.stop.x;
   const pointY = mathLocalY === null
-    ? lineReportCoord(0)
+    ? lineReportY(0)
     : mathBaselineYToLineY(reportLine, mathLocalY);
   const localPoint = lineLocalClientPoint(selected.line, reportLine, pointX, pointY);
   const normal = lineNormalUnit(selected.line);
@@ -3926,7 +3948,7 @@ export async function getKnuthPlassSelectionRects(
       endStop.offset,
       localStartX,
       localEndX,
-      lineReportCoord(0),
+      lineReportY(0),
       lineClientHeight(line, reportLine),
       lineBoxNormalOffset(line, reportLine)
     );

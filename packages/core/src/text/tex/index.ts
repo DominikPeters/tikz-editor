@@ -109,6 +109,28 @@ export {
   type TexLayoutIrOptions,
 } from "./layout-options.js";
 export {
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texLineLocalX,
+  texLineX,
+  texVListLocalX,
+  texVListLocalXFromOrigin,
+  texVListLocalY,
+  texVListX,
+  texVListY,
+  translateTexVListX,
+  type TexHBoxX,
+  type TexHBoxY,
+  type TexLength,
+  type TexLineLocalX,
+  type TexLineX,
+  type TexVListLocalX,
+  type TexVListLocalY,
+  type TexVListX,
+  type TexVListY,
+} from "./coordinates.js";
+export {
   DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY,
   type TexParagraphBreakScopePolicy,
   type TexParagraphRightskipStretchMode,

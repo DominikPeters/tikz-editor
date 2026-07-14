@@ -1,5 +1,11 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
 import {
+  texHBoxX,
+  texHBoxY,
+  type TexHBoxX,
+  type TexHBoxY,
+} from "../coordinates.js";
+import {
   defaultTexMathFontProfile,
   type TexMathFontProfile,
 } from "./font-profile.js";
@@ -17,10 +23,10 @@ export interface TexMathSvgRenderOptions {
 }
 
 export interface TexMathGlyphVisualBounds {
-  readonly xStart: number;
-  readonly xEnd: number;
-  readonly yStart: number;
-  readonly yEnd: number;
+  readonly xStart: TexHBoxX;
+  readonly xEnd: TexHBoxX;
+  readonly yStart: TexHBoxY;
+  readonly yEnd: TexHBoxY;
 }
 
 export function renderTexMathHListSvgBody(
@@ -31,7 +37,12 @@ export function renderTexMathHListSvgBody(
   const pieces = [
     `<g data-tex-math-hlist="true" data-tex-math-style="${escapeXmlAttribute(hlist.style)}" data-source-start="${hlist.sourceSpan.start}" data-source-end="${hlist.sourceSpan.end}">`,
   ];
-  pieces.push(...renderMathHListItems(hlist.items, fontProfile, 0, 0));
+  pieces.push(...renderMathHListItems(
+    hlist.items,
+    fontProfile,
+    texHBoxX(0),
+    texHBoxY(0)
+  ));
   pieces.push("</g>");
   return pieces.join("");
 }
@@ -50,27 +61,29 @@ export function texMathGlyphVisualBounds(
   if (!d) {
     return null;
   }
+  const hboxOriginX = texHBoxX(originX);
+  const hboxOriginY = texHBoxY(originY);
   const scale = font.atPt / 10;
   const points = svgPathControlPoints(d).map((point) => ({
-    x: originX + item.x + point.x * scale,
-    y: originY + item.y + point.y * scale,
+    x: hboxOriginX + item.x + point.x * scale,
+    y: hboxOriginY + item.y + point.y * scale,
   }));
   if (!points.length) {
     return null;
   }
   return {
-    xStart: Math.min(...points.map((point) => point.x)),
-    xEnd: Math.max(...points.map((point) => point.x)),
-    yStart: Math.min(...points.map((point) => point.y)),
-    yEnd: Math.max(...points.map((point) => point.y)),
+    xStart: texHBoxX(Math.min(...points.map((point) => point.x))),
+    xEnd: texHBoxX(Math.max(...points.map((point) => point.x))),
+    yStart: texHBoxY(Math.min(...points.map((point) => point.y))),
+    yEnd: texHBoxY(Math.max(...points.map((point) => point.y))),
   };
 }
 
 function renderMathHListItems(
   items: readonly TexMathHListItem[],
   fontProfile: TexMathFontProfile,
-  originX: number,
-  originY: number
+  originX: TexHBoxX,
+  originY: TexHBoxY
 ): string[] {
   const pieces: string[] = [];
   for (const item of items) {
@@ -87,8 +100,8 @@ function renderMathHListItems(
       pieces.push(...renderMathHListItems(
         item.items,
         fontProfile,
-        originX + item.x,
-        originY + item.y
+        texHBoxX(originX + item.x),
+        texHBoxY(originY + item.y)
       ));
       pieces.push("</g>");
       continue;
@@ -114,8 +127,8 @@ function renderMathHListItems(
 
 function renderMathRule(
   item: TexMathRuleLayoutItem,
-  originX: number,
-  originY: number
+  originX: TexHBoxX,
+  originY: TexHBoxY
 ): string {
   return [
     `<rect data-tex-rule="${escapeXmlAttribute(item.role)}"`,
@@ -135,8 +148,8 @@ function renderMathRule(
 function renderMathGlyphPath(
   item: TexMathGlyphLayoutItem,
   font: ResolvedTexFont,
-  originX: number,
-  originY: number
+  originX: TexHBoxX,
+  originY: TexHBoxY
 ): string {
   const d = font.data.glyphs?.[String(item.code)] ?? "";
   if (!d) {

@@ -14,6 +14,7 @@ import type {
 } from "../ir.js";
 import type { TexMathBox } from "../layout-inline-items.js";
 import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
+import type { TexVListLocalX, TexVListX } from "../coordinates.js";
 
 export interface TexSourceSpan {
   readonly start: number;
@@ -181,7 +182,8 @@ export interface TexHBoxItem {
   readonly sourceSpan?: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];
   readonly role?: TexHBoxRole;
-  readonly x?: number;
+  /** Inline displacement relative to the containing VList origin. */
+  readonly x?: TexVListLocalX;
   readonly advance?: number;
   readonly affectsVBoxBaseline?: boolean;
   readonly box: TexHorizontalLayout;
@@ -242,7 +244,8 @@ export interface TexVBoxListItemLabelBox {
   readonly placement: TexVBoxListItemLabelPlacement;
   readonly content: TexVBoxListItemLabelContent;
   readonly fontState?: SimpleTexFontState;
-  readonly rightEdge?: number;
+  /** Document-relative right edge used by paragraph report labels. */
+  readonly rightEdge?: TexVListX;
   readonly sourceSpan?: TexSourceSpan;
 }
 
@@ -376,7 +379,8 @@ export interface TexVListDocument {
 export interface PositionedTexVListItem {
   readonly item: TexVListItem;
   readonly path: readonly number[];
-  readonly x: number;
+  /** Absolute inline position in the root VList coordinate space. */
+  readonly x: TexVListX;
   readonly y: number;
   readonly metrics: TexBoxMetrics;
   readonly baseline?: TexVBoxBaseline;

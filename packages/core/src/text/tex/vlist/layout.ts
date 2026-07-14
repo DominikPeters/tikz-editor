@@ -1,4 +1,11 @@
 import { roundTexPt } from "../fonts/units.js";
+import {
+  texVListLocalX,
+  texVListX,
+  translateTexVListX,
+  type TexVListLocalX,
+  type TexVListX,
+} from "../coordinates.js";
 import type { TexParagraphAlignment } from "../ir.js";
 import type {
   PositionedTexVListItem,
@@ -19,7 +26,8 @@ export interface TexVListGlueSet {
 
 export interface MeasuredTexVListItem {
   readonly metrics: TexBoxMetrics;
-  readonly x?: number;
+  /** Inline displacement relative to the containing VList origin. */
+  readonly x?: TexVListLocalX;
   readonly y?: number;
   readonly advance?: number;
 }
@@ -50,7 +58,7 @@ export function layoutTexVListItems(
   glueSet: TexVListGlueSet | null,
   startCursor: number,
   pathPrefix: readonly number[] = [],
-  xOffset = 0,
+  xOffset: TexVListX = texVListX(0),
   context: TexVListLayoutContext = {}
 ): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: number } {
   const positioned: PositionedTexVListItem[] = [];
@@ -85,7 +93,10 @@ export function layoutTexVListItems(
       positioned.push({
         item,
         path,
-        x: roundTexPt(xOffset + (measured.x ?? 0)),
+        x: texVListX(roundTexPt(translateTexVListX(
+          xOffset,
+          measured.x ?? texVListLocalX(0)
+        ))),
         y,
         metrics: measured.metrics,
       });
@@ -95,19 +106,19 @@ export function layoutTexVListItems(
 
     if (item.kind === "vbox") {
       const top = cursor;
-      const itemX = materialVBoxInlineX(item, context);
+      const itemX = texVListLocalX(materialVBoxInlineX(item, context));
       const nested = layoutTexVBoxItem(
         item,
         measureItem,
         top,
         path,
-        roundTexPt(xOffset + itemX),
+        texVListX(roundTexPt(translateTexVListX(xOffset, itemX))),
         context
       );
       positioned.push({
         item,
         path,
-        x: roundTexPt(xOffset + itemX),
+        x: texVListX(roundTexPt(translateTexVListX(xOffset, itemX))),
         y: top,
         metrics: nested.metrics,
         baseline: nested.baseline,
@@ -124,7 +135,7 @@ function layoutTexVBoxItem(
   measureItem: TexVListItemMeasurer,
   top: number,
   path: readonly number[],
-  xOffset: number,
+  xOffset: TexVListX,
   context: TexVListLayoutContext
 ): {
   readonly children: readonly PositionedTexVListItem[];
@@ -135,7 +146,10 @@ function layoutTexVBoxItem(
   const leftMarginWidth = item.layout?.leftMarginWidth ?? 0;
   const rightMarginWidth = item.layout?.rightMarginWidth ?? 0;
   const targetWidth = finiteTexDimen(item.width);
-  const childXOffset = roundTexPt(xOffset + leftMarginWidth);
+  const childXOffset = texVListX(roundTexPt(translateTexVListX(
+    xOffset,
+    texVListLocalX(leftMarginWidth)
+  )));
   const childScopeWidth = texVListChildInlineScopeWidth(
     context.inlineScopeWidth,
     targetWidth,
@@ -242,7 +256,7 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
   }
   if (item.kind === "display-math") {
     return {
-      x: Math.max(0, roundTexPt((item.targetWidth - item.box.width) / 2)),
+      x: texVListLocalX(Math.max(0, roundTexPt((item.targetWidth - item.box.width) / 2))),
       metrics: {
         width: item.box.width,
         height: item.box.height,

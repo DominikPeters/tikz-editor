@@ -8,6 +8,7 @@ const targets = [
   "packages/core/src/svg",
   "packages/core/src/edit",
   "packages/core/src/geometry",
+  "packages/core/src/text",
   "packages/app/src/ui/coords",
   "packages/app/src/ui/canvas-panel"
 ];

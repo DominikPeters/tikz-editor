@@ -7,6 +7,7 @@ import {
   layoutSimpleTexParagraph,
   luaLatexDefaultTextFontProfile,
   parseSimpleTexParagraphIr,
+  texVListX,
 } from "../packages/core/src/text/tex/index.js";
 import {
   simpleTexInlineNodesToLayoutItems,
@@ -2134,6 +2135,7 @@ describe("TeX vlist scopes", () => {
       metricProvider: computerModernTexMetricProvider,
       spaceGlueProfile: "font",
       inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
+      paragraphOriginX: texVListX(25),
     });
 
     expect(attachments.marginLabel).toMatchObject({
@@ -2164,6 +2166,12 @@ describe("TeX vlist scopes", () => {
         },
       },
     });
+    expect(attachments.marginLabelHBox?.x).toBeCloseTo(
+      (attachments.marginLabel?.rightEdge ?? Number.NaN) -
+        (attachments.marginLabelHBox?.box.metrics.width ?? Number.NaN) -
+        25,
+      6
+    );
   });
 
   it("prepares scoped paragraph plans through the vlist API", () => {

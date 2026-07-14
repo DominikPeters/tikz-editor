@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
+import { texVListX } from "../packages/core/src/text/tex/coordinates.js";
 
 const RETRY_MESSAGE =
   "MathJax retry -- an asynchronous action is required; try using one of the promise-based functions and await its resolution.";
@@ -785,7 +786,7 @@ describe("mathjax node text engine", () => {
           },
         },
         path: [0],
-        x: 3,
+        x: texVListX(3),
         y: 5,
         metrics: { width: 24, height: 6, depth: 2 },
       },
@@ -797,7 +798,7 @@ describe("mathjax node text engine", () => {
           depth: 1,
         },
         path: [1],
-        x: 0,
+        x: texVListX(0),
         y: 14,
         metrics: { width: 12, height: 4, depth: 1 },
       },
@@ -808,7 +809,7 @@ describe("mathjax node text engine", () => {
           penalty: -50,
         },
         path: [2],
-        x: 0,
+        x: texVListX(0),
         y: 19,
         metrics: { width: 0, height: 0, depth: 0 },
       },
@@ -820,7 +821,7 @@ describe("mathjax node text engine", () => {
           estimated: { width: 0, height: 8.5, depth: 3.5 },
         },
         path: [3],
-        x: 0,
+        x: texVListX(0),
         y: 20,
         metrics: { width: 0, height: 8.5, depth: 3.5 },
       },
@@ -847,7 +848,7 @@ describe("mathjax node text engine", () => {
           items: [],
         },
         path: [0],
-        x: 10,
+        x: texVListX(10),
         y: 20,
         metrics: { width: 40, height: 7, depth: 13 },
         children: [
@@ -860,7 +861,7 @@ describe("mathjax node text engine", () => {
               },
             },
             path: [0, 0],
-            x: 15,
+            x: texVListX(15),
             y: 32,
             metrics: { width: 12, height: 4, depth: 2 },
           },
@@ -943,6 +944,25 @@ describe("mathjax node text engine", () => {
     expect(body.indexOf('data-tex-glyph="49"')).toBeLessThan(
       body.indexOf('data-line-index="0"')
     );
+  });
+
+  it("keeps list-label hboxes relative to the containing list origin", async () => {
+    installFakeBrowserMathJax();
+
+    const { renderSimpleTexParagraphDebugSvgBody } = await import(
+      "../packages/core/src/text/mathjax-engine.js"
+    );
+    const body = renderSimpleTexParagraphDebugSvgBody({
+      text: String.raw`\begin{itemize}\item Hello!\item World\end{itemize}`,
+      width: 100,
+      alignment: "ragged-right",
+    }) ?? "";
+    const firstLabel = body.match(
+      /<g transform="translate\(([-\d.]+) [-\d.]+\)" pointer-events="none"><rect[^>]+><path[^>]+data-tex-glyph="8226"/
+    );
+
+    expect(firstLabel).not.toBeNull();
+    expect(Number(firstLabel?.[1])).toBeCloseTo(-12.78, 4);
   });
 
   it("renders nested list lineboxes relative to their vbox groups", async () => {
