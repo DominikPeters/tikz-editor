@@ -49,7 +49,7 @@ function AddonPropertyRow(props: {
   const { property, applyEdit } = props;
 
   return (
-    <div className={css.controlRow}>
+    <div className={css.controlRow} data-testid={`addon-property-${property.id}`}>
       <span className={css.propertyLabel}>{property.label}</span>
       <AddonPropertyControl property={property} applyEdit={applyEdit} />
     </div>

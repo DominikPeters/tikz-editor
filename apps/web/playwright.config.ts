@@ -52,7 +52,7 @@ export default defineConfig({
     trace: "retain-on-failure"
   },
   webServer: {
-    command: `${withoutColorEnv} npm run build -- --base / && ${withoutColorEnv} npx vite preview --host 127.0.0.1 --port 4173`,
+    command: `${withoutColorEnv} env VITE_TEST_ADDONS=1 npm run build -- --base / && ${withoutColorEnv} npx vite preview --host 127.0.0.1 --port 4173`,
     cwd: ".",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,
