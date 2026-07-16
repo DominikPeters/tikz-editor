@@ -4,6 +4,7 @@ import { FeatureFlags } from "../ast/features.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type { NodeItem, PathItem, TikzFigure, TikzFigureInventoryItem, Span, Statement } from "../ast/types.js";
 import type { ParseTikzOptions, ParseTikzResult } from "./index.js";
+import type { AddonRuntime } from "../addons/runtime.js";
 import type { SourcePatch } from "../edit/types.js";
 import {
   getCachedContextDefinitions,
@@ -93,8 +94,14 @@ const SNIPPET_SUFFIX = "\n\\end{tikzpicture}";
 const BEGIN_TIKZ_PATTERN = /\\begin\{tikzpicture\*?\}/u;
 const END_TIKZ_PATTERN = /\\end\{tikzpicture\*?\}/u;
 
-export function createIncrementalParseSession(): IncrementalParseSession {
+export type IncrementalParseSessionConfig = {
+  /** Resolver for the active add-on runtime, consulted on every internal parse. */
+  resolveAddons?: () => AddonRuntime | null;
+};
+
+export function createIncrementalParseSession(config: IncrementalParseSessionConfig = {}): IncrementalParseSession {
   let cached: CachedIncrementalParseState | null = null;
+  const resolveAddons = (): AddonRuntime | null => config.resolveAddons?.() ?? null;
 
   const prime = (
     parse: ParseTikzResult,
@@ -165,6 +172,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
         recover: true,
         activeFigureId,
         includeContextDefinitions,
+        addons: resolveAddons()
       });
       cached = buildCache(parse, {
         activeFigureId: activeFigureId ?? parse.activeFigureId,
@@ -189,6 +197,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
         recover: true,
         activeFigureId,
         includeContextDefinitions,
+        addons: resolveAddons()
       });
       cached = buildCache(parse, {
         activeFigureId: activeFigureId ?? parse.activeFigureId,
@@ -248,7 +257,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
         }
         const nextSpan = shiftSpanThroughPatches(previousRef.span, patches);
         const snippet = input.source.slice(nextSpan.from, nextSpan.to);
-        const parsedSnippet = parseStatementSnippet(snippet);
+        const parsedSnippet = parseStatementSnippet(snippet, resolveAddons());
         if (parsedSnippet.parse.figure.body.length !== 1) {
           return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-structure-changed", patchApplication, input.sourceRevision ?? null);
         }
@@ -329,6 +338,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       recover: true,
       activeFigureId,
       includeContextDefinitions,
+      addons: resolveAddons()
     });
       cached = buildCache(parse, {
         activeFigureId: activeFigureId ?? parse.activeFigureId,
@@ -521,12 +531,12 @@ function decideFallbackReason(input: {
   return null;
 }
 
-function parseStatementSnippet(snippet: string): {
+function parseStatementSnippet(snippet: string, addons: AddonRuntime | null): {
   parse: ParseTikzResult;
   hasParseError: boolean;
 } {
   const source = `${SNIPPET_PREFIX}${snippet}\n${SNIPPET_SUFFIX.slice(1)}`;
-  const parse = parseTikz(source, { recover: true });
+  const parse = parseTikz(source, { recover: true, addons });
   return {
     parse,
     hasParseError: parse.diagnostics.some((diagnostic) => diagnostic.severity === "error")

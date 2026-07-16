@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppSettings } from "./types";
+import type { AppSettings, InstalledAddonSettings } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 import { loadSettings, saveSettings } from "./storage";
 
@@ -10,6 +10,8 @@ type SettingsStore = {
   updateCanvasSettings: (patch: Partial<AppSettings["canvas"]>) => void;
   updateColorPickerSettings: (patch: Partial<AppSettings["colorPicker"]>) => void;
   updateRenderingSettings: (patch: Partial<AppSettings["rendering"]>) => void;
+  setInstalledAddon: (addonId: string, entry: InstalledAddonSettings) => void;
+  removeInstalledAddon: (addonId: string) => void;
   resetGeneralSettings: () => void;
   resetEditorSettings: () => void;
   resetCanvasSettings: () => void;
@@ -62,6 +64,31 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const next: AppSettings = {
         ...state.settings,
         rendering: { ...state.settings.rendering, ...patch }
+      };
+      saveSettings(next);
+      return { settings: next };
+    });
+  },
+  setInstalledAddon: (addonId, entry) => {
+    set((state) => {
+      const next: AppSettings = {
+        ...state.settings,
+        addons: {
+          ...state.settings.addons,
+          installed: { ...state.settings.addons.installed, [addonId]: entry }
+        }
+      };
+      saveSettings(next);
+      return { settings: next };
+    });
+  },
+  removeInstalledAddon: (addonId) => {
+    set((state) => {
+      const installed = { ...state.settings.addons.installed };
+      delete installed[addonId];
+      const next: AppSettings = {
+        ...state.settings,
+        addons: { ...state.settings.addons, installed }
       };
       saveSettings(next);
       return { settings: next };

@@ -2,7 +2,7 @@ import type { Completion, CompletionContext, CompletionResult } from "@codemirro
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 
-import type { AddonRuntime } from "@tikz-editor/core";
+import type { AddonRuntime } from "@tikz-editor/core/addons/runtime";
 
 import { getActiveAddonRuntime } from "../../addons/registry";
 

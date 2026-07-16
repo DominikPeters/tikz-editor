@@ -31,6 +31,9 @@ import { createSingleFlightScheduler } from "./compute-scheduler";
 import { computeTrigger } from "./compute-trigger";
 import { buildRepeatPreviewScene } from "./repeat-preview";
 import { useSettingsStore } from "../settings/useSettingsStore";
+import type { AddonRegistration } from "@tikz-editor/addon-api";
+import { refreshAddonRuntime, setStaticAddonRegistrations } from "../addons/loader";
+import { useAddonRuntimeRevision } from "../addons/registry";
 import { getActiveEditorPlatform } from "../platform/current";
 import css from "./App.module.css";
 import "./variables.css";
@@ -219,7 +222,12 @@ function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string 
     : null;
 }
 
-export function App() {
+export type AppProps = {
+  /** Statically bundled add-on registrations (dev iteration, tests, opt-in builds). */
+  addons?: readonly AddonRegistration[];
+};
+
+export function App({ addons }: AppProps = {}) {
   const {
     source,
     sourceRevision,
@@ -257,12 +265,20 @@ export function App() {
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
     dispatch: s.dispatch
   })));
-  const { uiFontSizePx, colorScheme, canvasInvert, mathJaxFont } = useSettingsStore(useShallow((s) => ({
+  const { uiFontSizePx, colorScheme, canvasInvert, mathJaxFont, addonsSettings } = useSettingsStore(useShallow((s) => ({
     uiFontSizePx: s.settings.general.uiFontSizePx,
     colorScheme: s.settings.general.colorScheme,
     canvasInvert: s.settings.general.canvasInvert,
-    mathJaxFont: s.settings.rendering.mathJaxFont
+    mathJaxFont: s.settings.rendering.mathJaxFont,
+    addonsSettings: s.settings.addons
   })));
+  const addonRuntimeRevision = useAddonRuntimeRevision();
+  useEffect(() => {
+    if (addons) {
+      setStaticAddonRegistrations(addons);
+    }
+    void refreshAddonRuntime(addonsSettings);
+  }, [addons, addonsSettings]);
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
   const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), [menuTarget]);
@@ -1009,7 +1025,7 @@ export function App() {
       trigger,
       renderViewBox
     });
-  }, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDocumentFileRef, activeDocumentId, activeFigureId, addonRuntimeRevision, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
@@ -1030,7 +1046,7 @@ export function App() {
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger
     });
-  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
+  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, addonRuntimeRevision, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
 
   useEffect(() => {
     let prewarmTimer: number | null = null;

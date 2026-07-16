@@ -43,6 +43,21 @@ export type RenderingSettings = {
   mathJaxFont: MathJaxFont;
 };
 
+export type AddonInstallSource = { kind: "builtin" } | { kind: "url"; url: string; integrity?: string };
+
+export type InstalledAddonSettings = {
+  enabled: boolean;
+  source: AddonInstallSource;
+  /** The add-on's own version, recorded at install time. */
+  version: string;
+  /** The add-on's own settings bag (plain data). */
+  settings?: unknown;
+};
+
+export type AddonsSettings = {
+  installed: Record<string, InstalledAddonSettings>;
+};
+
 export type AppSettings = {
   general: GeneralSettings;
   editor: EditorSettings;
@@ -51,6 +66,7 @@ export type AppSettings = {
     accuracy: ColorPickerAccuracy;
   };
   rendering: RenderingSettings;
+  addons: AddonsSettings;
 };
 
 export const GRID_SIZE_MINOR_TARGET_PX: Record<GridSize, number> = {
@@ -91,5 +107,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   rendering: {
     mathJaxFont: "mathjax-newcm"
+  },
+  addons: {
+    installed: {}
   }
 };

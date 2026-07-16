@@ -3,6 +3,7 @@ import { Modal } from "./Modal";
 import type { PlatformLatex } from "../platform/types";
 import type { DocumentFileRef } from "../store/types";
 import { createStandaloneLatexExportArtifact } from "@tikz-editor/core/export/index";
+import { getActiveAddonRuntime } from "../addons/registry";
 import css from "./TikzJaxModal.module.css";
 
 const TIKZJAX_FONTS_CSS = "https://cdn.jsdelivr.net/npm/@drgrice1/tikzjax@1.0.0-beta24/dist/fonts.css";
@@ -131,7 +132,8 @@ export function TikzJaxModal({
       const latexDocument = createStandaloneLatexExportArtifact({
         source,
         activeFigureId,
-        documentClassOptions: ["dvisvgm", "border=2pt"]
+        documentClassOptions: ["dvisvgm", "border=2pt"],
+        addons: getActiveAddonRuntime()
       }).text;
       const readLastCompileLog = latex.readLastCompileLog;
       if (typeof readLastCompileLog === "function") {

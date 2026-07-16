@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { EDITOR_FONT_SIZE_OPTIONS, type ColorPickerAccuracy, type ColorScheme, type GridSize, type MathJaxFont } from "../settings/types";
 import { Modal } from "./Modal";
+import { AddonSettingsPanel } from "./AddonSettingsPanel";
 import css from "./SettingsModal.module.css";
 
-type CategoryId = "general" | "editor" | "canvas";
+type CategoryId = "general" | "editor" | "canvas" | "addons";
 
 const MATHJAX_FONTS: { value: MathJaxFont; label: string }[] = [
   { value: "mathjax-newcm",   label: "New Computer Modern (default)" },
@@ -23,7 +24,8 @@ const MATHJAX_FONTS: { value: MathJaxFont; label: string }[] = [
 const CATEGORIES: { id: CategoryId; label: string }[] = [
   { id: "general", label: "General" },
   { id: "editor", label: "Code Editor" },
-  { id: "canvas", label: "Canvas" }
+  { id: "canvas", label: "Canvas" },
+  { id: "addons", label: "Add-ons" }
 ];
 
 let rememberedCategory: CategoryId = "general";
@@ -73,6 +75,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setFormatterMaxLineLengthInput(null);
       return;
     }
+    if (activeCategory === "addons") {
+      return;
+    }
     resetCanvasSettings();
   };
 
@@ -109,6 +114,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </nav>
 
           <div className={css.content}>
+            {activeCategory === "addons" && <AddonSettingsPanel />}
             {activeCategory === "general" && (
               <div className={css.panel}>
                 <div className={css.panelTitle}>General</div>

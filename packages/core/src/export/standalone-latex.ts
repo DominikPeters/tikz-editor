@@ -6,6 +6,7 @@ import type {
 } from "../ast/types.js";
 import { parseTikz } from "../parser/index.js";
 import { evaluateTikzFigure } from "../semantic/evaluate.js";
+import type { AddonRuntime } from "../addons/runtime.js";
 
 export const STANDALONE_LATEX_EXPORT_MIME_TYPE = "application/x-tex;charset=utf-8";
 export const DEFAULT_STANDALONE_LATEX_EXPORT_FILE_NAME = "tikz-export.tex";
@@ -40,11 +41,14 @@ export type CreateStandaloneLatexExportArtifactOptions = {
   activeFigureId: string | null;
   fileName?: string;
   documentClassOptions?: readonly string[];
+  /** Active add-on runtime; used to claim statements and contribute preamble lines. */
+  addons?: AddonRuntime | null;
 };
 
 export type CreateMinimalTikzSourceArtifactOptions = {
   source: string;
   activeFigureId: string | null;
+  addons?: AddonRuntime | null;
 };
 
 function normalizeDocumentClassOptions(options: readonly string[] = []): string[] {
@@ -251,13 +255,16 @@ function analyzeMinimalFigureDependencies(
   definitionChunks: string[];
   figureSource: string;
   requiredLibraries: readonly string[];
+  addonPreambleLines: string[];
 } {
   const parseResult = parseTikz(options.source, {
     recover: true,
     activeFigureId: options.activeFigureId,
-    includeContextDefinitions: true
+    includeContextDefinitions: true,
+    addons: options.addons
   });
-  const semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source);
+  const semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, { addons: options.addons });
+  const addonPreambleLines = collectAddonPreambleLines(parseResult.figure.body, options.addons);
 
   const diagnostics: StandaloneExportDiagnostic[] = [];
   for (const diagnostic of parseResult.diagnostics) {
@@ -299,8 +306,39 @@ function analyzeMinimalFigureDependencies(
     complete: !diagnostics.some((diagnostic) => diagnostic.severity === "error"),
     definitionChunks,
     figureSource,
-    requiredLibraries: semanticResult.scene.requiredTikzLibraries
+    requiredLibraries: semanticResult.scene.requiredTikzLibraries,
+    addonPreambleLines
   };
+}
+
+function collectAddonPreambleLines(statements: readonly Statement[], addons: AddonRuntime | null | undefined): string[] {
+  if (!addons) {
+    return [];
+  }
+  const usedAddonIds = new Set<string>();
+  const visit = (body: readonly Statement[]): void => {
+    for (const statement of body) {
+      if (statement.kind === "AddonEnvironment" || statement.kind === "AddonCommand") {
+        usedAddonIds.add(statement.addonId);
+      }
+      if (statement.kind === "Scope" || (statement.kind === "AddonEnvironment" && statement.body)) {
+        visit(statement.body ?? []);
+      }
+    }
+  };
+  visit(statements);
+
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const addonId of [...usedAddonIds].sort()) {
+    for (const line of addons.engineById(addonId)?.manifest.requiredPreamble ?? []) {
+      if (!seen.has(line)) {
+        seen.add(line);
+        lines.push(line);
+      }
+    }
+  }
+  return lines;
 }
 
 function mergeDefinitionChunksWithInferredLibraries(
@@ -346,6 +384,7 @@ export function createStandaloneLatexExportArtifact(
   if (requiredLibraries.length > 0) {
     lines.push(`\\usetikzlibrary{${requiredLibraries.join(",")}}`);
   }
+  lines.push(...analysis.addonPreambleLines);
   lines.push("\\begin{document}");
   if (definitionChunks.length > 0) {
     lines.push(definitionChunks.join("\n"));

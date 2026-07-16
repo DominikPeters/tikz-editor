@@ -23,6 +23,7 @@ import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
 import { prepareImageAssetResolver } from "./image-asset-cache";
+import { getActiveAddonRuntime } from "./addons/registry";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
 
@@ -233,6 +234,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     phases.imageAssets = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
     const result = await renderTikzToSvgAsync(request.source, {
+      addons: getActiveAddonRuntime(),
       parse: {
         recover: true,
         activeFigureId: request.activeFigureId,
@@ -379,7 +381,7 @@ async function computeSnapshotIncremental(
   let incremental = session.evaluate({
     figure: parseResult.figure,
     source: parseResult.source,
-    options: { sourceFingerprint, textEngine, graphicsResolver },
+    options: { sourceFingerprint, textEngine, graphicsResolver, addons: getActiveAddonRuntime() },
     hints: {
       changedSourceIds,
       sourcePatches: patches,
@@ -623,7 +625,7 @@ function getIncrementalParseSession(): IncrementalParseSession {
   if (incrementalParseSession) {
     return incrementalParseSession;
   }
-  incrementalParseSession = createIncrementalParseSession();
+  incrementalParseSession = createIncrementalParseSession({ resolveAddons: getActiveAddonRuntime });
   return incrementalParseSession;
 }
 

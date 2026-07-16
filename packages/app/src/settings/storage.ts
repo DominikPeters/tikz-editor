@@ -45,6 +45,14 @@ export function loadSettings(): AppSettings {
       rendering: {
         ...DEFAULT_SETTINGS.rendering,
         ...parsed.rendering
+      },
+      addons: {
+        ...DEFAULT_SETTINGS.addons,
+        ...parsed.addons,
+        installed: {
+          ...DEFAULT_SETTINGS.addons.installed,
+          ...parsed.addons?.installed
+        }
       }
     };
   } catch {

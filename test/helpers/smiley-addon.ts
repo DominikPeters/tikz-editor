@@ -51,8 +51,10 @@ export const SMILEY_MANIFEST: AddonManifest = {
 };
 
 export function createSmileyAddon(): AddonRegistration {
+  // Cloned so tests can mutate manifests without leaking into other tests.
+  const manifest = structuredClone(SMILEY_MANIFEST);
   const engine: AddonEngine = {
-    manifest: SMILEY_MANIFEST,
+    manifest,
 
     parseEnvironment: (statement, context) => {
       const optionEntries = statement.options?.entries ?? [];
@@ -249,7 +251,7 @@ export function createSmileyAddon(): AddonRegistration {
   };
 
   const ui: AddonUi = {
-    manifest: SMILEY_MANIFEST,
+    manifest,
     inspector: (statement) => {
       if (statement.kind !== "AddonCommand" || statement.commandName !== "\\smiley") {
         return [];

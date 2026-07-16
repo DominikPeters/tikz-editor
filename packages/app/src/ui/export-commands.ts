@@ -6,6 +6,7 @@ import {
 } from "@tikz-editor/core/export/index";
 import { serializeSvgModelAsync, type EmitSvgResult } from "@tikz-editor/core/svg/index";
 import { getActiveEditorPlatform } from "../platform/current";
+import { getActiveAddonRuntime } from "../addons/registry";
 import { publishUiError } from "./ui-notifications";
 
 const DEFAULT_PNG_EXPORT_DPI = 144;
@@ -50,7 +51,8 @@ export async function exportStandaloneLatexDownload(
   const artifact = createStandaloneLatexExportArtifact({
     source,
     activeFigureId,
-    fileName: options.fileName
+    fileName: options.fileName,
+    addons: getActiveAddonRuntime()
   });
   if (!artifact.complete) {
     console.warn("[tikz-editor] Standalone LaTeX export emitted with unresolved diagnostics.", artifact.diagnostics);

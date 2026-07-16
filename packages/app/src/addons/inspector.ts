@@ -1,6 +1,6 @@
 import type { AddonInspectorSection } from "@tikz-editor/addon-api";
 import { findAddonStatement } from "@tikz-editor/core/addons/edit-context";
-import type { ParseTikzResult } from "@tikz-editor/core";
+import type { ParseTikzResult } from "@tikz-editor/core/parser/index";
 
 import { getActiveAddonRuntime } from "./registry";
 
