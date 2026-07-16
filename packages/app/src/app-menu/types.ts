@@ -116,6 +116,11 @@ export const APP_MENU_COMMAND_IDS = {
 
 export type AppMenuCommandId = (typeof APP_MENU_COMMAND_IDS)[keyof typeof APP_MENU_COMMAND_IDS];
 
+/** Namespaced command id contributed by an add-on, e.g. "addon:smiley:insert-smiley". */
+export type AddonMenuCommandId = `addon:${string}`;
+
+export type AnyMenuCommandId = AppMenuCommandId | AddonMenuCommandId;
+
 export type AppMenuPlatformTarget = "web" | "desktop" | "desktop-macos" | "desktop-windows" | "desktop-linux";
 
 type AppMenuPlatformScoped = {
@@ -128,7 +133,7 @@ export type AppMenuSeparatorItem = {
 
 export type AppMenuCommandItem = {
   kind: "command";
-  commandId: AppMenuCommandId;
+  commandId: AnyMenuCommandId;
   label: string;
   accelerator?: string;
 } & AppMenuPlatformScoped;

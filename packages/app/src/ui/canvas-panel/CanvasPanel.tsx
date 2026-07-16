@@ -39,7 +39,7 @@ import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
 import { createMathJaxNodeTextEngine } from "@tikz-editor/core/text/mathjax-engine";
 import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
-import type { AppMenuCommandId } from "../../app-menu";
+import type { AddonMenuCommandId, AnyMenuCommandId } from "../../app-menu";
 import { buildCanvasContextMenuDefinition } from "../../context-menu";
 import { buildEditParseOptions } from "../../edit-parse-options";
 import { getActiveAddonRuntime } from "../../addons/registry";
@@ -2070,6 +2070,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     state: contextMenus,
     platform,
     commandBindings: commandRuntime.bindings,
+    commandAddonBindings: commandRuntime.addonBindings,
     source,
     snapshot,
     toolMode,
@@ -2606,6 +2607,30 @@ export const CanvasPanel = memo(function CanvasPanel({
       contextMenuState?.includeMatrixMultiRemoveColumn
     ]
   );
+  const contextMenuAddonMenu = contextMenuState?.addonMenu ?? null;
+  const effectiveContextMenuDefinition = useMemo(() => {
+    if (!contextMenuAddonMenu || !contextMenuState) {
+      return contextMenuDefinition;
+    }
+    return {
+      ...contextMenuDefinition,
+      [contextMenuState.target]: [
+        ...contextMenuDefinition[contextMenuState.target],
+        { kind: "separator" as const },
+        ...contextMenuAddonMenu.items
+      ]
+    };
+  }, [contextMenuAddonMenu, contextMenuDefinition, contextMenuState]);
+  const contextMenuAddonBindings = useMemo(() => {
+    if (!contextMenuAddonMenu) {
+      return commandRuntime.addonBindings;
+    }
+    const merged = new Map(commandRuntime.addonBindings);
+    for (const [commandId, binding] of contextMenuAddonMenu.bindings) {
+      merged.set(commandId, binding);
+    }
+    return merged;
+  }, [commandRuntime.addonBindings, contextMenuAddonMenu]);
 
   return (
     <>
@@ -2705,10 +2730,20 @@ export const CanvasPanel = memo(function CanvasPanel({
         platform={platform}
         contextMenuState={contextMenuState}
         commandRuntimeBindings={commandRuntime.bindings}
-        contextMenuDefinition={contextMenuDefinition}
+        commandRuntimeAddonBindings={contextMenuAddonBindings}
+        contextMenuDefinition={effectiveContextMenuDefinition}
         onContextMenuClose={() => { setContextMenuState(null); }}
-        onContextMenuCommandRun={(commandId: AppMenuCommandId, origin: CommandOrigin) => {
-          commandRuntime.runCommand(commandId, origin);
+        onContextMenuCommandRun={(commandId: AnyMenuCommandId, origin: CommandOrigin) => {
+          const perOpenBinding = commandId.startsWith("addon:")
+            ? contextMenuAddonMenu?.bindings.get(commandId as AddonMenuCommandId)
+            : undefined;
+          if (perOpenBinding) {
+            if (perOpenBinding.enabled) {
+              void perOpenBinding.run(origin);
+            }
+          } else {
+            commandRuntime.runCommand(commandId, origin);
+          }
           setContextMenuState(null);
         }}
         dragTooltip={dragTooltip}

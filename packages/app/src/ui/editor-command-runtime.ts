@@ -1,5 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
-import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
+import { APP_MENU_COMMAND_IDS, type AddonMenuCommandId, type AnyMenuCommandId, type AppMenuCommandId } from "../app-menu";
+import { getActiveAddonRuntime, useAddonRuntimeRevision } from "../addons/registry";
+import { listAddonToolTemplates } from "../addons/templates";
 import { getDockLayoutHandle } from "./DockLayout";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
@@ -88,6 +90,7 @@ type RuntimeInput = {
   sourceRevision?: number;
   snapshot: SessionSnapshot;
   toolMode: ToolMode;
+  activeAddonTemplateId: string | null;
   selectedElementIds: ReadonlySet<string>;
   activeHandleId: string | null;
   historyIndex: number;
@@ -142,8 +145,21 @@ type RuntimeInput = {
 
 export type EditorCommandRuntime = {
   bindings: CommandBindings;
-  runCommand: (commandId: AppMenuCommandId, origin: CommandOrigin) => boolean;
+  /** Bindings for add-on-contributed commands, keyed by namespaced id. */
+  addonBindings: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
+  runCommand: (commandId: AnyMenuCommandId, origin: CommandOrigin) => boolean;
 };
+
+/** Look up a binding across core and add-on command ids. */
+export function resolveCommandBinding(
+  runtime: Pick<EditorCommandRuntime, "bindings" | "addonBindings">,
+  commandId: AnyMenuCommandId
+): CommandBinding | undefined {
+  if (commandId.startsWith("addon:")) {
+    return runtime.addonBindings.get(commandId as AddonMenuCommandId);
+  }
+  return runtime.bindings[commandId as AppMenuCommandId];
+}
 
 const PGF_TIKZ_MANUAL_URL = "https://tikz.dev";
 const GITHUB_REPOSITORY_URL = "https://github.com/DominikPeters/tikz-editor";
@@ -156,6 +172,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     sourceRevision,
     snapshot,
     toolMode,
+    activeAddonTemplateId,
     selectedElementIds,
     activeHandleId,
     historyIndex,
@@ -1068,10 +1085,15 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     }
   };
 
+  const addonBindings = buildAddonCommandBindings(toolMode, activeAddonTemplateId, dispatch);
+
   return {
     bindings,
+    addonBindings,
     runCommand: (commandId, origin) => {
-      const binding = bindings[commandId];
+      const binding = commandId.startsWith("addon:")
+        ? addonBindings.get(commandId as AddonMenuCommandId)
+        : bindings[commandId as AppMenuCommandId];
       if (!binding?.enabled) {
         return false;
       }
@@ -1079,6 +1101,45 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       return true;
     }
   };
+}
+
+/**
+ * Bindings for add-on-contributed insert commands: each menu action arms
+ * the addonTemplate tool with its template, mirroring the host's own
+ * Insert-menu tool bindings.
+ */
+function buildAddonCommandBindings(
+  toolMode: ToolMode,
+  activeAddonTemplateId: string | null,
+  dispatch: Dispatch
+): Map<AddonMenuCommandId, CommandBinding> {
+  const result = new Map<AddonMenuCommandId, CommandBinding>();
+  const runtime = getActiveAddonRuntime();
+  if (!runtime) {
+    return result;
+  }
+  const templateIds = new Set(listAddonToolTemplates().map((template) => template.id));
+  for (const ui of runtime.uis.values()) {
+    const contribution = ui.insertMenu;
+    if (!contribution) {
+      continue;
+    }
+    const actions = contribution.kind === "item" ? [contribution.item] : contribution.items;
+    for (const action of actions) {
+      const templateId = action.action.templateId;
+      if (!templateIds.has(templateId)) {
+        continue;
+      }
+      result.set(action.commandId, {
+        enabled: true,
+        checked: toolMode === "addonTemplate" && activeAddonTemplateId === templateId,
+        run: () => {
+          dispatch({ type: "SET_TOOL_MODE", mode: "addonTemplate", addonTemplateId: templateId });
+        }
+      });
+    }
+  }
+  return result;
 }
 
 export function useEditorCommandRuntime(
@@ -1113,6 +1174,8 @@ export function useEditorCommandRuntime(
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const snapshot = useEditorStore((s) => s.snapshot);
   const toolMode = useEditorStore((s) => s.toolMode);
+  const activeAddonTemplateId = useEditorStore((s) => s.activeAddonTemplateId);
+  const addonRuntimeRevision = useAddonRuntimeRevision();
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const activeHandleId = useEditorStore((s) => s.activeHandleId);
   const activeCanvasDragKind = useEditorStore((s) => s.activeCanvasDragKind);
@@ -1174,6 +1237,7 @@ export function useEditorCommandRuntime(
         sourceRevision: effectiveCommandInputs.sourceRevision,
         snapshot: effectiveCommandInputs.snapshot,
         toolMode,
+        activeAddonTemplateId,
         selectedElementIds: effectiveCommandInputs.selectedElementIds,
         activeHandleId: effectiveCommandInputs.activeHandleId,
         historyIndex,
@@ -1225,9 +1289,12 @@ export function useEditorCommandRuntime(
         onOpenSaveWorkspace: options.onOpenSaveWorkspace,
         onOpenManageWorkspaces: options.onOpenManageWorkspaces
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addon contributions live outside React state; the revision signal tracks them
     [
       effectiveCommandInputs,
       toolMode,
+      activeAddonTemplateId,
+      addonRuntimeRevision,
       historyIndex,
       historyLength,
       activeDocumentId,

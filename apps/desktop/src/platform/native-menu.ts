@@ -1,6 +1,6 @@
 import {
   APP_MENU_COMMAND_IDS,
-  type AppMenuCommandId,
+  type AnyMenuCommandId,
   type AppMenuDefinition,
   type AppMenuItem
 } from "@tikz-editor/app/app-menu";
@@ -13,9 +13,11 @@ export type NativeCommandState = {
   checked?: boolean;
 };
 
+export type NativeCommandStates = Partial<Record<AnyMenuCommandId, NativeCommandState>>;
+
 export type NativeMenuSyncPayload = {
   definition: AppMenuDefinition;
-  commandStates: Record<AppMenuCommandId, NativeCommandState>;
+  commandStates: NativeCommandStates;
   workspaceSignature?: string;
 };
 
@@ -29,7 +31,7 @@ type NativeCommandRef = {
 
 type NativeMenuNode = CheckMenuItem | MenuItem | PredefinedMenuItem | Submenu;
 
-function shouldHideDisabledContextMenuCommand(commandId: AppMenuCommandId, state: NativeCommandState): boolean {
+function shouldHideDisabledContextMenuCommand(commandId: AnyMenuCommandId, state: NativeCommandState): boolean {
   return commandId === APP_MENU_COMMAND_IDS.FLATTEN_FOREACH && !state.enabled;
 }
 
@@ -52,7 +54,7 @@ function basename(path: string): string {
 
 export function serializeDesktopContextMenuItems(
   items: readonly AppMenuItem[],
-  commandStates: Record<AppMenuCommandId, NativeCommandState>
+  commandStates: NativeCommandStates
 ): DesktopContextMenuItem[] {
   const serialized: DesktopContextMenuItem[] = [];
 
@@ -91,13 +93,13 @@ export function serializeDesktopContextMenuItems(
 
 export function createNativeDesktopMenuManager(options: {
   getBridge: () => DesktopBridge;
-  dispatchCommand: (commandId: AppMenuCommandId, origin: "platform" | "context-menu") => void;
+  dispatchCommand: (commandId: AnyMenuCommandId, origin: "platform" | "context-menu") => void;
   dispatchOpenRecent: (path: string) => void;
   reportError: (message: string, error?: unknown) => void;
 }) {
   const APP_DISPLAY_NAME = "TikZ Editor";
   const { getBridge, dispatchCommand, dispatchOpenRecent, reportError } = options;
-  const commandRefs = new Map<AppMenuCommandId, NativeCommandRef[]>();
+  const commandRefs = new Map<AnyMenuCommandId, NativeCommandRef[]>();
   let currentMenu: Menu | null = null;
   let latestPayload: NativeMenuSyncPayload | null = null;
   let definitionKey: string | null = null;
@@ -105,20 +107,20 @@ export function createNativeDesktopMenuManager(options: {
   let recentsDirty = true;
   let syncQueue = Promise.resolve();
 
-  function addCommandRef(commandId: AppMenuCommandId, ref: NativeCommandRef): void {
+  function addCommandRef(commandId: AnyMenuCommandId, ref: NativeCommandRef): void {
     const known = commandRefs.get(commandId) ?? [];
     known.push(ref);
     commandRefs.set(commandId, known);
   }
 
-  function nativeClipboardPredefinedItemFor(commandId: AppMenuCommandId): "Cut" | "Copy" | "Paste" | null {
+  function nativeClipboardPredefinedItemFor(commandId: AnyMenuCommandId): "Cut" | "Copy" | "Paste" | null {
     if (commandId === APP_MENU_COMMAND_IDS.CUT) return "Cut";
     if (commandId === APP_MENU_COMMAND_IDS.COPY) return "Copy";
     if (commandId === APP_MENU_COMMAND_IDS.PASTE) return "Paste";
     return null;
   }
 
-  async function applyCommandStates(commandStates: Record<AppMenuCommandId, NativeCommandState>): Promise<void> {
+  async function applyCommandStates(commandStates: NativeCommandStates): Promise<void> {
     for (const [commandId, refs] of commandRefs.entries()) {
       const state = commandStates[commandId] ?? { enabled: false };
       for (const ref of refs) {
@@ -132,7 +134,7 @@ export function createNativeDesktopMenuManager(options: {
 
   async function buildMenuItems(
     items: readonly AppMenuItem[],
-    commandStates: Record<AppMenuCommandId, NativeCommandState>,
+    commandStates: NativeCommandStates,
     recentFiles: readonly string[],
     origin: "platform" | "context-menu"
   ): Promise<NativeMenuNode[]> {
@@ -192,7 +194,7 @@ export function createNativeDesktopMenuManager(options: {
 
   async function buildMenuItem(
     item: AppMenuItem,
-    commandStates: Record<AppMenuCommandId, NativeCommandState>,
+    commandStates: NativeCommandStates,
     recentFiles: readonly string[],
     origin: "platform" | "context-menu"
   ): Promise<NativeMenuNode | null> {
@@ -265,7 +267,7 @@ export function createNativeDesktopMenuManager(options: {
         enabled: state.enabled,
         accelerator,
         action: (id) => {
-          dispatchCommand(id as AppMenuCommandId, origin);
+          dispatchCommand(id as AnyMenuCommandId, origin);
         }
       });
       addCommandRef(item.commandId, { kind: "check", item: checkItem });
@@ -278,7 +280,7 @@ export function createNativeDesktopMenuManager(options: {
       enabled: state.enabled,
       accelerator,
       action: (id) => {
-        dispatchCommand(id as AppMenuCommandId, origin);
+        dispatchCommand(id as AnyMenuCommandId, origin);
       }
     });
     addCommandRef(item.commandId, { kind: "command", item: commandItem });
@@ -286,7 +288,7 @@ export function createNativeDesktopMenuManager(options: {
   }
 
   async function buildMacApplicationSubmenu(
-    commandStates: Record<AppMenuCommandId, NativeCommandState>
+    commandStates: NativeCommandStates
   ): Promise<Submenu> {
     const menuApi = await import("@tauri-apps/api/menu");
     const aboutItem = await menuApi.MenuItem.new({

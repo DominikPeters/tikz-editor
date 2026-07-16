@@ -4,6 +4,7 @@ import {
   APP_MENU_COMMAND_IDS,
   APP_MENU_DEFINITION,
   filterAppMenuDefinitionForTarget,
+  type AnyMenuCommandId,
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { useEditorStore } from "../store/store";
@@ -25,7 +26,7 @@ import { DockLayout } from "./DockLayout";
 import { StatusBar } from "./StatusBar";
 import { isMacLikePlatform, isWindowsLikePlatform } from "./key-labels";
 import { isCodeMirrorEventTarget } from "./editor-commands";
-import { useEditorCommandRuntime } from "./editor-command-runtime";
+import { resolveCommandBinding, useEditorCommandRuntime } from "./editor-command-runtime";
 import { toolModeFromShortcut } from "./tool-config";
 import { createSingleFlightScheduler } from "./compute-scheduler";
 import { computeTrigger } from "./compute-trigger";
@@ -34,6 +35,7 @@ import { useSettingsStore } from "../settings/useSettingsStore";
 import type { AddonRegistration } from "@tikz-editor/addon-api";
 import { refreshAddonRuntime, setStaticAddonRegistrations } from "../addons/loader";
 import { useAddonRuntimeRevision } from "../addons/registry";
+import { appendAddonMenuItems } from "../addons/menu";
 import { getActiveEditorPlatform } from "../platform/current";
 import css from "./App.module.css";
 import "./variables.css";
@@ -281,7 +283,11 @@ export function App({ addons }: AppProps = {}) {
   }, [addons, addonsSettings]);
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
-  const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), [menuTarget]);
+  const menuDefinition = useMemo(
+    () => appendAddonMenuItems(filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addon contributions live outside React state; the revision signal tracks them
+    [menuTarget, addonRuntimeRevision]
+  );
   const [showOpenExampleModal, setShowOpenExampleModal] = useState(false);
   const [showOpenFromArxivModal, setShowOpenFromArxivModal] = useState(false);
   const [openFromArxivSession, setOpenFromArxivSession] = useState<ArxivPaperSession>({
@@ -1531,14 +1537,14 @@ export function App({ addons }: AppProps = {}) {
         return menuDefinition;
       },
       getCommandState: (commandId) => {
-        const binding = commandRuntimeRef.current.bindings[commandId as keyof typeof commandRuntimeRef.current.bindings];
+        const binding = resolveCommandBinding(commandRuntimeRef.current, commandId as AnyMenuCommandId);
         return {
           enabled: binding?.enabled ?? false,
           known: binding != null
         };
       },
       runCommand: (commandId) => {
-        return commandRuntimeRef.current.runCommand(commandId as keyof typeof commandRuntimeRef.current.bindings, "platform");
+        return commandRuntimeRef.current.runCommand(commandId as AnyMenuCommandId, "platform");
       },
       selectFirstFigure: () => {
         const firstFigureId = snapshotRef.current.figures[0]?.id ?? null;
@@ -1669,12 +1675,15 @@ export function App({ addons }: AppProps = {}) {
   }, [dispatch, pendingAutoFit, snapshot.source, source]);
 
   const nativeMenuCommandState = useMemo(() => {
-    const entries = Object.entries(commandRuntime.bindings).map(([commandId, binding]) => {
+    const entries = [
+      ...Object.entries(commandRuntime.bindings),
+      ...commandRuntime.addonBindings.entries()
+    ].map(([commandId, binding]) => {
       const state = { enabled: binding.enabled, checked: binding.checked };
       return [commandId, state] as const;
     });
     return {
-      commandStates: Object.fromEntries(entries) as Record<keyof typeof commandRuntime.bindings, { enabled: boolean; checked?: boolean }>,
+      commandStates: Object.fromEntries(entries),
       signature: entries.map(([commandId, state]) =>
         `${commandId}:${state.enabled ? "1" : "0"}:${state.checked === true ? "1" : "0"}`
       ).join("|")
@@ -2095,6 +2104,7 @@ export function App({ addons }: AppProps = {}) {
         <AppMenuBar
           definition={menuDefinition}
           bindings={commandRuntime.bindings}
+          addonBindings={commandRuntime.addonBindings}
         />
       )}
       <Toolbar

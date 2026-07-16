@@ -9,6 +9,7 @@ import type { NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import type { FrameTransform } from "@tikz-editor/core/coords/index";
 import type { Dispatch, SetStateAction } from "react";
 
+import type { AddonContextMenu } from "../../addons/context-menu";
 import type { SessionSnapshot } from "../../compute";
 import type { CanvasTransform, EditorAction } from "../../store/types";
 import type { CanvasContextMenuTarget } from "../../context-menu";
@@ -43,6 +44,7 @@ export type CanvasContextMenuState = {
   target: CanvasContextMenuTarget;
   anchor: ViewportPoint;
   handleIdOverride?: string | null;
+  addonMenu?: AddonContextMenu | null;
   includeEditEquationForSingleNode?: boolean;
   nodePositioningAction?: "position-relative" | "convert-absolute" | null;
   includePathSubmenuForSingleSelection?: boolean;

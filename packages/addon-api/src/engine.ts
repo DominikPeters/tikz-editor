@@ -349,6 +349,62 @@ export type AddonInspectorSection = {
 };
 
 /**
+ * An insertion template: the shared primitive behind add-on menu items and
+ * toolbar tools. The host inserts the generated snippet through its normal
+ * add-element machinery (undo, history, incremental rendering included).
+ */
+export type AddonTemplate = {
+  /** Namespaced id: "addon:<addonId>:<template>". */
+  id: `addon:${string}`;
+  label: string;
+  /**
+   * SVG path data (a single `d` string in a 24x24 viewBox, rendered with the
+   * host's icon styling). Not full SVG — no markup crosses the boundary.
+   * Omitted: the host shows a generic add-on glyph.
+   */
+  iconPath?: string;
+  /**
+   * Format the source snippet for a target point (world pt). For
+   * "drag-rect" placement, `opposite` is the second corner while the user
+   * drags open the rectangle; it is absent for menu insertion and plain
+   * clicks, in which case the template picks its own default size.
+   */
+  generateSource(at: WorldPoint, opposite?: WorldPoint): string;
+  /**
+   * Canvas placement behavior. "click" places at the click point;
+   * "drag-rect" opens a rectangle (click-drag) with a live preview, falling
+   * back to defaults on a plain click; "none" is menu-only (inserted at the
+   * visible canvas center). Default "click".
+   */
+  placement?: "click" | "drag-rect" | "none";
+};
+
+export type AddonMenuAction = {
+  /** Namespaced command id: "addon:<addonId>:<command>". */
+  commandId: `addon:${string}`;
+  label: string;
+  /** What the command does. Data, not a callback: introspectable and native-menu-serializable. */
+  action: { kind: "insert-template"; templateId: `addon:${string}` };
+};
+
+/**
+ * The add-on's Insert-menu presence: exactly one inline item, or a labeled
+ * submenu grouping several actions — the add-on chooses the shape.
+ */
+export type AddonMenuContribution =
+  | { kind: "item"; item: AddonMenuAction }
+  | { kind: "submenu"; label: string; items: AddonMenuAction[] };
+
+/** A context-menu item built at menu-open time; carries its plain-data edit. */
+export type AddonContextMenuItem = {
+  /** Namespaced command id, unique within the open menu. */
+  commandId: `addon:${string}`;
+  label: string;
+  /** Plain-data edit dispatched through the engine's applyEdit when clicked. */
+  edit: unknown;
+};
+
+/**
  * The ui entry of an add-on: main-thread-only contributions, loaded lazily.
  * Unlike engine payloads, these objects may carry functions — they never
  * cross a worker or snapshot boundary.
@@ -357,6 +413,16 @@ export type AddonUi = {
   manifest: AddonManifest;
   /** Inspector sections for a selected claimed statement. */
   inspector?(statement: AddonStatement): AddonInspectorSection[];
+  /** Insertion templates powering menu items and toolbar tools. */
+  templates?: AddonTemplate[];
+  /** The add-on's Insert-menu contribution (one item or one submenu). */
+  insertMenu?: AddonMenuContribution;
+  /**
+   * Context-menu items for a right-clicked claimed statement, built per
+   * open with the statement and click position (world pt) in hand.
+   * Empty/omitted contributes nothing.
+   */
+  contextMenu?(statement: AddonStatement, context: { world: WorldPoint }): AddonContextMenuItem[];
 };
 
 /** A statically registered add-on: engine plus optional ui entry. */

@@ -329,6 +329,9 @@ tikzducks ("Insert duck"), and the smiley test add-on are all instances.
 
 ## Implementation plan
 
+**Status: implemented** (all six steps landed together, validated by the
+smiley add-on's unit + e2e coverage).
+
 Each step lands independently, validated by the smiley add-on + tests.
 
 1. **Core template kind.** `{ kind: "addonSource"; source: string }` in
@@ -342,8 +345,8 @@ Each step lands independently, validated by the smiley add-on + tests.
 3. **Command runtime opening.** `AnyMenuCommandId`, `addonBindings` map
    built from the active runtime, `runCommand`/`getCommandState`/
    `AppMenuBar`/native-menu id widening. Unit test:
-   `runCommand("addon:smiley:insert-smiley")` inserts at the canvas
-   center and the statement renders.
+   `runCommand("addon:smiley:insert-smiley")` arms the addonTemplate
+   tool with the smiley template.
 4. **Menu assembly.** `buildMenuDefinition` with the add-on group in
    Insert (item vs submenu per contribution shape); runtime-revision
    dependency in App.tsx. e2e: menu shows "Insert smiley", clicking it
@@ -364,10 +367,9 @@ with e2e coverage riding the `VITE_TEST_ADDONS` harness.
 - **Icon guidelines:** path data implies a single-color glyph; if
   add-ons want two-tone icons the host would need a fill+stroke
   convention or a second path. Start strict (one path, one color).
-- **Drag-to-size placement:** pgfplots' axis wants a drag-defined
-  rectangle eventually (`placement: "drag-rect"` receiving two corners).
-  The template signature accommodates it (add a second optional point)
-  but the canvas interaction is deferred.
+- ~~**Drag-to-size placement**~~ — implemented: `placement: "drag-rect"`
+  rides the `tool-create` drag machinery with a content ghost preview
+  (see "Toolbar tools" above).
 - **Context items on multi-selection:** v1 contributes only for a
   single claimed statement; batch actions ("normalize all axes") would
   need a multi-statement hook — defer until a real use appears.

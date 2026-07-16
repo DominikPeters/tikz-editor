@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject
 } from "react";
-import type { AppMenuCommandId } from "../../app-menu";
+import type { AddonMenuCommandId, AnyMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
 import type { EditorPlatform } from "../../platform/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
@@ -47,7 +47,7 @@ import type { SvgBounds, WorldPoint } from "../coords/types";
 import { fmt, worldToSvgY, type RulerTick, type VisibleRanges } from "./geometry";
 import { CanvasContextMenu } from "../CanvasContextMenu";
 import { RenderedTooltip } from "../RenderedTooltip";
-import type { CommandBindings, CommandOrigin } from "../editor-command-runtime";
+import type { CommandBinding, CommandBindings, CommandOrigin } from "../editor-command-runtime";
 import type { GridLines } from "./useCanvasGuidesAndRulers";
 import type { GuideOrientation } from "./types";
 import type { HitRegion } from "./hit-regions";
@@ -159,9 +159,10 @@ type CanvasPanelViewProps = {
   platform: EditorPlatform;
   contextMenuState: CanvasContextMenuState | null;
   commandRuntimeBindings: CommandBindings;
+  commandRuntimeAddonBindings?: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
   contextMenuDefinition: CanvasContextMenuDefinition;
   onContextMenuClose: () => void;
-  onContextMenuCommandRun: (commandId: AppMenuCommandId, origin: CommandOrigin) => void;
+  onContextMenuCommandRun: (commandId: AnyMenuCommandId, origin: CommandOrigin) => void;
   dragTooltip: DragTooltipState | null;
   dragTooltipBoundary: { left: number; top: number; right: number; bottom: number } | null;
   warning: string | null;
@@ -265,6 +266,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     platform,
     contextMenuState,
     commandRuntimeBindings,
+    commandRuntimeAddonBindings,
     contextMenuDefinition,
     onContextMenuClose,
     onContextMenuCommandRun,
@@ -843,6 +845,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               }}
               target={contextMenuState?.target ?? "canvas-empty"}
               bindings={commandRuntimeBindings}
+              addonBindings={commandRuntimeAddonBindings}
               definition={contextMenuDefinition}
               containerRef={viewportRef}
               onClose={onContextMenuClose}

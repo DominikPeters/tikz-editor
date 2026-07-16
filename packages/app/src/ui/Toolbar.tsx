@@ -19,7 +19,13 @@ import { ToolbarToolPopup, ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } f
 import popupCss from "./ToolbarToolPopup.module.css";
 import type { ToolMode } from "../store/types";
 import { isMacLikePlatform } from "./key-labels";
+import { listAddonToolTemplates, type AddonToolTemplate } from "../addons/templates";
+import { useAddonRuntimeRevision } from "../addons/registry";
 import css from "./Toolbar.module.css";
+
+/** Generic puzzle-piece glyph for add-on tools without an iconPath. */
+const GENERIC_ADDON_TOOL_ICON_PATH =
+  "M10 3a2 2 0 0 1 4 0v1h4a1 1 0 0 1 1 1v4h-1a2 2 0 1 0 0 4h1v4a1 1 0 0 1-1 1h-4v-1a2 2 0 1 0-4 0v1H6a1 1 0 0 1-1-1v-4H4a2 2 0 1 1 0-4h1V5a1 1 0 0 1 1-1h4z";
 
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   id: option.value,
@@ -36,6 +42,10 @@ type ToolbarProps = {
 
 export function Toolbar({ updateChip = null }: ToolbarProps) {
   const toolMode = useEditorStore((s) => s.toolMode);
+  const activeAddonTemplateId = useEditorStore((s) => s.activeAddonTemplateId);
+  const addonRuntimeRevision = useAddonRuntimeRevision();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- addon templates live outside React state; the revision signal tracks them
+  const addonToolTemplates = useMemo(() => listAddonToolTemplates(), [addonRuntimeRevision]);
   const bucketFillColor = useEditorStore((s) => s.bucketFillColor);
   const selectedAddShape = useEditorStore((s) => s.selectedAddShape);
   const selectedAddMatrixRows = useEditorStore((s) => s.selectedAddMatrixRows);
@@ -340,6 +350,33 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
     );
   };
 
+  const renderAddonTemplateButton = (template: AddonToolTemplate) => {
+    const isActive = toolMode === "addonTemplate" && activeAddonTemplateId === template.id;
+
+    return (
+      <RenderedTooltip key={template.id} content={template.label}>
+        <button
+          type="button"
+          className={[css.btn, isActive ? css.btnActive : ""].filter(Boolean).join(" ")}
+          aria-label={template.label}
+          data-testid={`toolbar-addon-${template.id}`}
+          onClick={() => {
+            dispatch(
+              isActive
+                ? { type: "SET_TOOL_MODE", mode: "select" }
+                : { type: "SET_TOOL_MODE", mode: "addonTemplate", addonTemplateId: template.id }
+            );
+            setOpenPopupMode(null);
+          }}
+        >
+          <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true">
+            <path d={template.iconPath ?? GENERIC_ADDON_TOOL_ICON_PATH} fill="currentColor" fillRule="evenodd" />
+          </svg>
+        </button>
+      </RenderedTooltip>
+    );
+  };
+
   return (
     <div className={`${css.toolbar}${isMacDesktop ? ` ${css.toolbarDesktop}` : ""}`} data-tauri-drag-region data-select="chrome">
       {showAppTitle ? (
@@ -367,6 +404,8 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
           }
           return separator ? [separator, button] : [button];
         })}
+        {addonToolTemplates.length > 0 ? <div className={css.separator} /> : null}
+        {addonToolTemplates.map(renderAddonTemplateButton)}
       </div>
       <div className={css.spacer} />
       {updateChip ? (

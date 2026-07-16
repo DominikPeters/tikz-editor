@@ -34,12 +34,22 @@ export function createTemplateForToolDrag(
     selectedAddShape?: string;
     strokeColor?: string;
     fillColor?: string;
+    /** Active add-on template's snippet generator (addonTemplate mode). */
+    addonGenerateSource?: (at: WorldPoint, opposite?: WorldPoint) => string;
   }
 ): ElementTemplate {
   const dx = endWorld.x - startWorld.x;
   const dy = endWorld.y - startWorld.y;
   const dragDistance = Math.hypot(dx, dy);
   const hasDrag = dragDistance >= 1e-3;
+
+  if (mode === "addonTemplate") {
+    const generate = options?.addonGenerateSource;
+    return {
+      kind: "addonSource",
+      source: generate ? generate(startWorld, hasDrag ? endWorld : undefined) : ""
+    };
+  }
   const hasShapeDrag =
     Math.max(Math.abs(dx), Math.abs(dy)) >= MIN_SHAPE_DRAG_DIMENSION_PT;
 

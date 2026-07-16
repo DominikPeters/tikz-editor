@@ -44,6 +44,7 @@ const MAX_DEVELOPER_LOG_DEPTH = 4;
 function initialUiState(): WorkspaceEphemeralState {
   return {
     toolMode: "select",
+    activeAddonTemplateId: null,
     canvasTransform: DEFAULT_CANVAS_TRANSFORM,
     hoveredElementId: null,
     activeCanvasDragKind: null,
@@ -1090,11 +1091,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
-    case "SET_TOOL_MODE":
+    case "SET_TOOL_MODE": {
       if (readDocument(workspace.documents, activeId)?.assistantLockReason) return state;
-      if (ui.toolMode === action.mode) return state;
-      ui = { ...ui, toolMode: action.mode };
+      const nextAddonTemplateId = action.mode === "addonTemplate" ? action.addonTemplateId ?? null : null;
+      if (ui.toolMode === action.mode && ui.activeAddonTemplateId === nextAddonTemplateId) return state;
+      ui = { ...ui, toolMode: action.mode, activeAddonTemplateId: nextAddonTemplateId };
       break;
+    }
 
     case "SET_CANVAS_TRANSFORM":
       ui = { ...ui, canvasTransform: action.transform };

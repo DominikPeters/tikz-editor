@@ -27,7 +27,7 @@ export type SmileyPayload = {
 export const SMILEY_MANIFEST: AddonManifest = {
   id: "smiley",
   version: "0.0.1",
-  apiVersion: "^0.1.0",
+  apiVersion: "^0.2.0",
   displayName: "Smiley (test add-on)",
   license: "MIT",
   sourceUrl: "https://example.invalid/smiley",
@@ -250,8 +250,61 @@ export function createSmileyAddon(): AddonRegistration {
     }
   };
 
+  const formatUnits = (value: number) => String(Math.round((value / PT_PER_UNIT) * 1000) / 1000);
+
   const ui: AddonUi = {
     manifest,
+    templates: [
+      {
+        id: "addon:smiley:smiley",
+        label: "Smiley",
+        // Filled smiley glyph (24x24, evenodd cutouts for eyes and mouth).
+        iconPath:
+          "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" +
+          "M8.5 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z" +
+          "M15.5 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z" +
+          "M6.6 14.2c1.1 2.5 3 3.8 5.4 3.8s4.3-1.3 5.4-3.8l-1.8-.8c-.8 1.8-2 2.6-3.6 2.6s-2.8-.8-3.6-2.6z",
+        placement: "drag-rect",
+        generateSource: (at, opposite) => {
+          if (!opposite) {
+            return `\\smiley (${formatUnits(at.x)},${formatUnits(at.y)});`;
+          }
+          const centerX = (at.x + opposite.x) / 2;
+          const centerY = (at.y + opposite.y) / 2;
+          const radius = Math.max(
+            0.1 * PT_PER_UNIT,
+            Math.max(Math.abs(opposite.x - at.x), Math.abs(opposite.y - at.y)) / 2
+          );
+          return `\\smiley[radius=${formatUnits(radius)}] (${formatUnits(centerX)},${formatUnits(centerY)});`;
+        }
+      }
+    ],
+    insertMenu: {
+      kind: "item",
+      item: {
+        commandId: "addon:smiley:insert-smiley",
+        label: "Smiley",
+        action: { kind: "insert-template", templateId: "addon:smiley:smiley" }
+      }
+    },
+    contextMenu: (statement) => {
+      if (statement.kind !== "AddonCommand" || statement.commandName !== "\\smiley") {
+        return [];
+      }
+      const payload = statement.payload as SmileyPayload | undefined;
+      const radius = (payload?.radius ?? PT_PER_UNIT) / PT_PER_UNIT;
+      return [
+        {
+          commandId: "addon:smiley:grow",
+          label: "Grow smiley",
+          edit: {
+            kind: "set-radius",
+            statementId: statement.id,
+            radius: Math.round(radius * 1.25 * 1000) / 1000
+          } satisfies SmileyEdit
+        }
+      ];
+    },
     inspector: (statement) => {
       if (statement.kind !== "AddonCommand" || statement.commandName !== "\\smiley") {
         return [];

@@ -7,6 +7,8 @@ import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { distanceSquared, fmt, worldToSvgPoint, worldToSvgY } from "./geometry";
+import { buildAddonGhostPathData, findAddonTemplate } from "../../addons/ghost";
+import { useEditorStore } from "../../store/store";
 import { resolveBezierControlsFromBend } from "./interaction-helpers";
 import { resolveAddShapeDraft, resolveAddShapeOriginFromDrag } from "./add-shape-draft";
 import {
@@ -392,6 +394,17 @@ export function useCanvasDerivedState(args: UseCanvasDerivedStateArgs) {
         rx: width / 2,
         ry: height / 2
       };
+    }
+
+    if (toolDraft.toolMode === "addonTemplate") {
+      const template = findAddonTemplate(useEditorStore.getState().activeAddonTemplateId);
+      if (!template) {
+        return null;
+      }
+      const d = buildAddonGhostPathData(template, toolDraft.startWorld, toolDraft.currentWorld, (point) =>
+        worldToSvgPoint(point, svgResult.viewBox)
+      );
+      return d ? { kind: "path", d } : null;
     }
 
     const dx = toolDraft.currentWorld.x - toolDraft.startWorld.x;

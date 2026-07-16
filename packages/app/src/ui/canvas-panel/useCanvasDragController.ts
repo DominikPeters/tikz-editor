@@ -64,6 +64,8 @@ import { angleDeg, normalizeSignedDeg, resolveDraggedRotateDeg } from "./rotate-
 import type { ResizeFrame } from "./resize-frames";
 import { resolveScopeAwareMarqueeSelection } from "./scope-overlay";
 import { toolCreateSnapKind } from "../tool-config";
+import { findAddonTemplate } from "../../addons/ghost";
+import { useEditorStore } from "../../store/store";
 import type {
   DragState,
   GridResizeSnapConfig
@@ -1027,10 +1029,23 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           return;
         }
 
+        const activeAddonTemplate =
+          drag.toolMode === "addonTemplate"
+            ? findAddonTemplate(useEditorStore.getState().activeAddonTemplateId)
+            : null;
+        if (drag.toolMode === "addonTemplate" && !activeAddonTemplate) {
+          setToolDraft(null);
+          setSnapLines([]);
+          setDragState(null);
+          return;
+        }
         const rawTemplate = createTemplateForToolDrag(drag.toolMode, drag.startWorld, finalWorld, {
           selectedAddShape,
           strokeColor: creationStrokeColor,
-          fillColor: creationFillColor
+          fillColor: creationFillColor,
+          addonGenerateSource: activeAddonTemplate
+            ? (at, opposite) => activeAddonTemplate.generateSource(at, opposite)
+            : undefined
         });
         const template =
           rawTemplate.kind === "line"

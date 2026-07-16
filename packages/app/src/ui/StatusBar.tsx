@@ -354,6 +354,7 @@ function resolveToolCreateModifierHint(toolMode: ToolMode, keys: ModifierKeyLabe
     case "addCircle":
     case "addArrow":
     case "addBezier":
+    case "addonTemplate":
       return snapHint;
   }
 }

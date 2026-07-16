@@ -12,10 +12,12 @@ import {
 import { px, viewportPoint } from "@tikz-editor/core/coords/index";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 
-import { APP_MENU_COMMAND_IDS } from "../../app-menu";
-import type { CommandBindings } from "../editor-command-runtime";
+import { APP_MENU_COMMAND_IDS, type AddonMenuCommandId } from "../../app-menu";
+import { buildAddonContextMenu, type AddonContextMenu } from "../../addons/context-menu";
+import { resolveCommandBinding, type CommandBinding, type CommandBindings } from "../editor-command-runtime";
 import { buildCanvasContextMenuDefinition, type CanvasContextMenuTarget } from "../../context-menu";
 import type { getActiveEditorPlatform } from "../../platform/current";
+import type { MenuCommandStates } from "../../platform/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { resolveEquationNodeTarget } from "../equation-utils";
 import type { ClientPoint, WorldPoint } from "../coords/types";
@@ -36,6 +38,8 @@ type PendingNativeContextMenuRequest = {
 };
 
 type CanvasPlatform = ReturnType<typeof getActiveEditorPlatform>;
+
+const EMPTY_ADDON_BINDINGS: ReadonlyMap<AddonMenuCommandId, CommandBinding> = new Map();
 
 type MatrixMultiContextMenuOptions = {
   includeMatrixMultiRemoveRow: boolean;
@@ -88,6 +92,7 @@ export type UseCanvasContextMenuControllerArgs = {
   state: CanvasContextMenuRuntimeState;
   platform: CanvasPlatform;
   commandBindings: CommandBindings;
+  commandAddonBindings?: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
   source: string;
   snapshot: CanvasSnapshot;
   toolMode: ToolMode;
@@ -105,6 +110,7 @@ export function useCanvasContextMenuController({
   state,
   platform,
   commandBindings,
+  commandAddonBindings = EMPTY_ADDON_BINDINGS,
   source,
   snapshot,
   toolMode,
@@ -135,7 +141,8 @@ export function useCanvasContextMenuController({
         includeMatrixMultiInsertRowBelow?: boolean;
         includeMatrixMultiInsertColumnLeft?: boolean;
         includeMatrixMultiInsertColumnRight?: boolean;
-      } = {}
+      } = {},
+      addonMenu: AddonContextMenu | null = null
     ) => {
       const definition = buildCanvasContextMenuDefinition({
         includeEditEquationForSingleNode: options.includeEditEquationForSingleNode,
@@ -149,11 +156,24 @@ export function useCanvasContextMenuController({
         includeMatrixMultiInsertColumnLeft: options.includeMatrixMultiInsertColumnLeft,
         includeMatrixMultiInsertColumnRight: options.includeMatrixMultiInsertColumnRight
       });
+      const items = addonMenu
+        ? [...definition[target], { kind: "separator" as const }, ...addonMenu.items]
+        : definition[target];
+      const commandStates: MenuCommandStates = { ...commandBindings };
+      if (addonMenu) {
+        for (const [commandId, binding] of addonMenu.bindings) {
+          commandStates[commandId] = { enabled: binding.enabled, checked: binding.checked };
+        }
+      }
       void platform.menu?.showNativeContextMenu?.({
-        items: definition[target],
-        commandStates: commandBindings,
+        items,
+        commandStates,
         onCommandRun: (commandId, origin) => {
-          const binding = commandBindings[commandId];
+          const binding =
+            (commandId.startsWith("addon:")
+              ? addonMenu?.bindings.get(commandId as AddonMenuCommandId)
+              : undefined) ??
+            resolveCommandBinding({ bindings: commandBindings, addonBindings: commandAddonBindings }, commandId);
           if (!binding?.enabled) {
             return;
           }
@@ -161,7 +181,13 @@ export function useCanvasContextMenuController({
         }
       });
     },
-    [commandBindings, platform.menu]
+    [commandAddonBindings, commandBindings, platform.menu]
+  );
+
+  const resolveAddonContextMenu = useCallback(
+    (clickedSourceId: string | null, world: WorldPoint | null): AddonContextMenu | null =>
+      buildAddonContextMenu(snapshot.parseResult, clickedSourceId, world, dispatch),
+    [dispatch, snapshot.parseResult]
   );
 
   const resolveIncludeEditEquationForSingleNode = useCallback(
@@ -279,16 +305,16 @@ export function useCanvasContextMenuController({
       parseOptions: editParseOptions
     });
 
+    const pendingClickedWorld = svgResult
+      ? viewportToWorldPoint(
+          viewportPointFromClient(pendingNativeContextMenuRequest.clientPoint, viewportRef.current),
+          canvasTransform,
+          svgResult.viewBox
+        )
+      : null;
     state.contextMenuContextRef.current = {
       clickedTargetId: pendingNativeContextMenuRequest.clickedSourceId,
-      clickedWorld:
-        svgResult
-          ? viewportToWorldPoint(
-              viewportPointFromClient(pendingNativeContextMenuRequest.clientPoint, viewportRef.current),
-              canvasTransform,
-              svgResult.viewBox
-            )
-          : null
+      clickedWorld: pendingClickedWorld
     };
 
     if (pendingNativeContextMenuTimeoutRef.current) {
@@ -317,6 +343,7 @@ export function useCanvasContextMenuController({
     );
     const includeFlattenForeach = commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH].enabled;
     const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(nativeEffectiveTarget, selectedElementIds);
+    const addonMenu = resolveAddonContextMenu(pendingNativeContextMenuRequest.clickedSourceId, pendingClickedWorld);
 
     pendingNativeContextMenuTimeoutRef.current = setTimeout(() => {
       pendingNativeContextMenuTimeoutRef.current = null;
@@ -331,7 +358,7 @@ export function useCanvasContextMenuController({
         includeMatrixMultiInsertRowBelow: matrixMultiOptions.includeMatrixMultiInsertRowBelow,
         includeMatrixMultiInsertColumnLeft: matrixMultiOptions.includeMatrixMultiInsertColumnLeft,
         includeMatrixMultiInsertColumnRight: matrixMultiOptions.includeMatrixMultiInsertColumnRight
-      });
+      }, addonMenu);
       state.setPendingNativeContextMenuRequest(null);
       viewport.focus({ preventScroll: true });
     }, 75);
@@ -348,6 +375,7 @@ export function useCanvasContextMenuController({
     dispatch,
     editParseOptions,
     platform.menu?.usesNativeContextMenus,
+    resolveAddonContextMenu,
     resolveIncludeEditEquationForSingleNode,
     resolveIncludePathSubmenuForSingleSelection,
     resolveMatrixMultiContextMenuOptions,
@@ -409,16 +437,16 @@ export function useCanvasContextMenuController({
         dispatch({ type: "SET_ACTIVE_HANDLE", handleId: clickedHandleId });
       }
 
+      const clickedWorld = svgResult
+        ? viewportToWorldPoint(
+            viewportPointFromClient(clientPoint, viewport),
+            canvasTransform,
+            svgResult.viewBox
+          )
+        : null;
       state.contextMenuContextRef.current = {
         clickedTargetId: clickedSourceId,
-        clickedWorld:
-          svgResult
-            ? viewportToWorldPoint(
-                viewportPointFromClient(clientPoint, viewport),
-                canvasTransform,
-                svgResult.viewBox
-              )
-            : null
+        clickedWorld
       };
 
       const effectiveTarget =
@@ -435,11 +463,13 @@ export function useCanvasContextMenuController({
       const includePathSubmenuForSingleSelection = resolveIncludePathSubmenuForSingleSelection(effectiveTarget, equationSourceId);
       const includeFlattenForeach = commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH].enabled;
       const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(effectiveTarget, selectedElementIds);
+      const addonMenu = resolveAddonContextMenu(clickedSourceId, clickedWorld);
 
       const nextContextMenuState: CanvasContextMenuState = {
         target: effectiveTarget,
         anchor: viewportPointFromClient(clientPoint, viewport),
         handleIdOverride: clickedHandleId,
+        addonMenu,
         includeEditEquationForSingleNode,
         nodePositioningAction,
         includePathSubmenuForSingleSelection,
@@ -473,7 +503,7 @@ export function useCanvasContextMenuController({
           includeMatrixMultiInsertColumnLeft: matrixMultiOptions.includeMatrixMultiInsertColumnLeft,
           includeMatrixMultiInsertColumnRight: matrixMultiOptions.includeMatrixMultiInsertColumnRight,
           includeMatrixMultiRemoveColumn: matrixMultiOptions.includeMatrixMultiRemoveColumn
-        });
+        }, addonMenu);
         viewport.focus({ preventScroll: true });
         return;
       }
@@ -488,6 +518,7 @@ export function useCanvasContextMenuController({
       editParseOptions,
       focusedScopeId,
       platform.menu?.usesNativeContextMenus,
+      resolveAddonContextMenu,
       resolveIncludeEditEquationForSingleNode,
       resolveIncludePathSubmenuForSingleSelection,
       resolveMatrixMultiContextMenuOptions,

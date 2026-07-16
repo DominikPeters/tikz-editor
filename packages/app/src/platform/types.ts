@@ -1,10 +1,13 @@
 import type { LinkedTextReadResult, LinkedTextWriteResult } from "../linked-file-sync.js";
 import type { DocumentFileRef, FileRevision } from "../store/types.js";
-import type { AppMenuCommandId, AppMenuDefinition, AppMenuItem } from "../app-menu/index.js";
+import type { AnyMenuCommandId, AppMenuDefinition, AppMenuItem } from "../app-menu/index.js";
 
 export type MenuCommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
 
-export type MenuCommandHandler = (commandId: AppMenuCommandId, origin: MenuCommandOrigin) => void;
+export type MenuCommandHandler = (commandId: AnyMenuCommandId, origin: MenuCommandOrigin) => void;
+
+/** Enabled/checked state per command id; add-on ids are present only while contributed. */
+export type MenuCommandStates = Partial<Record<AnyMenuCommandId, { enabled: boolean; checked?: boolean }>>;
 
 export type PlatformPersistence = {
   load: (key: string) => string | null;
@@ -85,15 +88,15 @@ export type PlatformMenu = {
   usesNativeMenuBar?: boolean;
   usesNativeContextMenus?: boolean;
   bindCommandHandler?: (handler: MenuCommandHandler) => (() => void) | void;
-  dispatchCommand?: (commandId: AppMenuCommandId, origin?: MenuCommandOrigin) => void;
+  dispatchCommand?: (commandId: AnyMenuCommandId, origin?: MenuCommandOrigin) => void;
   syncNativeMenu?: (payload: {
     definition: AppMenuDefinition;
-    commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    commandStates: MenuCommandStates;
     workspaceSignature?: string;
   }) => Promise<void> | void;
   showNativeContextMenu?: (payload: {
     items: readonly AppMenuItem[];
-    commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    commandStates: MenuCommandStates;
     onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
 };
@@ -102,7 +105,7 @@ export type DesktopContextMenuItem =
   | { kind: "separator" }
   | {
       kind: "command";
-      commandId: AppMenuCommandId;
+      commandId: AnyMenuCommandId;
       label: string;
       enabled: boolean;
       checked?: boolean;

@@ -1404,6 +1404,7 @@ function makeInput({
     activeFigureId,
     snapshot,
     toolMode: "select" as const,
+    activeAddonTemplateId: null,
     selectedElementIds,
     activeHandleId,
     historyIndex: historyIndex ?? -1,

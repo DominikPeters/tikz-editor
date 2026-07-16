@@ -5,8 +5,16 @@ import {
   type CanvasContextMenuDefinition,
   type CanvasContextMenuTarget
 } from "../context-menu";
-import type { AppMenuCommandId, AppMenuItem } from "../app-menu";
-import type { CommandOrigin, CommandBindings } from "./editor-command-runtime";
+import type { AddonMenuCommandId, AnyMenuCommandId, AppMenuItem } from "../app-menu";
+import {
+  resolveCommandBinding,
+  type CommandBinding,
+  type CommandBindings,
+  type CommandOrigin
+} from "./editor-command-runtime";
+
+const EMPTY_ADDON_BINDINGS: ReadonlyMap<AddonMenuCommandId, CommandBinding> = new Map();
+const DISABLED_BINDING: CommandBinding = { enabled: false, run: () => { /* unresolved command id */ } };
 import { clampContextMenuAnchor, type ContextMenuAnchor } from "./canvas-panel/context-menu-target";
 import { formatAccelerator } from "./key-labels";
 import css from "./CanvasContextMenu.module.css";
@@ -20,17 +28,21 @@ function ContextMenuPopup({
   items,
   path,
   bindings,
+  addonBindings,
   origin,
   onCommandRun
 }: {
   items: readonly AppMenuItem[];
   path: string;
   bindings: CommandBindings;
+  addonBindings: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
   origin: CommandOrigin;
-  onCommandRun: (commandId: AppMenuCommandId, origin: CommandOrigin) => void;
+  onCommandRun: (commandId: AnyMenuCommandId, origin: CommandOrigin) => void;
 }) {
   const hasCheckItems = items.some(
-    (item) => item.kind === "command" && bindings[item.commandId].checked != null
+    (item) =>
+      item.kind === "command" &&
+      resolveCommandBinding({ bindings, addonBindings }, item.commandId)?.checked != null
   );
 
   return (
@@ -61,6 +73,7 @@ function ContextMenuPopup({
                   items={item.items}
                   path={`${itemKey}-submenu`}
                   bindings={bindings}
+                  addonBindings={addonBindings}
                   origin={origin}
                   onCommandRun={onCommandRun}
                 />
@@ -72,7 +85,7 @@ function ContextMenuPopup({
           return null;
         }
 
-        const binding = bindings[item.commandId];
+        const binding = resolveCommandBinding({ bindings, addonBindings }, item.commandId) ?? DISABLED_BINDING;
         const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
@@ -105,6 +118,7 @@ export function CanvasContextMenu({
   anchor,
   target,
   bindings,
+  addonBindings = EMPTY_ADDON_BINDINGS,
   onClose,
   onCommandRun,
   containerRef,
@@ -115,8 +129,9 @@ export function CanvasContextMenu({
   anchor: ContextMenuAnchor;
   target: CanvasContextMenuTarget;
   bindings: CommandBindings;
+  addonBindings?: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
   onClose: () => void;
-  onCommandRun: (commandId: AppMenuCommandId, origin: CommandOrigin) => void;
+  onCommandRun: (commandId: AnyMenuCommandId, origin: CommandOrigin) => void;
   containerRef: RefObject<HTMLElement | null>;
   origin?: CommandOrigin;
   definition?: CanvasContextMenuDefinition;
@@ -239,6 +254,7 @@ export function CanvasContextMenu({
         items={items}
         path={target}
         bindings={bindings}
+        addonBindings={addonBindings}
         origin={origin}
         onCommandRun={(commandId, runOrigin) => {
           onCommandRun(commandId, runOrigin);

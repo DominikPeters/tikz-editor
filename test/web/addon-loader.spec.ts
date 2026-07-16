@@ -37,7 +37,7 @@ describe("add-on loader", () => {
 
   it("rejects add-ons targeting an incompatible api version", async () => {
     const registration = createSmileyAddon();
-    registration.engine.manifest.apiVersion = "^0.2.0";
+    registration.engine.manifest.apiVersion = "^0.3.0";
     setStaticAddonRegistrations([registration]);
     const result = await refreshAddonRuntime({ installed: {} });
     expect(result.runtime.engines.has("smiley")).toBe(false);
@@ -51,8 +51,10 @@ describe("add-on loader", () => {
       return registration.engine;
     };
     expect(checkApiVersion(withRange("^0.1.0"))).toBeNull();
-    expect(checkApiVersion(withRange("0.1.0"))).toBeNull();
-    expect(checkApiVersion(withRange("^0.2.0"))).not.toBeNull();
+    expect(checkApiVersion(withRange("^0.2.0"))).toBeNull();
+    expect(checkApiVersion(withRange("0.2.0"))).toBeNull();
+    expect(checkApiVersion(withRange("^0.3.0"))).not.toBeNull();
+    expect(checkApiVersion(withRange("0.1.0"))).not.toBeNull();
     expect(checkApiVersion(withRange("^1.0.0"))).not.toBeNull();
     expect(checkApiVersion(withRange("not-a-range"))).not.toBeNull();
   });

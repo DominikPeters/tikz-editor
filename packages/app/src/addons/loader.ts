@@ -5,7 +5,7 @@ import type { AddonsSettings } from "../settings/types";
 import { setActiveAddonRuntime } from "./registry";
 
 /** The addon-api version this host implements (kept in sync with packages/addon-api). */
-const HOST_ADDON_API_VERSION = "0.1.0";
+const HOST_ADDON_API_VERSION = "0.2.0";
 
 export type AddonLoadIssue = {
   addonId: string;
@@ -172,6 +172,11 @@ function parseSemver(value: string): Semver | null {
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
+/**
+ * Host-side compatibility policy (not npm consumer semantics): addon-api
+ * minor bumps are additive, so a 0.y host accepts any caret range with a
+ * base minor <= y. Major bumps (or a future 1.x) must match exactly.
+ */
 function satisfiesCaret(host: Semver, base: Semver): boolean {
   if (compareSemver(host, base) < 0) {
     return false;
@@ -179,10 +184,7 @@ function satisfiesCaret(host: Semver, base: Semver): boolean {
   if (base[0] > 0) {
     return host[0] === base[0];
   }
-  if (base[1] > 0) {
-    return host[0] === 0 && host[1] === base[1];
-  }
-  return host[0] === 0 && host[1] === 0 && host[2] === base[2];
+  return host[0] === 0 && host[1] >= base[1];
 }
 
 function compareSemver(left: Semver, right: Semver): number {

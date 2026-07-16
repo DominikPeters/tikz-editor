@@ -1,6 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { gotoApp, resetStorageBeforeNavigation, setSource } from "./helpers";
+import {
+  canvasViewport,
+  clickHitRegionByTargetId,
+  dragBetweenPoints,
+  gotoApp,
+  openMenuCommand,
+  readSource,
+  resetStorageBeforeNavigation,
+  setSource,
+  waitForHitRegions
+} from "./helpers";
 
 // The e2e build registers the in-repo smiley test add-on statically
 // (VITE_TEST_ADDONS=1 in the playwright web server command), so these tests
@@ -110,4 +120,63 @@ test("the add-on manager lists the smiley add-on and disabling it deactivates cl
   await expect
     .poll(() => evaluateTestApi(page, (api) => api.getSceneSourceIds()))
     .not.toEqual(expect.arrayContaining([expect.stringMatching(/^addon-command:/)]));
+});
+
+const EMPTY_SOURCE = "\\begin{tikzpicture}\n\\draw (0,0) -- (0.1,0);\n\\end{tikzpicture}";
+
+test("the Insert menu arms the smiley tool and a canvas click places a smiley", async ({ page }) => {
+  await setSource(page, EMPTY_SOURCE);
+  await expect(page.getByTestId("toolbar-addon-addon:smiley:smiley")).toBeVisible();
+
+  await openMenuCommand(page, "insert", "addon:smiley:insert-smiley");
+
+  const box = await canvasViewport(page).boundingBox();
+  if (!box) {
+    throw new Error("Missing canvas viewport bounds.");
+  }
+  await page.mouse.click(box.x + box.width / 2 + 120, box.y + box.height / 2 - 90);
+
+  await expect.poll(async () => await readSource(page)).toMatch(/\\smiley \(-?[\d.]+,-?[\d.]+\);/);
+});
+
+test("dragging with the smiley tool shows a ghost preview and inserts with the dragged size", async ({ page }) => {
+  await setSource(page, EMPTY_SOURCE);
+
+  await page.getByTestId("toolbar-addon-addon:smiley:smiley").click();
+
+  const viewport = canvasViewport(page);
+  const box = await viewport.boundingBox();
+  if (!box) {
+    throw new Error("Missing canvas viewport bounds.");
+  }
+  await dragBetweenPoints(
+    page,
+    viewport,
+    { x: box.width / 2 + 60, y: box.height / 2 - 120 },
+    { x: box.width / 2 + 180, y: box.height / 2 - 20 }
+  );
+  await expect(page.getByTestId("canvas-tool-preview-path")).toBeVisible();
+  await page.mouse.up();
+
+  await expect
+    .poll(async () => await readSource(page))
+    .toMatch(/\\smiley\[radius=[\d.]+\] \(-?[\d.]+,-?[\d.]+\);/);
+});
+
+test("right-clicking a smiley offers the add-on context-menu action", async ({ page }) => {
+  await waitForHitRegions(page, 1);
+  const clickedId = await evaluateTestApi(page, (api) =>
+    api.getSceneSourceIds().find((id) => id.startsWith("addon-command:"))
+  );
+  expect(clickedId).toBeTruthy();
+
+  await clickHitRegionByTargetId(page, clickedId!, { button: "right" });
+  const growItem = page.getByTestId("canvas-context-cmd-addon:smiley:grow");
+  await expect(growItem).toBeVisible();
+  // The appended add-on item sits at the bottom of the long selection menu,
+  // which can overflow the test viewport — dispatch the click directly.
+  await growItem.dispatchEvent("click");
+
+  // The clicked smiley's radius grows by 25% (1 -> 1.25 or 0.6 -> 0.75).
+  await expect.poll(async () => await readSource(page)).toMatch(/radius=(1\.25|0\.75)/);
 });

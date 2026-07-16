@@ -199,7 +199,8 @@ export const TOOL_CREATE_MODES = [
   "addRect",
   "addEllipse",
   "addCircle",
-  "addShape"
+  "addShape",
+  "addonTemplate"
 ] as const;
 
 export type ToolCreateMode = (typeof TOOL_CREATE_MODES)[number];
@@ -243,7 +244,7 @@ export function isToolCreateMode(mode: ToolMode): mode is ToolCreateMode {
 }
 
 export function toolCreateSnapKind(mode: ToolCreateMode): SnapToolPointerKind {
-  if (mode === "addGrid" || mode === "addRect" || mode === "addEllipse" || mode === "addShape") {
+  if (mode === "addGrid" || mode === "addRect" || mode === "addEllipse" || mode === "addShape" || mode === "addonTemplate") {
     return "rect-corner";
   }
   if (mode === "addCircle") {
@@ -270,6 +271,7 @@ export const TOOL_HINTS: Partial<Record<ToolMode, string>> = {
   addShape: "Drag to set size",
   addMatrix: "Pick rows/columns, then click to place",
   addNode: "Click to place text",
+  addonTemplate: "Click to place, or drag to set size",
 };
 
 export function isCreationToolMode(mode: ToolMode): boolean {
@@ -277,7 +279,7 @@ export function isCreationToolMode(mode: ToolMode): boolean {
 }
 
 export function toolSupportsStroke(mode: ToolMode): boolean {
-  return mode !== "select" && mode !== "magnify" && mode !== "addBucket" && mode !== "addMatrix";
+  return mode !== "select" && mode !== "magnify" && mode !== "addBucket" && mode !== "addMatrix" && mode !== "addonTemplate";
 }
 
 export function toolSupportsFill(mode: ToolMode): boolean {

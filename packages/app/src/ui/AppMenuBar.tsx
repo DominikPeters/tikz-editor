@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppMenuDefinition, AppMenuItem } from "../app-menu";
-import type { CommandBindings } from "./editor-command-runtime";
+import type { AddonMenuCommandId, AppMenuDefinition, AppMenuItem } from "../app-menu";
+import { resolveCommandBinding, type CommandBinding, type CommandBindings } from "./editor-command-runtime";
+
+const EMPTY_ADDON_BINDINGS: ReadonlyMap<AddonMenuCommandId, CommandBinding> = new Map();
+const DISABLED_BINDING: CommandBinding = { enabled: false, run: () => { /* unresolved command id */ } };
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { BUILT_IN_WORKSPACES } from "./DockLayout";
 import { applyWorkspace, findActiveWorkspaceId } from "./workspace-apply";
@@ -12,12 +15,14 @@ function MenuPopup({
   path,
   nested,
   bindings,
+  addonBindings,
   onCommandRun
 }: {
   items: readonly AppMenuItem[];
   path: string;
   nested: boolean;
   bindings: CommandBindings;
+  addonBindings: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
   onCommandRun: () => void;
 }) {
   const userWorkspaces = useWorkspaceListStore((s) => s.userWorkspaces);
@@ -25,7 +30,11 @@ function MenuPopup({
   const hasWorkspaceList = items.some((item) => item.kind === "workspace-list");
   const hasCheckItems =
     hasWorkspaceList ||
-    items.some((item) => item.kind === "command" && bindings[item.commandId].checked != null);
+    items.some(
+      (item) =>
+        item.kind === "command" &&
+        resolveCommandBinding({ bindings, addonBindings }, item.commandId)?.checked != null
+    );
 
   return (
     <div className={[css.popup, nested ? css.popupNested : ""].filter(Boolean).join(" ")} role="menu" data-select="chrome">
@@ -103,13 +112,14 @@ function MenuPopup({
                 path={`${itemKey}-submenu`}
                 nested
                 bindings={bindings}
+                addonBindings={addonBindings}
                 onCommandRun={onCommandRun}
               />
             </div>
           );
         }
 
-        const binding = bindings[item.commandId];
+        const binding = resolveCommandBinding({ bindings, addonBindings }, item.commandId) ?? DISABLED_BINDING;
         const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
@@ -141,10 +151,12 @@ function MenuPopup({
 
 export function AppMenuBar({
   definition,
-  bindings
+  bindings,
+  addonBindings = EMPTY_ADDON_BINDINGS
 }: {
   definition: AppMenuDefinition;
   bindings: CommandBindings;
+  addonBindings?: ReadonlyMap<AddonMenuCommandId, CommandBinding>;
 }) {
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const menuRootRef = useRef<HTMLDivElement | null>(null);
@@ -224,6 +236,7 @@ export function AppMenuBar({
                 path={section.id}
                 nested={false}
                 bindings={bindings}
+                addonBindings={addonBindings}
                 onCommandRun={() => { setOpenSectionId(null); }}
               />
             ) : null}

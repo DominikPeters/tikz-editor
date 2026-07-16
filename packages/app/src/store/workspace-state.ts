@@ -220,6 +220,7 @@ export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEp
     workspaceVersion: normalizedWorkspace.workspaceVersion,
     recentDocumentIds: normalizedWorkspace.recentDocumentIds,
     toolMode: ui.toolMode,
+    activeAddonTemplateId: ui.activeAddonTemplateId,
     canvasTransform: ui.canvasTransform,
     hoveredElementId: ui.hoveredElementId,
     activeCanvasDragKind: ui.activeCanvasDragKind,
@@ -272,6 +273,7 @@ export function workspaceStateFromEditorState(state: EditorState): WorkspacePers
 export function uiStateFromEditorState(state: EditorState): WorkspaceEphemeralState {
   return {
     toolMode: state.toolMode,
+    activeAddonTemplateId: state.activeAddonTemplateId,
     canvasTransform: state.canvasTransform,
     hoveredElementId: state.hoveredElementId,
     activeCanvasDragKind: state.activeCanvasDragKind,

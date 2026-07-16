@@ -27,6 +27,7 @@ const TOOL_CHECKS: Record<ToolMode, readonly CapabilityCheck[]> = {
     { feature: "path_statement", layers: ["parser", "semantic", "svg", "edit"], label: "selection/move pipeline" }
   ],
   magnify: [],
+  addonTemplate: [],
   addBucket: [
     { feature: "options_structured", layers: ["edit"], label: "fill option editing" }
   ],

@@ -19,7 +19,9 @@ export type ElementTemplate =
   | { kind: "rectangle"; corner?: WorldPoint; strokeColor?: string; fillColor?: string }
   | { kind: "ellipse"; corner?: WorldPoint; strokeColor?: string; fillColor?: string }
   | { kind: "circle"; edge?: WorldPoint; strokeColor?: string; fillColor?: string }
-  | { kind: "filledCircle"; edge?: WorldPoint };
+  | { kind: "filledCircle"; edge?: WorldPoint }
+  /** Pre-generated snippet from an add-on template; inserted verbatim. */
+  | { kind: "addonSource"; source: string };
 
 export type ComplexPathSegment =
   | { kind: "line"; to: WorldPoint; toAnchor?: AnchorReference }
@@ -39,6 +41,9 @@ function wp(x: number, y: number): WorldPoint {
 }
 
 export function generateElementSource(template: ElementTemplate, at: WorldPoint): string {
+  if (template.kind === "addonSource") {
+    return template.source.trim();
+  }
   const atCoord = formatPointCm(at);
 
   switch (template.kind) {

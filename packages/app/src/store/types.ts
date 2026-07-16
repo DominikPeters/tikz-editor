@@ -24,7 +24,8 @@ export type ToolMode =
   | "addEllipse"
   | "addCircle"
   | "addArrow"
-  | "addBezier";
+  | "addBezier"
+  | "addonTemplate";
 export type CanvasDragKind = "element" | "resize" | "rotate" | "handle" | "pan" | "marquee" | "tool-create";
 export type CanvasAid = "grid" | "rulers" | "guides" | "transparencyGrid" | "documentBounds";
 export type SnapMode = "grid" | "guides" | "points" | "gaps";
@@ -167,6 +168,7 @@ export type WorkspacePersistedState = {
 export type WorkspaceEphemeralState = {
   // ── canvas slice ─────────────────────────────────────────────────────────────
   toolMode: ToolMode;
+  activeAddonTemplateId: string | null;
   canvasTransform: CanvasTransform;
   hoveredElementId: string | null;
   activeCanvasDragKind: CanvasDragKind | null;
@@ -255,6 +257,7 @@ export type EditorState = {
 
   // ── canvas slice ─────────────────────────────────────────────────────────────
   toolMode: ToolMode;
+  activeAddonTemplateId: string | null;
   canvasTransform: CanvasTransform;
   hoveredElementId: string | null;
   activeCanvasDragKind: CanvasDragKind | null;
@@ -391,7 +394,7 @@ export type EditorAction =
   | { type: "SET_FOCUSED_SCOPE"; scopeId: string | null }
   | { type: "SET_ACTIVE_HANDLE"; handleId: string | null }
   // Canvas
-  | { type: "SET_TOOL_MODE"; mode: ToolMode }
+  | { type: "SET_TOOL_MODE"; mode: ToolMode; addonTemplateId?: string | null }
   | { type: "SET_CANVAS_TRANSFORM"; transform: CanvasTransform }
   | { type: "SET_HOVERED_ELEMENT"; id: string | null }
   | { type: "SET_ACTIVE_CANVAS_DRAG"; kind: CanvasDragKind | null }

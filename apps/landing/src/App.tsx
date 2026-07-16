@@ -183,7 +183,8 @@ const TOOL_COPY: Record<ToolPreviewMode, { name?: string; description: ReactNode
 };
 
 const TOOL_CATALOG = TOOL_BUTTONS.map((button) => {
-  const mode: ToolPreviewMode = button.mode;
+  // TOOL_BUTTONS never contains the dynamic add-on tool mode.
+  const mode = button.mode as ToolPreviewMode;
   return {
     ...button,
     name: TOOL_COPY[mode].name ?? button.label,
