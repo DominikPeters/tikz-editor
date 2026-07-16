@@ -1,27 +1,39 @@
-# Add-On UI Contributions: Menus, Tools, Templates
+# Add-On UI Contributions: Menus, Tools, Templates, Context Menus
 
 ## Purpose
 
 Phase 2 of the add-on surface (deferred from `addon-architecture.md`,
 "Templates, menus, commands"): let add-ons contribute **menu items**,
-**toolbar tools**, and **insertion templates** so users can create add-on
-content (an axis, a smiley, a duck) without typing `\begin{axis}` by hand.
-The v1 add-on system (Phases A–D, landed 2026-07-16) covers parsing,
-evaluation, editing, inspection, completion, loading, and export; creation
-is the missing quadrant of the editing loop.
+**toolbar tools**, **insertion templates**, and **context-menu actions**
+so users can create and manipulate add-on content (an axis, a smiley, a
+duck) without typing source by hand. The v1 add-on system (Phases A–D,
+landed 2026-07-16) covers parsing, evaluation, editing, inspection,
+completion, loading, and export; creation and per-element actions are
+the missing quadrants of the editing loop.
 
-Scope for this design, in priority order:
+Scope, in priority order:
 
-1. **Menu commands** — add-on items in the Insert menu (and, sparingly,
-   other sections), dispatching add-on-defined actions.
-2. **Insertion templates** — "insert this source snippet at a canvas
-   position", the shared primitive both menus and tools bottom out in.
-3. **Toolbar creation tools** — a click-to-place tool mode per contributed
-   template (drag-to-size deferred).
+1. **Insertion templates** — "insert this source snippet at a canvas
+   position", the shared primitive menus and tools bottom out in.
+2. **Menu contributions** — add-on entries in the Insert menu: a single
+   item or a per-add-on submenu, the add-on chooses.
+3. **Toolbar creation tools** — a click-to-place tool per contributed
+   template, with add-on-supplied path-data icons.
+4. **Context-menu actions** — add-on items when a claimed element is
+   right-clicked.
 
-Non-goals: add-on panels/modals, context-menu contributions, add-on
-keyboard shortcuts beyond what menus give for free, and migrating core's
-own tools onto the new registry (design-for, don't-do, as usual).
+Non-goals: add-on panels/modals, add-on keyboard shortcuts beyond what
+menus give for free, arbitrary SVG/React icons across the API boundary,
+and migrating core's own tools onto the new registries.
+
+**Dropped constraint: worker safety.** The original architecture kept
+engine entries worker-safe for a planned compute-worker migration. That
+migration was tried and abandoned — snapshot transfer volume tanked
+performance — and is not coming back. Worker transferability is no
+longer a design input; contributions may live wherever is simplest.
+(Plain-data payloads for parse/eval results remain required — they ride
+inside snapshots and history — but "no functions on the ui entry
+boundary" style rules are gone.)
 
 ## Current state (what the code actually looks like)
 
@@ -36,16 +48,14 @@ The audit of the closed dispatch points, with anchors:
   `createEditorCommandRuntime` binds every id.
 - **The menu is a pure data tree.** `APP_MENU_DEFINITION`
   (`app-menu/default-menu.ts`) is a const of sections/items with
-  separators, submenus, and per-item `platforms` scoping; it is filtered
-  per platform by `filterAppMenuDefinitionForTarget` (App.tsx) and carries
-  no behavior. Good news for injection: contributing items = producing a
-  new definition value.
+  separators, submenus, and per-item `platforms` scoping; filtered per
+  platform by `filterAppMenuDefinitionForTarget` (App.tsx); no behavior.
+  Contributing items = producing a new definition value.
 - **The desktop native menu caches by content.** `native-menu.ts` only
   rebuilds when `JSON.stringify(definition)` changes; command nodes carry
   the command id and round-trip through `dispatchCommand(id as
-  AppMenuCommandId)`. Dynamic items therefore work iff (a) the definition
-  value changes when add-ons change and (b) contributed ids survive the
-  cast boundary.
+  AppMenuCommandId)`. Dynamic items work iff the definition value changes
+  when add-ons change and contributed ids survive the cast boundary.
 - **Tools are a parallel registry.** `TOOL_BUTTONS`
   (`ui/tool-config.tsx:174-190`) drives the toolbar; `ToolMode`
   (`store/types.ts:12-27`) is a closed union held in the store; creation
@@ -53,44 +63,53 @@ The audit of the closed dispatch points, with anchors:
   `ElementTemplate` (`core/src/edit/element-templates.ts:13-22`), whose
   `generateElementSource` emits a TikZ snippet and
   `insertElementIntoSource` splices it before `\end{tikzpicture}`.
+- **The canvas context menu is target-keyed data.**
+  `resolveCanvasContextMenuTarget` (`canvas-panel/context-menu-target.ts`)
+  classifies the clicked element (it already parses the clicked
+  statement via `parseTikzForEdit`) into a closed
+  `CanvasContextMenuTarget` union; `buildCanvasContextMenuDefinition`
+  (`context-menu/canvas-context-menu.ts`) maps each target to
+  `AppMenuItem[]`. The desktop path serializes those items and
+  dispatches back by command id
+  (`native-menu.ts serializeDesktopContextMenuItems`).
 - **Web keyboard shortcuts are hand-coded** in App.tsx's `onKeyDown`;
-  menu `accelerator` strings are display-only on web. Single-letter tool
-  shortcuts come from `TOOL_BUTTONS[].shortcut` via
-  `toolModeFromShortcut`.
+  menu `accelerator` strings are display-only on web.
 
 ## Design
 
 ### The shared primitive: add-on source templates
 
-Everything in this phase lowers to one operation the host already has:
-**insert a source snippet at a position** (`addElement` ≈ generate +
-splice). Rather than opening the `ElementTemplate` union (whose kinds are
-geometry-specific), add-ons contribute *source templates*:
+Everything creation-shaped lowers to one operation the host already
+has: **insert a source snippet at a position** (`addElement` ≈ generate
++ splice). Rather than opening the geometry-specific `ElementTemplate`
+union per add-on, add-ons contribute *source templates* on the **ui
+entry** (with the worker constraint gone, all UI-facing contributions
+live in one place; an add-on without a ui entry contributes no creation
+UI):
 
 ```ts
-// addon-api additions (engine entry — worker-safe, plain data + one pure fn)
+// addon-api additions
 export type AddonTemplate = {
   /** Namespaced id: "addon:<addonId>:<template>". */
   id: `addon:${string}`;
   label: string;                    // "Smiley", "Axis", "Duck"
-  /** Where creation is anchored: the template receives the target point. */
+  /**
+   * SVG path data (a single `d` string, 24x24 viewBox, filled by the
+   * host's icon styling). Not full SVG — no markup crosses the boundary.
+   * Omitted: the host shows a generic add-on glyph.
+   */
+  iconPath?: string;
+  /** The template receives the target point (world pt) and formats its own snippet. */
   generateSource(at: WorldPoint): string;
   /**
-   * How the canvas tool places it. "click" inserts at the click point;
-   * "none" means menu-only (inserted at the visible canvas center).
+   * How the canvas tool places it. "click" inserts at the click point
+   * and gets a toolbar button; "none" means menu-only (inserted at the
+   * visible canvas center).
    */
   placement?: "click" | "none";
 };
-```
 
-`generateSource` is a pure function of the target point — the add-on
-formats its own snippet (`\smiley (1.2,0.8);`,
-`\begin{axis}...\end{axis}`). It lives on the **engine** entry (pure,
-worker-safe, no DOM) so the same template list can later power a worker
-or CLI. Templates are declared on the engine:
-
-```ts
-export type AddonEngine = {
+export type AddonUi = {
   // ...existing...
   templates?: AddonTemplate[];
 };
@@ -104,12 +123,12 @@ core — the only core-union change this design needs:
 | { kind: "addonSource"; source: string }   // pre-generated snippet
 ```
 
-`generateElementSource` returns `template.source` verbatim for this kind;
-`insertElementIntoSource` and the selection/normalization behavior of
-`addElement` apply unchanged. The app builds the snippet by calling the
-add-on's `generateSource(at)` at dispatch time and wraps it as
-`{ kind: "addElement", template: { kind: "addonSource", source }, at }`.
-No new edit action; undo/history/incremental all come for free.
+`generateElementSource` returns `template.source` verbatim for this
+kind; `insertElementIntoSource`, selection, and normalization apply
+unchanged. The app calls the add-on's `generateSource(at)` at dispatch
+time and wraps it as `{ kind: "addElement", template: { kind:
+"addonSource", source }, at }`. No new edit action; undo/history/
+incremental all come for free.
 
 ### Namespaced command ids
 
@@ -121,66 +140,58 @@ export type AddonMenuCommandId = `addon:${string}`;           // "addon:smiley:i
 export type AnyMenuCommandId = AppMenuCommandId | AddonMenuCommandId;
 ```
 
-Everything that is exhaustively keyed stays exhaustive over
-`AppMenuCommandId`; add-on ids ride in parallel structures:
+Everything exhaustively keyed stays exhaustive over `AppMenuCommandId`;
+add-on ids ride in parallel structures:
 
 - `CommandBindings` keeps its `Record<AppMenuCommandId, CommandBinding>`
-  shape (so TS still enforces core coverage) and the runtime gains
-  `addonBindings: ReadonlyMap<AddonMenuCommandId, CommandBinding>`.
-  `runCommand` and `getCommandState` accept `AnyMenuCommandId` and consult
-  the map after the record. This keeps the "every core id has a binding"
-  compile-time guarantee while opening the runtime.
-- Menu item types widen: `AppMenuCommandItem.commandId: AnyMenuCommandId`.
-  The native menu's `dispatchCommand(id)` cast widens to
-  `AnyMenuCommandId` — the id is already just a string at that boundary.
+  shape (TS still enforces core coverage); the runtime gains
+  `addonBindings: ReadonlyMap<AddonMenuCommandId, CommandBinding>`,
+  consulted by `runCommand`/`getCommandState` after the record.
+- Menu item types widen: `AppMenuCommandItem.commandId:
+  AnyMenuCommandId`; the native menu's dispatch cast widens too (the id
+  is already just a string at that boundary).
 
 ### Menu contributions
 
-Add-ons declare menu items on the **ui entry** (main-thread, may carry
-functions):
+Add-ons declare their Insert-menu presence on the ui entry. **The add-on
+chooses its shape**: exactly one inline action, or a labeled submenu —
+nothing in between (an add-on with several actions must group them).
 
 ```ts
-export type AddonMenuContribution = {
+export type AddonMenuAction = {
   commandId: `addon:${string}`;
   label: string;
-  /** Only "insert" in v1; the item lands in a dedicated add-on group. */
-  section: "insert";
-  /** What the command does. v1: insert a declared template. */
+  /** v1: insert a declared template. Closed union, open by construction. */
   action: { kind: "insert-template"; templateId: `addon:${string}` };
 };
 
+export type AddonMenuContribution =
+  | { kind: "item"; item: AddonMenuAction }
+  | { kind: "submenu"; label: string; items: AddonMenuAction[] };
+
 export type AddonUi = {
   // ...existing...
-  menus?: AddonMenuContribution[];
+  insertMenu?: AddonMenuContribution;
 };
 ```
 
-The `action` field is a closed union rather than a callback: v1 has
-exactly one behavior (insert a template), and a data description keeps
-menu dispatch introspectable, serializable to the desktop native menu,
-and trivially enablement-checkable. A `{ kind: "command"; run() }`
-escape hatch can be added later without breaking anything — the union is
-open by construction.
+The `action` field is data rather than a callback so menu dispatch stays
+introspectable, serializable to the desktop native menu, and
+enablement-checkable. A `{ kind: "command" }` escape hatch can be added
+later without breaking anything.
 
-Assembly: App.tsx currently memoizes
-`filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget)`.
-That memo gains the add-on runtime revision as an input and becomes:
-
-```ts
-buildMenuDefinition(APP_MENU_DEFINITION, menuTarget, activeAddonMenus)
-```
-
-which appends, to the Insert section, one separator plus the contributed
-items (grouped per add-on, sorted by add-on id then declaration order).
+Assembly: App.tsx's menu-definition memo gains the add-on runtime
+revision as an input and becomes `buildMenuDefinition(APP_MENU_DEFINITION,
+menuTarget, activeAddonContributions)`, appending to the Insert section
+one separator plus each add-on's contribution (sorted by add-on id).
 Because this produces a **new definition value**, the desktop native
 menu's `JSON.stringify` cache key changes and it rebuilds — the existing
-mechanism already handles dynamic definitions correctly; enable/disable
-of an add-on flows through the same path.
+mechanism already handles dynamic definitions; enable/disable flows
+through the same path.
 
 Enablement: template-insert commands are enabled exactly when the
-document has an active figure (same condition as core insert tools);
-computed by the runtime, not the add-on. Disabled add-ons contribute
-nothing (the loader already rebuilds the runtime on settings changes).
+document has an active figure (same condition as core insert tools),
+computed by the runtime, not the add-on.
 
 ### Toolbar tools
 
@@ -189,57 +200,93 @@ add-on:
 
 ```ts
 // store/types.ts
-| { /* existing literals */ }
 | "addonTemplate"
 // plus store state:
 activeAddonTemplateId: `addon:${string}` | null;
 ```
 
 `SET_TOOL_MODE` gains an optional `addonTemplateId` payload. The toolbar
-renders one button per template with `placement: "click"`, using a
-generic puzzle-piece icon (add-on-supplied SVG icons are deferred —
-icons are the only part of this design that would carry markup across
-the boundary, and v1 does not need to solve that). The button behaves
-like other creation tools: click to arm, click on canvas to place, which
-dispatches the same `addElement`/`addonSource` action at the click
-point, then returns to select mode (matching one-shot placement).
+renders one button per template with `placement: "click"`, using the
+template's `iconPath` (rendered as `<svg viewBox="0 0 24 24"><path
+d={iconPath}/></svg>` with the toolbar's fill styling) or a generic
+add-on glyph when omitted. The button behaves like other creation
+tools: click to arm, click on canvas to place — dispatching the same
+`addElement`/`addonSource` action at the click point — then returns to
+select mode (one-shot placement). `isCreationToolMode` includes
+`"addonTemplate"`; snapping uses the plain point (no shape-specific
+snap kinds in v1).
 
-The canvas controller change is small: `isCreationToolMode` includes
-`"addonTemplate"`, and the placement handler looks up the active
-template, calls `generateSource(clickWorld)`, and dispatches. Snapping
-uses the plain point (no shape-specific snap kinds in v1).
+### Context-menu actions
+
+When a claimed element is right-clicked, the add-on may contribute
+actions for it. The hook mirrors the inspector provider: called at
+menu-open time with the clicked statement in hand, returning items that
+already carry their plain-data edits:
+
+```ts
+export type AddonContextMenuItem = {
+  /** Namespaced per-open command id, e.g. "addon:smiley:make-sad". */
+  commandId: `addon:${string}`;
+  label: string;
+  /** Plain-data edit dispatched through the engine's applyEdit on click. */
+  edit: unknown;
+};
+
+export type AddonUi = {
+  // ...existing...
+  /** Items for a right-clicked claimed statement; empty/omitted = no contribution. */
+  contextMenu?(statement: AddonStatement, context: { world: WorldPoint }): AddonContextMenuItem[];
+};
+```
+
+Wiring:
+
+- `resolveCanvasContextMenuTarget` already parses the clicked statement;
+  when the clicked source id belongs to a claimed statement (directly,
+  or via `findAddonStatement` for nested claims), the app calls
+  `ui.contextMenu(statement, { world })` and appends the returned items
+  (separator-prefixed) to the resolved target's item list. Targets stay
+  closed; add-on items are an append, not a new target.
+- Items are built **per open**: the app keeps a `commandId -> edit` map
+  for the open menu instance. The web menu dispatches
+  `{ kind: "addonEdit", addonId, edit }` directly; the desktop native
+  context menu serializes labels+ids as today and the dispatch callback
+  looks the edit up in the per-open map (ids round-trip as strings, as
+  they already do).
+- Building items at open time lets the add-on tailor them to the
+  statement (an axis offers different actions than an `\addplot`) and
+  to the click position (the `world` point can be baked into the edit —
+  e.g. "add data point here").
+
+Because every item bottoms out in `addonEdit`, undo/history/incremental
+behavior is identical to inspector writes; no new dispatch machinery.
 
 ### Keyboard shortcuts
 
 None in v1. Contributed menu items get no accelerators (web shortcuts
-are hand-coded in App.tsx and the letter namespace is crowded). The menu
-item itself is the discoverable path; shortcuts can follow if a real
-need appears.
+are hand-coded in App.tsx and the letter namespace is crowded). Menu and
+context-menu items are the discoverable paths.
 
-### Settings, loading, workers
+### Settings and loading
 
-No changes. Menus/tools derive from the active runtime, which the loader
-already rebuilds on enablement changes; the runtime revision signal
-already re-renders the toolbar/menu. Templates live on the engine entry
-(worker-safe by construction); menu contributions live on the ui entry
-and never cross a worker boundary.
+No changes. Menus/tools/context items derive from the active runtime,
+which the loader already rebuilds on enablement changes; the runtime
+revision signal already re-renders the affected components.
 
 ### apiVersion
 
-Additive: templates and menu contributions are optional fields, so this
-ships as addon-api **0.2.0** (minor bump), with hosts that implement it
-accepting `^0.1.0` manifests unchanged (feature-detect: add-ons declaring
-templates simply contribute nothing on a 0.1 host — but since the host
-version only moves forward, the practical rule is: add-ons requiring
-menus/tools declare `apiVersion: "^0.2.0"`).
+Additive: all new fields are optional, so this ships as addon-api
+**0.2.0** (minor bump). Add-ons requiring menus/tools declare
+`apiVersion: "^0.2.0"`.
 
 ## Litmus test
 
-Every hook above is describable without naming any concrete add-on:
-"engines may declare source templates; uis may declare Insert-menu items
-that insert a declared template; the toolbar shows a button per
-click-placeable template." pgfplots ("Insert axis"), tikzducks ("Insert
-duck"), and the smiley test add-on are all instances.
+Every hook is describable without naming a concrete add-on: "uis may
+declare source templates with path-data icons; an Insert-menu item or
+submenu that inserts declared templates; a toolbar button per
+click-placeable template; and context-menu items for right-clicked
+claimed statements." pgfplots ("Insert axis", "Add data point here"),
+tikzducks ("Insert duck"), and the smiley test add-on are all instances.
 
 ## Implementation plan
 
@@ -248,35 +295,40 @@ Each step lands independently, validated by the smiley add-on + tests.
 1. **Core template kind.** `{ kind: "addonSource"; source: string }` in
    `ElementTemplate` + `generateElementSource` case. Unit test: insert
    via `applyEditAction addElement`.
-2. **addon-api 0.2.0.** `AddonTemplate`, `AddonEngine.templates`,
-   `AddonMenuContribution`, `AddonUi.menus`; bump
-   `HOST_ADDON_API_VERSION`. Smiley declares an "Insert smiley" template
-   + menu item.
+2. **addon-api 0.2.0.** `AddonTemplate`, `AddonMenuAction`/
+   `AddonMenuContribution`, `AddonContextMenuItem`, the three `AddonUi`
+   fields; bump `HOST_ADDON_API_VERSION`. Smiley declares an "Insert
+   smiley" template (with a smiley-face `iconPath`) and a context item
+   ("Grow smiley" → radius edit).
 3. **Command runtime opening.** `AnyMenuCommandId`, `addonBindings` map
-   built from the active runtime (templates → insert commands),
-   `runCommand`/`getCommandState`/`AppMenuBar`/native-menu id widening.
-   Unit test: `runCommand("addon:smiley:insert-smiley")` inserts at the
-   canvas center and the statement renders.
+   built from the active runtime, `runCommand`/`getCommandState`/
+   `AppMenuBar`/native-menu id widening. Unit test:
+   `runCommand("addon:smiley:insert-smiley")` inserts at the canvas
+   center and the statement renders.
 4. **Menu assembly.** `buildMenuDefinition` with the add-on group in
-   Insert; runtime-revision dependency in App.tsx. e2e: menu shows
-   "Insert smiley", clicking it adds a smiley to the document.
+   Insert (item vs submenu per contribution shape); runtime-revision
+   dependency in App.tsx. e2e: menu shows "Insert smiley", clicking it
+   adds a smiley to the document.
 5. **Toolbar tool.** `"addonTemplate"` mode + `activeAddonTemplateId`,
-   toolbar button, canvas click placement. e2e: arm the tool, click the
-   canvas, smiley appears at the click point.
+   toolbar button with `iconPath`, canvas click placement. e2e: arm the
+   tool, click the canvas, smiley appears at the click point.
+6. **Context menu.** Claimed-statement detection in the target resolver,
+   per-open item map, append + dispatch on web and desktop-serialized
+   paths. e2e: right-click a smiley, "Grow smiley" appears and applying
+   it rewrites the radius in source.
 
-Steps 1–3 are core/app plumbing with unit coverage; 4–5 are the visible
-payoff with e2e coverage riding the `VITE_TEST_ADDONS` harness.
+Steps 1–3 are plumbing with unit coverage; 4–6 are the visible payoff
+with e2e coverage riding the `VITE_TEST_ADDONS` harness.
 
 ## Open questions
 
-- **Add-on tool icons:** generic icon in v1; if add-ons should supply
-  icons later, prefer a small curated glyph set or path-data-only icons
-  over arbitrary SVG/React across the boundary.
-- **Insert-menu growth:** with many add-ons enabled the Insert section
-  gets long; a per-add-on submenu ("Smiley ▸ Insert smiley") is the
-  likely shape once any add-on contributes more than ~2 items. Defer
-  until real add-ons show the shape.
+- **Icon guidelines:** path data implies a single-color glyph; if
+  add-ons want two-tone icons the host would need a fill+stroke
+  convention or a second path. Start strict (one path, one color).
 - **Drag-to-size placement:** pgfplots' axis wants a drag-defined
   rectangle eventually (`placement: "drag-rect"` receiving two corners).
   The template signature accommodates it (add a second optional point)
   but the canvas interaction is deferred.
+- **Context items on multi-selection:** v1 contributes only for a
+  single claimed statement; batch actions ("normalize all axes") would
+  need a multi-statement hook — defer until a real use appears.

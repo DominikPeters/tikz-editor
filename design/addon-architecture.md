@@ -686,6 +686,15 @@ Shell specifics:
 
 ### Worker forward-compatibility
 
+*Update 2026-07-16: obsolete. The compute-worker migration was
+prototyped and abandoned — snapshot transfer volume between the main
+thread and the worker tanked performance — and is not planned. Worker
+transferability is no longer a design constraint for add-ons; the
+plain-data payload rules remain (payloads ride inside snapshots and
+history), but "engine entries must be importable in a worker" does not
+bind future API decisions. The original rationale is kept below for
+context.*
+
 `computeSnapshot` is designed to move off the main thread. The design keeps
 that door open: engine entries are DOM-free, payloads are structured-clone
 data, and the loader records each active add-on's engine URL so a future
