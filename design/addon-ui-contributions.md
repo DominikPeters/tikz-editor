@@ -261,6 +261,19 @@ Wiring:
 Because every item bottoms out in `addonEdit`, undo/history/incremental
 behavior is identical to inspector writes; no new dispatch machinery.
 
+**Why no VS Code-style `when` clauses.** VS Code needs a declarative
+condition language because its contributions are static package.json
+declarations evaluated by an out-of-process host that cannot run
+extension code at menu-open time. Here add-ons are in-process and
+trusted, and `contextMenu()` runs at open time with the clicked
+statement in hand — visibility is an `if` in the callback, which
+subsumes any clause DSL (and covers conditions a DSL cannot, like the
+statement's parsed payload or the click position). A declarative
+condition would only earn its keep if ui entries became lazily loaded
+or if we wanted disabled-with-reason items; if that day comes, the
+shape should be a small typed condition union (consistent with menu
+actions as data), not a string expression language.
+
 ### Keyboard shortcuts
 
 None in v1. Contributed menu items get no accelerators (web shortcuts
