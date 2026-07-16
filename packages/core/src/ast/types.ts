@@ -83,7 +83,33 @@ export type Statement =
   | TikzLibraryStatement
   | ColorletStatement
   | DefineColorStatement
+  | AddonEnvironmentStatement
+  | AddonCommandStatement
   | UnknownStatement;
+
+export type AddonEnvironmentStatement = {
+  kind: "AddonEnvironment";
+  id: string;
+  span: Span;
+  raw: string;
+  addonId: string;
+  envName: string;
+  options?: OptionListAst;
+  bodySpan: Span;
+  body?: Statement[];
+  payload?: unknown;
+};
+
+export type AddonCommandStatement = {
+  kind: "AddonCommand";
+  id: string;
+  span: Span;
+  raw: string;
+  addonId: string;
+  commandName: string;
+  argsSpan: Span;
+  payload?: unknown;
+};
 
 export type PathStatement = {
   kind: "Path";

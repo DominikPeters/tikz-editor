@@ -54,6 +54,14 @@ export function unknownStatementId(statementIndex: number): string {
   return `unknown-statement:${statementIndex}`;
 }
 
+export function addonEnvironmentStatementId(statementIndex: number): string {
+  return `addon-environment:${statementIndex}`;
+}
+
+export function addonCommandStatementId(statementIndex: number): string {
+  return `addon-command:${statementIndex}`;
+}
+
 export function coordinateItemId(statementIndex: number, itemIndex: number): string {
   return `coordinate:${statementIndex}:${itemIndex}`;
 }

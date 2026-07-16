@@ -18,7 +18,9 @@ import {
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId
 } from "../ast/ids.js";
-import { mapBodyStatements, mapStatementNode, unwrapStatementLikeNode } from "../domains/statements/parse.js";
+import { mapBodyStatements, mapStatementNode, unwrapStatementLikeNode, type StatementMappingState } from "../domains/statements/parse.js";
+import type { AddonRuntime } from "../addons/runtime.js";
+import type { AddonStatementMapping } from "../addons/statement-mapping.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { findFirstChildByName, findFirstNodeByName, forEachChild, walk } from "../syntax/cursor.js";
 import { parseSyntax } from "@tikz-editor/lezer-tikz";
@@ -40,6 +42,7 @@ export type CstToAstOptions = {
   includeContextDefinitions?: boolean;
   contextDefinitions?: Statement[];
   scannedFigures?: readonly ScannedFigure[];
+  addons?: AddonRuntime;
 };
 
 type FigureNodeEntry = {
@@ -57,7 +60,10 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
   if (figureEntries.length === 0) {
     const inlineNode = findFirstNodeByName(tree.topNode, "TikzInline");
     if (inlineNode) {
-      const state = { nextStatementIndex: 0 };
+      const state: StatementMappingState = {
+        nextStatementIndex: 0,
+        addons: opts.addons ? createAddonStatementMapping(opts.addons, source, diagnostics) : undefined
+      };
       const inlineBody = mapBodyStatements(inlineNode, source, state);
       const optionsNode = findFirstChildByName(inlineNode, "OptionList");
       return {
@@ -110,7 +116,10 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
       diagnostics
     };
   }
-  const activeState = { nextStatementIndex: 0 };
+  const activeState: StatementMappingState = {
+    nextStatementIndex: 0,
+    addons: opts.addons ? createAddonStatementMapping(opts.addons, activeSyntax.parseSource, diagnostics) : undefined
+  };
   const priorDefinitions = opts.includeContextDefinitions
     ? (opts.contextDefinitions ?? collectPriorDefinitions(tree, source, activeFigureEntry.inventory.span.from, { nextStatementIndex: 0 }))
     : [];
@@ -350,6 +359,51 @@ function maskSourceToFigure(source: string, from: number, to: number): string {
     .replace(/[^\n]/g, " ");
   const figure = source.slice(safeFrom, safeTo);
   return `${prefix}${figure}`;
+}
+
+const MAX_ADDON_NESTED_PARSE_DEPTH = 16;
+
+function createAddonStatementMapping(
+  runtime: AddonRuntime,
+  parseSource: string,
+  diagnostics: Diagnostic[]
+): AddonStatementMapping {
+  let nestedParseDepth = 0;
+  const mapping: AddonStatementMapping = {
+    runtime,
+    source: parseSource,
+    diagnostics,
+    services: {
+      parseStatements: (span) => {
+        const masked = maskSourceToSpan(parseSource, span);
+        const tree = parseSyntax(masked);
+        nestedParseDepth += 1;
+        const nestedState: StatementMappingState = {
+          nextStatementIndex: 0,
+          addons: nestedParseDepth < MAX_ADDON_NESTED_PARSE_DEPTH ? mapping : undefined
+        };
+        try {
+          return mapBodyStatements(tree.topNode, masked, nestedState);
+        } finally {
+          nestedParseDepth -= 1;
+        }
+      },
+      parseOptionList: (raw, from) => parseOptionListRaw(raw, from),
+      readBalancedGroup: (from) => {
+        const group = readBalancedDelimited(parseSource, from, "{", "}");
+        return group ? { from: group.from, to: group.to } : null;
+      }
+    }
+  };
+  return mapping;
+}
+
+function maskSourceToSpan(source: string, span: { from: number; to: number }): string {
+  const safeFrom = Math.max(0, Math.min(source.length, span.from));
+  const safeTo = Math.max(safeFrom, Math.min(source.length, span.to));
+  const prefix = source.slice(0, safeFrom).replace(/[^\n]/g, " ");
+  const suffix = source.slice(safeTo).replace(/[^\n]/g, " ");
+  return `${prefix}${source.slice(safeFrom, safeTo)}${suffix}`;
 }
 
 function scanFigureInventories(

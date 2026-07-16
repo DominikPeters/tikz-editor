@@ -15,6 +15,7 @@
       "@tikz-editor/app/platform/types": ["./packages/app/src/platform/types.ts"],
       "@tikz-editor/app/store/types": ["./packages/app/src/store/types.ts"],
       "@tikz-editor/app/workspace": ["./packages/app/src/ui/workspace-apply.ts"],
+      "@tikz-editor/addon-api": ["./packages/addon-api/src/index.ts"],
       "@tikz-editor/core": ["./packages/core/src/index.ts"],
       "@tikz-editor/core/*": ["./packages/core/src/*"],
       "@tikz-editor/tex-fuzz": ["./packages/tex-fuzz/src/index.ts"],

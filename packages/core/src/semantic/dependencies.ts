@@ -8,7 +8,8 @@ export type SemanticDependencyNodeKind = "source" | "resource";
 export type SemanticDependencyResourceKind =
   | "named-coordinate"
   | "named-node-geometry"
-  | "named-path";
+  | "named-path"
+  | "coordinate-system";
 
 export type SemanticDependencyOpaqueReason =
   | "foreach-origin"

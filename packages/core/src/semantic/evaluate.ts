@@ -121,6 +121,13 @@ import type {
 } from "./types.js";
 import { BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER } from "./types.js";
 import type { SemanticSymbolDependencyEdge, SemanticUnresolvedSymbol } from "./symbol-resolver.js";
+import type { AddonEvalResult } from "@tikz-editor/addon-api";
+import type { AddonCommandStatement, AddonEnvironmentStatement } from "../ast/types.js";
+import {
+  AddonEvalBudgetExceededError,
+  createHostEvalContext,
+  toApiStatement
+} from "../addons/eval-context.js";
 
 export type EvaluateTikzResult = {
   scene: SceneFigure;
@@ -202,14 +209,35 @@ export function createSemanticEvaluationRun(
   const diagnostics: Diagnostic[] = [];
   const featureUsage = initializeFeatureUsage();
   markForeachFeaturesFromFigure(figure, featureUsage);
+  const addonPreambleConfigs = new Map<string, unknown>();
+  const addonRuntime = opts.addons?.isTriggeredBy(source) ? opts.addons : null;
+  if (addonRuntime) {
+    for (const [addonId, engine] of addonRuntime.engines) {
+      if (!engine.scanPreamble) {
+        continue;
+      }
+      try {
+        addonPreambleConfigs.set(addonId, engine.scanPreamble(source));
+      } catch (error) {
+        diagnostics.push({
+          severity: "warning",
+          code: "addon-preamble-scan-error",
+          message: `Add-on "${addonId}" preamble scan failed: ${error instanceof Error ? error.message : String(error)}`,
+          span: { from: 0, to: 0 }
+        });
+      }
+    }
+  }
   const context = createSemanticContext(
     defaultStyle(),
     identityMatrix(),
     opts.textEngine ?? null,
     source,
     opts.sourceFingerprint,
-    opts.graphicsResolver
+    opts.graphicsResolver,
+    { runtime: addonRuntime, preambleConfigs: addonPreambleConfigs }
   );
+  context.addonMaxElementsPerStatement = opts.maxAddonElementsPerStatement ?? 20_000;
   const expanded = withPgfMathRuntime(
     { rng: context.mathRandom },
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
@@ -1266,6 +1294,19 @@ function evaluateStatement(
     return [];
   }
 
+  if (statement.kind === "AddonEnvironment" || statement.kind === "AddonCommand") {
+    const addonElements = evaluateAddonClaimedStatement(
+      statement,
+      context,
+      diagnostics,
+      featureUsage,
+      statementMacroAttribution
+    );
+    if (addonElements) {
+      return addonElements;
+    }
+  }
+
   markFeature(featureUsage, "unknown_statement", "unsupported");
   diagnostics.push({
     severity: "warning",
@@ -1274,6 +1315,138 @@ function evaluateStatement(
     span: statement.span
   });
   return [];
+}
+
+function evaluateAddonClaimedStatement(
+  statement: AddonEnvironmentStatement | AddonCommandStatement,
+  context: ReturnType<typeof createSemanticContext>,
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage,
+  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>
+): SceneElement[] | null {
+  const engine = context.addonRuntime?.engineById(statement.addonId);
+  if (!engine) {
+    return null;
+  }
+
+  const handle = createHostEvalContext({
+    context,
+    statement,
+    addonId: statement.addonId,
+    diagnostics,
+    featureUsage,
+    maxElements: context.addonMaxElementsPerStatement,
+    evaluateNested: (statements, frame) => {
+      const parent = currentFrame(context);
+      let frameStyle = parent.style;
+      let frameChain = parent.styleChain;
+      let frameTransform = parent.transform;
+      const scopedCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
+      if (frame.styleEntries.length > 0) {
+        const delta = resolveContextDelta(
+          parent.style,
+          parent.transform,
+          [
+            {
+              kind: "scope",
+              sourceRef: {
+                sourceId: statement.id,
+                sourceSpan: statement.span,
+                sourceKind: "addon-frame",
+                label: statement.addonId
+              },
+              rawOptions: [
+                {
+                  span: statement.span,
+                  raw: frame.styleEntries.map((entry) => entry.raw).join(", "),
+                  entries: frame.styleEntries
+                }
+              ]
+            }
+          ],
+          scopedCustomStyles,
+          (raw) => evaluateRawCoordinate(raw, context).world,
+          parent.styleChain,
+          (raw) => resolveContextColorAliasValue(context, raw)
+        );
+        frameStyle = delta.style;
+        frameChain = delta.chain;
+        frameTransform = delta.transform;
+        pushStyleDiagnostics(diagnostics, delta.diagnostics, "Add-on frame option issue", statement.span);
+      }
+      pushFrame(context, {
+        ...parent,
+        style: frameStyle,
+        styleChain: frameChain,
+        transform: frameTransform,
+        clipChain: frame.clip ? [...parent.clipChain, frame.clip] : parent.clipChain,
+        customStyles: scopedCustomStyles,
+        picDefinitions: clonePicDefinitionRegistry(parent.picDefinitions),
+        colorAliases: parent.colorAliases.fork(),
+        macroBindings: parent.macroBindings.fork()
+      });
+      try {
+        return statements.flatMap((entry) =>
+          evaluateStatement(entry, context, diagnostics, featureUsage, statementMacroAttribution)
+        );
+      } finally {
+        popFrame(context);
+      }
+    }
+  });
+
+  let result: AddonEvalResult;
+  try {
+    result = engine.evaluate(toApiStatement(statement), handle.hostContext);
+  } catch (error) {
+    if (error instanceof AddonEvalBudgetExceededError) {
+      diagnostics.push({
+        severity: "warning",
+        code: "addon-eval-budget-exceeded",
+        message: error.message,
+        span: statement.span
+      });
+      return [];
+    }
+    diagnostics.push({
+      severity: "error",
+      code: "addon-eval-error",
+      message: `Add-on "${statement.addonId}" failed to evaluate: ${error instanceof Error ? error.message : String(error)}`,
+      span: statement.span
+    });
+    return [];
+  }
+
+  if (result.kind === "unsupported") {
+    if (result.reason) {
+      diagnostics.push({
+        severity: "warning",
+        code: "addon-unsupported",
+        message: `Add-on "${statement.addonId}": ${result.reason}`,
+        span: statement.span
+      });
+      return [];
+    }
+    return null;
+  }
+  if (result.kind === "error") {
+    diagnostics.push({
+      severity: "error",
+      code: "addon-eval-error",
+      message: `Add-on "${statement.addonId}" failed to evaluate: ${result.message}`,
+      span: statement.span
+    });
+    return [];
+  }
+  if (result.kind === "partial" && result.reason) {
+    diagnostics.push({
+      severity: "warning",
+      code: "addon-partial",
+      message: `Add-on "${statement.addonId}": ${result.reason}`,
+      span: statement.span
+    });
+  }
+  return handle.toCoreElements(result.elements);
 }
 
 function evaluatePicOperationInStatement(

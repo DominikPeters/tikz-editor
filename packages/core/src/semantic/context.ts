@@ -38,6 +38,10 @@ import {
   type SemanticSymbolResolverState
 } from "./symbol-resolver.js";
 import { createPgfRandom, type PgfRandom } from "./pgfmath/rng.js";
+import type { AddonRuntime } from "../addons/runtime.js";
+
+/** A registered "<name> cs:" resolver; args is the raw text after the colon. */
+export type AddonCoordinateSystemResolver = (args: string) => WorldPoint | null;
 
 export type NodeLayerMode = "front" | "behind";
 export type NodeDistanceValue =
@@ -190,6 +194,10 @@ export type SemanticContext = {
   statementEffectTracker: SemanticStatementEffectTracker | null;
   symbolResolver: SemanticSymbolResolver;
   mathRandom: PgfRandom;
+  addonRuntime: AddonRuntime | null;
+  addonPreambleConfigs: ReadonlyMap<string, unknown>;
+  addonCoordinateSystems: PersistentMap<string, AddonCoordinateSystemResolver>;
+  addonMaxElementsPerStatement: number;
 };
 
 export type SemanticBackgroundHookKind = "rectangle" | "grid" | "top" | "bottom" | "left" | "right";
@@ -225,6 +233,8 @@ export type SemanticStatementEffectSummary = {
   producesNamedCoordinates: Array<{ key: string; point: WorldPoint }>;
   producesNamedNodeGeometries: Array<{ key: string; geometry: NamedNodeGeometry }>;
   producesNamedPaths: string[];
+  /** In-memory only (function refs): add-on coordinate-system registrations to re-apply on replay. */
+  producesAddonCoordinateSystems: Array<{ key: string; resolve: AddonCoordinateSystemResolver }>;
   consumesNamedResources: SemanticStatementConsumedResource[];
   mutatesCurrentPoint: boolean;
   nextCurrentPoint: WorldPoint | null;
@@ -246,6 +256,7 @@ export type SemanticContextSnapshot = {
   namedCoordinateRewriteHandlesState: PersistentMapSnapshot<string, string>;
   namedNodeGeometriesState: PersistentMapSnapshot<string, NamedNodeGeometry>;
   namedPathsState: PersistentMapSnapshot<string, SceneElement[]>;
+  addonCoordinateSystemsState: PersistentMapSnapshot<string, AddonCoordinateSystemResolver>;
   currentPoint: WorldPoint | null;
   pathStartPoint: WorldPoint | null;
   editHandles: EditHandle[] | null;
@@ -268,8 +279,14 @@ type SemanticStatementEffectTracker = {
   producedNamedCoordinates: Map<string, WorldPoint>;
   producedNamedNodeGeometries: Map<string, NamedNodeGeometry>;
   producedNamedPaths: Set<string>;
+  producedAddonCoordinateSystems: Map<string, AddonCoordinateSystemResolver>;
   consumedNamedResources: Map<string, SemanticStatementConsumedResource>;
   opaqueReasons: Set<SemanticDependencyOpaqueReason>;
+};
+
+export type SemanticContextAddonOptions = {
+  runtime: AddonRuntime | null;
+  preambleConfigs: ReadonlyMap<string, unknown>;
 };
 
 export function createSemanticContext(
@@ -278,7 +295,8 @@ export function createSemanticContext(
   textEngine: NodeTextEngine | null = null,
   source = "",
   sourceFingerprint = computeSourceFingerprint(source),
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: NodeTextGraphicsResolver,
+  addons?: SemanticContextAddonOptions
 ): SemanticContext {
   const defaultNodeDistance = PT_PER_CM;
   const defaultTreeDistance = 15 * 2.84527559055;
@@ -372,7 +390,11 @@ export function createSemanticContext(
     dependencyActiveSourceId: null,
     statementEffectTracker: null,
     symbolResolver: createSemanticSymbolResolver(),
-    mathRandom: createPgfRandom(1)
+    mathRandom: createPgfRandom(1),
+    addonRuntime: addons?.runtime ?? null,
+    addonPreambleConfigs: addons?.preambleConfigs ?? new Map(),
+    addonCoordinateSystems: new PersistentMap<string, AddonCoordinateSystemResolver>(),
+    addonMaxElementsPerStatement: 20_000
   };
 }
 
@@ -452,6 +474,7 @@ export function snapshotSemanticContext(
     namedCoordinateRewriteHandlesState: context.namedCoordinateRewriteHandles.snapshot(),
     namedNodeGeometriesState: context.namedNodeGeometries.snapshot(),
     namedPathsState: context.namedPaths.snapshot(),
+    addonCoordinateSystemsState: context.addonCoordinateSystems.snapshot(),
     currentPoint: context.currentPoint ? { ...context.currentPoint } : null,
     pathStartPoint: context.pathStartPoint ? { ...context.pathStartPoint } : null,
     editHandles:
@@ -478,6 +501,7 @@ export function restoreSemanticContext(
   context.namedCoordinateRewriteHandles.restore(snapshot.namedCoordinateRewriteHandlesState);
   context.namedNodeGeometries.restore(snapshot.namedNodeGeometriesState);
   context.namedPaths.restore(snapshot.namedPathsState);
+  context.addonCoordinateSystems.restore(snapshot.addonCoordinateSystemsState);
   context.currentPoint = snapshot.currentPoint ? { ...snapshot.currentPoint } : null;
   context.pathStartPoint = snapshot.pathStartPoint ? { ...snapshot.pathStartPoint } : null;
   if (snapshot.editHandles) {
@@ -822,11 +846,42 @@ export function readNamedPath(
   return elements;
 }
 
+export function registerAddonCoordinateSystem(
+  context: SemanticContext,
+  name: string,
+  resolve: AddonCoordinateSystemResolver,
+  explicitSourceId?: string
+): void {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized || normalized === "canvas" || normalized === "perpendicular" || normalized === "intersection") {
+    return;
+  }
+  context.addonCoordinateSystems.set(normalized, resolve);
+  const tracker = context.statementEffectTracker;
+  if (tracker) {
+    tracker.producedAddonCoordinateSystems.set(normalized, resolve);
+  }
+  recordDependencyProducer(context, "coordinate-system", normalized, explicitSourceId);
+}
+
+export function resolveAddonCoordinateSystem(
+  context: SemanticContext,
+  name: string,
+  explicitSourceId?: string
+): AddonCoordinateSystemResolver | undefined {
+  const resolve = context.addonCoordinateSystems.get(name.trim().toLowerCase());
+  if (resolve != null) {
+    recordDependencyConsumer(context, "coordinate-system", name.trim().toLowerCase(), explicitSourceId);
+  }
+  return resolve;
+}
+
 export function beginStatementEffectTracking(context: SemanticContext): void {
   context.statementEffectTracker = {
     producedNamedCoordinates: new Map<string, WorldPoint>(),
     producedNamedNodeGeometries: new Map<string, NamedNodeGeometry>(),
     producedNamedPaths: new Set<string>(),
+    producedAddonCoordinateSystems: new Map<string, AddonCoordinateSystemResolver>(),
     consumedNamedResources: new Map<string, SemanticStatementConsumedResource>(),
     opaqueReasons: new Set<SemanticDependencyOpaqueReason>()
   };
@@ -847,6 +902,7 @@ export function endStatementEffectTracking(
       producesNamedCoordinates: [],
       producesNamedNodeGeometries: [],
       producesNamedPaths: [],
+      producesAddonCoordinateSystems: [],
       consumesNamedResources: [],
       mutatesCurrentPoint: pointsDiffer(options.beforeCurrentPoint, context.currentPoint),
       nextCurrentPoint: context.currentPoint ? { ...context.currentPoint } : null,
@@ -868,6 +924,10 @@ export function endStatementEffectTracking(
       geometry: structuredClone(geometry)
     })),
     producesNamedPaths: [...tracker.producedNamedPaths],
+    producesAddonCoordinateSystems: [...tracker.producedAddonCoordinateSystems.entries()].map(([key, resolve]) => ({
+      key,
+      resolve
+    })),
     consumesNamedResources: [...tracker.consumedNamedResources.values()].sort((left, right) => {
       const leftKey = `${left.kind}\u0000${left.key}`;
       const rightKey = `${right.kind}\u0000${right.key}`;
@@ -903,6 +963,10 @@ export function applyStatementEffectSummary(
   }
   for (const producedPath of summary.producesNamedPaths) {
     recordDependencyProducer(context, "named-path", producedPath, sourceId);
+  }
+  for (const produced of summary.producesAddonCoordinateSystems) {
+    context.addonCoordinateSystems.set(produced.key, produced.resolve);
+    recordDependencyProducer(context, "coordinate-system", produced.key, sourceId);
   }
   for (const consumed of summary.consumesNamedResources) {
     recordDependencyConsumer(context, consumed.kind, consumed.key, sourceId);

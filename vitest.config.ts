@@ -31,6 +31,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@tikz-editor/addon-api": path.resolve(rootDir, "./packages/addon-api/src/index.ts"),
       "@tikz-editor/core": path.resolve(rootDir, "./packages/core/src"),
       "@tikz-editor/tex-fuzz": path.resolve(rootDir, "./packages/tex-fuzz/src/index.ts"),
       "@tikz-editor/lang-tikz": path.resolve(rootDir, "./packages/lang-tikz/src/index.ts"),

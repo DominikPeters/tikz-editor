@@ -14,6 +14,7 @@ import {
 } from "./shared.js";
 import { scanTikzFigures } from "./figure-scan.js";
 import { incrementProfilingCounter } from "../profiling.js";
+import type { AddonRuntime } from "../addons/runtime.js";
 
 export type NodeTextValidationContext = {
   node: NodeItem;
@@ -30,6 +31,8 @@ export type ParseTikzOptions = {
   activeFigureId?: string | null;
   includeContextDefinitions?: boolean;
   nodeTextValidator?: (context: NodeTextValidationContext) => NodeTextValidationIssue | null;
+  /** Active add-on runtime; claimed statements route to add-on engines during CST->AST mapping. */
+  addons?: AddonRuntime | null;
 };
 
 export type ParseTikzResult = {
@@ -56,12 +59,14 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
       ? getCachedContextDefinitions(input.slice(0, activeFigureSpan.from), collectContextDefinitions)
       : undefined;
   const tree = parseSyntax(parseSource);
+  const addons = opts.addons?.isTriggeredBy(input) ? opts.addons : undefined;
 
   const mapped = fromCst(tree, input, {
     activeFigureId: opts.activeFigureId,
     includeContextDefinitions: opts.includeContextDefinitions ?? false,
     contextDefinitions,
-    scannedFigures
+    scannedFigures,
+    addons
   });
   const diagnostics = [...mapped.diagnostics];
 

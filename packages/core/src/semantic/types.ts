@@ -13,6 +13,7 @@ import type {
 import type { AnchorTransform, FrameTransform, WorldTransform } from "../coords/transforms.js";
 import type { StyleChainEntry } from "./style-chain.js";
 import type { PlacementSegment } from "./path/types.js";
+import type { AddonRuntime } from "../addons/runtime.js";
 
 export const SHADOW_INHERIT_STROKE = "__tikz-shadow-inherit-stroke__";
 export const SHADOW_INHERIT_FILL = "__tikz-shadow-inherit-fill__";
@@ -499,9 +500,13 @@ export type FeatureUsage = Record<string, FeatureUsageState>;
 export type EvaluateOptions = {
   defaultLengthUnit?: "cm" | "pt";
   maxForeachExpansions?: number;
+  /** Cap on scene elements a single add-on statement may emit (default 20000). */
+  maxAddonElementsPerStatement?: number;
   sourceFingerprint?: string;
   textEngine?: NodeTextEngine | null;
   graphicsResolver?: NodeTextGraphicsResolver;
+  /** Active add-on runtime; claimed statements evaluate through add-on engines. */
+  addons?: AddonRuntime | null;
 };
 
 export type { CoordinateForm };

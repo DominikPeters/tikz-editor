@@ -7,6 +7,7 @@ import type { EmitSvgOptions, EmitSvgResult } from "../svg/index.js";
 import { createMathJaxNodeTextEngine } from "../text/mathjax-engine.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { NodeItem, TikzFigure } from "../ast/types.js";
+import type { AddonRuntime } from "../addons/runtime.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
 
 let mathJaxEngineUnavailable = false;
@@ -24,6 +25,8 @@ export type RenderTikzOptions = {
   svg?: EmitSvgOptions;
   textEngine?: NodeTextEngine | null;
   validateNodeText?: boolean;
+  /** Active add-on runtime, threaded into both parse and evaluate. */
+  addons?: AddonRuntime | null;
 };
 
 export type RenderDiagnostic = {
@@ -40,11 +43,11 @@ export type RenderTikzToSvgResult = {
 };
 
 export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): RenderTikzToSvgResult {
-  const parseResult = parseTikz(source, opts.parse);
+  const parseResult = parseTikz(source, { addons: opts.addons, ...opts.parse });
   const semanticResult = (opts.semanticEvaluator ?? evaluateTikzFigure)(
     parseResult.figure,
     parseResult.source,
-    opts.evaluate ?? {}
+    { addons: opts.addons, ...opts.evaluate }
   );
   const svgResult = emitSvg(semanticResult.scene, opts.svg);
 
@@ -99,6 +102,7 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
   }
 
   const parseOpts: ParseTikzOptions = {
+    addons: opts.addons,
     ...opts.parse,
     includeContextDefinitions: opts.parse?.includeContextDefinitions ?? true,
     nodeTextValidator:
@@ -114,6 +118,7 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
   };
 
   const evaluateOpts: EvaluateOptions = {
+    addons: opts.addons,
     ...opts.evaluate,
     textEngine: opts.evaluate?.textEngine ?? textEngine
   };

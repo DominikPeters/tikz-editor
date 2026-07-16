@@ -6,6 +6,7 @@ import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, type MacroBindi
 import {
   readNamedCoordinate,
   readNamedNodeGeometry,
+  resolveAddonCoordinateSystem,
   type NamedNodeGeometry,
   type SemanticContext
 } from "../context.js";
@@ -23,7 +24,7 @@ export type EvaluatedCoordinate = {
   world: WorldPoint | null;
   local?: FrameLocalPoint;
   frame?: FrameTransform;
-  origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor";
+  origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor" | "addon-coordinate-system";
   coordinateForm: CoordinateForm;
   relativePrefix?: "+" | "++";
   diagnostics: string[];
@@ -90,7 +91,20 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
   }
 
   if (item.form === "explicit") {
-    const parsed = parseExplicitCoordinate(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector));
+    const expandedExplicit = expandCoordinateComponent(item.x, frame.macroBindings, traceCollector);
+    const addonResolved = tryResolveAddonCoordinateSystemCoordinate(expandedExplicit, context, diagnostics, item.raw);
+    if (addonResolved) {
+      return addonResolved.point
+        ? worldOnlyCoordinate(
+            "explicit",
+            addonResolved.point,
+            diagnostics,
+            item.relativePrefix === "++",
+            "addon-coordinate-system"
+          )
+        : invalidCoordinate("explicit", diagnostics, item.relativePrefix === "++");
+    }
+    const parsed = parseExplicitCoordinate(expandedExplicit);
     if (!parsed) {
       diagnostics.push(`unsupported-coordinate-form:${item.form}`);
       return invalidCoordinate("explicit", diagnostics, item.relativePrefix === "++");
@@ -302,6 +316,28 @@ function invalidCoordinate(
     advancesCurrentPoint,
     relativePrefix
   };
+}
+
+function tryResolveAddonCoordinateSystemCoordinate(
+  raw: string,
+  context: SemanticContext,
+  diagnostics: string[],
+  originalRaw: string
+): { point: WorldPoint | null } | null {
+  const csMatch = raw.trim().match(/^(.+?)\s*cs\s*:\s*(.+)$/i);
+  if (!csMatch) {
+    return null;
+  }
+  const resolve = resolveAddonCoordinateSystem(context, csMatch[1]);
+  if (!resolve) {
+    return null;
+  }
+  const resolved = resolve(csMatch[2].trim());
+  if (!resolved || !Number.isFinite(resolved.x) || !Number.isFinite(resolved.y)) {
+    diagnostics.push(`invalid-explicit-coordinate:${originalRaw}`);
+    return { point: null };
+  }
+  return { point: worldPoint(pt(resolved.x), pt(resolved.y)) };
 }
 
 function parseExplicitCoordinate(raw: string): ParsedExplicitCoordinate | null {

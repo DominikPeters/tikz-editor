@@ -1,4 +1,6 @@
 export { FeatureFlags } from "./ast/features.js";
+export { createAddonRuntime } from "./addons/index.js";
+export type { AddonRuntime, AddonRuntimeIssue } from "./addons/index.js";
 export * from "./coords/index.js";
 export { parseTikz, createIncrementalParseSession } from "./parser/index.js";
 export { applyEdit, applyEditIntent } from "./edit/apply.js";

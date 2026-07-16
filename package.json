@@ -21,7 +21,7 @@
     "lint:test": "eslint test apps/web/e2e apps/web/profiling apps/desktop/e2e --cache --cache-location node_modules/.cache/eslint/test/ --cache-strategy content --max-warnings=0",
     "lint:ci": "npm run lint:prod && npm run lint:test && npm run lint:dead-code",
     "typecheck": "tsc -p tsconfig.json --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo && node scripts/check-coordinate-typing.mjs",
-    "build": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build && npm run -w @tikz-editor/core build",
+    "build": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build && npm run -w @tikz-editor/addon-api build && npm run -w @tikz-editor/core build",
     "build:tex-fuzz": "npm run -w @tikz-editor/core build && npm run -w @tikz-editor/tex-fuzz build",
     "test": "npm run generate:grammar && vitest run",
     "test:coverage": "npm run generate:grammar && vitest run --coverage",
