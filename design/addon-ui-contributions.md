@@ -100,7 +100,7 @@ export type AddonTemplate = {
    */
   iconPath?: string;
   /** The template receives the target point (world pt) and formats its own snippet. */
-  generateSource(at: WorldPoint): string;
+  generateSource(at: WorldPoint, opposite?: WorldPoint): string;
   /**
    * How the canvas tool places it. "click" inserts at the click point
    * and gets a toolbar button; "none" means menu-only (inserted at the
@@ -189,9 +189,13 @@ menu's `JSON.stringify` cache key changes and it rebuilds — the existing
 mechanism already handles dynamic definitions; enable/disable flows
 through the same path.
 
-Enablement: template-insert commands are enabled exactly when the
-document has an active figure (same condition as core insert tools),
-computed by the runtime, not the add-on.
+**Menu items arm the tool** — matching the host's own Insert menu, where
+every item (Node, Rectangle, ...) switches the tool mode rather than
+inserting directly. An add-on "Insert smiley" item dispatches
+`SET_TOOL_MODE { mode: "addonTemplate", addonTemplateId }`; the user then
+clicks (or drag-opens) on the canvas to place. Enablement and
+check-state follow the same `insertBinding` pattern as core insert
+commands.
 
 ### Toolbar tools
 
@@ -206,15 +210,37 @@ activeAddonTemplateId: `addon:${string}` | null;
 ```
 
 `SET_TOOL_MODE` gains an optional `addonTemplateId` payload. The toolbar
-renders one button per template with `placement: "click"`, using the
-template's `iconPath` (rendered as `<svg viewBox="0 0 24 24"><path
-d={iconPath}/></svg>` with the toolbar's fill styling) or a generic
-add-on glyph when omitted. The button behaves like other creation
-tools: click to arm, click on canvas to place — dispatching the same
-`addElement`/`addonSource` action at the click point — then returns to
-select mode (one-shot placement). `isCreationToolMode` includes
-`"addonTemplate"`; snapping uses the plain point (no shape-specific
-snap kinds in v1).
+renders one button per template, using the template's `iconPath`
+(rendered as `<svg viewBox="0 0 24 24"><path d={iconPath}/></svg>` with
+the toolbar's fill styling) or a generic add-on glyph when omitted.
+
+Placement rides the existing `tool-create` drag machinery
+(`useCanvasToolInteractions` pointerdown -> `tool-create` drag state ->
+`useCanvasDragController` move/up), which core drag-to-size tools
+already use: `"addonTemplate"` joins `TOOL_CREATE_MODES` with
+`toolCreateSnapKind = "rect-corner"`. On pointerup,
+`createTemplateForToolDrag` gains an addon case producing
+`{ kind: "addonSource", source: generateSource(start, dragged ? final :
+undefined) }` — a plain click (drag below the existing 1e-3 threshold)
+passes no `opposite`, so the template falls back to its defaults,
+matching how a click with the line tool places a default-length line.
+One `addElement` dispatch on pointerup = one undo entry, then the tool
+resets to select (one-shot), identical to core tools.
+
+**Ghost preview.** Core tools preview via a lightweight SVG overlay
+(`toolDraft` -> `toolPreview` descriptor in `useCanvasDerivedState` ->
+`ToolPreviewOverlay`), never touching the source mid-drag. Add-on
+templates get a *content* ghost through the same channel: a new
+descriptor kind carries SVG-space primitives obtained by evaluating the
+template's generated snippet through the normal pipeline —
+`generateSource(start, current)` -> parse+evaluate with the active
+runtime -> `SceneElement[]` -> path/circle/ellipse primitives mapped
+with `worldToSvgPoint` (text elements skipped in v1). Rendered inside
+the existing `toolPreview` styling (semi-transparent blue), so the user
+drags open an actual smiley/axis, not a placeholder rectangle. The
+computation is memoized on the draft state like every other descriptor;
+if a heavyweight add-on ever makes per-move evaluation too slow, the
+memo is the natural throttle point.
 
 ### Context-menu actions
 
