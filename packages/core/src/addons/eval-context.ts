@@ -94,7 +94,7 @@ export function createHostEvalContext(input: CreateHostEvalContextInput): HostEv
   let elementCounter = 0;
   let clipCounter = 0;
 
-  const sourceRefFor = (sourceId: string | undefined): SourceRef => ({
+  const sourceRefFor = (sourceId?: string): SourceRef => ({
     sourceId: sourceId ?? statement.id,
     sourceSpan: statement.span,
     sourceFingerprint: context.sourceFingerprint

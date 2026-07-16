@@ -32,6 +32,8 @@ export const SMILEY_MANIFEST: AddonManifest = {
   sourceUrl: "https://example.invalid/smiley",
   triggers: {
     commands: ["\\smiley"],
+    macroCommands: ["\\smileyset"],
+    environments: ["smileybox"],
     packages: ["smiley"]
   },
   requiredPreamble: ["\\usepackage{smiley}"],
@@ -51,7 +53,27 @@ export function createSmileyAddon(): AddonRegistration {
   const engine: AddonEngine = {
     manifest: SMILEY_MANIFEST,
 
+    parseEnvironment: (statement, context) => {
+      const optionEntries = statement.options?.entries ?? [];
+      const paddingEntry = optionEntries.find((entry) => entry.kind === "kv" && entry.key === "padding");
+      const padding =
+        paddingEntry?.kind === "kv" && Number.isFinite(Number.parseFloat(paddingEntry.valueRaw))
+          ? Number.parseFloat(paddingEntry.valueRaw) * PT_PER_UNIT
+          : 0.25 * PT_PER_UNIT;
+      void context;
+      return { kind: "success", payload: { padding } };
+    },
+
     parseCommand: (statement, context) => {
+      if (statement.commandName === "\\smileyset") {
+        const rawArgs = context.slice(statement.argsSpan);
+        const braceOffset = rawArgs.indexOf("{");
+        const group = braceOffset >= 0 ? context.readBalancedGroup(statement.argsSpan.from + braceOffset) : null;
+        return {
+          kind: "success",
+          payload: { configRaw: group ? context.slice({ from: group.from + 1, to: group.to - 1 }).trim() : "" }
+        };
+      }
       const args = context.slice(statement.argsSpan);
       const coordMatch = /\(([^()]*)\)/.exec(args);
       const optionsMatch = /\[[^\]]*\]/.exec(args);
@@ -75,8 +97,29 @@ export function createSmileyAddon(): AddonRegistration {
     },
 
     evaluate: (statement, context) => {
-      if (statement.kind !== "AddonCommand") {
-        return { kind: "unsupported", reason: "smiley only claims commands" };
+      if (statement.kind === "AddonEnvironment") {
+        const payload = statement.payload as { padding: number } | undefined;
+        const padding = payload?.padding ?? 0.25 * PT_PER_UNIT;
+        const bodyElements = context.evaluateTikzStatements(statement.body ?? []);
+        const border = context.makePath({
+          commands: [
+            { kind: "M", to: { x: -padding, y: -padding } },
+            { kind: "L", to: { x: 3 * PT_PER_UNIT + padding, y: -padding } },
+            { kind: "L", to: { x: 3 * PT_PER_UNIT + padding, y: 3 * PT_PER_UNIT + padding } },
+            { kind: "L", to: { x: -padding, y: 3 * PT_PER_UNIT + padding } },
+            { kind: "Z" }
+          ]
+        });
+        context.markFeature("addon:smiley:smileybox-environment", "supported");
+        return { kind: "success", elements: [...bodyElements, border] };
+      }
+      if (statement.commandName === "\\smileyset") {
+        const payload = statement.payload as { configRaw: string } | undefined;
+        context.markFeature("addon:smiley:smileyset-command", "supported");
+        if (!payload) {
+          return { kind: "error", message: "missing \\smileyset payload" };
+        }
+        return { kind: "success", elements: [] };
       }
       const payload = statement.payload as SmileyPayload | undefined;
       if (!payload || payload.coordRaw == null) {

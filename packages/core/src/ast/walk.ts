@@ -17,6 +17,9 @@ export function walkStatements(statements: readonly Statement[], visitor: AstWal
     if (statement.kind === "Scope") {
       walkStatements(statement.body, visitor);
     }
+    if (statement.kind === "AddonEnvironment" && statement.body) {
+      walkStatements(statement.body, visitor);
+    }
   }
 }
 

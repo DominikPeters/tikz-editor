@@ -37,7 +37,16 @@ Statement {
   MacroAliasStatement |
   MacroCommandDefinitionStatement |
   PgfMathStatement |
+  GenericEnvironment |
   UnknownStatement
+}
+
+// Generic environment seam for add-ons: matches any \begin{name}...\end{name}
+// pair that is not one of the dedicated environments (tikzpicture, scope).
+// LR cannot enforce begin/end name matching; the CST->AST layer validates the
+// names and emits a diagnostic on mismatch.
+GenericEnvironment {
+  BeginEnvGeneric OptionList? BodyItem* EndEnvGeneric
 }
 
 StyleDefinitionStatement {
@@ -853,6 +862,8 @@ ForeachKw { @specialize<Identifier, "foreach"> }
     UseAsBoundingBoxCmd,
     BeginScope,
     EndScope,
+    BeginEnvGeneric,
+    EndEnvGeneric,
     ForeachCmd,
     MatrixCmd,
     NodeCmd,
@@ -902,6 +913,8 @@ ForeachKw { @specialize<Identifier, "foreach"> }
   MatrixCmd { "\\matrix" }
   BeginScope { "\\begin{scope}" }
   EndScope { "\\end{scope}" }
+  BeginEnvGeneric { "\\begin{" ![}]* "}" }
+  EndEnvGeneric { "\\end{" ![}]* "}" }
   ForeachCmd { "\\foreach" }
   NodeCmd { "\\node" }
   PicCmd { "\\pic" }

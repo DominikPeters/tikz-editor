@@ -17,8 +17,17 @@ export type AddonCapabilityRow = {
 export type AddonTriggers = {
   /** Environment names the add-on claims, e.g. ["axis", "semilogxaxis"]. */
   environments?: string[];
-  /** Command names the add-on claims, with leading backslash, e.g. ["\\addplot"]. */
+  /**
+   * Semicolon-terminated command names the add-on claims, with leading
+   * backslash, e.g. ["\\addplot"]. These parse through the host grammar.
+   */
   commands?: string[];
+  /**
+   * TeX-macro-style command names whose arguments are only {...} groups and
+   * [...] option lists and that are NOT semicolon-terminated, e.g.
+   * ["\\pgfplotsset", "\\duck"]. These are recovered by a host prescan.
+   */
+  macroCommands?: string[];
   /** \usepackage names that activate the add-on, e.g. ["pgfplots"]. */
   packages?: string[];
   /** \usetikzlibrary (or add-on-specific library command) names. */

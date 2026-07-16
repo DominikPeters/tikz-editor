@@ -6,7 +6,7 @@ const tikzHighlighting = styleTags({
   Comment: t.lineComment,
 
   // Environment delimiters
-  "BeginTikz EndTikz BeginScope EndScope": t.keyword,
+  "BeginTikz EndTikz BeginScope EndScope BeginEnvGeneric EndEnvGeneric": t.keyword,
 
   // Path commands and definition-style commands
   "DrawCmd PathCmd FillDrawCmd FillCmd PatternCmd ClipCmd ShadeCmd ShadeDrawCmd UseAsBoundingBoxCmd MatrixCmd ColorletCmd DefineColorCmd DefCmd LetDefCmd NewCommandCmd RenewCommandCmd TikzSetCmd TikzStyleCmd PgfkeysCmd":
@@ -163,6 +163,7 @@ export const tikzLanguage = LRLanguage.define({
       foldNodeProp.add({
         TikzEnvironment: foldInside,
         ScopeStatement: foldInside,
+        GenericEnvironment: foldInside,
         Group: foldInside,
       })
     ],

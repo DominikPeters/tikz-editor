@@ -15,6 +15,7 @@ import {
 import { scanTikzFigures } from "./figure-scan.js";
 import { incrementProfilingCounter } from "../profiling.js";
 import type { AddonRuntime } from "../addons/runtime.js";
+import { maskAddonMacroRegions, scanAddonMacroRegions } from "../addons/macro-scan.js";
 
 export type NodeTextValidationContext = {
   node: NodeItem;
@@ -58,15 +59,17 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
     opts.includeContextDefinitions && activeFigureSpan
       ? getCachedContextDefinitions(input.slice(0, activeFigureSpan.from), collectContextDefinitions)
       : undefined;
-  const tree = parseSyntax(parseSource);
   const addons = opts.addons?.isTriggeredBy(input) ? opts.addons : undefined;
+  const addonMacroRegions = addons ? scanAddonMacroRegions(parseSource, addons) : [];
+  const tree = parseSyntax(maskAddonMacroRegions(parseSource, addonMacroRegions));
 
   const mapped = fromCst(tree, input, {
     activeFigureId: opts.activeFigureId,
     includeContextDefinitions: opts.includeContextDefinitions ?? false,
     contextDefinitions,
     scannedFigures,
-    addons
+    addons,
+    addonMacroRegions
   });
   const diagnostics = [...mapped.diagnostics];
 

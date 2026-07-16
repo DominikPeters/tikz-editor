@@ -2,6 +2,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 
 import type { Diagnostic } from "../diagnostics/types.js";
 import type {
+  AddonCommandStatement,
   ColorletStatement,
   DefineColorStatement,
   MacroAliasStatement,
@@ -12,15 +13,18 @@ import type {
   TikzFigureInventoryItem
 } from "../ast/types.js";
 import {
+  addonCommandStatementId,
   colorletStatementId,
   defineColorStatementId,
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
-  macroDefinitionStatementId
+  macroDefinitionStatementId,
+  unknownStatementId
 } from "../ast/ids.js";
 import { mapBodyStatements, mapStatementNode, unwrapStatementLikeNode, type StatementMappingState } from "../domains/statements/parse.js";
 import type { AddonRuntime } from "../addons/runtime.js";
-import type { AddonStatementMapping } from "../addons/statement-mapping.js";
+import type { AddonMacroRegion } from "../addons/macro-scan.js";
+import { runAddonCommandParse, type AddonStatementMapping } from "../addons/statement-mapping.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { findFirstChildByName, findFirstNodeByName, forEachChild, walk } from "../syntax/cursor.js";
 import { parseSyntax } from "@tikz-editor/lezer-tikz";
@@ -43,6 +47,8 @@ export type CstToAstOptions = {
   contextDefinitions?: Statement[];
   scannedFigures?: readonly ScannedFigure[];
   addons?: AddonRuntime;
+  /** Claimed macro-command regions masked out before the Lezer parse (see addons/macro-scan). */
+  addonMacroRegions?: readonly AddonMacroRegion[];
 };
 
 type FigureNodeEntry = {
@@ -64,7 +70,14 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
         nextStatementIndex: 0,
         addons: opts.addons ? createAddonStatementMapping(opts.addons, source, diagnostics) : undefined
       };
-      const inlineBody = mapBodyStatements(inlineNode, source, state);
+      const inlineBody = mergeStatementsBySpanOrder(
+        mapBodyStatements(inlineNode, source, state),
+        synthesizeAddonMacroStatements(
+          opts.addonMacroRegions,
+          { from: inlineNode.from, to: inlineNode.to },
+          state
+        )
+      );
       const optionsNode = findFirstChildByName(inlineNode, "OptionList");
       return {
         figure: {
@@ -126,7 +139,10 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
   if (opts.includeContextDefinitions) {
     activeState.nextStatementIndex = priorDefinitions.filter((statement) => !isMacroContextStatement(statement)).length;
   }
-  const activeBody = mapBodyStatements(activeSyntax.node, activeSyntax.parseSource, activeState);
+  const activeBody = mergeStatementsBySpanOrder(
+    mapBodyStatements(activeSyntax.node, activeSyntax.parseSource, activeState),
+    synthesizeAddonMacroStatements(opts.addonMacroRegions, activeFigureEntry.inventory.span, activeState)
+  );
   const body = [...priorDefinitions, ...activeBody];
   const optionsNode = findFirstChildByName(activeSyntax.node, "OptionList");
 
@@ -359,6 +375,63 @@ function maskSourceToFigure(source: string, from: number, to: number): string {
     .replace(/[^\n]/g, " ");
   const figure = source.slice(safeFrom, safeTo);
   return `${prefix}${figure}`;
+}
+
+/**
+ * Synthesize AddonCommand statements for the claimed macro-command regions
+ * that were masked before the Lezer parse. Only regions inside the given
+ * figure span participate; the statement mapping state supplies both the
+ * id allocation and the add-on services.
+ */
+function synthesizeAddonMacroStatements(
+  regions: readonly AddonMacroRegion[] | undefined,
+  figureSpan: { from: number; to: number },
+  state: StatementMappingState
+): Statement[] {
+  const mapping = state.addons;
+  if (!mapping || !regions || regions.length === 0) {
+    return [];
+  }
+  const statements: Statement[] = [];
+  for (const region of regions) {
+    if (region.span.from < figureSpan.from || region.span.to > figureSpan.to) {
+      continue;
+    }
+    const route = mapping.runtime.engineForCommand(region.commandName);
+    if (!route) {
+      continue;
+    }
+    const statementIndex = state.nextStatementIndex;
+    state.nextStatementIndex += 1;
+    const statement: AddonCommandStatement = {
+      kind: "AddonCommand",
+      id: addonCommandStatementId(statementIndex),
+      span: { from: region.span.from, to: region.span.to },
+      raw: mapping.source.slice(region.span.from, region.span.to),
+      addonId: region.addonId,
+      commandName: region.commandName,
+      argsSpan: { from: region.argsSpan.from, to: region.argsSpan.to }
+    };
+    const parsed = runAddonCommandParse(statement, route.engine, mapping);
+    if (parsed) {
+      statements.push(parsed);
+      continue;
+    }
+    statements.push({
+      kind: "UnknownStatement",
+      id: unknownStatementId(statementIndex),
+      span: { from: region.span.from, to: region.span.to },
+      raw: mapping.source.slice(region.span.from, region.span.to)
+    });
+  }
+  return statements;
+}
+
+function mergeStatementsBySpanOrder(left: Statement[], right: Statement[]): Statement[] {
+  if (right.length === 0) {
+    return left;
+  }
+  return [...left, ...right].sort((a, b) => a.span.from - b.span.from || a.span.to - b.span.to);
 }
 
 const MAX_ADDON_NESTED_PARSE_DEPTH = 16;

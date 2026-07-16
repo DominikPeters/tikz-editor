@@ -23,6 +23,8 @@ export type AddonRuntime = {
   engineForCommand(commandName: string): AddonEngineRoute | null;
   engineForEnvironment(envName: string): AddonEngineRoute | null;
   engineById(addonId: string): AddonEngine | null;
+  /** Claimed TeX-macro-style command names (not semicolon-terminated), normalized with leading backslash. */
+  macroCommandNames: ReadonlySet<string>;
   /** Cheap prescan: does this document mention any trigger of any active add-on? */
   isTriggeredBy(source: string): boolean;
 };
@@ -32,6 +34,7 @@ export function createAddonRuntime(registrations: readonly AddonRegistration[]):
   const uis = new Map<string, AddonUi>();
   const commandRouting = new Map<string, string>();
   const environmentRouting = new Map<string, string>();
+  const macroCommandNames = new Set<string>();
   const issues: AddonRuntimeIssue[] = [];
 
   for (const registration of registrations) {
@@ -43,7 +46,8 @@ export function createAddonRuntime(registrations: readonly AddonRegistration[]):
     }
 
     const triggers = engine.manifest.triggers;
-    const claimedCommands = (triggers.commands ?? []).map(normalizeCommandName);
+    const claimedMacroCommands = (triggers.macroCommands ?? []).map(normalizeCommandName);
+    const claimedCommands = [...(triggers.commands ?? []).map(normalizeCommandName), ...claimedMacroCommands];
     const claimedEnvironments = triggers.environments ?? [];
 
     const commandConflict = claimedCommands.find((name) => commandRouting.has(name));
@@ -64,6 +68,9 @@ export function createAddonRuntime(registrations: readonly AddonRegistration[]):
     }
     for (const name of claimedCommands) {
       commandRouting.set(name, addonId);
+    }
+    for (const name of claimedMacroCommands) {
+      macroCommandNames.add(name);
     }
     for (const name of claimedEnvironments) {
       environmentRouting.set(name, addonId);
@@ -86,6 +93,7 @@ export function createAddonRuntime(registrations: readonly AddonRegistration[]):
     engineForCommand: (commandName) => routeFor(commandRouting, normalizeCommandName(commandName)),
     engineForEnvironment: (envName) => routeFor(environmentRouting, envName),
     engineById: (addonId) => engines.get(addonId) ?? null,
+    macroCommandNames,
     isTriggeredBy: (source) => isTriggeredBySource(source, engines.values())
   };
 }
@@ -97,7 +105,7 @@ function normalizeCommandName(name: string): string {
 function isTriggeredBySource(source: string, engines: Iterable<AddonEngine>): boolean {
   for (const engine of engines) {
     const triggers = engine.manifest.triggers;
-    for (const command of triggers.commands ?? []) {
+    for (const command of [...(triggers.commands ?? []), ...(triggers.macroCommands ?? [])]) {
       if (source.includes(normalizeCommandName(command))) {
         return true;
       }

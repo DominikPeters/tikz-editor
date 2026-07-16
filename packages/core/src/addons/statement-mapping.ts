@@ -1,6 +1,6 @@
-import type { HostParseContext } from "@tikz-editor/addon-api";
+import type { AddonEngine, AddonParseResult, HostParseContext } from "@tikz-editor/addon-api";
 
-import type { Span, Statement } from "../ast/types.js";
+import type { AddonCommandStatement, Span, Statement } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type { OptionListAst } from "../options/types.js";
 import type { AddonRuntime } from "./runtime.js";
@@ -27,6 +27,42 @@ export type AddonStatementMapping = {
   diagnostics: Diagnostic[];
   services: AddonStatementMappingServices;
 };
+
+/**
+ * Run an engine's parseCommand hook over a freshly built AddonCommand
+ * statement and fold the result into it. Returns null when the engine
+ * reports the statement as unsupported (callers fall back to
+ * UnknownStatement); engine exceptions become error diagnostics.
+ */
+export function runAddonCommandParse(
+  statement: AddonCommandStatement,
+  engine: AddonEngine,
+  mapping: AddonStatementMapping
+): AddonCommandStatement | null {
+  if (!engine.parseCommand) {
+    return statement;
+  }
+  let result: AddonParseResult;
+  try {
+    result = engine.parseCommand(statement, createHostParseContext(mapping));
+  } catch (error) {
+    result = { kind: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+  if (result.kind === "unsupported") {
+    return null;
+  }
+  if (result.kind === "error") {
+    mapping.diagnostics.push({
+      severity: "error",
+      message: `Add-on "${statement.addonId}" failed to parse ${statement.commandName}: ${result.message}`,
+      span: statement.span,
+      code: "addon-parse-error"
+    });
+    return statement;
+  }
+  statement.payload = result.payload;
+  return statement;
+}
 
 export function createHostParseContext(mapping: AddonStatementMapping): HostParseContext {
   return {

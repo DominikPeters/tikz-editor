@@ -103,6 +103,41 @@ const NON_NEGATIVE_KEYS = new Set([
   "rounded corners"
 ]);
 
+// Add-on-contributed scrub keys, installed by the add-on loader from the
+// engines' declarative completion tables.
+export type AddonScrubKeyTables = {
+  length?: readonly string[];
+  angle?: readonly string[];
+  numeric?: readonly string[];
+  nonNegative?: readonly string[];
+};
+
+const ADDON_LENGTH_KEYS = new Set<string>();
+const ADDON_ANGLE_KEYS = new Set<string>();
+const ADDON_NUMERIC_KEYS = new Set<string>();
+const ADDON_NON_NEGATIVE_KEYS = new Set<string>();
+
+export function setAddonScrubKeys(tables: readonly AddonScrubKeyTables[]): void {
+  ADDON_LENGTH_KEYS.clear();
+  ADDON_ANGLE_KEYS.clear();
+  ADDON_NUMERIC_KEYS.clear();
+  ADDON_NON_NEGATIVE_KEYS.clear();
+  for (const table of tables) {
+    for (const key of table.length ?? []) {
+      ADDON_LENGTH_KEYS.add(key.toLowerCase());
+    }
+    for (const key of table.angle ?? []) {
+      ADDON_ANGLE_KEYS.add(key.toLowerCase());
+    }
+    for (const key of table.numeric ?? []) {
+      ADDON_NUMERIC_KEYS.add(key.toLowerCase());
+    }
+    for (const key of table.nonNegative ?? []) {
+      ADDON_NON_NEGATIVE_KEYS.add(key.toLowerCase());
+    }
+  }
+}
+
 export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
   return ViewPlugin.fromClass(
     class {
@@ -408,9 +443,11 @@ function classifyScrubContext(doc: EditorView["state"]["doc"], numberNode: Synta
   const optionKey = extractOptionKey(doc, signedFrom);
   const unit = extractUnitAfterNumber(doc, numberNode.to);
   const insideCoordinate = hasAncestor(numberNode, "Coordinate");
-  const nonNegative = optionKey ? NON_NEGATIVE_KEYS.has(optionKey) : false;
+  const nonNegative = optionKey
+    ? NON_NEGATIVE_KEYS.has(optionKey) || ADDON_NON_NEGATIVE_KEYS.has(optionKey)
+    : false;
 
-  if (optionKey && ANGLE_KEYS.has(optionKey)) {
+  if (optionKey && (ANGLE_KEYS.has(optionKey) || ADDON_ANGLE_KEYS.has(optionKey))) {
     return { kind: "angle", step: 1, minPrecision: 0 };
   }
   if (optionKey && SCALE_KEYS.has(optionKey)) {
@@ -426,7 +463,7 @@ function classifyScrubContext(doc: EditorView["state"]["doc"], numberNode: Synta
     const unitStep = lengthStepForUnit(unit);
     return { kind: "length", step: unitStep.step, minPrecision: unitStep.minPrecision, min: nonNegative ? 0 : undefined };
   }
-  if (optionKey && LENGTH_KEYS.has(optionKey)) {
+  if (optionKey && (LENGTH_KEYS.has(optionKey) || ADDON_LENGTH_KEYS.has(optionKey))) {
     return { kind: "length", step: 0.05, minPrecision: 2, min: nonNegative ? 0 : undefined };
   }
   if (insideCoordinate) {
@@ -435,7 +472,7 @@ function classifyScrubContext(doc: EditorView["state"]["doc"], numberNode: Synta
     }
     return { kind: "coordinate", step: 0.1, minPrecision: 1 };
   }
-  if (optionKey && NUMERIC_KEYS.has(optionKey)) {
+  if (optionKey && (NUMERIC_KEYS.has(optionKey) || ADDON_NUMERIC_KEYS.has(optionKey))) {
     return { kind: "numeric", step: 0.1, minPrecision: 1 };
   }
 

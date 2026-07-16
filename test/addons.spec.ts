@@ -184,6 +184,115 @@ describe("smiley test add-on (Phase A contract)", () => {
   });
 });
 
+describe("claimed environments (Phase B grammar seam)", () => {
+  const runtime = () => createAddonRuntime([createSmileyAddon()]);
+
+  it("parses a claimed environment into AddonEnvironment with a host-parsed body", () => {
+    const source = [
+      "\\begin{tikzpicture}",
+      "\\begin{smileybox}[padding=0.5]",
+      "\\draw (0,0) -- (1,1);",
+      "\\smiley (2,2);",
+      "\\end{smileybox}",
+      "\\end{tikzpicture}"
+    ].join("\n");
+    const parsed = parseTikz(source, { addons: runtime() });
+
+    expect(parsed.figure.body).toHaveLength(1);
+    const environment = parsed.figure.body[0];
+    if (environment.kind !== "AddonEnvironment") {
+      throw new Error(`expected AddonEnvironment, got ${environment.kind}`);
+    }
+    expect(environment.envName).toBe("smileybox");
+    expect(environment.addonId).toBe("smiley");
+    expect(environment.payload).toEqual({ padding: 0.5 * 28.4527559055 });
+    expect((environment.body ?? []).map((statement) => statement.kind)).toEqual(["Path", "AddonCommand"]);
+  });
+
+  it("evaluates the environment body as ordinary TikZ plus add-on chrome", () => {
+    const source = [
+      "\\begin{tikzpicture}",
+      "\\begin{smileybox}",
+      "\\draw (0,0) -- (1,1);",
+      "\\end{smileybox}",
+      "\\end{tikzpicture}"
+    ].join("\n");
+    const result = renderTikzToSvg(source, { addons: runtime() });
+
+    expect(result.semantic.diagnostics.filter((d) => d.code === "unsupported-statement")).toEqual([]);
+    const paths = result.semantic.scene.elements.filter((element) => element.kind === "Path");
+    expect(paths).toHaveLength(2);
+    const bodyPath = paths.find((element) => element.sourceRef.sourceId.startsWith("path:"));
+    const border = paths.find((element) => element.sourceRef.sourceId.startsWith("addon-environment:"));
+    expect(bodyPath).toBeDefined();
+    expect(border).toBeDefined();
+  });
+
+  it("warns on begin/end environment name mismatch", () => {
+    const source = [
+      "\\begin{tikzpicture}",
+      "\\begin{smileybox}",
+      "\\end{smilebox}",
+      "\\end{tikzpicture}"
+    ].join("\n");
+    const parsed = parseTikz(source, { addons: runtime() });
+    expect(parsed.diagnostics.some((d) => d.code === "environment-name-mismatch")).toBe(true);
+  });
+
+  it("keeps unclaimed environments as unknown statements with the standard warning", () => {
+    const source = [
+      "\\begin{tikzpicture}",
+      "\\begin{axis}",
+      "\\end{axis}",
+      "\\end{tikzpicture}"
+    ].join("\n");
+    const result = renderTikzToSvg(source, { addons: runtime() });
+    expect(result.parse.figure.body.map((statement) => statement.kind)).toEqual(["UnknownStatement"]);
+    expect(result.semantic.diagnostics.some((d) => d.code === "unsupported-statement")).toBe(true);
+  });
+});
+
+describe("claimed macro commands (semicolon-less prescan)", () => {
+  const runtime = () => createAddonRuntime([createSmileyAddon()]);
+
+  it("recovers a claimed macro command without a semicolon", () => {
+    const source = [
+      "\\begin{tikzpicture}",
+      "\\smileyset{mood=happy}",
+      "\\draw (0,0) -- (1,1);",
+      "\\end{tikzpicture}"
+    ].join("\n");
+    const parsed = parseTikz(source, { addons: runtime() });
+
+    expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["AddonCommand", "Path"]);
+    const claimed = parsed.figure.body[0];
+    if (claimed.kind !== "AddonCommand") {
+      throw new Error("expected AddonCommand");
+    }
+    expect(claimed.commandName).toBe("\\smileyset");
+    expect(claimed.payload).toEqual({ configRaw: "mood=happy" });
+    expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+  });
+
+  it("routes a semicolon-terminated claimed macro command through the grammar path", () => {
+    const source = "\\begin{tikzpicture}\n\\smileyset{mood=happy};\n\\end{tikzpicture}";
+    const parsed = parseTikz(source, { addons: runtime() });
+    expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["AddonCommand"]);
+  });
+
+  it("ignores claimed macro commands inside braced groups", () => {
+    const source = "\\begin{tikzpicture}\n\\node at (0,0) {uses \\smileyset literally};\n\\end{tikzpicture}";
+    const parsed = parseTikz(source, { addons: runtime() });
+    expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["Path"]);
+  });
+
+  it("still reports missing semicolons for plain TikZ statements", () => {
+    const source = "\\begin{tikzpicture}\n\\smileyset{mood=happy}\n\\draw (0,0) -- (1,1)\n\\end{tikzpicture}";
+    const parsed = parseTikz(source, { addons: runtime() });
+    expect(parsed.diagnostics.some((d) => d.code === "missing-semicolon" || d.code === "parse-error")).toBe(true);
+  });
+});
+
 describe("add-on evaluation budget", () => {
   it("degrades to a warning when an add-on exceeds the element budget", () => {
     const floodEngine: AddonEngine = {

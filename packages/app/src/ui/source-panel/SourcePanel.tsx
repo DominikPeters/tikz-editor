@@ -64,6 +64,7 @@ import { NAMED_COLORS } from "@tikz-editor/core/semantic/style/constants";
 import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 import { tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
+import { addonCompletion } from "./addon-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { colorSwatches } from "./color-swatches";
@@ -918,6 +919,7 @@ export function SourcePanel() {
     const completionExtension = ENABLE_TIKZ_AUTOCOMPLETE
       ? autocompletion({
           override: [
+            addonCompletion,
             (context) => tikzCompletion(context, symbolsRef.current)
           ]
         })

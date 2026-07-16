@@ -4,6 +4,7 @@ import type { AddonParseResult } from "@tikz-editor/addon-api";
 
 import {
   addonCommandStatementId,
+  addonEnvironmentStatementId,
   colorletStatementId,
   defineColorStatementId,
   foreachStatementId,
@@ -19,6 +20,7 @@ import {
 } from "../../ast/ids.js";
 import type {
   AddonCommandStatement,
+  AddonEnvironmentStatement,
   ColorletStatement,
   DefineColorStatement,
   ForeachStatement,
@@ -40,7 +42,7 @@ import { parseOptionListRaw } from "../../options/parse.js";
 import { parseForeachHeaderRaw } from "../../foreach/header.js";
 import { parseStyleValueAsOptionList } from "../../semantic/style/option-utils.js";
 import { findFirstChildByName, findFirstNodeByName, firstNamedChild, forEachChild } from "../../syntax/cursor.js";
-import { createHostParseContext, type AddonStatementMapping } from "../../addons/statement-mapping.js";
+import { createHostParseContext, runAddonCommandParse, type AddonStatementMapping } from "../../addons/statement-mapping.js";
 
 export type StatementMappingState = {
   nextStatementIndex: number;
@@ -122,6 +124,10 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
     return mapUnknownStatement(node, source, allocateStatementIndex(state));
   }
 
+  if (node.type.name === "GenericEnvironment") {
+    return mapGenericEnvironmentNode(node, source, state);
+  }
+
   if (node.type.name === "ScopeStatement") {
     return mapScopeStatement(node, source, state);
   }
@@ -131,6 +137,79 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
   }
 
   return null;
+}
+
+function mapGenericEnvironmentNode(node: SyntaxNode, source: string, state: StatementMappingState): Statement {
+  const beginNode = findFirstChildByName(node, "BeginEnvGeneric");
+  const endNode = findFirstChildByName(node, "EndEnvGeneric");
+  const envName = beginNode ? parseEnvironmentTokenName(source.slice(beginNode.from, beginNode.to)) : null;
+  const addons = state.addons;
+  const route = addons && envName != null ? addons.runtime.engineForEnvironment(envName) : null;
+  if (!route || !addons || envName == null || !beginNode) {
+    return mapUnknownStatement(node, source, allocateStatementIndex(state));
+  }
+
+  const endName = endNode ? parseEnvironmentTokenName(source.slice(endNode.from, endNode.to)) : null;
+  if (endName != null && endName !== envName) {
+    addons.diagnostics.push({
+      severity: "warning",
+      message: `Environment name mismatch: \\begin{${envName}} closed by \\end{${endName}}.`,
+      span: endNode ? { from: endNode.from, to: endNode.to } : { from: node.from, to: node.to },
+      code: "environment-name-mismatch"
+    });
+  }
+
+  const statementIndex = allocateStatementIndex(state);
+  const optionsNode = findFirstChildByName(node, "OptionList");
+  const bodyFrom = optionsNode ? optionsNode.to : beginNode.to;
+  const bodyTo = endNode ? endNode.from : node.to;
+  const statement: AddonEnvironmentStatement = {
+    kind: "AddonEnvironment",
+    id: addonEnvironmentStatementId(statementIndex),
+    span: { from: node.from, to: node.to },
+    raw: source.slice(node.from, node.to),
+    addonId: route.addonId,
+    envName,
+    options: optionsNode
+      ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+      : undefined,
+    bodySpan: { from: bodyFrom, to: Math.max(bodyFrom, bodyTo) },
+    body: mapBodyStatements(node, source, state)
+  };
+
+  if (!route.engine.parseEnvironment) {
+    return statement;
+  }
+
+  let result: AddonParseResult;
+  try {
+    result = route.engine.parseEnvironment(statement, createHostParseContext(addons));
+  } catch (error) {
+    result = { kind: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+  if (result.kind === "unsupported") {
+    return mapUnknownStatement(node, source, allocateStatementIndex(state));
+  }
+  if (result.kind === "error") {
+    addons.diagnostics.push({
+      severity: "error",
+      message: `Add-on "${route.addonId}" failed to parse \\begin{${envName}}: ${result.message}`,
+      span: statement.span,
+      code: "addon-parse-error"
+    });
+    return statement;
+  }
+  statement.payload = result.payload;
+  return statement;
+}
+
+function parseEnvironmentTokenName(tokenText: string): string | null {
+  const match = /^\\(?:begin|end)\{([^}]*)\}$/.exec(tokenText.trim());
+  if (!match) {
+    return null;
+  }
+  const name = match[1].trim();
+  return name.length > 0 ? name : null;
 }
 
 function tryMapAddonCommandStatement(
@@ -162,30 +241,7 @@ function tryMapAddonCommandStatement(
     argsSpan: { from: commandNode.to, to: Math.max(commandNode.to, argsTo) }
   };
 
-  if (!route.engine.parseCommand) {
-    return statement;
-  }
-
-  let result: AddonParseResult;
-  try {
-    result = route.engine.parseCommand(statement, createHostParseContext(addons));
-  } catch (error) {
-    result = { kind: "error", message: error instanceof Error ? error.message : String(error) };
-  }
-  if (result.kind === "unsupported") {
-    return null;
-  }
-  if (result.kind === "error") {
-    addons.diagnostics.push({
-      severity: "error",
-      message: `Add-on "${route.addonId}" failed to parse ${commandName}: ${result.message}`,
-      span: statement.span,
-      code: "addon-parse-error"
-    });
-    return statement;
-  }
-  statement.payload = result.payload;
-  return statement;
+  return runAddonCommandParse(statement, route.engine, addons);
 }
 
 function mapScopeStatement(node: SyntaxNode, source: string, state: StatementMappingState): ScopeStatement {
