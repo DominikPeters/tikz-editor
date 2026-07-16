@@ -881,7 +881,12 @@ Each phase lands independently and is verifiable in isolation.
   `apply-kv` additionally became a key→handler table
   (`createKvHandlerMap`), so the "inverted" style-key decision below has a
   registry to attach to if it is ever revisited. Existing suites pass.
-- **Phase A — addon-api + engine hooks.** Create `@tikz-editor/addon-api`
+- **Phase A — addon-api + engine hooks. Done (2026-07-16).** Landed as
+  `packages/addon-api` plus `packages/core/src/addons/` (runtime,
+  statement mapping, HostParseContext/HostEvalContext, coordinate-system
+  registry with dependency instrumentation, element budget). The toy
+  test add-on lives in `test/helpers/smiley-addon.ts` with contract
+  tests in `test/addons.spec.ts`. Create `@tikz-editor/addon-api`
   (types, manifest, contexts) and the core `AddonRuntime`: statement routing
   in `mapStatementNode`, evaluation hook in `evaluateStatement`,
   `HostParseContext`/`HostEvalContext` (style, text layout, pgfmath, foreach,
@@ -889,16 +894,34 @@ Each phase lands independently and is verifiable in isolation.
   dependency instrumentation, diagnostics/feature namespacing. Static
   registration only. Validation: toy test add-on renders, selects,
   incremental-drags correctly; claimed statements stop warning.
-- **Phase B — grammar seam + language UX.** `GenericEnvironment` (+
+- **Phase B — grammar seam + language UX. Done (2026-07-16).**
+  `GenericEnvironment` landed in the grammar; the `MacroStatement`
+  open question resolved AGAINST a grammar production (it would
+  legalize missing semicolons everywhere) in favor of the sanctioned
+  hand-scanner fallback: manifests declare semicolon-less macros via
+  `triggers.macroCommands`, recovered by a statement-level prescan
+  (`core/src/addons/macro-scan.ts`) that masks regions before the
+  Lezer parse and synthesizes AddonCommand statements.
+  `GenericEnvironment` (+
   `MacroStatement` or the scanner fallback) in the host grammar; completion
   source composition; scrub-key contribution; generic
   highlighting/folding for claimed environments. Validation: axis-shaped
   fixture documents parse into `AddonEnvironment` with host-parsed interiors.
-- **Phase C — editing surface.** `addonEdit` action + `addon` handle variant,
+- **Phase C — editing surface. Done (2026-07-16).** One deliberate
+  deviation: `planHandleDrag(handle, newWorld)` takes no context (pure
+  translation from handle data), and add-on inspector sections use a
+  compact typed property spec (`AddonInspectorProperty` with buildEdit
+  callbacks) rendered by a dedicated block rather than threading writes
+  through `SetPropertyWriteTarget`. `addonEdit` action + `addon` handle variant,
   drag-plan hook, inspector provider registry, namespaced property ids.
   Validation: toy add-on's handle drag rewrites source through the normal
   incremental path; inspector sections render and write.
-- **Phase D — loading + settings.** `AppSettings.addons`, loader (static +
+- **Phase D — loading + settings. Done (2026-07-16).** Loader in
+  `packages/app/src/addons/loader.ts` (static registrations via
+  `<App addons={...}>`, dynamic `import()` with apiVersion check), the
+  add-on manager tab in the settings modal, runtime threading through
+  compute (full + incremental sessions), edit dispatch, and standalone
+  export preamble contribution. `AppSettings.addons`, loader (static +
   dynamic import with apiVersion check), add-on manager UI, same-origin
   hosting layout for web, desktop path via platform adapter, export preamble
   contribution. Validation: enable/disable round-trips; a dev add-on loads
