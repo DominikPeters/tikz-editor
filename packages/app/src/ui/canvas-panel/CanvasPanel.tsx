@@ -42,6 +42,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
 import { buildCanvasContextMenuDefinition } from "../../context-menu";
 import { buildEditParseOptions } from "../../edit-parse-options";
+import { getActiveAddonRuntime } from "../../addons/registry";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { GRID_SIZE_MINOR_TARGET_PX } from "../../settings/types";
 import { useSettingsStore } from "../../settings/useSettingsStore";
@@ -1338,7 +1339,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             analysis: "none"
           }).sourceFingerprint;
       const result = applyEditAction(sourceForEdit, snapshot.editHandles, action, {
-        evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
+        evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current, addons: getActiveAddonRuntime() },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
 

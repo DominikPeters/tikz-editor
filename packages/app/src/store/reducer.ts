@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import type { AssistantItem } from "../platform/types";
 import { buildEditParseOptions } from "../edit-parse-options";
+import { getActiveAddonRuntime } from "../addons/registry";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
 import {
   createDocumentSession,
@@ -775,7 +776,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           activeDoc.snapshot.editHandles,
           action.action,
           {
-            evaluateOptions: { sourceFingerprint },
+            evaluateOptions: { sourceFingerprint, addons: getActiveAddonRuntime() },
             parseOptions
           }
         );

@@ -917,14 +917,16 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         lines: snapped.lines
       });
 
-      const ok = applyActionWithFeedback(
-        resolveHandleDragAction({
-          handleId: resolvedHandleId,
-          newWorld: nextWorld,
-          activeEndpointAnchor: drag.activeEndpointAnchor
-        }),
-        drag.historyMergeKey
-      );
+      const dragAction = resolveHandleDragAction({
+        handleId: resolvedHandleId,
+        newWorld: nextWorld,
+        activeEndpointAnchor: drag.activeEndpointAnchor,
+        handle: snapshotEditHandles.find((handle) => handle.id === resolvedHandleId) ?? null
+      });
+      if (!dragAction) {
+        return;
+      }
+      const ok = applyActionWithFeedback(dragAction, drag.historyMergeKey);
       if (ok.sourceChanged) {
         drag.lastKnownWorld = nextWorld;
       }

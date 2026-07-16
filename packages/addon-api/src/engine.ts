@@ -147,6 +147,64 @@ export type AddonChildFrameOptions = {
   clip?: HostClipRef;
 };
 
+/** Spec for a canvas edit handle created during evaluation. */
+export type AddonEditHandleSpec = {
+  /** Add-on-defined role, e.g. "axis-corner", "data-point". */
+  role: string;
+  world: WorldPoint;
+  /** Plain structured-clone-compatible data the engine needs to plan a drag. */
+  data?: unknown;
+  /** Stamp the handle with a nested statement's source id; defaults to the claimed statement. */
+  sourceId?: string;
+};
+
+/** The host's view of an add-on handle, passed back when planning a drag. */
+export type AddonHandleView = {
+  id: string;
+  addonId: string;
+  role: string;
+  world: WorldPoint;
+  data?: unknown;
+  sourceId: string;
+  sourceSpan: Span;
+};
+
+export type AddonSourcePatch = {
+  span: Span;
+  replacement: string;
+};
+
+/** Set (value string) or remove (value null) a key in an option list. */
+export type AddonOptionMutation = {
+  key: string;
+  value: string | null;
+};
+
+export type AddonEditResult =
+  | {
+      kind: "success";
+      patches: AddonSourcePatch[];
+      /** Source ids whose geometry the edit affects; drives the incremental fast path. */
+      changedSourceIds?: string[];
+      selectedSourceIds?: string[];
+    }
+  | { kind: "unsupported"; reason?: string }
+  | { kind: "error"; message: string };
+
+/** Injected edit services. Patch spans refer to the current document source. */
+export type HostEditContext = {
+  source: string;
+  slice(span: Span): string;
+  parseOptionList(raw: string, from?: number): OptionListAst;
+  /** Current parse of the claimed statement carrying this edit, if it can be located. */
+  findStatement(sourceId: string): AddonStatement | null;
+  /**
+   * Build a patch that applies option-list mutations to a claimed statement,
+   * inserting a fresh option list when the statement has none.
+   */
+  rewriteOptionList(statement: AddonStatement, mutations: AddonOptionMutation[]): AddonSourcePatch | null;
+};
+
 /**
  * Injected evaluation services. Implementations record dependency edges for
  * every named-coordinate/geometry read and write, which is what keeps the
@@ -191,6 +249,8 @@ export type HostEvalContext = {
   /** Re-evaluate host-parsed TikZ statements (e.g. an environment body) as ordinary TikZ. */
   evaluateTikzStatements(statements: HostStatement[], frame?: AddonChildFrameOptions): HostSceneElement[];
 
+  /** Create a canvas edit handle for the claimed statement. */
+  createHandle(spec: AddonEditHandleSpec): void;
   /** Mint an element id under the claimed statement's source id. */
   makeElementId(suffix: string): string;
   pushDiagnostic(diagnostic: AddonDiagnostic): void;
@@ -224,6 +284,15 @@ export type AddonEngine = {
   parseCommand?(statement: AddonCommandStatement, context: HostParseContext): AddonParseResult;
   evaluate(statement: AddonStatement, context: HostEvalContext): AddonEvalResult;
   /**
+   * Translate a handle drag into a plain-data edit description, or null when
+   * the drag is not applicable. Pure: derives everything from the handle's
+   * `data` and the new world position. The host wraps the result in an
+   * addonEdit action and routes it to `applyEdit`.
+   */
+  planHandleDrag?(handle: AddonHandleView, newWorld: WorldPoint): unknown;
+  /** Apply a plain-data edit (from planHandleDrag or an inspector write) as source patches. */
+  applyEdit?(edit: unknown, context: HostEditContext): AddonEditResult;
+  /**
    * Pure scan over the full document source for preamble-level configuration
    * (e.g. \pgfplotsset outside figures). The plain-data result is handed to
    * every subsequent evaluate call as `context.preambleConfig`.
@@ -233,12 +302,61 @@ export type AddonEngine = {
 };
 
 /**
- * The ui entry of an add-on: React components and other main-thread-only
- * contributions, loaded lazily. Shape grows in later phases (inspector
- * sections, templates, commands).
+ * Inspector properties an add-on can contribute for a selected claimed
+ * statement. These map onto the host's existing property renderers; property
+ * ids must be namespaced `addon:<addonId>:<property>`. `buildEdit` turns a
+ * new value into a plain-data edit routed to the engine's `applyEdit`.
+ */
+export type AddonInspectorProperty =
+  | {
+      kind: "number";
+      id: `addon:${string}`;
+      label: string;
+      value: number;
+      min?: number;
+      max?: number;
+      step?: number;
+      unit?: string;
+      buildEdit(newValue: number): unknown;
+    }
+  | {
+      kind: "text";
+      id: `addon:${string}`;
+      label: string;
+      value: string;
+      buildEdit(newValue: string): unknown;
+    }
+  | {
+      kind: "dropdown";
+      id: `addon:${string}`;
+      label: string;
+      value: string;
+      options: Array<{ value: string; label: string }>;
+      buildEdit(newValue: string): unknown;
+    }
+  | {
+      kind: "checkbox";
+      id: `addon:${string}`;
+      label: string;
+      value: boolean;
+      buildEdit(newValue: boolean): unknown;
+    };
+
+export type AddonInspectorSection = {
+  id: string;
+  title: string;
+  properties: AddonInspectorProperty[];
+};
+
+/**
+ * The ui entry of an add-on: main-thread-only contributions, loaded lazily.
+ * Unlike engine payloads, these objects may carry functions — they never
+ * cross a worker or snapshot boundary.
  */
 export type AddonUi = {
   manifest: AddonManifest;
+  /** Inspector sections for a selected claimed statement. */
+  inspector?(statement: AddonStatement): AddonInspectorSection[];
 };
 
 /** A statically registered add-on: engine plus optional ui entry. */

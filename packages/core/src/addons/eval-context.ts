@@ -93,6 +93,7 @@ export function createHostEvalContext(input: CreateHostEvalContextInput): HostEv
   const clipPathsById = new Map<string, SceneClipPath>();
   let elementCounter = 0;
   let clipCounter = 0;
+  let handleCounter = 0;
 
   const sourceRefFor = (sourceId?: string): SourceRef => ({
     sourceId: sourceId ?? statement.id,
@@ -418,6 +419,26 @@ export function createHostEvalContext(input: CreateHostEvalContextInput): HostEv
         mintedElements.add(element);
       }
       return nestedElements;
+    },
+
+    createHandle: (spec) => {
+      handleCounter += 1;
+      const handleId = `handle:${spec.sourceId ?? statement.id}:addon:${spec.role}:${handleCounter}`;
+      context.editHandles.push({
+        handleType: "addon",
+        kind: "addon",
+        rewriteMode: "addon",
+        id: handleId,
+        runtimeId: handleId,
+        sourceRef: sourceRefFor(spec.sourceId),
+        world: toWorld(spec.world),
+        transform: frame().transform,
+        sourceText: "",
+        coordinateForm: "unknown",
+        addonId,
+        role: spec.role,
+        data: spec.data
+      });
     },
 
     makeElementId: (suffix) => nextElementId(suffix),

@@ -38,6 +38,7 @@ import { getInspectorPropertyCapabilityStatus } from "../capabilities";
 import { ColorPickerField } from "../ColorPicker";
 import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./arrange-actions";
 import { InspectorMultiSection,InspectorSingleSection } from "./InspectorSections";
+import { AddonInspectorSections } from "./AddonInspectorSections";
 import {
 clampNumber,
 NODE_FONT_SIZE_MIXED_OPTION_VALUE,
@@ -100,6 +101,7 @@ export function InspectorPanel() {
     projectNamedColorSwatches,
     globalTransformValues,
     figureBoundsState,
+    addonInspectorModel,
     descriptor,
     multiModel,
     singlePropertyProvenance,
@@ -1976,6 +1978,15 @@ export function InspectorPanel() {
         renderToolOptionsPanel()
       ) : selectedSourceIds.length === 0 ? (
         renderGlobalTransformPanel()
+      ) : selectedSourceIds.length === 1 && addonInspectorModel ? (
+        <>
+          <SidePanel.Header>{renderedDescriptor?.elementKind ?? "Add-on element"}</SidePanel.Header>
+          <SidePanel.Content className={css.content}>
+            <div className={css.elementInfo}>
+              <AddonInspectorSections model={addonInspectorModel} dispatch={dispatch} />
+            </div>
+          </SidePanel.Content>
+        </>
       ) : selectedSourceIds.length === 1 ? (
         !renderedDescriptor ? (
           <SidePanel.Content>

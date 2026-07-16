@@ -1,12 +1,30 @@
 import type { EditAction } from "@tikz-editor/core/edit/actions";
-import type { NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
+import { toAddonHandleView } from "@tikz-editor/core/addons/edit-context";
+import type { EditHandle, NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
+
+import { getActiveAddonRuntime } from "../../addons/registry";
 
 export function resolveHandleDragAction(input: {
   handleId: string;
   newWorld: WorldPoint;
   activeEndpointAnchor: NodeAnchorTarget | null;
-}): EditAction {
+  /** The live handle object; required to route add-on handles to their engine. */
+  handle?: EditHandle | null;
+}): EditAction | null {
+  if (input.handle?.handleType === "addon") {
+    const runtime = getActiveAddonRuntime();
+    const engine = runtime?.engineById(input.handle.addonId);
+    const edit = engine?.planHandleDrag?.(toAddonHandleView(input.handle), {
+      x: input.newWorld.x,
+      y: input.newWorld.y
+    });
+    if (edit == null) {
+      return null;
+    }
+    return { kind: "addonEdit", addonId: input.handle.addonId, edit };
+  }
+
   if (input.activeEndpointAnchor) {
     return {
       kind: "connectHandle",

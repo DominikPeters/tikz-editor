@@ -646,11 +646,31 @@ export type PathAttachmentEditHandle = EditHandleBase & {
   positioningContext?: never;
 };
 
+/** Generic handle created by an add-on engine during evaluation. */
+export type AddonEditHandle = EditHandleBase & {
+  handleType: "addon";
+  kind: "addon";
+  rewriteMode: "addon";
+  addonId: string;
+  /** Add-on-defined role, e.g. "axis-corner", "data-point". */
+  role: string;
+  /** Plain structured-clone-compatible data for the engine's drag planning. */
+  data?: unknown;
+  local?: never;
+  frame?: never;
+  relativeBase?: never;
+  insertion?: never;
+  curveEdit?: never;
+  positioningContext?: never;
+  pathAttachmentContext?: never;
+};
+
 export type EditHandle =
   | CoordinateEditHandle
   | CurveControlEditHandle
   | NodePositionEditHandle
-  | PathAttachmentEditHandle;
+  | PathAttachmentEditHandle
+  | AddonEditHandle;
 
 export function isCoordinateEditHandle(handle: EditHandle): handle is CoordinateEditHandle {
   return handle.handleType === "coordinate";

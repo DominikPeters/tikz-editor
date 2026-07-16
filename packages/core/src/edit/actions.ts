@@ -53,6 +53,7 @@ import {
 } from "./actions/move-arrange-actions.js";
 import { applyReorderElementsAction, buildParentReorderReplacement } from "./actions/reorder-elements.js";
 import { applyResizeElementAction } from "./actions/resize-element.js";
+import { applyAddonEditAction } from "./actions/addon-edit.js";
 import {
   applyRotateElementAction,
   type RotateElementAction
@@ -168,6 +169,7 @@ export type EditAction =
       horizontalStep: number;
       verticalStep: number;
     }
+  | { kind: "addonEdit"; addonId: string; edit: unknown }
   | { kind: "flattenForeach"; target: FlattenForeachTarget; recursive?: boolean; maxExpansions?: number }
   | { kind: "addTreeChild"; parentSourceId: string; afterChildIndex?: number }
   | { kind: "removeTreeChild"; childSourceId: string }
@@ -250,6 +252,8 @@ export function applyEditAction(
   const parseOptions = options.parseOptions ?? {};
   const rawResult = (() : EditActionResult => {
     switch (action.kind) {
+      case "addonEdit":
+        return applyAddonEditAction(source, action, evaluateOptions?.addons, parseOptions);
       case "moveHandle":
         return applyMoveHandle(source, editHandles, action.handleId, action.newWorld, parseOptions);
       case "connectHandle":

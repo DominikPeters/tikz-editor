@@ -2,6 +2,7 @@ import type {
   AddonEngine,
   AddonManifest,
   AddonRegistration,
+  AddonUi,
   OptionEntry,
   WorldPoint
 } from "@tikz-editor/addon-api";
@@ -194,11 +195,94 @@ export function createSmileyAddon(): AddonRegistration {
         maxX: center.x + radius,
         maxY: center.y + radius
       });
+      context.createHandle({
+        role: "center",
+        world: center,
+        data: { statementId: statement.id }
+      });
       context.markFeature("addon:smiley:smiley-command", "supported");
 
       return { kind: "success", elements: [face, leftEye, rightEye, mouth] };
+    },
+
+    planHandleDrag: (handle, newWorld) => {
+      if (handle.role !== "center") {
+        return null;
+      }
+      return {
+        kind: "move-center",
+        statementId: handle.sourceId,
+        x: newWorld.x / PT_PER_UNIT,
+        y: newWorld.y / PT_PER_UNIT
+      } satisfies SmileyEdit;
+    },
+
+    applyEdit: (edit, context) => {
+      const smileyEdit = edit as SmileyEdit;
+      const statement = context.findStatement(smileyEdit.statementId);
+      if (!statement || statement.kind !== "AddonCommand") {
+        return { kind: "error", message: `Statement ${smileyEdit.statementId} not found` };
+      }
+      if (smileyEdit.kind === "move-center") {
+        const argsRaw = context.slice(statement.argsSpan);
+        const coordMatch = /\(([^()]*)\)/.exec(argsRaw);
+        if (!coordMatch || coordMatch.index == null) {
+          return { kind: "unsupported", reason: "\\smiley has no coordinate to move" };
+        }
+        const from = statement.argsSpan.from + coordMatch.index + 1;
+        const to = from + coordMatch[1].length;
+        const format = (value: number) => String(Math.round(value * 1000) / 1000);
+        return {
+          kind: "success",
+          patches: [{ span: { from, to }, replacement: `${format(smileyEdit.x)},${format(smileyEdit.y)}` }],
+          changedSourceIds: [statement.id]
+        };
+      }
+      const patch = context.rewriteOptionList(statement, [
+        { key: "radius", value: String(Math.round(smileyEdit.radius * 1000) / 1000) }
+      ]);
+      if (!patch) {
+        return { kind: "unsupported", reason: "Could not rewrite \\smiley options" };
+      }
+      return { kind: "success", patches: [patch], changedSourceIds: [statement.id] };
     }
   };
 
-  return { engine };
+  const ui: AddonUi = {
+    manifest: SMILEY_MANIFEST,
+    inspector: (statement) => {
+      if (statement.kind !== "AddonCommand" || statement.commandName !== "\\smiley") {
+        return [];
+      }
+      const payload = statement.payload as SmileyPayload | undefined;
+      const radius = (payload?.radius ?? PT_PER_UNIT) / PT_PER_UNIT;
+      return [
+        {
+          id: "smiley",
+          title: "Smiley",
+          properties: [
+            {
+              kind: "number",
+              id: "addon:smiley:radius",
+              label: "Radius",
+              value: radius,
+              min: 0.1,
+              step: 0.1,
+              buildEdit: (newValue: number): SmileyEdit => ({
+                kind: "set-radius",
+                statementId: statement.id,
+                radius: newValue
+              })
+            }
+          ]
+        }
+      ];
+    }
+  };
+
+  return { engine, ui };
 }
+
+export type SmileyEdit =
+  | { kind: "move-center"; statementId: string; x: number; y: number }
+  | { kind: "set-radius"; statementId: string; radius: number };

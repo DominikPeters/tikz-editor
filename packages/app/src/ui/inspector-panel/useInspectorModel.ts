@@ -23,6 +23,7 @@ import { buildStylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import { buildEditParseOptions } from "../../edit-parse-options";
+import { buildAddonInspectorModel } from "../../addons/inspector";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
@@ -301,6 +302,11 @@ export function useInspectorModel(args: {
       .filter((element): element is SceneElement => element != null);
   }, [selectedElementBySourceId, selectedSourceIds]);
 
+  const addonInspectorModel = useMemo(
+    () => buildAddonInspectorModel(snapshot.parseResult, selectedSourceIds),
+    [selectedSourceIds, snapshot.parseResult]
+  );
+
   const descriptorEntries = useMemo(() => {
     const resolveTarget = createInspectorTargetResolver(snapshot.source, parseOptions);
     return selectedSourceIds.map((sourceId) => {
@@ -474,6 +480,7 @@ export function useInspectorModel(args: {
     source,
     snapshot,
     selectedSourceIds,
+    addonInspectorModel,
     projectNamedColorSwatches,
     globalTransformValues,
     figureBoundsState,

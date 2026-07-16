@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { AddonEngine, AddonRegistration } from "@tikz-editor/addon-api";
 import { parseTikz } from "@tikz-editor/core/parser/index.js";
 import { createAddonRuntime } from "@tikz-editor/core/addons/runtime.js";
+import { toAddonHandleView } from "@tikz-editor/core/addons/edit-context.js";
+import { applyEditAction } from "@tikz-editor/core/edit/actions.js";
 import { renderTikzToSvg } from "@tikz-editor/core/render/index.js";
 import { collectGeometryInvalidation } from "@tikz-editor/core/semantic/dependencies.js";
 import { createSmileyAddon } from "./helpers/smiley-addon.js";
@@ -290,6 +292,88 @@ describe("claimed macro commands (semicolon-less prescan)", () => {
     const source = "\\begin{tikzpicture}\n\\smileyset{mood=happy}\n\\draw (0,0) -- (1,1)\n\\end{tikzpicture}";
     const parsed = parseTikz(source, { addons: runtime() });
     expect(parsed.diagnostics.some((d) => d.code === "missing-semicolon" || d.code === "parse-error")).toBe(true);
+  });
+});
+
+describe("add-on editing surface (Phase C)", () => {
+  const runtime = () => createAddonRuntime([createSmileyAddon()]);
+
+  it("creates addon edit handles during evaluation", () => {
+    const source = "\\begin{tikzpicture}\n\\smiley (1,1);\n\\end{tikzpicture}";
+    const result = renderTikzToSvg(source, { addons: runtime() });
+    const handle = result.semantic.editHandles.find((entry) => entry.handleType === "addon");
+    expect(handle).toBeDefined();
+    if (handle?.handleType !== "addon") {
+      throw new Error("expected addon handle");
+    }
+    expect(handle.addonId).toBe("smiley");
+    expect(handle.role).toBe("center");
+    expect(handle.world.x).toBeCloseTo(28.4527559055, 3);
+    expect(handle.sourceRef.sourceId).toBe("addon-command:0");
+  });
+
+  it("routes a handle drag through planHandleDrag and applyEditAction", () => {
+    const activeRuntime = runtime();
+    const source = "\\begin{tikzpicture}\n\\smiley (1,1);\n\\end{tikzpicture}";
+    const result = renderTikzToSvg(source, { addons: activeRuntime });
+    const handle = result.semantic.editHandles.find((entry) => entry.handleType === "addon");
+    if (handle?.handleType !== "addon") {
+      throw new Error("expected addon handle");
+    }
+
+    const engine = activeRuntime.engineById("smiley");
+    const edit = engine?.planHandleDrag?.(toAddonHandleView(handle), { x: 2 * 28.4527559055, y: 28.4527559055 });
+    expect(edit).toBeDefined();
+
+    const applied = applyEditAction(source, result.semantic.editHandles, {
+      kind: "addonEdit",
+      addonId: "smiley",
+      edit
+    }, { evaluateOptions: { addons: activeRuntime } });
+    if (applied.kind !== "success") {
+      throw new Error(`expected success, got ${applied.kind}`);
+    }
+    expect(applied.newSource).toContain("\\smiley (2,1);");
+    expect(applied.changedSourceIds).toEqual(["addon-command:0"]);
+  });
+
+  it("applies inspector property writes through rewriteOptionList", () => {
+    const activeRuntime = runtime();
+    const registration = createSmileyAddon();
+    const source = "\\begin{tikzpicture}\n\\smiley[fill=red] (1,1);\n\\end{tikzpicture}";
+    const parsed = parseTikz(source, { addons: activeRuntime });
+    const statement = parsed.figure.body[0];
+    if (statement.kind !== "AddonCommand") {
+      throw new Error("expected AddonCommand");
+    }
+
+    const sections = registration.ui?.inspector?.(statement) ?? [];
+    expect(sections).toHaveLength(1);
+    const property = sections[0].properties[0];
+    if (property.kind !== "number") {
+      throw new Error("expected number property");
+    }
+    expect(property.value).toBeCloseTo(1, 6);
+
+    const applied = applyEditAction(source, [], {
+      kind: "addonEdit",
+      addonId: "smiley",
+      edit: property.buildEdit(2)
+    }, { evaluateOptions: { addons: activeRuntime } });
+    if (applied.kind !== "success") {
+      throw new Error(`expected success, got ${applied.kind}`);
+    }
+    expect(applied.newSource).toContain("radius=2");
+    expect(applied.newSource).toContain("fill=red");
+  });
+
+  it("reports unsupported for edits from unknown add-ons", () => {
+    const applied = applyEditAction("\\begin{tikzpicture}\n\\end{tikzpicture}", [], {
+      kind: "addonEdit",
+      addonId: "ghost",
+      edit: {}
+    }, {});
+    expect(applied.kind).toBe("unsupported");
   });
 });
 
