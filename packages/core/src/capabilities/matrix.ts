@@ -650,6 +650,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
+  beamer_document_scan: {
+    parser: "stable",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["beamer_document_scan"],
+    notes:
+      "Headless source scanner inventories Beamer frames, sections, frame headers, preamble metadata, and nested TikZ roots. Frame content lowering and rendering are tracked by later Beamer phases."
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

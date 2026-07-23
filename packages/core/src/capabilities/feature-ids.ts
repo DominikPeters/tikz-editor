@@ -90,6 +90,7 @@ export const FEATURE_IDS = [
   "svg_circle",
   "svg_text",
   "text_includegraphics",
+  "beamer_document_scan",
   "render_pipeline"
 ] as const;
 

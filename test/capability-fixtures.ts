@@ -298,6 +298,15 @@ export const capabilityFixtures: Record<string, string> = {
   node_text_includegraphics: String.raw`\begin{tikzpicture}
   \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
 \end{tikzpicture}`,
+  beamer_document_scan: String.raw`\documentclass{beamer}
+\begin{document}
+\section{Introduction}
+\begin{frame}[t]{A frame}
+  \begin{tikzpicture}
+    \node {Nested figure};
+  \end{tikzpicture}
+\end{frame}
+\end{document}`,
   matrix_basic: String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes,row sep=4mm,column sep=6mm] (m) {
     A & B \\

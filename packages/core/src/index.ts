@@ -1,4 +1,5 @@
 export { FeatureFlags } from "./ast/features.js";
+export { scanBeamerDocument } from "./beamer/index.js";
 export * from "./coords/index.js";
 export { parseTikz, createIncrementalParseSession } from "./parser/index.js";
 export { applyEdit, applyEditIntent } from "./edit/apply.js";
@@ -61,6 +62,7 @@ export {
 } from "./edit/snapping/index.js";
 
 export type { ParseTikzOptions, ParseTikzResult } from "./parser/index.js";
+export type * from "./beamer/index.js";
 export type * from "./parser/incremental.js";
 export type { TikzEdit, ApplyEditResult, EditIntent, EditIntentResult, SourcePatch } from "./edit/types.js";
 export type { EditAnalysisSession, EditAnalysisView, EditAnalysisOptions } from "./edit/analysis.js";

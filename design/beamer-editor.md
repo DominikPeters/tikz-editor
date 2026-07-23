@@ -551,6 +551,13 @@ biggest determinant of coverage. Strategy:
 
 ### Phase B0: Measurement and Renderer Contract
 
+**Progress (2026-07-23):** The initial source contract and scanner are in
+place under `packages/core/src/beamer`: exact document/frame/header/body
+spans, frame options and titles, sections/subsections, basic preamble mining,
+absolute nested-TikZ roots, recovery diagnostics, and a public
+`scanBeamerDocument` entry point. The frame layout/result contracts and
+LuaLaTeX page oracle remain.
+
 - Maintain the corpus scanner and add Beamer constructs to the capabilities
   matrix. Scanner metrics must count file-defined macro use inside math and
   other atomic constructs rather than silently removing the main coverage

@@ -14,6 +14,10 @@
       "types": "./dist/capabilities/index.d.ts",
       "import": "./dist/capabilities/index.js"
     },
+    "./beamer": {
+      "types": "./dist/beamer/index.d.ts",
+      "import": "./dist/beamer/index.js"
+    },
     "./coords": {
       "types": "./dist/coords/index.d.ts",
       "import": "./dist/coords/index.js"
