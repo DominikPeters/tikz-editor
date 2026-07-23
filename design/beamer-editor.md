@@ -628,7 +628,9 @@ under `artifacts/beamer-frame-compare`. The minimal
 `test/fixtures/beamer/hello_world_beamer.tex` fixture is the first visual
 baseline; it isolates Madrid/seahorse chrome, Latin Modern text, and centered
 one-column body placement before the KKT fixture adds lists and embedded
-TikZ.
+TikZ. The oracle PNG is rasterized directly from the selected PDF page rather
+than its diagnostic SVG, because dvisvgm omits Beamer's PGF radial sphere
+shadings.
 
 The comparison's primary evidence is now a full-page LuaLaTeX shipout trace,
 not its raster diff. The probe walks the final page box without modifying it

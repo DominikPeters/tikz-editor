@@ -183,6 +183,32 @@ function rasterizeSvg(inputPath, outputPath, width, height) {
   ]);
 }
 
+function rasterizePdfPage(
+  inputPath,
+  outputPath,
+  pageNumber,
+  width,
+  height
+) {
+  const outputPrefix = outputPath.endsWith(".png")
+    ? outputPath.slice(0, -".png".length)
+    : outputPath;
+  runRequired("pdftoppm", [
+    "-png",
+    "-f",
+    String(pageNumber),
+    "-l",
+    String(pageNumber),
+    "-singlefile",
+    "-scale-to-x",
+    String(width),
+    "-scale-to-y",
+    String(height),
+    inputPath,
+    outputPrefix,
+  ]);
+}
+
 function createVisualComparisons(runDir) {
   const rendererPng = join(runDir, "renderer.png");
   const oraclePng = join(runDir, "oracle.png");
@@ -283,7 +309,17 @@ async function main() {
   const rendererPng = join(runDir, "renderer.png");
   const oraclePng = join(runDir, "oracle.png");
   rasterizeSvg(rendererSvg, rendererPng, options.width, rasterHeight);
-  rasterizeSvg(oracleSvg, oraclePng, options.width, rasterHeight);
+  // dvisvgm preserves the selected oracle page as a useful vector artifact,
+  // but it drops Beamer's PGF radial shadings. Raster the same selected PDF
+  // page directly so theme markers and other PDF paint operators remain in
+  // the visual comparison.
+  rasterizePdfPage(
+    join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf"),
+    oraclePng,
+    oracleReport.input.compiledPage,
+    options.width,
+    rasterHeight
+  );
   createVisualComparisons(runDir);
 
   const report = {
