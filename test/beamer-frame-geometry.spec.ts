@@ -16,12 +16,11 @@ describe("Beamer frame geometry contract", () => {
     const geometry = resolveBeamerPageGeometry(document);
 
     expect(geometry.aspectRatio).toBe("169");
-    expect(geometry.profile).toBe("madrid");
+    expect(geometry.themeId).toBe("Madrid");
     expect(geometry.page.width).toBeCloseTo(455.24408, 4);
     expect(geometry.page.height).toBeCloseTo(256.0748, 4);
     expect(geometry.textArea.x).toBe(10.95);
     expect(geometry.textArea.width).toBeCloseTo(433.34408, 4);
-    expect(geometry.footlineHeight).toBeCloseTo(12.658, 4);
   });
 
   it("uses Beamer's default page and margin profile", () => {
@@ -32,11 +31,10 @@ describe("Beamer frame geometry contract", () => {
     );
 
     expect(geometry.aspectRatio).toBe("43");
-    expect(geometry.profile).toBe("beamer-default");
+    expect(geometry.themeId).toBe("default");
     expect(geometry.page.width).toBeCloseTo(364.19528, 4);
     expect(geometry.page.height).toBeCloseTo(273.14646, 4);
     expect(geometry.textArea.x).toBeCloseTo(28.45276, 4);
-    expect(geometry.footlineHeight).toBe(0);
   });
 
   it("implements Beamer's custom aspect-ratio convention", () => {

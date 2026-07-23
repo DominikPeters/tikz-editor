@@ -315,38 +315,64 @@ source version/hash so a TeX Live upgrade changes the oracle explicitly.
 
 ## Theme Engine
 
-Beamer's own four-way decomposition is the interface boundary. A theme is
-**code for structure, data for appearance**:
+Beamer's own four-way decomposition is the source-level interface boundary,
+but the renderer must not branch on theme names. Theme handling is a
+four-stage pipeline:
+
+1. The preamble scanner records theme/component uses and options in source
+   order.
+2. A preset registry expands aggregate themes (`Madrid`, `metropolis`,
+   `moloch`) into the same outer/inner/color/font component patches that their
+   `.sty` files apply.
+3. A reducer applies those patches, followed by explicit
+   `\usecolortheme`/`\usefonttheme` and supported preamble overrides, to
+   produce one immutable `ResolvedBeamerTheme`.
+4. The frame composer consumes only that resolved record. Structural
+   templates return composition boxes/items; the generic SVG emitter knows
+   neither theme names nor Beamer color names.
+
+This matters for combinations such as `Madrid` followed by `seahorse`: Madrid
+chooses the `infolines` outer structure, while seahorse replaces palette data.
+It must not require a `Madrid + seahorse` renderer variant.
+
+A theme is therefore **code for structural templates, data for appearance and
+dimensions**:
 
 ```ts
-interface OuterThemeRenderer {
-  // chrome: headline, footline, sidebar, frametitle bar, progress indicators
-  renderChrome(ctx: FrameChromeContext): BeamerChromeLayout;
-  // the rect the block layout engine fills; depends on slide size and chrome
-  contentArea(ctx: FrameChromeContext): Rect;
+interface BeamerThemePreset {
+  id: string;
+  apply(use: ThemeUse, state: BeamerThemeBuilder): void;
 }
 
-interface InnerThemeStyle {
-  bullet(level: number): BulletRenderer;       // triangle | circle | ball | square
-  blockStyle: "plain" | "rounded" | "shadow" | "fill";
-  titlePage(ctx: TitlePageContext): BlockTree;
-  sectionPage?(ctx: SectionContext): BlockTree;
+interface BeamerTemplateSet {
+  headline: BeamerTemplate;
+  footline: BeamerTemplate;
+  frameTitle: BeamerTemplate;
+  titlePage: BeamerTemplate;
+  sectionPage: BeamerTemplate;
+  block: BeamerTemplate;
+  bullets: readonly BeamerTemplate[];
 }
 
-interface BeamerThemeRecord {
-  colors: BeamerColorRecord;   // ~30 named beamer-colors (structure, palettes,
-                               // block title/body, frametitle, alerted text, ...)
-  fonts: BeamerFontRecord;     // size/series/family per element
-  outer: OuterThemeRenderer;
-  inner: InnerThemeStyle;
-  options: Record<string, string | boolean>;   // e.g. moloch's progressbar=frametitle
+interface ResolvedBeamerTheme {
+  id: string;
+  colors: Readonly<BeamerColorRecord>;
+  fonts: Readonly<BeamerFontRecord>;
+  dimensions: Readonly<BeamerThemeDimensions>;
+  templates: Readonly<BeamerTemplateSet>;
+  options: Readonly<Record<string, string | boolean>>;
+  appliedComponents: readonly ThemeComponentProvenance[];
 }
 ```
 
-`FrameChromeContext` carries: frame title/subtitle, frame number and total,
-section/subsection structure (for navigation chrome and progress bars),
-title/author/date fields, slide geometry (4:3 = 128mm × 96mm,
-16:9 = 160mm × 90mm), and current overlay step.
+`BeamerTemplate` is a pure layout function over a `BeamerTemplateContext`. It
+returns source-addressed composition IR (boxes, text requests, rules, fills,
+and child slots), never SVG markup. The context carries frame
+title/subtitle, frame number and total, section/subsection structure, document
+metadata, slide geometry, current overlay step, and the resolved theme roles.
+The composition engine measures requested text and children, resolves
+alignment/stretch, and produces positioned items. This keeps measurement out
+of theme preset resolution and keeps SVG concerns out of templates.
 
 Presets are records: `default`, `Madrid` (infolines outer), `metropolis`,
 `moloch` (+ option handling). Because `\usecolortheme`/`\usefonttheme` and
@@ -355,8 +381,17 @@ patches on the record — this is why the appearance dimension must stay data,
 not code. Only unrecognized `\usetheme` or structural `\setbeamertemplate`
 degrades chrome (see Fallback).
 
-Each outer renderer is a small, source-addressed layout unit validated against
-real Beamer output with the structural and visual comparison harnesses.
+The initial implementation must exercise the resolver against both theme
+families before frame rendering grows: `Madrid` + a later color-theme patch,
+and `metropolis`/`moloch` + options such as
+`progressbar=frametitle`. Theme-specific source constants live only in their
+preset/template modules and cite the `.sty` definitions. Frame parsing,
+block composition, paragraph layout, embedded TikZ placement, and SVG
+emission are theme-independent.
+
+Each structural template is a small, source-addressed layout unit validated
+against real Beamer output with the structural and visual comparison
+harnesses.
 
 ## Overlays (Core MVP)
 

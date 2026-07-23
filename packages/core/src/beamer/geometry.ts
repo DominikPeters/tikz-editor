@@ -1,11 +1,11 @@
 import type {
   BeamerDocumentModel,
   BeamerPageGeometry,
-  BeamerThemeUseModel,
 } from "./types.js";
+import { resolveBeamerTheme } from "./theme/resolve.js";
+import type { ResolvedBeamerTheme } from "./theme/types.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
-const DEFAULT_NORMAL_SIZE_PT = 10.95;
 
 const STANDARD_PAGE_SIZES_CM: Readonly<Record<string, readonly [number, number]>> = {
   "2013": [14, 9.1],
@@ -22,22 +22,20 @@ const STANDARD_PAGE_SIZES_CM: Readonly<Record<string, readonly [number, number]>
  * Resolve the source-derived page geometry needed before frame layout.
  *
  * Page sizes mirror the aspectratio table in Beamer 3.72's `beamer.cls`.
- * Madrid uses `beamerouterthemeinfolines.sty`, which sets both text margins to
- * 1em. At Beamer's default 11pt class size, the normal size is 10.95pt.
+ * Theme-controlled horizontal dimensions arrive through the resolved theme;
+ * this module has no knowledge of aggregate theme names or templates.
  */
 export function resolveBeamerPageGeometry(
-  document: BeamerDocumentModel
+  document: BeamerDocumentModel,
+  theme: ResolvedBeamerTheme = resolveBeamerTheme(document)
 ): BeamerPageGeometry {
   const aspectRatio = documentClassOption(document, "aspectratio") ?? "43";
   const [widthCm, heightCm] =
     STANDARD_PAGE_SIZES_CM[aspectRatio] ?? customPageSizeCm(aspectRatio);
   const pageWidth = cmToTexPt(widthCm);
   const pageHeight = cmToTexPt(heightCm);
-  const madrid = usesTheme(document.preamble.themes, "theme", "Madrid");
-  const margin = madrid ? DEFAULT_NORMAL_SIZE_PT : cmToTexPt(1);
-  // infolines: ht=2.25ex, dp=1ex. The measured value is retained as a
-  // source-backed profile constant until the font/dimension executor exists.
-  const footlineHeight = madrid ? 12.658004760742188 : 0;
+  const marginLeft = theme.dimensions.textMarginLeftPt;
+  const marginRight = theme.dimensions.textMarginRightPt;
 
   return {
     aspectRatio,
@@ -48,14 +46,12 @@ export function resolveBeamerPageGeometry(
       height: pageHeight,
     },
     textArea: {
-      x: margin,
+      x: marginLeft,
       y: 0,
-      width: pageWidth - 2 * margin,
-      height: pageHeight - footlineHeight,
+      width: pageWidth - marginLeft - marginRight,
+      height: pageHeight,
     },
-    headlineHeight: 0,
-    footlineHeight,
-    profile: madrid ? "madrid" : "beamer-default",
+    themeId: theme.id,
   };
 }
 
@@ -74,18 +70,6 @@ function documentClassOption(
     }
   }
   return null;
-}
-
-function usesTheme(
-  themes: readonly BeamerThemeUseModel[],
-  kind: BeamerThemeUseModel["kind"],
-  name: string
-): boolean {
-  return themes.some(
-    (theme) =>
-      theme.kind === kind &&
-      theme.name.value.trim().toLocaleLowerCase() === name.toLocaleLowerCase()
-  );
 }
 
 function customPageSizeCm(aspectRatio: string): readonly [number, number] {

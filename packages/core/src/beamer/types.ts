@@ -149,15 +149,8 @@ export type BeamerPageGeometry = {
   page: BeamerRect;
   /** Theme-defined body text box, before frame-local layout. */
   textArea: BeamerRect;
-  /** Space occupied by the active headline template. */
-  headlineHeight: number;
-  /** Space occupied by the active footline template. */
-  footlineHeight: number;
-  /**
-   * The source-backed profile used to resolve dimensions which Beamer themes
-   * mutate at TeX execution time.
-   */
-  profile: "beamer-default" | "madrid";
+  /** Identifier of the fully resolved theme supplying the dimensions. */
+  themeId: string;
 };
 
 export type BeamerFrameLayoutItemKind =
@@ -230,4 +223,11 @@ export type RenderBeamerFrameResult = {
   layout: BeamerFrameLayout;
   svg: BeamerFrameSvgResult;
   diagnostics: Diagnostic[];
+};
+
+export type RenderBeamerFrameOptions = {
+  /** Zero-based frame index. */
+  frameIndex?: number;
+  /** One-based overlay step. Overlay filtering is not yet implemented. */
+  step?: number;
 };
