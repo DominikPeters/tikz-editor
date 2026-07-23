@@ -555,8 +555,10 @@ biggest determinant of coverage. Strategy:
 place under `packages/core/src/beamer`: exact document/frame/header/body
 spans, frame options and titles, sections/subsections, basic preamble mining,
 absolute nested-TikZ roots, recovery diagnostics, and a public
-`scanBeamerDocument` entry point. The frame layout/result contracts and
-LuaLaTeX page oracle remain.
+`scanBeamerDocument` entry point. `npm run probe:beamer-frame` compiles a
+selected source frame with LuaLaTeX and records the Beamer source
+version/hash, TeX page dimensions, PDF page box, positioned structured text,
+PDF, and SVG. The frame layout/result contracts remain.
 
 - Maintain the corpus scanner and add Beamer constructs to the capabilities
   matrix. Scanner metrics must count file-defined macro use inside math and
