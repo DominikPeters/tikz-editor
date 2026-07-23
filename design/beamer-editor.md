@@ -10,8 +10,9 @@ or any text editor.
 
 This document records the architectural decisions, grounds the scope in a
 corpus of real decks, and lays out implementation phases. It builds directly
-on `design/tex-like-layout-architecture.md`, which already anticipates Beamer
-frame layout as Phase 7 of the text subsystem.
+on `design/tex-like-layout-architecture.md`; most of that plan's paragraph,
+list, vlist, display-math, source-map, caret, and SVG-glyph foundations are
+now implemented, leaving Beamer page composition as the missing layer.
 
 ## Decisions Already Made
 
@@ -35,6 +36,16 @@ These were settled in design discussion and are treated as fixed below:
   flow. Coverage and faithful rendering come before insertion templates.
 - **Overlays are core MVP**, not a later phase. The step model is part of the
   frame IR from the beginning.
+- **LuaLaTeX with Latin Modern is the reference profile and oracle.** Beamer
+  text rendering uses the existing LuaLaTeX-oriented text profile, with a
+  Beamer font-role/size layer selecting Latin Modern Sans where Beamer selects
+  sans. Compiler comparisons, glyph traces, and cached oracle artifacts use
+  LuaLaTeX rather than mixing pdfLaTeX metrics with LuaLaTeX traces.
+- **Installed Beamer sources are the normative layout specification.** Page
+  geometry, frame skips, columns, blocks, overlays, and theme chrome are
+  transcribed from the corresponding `beamer*.sty`/`beamer.cls` definitions
+  located through `kpsewhich`, then locked down with oracle tests. Screenshots
+  and remembered constants are not specifications.
 
 ## Goals
 
@@ -101,8 +112,8 @@ Consequences adopted in this document:
 4. Macro expansion strategy matters more than any single environment.
 5. `[fragile]`/verbatim support can wait indefinitely.
 
-The scanner that produced these numbers should become a maintained tool
-(`scripts/scan-beamer-corpus.mjs`) and the construct list should join the
+The scanner that produced these numbers is maintained as
+`scripts/scan-beamer-corpus.mjs`; the construct list should also join the
 capabilities matrix (`packages/core/src/capabilities/`), so subset coverage
 is a tracked metric, not a guess.
 
@@ -127,9 +138,12 @@ also collect `\section`/`\subsection` commands between frames, because
 chrome (navigation, section pages) depends on them. Frames nest
 tikzpictures, so the inventory becomes shallowly hierarchical.
 
-This refactor lands *before* any Beamer feature: per-root editing-session
-state (`activeFigureId`, compute snapshot, undo grouping) must depend on a
-root abstraction, not on "active tikzpicture".
+This refactor lands before **app integration**, not before the headless Beamer
+renderer. The core renderer can scan and render source-backed frames without
+changing `activeFigureId`, compute snapshots, navigation, or undo state.
+Before frames enter `packages/app`, per-root editing-session state
+(`activeFigureId`, compute snapshot, undo grouping) must depend on a root
+abstraction, not on "active tikzpicture".
 
 ### Render order vs source order
 
@@ -162,9 +176,9 @@ Everything else in the preamble is opaque and preserved untouched.
 
 ## Frame Content Model
 
-A frame body parses into the block IR from
-`design/tex-like-layout-architecture.md` (paragraphs, lists, quotes), plus
-frame-level constructs:
+A frame body reuses the implemented simple-TeX/vlist IR described by
+`design/tex-like-layout-architecture.md` for paragraphs, lists, quotes,
+vertical glue, and display math, plus frame-level constructs:
 
 - **Vertical layout root** with Beamer's default vertical centering (`[c]`),
   and `[t]`/`[b]` variants from frame options.
@@ -200,19 +214,104 @@ otherwise the box falls back at inline/block granularity (see Fallback).
 
 ### Fonts
 
-Beamer's default is Computer Modern **Sans** at multiple sizes
-(frametitle, body, footline, footnote sizes). The TFM→metrics→glyph pipeline
-from the text-layout doc handles this; it is vendored-data expansion
-(`cmss10/12/17`, bold sans, plus the size-substitution table), not new
-architecture — but it is a prerequisite for the first rendered frame.
-metropolis/moloch uses Fira Sans when available; v1 renders it with the CM
-Sans profile and notes the substitution (metric-faithful Fira is a later
-font profile).
+The reference compiler is LuaLaTeX, so the editor's Beamer profile builds on
+`luaLatexDefaultTextFontProfile`. Beamer's default font theme selects a sans
+family at multiple sizes (frametitle, body, footline, footnote); the Beamer
+font-role layer therefore resolves those roles to Latin Modern Sans with the
+same requested sizes, series, and shapes as the class and theme sources.
+The existing scalable Latin Modern outlines and metrics are reused rather than
+introducing a second text engine.
 
-Beamer's default math setup is sans-influenced. The native math font profile
-initially renders classic CM serif math, which remains an accepted v1
-fidelity gap (one corpus deck even opts out via
-`\usefonttheme{professionalfonts}`).
+metropolis/moloch uses Fira Sans when available; v1 renders it with the Latin
+Modern Sans profile and reports the substitution (metric-faithful Fira is a
+later font profile).
+
+Beamer's default math setup remains a separate fidelity surface. The native
+math profile may differ visibly from LuaLaTeX's complete Beamer math setup;
+that is an accepted v1 gap tracked by the frame oracle (one corpus deck opts
+out via `\usefonttheme{professionalfonts}`).
+
+## Core Rendering Architecture
+
+Beamer rendering is a headless `packages/core` feature before it is an editor
+mode. The core boundary has three source-backed records:
+
+```ts
+interface BeamerDocumentModel {
+  source: string;
+  preamble: BeamerPreambleModel;
+  sections: BeamerSectionModel[];
+  frames: BeamerFrameModel[];
+  diagnostics: Diagnostic[];
+}
+
+interface BeamerFrameLayout {
+  frameId: string;
+  step: number;
+  page: Rect;
+  contentArea: Rect;
+  items: BeamerPositionedItem[];
+  paragraphReports: ParagraphLayoutReport<"document">[];
+  vlistLayouts: TexVListLayout<"document">[];
+}
+
+interface RenderBeamerFrameResult {
+  document: BeamerDocumentModel;
+  frame: BeamerFrameModel;
+  layout: BeamerFrameLayout;
+  svg: string;
+  svgModel: SvgRenderModel;
+  diagnostics: Diagnostic[];
+}
+```
+
+The Beamer frontend owns structural commands and environments: frames,
+columns, blocks, theme constructs, and overlays. Textual leaves are
+`MappedText` values expanded through `expandMacroBindingsMapped` and laid out
+by the existing simple-TeX/vlist pipeline. Beamer-specific concepts do not
+fork or specialize that generic text IR.
+
+The page layout is a Beamer composition IR, not a `SceneFigure`: theme chrome,
+horizontal columns, decorated blocks, text vlists, and atomic embedded
+figures are not TikZ scene elements. The emitter lowers the positioned page
+items to the existing source-addressed `SvgRenderModel`, preserving stable
+part IDs and incremental-diff compatibility. Initially an embedded TikZ
+picture may be one transformed nested SVG part; part-level composition is
+deferred until in-place figure editing.
+
+The production vlist/glyph SVG renderer currently hosted by the node text
+engine becomes a public renderer over `ParagraphLayoutReport` plus
+`TexVListLayout`. The headless Beamer result returns those reports directly;
+an app adapter may later register them with the existing hit-testing
+infrastructure.
+
+This boundary deliberately preserves the facts required by later editing
+without implementing editing now: every structural node has an absolute
+document span and stable source ID, macro-expanded leaves retain their
+`TextSourceMap`, and the positioned layout retains block, line, glyph, caret,
+and selection geometry.
+
+### Beamer source fidelity
+
+Implementation constants must cite the Beamer source definition they model.
+At minimum the initial profiles are derived from:
+
+- `beamer.cls`: aspect-ratio page sizes, geometry defaults, and base-size
+  selection.
+- `beamerbaseframe.sty` and `beamerbaseframesize.sty`: frame-title boxing,
+  available text height, `[c]`/`[t]`/`[b]` skips, shrink, and footnote
+  interaction.
+- `beamerbaseframecomponents.sty`: `columns`, `onlytextwidth`, `totalwidth`,
+  `T`/`t`/`c`/`b` alignment, minipage construction, and margin behavior.
+- `beamerbaseoverlay.sty` plus the overlay decoder: pause counters,
+  default overlay specifications, action environments, and keep-space versus
+  remove-space behavior.
+- The selected outer, inner, color, and font theme `.sty` files. For example,
+  Madrid is the composition of its declared color, inner, and outer themes;
+  `seahorse` is then applied as a color-theme patch.
+
+Tests and comparison reports record the LuaLaTeX version and relevant Beamer
+source version/hash so a TeX Live upgrade changes the oracle explicitly.
 
 ## Theme Engine
 
@@ -222,7 +321,7 @@ Beamer's own four-way decomposition is the interface boundary. A theme is
 ```ts
 interface OuterThemeRenderer {
   // chrome: headline, footline, sidebar, frametitle bar, progress indicators
-  renderChrome(ctx: FrameChromeContext): SvgFragment;
+  renderChrome(ctx: FrameChromeContext): BeamerChromeLayout;
   // the rect the block layout engine fills; depends on slide size and chrome
   contentArea(ctx: FrameChromeContext): Rect;
 }
@@ -256,8 +355,8 @@ patches on the record — this is why the appearance dimension must stay data,
 not code. Only unrecognized `\usetheme` or structural `\setbeamertemplate`
 degrades chrome (see Fallback).
 
-Each outer renderer is a small, screenshot-testable unit validated against
-real Beamer output with the existing visual-compare harness.
+Each outer renderer is a small, source-addressed layout unit validated against
+real Beamer output with the structural and visual comparison harnesses.
 
 ## Overlays (Core MVP)
 
@@ -298,11 +397,12 @@ and overlay-decorated commands follow the same spec model.
 
 ### Oracle
 
-Beamer compiles one PDF page per step. A compiled frame therefore *is* the
-oracle for the step model: page count validates step counting, and per-page
-visual comparison validates per-step layout (including `\only` reflow). The
-existing compare-harness pattern (compile, cache, raster-diff) applies
-directly.
+Beamer compiles one PDF page per step. A LuaLaTeX-compiled frame therefore
+*is* the oracle for the step model: page count validates step counting, and
+per-page structural and visual comparison validates per-step layout
+(including `\only` reflow). The harness follows the existing text comparison
+strategy: Lua node/page traces are the primary geometry signal and raster
+diffs are a secondary diagnostic normalized against converter noise.
 
 ## Slide Types and Templates
 
@@ -438,8 +538,9 @@ biggest determinant of coverage. Strategy:
   22-deck corpus and tracked over time via the capabilities matrix.
 - **Theme chrome fixtures**: per theme × geometry × (frame number, section
   structure) screenshot comparison against real Beamer output.
-- **Frame layout oracle**: compile single frames with pdfLaTeX, compare
-  rendered SVG against editor output — same harness family as
+- **Frame layout oracle**: compile single frames with LuaLaTeX and compare
+  page size, positioned boxes/rules, line breaks, font IDs, glyph codes, and
+  glyph positions before raster comparison — the same harness family as
   `compare-tex-text-visual-fuzz.mjs`, with frames instead of nodes.
 - **Overlay oracle**: PDF page count = step count; per-page diffs validate
   per-step layout including `\only` reflow.
@@ -448,43 +549,67 @@ biggest determinant of coverage. Strategy:
 
 ## Implementation Phases
 
-### Phase B0: Measurement and Root Abstraction
+### Phase B0: Measurement and Renderer Contract
 
-- Build the corpus scanner and add Beamer constructs to the capabilities
-  matrix.
-- Generalize figure inventory → document-root inventory; refactor
-  per-root session state onto the abstraction. (Useful for multi-figure
-  documents regardless of Beamer.)
+- Maintain the corpus scanner and add Beamer constructs to the capabilities
+  matrix. Scanner metrics must count file-defined macro use inside math and
+  other atomic constructs rather than silently removing the main coverage
+  signal.
+- Define `BeamerDocumentModel`, `BeamerFrameLayout`, and
+  `RenderBeamerFrameResult`, including absolute source spans, mapped text,
+  retained geometry reports, diagnostics, and `SvgRenderModel` output.
+- Extract a public native vlist/glyph SVG renderer from the node text engine.
+- Add a LuaLaTeX page-trace/oracle probe and record compiler/Beamer source
+  versions in its artifacts.
 
-Exit: scanner reports per-frame construct profiles on the 22-deck corpus;
-existing tikz editing unaffected by the root refactor.
+Exit: the renderer contract is covered by type/tests; scanner reports
+trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
+Beamer page's structural geometry.
 
-### Phase B1: Deck Document Model
+### Phase B1: Headless Deck Document Model
 
 - Frame + section scanner, render-order list (incl. `\AtBeginSection`
   recognition), preamble mining (theme, colors, title fields, graphicspath,
   macro table).
-- Slide sorter UI in deck mode; frames render as source cards (universal
-  fallback first).
+- Structural frame frontend for paragraphs, lists, blocks, columns, overlays,
+  and source-backed fallback nodes. Text leaves reuse `MappedText` and the
+  existing simple-TeX frontend.
 
-Exit: any corpus deck opens; sorter shows all slides in render order;
-reordering frames produces correct minimal source diffs.
+Exit: any corpus deck produces a document/frame inventory and diagnostics
+without app state or source mutation; no-op parsing preserves all source
+bytes.
 
-### Phase B2: Frame Rendering (read-only), Both Themes, Step Model
+### Phase B2: Headless Frame Rendering, Both Theme Families, Step Model
 
-- CM Sans font profile (metrics + glyphs, key sizes).
+- Beamer Latin Modern Sans font-role and size profile over the existing
+  LuaLaTeX text profile.
 - Block layout: frametitle, paragraphs, lists, blocks/theorems, columns,
   center, vspace/vfill, scalebox, native display-math boxes, embedded
-  tikzpictures (existing renderer), `\includegraphics` (incl. PDF.js).
+  tikzpictures (existing renderer), `\includegraphics` (incl. PDF.js), and
+  the core `tabular` subset.
 - Theme engine with `default`, `Madrid`, `metropolis`, `moloch`(+options);
   titlepage and section pages; `\setbeamercolor`/`\definecolor` patches.
-- Overlay specs parsed into the IR; per-step layout; step scrubber
-  (read-only).
+- Overlay specs parsed into the IR and per-step layout.
 - Block/inline fallback placeholders; chrome fallback.
+- Begin with the Madrid/seahorse KKT fixture: first its representative
+  columns/list/TikZ frame, then display-math, block, and title-page frames.
+  Add small dedicated overlay and metropolis/moloch fixtures so the main deck
+  does not overdetermine the architecture.
 
 Exit: ≥70% of corpus frames render without frame-level fallback; overlay
 oracle passes on frames using `\only`/`\uncover`/`item<>`; theme fixtures
 match real Beamer within tolerance.
+
+### Phase B2.5: App and Root Integration
+
+- Generalize figure inventory → document-root inventory and refactor
+  per-root session state (`activeFigureId`, compute snapshots, thumbnails,
+  source synchronization, viewport persistence, undo grouping) onto it.
+- Add deck-mode source cards, slide sorter, selected-step state, and the
+  read-only step scrubber using the established headless renderer result.
+
+Exit: any corpus deck opens in the app; the sorter shows render order and
+fallback cards; existing TikZ editing remains unaffected.
 
 ### Phase B3: Editing
 
@@ -496,13 +621,13 @@ Exit: round-trip property tests pass; a corpus deck can have a typo fixed,
 a bullet added, an overlay step adjusted, and a slide inserted — all from
 the canvas, with minimal diffs.
 
-### Phase B4: Tables, Footnotes, Inline Boxes
+### Phase B4: Footnotes and Advanced Inline Boxes
 
-- `tabular` subset (alignment IR), `\footnote`, `\colorbox`, generic
-  decorated-box rendering for recognizable `tcolorbox` uses.
+- `\footnote`, `\colorbox`, and generic decorated-box rendering for
+  recognizable `tcolorbox` uses.
 
-Exit: corpus frame coverage ≥85%; tables render with correct column widths
-on corpus decks.
+Exit: corpus frame coverage ≥85%; footnotes and common inline/decorated boxes
+render correctly across the supported themes.
 
 ### Phase B5: Deep TikZ Integration and Authoring Polish
 
@@ -516,9 +641,10 @@ overlay]`; double-click-to-edit works in place.
 
 ## Risks and Tradeoffs
 
-- **The block layout engine is the critical path** (vbox stacking, vertical
-  centering, per-step reflow). It is shared with the text subsystem's
-  Phase 6/7; Beamer work should accelerate, not fork, that plan.
+- **Beamer composition is the critical path** (frame glue, horizontal
+  columns, decorated boxes, theme chrome, and per-step projection). Generic
+  paragraph, list, vbox, glue, display-math, source-map, and caret machinery
+  already exists and must be reused rather than forked.
 - **Macro expansion can expand without bound.** The expansion subset must be
   explicit and the use-site fallback must be cheap, or coverage work becomes
   a macro interpreter project.
@@ -528,9 +654,9 @@ overlay]`; double-click-to-edit works in place.
 - **Two corpora biases**: 22 decks from one community. The scanner should be
   easy to point at other corpora (e.g. arXiv source of `beamer` decks)
   before locking the subset.
-- **CM serif math vs Beamer sans-influenced math** is a visible fidelity gap
-  in v1; acceptable, but should be stated in the UI (font profile note), not
-  silent.
+- **Native math vs LuaLaTeX's Beamer math setup** may remain a visible
+  fidelity gap in v1; it is measured by the same oracle and stated in the UI
+  rather than hidden.
 - **Per-step layout cost** is assumed cheap; if profiling disagrees,
   keep-space steps can share layout and only `\only`-bearing frames pay
   per-step.
@@ -541,7 +667,7 @@ overlay]`; double-click-to-edit works in place.
   suggests one or two common shapes per deck, usually via a single preamble
   macro — per-deck recognition may cover most uses.)
 - Fira Sans metric profile for metropolis/moloch: when does metric-faithful
-  Fira matter vs CM Sans substitution?
+  Fira matter vs Latin Modern Sans substitution?
 - `\footnote` placement interaction with footline chrome across themes.
 - Should the sorter offer a per-step expanded view (one thumbnail per step)
   for overlay-heavy frames?

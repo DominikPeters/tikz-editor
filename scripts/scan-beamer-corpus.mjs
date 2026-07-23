@@ -306,6 +306,10 @@ function classifyFrame(frame, fileContext) {
 
   const removedEnvs = {};
   let body = removeEnvBodies(frame.body, [...VERBATIM_ENVS], removedEnvs);
+  // Macro usage is a coverage signal even when the invocation is inside an
+  // atomic TikZ picture or a math island. Preserve this pre-removal view for
+  // the custom-macro pass while continuing to exclude verbatim-like content.
+  const macroUsageBody = body;
   body = removeEnvBodies(body, ["tikzpicture"], removedEnvs);
   for (const env of Object.keys(removedEnvs)) {
     if (VERBATIM_ENVS.has(env)) escalate("fallback", `env:${env}`);
@@ -355,10 +359,17 @@ function classifyFrame(frame, fileContext) {
   for (const m of body.matchAll(/\\([a-zA-Z]+)\b/g)) {
     const name = m[1];
     if (REPORT_CMDS.includes(name)) cmdCounts[name] = (cmdCounts[name] ?? 0) + 1;
+    if (!fileContext.definedMacros.has(name) &&
+        !KNOWN_NOISE_CMDS.has(name) &&
+        name !== "REMOVEDmath" &&
+        name !== "REMOVEDenv") {
+      unknownCmds[name] = (unknownCmds[name] ?? 0) + 1;
+    }
+  }
+  for (const m of macroUsageBody.matchAll(/\\([a-zA-Z]+)\b/g)) {
+    const name = m[1];
     if (fileContext.definedMacros.has(name)) {
       customMacroUses[name] = (customMacroUses[name] ?? 0) + 1;
-    } else if (!KNOWN_NOISE_CMDS.has(name) && name !== "REMOVEDmath" && name !== "REMOVEDenv") {
-      unknownCmds[name] = (unknownCmds[name] ?? 0) + 1;
     }
   }
 
