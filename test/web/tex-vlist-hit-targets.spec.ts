@@ -13,7 +13,7 @@ import type {
 } from "../../packages/core/src/text/knuth-plass/index";
 import { clientPoint, px } from "../../packages/core/src/coords/index.js";
 import { layoutSimpleTexParagraph } from "../../packages/core/src/text/tex/index.js";
-import { registerTexVListLayoutsOnOutputJax } from "../../packages/core/src/text/tex/vlist/index.js";
+import { registerTexVListLayouts } from "../../packages/core/src/text/tex/vlist/index.js";
 
 function registeredSnapshotForSource(
   source: string,
@@ -30,13 +30,13 @@ function registeredSnapshotForSource(
   if (!result.vlistLayout) {
     throw new Error(`expected registered vlist layout: ${result.fallbackReason ?? "missing layout"}`);
   }
-  const outputJax = {};
-  registerTexVListLayoutsOnOutputJax(outputJax, [{
+  const layoutContext = {};
+  registerTexVListLayouts(layoutContext, [{
     paragraphId: "tex:vlist-hit-source",
     layout: result.vlistLayout,
   }]);
   return getKnuthPlassVListGeometrySnapshot({
-    outputJax,
+    layoutContext,
     paragraphId: "tex:vlist-hit-source",
     containerElement: {
       getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),

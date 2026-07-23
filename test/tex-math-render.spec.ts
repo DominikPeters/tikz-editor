@@ -270,7 +270,7 @@ describe("TeX math SVG rendering", () => {
     }
   });
 
-  it("renders simple hlist glyphs as TeX font SVG paths in MathJax-compatible units", () => {
+  it("renders simple hlist glyphs as TeX font SVG paths in TeX-compatible units", () => {
     const parsed = parseTexMath("a+1", { sourceOffset: 10 });
     const result = layoutTexMathList(parsed.list);
     expect(result.supported).toBe(true);
@@ -1210,7 +1210,7 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('transform="translate(960.418');
   });
 
-  it("creates inline math boxes for supported formulas without MathJax", () => {
+  it("creates inline math boxes for supported formulas with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
       source: "$x-y$",
@@ -1480,7 +1480,7 @@ describe("TeX math SVG rendering", () => {
     expect(mathAdvance).toBeLessThan(box?.width ?? 0);
   });
 
-  it("creates math boxes for operatorname without MathJax", () => {
+  it("creates math boxes for operatorname with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const inlineContent = String.raw`\operatorname{rank}`;
     const inlineSource = `$${inlineContent}$`;
@@ -1524,7 +1524,7 @@ describe("TeX math SVG rendering", () => {
     expect(displayBox?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="120"');
   });
 
-  it("creates display-style math boxes for display formulas without MathJax", () => {
+  it("creates display-style math boxes for display formulas with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const source = String.raw`\[\sum_i^n\]`;
     const box = provider.getDisplayMathBox?.({
@@ -1705,7 +1705,7 @@ describe("TeX math SVG rendering", () => {
     expect(fixed?.svgBody).toContain('data-tex-font="cmr10" data-tex-glyph="43"');
   });
 
-  it("creates inline math boxes for simple superscripts and subscripts without MathJax", () => {
+  it("creates inline math boxes for simple superscripts and subscripts with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const box = provider.getInlineMathBox({
       source: "$y_i^2$",
@@ -1729,7 +1729,7 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="105"');
   });
 
-  it("creates inline math boxes for pmatrix without MathJax", () => {
+  it("creates inline math boxes for pmatrix with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const content = String.raw`\begin{pmatrix}a&b\\c&d\end{pmatrix}`;
     const source = `$${content}$`;
@@ -1755,7 +1755,7 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('data-tex-font="cmex10" data-tex-glyph="19"');
   });
 
-  it("creates inline math boxes for array environments without MathJax", () => {
+  it("creates inline math boxes for array environments with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const content = String.raw`\begin{array}{lc}a&b\\x&y\end{array}`;
     const source = `$${content}$`;
@@ -1782,7 +1782,7 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('transform="translate(2071.528 589.9963) scale(100)"');
   });
 
-  it("creates inline math boxes for cases environments without MathJax", () => {
+  it("creates inline math boxes for cases environments with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const content = String.raw`\begin{cases}a&b\\x&y\end{cases}`;
     const source = `$${content}$`;
@@ -1809,7 +1809,7 @@ describe("TeX math SVG rendering", () => {
     expect(box?.svgBody).toContain('transform="translate(805.56 -682.0044) scale(100)"');
   });
 
-  it("creates inline math boxes for smallmatrix environments without MathJax", () => {
+  it("creates inline math boxes for smallmatrix environments with the native renderer", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const content = String.raw`\begin{smallmatrix}a&b\\x&y\end{smallmatrix}`;
     const source = `$${content}$`;

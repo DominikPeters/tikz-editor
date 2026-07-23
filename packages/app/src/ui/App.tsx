@@ -8,7 +8,7 @@ import {
 } from "../app-menu";
 import { useEditorStore } from "../store/store";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
-import { computeSnapshot, makeEmptySnapshot, setMathJaxFont, type ComputeRequest, type ComputeResponse } from "../compute";
+import { computeSnapshot, makeEmptySnapshot, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
 import { applyEditAction } from "@tikz-editor/core/edit/actions";
 import { getRepeatSelectionEligibility } from "@tikz-editor/core/edit/actions/repeat";
@@ -257,11 +257,10 @@ export function App() {
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
     dispatch: s.dispatch
   })));
-  const { uiFontSizePx, colorScheme, canvasInvert, mathJaxFont } = useSettingsStore(useShallow((s) => ({
+  const { uiFontSizePx, colorScheme, canvasInvert } = useSettingsStore(useShallow((s) => ({
     uiFontSizePx: s.settings.general.uiFontSizePx,
     colorScheme: s.settings.general.colorScheme,
-    canvasInvert: s.settings.general.canvasInvert,
-    mathJaxFont: s.settings.rendering.mathJaxFont
+    canvasInvert: s.settings.general.canvasInvert
   })));
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
@@ -994,7 +993,6 @@ export function App() {
     if (!scheduler || typingComputeDelay != null) {
       return;
     }
-    setMathJaxFont(mathJaxFont);
     scheduler.schedule({
       id: crypto.randomUUID(),
       documentId: activeDocumentId,
@@ -1009,14 +1007,13 @@ export function App() {
       trigger,
       renderViewBox
     });
-  }, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
     if (!scheduler || typingComputeDelay == null) {
       return;
     }
-    setMathJaxFont(mathJaxFont);
     scheduler.schedule({
       id: crypto.randomUUID(),
       documentId: activeDocumentId,
@@ -1030,7 +1027,7 @@ export function App() {
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger
     });
-  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
+  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, trigger, typingComputeDelay]);
 
   useEffect(() => {
     let prewarmTimer: number | null = null;
@@ -1592,9 +1589,9 @@ export function App() {
             sourceId: element.sourceRef.sourceId,
             sceneTextId: element.id,
             text: element.text,
-            renderSourceText: element.textRenderInfo?.mode === "mathjax" ? element.textRenderInfo.renderSourceText : null,
-            paragraphId: element.textRenderInfo?.mode === "mathjax" ? element.textRenderInfo.paragraphId : null,
-            layoutKind: element.textRenderInfo?.mode === "mathjax" ? element.textRenderInfo.layoutKind : null
+            renderSourceText: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.renderSourceText : null,
+            paragraphId: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.paragraphId : null,
+            layoutKind: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.layoutKind : null
           }));
       },
       resetProfilingSession: (label) => {

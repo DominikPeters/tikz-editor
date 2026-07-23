@@ -4,15 +4,15 @@ import { renderTikzToSvg, renderTikzToSvgAsync } from "../packages/core/src/rend
 import { parseLength } from "../packages/core/src/semantic/coords/parse-length.js";
 import type { SceneCircle, SceneEllipse, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
-import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
-import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
-import { getTexVListLayoutFromOutputJax } from "../packages/core/src/text/tex/vlist/registry.js";
+import { getParagraphLayoutReports } from "../packages/core/src/text/knuth-plass/index.js";
+import { getActiveTextLayoutContext } from "../packages/core/src/text/layout-context.js";
+import { getTexVListLayout } from "../packages/core/src/text/tex/vlist/registry.js";
 import { projectInputRange } from "../packages/core/src/text/source-map.js";
 import type { NodeTextEngine, NodeTextGraphicsResolver, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
 
 function readLineboxTranslateXs(svg: string): number[] {
   const xs: number[] = [];
-  const lineboxPattern = /<g\b[^>]*data-mjx-linebox="true"[^>]*>/g;
+  const lineboxPattern = /<g\b[^>]*data-tex-linebox="true"[^>]*>/g;
   for (const match of svg.matchAll(lineboxPattern)) {
     const tag = match[0];
     const transformMatch = tag.match(/transform="translate\(([-+0-9.]+)(?:\s*,\s*|\s+)([-+0-9.]+)\)"/);
@@ -23,7 +23,7 @@ function readLineboxTranslateXs(svg: string): number[] {
 
 function readLineboxTranslateYs(svg: string): number[] {
   const ys: number[] = [];
-  const lineboxPattern = /<g\b[^>]*data-mjx-linebox="true"[^>]*>/g;
+  const lineboxPattern = /<g\b[^>]*data-tex-linebox="true"[^>]*>/g;
   for (const match of svg.matchAll(lineboxPattern)) {
     const tag = match[0];
     const transformMatch = tag.match(/transform="translate\(([-+0-9.]+)(?:\s*,\s*|\s+)([-+0-9.]+)\)"/);
@@ -33,7 +33,7 @@ function readLineboxTranslateYs(svg: string): number[] {
 }
 
 function countLineboxes(svg: string): number {
-  return (svg.match(/data-mjx-linebox=/g) ?? []).length;
+  return (svg.match(/data-tex-linebox=/g) ?? []).length;
 }
 
 function renderedMspaceAdvances(svg: string): number[] {
@@ -52,7 +52,7 @@ function renderedMspaceAdvances(svg: string): number[] {
 }
 
 function reportForParagraphId(paragraphId: string | null) {
-  const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+  const reports = getParagraphLayoutReports(getActiveTextLayoutContext());
   return reports.find((report) => report.paragraphId === paragraphId) ?? null;
 }
 
@@ -143,9 +143,9 @@ describe("render pipeline", () => {
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     // Cells desugar to `$...$` text (PGF's execute at begin/end node=$) and render
-    // through the native TeX engine rather than the MathJax fallback.
+    // through the same native TeX engine as ordinary node text.
     expect(result.svg.svg).toContain('data-tex-inline-math="true"');
     expect(result.svg.svg).not.toContain('\\mbox{x^2}');
     const cells = result.semantic.scene.elements.filter(
@@ -153,12 +153,12 @@ describe("render pipeline", () => {
     );
     expect(cells.map((cell) => cell.text)).toEqual(["x^2", "\\frac{1}{y}"]);
     for (const cell of cells) {
-      expect(cell.textRenderInfo?.mode).toBe("mathjax");
+      expect(cell.textRenderInfo?.mode).toBe("tex");
       expect(
-        cell.textRenderInfo?.mode === "mathjax" ? cell.textRenderInfo.renderSourceText : null
+        cell.textRenderInfo?.mode === "tex" ? cell.textRenderInfo.renderSourceText : null
       ).toBe(`$${cell.text}$`);
       expect(
-        cell.textRenderInfo?.mode === "mathjax" ? cell.textRenderInfo.paragraphId : null
+        cell.textRenderInfo?.mode === "tex" ? cell.textRenderInfo.paragraphId : null
       ).toMatch(/^tex:/);
     }
   });
@@ -179,7 +179,7 @@ describe("render pipeline", () => {
     );
     expect(cells).toHaveLength(1);
     expect(
-      cells[0]?.textRenderInfo?.mode === "mathjax"
+      cells[0]?.textRenderInfo?.mode === "tex"
         ? cells[0].textRenderInfo.renderSourceText
         : null
     ).toBe("$a $\\text{plus}$ b$");
@@ -204,16 +204,16 @@ describe("render pipeline", () => {
     );
     expect(cells).toHaveLength(2);
     const paragraphIds = cells.map((cell) =>
-      cell.textRenderInfo?.mode === "mathjax" ? cell.textRenderInfo.paragraphId : null
+      cell.textRenderInfo?.mode === "tex" ? cell.textRenderInfo.paragraphId : null
     );
     expect(paragraphIds[0]).toMatch(/^tex:/);
     expect(paragraphIds[1]).toMatch(/^tex:/);
     expect(paragraphIds[0]).not.toBe(paragraphIds[1]);
 
     const expectedSpans = [source.indexOf(label), source.lastIndexOf(label)];
-    const outputJax = getActiveMathJaxOutputJax();
+    const layoutContext = getActiveTextLayoutContext();
     for (const [index, paragraphId] of paragraphIds.entries()) {
-      const layout = getTexVListLayoutFromOutputJax(outputJax, paragraphId);
+      const layout = getTexVListLayout(layoutContext, paragraphId);
       expect(layout, `registered vlist layout for node ${index}`).not.toBeNull();
       const spanStart = expectedSpans[index];
       expect(layout?.paragraphPlacements[0]?.sourceSpan).toEqual({
@@ -506,14 +506,14 @@ describe("render pipeline", () => {
     expect(result.semantic.scene.kind).toBe("SceneFigure");
   });
 
-  it("renders node text through MathJax in async mode", async () => {
+  it("renders node text through native TeX in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw,text width=2cm] at (0,0) {Hello \textit{World}};
 \end{tikzpicture}`;
 
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
 
@@ -564,7 +564,7 @@ describe("render pipeline", () => {
     });
 
     expect(flushCalls).toBeGreaterThan(0);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg).toContain("data-test='ready'");
   });
 
@@ -579,7 +579,7 @@ describe("render pipeline", () => {
 
     expect(result.renderDiagnostics).toEqual([]);
     expect(result.svg.svg).toContain("<text");
-    expect(result.svg.svg).not.toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).not.toContain('data-text-renderer="tex"');
   });
 
   it("passes macro-expanded node text source maps to the text engine", async () => {
@@ -670,7 +670,7 @@ describe("render pipeline", () => {
 
   it("renders partial text commands in explicit multiline node text as literal runs", async () => {
     const source = String.raw`\begin{tikzpicture}
-  \node at (0.2,3.2) [align=left]{I'm testing the Mathjax \\ rendering \te};
+  \node at (0.2,3.2) [align=left]{I'm testing the TeX \\ rendering \te};
 \end{tikzpicture}`;
 
     const result = await renderTikzToSvgAsync(source);
@@ -771,9 +771,9 @@ describe("render pipeline", () => {
     if (singleWordText?.kind === "Text" && multiWordText?.kind === "Text") {
       const singleRenderInfo = singleWordText.textRenderInfo;
       const multiRenderInfo = multiWordText.textRenderInfo;
-      expect(singleRenderInfo?.mode).toBe("mathjax");
-      expect(multiRenderInfo?.mode).toBe("mathjax");
-      if (singleRenderInfo?.mode === "mathjax" && multiRenderInfo?.mode === "mathjax") {
+      expect(singleRenderInfo?.mode).toBe("tex");
+      expect(multiRenderInfo?.mode).toBe("tex");
+      if (singleRenderInfo?.mode === "tex" && multiRenderInfo?.mode === "tex") {
         expect(singleRenderInfo.layoutKind).toBe("single-line");
         expect(multiRenderInfo.layoutKind).toBe("single-line");
       }
@@ -782,7 +782,7 @@ describe("render pipeline", () => {
     expect(renderedMspaceAdvances(multiWord.svg.svg).every((advance) => advance > 0)).toBe(true);
   });
 
-  it("preserves visible spaces in plain single-line MathJax node text", async () => {
+  it("preserves visible spaces in plain single-line native TeX node text", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw] (test) at (0, 1.5) {this is a node with text};
 \end{tikzpicture}`;
@@ -794,8 +794,8 @@ describe("render pipeline", () => {
     if (text?.kind === "Text") {
       expect(text.text).toBe("this is a node with text");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         const report = reportForParagraphId(renderInfo.paragraphId);
         const spaceRuns = report?.runs.filter((run) => run.kind === "space") ?? [];
         expect(spaceRuns).toHaveLength(5);
@@ -817,8 +817,8 @@ describe("render pipeline", () => {
       expect(text.text).toBe("Let me think of something long and fun to write");
       expect(text.text).not.toContain("\n");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("single-line");
         expect(renderInfo.paragraphId).toBeTruthy();
       }
@@ -837,8 +837,8 @@ describe("render pipeline", () => {
     if (text?.kind === "Text") {
       const renderInfo = text.textRenderInfo;
       expect(text.text).toBe("C");
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("single-line");
         expect(renderInfo.paragraphId).toBeTruthy();
         expect(renderInfo.renderSourceText).toBe("C");
@@ -898,9 +898,9 @@ World};
     if (inlineText?.kind === "Text" && newlineText?.kind === "Text") {
       const inlineRenderInfo = inlineText.textRenderInfo;
       const newlineRenderInfo = newlineText.textRenderInfo;
-      expect(inlineRenderInfo?.mode).toBe("mathjax");
-      expect(newlineRenderInfo?.mode).toBe("mathjax");
-      if (inlineRenderInfo?.mode === "mathjax" && newlineRenderInfo?.mode === "mathjax") {
+      expect(inlineRenderInfo?.mode).toBe("tex");
+      expect(newlineRenderInfo?.mode).toBe("tex");
+      if (inlineRenderInfo?.mode === "tex" && newlineRenderInfo?.mode === "tex") {
         expect(inlineRenderInfo.layoutKind).toBe("single-line");
         expect(newlineRenderInfo.layoutKind).toBe("single-line");
       }
@@ -918,8 +918,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("FirstSecond");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("single-line");
         expect(renderInfo.renderSourceText).toBe("FirstSecond");
       }
@@ -936,12 +936,11 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("First\nSecond");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(result.svg.svg).not.toContain(String.raw`\begin{array}`);
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
@@ -957,12 +956,11 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("Abcd\ndefgh");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
   });
@@ -977,12 +975,11 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("$x$\nvariable");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
     const xs = readLineboxTranslateXs(result.svg.svg);
@@ -997,8 +994,8 @@ World};
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     expect(text?.kind).toBe("Text");
     const renderInfo = text?.textRenderInfo;
-    expect(renderInfo?.mode).toBe("mathjax");
-    if (renderInfo?.mode === "mathjax") {
+    expect(renderInfo?.mode).toBe("tex");
+    if (renderInfo?.mode === "tex") {
       expect(renderInfo.paragraphId).toMatch(/^tex:/);
       expect(renderInfo.layoutKind).toBe("wrapped");
       const report = reportForParagraphId(renderInfo.paragraphId);
@@ -1007,7 +1004,7 @@ World};
       expect(report?.lines[1]?.segments.map((segment) => segment.text).join("")).toBe("Beta");
     }
     expect(result.svg.svg).toContain('data-paragraph-id="tex:');
-    expect(result.svg.svg).toContain('data-mjx-linebox="true"');
+    expect(result.svg.svg).toContain('data-tex-linebox="true"');
     expect(result.svg.svg).toContain('data-tex-font="lmroman10-regular"');
     expect(result.svg.svg).toContain("<path");
     expect(result.svg.svg).not.toContain("<text");
@@ -1035,8 +1032,8 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const renderInfo = text?.textRenderInfo;
-    expect(renderInfo?.mode).toBe("mathjax");
-    if (renderInfo?.mode === "mathjax") {
+    expect(renderInfo?.mode).toBe("tex");
+    if (renderInfo?.mode === "tex") {
       expect(renderInfo.paragraphId).toMatch(/^tex:/);
       const report = reportForParagraphId(renderInfo.paragraphId);
       expect(report?.lines).toHaveLength(2);
@@ -1063,8 +1060,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("a\nvariable");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1088,8 +1085,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("$x$\nvariable");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1114,7 +1111,7 @@ World};
     expect(textElements).toHaveLength(3);
     const renderInfos = textElements.map((element) => element.textRenderInfo);
     expect(renderInfos.every((info) =>
-      info?.mode === "mathjax" && info.paragraphId != null && info.paragraphId.startsWith("tex:")
+      info?.mode === "tex" && info.paragraphId != null && info.paragraphId.startsWith("tex:")
     )).toBe(true);
     expect(textElements[0]?.textBlockWidth).toBeCloseTo(textElements[1]?.textBlockWidth ?? 0, 6);
     expect(textElements[0]?.textBlockHeight).toBeCloseTo(textElements[1]?.textBlockHeight ?? 0, 6);
@@ -1136,8 +1133,8 @@ World};
       expect(secondLine.startsWith(" ")).toBe(false);
       expect(secondLine.startsWith("and")).toBe(true);
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.renderSourceText).toContain(String.raw`\\and this is the second`);
         expect(renderInfo.renderSourceText).not.toContain(String.raw`\\ and this is the second`);
       }
@@ -1158,8 +1155,8 @@ World};
       expect(secondLine.startsWith(" ")).toBe(false);
       expect(secondLine.startsWith("and")).toBe(true);
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1179,8 +1176,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1200,8 +1197,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1225,8 +1222,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toContain("\n");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1267,12 +1264,12 @@ World};
     expect(text?.kind).toBe("Text");
     if (text?.kind === "Text") {
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("wrapped");
       }
     }
-    const lineboxCount = (result.svg.svg.match(/data-mjx-linebox=/g) ?? []).length;
+    const lineboxCount = (result.svg.svg.match(/data-tex-linebox=/g) ?? []).length;
     expect(lineboxCount).toBeGreaterThan(1);
     expect(result.svg.svg).toContain('data-align="left"');
   });
@@ -1282,7 +1279,7 @@ World};
   \node[draw,text width=6.1cm,align=left] (A) at (0,0) {This is the first line and this is the second line which is much longer};
 \end{tikzpicture}`);
 
-    const lineboxCount = (result.svg.svg.match(/data-mjx-linebox=/g) ?? []).length;
+    const lineboxCount = (result.svg.svg.match(/data-tex-linebox=/g) ?? []).length;
     expect(lineboxCount).toBeGreaterThan(1);
     expect(result.svg.svg).toContain('data-align="left"');
     // The source contains no hyphen, so a rendered hyphen glyph indicates
@@ -1324,18 +1321,18 @@ World};
       capitalAbbreviationText?.kind === "Text"
     ) {
       const ordinaryReport = reportForParagraphId(
-        ordinaryText.textRenderInfo?.mode === "mathjax" ? ordinaryText.textRenderInfo.paragraphId : null
+        ordinaryText.textRenderInfo?.mode === "tex" ? ordinaryText.textRenderInfo.paragraphId : null
       );
       const sentenceReport = reportForParagraphId(
-        sentenceText.textRenderInfo?.mode === "mathjax" ? sentenceText.textRenderInfo.paragraphId : null
+        sentenceText.textRenderInfo?.mode === "tex" ? sentenceText.textRenderInfo.paragraphId : null
       );
       const lowercaseSentenceReport = reportForParagraphId(
-        lowercaseSentenceText.textRenderInfo?.mode === "mathjax"
+        lowercaseSentenceText.textRenderInfo?.mode === "tex"
           ? lowercaseSentenceText.textRenderInfo.paragraphId
           : null
       );
       const capitalAbbreviationReport = reportForParagraphId(
-        capitalAbbreviationText.textRenderInfo?.mode === "mathjax"
+        capitalAbbreviationText.textRenderInfo?.mode === "tex"
           ? capitalAbbreviationText.textRenderInfo.paragraphId
           : null
       );
@@ -1360,7 +1357,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report = reportForParagraphId(
-      text?.textRenderInfo?.mode === "mathjax" ? text.textRenderInfo.paragraphId : null
+      text?.textRenderInfo?.mode === "tex" ? text.textRenderInfo.paragraphId : null
     );
     const advances = report?.lines.flatMap((line) =>
       line.segments
@@ -1378,7 +1375,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(report).not.toBeNull();
@@ -1393,7 +1390,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(report).not.toBeNull();
@@ -1408,7 +1405,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     expect(text?.kind).toBe("Text");
-    if (text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax") {
+    if (text?.kind === "Text" && text.textRenderInfo?.mode === "tex") {
       const report = reportForParagraphId(text.textRenderInfo.paragraphId);
       expect(report).not.toBeNull();
       expect(report?.alignment).toBe("justified");
@@ -1432,8 +1429,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line which is much longer");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
         expect(renderInfo.paragraphId).toBeTruthy();
       }
@@ -1455,8 +1452,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line which is much longer");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
         expect(renderInfo.paragraphId).toBeTruthy();
       }
@@ -1476,7 +1473,7 @@ World};
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     let reportParagraphId: string | null = null;
     expect(text?.kind).toBe("Text");
-    if (text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax") {
+    if (text?.kind === "Text" && text.textRenderInfo?.mode === "tex") {
       expect(text.text).toBe("Alpha\nBeta\nThe longest line here");
       expect(text.textRenderInfo.layoutKind).toBe("explicit-multiline");
       expect(text.textRenderInfo.paragraphId).toBeTruthy();
@@ -1500,7 +1497,7 @@ World};
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     let reportParagraphId: string | null = null;
     expect(text?.kind).toBe("Text");
-    if (text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax") {
+    if (text?.kind === "Text" && text.textRenderInfo?.mode === "tex") {
       expect(text.text).toBe("Alpha\nBeta\nThe longest line here");
       expect(text.textRenderInfo.layoutKind).toBe("explicit-multiline");
       expect(text.textRenderInfo.paragraphId).toBeTruthy();
@@ -1523,7 +1520,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(countLineboxes(result.svg.svg)).toBe(3);
@@ -1542,7 +1539,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(countLineboxes(result.svg.svg)).toBe(3);
@@ -1554,40 +1551,40 @@ World};
     expect(report?.lines[0]?.break?.lineLeading).toBe("10pt");
   });
 
-  it("preserves node font italic styling through MathJax wrappers in async mode", async () => {
+  it("preserves node font italic styling through native TeX wrappers in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[node font=\itshape] (0,0) -- +(1,0) node[above] {italic};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg).toContain('data-tex-font="lmroman10-italic"');
   });
 
-  it("wraps MathJax text with family and weight commands from font options", async () => {
+  it("wraps native TeX text with family and weight commands from font options", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[font=\sffamily\bfseries] at (0,0) {Hello};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg).toContain('data-tex-font="lmsans10-bold"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
 
-  it("normalizes legacy family switches inside node text for MathJax validation", async () => {
+  it("normalizes legacy family switches inside node text for native TeX validation", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw] at (0,0) {{\sffamily\Large node n}};
   \node[draw] at (1,0) {\phantom{\sffamily\Large node n}};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
     expect(result.svg.svg).not.toContain(String.raw`\sffamily`);
   });
 
-  it("resolves colorlet aliases before MathJax text rendering", async () => {
+  it("resolves colorlet aliases before native TeX text rendering", async () => {
     const source = String.raw`\begin{tikzpicture}
   \colorlet{mycolor}{blue}
   \node at (0,0) {\textcolor{mycolor}{this}};
@@ -1656,7 +1653,7 @@ World};
     expect(result.svg.svg).not.toContain('fill="mypink!20"');
   });
 
-  it("resolves definecolor HTML aliases before MathJax text rendering", async () => {
+  it("resolves definecolor HTML aliases before native TeX text rendering", async () => {
     const source = String.raw`\begin{tikzpicture}
   \definecolor{brand}{HTML}{1A2B3C}
   \node at (0,0) {\textcolor{brand}{this}};
@@ -1672,7 +1669,7 @@ World};
     expect(result.svg.svg).toContain('fill="#1a2b3c"');
   });
 
-  it("resolves definecolor rgb aliases before MathJax text rendering", async () => {
+  it("resolves definecolor rgb aliases before native TeX text rendering", async () => {
     const source = String.raw`\begin{tikzpicture}
   \definecolor{brand}{rgb}{0.1,0.2,0.3}
   \node at (0,0) {\textcolor{brand}{this}};
@@ -1688,14 +1685,14 @@ World};
     expect(result.svg.svg).toContain('fill="#1a334d"');
   });
 
-  it("renders foreach \\textsf labels through MathJax in async mode", async () => {
+  it("renders foreach \\textsf labels through native TeX in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \foreach \label in {1,2,3}
     \node at (\label,0) {\textsf{\label}};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg.includes('xml:space="preserve">\\textsf{')).toBe(false);
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
@@ -1749,7 +1746,7 @@ World};
     expect(macroPaths[0]?.style.dashArray?.join(",")).toBe("4,2");
   });
 
-  it("expands user-defined text macros before MathJax rendering in async mode", async () => {
+  it("expands user-defined text macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \def\labelmacro{\textsf{A}}
   \node at (0,0) {$\labelmacro$};
@@ -1757,7 +1754,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
@@ -1765,7 +1762,7 @@ World};
     }
   });
 
-  it("expands fixed-arity newcommand macros before MathJax rendering in async mode", async () => {
+  it("expands fixed-arity newcommand macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \newcommand{\vect}[1]{\mathbf{#1}}
   \node at (0,0) {$\vect{x}$};
@@ -1773,7 +1770,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
@@ -1813,7 +1810,7 @@ World};
     expect(result.svg.svg).toContain(`data-tex-glyph="86" data-source-start="${valueStart}" data-source-end="${valueStart + 1}"`);
   });
 
-  it("expands DeclareMathOperator macros before MathJax rendering in async mode", async () => {
+  it("expands DeclareMathOperator macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\DeclareMathOperator{\cone}{cone}
 \DeclareMathOperator*{\argmax}{argmax}
 \begin{tikzpicture}
@@ -1823,7 +1820,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const labels = result.semantic.scene.elements
       .filter((element) => element.kind === "Text")
       .map((element) => (element.kind === "Text" ? element.text : ""));
@@ -1831,7 +1828,7 @@ World};
     expect(labels).toContain(String.raw`$\operatorname*{argmax}_{x \in X} f(x)$`);
   });
 
-  it("expands providecommand and DeclareRobustCommand macros before MathJax rendering in async mode", async () => {
+  it("expands providecommand and DeclareRobustCommand macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\newcommand{\kept}{A}
 \providecommand{\kept}{B}
 \providecommand{\fresh}[1]{\mathcal{#1}}
@@ -1842,7 +1839,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
@@ -1850,7 +1847,7 @@ World};
     }
   });
 
-  it("expands newcommand optional/default arguments before MathJax rendering in async mode", async () => {
+  it("expands newcommand optional/default arguments before native TeX rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \newcommand{\pair}[2][\alpha]{#1+#2}
   \node at (0,0) {$\pair{x}$};
@@ -1859,7 +1856,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const labels = result.semantic.scene.elements
       .filter((element) => element.kind === "Text")
       .map((element) => (element.kind === "Text" ? element.text : ""));
@@ -1875,7 +1872,7 @@ World};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg.includes('xml:space="preserve">$\\mathstrut')).toBe(false);
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");

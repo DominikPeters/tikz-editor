@@ -2,7 +2,7 @@ import type { MeasurementService } from './measure.js';
 import type { AppliedBreak } from './applyBreaks.js';
 import type { AnyWrapper, GreedyLine, ParagraphRun } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
-import type { KnuthPlassLayoutMode } from '../install.js';
+import type { KnuthPlassLayoutMode } from '../layout-options.js';
 import type { TextSourceRangePolicy } from '../../source-map.js';
 import {
   texLength,

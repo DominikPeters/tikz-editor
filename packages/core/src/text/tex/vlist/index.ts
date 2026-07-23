@@ -122,9 +122,9 @@ export {
   type SimpleTexLayoutScopePreparationParams,
 } from "./document.js";
 export {
-  getTexVListLayoutFromOutputJax,
-  getTexVListLayoutsFromOutputJax,
-  registerTexVListLayoutsOnOutputJax,
+  getTexVListLayout,
+  getTexVListLayouts,
+  registerTexVListLayouts,
   type RegisteredTexVListLayout,
 } from "./registry.js";
 export type {

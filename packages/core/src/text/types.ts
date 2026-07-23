@@ -12,7 +12,6 @@ export type NodeTextValidationIssue = {
 
 export type NodeTextMeasureRequest = {
   text: string;
-  mode?: "text" | "math";
   textWidthPt: number | null;
   alignment?: NodeTextParagraphAlignment;
   fontStyle: NodeTextFontStyle;
@@ -100,7 +99,7 @@ export type NodeTextRenderInfo =
       mode: "plain";
     }
   | {
-      mode: "mathjax";
+      mode: "tex";
       cacheKey: string;
       paragraphId: string | null;
       renderSourceText: string;

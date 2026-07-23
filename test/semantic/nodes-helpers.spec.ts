@@ -298,9 +298,9 @@ describe("semantic node helper coverage", () => {
       }),
       "math"
     );
-    expect(measured.textRenderInfo.mode).toBe("mathjax");
-    if (measured.textRenderInfo.mode !== "mathjax") {
-      throw new Error("expected MathJax render info");
+    expect(measured.textRenderInfo.mode).toBe("tex");
+    if (measured.textRenderInfo.mode !== "tex") {
+      throw new Error("expected native TeX render info");
     }
     expect(measured.textRenderInfo.layoutKind).toBe("explicit-multiline");
     expect(measured.textRenderInfo.paragraphAlignment).toBe("center");
@@ -320,8 +320,8 @@ describe("semantic node helper coverage", () => {
           renderSourceText: "x y"
       })
     );
-    if (measuredWrappedCenter.textRenderInfo.mode !== "mathjax") {
-      throw new Error("expected MathJax render info");
+    if (measuredWrappedCenter.textRenderInfo.mode !== "tex") {
+      throw new Error("expected native TeX render info");
     }
     expect(measuredWrappedCenter.textRenderInfo.paragraphAlignment).toBe("center");
 

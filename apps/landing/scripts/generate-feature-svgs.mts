@@ -345,7 +345,7 @@ async function renderRotateNodeState(): Promise<RotateNodeState> {
   const bodyD = capture(bodyTag, /\sd="([^"]+)"/, "rectangle body d");
   const labelTag = capture(
     svg,
-    /(<svg[^>]*data-source-id="path:1"[^>]*data-text-renderer="mathjax"[^>]*>)/,
+    /(<svg[^>]*data-source-id="path:1"[^>]*data-text-renderer="tex"[^>]*>)/,
     "rectangle label"
   );
   const labelX = Number(capture(labelTag, /\sx="([^"]+)"/, "rectangle label x"));
@@ -549,7 +549,7 @@ async function renderShowcaseSvgs(): Promise<Record<string, ShowcaseSvg | Foreac
 }
 
 function extractForeachRepeatCells(svg: string, maxColumns: number, maxRows: number): ForeachRepeatCell[] {
-  const circleLabelPairs = [...svg.matchAll(/(<circle[^>]*data-source-id="foreach:[^"]+"[^>]*\/>)\s*(<svg[^>]*data-source-id="foreach:[^"]+"[^>]*data-text-renderer="mathjax"[\s\S]*?<\/svg>)/g)];
+  const circleLabelPairs = [...svg.matchAll(/(<circle[^>]*data-source-id="foreach:[^"]+"[^>]*\/>)\s*(<svg[^>]*data-source-id="foreach:[^"]+"[^>]*data-text-renderer="tex"[\s\S]*?<\/svg>)/g)];
   const expected = maxColumns * maxRows;
   if (circleLabelPairs.length !== expected) {
     throw new Error(`Expected ${expected} foreach repeat cells, found ${circleLabelPairs.length}`);
@@ -571,7 +571,7 @@ function extractRectNodes(svg: string): RenderedRectNode[] {
       const sourceId = capture(rectTag, /data-source-id="([^"]+)"/, "rect source id");
       const labelTag = capture(
         svg,
-        new RegExp(`(<svg[^>]*data-source-id="${escapeRegExp(sourceId)}"[^>]*data-text-renderer="mathjax"[^>]*>)`),
+        new RegExp(`(<svg[^>]*data-source-id="${escapeRegExp(sourceId)}"[^>]*data-text-renderer="tex"[^>]*>)`),
         `label for ${sourceId}`
       );
 
@@ -594,7 +594,7 @@ function extractCircleNodes(svg: string): RenderedCircleNode[] {
     const sourceId = capture(circleTag, /data-source-id="([^"]+)"/, "circle source id");
     const labelTag = capture(
       svg,
-      new RegExp(`(<svg[^>]*data-source-id="${escapeRegExp(sourceId)}"[^>]*data-text-renderer="mathjax"[^>]*>)`),
+      new RegExp(`(<svg[^>]*data-source-id="${escapeRegExp(sourceId)}"[^>]*data-text-renderer="tex"[^>]*>)`),
       `label for ${sourceId}`
     );
 

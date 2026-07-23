@@ -25,7 +25,7 @@ function buildTarget(source: string, text: string): EditableTextTarget {
     sourceSpan: { from: spanFrom, to: spanFrom + text.length },
     text,
     renderSourceText: text,
-    usesMathJax: false,
+    usesTex: false,
     paragraphId: null,
     layoutKind: "single-line",
     style: {

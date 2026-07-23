@@ -749,7 +749,7 @@ function queryNodePath(root: ParentNode, node: NodeState): SVGPathElement | null
 }
 
 function queryNodeLabel(root: ParentNode, node: NodeState): SVGImageElement | null {
-  return root.querySelector<SVGImageElement>(`[data-source-id="${node.sourceId}"][data-text-renderer="mathjax"]`);
+  return root.querySelector<SVGImageElement>(`[data-source-id="${node.sourceId}"][data-text-renderer="tex"]`);
 }
 
 function cloneNode(node: NodeState): NodeState {

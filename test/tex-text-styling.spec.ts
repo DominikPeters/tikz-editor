@@ -11,7 +11,7 @@ import { layoutSimpleTexParagraph } from "../packages/core/src/text/tex/layout-s
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/fonts/computer-modern.js";
 import { defaultTexTextFontProfile } from "../packages/core/src/text/tex/fonts/text-profile.js";
 import { createTexParagraphRunAdapter } from "../packages/core/src/text/tex/paragraph-runs.js";
-import { renderSimpleTexParagraphDebugSvgBody } from "../packages/core/src/text/mathjax-engine.js";
+import { renderTexParagraphDebugSvgBody } from "../packages/core/src/text/tex-node-text-engine.js";
 
 describe("native TeX text styling", () => {
   it("parses scoped and declaration colors with source-backed children", () => {
@@ -64,11 +64,11 @@ describe("native TeX text styling", () => {
     expect(segments.find((segment) => segment.text === "large")?.fontAtPt)
       .toBeCloseTo(9.96264 * 1.44, 5);
 
-    const svg = renderSimpleTexParagraphDebugSvgBody({ text: source, width: 300 });
+    const svg = renderTexParagraphDebugSvgBody({ text: source, width: 300 });
     expect(svg).toContain('<g fill="#ff0000">');
     expect(svg).toContain("scale(1.43462)");
 
-    const mathSvg = renderSimpleTexParagraphDebugSvgBody({
+    const mathSvg = renderTexParagraphDebugSvgBody({
       text: String.raw`\textcolor{blue}{$x$}`,
       width: 100,
     });
@@ -76,7 +76,7 @@ describe("native TeX text styling", () => {
   });
 
   it("renders colorbox paints independently while preserving nested foreground styles", () => {
-    const svg = renderSimpleTexParagraphDebugSvgBody({
+    const svg = renderTexParagraphDebugSvgBody({
       text: String.raw`\colorbox{yellow}{a \textcolor{blue}{b} $x$} \fcolorbox{red}{white}{c}`,
       width: 300,
     });
@@ -154,7 +154,7 @@ describe("native TeX text styling", () => {
     expect(tie).toMatchObject({ kind: "space", text: " ", sourceStart: source.indexOf("~") });
     expect(tokens.some((token) => token.literal)).toBe(false);
 
-    const svg = renderSimpleTexParagraphDebugSvgBody({ text: source, width: 300 });
+    const svg = renderTexParagraphDebugSvgBody({ text: source, width: 300 });
     expect(svg).not.toContain("data-tex-literal");
   });
 
@@ -195,7 +195,7 @@ describe("native TeX text styling", () => {
       expect.objectContaining({ kind: "math", content: "x^2" }),
     ]));
 
-    const svg = renderSimpleTexParagraphDebugSvgBody({ text: source, width: 300 });
+    const svg = renderTexParagraphDebugSvgBody({ text: source, width: 300 });
     expect(svg).toContain('data-tex-rule="underline-rule"');
     expect(svg).toContain('data-tex-inline-math="true"');
     expect(svg).not.toContain("data-tex-literal");
@@ -205,7 +205,7 @@ describe("native TeX text styling", () => {
     const source = "ŷŶ ũŨ ẽẼ ĩĨ i\u0303";
     const ir = parseSimpleTexParagraphIr(source);
     expect(ir.unsupportedCommand).toBe(false);
-    const svg = renderSimpleTexParagraphDebugSvgBody({ text: source, width: 300 });
+    const svg = renderTexParagraphDebugSvgBody({ text: source, width: 300 });
     expect(svg).not.toContain("data-tex-literal");
     expect(svg).toContain("data-tex-glyph=\"7869\"");
   });

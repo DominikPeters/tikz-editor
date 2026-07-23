@@ -36,8 +36,8 @@ import {
   computeTexVListNaturalTotalHeight as computeTexVListNaturalTotalHeightCore,
   findPositionedTexVListItemByPath,
   flattenPositionedTexVListItems,
-  getTexVListLayoutFromOutputJax,
-  getTexVListLayoutsFromOutputJax,
+  getTexVListLayout,
+  getTexVListLayouts,
   groupSimpleTexVListScopes,
   layoutTexVListItems as layoutTexVListItemsCore,
   layoutTexVListFromBrokenParagraphs as layoutTexVListFromBrokenParagraphsCore,
@@ -53,7 +53,7 @@ import {
   prepareTexLayoutParagraphsFromVList,
   prepareSimpleTexLayoutDocument as prepareSimpleTexLayoutDocumentCore,
   prepareSimpleTexVList,
-  registerTexVListLayoutsOnOutputJax,
+  registerTexVListLayouts,
   texListItemParagraphAttachments,
   texVListBoxLayoutReport as texVListBoxLayoutReportCore,
   texParagraphScopeContext,
@@ -4270,7 +4270,7 @@ describe("TeX vlist report assembly", () => {
 
 describe("TeX vlist layout registry", () => {
   it("registers positioned vlist layouts by paragraph id on an output jax", () => {
-    const outputJax = {};
+    const layoutContext = {};
     const items = [] as const;
     const baseline = texFixture<TexVListLayout["baseline"]>({
       kind: "explicit",
@@ -4292,21 +4292,21 @@ describe("TeX vlist layout registry", () => {
       boxReport: texVListBoxLayoutReport(items, { width: 24, height: 5, depth: 2 }, baseline),
     });
 
-    expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([]);
-    registerTexVListLayoutsOnOutputJax(outputJax, [
+    expect(getTexVListLayouts(layoutContext)).toEqual([]);
+    registerTexVListLayouts(layoutContext, [
       { paragraphId: "tex:a", layout },
       { paragraphId: "", layout },
     ]);
-    registerTexVListLayoutsOnOutputJax(outputJax, [
+    registerTexVListLayouts(layoutContext, [
       { paragraphId: "tex:a", layout: replacement },
     ]);
 
-    expect(getTexVListLayoutFromOutputJax(outputJax, "tex:a")).toBe(replacement);
-    expect(getTexVListLayoutFromOutputJax(outputJax, "tex:missing")).toBeNull();
-    expect(getTexVListLayoutsFromOutputJax(outputJax)).toEqual([
+    expect(getTexVListLayout(layoutContext, "tex:a")).toBe(replacement);
+    expect(getTexVListLayout(layoutContext, "tex:missing")).toBeNull();
+    expect(getTexVListLayouts(layoutContext)).toEqual([
       { paragraphId: "tex:a", layout: replacement },
     ]);
-    expect(getTexVListLayoutsFromOutputJax(null)).toEqual([]);
+    expect(getTexVListLayouts(null)).toEqual([]);
   });
 });
 

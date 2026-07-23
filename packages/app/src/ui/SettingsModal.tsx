@@ -1,24 +1,10 @@
 import { useState } from "react";
 import { useSettingsStore } from "../settings/useSettingsStore";
-import { EDITOR_FONT_SIZE_OPTIONS, type ColorPickerAccuracy, type ColorScheme, type GridSize, type MathJaxFont } from "../settings/types";
+import { EDITOR_FONT_SIZE_OPTIONS, type ColorPickerAccuracy, type ColorScheme, type GridSize } from "../settings/types";
 import { Modal } from "./Modal";
 import css from "./SettingsModal.module.css";
 
 type CategoryId = "general" | "editor" | "canvas";
-
-const MATHJAX_FONTS: { value: MathJaxFont; label: string }[] = [
-  { value: "mathjax-newcm",   label: "New Computer Modern (default)" },
-  { value: "mathjax-asana",   label: "Asana Math" },
-  { value: "mathjax-bonum",   label: "Gyre Bonum" },
-  { value: "mathjax-dejavu",  label: "DejaVu" },
-  { value: "mathjax-fira",    label: "Fira / Fira Math" },
-  { value: "mathjax-modern",  label: "Latin Modern" },
-  { value: "mathjax-pagella", label: "Gyre Pagella" },
-  { value: "mathjax-schola",  label: "Gyre Schola" },
-  { value: "mathjax-stix2",   label: "STIX2" },
-  { value: "mathjax-termes",  label: "Gyre Termes" },
-  { value: "mathjax-tex",     label: "TeX (classic MathJax v3)" },
-];
 
 const CATEGORIES: { id: CategoryId; label: string }[] = [
   { id: "general", label: "General" },
@@ -47,7 +33,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const updateEditorSettings = useSettingsStore((s) => s.updateEditorSettings);
   const updateCanvasSettings = useSettingsStore((s) => s.updateCanvasSettings);
   const updateColorPickerSettings = useSettingsStore((s) => s.updateColorPickerSettings);
-  const updateRenderingSettings = useSettingsStore((s) => s.updateRenderingSettings);
   const resetGeneralSettings = useSettingsStore((s) => s.resetGeneralSettings);
   const resetEditorSettings = useSettingsStore((s) => s.resetEditorSettings);
   const resetCanvasSettings = useSettingsStore((s) => s.resetCanvasSettings);
@@ -370,34 +355,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     <datalist id="zoom-speed-ticks">
                       <option value={0.0045} />
                     </datalist>
-                  </div>
-                </div>
-
-                <div className={css.panelTitle}>Rendering</div>
-                <div className={css.settingsGroup}>
-                  <div className={css.settingRow}>
-                    <label className={css.settingLabel} htmlFor="setting-mathjax-font">
-                      Math Font
-                      <span className={css.settingDesc}>Font used to render math in text nodes.</span>
-                    </label>
-                    <select
-                      id="setting-mathjax-font"
-                      className={css.select}
-                      value={settings.rendering.mathJaxFont}
-                      onChange={(e) => { updateRenderingSettings({ mathJaxFont: e.target.value as MathJaxFont }); }}
-                    >
-                      {MATHJAX_FONTS.map(({ value, label }) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className={css.fontPreviewRow}>
-                    <img
-                      key={settings.rendering.mathJaxFont}
-                      className={css.fontPreviewImg}
-                      src={`${import.meta.env.BASE_URL}font-previews/${settings.rendering.mathJaxFont}.svg`}
-                      alt={`Preview of ${settings.rendering.mathJaxFont}`}
-                    />
                   </div>
                 </div>
 

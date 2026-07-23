@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderSimpleTexParagraphDebugSvgBody } from "../packages/core/src/text/mathjax-engine.js";
+import { renderTexParagraphDebugSvgBody } from "../packages/core/src/text/tex-node-text-engine.js";
 import { createIdentityMappedText } from "../packages/core/src/text/source-map.js";
 import {
   computerModernTexMetricProvider,
@@ -77,7 +77,7 @@ describe("public TeX SVG renderer", () => {
     const direct = layoutAndRender(source, {
       paragraphId: "tex:debug-placeholder",
     }).body;
-    const existing = renderSimpleTexParagraphDebugSvgBody({
+    const existing = renderTexParagraphDebugSvgBody({
       text: source,
       width: 180,
       alignment: "ragged-right",

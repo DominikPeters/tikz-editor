@@ -10,13 +10,9 @@ import {
   type MathSourceSpan,
   type TextSourceSpan,
 } from './sourceParser.js';
-import {
-  createMathPrefixCache,
-  readPrefixUnitsFromTable,
-} from './mathPrefix.js';
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
-import { getTexVListLayoutFromOutputJax } from '../../tex/vlist/registry.js';
+import { getTexVListLayout } from '../../tex/vlist/registry.js';
 import { flattenPositionedTexVListItems } from '../../tex/vlist/traversal.js';
 import type {
   PositionedTexVListItem,
@@ -46,7 +42,7 @@ import {
   type TexVListX,
   type TexVListY,
 } from '../../tex/coordinates.js';
-import { getKnuthPlassReportsFromOutputJax } from '../report-registry.js';
+import { getParagraphLayoutReports } from '../report-registry.js';
 import { clamp } from '../../../utils/math.js';
 import {
   sourceOffsetForSpace,
@@ -151,7 +147,6 @@ export type CaretMappingErrorCode =
   | 'paragraph-not-found'
   | 'source-parse-error'
   | 'alignment-error'
-  | 'math-measurement-error'
   | 'geometry-error';
 
 export interface CaretMappingError {
@@ -172,7 +167,6 @@ export interface CaretHitResult<
   offset: SourceOffset<Space> | null;
   lineIndex: number | null;
   kind: 'text' | 'space' | 'math' | null;
-  snappedToMathPrefix: boolean;
 }
 
 export interface CaretPointResult<
@@ -184,7 +178,6 @@ export interface CaretPointResult<
   clientPoint: ClientPoint | null;
   rotationDeg: number | null;
   kind: 'text' | 'space' | 'math' | null;
-  snappedToMathPrefix: boolean;
 }
 
 export interface LineRangeFromPointResult<
@@ -217,7 +210,7 @@ export interface VListBoxGeometry {
 
 export interface VListBoxGeometryParams {
   containerElement: Element;
-  outputJax?: unknown;
+  layoutContext?: unknown;
   paragraphId?: string | null;
 }
 
@@ -287,7 +280,7 @@ export interface VListItemGeometry {
 
 export interface VListItemGeometryParams {
   containerElement: Element;
-  outputJax?: unknown;
+  layoutContext?: unknown;
   paragraphId?: string | null;
 }
 
@@ -371,7 +364,7 @@ export interface VListParagraphGeometry {
 
 export interface VListParagraphGeometryParams {
   containerElement: Element;
-  outputJax?: unknown;
+  layoutContext?: unknown;
   paragraphId?: string | null;
 }
 
@@ -392,7 +385,7 @@ export interface PlaceholderGeometry {
 
 export interface PlaceholderGeometryParams {
   containerElement: Element;
-  outputJax?: unknown;
+  layoutContext?: unknown;
   paragraphId?: string | null;
 }
 
@@ -418,7 +411,6 @@ interface Stop {
   x: TexLineX;
   y?: MathBaselineCoord;
   kind: 'text' | 'space' | 'math';
-  snappedToMathPrefix: boolean;
   lineStart: boolean;
   lineEnd: boolean;
 }
@@ -522,7 +514,6 @@ interface NormalizedClientRect {
 }
 
 const EPSILON = 1e-6;
-const mathPrefixCache = createMathPrefixCache();
 let paragraphCacheByOutput = new WeakMap<object, Map<string, CachedParagraphEntry>>();
 
 function readContainerGeometrySnapshot(containerElement: Element | null | undefined): ContainerGeometrySnapshot | null {
@@ -617,15 +608,15 @@ function createCaretMappingErrorFactory<T extends ResultBase>(
   } as T);
 }
 
-function readReportsFromOutputJax(outputJax: unknown): ParagraphLayoutReport[] {
-  return getKnuthPlassReportsFromOutputJax(outputJax);
+function readReportsFromLayoutContext(layoutContext: unknown): ParagraphLayoutReport[] {
+  return getParagraphLayoutReports(layoutContext);
 }
 
 function findReportByParagraphId(
-  outputJax: unknown,
+  layoutContext: unknown,
   paragraphId: string
 ): { report: ParagraphLayoutReport | null; reports: ParagraphLayoutReport[] } {
-  const reports = readReportsFromOutputJax(outputJax);
+  const reports = readReportsFromLayoutContext(layoutContext);
   const report = reports.find((entry) => entry.paragraphId === paragraphId) ?? null;
   return { report, reports };
 }
@@ -640,7 +631,7 @@ function collectLineGeometryElements(
 
   const lineBoxes =
     typeof (containerElement).querySelectorAll === 'function'
-      ? Array.from((containerElement).querySelectorAll('[data-mjx-linebox="true"]'))
+      ? Array.from((containerElement).querySelectorAll('[data-tex-linebox="true"]'))
       : [];
   if (lineBoxes.length === expectedCount) {
     return lineBoxes;
@@ -693,7 +684,7 @@ export function getKnuthPlassVListGeometrySnapshot(
     return emptyVListGeometrySnapshot();
   }
 
-  const layout = getTexVListLayoutFromOutputJax(params.outputJax, params.paragraphId);
+  const layout = getTexVListLayout(params.layoutContext, params.paragraphId);
   const matrix = containerElement.getScreenCTM?.();
   if (layout && matrix) {
     const boxes = registeredVListBoxGeometry(layout, matrix);
@@ -1406,10 +1397,10 @@ function texVListLocalBoundsForItemGeometry(
 function readLineGeometry(
   containerElement: Element,
   report: ParagraphLayoutReport,
-  outputJax?: unknown
+  layoutContext?: unknown
 ): LineGeometry[] {
   const sortedLines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
-  const registered = registeredLineGeometry(containerElement, report, outputJax, sortedLines);
+  const registered = registeredLineGeometry(containerElement, report, layoutContext, sortedLines);
   if (registered) {
     return registered;
   }
@@ -1508,10 +1499,10 @@ function readLineGeometry(
 function registeredLineGeometry(
   containerElement: Element,
   report: ParagraphLayoutReport,
-  outputJax: unknown,
+  layoutContext: unknown,
   sortedLines: readonly ParagraphLayoutReport['lines'][number][]
 ): LineGeometry[] | null {
-  const layout = getTexVListLayoutFromOutputJax(outputJax, report.paragraphId);
+  const layout = getTexVListLayout(layoutContext, report.paragraphId);
   const rootMatrix = containerElement.getScreenCTM?.();
   const viewBoxWidth = Number(
     containerElement.viewBox?.baseVal?.width ??
@@ -2673,10 +2664,9 @@ function markLineEndpoints(stops: Stop[]): Stop[] {
   return stops;
 }
 
-async function buildStopsByLine(
-  outputJax: unknown,
+function buildStopsByLine(
   alignedSegments: AlignedSegment[]
-): Promise<Map<number, Stop[]>> {
+): Map<number, Stop[]> {
   const stopsByLine = new Map<number, Stop[]>();
 
   const addStop = (lineIndex: number, stop: Stop) => {
@@ -2704,7 +2694,6 @@ async function buildStopsByLine(
           offset: aligned.rawStart,
           x: lineReportCoord(providedStops[0] ?? segLeft),
           kind: 'math',
-          snappedToMathPrefix: false,
           lineStart: false,
           lineEnd: false,
         });
@@ -2712,7 +2701,6 @@ async function buildStopsByLine(
           offset: aligned.rawEnd,
           x: lineReportCoord(providedStops.at(-1) ?? segLeft + segWidth),
           kind: 'math',
-          snappedToMathPrefix: false,
           lineStart: false,
           lineEnd: false,
         });
@@ -2730,7 +2718,6 @@ async function buildStopsByLine(
             x: lineReportCoord(providedStops[i] ?? 0),
             ...(mathEntry ? { y: mathEntry.y } : {}),
             kind: 'math',
-            snappedToMathPrefix: false,
             lineStart: false,
             lineEnd: false,
           });
@@ -2755,31 +2742,15 @@ async function buildStopsByLine(
             x: lineReportCoord(providedStops[i] ?? 0),
             ...(mathEntry ? { y: mathEntry.y } : {}),
             kind: 'math',
-            snappedToMathPrefix: false,
             lineStart: false,
             lineEnd: false,
           });
         }
         continue;
       }
-      const table = await mathPrefixCache.getOrBuild(outputJax, span);
-      for (let i = 0; i <= rawLength; i++) {
-        const offset = aligned.rawStart + i;
-        const ratio = offset <= span.contentStart
-          ? 0
-          : offset >= span.contentEnd
-            ? 1
-            : readPrefixUnitsFromTable(clamp(offset - span.contentStart, 0, span.content.length), span.content.length, 1, table);
-        addStop(aligned.lineIndex, {
-          offset,
-          x: lineReportCoord(segLeft + ratio * segWidth),
-          kind: 'math',
-          snappedToMathPrefix: true,
-          lineStart: false,
-          lineEnd: false,
-        });
-      }
-      continue;
+      throw new Error(
+        `Native math source range ${span.rawStart}:${span.rawEnd} has no complete caret-stop map.`
+      );
     }
 
     if (aligned.segment.kind === 'space') {
@@ -2789,7 +2760,6 @@ async function buildStopsByLine(
           offset: aligned.rawStart + i,
           x: lineReportCoord(segLeft + segWidth * t),
           kind: 'space',
-          snappedToMathPrefix: false,
           lineStart: false,
           lineEnd: false,
         });
@@ -2809,7 +2779,6 @@ async function buildStopsByLine(
         offset: aligned.rawStart,
         x: lineReportCoord(providedStops[0] ?? segLeft),
         kind: 'text',
-        snappedToMathPrefix: false,
         lineStart: false,
         lineEnd: false,
       });
@@ -2817,7 +2786,6 @@ async function buildStopsByLine(
         offset: aligned.rawEnd,
         x: lineReportCoord(providedStops.at(-1) ?? segLeft + segWidth),
         kind: 'text',
-        snappedToMathPrefix: false,
         lineStart: false,
         lineEnd: false,
       });
@@ -2839,7 +2807,6 @@ async function buildStopsByLine(
         offset: aligned.rawStart + i,
         x: lineReportCoord(providedStops[i] ?? 0),
         kind: 'text',
-        snappedToMathPrefix: false,
         lineStart: false,
         lineEnd: false,
       });
@@ -2910,11 +2877,11 @@ function buildLineHitMaps(
 }
 
 function buildDisplayMathLineHitMaps(
-  outputJax: unknown,
+  layoutContext: unknown,
   report: ParagraphLayoutReport,
   containerElement: Element
 ): LineHitMap[] {
-  const layout = getTexVListLayoutFromOutputJax(outputJax, report.paragraphId);
+  const layout = getTexVListLayout(layoutContext, report.paragraphId);
   const rootMatrix = containerElement.getScreenCTM?.();
   const viewBoxWidth = Number(
     containerElement.viewBox?.baseVal?.width ??
@@ -3163,7 +3130,6 @@ function displayMathStopsForBox(
     offset: Math.max(0, Math.floor(box.sourceStart + index)),
     x: lineReportCoord(stopX),
     kind: 'math',
-    snappedToMathPrefix: false,
     lineStart: false,
     lineEnd: false,
   })).filter((stop, index) => index <= rawLength));
@@ -3347,21 +3313,21 @@ function buildVisibleHyphenBreakOffsetByLine(
   return byLine;
 }
 
-async function buildParagraphHitMap(
-  outputJax: unknown,
+function buildParagraphHitMap(
+  layoutContext: unknown,
   report: ParagraphLayoutReport,
   sourceText: string,
   sourceTextStartOffset: number,
   containerElement: Element
-): Promise<ParagraphHitMap> {
+): ParagraphHitMap {
   const aligned = alignSegmentsToSource(report, sourceText, sourceTextStartOffset);
   if (aligned.error) {
     throw new Error(aligned.error);
   }
 
-  const lineGeometry = readLineGeometry(containerElement, report, outputJax);
+  const lineGeometry = readLineGeometry(containerElement, report, layoutContext);
   const geometryByLineIndex = new Map(lineGeometry.map((entry) => [entry.lineIndex, entry]));
-  const stopsByLine = await buildStopsByLine(outputJax, aligned.aligned);
+  const stopsByLine = buildStopsByLine(aligned.aligned);
   const visibleHyphenBreakOffsetByLine = buildVisibleHyphenBreakOffsetByLine(report, aligned.aligned);
   const mathConstructRangesByLine = buildMathConstructRangesByLine(aligned.aligned);
   const mathCaretEntriesByLine = buildMathCaretEntriesByLine(aligned.aligned);
@@ -3374,7 +3340,7 @@ async function buildParagraphHitMap(
     mathConstructRangesByLine,
     mathCaretEntriesByLine
   );
-  const displayLines = buildDisplayMathLineHitMaps(outputJax, report, containerElement);
+  const displayLines = buildDisplayMathLineHitMaps(layoutContext, report, containerElement);
 
   return {
     report,
@@ -3384,20 +3350,20 @@ async function buildParagraphHitMap(
 }
 
 async function getParagraphHitMap(
-  outputJax: unknown,
+  layoutContext: unknown,
   report: ParagraphLayoutReport,
   sourceText: string,
   sourceTextStartOffset: number,
   containerElement: Element
 ): Promise<ParagraphHitMap> {
-  if (!outputJax || typeof outputJax !== 'object') {
-    return buildParagraphHitMap(outputJax, report, sourceText, sourceTextStartOffset, containerElement);
+  if (!layoutContext || typeof layoutContext !== 'object') {
+    return buildParagraphHitMap(layoutContext, report, sourceText, sourceTextStartOffset, containerElement);
   }
 
-  let map = paragraphCacheByOutput.get(outputJax);
+  let map = paragraphCacheByOutput.get(layoutContext);
   if (!map) {
     map = new Map<string, CachedParagraphEntry>();
-    paragraphCacheByOutput.set(outputJax, map);
+    paragraphCacheByOutput.set(layoutContext, map);
   }
 
   const existing = map.get(report.paragraphId);
@@ -3412,13 +3378,13 @@ async function getParagraphHitMap(
     return existing.mapPromise;
   }
 
-  const mapPromise = buildParagraphHitMap(
-    outputJax,
+  const mapPromise = Promise.resolve().then(() => buildParagraphHitMap(
+    layoutContext,
     report,
     sourceText,
     sourceTextStartOffset,
     containerElement
-  ).catch((error) => {
+  )).catch((error) => {
     const current = map.get(report.paragraphId);
     if (current?.mapPromise === mapPromise) {
       map.delete(report.paragraphId);
@@ -3512,7 +3478,6 @@ function stopFromMathCaretEntry(entry: MathCaretEntry): Stop {
     x: entry.x,
     y: entry.y,
     kind: 'math',
-    snappedToMathPrefix: false,
     lineStart: false,
     lineEnd: false,
   };
@@ -3926,9 +3891,6 @@ function inferLineByClientPoint(
 }
 
 function mapBuildFailureCode(message: string): CaretMappingErrorCode {
-  if (/tex2svg/i.test(message)) {
-    return 'math-measurement-error';
-  }
   if (/opening|closing|parse/i.test(message)) {
     return 'source-parse-error';
   }
@@ -3943,7 +3905,7 @@ type HitMapResolution<T extends ResultBase> =
   | { kind: 'error'; result: T };
 
 async function resolveHitMap<T extends ResultBase>(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: CaretBaseParams,
   createError: CaretMappingErrorFactory<T>
 ): Promise<HitMapResolution<T>> {
@@ -3955,7 +3917,7 @@ async function resolveHitMap<T extends ResultBase>(
       result: createError('invalid-params', 'sourceTextStartOffset must be a non-negative integer.'),
     };
   }
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
+  const { report } = findReportByParagraphId(layoutContext, paragraphId);
   if (!report) {
     return {
       kind: 'error',
@@ -3980,7 +3942,7 @@ async function resolveHitMap<T extends ResultBase>(
   let hitMap: ParagraphHitMap;
   try {
     hitMap = await getParagraphHitMap(
-      outputJax,
+      layoutContext,
       report,
       sourceText,
       sourceTextStartOffset,
@@ -4005,15 +3967,15 @@ async function resolveHitMap<T extends ResultBase>(
 }
 
 export function getKnuthPlassCaretFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<CaretFromPointParams<'document'>> & { sourceCoordinateSpace: 'document' }
 ): Promise<CaretHitResult<'document'>>;
 export function getKnuthPlassCaretFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: (Partial<CaretFromPointParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
 ): Promise<CaretHitResult<'layout'>>;
 export async function getKnuthPlassCaretFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<CaretHitResult> {
   const paragraphId = String(params?.paragraphId ?? '');
@@ -4021,7 +3983,6 @@ export async function getKnuthPlassCaretFromPoint(
     offset: null,
     lineIndex: null,
     kind: null,
-    snappedToMathPrefix: false,
   });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement || !params.clientPoint) {
     return createError(
@@ -4031,7 +3992,7 @@ export async function getKnuthPlassCaretFromPoint(
   }
 
   const resolution = await resolveHitMap(
-    outputJax,
+    layoutContext,
     {
       paragraphId,
       sourceText: params.sourceText,
@@ -4071,21 +4032,20 @@ export async function getKnuthPlassCaretFromPoint(
     ),
     lineIndex: line.lineIndex,
     kind: stop.kind,
-    snappedToMathPrefix: stop.snappedToMathPrefix,
     error: null,
   };
 }
 
 export function getKnuthPlassPointFromOffset(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<PointFromOffsetParams<'document'>> & { sourceCoordinateSpace: 'document' }
 ): Promise<CaretPointResult<'document'>>;
 export function getKnuthPlassPointFromOffset(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: (Partial<PointFromOffsetParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
 ): Promise<CaretPointResult<'layout'>>;
 export async function getKnuthPlassPointFromOffset(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<PointFromOffsetParams> | null | undefined
 ): Promise<CaretPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
@@ -4096,7 +4056,6 @@ export async function getKnuthPlassPointFromOffset(
     clientPoint: null,
     rotationDeg: null,
     kind: null,
-    snappedToMathPrefix: false,
   });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement) {
     return createError(
@@ -4106,7 +4065,7 @@ export async function getKnuthPlassPointFromOffset(
   }
 
   const resolution = await resolveHitMap(
-    outputJax,
+    layoutContext,
     {
       paragraphId,
       sourceText: params.sourceText,
@@ -4167,21 +4126,20 @@ export async function getKnuthPlassPointFromOffset(
     clientPoint,
     rotationDeg: (Math.atan2(selected.line.screenMatrix.b, selected.line.screenMatrix.a) * 180) / Math.PI,
     kind: selected.stop.kind,
-    snappedToMathPrefix: selected.stop.snappedToMathPrefix,
     error: null,
   };
 }
 
 export function getKnuthPlassSelectionRects(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<SelectionRectsParams<'document'>> & { sourceCoordinateSpace: 'document' }
 ): Promise<SelectionRectsResult<'document'>>;
 export function getKnuthPlassSelectionRects(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: (Partial<SelectionRectsParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
 ): Promise<SelectionRectsResult<'layout'>>;
 export async function getKnuthPlassSelectionRects(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<SelectionRectsParams> | null | undefined
 ): Promise<SelectionRectsResult> {
   const paragraphId = String(params?.paragraphId ?? '');
@@ -4199,7 +4157,7 @@ export async function getKnuthPlassSelectionRects(
   }
 
   const resolution = await resolveHitMap(
-    outputJax,
+    layoutContext,
     {
       paragraphId,
       sourceText: params.sourceText,
@@ -4309,15 +4267,15 @@ export async function getKnuthPlassSelectionRects(
 }
 
 export function getKnuthPlassLineRangeFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<CaretFromPointParams<'document'>> & { sourceCoordinateSpace: 'document' }
 ): Promise<LineRangeFromPointResult<'document'>>;
 export function getKnuthPlassLineRangeFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: (Partial<CaretFromPointParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
 ): Promise<LineRangeFromPointResult<'layout'>>;
 export async function getKnuthPlassLineRangeFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<LineRangeFromPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
@@ -4334,7 +4292,7 @@ export async function getKnuthPlassLineRangeFromPoint(
   }
 
   const resolution = await resolveHitMap(
-    outputJax,
+    layoutContext,
     {
       paragraphId,
       sourceText: params.sourceText,
@@ -4370,17 +4328,17 @@ export async function getKnuthPlassLineRangeFromPoint(
   };
 }
 
-export function clearKnuthPlassCaretMappingCache(outputJax?: unknown): void {
-  if (outputJax && typeof outputJax === 'object') {
-    paragraphCacheByOutput.delete(outputJax);
+export function clearKnuthPlassCaretMappingCache(layoutContext?: unknown): void {
+  if (layoutContext && typeof layoutContext === 'object') {
+    paragraphCacheByOutput.delete(layoutContext);
     return;
   }
   paragraphCacheByOutput = new WeakMap<object, Map<string, CachedParagraphEntry>>();
 }
 
-export function __getKnuthPlassCaretMappingCacheSize(outputJax: unknown): number {
-  if (!outputJax || typeof outputJax !== 'object') {
+export function __getKnuthPlassCaretMappingCacheSize(layoutContext: unknown): number {
+  if (!layoutContext || typeof layoutContext !== 'object') {
     return 0;
   }
-  return paragraphCacheByOutput.get(outputJax)?.size ?? 0;
+  return paragraphCacheByOutput.get(layoutContext)?.size ?? 0;
 }

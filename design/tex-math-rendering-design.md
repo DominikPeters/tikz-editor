@@ -2,12 +2,11 @@
 
 ## Purpose
 
-Build a TeX-derived math rendering subsystem that can eventually replace
-MathJax inside the TeX-derived text path. The goal is not to render "similar
-looking math"; the goal is to make TikZ Editor's preview obey the same layout
-decisions as the canonical compiler path so users can tune node text, display
-math, and later document-like material without being surprised by the compiled
-output.
+Build and extend the TeX-derived math rendering subsystem that replaced
+MathJax inside the native text path. The goal is not to render "similar looking
+math"; the goal is to make TikZ Editor's preview obey the same layout decisions
+as the canonical compiler path so users can tune node text, display math, and
+later document-like material without being surprised by the compiled output.
 
 The canonical oracle for this work is `lualatex`. MathJax source code under
 `examples/mathjax-src/` is reference material only: it can inform parser structure,
@@ -17,9 +16,9 @@ TeX-derived path.
 
 This document supersedes the earlier "MathJax remains the engine for math
 islands" assumption in `design/tex-like-layout-architecture.md` for the
-TeX-derived renderer. Legacy MathJax rendering can remain as a compatibility
-path while this branch is under development, but unsupported math in the new
-path should be explicit rather than silently delegated to MathJax.
+TeX-derived renderer. The compatibility path was removed on 2026-07-23;
+unsupported math is now explicit rather than silently delegated to another
+renderer.
 
 ## Design Principles
 
@@ -654,18 +653,19 @@ work should focus on:
 
 ### Phase 0: Remove MathJax From the New Path
 
-Goal:
+**Completed 2026-07-23.**
 
-- Inline math in the TeX-derived path becomes an explicit unsupported math
-  placeholder unless handled by the new math subsystem.
-- Legacy MathJax rendering remains outside this path if needed.
+- Inline math is handled by the native math subsystem or represented by the
+  native unsupported-input policy.
+- No legacy rendering path remains.
 
 Validation:
 
 - Existing paragraph text tests still pass for non-math input.
-- Math input reports a typed unsupported reason with source span.
-- No new TeX-derived path code calls MathJax measurement/rendering APIs.
-- Capability/fallback tests verify unsupported math is visible in diagnostics.
+- Supported math renders through the native IR; unsupported input has a typed
+  native reason rather than an alternate rendering path.
+- No production path calls MathJax measurement/rendering APIs.
+- Native engine tests cover supported and unsupported inputs explicitly.
 
 ### Phase 1: Math Parser and IR Skeleton
 
@@ -798,16 +798,8 @@ For a feature to be considered fully implemented:
 - unsupported subcases produce typed diagnostics or placeholders;
 - fuzz coverage includes the construct before it is enabled by default.
 
-## Immediate Next Step
+## Current Next Step
 
-Start with Phase 0 and Phase 1 together:
-
-1. Remove MathJax measurement/rendering from the TeX-derived inline math path.
-2. Add `packages/core/src/text/tex/math/ir.ts`.
-3. Add `packages/core/src/text/tex/math/parser.ts`.
-4. Parse a narrow inline grammar into `TexMathList`.
-5. Add parser unit tests and parser-only fuzzing before adding layout.
-
-This creates a clean foundation: source parsing remains ours, MathJax stops
-pulling the design sideways, and every later rendering feature has a TeX-like
-IR target plus a validation contract.
+Continue expanding native command, font, and editor-hit-map coverage against
+the LuaLaTeX oracle. Unsupported constructs should become explicit feature
+requests and tests; they must not introduce another implicit renderer.

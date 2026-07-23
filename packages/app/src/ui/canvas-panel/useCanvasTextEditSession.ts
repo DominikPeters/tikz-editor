@@ -30,7 +30,7 @@ import {
   documentOffsetToTextarea,
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
-import { getActiveMathJaxOutputJax } from "@tikz-editor/core/text/mathjax-engine";
+import { getActiveTextLayoutContext } from "@tikz-editor/core/text/layout-context";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
 import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
@@ -383,7 +383,7 @@ function estimateTextOffsetFromClient(
     target.text,
     target.renderSourceText ?? target.text,
     (text) => ctx?.measureText(text).width ?? Number.NaN,
-    { syntax: target.usesMathJax ? "mathjax" : "plain" }
+    { syntax: target.usesTex ? "tex" : "plain" }
   );
   const ranges = layout.sourceLineRanges;
   const yRatio =
@@ -549,7 +549,7 @@ export function useCanvasTextEditSession(
     if (!host) {
       return null;
     }
-    const candidates = Array.from(host.querySelectorAll<SVGSVGElement>('svg[data-text-renderer="mathjax"]'));
+    const candidates = Array.from(host.querySelectorAll<SVGSVGElement>('svg[data-text-renderer="tex"]'));
     for (const candidate of candidates) {
       if (candidate.getAttribute("data-scene-text-id") === target.sceneTextId) {
         return candidate;
@@ -572,14 +572,14 @@ export function useCanvasTextEditSession(
     (
       target: EditableTextTarget,
       clientPoint: ClientPoint,
-      outputJax: unknown,
+      layoutContext: unknown,
       containerElement: SVGSVGElement
     ): VListSourceHit | null => {
-      if (!target.paragraphId || !(target.usesMathJax && target.layoutKind !== "single-line")) {
+      if (!target.paragraphId || !(target.usesTex && target.layoutKind !== "single-line")) {
         return null;
       }
       const snapshot = getKnuthPlassVListGeometrySnapshot({
-        outputJax,
+        layoutContext,
         paragraphId: target.paragraphId,
         containerElement
       });
@@ -593,12 +593,12 @@ export function useCanvasTextEditSession(
       if (target.isForeachTemplateEdit) {
         return null;
       }
-      const outputJax = getActiveMathJaxOutputJax();
+      const layoutContext = getActiveTextLayoutContext();
       const containerElement = resolveRenderedMathTextElement(target);
-      const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
-      if (!target.paragraphId || !outputJax || !containerElement) {
+      const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
+      if (!target.paragraphId || !layoutContext || !containerElement) {
         if (requiresParagraphGeometry) {
-          console.error("[canvas-text-edit] Missing paragraph geometry for multiline MathJax hit-testing.", {
+          console.error("[canvas-text-edit] Missing paragraph geometry for multiline TeX hit-testing.", {
             sourceId: target.sourceId,
             paragraphId: target.paragraphId,
             layoutKind: target.layoutKind
@@ -615,7 +615,7 @@ export function useCanvasTextEditSession(
         );
         return { offset, selectionRange: null };
       }
-      const result = await getKnuthPlassCaretFromPoint(outputJax, {
+      const result = await getKnuthPlassCaretFromPoint(layoutContext, {
         paragraphId: target.paragraphId,
         sourceText: target.text,
         sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
@@ -630,7 +630,7 @@ export function useCanvasTextEditSession(
         };
       }
       console.error("[canvas-text-edit] Paragraph source hit failed.", result.error);
-      const vlistHit = resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement);
+      const vlistHit = resolveTexVListSourceHitFromClient(target, clientPoint, layoutContext, containerElement);
       if (!vlistHit) {
         return null;
       }
@@ -651,11 +651,11 @@ export function useCanvasTextEditSession(
       if (target.isForeachTemplateEdit) {
         return null;
       }
-      const outputJax = getActiveMathJaxOutputJax();
+      const layoutContext = getActiveTextLayoutContext();
       const containerElement = resolveRenderedMathTextElement(target);
-      const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
-      if (target.paragraphId && outputJax && containerElement) {
-        const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
+      const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
+      if (target.paragraphId && layoutContext && containerElement) {
+        const result = await getKnuthPlassLineRangeFromPoint(layoutContext, {
           paragraphId: target.paragraphId,
           sourceText: target.text,
           sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
@@ -670,7 +670,7 @@ export function useCanvasTextEditSession(
           }, target.text.length);
         }
         const vlistLineRange = textLineRangeFromVListSourceHit(
-          resolveTexVListSourceHitFromClient(target, clientPoint, outputJax, containerElement),
+          resolveTexVListSourceHitFromClient(target, clientPoint, layoutContext, containerElement),
           (offset) => documentOffsetToTextarea(documentSourceOffset(offset), target.sourceSpan),
           target.text.length
         );
@@ -679,7 +679,7 @@ export function useCanvasTextEditSession(
         }
       }
       if (requiresParagraphGeometry) {
-        console.error("[canvas-text-edit] Missing paragraph geometry for multiline MathJax line-range resolution.", {
+        console.error("[canvas-text-edit] Missing paragraph geometry for multiline TeX line-range resolution.", {
           sourceId: target.sourceId,
           paragraphId: target.paragraphId,
           layoutKind: target.layoutKind
@@ -740,7 +740,7 @@ export function useCanvasTextEditSession(
       const clickCount = event.detail >= 2 ? event.detail : 1;
       const mode = resolveTextSelectionModeFromClickCount(clickCount);
       const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
-      const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
+      const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
       const provisionalOffset = requiresParagraphGeometry
         ? 0
         : estimateTextOffsetFromClient(

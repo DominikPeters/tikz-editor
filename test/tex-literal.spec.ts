@@ -163,23 +163,10 @@ describe("simple TeX literal runs", () => {
   });
 
   it("marks literal runs with data-tex-literal in rendered engine SVG", async () => {
-    const target = globalThis as {
-      window?: unknown;
-      document?: unknown;
-      MathJax?: unknown;
-    };
-    target.window = {};
-    target.document = {};
-    target.MathJax = {
-      tex2svg: () => {
-        throw new Error("MathJax should not be needed for literal runs");
-      },
-      startup: {},
-    };
-    const { createMathJaxNodeTextEngine } = await import(
-      "../packages/core/src/text/mathjax-engine.js"
+    const { createTexNodeTextEngine } = await import(
+      "../packages/core/src/text/tex-node-text-engine.js"
     );
-    const engine = await createMathJaxNodeTextEngine();
+    const engine = await createTexNodeTextEngine();
 
     const measured = engine.measure({
       text: "This is a \\tex",

@@ -116,7 +116,7 @@ describe("parseTikz", () => {
 
   it("keeps a recovered node text span from swallowing the path semicolon", () => {
     const source = String.raw`\begin{tikzpicture}
-  \node at (0,0) {I'm testing the Mathjax \\ rendering \textit{d;
+  \node at (0,0) {I'm testing the TeX \\ rendering \textit{d;
 \end{tikzpicture}`;
     const result = parseTikz(source);
 
@@ -129,14 +129,14 @@ describe("parseTikz", () => {
     const node = statement.items.find((item) => item.kind === "Node");
     expect(node?.kind).toBe("Node");
     if (node?.kind === "Node") {
-      expect(node.text).toBe(String.raw`I'm testing the Mathjax \\ rendering \textit{d`);
+      expect(node.text).toBe(String.raw`I'm testing the TeX \\ rendering \textit{d`);
       expect(source.slice(node.textSpan.from, node.textSpan.to)).toBe(node.text);
     }
   });
 
   it("does not reuse the structural node close brace as recovered node text", () => {
     const source = String.raw`\begin{tikzpicture}
-  \node at (0,0) {I'm testing the Mathjax \\ rendering \textit{d};
+  \node at (0,0) {I'm testing the TeX \\ rendering \textit{d};
 \end{tikzpicture}`;
     const result = parseTikz(source);
 
@@ -149,7 +149,7 @@ describe("parseTikz", () => {
     const node = statement.items.find((item) => item.kind === "Node");
     expect(node?.kind).toBe("Node");
     if (node?.kind === "Node") {
-      expect(node.text).toBe(String.raw`I'm testing the Mathjax \\ rendering \textit{d`);
+      expect(node.text).toBe(String.raw`I'm testing the TeX \\ rendering \textit{d`);
       expect(source.slice(node.textSpan.from, node.textSpan.to)).toBe(node.text);
     }
   });

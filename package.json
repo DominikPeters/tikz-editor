@@ -93,7 +93,6 @@
     "compare:kolda-book": "node scripts/compare-pgf-docs-renderings.mjs --mode kolda-book",
     "harvest:beamer-corpus": "node scripts/harvest-beamer-corpus.mjs",
     "scan:beamer-corpus": "node scripts/scan-beamer-corpus.mjs",
-    "generate:font-previews": "node scripts/generate-font-previews.mjs",
     "generate:shape-previews": "npx tsx apps/web/scripts/generate-node-shape-previews.ts",
     "debug:multiline": "npm run -w @tikz-editor/web debug:multiline --",
     "bench:incremental-drag": "node scripts/benchmark-incremental-drag.mjs",

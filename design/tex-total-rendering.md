@@ -1,5 +1,23 @@
 # TeX Total Rendering and Fallback Removal
 
+## Status (2026-07-23)
+
+Implemented on `tex-text`.
+
+- `packages/core/src/text/tex-node-text-engine.ts` is now the only rich node
+  text engine. It measures and renders prose, paragraphs, inline math, and
+  display math through the native TeX IR and SVG renderer.
+- The MathJax runtime path, output visitor, prefix-measurement caret fallback,
+  worker/font loading, font setting, font previews, and npm dependencies have
+  been removed.
+- Matrix math cells are desugared to `$...$` before entering the same text
+  engine; `NodeTextMeasureRequest` no longer has a `mode: "math"` branch.
+- Paragraph and vlist reports are associated with an opaque
+  `TextLayoutContext`, with native source/glyph maps as the sole caret
+  authority.
+- Unsupported input is either contained as a native literal run or reported
+  as `unsupported-node-tex`; it is never delegated to another renderer.
+
 ## Purpose
 
 The TeX-derived text+math path currently renders a node only when the whole
@@ -57,11 +75,11 @@ and MathJax is not a meaningful fallback for a frame body at all.
 - Guessing user intent mid-edit (e.g. "is `\tex` a prefix of `\textbf`?").
   No caret-dependent parsing.
 - Semantic math editing or error recovery beyond literal rendering.
-- Removing MathJax as an npm dependency in the same change as removing the
-  fallback (the Knuth-Plass line-break visitor import is a separate,
-  smaller cleanup).
+- At proposal time, removing MathJax as an npm dependency was not required in
+  the same change as removing the fallback. The completed implementation did
+  remove the dependency and obsolete line-break visitor together.
 
-## Current State
+## Historical State Before Removal
 
 Where fallback decisions live today:
 
@@ -287,23 +305,23 @@ package-specific text-decoration commands remain outside this tranche.
 
 ### Phase 4: Delete the fallback
 
-- Remove the MathJax measure/render path from `mathjax-engine.ts`;
-  `buildSimpleTexTextCacheEntry` becomes the only entry point. Rename the
-  module (`node-text-engine.ts`) — its current name is already misleading.
-- Fallback telemetry (added at the start of Phase 3: log every
-  `fallbackReason` occurrence in dev builds) must show the remaining rate
-  is ~zero on real documents before this lands.
-- Separately: replace the `@mathjax/src` LinebreakVisitor import in the
-  legacy Knuth-Plass path, then drop the MathJax dependency and worker from
-  the bundle.
+**Completed 2026-07-23.**
+
+- Removed the hybrid engine and replaced it with
+  `tex-node-text-engine.ts`.
+- Removed fallback telemetry and async fallback queues because no alternate
+  renderer remains.
+- Replaced the output visitor and renderer-owned report storage with native
+  paragraph/vlist registries keyed by `TextLayoutContext`.
+- Dropped `@mathjax/src`, `mathjax`, the worker/font loader, UI font setting,
+  and bundled font-preview assets.
 
 ## Limits
 
-- **Non-ASCII text cannot be absorbed by literal runs**, because `é` cannot
-  be OT1-shaped in `cmtt` either. Until accent composition and/or a
-  browser-font escape hatch exists (an accepted intermediate mode per the
-  layout architecture doc), non-ASCII remains the one whole-node fallback
-  trigger. This is the main reason Phase 4 cannot precede Phase 3.
+- **Non-ASCII text cannot always be absorbed by literal runs**, because `é`
+  cannot be OT1-shaped in `cmtt` either. Until accent composition or another
+  native font path exists, such input may be reported as unsupported or fail
+  native measurement. It never switches to another renderer.
 - Literal runs are a *display* of source, so a node dense with unsupported
   macros reads as code. That is intended: it is honest, editable, and
   strictly more informative than a wrong-looking approximation.

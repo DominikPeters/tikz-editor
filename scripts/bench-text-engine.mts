@@ -6,19 +6,14 @@
  * unique string. Warm (cache-hit) latency is reported for reference.
  *
  * Usage:
- *   npx tsx scripts/bench-text-engine.mts                 # native simple-TeX path
- *   npx tsx scripts/bench-text-engine.mts --force-mathjax # MathJax fallback path
+ *   npx tsx scripts/bench-text-engine.mts                 # native TeX path
  *   npx tsx scripts/bench-text-engine.mts --json out.json # also write JSON results
- *
- * Run the two arms in separate processes: the engine is a module singleton and
- * its render cache would otherwise leak entries between arms.
  */
 
 import { performance } from "node:perf_hooks";
 import { writeFileSync } from "node:fs";
 
 const argv = process.argv.slice(2);
-const forceMathJax = argv.includes("--force-mathjax");
 const jsonIndex = argv.indexOf("--json");
 const jsonPath = jsonIndex >= 0 ? argv[jsonIndex + 1] ?? null : null;
 const samplesIndex = argv.indexOf("--samples");
@@ -26,12 +21,8 @@ const SAMPLES = samplesIndex >= 0 ? Number(argv[samplesIndex + 1]) : 40;
 const onlyIndex = argv.indexOf("--only");
 const only = onlyIndex >= 0 ? argv[onlyIndex + 1] ?? null : null;
 
-if (forceMathJax) {
-  (globalThis as { __TIKZ_EDITOR_FORCE_MATHJAX_TEXT__?: boolean }).__TIKZ_EDITOR_FORCE_MATHJAX_TEXT__ = true;
-}
-
-const { createMathJaxNodeTextEngine } = await import(
-  "../packages/core/src/text/mathjax-engine.js"
+const { createTexNodeTextEngine } = await import(
+  "../packages/core/src/text/tex-node-text-engine.js"
 );
 
 type BenchCase = {
@@ -39,7 +30,6 @@ type BenchCase = {
   /** `{i}` is replaced with a zero-padded counter so every sample is a cold cache miss of identical shape. */
   template: string;
   textWidthPt: number | null;
-  mode?: "text" | "math";
   alignment?: "ragged-right" | "ragged-left" | "center" | "justified";
 };
 
@@ -75,11 +65,9 @@ const CASES: BenchCase[] = [
     template: "first line {i}\\\\second line\\\\third and final line",
     textWidthPt: null,
   },
-  // Matrix-of-math-nodes cells reach the engine as `$...$` text since the
-  // semantic layer desugars mode:"math" (see resolveNodeLayout); keep a raw
-  // math-mode case too — it exercises the engine's MathJax compatibility path.
+  // Matrix-of-math-nodes cells reach the engine as `$...$` text because the
+  // semantic layer desugars math cells before measurement.
   { name: "matrix math cell", template: "$\\sum_{k=1}^{n} k^2 + {i}$", textWidthPt: null },
-  { name: "math mode label (raw)", template: "\\sum_{k=1}^{n} k^2 + {i}", textWidthPt: null, mode: "math" },
 ];
 
 function instantiate(template: string, i: number): string {
@@ -95,15 +83,14 @@ function quantile(sorted: number[], q: number): number {
 }
 
 const initStart = performance.now();
-const engine = await createMathJaxNodeTextEngine();
+const engine = await createTexNodeTextEngine();
 const initMs = performance.now() - initStart;
 
-// Warm up JIT + MathJax dynamic font loading on strings outside the sample space.
+// Warm up the JIT on strings outside the sample space.
 for (const benchCase of CASES) {
   for (let w = 0; w < 3; w += 1) {
     engine.measure({
       text: instantiate(benchCase.template, 900 + w).replaceAll(/\d+/g, (d) => `${d}${w}`),
-      mode: benchCase.mode ?? "text",
       textWidthPt: benchCase.textWidthPt,
       ...(benchCase.alignment ? { alignment: benchCase.alignment } : {}),
       fontStyle: "normal",
@@ -133,7 +120,6 @@ for (const benchCase of activeCases) {
   for (let i = 0; i < SAMPLES; i += 1) {
     requests.push({
       text: instantiate(benchCase.template, i),
-      mode: benchCase.mode ?? "text",
       textWidthPt: benchCase.textWidthPt,
       ...(benchCase.alignment ? { alignment: benchCase.alignment } : {}),
       fontStyle: "normal",
@@ -174,7 +160,7 @@ for (const benchCase of activeCases) {
   });
 }
 
-const arm = forceMathJax ? "mathjax-fallback" : "native-simple-tex";
+const arm = "native-tex";
 const fmt = (v: number) => v.toFixed(3).padStart(9);
 
 console.log(`\narm: ${arm}   engine init: ${initMs.toFixed(0)} ms   samples/case: ${SAMPLES}`);

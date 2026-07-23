@@ -30,7 +30,7 @@ import {
 import { texVListX } from "../packages/core/src/text/tex/coordinates.js";
 import {
   layoutTexVListFromMeasuredParagraphs,
-  registerTexVListLayoutsOnOutputJax,
+  registerTexVListLayouts,
   texVListBoxLayoutReport,
   type TexVListDocument,
   type TexVListLayout,
@@ -552,20 +552,6 @@ function makeFakeInlineMathBoxProvider(
       depth: 2,
       svgBody: `<g data-fake-inline-math="${params.content}"></g>`,
     }),
-  };
-}
-
-function makeFakeInlineMathTex2Svg(unitWidth = 1): (tex: string) => {
-  readonly querySelector: () => { readonly getAttribute: (name: string) => string | null };
-} {
-  return (tex: string) => {
-    const content = /\\textstyle\{([\s\S]*)\}/.exec(tex)?.[1] ?? tex;
-    const width = Math.max(0, content.length * unitWidth);
-    return {
-      querySelector: () => ({
-        getAttribute: (name: string) => (name === "viewBox" ? `0 0 ${width} 1` : null),
-      }),
-    };
   };
 }
 
@@ -1328,26 +1314,26 @@ describe("Computer Modern OT1 text shaping", () => {
     const text = "office";
     const shaped = computerModernTexMetricProvider.shapeText(text);
     const report = makeShapedTextReport(text);
-    const outputJax = { linebreaks: { getReports: () => [report] } };
+    const layoutContext = { linebreaks: { getReports: () => [report] } };
     const containerElement = {
       querySelectorAll: () => [
         makeLineElement({ left: 0, top: 0, right: shaped.width, bottom: 10 }, report.width),
       ],
     };
 
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: text,
       containerElement,
       offset: 3,
     });
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: text,
       containerElement,
       clientPoint: clientPoint(px(shaped.caretStops[3]), px(2)),
     });
-    const selection = await getKnuthPlassSelectionRects(outputJax, {
+    const selection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: text,
       containerElement,
@@ -1388,14 +1374,14 @@ describe("Computer Modern OT1 text shaping", () => {
     const betweenEAndS = caretStops[2];
     expect(Number.isFinite(betweenEAndS)).toBe(true);
 
-    const outputJax = { linebreaks: { getReports: () => report ? [report] : [] } };
+    const layoutContext = { linebreaks: { getReports: () => report ? [report] : [] } };
     const containerElement = {
       querySelectorAll: () => [
         makeLineElement({ left: 0, top: 0, right: report?.width ?? 120, bottom: 10 }, report?.width ?? 120),
       ],
     };
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:styled-hit-test",
       sourceText,
       containerElement,
@@ -1428,8 +1414,8 @@ describe("Computer Modern OT1 text shaping", () => {
       sourceOffset: sourceText.indexOf(String.raw`\\`),
     });
 
-    const outputJax = { linebreaks: { getReports: () => report ? [report] : [] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => report ? [report] : [] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:styled-forced-break-hitmap",
       layout: vlistLayout!,
     }]);
@@ -1442,7 +1428,7 @@ describe("Computer Modern OT1 text shaping", () => {
     };
 
     const anotherOffset = sourceText.indexOf("another") + 3;
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:styled-forced-break-hitmap",
       sourceText,
       containerElement,
@@ -1456,7 +1442,7 @@ describe("Computer Modern OT1 text shaping", () => {
       kind: "text",
     });
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:styled-forced-break-hitmap",
       sourceText,
       containerElement,
@@ -1469,7 +1455,7 @@ describe("Computer Modern OT1 text shaping", () => {
       kind: "text",
     });
 
-    const selection = await getKnuthPlassSelectionRects(outputJax, {
+    const selection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:styled-forced-break-hitmap",
       sourceText,
       containerElement,
@@ -1495,8 +1481,8 @@ describe("Computer Modern OT1 text shaping", () => {
       expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
 
       const report = result.report!;
-      const outputJax = { linebreaks: { getReports: () => [report] } };
-      registerTexVListLayoutsOnOutputJax(outputJax, [{
+      const layoutContext = { linebreaks: { getReports: () => [report] } };
+      registerTexVListLayouts(layoutContext, [{
         paragraphId: testCase.id,
         layout: result.vlistLayout!,
       }]);
@@ -1510,7 +1496,7 @@ describe("Computer Modern OT1 text shaping", () => {
 
       const sampledOffsets = testCase.offsets.filter((_, index) => index % 3 === 0).slice(0, 8);
       for (const offset of sampledOffsets) {
-        const point = await getKnuthPlassPointFromOffset(outputJax, {
+        const point = await getKnuthPlassPointFromOffset(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -1523,7 +1509,7 @@ describe("Computer Modern OT1 text shaping", () => {
           kind: "text",
         });
 
-        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+        const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -1540,7 +1526,7 @@ describe("Computer Modern OT1 text shaping", () => {
       const rangeStart = testCase.offsets[0];
       const rangeEnd = testCase.offsets[testCase.offsets.length - 1];
       if (rangeStart !== undefined && rangeEnd !== undefined && rangeEnd > rangeStart) {
-        const selection = await getKnuthPlassSelectionRects(outputJax, {
+        const selection = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -2960,8 +2946,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("reads TeX vlist box geometry from registered positioned layouts", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-vbox",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3029,7 +3015,7 @@ describe("simple TeX paragraph layout", () => {
     }]);
 
     expect(getKnuthPlassVListBoxGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-vbox",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3097,7 +3083,7 @@ describe("simple TeX paragraph layout", () => {
       },
     ]);
     expect(getKnuthPlassVListBoxFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-vbox",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3113,7 +3099,7 @@ describe("simple TeX paragraph layout", () => {
       sourceEnd: 30,
     }));
     expect(getKnuthPlassVListBoxFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-vbox",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3123,8 +3109,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("reads TeX paragraph placement geometry from registered vlist layouts", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-paragraph-placements",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3163,7 +3149,7 @@ describe("simple TeX paragraph layout", () => {
     }]);
 
     expect(getKnuthPlassVListParagraphGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-paragraph-placements",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3243,8 +3229,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("reads TeX placeholder geometry from registered positioned layouts", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-placeholder",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3283,7 +3269,7 @@ describe("simple TeX paragraph layout", () => {
     }]);
 
     expect(getKnuthPlassPlaceholderGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-placeholder",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3471,8 +3457,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("reads generic TeX vlist item geometry from registered positioned layouts", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-items",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3558,7 +3544,7 @@ describe("simple TeX paragraph layout", () => {
     }]);
 
     expect(getKnuthPlassVListItemGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-items",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3669,7 +3655,7 @@ describe("simple TeX paragraph layout", () => {
       },
     ]);
     expect(getKnuthPlassVListLabelGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-items",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3692,7 +3678,7 @@ describe("simple TeX paragraph layout", () => {
       }),
     ]);
     expect(getKnuthPlassVListItemFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-items",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3711,8 +3697,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("uses vlist tree depth for registered item hit-testing when bounds tie", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-item-depth-hit",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3754,7 +3740,7 @@ describe("simple TeX paragraph layout", () => {
     }]);
 
     expect(getKnuthPlassVListItemFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-item-depth-hit",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -3772,8 +3758,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("hits registered TeX vlist labels and resolves their paragraph owner", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-label-hit",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3827,7 +3813,7 @@ describe("simple TeX paragraph layout", () => {
     } as any;
 
     expect(getKnuthPlassVListLabelFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-label-hit",
       containerElement,
       clientPoint: clientPoint(px(20), px(34)),
@@ -3846,7 +3832,7 @@ describe("simple TeX paragraph layout", () => {
       }),
     });
     expect(getKnuthPlassVListLabelFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-label-hit",
       containerElement,
       clientPoint: clientPoint(px(44), px(34)),
@@ -3854,8 +3840,8 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("builds a coherent TeX vlist geometry snapshot from registered positioned layouts", () => {
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:registered-snapshot",
       layout: registeredLayoutWithBoxReport({
         metrics: { width: 100, height: 20, depth: 10 },
@@ -3953,7 +3939,7 @@ describe("simple TeX paragraph layout", () => {
     }]);
 
     const snapshot = getKnuthPlassVListGeometrySnapshot({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:registered-snapshot",
       containerElement: {
         getScreenCTM: () => ({ a: 2, b: 0, c: 0, d: 3, e: 10, f: 20 }),
@@ -4944,7 +4930,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.report?.lines[0]?.descent).toBeGreaterThanOrEqual(2);
   });
 
-  it("maps editor caret positions inside TeX-derived inline math source spans", async () => {
+  it("rejects inline math providers that omit native caret geometry", async () => {
     const sourceText = String.raw`Alpha $xyz$ beta`;
     const result = layoutSimpleTexParagraph(sourceText, {
       paragraphId: "tex:inline-math-hitmap",
@@ -4959,8 +4945,7 @@ describe("simple TeX paragraph layout", () => {
     const mathSegment = report?.lines[0]?.segments.find((segment) => segment.kind === "math");
     expect(mathSegment).toBeTruthy();
 
-    const outputJax = {
-      tex2svg: makeFakeInlineMathTex2Svg(1),
+    const layoutContext = {
       linebreaks: { getReports: () => report ? [report] : [] },
     };
     const containerElement = {
@@ -4969,38 +4954,19 @@ describe("simple TeX paragraph layout", () => {
       ],
     };
     const offsetInsideMath = sourceText.indexOf("xyz") + 2;
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:inline-math-hitmap",
       sourceText,
       containerElement,
       offset: offsetInsideMath,
     });
-    expect(point.error?.message ?? null).toBeNull();
     expect(point).toMatchObject({
-      ok: true,
-      offset: offsetInsideMath,
-      kind: "math",
-    });
-    expect(point.lineLocalX).toBeCloseTo(
-      (mathSegment?.x ?? 0) + (2 / 3) * (mathSegment?.width ?? 0),
-      6
-    );
-
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
-      paragraphId: "tex:inline-math-hitmap",
-      sourceText,
-      containerElement,
-      clientPoint: clientPoint(px(point.clientPoint?.x ?? 0), px(point.clientPoint?.y ?? 0)),
-    });
-    expect(caret.error?.message ?? null).toBeNull();
-    expect(caret).toMatchObject({
-      ok: true,
-      offset: offsetInsideMath,
-      kind: "math",
+      ok: false,
+      error: { code: "alignment-error" }
     });
   });
 
-  it("maps supported TeX-derived inline math carets without MathJax prefix measurement", async () => {
+  it("maps supported TeX-derived inline math carets without external prefix measurement", async () => {
     const sourceText = String.raw`Alpha $x-y$ beta`;
     const result = layoutSimpleTexParagraph(sourceText, {
       paragraphId: "tex:inline-math-real-hitmap",
@@ -5020,10 +4986,7 @@ describe("simple TeX paragraph layout", () => {
       expect(mathCaretEntries.some((entry) => entry.sourceOffsetRaw === offset)).toBe(true);
     }
 
-    const outputJax = {
-      tex2svg: () => {
-        throw new Error("MathJax prefix measurement should not be used for TeX-derived math.");
-      },
+    const layoutContext = {
       linebreaks: { getReports: () => report ? [report] : [] },
     };
     const containerElement = {
@@ -5032,7 +4995,7 @@ describe("simple TeX paragraph layout", () => {
       ],
     };
     const offsetBeforeMinus = sourceText.indexOf("-");
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:inline-math-real-hitmap",
       sourceText,
       containerElement,
@@ -5048,11 +5011,10 @@ describe("simple TeX paragraph layout", () => {
       ok: true,
       offset: offsetBeforeMinus,
       kind: "math",
-      snappedToMathPrefix: false,
     });
     expect(point.lineLocalX).toBeCloseTo(expectedMinusEntry?.x ?? 0, 6);
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:inline-math-real-hitmap",
       sourceText,
       containerElement,
@@ -5063,7 +5025,6 @@ describe("simple TeX paragraph layout", () => {
       ok: true,
       offset: offsetBeforeMinus,
       kind: "math",
-      snappedToMathPrefix: false,
     });
   });
 
@@ -5085,10 +5046,7 @@ describe("simple TeX paragraph layout", () => {
     expect(fractionConstruct).toBeTruthy();
     expect(fractionCaretEntries.length).toBeGreaterThan(0);
 
-    const outputJax = {
-      tex2svg: () => {
-        throw new Error("MathJax prefix measurement should not be used for TeX-derived math selections.");
-      },
+    const layoutContext = {
       linebreaks: { getReports: () => report ? [report] : [] },
     };
     const containerElement = {
@@ -5097,7 +5055,7 @@ describe("simple TeX paragraph layout", () => {
       ],
     };
 
-    const numeratorSelection = await getKnuthPlassSelectionRects(outputJax, {
+    const numeratorSelection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
@@ -5115,7 +5073,7 @@ describe("simple TeX paragraph layout", () => {
       renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0], sourceText, "1234")
     );
 
-    const denominatorSelection = await getKnuthPlassSelectionRects(outputJax, {
+    const denominatorSelection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
@@ -5134,7 +5092,7 @@ describe("simple TeX paragraph layout", () => {
       renderedMathGlyphBoundsForText(mathSegment!, report!.lines[0], sourceText, "98765")
     );
 
-    const crossRowSelection = await getKnuthPlassSelectionRects(outputJax, {
+    const crossRowSelection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
@@ -5159,13 +5117,13 @@ describe("simple TeX paragraph layout", () => {
     );
 
     const caretOffsetBetweenTwoAndThree = sourceText.indexOf("3");
-    const caretPoint = await getKnuthPlassPointFromOffset(outputJax, {
+    const caretPoint = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
       offset: caretOffsetBetweenTwoAndThree,
     });
-    const threeSelection = await getKnuthPlassSelectionRects(outputJax, {
+    const threeSelection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:inline-math-fraction-row-selection",
       sourceText,
       containerElement,
@@ -5193,10 +5151,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
 
-    const outputJax = {
-      tex2svg: () => {
-        throw new Error("MathJax prefix measurement should not be used for TeX-derived math selections.");
-      },
+    const layoutContext = {
       linebreaks: { getReports: () => report ? [report] : [] },
     };
     const containerElement = {
@@ -5206,7 +5161,7 @@ describe("simple TeX paragraph layout", () => {
     };
 
     const sourceSpaceAfterSuperscript = sourceText.indexOf(" =");
-    const sourceGapSelection = await getKnuthPlassSelectionRects(outputJax, {
+    const sourceGapSelection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:inline-math-source-gap-selection",
       sourceText,
       containerElement,
@@ -5235,10 +5190,7 @@ describe("simple TeX paragraph layout", () => {
     expect(result.supported).toBe(true);
     expect(report).toBeTruthy();
 
-    const outputJax = {
-      tex2svg: () => {
-        throw new Error("MathJax prefix measurement should not be used for TeX-derived fraction hit testing.");
-      },
+    const layoutContext = {
       linebreaks: { getReports: () => report ? [report] : [] },
     };
     const containerElement = {
@@ -5248,13 +5200,13 @@ describe("simple TeX paragraph layout", () => {
     };
     const numeratorOffset = sourceText.indexOf("1");
     const denominatorOffset = sourceText.indexOf("2");
-    const numeratorPoint = await getKnuthPlassPointFromOffset(outputJax, {
+    const numeratorPoint = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:inline-math-fraction-2d-hitmap",
       sourceText,
       containerElement,
       offset: numeratorOffset,
     });
-    const denominatorPoint = await getKnuthPlassPointFromOffset(outputJax, {
+    const denominatorPoint = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:inline-math-fraction-2d-hitmap",
       sourceText,
       containerElement,
@@ -5264,13 +5216,13 @@ describe("simple TeX paragraph layout", () => {
     expect(denominatorPoint.error?.message ?? null).toBeNull();
     expect(numeratorPoint.clientPoint?.y).toBeLessThan(denominatorPoint.clientPoint?.y ?? 0);
 
-    const numeratorCaret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const numeratorCaret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:inline-math-fraction-2d-hitmap",
       sourceText,
       containerElement,
       clientPoint: clientPoint(px(numeratorPoint.clientPoint?.x ?? 0), px(numeratorPoint.clientPoint?.y ?? 0)),
     });
-    const denominatorCaret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const denominatorCaret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:inline-math-fraction-2d-hitmap",
       sourceText,
       containerElement,
@@ -5303,10 +5255,7 @@ describe("simple TeX paragraph layout", () => {
       )
     )).toBe(true);
 
-    const outputJax = {
-      tex2svg: () => {
-        throw new Error("MathJax prefix measurement should not be used for fragmented TeX-derived math hit testing.");
-      },
+    const layoutContext = {
       linebreaks: { getReports: () => report ? [report] : [] },
     };
     const containerElement = {
@@ -5322,7 +5271,7 @@ describe("simple TeX paragraph layout", () => {
     const seenVisualCaretPoints = new Set<string>();
 
     for (const offset of sampledOffsets) {
-      const point = await getKnuthPlassPointFromOffset(outputJax, {
+      const point = await getKnuthPlassPointFromOffset(layoutContext, {
         paragraphId: "tex:inline-math-fragment-hitmap",
         sourceText,
         containerElement,
@@ -5333,10 +5282,9 @@ describe("simple TeX paragraph layout", () => {
         ok: true,
         offset,
         kind: "math",
-        snappedToMathPrefix: false,
       });
 
-      const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+      const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
         paragraphId: "tex:inline-math-fragment-hitmap",
         sourceText,
         containerElement,
@@ -5353,20 +5301,18 @@ describe("simple TeX paragraph layout", () => {
           ok: true,
           lineIndex: point.lineIndex,
           kind: "math",
-          snappedToMathPrefix: false,
         });
       } else {
         expect(caret).toMatchObject({
           ok: true,
           offset,
           kind: "math",
-          snappedToMathPrefix: false,
         });
       }
       seenVisualCaretPoints.add(visualPointKey);
     }
 
-    const crossFragmentSelection = await getKnuthPlassSelectionRects(outputJax, {
+    const crossFragmentSelection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:inline-math-fragment-hitmap",
       sourceText,
       containerElement,
@@ -5427,10 +5373,7 @@ unordered.`;
 
       const report = result.report!;
       expectMathSegmentGlyphsWithinSourceSpans(report);
-      const outputJax = {
-        tex2svg: () => {
-          throw new Error("MathJax prefix measurement should not be used for TeX-derived mixed hit-map fuzz.");
-        },
+      const layoutContext = {
         linebreaks: { getReports: () => [report] },
       };
       const containerElement = {
@@ -5439,7 +5382,7 @@ unordered.`;
 
       const sampledOffsets = testCase.offsets.slice(0, 24);
       for (const { offset, kind, label, exactRoundTrip } of sampledOffsets) {
-        const point = await getKnuthPlassPointFromOffset(outputJax, {
+        const point = await getKnuthPlassPointFromOffset(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -5452,7 +5395,7 @@ unordered.`;
           kind,
         });
 
-        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+        const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -5473,7 +5416,7 @@ unordered.`;
       const rangeStart = testCase.offsets[0]?.offset ?? 0;
       const rangeEnd = testCase.offsets.at(-1)?.offset ?? 0;
       if (rangeEnd > rangeStart) {
-        const selection = await getKnuthPlassSelectionRects(outputJax, {
+        const selection = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -5530,20 +5473,20 @@ unordered.`;
     expect(report).not.toBeNull();
     expect(report?.lines).toHaveLength(2);
 
-    const outputJax = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
+    const layoutContext = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
     const containerElement = {
       querySelectorAll: () => [
         makeLineElement({ left: 0, top: 0, right: report?.width ?? 0, bottom: 10 }, report?.width ?? 1),
         makeLineElement({ left: 0, top: 12, right: report?.width ?? 0, bottom: 22 }, report?.width ?? 1),
       ],
     };
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:hitmap",
       sourceText,
       containerElement,
       offset: 3,
     });
-    const secondLinePoint = await getKnuthPlassPointFromOffset(outputJax, {
+    const secondLinePoint = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:hitmap",
       sourceText,
       containerElement,
@@ -5586,8 +5529,8 @@ unordered.`;
       xStart: 47,
     });
 
-    const outputJax = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:nested-vlist-hitmap",
       layout: vlistLayout!,
     }]);
@@ -5599,7 +5542,7 @@ unordered.`;
       },
     };
     const alphaOffset = sourceText.indexOf("Alpha") + 2;
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:nested-vlist-hitmap",
       sourceText,
       containerElement,
@@ -5620,7 +5563,7 @@ unordered.`;
       6
     );
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:nested-vlist-hitmap",
       sourceText,
       containerElement,
@@ -5658,8 +5601,8 @@ unordered.`;
     expect(report?.sourceMappingMode).toBe("explicit");
     expect(vlistLayout).toBeDefined();
 
-    const outputJax = { linebreaks: { getReports: () => [report!] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => [report!] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:enumerate-document-hitmap",
       layout: vlistLayout!,
     }]);
@@ -5671,7 +5614,7 @@ unordered.`;
       },
     };
     const documentOffset = documentSource.indexOf("Hello") + 2;
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:enumerate-document-hitmap",
       sourceText: nodeText,
       sourceTextStartOffset: documentSourceOffset(prefix.length),
@@ -5686,7 +5629,7 @@ unordered.`;
       kind: "text",
     });
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:enumerate-document-hitmap",
       sourceText: nodeText,
       sourceTextStartOffset: documentSourceOffset(prefix.length),
@@ -5696,7 +5639,7 @@ unordered.`;
     });
     expect(caret).toMatchObject({ ok: true, offset: documentOffset, kind: "text" });
 
-    const wrongSpace = await getKnuthPlassPointFromOffset(outputJax, {
+    const wrongSpace = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:enumerate-document-hitmap",
       sourceText: nodeText,
       sourceCoordinateSpace: "document",
@@ -5726,8 +5669,8 @@ unordered.`;
     expect(report).not.toBeNull();
     expect(vlistLayout).not.toBeNull();
 
-    const outputJax = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => [report as ParagraphLayoutReport] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:display-align-row-hitmap",
       layout: vlistLayout!,
     }]);
@@ -5740,7 +5683,7 @@ unordered.`;
     };
 
     const alignRows = getKnuthPlassVListItemGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:display-align-row-hitmap",
       containerElement: containerElement as any,
     }).filter((item) => item.hboxRole === "display-align-row");
@@ -5768,7 +5711,7 @@ unordered.`;
     const secondRow = alignRows[1];
     expect(secondRow).toBeDefined();
     const hit = getKnuthPlassVListItemFromPoint({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:display-align-row-hitmap",
       containerElement: containerElement,
       clientPoint: clientPoint(
@@ -5786,7 +5729,7 @@ unordered.`;
     });
 
     const snapshot = getKnuthPlassVListGeometrySnapshot({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:display-align-row-hitmap",
       containerElement: containerElement,
     });
@@ -5819,8 +5762,8 @@ unordered.`;
     expect(result.report, sourceText).not.toBeNull();
     expect(result.vlistLayout, sourceText).not.toBeNull();
 
-    const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:display-math-caret",
       layout: result.vlistLayout!,
     }]);
@@ -5832,7 +5775,7 @@ unordered.`;
       },
     };
     const snapshot = getKnuthPlassVListGeometrySnapshot({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:display-math-caret",
       containerElement: containerElement,
     });
@@ -5854,7 +5797,7 @@ unordered.`;
     });
 
     const offset = sourceText.indexOf("^");
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:display-math-caret",
       sourceText,
       containerElement,
@@ -5865,10 +5808,9 @@ unordered.`;
       ok: true,
       offset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:display-math-caret",
       sourceText,
       containerElement,
@@ -5879,10 +5821,9 @@ unordered.`;
       ok: true,
       offset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
 
-    const selection = await getKnuthPlassSelectionRects(outputJax, {
+    const selection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:display-math-caret",
       sourceText,
       containerElement,
@@ -5909,8 +5850,8 @@ unordered.`;
       expect(result.report, sourceText).not.toBeNull();
       expect(result.vlistLayout, sourceText).not.toBeNull();
 
-      const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
-      registerTexVListLayoutsOnOutputJax(outputJax, [{
+      const layoutContext = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+      registerTexVListLayouts(layoutContext, [{
         paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
         layout: result.vlistLayout!,
       }]);
@@ -5925,7 +5866,7 @@ unordered.`;
 
       for (const tracked of formula.trackedOffsets) {
         const offset = contentStart + tracked.offset;
-        const point = await getKnuthPlassPointFromOffset(outputJax, {
+        const point = await getKnuthPlassPointFromOffset(layoutContext, {
           paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
           sourceText,
           containerElement,
@@ -5936,10 +5877,9 @@ unordered.`;
           ok: true,
           offset,
           kind: "math",
-          snappedToMathPrefix: false,
         });
 
-        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+        const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
           paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
           sourceText,
           containerElement,
@@ -5949,14 +5889,13 @@ unordered.`;
         expect(caret, `${sourceText} @ ${offset} (${tracked.label})`).toMatchObject({
           ok: true,
           kind: "math",
-          snappedToMathPrefix: false,
         });
       }
 
       const selectionStart = contentStart + (formula.trackedOffsets[0]?.offset ?? 0);
       const selectionEnd = contentStart + (formula.trackedOffsets.at(-1)?.offset ?? 0) + 1;
       if (selectionEnd > selectionStart) {
-        const selection = await getKnuthPlassSelectionRects(outputJax, {
+        const selection = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: `tex:display-math-construct-caret-${formulaIndex}`,
           sourceText,
           containerElement,
@@ -5983,8 +5922,8 @@ unordered.`;
     expect(result.report, sourceText).not.toBeNull();
     expect(result.vlistLayout, sourceText).not.toBeNull();
 
-    const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:numbered-display-align-caret",
       layout: result.vlistLayout!,
     }]);
@@ -5997,7 +5936,7 @@ unordered.`;
     };
 
     const alignRows = getKnuthPlassVListItemGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:numbered-display-align-caret",
       containerElement: containerElement as any,
     }).filter((item) => item.hboxRole === "display-align-row");
@@ -6024,7 +5963,7 @@ unordered.`;
     ]);
 
     const offset = sourceText.indexOf("&=b");
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: "tex:numbered-display-align-caret",
       sourceText,
       containerElement,
@@ -6035,10 +5974,9 @@ unordered.`;
       ok: true,
       offset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:numbered-display-align-caret",
       sourceText,
       containerElement,
@@ -6049,7 +5987,6 @@ unordered.`;
       ok: true,
       offset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
   });
 
@@ -6066,8 +6003,8 @@ unordered.`;
     expect(result.report, sourceText).not.toBeNull();
     expect(result.vlistLayout, sourceText).not.toBeNull();
 
-    const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: "tex:display-multline-shove-caret",
       layout: result.vlistLayout!,
     }]);
@@ -6080,7 +6017,7 @@ unordered.`;
     };
 
     const rows = getKnuthPlassVListItemGeometry({
-      outputJax,
+      layoutContext,
       paragraphId: "tex:display-multline-shove-caret",
       containerElement: containerElement as any,
     }).filter((item) => item.hboxRole === "display-align-row");
@@ -6093,7 +6030,7 @@ unordered.`;
     const leftOffset = sourceText.indexOf("c+d");
     const rightOffset = sourceText.indexOf("e+f");
     const [leftPoint, rightPoint] = await Promise.all([leftOffset, rightOffset].map((offset) =>
-      getKnuthPlassPointFromOffset(outputJax, {
+      getKnuthPlassPointFromOffset(layoutContext, {
         paragraphId: "tex:display-multline-shove-caret",
         sourceText,
         containerElement,
@@ -6106,18 +6043,16 @@ unordered.`;
       ok: true,
       offset: leftOffset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
     expect(rightPoint).toMatchObject({
       ok: true,
       offset: rightOffset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
     expect(rightPoint.lineIndex).not.toBe(leftPoint.lineIndex);
     expect(rightPoint.lineLocalX ?? 0).toBeGreaterThan((leftPoint.lineLocalX ?? 0) + 80);
 
-    const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+    const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: "tex:display-multline-shove-caret",
       sourceText,
       containerElement,
@@ -6128,10 +6063,9 @@ unordered.`;
       ok: true,
       offset: rightOffset,
       kind: "math",
-      snappedToMathPrefix: false,
     });
 
-    const selection = await getKnuthPlassSelectionRects(outputJax, {
+    const selection = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: "tex:display-multline-shove-caret",
       sourceText,
       containerElement,
@@ -6157,8 +6091,8 @@ unordered.`;
       expect(result.report, testCase.source).not.toBeNull();
       expect(result.vlistLayout, testCase.source).not.toBeNull();
 
-      const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
-      registerTexVListLayoutsOnOutputJax(outputJax, [{
+      const layoutContext = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+      registerTexVListLayouts(layoutContext, [{
         paragraphId: testCase.id,
         layout: result.vlistLayout!,
       }]);
@@ -6171,7 +6105,7 @@ unordered.`;
       };
 
       const snapshot = getKnuthPlassVListGeometrySnapshot({
-        outputJax,
+        layoutContext,
         paragraphId: testCase.id,
         containerElement: containerElement,
       });
@@ -6192,7 +6126,7 @@ unordered.`;
         ).toBe(expectedSource);
 
         const hit = getKnuthPlassVListItemFromPoint({
-          outputJax,
+          layoutContext,
           paragraphId: testCase.id,
           containerElement: containerElement,
           clientPoint: clientPoint(
@@ -6226,7 +6160,7 @@ unordered.`;
 
       expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
       for (const { offset, label } of testCase.offsets.slice(0, 10)) {
-        const point = await getKnuthPlassPointFromOffset(outputJax, {
+        const point = await getKnuthPlassPointFromOffset(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -6237,10 +6171,9 @@ unordered.`;
           ok: true,
           offset,
           kind: "math",
-          snappedToMathPrefix: false,
         });
 
-        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+        const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -6250,14 +6183,13 @@ unordered.`;
         expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
           ok: true,
           kind: "math",
-          snappedToMathPrefix: false,
         });
       }
 
       const selectionStart = testCase.offsets[0]?.offset ?? 0;
       const selectionEnd = (testCase.offsets.at(-1)?.offset ?? selectionStart) + 1;
       if (selectionEnd > selectionStart) {
-        const selection = await getKnuthPlassSelectionRects(outputJax, {
+        const selection = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -6290,8 +6222,8 @@ unordered.`;
       expect(result.vlistLayout, testCase.source).not.toBeNull();
       expect(testCase.offsets.length, testCase.source).toBeGreaterThan(0);
 
-      const outputJax = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
-      registerTexVListLayoutsOnOutputJax(outputJax, [{
+      const layoutContext = { linebreaks: { getReports: () => [result.report as ParagraphLayoutReport] } };
+      registerTexVListLayouts(layoutContext, [{
         paragraphId: testCase.id,
         layout: result.vlistLayout!,
       }]);
@@ -6304,7 +6236,7 @@ unordered.`;
       };
 
       const snapshot = getKnuthPlassVListGeometrySnapshot({
-        outputJax,
+        layoutContext,
         paragraphId: testCase.id,
         containerElement: containerElement,
       });
@@ -6331,7 +6263,7 @@ unordered.`;
       }
 
       for (const { offset, kind, label, exactRoundTrip } of testCase.offsets.slice(0, 18)) {
-        const point = await getKnuthPlassPointFromOffset(outputJax, {
+        const point = await getKnuthPlassPointFromOffset(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -6342,10 +6274,9 @@ unordered.`;
           ok: true,
           offset,
           kind: "math",
-          snappedToMathPrefix: false,
         });
 
-        const caret = await getKnuthPlassCaretFromPoint(outputJax, {
+        const caret = await getKnuthPlassCaretFromPoint(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -6359,7 +6290,6 @@ unordered.`;
           expect(caret, `${testCase.id}: ${testCase.source} @ ${offset} (${label ?? "offset"})`).toMatchObject({
             offset,
             kind,
-            snappedToMathPrefix: false,
           });
         }
       }
@@ -6367,7 +6297,7 @@ unordered.`;
       const firstOffset = testCase.offsets[0]?.offset ?? 0;
       const lastOffset = testCase.offsets.at(-1)?.offset ?? firstOffset;
       if (lastOffset > firstOffset) {
-        const selection = await getKnuthPlassSelectionRects(outputJax, {
+        const selection = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: testCase.id,
           sourceText: testCase.source,
           containerElement,
@@ -6388,7 +6318,7 @@ unordered.`;
           `${testCase.id} row ${rowIndex}: ${testCase.source}`
         ).toBe(expectedSource);
         const hit = getKnuthPlassVListItemFromPoint({
-          outputJax,
+          layoutContext,
           paragraphId: testCase.id,
           containerElement: containerElement,
           clientPoint: clientPoint(

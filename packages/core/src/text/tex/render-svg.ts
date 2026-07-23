@@ -303,7 +303,7 @@ function renderTexReportLineSvg<Space extends SourceCoordinateSpace>(
     ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
     : "";
   const pieces = [
-    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(texVListSvgTranslateX(lineRootX, options.originX))} ${formatPt(texVListSvgTranslateY(lineTop, options.originY))})">`,
+    `<g data-tex-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(texVListSvgTranslateX(lineRootX, options.originX))} ${formatPt(texVListSvgTranslateY(lineTop, options.originY))})">`,
     `<rect x="${formatPt(lineBoxLeft)}" y="0" width="${formatPt(texLength(report.width))}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
