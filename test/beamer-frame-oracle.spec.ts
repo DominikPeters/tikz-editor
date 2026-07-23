@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { scanBeamerDocument } from "../packages/core/src/index.js";
 import {
   buildBeamerFrameProbeSource,
+  parseBeamerPageTraceTsv,
   parseBeamerClassVersion,
   parseBeamerProbeLog,
   parsePdfInfo,
@@ -31,6 +32,8 @@ describe("Beamer frame oracle", () => {
     );
     expect(probe.source).toContain(String.raw`\newcommand{\term}{oracle}`);
     expect(probe.source).toContain(String.raw`\begin{frame}[t]{Selected}`);
+    expect(probe.source).toContain(String.raw`\setcounter{framenumber}{1}`);
+    expect(probe.source).toContain(String.raw`\def\inserttotalframenumber{2}`);
     expect(probe.source).not.toContain("not selected");
     expect(probe.source.match(/\\begin\{document\}/gu)).toHaveLength(1);
     expect(probe.source).toContain("TIKZ_BEAMER_DIM paperWidth");
@@ -81,6 +84,51 @@ TIKZ_BEAMER_DIM paperWidth 1048576
         },
       },
     ]);
+  });
+
+  it("parses full-page box, rule, and glyph traces in scaled points", () => {
+    const trace = parseBeamerPageTraceTsv(`PAGE\t1\tvlist\t1048576\t2097152\t0
+BOX\t1\tvlist\troot\t0\t0\t1048576\t2097152\t0
+RULE\t1\troot.1\t-65536\t-131072\t1048576\t2097152\t0
+GLYPH\t1\troot.2\t72\t32768\t65536\t491520\t458752\t0\t15\t786432\t[lmsans12-regular]:+tlig;
+`);
+
+    expect(trace.pages).toEqual([{
+      pageNumber: 1,
+      boxKind: "vlist",
+      width: { sp: 1_048_576, texPt: 16 },
+      height: { sp: 2_097_152, texPt: 32 },
+      depth: { sp: 0, texPt: 0 },
+      boxes: [{
+        kind: "vlist",
+        path: "root",
+        x: { sp: 0, texPt: 0 },
+        y: { sp: 0, texPt: 0 },
+        width: { sp: 1_048_576, texPt: 16 },
+        height: { sp: 2_097_152, texPt: 32 },
+        depth: { sp: 0, texPt: 0 },
+      }],
+      rules: [{
+        path: "root.1",
+        x: { sp: -65_536, texPt: -1 },
+        y: { sp: -131_072, texPt: -2 },
+        width: { sp: 1_048_576, texPt: 16 },
+        height: { sp: 2_097_152, texPt: 32 },
+        depth: { sp: 0, texPt: 0 },
+      }],
+      glyphs: [{
+        path: "root.2",
+        code: 72,
+        x: { sp: 32_768, texPt: 0.5 },
+        y: { sp: 65_536, texPt: 1 },
+        width: { sp: 491_520, texPt: 7.5 },
+        height: { sp: 458_752, texPt: 7 },
+        depth: { sp: 0, texPt: 0 },
+        fontId: 15,
+        fontSize: { sp: 786_432, texPt: 12 },
+        fontName: "[lmsans12-regular]:+tlig;",
+      }],
+    }]);
   });
 
   it("parses PDF page geometry and Beamer class provenance", () => {

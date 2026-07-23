@@ -622,6 +622,18 @@ baseline; it isolates Madrid/seahorse chrome, Latin Modern text, and centered
 one-column body placement before the KKT fixture adds lists and embedded
 TikZ.
 
+The comparison's primary evidence is now a full-page LuaLaTeX shipout trace,
+not its raster diff. The probe walks the final page box without modifying it
+and records boxes, painted rules, and every glyph in integer scaled points.
+The comparison normalizes those records to the frame contract's top-left,
+y-down TeX-point space, then matches native template rectangles and
+source-backed paragraph lines against the oracle. Its structural report
+contains edge deltas, absolute glyph/baseline deltas, glyph/font agreement,
+and unmatched records. Raster differences remain the final check for PDF
+literal paths, clipping, images, and antialiasing. Native embedded-TikZ glyph
+records are explicitly marked outside the current structural-text coverage
+rather than counted as renderer omissions.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.

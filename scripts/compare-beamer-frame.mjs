@@ -10,6 +10,11 @@ import { basename, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+import {
+  buildNativeBeamerPageTrace,
+  compareBeamerPageTraces,
+  normalizeOracleBeamerPageTrace,
+} from "./lib/beamer-frame-compare.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultOutDir = join(repoRoot, "artifacts", "beamer-frame-compare");
@@ -110,9 +115,9 @@ function runRequired(command, args, options = {}) {
   }
 }
 
-async function loadBeamerRenderer() {
+async function loadCoreRenderer() {
   ensureDistBuildFresh(repoRoot);
-  const entry = join(
+  const beamerEntry = join(
     repoRoot,
     "packages",
     "core",
@@ -120,7 +125,21 @@ async function loadBeamerRenderer() {
     "beamer",
     "index.js"
   );
-  return import(pathToFileURL(entry).href);
+  const coreEntry = join(
+    repoRoot,
+    "packages",
+    "core",
+    "dist",
+    "index.js"
+  );
+  const [beamer, core] = await Promise.all([
+    import(pathToFileURL(beamerEntry).href),
+    import(pathToFileURL(coreEntry).href),
+  ]);
+  return {
+    renderBeamerFrame: beamer.renderBeamerFrame,
+    computerModernTexMetricProvider: core.computerModernTexMetricProvider,
+  };
 }
 
 function runOracle(options, runDir) {
@@ -216,7 +235,10 @@ async function main() {
   const runDir = join(options.outDir, runName);
   mkdirSync(runDir, { recursive: true });
 
-  const { renderBeamerFrame } = await loadBeamerRenderer();
+  const {
+    computerModernTexMetricProvider,
+    renderBeamerFrame,
+  } = await loadCoreRenderer();
   const render = await renderBeamerFrame(source, {
     frameIndex: options.frameNumber - 1,
   });
@@ -228,6 +250,33 @@ async function main() {
   const oracleReport = JSON.parse(
     readFileSync(join(oracleDir, "report.json"), "utf8")
   );
+  const nativePageTrace = buildNativeBeamerPageTrace(
+    render,
+    computerModernTexMetricProvider
+  );
+  const oraclePageTrace = normalizeOracleBeamerPageTrace(
+    oracleReport.pageTrace.selectedPage,
+    oracleReport.tex.selectedPage
+  );
+  const structuralComparison = compareBeamerPageTraces(
+    nativePageTrace,
+    oraclePageTrace
+  );
+  writeFileSync(
+    join(runDir, "native-page-trace.json"),
+    `${JSON.stringify(nativePageTrace, null, 2)}\n`,
+    "utf8"
+  );
+  writeFileSync(
+    join(runDir, "oracle-page-trace.json"),
+    `${JSON.stringify(oraclePageTrace, null, 2)}\n`,
+    "utf8"
+  );
+  writeFileSync(
+    join(runDir, "structural-comparison.json"),
+    `${JSON.stringify(structuralComparison, null, 2)}\n`,
+    "utf8"
+  );
   const rasterHeight = Math.round(
     options.width * render.svg.viewBox.height / render.svg.viewBox.width
   );
@@ -238,7 +287,7 @@ async function main() {
   createVisualComparisons(runDir);
 
   const report = {
-    formatVersion: 1,
+    formatVersion: 2,
     input: {
       path: options.inputPath,
       frameNumber: options.frameNumber,
@@ -265,6 +314,7 @@ async function main() {
       page: oracleReport.pdf,
       selectedTrace: oracleReport.tex.selectedPage,
     },
+    structural: structuralComparison,
     raster: {
       width: options.width,
       height: rasterHeight,
@@ -278,6 +328,9 @@ async function main() {
       sideBySidePng: "side-by-side.png",
       differencePng: "difference.png",
       overlayPng: "overlay.png",
+      nativePageTrace: "native-page-trace.json",
+      oraclePageTrace: "oracle-page-trace.json",
+      structuralComparison: "structural-comparison.json",
     },
   };
   const reportPath = join(runDir, "report.json");
@@ -287,6 +340,9 @@ async function main() {
     "utf8"
   );
   console.log(`[beamer-frame-compare] wrote ${reportPath}`);
+  console.log(
+    `[beamer-frame-compare] structural ${JSON.stringify(structuralComparison.summary)}`
+  );
 }
 
 main().catch((error) => {

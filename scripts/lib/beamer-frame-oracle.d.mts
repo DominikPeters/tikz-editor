@@ -32,6 +32,7 @@ export interface BeamerStructuredTextLine {
 }
 
 export function beamerProbeInstrumentation(): string;
+export function beamerPageTraceLuaSource(): string;
 export function buildBeamerFrameProbeSource(
   source: string,
   document: BeamerDocumentModel,
@@ -39,6 +40,18 @@ export function buildBeamerFrameProbeSource(
 ): { readonly frame: BeamerFrameModel; readonly source: string };
 export function parseBeamerProbeLog(log: string): {
   readonly pages: readonly BeamerProbePageTrace[];
+};
+export function parseBeamerPageTraceTsv(tsv: string): {
+  readonly pages: readonly {
+    readonly pageNumber: number;
+    readonly boxKind: string;
+    readonly width: { readonly sp: number; readonly texPt: number };
+    readonly height: { readonly sp: number; readonly texPt: number };
+    readonly depth: { readonly sp: number; readonly texPt: number };
+    readonly boxes: readonly unknown[];
+    readonly rules: readonly unknown[];
+    readonly glyphs: readonly unknown[];
+  }[];
 };
 export function parsePdfInfo(output: string): {
   readonly pageCount: number;

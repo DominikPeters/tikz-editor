@@ -11,10 +11,12 @@ import { fileURLToPath } from "node:url";
 
 import {
   BEAMER_FRAME_ORACLE_VERSION,
+  beamerPageTraceLuaSource,
   buildBeamerFrameProbeSource,
   fileSha256,
   firstVersionLine,
   parseBeamerClassVersion,
+  parseBeamerPageTraceTsv,
   parseBeamerProbeLog,
   parsePdfInfo,
   summarizeMutoolStructuredText,
@@ -226,6 +228,19 @@ async function main() {
   const runDir = join(options.outDir, runName);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(join(runDir, "probe.tex"), probe.source, "utf8");
+  writeFileSync(
+    join(runDir, "beamer-page-trace.lua"),
+    beamerPageTraceLuaSource(),
+    "utf8"
+  );
+  // Beamer reads the .nav file during its begin-document patches. Seed the
+  // original deck's frame-count context before compiling the isolated frame;
+  // the selected frame still increments from the preceding source index.
+  writeFileSync(
+    join(runDir, "probe.nav"),
+    `\\headcommand {\\gdef \\inserttotalframenumber {${document.frames.length}}}\n`,
+    "utf8"
+  );
 
   compileProbe(runDir);
   const log = readFileSync(join(runDir, "probe.log"), "utf8");
@@ -246,6 +261,9 @@ async function main() {
     JSON.parse(
       readFileSync(join(runDir, "structured-text.json"), "utf8")
     )
+  );
+  const pageTrace = parseBeamerPageTraceTsv(
+    readFileSync(join(runDir, "beamer-page-trace.tsv"), "utf8")
   );
 
   const selectedTrace =
@@ -275,8 +293,17 @@ async function main() {
         structuredText.pages.at(-1) ??
         null,
     },
+    pageTrace: {
+      pages: pageTrace.pages,
+      selectedPage:
+        pageTrace.pages[pageNumber - 1] ??
+        pageTrace.pages.at(-1) ??
+        null,
+    },
     artifacts: {
       tex: "probe.tex",
+      pageTraceLua: "beamer-page-trace.lua",
+      pageTrace: "beamer-page-trace.tsv",
       log: "probe.log",
       pdf: "probe.pdf",
       svg: "probe.svg",
