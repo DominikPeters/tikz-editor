@@ -217,7 +217,7 @@ describe("svg render model", () => {
     expect(markup).toContain("rotate(-30");
   });
 
-  it("reports empty paths and preserves cached MathJax text payload metadata", () => {
+  it("reports empty paths and preserves cached native TeX text payload metadata", () => {
     const textStyle = {
       ...defaultStyle(),
       textAlign: "right" as const,
@@ -237,8 +237,8 @@ describe("svg render model", () => {
         },
         {
           kind: "Text",
-          id: "mathjax-text",
-          runtimeId: "mathjax-text",
+          id: "tex-text",
+          runtimeId: "tex-text",
           layer: "main",
           sourceRef: sourceRef("source:text"),
           style: textStyle,
@@ -248,8 +248,8 @@ describe("svg render model", () => {
           rotation: 15,
           transform: worldTransform(1, 0, 0, 1, 1, 2),
           textRenderInfo: {
-            mode: "mathjax",
-            cacheKey: "mathjax:1",
+            mode: "tex",
+            cacheKey: "tex:1",
             paragraphId: "paragraph:1",
             renderSourceText: String.raw`\frac{a}{b}`,
             layoutKind: "wrapped",
@@ -263,7 +263,7 @@ describe("svg render model", () => {
           validate: () => null,
           measure: () => null,
           renderFromCache: () => ({
-            cacheKey: "mathjax:1",
+            cacheKey: "tex:1",
             viewBox: { x: 0, y: 0, width: 20, height: 10 },
             body: "<g><path d=\"M0 0\" /></g>"
           })
@@ -273,7 +273,7 @@ describe("svg render model", () => {
 
     const markup = emitted.parts.map((part) => part.markup).join("");
     expect(emitted.diagnostics).toContainEqual(expect.objectContaining({ code: "empty-path" }));
-    expect(markup).toContain('data-text-renderer="mathjax"');
+    expect(markup).toContain('data-text-renderer="tex"');
     expect(markup).toContain('data-paragraph-id="paragraph:1"');
     expect(markup).toContain('preserveAspectRatio="xMaxYMid meet"');
     expect(markup).toContain('transform="matrix');
@@ -292,8 +292,8 @@ describe("svg render model", () => {
         scene([
           {
             kind: "Text",
-            id: "missing-mathjax-text",
-            runtimeId: "missing-mathjax-text",
+            id: "missing-tex-text",
+            runtimeId: "missing-tex-text",
             layer: "main",
             sourceRef: sourceRef("source:missing-text"),
             style: defaultStyle(),
@@ -301,8 +301,8 @@ describe("svg render model", () => {
             position: worldPoint(pt(0), pt(0)),
             text: String.raw`\alpha`,
             textRenderInfo: {
-              mode: "mathjax",
-              cacheKey: "mathjax:missing",
+              mode: "tex",
+              cacheKey: "tex:missing",
               paragraphId: null,
               renderSourceText: String.raw`\alpha`,
               layoutKind: "single-line",
@@ -316,7 +316,7 @@ describe("svg render model", () => {
         }
       );
 
-      expect(missingRender.diagnostics).toContainEqual(expect.objectContaining({ code: "missing-mathjax-text-render" }));
+      expect(missingRender.diagnostics).toContainEqual(expect.objectContaining({ code: "missing-tex-text-render" }));
       expect(missingRender.parts.map((part) => part.markup).join("")).toContain("<text");
     }
   });

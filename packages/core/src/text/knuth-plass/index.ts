@@ -1,4 +1,3 @@
-export { KnuthPlassVisitor } from './KnuthPlassVisitor.js';
 export {
   DEFAULT_PARAGRAPH_ALIGNMENT,
   TEX_INTERWORD_SHRINK_EM,
@@ -12,10 +11,6 @@ export {
   type AlignmentGlue,
 } from './alignment.js';
 export {
-  installKnuthPlassVisitor,
-  getKnuthPlassReportsFromOutputJax,
-  registerKnuthPlassReportsOnOutputJax,
-  setKnuthPlassOptionsOnOutputJax,
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
   getKnuthPlassPlaceholderGeometry,
@@ -33,12 +28,6 @@ export {
   getKnuthPlassVListSourceHitFromSnapshot,
   getKnuthPlassVListTreeHitFromSnapshot,
   clearKnuthPlassCaretMappingCache,
-  type KnuthPlassConfig,
-  type KnuthPlassLayoutMode,
-  type WrappedTextGap,
-  type MathJaxConfigLike,
-  type MathJaxOutputConfig,
-  type OutputJaxName,
   type CaretFromPointParams,
   type PointFromOffsetParams,
   type SelectionRectsParams,
@@ -70,6 +59,15 @@ export {
   type VListTreeHitParams,
   type VListTreeHitResult,
 } from './install.js';
+export {
+  getParagraphLayoutReports,
+  registerParagraphLayoutReports,
+} from "./report-registry.js";
+export type {
+  KnuthPlassConfig,
+  KnuthPlassLayoutMode,
+  WrappedTextGap,
+} from "./layout-options.js";
 
 export type {
   ParagraphLayoutReport,
@@ -141,16 +139,3 @@ export {
   type MathSourceSpan,
   type MathDelimiterKind,
 } from './editor/sourceParser.js';
-
-export {
-  stabilizePrefixForMeasurement,
-  scanTeXPrefixState,
-  hasDanglingMathScriptOperator,
-  createMathPrefixCache,
-  normalizeMathSourceForCache,
-  seedPrefixWidthTable,
-  finalizePrefixWidthTable,
-  readPrefixUnitsFromTable,
-  findNearestPrefixIndexFromTable,
-  type MathPrefixCache,
-} from './editor/mathPrefix.js';

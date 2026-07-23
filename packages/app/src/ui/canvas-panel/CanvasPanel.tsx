@@ -36,7 +36,7 @@ SceneElement
 } from "@tikz-editor/core/semantic/types";
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
-import { createMathJaxNodeTextEngine } from "@tikz-editor/core/text/mathjax-engine";
+import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
 import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
@@ -474,12 +474,11 @@ export const CanvasPanel = memo(function CanvasPanel({
     showDevPanel: s.showDevPanel,
     dispatch: s.dispatch
   })));
-  const { gridSize, handleSizePx, zoomSpeed, snapHapticsEnabled, mathJaxFont } = useSettingsStore(useShallow((s) => ({
+  const { gridSize, handleSizePx, zoomSpeed, snapHapticsEnabled } = useSettingsStore(useShallow((s) => ({
     gridSize: s.settings.canvas.gridSize,
     handleSizePx: s.settings.canvas.handleSizePx,
     zoomSpeed: s.settings.canvas.zoomSpeed,
-    snapHapticsEnabled: s.settings.canvas.snapHapticsEnabled,
-    mathJaxFont: s.settings.rendering.mathJaxFont
+    snapHapticsEnabled: s.settings.canvas.snapHapticsEnabled
   })));
   const gridMinorTargetPx = GRID_SIZE_MINOR_TARGET_PX[gridSize];
 
@@ -869,7 +868,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   useEffect(() => {
     let cancelled = false;
-    void createMathJaxNodeTextEngine({ font: mathJaxFont })
+    void createTexNodeTextEngine()
       .then((engine) => {
         if (!cancelled) {
           textEngineRef.current = engine;
@@ -885,7 +884,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     return () => {
       cancelled = true;
     };
-  }, [mathJaxFont]);
+  }, []);
 
   const densePathSourceIds = useMemo(() => {
     return collectDensePathSourceIds(snapshot.scene?.elements);
@@ -1659,16 +1658,16 @@ export const CanvasPanel = memo(function CanvasPanel({
         sourceSpan,
         text: sourceSlice,
         renderSourceText:
-          sceneText.textRenderInfo?.mode === "mathjax"
+          sceneText.textRenderInfo?.mode === "tex"
             ? sceneText.textRenderInfo.renderSourceText
             : sourceSlice,
-        usesMathJax: sceneText.textRenderInfo?.mode === "mathjax",
+        usesTex: sceneText.textRenderInfo?.mode === "tex",
         paragraphId:
-          sceneText.textRenderInfo?.mode === "mathjax"
+          sceneText.textRenderInfo?.mode === "tex"
             ? sceneText.textRenderInfo.paragraphId
             : null,
         layoutKind:
-          sceneText.textRenderInfo?.mode === "mathjax"
+          sceneText.textRenderInfo?.mode === "tex"
             ? sceneText.textRenderInfo.layoutKind
             : resolveFallbackTextLayoutKind(sourceSlice, sceneText.textHasFixedWidth, !!sceneText.matrixCell),
         style: sceneText.style,

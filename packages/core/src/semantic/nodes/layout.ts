@@ -23,9 +23,9 @@ import { normalizeOptionValue } from "./utils.js";
 const EXPLICIT_LINE_BREAK_PATTERN = /[ \t\r\n]*\\\\(?:\[[^\]]*\])?[ \t\r\n]*/g;
 const EXPLICIT_LINE_BREAK_CANONICAL_PATTERN = /[ \t\r\n]*(\\\\(?:\[[^\]]*\])?)[ \t\r\n]*/g;
 const EXPLICIT_LINE_BREAK_TOKEN_PATTERN = /\\\\(?:\[[^\]]*\])?/;
-const PLAIN_TEXT_SERIF_FONT_STACK = "MJX-NCM, CMU Serif, Latin Modern Roman, Times New Roman, serif";
-const PLAIN_TEXT_SANS_FONT_STACK = "MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif";
-const PLAIN_TEXT_MONO_FONT_STACK = "MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
+const PLAIN_TEXT_SERIF_FONT_STACK = "Latin Modern Roman, CMU Serif, Times New Roman, serif";
+const PLAIN_TEXT_SANS_FONT_STACK = "Latin Modern Sans, CMU Sans Serif, Helvetica, Arial, sans-serif";
+const PLAIN_TEXT_MONO_FONT_STACK = "Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
 
 let plainTextMeasureContext: CanvasRenderingContext2D | null | undefined;
 
@@ -166,10 +166,9 @@ export function resolveNodeLayout(
   // `execute at begin node=$` / `execute at end node=$` (tikzlibrarymatrix.code.tex),
   // i.e. plain `$` toggles around the node text — so a cell that contains its own
   // `$...$` escapes back to text. Mirror that desugaring here and measure the
-  // wrapped text in text mode, which routes it through the native TeX engine.
+  // wrapped text through the native TeX engine.
   const mathModeWrap = textMode === "math" && normalizedText.trim().length > 0;
   const measureText = mathModeWrap ? `$${normalizedText}$` : normalizedText;
-  const measureMode = mathModeWrap ? "text" : textMode;
   const measureSourceMap = mathModeWrap
     ? wrapMathModeSourceMap(normalizedText, normalizedTextSourceMap)
     : normalizedTextSourceMap;
@@ -185,9 +184,8 @@ export function resolveNodeLayout(
 
   const measuredText = (() => {
     try {
-      return textEngine?.measure({
+      return normalizedText.trim().length > 0 ? textEngine?.measure({
         text: measureText,
-        mode: measureMode,
         textWidthPt: textWidth,
         alignment: paragraphAlignment,
         fontStyle: style.fontStyle,
@@ -197,21 +195,21 @@ export function resolveNodeLayout(
         ...(measureSourceMap ? { sourceMap: measureSourceMap } : {}),
         ...(graphicsResolver ? { graphicsResolver } : {}),
         ...(colorResolver ? { colorResolver } : {})
-      }) ?? null;
+      }) ?? null : null;
     } catch {
       return null;
     }
   })();
 
   if (measuredText) {
-    // We trust MathJax for block metrics/wrapping; line-level alignment inside the block is best-effort for now.
+    // The native TeX engine owns block metrics and wrapping.
     textLines = splitNodeLines(normalizedText);
     textNaturalWidth = measuredText.width;
     textNaturalHeight = measuredText.height;
     baseLineY = measuredText.baselineY;
     midLineY = measuredText.midLineY;
     textRenderInfo = {
-      mode: "mathjax",
+      mode: "tex",
       cacheKey: measuredText.cacheKey,
       paragraphId: measuredText.paragraphId,
       renderSourceText: measuredText.renderSourceText,

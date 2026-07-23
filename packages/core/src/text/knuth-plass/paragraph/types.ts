@@ -1,17 +1,17 @@
-export interface MathJaxAttributes {
+export interface ParagraphAttributes {
   get(name: string): unknown;
   set(name: string, value: unknown): void;
 }
 
-export interface MathJaxNode {
+export interface ParagraphNode {
   kind?: string;
-  attributes?: MathJaxAttributes;
+  attributes?: ParagraphAttributes;
   getText?(): string;
   isKind?(kind: string): boolean;
   setText?(text: string): void;
 }
 
-export interface MathJaxBBox {
+export interface ParagraphBBox {
   L?: number;
   R?: number;
   w?: number;
@@ -21,35 +21,35 @@ export interface MathJaxBBox {
   lineLeading?: number;
 }
 
-export type MathJaxWrapperConstructor = {
+export type ParagraphWrapperConstructor = {
   new (...args: never[]): AnyWrapper;
   prototype?: AnyWrapper;
 };
 
-export interface MathJaxWrapperFactoryLike {
+export interface ParagraphWrapperFactory {
   nodeMap?: {
     get(name: string): unknown;
   };
 }
 
 export interface AnyWrapper {
-  node?: MathJaxNode;
+  node?: ParagraphNode;
   childNodes?: AnyWrapper[];
   parent?: AnyWrapper;
   jax?: { linebreaks?: unknown; knuthPlassOptions?: unknown };
-  lineBBox?: MathJaxBBox[];
+  lineBBox?: ParagraphBBox[];
   containerWidth?: number;
   breakToWidth?(width: number): void;
   clearBreakPoints?(): void;
-  computeBBox?(bbox: MathJaxBBox, recompute?: boolean): void;
-  computeLineBBox?(index: number): (MathJaxBBox & { getIndentData?(node: MathJaxNode): unknown }) | null;
-  getBBox?(): MathJaxBBox;
-  getOuterBBox?(): MathJaxBBox;
+  computeBBox?(bbox: ParagraphBBox, recompute?: boolean): void;
+  computeLineBBox?(index: number): (ParagraphBBox & { getIndentData?(node: ParagraphNode): unknown }) | null;
+  getBBox?(): ParagraphBBox;
+  getOuterBBox?(): ParagraphBBox;
   invalidateBBox?(): void;
   place?(x: number, y: number, parent: unknown): void;
   placeLines?(parents: unknown[]): void;
   set?(x: number, y: number): void;
-  setBBoxDimens?(bbox: MathJaxBBox): void;
+  setBBoxDimens?(bbox: ParagraphBBox): void;
   setBreakAt?(index: number | [number, number], kind?: string): void;
   setBreakStyle?(style: string): void;
   setChildPWidths?(recompute: boolean, width: number): void;

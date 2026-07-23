@@ -11,30 +11,15 @@ import {
   getKnuthPlassVListSourceHitFromSnapshot
 } from "../packages/core/src/text/knuth-plass/editor/hitmap.js";
 import {
-  getKnuthPlassReportsFromOutputJax,
-  installKnuthPlassVisitor,
-  registerKnuthPlassReportsOnOutputJax,
-  setKnuthPlassOptionsOnOutputJax
-} from "../packages/core/src/text/knuth-plass/install.js";
-import { KnuthPlassVisitor } from "../packages/core/src/text/knuth-plass/KnuthPlassVisitor.js";
-import {
-  createMathPrefixCache,
-  finalizePrefixWidthTable,
-  findNearestPrefixIndexFromTable,
-  hasDanglingMathScriptOperator,
-  normalizeMathSourceForCache,
-  readPrefixUnitsFromTable,
-  scanTeXPrefixState,
-  seedPrefixWidthTable,
-  stabilizePrefixForMeasurement
-} from "../packages/core/src/text/knuth-plass/editor/mathPrefix.js";
+  registerParagraphLayoutReports
+} from "../packages/core/src/text/knuth-plass/report-registry.js";
 import { parseSourceSpans } from "../packages/core/src/text/knuth-plass/editor/sourceParser.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph
 } from "../packages/core/src/text/tex/index.js";
-import { registerTexVListLayoutsOnOutputJax, texVListBoxLayoutReport } from "../packages/core/src/text/tex/vlist/index.js";
+import { registerTexVListLayouts, texVListBoxLayoutReport } from "../packages/core/src/text/tex/vlist/index.js";
 
 type NumericFixture<T> = T extends number
   ? number
@@ -337,25 +322,6 @@ function makeSegmentedSingleLineReport(
   });
 }
 
-function makeTex2Svg(width: number): () => { querySelector: () => { getAttribute: (name: string) => string | null } } {
-  return () => ({
-    querySelector: () => ({
-      getAttribute: (name: string) => (name === "viewBox" ? `0 0 ${width} 1` : null)
-    })
-  });
-}
-
-function makeVisitor(): any {
-  const visitor = Object.create(KnuthPlassVisitor.prototype);
-  visitor.reportByWrapper = new WeakMap();
-  visitor.paragraphIdByWrapper = new WeakMap();
-  visitor.originalMtextTextByWrapper = new WeakMap();
-  visitor.originalMspaceWidthByWrapper = new WeakMap();
-  visitor.nextParagraphNumber = 1;
-  visitor.reports = [];
-  return visitor;
-}
-
 function attributes(initial: Record<string, unknown> = {}) {
   const values = new Map(Object.entries(initial));
   return {
@@ -375,716 +341,16 @@ function wrapperNode(kind: string, attrs = attributes()): any {
   };
 }
 
-describe("knuth-plass math prefix helpers", () => {
-  it("parses escaped and delimited math source spans", () => {
-    const parsed = parseSourceSpans(String.raw`pre \$x \(a\) mid $b\$c$ post`);
-
-    expect(parsed.error).toBeNull();
-    expect(parsed.spans.map((span) => span.kind)).toEqual(["text", "math", "text", "math", "text"]);
-    expect(parsed.spans[1]).toMatchObject({
-      kind: "math",
-      delimiter: "paren",
-      content: "a"
-    });
-    expect(parsed.spans[3]).toMatchObject({
-      kind: "math",
-      delimiter: "dollar",
-      content: String.raw`b\$c`
-    });
-
-    expect(parseSourceSpans(String.raw`\) stray`).error).toMatchObject({
-      code: "unexpected-close-delimiter",
-      index: 0
-    });
-    expect(parseSourceSpans("text $x").error).toMatchObject({
-      code: "unclosed-math",
-      index: 5
-    });
-    expect(parseSourceSpans(String.raw`text \(x`).error).toMatchObject({
-      code: "unclosed-math",
-      index: 5
-    });
-    expect(parseSourceSpans(String.raw`\\) escaped close`).spans).toEqual([
-      {
-        kind: "text",
-        rawStart: 0,
-        rawEnd: 17,
-        text: String.raw`\\) escaped close`
-      }
-    ]);
-  });
-
-  it("stabilizes incomplete TeX prefixes for measurement", () => {
-    expect(hasDanglingMathScriptOperator("   ")).toBe(false);
-    expect(hasDanglingMathScriptOperator("x^   ")).toBe(true);
-    expect(hasDanglingMathScriptOperator(String.raw`x\^`)).toBe(false);
-    expect(hasDanglingMathScriptOperator("plain")).toBe(false);
-
-    expect(scanTeXPrefixState(String.raw`\(\left(x`).inMath).toBe(true);
-    expect(scanTeXPrefixState(String.raw`\(\left(x`).unclosedLeftCount).toBe(1);
-    expect(scanTeXPrefixState(String.raw`\) stray`).mathMode).toBe("none");
-    expect(scanTeXPrefixState(String.raw`\right. outside`).unclosedLeftCount).toBe(0);
-    expect(scanTeXPrefixState(String.raw`$x$`).mathMode).toBe("none");
-    expect(scanTeXPrefixState("\\").trailingEscape).toBe(true);
-    expect(scanTeXPrefixState("{x").braceDepth).toBe(1);
-
-    expect(stabilizePrefixForMeasurement("\\(\\left{x^")).toBe("\\(\\left{x^}\\right.\\)");
-    expect(stabilizePrefixForMeasurement("$x^")).toBe("$x^{}$");
-    expect(stabilizePrefixForMeasurement("$x\\")).toBe("$x\\phantom{}$");
-    expect(stabilizePrefixForMeasurement("{x")).toBe("{x}");
-  });
-
-  it("normalizes prefix width tables and nearest-index lookup", () => {
-    expect(seedPrefixWidthTable(3, 9)).toEqual([0, Number.NaN, Number.NaN, 9]);
-    expect(finalizePrefixWidthTable([], 10)).toEqual([]);
-    expect(finalizePrefixWidthTable([5, Number.NaN, -1, 20], 12)).toEqual([0, 0, 0, 12]);
-
-    expect(readPrefixUnitsFromTable(Number.POSITIVE_INFINITY, 4, 20, [0, 5, 10, 15, 20])).toBe(0);
-    expect(readPrefixUnitsFromTable(1, 0, 20, [])).toBe(0);
-    expect(readPrefixUnitsFromTable(2, 4, 20, [0, 5, 10, 15, 20])).toBe(10);
-    expect(readPrefixUnitsFromTable(2, 4, 20, [])).toBe(10);
-
-    expect(findNearestPrefixIndexFromTable(8, 4, 20, [])).toBe(2);
-    expect(findNearestPrefixIndexFromTable(5, 4, 20, [0, Number.NaN, 10, 15, 20])).toBe(1);
-    expect(findNearestPrefixIndexFromTable(11, 4, 20, [0, 4, 12, 17, 20])).toBe(2);
-    expect(findNearestPrefixIndexFromTable(0, 0, 20, [])).toBe(0);
-    expect(normalizeMathSourceForCache("dollar", "  x   +   y ")).toBe("dollar:x + y");
-  });
-
-  it("builds, caches, and evicts measured math prefix tables", async () => {
-    let calls = 0;
-    const cache = createMathPrefixCache(1);
-    const outputJax = {
-      tex2svg: (tex: string) => {
-        calls += 1;
-        return {
-          querySelector: () => ({
-            getAttribute: (name: string) => (name === "viewBox" ? `0 0 ${tex.length} 1` : null)
-          })
-        };
-      }
-    };
-
-    const first = await cache.getOrBuild(outputJax, {
-      kind: "math",
-      rawStart: 0,
-      rawEnd: 0,
-      source: "",
-      delimiter: "dollar",
-      content: String.raw`\alpha x`,
-      contentStart: 1,
-      contentEnd: 9,
-    });
-    const second = await cache.getOrBuild(outputJax, {
-      kind: "math",
-      rawStart: 0,
-      rawEnd: 0,
-      source: "",
-      delimiter: "dollar",
-      content: String.raw` \alpha x `,
-      contentStart: 1,
-      contentEnd: 11,
-    });
-    const third = await cache.getOrBuild(outputJax, {
-      kind: "math",
-      rawStart: 0,
-      rawEnd: 0,
-      source: "",
-      delimiter: "paren",
-      content: String.raw`\beta`,
-      contentStart: 2,
-      contentEnd: 7,
-    });
-
-    expect(first[0]).toBe(0);
-    expect(first[first.length - 1]).toBe(1);
-    expect(second).toBe(first);
-    expect(third).not.toBe(first);
-    expect(calls).toBeGreaterThan(0);
-
-    const fallback = await cache.getOrBuild({
-      tex2svg: () => ({
-        firstElementChild: {
-          getAttribute: (name: string) => (name === "width" ? "0" : null),
-          getBBox: () => ({ width: 0 })
-        }
-      })
-    }, {
-      kind: "math",
-      rawStart: 0,
-      rawEnd: 0,
-      source: "",
-      delimiter: "paren",
-      content: String.raw`\bad`,
-      contentStart: 2,
-      contentEnd: 6,
-    });
-    expect(fallback).toEqual([0, 0.25, 0.5, 0.75, 1]);
-
-    const widthFallbacks = await Promise.all([
-      createMathPrefixCache().getOrBuild({
-        tex2svg: () => ({ viewBox: { baseVal: { width: 3 } } })
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      }),
-      createMathPrefixCache().getOrBuild({
-        tex2svg: () => ({ getAttribute: (name: string) => name === "width" ? "4" : null })
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      }),
-      createMathPrefixCache().getOrBuild({
-        tex2svg: () => ({ getBBox: () => ({ width: 5 }) })
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      }),
-      createMathPrefixCache().getOrBuild({
-        tex2svg: () => null
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      }),
-      createMathPrefixCache().getOrBuild({
-        tex2svg: () => {
-          throw new Error("render failed");
-        }
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      }),
-      createMathPrefixCache().getOrBuild({
-        tex2svg: () => ({ getAttribute: () => null })
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "",
-        contentStart: 1,
-        contentEnd: 1,
-      })
-    ]);
-    expect(widthFallbacks.slice(0, 3)).toEqual([[0, 1], [0, 1], [0, 1]]);
-    expect(widthFallbacks[3]).toEqual([0, 1]);
-    expect(widthFallbacks[4]).toEqual([0, 1]);
-    expect(widthFallbacks[5]).toEqual([0]);
-
-    await expect(cache.getOrBuild({}, {
-      kind: "math",
-      rawStart: 0,
-      rawEnd: 0,
-      source: "",
-      delimiter: "dollar",
-      content: "x",
-      contentStart: 1,
-      contentEnd: 2,
-    })).rejects.toThrow("No tex2svg");
-    await expect(cache.getOrBuild(null, {
-      kind: "math",
-      rawStart: 0,
-      rawEnd: 0,
-      source: "",
-      delimiter: "dollar",
-      content: "x",
-      contentStart: 1,
-      contentEnd: 2,
-    })).rejects.toThrow("No tex2svg");
-  });
-
-  it("can measure through the global MathJax adaptor runtime", async () => {
-    const previousMathJax = (globalThis as { MathJax?: unknown }).MathJax;
-    try {
-      (globalThis as { MathJax?: unknown }).MathJax = {
-        startup: {
-          adaptor: {}
-        },
-        tex2svg: () => ({ querySelector: () => ({ getAttribute: (name: string) => name === "viewBox" ? "0 0 3 1" : null }) })
-      };
-      await expect(createMathPrefixCache().getOrBuild(null, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      })).resolves.toEqual([0, 1]);
-
-      (globalThis as { MathJax?: unknown }).MathJax = {
-        startup: {
-          adaptor: {
-            firstChild: () => ({ kind: "svg" }),
-            getAttribute: (_node: unknown, name: string) => (name === "viewBox" ? "0 0 7 1" : null)
-          }
-        }
-      };
-      const table = await createMathPrefixCache().getOrBuild({
-        mathjax: {
-          tex2svg: () => ({})
-        }
-      }, {
-        kind: "math",
-        rawStart: 0,
-        rawEnd: 0,
-        source: "",
-        delimiter: "dollar",
-        content: "x",
-        contentStart: 1,
-        contentEnd: 2,
-      });
-
-      expect(table).toEqual([0, 1]);
-    } finally {
-      (globalThis as { MathJax?: unknown }).MathJax = previousMathJax;
-    }
-  });
-});
-
-describe("knuth-plass install helpers", () => {
-  it("installs visitors, merges output options, and reads reports defensively", () => {
-    const config = installKnuthPlassVisitor(
-      {
-        svg: {
-          linebreaks: {
-            existing: true
-          }
-        }
-      },
-      ["svg", "chtml"]
-    );
-
-    expect(config.svg?.linebreaks?.existing).toBe(true);
-    expect(config.svg?.linebreaks?.LinebreakVisitor).toBe(KnuthPlassVisitor);
-    expect(config.chtml?.linebreaks?.LinebreakVisitor).toBe(KnuthPlassVisitor);
-
-    const outputJax = {
-      knuthPlassOptions: {
-        tolerance: 20
-      },
-      linebreaks: {
-        getReports: () => [makeSingleLineReport()]
-      }
-    };
-    setKnuthPlassOptionsOnOutputJax(outputJax, {
-      tolerance: 100,
-      alignment: "center"
-    });
-    setKnuthPlassOptionsOnOutputJax(null, { tolerance: 5 });
-    setKnuthPlassOptionsOnOutputJax(outputJax, null);
-
-    expect(outputJax.knuthPlassOptions).toMatchObject({
-      tolerance: 100,
-      alignment: "center"
-    });
-    expect(getKnuthPlassReportsFromOutputJax(outputJax)).toHaveLength(1);
-    expect(getKnuthPlassReportsFromOutputJax(null)).toEqual([]);
-    expect(getKnuthPlassReportsFromOutputJax({ linebreaks: { getReports: () => "nope" } })).toEqual([]);
-  });
-
-  it("merges visitor options and restores captured wrapper state defensively", () => {
-    KnuthPlassVisitor.configure(null);
-    KnuthPlassVisitor.configure({ alignment: "center", tolerance: 7 });
-    const visitor = makeVisitor();
-
-    expect(visitor.getLatestReport()).toBeNull();
-    expect(visitor.getReportFor(null)).toBeNull();
-    expect(visitor["getKnuthPlassOptions"]({
-      jax: {
-        knuthPlassOptions: {
-          layoutMode: "fixed-lines",
-          pretolerance: 3
-        }
-      }
-    })).toMatchObject({
-      alignment: "center",
-      layoutMode: "fixed-lines",
-      pretolerance: 3,
-      tolerance: 7
-    });
-    expect(visitor["getKnuthPlassOptions"]({ jax: { knuthPlassOptions: "bad" } })).toMatchObject({
-      alignment: "center",
-      tolerance: 7
-    });
-    expect(visitor["getKnuthPlassOptions"]({})).toMatchObject({
-      alignment: "center",
-      tolerance: 7
-    });
-    expect(visitor["resolveKnuthPlassOptions"]({})).toMatchObject({
-      alignment: "ragged-right",
-      layoutMode: "wrap"
-    });
-
-    const resolved = visitor["resolveKnuthPlassOptions"]({
-      alignment: "ragged-left",
-      layoutMode: "wrapped-explicit",
-      pretolerance: 1,
-      tolerance: 2,
-      linepenalty: 3,
-      hyphenpenalty: 4,
-      exhyphenpenalty: 5,
-      adjdemerits: 6,
-      doublehyphendemerits: 7,
-      finalhyphendemerits: 8,
-      lefthyphenmin: 1,
-      righthyphenmin: 2
-    });
-    expect(resolved).toMatchObject({
-      alignment: "ragged-left",
-      layoutMode: "wrapped-explicit",
-      pretolerance: 1,
-      righthyphenmin: 2
-    });
-
-    const textAttrs = attributes();
-    let text = "Alpha";
-    let textInvalidations = 0;
-    let wrapperInvalidations = 0;
-    let clearCount = 0;
-    const textChild = {
-      node: wrapperNode("text", textAttrs),
-      invalidateBBox: () => {
-        textInvalidations++;
-      }
-    };
-    textChild.node.getText = () => text;
-    textChild.node.setText = (next: string) => {
-      text = next;
-    };
-    const mtext = {
-      node: wrapperNode("mtext"),
-      childNodes: [
-        textChild,
-        { node: wrapperNode("mi") },
-        { node: wrapperNode("text") }
-      ],
-      clearBreakPoints: () => {
-        clearCount++;
-      },
-      invalidateBBox: () => {
-        wrapperInvalidations++;
-      },
-      textWidth: (value: string) => value.length
-    };
-    visitor["captureOriginalMtextState"](null);
-    visitor["captureOriginalMtextState"]({ node: wrapperNode("mi") });
-    visitor["captureOriginalMtextState"](mtext);
-    visitor["captureOriginalMtextState"](mtext);
-    text = "Changed";
-
-    const mspaceAttrs = attributes({ width: "2em" });
-    const mspaceStyles: string[] = [];
-    let mspaceInvalidations = 0;
-    const mspace = {
-      node: wrapperNode("mspace", mspaceAttrs),
-      getBBox: () => ({ w: 0 }),
-      setBreakStyle: (style: string) => {
-        mspaceStyles.push(style);
-      },
-      invalidateBBox: () => {
-        mspaceInvalidations++;
-      }
-    };
-    visitor["captureOriginalMspaceStateFromRuns"]([
-      {
-        kind: "space",
-        runIndex: 0,
-        sourceStart: 0,
-        sourceEnd: 1,
-        text: " ",
-        wrapper: mspace,
-        breakRef: { kind: "mspace", wrapper: mspace }
-      },
-      {
-        kind: "space",
-        runIndex: 1,
-        sourceStart: 1,
-        sourceEnd: 2,
-        text: " ",
-        wrapper: {},
-        breakRef: { kind: "mtext-space", wrapper: mtext, childIndex: 0, wordIndex: 0 }
-      },
-      {
-        kind: "space",
-        runIndex: 2,
-        sourceStart: 2,
-        sourceEnd: 3,
-        text: " ",
-        wrapper: { node: wrapperNode("mspace", attributes({ width: 3 })) },
-        breakRef: { kind: "mspace", wrapper: { node: wrapperNode("mspace", attributes({ width: 3 })) } }
-      }
-    ]);
-    mspaceAttrs.set("width", "9em");
-
-    const paragraph: any = { node: wrapperNode("mrow"), childNodes: [mtext, mspace] };
-    paragraph.childNodes.push(paragraph);
-    visitor["restoreParagraphWrapperState"](paragraph);
-    visitor["restoreMtextWrapper"]({ node: wrapperNode("mtext"), childNodes: [] });
-    visitor["restoreMspaceWrapper"]({ node: wrapperNode("mspace") });
-    visitor["captureOriginalMtextState"]({ node: wrapperNode("mtext") });
-    visitor["restoreParagraphWrapperState"](null);
-    visitor["restoreMtextWrapper"]({ node: wrapperNode("mtext") });
-    visitor["restoreMspaceWrapper"]({ node: { attributes: { set: "bad" } } });
-
-    expect(text).toBe("Alpha");
-    expect(mspaceAttrs.values.get("width")).toBe("2em");
-    expect(textInvalidations).toBeGreaterThan(0);
-    expect(wrapperInvalidations).toBeGreaterThan(0);
-    expect(clearCount).toBeGreaterThan(0);
-    expect(mspaceStyles).toContain("");
-    expect(mspaceInvalidations).toBeGreaterThan(0);
-  });
-
-  it("reads line metrics, paragraph ids, and reports from visitor helpers", () => {
-    const visitor = makeVisitor();
-
-    const lineWrapper = {
-      lineBBox: [
-        { h: 7, d: 3 },
-        { h: Number.NaN, d: "bad" }
-      ]
-    };
-    const paragraph = { childNodes: [lineWrapper] };
-    expect(visitor["readLineMetrics"](paragraph, 2)).toEqual([
-      { ascent: 7, descent: 3 },
-      { ascent: 0, descent: 0 }
-    ]);
-
-    const generated = visitor["getParagraphId"](null);
-    const wrapper = {};
-    const first = visitor["getParagraphId"](wrapper);
-    const second = visitor["getParagraphId"](wrapper);
-    expect(generated).not.toBe(first);
-    expect(second).toBe(first);
-
-    visitor["saveReport"](
-      wrapper,
-      10,
-      [],
-      new Map(),
-      [{ lineIndex: 0, startRun: 0, startTextOffset: 0, endRun: 0, endTextOffset: null, width: 0, break: null }],
-      [],
-      ["manual"],
-      undefined,
-      "degraded",
-      "unit-test",
-      true,
-      "unknown",
-      "center",
-      "fixed-lines"
-    );
-    expect(visitor.getLatestReport()).toMatchObject({
-      paragraphId: first,
-      alignment: "center",
-      layoutMode: "fixed-lines",
-      internalMode: "degraded",
-      internalDegradeReason: "unit-test",
-      externalFallbackUsed: true
-    });
-    expect(visitor.getReportFor(wrapper)).toBe(visitor.getLatestReport());
-    expect(visitor.getReportFor({})).toBeNull();
-    expect(visitor["isEligibleParboxParagraph"]({})).toBe(false);
-    expect(visitor["isEligibleParboxParagraph"]({ parent: { node: wrapperNode("mrow") } })).toBe(false);
-    expect(visitor["isEligibleParboxParagraph"]({
-      parent: {
-        node: wrapperNode("mpadded", attributes({ "data-overflow": "clip", width: "8em" }))
-      }
-    })).toBe(false);
-    expect(visitor["isEligibleParboxParagraph"]({
-      parent: {
-        node: wrapperNode("mpadded", attributes({ "data-overflow": "linebreak", width: " " }))
-      }
-    })).toBe(false);
-    expect(visitor["isEligibleParboxParagraph"]({
-      parent: {
-        node: wrapperNode("mpadded", attributes({ "data-overflow": "linebreak", width: "8em" }))
-      }
-    })).toBe(true);
-  });
-
-  it("patches MathJax wrapper bbox and line placement methods", () => {
-    const visitor = makeVisitor();
-    let originalBBoxCalls = 0;
-    class MpaddedWrapper {
-      computeBBox(bbox: { w?: number }, _recompute = false): void {
-        originalBBoxCalls++;
-        bbox.w ??= 8;
-      }
-    }
-    visitor["patchMpaddedWrapperComputeBBox"]({
-      nodeMap: new Map([["mpadded", MpaddedWrapper]])
-    });
-    visitor["patchMpaddedWrapperComputeBBox"]({});
-    visitor["patchMpaddedWrapperComputeBBox"]({
-      nodeMap: new Map([["mpadded", MpaddedWrapper]])
-    });
-    visitor["patchMpaddedWrapperComputeBBox"]({
-      nodeMap: new Map([["mpadded", class {}]])
-    });
-
-    const overflowAttrs = attributes({ "data-overflow": "linebreak", width: "6em" });
-    const nonOverflow = new MpaddedWrapper() as any;
-    nonOverflow.node = wrapperNode("mpadded", attributes({ "data-overflow": "clip" }));
-    nonOverflow.computeBBox({});
-
-    const missingChild = new MpaddedWrapper() as any;
-    missingChild.node = wrapperNode("mpadded", overflowAttrs);
-    missingChild.childNodes = [];
-    missingChild.computeBBox({});
-
-    const childWidths: number[] = [];
-    const child = {
-      breakToWidth: (width: number) => {
-        childWidths.push(width);
-      }
-    };
-    const wrongVisitor = new MpaddedWrapper() as any;
-    wrongVisitor.node = wrapperNode("mpadded", overflowAttrs);
-    wrongVisitor.childNodes = [child];
-    wrongVisitor.jax = { linebreaks: {} };
-    wrongVisitor.computeBBox({});
-
-    const originalEligibility = visitor.isEligibleParboxParagraph.bind(visitor);
-    visitor.isEligibleParboxParagraph = () => false;
-    const ineligible = new MpaddedWrapper() as any;
-    ineligible.node = wrapperNode("mpadded", overflowAttrs);
-    ineligible.childNodes = [child];
-    ineligible.jax = { linebreaks: visitor };
-    ineligible.computeBBox({});
-
-    visitor.isEligibleParboxParagraph = () => true;
-    const configuredWidth = new MpaddedWrapper() as any;
-    configuredWidth.node = wrapperNode("mpadded", overflowAttrs);
-    configuredWidth.childNodes = [child];
-    configuredWidth.containerWidth = 0;
-    configuredWidth.jax = { linebreaks: visitor };
-    configuredWidth.computeBBox({});
-
-    const measuredWidth = new MpaddedWrapper() as any;
-    measuredWidth.node = wrapperNode("mpadded", attributes({ "data-overflow": "linebreak" }));
-    measuredWidth.childNodes = [child];
-    measuredWidth.jax = { linebreaks: visitor };
-    measuredWidth.setBBoxDimens = (bbox: { w?: number }) => {
-      bbox.w = Number(bbox.w ?? 0) + 1;
-    };
-    let childPWidth: number | null = null;
-    measuredWidth.setChildPWidths = (_recompute: boolean, width: number) => {
-      childPWidth = width;
-    };
-    measuredWidth.computeBBox({}, true);
-
-    const noWidth = new MpaddedWrapper() as any;
-    noWidth.node = wrapperNode("mpadded", attributes({ "data-overflow": "linebreak" }));
-    noWidth.childNodes = [child];
-    noWidth.jax = { linebreaks: visitor };
-    noWidth.computeBBox({ w: 0 });
-    visitor.isEligibleParboxParagraph = originalEligibility;
-
-    expect(originalBBoxCalls).toBeGreaterThanOrEqual(5);
-    expect(childWidths).toContain(6);
-    expect(childWidths).toContain(8);
-    expect(childPWidth).toBe(8);
-
-    let originalPlaceCalls = 0;
-    class MrowWrapper {
-      placeLines(_parents: unknown[]): void {
-        originalPlaceCalls++;
-      }
-    }
-    visitor["patchMrowWrapperPlaceLines"]({
-      nodeMap: new Map([["mrow", MrowWrapper]])
-    });
-    visitor["patchMrowWrapperPlaceLines"]({});
-    visitor["patchMrowWrapperPlaceLines"]({
-      nodeMap: new Map([["mrow", MrowWrapper]])
-    });
-    visitor["patchMrowWrapperPlaceLines"]({
-      nodeMap: new Map([["mrow", class {}]])
-    });
-
-    const noParagraph = new MrowWrapper() as any;
-    noParagraph.parent = { node: wrapperNode("mpadded", attributes()) };
-    noParagraph.placeLines([]);
-
-    const badLines = new MrowWrapper() as any;
-    badLines.parent = { node: wrapperNode("mpadded", attributes({ "data-paragraph-id": "paragraph:1" })) };
-    badLines.lineBBox = null;
-    badLines.placeLines([]);
-
-    const placed: Array<{ x: number; y: number; parent: unknown }> = [];
-    const placedWrapper = new MrowWrapper() as any;
-    placedWrapper.parent = { node: wrapperNode("mpadded", attributes({ "data-paragraph-id": "paragraph:1" })) };
-    placedWrapper.lineBBox = [
-      { h: 4, d: 1, L: 2, lineLeading: 0.5 },
-      { h: 3, d: Number.NaN, L: 5, lineLeading: Number.NaN }
-    ];
-    placedWrapper.dh = 10;
-    placedWrapper.place = (x: number, y: number, parent: unknown) => {
-      placed.push({ x, y, parent });
-    };
-    visitor["reportByWrapper"].set(placedWrapper, makeTwoLineReport());
-    placedWrapper.jax = { linebreaks: visitor };
-    placedWrapper.placeLines(["first", "second", "missing"]);
-
-    const fallbackPlaced: Array<{ x: number; y: number }> = [];
-    const fallbackWrapper = new MrowWrapper() as any;
-    fallbackWrapper.parent = { node: wrapperNode("mpadded", attributes({ "data-paragraph-id": "paragraph:other" })) };
-    fallbackWrapper.lineBBox = [{ h: 1, d: 1, L: 7 }];
-    fallbackWrapper.place = (x: number, y: number) => {
-      fallbackPlaced.push({ x, y });
-    };
-    fallbackWrapper.jax = { linebreaks: {} };
-    fallbackWrapper.placeLines(["only"]);
-
-    expect(originalPlaceCalls).toBe(2);
-    expect(placed.map((entry) => entry.x)).toEqual([0, 0]);
-    expect(fallbackPlaced[0]?.x).toBe(7);
-  });
-});
-
 describe("knuth-plass hitmap line ranges", () => {
   it("returns invalid-params for incomplete caret mapping requests", async () => {
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => []
       }
     };
 
     await expect(
-      getKnuthPlassCaretFromPoint(outputJax, {
+      getKnuthPlassCaretFromPoint(layoutContext, {
         paragraphId: "",
         sourceText: "Hello",
         containerElement: {},
@@ -1092,7 +358,7 @@ describe("knuth-plass hitmap line ranges", () => {
       })
     ).resolves.toMatchObject({ ok: false, error: { code: "invalid-params" } });
     await expect(
-      getKnuthPlassPointFromOffset(outputJax, {
+      getKnuthPlassPointFromOffset(layoutContext, {
         paragraphId: "",
         sourceText: "Hello",
         containerElement: {},
@@ -1100,7 +366,7 @@ describe("knuth-plass hitmap line ranges", () => {
       })
     ).resolves.toMatchObject({ ok: false, error: { code: "invalid-params" } });
     await expect(
-      getKnuthPlassSelectionRects(outputJax, {
+      getKnuthPlassSelectionRects(layoutContext, {
         paragraphId: "",
         sourceText: "Hello",
         containerElement: {},
@@ -1109,7 +375,7 @@ describe("knuth-plass hitmap line ranges", () => {
       })
     ).resolves.toMatchObject({ ok: false, error: { code: "invalid-params" } });
     await expect(
-      getKnuthPlassLineRangeFromPoint(outputJax, {
+      getKnuthPlassLineRangeFromPoint(layoutContext, {
         paragraphId: "",
         sourceText: "Hello",
         containerElement: {},
@@ -1117,7 +383,7 @@ describe("knuth-plass hitmap line ranges", () => {
       })
     ).resolves.toMatchObject({ ok: false, error: { code: "invalid-params" } });
     await expect(
-      getKnuthPlassPointFromOffset(outputJax, {
+      getKnuthPlassPointFromOffset(layoutContext, {
         paragraphId: "paragraph:1",
         sourceText: 1 as never,
         containerElement: {},
@@ -1125,7 +391,7 @@ describe("knuth-plass hitmap line ranges", () => {
       })
     ).resolves.toMatchObject({ ok: false, error: { code: "invalid-params" } });
     await expect(
-      getKnuthPlassSelectionRects(outputJax, {
+      getKnuthPlassSelectionRects(layoutContext, {
         paragraphId: "paragraph:1",
         sourceText: "Hello",
         containerElement: null as never,
@@ -1137,8 +403,8 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("uses supplemental output jax reports for caret hit testing", async () => {
     const report = makeSingleLineReport();
-    const outputJax = {};
-    registerKnuthPlassReportsOnOutputJax(outputJax, [report]);
+    const layoutContext = {};
+    registerParagraphLayoutReports(layoutContext, [report]);
     const containerElement = {
       getBoundingClientRect: () => ({
         left: 0,
@@ -1153,7 +419,7 @@ describe("knuth-plass hitmap line ranges", () => {
     };
 
     await expect(
-      getKnuthPlassCaretFromPoint(outputJax, {
+      getKnuthPlassCaretFromPoint(layoutContext, {
         paragraphId: report.paragraphId,
         sourceText: "Hello World",
         containerElement,
@@ -1167,7 +433,7 @@ describe("knuth-plass hitmap line ranges", () => {
   });
 
   it("reports missing paragraphs and geometry build failures through each exported mapper", async () => {
-    const missingOutputJax = {
+    const missingLayoutContext = {
       linebreaks: {
         getReports: () => []
       }
@@ -1179,20 +445,19 @@ describe("knuth-plass hitmap line ranges", () => {
       clientPoint: clientPoint(px(0), px(0))
     };
 
-    await expect(getKnuthPlassCaretFromPoint(missingOutputJax, request)).resolves.toEqual({
+    await expect(getKnuthPlassCaretFromPoint(missingLayoutContext, request)).resolves.toEqual({
       ok: false,
       paragraphId: "missing",
       offset: null,
       lineIndex: null,
       kind: null,
-      snappedToMathPrefix: false,
       error: {
         code: "paragraph-not-found",
         paragraphId: "missing",
         message: "Paragraph 'missing' was not found in Knuth-Plass reports."
       }
     });
-    await expect(getKnuthPlassPointFromOffset(missingOutputJax, {
+    await expect(getKnuthPlassPointFromOffset(missingLayoutContext, {
       paragraphId: "missing",
       sourceText: "Hello",
       containerElement: {},
@@ -1206,14 +471,13 @@ describe("knuth-plass hitmap line ranges", () => {
       clientPoint: null,
       rotationDeg: null,
       kind: null,
-      snappedToMathPrefix: false,
       error: {
         code: "paragraph-not-found",
         paragraphId: "missing",
         message: "Paragraph 'missing' was not found in Knuth-Plass reports."
       }
     });
-    await expect(getKnuthPlassSelectionRects(missingOutputJax, {
+    await expect(getKnuthPlassSelectionRects(missingLayoutContext, {
       paragraphId: "missing",
       sourceText: "Hello",
       containerElement: {},
@@ -1253,7 +517,7 @@ describe("knuth-plass hitmap line ranges", () => {
     });
 
     const report = makeSingleLineReport();
-    const geometryFailureOutputJax = {
+    const geometryFailureLayoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1262,7 +526,7 @@ describe("knuth-plass hitmap line ranges", () => {
       querySelectorAll: () => []
     };
 
-    await expect(getKnuthPlassCaretFromPoint(geometryFailureOutputJax, {
+    await expect(getKnuthPlassCaretFromPoint(geometryFailureLayoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: badContainer,
@@ -1271,7 +535,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ok: false,
       error: { code: "geometry-error" }
     });
-    await expect(getKnuthPlassPointFromOffset(geometryFailureOutputJax, {
+    await expect(getKnuthPlassPointFromOffset(geometryFailureLayoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: badContainer,
@@ -1280,7 +544,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ok: false,
       error: { code: "geometry-error" }
     });
-    await expect(getKnuthPlassSelectionRects(geometryFailureOutputJax, {
+    await expect(getKnuthPlassSelectionRects(geometryFailureLayoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: badContainer,
@@ -1290,7 +554,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ok: false,
       error: { code: "geometry-error" }
     });
-    await expect(getKnuthPlassLineRangeFromPoint(geometryFailureOutputJax, {
+    await expect(getKnuthPlassLineRangeFromPoint(geometryFailureLayoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: true as never,
@@ -1299,7 +563,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ok: false,
       error: { code: "geometry-error" }
     });
-    await expect(getKnuthPlassLineRangeFromPoint(geometryFailureOutputJax, {
+    await expect(getKnuthPlassLineRangeFromPoint(geometryFailureLayoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: {},
@@ -1315,7 +579,7 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("returns visual line offsets for a point", async () => {
     const report = makeTwoLineReport();
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1327,7 +591,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
+    const result = await getKnuthPlassLineRangeFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
@@ -1343,13 +607,13 @@ describe("knuth-plass hitmap line ranges", () => {
       error: null
     });
 
-    const beforeLine = await getKnuthPlassLineRangeFromPoint(outputJax, {
+    const beforeLine = await getKnuthPlassLineRangeFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
       clientPoint: clientPoint(px(-5), px(2))
     });
-    const afterLine = await getKnuthPlassLineRangeFromPoint(outputJax, {
+    const afterLine = await getKnuthPlassLineRangeFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
@@ -1362,7 +626,7 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("maps caret points to the nearest measured stop and reuses cached geometry", async () => {
     const report = makeTwoLineReport();
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1376,14 +640,14 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    clearKnuthPlassCaretMappingCache(outputJax);
-    const result = await getKnuthPlassCaretFromPoint(outputJax, {
+    clearKnuthPlassCaretMappingCache(layoutContext);
+    const result = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
       clientPoint: clientPoint(px(4.6), px(2))
     });
-    const cached = await getKnuthPlassPointFromOffset(outputJax, {
+    const cached = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
@@ -1396,15 +660,14 @@ describe("knuth-plass hitmap line ranges", () => {
       offset: 5,
       lineIndex: 0,
       kind: "text",
-      snappedToMathPrefix: false,
       error: null
     });
     expect(cached.ok).toBe(true);
     expect(cached.offset).toBe(17);
-    expect(__getKnuthPlassCaretMappingCacheSize(outputJax)).toBe(1);
+    expect(__getKnuthPlassCaretMappingCacheSize(layoutContext)).toBe(1);
 
-    clearKnuthPlassCaretMappingCache(outputJax);
-    expect(__getKnuthPlassCaretMappingCacheSize(outputJax)).toBe(0);
+    clearKnuthPlassCaretMappingCache(layoutContext);
+    expect(__getKnuthPlassCaretMappingCacheSize(layoutContext)).toBe(0);
   });
 
   it("uses TeX-provided inline math stops for source carets inside delimiter spans", async () => {
@@ -1424,10 +687,7 @@ describe("knuth-plass hitmap line ranges", () => {
     }
     const mathSegment = report.lines[0]?.segments.find((segment) => segment.kind === "math");
     expect(mathSegment?.caretStops).toBeTruthy();
-    const outputJax = {
-      tex2svg: () => {
-        throw new Error("MathJax prefix measurement should not be used for TeX-derived math.");
-      },
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1444,7 +704,7 @@ describe("knuth-plass hitmap line ranges", () => {
     );
     expect(expectedEntry).toBeTruthy();
 
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText,
       containerElement,
@@ -1455,7 +715,6 @@ describe("knuth-plass hitmap line ranges", () => {
       ok: true,
       offset: offsetBeforeY,
       kind: "math",
-      snappedToMathPrefix: false
     });
     expect(point.lineLocalX).toBeCloseTo(expectedEntry?.x ?? 0, 6);
   });
@@ -1472,13 +731,13 @@ describe("knuth-plass hitmap line ranges", () => {
         Array.from({ length: 7 }, (_, index) => 5 + index)
       );
     }
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
     };
-    type RegisteredLayout = Parameters<typeof registerTexVListLayoutsOnOutputJax>[1][number]["layout"];
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    type RegisteredLayout = Parameters<typeof registerTexVListLayouts>[1][number]["layout"];
+    registerTexVListLayouts(layoutContext, [{
       paragraphId: report.paragraphId,
       layout: {
         metrics: coordinateFixture<RegisteredLayout["metrics"]>({ width: report.width, height: 8, depth: 16 }),
@@ -1518,14 +777,14 @@ describe("knuth-plass hitmap line ranges", () => {
       }
     };
 
-    clearKnuthPlassCaretMappingCache(outputJax);
-    const point = await getKnuthPlassPointFromOffset(outputJax, {
+    clearKnuthPlassCaretMappingCache(layoutContext);
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
       offset: 12
     });
-    const hit = await getKnuthPlassCaretFromPoint(outputJax, {
+    const hit = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
@@ -1562,8 +821,8 @@ describe("knuth-plass hitmap line ranges", () => {
       throw new Error("expected intertext vlist layout");
     }
 
-    const outputJax = {};
-    registerTexVListLayoutsOnOutputJax(outputJax, [{
+    const layoutContext = {};
+    registerTexVListLayouts(layoutContext, [{
       paragraphId,
       layout: layout.vlistLayout,
     }]);
@@ -1574,7 +833,7 @@ describe("knuth-plass hitmap line ranges", () => {
     const intertextStart = source.indexOf("{words}") + 1;
     const intertextEnd = intertextStart + "words".length;
     const snapshot = getKnuthPlassVListGeometrySnapshot({
-      outputJax,
+      layoutContext,
       paragraphId,
       containerElement: containerElement,
     });
@@ -1606,7 +865,7 @@ describe("knuth-plass hitmap line ranges", () => {
   it("uses the paragraph root as single-line fallback geometry", async () => {
     const report = makeSingleLineReport();
     const lineElement = makeLineElement({ left: 0, top: 0, right: 11, bottom: 10 }, report.width);
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1616,7 +875,7 @@ describe("knuth-plass hitmap line ranges", () => {
       querySelector: (selector: string) => selector === "[data-paragraph-id]" ? lineElement : null
     };
 
-    const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
+    const result = await getKnuthPlassLineRangeFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement,
@@ -1632,7 +891,7 @@ describe("knuth-plass hitmap line ranges", () => {
       error: null
     });
 
-    const overflowFallback = await getKnuthPlassLineRangeFromPoint(outputJax, {
+    const overflowFallback = await getKnuthPlassLineRangeFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: {
@@ -1646,7 +905,7 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("invalidates cached maps when container geometry changes", async () => {
     const report = makeSingleLineReport();
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1660,15 +919,15 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    clearKnuthPlassCaretMappingCache(outputJax);
-    const first = await getKnuthPlassPointFromOffset(outputJax, {
+    clearKnuthPlassCaretMappingCache(layoutContext);
+    const first = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement,
       offset: 4
     });
     containerWidth = 12;
-    const second = await getKnuthPlassPointFromOffset(outputJax, {
+    const second = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement,
@@ -1677,7 +936,7 @@ describe("knuth-plass hitmap line ranges", () => {
 
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
-    expect(__getKnuthPlassCaretMappingCacheSize(outputJax)).toBe(1);
+    expect(__getKnuthPlassCaretMappingCacheSize(layoutContext)).toBe(1);
 
     const invalidSnapshotContainer = {
       getBoundingClientRect: () => ({ left: Number.NaN, top: 0, right: 11, bottom: 10, width: 11, height: 10 }),
@@ -1686,7 +945,7 @@ describe("knuth-plass hitmap line ranges", () => {
         makeLineElement({ left: 0, top: 0, right: 11, bottom: 10 }, report.width)
       ]
     };
-    const invalidSnapshot = await getKnuthPlassPointFromOffset(outputJax, {
+    const invalidSnapshot = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World",
       containerElement: invalidSnapshotContainer,
@@ -1716,7 +975,7 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("maps source parse and alignment failures to specific errors", async () => {
     const report = makeSingleLineReport();
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -1727,7 +986,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    const sourceParse = await getKnuthPlassPointFromOffset(outputJax, {
+    const sourceParse = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "$unterminated",
       containerElement,
@@ -1771,12 +1030,12 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("returns geometry-error when line geometry cannot be resolved", async () => {
     const report = makeTwoLineReport();
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
     };
-    const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
+    const result = await getKnuthPlassLineRangeFromPoint(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement: {
@@ -1996,7 +1255,7 @@ describe("knuth-plass hitmap line ranges", () => {
       }
     );
 
-    expect(mathMeasurement.error?.code).toBe("math-measurement-error");
+    expect(mathMeasurement.error?.code).toBe("alignment-error");
   });
 
   it("reports malformed hitmaps with no lines or out-of-bounds stops", async () => {
@@ -2092,7 +1351,7 @@ describe("knuth-plass hitmap line ranges", () => {
 
   it("handles collapsed and reversed selection ranges", async () => {
     const report = makeTwoLineReport();
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -2104,7 +1363,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    const collapsed = await getKnuthPlassSelectionRects(outputJax, {
+    const collapsed = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
@@ -2113,7 +1372,7 @@ describe("knuth-plass hitmap line ranges", () => {
     });
     expect(collapsed).toMatchObject({ ok: true, startOffset: 4, endOffset: 4, rects: [] });
 
-    const reversed = await getKnuthPlassSelectionRects(outputJax, {
+    const reversed = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: "Hello World Again",
       containerElement,
@@ -2369,10 +1628,9 @@ describe("knuth-plass hitmap line ranges", () => {
     );
   });
 
-  it("resolves normalized explicit multiline math caret points through the paragraph hitmap", async () => {
+  it("rejects explicit multiline math reports without native caret geometry", async () => {
     const report = makeExplicitMultilineMathReport();
-    const outputJax = {
-      tex2svg: makeTex2Svg(1),
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -2385,27 +1643,17 @@ describe("knuth-plass hitmap line ranges", () => {
     };
     const sourceText = String.raw`$x$\\variable`;
 
-    const points = await Promise.all(
-      [0, 1, 2, 3, 4].map((offset) =>
-        getKnuthPlassPointFromOffset(outputJax, {
-          paragraphId: report.paragraphId,
-          sourceText,
-          containerElement,
-          offset
-        })
-      )
-    );
+    const point = await getKnuthPlassPointFromOffset(layoutContext, {
+      paragraphId: report.paragraphId,
+      sourceText,
+      containerElement,
+      offset: 1
+    });
 
-    for (const point of points) {
-      expect(point.ok).toBe(true);
-      expect(point.error).toBeNull();
-      expect(point.clientPoint).not.toBeNull();
-    }
-
-    expect(points[0].clientPoint?.x).toBe(points[1].clientPoint?.x);
-    expect(points[2].clientPoint?.x).toBe(points[3].clientPoint?.x);
-    expect((points[2].clientPoint?.x ?? 0)).toBeGreaterThan(points[1].clientPoint?.x ?? 0);
-    expect(points[4].lineIndex).toBe(1);
+    expect(point).toMatchObject({
+      ok: false,
+      error: { code: "alignment-error" }
+    });
   });
 
   it("maps literal spaces and TeX linebreak commands as space-like source ranges", async () => {
@@ -2493,7 +1741,7 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(linebreakRects.rects).toHaveLength(1);
   });
 
-  it("groups adjacent math visual segments into one source span", async () => {
+  it("does not synthesize caret geometry for adjacent math segments", async () => {
     const mathReport = makeSegmentedSingleLineReport(
       "paragraph:adjacent-math",
       2,
@@ -2506,8 +1754,7 @@ describe("knuth-plass hitmap line ranges", () => {
         { runIndex: 1, kind: "math", x: 1, width: 1, caretStops: [1, 2] }
       ]
     );
-    const outputJax = {
-      tex2svg: makeTex2Svg(2),
+    const layoutContext = {
       linebreaks: {
         getReports: () => [mathReport]
       }
@@ -2518,13 +1765,13 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    const middle = await getKnuthPlassPointFromOffset(outputJax, {
+    const middle = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: mathReport.paragraphId,
       sourceText: "$xy$",
       containerElement,
       offset: 2
     });
-    const hit = await getKnuthPlassCaretFromPoint(outputJax, {
+    const hit = await getKnuthPlassCaretFromPoint(layoutContext, {
       paragraphId: mathReport.paragraphId,
       sourceText: "$xy$",
       containerElement,
@@ -2532,46 +1779,43 @@ describe("knuth-plass hitmap line ranges", () => {
     });
 
     expect(middle).toMatchObject({
-      ok: true,
-      kind: "math",
-      snappedToMathPrefix: true
+      ok: false,
+      error: { code: "alignment-error" }
     });
     expect(hit).toMatchObject({
-      ok: true,
-      kind: "math",
-      snappedToMathPrefix: true
+      ok: false,
+      error: { code: "alignment-error" }
     });
   });
 
   it("handles nullish mapper params without throwing", async () => {
-    const outputJax = {
+    const layoutContext = {
       linebreaks: {
         getReports: () => []
       }
     };
 
-    await expect(getKnuthPlassCaretFromPoint(outputJax, null)).resolves.toMatchObject({
+    await expect(getKnuthPlassCaretFromPoint(layoutContext, null)).resolves.toMatchObject({
       ok: false,
       error: { code: "invalid-params" }
     });
-    await expect(getKnuthPlassPointFromOffset(outputJax, null)).resolves.toMatchObject({
+    await expect(getKnuthPlassPointFromOffset(layoutContext, null)).resolves.toMatchObject({
       ok: false,
       error: { code: "invalid-params" }
     });
-    await expect(getKnuthPlassSelectionRects(outputJax, null)).resolves.toMatchObject({
+    await expect(getKnuthPlassSelectionRects(layoutContext, null)).resolves.toMatchObject({
       ok: false,
       error: { code: "invalid-params" }
     });
-    await expect(getKnuthPlassLineRangeFromPoint(outputJax, null)).resolves.toMatchObject({
+    await expect(getKnuthPlassLineRangeFromPoint(layoutContext, null)).resolves.toMatchObject({
       ok: false,
       error: { code: "invalid-params" }
     });
   });
 
-  it("returns selection rects for normalized explicit multiline math source", async () => {
+  it("rejects selections over math without native caret geometry", async () => {
     const report = makeExplicitMultilineMathReport();
-    const outputJax = {
-      tex2svg: makeTex2Svg(1),
+    const layoutContext = {
       linebreaks: {
         getReports: () => [report]
       }
@@ -2583,7 +1827,7 @@ describe("knuth-plass hitmap line ranges", () => {
       ]
     };
 
-    const rects = await getKnuthPlassSelectionRects(outputJax, {
+    const rects = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId: report.paragraphId,
       sourceText: String.raw`$x$\\variable`,
       containerElement,
@@ -2591,7 +1835,9 @@ describe("knuth-plass hitmap line ranges", () => {
       endOffset: 13
     });
 
-    expect(rects.ok).toBe(true);
-    expect(rects.rects).toHaveLength(2);
+    expect(rects).toMatchObject({
+      ok: false,
+      error: { code: "alignment-error" }
+    });
   });
 });

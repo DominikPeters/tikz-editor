@@ -1,32 +1,32 @@
-import type { ParagraphLayoutReport } from './paragraph/report.js';
+import type { ParagraphLayoutReport } from "./paragraph/report.js";
 
-interface MathJaxOutputJaxReportsLike {
+interface ParagraphReportProvider {
   linebreaks?: {
     getReports?(): ParagraphLayoutReport[];
   };
 }
 
-const supplementalReportsByOutputJax = new WeakMap<object, Map<string, ParagraphLayoutReport>>();
+const reportsByLayoutContext =
+  new WeakMap<object, Map<string, ParagraphLayoutReport>>();
 
 // Paragraph ids derive from position-anchored cache keys, so edits and drag
-// frames register fresh ids continually; cap the registry (evicting the least
-// recently registered ids) instead of growing for the session lifetime.
-const SUPPLEMENTAL_REPORT_REGISTRY_LIMIT = 4096;
+// frames register fresh ids continually; cap the registry instead of growing
+// for the session lifetime.
+const REPORT_REGISTRY_LIMIT = 4096;
 
-export function getKnuthPlassReportsFromOutputJax(
-  outputJax: unknown
+export function getParagraphLayoutReports(
+  layoutContext: unknown
 ): ParagraphLayoutReport[] {
-  if (!outputJax || typeof outputJax !== 'object') {
+  if (!layoutContext || typeof layoutContext !== "object") {
     return [];
   }
-
-  const target = outputJax as MathJaxOutputJaxReportsLike;
-  const fromVisitor = target.linebreaks?.getReports?.();
-  const reports = Array.isArray(fromVisitor) ? [...fromVisitor] : [];
-  const supplemental = supplementalReportsByOutputJax.get(outputJax);
-  if (supplemental) {
+  const provided = (layoutContext as ParagraphReportProvider).linebreaks
+    ?.getReports?.();
+  const reports = Array.isArray(provided) ? [...provided] : [];
+  const registered = reportsByLayoutContext.get(layoutContext);
+  if (registered) {
     const seen = new Set(reports.map((report) => report.paragraphId));
-    for (const report of supplemental.values()) {
+    for (const report of registered.values()) {
       if (!seen.has(report.paragraphId)) {
         reports.push(report);
       }
@@ -35,26 +35,30 @@ export function getKnuthPlassReportsFromOutputJax(
   return reports;
 }
 
-export function registerKnuthPlassReportsOnOutputJax(
-  outputJax: unknown,
+export function registerParagraphLayoutReports(
+  layoutContext: unknown,
   reports: readonly ParagraphLayoutReport[]
 ): void {
-  if (!outputJax || typeof outputJax !== 'object' || reports.length === 0) {
+  if (
+    !layoutContext ||
+    typeof layoutContext !== "object" ||
+    reports.length === 0
+  ) {
     return;
   }
   const existing =
-    supplementalReportsByOutputJax.get(outputJax) ??
+    reportsByLayoutContext.get(layoutContext) ??
     new Map<string, ParagraphLayoutReport>();
   for (const report of reports) {
     existing.delete(report.paragraphId);
     existing.set(report.paragraphId, report);
   }
-  while (existing.size > SUPPLEMENTAL_REPORT_REGISTRY_LIMIT) {
+  while (existing.size > REPORT_REGISTRY_LIMIT) {
     const oldest = existing.keys().next();
     if (oldest.done) {
       break;
     }
     existing.delete(oldest.value);
   }
-  supplementalReportsByOutputJax.set(outputJax, existing);
+  reportsByLayoutContext.set(layoutContext, existing);
 }

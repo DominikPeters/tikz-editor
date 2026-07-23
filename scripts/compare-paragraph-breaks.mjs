@@ -751,16 +751,16 @@ function runLuaTeXOracle(caseSpec, caseDir, oracleCacheDir) {
 async function loadRendererModules() {
   const distEntry = ensureDistBuildFresh(repoRoot);
   const coreModule = await import(pathToFileURL(distEntry).href);
-  const mathJaxModule = await import(
-    pathToFileURL(resolve(repoRoot, "packages/core/dist/text/mathjax-engine.js")).href
+  const layoutContextModule = await import(
+    pathToFileURL(resolve(repoRoot, "packages/core/dist/text/layout-context.js")).href
   );
   const knuthPlassModule = await import(
     pathToFileURL(resolve(repoRoot, "packages/core/dist/text/knuth-plass/index.js")).href
   );
   return {
     renderTikzToSvgAsync: coreModule.renderTikzToSvgAsync,
-    getActiveMathJaxOutputJax: mathJaxModule.getActiveMathJaxOutputJax,
-    getKnuthPlassReportsFromOutputJax: knuthPlassModule.getKnuthPlassReportsFromOutputJax,
+    getActiveTextLayoutContext: layoutContextModule.getActiveTextLayoutContext,
+    getParagraphLayoutReports: knuthPlassModule.getParagraphLayoutReports,
   };
 }
 
@@ -797,13 +797,13 @@ async function runOurRenderer(caseSpec, caseDir, renderer) {
   if (!textElement || textElement.kind !== "Text") {
     throw new Error("Renderer output does not contain a scene text element.");
   }
-  if (textElement.textRenderInfo?.mode !== "mathjax") {
-    throw new Error("Renderer output for the compared case is not MathJax-backed text.");
+  if (textElement.textRenderInfo?.mode !== "tex") {
+    throw new Error("Renderer output for the compared case is not native TeX text.");
   }
 
   const paragraphId = textElement.textRenderInfo.paragraphId;
-  const outputJax = renderer.getActiveMathJaxOutputJax();
-  const reports = renderer.getKnuthPlassReportsFromOutputJax(outputJax);
+  const layoutContext = renderer.getActiveTextLayoutContext();
+  const reports = renderer.getParagraphLayoutReports(layoutContext);
   const report = [...reports].reverse().find((entry) => entry.paragraphId === paragraphId) ?? null;
   if (!report) {
     throw new Error(`Could not find paragraph report for ${paragraphId ?? "null"}.`);

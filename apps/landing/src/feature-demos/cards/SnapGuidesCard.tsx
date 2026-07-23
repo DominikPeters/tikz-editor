@@ -365,7 +365,7 @@ function queryNode(root: ParentNode, node: RectNode): SVGPathElement | null {
 }
 
 function queryLabel(root: ParentNode, node: RectNode): SVGImageElement | null {
-  return root.querySelector<SVGImageElement>(`[data-source-id="${node.sourceId}"][data-text-renderer="mathjax"]`);
+  return root.querySelector<SVGImageElement>(`[data-source-id="${node.sourceId}"][data-text-renderer="tex"]`);
 }
 
 function snapLineKey(line: SnapGuideLine): string {

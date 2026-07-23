@@ -13,13 +13,16 @@ export {
 export { emitSvg, emitSvgModel, serializeSvgModel, serializeSvgModelAsync, diffSvgModels } from "./svg/index.js";
 export { renderTikzToSvg, renderTikzToSvgAsync } from "./render/index.js";
 export { capabilityMatrix, FEATURE_IDS } from "./capabilities/index.js";
-export { createMathJaxNodeTextEngine, setWorkerFontLoader } from "./text/mathjax-engine.js";
+export { createTexNodeTextEngine } from "./text/tex-node-text-engine.js";
 export {
   ComputerModernTexMetricProvider,
   DEFAULT_COMPUTER_MODERN_TEXT_FONTS,
   computerModernTexMetricProvider
 } from "./text/tex/index.js";
-export type { MathJaxFont } from "./text/mathjax-engine.js";
+export {
+  renderTexParagraphSvgBody,
+  renderTexVListSvgMetadata
+} from "./text/tex/index.js";
 export { collectSymbols, resolveDocHoverTarget } from "./completion/index.js";
 export {
   createPdfExportArtifact,

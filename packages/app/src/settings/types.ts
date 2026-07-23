@@ -26,23 +26,6 @@ export type CanvasSettings = {
   snapHapticsEnabled: boolean;
 };
 
-export type MathJaxFont =
-  | "mathjax-newcm"
-  | "mathjax-asana"
-  | "mathjax-bonum"
-  | "mathjax-dejavu"
-  | "mathjax-fira"
-  | "mathjax-modern"
-  | "mathjax-pagella"
-  | "mathjax-schola"
-  | "mathjax-stix2"
-  | "mathjax-termes"
-  | "mathjax-tex";
-
-export type RenderingSettings = {
-  mathJaxFont: MathJaxFont;
-};
-
 export type AppSettings = {
   general: GeneralSettings;
   editor: EditorSettings;
@@ -50,7 +33,6 @@ export type AppSettings = {
   colorPicker: {
     accuracy: ColorPickerAccuracy;
   };
-  rendering: RenderingSettings;
 };
 
 export const GRID_SIZE_MINOR_TARGET_PX: Record<GridSize, number> = {
@@ -88,8 +70,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   colorPicker: {
     accuracy: "approximate"
-  },
-  rendering: {
-    mathJaxFont: "mathjax-newcm"
   }
 };

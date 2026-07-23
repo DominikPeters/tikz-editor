@@ -5,21 +5,28 @@ export interface RegisteredTexVListLayout {
   readonly layout: TexVListLayout;
 }
 
-const texVListLayoutsByOutputJax = new WeakMap<object, Map<string, TexVListLayout>>();
+const texVListLayoutsByContext =
+  new WeakMap<object, Map<string, TexVListLayout>>();
 
 // Paragraph ids derive from position-anchored cache keys, so edits and drag
-// frames register fresh ids continually; cap the registry (evicting the least
-// recently registered ids) instead of growing for the session lifetime.
+// frames register fresh ids continually; cap the registry instead of growing
+// for the session lifetime.
 const TEX_VLIST_REGISTRY_LIMIT = 4096;
 
-export function registerTexVListLayoutsOnOutputJax(
-  outputJax: unknown,
+export function registerTexVListLayouts(
+  layoutContext: unknown,
   layouts: readonly RegisteredTexVListLayout[]
 ): void {
-  if (!outputJax || typeof outputJax !== "object" || layouts.length === 0) {
+  if (
+    !layoutContext ||
+    typeof layoutContext !== "object" ||
+    layouts.length === 0
+  ) {
     return;
   }
-  const existing = texVListLayoutsByOutputJax.get(outputJax) ?? new Map<string, TexVListLayout>();
+  const existing =
+    texVListLayoutsByContext.get(layoutContext) ??
+    new Map<string, TexVListLayout>();
   for (const entry of layouts) {
     if (entry.paragraphId.length > 0) {
       existing.delete(entry.paragraphId);
@@ -33,16 +40,16 @@ export function registerTexVListLayoutsOnOutputJax(
     }
     existing.delete(oldest.value);
   }
-  texVListLayoutsByOutputJax.set(outputJax, existing);
+  texVListLayoutsByContext.set(layoutContext, existing);
 }
 
-export function getTexVListLayoutsFromOutputJax(
-  outputJax: unknown
+export function getTexVListLayouts(
+  layoutContext: unknown
 ): RegisteredTexVListLayout[] {
-  if (!outputJax || typeof outputJax !== "object") {
+  if (!layoutContext || typeof layoutContext !== "object") {
     return [];
   }
-  const layouts = texVListLayoutsByOutputJax.get(outputJax);
+  const layouts = texVListLayoutsByContext.get(layoutContext);
   if (!layouts) {
     return [];
   }
@@ -52,12 +59,12 @@ export function getTexVListLayoutsFromOutputJax(
   }));
 }
 
-export function getTexVListLayoutFromOutputJax(
-  outputJax: unknown,
+export function getTexVListLayout(
+  layoutContext: unknown,
   paragraphId: string | null | undefined
 ): TexVListLayout | null {
-  if (!outputJax || typeof outputJax !== "object" || !paragraphId) {
+  if (!layoutContext || typeof layoutContext !== "object" || !paragraphId) {
     return null;
   }
-  return texVListLayoutsByOutputJax.get(outputJax)?.get(paragraphId) ?? null;
+  return texVListLayoutsByContext.get(layoutContext)?.get(paragraphId) ?? null;
 }

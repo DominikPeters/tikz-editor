@@ -4,14 +4,10 @@ import { evaluateTikzFigure } from "../semantic/evaluate.js";
 import type { EvaluateOptions, EvaluateTikzResult } from "../semantic/index.js";
 import { emitSvg } from "../svg/emit.js";
 import type { EmitSvgOptions, EmitSvgResult } from "../svg/index.js";
-import { createMathJaxNodeTextEngine } from "../text/mathjax-engine.js";
+import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { NodeItem, TikzFigure } from "../ast/types.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
-
-let mathJaxEngineUnavailable = false;
-let mathJaxEngineUnavailableReason: string | null = null;
-let lastMathJaxWarning: string | null = null;
 
 export type RenderTikzOptions = {
   parse?: ParseTikzOptions;
@@ -23,7 +19,6 @@ export type RenderTikzOptions = {
   ) => EvaluateTikzResult;
   svg?: EmitSvgOptions;
   textEngine?: NodeTextEngine | null;
-  validateNodeText?: boolean;
 };
 
 export type RenderDiagnostic = {
@@ -64,46 +59,17 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
     : opts.evaluate?.textEngine ?? opts.svg?.textEngine;
   let textEngine = providedEngine;
   const shouldCreateDefaultTextEngine = textEngine === undefined;
-  const browserRuntime = hasBrowserDomGlobals();
-  const useDefaultNodeTextValidator = opts.validateNodeText ?? true;
-  const hasUserMacros = containsUserMacroDefinitions(source);
-  if (shouldCreateDefaultTextEngine && !browserRuntime && mathJaxEngineUnavailable) {
-    renderDiagnostics.push({
-      code: "mathjax-engine-unavailable",
-      message:
-        mathJaxEngineUnavailableReason ??
-        "MathJax text engine is unavailable in this runtime; using plain SVG text fallback.",
-      severity: "warning"
-    });
-    textEngine = null;
-  } else if (shouldCreateDefaultTextEngine && (!mathJaxEngineUnavailable || browserRuntime)) {
-    try {
-      textEngine = await createMathJaxNodeTextEngine();
-      if (!browserRuntime) {
-        mathJaxEngineUnavailableReason = null;
-      }
-    } catch (error) {
-      const message = describeMathJaxFailure(error);
-      textEngine = null;
-      renderDiagnostics.push({
-        code: "mathjax-engine-unavailable",
-        message,
-        severity: "warning"
-      });
-      logMathJaxWarning(message);
-      if (!browserRuntime) {
-        mathJaxEngineUnavailable = true;
-        mathJaxEngineUnavailableReason = message;
-      }
-    }
+  if (shouldCreateDefaultTextEngine) {
+    textEngine = await createTexNodeTextEngine();
   }
+  const hasUserMacros = containsUserMacroDefinitions(source);
 
   const parseOpts: ParseTikzOptions = {
     ...opts.parse,
     includeContextDefinitions: opts.parse?.includeContextDefinitions ?? true,
     nodeTextValidator:
       opts.parse?.nodeTextValidator ??
-      (useDefaultNodeTextValidator && textEngine && !hasUserMacros
+      (hasExplicitTextEngine && textEngine && !hasUserMacros
         ? ({ node }) => {
             if (isMatrixNode(node)) {
               return null;
@@ -142,20 +108,6 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
   };
 }
 
-function hasBrowserDomGlobals(): boolean {
-  const candidate = globalThis as { window?: unknown; document?: unknown };
-  return candidate.window != null && candidate.document != null;
-}
-
-function describeMathJaxFailure(error: unknown): string {
-  const details = error instanceof Error ? error.message : String(error);
-  const normalizedDetails = details.trim();
-  if (!normalizedDetails) {
-    return "MathJax text engine initialization failed; falling back to plain SVG text rendering.";
-  }
-  return `MathJax text engine initialization failed; falling back to plain SVG text rendering. (${normalizedDetails})`;
-}
-
 function containsUserMacroDefinitions(source: string): boolean {
   return /\\(?:def|let|newcommand|renewcommand|providecommand|DeclareRobustCommand|DeclareMathOperator|pgfmathparse|pgfmathsetmacro)\b/.test(source);
 }
@@ -177,14 +129,4 @@ function normalizeNodeTextForValidation(text: string): string {
     return text;
   }
   return parts.map((part) => part.text).filter((partText) => partText.length > 0).join(" ");
-}
-
-function logMathJaxWarning(message: string): void {
-  if (lastMathJaxWarning === message) {
-    return;
-  }
-  lastMathJaxWarning = message;
-  if (typeof console !== "undefined" && typeof console.warn === "function") {
-    console.warn(`[tikz-editor] ${message}`);
-  }
 }

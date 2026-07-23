@@ -179,17 +179,17 @@ async function dispatchTextRegionPointerDrag(
   }, options);
 }
 
-async function readMathJaxLocalClientPoint(
+async function readTexLocalClientPoint(
   page: Page,
   options: { sourceId: string; localRatioX: number; localRatioY: number }
 ): Promise<{ x: number; y: number }> {
   return await page.evaluate((raw) => {
     const { sourceId, localRatioX, localRatioY } = raw;
     const rendered = document.querySelector(
-      `svg[data-text-renderer="mathjax"][data-source-id="${sourceId}"]`
+      `svg[data-text-renderer="tex"][data-source-id="${sourceId}"]`
     );
     if (!rendered) {
-      throw new Error(`Rendered MathJax SVG not found for ${sourceId}.`);
+      throw new Error(`Rendered Tex SVG not found for ${sourceId}.`);
     }
     const owner = rendered.ownerSVGElement;
     const ctm = owner?.getScreenCTM?.();
@@ -201,7 +201,7 @@ async function readMathJaxLocalClientPoint(
     const width = Number(rendered.getAttribute("width"));
     const height = Number(rendered.getAttribute("height"));
     if (![x, y, width, height].every(Number.isFinite)) {
-      throw new Error(`Rendered MathJax SVG geometry is invalid for ${sourceId}.`);
+      throw new Error(`Rendered Tex SVG geometry is invalid for ${sourceId}.`);
     }
     const point = owner.createSVGPoint();
     point.x = x + width * localRatioX;
@@ -211,7 +211,7 @@ async function readMathJaxLocalClientPoint(
   }, options);
 }
 
-async function readMathJaxSourceClientPoint(
+async function readTexSourceClientPoint(
   page: Page,
   options: { sourceId: string; sourceOffset: number; sourceText?: string }
 ): Promise<{ x: number; y: number }> {
@@ -332,10 +332,10 @@ async function readMathJaxSourceClientPoint(
       ? sourceToRenderOffset(editableText, debugText.renderSourceText, sourceOffset)
       : sourceOffset;
     const rendered = document.querySelector(
-      `svg[data-text-renderer="mathjax"][data-source-id="${sourceId}"]`
+      `svg[data-text-renderer="tex"][data-source-id="${sourceId}"]`
     );
     if (!rendered) {
-      throw new Error(`Rendered MathJax SVG not found for ${sourceId}.`);
+      throw new Error(`Rendered Tex SVG not found for ${sourceId}.`);
     }
     const sourceBackedElements = Array.from(
       rendered.querySelectorAll<SVGGraphicsElement>("[data-source-start][data-source-end]")
@@ -367,7 +367,7 @@ async function readMathJaxSourceClientPoint(
         return glyphCode == null ? `${start}:${end}` : `${start}:${end}#${glyphCode}`;
       }).join(", ");
       throw new Error(
-        `Rendered MathJax source glyph not found for ${sourceId} offset ${sourceOffset} (render offset ${renderOffset}). ` +
+        `Rendered Tex source glyph not found for ${sourceId} offset ${sourceOffset} (render offset ${renderOffset}). ` +
           `Tried offsets ${offsets.join(", ")}; available ranges: ${sample || "none"}.`
       );
     }
@@ -380,7 +380,7 @@ async function readMathJaxSourceClientPoint(
       rect.width <= 0 ||
       rect.height <= 0
     ) {
-      throw new Error(`Rendered MathJax source glyph geometry is invalid for ${sourceId} offset ${sourceOffset}.`);
+      throw new Error(`Rendered Tex source glyph geometry is invalid for ${sourceId} offset ${sourceOffset}.`);
     }
     return {
       x: rect.left + rect.width / 2,
@@ -389,16 +389,16 @@ async function readMathJaxSourceClientPoint(
   }, options);
 }
 
-async function readMathJaxDocumentSourceClientPoint(
+async function readTexDocumentSourceClientPoint(
   page: Page,
   options: { sourceId: string; documentOffset: number }
 ): Promise<{ x: number; y: number }> {
   return await page.evaluate(({ sourceId, documentOffset }) => {
     const rendered = document.querySelector(
-      `svg[data-text-renderer="mathjax"][data-source-id="${sourceId}"]`
+      `svg[data-text-renderer="tex"][data-source-id="${sourceId}"]`
     );
     if (!rendered) {
-      throw new Error(`Rendered MathJax SVG not found for ${sourceId}.`);
+      throw new Error(`Rendered Tex SVG not found for ${sourceId}.`);
     }
     const candidates = Array.from(
       rendered.querySelectorAll<SVGGraphicsElement>("[data-source-start][data-source-end]")
@@ -414,7 +414,7 @@ async function readMathJaxDocumentSourceClientPoint(
     const glyph = candidates.find((element) => element.hasAttribute("data-tex-glyph")) ?? candidates[0];
     const rect = glyph?.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) {
-      throw new Error(`Rendered MathJax document source glyph not found at offset ${documentOffset}.`);
+      throw new Error(`Rendered Tex document source glyph not found at offset ${documentOffset}.`);
     }
     return {
       x: rect.left + rect.width * 0.05,
@@ -550,7 +550,7 @@ test("rotated single-line node does not enter edit mode at the untransformed tex
   const popup = page.getByTestId("canvas-text-edit-popup");
   await expect(popup).toBeHidden();
 
-  const point = await readMathJaxLocalClientPoint(page, {
+  const point = await readTexLocalClientPoint(page, {
     sourceId: "path:0",
     localRatioX: 0.08,
     localRatioY: 0.5
@@ -743,7 +743,7 @@ test("deleting all node text keeps the popup open so new text can be entered", a
   await expect.poll(async () => await readStoreSource(page)).toContain("{New}");
 });
 
-test("transient MathJax syntax errors keep canvas edit mode active", async ({ page }) => {
+test("transient Tex syntax errors keep canvas edit mode active", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
 \node at (0,0) {Hello};
@@ -784,7 +784,7 @@ test("node text edit recovers to original source after } then Backspace around i
 
   let clickedBetweenXAndDollar = false;
   for (const localRatioX of [0.55, 0.65, 0.75, 0.85]) {
-    const point = await readMathJaxLocalClientPoint(page, {
+    const point = await readTexLocalClientPoint(page, {
       sourceId: "path:0",
       localRatioX,
       localRatioY: 0.5
@@ -819,7 +819,7 @@ test("node text edit recovers to original source after } then Backspace around i
     .toEqual(originalSource);
 });
 
-test("fallback-rendered invalid MathJax text still enters canvas edit mode", async ({ page }) => {
+test("fallback-rendered invalid Tex text still enters canvas edit mode", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
 \node at (0,0) {$};
@@ -960,7 +960,7 @@ test("wrapped TeX-derived display math supports canvas caret and selection mappi
 \end{tikzpicture}`);
 
   await waitForHitRegions(page, 1);
-  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveAttribute(
     "data-paragraph-id",
     /.+/
   );
@@ -968,7 +968,7 @@ test("wrapped TeX-derived display math supports canvas caret and selection mappi
   const displayStart = text.indexOf(String.raw`\[`);
   const displayEnd = text.indexOf(String.raw`\]`) + String.raw`\]`.length;
   const yOffset = text.indexOf("y");
-  const clickPoint = await readMathJaxSourceClientPoint(page, {
+  const clickPoint = await readTexSourceClientPoint(page, {
     sourceId: "path:0",
     sourceOffset: yOffset,
     sourceText: text
@@ -1013,7 +1013,7 @@ test("wrapped TeX-derived mixed math and styled text keeps canvas caret mapping"
 \end{tikzpicture}`);
 
   await waitForHitRegions(page, 1);
-  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveAttribute(
     "data-paragraph-id",
     /.+/
   );
@@ -1025,7 +1025,7 @@ test("wrapped TeX-derived mixed math and styled text keeps canvas caret mapping"
     text.indexOf("z"),
   ];
   for (const offset of clickOffsets) {
-    const point = await readMathJaxSourceClientPoint(page, {
+    const point = await readTexSourceClientPoint(page, {
       sourceId: "path:0",
       sourceOffset: offset,
       sourceText: text
@@ -1066,12 +1066,12 @@ test("enumerate canvas clicks keep the floating textarea caret in node-local coo
   await setSource(page, documentSource);
 
   await waitForHitRegions(page, 1);
-  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveAttribute(
     "data-paragraph-id",
     /.+/
   );
   const helloOffset = text.indexOf("Hello") + 2;
-  const point = await readMathJaxDocumentSourceClientPoint(page, {
+  const point = await readTexDocumentSourceClientPoint(page, {
     sourceId: "path:0",
     documentOffset: documentSource.indexOf("Hello") + 2,
   });
@@ -1108,14 +1108,14 @@ test("wrapped TeX-derived align display rows and tags keep canvas caret mapping"
 \end{tikzpicture}`);
 
   await waitForHitRegions(page, 1);
-  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveAttribute(
     "data-paragraph-id",
     /.+/
   );
 
   const textarea = page.getByTestId("canvas-text-edit-textarea");
   for (const offset of [text.indexOf("y"), text.lastIndexOf("b")]) {
-    const point = await readMathJaxSourceClientPoint(page, {
+    const point = await readTexSourceClientPoint(page, {
       sourceId: "path:0",
       sourceOffset: offset,
       sourceText: text
@@ -1134,7 +1134,7 @@ test("wrapped TeX-derived align display rows and tags keep canvas caret mapping"
 
   const tagStart = text.indexOf(String.raw`\tag`);
   const tagEnd = text.indexOf("}", tagStart) + 1;
-  const tagPoint = await readMathJaxSourceClientPoint(page, {
+  const tagPoint = await readTexSourceClientPoint(page, {
     sourceId: "path:0",
     sourceOffset: text.indexOf("A", tagStart),
     sourceText: text
@@ -1209,7 +1209,7 @@ test("rotated wrapped text click maps consistently to caret offsets", async ({ p
   await expect(textarea).toHaveValue(fullText);
   await setTextareaSelection(page, 0, 0);
 
-  const firstPoint = await readMathJaxLocalClientPoint(page, {
+  const firstPoint = await readTexLocalClientPoint(page, {
     sourceId: "path:0",
     localRatioX: 0.24,
     localRatioY: 0.30
@@ -1226,7 +1226,7 @@ test("rotated wrapped text click maps consistently to caret offsets", async ({ p
   expect(firstSelection.start).not.toBeNull();
   expect(firstSelection.end).toBe(firstSelection.start);
 
-  const secondPoint = await readMathJaxLocalClientPoint(page, {
+  const secondPoint = await readTexLocalClientPoint(page, {
     sourceId: "path:0",
     localRatioX: 0.58,
     localRatioY: 0.66
@@ -1294,7 +1294,7 @@ test("explicit multiline aligned text keeps authored line breaks and canvas sele
 
     const textarea = page.getByTestId("canvas-text-edit-textarea");
     await expect(textarea).toHaveValue(selectionText);
-    await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveAttribute(
+    await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveAttribute(
       "data-paragraph-id",
       /.+/
     );
@@ -1325,16 +1325,16 @@ test("explicit multiline aligned text keeps authored line breaks and canvas sele
 test("plain fallback multiline caret uses literal backslash text positions", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
-  \node at (0.2,3.2) [align=left]{I'm testing the Mathjax \\ rendering \te};
+  \node at (0.2,3.2) [align=left]{I'm testing the TeX \\ rendering \te};
 \end{tikzpicture}`);
 
   await waitForHitRegions(page, 1);
   await clickTextHitRegionByTargetId(page, "path:0");
 
-  const text = String.raw`I'm testing the Mathjax \\ rendering \te`;
+  const text = String.raw`I'm testing the TeX \\ rendering \te`;
   const textarea = page.getByTestId("canvas-text-edit-textarea");
   await expect(textarea).toHaveValue(text);
-  await expect(page.locator("svg[data-text-renderer='mathjax'][data-source-id='path:0']")).toHaveCount(0);
+  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveCount(0);
 
   const firstLineOffset = text.indexOf("the") + 2;
   await setTextareaSelection(page, firstLineOffset, firstLineOffset);
@@ -1347,7 +1347,7 @@ test("plain fallback multiline caret uses literal backslash text positions", asy
   expect(firstLineCaret.y + firstLineCaret.height / 2).toBeLessThan(textRegionBox.y + textRegionBox.height / 2);
 
   const firstLineSelectionStart = text.indexOf("testing");
-  const firstLineSelectionEnd = text.indexOf("Mathjax") + "Mathjax".length;
+  const firstLineSelectionEnd = text.indexOf("TeX") + "TeX".length;
   await setTextareaSelection(page, firstLineSelectionStart, firstLineSelectionEnd);
   const firstLineSelectionRect = await page.getByTestId("canvas-text-selection-rect").first().boundingBox();
   if (!firstLineSelectionRect) {
@@ -1370,14 +1370,14 @@ test("plain fallback multiline caret uses literal backslash text positions", asy
   expect(Math.abs(afterT.y - beforeSlash.y)).toBeLessThan(3);
 });
 
-test("wrapped multiline MathJax nodes edit without paragraph-geometry fallback errors", async ({ page }) => {
+test("wrapped multiline Tex nodes edit without paragraph-geometry fallback errors", async ({ page }) => {
   const geometryErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() !== "error") {
       return;
     }
     const text = message.text();
-    if (text.includes("Missing paragraph geometry for multiline MathJax")) {
+    if (text.includes("Missing paragraph geometry for multiline Tex")) {
       geometryErrors.push(text);
     }
   });
@@ -1535,7 +1535,7 @@ test("clicking rendered wrapped align=right multiline text updates the textarea 
   await expect.poll(async () => await readTextareaSelection(page)).not.toEqual(initialSelection);
 });
 
-test("dragging across rendered MathJax node text creates a canvas selection in Chrome", async ({ page }) => {
+test("dragging across rendered Tex node text creates a canvas selection in Chrome", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
 \node at (0,0) {$x^2 + y^2 = z^2$};
@@ -1545,7 +1545,7 @@ test("dragging across rendered MathJax node text creates a canvas selection in C
   await expect(textRegion).toBeVisible();
   const box = await textRegion.boundingBox();
   if (!box) {
-    throw new Error("Missing MathJax text hit-region bounds.");
+    throw new Error("Missing Tex text hit-region bounds.");
   }
 
   const startX = box.x + 10;
@@ -1879,21 +1879,21 @@ test("typing trailing backslash in node text stays local until stabilized by nex
 test("incomplete text command group does not render the path semicolon as node text", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
-  \node at (0.2,3.2) [align=left]{I'm testing the Mathjax \\ rendering };
+  \node at (0.2,3.2) [align=left]{I'm testing the TeX \\ rendering };
 \end{tikzpicture}`);
 
   await waitForHitRegions(page, 1);
   await clickTextHitRegionByTargetId(page, "path:0");
 
   const textarea = page.getByTestId("canvas-text-edit-textarea");
-  const nextText = String.raw`I'm testing the Mathjax \\ rendering \textit{d`;
+  const nextText = String.raw`I'm testing the TeX \\ rendering \textit{d`;
   await expect(textarea).toBeFocused();
   await textarea.press("End");
   await page.keyboard.type(String.raw`\textit{d`);
   await expect(textarea).toHaveValue(nextText);
   await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`\textit{d};`);
 
-  const expectedSceneText = "I'm testing the Mathjax\nrendering \\textit{d";
+  const expectedSceneText = "I'm testing the TeX\nrendering \\textit{d";
   await expect.poll(async () => {
     return await page.evaluate(() => {
       const api = (globalThis as {

@@ -1051,7 +1051,7 @@ function stampMatrixCellElements(elements: SceneElement[], matrixCell: MatrixCel
     element.matrixCell = matrixCell;
     element.sourceRef.sourceId = matrixCell.cellSourceId;
     element.sourceRef.sourceSpan = matrixCell.cellSpan;
-    if (element.kind === "Text" && element.textRenderInfo?.mode === "mathjax") {
+    if (element.kind === "Text" && element.textRenderInfo?.mode === "tex") {
       element.textRenderInfo = {
         ...element.textRenderInfo,
         layoutKind: "matrix-cell"

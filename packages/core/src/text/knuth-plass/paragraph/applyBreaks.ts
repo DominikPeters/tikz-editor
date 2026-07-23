@@ -7,7 +7,7 @@ import type {
 } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
 import { TEX_INTERWORD_SPACE_EM } from '../alignment.js';
-import type { WrappedTextGap } from '../install.js';
+import type { WrappedTextGap } from '../layout-options.js';
 
 export interface AppliedBreak extends BreakDecision {
   lineIndex: number;

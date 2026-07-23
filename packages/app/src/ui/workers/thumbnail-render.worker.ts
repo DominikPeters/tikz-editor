@@ -1,35 +1,4 @@
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
-import { setWorkerFontLoader } from "@tikz-editor/core/text/mathjax-engine";
-
-// Map MathJax bare-specifier font names to Vite lazy chunks.
-// Each entry becomes a separate chunk — zero upfront cost, loaded on demand.
-const FONT_CHUNKS: Record<string, () => Promise<unknown>> = {
-  "sans-serif":    () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif.js"),
-  "sans-serif-b":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-b.js"),
-  "sans-serif-i":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-i.js"),
-  "sans-serif-bi": () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-bi.js"),
-  "sans-serif-r":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-r.js"),
-  "sans-serif-ex": () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-ex.js"),
-  "monospace":     () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/monospace.js"),
-  "monospace-l":   () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/monospace-l.js"),
-  "monospace-ex":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/monospace-ex.js"),
-  "latin":         () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin.js"),
-  "latin-b":       () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-b.js"),
-  "latin-i":       () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-i.js"),
-  "latin-bi":      () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-bi.js"),
-  "math":          () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/math.js"),
-  "symbols":       () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/symbols.js"),
-  "arrows":        () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/arrows.js"),
-  "greek":         () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/greek.js"),
-  "greek-ss":      () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/greek-ss.js"),
-};
-
-setWorkerFontLoader((name: string) => {
-  const key = name.match(/\/svg\/dynamic\/(.+?)\.js$/)?.[1];
-  const loader = key ? FONT_CHUNKS[key] : null;
-  if (loader) return loader();
-  return Promise.reject(new Error(`MathJax dynamic font not available in worker: ${name}`));
-});
 import type {
   ThumbnailRenderRequest,
   ThumbnailWorkerRequestMessage,

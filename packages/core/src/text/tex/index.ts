@@ -24,6 +24,11 @@ export {
   type TexParagraphLayoutResult,
 } from "./paragraph.js";
 export {
+  renderTexParagraphSvgBody,
+  renderTexVListSvgMetadata,
+  type RenderTexParagraphSvgBodyOptions,
+} from "./render-svg.js";
+export {
   SIMPLE_TEX_CONTROL_NODE_KINDS,
   SIMPLE_TEX_DIMENSION_BOX_COMMAND_NAMES,
   SIMPLE_TEX_DISPLAY_MATH_DELIMITERS,
@@ -108,6 +113,10 @@ export {
 export {
   type TexLayoutIrOptions,
 } from "./layout-options.js";
+export type {
+  PositionedTexVListItem,
+  TexVListLayout,
+} from "./vlist/types.js";
 export {
   projectTexHBoxXToLine,
   projectTexHBoxYToLine,

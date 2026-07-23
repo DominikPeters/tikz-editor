@@ -202,10 +202,6 @@ const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 const SOURCE_PICKER_COLORS = uniqueStrings(["none", ...NAMED_COLORS]);
 const ENABLE_TIKZ_AUTOCOMPLETE = true;
 
-type MathJaxBrowserRuntime = {
-  typesetPromise?: (elements?: Element[]) => Promise<void>;
-};
-
 function stripTikzPrefixInSignatureHtml(signatureHtml: string): string {
   const template = document.createElement("template");
   template.innerHTML = signatureHtml;
@@ -217,22 +213,6 @@ function stripTikzPrefixInSignatureHtml(signatureHtml: string): string {
     }
   });
   return template.innerHTML;
-}
-
-function includesInlineMath(text: string | null | undefined): boolean {
-  return typeof text === "string" && text.includes("\\(");
-}
-
-function maybeTypesetTooltipMathJax(dom: HTMLElement): void {
-  const runtime = (globalThis as { MathJax?: MathJaxBrowserRuntime }).MathJax;
-  if (!runtime || typeof runtime.typesetPromise !== "function") {
-    return;
-  }
-  queueMicrotask(() => {
-    void runtime.typesetPromise?.([dom]).catch(() => {
-      // Keep tooltip rendering resilient if MathJax fails on malformed inline input.
-    });
-  });
 }
 
 // ── State fields ─────────────────────────────────────────────────────────────
@@ -710,14 +690,6 @@ const docsTooltip = hoverTooltip(async (view, pos, side) => {
       });
       linkRow.appendChild(link);
       dom.appendChild(linkRow);
-
-      const shouldTypesetMath =
-        includesInlineMath(entry.signatureHtml) ||
-        includesInlineMath(entry.defaultHtml) ||
-        includesInlineMath(entry.snippetHtml);
-      if (shouldTypesetMath) {
-        maybeTypesetTooltipMathJax(dom);
-      }
 
       return { dom };
     }

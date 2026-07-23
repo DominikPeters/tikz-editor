@@ -6,7 +6,7 @@ import { applyEditAction, preflightPositionNodeRelativeToAction } from "../packa
 import { createEditAnalysisSession } from "../packages/core/src/edit/analysis.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
-import { createMathJaxNodeTextEngine } from "../packages/core/src/text/mathjax-engine.js";
+import { createTexNodeTextEngine } from "../packages/core/src/text/tex-node-text-engine.js";
 import { wp } from "./coords-helpers.js";
 import { cm, expectPatchesReconstructSource, makeHandle } from "./edit-actions-helpers.js";
 
@@ -1463,7 +1463,7 @@ describe("applyEditAction – node relative positioning conversions", () => {
   });
 
   it("round trips text nodes with different inner sep through diagonal relative positioning", async () => {
-    const textEngine = await createMathJaxNodeTextEngine();
+    const textEngine = await createTexNodeTextEngine();
     expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
   \node[draw, inner sep=4pt] (a) at (-0.2,2.66) {node a};
   \node[draw, inner sep=1pt] (b) at (1.35,1.8) {node b};

@@ -82,7 +82,7 @@ export function RotateNodeCard() {
     mountRenderedScene(contentGroup, rotateNodeInitial.innerSvg);
 
     const bodyPath = contentGroup.querySelector<SVGPathElement>('path[data-source-id="path:1"]:not([data-arrow-tip-kind])');
-    const labelSvg = contentGroup.querySelector<SVGImageElement>('[data-source-id="path:1"][data-text-renderer="mathjax"]');
+    const labelSvg = contentGroup.querySelector<SVGImageElement>('[data-source-id="path:1"][data-text-renderer="tex"]');
     if (!bodyPath || !labelSvg) {
       return;
     }

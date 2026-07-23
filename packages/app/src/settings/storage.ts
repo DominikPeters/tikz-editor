@@ -41,10 +41,6 @@ export function loadSettings(): AppSettings {
       colorPicker: {
         ...DEFAULT_SETTINGS.colorPicker,
         ...parsed.colorPicker
-      },
-      rendering: {
-        ...DEFAULT_SETTINGS.rendering,
-        ...parsed.rendering
       }
     };
   } catch {

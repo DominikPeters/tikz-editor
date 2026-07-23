@@ -47,10 +47,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@mathjax/src": "^4.1.1",
     "@lezer/common": "^1.5.1",
     "@tikz-editor/lezer-tikz": "0.5.2",
-    "mathjax": "^4.1.1",
     "xml-formatter": "^3.6.7"
   },
   "devDependencies": {

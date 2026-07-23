@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
-import { getActiveMathJaxOutputJax } from "@tikz-editor/core/text/mathjax-engine";
+import { getActiveTextLayoutContext } from "@tikz-editor/core/text/layout-context";
 import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
 import {
   documentSourceOffset,
@@ -140,7 +140,7 @@ function resolveRegionSelectionOverlay(
       }
       return ctx.measureText(text).width;
     },
-    { syntax: target.usesMathJax ? "mathjax" : "plain" }
+    { syntax: target.usesTex ? "tex" : "plain" }
   );
   const ranges = layout.sourceLineRanges;
   const contentBox = resolveRectHitRegionContentBox(target.region);
@@ -201,7 +201,7 @@ function projectRegionSelectionOverlayToViewport(
 }
 
 async function estimateCaretHeight(
-  outputJax: unknown,
+  layoutContext: unknown,
   paragraphId: string,
   sourceText: string,
   sourceTextStartOffset: DocumentSourceOffset,
@@ -219,7 +219,7 @@ async function estimateCaretHeight(
     probes.push([prevOffset, offset]);
   }
   for (const [startOffset, endOffset] of probes) {
-    const rects = await getKnuthPlassSelectionRects(outputJax, {
+    const rects = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId,
       sourceText,
       sourceTextStartOffset,
@@ -326,7 +326,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       return;
     }
 
-    const outputJax = getActiveMathJaxOutputJax();
+    const layoutContext = getActiveTextLayoutContext();
     const containerElement = resolveRenderedMathTextElement(target);
     const viewport = viewportRef.current;
     if (!viewport) {
@@ -350,7 +350,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
 
     void (async () => {
       const requiresParagraphGeometry =
-        target.usesMathJax && target.layoutKind !== "single-line";
+        target.usesTex && target.layoutKind !== "single-line";
       const pushOverlay = (overlay: TextSelectionOverlay | null) => {
         dispatchCanvasTextEditAction({
           type: "overlay_resolved",
@@ -363,7 +363,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       };
       const setRegionFallbackOverlay = () => {
         if (requiresParagraphGeometry) {
-          console.error("[canvas-text-edit] Missing paragraph geometry for multiline MathJax overlay.", {
+          console.error("[canvas-text-edit] Missing paragraph geometry for multiline TeX overlay.", {
             sourceId: target.sourceId,
             paragraphId: target.paragraphId,
             layoutKind: target.layoutKind
@@ -390,13 +390,13 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       };
 
       try {
-        if (!target.paragraphId || !outputJax || !containerElement) {
+        if (!target.paragraphId || !layoutContext || !containerElement) {
           setRegionFallbackOverlay();
           return;
         }
 
         if (documentStart === documentEnd) {
-          const point = await getKnuthPlassPointFromOffset(outputJax, {
+          const point = await getKnuthPlassPointFromOffset(layoutContext, {
             paragraphId: target.paragraphId,
             sourceText: target.text,
             sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
@@ -413,7 +413,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           }
           const height =
             (await estimateCaretHeight(
-              outputJax,
+              layoutContext,
               target.paragraphId,
               target.text,
               documentSourceOffset(target.sourceSpan.from),
@@ -445,7 +445,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           return;
         }
 
-        const rects = await getKnuthPlassSelectionRects(outputJax, {
+        const rects = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: target.paragraphId,
           sourceText: target.text,
           sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),

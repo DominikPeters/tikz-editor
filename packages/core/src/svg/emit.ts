@@ -140,11 +140,11 @@ const PGF_SHADE_CANONICAL_SIZE = 100.375;
 const PGF_SHADE_CANONICAL_HALF = PGF_SHADE_CANONICAL_SIZE / 2;
 const PGF_BALL_FOCUS_OFFSET = PGF_SHADE_CANONICAL_HALF * 0.2;
 const PLAIN_TEXT_SERIF_FONT_STACK =
-  "MJX-NCM, CMU Serif, Latin Modern Roman, Times New Roman, serif";
+  "Latin Modern Roman, CMU Serif, Times New Roman, serif";
 const PLAIN_TEXT_SANS_FONT_STACK =
-  "MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif";
+  "Latin Modern Sans, CMU Sans Serif, Helvetica, Arial, sans-serif";
 const PLAIN_TEXT_MONO_FONT_STACK =
-  "MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
+  "Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
 
 export function emitSvg(
   scene: SceneFigure,
@@ -755,14 +755,14 @@ export function emitSvgModel(
     const svgElementTransform = element.transform
       ? worldTransformToSvgTransform(element.transform, viewBox)
       : null;
-    if (element.textRenderInfo?.mode === "mathjax") {
+    if (element.textRenderInfo?.mode === "tex") {
       const rendered =
         opts.textEngine?.renderFromCache(element.textRenderInfo.cacheKey) ??
         null;
       if (!rendered) {
         diagnostics.push({
-          code: "missing-mathjax-text-render",
-          message: `Missing cached MathJax text render payload for ${element.id}.`,
+          code: "missing-tex-text-render",
+          message: `Missing cached TeX text render payload for ${element.id}.`,
         });
       } else {
         const textColor = element.style.textColor ?? "#000000";
@@ -784,7 +784,7 @@ export function emitSvgModel(
         const sceneTextIdAttr = ` data-scene-text-id="${escapeAttr(
           element.id
         )}"`;
-        const preserveAspectRatio = resolveMathJaxPreserveAspectRatio(
+        const preserveAspectRatio = resolveTexPreserveAspectRatio(
           element.textRenderInfo.paragraphAlignment
         );
         const preserveAspectRatioAttr =
@@ -793,7 +793,7 @@ export function emitSvgModel(
             : "";
         const renderedSvg = `<svg data-source-id="${escapeAttr(
           element.sourceRef.sourceId
-        )}" data-text-renderer="mathjax"${paragraphAttr}${layoutKindAttr}${sceneTextIdAttr} x="${fmt(
+        )}" data-text-renderer="tex"${paragraphAttr}${layoutKindAttr}${sceneTextIdAttr} x="${fmt(
           x
         )}" y="${fmt(y)}" width="${fmt(textBlockWidth)}" height="${fmt(
           textBlockHeight
@@ -811,14 +811,14 @@ export function emitSvgModel(
               `rotate(${fmt(-rotation)} ${fmt(position.x)} ${fmt(position.y)})`
             );
           appendPart(
-            `${element.id}:text:mathjax:rotated`,
+            `${element.id}:text:tex:rotated`,
             element.sourceRef.sourceId,
             element.id,
             `<g transform="${transforms.join(" ")}">${renderedSvg}</g>`
           );
         } else {
           appendPart(
-            `${element.id}:text:mathjax`,
+            `${element.id}:text:tex`,
             element.sourceRef.sourceId,
             element.id,
             renderedSvg
@@ -869,7 +869,7 @@ export function emitSvgModel(
   });
 }
 
-function resolveMathJaxPreserveAspectRatio(
+function resolveTexPreserveAspectRatio(
   alignment:
     | ResolvedStyle["textAlign"]
     | "justified"

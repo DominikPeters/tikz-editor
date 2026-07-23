@@ -632,7 +632,7 @@ export function reduceCanvasTextEdit(
             selectionStart: selection.start,
             selectionEnd: selection.end,
             historyMergeKey: action.historyMergeKey,
-            usesMathJax: action.target.usesMathJax,
+            usesTex: action.target.usesTex,
             paragraphId: action.target.paragraphId,
             renderSourceText: action.target.renderSourceText,
             layoutKind: action.target.layoutKind,
@@ -670,7 +670,7 @@ export function reduceCanvasTextEdit(
             selectionStart: selection.start,
             selectionEnd: selection.end,
             historyMergeKey: action.historyMergeKey,
-            usesMathJax: action.target.usesMathJax,
+            usesTex: action.target.usesTex,
             paragraphId: action.target.paragraphId,
             renderSourceText: action.target.renderSourceText,
             layoutKind: action.target.layoutKind,
@@ -990,7 +990,7 @@ export function reduceCanvasTextEdit(
         action.target.sourceSpan
       );
       const nextSceneTextId = targetMatchesSessionText ? action.target.sceneTextId : session.sceneTextId;
-      const nextUsesMathJax = targetMatchesSessionText ? action.target.usesMathJax : session.usesMathJax;
+      const nextUsesTex = targetMatchesSessionText ? action.target.usesTex : session.usesTex;
       const nextParagraphId = targetMatchesSessionText ? action.target.paragraphId : session.paragraphId;
       const nextRenderSourceText = targetMatchesSessionText ? action.target.renderSourceText : session.renderSourceText;
       const nextLayoutKind = targetMatchesSessionText ? action.target.layoutKind : session.layoutKind;
@@ -1003,7 +1003,7 @@ export function reduceCanvasTextEdit(
         state.sourceRevision === action.sourceRevision &&
         session.workingSource === action.source &&
         session.sceneTextId === nextSceneTextId &&
-        session.usesMathJax === nextUsesMathJax &&
+        session.usesTex === nextUsesTex &&
         sameSpan(session.sourceSpan, reconciledSourceSpan) &&
         session.paragraphId === nextParagraphId &&
         session.renderSourceText === nextRenderSourceText &&
@@ -1032,7 +1032,7 @@ export function reduceCanvasTextEdit(
             sceneTextId: nextSceneTextId,
             sourceSpan: reconciledSourceSpan,
             workingSource: action.source,
-            usesMathJax: nextUsesMathJax,
+            usesTex: nextUsesTex,
             paragraphId: nextParagraphId,
             renderSourceText: nextRenderSourceText,
             layoutKind: nextLayoutKind,
