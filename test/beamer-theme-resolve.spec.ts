@@ -59,8 +59,15 @@ describe("Beamer theme resolution", () => {
           family: "sans",
           series: "bold",
           sizePt: 12,
-          substitutedFor: "Fira Sans",
+          ...(name === "metropolis"
+            ? { substitutedFor: "Fira Sans" }
+            : {}),
         })
+      );
+      expect(theme.diagnostics).toEqual(
+        name === "metropolis"
+          ? [expect.objectContaining({ code: "beamer-font-substitution" })]
+          : []
       );
     }
   );

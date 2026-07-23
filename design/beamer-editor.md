@@ -222,9 +222,11 @@ same requested sizes, series, and shapes as the class and theme sources.
 The existing scalable Latin Modern outlines and metrics are reused rather than
 introducing a second text engine.
 
-metropolis/moloch uses Fira Sans when available; v1 renders it with the Latin
-Modern Sans profile and reports the substitution (metric-faithful Fira is a
-later font profile).
+The TeX Live 2025 Metropolis font theme requests Fira Sans when available; v1
+renders it with the Latin Modern Sans profile and reports the substitution
+(metric-faithful Fira is a later font profile). Moloch 0.6 no longer selects
+Fira in its font-theme source, so it inherits Beamer's active sans family and
+does not report that substitution.
 
 Beamer's default math setup remains a separate fidelity surface. The native
 math profile may differ visibly from LuaLaTeX's complete Beamer math setup;
@@ -593,7 +595,11 @@ absolute nested-TikZ roots, recovery diagnostics, and a public
 `scanBeamerDocument` entry point. `npm run probe:beamer-frame` compiles a
 selected source frame with LuaLaTeX and records the Beamer source
 version/hash, TeX page dimensions, PDF page box, positioned structured text,
-PDF, and SVG. The frame layout/result contracts remain.
+PDF, and SVG. The frame layout/result contracts, ordered theme-component
+resolver, registered structural chrome plans, and initial source-backed
+columns/list/glue/TikZ body IR are now in place. The first headless renderer
+composes the representative Madrid/Seahorse frame through those boundaries;
+broader body nodes, overlay steps, and oracle-driven visual refinement remain.
 
 - Maintain the corpus scanner and add Beamer constructs to the capabilities
   matrix. Scanner metrics must count file-defined macro use inside math and

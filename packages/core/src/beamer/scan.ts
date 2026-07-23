@@ -17,14 +17,14 @@ import type {
   BeamerTikzPictureRoot,
 } from "./types.js";
 
-type ControlSequence = {
+export type BeamerControlSequence = {
   from: number;
   to: number;
   name: string;
   starred: boolean;
 };
 
-type EnvironmentToken = {
+export type BeamerEnvironmentToken = {
   kind: "begin" | "end";
   name: string;
   span: Span;
@@ -37,8 +37,8 @@ type DocumentRange = {
 };
 
 type FrameCandidate = {
-  begin: EnvironmentToken;
-  end: EnvironmentToken | null;
+  begin: BeamerEnvironmentToken;
+  end: BeamerEnvironmentToken | null;
 };
 
 const OPAQUE_ENVIRONMENTS = new Set([
@@ -117,7 +117,7 @@ function findDocumentRange(
   source: string,
   diagnostics: Diagnostic[]
 ): DocumentRange {
-  const tokens = scanEnvironmentTokens(source, { from: 0, to: source.length });
+  const tokens = scanBeamerEnvironmentTokens(source, { from: 0, to: source.length });
   const begin = tokens.find(
     (token) => token.kind === "begin" && token.name === "document"
   );
@@ -166,11 +166,11 @@ function collectFrameCandidates(
   range: Span,
   diagnostics: Diagnostic[]
 ): FrameCandidate[] {
-  const tokens = scanEnvironmentTokens(source, range).filter(
+  const tokens = scanBeamerEnvironmentTokens(source, range).filter(
     (token) => token.name === "frame"
   );
   const candidates: FrameCandidate[] = [];
-  let open: { begin: EnvironmentToken; depth: number } | null = null;
+  let open: { begin: BeamerEnvironmentToken; depth: number } | null = null;
 
   for (const token of tokens) {
     if (token.kind === "begin") {
@@ -579,7 +579,7 @@ function associateFramesWithSections(
 }
 
 function scanPreamble(source: string, span: Span): BeamerPreambleModel {
-  const controls = scanControlSequences(source, span);
+  const controls = scanBeamerControlSequences(source, span);
   let documentClass: BeamerDocumentClassModel | null = null;
   const themes: BeamerThemeUseModel[] = [];
   const metadata: BeamerPreambleModel["metadata"] = {};
@@ -632,7 +632,7 @@ function scanPreamble(source: string, span: Span): BeamerPreambleModel {
 
 function readDocumentClass(
   source: string,
-  command: ControlSequence,
+  command: BeamerControlSequence,
   limit: number
 ): BeamerDocumentClassModel | null {
   let cursor = skipWhitespaceAndComments(source, command.to, limit);
@@ -661,7 +661,7 @@ function readDocumentClass(
 
 function readThemeUse(
   source: string,
-  command: ControlSequence,
+  command: BeamerControlSequence,
   kind: BeamerThemeKind,
   limit: number
 ): BeamerThemeUseModel | null {
@@ -692,7 +692,7 @@ function readThemeUse(
 
 function readMetadataField(
   source: string,
-  command: ControlSequence,
+  command: BeamerControlSequence,
   name: BeamerMetadataFieldName,
   limit: number
 ): BeamerMetadataFieldModel | null {
@@ -727,7 +727,7 @@ function scanFirstCommandValue(
   commandName: string,
   excludedRoots: readonly BeamerTikzPictureRoot[]
 ): BeamerDelimitedSourceValue | undefined {
-  for (const command of scanControlSequences(source, range)) {
+  for (const command of scanBeamerControlSequences(source, range)) {
     if (
       command.name !== commandName ||
       excludedRoots.some(
@@ -745,7 +745,7 @@ function scanFirstCommandValue(
   return undefined;
 }
 
-function readFirstRequiredArgument(
+export function readBeamerRequiredArgument(
   source: string,
   from: number,
   limit: number
@@ -779,8 +779,11 @@ function readCommandMainArgument(
     : null;
 }
 
-function scanEnvironmentTokens(source: string, range: Span): EnvironmentToken[] {
-  const tokens: EnvironmentToken[] = [];
+export function scanBeamerEnvironmentTokens(
+  source: string,
+  range: Span
+): BeamerEnvironmentToken[] {
+  const tokens: BeamerEnvironmentToken[] = [];
   let cursor = range.from;
 
   while (cursor < range.to) {
@@ -802,7 +805,7 @@ function scanEnvironmentTokens(source: string, range: Span): EnvironmentToken[] 
     if (command.name !== "begin" && command.name !== "end") {
       continue;
     }
-    const nameArgument = readFirstRequiredArgument(
+    const nameArgument = readBeamerRequiredArgument(
       source,
       command.to,
       range.to
@@ -811,7 +814,7 @@ function scanEnvironmentTokens(source: string, range: Span): EnvironmentToken[] 
       continue;
     }
     const name = nameArgument.value.trim();
-    const token: EnvironmentToken = {
+    const token: BeamerEnvironmentToken = {
       kind: command.name,
       name,
       span: { from: command.from, to: nameArgument.span.to },
@@ -832,11 +835,11 @@ function scanEnvironmentTokens(source: string, range: Span): EnvironmentToken[] 
   return tokens;
 }
 
-function scanControlSequences(
+export function scanBeamerControlSequences(
   source: string,
   range: Span
-): ControlSequence[] {
-  const controls: ControlSequence[] = [];
+): BeamerControlSequence[] {
+  const controls: BeamerControlSequence[] = [];
   let cursor = range.from;
   while (cursor < range.to) {
     const char = source.charAt(cursor);
@@ -863,7 +866,7 @@ function readControlSequence(
   source: string,
   from: number,
   limit: number
-): ControlSequence | null {
+): BeamerControlSequence | null {
   if (source.charAt(from) !== "\\") {
     return null;
   }

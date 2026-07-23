@@ -124,6 +124,7 @@ export type BeamerTemplatePrimitive =
       fontRole: BeamerThemeFontRole;
       colorRole: string;
       alignment: "left" | "center" | "right";
+      verticalAlignment: "top" | "center" | "bottom";
     };
 
 export type BeamerFrameChromePlan = {

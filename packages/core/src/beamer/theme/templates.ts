@@ -122,6 +122,7 @@ function planDefaultFrameTitle(
         fontRole: "frame-title",
         colorRole: "frametitle",
         alignment: "left",
+        verticalAlignment: "top",
       },
     ],
   };
@@ -170,6 +171,7 @@ function planModernFrameTitle(
       fontRole: "frame-title",
       colorRole: "frametitle",
       alignment: "left",
+      verticalAlignment: "top",
     },
   ];
   if (progressHeight > 0) {
@@ -236,6 +238,7 @@ function planInfolinesFootline(
       fontRole: "footline",
       colorRole: "title in head/foot",
       alignment: "center",
+      verticalAlignment: "center",
     });
   }
   primitives.push({
@@ -256,6 +259,7 @@ function planInfolinesFootline(
     fontRole: "footline",
     colorRole: "date in head/foot",
     alignment: "right",
+    verticalAlignment: "center",
   });
   return { inset: height, primitives };
 }
@@ -325,6 +329,7 @@ function planModernFootline(
       fontRole: "footline",
       colorRole: "normal text",
       alignment: "right",
+      verticalAlignment: "center",
     }],
   };
 }

@@ -195,8 +195,8 @@ const themeAppliers = new Map<string, ComponentApplier>([
       state.templates.headline = DEFAULT_REF("beamer/headline/none");
     }
   }],
-  ["metropolis", (state, use) => applyModernTheme(state, use, "metropolis")],
-  ["moloch", (state, use) => applyModernTheme(state, use, "moloch")],
+  ["metropolis", (state, use) => { applyModernTheme(state, use, "metropolis"); }],
+  ["moloch", (state, use) => { applyModernTheme(state, use, "moloch"); }],
 ]);
 
 const colorThemeAppliers = new Map<string, ComponentApplier>([
@@ -344,19 +344,32 @@ function applyModernFonts(
     // Native Fira metrics are deferred; retain the requested face explicitly.
     state.fonts["normal-text"] = {
       ...state.fonts["normal-text"],
-      substitutedFor: family === "metropolis" ? "Fira Sans Light" : "Fira Sans",
+      ...(family === "metropolis"
+        ? { substitutedFor: "Fira Sans Light" }
+        : {}),
     };
     state.fonts["frame-title"] = {
       ...state.fonts["frame-title"],
       sizePt: 12,
       lineHeightPt: 14.4,
       series: "bold",
-      substitutedFor: family === "metropolis" ? "Fira Sans" : "Fira Sans",
+      ...(family === "metropolis"
+        ? { substitutedFor: "Fira Sans" }
+        : {}),
     };
     state.fonts["block-title"] = {
       ...state.fonts["normal-text"],
       series: "bold",
     };
+    if (family === "metropolis") {
+      state.diagnostics.push({
+        severity: "warning",
+        code: "beamer-font-substitution",
+        message:
+          "Metropolis requests Fira Sans; the native Beamer renderer currently substitutes Latin Modern Sans.",
+        span: use.source.span,
+      });
+    }
   };
 }
 
@@ -416,7 +429,7 @@ function markComponentOnly(
   kind: Exclude<BeamerThemeKind, "theme">,
   name: string
 ): ComponentApplier {
-  return (state, use) => markApplied(state, kind, name, use);
+  return (state, use) => { markApplied(state, kind, name, use); };
 }
 
 function markApplied(

@@ -74,13 +74,13 @@ function documentClassOption(
 
 function customPageSizeCm(aspectRatio: string): readonly [number, number] {
   if (!/^\d+$/.test(aspectRatio)) {
-    return STANDARD_PAGE_SIZES_CM["43"]!;
+    return STANDARD_PAGE_SIZES_CM["43"];
   }
   const split = aspectRatio.length < 4 ? 1 : 2;
   const numerator = Number(aspectRatio.slice(0, -split));
   const denominator = Number(aspectRatio.slice(-split));
   if (!(numerator > 0 && denominator > 0)) {
-    return STANDARD_PAGE_SIZES_CM["43"]!;
+    return STANDARD_PAGE_SIZES_CM["43"];
   }
   const height = 9.6;
   return [height * numerator / denominator, height];
