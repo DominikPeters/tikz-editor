@@ -13,7 +13,10 @@ import {
   type SimpleTexListContext,
 } from "../ir.js";
 import type { TexMathTextPart } from "../math/ir.js";
-import type { TexListLayoutProfile } from "../layout-options.js";
+import type {
+  TexDisplayMathLayoutProfile,
+  TexListLayoutProfile,
+} from "../layout-options.js";
 import { layoutTexVListItems } from "./layout.js";
 import { createMeasuredParagraphVListMeasurer } from "./paragraph-measurement.js";
 import { texVListPathKey } from "./paths.js";
@@ -48,29 +51,29 @@ const articleListSpacingEm = {
   parsepByDepth: [0.4, 0.2, 0],
 } as const;
 
-const latexArticleDisplaySkipsPt = {
+const latexArticleDisplaySkipsPt: TexDisplayMathLayoutProfile = {
   above: {
     normal: {
-      size: 10,
-      stretch: 2,
-      shrink: 5,
+      sizePt: 10,
+      stretchPt: 2,
+      shrinkPt: 5,
     },
     short: {
-      size: 0,
-      stretch: 3,
-      shrink: 0,
+      sizePt: 0,
+      stretchPt: 3,
+      shrinkPt: 0,
     },
   },
   below: {
     normal: {
-      size: 10,
-      stretch: 2,
-      shrink: 5,
+      sizePt: 10,
+      stretchPt: 2,
+      shrinkPt: 5,
     },
     short: {
-      size: 6,
-      stretch: 3,
-      shrink: 3,
+      sizePt: 6,
+      stretchPt: 3,
+      shrinkPt: 3,
     },
   },
 } as const;
@@ -446,36 +449,38 @@ export function materializeParagraphVerticalGlueInVList(
 }
 
 export function materializeDisplayMathVerticalGlueInVList(
-  vlist: TexVListDocument
+  vlist: TexVListDocument,
+  profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt
 ): TexVListDocument {
   return {
     ...vlist,
-    items: materializeDisplayMathVerticalGlueInItems(vlist.items),
+    items: materializeDisplayMathVerticalGlueInItems(vlist.items, profile),
   };
 }
 
 function materializeDisplayMathVerticalGlueInItems(
-  sourceItems: readonly TexVListItem[]
+  sourceItems: readonly TexVListItem[],
+  profile: TexDisplayMathLayoutProfile
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
   for (const item of sourceItems) {
     if (item.kind === "vbox") {
       items.push({
         ...item,
-        items: materializeDisplayMathVerticalGlueInItems(item.items),
+        items: materializeDisplayMathVerticalGlueInItems(item.items, profile),
       });
       continue;
     }
     if (item.kind === "display-math") {
-      items.push(displayMathBoundaryGlueItem(item, "above"));
+      items.push(displayMathBoundaryGlueItem(item, "above", profile));
       items.push(item);
-      items.push(displayMathBoundaryGlueItem(item, "below"));
+      items.push(displayMathBoundaryGlueItem(item, "below", profile));
       continue;
     }
     if (item.kind === "display-alignment") {
-      items.push(displayMathBoundaryGlueItem(item, "above"));
-      items.push(...displayAlignmentMaterialItems(item));
-      items.push(displayMathBoundaryGlueItem(item, "below"));
+      items.push(displayMathBoundaryGlueItem(item, "above", profile));
+      items.push(...displayAlignmentMaterialItems(item, profile));
+      items.push(displayMathBoundaryGlueItem(item, "below", profile));
       continue;
     }
     items.push(item);
@@ -485,9 +490,10 @@ function materializeDisplayMathVerticalGlueInItems(
 
 function displayMathBoundaryGlueItem(
   item: TexDisplayMathItem | TexDisplayAlignmentItem,
-  side: "above" | "below"
+  side: "above" | "below",
+  profile: TexDisplayMathLayoutProfile
 ): TexGlueItem {
-  const skip = latexArticleDisplaySkipsPt[side].normal;
+  const skip = profile[side].normal;
   return {
     kind: "glue",
     sourceSpan: item.sourceSpan,
@@ -496,9 +502,9 @@ function displayMathBoundaryGlueItem(
       kind: "display-math-boundary",
       side,
     },
-    size: texLength(skip.size),
-    stretch: texLength(skip.stretch),
-    shrink: texLength(skip.shrink),
+    size: texLength(skip.sizePt),
+    stretch: texLength(skip.stretchPt),
+    shrink: texLength(skip.shrinkPt),
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
@@ -510,6 +516,7 @@ export function resolveDisplayMathVerticalGlueInVList(
   options: {
     readonly lineHeight: TexLength;
     readonly initialPreviousDepth?: TexLength;
+    readonly displayMathProfile?: TexDisplayMathLayoutProfile;
   }
 ): TexVListDocument {
   const initialMaterialMetrics = options.initialPreviousDepth === undefined
@@ -540,6 +547,7 @@ function resolveDisplayMathVerticalGlueInItems(
   options: {
     readonly lineHeight: TexLength;
     readonly initialPreviousDepth?: TexLength;
+    readonly displayMathProfile?: TexDisplayMathLayoutProfile;
   },
   pathPrefix: readonly number[],
   state: {
@@ -674,7 +682,11 @@ function resolveDisplayMathVerticalGlueInItems(
         previousDisplaySkipVariant = variant;
       }
       plainParagraphInterlinePending = false;
-      items.push(resolveDisplayMathBoundaryGlueItem(item, variant));
+      items.push(resolveDisplayMathBoundaryGlueItem(
+        item,
+        variant,
+        options.displayMathProfile
+      ));
       if (item.origin.side === "above" && displayItem && previousParagraphMeasurement) {
         items.push(displayMathInterlineGlueItem(
           item,
@@ -927,7 +939,8 @@ function explicitVerticalPreviousDepth(
 }
 
 function displayAlignmentMaterialItems(
-  item: TexDisplayAlignmentItem
+  item: TexDisplayAlignmentItem,
+  profile: TexDisplayMathLayoutProfile
 ): readonly TexVListItem[] {
   const rows: TexVListItem[] = [];
   rows.push(displayAlignmentGlueItem(item, displayAlignmentTopCorrection(item), "align-top-correction"));
@@ -939,10 +952,20 @@ function displayAlignmentMaterialItems(
       rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
     }
     for (const intertext of item.alignment.intertexts?.filter((candidate) => candidate.beforeRowIndex === row.rowIndex) ?? []) {
-      rows.push(displayAlignmentIntertextSkipItem(item, intertext, "below"));
+      rows.push(displayAlignmentIntertextSkipItem(
+        item,
+        intertext,
+        "below",
+        profile
+      ));
       rows.push(displayAlignmentIntertextLeadingItem(item, intertext));
       rows.push(displayAlignmentIntertextParagraph(item, intertext));
-      rows.push(displayAlignmentIntertextSkipItem(item, intertext, "above"));
+      rows.push(displayAlignmentIntertextSkipItem(
+        item,
+        intertext,
+        "above",
+        profile
+      ));
       rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
       rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
     }
@@ -975,9 +998,10 @@ function displayAlignmentIntertextLeadingItem(
 function displayAlignmentIntertextSkipItem(
   item: TexDisplayAlignmentItem,
   intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number],
-  side: "above" | "below"
+  side: "above" | "below",
+  profile: TexDisplayMathLayoutProfile
 ): TexGlueItem {
-  const skip = latexArticleDisplaySkipsPt[side].normal;
+  const skip = profile[side].normal;
   return {
     kind: "glue",
     sourceSpan: {
@@ -989,9 +1013,9 @@ function displayAlignmentIntertextSkipItem(
       kind: "display-alignment-intertext-skip",
       side,
     },
-    size: texLength(skip.size),
-    stretch: texLength(skip.stretch),
-    shrink: texLength(skip.shrink),
+    size: texLength(skip.sizePt),
+    stretch: texLength(skip.stretchPt),
+    shrink: texLength(skip.shrinkPt),
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
@@ -1293,21 +1317,22 @@ function displayMathSkipVariant(
 
 function resolveDisplayMathBoundaryGlueItem(
   item: TexGlueItem,
-  variant: TexDisplayMathSkipVariant
+  variant: TexDisplayMathSkipVariant,
+  profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt
 ): TexGlueItem {
   if (item.origin?.kind !== "display-math-boundary") {
     return item;
   }
-  const skip = latexArticleDisplaySkipsPt[item.origin.side][variant];
+  const skip = profile[item.origin.side][variant];
   return {
     ...item,
     origin: {
       ...item.origin,
       variant,
     },
-    size: texLength(skip.size),
-    stretch: texLength(skip.stretch),
-    shrink: texLength(skip.shrink),
+    size: texLength(skip.sizePt),
+    stretch: texLength(skip.stretchPt),
+    shrink: texLength(skip.shrinkPt),
   };
 }
 

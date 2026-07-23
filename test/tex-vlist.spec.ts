@@ -638,6 +638,34 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("accepts class-owned display skip profiles", () => {
+    const source = String.raw`Alpha \[\sum_i^n\] Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+    const materialized = materializeDisplayMathVerticalGlueInVList(vlist, {
+      above: {
+        normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
+        short: { sizePt: 0, stretchPt: 3, shrinkPt: 0 },
+      },
+      below: {
+        normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
+        short: { sizePt: 6.5, stretchPt: 3.5, shrinkPt: 3 },
+      },
+    });
+
+    expect(materialized.items.filter(
+      (item) =>
+        item.kind === "glue" &&
+        item.origin?.kind === "display-math-boundary"
+    )).toEqual([
+      expect.objectContaining({ size: 11, stretch: 3, shrink: 6 }),
+      expect.objectContaining({ size: 11, stretch: 3, shrink: 6 }),
+    ]);
+  });
+
   it("reports display skips in paragraph-display-paragraph vlist layouts", () => {
     const source = String.raw`Alpha \[\sum_i^n\] Beta`;
     const parsed = parseSimpleTexParagraphIr(source);

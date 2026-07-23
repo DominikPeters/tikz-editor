@@ -164,6 +164,7 @@ export function layoutTexVListFromBrokenParagraphs(
       combined,
       baselineSkip: options.baselineSkip,
       initialPreviousDepth: options.initialPreviousDepth,
+      displayMathProfile: options.displayMathProfile,
     }),
     combined,
   };
@@ -206,6 +207,7 @@ export function layoutTexVListFromCombinedParagraphReport(
     paragraphAlignment: options.alignment,
     lineHeight,
     initialPreviousDepth: options.initialPreviousDepth,
+    displayMathProfile: options.displayMathProfile,
     firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
     firstLineAscent: texLatexNormalFirstLineAscent(
       builtReport.report,
@@ -270,6 +272,7 @@ export function layoutTexVListFromMeasuredParagraphs(
     {
       lineHeight: options.lineHeight,
       initialPreviousDepth: options.initialPreviousDepth,
+      displayMathProfile: options.displayMathProfile,
     }
   );
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);

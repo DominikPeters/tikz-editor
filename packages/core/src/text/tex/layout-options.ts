@@ -35,6 +35,30 @@ export interface TexListLayoutProfile {
   readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
 }
 
+export interface TexDisplayMathGlueProfile {
+  readonly sizePt: number;
+  readonly stretchPt: number;
+  readonly shrinkPt: number;
+}
+
+/**
+ * Class- and font-size-owned TeX display parameters.
+ *
+ * LaTeX installs these registers as part of size selection, so consumers such
+ * as Beamer must be able to replace the article/10pt defaults without
+ * changing the generic VList algorithm.
+ */
+export interface TexDisplayMathLayoutProfile {
+  readonly above: Readonly<{
+    normal: TexDisplayMathGlueProfile;
+    short: TexDisplayMathGlueProfile;
+  }>;
+  readonly below: Readonly<{
+    normal: TexDisplayMathGlueProfile;
+    short: TexDisplayMathGlueProfile;
+  }>;
+}
+
 export interface TexLayoutIrOptions {
   readonly width?: TexLength;
   readonly parindent?: TexLength;
@@ -42,6 +66,7 @@ export interface TexLayoutIrOptions {
   readonly baselineSkip?: TexLength;
   readonly initialPreviousDepth?: TexLength;
   readonly listProfile?: TexListLayoutProfile;
+  readonly displayMathProfile?: TexDisplayMathLayoutProfile;
   readonly tikzTextWidthNode?: boolean;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly textFontProfile?: TexTextFontProfile;

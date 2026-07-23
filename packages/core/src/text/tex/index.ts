@@ -111,6 +111,8 @@ export {
   type TexLayoutParagraphPlan,
 } from "./vlist/paragraph-plans.js";
 export {
+  type TexDisplayMathGlueProfile,
+  type TexDisplayMathLayoutProfile,
   type TexLayoutIrOptions,
   type TexListLayoutProfile,
   type TexListMarkerProfile,

@@ -18,6 +18,7 @@ import {
   layoutSimpleTexParagraph,
   renderTexParagraphSvgBody,
   texLength,
+  type TexDisplayMathLayoutProfile,
   type TexListLayoutProfile,
   type TexMetricProvider,
 } from "../text/tex/index.js";
@@ -116,6 +117,19 @@ const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
   itemsepPtByDepth: [3, 0, 0],
   parsepPtByDepth: [0, 0, 0],
   initialItemBaselineAdjustmentPt: 0,
+};
+
+// beamer.cls uses the 11pt LaTeX size profile by default. These are the
+// \normalsize display registers installed by size11.clo.
+const BEAMER_NORMAL_DISPLAY_MATH_PROFILE: TexDisplayMathLayoutProfile = {
+  above: {
+    normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
+    short: { sizePt: 0, stretchPt: 3, shrinkPt: 0 },
+  },
+  below: {
+    normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
+    short: { sizePt: 6.5, stretchPt: 3.5, shrinkPt: 3 },
+  },
 };
 
 function beamerListLayoutProfile(
@@ -322,7 +336,9 @@ export async function renderBeamerFrame(
 
         const tikz = flowItem;
         const tikzId = tikz.id;
-        const tikzX = x + (preparedColumn.width - tikz.width) / 2;
+        // A column begins with \raggedright; an unadorned tikzpicture is an
+        // ordinary hbox at the left edge of that paragraph.
+        const tikzX = x;
         const tikzY = flowY;
         const bounds = {
           x: tikzX,
@@ -688,7 +704,13 @@ async function prepareColumnFlowNode(params: {
 
   const snippet = source.slice(node.span.from, node.span.to);
   const rendered = await renderTikzToSvgAsync(
-    applyThemeFamilyToTikz(snippet, bodyFont)
+    applyThemeFamilyToTikz(snippet, bodyFont),
+    {
+      // A TikZ picture contributes its natural PGF bounding box to the
+      // surrounding TeX hbox. The standalone renderer's presentation padding
+      // is useful for an isolated SVG, but it is not part of that box.
+      svg: { padding: 0 },
+    }
   );
   const viewBox = rendered.svg.viewBox;
   const scale = Math.min(1, width / Math.max(viewBox.width, 1));
@@ -888,6 +910,7 @@ function layoutParagraph(params: {
     baselineSkip: params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,
     listProfile: params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE,
+    displayMathProfile: BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
     sourceMap: params.mapped.sourceMap,
   });
   if (!result.supported || !result.report || !result.vlistLayout) {

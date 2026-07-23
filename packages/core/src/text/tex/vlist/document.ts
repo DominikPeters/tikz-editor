@@ -82,7 +82,8 @@ export function prepareSimpleTexLayoutScope(
   const preparedVList = prepareSimpleTexVList(
     baseVList,
     params.font,
-    params.options.listProfile
+    params.options.listProfile,
+    params.options.displayMathProfile
   );
   const paragraphPreparation = prepareTexLayoutParagraphsFromVList({
     vlist: preparedVList.normalized,

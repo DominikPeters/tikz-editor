@@ -13,7 +13,10 @@ import type {
   ShapedTexTextRun,
   TexMetricProvider,
 } from "./fonts/types.js";
-import type { TexListLayoutProfile } from "./layout-options.js";
+import type {
+  TexDisplayMathLayoutProfile,
+  TexListLayoutProfile,
+} from "./layout-options.js";
 import {
   analyzeSimpleTexParagraph,
   type SimpleTexMathNode,
@@ -47,6 +50,7 @@ export interface TexParagraphLayoutOptions {
   /** Depth of a preceding box outside this source-backed layout fragment. */
   readonly initialPreviousDepth?: number;
   readonly listProfile?: TexListLayoutProfile;
+  readonly displayMathProfile?: TexDisplayMathLayoutProfile;
   readonly tikzTextWidthNode?: boolean;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly fallbackPolicy?: "whole-node" | "placeholder";
@@ -230,6 +234,7 @@ export function layoutSimpleTexParagraph(
     initialErrors: errors,
     baselineSkip: layoutOptions.baselineSkip,
     initialPreviousDepth: layoutOptions.initialPreviousDepth,
+    displayMathProfile: layoutOptions.displayMathProfile,
   });
   if (reportAssembly.status === "empty") {
     const reason = "Paragraph contains no text runs.";

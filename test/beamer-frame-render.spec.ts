@@ -116,6 +116,40 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("uses Beamer boxes and 11pt display skips for the KKT geometry frame", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 4 });
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.paragraphId === "frame:4:column:0:paragraph:0"
+    )!;
+    const placements = new Map(
+      body.vlistLayout.linePlacements.map(
+        (placement) => [placement.lineIndex, placement]
+      )
+    );
+    const baselines = body.report.lines.map(
+      (line) =>
+        body.bounds.y +
+        Number(placements.get(line.lineIndex)?.y ?? 0) +
+        Number(line.ascent)
+    );
+    const secondColumn = result.layout.items.find(
+      (item) => item.id === "frame:4:columns:0:column:1"
+    )!;
+    const tikz = result.layout.embeddedTikz[0]!;
+
+    expect(baselines).toEqual([
+      expect.closeTo(94.032506, 6),
+      expect.closeTo(107.632506, 6),
+      expect.closeTo(156.832506, 6),
+      expect.closeTo(170.432506, 6),
+    ]);
+    expect(tikz.bounds.x).toBeCloseTo(secondColumn.bounds.x, 6);
+    expect(tikz.bounds.width).toBeCloseTo(145.109055, 6);
+    expect(tikz.bounds.height).toBeCloseTo(82.712161, 6);
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
   it("keeps unsupported bodies explicit in the contract", async () => {
     const result = await renderBeamerFrame(String.raw`
 \documentclass{beamer}

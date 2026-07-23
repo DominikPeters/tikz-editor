@@ -15,7 +15,10 @@ import type {
 } from "../ir.js";
 import type { TexMathBox } from "../layout-inline-items.js";
 import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
-import type { TexListMarkerProfile } from "../layout-options.js";
+import type {
+  TexDisplayMathLayoutProfile,
+  TexListMarkerProfile,
+} from "../layout-options.js";
 import type {
   TexHBoxX,
   TexHBoxY,
@@ -465,6 +468,7 @@ export interface TexVListLayoutOptions {
   readonly height?: TexLength;
   readonly verticalAlign?: "top" | "center" | "bottom";
   readonly paragraphAlignment?: TexParagraphAlignment;
+  readonly displayMathProfile?: TexDisplayMathLayoutProfile;
   /** Previous TeX box depth when this VList is a source fragment. */
   readonly initialPreviousDepth?: TexLength;
 }

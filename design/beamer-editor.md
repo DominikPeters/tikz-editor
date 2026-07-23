@@ -689,6 +689,21 @@ square, metropolis, and moloch marker families resolve through the same
 profile rather than renderer conditionals. Embedded-TikZ glyphs remain
 explicitly excluded until their trace is merged.
 
+The next KKT pass uses the geometry frame to calibrate display math and
+embedded-picture composition. An embedded `tikzpicture` contributes its
+natural PGF bounding box to the enclosing TeX hbox; the standalone SVG
+renderer's 12pt presentation padding is therefore disabled at this
+composition boundary. The hbox is placed at the column's `\raggedright`
+left edge rather than centered. Display skips are now a document-profile
+input to the shared VList engine: Beamer's default 11pt profile transcribes
+the `size11.clo` `\normalsize` registers instead of inheriting the generic
+article/10pt constants. These changes reduce the geometry frame's maximum
+matched-glyph vertical delta from 10.134688pt to 0.158409pt (the remaining
+maximum is the already-known frame-title baseline); all matched body lines
+agree to 0.000004pt. The native diagram path geometry is visually aligned
+with the LuaLaTeX page. Embedded-TikZ glyph trace composition is the next
+measurement refinement for its node labels.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.
@@ -718,8 +733,12 @@ bytes.
   titlepage and section pages; `\setbeamercolor`/`\definecolor` patches.
 - Overlay specs parsed into the IR and per-step layout.
 - Block/inline fallback placeholders; chrome fallback.
-- Begin with the Madrid/seahorse KKT fixture: first its representative
-  columns/list/TikZ frame, then display-math, block, and title-page frames.
+- Drive the Madrid/seahorse KKT fixture to faithful rendering one frame at a
+  time, ordered by reusable primitives: calibrate the already-lowered column
+  frames (2, 5, 13, 20); add ordinary root flow (3, 4); add
+  block/theorem/proof composition (6–12); finish specialized example content
+  and overlays (14–19); then finish the title page (1) and run a full-deck
+  structural/raster regression.
   Add small dedicated overlay and metropolis/moloch fixtures so the main deck
   does not overdetermine the architecture.
 
