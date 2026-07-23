@@ -9,6 +9,8 @@ import {
 } from "./scan.js";
 import type {
   BeamerColumnAlignment,
+  BeamerBlockBodyNode,
+  BeamerBlockEnvironment,
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
   BeamerColumnsBodyNode,
@@ -22,6 +24,11 @@ const LIST_ENVIRONMENTS = new Set([
   "itemize",
   "enumerate",
   "description",
+]);
+const BLOCK_ENVIRONMENTS = new Set<BeamerBlockEnvironment>([
+  "block",
+  "alertblock",
+  "exampleblock",
 ]);
 
 /**
@@ -42,30 +49,47 @@ export function parseBeamerFrameBody(
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (token.kind !== "begin" || token.name !== "columns") {
+    if (
+      token.kind !== "begin" ||
+      (token.name !== "columns" &&
+        !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment))
+    ) {
       continue;
     }
     const endIndex = matchingEnvironmentEnd(tokens, index);
     if (endIndex < 0) {
       diagnostics.push({
         severity: "error",
-        code: "beamer-unterminated-columns",
-        message: "The columns environment has no matching end.",
+        code: token.name === "columns"
+          ? "beamer-unterminated-columns"
+          : "beamer-unterminated-block",
+        message: `The ${token.name} environment has no matching end.`,
         span: token.span,
       });
       break;
     }
     const end = tokens[endIndex];
     pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
-    children.push(parseColumns({
-      source,
-      frameId: frame.id,
-      begin: token,
-      end,
-      tokens: tokens.slice(index + 1, endIndex),
-      diagnostics,
-      nodeIndex,
-    }));
+    children.push(
+      token.name === "columns"
+        ? parseColumns({
+            source,
+            frameId: frame.id,
+            begin: token,
+            end,
+            tokens: tokens.slice(index + 1, endIndex),
+            diagnostics,
+            nodeIndex,
+          })
+        : parseBlock({
+            source,
+            ownerId: frame.id,
+            begin: token,
+            end,
+            nodeIndex,
+            diagnostics,
+          })
+    );
     nodeIndex += 1;
     cursor = end.span.to;
     index = endIndex;
@@ -78,6 +102,58 @@ export function parseBeamerFrameBody(
     span: frame.bodySpan,
     children,
     diagnostics,
+  };
+}
+
+function parseBlock(params: {
+  source: string;
+  ownerId: string;
+  begin: BeamerEnvironmentToken;
+  end: BeamerEnvironmentToken;
+  nodeIndex: number;
+  diagnostics: Diagnostic[];
+}): BeamerBlockBodyNode {
+  const { source, ownerId, begin, end, nodeIndex, diagnostics } = params;
+  const options = readBeamerOptionalArgument(
+    source,
+    begin.span.to,
+    end.span.from
+  ) ?? undefined;
+  const title = readBeamerRequiredArgument(
+    source,
+    options?.span.to ?? begin.span.to,
+    end.span.from
+  );
+  if (!title) {
+    diagnostics.push({
+      severity: "error",
+      code: "beamer-block-missing-title",
+      message: `A Beamer ${begin.name} requires a title argument.`,
+      span: begin.span,
+    });
+  }
+  const fallbackTitle: BeamerBlockBodyNode["title"] = title ?? {
+    span: { from: begin.span.to, to: begin.span.to },
+    contentSpan: { from: begin.span.to, to: begin.span.to },
+    value: "",
+  };
+  const bodySpan = {
+    from: fallbackTitle.span.to,
+    to: end.span.from,
+  };
+  const children: BeamerBlockBodyNode["children"] = [];
+  pushTextNode(source, bodySpan, `${ownerId}:block:${nodeIndex}`, children);
+  return {
+    kind: "block",
+    id: `${ownerId}:block:${nodeIndex}`,
+    environment: begin.name as BeamerBlockEnvironment,
+    span: { from: begin.span.from, to: end.span.to },
+    beginSpan: begin.span,
+    endSpan: end.span,
+    options,
+    title: fallbackTitle,
+    bodySpan,
+    children,
   };
 }
 
@@ -163,7 +239,8 @@ function parseColumns(params: {
         frameId,
         columns.length,
         bodySpan,
-        tokens.slice(index + 1, endIndex)
+        tokens.slice(index + 1, endIndex),
+        diagnostics
       ),
     });
     index = endIndex;
@@ -240,13 +317,40 @@ function parseColumnFlow(
   frameId: string,
   columnIndex: number,
   bodySpan: Span,
-  tokens: readonly BeamerEnvironmentToken[]
+  tokens: readonly BeamerEnvironmentToken[],
+  diagnostics: Diagnostic[]
 ): BeamerColumnFlowNode[] {
   const structural: Array<{
     span: Span;
     node: BeamerColumnFlowNode;
   }> = [];
   let nodeIndex = 0;
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (
+      token.kind !== "begin" ||
+      !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)
+    ) {
+      continue;
+    }
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) {
+      continue;
+    }
+    const end = tokens[endIndex];
+    const node = parseBlock({
+      source,
+      ownerId: `${frameId}:column:${columnIndex}`,
+      begin: token,
+      end,
+      nodeIndex,
+      diagnostics,
+    });
+    structural.push({ span: node.span, node });
+    nodeIndex += 1;
+    index = endIndex;
+  }
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];

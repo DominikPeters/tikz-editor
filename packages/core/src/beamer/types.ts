@@ -169,6 +169,7 @@ export type BeamerFrameLayoutItemKind =
   | "frame-subtitle"
   | "text"
   | "list-marker"
+  | "block"
   | "columns"
   | "column"
   | "tikzpicture"
@@ -187,7 +188,13 @@ export type BeamerFrameLayoutItem = {
 
 export type BeamerParagraphLayout = {
   paragraphId: string;
-  role: "frame-title" | "frame-subtitle" | "body" | "footline";
+  role:
+    | "frame-title"
+    | "frame-subtitle"
+    | "body"
+    | "block-title"
+    | "block-body"
+    | "footline";
   sourceSpan: Span;
   bounds: BeamerRect;
   report: ParagraphLayoutReport<"document">;

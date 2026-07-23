@@ -149,7 +149,13 @@ function createDefaultTheme(): MutableTheme {
         sizePt: 6,
         lineHeightPt: 7,
       },
-      "block-title": normalFont,
+      // beamerfontthemedefault.sty: block title inherits block body and
+      // selects \large. In the 11pt class profile that is 12pt/14pt.
+      "block-title": {
+        ...normalFont,
+        sizePt: 12,
+        lineHeightPt: 14,
+      },
       "block-body": normalFont,
     },
     // beamer.cls passes hmargin=1cm to geometry.

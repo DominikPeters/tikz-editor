@@ -14,6 +14,7 @@ import {
 import {
   createGeneratedMappedText,
   createIdentityMappedText,
+  mapTransformedTextWithFallback,
   type MappedText,
 } from "../text/source-map.js";
 import {
@@ -29,6 +30,7 @@ import {
 } from "../text/tex/index.js";
 import { parseBeamerFrameBody } from "./content.js";
 import type {
+  BeamerBlockBodyNode,
   BeamerColumnAlignment,
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
@@ -41,12 +43,14 @@ import { scanBeamerDocument } from "./scan.js";
 import {
   createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
+  planBeamerBlockTemplate,
   planBeamerFrameChrome,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
 } from "./theme/index.js";
 import type {
+  BeamerBlockTemplatePlan,
   BeamerFrameChromePlan,
   BeamerTemplatePrimitive,
   BeamerThemeFont,
@@ -73,6 +77,23 @@ type LaidParagraph = {
   }[];
 };
 
+type PreparedBlock = {
+  node: BeamerBlockBodyNode;
+  plan: BeamerBlockTemplatePlan;
+  width: number;
+  title: LaidParagraph;
+  body: LaidParagraph | null;
+  titleAscent: number;
+  titleDepth: number;
+  titleBackgroundHeight: number;
+  bodyBackgroundTop: number;
+  bodyParagraphTop: number;
+  bodyBackgroundHeight: number;
+  backgroundTop: number;
+  backgroundBottom: number;
+  naturalHeight: number;
+};
+
 type PreparedColumnFlowItem =
   | {
       kind: "paragraph";
@@ -91,6 +112,11 @@ type PreparedColumnFlowItem =
       height: number;
       model: BeamerEmbeddedTikzLayout["model"];
       viewBox: BeamerEmbeddedTikzLayout["viewBox"];
+    }
+  | {
+      kind: "block";
+      block: PreparedBlock;
+      height: number;
     };
 
 type PreparedColumnContent = {
@@ -108,6 +134,8 @@ type PreparedFrameFlowItem =
       paragraph: LaidParagraph;
       naturalHeight: number;
       boxHeight: number;
+      startingBaselineSkip: number;
+      leadingAdjustment: number;
       endingDepth: number;
       endsWithVerticalSpace: boolean;
       trailingParagraphPreviousDepth: number;
@@ -117,6 +145,14 @@ type PreparedFrameFlowItem =
       node: BeamerColumnsBodyNode;
       columns: PreparedColumnContent[];
       box: Pick<ColumnVerticalBox, "height" | "depth">;
+    }
+  | {
+      kind: "block";
+      node: BeamerBlockBodyNode;
+      block: PreparedBlock;
+      naturalHeight: number;
+      boxHeight: number;
+      endingDepth: number;
     };
 
 type PositionedFrameFlowItem = {
@@ -287,7 +323,7 @@ export async function renderBeamerFrame(
           modelBuilder,
           theme,
         });
-      } else {
+      } else if (placement.item.kind === "columns") {
         emitPreparedColumns({
           prepared: placement.item,
           referenceY: frameBlockTop + placement.referenceY,
@@ -295,6 +331,17 @@ export async function renderBeamerFrame(
           items,
           paragraphs,
           embeddedTikz,
+          modelBuilder,
+          theme,
+        });
+      } else {
+        emitPreparedBlock({
+          prepared: placement.item.block,
+          x: availableContentBounds.x,
+          y: frameBlockTop + placement.contentTop,
+          parentId: null,
+          items,
+          paragraphs,
           modelBuilder,
           theme,
         });
@@ -485,9 +532,10 @@ async function prepareFrameFlow(params: {
   const bodyFont = params.theme.fonts["normal-text"];
   for (const node of params.children) {
     if (node.kind === "paragraph") {
+      const paragraphSource = params.source.slice(node.span.from, node.span.to);
       const paragraph = layoutParagraph({
         mapped: createIdentityMappedText(
-          params.source.slice(node.span.from, node.span.to),
+          paragraphSource,
           node.span.from
         ),
         sourceSpan: node.span,
@@ -499,16 +547,25 @@ async function prepareFrameFlow(params: {
         macroBindings: params.macroBindings,
       });
       if (paragraph) {
+        const trailingTrivlistSkip = trailingBeamerTrivlistSkip(
+          paragraphSource
+        );
+        const namedSize = activeBeamerNamedSize(paragraphSource);
         result.push({
           kind: "paragraph",
           node,
           paragraph,
-          naturalHeight: paragraph.height,
+          naturalHeight: paragraph.height + trailingTrivlistSkip,
           boxHeight: paragraphStartingMaterialHeight(paragraph),
+          startingBaselineSkip:
+            namedSize?.lineHeightPt ?? bodyFont.lineHeightPt,
+          leadingAdjustment: leadingBeamerTrivlistAdjustment(
+            paragraphSource,
+            paragraph
+          ),
           endingDepth: paragraphEndingMaterialDepth(paragraph),
           endsWithVerticalSpace: paragraphEndsWithVerticalSpace(paragraph),
-          trailingParagraphPreviousDepth:
-            paragraphTrailingNonGlueDepth(paragraph),
+          trailingParagraphPreviousDepth: paragraphLastLineDepth(paragraph),
         });
       }
       continue;
@@ -546,6 +603,26 @@ async function prepareFrameFlow(params: {
       });
       continue;
     }
+    if (node.kind === "block") {
+      const block = prepareBlock({
+        source: params.source,
+        node,
+        width: params.textWidth,
+        theme: params.theme,
+        macroBindings: params.macroBindings,
+      });
+      if (block) {
+        result.push({
+          kind: "block",
+          node,
+          block,
+          naturalHeight: block.naturalHeight,
+          boxHeight: block.naturalHeight,
+          endingDepth: 0,
+        });
+      }
+      continue;
+    }
     params.diagnostics.push({
       severity: "warning",
       code: "beamer-render-unsupported-flow-node",
@@ -569,8 +646,8 @@ function positionPreparedFrameFlow(
       const glue = verticalInterlineGlue(
         previousDepth,
         item.boxHeight,
-        baselineSkip
-      );
+        item.startingBaselineSkip
+      ) + item.leadingAdjustment;
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
       const visualBottom = contentTop + item.naturalHeight;
@@ -587,16 +664,31 @@ function positionPreparedFrameFlow(
         item.endsWithVerticalSpace &&
         flow[index + 1]?.kind === "columns"
       ) {
-        // `\vspace` remains attached to the current paragraph. The `\par`
-        // at the start of Beamer's columns environment then contributes the
-        // empty line seen in the shipped vertical list before its hbox.
-        cursor += verticalInterlineGlue(
-          item.trailingParagraphPreviousDepth,
-          0,
-          baselineSkip
-        );
-        previousDepth = 0;
+        // The explicit `\vspace` ends the shared text vlist in glue, but TeX's
+        // following columns hbox still computes `\baselineskip` from the
+        // preceding line's real depth. Do not carry the enclosing vbox depth.
+        previousDepth = item.trailingParagraphPreviousDepth;
       }
+      continue;
+    }
+    if (item.kind === "block") {
+      const glue = verticalInterlineGlue(
+        previousDepth,
+        item.boxHeight,
+        baselineSkip
+      );
+      const referenceY = cursor + glue + item.boxHeight;
+      const contentTop = referenceY - item.boxHeight;
+      const visualBottom = contentTop + item.naturalHeight;
+      items.push({
+        item,
+        contentTop,
+        referenceY,
+        visualTop: contentTop,
+        visualBottom,
+      });
+      cursor = visualBottom;
+      previousDepth = item.endingDepth;
       continue;
     }
     const glue = verticalInterlineGlue(
@@ -642,6 +734,10 @@ function paragraphEndingMaterialDepth(paragraph: LaidParagraph): number {
 }
 
 function paragraphStartingMaterialHeight(paragraph: LaidParagraph): number {
+  const firstLine = paragraph.layout.report.lines[0];
+  if (firstLine) {
+    return Number(firstLine.ascent);
+  }
   const first = paragraph.layout.vlistLayout.boxReport.items.find(
     (item) => item.itemKind !== "glue" && item.itemKind !== "penalty"
   );
@@ -657,15 +753,304 @@ function paragraphEndsWithVerticalSpace(paragraph: LaidParagraph): boolean {
   );
 }
 
-function paragraphTrailingNonGlueDepth(paragraph: LaidParagraph): number {
-  const items = paragraph.layout.vlistLayout.boxReport.items;
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (item?.itemKind !== "glue" && item?.itemKind !== "penalty") {
-      return Number(item?.depth ?? 0);
-    }
+function trailingBeamerTrivlistSkip(source: string): number {
+  const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright)\s*\}/gu;
+  let lastEnd = -1;
+  for (const match of source.matchAll(endPattern)) {
+    lastEnd = (match.index ?? 0) + match[0].length;
   }
-  return 0;
+  if (lastEnd < 0) {
+    return 0;
+  }
+  const suffix = source.slice(lastEnd);
+  return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? 9 : 0;
+}
+
+function leadingBeamerTrivlistAdjustment(
+  source: string,
+  paragraph: LaidParagraph
+): number {
+  if (
+    !/\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(source)
+  ) {
+    return 0;
+  }
+  const boundary = paragraph.layout.vlistLayout.boxReport.items.find(
+    (item) =>
+      item.itemKind === "glue" &&
+      item.glue?.origin?.kind === "trivlist-boundary"
+  );
+  // size11.clo gives these trivlists a natural 9pt topsep. The generic text
+  // engine expresses the same default as .8em (8.76pt at Beamer's 10.95pt
+  // normalsize), so the Beamer adapter owns the small class-profile delta.
+  return Math.max(0, 9 - Number(boundary?.height ?? 9));
+}
+
+function prepareBlock(params: {
+  source: string;
+  node: BeamerBlockBodyNode;
+  width: number;
+  theme: ResolvedBeamerTheme;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
+}): PreparedBlock | null {
+  const plan = planBeamerBlockTemplate({
+    environment: params.node.environment,
+    theme: params.theme,
+  });
+  const title = layoutParagraph({
+    mapped: createIdentityMappedText(
+      params.node.title.value,
+      params.node.title.contentSpan.from
+    ),
+    sourceSpan: params.node.title.contentSpan,
+    paragraphId: `${params.node.id}:title`,
+    role: "block-title",
+    bounds: { x: 0, y: 0, width: params.width, height: 0 },
+    font: params.theme.fonts[plan.titleFontRole],
+    alignment: "left",
+    macroBindings: params.macroBindings,
+  });
+  if (!title) {
+    return null;
+  }
+  const bodyNode = params.node.children.find(
+    (node): node is BeamerParagraphBodyNode => node.kind === "paragraph"
+  );
+  const body = bodyNode
+    ? layoutParagraph({
+        mapped: createIdentityMappedText(
+          params.source.slice(bodyNode.span.from, bodyNode.span.to),
+          bodyNode.span.from
+        ),
+        sourceSpan: bodyNode.span,
+        paragraphId: `${params.node.id}:body`,
+        role: "block-body",
+        bounds: { x: 0, y: 0, width: params.width, height: 0 },
+        font: params.theme.fonts[plan.bodyFontRole],
+        alignment: "left",
+        disableAutomaticHyphenation: true,
+        macroBindings: params.macroBindings,
+      })
+    : null;
+  const titleLine = title.layout.report.lines[0];
+  const titleAscent = Number(titleLine?.ascent ?? firstLineBaselineOffset(title));
+  const titleDepth = Number(titleLine?.descent ?? 0);
+  const geometry = plan.geometry;
+  const backgroundTop =
+    geometry.beforeSkipPt +
+    Math.max(0, geometry.outerBleedPt - geometry.roundedTopInsetPt);
+  const titleBackgroundHeight =
+    titleAscent +
+    Math.max(titleDepth, geometry.titleDepthFloorPt) +
+    geometry.titleExtraHeightPt;
+  const bodyBackgroundTop =
+    backgroundTop +
+    titleBackgroundHeight +
+    geometry.transitionHeightPt;
+  const bodyParagraphTop =
+    bodyBackgroundTop + geometry.bodyTopPaddingPt;
+  const bodyExtent = body ? paragraphLineExtent(body) : 0;
+  const bodyBackgroundHeight =
+    geometry.bodyTopPaddingPt +
+    bodyExtent +
+    geometry.bodyExtraHeightPt;
+  const backgroundBottom = bodyBackgroundTop + bodyBackgroundHeight;
+  return {
+    node: params.node,
+    plan,
+    width: params.width,
+    title,
+    body,
+    titleAscent,
+    titleDepth,
+    titleBackgroundHeight,
+    bodyBackgroundTop,
+    bodyParagraphTop,
+    bodyBackgroundHeight,
+    backgroundTop,
+    backgroundBottom,
+    naturalHeight: backgroundBottom + geometry.boxBottomAdvancePt,
+  };
+}
+
+function emitPreparedBlock(params: {
+  prepared: PreparedBlock;
+  x: number;
+  y: number;
+  parentId: string | null;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  theme: ResolvedBeamerTheme;
+}): void {
+  const block = params.prepared;
+  const geometry = block.plan.geometry;
+  const outerBounds = {
+    x: params.x - geometry.outerBleedPt,
+    y: params.y + block.backgroundTop,
+    width: block.width + 2 * geometry.outerBleedPt,
+    height:
+      block.backgroundBottom -
+      block.backgroundTop +
+      geometry.shadowExtentPt,
+  };
+  const titleColor = resolveBeamerThemeColor(
+    params.theme,
+    block.plan.titleColorRole
+  );
+  const bodyColor = resolveBeamerThemeColor(
+    params.theme,
+    block.plan.bodyColorRole
+  );
+  params.modelBuilder.addPart({
+    basePartId: `${block.node.id}:chrome`,
+    sourceId: block.node.id,
+    elementId: null,
+    markup: blockChromeMarkup({
+      block,
+      x: params.x,
+      y: params.y,
+      titleFill: titleColor.bg ?? "transparent",
+      bodyFill: bodyColor.bg ?? "transparent",
+    }),
+  });
+
+  const titleY =
+    params.y +
+    block.backgroundTop +
+    geometry.roundedTopInsetPt;
+  block.title.layout.bounds = {
+    ...block.title.layout.bounds,
+    x: params.x,
+    y: titleY,
+  };
+  params.paragraphs.push(block.title.layout);
+  params.items.push({
+    id: block.title.layout.paragraphId,
+    kind: "text",
+    sourceSpan: block.title.layout.sourceSpan,
+    bounds: block.title.layout.bounds,
+    parentId: block.node.id,
+    paragraphId: block.title.layout.paragraphId,
+  });
+  params.modelBuilder.addPart({
+    basePartId: block.title.layout.paragraphId,
+    sourceId: block.title.layout.paragraphId,
+    elementId: null,
+    markup: paragraphMarkup(
+      block.title.svgBody,
+      params.x,
+      titleY,
+      titleColor.fg ?? textColor(params.theme, "normal text")
+    ),
+  });
+
+  const childIds = [block.title.layout.paragraphId];
+  if (block.body) {
+    const bodyY = params.y + block.bodyParagraphTop;
+    block.body.layout.bounds = {
+      ...block.body.layout.bounds,
+      x: params.x,
+      y: bodyY,
+      height: paragraphLineExtent(block.body),
+    };
+    params.paragraphs.push(block.body.layout);
+    childIds.push(block.body.layout.paragraphId);
+    params.items.push({
+      id: block.body.layout.paragraphId,
+      kind: "text",
+      sourceSpan: block.body.layout.sourceSpan,
+      bounds: block.body.layout.bounds,
+      parentId: block.node.id,
+      paragraphId: block.body.layout.paragraphId,
+    });
+    params.modelBuilder.addPart({
+      basePartId: block.body.layout.paragraphId,
+      sourceId: block.body.layout.paragraphId,
+      elementId: null,
+      markup: paragraphMarkup(
+        block.body.svgBody,
+        params.x,
+        bodyY,
+        bodyColor.fg ?? textColor(params.theme, "normal text")
+      ),
+    });
+  }
+
+  params.items.push({
+    id: block.node.id,
+    kind: "block",
+    sourceSpan: block.node.span,
+    bounds: outerBounds,
+    parentId: params.parentId,
+    childIds,
+  });
+}
+
+function blockChromeMarkup(params: {
+  block: PreparedBlock;
+  x: number;
+  y: number;
+  titleFill: string;
+  bodyFill: string;
+}): string {
+  const { block } = params;
+  const geometry = block.plan.geometry;
+  const left = params.x - geometry.outerBleedPt;
+  const right = params.x + block.width + geometry.outerBleedPt;
+  const top = params.y + block.backgroundTop;
+  const titleBottom = top + block.titleBackgroundHeight;
+  const bodyTop = params.y + block.bodyBackgroundTop;
+  const bottom = params.y + block.backgroundBottom;
+  const radius = geometry.cornerRadiusPt;
+  const gradientId = `${block.node.id}:transition`.replace(
+    /[^A-Za-z0-9_-]/gu,
+    "-"
+  );
+  const filterId = `${block.node.id}:shadow`.replace(
+    /[^A-Za-z0-9_-]/gu,
+    "-"
+  );
+  const roundedOutline =
+    `M${fmt(left + radius)} ${fmt(top)}` +
+    `H${fmt(right - radius)}` +
+    `Q${fmt(right)} ${fmt(top)} ${fmt(right)} ${fmt(top + radius)}` +
+    `V${fmt(bottom - radius)}` +
+    `Q${fmt(right)} ${fmt(bottom)} ${fmt(right - radius)} ${fmt(bottom)}` +
+    `H${fmt(left + radius)}` +
+    `Q${fmt(left)} ${fmt(bottom)} ${fmt(left)} ${fmt(bottom - radius)}` +
+    `V${fmt(top + radius)}` +
+    `Q${fmt(left)} ${fmt(top)} ${fmt(left + radius)} ${fmt(top)}Z`;
+  const titlePath =
+    `M${fmt(left)} ${fmt(titleBottom)}V${fmt(top + radius)}` +
+    `Q${fmt(left)} ${fmt(top)} ${fmt(left + radius)} ${fmt(top)}` +
+    `H${fmt(right - radius)}` +
+    `Q${fmt(right)} ${fmt(top)} ${fmt(right)} ${fmt(top + radius)}` +
+    `V${fmt(titleBottom)}Z`;
+  const bodyPath =
+    `M${fmt(left)} ${fmt(bodyTop)}V${fmt(bottom - radius)}` +
+    `Q${fmt(left)} ${fmt(bottom)} ${fmt(left + radius)} ${fmt(bottom)}` +
+    `H${fmt(right - radius)}` +
+    `Q${fmt(right)} ${fmt(bottom)} ${fmt(right)} ${fmt(bottom - radius)}` +
+    `V${fmt(bodyTop)}Z`;
+  const shadowFilter = block.plan.shadow
+    ? `<filter id="${filterId}" x="-10%" y="-10%" width="130%" height="140%"><feGaussianBlur stdDeviation="${fmt(1.25)}" /></filter>`
+    : "";
+  const shadowPath = block.plan.shadow
+    ? `<path d="${roundedOutline}" transform="translate(${fmt(2)} ${fmt(2)})" fill="#000000" opacity="0.22" filter="url(#${filterId})" />`
+    : "";
+  return (
+    `<g data-beamer-block-template="${block.plan.templateId}">` +
+    `<defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="${params.titleFill}" />` +
+    `<stop offset="1" stop-color="${params.bodyFill}" />` +
+    `</linearGradient>${shadowFilter}</defs>` +
+    shadowPath +
+    `<path d="${titlePath}" fill="${params.titleFill}" />` +
+    `<path d="M${fmt(left)} ${fmt(titleBottom)}H${fmt(right)}V${fmt(bodyTop)}H${fmt(left)}Z" fill="url(#${gradientId})" />` +
+    `<path d="${bodyPath}" fill="${params.bodyFill}" />` +
+    `</g>`
+  );
 }
 
 function emitFrameParagraph(params: {
@@ -791,6 +1176,19 @@ function emitPreparedColumns(params: {
           ),
         });
         flowY += flowItem.advanceHeight;
+      } else if (flowItem.kind === "block") {
+        emitPreparedBlock({
+          prepared: flowItem.block,
+          x,
+          y: flowY,
+          parentId: columnId,
+          items: params.items,
+          paragraphs: params.paragraphs,
+          modelBuilder: params.modelBuilder,
+          theme: params.theme,
+        });
+        childIds.push(flowItem.block.node.id);
+        flowY += flowItem.height;
       } else {
         emitEmbeddedTikz({
           tikz: flowItem,
@@ -912,6 +1310,7 @@ async function prepareColumnContent(params: {
       node,
       width,
       bodyFont,
+      theme,
       diagnostics,
       listProfile,
       initialPreviousDepth:
@@ -955,6 +1354,7 @@ async function prepareColumnFlowNode(params: {
   node: BeamerColumnFlowNode;
   width: number;
   bodyFont: BeamerThemeFont;
+  theme: ResolvedBeamerTheme;
   diagnostics: Diagnostic[];
   listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
@@ -965,6 +1365,7 @@ async function prepareColumnFlowNode(params: {
     node,
     width,
     bodyFont,
+    theme,
     diagnostics,
     listProfile,
     initialPreviousDepth,
@@ -975,6 +1376,18 @@ async function prepareColumnFlowNode(params: {
       kind: "vertical-space",
       height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
     };
+  }
+  if (node.kind === "block") {
+    const block = prepareBlock({
+      source,
+      node,
+      width,
+      theme,
+      macroBindings,
+    });
+    return block
+      ? { kind: "block", block, height: block.naturalHeight }
+      : null;
   }
   if (node.kind === "paragraph" || node.kind === "list") {
     const text = source.slice(node.span.from, node.span.to);
@@ -1109,6 +1522,9 @@ function firstFlowReferenceFromTop(
     if (item.kind === "tikzpicture") {
       return offset + item.height;
     }
+    if (item.kind === "block") {
+      return offset + item.height;
+    }
     const firstLine = item.paragraph.layout.report.lines[0];
     if (!firstLine) {
       offset += item.advanceHeight;
@@ -1164,6 +1580,7 @@ function layoutParagraph(params: {
   interwordSpacePt?: number;
   initialPreviousDepth?: number;
   listProfile?: TexListLayoutProfile;
+  disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
@@ -1188,9 +1605,20 @@ function layoutParagraph(params: {
       : params.alignment === "right"
         ? "ragged-left"
         : "ragged-right";
-  const mapped = params.macroBindings
+  let mapped = params.macroBindings
     ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
     : params.mapped;
+  const namedSize = activeBeamerNamedSize(mapped.text);
+  if (namedSize) {
+    mapped = mapTransformedTextWithFallback(
+      mapped,
+      mapped.text.replace(
+        namedSize.pattern,
+        `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont`
+      ),
+      `Beamer 11pt class ${namedSize.command} size`
+    );
+  }
   const result = layoutSimpleTexParagraph(mapped.text, {
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
@@ -1199,19 +1627,27 @@ function layoutParagraph(params: {
     metricProvider,
     textFontProfile,
     tikzTextWidthNode: true,
-    // Beamer's global `\raggedright` keeps the active font's interword glue.
-    // A template-specific fixed space is expressed by the metric-provider
-    // wrapper above, not by TikZ's 0.3333em node-text profile.
-    spaceGlueProfile: "font-fixed",
+    // Beamer's `\raggedright` changes the margin glue, not the active font's
+    // interword stretch and shrink. Centered text can therefore shrink spaces
+    // slightly to retain the same line break as TeX.
+    spaceGlueProfile:
+      /\\(?:begin\s*\{\s*center\s*\}|centering)(?![A-Za-z@])/u.test(
+        mapped.text
+      )
+        ? "font"
+        : "font-fixed",
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,
       fontProfile: createBeamerTexMathFontProfile(params.font),
     }),
-    baselineSkip: params.font.lineHeightPt,
+    baselineSkip: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,
     listProfile: params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE,
     displayMathProfile: BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
+    hyphenator: params.disableAutomaticHyphenation
+      ? { hyphenate: () => [] }
+      : undefined,
     sourceMap: mapped.sourceMap,
   });
   if (!result.supported || !result.report || !result.vlistLayout) {
@@ -1257,6 +1693,48 @@ function layoutParagraph(params: {
             },
           }))
       : [],
+  };
+}
+
+function activeBeamerNamedSize(source: string): {
+  command: string;
+  pattern: RegExp;
+  sizePt: number;
+  lineHeightPt: number;
+} | null {
+  const sizes = [
+    ["tiny", 6, 7],
+    ["scriptsize", 8, 9.5],
+    ["footnotesize", 9, 11],
+    ["small", 10, 12],
+    ["normalsize", 10.95, 13.6],
+    ["large", 12, 14],
+    ["Large", 14.4, 18],
+    ["LARGE", 17.28, 22],
+    ["huge", 20.74, 25],
+    ["Huge", 24.88, 30],
+  ] as const;
+  let selected:
+    | {
+        command: string;
+        pattern: RegExp;
+        sizePt: number;
+        lineHeightPt: number;
+        index: number;
+      }
+    | null = null;
+  for (const [command, sizePt, lineHeightPt] of sizes) {
+    const pattern = new RegExp(String.raw`\\${command}(?![A-Za-z@])`, "gu");
+    const match = pattern.exec(source);
+    if (match && (selected == null || match.index > selected.index)) {
+      selected = { command, pattern, sizePt, lineHeightPt, index: match.index };
+    }
+  }
+  return selected && {
+    command: selected.command,
+    pattern: selected.pattern,
+    sizePt: selected.sizePt,
+    lineHeightPt: selected.lineHeightPt,
   };
 }
 

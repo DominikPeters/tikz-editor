@@ -262,6 +262,57 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("composes Madrid rounded blocks through the resolved theme template", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 19 });
+    const blocks = result.layout.items.filter(
+      (item) => item.kind === "block"
+    );
+    const columns = result.layout.items.find(
+      (item) => item.id === "frame:19:columns:0"
+    )!;
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.paragraphId === "frame:19:paragraph:0"
+    )!;
+    const necessaryTitle = result.layout.paragraphs.find(
+      (paragraph) =>
+        paragraph.paragraphId === "frame:19:column:0:block:0:title"
+    )!;
+    const necessaryBody = result.layout.paragraphs.find(
+      (paragraph) =>
+        paragraph.paragraphId === "frame:19:column:0:block:0:body"
+    )!;
+    const baseline = (paragraph: typeof body, lineIndex: number) => {
+      const line = paragraph.report.lines[lineIndex]!;
+      const placement = paragraph.vlistLayout.linePlacements.find(
+        (candidate) => candidate.lineIndex === line.lineIndex
+      )!;
+      return paragraph.bounds.y + Number(placement.y) + Number(line.ascent);
+    };
+
+    expect(blocks).toHaveLength(3);
+    expect(columns.bounds.y).toBeCloseTo(130.367846, 6);
+    expect(baseline(body, 0)).toBeCloseTo(86.964646, 6);
+    expect(baseline(body, 1)).toBeCloseTo(104.964646, 6);
+    expect(baseline(necessaryTitle, 0)).toBeCloseTo(148.710846, 6);
+    expect(baseline(necessaryBody, 0)).toBeCloseTo(165.275021, 6);
+    expect(
+      necessaryTitle.report.lines[0]?.segments.find(
+        (segment) => segment.kind === "text"
+      )
+    ).toEqual(
+      expect.objectContaining({
+        fontId: "lmsans12-regular",
+        fontAtPt: 12,
+      })
+    );
+    expect(result.svg.svg).toContain(
+      'data-beamer-block-template="beamer/block/rounded-shadow"'
+    );
+    expect(result.svg.svg).toContain("<linearGradient");
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
   it("renders the minimal comparison fixture without diagnostics", async () => {
     const source = readFileSync(HELLO_WORLD_FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source);

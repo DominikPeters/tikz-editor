@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  planBeamerBlockTemplate,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
@@ -18,6 +19,24 @@ describe("Beamer theme resolution", () => {
     expect(theme.id).toBe("Madrid");
     expect(theme.templates.footline.id).toBe("beamer/footline/infolines");
     expect(theme.templates.frameTitle.id).toBe("beamer/frame-title/default");
+    expect(
+      planBeamerBlockTemplate({ environment: "block", theme })
+    ).toEqual(
+      expect.objectContaining({
+        templateId: "beamer/block/rounded-shadow",
+        style: "rounded",
+        shadow: true,
+        titleColorRole: "block title",
+        bodyColorRole: "block body",
+        geometry: expect.objectContaining({
+          beforeSkipPt: 6,
+          outerBleedPt: expect.closeTo(4.015, 6),
+          roundedTopInsetPt: expect.closeTo(3.01125, 6),
+          titleDepthFloorPt: 1.5,
+          bodyTopPaddingPt: 2,
+        }),
+      })
+    );
     expect(theme.dimensions.textMarginLeftPt).toBe(10.95);
     expect(theme.colors.frametitle).toEqual({
       fg: "#000000",

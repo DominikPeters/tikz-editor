@@ -41,12 +41,34 @@ export type BeamerUnsupportedBodyNode = {
   message: string;
 };
 
-export type BeamerColumnFlowNode =
+export type BeamerLeafFlowNode =
   | BeamerParagraphBodyNode
   | BeamerListBodyNode
   | BeamerVerticalSpaceBodyNode
   | BeamerTikzBodyNode
   | BeamerUnsupportedBodyNode;
+
+export type BeamerBlockEnvironment =
+  | "block"
+  | "alertblock"
+  | "exampleblock";
+
+export type BeamerBlockBodyNode = {
+  kind: "block";
+  id: string;
+  environment: BeamerBlockEnvironment;
+  span: Span;
+  beginSpan: Span;
+  endSpan: Span;
+  options?: BeamerDelimitedSourceValue;
+  title: BeamerDelimitedSourceValue;
+  bodySpan: Span;
+  children: BeamerLeafFlowNode[];
+};
+
+export type BeamerColumnFlowNode =
+  | BeamerLeafFlowNode
+  | BeamerBlockBodyNode;
 
 /**
  * Beamer's `T` mode is distinct from `t`: both use a top-aligned minipage,
@@ -81,6 +103,7 @@ export type BeamerColumnsBodyNode = {
 
 export type BeamerFrameBodyNode =
   | BeamerColumnsBodyNode
+  | BeamerBlockBodyNode
   | BeamerParagraphBodyNode
   | BeamerUnsupportedBodyNode;
 

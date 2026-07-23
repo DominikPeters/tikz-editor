@@ -103,4 +103,54 @@ describe("Beamer frame content frontend", () => {
       }),
     ]);
   });
+
+  it("lowers theme-decorated blocks at the frame root and inside columns", () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const document = scanBeamerDocument(source);
+    const takeaways = parseBeamerFrameBody({
+      source,
+      frame: document.frames[19]!,
+    });
+
+    expect(takeaways.diagnostics).toEqual([]);
+    expect(takeaways.children.map((node) => node.kind)).toEqual([
+      "paragraph",
+      "columns",
+    ]);
+    const columns = takeaways.children[1]!;
+    expect(columns.kind).toBe("columns");
+    if (columns.kind !== "columns") {
+      throw new Error("Expected columns.");
+    }
+    expect(columns.columns).toHaveLength(3);
+    expect(
+      columns.columns.map((column) =>
+        column.children.map((node) => node.kind)
+      )
+    ).toEqual([["block"], ["block"], ["block"]]);
+    const blocks = columns.columns.map((column) => column.children[0]!);
+    for (const block of blocks) {
+      expect(block.kind).toBe("block");
+      if (block.kind !== "block") {
+        throw new Error("Expected block.");
+      }
+      expect(block.environment).toBe("block");
+      expect(block.children.map((node) => node.kind)).toEqual(["paragraph"]);
+      expect(source.slice(block.span.from, block.span.to)).toContain(
+        String.raw`\begin{block}`
+      );
+    }
+    expect(
+      blocks.map((block) => block.kind === "block" && block.title.value)
+    ).toEqual(["Necessary", "Sufficient", "Useful"]);
+
+    const pitfalls = parseBeamerFrameBody({
+      source,
+      frame: document.frames[18]!,
+    });
+    expect(pitfalls.children.map((node) => node.kind)).toEqual([
+      "paragraph",
+      "block",
+    ]);
+  });
 });

@@ -310,6 +310,10 @@ At minimum the initial profiles are derived from:
   interaction.
 - `beamerbaseframecomponents.sty`: `columns`, `onlytextwidth`, `totalwidth`,
   `T`/`t`/`c`/`b` alignment, minipage construction, and margin behavior.
+- `beamerbaseauxtemplates.sty` and `beamerbaseboxes.sty`: block template
+  entry/exit skips, rounded-box construction, title/body slots, PGF `bp`
+  geometry, transitions, and shadows. Block dimensions must be transcribed
+  from these sources rather than inferred from a theme screenshot.
 - `beamerbaseoverlay.sty` plus the overlay decoder: pause counters,
   default overlay specifications, action environments, and keep-space versus
   remove-space behavior.
@@ -758,6 +762,27 @@ initial `\topskip`, rather than the aggregate paragraph VList height.
 Ragged/centered Beamer text uses the active font's natural interword width with
 zero finite adjustment (the surrounding `fil` glue owns alignment), and
 template struts provide fixed baselines such as the default frame title.
+
+Rounded blocks now follow the same theme-template boundary as chrome and list
+markers. The frame frontend lowers `block`, `alertblock`, and `exampleblock`
+to source-backed nodes both at the frame root and inside columns; the
+composer asks the resolved block template for semantic color/font roles and
+source-derived geometry. Madrid's `rounded` inner theme therefore selects one
+`beamer/block/rounded-shadow` plan instead of renderer-side theme checks. Its
+initial geometry transcribes the `4bp` outer extent, `3bp` rounded inset,
+`1.5pt` title-depth floor, title/body transition, and body lead from
+`beamerbaseauxtemplates.sty` and `beamerbaseboxes.sty`.
+
+The frame-20 oracle pass also fixes two reusable vertical-box contracts
+exposed by `center` followed by `[T]` columns. Initial interline glue uses the
+active named-size baseline (`\Large` is 14.4/18pt in Beamer's 11pt class)
+rather than the enclosing text VList height, and a glue-ending paragraph
+carries its real final line depth into the following columns hbox rather than
+the wrapper vbox depth. The Beamer adapter accounts for the class's natural
+9pt center-trivlist `\topsep` where the generic text profile expresses
+`.8em`. On the Takeaways frame, all 16 text lines and 307 glyphs match the
+LuaLaTeX trace with matching font IDs/codes; maximum glyph deltas are
+0.003519pt horizontally and 0.014666pt vertically.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

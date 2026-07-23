@@ -5,6 +5,7 @@ export { scanBeamerDocument } from "./scan.js";
 export {
   createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
+  planBeamerBlockTemplate,
   planBeamerFrameChrome,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,

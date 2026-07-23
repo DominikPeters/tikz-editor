@@ -1,6 +1,9 @@
 import type { Diagnostic } from "../../diagnostics/types.js";
 import type { Span } from "../../ast/types.js";
 import type {
+  BeamerBlockEnvironment,
+} from "../content-types.js";
+import type {
   BeamerDelimitedSourceValue,
   BeamerDocumentModel,
   BeamerFrameModel,
@@ -144,5 +147,38 @@ export type BeamerFrameTemplateContext = {
   totalFrames: number;
   step: number;
   page: BeamerPageGeometry;
+  theme: ResolvedBeamerTheme;
+};
+
+export type BeamerBlockTemplatePlan = {
+  templateId: string;
+  style: "default" | "rounded" | "modern";
+  shadow: boolean;
+  titleColorRole: string;
+  bodyColorRole: string;
+  titleFontRole: "block-title";
+  bodyFontRole: "block-body";
+  /**
+   * Source-derived box constants. Rounded blocks use bp because their PGF
+   * paths are specified in bp in beamerbaseboxes.sty.
+   */
+  geometry: {
+    beforeSkipPt: number;
+    afterSkipPt: number;
+    outerBleedPt: number;
+    roundedTopInsetPt: number;
+    titleDepthFloorPt: number;
+    titleExtraHeightPt: number;
+    transitionHeightPt: number;
+    bodyTopPaddingPt: number;
+    bodyExtraHeightPt: number;
+    boxBottomAdvancePt: number;
+    cornerRadiusPt: number;
+    shadowExtentPt: number;
+  };
+};
+
+export type BeamerBlockTemplateContext = {
+  environment: BeamerBlockEnvironment;
   theme: ResolvedBeamerTheme;
 };

@@ -47,13 +47,16 @@ function makeTextFontProfile(params: {
   return {
     ...params,
     metricProvider: computerModernTexMetricProvider,
-    resolveTextFont: (state, atPt, metricProvider = computerModernTexMetricProvider) => ({
-      ...metricProvider.resolveFont({
-        fontId: params.resolveTextFontId(state, atPt),
-        atPt: state.sizePt ?? atPt,
-      }),
-      ...(state.color ? { color: state.color } : {}),
-    }),
+    resolveTextFont: (state, atPt, metricProvider = computerModernTexMetricProvider) => {
+      const resolvedAtPt = state.sizePt ?? atPt;
+      return {
+        ...metricProvider.resolveFont({
+          fontId: params.resolveTextFontId(state, resolvedAtPt),
+          atPt: resolvedAtPt,
+        }),
+        ...(state.color ? { color: state.color } : {}),
+      };
+    },
   };
 }
 
