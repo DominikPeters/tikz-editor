@@ -1,5 +1,6 @@
 import type {
   TexMathDisplayAlignment,
+  TexMathDisplayAlignmentOpenedInterline,
   TexMathDisplayAlignmentIntertext,
   TexMathBox,
   TexMathBreakpoint,
@@ -1378,6 +1379,7 @@ function getDisplayMathAlignment(
       delimiter: params.delimiter,
       width: texLength(params.targetWidth),
       rows,
+      openedInterline: displayAlignmentOpenedInterline(fontProfile),
       ...(intertexts.length > 0 ? { intertexts } : {}),
     };
   }
@@ -1455,6 +1457,7 @@ function getDisplayMathAlignment(
       delimiter: params.delimiter,
       width: texLength(params.targetWidth),
       rows,
+      openedInterline: displayAlignmentOpenedInterline(fontProfile),
       ...(intertexts.length > 0 ? { intertexts } : {}),
     };
   }
@@ -1575,6 +1578,7 @@ function getDisplayMathAlignment(
       ...rows.map((row) => row.width)
     )),
     rows,
+    openedInterline: displayAlignmentOpenedInterline(fontProfile),
     ...(intertexts.length > 0 ? { intertexts } : {}),
   };
 }
@@ -1781,6 +1785,23 @@ function alignedNucleusFromList(list: TexMathList): TexMathAlignedNucleus | null
     return null;
   }
   return item.nucleus;
+}
+
+function displayAlignmentOpenedInterline(
+  fontProfile: TexMathFontProfile
+): TexMathDisplayAlignmentOpenedInterline {
+  const parameters = fontProfile.layoutParameters;
+  return {
+    baselineSkip: texLength(
+      roundTexPt(parameters.alignedBaselineSkip + parameters.alignedJot)
+    ),
+    lineSkip: texLength(
+      roundTexPt(parameters.alignedLineSkip + parameters.alignedJot)
+    ),
+    lineSkipLimit: texLength(
+      roundTexPt(parameters.alignedLineSkipLimit + parameters.alignedJot)
+    ),
+  };
 }
 
 function displayAlignmentRowTagWidths(

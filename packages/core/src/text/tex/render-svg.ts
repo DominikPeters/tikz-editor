@@ -35,6 +35,7 @@ import type {
   TexRenderItem,
   TexVListLayout,
 } from "./vlist/types.js";
+import { TEX_MATH_SVG_UNITS_PER_PT } from "./math/render-svg.js";
 
 const DEFAULT_TEX_SVG_BASE_FONT_SIZE_PT = texLength(10);
 
@@ -227,8 +228,7 @@ function renderTexVListItemsSvgContent<Space extends SourceCoordinateSpace>(
     if (item.item.kind === "display-math") {
       pieces.push(renderTexDisplayMathSvgContent(
         item,
-        options,
-        options.context.baseFontSizePt
+        options
       ));
       continue;
     }
@@ -315,8 +315,7 @@ function renderTexReportLineSvg<Space extends SourceCoordinateSpace>(
         pieces.push(renderTexInlineMathSvg(
           segment.mathSvgBody,
           projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
-          baseline,
-          options.context.baseFontSizePt
+          baseline
         ));
       }
       continue;
@@ -407,10 +406,9 @@ function texReportLineXOffset<Space extends SourceCoordinateSpace>(
 function renderTexInlineMathSvg(
   body: string,
   x: TexHBoxX,
-  baseline: TexHBoxY,
-  baseFontSizePt: TexLength
+  baseline: TexHBoxY
 ): string {
-  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(baseFontSizePt / 1000)})">${body}</g>`;
+  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(texLength(1 / TEX_MATH_SVG_UNITS_PER_PT))})">${body}</g>`;
 }
 
 function texReportLineTop<Space extends SourceCoordinateSpace>(
@@ -483,8 +481,7 @@ function renderTexVListSvgMetadataItems(
     if (item.item.kind === "display-math") {
       pieces.push(renderTexDisplayMathSvgContent(
         item,
-        origin,
-        DEFAULT_TEX_SVG_BASE_FONT_SIZE_PT
+        origin
       ));
       continue;
     }
@@ -618,8 +615,7 @@ function renderTexVListLeafBoxSvgMetadata(
 
 function renderTexDisplayMathSvgContent(
   item: PositionedTexVListItem,
-  origin: TexVListSvgOrigin = {},
-  baseFontSizePt: TexLength
+  origin: TexVListSvgOrigin = {}
 ): string {
   if (item.item.kind !== "display-math") {
     return "";
@@ -631,8 +627,7 @@ function renderTexDisplayMathSvgContent(
     renderTexInlineMathSvg(
       item.item.box.svgBody ?? "",
       texHBoxX(0),
-      texHBoxY(item.metrics.height),
-      baseFontSizePt
+      texHBoxY(item.metrics.height)
     ),
     "</g>",
   ].join("");
@@ -646,8 +641,7 @@ function renderTexHBoxRenderItemSvg(
     return renderTexInlineMathSvg(
       item.svgBody,
       texHBoxX(item.x),
-      texHBoxY(item.baseline),
-      context.baseFontSizePt
+      texHBoxY(item.baseline)
     );
   }
   const font = context.metricProvider.resolveFont({

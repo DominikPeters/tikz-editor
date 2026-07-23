@@ -362,6 +362,10 @@ export interface SimpleTexVerticalGlueNode extends SimpleTexSourceRange {
   readonly text: string;
   readonly command: SimpleTexVerticalGlueCommandName;
   readonly size: TexLength;
+  readonly relativeSize?: {
+    readonly value: number;
+    readonly unit: "em" | "ex";
+  };
   readonly stretch?: TexLength;
   readonly shrink?: TexLength;
   readonly stretchOrder?: "normal" | "fil" | "fill" | "filll";
@@ -522,6 +526,8 @@ export interface SimpleTexParagraphBlock {
   readonly noIndent: boolean;
   readonly startsAfterExplicitPar?: boolean;
   readonly firstLineIndentEm?: number;
+  /** A source space retained when horizontal mode resumes after display math. */
+  readonly leadingInterwordSpace?: boolean;
   readonly quotationItemFirstParagraph?: boolean;
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
@@ -542,6 +548,10 @@ export interface SimpleTexVerticalGlueBlockItem extends SimpleTexSourceRange {
   readonly text: string;
   readonly command: SimpleTexVerticalGlueCommandName;
   readonly size: TexLength;
+  readonly relativeSize?: {
+    readonly value: number;
+    readonly unit: "em" | "ex";
+  };
   readonly stretch?: TexLength;
   readonly shrink?: TexLength;
   readonly stretchOrder?: "normal" | "fil" | "fill" | "filll";
@@ -649,6 +659,7 @@ export interface SimpleTexParagraphSegment {
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
   readonly firstLineIndentEm?: number;
+  readonly leadingInterwordSpace?: boolean;
   readonly quotationItemFirstParagraph?: boolean;
   readonly forcedBreakAfter?: {
     readonly sourceOffset: number;
@@ -666,6 +677,7 @@ export interface SimpleTexSegmentInput {
   readonly noIndent: boolean;
   readonly startsAfterExplicitPar?: boolean;
   readonly firstLineIndentEm?: number;
+  readonly leadingInterwordSpace?: boolean;
   readonly quotationItemFirstParagraph?: boolean;
   readonly quoteDepth: number;
   readonly quotationDepth?: number;
@@ -1788,6 +1800,7 @@ function scanSimpleTexVerticalGlueCommand(
     }
     const rawLength = text.slice(argumentStart + 1, argumentEnd - 1);
     const parsed = parseTexSemanticLength(rawLength);
+    const relativeSize = parseSimpleTexRelativeLength(rawLength);
     return {
       node: {
         kind: "vertical-glue",
@@ -1796,6 +1809,7 @@ function scanSimpleTexVerticalGlueCommand(
         sourceStart: sourceOffset + start,
         sourceEnd: sourceOffset + argumentEnd,
         size: parsed ?? texLength(0),
+        ...(relativeSize ? { relativeSize } : {}),
         stretchOrder: "normal",
         shrinkOrder: "normal",
       },
@@ -4063,6 +4077,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         size: node.size,
+        ...(node.relativeSize ? { relativeSize: node.relativeSize } : {}),
         stretch: node.stretch,
         shrink: node.shrink,
         stretchOrder: node.stretchOrder,
@@ -4189,6 +4204,20 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
 }
 
+function parseSimpleTexRelativeLength(
+  raw: string
+): { readonly value: number; readonly unit: "em" | "ex" } | null {
+  const match =
+    /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(em|ex)$/iu.exec(raw.trim());
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+  return {
+    value: Number(match[1]),
+    unit: match[2].toLowerCase() as "em" | "ex",
+  };
+}
+
 function hasNonSpaceSourceText(
   text: string,
   start: number,
@@ -4267,6 +4296,9 @@ export function splitSimpleTexParagraphSegments(
       ...(block.firstLineIndentEm !== undefined
         ? { firstLineIndentEm: block.firstLineIndentEm }
         : {}),
+      ...(block.leadingInterwordSpace === true
+        ? { leadingInterwordSpace: true }
+        : {}),
       ...(block.quotationItemFirstParagraph === true
         ? { quotationItemFirstParagraph: true }
         : {}),
@@ -4305,6 +4337,9 @@ export function splitSimpleTexParagraphSegments(
         ),
         noIndent: segmentNoIndent,
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
+        ...(block.leadingInterwordSpace === true && segments.length === 0
+          ? { leadingInterwordSpace: true }
+          : {}),
         ...(block.quotationItemFirstParagraph === true && segments.length === 0
           ? { quotationItemFirstParagraph: true }
           : {}),

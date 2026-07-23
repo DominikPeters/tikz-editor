@@ -13,8 +13,11 @@ import type {
   TexParagraphAlignment,
   TexSpaceGlueProfile,
 } from "../ir.js";
-import type { TexMathBox } from "../layout-inline-items.js";
-import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
+import type {
+  TexMathBox,
+  TexMathDisplayAlignment,
+  TexMathDisplayAlignmentOpenedInterline,
+} from "../layout-inline-items.js";
 import type {
   TexDisplayMathLayoutProfile,
   TexListMarkerProfile,
@@ -83,7 +86,13 @@ export type TexGlueOrigin =
   | {
       readonly kind: "display-math-interline";
       readonly side: "above" | "below";
-      readonly purpose?: "align-top-correction" | "align-row-baseline" | "align-structural";
+      readonly purpose: "align-top-correction" | "align-row-baseline" | "align-structural";
+      readonly openedInterline: TexMathDisplayAlignmentOpenedInterline;
+    }
+  | {
+      readonly kind: "display-math-interline";
+      readonly side: "above" | "below";
+      readonly purpose?: undefined;
     }
   | {
       readonly kind: "display-alignment-intertext-skip";
@@ -91,6 +100,7 @@ export type TexGlueOrigin =
     }
   | {
       readonly kind: "display-alignment-intertext-leading";
+      readonly openedInterline: TexMathDisplayAlignmentOpenedInterline;
     };
 
 export interface TexLineBox {

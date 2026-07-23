@@ -1418,7 +1418,7 @@ function layoutTextNucleus(
   const isTextBoxCommand = isTextBoxNucleusCommand(nucleus.command);
   const atPt = isTextBoxCommand
     ? baseAtPt
-    : textStyleAtPt(style, baseAtPt);
+    : fontProfile.resolveMathStyleAtPt(style, baseAtPt);
   if (nucleus.nodes) {
     const initialFontState = textNucleusInitialFontState(nucleus, fontProfile);
     const tokens = textNucleusInlineTokens(nucleus, initialFontState);
@@ -1677,16 +1677,6 @@ function textShapedItemToMathLayoutItem(
   });
 }
 
-function textStyleAtPt(style: TexMathStyle, baseAtPt: TexLength): TexLength {
-  if (style === "script") {
-    return texLength(baseAtPt * 0.7);
-  }
-  if (style === "scriptscript") {
-    return texLength(baseAtPt * 0.5);
-  }
-  return texLength(baseAtPt);
-}
-
 function layoutAlphabetNucleus(
   nucleus: TexMathAlphabetNucleus,
   fontProfile: TexMathFontProfile,
@@ -1801,14 +1791,8 @@ function omitScriptAlphabetTrailingItalicKern(hlist: TexMathHList): TexMathHList
   });
 }
 
-const TEX_ALIGNED_ROW_HEIGHT_PT = 8.399963;
-const TEX_ALIGNED_ROW_DEPTH_PT = 3.600037;
-const TEX_AMSMATH_JOT_PT = 3;
 const TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT = 10;
 const TEX_LATEX_EQNARRAY_COLUMN_GAP_PT = 10;
-const TEX_ALIGNED_BASELINE_SKIP_PT = 12;
-const TEX_ALIGNED_LINE_SKIP_LIMIT_PT = 0;
-const TEX_ALIGNED_LINE_SKIP_PT = 1;
 const TEX_MATRIX_ARRAY_COL_SEP_PT = 5;
 const TEX_CASES_ARRAY_STRETCH = 1.2;
 const TEX_CASES_COLUMN_GAP_PT = 10;
@@ -1876,7 +1860,10 @@ function layoutAlignedNucleus(
     eqnarrayColumnGapCount(columnCount, nucleus.columnSeparation) * TEX_LATEX_EQNARRAY_COLUMN_GAP_PT +
     alignedTrailingWidth(concreteRows.length, nucleus.columnSeparation)
   );
-  const baselineOffsets = alignedRowBaselineOffsets(concreteRows);
+  const baselineOffsets = alignedRowBaselineOffsets(
+    concreteRows,
+    fontProfile
+  );
   const lastRow = concreteRows[concreteRows.length - 1];
   const naturalHeight = roundTexPt(
     concreteRows[0].height +
@@ -1984,8 +1971,14 @@ function layoutAlignedRow(
   return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
-    height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...concreteCells.map((cell) => cell.hlist.height))),
-    depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...concreteCells.map((cell) => cell.hlist.depth))),
+    height: roundTexPt(Math.max(
+      fontProfile.layoutParameters.arrayStrutHeight,
+      ...concreteCells.map((cell) => cell.hlist.height)
+    )),
+    depth: roundTexPt(Math.max(
+      fontProfile.layoutParameters.arrayStrutDepth,
+      ...concreteCells.map((cell) => cell.hlist.depth)
+    )),
     ...(row.intertextsBefore ? { intertextsBefore: row.intertextsBefore } : {}),
     ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
   });
@@ -2038,14 +2031,17 @@ function alignedCellStyle(): TexMathStyle {
   return "display";
 }
 
-function alignedRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
+function alignedRowBaselineOffsets(
+  rows: readonly TexMathAlignedRowLayout[],
+  fontProfile: TexMathFontProfile
+): readonly number[] {
   const offsets = [0];
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
     const previous = rows[rowIndex - 1];
     const current = rows[rowIndex];
     offsets.push(roundTexPt(
       offsets[rowIndex - 1] +
-      alignedRowBaselineDistance(previous, current)
+      alignedRowBaselineDistance(previous, current, fontProfile)
     ));
   }
   return offsets;
@@ -2053,13 +2049,34 @@ function alignedRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): re
 
 function alignedRowBaselineDistance(
   previous: TexMathAlignedRowLayout,
-  current: TexMathAlignedRowLayout
+  current: TexMathAlignedRowLayout,
+  fontProfile: TexMathFontProfile
 ): number {
   const naturalDistance = roundTexPt(previous.depth + current.height);
-  const interlineGlue = TEX_ALIGNED_BASELINE_SKIP_PT - naturalDistance >= TEX_ALIGNED_LINE_SKIP_LIMIT_PT
-    ? roundTexPt(TEX_ALIGNED_BASELINE_SKIP_PT - naturalDistance)
-    : TEX_ALIGNED_LINE_SKIP_PT;
-  return roundTexPt(naturalDistance + interlineGlue + TEX_AMSMATH_JOT_PT);
+  const parameters = fontProfile.layoutParameters;
+  const openedBaselineSkip = roundTexPt(
+    parameters.alignedBaselineSkip + parameters.alignedJot
+  );
+  const openedLineSkip = roundTexPt(
+    parameters.alignedLineSkip + parameters.alignedJot
+  );
+  const openedLineSkipLimit = roundTexPt(
+    parameters.alignedLineSkipLimit + parameters.alignedJot
+  );
+  // TeX compares scaled integers here. Quantize both dimensions before the
+  // subtraction so a decimal baseline such as 13.6pt does not take the
+  // `\lineskip` branch because of a floating-point residue.
+  const baselineGlueSp =
+    Math.round(openedBaselineSkip * TEX_SP_PER_PT) -
+    Math.round(naturalDistance * TEX_SP_PER_PT);
+  const baselineGlue = roundTexPt(baselineGlueSp / TEX_SP_PER_PT);
+  const lineSkipLimitSp = Math.round(
+    openedLineSkipLimit * TEX_SP_PER_PT
+  );
+  const interlineGlue = baselineGlueSp >= lineSkipLimitSp
+    ? baselineGlue
+    : openedLineSkip;
+  return roundTexPt(naturalDistance + interlineGlue);
 }
 
 function shouldInsertAlignedPairGap(
@@ -2592,8 +2609,12 @@ function layoutCasesBody(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const rowHeight = roundTexPt(TEX_ALIGNED_ROW_HEIGHT_PT * TEX_CASES_ARRAY_STRETCH);
-  const rowDepth = roundTexPt(TEX_ALIGNED_ROW_DEPTH_PT * TEX_CASES_ARRAY_STRETCH);
+  const rowHeight = roundTexPt(
+    fontProfile.layoutParameters.arrayStrutHeight * TEX_CASES_ARRAY_STRETCH
+  );
+  const rowDepth = roundTexPt(
+    fontProfile.layoutParameters.arrayStrutDepth * TEX_CASES_ARRAY_STRETCH
+  );
   const rows = nucleus.rows.map((row) =>
     layoutMatrixRow(
       row,
@@ -2908,8 +2929,14 @@ function layoutArrayRow(
   return mathAlignedRowLayout({
     cells,
     sourceSpan: row.sourceSpan,
-    height: roundTexPt(Math.max(TEX_ALIGNED_ROW_HEIGHT_PT, ...cells.map((cell) => cell.hlist.height))),
-    depth: roundTexPt(Math.max(TEX_ALIGNED_ROW_DEPTH_PT, ...cells.map((cell) => cell.hlist.depth))),
+    height: roundTexPt(Math.max(
+      fontProfile.layoutParameters.arrayStrutHeight,
+      ...cells.map((cell) => cell.hlist.height)
+    )),
+    depth: roundTexPt(Math.max(
+      fontProfile.layoutParameters.arrayStrutDepth,
+      ...cells.map((cell) => cell.hlist.depth)
+    )),
   });
 }
 
@@ -3399,8 +3426,8 @@ function layoutMatrixRow(
   fontProfile: TexMathFontProfile,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
-  minimumHeight = TEX_ALIGNED_ROW_HEIGHT_PT,
-  minimumDepth = TEX_ALIGNED_ROW_DEPTH_PT,
+  minimumHeight?: number,
+  minimumDepth?: number,
   cellStyle: TexMathStyle = "text"
 ): TexMathAlignedRowLayout | null {
   const cells = row.cells.map((cell) => {
@@ -3419,8 +3446,14 @@ function layoutMatrixRow(
   return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
-    height: roundTexPt(Math.max(minimumHeight, ...concreteCells.map((cell) => cell.hlist.height))),
-    depth: roundTexPt(Math.max(minimumDepth, ...concreteCells.map((cell) => cell.hlist.depth))),
+    height: roundTexPt(Math.max(
+      minimumHeight ?? fontProfile.layoutParameters.arrayStrutHeight,
+      ...concreteCells.map((cell) => cell.hlist.height)
+    )),
+    depth: roundTexPt(Math.max(
+      minimumDepth ?? fontProfile.layoutParameters.arrayStrutDepth,
+      ...concreteCells.map((cell) => cell.hlist.depth)
+    )),
   });
 }
 
@@ -5164,7 +5197,7 @@ function layoutMultiDotAccentNucleus(
   }
   const font = fontProfile.textFontProfile.resolveTextFont(
     fontProfile.textFontProfile.defaultFontState,
-    textStyleAtPt(style, baseAtPt),
+    fontProfile.resolveMathStyleAtPt(style, baseAtPt),
     fontProfile.metricProvider
   );
   let shapedDot: ReturnType<typeof fontProfile.metricProvider.shapeText>;
@@ -6467,7 +6500,7 @@ function resolveMathSymbolParts(
   if (alphabetGlyph) {
     const font = fontProfile.metricProvider.resolveFont({
       fontId: alphabetGlyph.fontId,
-      atPt: textStyleAtPt(style, baseAtPt),
+      atPt: fontProfile.resolveMathStyleAtPt(style, baseAtPt),
     });
     const metric = requiredCharMetric(font, alphabetGlyph.code);
     const width = roundTexPt(tfmToPt(font, metric.width));
@@ -6489,7 +6522,7 @@ function resolveMathSymbolParts(
   }
   return resolved.map((glyph) => {
     if (glyph.kind === "kern") {
-      const scale = textStyleAtPt(style, baseAtPt) / 10;
+      const scale = fontProfile.resolveMathStyleAtPt(style, baseAtPt) / 10;
       return resolvedMathKern({
         kind: "kern",
         width: roundTexPt(glyph.width * scale),
@@ -6514,13 +6547,19 @@ function resolveMathSymbolParts(
       code: glyph.code,
       text: nucleus.text,
       xOffset: glyph.xOffset !== undefined
-        ? roundTexPt(glyph.xOffset * (textStyleAtPt(style, baseAtPt) / 10))
+        ? roundTexPt(glyph.xOffset * (
+            fontProfile.resolveMathStyleAtPt(style, baseAtPt) / 10
+          ))
         : 0,
       yOffset: glyph.yOffset !== undefined
-        ? roundTexPt(glyph.yOffset * (textStyleAtPt(style, baseAtPt) / 10))
+        ? roundTexPt(glyph.yOffset * (
+            fontProfile.resolveMathStyleAtPt(style, baseAtPt) / 10
+          ))
         : 0,
       advance: glyph.advance !== undefined
-        ? roundTexPt(glyph.advance * (textStyleAtPt(style, baseAtPt) / 10))
+        ? roundTexPt(glyph.advance * (
+            fontProfile.resolveMathStyleAtPt(style, baseAtPt) / 10
+          ))
         : width,
       sourceSpan: nucleus.sourceSpan,
     });
@@ -6544,7 +6583,10 @@ function resolveBoldMathFont(
   // CM has no genuine bold extension or AMS symbol fonts. amsbsy leaves those
   // families alone; \pmb is the explicitly synthetic alternative.
   return fontId
-    ? fontProfile.metricProvider.resolveFont({ fontId, atPt: textStyleAtPt(style, baseAtPt) })
+    ? fontProfile.metricProvider.resolveFont({
+        fontId,
+        atPt: fontProfile.resolveMathStyleAtPt(style, baseAtPt),
+      })
     : fontProfile.resolveMathFont({ family, style, baseAtPt });
 }
 

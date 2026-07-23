@@ -82,6 +82,7 @@ export {
 } from "./layout.js";
 export {
   renderTexMathHListSvgBody,
+  TEX_MATH_SVG_UNITS_PER_PT,
   type TexMathSvgRenderOptions,
 } from "./render-svg.js";
 export {
@@ -97,6 +98,7 @@ export {
   type TexMathFontFamily,
   type TexMathFontManifestEntry,
   type TexMathFontProfile,
+  type TexMathLayoutParameters,
   type TexMathFontRequest,
   type TexMathParameters,
 } from "./font-profile.js";

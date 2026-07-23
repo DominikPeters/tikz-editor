@@ -80,9 +80,6 @@ const latexArticleDisplaySkipsPt: TexDisplayMathLayoutProfile = {
 
 const latexNormalLineSkipPt = texLength(1);
 const latexAmsmathAlignTopCorrectionPt = texLength(-3);
-const latexAmsmathOpenBaselineSkipPt = texLength(15);
-const latexAmsmathOpenLineSkipPt = texLength(4);
-const latexAmsmathOpenLineSkipLimitPt = texLength(3);
 
 type DisplayAlignmentGluePurpose =
   | "align-top-correction"
@@ -768,7 +765,11 @@ function resolveDisplayMathVerticalGlueInItems(
           texLength(0);
         items.push({
           ...item,
-          size: texOpenedInterlineGlueSize(previousDepth, nextRow.box.metrics.height),
+          size: texOpenedInterlineGlueSize(
+            previousDepth,
+            nextRow.box.metrics.height,
+            item.origin.openedInterline
+          ),
         });
         continue;
       }
@@ -825,7 +826,8 @@ function resolveDisplayMathVerticalGlueInItems(
         ...item,
         size: displayAlignmentIntertextLeadingSize(
           previousDisplayMaterialMetrics?.depth ?? texLength(0),
-          nextParagraph
+          nextParagraph,
+          item.origin.openedInterline
         ),
       });
       continue;
@@ -988,6 +990,7 @@ function displayAlignmentIntertextLeadingItem(
     ...(item.scopePath ? { scopePath: item.scopePath } : {}),
     origin: {
       kind: "display-alignment-intertext-leading",
+      openedInterline: item.alignment.openedInterline,
     },
     size: texLength(0),
     stretchOrder: "normal",
@@ -1107,7 +1110,8 @@ function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
 
 function displayAlignmentIntertextLeadingSize(
   previousDepth: TexLength,
-  paragraph: TexVListParagraphBoxMeasurement | undefined
+  paragraph: TexVListParagraphBoxMeasurement | undefined,
+  openedInterline: TexDisplayAlignmentItem["alignment"]["openedInterline"]
 ): TexLength {
   if (!paragraph) {
     return texLength(0);
@@ -1115,7 +1119,11 @@ function displayAlignmentIntertextLeadingSize(
   const vboxHeight = paragraph.lineIndices.length > 1
     ? paragraph.ruleLeadingAdvance
     : paragraph.ruleLeadingMetrics.height;
-  return texOpenedInterlineGlueSize(previousDepth, vboxHeight);
+  return texOpenedInterlineGlueSize(
+    previousDepth,
+    vboxHeight,
+    openedInterline
+  );
 }
 
 function displayAlignmentPreviousDepth(
@@ -1217,6 +1225,7 @@ function displayAlignmentGlueItem(
       kind: "display-math-interline",
       side: "above",
       purpose,
+      openedInterline: item.alignment.openedInterline,
     },
     size,
     stretchOrder: "normal",
@@ -1466,13 +1475,14 @@ function texInterlineGlueSize(
 
 function texOpenedInterlineGlueSize(
   previousDepth: TexLength,
-  nextHeight: TexLength
+  nextHeight: TexLength,
+  openedInterline: TexDisplayAlignmentItem["alignment"]["openedInterline"]
 ): TexLength {
   const baselineGlue = texLength(roundTexPt(
-    latexAmsmathOpenBaselineSkipPt - previousDepth - nextHeight
+    openedInterline.baselineSkip - previousDepth - nextHeight
   ));
-  return baselineGlue < latexAmsmathOpenLineSkipLimitPt
-    ? latexAmsmathOpenLineSkipPt
+  return baselineGlue < openedInterline.lineSkipLimit
+    ? openedInterline.lineSkip
     : baselineGlue;
 }
 

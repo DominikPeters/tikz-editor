@@ -58,9 +58,9 @@ export function lowerSimpleTexBlockItemsToVList(
 ): TexVListDocument {
   const items: TexVListItem[] = [];
   let equationNumber = 0;
-  for (const item of blockItems) {
+  for (const item of attachPostDisplayVSpace(blockItems)) {
     if (item.kind === "vertical-glue") {
-      items.push(glueItemFromSimpleTexVerticalGlue(item));
+      items.push(glueItemFromSimpleTexVerticalGlue(item, options.font));
       continue;
     }
     if (item.kind === "vertical-rule") {
@@ -381,7 +381,15 @@ function placeholderItemFromSimpleTexPlaceholder(
   };
 }
 
-function glueItemFromSimpleTexVerticalGlue(item: SimpleTexVerticalGlueBlockItem): TexGlueItem {
+function glueItemFromSimpleTexVerticalGlue(
+  item: SimpleTexVerticalGlueBlockItem,
+  font: ResolvedTexFont | undefined
+): TexGlueItem {
+  const relativeUnitPt = item.relativeSize && font
+    ? item.relativeSize.unit === "em"
+      ? Number(font.atPt)
+      : Number(font.atPt) * font.data.fontdimen.xheight
+    : null;
   return {
     kind: "glue",
     sourceSpan: {
@@ -393,12 +401,61 @@ function glueItemFromSimpleTexVerticalGlue(item: SimpleTexVerticalGlueBlockItem)
       command: item.command,
     },
     scopePath: scopePathForVerticalBlockItem(item),
-    size: item.size,
+    size: relativeUnitPt == null
+      ? item.size
+      : texLength(item.relativeSize!.value * relativeUnitPt),
     stretch: item.stretch,
     shrink: item.shrink,
     stretchOrder: item.stretchOrder,
     shrinkOrder: item.shrinkOrder,
   };
+}
+
+/**
+ * LaTeX's `\vspace` uses `\vadjust` in horizontal mode. After a display,
+ * horizontal mode resumes, so a following `\vspace` is shipped after the
+ * next paragraph line rather than before it. At this block boundary a
+ * one-line paragraph is represented by one paragraph item; placing the glue
+ * after it reproduces that page-list order and keeps the adjustment explicit
+ * for a future per-line attachment model.
+ */
+function attachPostDisplayVSpace(
+  blockItems: readonly SimpleTexBlockItem[]
+): readonly SimpleTexBlockItem[] {
+  const output: SimpleTexBlockItem[] = [];
+  for (let index = 0; index < blockItems.length; index += 1) {
+    const display = blockItems[index];
+    const glue = blockItems[index + 1];
+    const paragraph = blockItems[index + 2];
+    if (
+      display?.kind === "display-math" &&
+      glue?.kind === "vertical-glue" &&
+      glue.command === "vspace" &&
+      paragraph?.kind === "paragraph"
+    ) {
+      const leadingInterwordSpace =
+        paragraph.block.sourceStart > glue.sourceEnd;
+      output.push(
+        display,
+        leadingInterwordSpace
+          ? {
+              ...paragraph,
+              block: {
+                ...paragraph.block,
+                leadingInterwordSpace: true,
+              },
+            }
+          : paragraph,
+        glue
+      );
+      index += 2;
+      continue;
+    }
+    if (display) {
+      output.push(display);
+    }
+  }
+  return output;
 }
 
 function ruleItemFromSimpleTexVerticalRule(item: SimpleTexVerticalRuleBlockItem): TexRuleItem {
@@ -481,6 +538,9 @@ function paragraphInputFromSimpleTexBlock(
       : {}),
     ...(block.firstLineIndentEm !== undefined
       ? { firstLineIndentEm: block.firstLineIndentEm }
+      : {}),
+    ...(block.leadingInterwordSpace === true
+      ? { leadingInterwordSpace: true }
       : {}),
     ...(block.quotationItemFirstParagraph === true
       ? { quotationItemFirstParagraph: true }

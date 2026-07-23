@@ -5,8 +5,6 @@ import {
   texLength,
   type SimpleTexFontState,
   type TexMathFontProfile,
-  type TexMathStyle,
-  type TexLength,
   type TexTextFontProfile,
 } from "../../text/tex/index.js";
 import type { BeamerThemeFont } from "./types.js";
@@ -80,9 +78,17 @@ export function createBeamerTexMathFontProfile(
     id: `${base.id}-beamer-${role.family}-${role.series}-${role.shape}`,
     label: `${base.label} with Beamer font substitutions`,
     textFontProfile,
+    layoutParameters: {
+      arrayStrutHeight: texLength(role.lineHeightPt * 0.7),
+      arrayStrutDepth: texLength(role.lineHeightPt * 0.3),
+      alignedBaselineSkip: texLength(role.lineHeightPt),
+      alignedLineSkip: base.layoutParameters.alignedLineSkip,
+      alignedLineSkipLimit: base.layoutParameters.alignedLineSkipLimit,
+      alignedJot: base.layoutParameters.alignedJot,
+    },
     resolveMathFont(request) {
       const baseAtPt = texLength(request.baseAtPt ?? 10);
-      const atPt = mathStyleAtPt(request.style, baseAtPt);
+      const atPt = base.resolveMathStyleAtPt(request.style, baseAtPt);
       if (/^[A-Za-z]$/.test(request.symbolText ?? "")) {
         return textFontProfile.resolveTextFont(
           {
@@ -116,17 +122,4 @@ export function createBeamerTexMathFontProfile(
       return base.resolveMathFont(request);
     },
   };
-}
-
-function mathStyleAtPt(
-  style: TexMathStyle,
-  baseAtPt: TexLength
-): TexLength {
-  if (style === "script") {
-    return texLength(baseAtPt * 0.7);
-  }
-  if (style === "scriptscript") {
-    return texLength(baseAtPt * 0.5);
-  }
-  return baseAtPt;
 }

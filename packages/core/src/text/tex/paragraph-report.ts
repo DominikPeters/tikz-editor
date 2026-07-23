@@ -824,7 +824,7 @@ function texMathBoxSvgBody(
 }
 
 function wrapTexSvgColor(body: string, color: string): string {
-  return `<g fill="${color.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}" stroke="${color.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}">${body}</g>`;
+  return `<g fill="${color.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}" stroke="none">${body}</g>`;
 }
 
 function omitLineInitialDiscardedMathOperator(

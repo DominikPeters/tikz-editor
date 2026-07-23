@@ -476,7 +476,7 @@ function texLayoutBoxSvgBody(box: TexMathBox): string | undefined {
 
 function wrapTexBoxColor(body: string, color: string): string {
   const escaped = color.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-  return `<g fill="${escaped}" stroke="${escaped}">${body}</g>`;
+  return `<g fill="${escaped}" stroke="none">${body}</g>`;
 }
 
 export function texLayoutGlyphItemWidth(item: TexLayoutGlyphItem): TexLength {

@@ -53,7 +53,22 @@ const DEFAULT_FONTS = [
   "rsfs10",
   "rsfs7",
   "rsfs5",
+  // Additional NFSS optical sizes. Keep these deferred at the end so adding
+  // them does not reorder the established text and math font table.
+  "cmr12",
+  "cmr17",
+  "cmr9",
+  "cmr8",
+  "cmr6",
+  "cmmi12",
+  "cmmi9",
+  "cmmi8",
+  "cmmi6",
+  "cmsy9",
+  "cmsy8",
+  "cmsy6",
 ];
+const DEFERRED_FONT_NAMES = new Set(DEFAULT_FONTS.slice(-12));
 // Keep the generated Latin Modern tables compact while covering the characters
 // people routinely type in prose.  U+0080..U+009F are controls, so deliberately
 // leave that hole between ASCII and Latin-1 Supplement.
@@ -543,7 +558,8 @@ function parsePl(pl) {
 function generate(fontNames) {
   const fonts = {};
   const deferredFontNames = fontNames.filter((fontName) =>
-    ["eufm", "eufb", "cmmib", "cmbsy", "rsfs"].some((prefix) => fontName.startsWith(prefix))
+    DEFERRED_FONT_NAMES.has(fontName)
+    || ["eufm", "eufb", "cmmib", "cmbsy", "rsfs"].some((prefix) => fontName.startsWith(prefix))
   );
   const generateTfmFont = (fontName) => {
     const tfmPath = run("kpsewhich", [`${fontName}.tfm`]);

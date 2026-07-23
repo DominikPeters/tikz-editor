@@ -1029,6 +1029,54 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("attaches relative vspace after a post-display paragraph using the active font size", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Before \[x\]\vspace{.3em} After`
+    );
+    const font = computerModernTexMetricProvider.resolveFont({
+      fontId: "lmsans10-regular",
+      atPt: texLength(10.95),
+    });
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      font,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+
+    expect(vlist.items.map((item) =>
+      item.kind === "paragraph"
+        ? {
+            kind: item.kind,
+            text: item.paragraph.text,
+            leadingInterwordSpace: item.paragraph.leadingInterwordSpace,
+          }
+        : item.kind === "glue"
+          ? {
+              kind: item.kind,
+              size: item.size,
+              origin: item.origin,
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      {
+        kind: "paragraph",
+        text: "Before",
+        leadingInterwordSpace: undefined,
+      },
+      { kind: "display-math" },
+      {
+        kind: "paragraph",
+        text: "After",
+        leadingInterwordSpace: true,
+      },
+      {
+        kind: "glue",
+        size: expect.closeTo(3.285, 10),
+        origin: { kind: "explicit-command", command: "vspace" },
+      },
+    ]);
+  });
+
   it("lowers explicit TeX hrule commands into vlist rules", () => {
     const source = String.raw`Alpha \par \hrule width 24pt height 2pt depth 1pt Beta`;
     const parsed = parseSimpleTexParagraphIr(source);

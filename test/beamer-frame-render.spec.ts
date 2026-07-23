@@ -150,6 +150,25 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("uses Beamer's 11pt NFSS and AMS alignment spacing for the KKT conditions", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 3 });
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.paragraphId === "frame:3:paragraph:0"
+    )!;
+    const rows = body.vlistLayout.boxReport.items.filter(
+      (item) => item.hboxRole?.kind === "display-align-row"
+    );
+    const baselines = rows.map((row) => Number(row.y + row.height));
+
+    expect(baselines).toHaveLength(4);
+    expect(baselines[1] - baselines[0]).toBeCloseTo(29.510575, 6);
+    expect(baselines[2] - baselines[1]).toBeCloseTo(16.6, 6);
+    expect(baselines[3] - baselines[2]).toBeCloseTo(16.6, 6);
+    expect(result.svg.svg).toContain('data-tex-font="cmmi8"');
+    expect(result.svg.svg).not.toContain('data-tex-font="cmmi7"');
+  }, 20_000);
+
   it("expands preamble math macros before native display layout", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 2 });

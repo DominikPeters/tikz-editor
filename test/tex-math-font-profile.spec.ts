@@ -6,6 +6,7 @@ import {
   luaLatexAmsMathFontProfile,
   luaLatexDefaultMathFontId,
   luaLatexDefaultMathFontProfile,
+  texLength,
 } from "../packages/core/src/text/tex/index.js";
 
 describe("TeX math font profile", () => {
@@ -54,6 +55,52 @@ describe("TeX math font profile", () => {
     expect(extension.atPt).toBe(10);
   });
 
+  it("uses LaTeX's declared math sizes before its proportional fallback", () => {
+    expect(
+      luaLatexDefaultMathFontProfile.resolveMathStyleAtPt("script", texLength(10.95))
+    ).toBe(8);
+    expect(
+      luaLatexDefaultMathFontProfile.resolveMathStyleAtPt("scriptscript", texLength(10.95))
+    ).toBe(6);
+    expect(
+      luaLatexDefaultMathFontProfile.resolveMathStyleAtPt("script", texLength(12))
+    ).toBe(8);
+    expect(
+      luaLatexDefaultMathFontProfile.resolveMathStyleAtPt("scriptscript", texLength(12))
+    ).toBe(6);
+    expect(
+      luaLatexDefaultMathFontProfile.resolveMathStyleAtPt("script", texLength(13))
+    ).toBeCloseTo(9.1, 10);
+  });
+
+  it("selects NFSS optical designs after resolving the declared math size", () => {
+    const scriptLetter = luaLatexDefaultMathFontProfile.resolveMathFont({
+      family: "letters",
+      style: "script",
+      baseAtPt: 10.95,
+    });
+    const scriptscriptLetter = luaLatexDefaultMathFontProfile.resolveMathFont({
+      family: "letters",
+      style: "scriptscript",
+      baseAtPt: 10.95,
+    });
+    const scriptSymbol = luaLatexDefaultMathFontProfile.resolveMathFont({
+      family: "symbols",
+      style: "script",
+      baseAtPt: 10.95,
+    });
+    const scriptOperator = luaLatexDefaultMathFontProfile.resolveMathFont({
+      family: "operators",
+      style: "script",
+      baseAtPt: 10.95,
+    });
+
+    expect(scriptLetter).toMatchObject({ id: "cmmi8", atPt: 8 });
+    expect(scriptscriptLetter).toMatchObject({ id: "cmmi6", atPt: 6 });
+    expect(scriptSymbol).toMatchObject({ id: "cmsy8", atPt: 8 });
+    expect(scriptOperator).toMatchObject({ id: "cmr8", atPt: 8 });
+  });
+
   it("models amsmath cmex font-size selection for extension symbols", () => {
     expect(luaLatexAmsMathFontProfile.manifest).toEqual([
       { family: "operators", text: "cmr10", script: "cmr7", scriptscript: "cmr5" },
@@ -100,6 +147,20 @@ describe("TeX math font profile", () => {
     expect(scriptAmsA.atPt).toBe(7);
     expect(scriptscriptAmsB.id).toBe("msbm5");
     expect(scriptscriptAmsB.atPt).toBe(5);
+
+    const beamerSizedExtension = luaLatexAmsMathFontProfile.resolveMathFont({
+      family: "extension",
+      style: "script",
+      baseAtPt: 10.95,
+    });
+    const beamerSizedAmsA = luaLatexAmsMathFontProfile.resolveMathFont({
+      family: "amsSymbolsA",
+      style: "script",
+      baseAtPt: 10.95,
+    });
+
+    expect(beamerSizedExtension).toMatchObject({ id: "cmex8", atPt: 8 });
+    expect(beamerSizedAmsA).toMatchObject({ id: "msam10", atPt: 8 });
   });
 
   it("vendors math font metadata, parameters, and extensible recipes", () => {

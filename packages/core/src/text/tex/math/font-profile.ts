@@ -78,6 +78,21 @@ export interface TexMathStyleParameterValues {
   readonly scriptscript: TexLength;
 }
 
+export interface TexMathLayoutParameters {
+  /** LaTeX's current `\strutbox` height used by array-like environments. */
+  readonly arrayStrutHeight: TexLength;
+  /** LaTeX's current `\strutbox` depth used by array-like environments. */
+  readonly arrayStrutDepth: TexLength;
+  /** Current surrounding `\baselineskip` used by AMS display alignments. */
+  readonly alignedBaselineSkip: TexLength;
+  /** Current `\lineskip` before amsmath applies `\openup\jot`. */
+  readonly alignedLineSkip: TexLength;
+  /** Current `\lineskiplimit` before amsmath applies `\openup\jot`. */
+  readonly alignedLineSkipLimit: TexLength;
+  /** AMS alignment `\jot`, applied through `\openup`. */
+  readonly alignedJot: TexLength;
+}
+
 export interface TexMathFontProfile {
   readonly id: string;
   readonly label: string;
@@ -87,10 +102,21 @@ export interface TexMathFontProfile {
   readonly metricProvider: TexMetricProvider;
   readonly manifest: readonly TexMathFontManifestEntry[];
   readonly parameters: TexMathParameters;
+  readonly layoutParameters: TexMathLayoutParameters;
   readonly resolveMathFontId: (
     family: TexMathFontFamily,
     style: TexMathStyle
   ) => DefaultComputerModernMathFont;
+  /**
+   * Resolve TeX's text/script/scriptscript font size for the active text size.
+   *
+   * LaTeX declares exact math sizes for its standard text sizes and only uses
+   * the 0.7/0.5 fallback ratios for undeclared sizes.
+   */
+  readonly resolveMathStyleAtPt: (
+    style: TexMathStyle,
+    baseAtPt: TexLength
+  ) => TexLength;
   readonly resolveMathFont: (request: TexMathFontRequest) => ResolvedTexFont;
 }
 
@@ -181,6 +207,7 @@ function createComputerModernMathFontProfile(options: {
   readonly preamble: readonly string[];
   readonly manifest: readonly TexMathFontManifestEntry[];
   readonly resolveMathFontId: (family: TexMathFontFamily, style: TexMathStyle) => DefaultComputerModernMathFont;
+  readonly amsFontSelection?: boolean;
 }): TexMathFontProfile {
   return {
     id: options.id,
@@ -191,11 +218,30 @@ function createComputerModernMathFontProfile(options: {
     metricProvider: computerModernTexMetricProvider,
     manifest: options.manifest,
     parameters: createLuaLatexDefaultMathParameters(computerModernTexMetricProvider),
+    layoutParameters: {
+      arrayStrutHeight: texLength(8.399963),
+      arrayStrutDepth: texLength(3.600037),
+      alignedBaselineSkip: texLength(12),
+      alignedLineSkip: texLength(1),
+      alignedLineSkipLimit: texLength(0),
+      alignedJot: texLength(3),
+    },
     resolveMathFontId: options.resolveMathFontId,
+    resolveMathStyleAtPt: luaLatexMathStyleAtPt,
     resolveMathFont: ({ family, style, baseAtPt: requestedBaseAtPt }) => {
       const baseAtPt = texLength(requestedBaseAtPt ?? 10);
-      const fontId = options.resolveMathFontId(family, style);
-      const atPt = mathFontAtPt(family, fontId, style, baseAtPt);
+      const atPt = mathFontAtPt(
+        family,
+        options.resolveMathFontId(family, style),
+        style,
+        baseAtPt,
+        luaLatexMathStyleAtPt
+      );
+      const fontId = resolveComputerModernMathOpticalFont(
+        family,
+        atPt,
+        options.amsFontSelection ?? false
+      );
       return computerModernTexMetricProvider.resolveFont({ fontId, atPt });
     },
   };
@@ -215,6 +261,7 @@ export const luaLatexAmsMathFontProfile: TexMathFontProfile = createComputerMode
   preamble: [String.raw`\usepackage{amsmath,amssymb}`],
   manifest: amsMathManifest,
   resolveMathFontId: luaLatexAmsMathFontId,
+  amsFontSelection: true,
 });
 
 export const defaultTexMathFontProfile = luaLatexDefaultMathFontProfile;
@@ -223,10 +270,107 @@ function mathFontAtPt(
   family: TexMathFontFamily,
   fontId: DefaultComputerModernMathFont,
   style: TexMathStyle,
-  baseAtPt: TexLength
+  baseAtPt: TexLength,
+  resolveMathStyleAtPt: TexMathFontProfile["resolveMathStyleAtPt"]
 ): TexLength {
   if (family === "extension" && fontId === "cmex10") {
     return texLength(baseAtPt);
+  }
+  return resolveMathStyleAtPt(style, baseAtPt);
+}
+
+/**
+ * Apply the optical-size rules from LaTeX's Computer Modern `.fd` files.
+ *
+ * A math style first chooses an actual point size through `\DeclareMathSizes`;
+ * NFSS then chooses the design for that size. Those are distinct operations:
+ * at a 10.95 pt text size, for example, script math is 8 pt and uses `cmmi8`,
+ * not `cmmi7` enlarged to 8 pt.
+ */
+function resolveComputerModernMathOpticalFont(
+  family: TexMathFontFamily,
+  atPt: TexLength,
+  amsFontSelection: boolean
+): DefaultComputerModernMathFont {
+  if (family === "operators") {
+    if (atPt < 5.5) return "cmr5";
+    if (atPt < 6.5) return "cmr6";
+    if (atPt < 7.5) return "cmr7";
+    if (atPt < 8.5) return "cmr8";
+    if (atPt < 9.5) return "cmr9";
+    if (atPt < 11.5) return "cmr10";
+    if (atPt < 15.84) return "cmr12";
+    return "cmr17";
+  }
+  if (family === "letters") {
+    if (atPt < 5.5) return "cmmi5";
+    if (atPt < 6.5) return "cmmi6";
+    if (atPt < 7.5) return "cmmi7";
+    if (atPt < 8.5) return "cmmi8";
+    if (atPt < 9.5) return "cmmi9";
+    if (atPt < 11.5) return "cmmi10";
+    return "cmmi12";
+  }
+  if (family === "symbols") {
+    if (atPt < 5.5) return "cmsy5";
+    if (atPt < 6.5) return "cmsy6";
+    if (atPt < 7.5) return "cmsy7";
+    if (atPt < 8.5) return "cmsy8";
+    if (atPt < 9.5) return "cmsy9";
+    return "cmsy10";
+  }
+  if (family === "extension") {
+    if (!amsFontSelection) return "cmex10";
+    if (atPt < 8) return "cmex7";
+    if (atPt < 9) return "cmex8";
+    if (atPt < 9.5) return "cmex9";
+    return "cmex10";
+  }
+  if (family === "amsSymbolsA") {
+    if (atPt < 6) return "msam5";
+    if (atPt < 8) return "msam7";
+    return "msam10";
+  }
+  if (atPt < 6) return "msbm5";
+  if (atPt < 8) return "msbm7";
+  return "msbm10";
+}
+
+const latexDeclaredMathSizes = [
+  { text: 5, script: 5, scriptscript: 5 },
+  { text: 6, script: 5, scriptscript: 5 },
+  { text: 7, script: 5, scriptscript: 5 },
+  { text: 8, script: 6, scriptscript: 5 },
+  { text: 9, script: 6, scriptscript: 5 },
+  { text: 10, script: 7, scriptscript: 5 },
+  { text: 10.95, script: 8, scriptscript: 6 },
+  { text: 12, script: 8, scriptscript: 6 },
+  { text: 14.4, script: 10, scriptscript: 7 },
+  { text: 17.28, script: 12, scriptscript: 10 },
+  { text: 20.74, script: 14.4, scriptscript: 12 },
+  { text: 24.88, script: 20.74, scriptscript: 17.28 },
+] as const;
+
+/**
+ * The default declarations from LaTeX's `fontmath.ltx`.
+ *
+ * NFSS keys these declarations by the exact current font size. The small
+ * tolerance only absorbs decimal representation at our typed-point boundary.
+ */
+export function luaLatexMathStyleAtPt(
+  style: TexMathStyle,
+  baseAtPt: TexLength
+): TexLength {
+  if (style === "display" || style === "text") {
+    return texLength(baseAtPt);
+  }
+  const declaration = latexDeclaredMathSizes.find(
+    (entry) => Math.abs(entry.text - baseAtPt) < 0.005
+  );
+  if (declaration) {
+    return texLength(
+      style === "script" ? declaration.script : declaration.scriptscript
+    );
   }
   return texLength(baseAtPt * mathStyleScale(style));
 }

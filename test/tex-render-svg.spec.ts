@@ -104,7 +104,7 @@ describe("public TeX SVG renderer", () => {
     );
   });
 
-  it("uses an explicit base font size for glyph and math scaling", () => {
+  it("scales glyph paths once while converting math SVG units to TeX points", () => {
     const fontSizePt = texLength(14.4);
     const { body } = layoutAndRender(String.raw`Large \(x\)`, {
       paragraphId: "tex:large",
@@ -112,6 +112,10 @@ describe("public TeX SVG renderer", () => {
     });
 
     expect(body).toContain("scale(1.44)");
-    expect(body).toContain("scale(0.0144)");
+    expect(body).toContain(
+      'data-tex-inline-math="true" transform="translate('
+    );
+    expect(body).toContain("scale(0.01)");
+    expect(body).not.toContain("scale(0.0144)");
   });
 });

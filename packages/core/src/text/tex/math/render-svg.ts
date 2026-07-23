@@ -18,7 +18,8 @@ import type {
   TexMathRuleLayoutItem,
 } from "./layout.js";
 
-const SVG_UNIT_SCALE = 100;
+/** Internal SVG coordinate units emitted for one TeX point. */
+export const TEX_MATH_SVG_UNITS_PER_PT = 100;
 
 export interface TexMathSvgRenderOptions {
   readonly fontProfile?: TexMathFontProfile;
@@ -97,7 +98,7 @@ function renderMathHListItems(
         ` data-source-start="${item.sourceSpan.start}"`,
         ` data-source-end="${item.sourceSpan.end}"`,
         item.color
-          ? ` fill="${escapeXmlAttribute(item.color)}" stroke="${escapeXmlAttribute(item.color)}"`
+          ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
           : "",
         ">",
       ].join(""));
@@ -140,10 +141,10 @@ function renderMathRule(
     `<rect data-tex-rule="${escapeXmlAttribute(item.role)}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
-    ` x="${formatSvgNumber(x * SVG_UNIT_SCALE)}"`,
-    ` y="${formatSvgNumber(y * SVG_UNIT_SCALE)}"`,
-    ` width="${formatSvgNumber(item.width * SVG_UNIT_SCALE)}"`,
-    ` height="${formatSvgNumber(item.height * SVG_UNIT_SCALE)}"`,
+    ` x="${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)}"`,
+    ` y="${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}"`,
+    ` width="${formatSvgNumber(item.width * TEX_MATH_SVG_UNITS_PER_PT)}"`,
+    ` height="${formatSvgNumber(item.height * TEX_MATH_SVG_UNITS_PER_PT)}"`,
     item.color
       ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
       : "",
@@ -161,7 +162,7 @@ function renderMathGlyphPath(
   if (!d) {
     return "";
   }
-  const scale = (font.atPt / 10) * SVG_UNIT_SCALE;
+  const scale = (font.atPt / 10) * TEX_MATH_SVG_UNITS_PER_PT;
   const x = translateTexHBoxX(originX, item.x);
   const y = translateTexHBoxY(originY, item.y);
   return [
@@ -170,10 +171,10 @@ function renderMathGlyphPath(
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
     item.color
-      ? ` fill="${escapeXmlAttribute(item.color)}" stroke="${escapeXmlAttribute(item.color)}"`
+      ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
       : "",
     ` d="${escapeXmlAttribute(d)}"`,
-    ` transform="translate(${formatSvgNumber(x * SVG_UNIT_SCALE)} ${formatSvgNumber(y * SVG_UNIT_SCALE)}) scale(${formatSvgNumber(scale)})" />`,
+    ` transform="translate(${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)} ${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}) scale(${formatSvgNumber(scale)})" />`,
   ].join("");
 }
 

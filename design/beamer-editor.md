@@ -734,6 +734,27 @@ mapping. This is a document-level facility, not a list of presentation- or
 fixture-specific aliases. It makes the frame-3 `array` and its `\R`, `\act`,
 and `\Lagr` commands render through the native math engine.
 
+The same pass keeps math typography and vertical material profile-owned.
+Array strut height/depth and AMS alignment baseline skip come from the active
+Beamer font role rather than renderer constants. Math style sizes follow
+LaTeX's `fontmath.ltx` `\DeclareMathSizes` table—so Beamer's 10.95pt body uses
+8pt script and 6pt scriptscript fonts—falling back to NFSS's 0.7/0.5 ratios
+only for undeclared text sizes. Font selection then follows the Computer
+Modern `.fd` optical-size rules (`cmmi8` at 8pt, not `cmmi7` enlarged to 8pt).
+AMS alignment lowering carries the active `\baselineskip`, `\lineskip`,
+`\lineskiplimit`, and `\jot` across the math/VList contract; the VList applies
+the resulting `\openup\jot` registers instead of reverting to article-class
+constants.
+
+The math SVG contract emits 100 internal units per TeX point; the paragraph
+renderer converts those units with one fixed `0.01` transform, while
+individual glyph paths own the font-size scale. This prevents non-10pt Beamer
+math from being scaled twice even when its traced font metrics are correct. In
+vertical flow, relative `em`/`ex` glue resolves against the active font, and a
+post-display `\vspace` remains an explicit `\vadjust`-like attachment after
+the resumed paragraph line, including the source interword space that follows
+the command.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.

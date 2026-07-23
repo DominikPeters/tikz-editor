@@ -231,6 +231,12 @@ export interface TexMathDisplayAlignmentIntertext {
   readonly contentEnd: number;
 }
 
+export interface TexMathDisplayAlignmentOpenedInterline {
+  readonly baselineSkip: TexLength;
+  readonly lineSkip: TexLength;
+  readonly lineSkipLimit: TexLength;
+}
+
 export interface TexMathDisplayAlignment {
   readonly source: string;
   readonly content: string;
@@ -241,6 +247,8 @@ export interface TexMathDisplayAlignment {
   readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly width: TexLength;
   readonly rows: readonly TexMathDisplayAlignmentRowBox[];
+  /** Interline registers after amsmath's `\openup\jot`. */
+  readonly openedInterline: TexMathDisplayAlignmentOpenedInterline;
   readonly intertexts?: readonly TexMathDisplayAlignmentIntertext[];
 }
 

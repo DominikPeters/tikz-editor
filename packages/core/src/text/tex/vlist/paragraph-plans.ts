@@ -15,6 +15,7 @@ import {
 import {
   TexParagraphLayoutState,
 } from "../layout-state.js";
+import { texInterwordGlueForSpaceFactor } from "../space-glue.js";
 import type {
   TexParagraphBreakScopePolicy,
   TexParagraphRightskipStretchMode,
@@ -174,6 +175,14 @@ export function prepareTexLayoutParagraphsFromVList(
         segment,
         font: params.font,
       });
+      const leadingInterwordSpaceWidth =
+        segment.leadingInterwordSpace === true
+          ? texInterwordGlueForSpaceFactor(
+              params.font,
+              1000,
+              spaceGlueProfile
+            ).width
+          : undefined;
       paragraphPlans.push({
         blockIndex,
         vlistPath: entry.path,
@@ -196,7 +205,8 @@ export function prepareTexLayoutParagraphsFromVList(
           segmentIndex,
           ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
           firstLineIndentWidth: listAttachments.firstLineIndentWidth ??
-            quotationPrefix.firstLineIndentWidth,
+            quotationPrefix.firstLineIndentWidth ??
+            leadingInterwordSpaceWidth,
           ...(quotationPrefix.forcedBreakIndentWidth !== undefined
             ? { forcedBreakIndentWidth: quotationPrefix.forcedBreakIndentWidth }
             : {}),
