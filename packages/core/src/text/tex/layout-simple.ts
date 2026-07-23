@@ -13,6 +13,7 @@ import type {
   ShapedTexTextRun,
   TexMetricProvider,
 } from "./fonts/types.js";
+import type { TexListLayoutProfile } from "./layout-options.js";
 import {
   analyzeSimpleTexParagraph,
   type SimpleTexMathNode,
@@ -41,6 +42,11 @@ export interface TexParagraphLayoutOptions {
   readonly pretolerance?: number;
   readonly parindent?: number;
   readonly rightskipStretch?: number;
+  /** Absolute `\baselineskip` in TeX points. */
+  readonly baselineSkip?: number;
+  /** Depth of a preceding box outside this source-backed layout fragment. */
+  readonly initialPreviousDepth?: number;
+  readonly listProfile?: TexListLayoutProfile;
   readonly tikzTextWidthNode?: boolean;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly fallbackPolicy?: "whole-node" | "placeholder";
@@ -73,7 +79,14 @@ export function layoutSimpleTexParagraph(
   text: string,
   options: TexParagraphLayoutOptions
 ): TexParagraphLayoutResult {
-  const analysis = analyzeSimpleTexParagraph(text, options.width, options.colorResolver?.resolve.bind(options.colorResolver));
+  const analysis = analyzeSimpleTexParagraph(
+    text,
+    options.width,
+    options.colorResolver?.resolve.bind(options.colorResolver),
+    options.listProfile
+      ? { listLeftMarginEmByDepth: options.listProfile.leftMarginEmByDepth }
+      : undefined
+  );
   const fallbackReason = analysis.fallbackReason;
   const usePlaceholderFallback =
     fallbackReason !== null &&
@@ -101,6 +114,8 @@ export function layoutSimpleTexParagraph(
     width: inputWidth,
     parindent: inputParindent,
     rightskipStretch: inputRightskipStretch,
+    baselineSkip: inputBaselineSkip,
+    initialPreviousDepth: inputInitialPreviousDepth,
     ...otherOptions
   } = options;
   const layoutOptions = {
@@ -111,6 +126,12 @@ export function layoutSimpleTexParagraph(
       : {}),
     ...(inputRightskipStretch !== undefined
       ? { rightskipStretch: texLength(inputRightskipStretch) }
+      : {}),
+    ...(inputBaselineSkip !== undefined
+      ? { baselineSkip: texLength(inputBaselineSkip) }
+      : {}),
+    ...(inputInitialPreviousDepth !== undefined
+      ? { initialPreviousDepth: texLength(inputInitialPreviousDepth) }
       : {}),
     font,
     metricProvider,
@@ -207,6 +228,8 @@ export function layoutSimpleTexParagraph(
     metricProvider,
     entries: paragraphBreaks.entries,
     initialErrors: errors,
+    baselineSkip: layoutOptions.baselineSkip,
+    initialPreviousDepth: layoutOptions.initialPreviousDepth,
   });
   if (reportAssembly.status === "empty") {
     const reason = "Paragraph contains no text runs.";

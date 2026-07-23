@@ -112,6 +112,7 @@ export {
 } from "./vlist/paragraph-plans.js";
 export {
   type TexLayoutIrOptions,
+  type TexListLayoutProfile,
 } from "./layout-options.js";
 export type {
   PositionedTexVListItem,

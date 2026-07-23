@@ -79,7 +79,11 @@ export function prepareSimpleTexLayoutScope(
         width: params.options.width,
         tikzTextWidthNode: params.options.tikzTextWidthNode,
       });
-  const preparedVList = prepareSimpleTexVList(baseVList, params.font);
+  const preparedVList = prepareSimpleTexVList(
+    baseVList,
+    params.font,
+    params.options.listProfile
+  );
   const paragraphPreparation = prepareTexLayoutParagraphsFromVList({
     vlist: preparedVList.normalized,
     defaultAlignment: params.defaultAlignment,

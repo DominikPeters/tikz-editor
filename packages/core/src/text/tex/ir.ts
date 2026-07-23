@@ -729,6 +729,10 @@ const luaLatexNormalFontState: SimpleTexFontState = {
 };
 export const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1] as const;
 
+export interface SimpleTexParagraphIrOptions {
+  readonly listLeftMarginEmByDepth?: readonly number[];
+}
+
 export function getSimpleTexFallbackReason(text: string, width: number): string | null {
   return analyzeSimpleTexParagraph(text, width).fallbackReason;
 }
@@ -736,7 +740,8 @@ export function getSimpleTexFallbackReason(text: string, width: number): string 
 export function analyzeSimpleTexParagraph(
   text: string,
   width: number,
-  resolveColorAlias?: ColorAliasResolver
+  resolveColorAlias?: ColorAliasResolver,
+  options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphAnalysis {
   if (!Number.isFinite(width) || width <= 0) {
     return {
@@ -744,7 +749,7 @@ export function analyzeSimpleTexParagraph(
       fallbackReason: "Paragraph width must be positive.",
     };
   }
-  const ir = buildSimpleTexParagraphIr(text, resolveColorAlias);
+  const ir = buildSimpleTexParagraphIr(text, resolveColorAlias, options);
   if (ir.unsupportedCommand) {
     return {
       ir,
@@ -786,9 +791,17 @@ export function parseSimpleTexInlineNodes(
 
 function buildSimpleTexParagraphIr(
   text: string,
-  resolveColorAlias?: ColorAliasResolver
+  resolveColorAlias?: ColorAliasResolver,
+  options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphIr {
-  return buildSimpleTexParagraphIrForRange(text, 0, text.length, 0, resolveColorAlias);
+  return buildSimpleTexParagraphIrForRange(
+    text,
+    0,
+    text.length,
+    0,
+    resolveColorAlias,
+    options
+  );
 }
 
 function buildSimpleTexParagraphIrForRange(
@@ -796,7 +809,8 @@ function buildSimpleTexParagraphIrForRange(
   start: number,
   end: number,
   sourceOffset: number,
-  resolveColorAlias?: ColorAliasResolver
+  resolveColorAlias?: ColorAliasResolver,
+  options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphIr {
   const nodeScan = scanSimpleTexIrNodes(
     text.slice(start, end),
@@ -807,7 +821,8 @@ function buildSimpleTexParagraphIrForRange(
     text,
     nodeScan.nodes,
     sourceOffset,
-    sourceOffset + end
+    sourceOffset + end,
+    options
   );
   return {
     kind: "simple-tex-paragraph",
@@ -3525,7 +3540,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
   text: string,
   sourceNodes: readonly SimpleTexNode[],
   sourceOffset = 0,
-  sourceEnd = sourceOffset + text.length
+  sourceEnd = sourceOffset + text.length,
+  options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphBlockScanResult {
   const blocks: SimpleTexParagraphBlock[] = [];
   const items: SimpleTexBlockItem[] = [];
@@ -3748,8 +3764,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const beginList = (kind: SimpleTexListKind) => {
     const depth = currentQuoteDepth + listStack.length + 1;
     const labelDepth = listStack.filter((entry) => entry.kind === kind).length + 1;
-    const ownMargin = articleListLeftMarginEmByDepth[
-      Math.min(depth - 1, articleListLeftMarginEmByDepth.length - 1)
+    const margins =
+      options?.listLeftMarginEmByDepth ?? articleListLeftMarginEmByDepth;
+    const marginDepthIndex = options?.listLeftMarginEmByDepth
+      ? listStack.length
+      : depth - 1;
+    const ownMargin = margins[
+      Math.min(marginDepthIndex, margins.length - 1)
     ] ?? 1;
     const scopeRole = {
       kind: "list",

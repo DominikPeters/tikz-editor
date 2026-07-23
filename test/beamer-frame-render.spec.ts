@@ -57,6 +57,38 @@ describe("headless Beamer frame renderer", () => {
     expect(intro.report.lines[0]?.segments[0]?.sourceStartRaw).toBe(
       intro.sourceSpan.from
     );
+    const bodyParagraphs = result.layout.paragraphs.filter(
+      (paragraph) => paragraph.role === "body"
+    );
+    const bodyBaselines = bodyParagraphs.flatMap((paragraph) => {
+      const placements = new Map(
+        paragraph.vlistLayout.linePlacements.map(
+          (placement) => [placement.lineIndex, placement]
+        )
+      );
+      return paragraph.report.lines.map((line) =>
+        paragraph.bounds.y +
+        Number(placements.get(line.lineIndex)?.y ?? 0) +
+        Number(line.ascent)
+      );
+    });
+    expect(bodyBaselines).toEqual([
+      expect.closeTo(74.010236, 6),
+      expect.closeTo(87.610236, 6),
+      expect.closeTo(109.685236, 6),
+      expect.closeTo(126.285236, 6),
+      expect.closeTo(139.885236, 6),
+      expect.closeTo(156.485236, 6),
+      expect.closeTo(170.085236, 6),
+      expect.closeTo(186.685236, 6),
+      expect.closeTo(200.285236, 6),
+    ]);
+    const list = bodyParagraphs.find(
+      (paragraph) => paragraph.paragraphId === "frame:1:column:0:list:0"
+    )!;
+    expect(list.report.lines.map((line) => line.xStart)).toEqual(
+      list.report.lines.map(() => expect.closeTo(21.9, 6))
+    );
 
     expect(result.svg.viewBox.width).toBeCloseTo(455.24408, 4);
     expect(result.svg.svg).toContain(

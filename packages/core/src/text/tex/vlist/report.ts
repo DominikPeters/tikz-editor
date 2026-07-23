@@ -105,6 +105,7 @@ export interface TexVListCombinedParagraphReportAssemblyOptions extends TexVList
   readonly font: ResolvedTexFont;
   readonly metricProvider: TexMetricProvider;
   readonly combined: TexVListCombinedParagraphReportInput;
+  readonly baselineSkip?: TexLength;
 }
 
 export interface TexVListBrokenParagraphReportAssemblyOptions extends TexVListLayoutOptions {
@@ -115,6 +116,7 @@ export interface TexVListBrokenParagraphReportAssemblyOptions extends TexVListLa
   readonly metricProvider: TexMetricProvider;
   readonly entries: readonly TexBrokenLayoutParagraph[];
   readonly initialErrors?: readonly string[];
+  readonly baselineSkip?: TexLength;
 }
 
 export interface TexVListBrokenParagraphReportLaidOutResult extends TexVListParagraphReportAssemblyResult {
@@ -160,6 +162,8 @@ export function layoutTexVListFromBrokenParagraphs(
       font: options.font,
       metricProvider: options.metricProvider,
       combined,
+      baselineSkip: options.baselineSkip,
+      initialPreviousDepth: options.initialPreviousDepth,
     }),
     combined,
   };
@@ -187,18 +191,21 @@ export function layoutTexVListFromCombinedParagraphReport(
     metricProvider: options.metricProvider,
     errors: options.combined.errors,
   });
+  const lineHeight =
+    options.baselineSkip ?? texLatexNormalParagraphLineHeight(options.font);
   const horizontalLayout = createTexVListParagraphHorizontalLayoutsFromLineBoxes({
     report: builtReport.report,
     lineBoxes: builtReport.lineBoxes,
     paragraphLineAssignments,
-    lineHeight: texLatexNormalParagraphLineHeight(options.font),
+    lineHeight,
   });
   const layout = layoutTexVListFromHorizontalParagraphs(document, {
     width: options.width,
     height: options.height,
     verticalAlign: options.verticalAlign,
     paragraphAlignment: options.alignment,
-    lineHeight: texLatexNormalParagraphLineHeight(options.font),
+    lineHeight,
+    initialPreviousDepth: options.initialPreviousDepth,
     firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
     firstLineAscent: texLatexNormalFirstLineAscent(
       builtReport.report,
@@ -260,7 +267,10 @@ export function layoutTexVListFromMeasuredParagraphs(
   const resolvedDocument = resolveDisplayMathVerticalGlueInVList(
     document,
     paragraphMeasurements,
-    { lineHeight: options.lineHeight }
+    {
+      lineHeight: options.lineHeight,
+      initialPreviousDepth: options.initialPreviousDepth,
+    }
   );
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);
   const naturalTotalHeight = computeTexVListNaturalTotalHeight(

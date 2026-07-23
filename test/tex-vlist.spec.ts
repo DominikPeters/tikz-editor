@@ -2597,6 +2597,27 @@ describe("TeX vlist spacing", () => {
     ]);
   });
 
+  it("uses document-profile list parameters at each nested depth", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item Outer\begin{itemize}\item Inner\end{itemize}\item After\end{itemize}`
+    );
+    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const skips = planSimpleTexParagraphVerticalSkips(
+      vlist.items,
+      computerModernTexMetricProvider.resolveFont(),
+      {
+        leftMarginEmByDepth: [2, 2, 2],
+        topsepPtByDepth: [3, 2, 2],
+        partopsepPtByDepth: [0, 0, 0],
+        itemsepPtByDepth: [3, 0, 0],
+        parsepPtByDepth: [0, 0, 0],
+        initialItemBaselineAdjustmentPt: 0,
+      }
+    );
+
+    expect(skips.map((skip) => skip.listSize)).toEqual([3, 2, 2]);
+  });
+
   it("plans LaTeX trivlist vertical skips for center environments", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Alpha \par \begin{center} Beta \par Gamma \end{center} \par Delta`

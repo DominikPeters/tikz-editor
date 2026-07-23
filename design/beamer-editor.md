@@ -660,8 +660,21 @@ models that construction directly. It also evaluates the frame-title's
 trailing `0.25em` after restoring the normal body font, matching
 `beamerbaseframe.sty`. On the Hello fixture this reduces the maximum absolute
 body baseline delta from about 5.31pt to 0.000012pt. The KKT fixture's
-remaining vertical deltas are now localized to list-internal indentation and
-vlist glue rather than page chrome or the outer columns reference line.
+list pass then exposes document-profile list parameters in the shared
+simple-TeX/vlist API instead of adding Beamer-only placement code. The Beamer
+profile transcribes `\leftmargini` through `\leftmarginiii`, `\topsep`,
+`\partopsep`, `\itemsep`, and `\parsep` from
+`beamerbaselocalstructure.sty`; the vlist fragment contract additionally
+carries the active `\baselineskip` and the preceding external box depth.
+This reproduces TeX's interline glue when a source-backed list is laid out
+separately from its preceding paragraph. Normalized Unicode paired quotes
+also consult their OT1 slots for Latin Modern lig/kern rules, preserving
+source-facing Unicode while matching LuaLaTeX's period–closing-quote kern.
+On the KKT frame all nine source-backed body baselines now agree within
+0.000028pt and body glyph x positions within 0.019792pt. The full-page
+maximum x delta is 0.315379pt in the frame title. The remaining four
+unmatched oracle rules are Beamer's theme-owned itemize label templates;
+embedded-TikZ glyphs remain explicitly excluded until their trace is merged.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

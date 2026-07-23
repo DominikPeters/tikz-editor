@@ -13,6 +13,7 @@ import {
   type SimpleTexListContext,
 } from "../ir.js";
 import type { TexMathTextPart } from "../math/ir.js";
+import type { TexListLayoutProfile } from "../layout-options.js";
 import { layoutTexVListItems } from "./layout.js";
 import { createMeasuredParagraphVListMeasurer } from "./paragraph-measurement.js";
 import { texVListPathKey } from "./paths.js";
@@ -97,12 +98,14 @@ export interface SimpleTexParagraphVerticalSkip {
 
 export function planSimpleTexParagraphVerticalSkips(
   items: readonly TexVListItem[],
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  listProfile?: TexListLayoutProfile
 ): readonly SimpleTexParagraphVerticalSkip[] {
   const skips: SimpleTexParagraphVerticalSkip[] = [];
   planSimpleTexParagraphVerticalSkipsInto(
     items,
     font,
+    listProfile,
     createInitialSimpleTexParagraphVerticalSkipState(),
     skips,
     [],
@@ -130,6 +133,7 @@ type TexTrivlistScopeRole = Extract<TexVBoxRole, { readonly kind: "trivlist" }>;
 function planSimpleTexParagraphVerticalSkipsInto(
   items: readonly TexVListItem[],
   font: ResolvedTexFont,
+  listProfile: TexListLayoutProfile | undefined,
   state: SimpleTexParagraphVerticalSkipState,
   skips: SimpleTexParagraphVerticalSkip[],
   ancestors: readonly TexVBoxRole[],
@@ -146,6 +150,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         planSimpleTexParagraphVerticalSkipsInto(
           item.items,
           font,
+          listProfile,
           createInitialSimpleTexParagraphVerticalSkipState(),
           skips,
           item.role ? [...ancestors, item.role] : ancestors,
@@ -162,6 +167,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       planSimpleTexParagraphVerticalSkipsInto(
         item.items,
         font,
+        listProfile,
         state,
         skips,
         item.role ? [...ancestors, item.role] : ancestors,
@@ -195,7 +201,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
           hasPreviousEmittedParagraph,
           startsListInVerticalMode,
           exitsTrivlistScope,
-          font
+          font,
+          listProfile
         );
     const quoteVerticalSkipBefore = followsDisplay
       ? texLength(0)
@@ -429,11 +436,12 @@ function paragraphBoundaryGlueItems(
 
 export function materializeParagraphVerticalGlueInVList(
   vlist: TexVListDocument,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  listProfile?: TexListLayoutProfile
 ): TexVListDocument {
   return addParagraphVerticalGlueToVList(
     vlist,
-    planSimpleTexParagraphVerticalSkips(vlist.items, font)
+    planSimpleTexParagraphVerticalSkips(vlist.items, font, listProfile)
   );
 }
 
@@ -501,13 +509,24 @@ export function resolveDisplayMathVerticalGlueInVList(
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
   options: {
     readonly lineHeight: TexLength;
+    readonly initialPreviousDepth?: TexLength;
   }
 ): TexVListDocument {
+  const initialMaterialMetrics = options.initialPreviousDepth === undefined
+    ? undefined
+    : {
+        width: texLength(0),
+        height: texLength(0),
+        depth: options.initialPreviousDepth,
+      };
   const resolved = resolveDisplayMathVerticalGlueInItems(
     vlist.items,
     paragraphMeasurements,
     options,
-    []
+    [],
+    {
+      previousDisplayMaterialMetrics: initialMaterialMetrics,
+    }
   );
   return {
     ...vlist,
@@ -520,6 +539,7 @@ function resolveDisplayMathVerticalGlueInItems(
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
   options: {
     readonly lineHeight: TexLength;
+    readonly initialPreviousDepth?: TexLength;
   },
   pathPrefix: readonly number[],
   state: {
@@ -538,7 +558,9 @@ function resolveDisplayMathVerticalGlueInItems(
   let previousDisplaySkipVariant: TexDisplayMathSkipVariant =
     state.previousDisplaySkipVariant ?? "normal";
   let previousDisplayMaterialMetrics = state.previousDisplayMaterialMetrics;
-  let plainParagraphInterlinePending = previousParagraphMeasurement !== undefined;
+  let plainParagraphInterlinePending =
+    previousParagraphMeasurement !== undefined ||
+    previousDisplayMaterialMetrics !== undefined;
   let paragraphBoundaryInterlineAlreadyInserted = false;
   for (let index = 0; index < sourceItems.length; index += 1) {
     const item = sourceItems[index];
@@ -1520,46 +1542,73 @@ function texArticleListVerticalSkipBefore(
   hasPreviousEmittedParagraph: boolean,
   startsListInVerticalMode: boolean,
   exitsTrivlistScope: boolean,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
 ): TexLength {
   if (!previous && !current) {
     return texLength(0);
   }
   if (!hasPreviousEmittedParagraph && current) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
-    return texArticleInitialListSkip(startsListInVerticalMode, font);
+    return texArticleInitialListSkip(
+      current.depth,
+      startsListInVerticalMode,
+      font,
+      profile
+    );
   }
   if (!previous && current) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
     return texArticleOutsideListBoundarySkip(
       startsListInVerticalMode,
-      font
+      font,
+      profile,
+      current.depth
     );
   }
   if (previous && !current) {
-    return texArticleListExitBoundarySkip(state, previous.depth, 0, font);
+    return texArticleListExitBoundarySkip(
+      state,
+      previous.depth,
+      0,
+      font,
+      profile
+    );
   }
   if (!previous || !current) {
     return texLength(0);
   }
   if (current.depth > previous.depth) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
-    return texArticleNestedListBoundarySkip(previous.depth, current.depth, font);
+    return texArticleNestedListBoundarySkip(
+      previous.depth,
+      current.depth,
+      font,
+      profile
+    );
   }
   if (current.depth < previous.depth) {
-    return texArticleListExitBoundarySkip(state, previous.depth, current.depth, font);
+    return texArticleListExitBoundarySkip(
+      state,
+      previous.depth,
+      current.depth,
+      font,
+      profile
+    );
   }
   if (
     current.kind === previous.kind &&
     current.labelDepth === previous.labelDepth &&
     current.itemIndex === previous.itemIndex
   ) {
-    return current.showLabel ? texLength(0) : texArticleListParagraphSkip(current.depth, font);
+    return current.showLabel
+      ? texLength(0)
+      : texArticleListParagraphSkip(current.depth, font, profile);
   }
   if (exitsTrivlistScope && current.depth === previous.depth) {
-    return texArticleListItemSepSkip(current.depth, font);
+    return texArticleListItemSepSkip(current.depth, font, profile);
   }
-  return texArticleListItemBoundarySkip(current.depth, font);
+  return texArticleListItemBoundarySkip(current.depth, font, profile);
 }
 
 function texArticleTrivlistExitBoundarySkip(
@@ -1600,9 +1649,20 @@ function commonTrivlistScopePrefixLength(
 }
 
 function texArticleInitialListSkip(
+  depth: number,
   startsListInVerticalMode: boolean,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
 ): TexLength {
+  if (profile) {
+    return texLength(
+      texProfileDepthValue(profile.topsepPtByDepth, depth) +
+        (startsListInVerticalMode
+          ? texProfileDepthValue(profile.partopsepPtByDepth, depth)
+          : 0) +
+        profile.initialItemBaselineAdjustmentPt
+    );
+  }
   return texEmSkip(
     articleListSpacingEm.topsep +
       (startsListInVerticalMode ? articleListSpacingEm.partopsep : 0) +
@@ -1613,8 +1673,18 @@ function texArticleInitialListSkip(
 
 function texArticleOutsideListBoundarySkip(
   usesPartopsep: boolean,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile,
+  depth = 1
 ): TexLength {
+  if (profile) {
+    return texLength(
+      texProfileDepthValue(profile.topsepPtByDepth, depth) +
+        (usesPartopsep
+          ? texProfileDepthValue(profile.partopsepPtByDepth, depth)
+          : 0)
+    );
+  }
   return texEmSkip(
     articleListSpacingEm.topsep +
       (usesPartopsep
@@ -1628,7 +1698,8 @@ function texArticleListExitBoundarySkip(
   state: SimpleTexParagraphVerticalSkipState,
   previousDepth: number,
   currentDepth: number,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
 ): TexLength {
   if (currentDepth <= 0) {
     let size = texLength(0);
@@ -1637,7 +1708,12 @@ function texArticleListExitBoundarySkip(
       state.listPartopsepByDepth.delete(depth);
       size = texLength(Math.max(
         size,
-        texArticleOutsideListBoundarySkip(usesPartopsep, font)
+        texArticleOutsideListBoundarySkip(
+          usesPartopsep,
+          font,
+          profile,
+          depth
+        )
       ));
     }
     return size;
@@ -1648,8 +1724,18 @@ function texArticleListExitBoundarySkip(
     const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
     state.listPartopsepByDepth.delete(depth);
     const depthSize = depth <= 1
-      ? texArticleOutsideListBoundarySkip(usesPartopsep, font)
-      : texArticleNestedListBoundarySkip(depth, depth - 1, font);
+      ? texArticleOutsideListBoundarySkip(
+          usesPartopsep,
+          font,
+          profile,
+          depth
+        )
+      : texArticleNestedListBoundarySkip(
+          depth,
+          depth - 1,
+          font,
+          profile
+        );
     size = texLength(Math.max(size, depthSize));
   }
   return size;
@@ -1658,8 +1744,15 @@ function texArticleListExitBoundarySkip(
 function texArticleNestedListBoundarySkip(
   previousDepth: number,
   currentDepth: number,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
 ): TexLength {
+  if (profile) {
+    return texLength(texProfileDepthValue(
+      profile.topsepPtByDepth,
+      Math.max(previousDepth, currentDepth)
+    ));
+  }
   return texEmSkip(
     texDepthIndexedEm(
       articleListSpacingEm.nestedTopsepByDepth,
@@ -1669,7 +1762,17 @@ function texArticleNestedListBoundarySkip(
   );
 }
 
-function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): TexLength {
+function texArticleListItemBoundarySkip(
+  depth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(
+      texProfileDepthValue(profile.itemsepPtByDepth, depth) +
+        texProfileDepthValue(profile.parsepPtByDepth, depth)
+    );
+  }
   return texEmSkip(
     texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth) +
       texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth),
@@ -1677,12 +1780,30 @@ function texArticleListItemBoundarySkip(depth: number, font: ResolvedTexFont): T
   );
 }
 
-function texArticleListItemSepSkip(depth: number, font: ResolvedTexFont): TexLength {
+function texArticleListItemSepSkip(
+  depth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(texProfileDepthValue(profile.itemsepPtByDepth, depth));
+  }
   return texEmSkip(texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth), font);
 }
 
-function texArticleListParagraphSkip(depth: number, font: ResolvedTexFont): TexLength {
+function texArticleListParagraphSkip(
+  depth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(texProfileDepthValue(profile.parsepPtByDepth, depth));
+  }
   return texEmSkip(texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth), font);
+}
+
+function texProfileDepthValue(values: readonly number[], depth: number): number {
+  return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
 }
 
 function texDepthIndexedEm(values: readonly number[], depth: number): number {

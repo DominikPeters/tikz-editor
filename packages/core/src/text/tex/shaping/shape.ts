@@ -78,7 +78,7 @@ function applyLigKernProgram(encoded: readonly Ot1EncodedChar[], font: ResolvedT
       continue;
     }
 
-    const rule = rules.get(ruleKey(current.code, next.code));
+    const rule = ligKernRule(rules, current.code, next.code);
     if (rule?.kind === "lig") {
       current = {
         code: rule.out,
@@ -156,6 +156,29 @@ function buildLigKernMap(rules: readonly GeneratedTexLigKern[]): Map<number, Lig
 
 function ruleKey(left: number, right: number): number {
   return left * 0x10000 + right;
+}
+
+function ligKernRule(
+  rules: ReadonlyMap<number, LigKernRule>,
+  left: number,
+  right: number
+): LigKernRule | undefined {
+  return rules.get(ruleKey(
+    ot1LigKernAlias(left),
+    ot1LigKernAlias(right)
+  ));
+}
+
+function ot1LigKernAlias(code: number): number {
+  // The parser exposes TeX's paired quotes as Unicode glyphs, while the
+  // TFM lig/kern program addresses their OT1 slots.
+  if (code === 0x201c) {
+    return 92;
+  }
+  if (code === 0x201d) {
+    return 34;
+  }
+  return code;
 }
 
 function buildCaretStops(

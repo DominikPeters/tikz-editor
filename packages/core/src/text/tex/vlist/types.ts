@@ -463,6 +463,8 @@ export interface TexVListLayoutOptions {
   readonly height?: TexLength;
   readonly verticalAlign?: "top" | "center" | "bottom";
   readonly paragraphAlignment?: TexParagraphAlignment;
+  /** Previous TeX box depth when this VList is a source fragment. */
+  readonly initialPreviousDepth?: TexLength;
 }
 
 export interface TexVListParagraphLineAssignment {

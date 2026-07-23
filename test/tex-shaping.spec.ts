@@ -25,6 +25,7 @@ import {
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
   parseTexMath,
+  texLength,
   type TexMathBoxProvider,
 } from "../packages/core/src/text/tex/index.js";
 import { texVListX } from "../packages/core/src/text/tex/coordinates.js";
@@ -1278,6 +1279,21 @@ describe("Computer Modern OT1 text shaping", () => {
       computerModernTexMetricProvider.shapeText("A", font).width + (kern?.width ?? 0),
       6
     );
+  });
+
+  it("applies OT1 kern programs to normalized Unicode quote glyphs", () => {
+    const font = computerModernTexMetricProvider.resolveFont({
+      fontId: "lmsans10-regular",
+      atPt: texLength(10.95),
+    });
+    const shaped = computerModernTexMetricProvider.shapeText(".\u201d", font);
+    const kern = shaped.items.find((item) => item.kind === "kern");
+
+    expect(kern?.width).toBeCloseTo(-1.52205, 6);
+    expect(shaped.items.filter((item) => item.kind === "glyph").map((item) => item.code)).toEqual([
+      46,
+      0x201d,
+    ]);
   });
 
   it("uses the injected metric provider throughout paragraph layout", () => {

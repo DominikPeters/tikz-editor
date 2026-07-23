@@ -18,6 +18,7 @@ import {
   layoutSimpleTexParagraph,
   renderTexParagraphSvgBody,
   texLength,
+  type TexListLayoutProfile,
   type TexMetricProvider,
 } from "../text/tex/index.js";
 import { parseBeamerFrameBody } from "./content.js";
@@ -100,6 +101,17 @@ type ColumnVerticalBox = {
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 const TEX_LINE_SKIP_PT = 1;
+// beamerbaselocalstructure.sty: \leftmargini..iii=2em,
+// \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
+// \itemsep=3pt. The deeper itemsep values alias their zero parsep.
+const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
+  leftMarginEmByDepth: [2, 2, 2],
+  topsepPtByDepth: [3, 2, 2],
+  partopsepPtByDepth: [0, 0, 0],
+  itemsepPtByDepth: [3, 0, 0],
+  parsepPtByDepth: [0, 0, 0],
+  initialItemBaselineAdjustmentPt: 0,
+};
 
 /**
  * Render one Beamer frame into a fixed-page SVG and a source-addressable
@@ -539,6 +551,7 @@ async function prepareColumnContent(params: {
   const width = resolveColumnWidth(column.width.value, textWidth);
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = theme.fonts["normal-text"];
+  let previousDepth: number | undefined;
 
   for (const node of column.children) {
     const prepared = await prepareColumnFlowNode({
@@ -547,9 +560,16 @@ async function prepareColumnContent(params: {
       width,
       bodyFont,
       diagnostics,
+      initialPreviousDepth:
+        node.kind === "list" ? previousDepth : undefined,
     });
     if (prepared) {
       flow.push(prepared);
+      if (prepared.kind === "paragraph") {
+        previousDepth = paragraphLastLineDepth(prepared.paragraph);
+      } else if (prepared.kind === "tikzpicture") {
+        previousDepth = 0;
+      }
     }
   }
 
@@ -581,6 +601,7 @@ async function prepareColumnFlowNode(params: {
   width: number;
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
+  initialPreviousDepth?: number;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -588,6 +609,7 @@ async function prepareColumnFlowNode(params: {
     width,
     bodyFont,
     diagnostics,
+    initialPreviousDepth,
   } = params;
   if (node.kind === "vertical-space") {
     return {
@@ -605,6 +627,7 @@ async function prepareColumnFlowNode(params: {
       bounds: { x: 0, y: 0, width, height: 0 },
       font: bodyFont,
       alignment: "left",
+      initialPreviousDepth,
     });
     if (!paragraph) {
       return null;
@@ -748,6 +771,10 @@ function paragraphLineExtent(paragraph: LaidParagraph): number {
   return bottom || paragraph.height;
 }
 
+function paragraphLastLineDepth(paragraph: LaidParagraph): number {
+  return Number(paragraph.layout.report.lines.at(-1)?.descent ?? 0);
+}
+
 function fontXHeightPt(font: BeamerThemeFont): number {
   const fontSize = texLength(font.sizePt);
   const profile = createBeamerTexTextFontProfile(font);
@@ -785,6 +812,7 @@ function layoutParagraph(params: {
   font: BeamerThemeFont;
   alignment: "left" | "center" | "right";
   interwordSpacePt?: number;
+  initialPreviousDepth?: number;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -823,6 +851,9 @@ function layoutParagraph(params: {
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,
     }),
+    baselineSkip: params.font.lineHeightPt,
+    initialPreviousDepth: params.initialPreviousDepth,
+    listProfile: BEAMER_LIST_LAYOUT_PROFILE,
     sourceMap: params.mapped.sourceMap,
   });
   if (!result.supported || !result.report || !result.vlistLayout) {
