@@ -125,6 +125,10 @@ export type BeamerTemplatePrimitive =
       colorRole: string;
       alignment: "left" | "center" | "right";
       verticalAlignment: "top" | "center" | "bottom";
+      /** Optional absolute page baseline for single-line template text. */
+      baselineY?: number;
+      /** Fixed interword glue for template-generated spacing such as `\,`. */
+      interwordSpacePt?: number;
     };
 
 export type BeamerFrameChromePlan = {

@@ -280,6 +280,19 @@ const DEFAULT_OTF_GLYPHS = [
     ],
   },
   {
+    fontName: "lmsans12-regular",
+    fileName: "lmsans12-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
     fontName: "lmsans10-bold",
     fileName: "lmsans10-bold.otf",
     codeRanges: LATIN_TEXT_CODE_RANGES,

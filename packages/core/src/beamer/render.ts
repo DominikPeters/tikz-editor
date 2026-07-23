@@ -17,6 +17,7 @@ import {
   layoutSimpleTexParagraph,
   renderTexParagraphSvgBody,
   texLength,
+  type TexMetricProvider,
 } from "../text/tex/index.js";
 import { parseBeamerFrameBody } from "./content.js";
 import type {
@@ -80,6 +81,9 @@ type PreparedColumnContent = {
   flow: PreparedColumnFlowItem[];
   naturalHeight: number;
 };
+
+const TEX_POINTS_PER_CM = 72.27 / 2.54;
+const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 
 /**
  * Render one Beamer frame into a fixed-page SVG and a source-addressable
@@ -181,8 +185,11 @@ export async function renderBeamerFrame(
       0,
       ...prepared.map((column) => column.naturalHeight)
     );
-    const top = availableContentBounds.y +
-      Math.max(0, (availableContentBounds.height - totalHeight) / 2);
+    const top = positionFrameContentTop(
+      availableContentBounds,
+      totalHeight,
+      frame.options?.alignment ?? "center"
+    );
     const columnGap = prepared.length > 1
       ? Math.max(
         0,
@@ -419,17 +426,14 @@ function renderChrome(params: {
       bounds: primitive.bounds,
       font,
       alignment: primitive.alignment,
+      interwordSpacePt: primitive.interwordSpacePt,
     });
     if (!laid) {
       continue;
     }
-    const freeHeight = Math.max(0, primitive.bounds.height - laid.height);
-    const y = primitive.bounds.y +
-      (primitive.verticalAlignment === "bottom"
-        ? freeHeight
-        : primitive.verticalAlignment === "center"
-          ? freeHeight / 2
-          : 0);
+    const y = primitive.baselineY == null
+      ? verticallyAlignedParagraphY(primitive, laid.height)
+      : primitive.baselineY - firstLineBaselineOffset(laid);
     laid.layout.bounds = {
       ...laid.layout.bounds,
       x: primitive.bounds.x,
@@ -458,6 +462,30 @@ function renderChrome(params: {
       ),
     });
   }
+}
+
+function verticallyAlignedParagraphY(
+  primitive: Extract<BeamerTemplatePrimitive, { kind: "text" }>,
+  paragraphHeight: number
+): number {
+  const freeHeight = Math.max(0, primitive.bounds.height - paragraphHeight);
+  return primitive.bounds.y +
+    (primitive.verticalAlignment === "bottom"
+      ? freeHeight
+      : primitive.verticalAlignment === "center"
+        ? freeHeight / 2
+        : 0);
+}
+
+function firstLineBaselineOffset(paragraph: LaidParagraph): number {
+  const firstLine = paragraph.layout.report.lines[0];
+  if (!firstLine) {
+    return 0;
+  }
+  const placement = paragraph.layout.vlistLayout.linePlacements.find(
+    (candidate) => candidate.lineIndex === firstLine.lineIndex
+  );
+  return Number(placement?.y ?? 0) + Number(firstLine.ascent);
 }
 
 async function prepareColumnContent(params: {
@@ -587,13 +615,23 @@ function layoutParagraph(params: {
   bounds: BeamerRect;
   font: BeamerThemeFont;
   alignment: "left" | "center" | "right";
+  interwordSpacePt?: number;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
-  const resolvedFont = profile.resolveTextFont(
-    profile.defaultFontState,
+  const metricProvider = params.interwordSpacePt == null
+    ? computerModernTexMetricProvider
+    : fixedInterwordMetricProvider(
+      computerModernTexMetricProvider,
+      params.interwordSpacePt
+    );
+  const textFontProfile = metricProvider === profile.metricProvider
+    ? profile
+    : { ...profile, metricProvider };
+  const resolvedFont = textFontProfile.resolveTextFont(
+    textFontProfile.defaultFontState,
     fontSize,
-    computerModernTexMetricProvider
+    metricProvider
   );
   const alignment =
     params.alignment === "center"
@@ -606,9 +644,12 @@ function layoutParagraph(params: {
     width: texLength(params.bounds.width),
     alignment,
     font: resolvedFont,
-    metricProvider: computerModernTexMetricProvider,
-    textFontProfile: profile,
+    metricProvider,
+    textFontProfile,
     tikzTextWidthNode: true,
+    ...(params.interwordSpacePt == null
+      ? {}
+      : { spaceGlueProfile: "font" as const }),
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,
@@ -636,11 +677,38 @@ function layoutParagraph(params: {
     svgBody: renderTexParagraphSvgBody(result.report, {
       lineHeightPt: texLength(params.font.lineHeightPt),
       vlistLayout: result.vlistLayout,
-      metricProvider: computerModernTexMetricProvider,
-      textFontProfile: profile,
+      metricProvider,
+      textFontProfile,
       baseFontSizePt: fontSize,
       alignment,
     }),
+  };
+}
+
+function fixedInterwordMetricProvider(
+  base: TexMetricProvider,
+  spacePt: number
+): TexMetricProvider {
+  return {
+    resolveFont(options) {
+      const font = base.resolveFont(options);
+      return {
+        ...font,
+        data: {
+          ...font.data,
+          fontdimen: {
+            ...font.data.fontdimen,
+            space: spacePt / Number(font.atPt),
+            stretch: 0,
+            shrink: 0,
+            extraspace: 0,
+          },
+        },
+      };
+    },
+    shapeText(text, font, options) {
+      return base.shapeText(text, font, options);
+    },
   };
 }
 
@@ -673,6 +741,25 @@ function resolveColumnWidth(expression: string, textWidth: number): number {
 function resolveEmDimension(value: string): number {
   const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))em$/.exec(value);
   return match ? Number(match[1]) : 0;
+}
+
+function positionFrameContentTop(
+  available: BeamerRect,
+  contentHeight: number,
+  alignment: "top" | "center" | "bottom"
+): number {
+  const freeHeight = Math.max(0, available.height - contentHeight);
+  if (alignment === "top") {
+    // beamerbaseframe.sty gives top-aligned frames a natural .2cm top skip;
+    // their stretch is dominated by the bottom `1fill`.
+    return available.y + Math.min(TOP_ALIGNED_FRAME_SKIP_PT, freeHeight);
+  }
+  if (alignment === "bottom") {
+    return available.y + freeHeight;
+  }
+  // Beamer's default `c` frame uses 1fill above and 1.5fill below, so the
+  // remaining vertical space is divided 2:3 rather than geometrically halved.
+  return available.y + freeHeight * (1 / 2.5);
 }
 
 function applyThemeFamilyToTikz(

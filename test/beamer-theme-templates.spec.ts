@@ -31,8 +31,19 @@ describe("Beamer structural theme templates", () => {
 \title{Deck}
 \begin{document}\begin{frame}{Frame}Body\end{frame}\end{document}`);
 
-    expect(chrome.topInset).toBe(30.5);
+    expect(chrome.topInset).toBeCloseTo(31.284662, 6);
     expect(chrome.bottomInset).toBeCloseTo(12.658, 4);
+    expect(
+      chrome.primitives.find(
+        (primitive) => primitive.id === "frame:0:frame-title:background"
+      )?.bounds.height
+    ).toBeCloseTo(27.684662, 6);
+    expect(
+      chrome.primitives.find(
+        (primitive) => primitive.id ===
+          "frame:0:footline:title:background"
+      )?.bounds.height
+    ).toBeCloseTo(8.658005, 6);
     expect(chrome.primitives.map((primitive) => primitive.kind)).toEqual([
       "fill",
       "text",

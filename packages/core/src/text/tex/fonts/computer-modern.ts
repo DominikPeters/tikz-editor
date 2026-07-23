@@ -46,6 +46,7 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "lmmonolt10-bold",
   "lmmonolt10-boldoblique",
   "lmsans10-regular",
+  "lmsans12-regular",
   "lmsans10-bold",
   "lmsans10-oblique",
   "lmsans10-boldoblique",

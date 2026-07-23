@@ -180,7 +180,10 @@ export function luaLatexDefaultFontIdForState(
     if (state.shape === "slanted") {
       return atPt <= 8 ? "lmsans8-oblique" : "lmsans10-oblique";
     }
-    return atPt <= 8 ? "lmsans8-regular" : "lmsans10-regular";
+    if (atPt <= 8) {
+      return "lmsans8-regular";
+    }
+    return atPt >= 12 ? "lmsans12-regular" : "lmsans10-regular";
   }
   if (state.series === "bold" && state.shape === "italic") {
     return "lmroman10-bolditalic";

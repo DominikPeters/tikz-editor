@@ -7,7 +7,20 @@ import type {
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
-const INFOLINES_FOOTLINE_HEIGHT_PT = 12.658004760742188;
+// beamerouterthemedefault.sty paints the frametitle color box, while
+// beamerbaseframe.sty adds a separate 0.25em skip to the frame-title box.
+// Keep those dimensions separate: only the former is colored.
+const DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT = 27.684661865234375;
+const DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM = 0.25;
+const DEFAULT_FRAME_TITLE_TEXT_TOP_PT = 10.148712158203125;
+// beamerouterthemeinfolines.sty: ht=2.25ex,dp=1ex. The 4pt reserve added by
+// beamerbaseframecomponents.sty belongs to \footheight, not the painted boxes.
+const INFOLINES_FOOTLINE_PAINT_HEIGHT_PT = 8.658004760742188;
+const BEAMER_FOOTLINE_RESERVE_PT = 4;
+const LATIN_MODERN_SANS_X_HEIGHT_EM = 0.444;
+// The Infolines template uses leftskip=2ex,rightskip=2ex at its 6pt footline
+// font. This is the LuaLaTeX/Latin Modern Sans 8 ex measured in TeX points.
+const INFOLINES_FOOTLINE_EX_PT = 2.6674957275390625;
 
 type ChromeTemplatePlan = {
   inset: number;
@@ -84,12 +97,15 @@ function planDefaultFrameTitle(
     return { inset: 0, primitives: [] };
   }
   // beamerouterthemedefault.sty: beamercolorbox sep=0.3cm and width
-  // textwidth + both Beamer margins. The vertical extent is locked to the
-  // LuaLaTeX oracle until TeX strut/glue execution is shared here.
-  const height = 30.5;
+  // textwidth + both Beamer margins. The painted vertical extent is locked to
+  // the LuaLaTeX oracle until TeX strut/glue execution is shared here.
+  const paintHeight = DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT;
+  const inset = paintHeight +
+    DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM *
+      context.theme.fonts["frame-title"].sizePt;
   const background = context.theme.colors.frametitle?.bg;
   return {
-    inset: height,
+    inset,
     primitives: [
       ...(background
         ? [{
@@ -100,7 +116,7 @@ function planDefaultFrameTitle(
               x: 0,
               y: 0,
               width: context.page.page.width,
-              height,
+              height: paintHeight,
             },
             colorRole: "frametitle",
           }]
@@ -111,7 +127,7 @@ function planDefaultFrameTitle(
         sourceSpan: context.frame.title.contentSpan,
         bounds: {
           x: DEFAULT_FRAME_TITLE_SEP_PT,
-          y: 9.5,
+          y: DEFAULT_FRAME_TITLE_TEXT_TOP_PT,
           width: context.page.page.width - 2 * DEFAULT_FRAME_TITLE_SEP_PT,
           height: context.theme.fonts["frame-title"].lineHeightPt,
         },
@@ -211,13 +227,18 @@ function planInfolinesFootline(
 ): ChromeTemplatePlan {
   // beamerouterthemeinfolines.sty: three .333333 paperwidth color boxes,
   // ht=2.25ex, dp=1ex.
-  const height = INFOLINES_FOOTLINE_HEIGHT_PT;
-  const y = context.page.page.height - height;
+  const paintHeight = INFOLINES_FOOTLINE_PAINT_HEIGHT_PT;
+  const inset = paintHeight + BEAMER_FOOTLINE_RESERVE_PT;
+  const y = context.page.page.height - paintHeight;
+  const baselineY = y +
+    2.25 *
+      LATIN_MODERN_SANS_X_HEIGHT_EM *
+      context.theme.fonts.footline.sizePt;
   const third = context.page.page.width / 3;
   const primitives: BeamerTemplatePrimitive[] = [
-    infolinesFill(context, 0, y, third, height, "palette tertiary", "author"),
-    infolinesFill(context, third, y, third, height, "palette secondary", "title"),
-    infolinesFill(context, 2 * third, y, third, height, "palette primary", "date"),
+    infolinesFill(context, 0, y, third, paintHeight, "palette tertiary", "author"),
+    infolinesFill(context, third, y, third, paintHeight, "palette secondary", "title"),
+    infolinesFill(context, 2 * third, y, third, paintHeight, "palette primary", "date"),
   ];
   const title = context.document.preamble.metadata.title;
   if (title) {
@@ -229,7 +250,7 @@ function planInfolinesFootline(
         x: third,
         y,
         width: third,
-        height,
+        height: paintHeight,
       },
       source: {
         kind: "mapped",
@@ -239,6 +260,7 @@ function planInfolinesFootline(
       colorRole: "title in head/foot",
       alignment: "center",
       verticalAlignment: "center",
+      baselineY,
     });
   }
   primitives.push({
@@ -246,10 +268,10 @@ function planInfolinesFootline(
     id: `${context.frame.id}:footline:number`,
     sourceSpan: context.frame.span,
     bounds: {
-      x: 2 * third,
+      x: 2 * third + 2 * INFOLINES_FOOTLINE_EX_PT,
       y,
-      width: third - 2 * context.theme.fonts.footline.sizePt,
-      height,
+      width: third - 4 * INFOLINES_FOOTLINE_EX_PT,
+      height: paintHeight,
     },
     source: {
       kind: "derived",
@@ -260,8 +282,10 @@ function planInfolinesFootline(
     colorRole: "date in head/foot",
     alignment: "right",
     verticalAlignment: "center",
+    baselineY,
+    interwordSpacePt: context.theme.fonts.footline.sizePt / 6,
   });
-  return { inset: height, primitives };
+  return { inset, primitives };
 }
 
 function planInfolinesHeadline(): ChromeTemplatePlan {

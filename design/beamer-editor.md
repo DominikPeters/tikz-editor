@@ -393,7 +393,15 @@ emission are theme-independent.
 
 Each structural template is a small, source-addressed layout unit validated
 against real Beamer output with the structural and visual comparison
-harnesses.
+harnesses. A template must distinguish its **painted bounds** from the edge
+space reserved for frame layout. For example, Infolines paints its
+`ht=2.25ex,dp=1ex` footline boxes, while
+`beamerbaseframecomponents.sty` adds a separate 4pt to `\footheight`;
+the extra reserve must not enlarge the colored rectangles. Similarly, the
+default frame-title color box and `beamerbaseframe.sty`'s trailing `0.25em`
+skip are separate dimensions. Template text may provide an explicit baseline
+when Beamer positions a color-box baseline independently of the rendered
+glyph extents.
 
 ## Overlays (Core MVP)
 
@@ -633,6 +641,14 @@ and unmatched records. Raster differences remain the final check for PDF
 literal paths, clipping, images, and antialiasing. Native embedded-TikZ glyph
 records are explicitly marked outside the current structural-text coverage
 rather than counted as renderer omissions.
+
+The first refinement driven by that report separates Madrid/Infolines paint
+from reserved frame insets, uses the `lmsans12` optical design for the
+14.4pt frame title, places Infolines text on its TeX baseline, and models the
+thin spaces in the total-frame-number template. Default centered frames use
+the 1fill:1.5fill top/bottom ratio from `beamerbaseframe.sty`; remaining body
+offsets are therefore attributable to the columns/vlist natural-height model
+rather than theme chrome.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
