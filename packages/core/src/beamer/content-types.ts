@@ -48,12 +48,20 @@ export type BeamerColumnFlowNode =
   | BeamerTikzBodyNode
   | BeamerUnsupportedBodyNode;
 
+/**
+ * Beamer's `T` mode is distinct from `t`: both use a top-aligned minipage,
+ * but `T` prepends `\vskip-1ex\nointerlineskip` so the visible tops align.
+ */
+export type BeamerColumnAlignment = "T" | "top" | "center" | "bottom";
+
 export type BeamerColumnBodyNode = {
   kind: "column";
   id: string;
   span: Span;
   beginSpan: Span;
   endSpan: Span;
+  options?: BeamerDelimitedSourceValue;
+  alignment: BeamerColumnAlignment;
   width: BeamerDelimitedSourceValue;
   bodySpan: Span;
   children: BeamerColumnFlowNode[];
@@ -65,6 +73,8 @@ export type BeamerColumnsBodyNode = {
   span: Span;
   beginSpan: Span;
   endSpan: Span;
+  options?: BeamerDelimitedSourceValue;
+  alignment: BeamerColumnAlignment;
   bodySpan: Span;
   columns: BeamerColumnBodyNode[];
 };

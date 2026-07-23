@@ -14,6 +14,7 @@ import {
 import {
   computerModernTexMetricProvider,
   createTexDerivedInlineMathBoxProvider,
+  defaultTexMathFontProfile,
   layoutSimpleTexParagraph,
   renderTexParagraphSvgBody,
   texLength,
@@ -21,6 +22,7 @@ import {
 } from "../text/tex/index.js";
 import { parseBeamerFrameBody } from "./content.js";
 import type {
+  BeamerColumnAlignment,
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
   BeamerColumnsBodyNode,
@@ -60,6 +62,7 @@ type PreparedColumnFlowItem =
   | {
       kind: "paragraph";
       paragraph: LaidParagraph;
+      advanceHeight: number;
     }
   | {
       kind: "vertical-space";
@@ -80,10 +83,23 @@ type PreparedColumnContent = {
   width: number;
   flow: PreparedColumnFlowItem[];
   naturalHeight: number;
+  box: ColumnVerticalBox;
+};
+
+/**
+ * TeX vertical boxes are positioned by a reference line, not their visual
+ * top. Content may protrude above that line (notably Beamer's `[T]` columns),
+ * so keep the box dimensions and the content/reference relationship separate.
+ */
+type ColumnVerticalBox = {
+  height: number;
+  depth: number;
+  referenceFromContentTop: number;
 };
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
+const TEX_LINE_SKIP_PT = 1;
 
 /**
  * Render one Beamer frame into a fixed-page SVG and a source-addressable
@@ -181,15 +197,31 @@ export async function renderBeamerFrame(
         })
       )
     );
-    const totalHeight = Math.max(
-      0,
-      ...prepared.map((column) => column.naturalHeight)
+    const columnsBox = {
+      height: Math.max(0, ...prepared.map((column) => column.box.height)),
+      depth: Math.max(0, ...prepared.map((column) => column.box.depth)),
+    };
+    const frameAppend = appendVerticalBoxToFrame(
+      columnsBox,
+      theme.fonts["normal-text"].lineHeightPt
     );
-    const top = positionFrameContentTop(
+    const frameBlockTop = positionFrameContentTop(
       availableContentBounds,
-      totalHeight,
+      frameAppend.extent,
       frame.options?.alignment ?? "center"
     );
+    const columnsReferenceY = frameBlockTop + frameAppend.referenceOffset;
+    const columnTops = prepared.map(
+      (column) =>
+        columnsReferenceY - column.box.referenceFromContentTop
+    );
+    const visualTop = Math.min(...columnTops);
+    const visualBottom = Math.max(
+      ...prepared.map(
+        (column, index) => columnTops[index] + column.naturalHeight
+      )
+    );
+    const totalHeight = Math.max(0, visualBottom - visualTop);
     const columnGap = prepared.length > 1
       ? Math.max(
         0,
@@ -207,7 +239,8 @@ export async function renderBeamerFrame(
       const columnId = preparedColumn.column.id;
       columnChildIds.push(columnId);
       const childIds: string[] = [];
-      let flowY = top;
+      const columnTop = columnTops[index];
+      let flowY = columnTop;
 
       for (const flowItem of preparedColumn.flow) {
         if (flowItem.kind === "vertical-space") {
@@ -220,6 +253,7 @@ export async function renderBeamerFrame(
             ...laid.layout.bounds,
             x,
             y: flowY,
+            height: flowItem.advanceHeight,
           };
           paragraphs.push(laid.layout);
           childIds.push(laid.layout.paragraphId);
@@ -242,7 +276,7 @@ export async function renderBeamerFrame(
               textColor(theme, "normal text")
             ),
           });
-          flowY += laid.height;
+          flowY += flowItem.advanceHeight;
           continue;
         }
 
@@ -298,7 +332,7 @@ export async function renderBeamerFrame(
         sourceSpan: preparedColumn.column.span,
         bounds: {
           x,
-          y: top,
+          y: columnTop,
           width: preparedColumn.width,
           height: preparedColumn.naturalHeight,
         },
@@ -314,7 +348,7 @@ export async function renderBeamerFrame(
       sourceSpan: columnsNode?.span ?? frame.bodySpan,
       bounds: {
         x: availableContentBounds.x,
-        y: top,
+        y: visualTop,
         width: availableContentBounds.width,
         height: totalHeight,
       },
@@ -323,7 +357,7 @@ export async function renderBeamerFrame(
     });
     contentBounds = {
       ...availableContentBounds,
-      y: top,
+      y: visualTop,
       height: totalHeight,
     };
   } else {
@@ -519,17 +553,24 @@ async function prepareColumnContent(params: {
     }
   }
 
+  const naturalHeight = flow.reduce(
+    (height, item) =>
+      height +
+      (item.kind === "paragraph"
+        ? item.advanceHeight
+        : item.height),
+    0
+  );
   return {
     column,
     width,
     flow,
-    naturalHeight: flow.reduce(
-      (height, item) =>
-        height +
-        (item.kind === "paragraph"
-          ? item.paragraph.height
-          : item.height),
-      0
+    naturalHeight,
+    box: measureColumnVerticalBox(
+      column.alignment,
+      flow,
+      naturalHeight,
+      bodyFont
     ),
   };
 }
@@ -565,9 +606,19 @@ async function prepareColumnFlowNode(params: {
       font: bodyFont,
       alignment: "left",
     });
-    return paragraph
-      ? { kind: "paragraph", paragraph }
-      : null;
+    if (!paragraph) {
+      return null;
+    }
+    return {
+      kind: "paragraph",
+      paragraph,
+      // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
+      // strut carried by the shared text frontend's enclosing vlist. Lists,
+      // on the other hand, intentionally carry their vertical list glue.
+      advanceHeight: node.kind === "paragraph"
+        ? paragraphLineExtent(paragraph)
+        : paragraph.height,
+    };
   }
   if (node.kind === "unsupported") {
     diagnostics.push({
@@ -604,6 +655,124 @@ async function prepareColumnFlowNode(params: {
     height: viewBox.height * scale,
     model: rendered.svg.model,
     viewBox,
+  };
+}
+
+function measureColumnVerticalBox(
+  alignment: BeamerColumnAlignment,
+  flow: readonly PreparedColumnFlowItem[],
+  naturalHeight: number,
+  font: BeamerThemeFont
+): ColumnVerticalBox {
+  if (alignment === "T") {
+    const xHeight = fontXHeightPt(font);
+    // beamerbaseframecomponents.sty selects a top-aligned minipage and emits
+    // `\vskip-1ex\nointerlineskip`. The artificial leading empty line gives
+    // the vtop zero height; the content can therefore protrude above its
+    // reference line while only the remainder contributes to its depth.
+    return {
+      height: 0,
+      depth: Math.max(0, naturalHeight - xHeight),
+      referenceFromContentTop: xHeight,
+    };
+  }
+
+  if (alignment === "bottom") {
+    return {
+      height: naturalHeight,
+      depth: 0,
+      referenceFromContentTop: naturalHeight,
+    };
+  }
+
+  if (alignment === "center") {
+    // LaTeX's `minipage[c]` lowers through `\@iiiparbox` to `\vcenter`.
+    // TeX centers the total box extent on the active math axis rather than
+    // splitting height/depth geometrically around the reference line.
+    const mathAxis =
+      Number(defaultTexMathFontProfile.parameters.axisHeight) * font.sizePt;
+    const height = naturalHeight / 2 + mathAxis;
+    return {
+      height,
+      depth: naturalHeight - height,
+      referenceFromContentTop: height,
+    };
+  }
+
+  const firstReference = firstFlowReferenceFromTop(flow);
+  return {
+    height: firstReference,
+    depth: Math.max(0, naturalHeight - firstReference),
+    referenceFromContentTop: firstReference,
+  };
+}
+
+function firstFlowReferenceFromTop(
+  flow: readonly PreparedColumnFlowItem[]
+): number {
+  let offset = 0;
+  for (const item of flow) {
+    if (item.kind === "vertical-space") {
+      offset += item.height;
+      continue;
+    }
+    if (item.kind === "tikzpicture") {
+      return offset + item.height;
+    }
+    const firstLine = item.paragraph.layout.report.lines[0];
+    if (!firstLine) {
+      offset += item.advanceHeight;
+      continue;
+    }
+    const placement = item.paragraph.layout.vlistLayout.linePlacements.find(
+      (candidate) => candidate.lineIndex === firstLine.lineIndex
+    );
+    return offset + Number(placement?.y ?? 0) + Number(firstLine.ascent);
+  }
+  return offset;
+}
+
+function paragraphLineExtent(paragraph: LaidParagraph): number {
+  let bottom = 0;
+  for (const line of paragraph.layout.report.lines) {
+    const placement = paragraph.layout.vlistLayout.linePlacements.find(
+      (candidate) => candidate.lineIndex === line.lineIndex
+    );
+    bottom = Math.max(
+      bottom,
+      Number(placement?.y ?? 0) +
+        Number(line.ascent) +
+        Number(line.descent)
+    );
+  }
+  return bottom || paragraph.height;
+}
+
+function fontXHeightPt(font: BeamerThemeFont): number {
+  const fontSize = texLength(font.sizePt);
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(
+    profile.defaultFontState,
+    fontSize,
+    profile.metricProvider
+  );
+  return Number(resolved.atPt) * resolved.data.fontdimen.xheight;
+}
+
+function appendVerticalBoxToFrame(
+  box: Pick<ColumnVerticalBox, "height" | "depth">,
+  baselineSkip: number
+): { extent: number; referenceOffset: number } {
+  // TeX's vertical-list append rule inserts \baselineskip minus the incoming
+  // box height. If that would cross \lineskiplimit (zero here), it uses the
+  // 1pt \lineskip instead. Keeping the reference offset makes later theme
+  // boxes composable without reducing them to top/height rectangles.
+  const candidateGlue = baselineSkip - box.height;
+  const glue = candidateGlue >= 0 ? candidateGlue : TEX_LINE_SKIP_PT;
+  const referenceOffset = glue + box.height;
+  return {
+    extent: referenceOffset + box.depth,
+    referenceOffset,
   };
 }
 

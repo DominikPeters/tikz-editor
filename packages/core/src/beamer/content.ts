@@ -1,12 +1,14 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import {
+  readBeamerOptionalArgument,
   readBeamerRequiredArgument,
   scanBeamerControlSequences,
   scanBeamerEnvironmentTokens,
   type BeamerEnvironmentToken,
 } from "./scan.js";
 import type {
+  BeamerColumnAlignment,
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
   BeamerColumnsBodyNode,
@@ -97,6 +99,14 @@ function parseColumns(params: {
     diagnostics,
     nodeIndex,
   } = params;
+  const options = readBeamerOptionalArgument(
+    source,
+    begin.span.to,
+    end.span.from
+  ) ?? undefined;
+  // beamer.cls executes its `c` class option by default. The columns
+  // environment then inherits that class default before applying its keys.
+  const alignment = resolveColumnAlignment(options?.value, "center");
   const columns: BeamerColumnBodyNode[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -114,9 +124,14 @@ function parseColumns(params: {
       continue;
     }
     const columnEnd = tokens[endIndex];
-    const width = readBeamerRequiredArgument(
+    const columnOptions = readBeamerOptionalArgument(
       source,
       token.span.to,
+      columnEnd.span.from
+    ) ?? undefined;
+    const width = readBeamerRequiredArgument(
+      source,
+      columnOptions?.span.to ?? token.span.to,
       columnEnd.span.from
     );
     if (!width) {
@@ -139,6 +154,8 @@ function parseColumns(params: {
       span: { from: token.span.from, to: columnEnd.span.to },
       beginSpan: token.span,
       endSpan: columnEnd.span,
+      options: columnOptions,
+      alignment: resolveColumnAlignment(columnOptions?.value, alignment),
       width,
       bodySpan,
       children: parseColumnFlow(
@@ -157,9 +174,65 @@ function parseColumns(params: {
     span: { from: begin.span.from, to: end.span.to },
     beginSpan: begin.span,
     endSpan: end.span,
-    bodySpan: { from: begin.span.to, to: end.span.from },
+    options,
+    alignment,
+    bodySpan: {
+      from: options?.span.to ?? begin.span.to,
+      to: end.span.from,
+    },
     columns,
   };
+}
+
+function resolveColumnAlignment(
+  optionSource: string | undefined,
+  fallback: BeamerColumnAlignment
+): BeamerColumnAlignment {
+  if (!optionSource) {
+    return fallback;
+  }
+  let result = fallback;
+  for (const entry of splitTopLevelOptions(optionSource)) {
+    const key = entry.split("=", 1)[0]?.trim();
+    if (key === "T") {
+      result = "T";
+    } else if (key === "t") {
+      result = "top";
+    } else if (key === "c") {
+      result = "center";
+    } else if (key === "b") {
+      result = "bottom";
+    }
+  }
+  return result;
+}
+
+function splitTopLevelOptions(value: string): string[] {
+  const entries: string[] = [];
+  let start = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value.charAt(index);
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}") {
+      braceDepth = Math.max(0, braceDepth - 1);
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    } else if (char === "," && braceDepth === 0 && bracketDepth === 0) {
+      entries.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  entries.push(value.slice(start));
+  return entries;
 }
 
 function parseColumnFlow(

@@ -86,11 +86,13 @@ TIKZ_BEAMER_DIM paperWidth 1048576
     ]);
   });
 
-  it("parses full-page box, rule, and glyph traces in scaled points", () => {
+  it("parses full-page box, rule, glyph, and spacing traces in scaled points", () => {
     const trace = parseBeamerPageTraceTsv(`PAGE\t1\tvlist\t1048576\t2097152\t0
 BOX\t1\tvlist\troot\t0\t0\t1048576\t2097152\t0
 RULE\t1\troot.1\t-65536\t-131072\t1048576\t2097152\t0
 GLYPH\t1\troot.2\t72\t32768\t65536\t491520\t458752\t0\t15\t786432\t[lmsans12-regular]:+tlig;
+GLUE\t1\troot.3\ty\t0\t524288\t0\t65536\t655360\t2\t0\t0\t0
+KERN\t1\troot.4\ty\t0\t589824\t-32768\t-32768\t0\t0\t0\t0\t1
 `);
 
     expect(trace.pages).toEqual([{
@@ -127,6 +129,32 @@ GLYPH\t1\troot.2\t72\t32768\t65536\t491520\t458752\t0\t15\t786432\t[lmsans12-reg
         fontId: 15,
         fontSize: { sp: 786_432, texPt: 12 },
         fontName: "[lmsans12-regular]:+tlig;",
+      }],
+      glues: [{
+        path: "root.3",
+        axis: "y",
+        x: { sp: 0, texPt: 0 },
+        y: { sp: 524_288, texPt: 8 },
+        natural: { sp: 0, texPt: 0 },
+        effective: { sp: 65_536, texPt: 1 },
+        stretch: { sp: 655_360, texPt: 10 },
+        stretchOrder: 2,
+        shrink: { sp: 0, texPt: 0 },
+        shrinkOrder: 0,
+        subtype: 0,
+      }],
+      kerns: [{
+        path: "root.4",
+        axis: "y",
+        x: { sp: 0, texPt: 0 },
+        y: { sp: 589_824, texPt: 9 },
+        natural: { sp: -32_768, texPt: -0.5 },
+        effective: { sp: -32_768, texPt: -0.5 },
+        stretch: { sp: 0, texPt: 0 },
+        stretchOrder: 0,
+        shrink: { sp: 0, texPt: 0 },
+        shrinkOrder: 0,
+        subtype: 1,
       }],
     }]);
   });

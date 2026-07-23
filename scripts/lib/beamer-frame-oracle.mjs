@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 2;
+export const BEAMER_FRAME_ORACLE_VERSION = 3;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -147,6 +147,24 @@ local function write_glyph(path, value, x, baseline)
   }, "\t"), "\n")
 end
 
+local function write_spacing(kind, path, axis, x, y, value, effective)
+  trace_file:write(table.concat({
+    kind,
+    page_index,
+    path,
+    axis,
+    math.floor(x + 0.5),
+    math.floor(y + 0.5),
+    value.width or (value.spec and value.spec.width) or value.kern or 0,
+    math.floor(effective + 0.5),
+    value.stretch or (value.spec and value.spec.stretch) or 0,
+    value.stretch_order or (value.spec and value.spec.stretch_order) or 0,
+    value.shrink or (value.spec and value.spec.shrink) or 0,
+    value.shrink_order or (value.spec and value.spec.shrink_order) or 0,
+    value.subtype or 0,
+  }, "\t"), "\n")
+end
+
 local walk_hlist
 local walk_vlist
 
@@ -161,9 +179,13 @@ walk_hlist = function(list, parent, origin_x, baseline, path)
       write_glyph(current_path, value, x, baseline)
       x = x + (value.width or 0)
     elseif value.id == glue_id then
-      x = x + glue_width(value, parent)
+      local effective = glue_width(value, parent)
+      write_spacing("GLUE", current_path, "x", x, baseline, value, effective)
+      x = x + effective
     elseif value.id == kern_id then
-      x = x + (value.kern or value.width or 0)
+      local effective = value.kern or value.width or 0
+      write_spacing("KERN", current_path, "x", x, baseline, value, effective)
+      x = x + effective
     elseif value.id == hlist_id then
       local child_baseline = baseline + (value.shift or 0)
       local child_top = child_baseline - (value.height or 0)
@@ -197,9 +219,13 @@ walk_vlist = function(list, parent, origin_x, origin_y, path)
     index = index + 1
     local current_path = child_path(path, index)
     if value.id == glue_id then
-      y = y + glue_width(value, parent)
+      local effective = glue_width(value, parent)
+      write_spacing("GLUE", current_path, "y", origin_x, y, value, effective)
+      y = y + effective
     elseif value.id == kern_id then
-      y = y + (value.kern or value.width or 0)
+      local effective = value.kern or value.width or 0
+      write_spacing("KERN", current_path, "y", origin_x, y, value, effective)
+      y = y + effective
     elseif value.id == hlist_id then
       local x = origin_x + (value.shift or 0)
       local baseline = y + (value.height or 0)
@@ -344,6 +370,8 @@ export function parseBeamerPageTraceTsv(tsv) {
         boxes: [],
         rules: [],
         glyphs: [],
+        glues: [],
+        kerns: [],
       };
       pages.push(page);
       byNumber.set(pageNumber, page);
@@ -385,6 +413,21 @@ export function parseBeamerPageTraceTsv(tsv) {
         fontSize: dimension(Number(fields[10])),
         fontName: fields[11] ?? "",
       });
+    } else if (kind === "GLUE" || kind === "KERN") {
+      const spacing = {
+        path: fields[2] ?? "",
+        axis: fields[3] === "x" ? "x" : "y",
+        x: dimension(Number(fields[4])),
+        y: dimension(Number(fields[5])),
+        natural: dimension(Number(fields[6])),
+        effective: dimension(Number(fields[7])),
+        stretch: dimension(Number(fields[8])),
+        stretchOrder: Number(fields[9]),
+        shrink: dimension(Number(fields[10])),
+        shrinkOrder: Number(fields[11]),
+        subtype: Number(fields[12]),
+      };
+      page[kind === "GLUE" ? "glues" : "kerns"].push(spacing);
     }
   }
   return { pages };

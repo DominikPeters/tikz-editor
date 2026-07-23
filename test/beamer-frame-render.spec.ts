@@ -120,6 +120,20 @@ describe("headless Beamer frame renderer", () => {
     expect(
       result.layout.items.filter((item) => item.kind === "column")
     ).toHaveLength(1);
+    expect(result.layout.contentBounds.y).toBeCloseTo(117.726856, 6);
+    expect(result.layout.contentBounds.height).toBeCloseTo(7.8402, 6);
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "body"
+    )!;
+    const bodyLine = body.report.lines[0]!;
+    const bodyPlacement = body.vlistLayout.linePlacements.find(
+      (placement) => placement.lineIndex === bodyLine.lineIndex
+    )!;
+    expect(
+      body.bounds.y +
+        Number(bodyPlacement.y) +
+        Number(bodyLine.ascent)
+    ).toBeCloseTo(125.446606, 6);
     expect(result.layout.paragraphs.map((paragraph) => paragraph.role)).toEqual([
       "frame-title",
       "footline",

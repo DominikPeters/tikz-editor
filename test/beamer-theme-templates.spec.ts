@@ -31,7 +31,7 @@ describe("Beamer structural theme templates", () => {
 \title{Deck}
 \begin{document}\begin{frame}{Frame}Body\end{frame}\end{document}`);
 
-    expect(chrome.topInset).toBeCloseTo(31.284662, 6);
+    expect(chrome.topInset).toBeCloseTo(30.422162, 6);
     expect(chrome.bottomInset).toBeCloseTo(12.658, 4);
     expect(
       chrome.primitives.find(

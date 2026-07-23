@@ -632,7 +632,10 @@ TikZ.
 
 The comparison's primary evidence is now a full-page LuaLaTeX shipout trace,
 not its raster diff. The probe walks the final page box without modifying it
-and records boxes, painted rules, and every glyph in integer scaled points.
+and records boxes, painted rules, glyphs, glue, and kerns in integer scaled
+points. Glue records retain their natural and effective sizes plus
+stretch/shrink orders, so frame-fill behavior can be derived from the final
+TeX page list rather than estimated from pixels.
 The comparison normalizes those records to the frame contract's top-left,
 y-down TeX-point space, then matches native template rectangles and
 source-backed paragraph lines against the oracle. Its structural report
@@ -647,8 +650,18 @@ from reserved frame insets, uses the `lmsans12` optical design for the
 14.4pt frame title, places Infolines text on its TeX baseline, and models the
 thin spaces in the total-frame-number template. Default centered frames use
 the 1fill:1.5fill top/bottom ratio from `beamerbaseframe.sty`; remaining body
-offsets are therefore attributable to the columns/vlist natural-height model
-rather than theme chrome.
+offsets were therefore attributable to the columns/vlist natural-height model
+rather than theme chrome. The next refinement preserves Beamer's `T` column
+mode in the content IR and composes columns as TeX reference-line boxes with
+separate height, depth, and visible-content extents. In particular,
+`beamerbaseframecomponents.sty` implements `T` as a top minipage with a
+zero-height leading box and `\vskip-1ex\nointerlineskip`; the renderer now
+models that construction directly. It also evaluates the frame-title's
+trailing `0.25em` after restoring the normal body font, matching
+`beamerbaseframe.sty`. On the Hello fixture this reduces the maximum absolute
+body baseline delta from about 5.31pt to 0.000012pt. The KKT fixture's
+remaining vertical deltas are now localized to list-internal indentation and
+vlist glue rather than page chrome or the outer columns reference line.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

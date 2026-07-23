@@ -102,7 +102,9 @@ function planDefaultFrameTitle(
   const paintHeight = DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT;
   const inset = paintHeight +
     DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM *
-      context.theme.fonts["frame-title"].sizePt;
+      // `\beamer@frametitlebox` has ended when beamerbaseframe.sty emits
+      // `\vskip0.25em`, so TeX evaluates this em in the restored body font.
+      context.theme.fonts["normal-text"].sizePt;
   const background = context.theme.colors.frametitle?.bg;
   return {
     inset,

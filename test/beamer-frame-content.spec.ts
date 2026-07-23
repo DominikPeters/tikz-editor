@@ -28,6 +28,12 @@ describe("Beamer frame content frontend", () => {
     if (columns.kind !== "columns") {
       throw new Error("Expected columns.");
     }
+    expect(columns.options?.value).toBe(String.raw`T,totalwidth=\textwidth`);
+    expect(columns.alignment).toBe("T");
+    expect(columns.columns.map((column) => column.alignment)).toEqual([
+      "T",
+      "T",
+    ]);
     expect(columns.columns.map((column) => column.width.value)).toEqual([
       ".55\\textwidth",
       ".42\\textwidth",
@@ -45,6 +51,35 @@ describe("Beamer frame content frontend", () => {
         expect(source.slice(node.span.from, node.span.to).trim()).not.toBe("");
       }
     }
+  });
+
+  it("preserves columns alignment and resolves per-column overrides", () => {
+    const source = String.raw`
+\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\begin{columns}[T,totalwidth={.8\textwidth}]
+  \begin{column}[b]{\textwidth}Bottom\end{column}
+\end{columns}
+\end{frame}
+\end{document}`;
+    const document = scanBeamerDocument(source);
+    const ir = parseBeamerFrameBody({
+      source,
+      frame: document.frames[0]!,
+    });
+    const columns = ir.children[0]!;
+    expect(columns.kind).toBe("columns");
+    if (columns.kind !== "columns") {
+      throw new Error("Expected columns.");
+    }
+
+    expect(columns.alignment).toBe("T");
+    expect(columns.columns[0]).toMatchObject({
+      alignment: "bottom",
+      options: expect.objectContaining({ value: "b" }),
+      width: expect.objectContaining({ value: String.raw`\textwidth` }),
+    });
   });
 
   it("retains non-column bodies as text leaves", () => {

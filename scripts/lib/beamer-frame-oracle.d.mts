@@ -51,6 +51,8 @@ export function parseBeamerPageTraceTsv(tsv: string): {
     readonly boxes: readonly unknown[];
     readonly rules: readonly unknown[];
     readonly glyphs: readonly unknown[];
+    readonly glues: readonly unknown[];
+    readonly kerns: readonly unknown[];
   }[];
 };
 export function parsePdfInfo(output: string): {
