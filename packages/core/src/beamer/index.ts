@@ -3,6 +3,7 @@ export { parseBeamerFrameBody } from "./content.js";
 export { renderBeamerFrame } from "./render.js";
 export { scanBeamerDocument } from "./scan.js";
 export {
+  createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
   planBeamerFrameChrome,
   resolveBeamerItemizeMarkers,

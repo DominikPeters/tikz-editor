@@ -150,6 +150,22 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("expands preamble math macros before native display layout", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 2 });
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "body"
+    )!;
+
+    expect(body.report.lines.some((line) =>
+      line.segments.some((segment) => segment.kind === "math")
+    )).toBe(true);
+    expect(result.svg.svg).toContain('data-tex-font="msbm10"');
+    expect(result.svg.svg).toContain('data-tex-font="cmsy10"');
+    expect(result.svg.svg).not.toContain("tex-unsupported-fallback");
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
   it("renders an ordinary root-flow body without a columns wrapper", async () => {
     const result = await renderBeamerFrame(String.raw`
 \documentclass{beamer}
@@ -168,6 +184,20 @@ describe("headless Beamer frame renderer", () => {
       )
     ).toBe(true);
     expect(result.layout.items.some((item) => item.kind === "unsupported")).toBe(false);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("uses Beamer's class-owned sans math font substitutions", async () => {
+    const result = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\begin{document}
+\begin{frame}{Math fonts}$x_1=(\lambda)$ and \(\text{label}\).\end{frame}
+\end{document}`);
+
+    expect(result.svg.svg).toContain('data-tex-font="lmsans10-oblique"');
+    expect(result.svg.svg).toContain('data-tex-font="lmsans8-regular"');
+    expect(result.svg.svg).toContain('data-tex-font="cmss10"');
+    expect(result.svg.svg).toContain('data-tex-font="cmmi10"');
     expect(result.diagnostics).toEqual([]);
   });
 

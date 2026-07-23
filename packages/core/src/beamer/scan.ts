@@ -1,6 +1,7 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { scanTikzFigures } from "../parser/figure-scan.js";
+import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import type {
   BeamerDelimitedSourceValue,
   BeamerDocumentClassModel,
@@ -584,6 +585,13 @@ function scanPreamble(source: string, span: Span): BeamerPreambleModel {
   const themes: BeamerThemeUseModel[] = [];
   const metadata: BeamerPreambleModel["metadata"] = {};
   const atBeginSectionSpans: Span[] = [];
+  const macroDefinitions = collectContextDefinitions(
+    source.slice(0, span.to)
+  ).filter((statement) =>
+    statement.kind === "MacroDefinition" ||
+    statement.kind === "MacroAlias" ||
+    statement.kind === "MacroCommandDefinition"
+  );
 
   for (const command of controls) {
     if (command.name === "documentclass" && !documentClass) {
@@ -627,6 +635,7 @@ function scanPreamble(source: string, span: Span): BeamerPreambleModel {
     themes,
     metadata,
     atBeginSectionSpans,
+    macroDefinitions,
   };
 }
 

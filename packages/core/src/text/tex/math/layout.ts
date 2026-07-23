@@ -6499,7 +6499,12 @@ function resolveMathSymbolParts(
     }
     const font = alphabet === "boldsymbol"
       ? resolveBoldMathFont(fontProfile, glyph.family, style, baseAtPt)
-      : fontProfile.resolveMathFont({ family: glyph.family, style, baseAtPt });
+      : fontProfile.resolveMathFont({
+        family: glyph.family,
+        style,
+        baseAtPt,
+        symbolText: nucleus.text,
+      });
     const metric = requiredCharMetric(font, glyph.code);
     const width = roundTexPt(tfmToPt(font, metric.width));
     return resolvedMathGlyph({

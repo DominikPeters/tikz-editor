@@ -38,9 +38,6 @@ import type {
   ChildForeachClause,
   ChildOperationItem,
   ForeachStatement,
-  MacroAliasStatement,
-  MacroCommandDefinitionStatement,
-  MacroDefinitionStatement,
   NodeForeachClause,
   NodeItem,
   PathForeachItem,
@@ -54,8 +51,17 @@ import type {
   TikzFigure,
   UnknownStatement
 } from "../ast/types.js";
-import { expandMacroBindings, isControlSequenceToken } from "../macros/expand.js";
-import type { MacroBinding, MacroOriginFrame as MacroOriginFrameType } from "../macros/types.js";
+import {
+  collectMacroAlias,
+  collectMacroBindings,
+  collectMacroCommandDefinition,
+  collectMacroDefinition,
+  expandMacroBindings,
+} from "../macros/index.js";
+import type {
+  MacroBinding,
+  MacroOriginFrame as MacroOriginFrameType,
+} from "../macros/types.js";
 import { buildForeachIterations } from "./options.js";
 import {
   parsePathItemsFromFragmentWithSyntheticMapping,
@@ -1001,84 +1007,6 @@ function cloneForeachStack(stack: ForeachOriginFrame[]): ForeachOriginFrame[] {
 // ---------------------------------------------------------------------------
 
 const CONTROL_SEQUENCE_REGEX_MACRO = /^\\[A-Za-z@]+/;
-
-function normalizeMacroName(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!isControlSequenceToken(trimmed)) {
-    return null;
-  }
-  return trimmed;
-}
-
-function collectMacroDefinition(statement: MacroDefinitionStatement, bindings: Map<string, MacroBinding>): void {
-  const name = normalizeMacroName(statement.nameRaw);
-  if (!name) return;
-  bindings.set(name, {
-    kind: "text",
-    value: statement.valueRaw,
-    provenance: [{ macroName: name, definitionId: statement.id, definitionSpan: statement.span, commandRaw: statement.commandRaw }]
-  });
-}
-
-function collectMacroCommandDefinition(statement: MacroCommandDefinitionStatement, bindings: Map<string, MacroBinding>): void {
-  const name = normalizeMacroName(statement.nameRaw);
-  if (!name) return;
-  if (statement.commandRaw === "\\providecommand" && bindings.has(name)) return;
-  const parameterCount = Math.min(Math.max(0, statement.arity), 9);
-  const origin: MacroOriginFrameType = { macroName: name, definitionId: statement.id, definitionSpan: statement.span, commandRaw: statement.commandRaw };
-  if (parameterCount === 0) {
-    bindings.set(name, { kind: "text", value: statement.bodyRaw, provenance: [origin] });
-  } else {
-    bindings.set(name, {
-      kind: "callable",
-      parameterCount,
-      optionalFirstArgDefault: statement.optionalDefaultRaw,
-      body: statement.bodyRaw,
-      provenance: [origin]
-    });
-  }
-}
-
-function collectMacroAlias(statement: MacroAliasStatement, bindings: Map<string, MacroBinding>): void {
-  const name = normalizeMacroName(statement.nameRaw);
-  if (!name) return;
-  const targetRaw = statement.targetRaw.trim();
-  if (targetRaw.length === 0) return;
-  const origin: MacroOriginFrameType = { macroName: name, definitionId: statement.id, definitionSpan: statement.span, commandRaw: statement.commandRaw };
-  if (isControlSequenceToken(targetRaw)) {
-    const existing = bindings.get(targetRaw);
-    if (existing) {
-      const cloned: MacroBinding = existing.kind === "text"
-        ? { kind: "text", value: existing.value, provenance: [...existing.provenance, origin] }
-        : { kind: "callable", parameterCount: existing.parameterCount, optionalFirstArgDefault: existing.optionalFirstArgDefault, body: existing.body, provenance: [...existing.provenance, origin] };
-      bindings.set(name, cloned);
-    } else {
-      bindings.set(name, { kind: "text", value: targetRaw, provenance: [origin] });
-    }
-  } else {
-    bindings.set(name, { kind: "text", value: targetRaw, provenance: [origin] });
-  }
-}
-
-function collectMacroBindings(statements: Statement[]): Map<string, MacroBinding> {
-  const bindings = new Map<string, MacroBinding>();
-  for (const statement of statements) {
-    if (statement.kind === "MacroDefinition") {
-      collectMacroDefinition(statement, bindings);
-    } else if (statement.kind === "MacroCommandDefinition") {
-      collectMacroCommandDefinition(statement, bindings);
-    } else if (statement.kind === "MacroAlias") {
-      collectMacroAlias(statement, bindings);
-    } else if (statement.kind === "Scope") {
-      // Collect from scope bodies too (though scoping is approximate in pre-pass)
-      const scopeBindings = collectMacroBindings((statement).body);
-      for (const [key, value] of scopeBindings) {
-        bindings.set(key, value);
-      }
-    }
-  }
-  return bindings;
-}
 
 function tryExpandMacroStatement(
   statement: UnknownStatement,

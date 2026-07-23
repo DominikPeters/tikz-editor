@@ -28,6 +28,19 @@ describe("Beamer document scanner", () => {
     expect(document.preamble.metadata.title?.value.value).toBe(
       "The Karush-Kuhn-Tucker Theorem"
     );
+    expect(
+      document.preamble.macroDefinitions.map((definition) =>
+        definition.kind === "MacroCommandDefinition"
+          ? [definition.nameRaw, definition.arity, definition.bodyRaw]
+          : [definition.kind]
+      )
+    ).toEqual([
+      ["\\R", 0, "\\mathbb{R}"],
+      ["\\grad", 0, "\\nabla"],
+      ["\\inner", 2, "\\left\\langle #1,#2\\right\\rangle"],
+      ["\\Lagr", 0, "\\mathcal{L}"],
+      ["\\act", 0, "\\mathcal{A}"],
+    ]);
     expect(document.frames).toHaveLength(20);
     expect(document.sections).toEqual([]);
     expect(document.roots).toHaveLength(20);

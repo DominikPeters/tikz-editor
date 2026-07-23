@@ -1,6 +1,12 @@
 import {
+  computerModernTexMetricProvider,
+  luaLatexAmsMathFontProfile,
   luaLatexDefaultTextFontProfile,
+  texLength,
   type SimpleTexFontState,
+  type TexMathFontProfile,
+  type TexMathStyle,
+  type TexLength,
   type TexTextFontProfile,
 } from "../../text/tex/index.js";
 import type { BeamerThemeFont } from "./types.js";
@@ -54,4 +60,73 @@ export function createBeamerTexTextFontProfile(
       );
     },
   };
+}
+
+/**
+ * Reproduce Beamer's default sans-math substitutions.
+ *
+ * `beamerbasefont.sty` replaces the operators symbol font with `cmss`, then
+ * declares literal digits and Latin letters through the active sans text
+ * family. It deliberately leaves Greek letters, symbols, large operators,
+ * and AMS symbols in their ordinary Computer Modern math families.
+ */
+export function createBeamerTexMathFontProfile(
+  role: BeamerThemeFont
+): TexMathFontProfile {
+  const base = luaLatexAmsMathFontProfile;
+  const textFontProfile = createBeamerTexTextFontProfile(role);
+  return {
+    ...base,
+    id: `${base.id}-beamer-${role.family}-${role.series}-${role.shape}`,
+    label: `${base.label} with Beamer font substitutions`,
+    textFontProfile,
+    resolveMathFont(request) {
+      const baseAtPt = texLength(request.baseAtPt ?? 10);
+      const atPt = mathStyleAtPt(request.style, baseAtPt);
+      if (/^[A-Za-z]$/.test(request.symbolText ?? "")) {
+        return textFontProfile.resolveTextFont(
+          {
+            ...textFontProfile.defaultFontState,
+            family: "normal",
+            series: "medium",
+            shape: "italic",
+          },
+          atPt,
+          computerModernTexMetricProvider
+        );
+      }
+      if (/^[0-9]$/.test(request.symbolText ?? "")) {
+        return textFontProfile.resolveTextFont(
+          {
+            ...textFontProfile.defaultFontState,
+            family: "normal",
+            series: "medium",
+            shape: "upright",
+          },
+          atPt,
+          computerModernTexMetricProvider
+        );
+      }
+      if (request.family === "operators") {
+        return computerModernTexMetricProvider.resolveFont({
+          fontId: atPt <= 8 ? "cmss8" : "cmss10",
+          atPt,
+        });
+      }
+      return base.resolveMathFont(request);
+    },
+  };
+}
+
+function mathStyleAtPt(
+  style: TexMathStyle,
+  baseAtPt: TexLength
+): TexLength {
+  if (style === "script") {
+    return texLength(baseAtPt * 0.7);
+  }
+  if (style === "scriptscript") {
+    return texLength(baseAtPt * 0.5);
+  }
+  return baseAtPt;
 }

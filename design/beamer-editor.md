@@ -228,10 +228,15 @@ renders it with the Latin Modern Sans profile and reports the substitution
 Fira in its font-theme source, so it inherits Beamer's active sans family and
 does not report that substitution.
 
-Beamer's default math setup remains a separate fidelity surface. The native
-math profile may differ visibly from LuaLaTeX's complete Beamer math setup;
-that is an accepted v1 gap tracked by the frame oracle (one corpus deck opts
-out via `\usefonttheme{professionalfonts}`).
+Beamer's default math setup is a separate, class-owned font profile rather
+than the generic LuaLaTeX math default. Following
+`beamerbasefont.sty`, literal Latin variables and digits resolve through the
+active sans text family, delimiters and relations use Beamer's `cmss`
+operators family, and Greek, symbol, extension, and AMS families remain in
+their ordinary Computer Modern math fonts. The math-font request retains the
+source symbol so the profile can distinguish literal Latin letters from Greek
+commands without inventing a global pseudo-family. A later font-theme pass
+must model opt-outs such as `\usefonttheme{professionalfonts}` explicitly.
 
 ## Core Rendering Architecture
 
@@ -640,7 +645,10 @@ stretch/shrink orders, so frame-fill behavior can be derived from the final
 TeX page list rather than estimated from pixels.
 The comparison normalizes those records to the frame contract's top-left,
 y-down TeX-point space, then matches native template rectangles and
-source-backed paragraph lines against the oracle. Its structural report
+source-backed paragraph lines against the oracle. Native tracing walks both
+paragraph line segments and positioned VList display-math/display-alignment
+boxes, so math glyphs on subsidiary array, script, and alignment baselines
+participate in the same font/code/position comparison. Its structural report
 contains edge deltas, absolute glyph/baseline deltas, glyph/font agreement,
 and unmatched records. Raster differences remain the final check for PDF
 literal paths, clipping, images, and antialiasing. Native embedded-TikZ glyph
@@ -713,8 +721,18 @@ trailing `\vspace` boundary follows the shipped Beamer list: the display's
 depth determines the interline glue to the empty paragraph created by the
 columns environment, then the columns hbox is appended on its own reference
 line. Matched frame-13 prose and column baselines are now within 1.034pt,
-down from an 83.397pt column displacement; display-math rules and glyph-line
-grouping still need to be added to the structural comparator.
+down from an 83.397pt column displacement. Positioned display-math and
+display-alignment glyph rows now join the structural comparator as described
+above; display-owned rules remain the next geometry-trace extension.
+
+The ordinary-math KKT pass also connects Beamer preamble mining to the shared
+mapped macro-expansion contract. Parsed `\def`, `\let`, `\newcommand`,
+`\providecommand`, `\DeclareRobustCommand`, and `\DeclareMathOperator`
+definitions compile into the same `MacroBinding` representation used by TikZ
+and are expanded before paragraph/math layout while retaining use-site source
+mapping. This is a document-level facility, not a list of presentation- or
+fixture-specific aliases. It makes the frame-3 `array` and its `\R`, `\act`,
+and `\Lagr` commands render through the native math engine.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
@@ -812,9 +830,10 @@ overlay]`; double-click-to-edit works in place.
 - **Two corpora biases**: 22 decks from one community. The scanner should be
   easy to point at other corpora (e.g. arXiv source of `beamer` decks)
   before locking the subset.
-- **Native math vs LuaLaTeX's Beamer math setup** may remain a visible
-  fidelity gap in v1; it is measured by the same oracle and stated in the UI
-  rather than hidden.
+- **Font-theme math overrides** such as `professionalfonts` remain a fidelity
+  surface beyond the default Beamer sans-math profile; they are measured by
+  the same oracle and must be represented as profile changes rather than
+  hidden substitutions.
 - **Per-step layout cost** is assumed cheap; if profiling disagrees,
   keep-space steps can share layout and only `\only`-bearing frames pay
   per-step.

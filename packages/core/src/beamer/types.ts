@@ -1,4 +1,9 @@
-import type { Span } from "../ast/types.js";
+import type {
+  MacroAliasStatement,
+  MacroCommandDefinitionStatement,
+  MacroDefinitionStatement,
+  Span,
+} from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
 import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
@@ -112,6 +117,11 @@ export type BeamerPreambleModel = {
   themes: BeamerThemeUseModel[];
   metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>>;
   atBeginSectionSpans: Span[];
+  macroDefinitions: Array<
+    | MacroDefinitionStatement
+    | MacroAliasStatement
+    | MacroCommandDefinitionStatement
+  >;
 };
 
 export type BeamerDocumentRoot = BeamerSectionModel | BeamerFrameModel;

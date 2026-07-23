@@ -1,5 +1,10 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import {
+  collectMacroBindings,
+  expandMacroBindingsMapped,
+  type MacroBinding,
+} from "../macros/index.js";
 import { renderTikzToSvgAsync } from "../render/index.js";
 import { formatSvgNumber as fmt } from "../svg/format.js";
 import {
@@ -34,6 +39,7 @@ import type {
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { scanBeamerDocument } from "./scan.js";
 import {
+  createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
   planBeamerFrameChrome,
   resolveBeamerItemizeMarkers,
@@ -194,6 +200,9 @@ export async function renderBeamerFrame(
   }
 
   const theme = resolveBeamerTheme(document);
+  const macroBindings = collectMacroBindings(
+    document.preamble.macroDefinitions
+  );
   const page = resolveBeamerPageGeometry(document, theme);
   const chrome = planBeamerFrameChrome({
     document,
@@ -236,6 +245,7 @@ export async function renderBeamerFrame(
     items,
     paragraphs,
     modelBuilder,
+    macroBindings,
   });
 
   const availableContentBounds: BeamerRect = {
@@ -254,6 +264,7 @@ export async function renderBeamerFrame(
     textWidth: page.textArea.width,
     diagnostics,
     theme,
+    macroBindings,
   });
   if (preparedFrameFlow.length > 0) {
     const positioned = positionPreparedFrameFlow(
@@ -361,6 +372,7 @@ function renderChrome(params: {
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
 }): void {
   const { chrome, theme, items, paragraphs, modelBuilder } = params;
   for (const primitive of chrome.primitives) {
@@ -399,6 +411,7 @@ function renderChrome(params: {
       font,
       alignment: primitive.alignment,
       interwordSpacePt: primitive.interwordSpacePt,
+      macroBindings: params.macroBindings,
     });
     if (!laid) {
       continue;
@@ -466,6 +479,7 @@ async function prepareFrameFlow(params: {
   textWidth: number;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
@@ -482,6 +496,7 @@ async function prepareFrameFlow(params: {
         bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
         font: bodyFont,
         alignment: "left",
+        macroBindings: params.macroBindings,
       });
       if (paragraph) {
         result.push({
@@ -516,6 +531,7 @@ async function prepareFrameFlow(params: {
             textWidth: params.textWidth,
             diagnostics: params.diagnostics,
             theme: params.theme,
+            macroBindings: params.macroBindings,
           })
         )
       );
@@ -867,6 +883,7 @@ async function prepareColumnContent(params: {
   textWidth: number;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
 }): Promise<PreparedColumnContent> {
   const {
     source,
@@ -874,6 +891,7 @@ async function prepareColumnContent(params: {
     textWidth,
     diagnostics,
     theme,
+    macroBindings,
   } = params;
   const width = resolveColumnWidth(column.width.value, textWidth);
   const flow: PreparedColumnFlowItem[] = [];
@@ -891,6 +909,7 @@ async function prepareColumnContent(params: {
       listProfile,
       initialPreviousDepth:
         node.kind === "list" ? previousDepth : undefined,
+      macroBindings,
     });
     if (prepared) {
       flow.push(prepared);
@@ -932,6 +951,7 @@ async function prepareColumnFlowNode(params: {
   diagnostics: Diagnostic[];
   listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -941,6 +961,7 @@ async function prepareColumnFlowNode(params: {
     diagnostics,
     listProfile,
     initialPreviousDepth,
+    macroBindings,
   } = params;
   if (node.kind === "vertical-space") {
     return {
@@ -960,6 +981,7 @@ async function prepareColumnFlowNode(params: {
       alignment: "left",
       initialPreviousDepth,
       listProfile,
+      macroBindings,
     });
     if (!paragraph) {
       return null;
@@ -1135,6 +1157,7 @@ function layoutParagraph(params: {
   interwordSpacePt?: number;
   initialPreviousDepth?: number;
   listProfile?: TexListLayoutProfile;
+  macroBindings?: ReadonlyMap<string, MacroBinding>;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -1158,7 +1181,10 @@ function layoutParagraph(params: {
       : params.alignment === "right"
         ? "ragged-left"
         : "ragged-right";
-  const result = layoutSimpleTexParagraph(params.mapped.text, {
+  const mapped = params.macroBindings
+    ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
+    : params.mapped;
+  const result = layoutSimpleTexParagraph(mapped.text, {
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
     alignment,
@@ -1172,12 +1198,13 @@ function layoutParagraph(params: {
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,
+      fontProfile: createBeamerTexMathFontProfile(params.font),
     }),
     baselineSkip: params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,
     listProfile: params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE,
     displayMathProfile: BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
-    sourceMap: params.mapped.sourceMap,
+    sourceMap: mapped.sourceMap,
   });
   if (!result.supported || !result.report || !result.vlistLayout) {
     return null;

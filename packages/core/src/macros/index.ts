@@ -1,4 +1,11 @@
 export {
+  collectMacroAlias,
+  collectMacroBindings,
+  collectMacroCommandDefinition,
+  collectMacroDefinition,
+  type MacroBindingStatement,
+} from "./bindings.js";
+export {
   DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
   expandMacroBindings,
   expandMacroBindingsMapped,

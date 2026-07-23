@@ -25,6 +25,16 @@ export interface TexMathFontRequest {
   readonly family: TexMathFontFamily;
   readonly style: TexMathStyle;
   readonly baseAtPt?: number;
+  /**
+   * The source symbol whose TeX math family is being resolved.
+   *
+   * Most math font profiles only need the family. Classes such as Beamer,
+   * however, redeclare literal Latin letters and digits through dedicated
+   * symbol fonts while leaving Greek letters in the ordinary `letters`
+   * family. Keeping the symbol available here models that distinction
+   * without assigning a fake global family to either set of glyphs.
+   */
+  readonly symbolText?: string;
 }
 
 export interface TexMathFontManifestEntry {

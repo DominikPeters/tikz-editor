@@ -8,6 +8,7 @@ import {
   type OracleBeamerPageTrace,
 } from "../scripts/lib/beamer-frame-compare.mjs";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
+import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
 
 const COORDINATE_SYSTEM = {
   unit: "tex-pt",
@@ -30,6 +31,35 @@ function glyph(overrides: Partial<BeamerTraceGlyph> = {}): BeamerTraceGlyph {
 }
 
 describe("Beamer structural frame comparison", () => {
+  it("traces standalone display and alignment math glyph rows", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\begin{document}
+\begin{frame}{Math}
+Display rows:
+\[
+  x_1 = 2
+\]
+\[
+  y = 3
+\]
+\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+    const displayLines = trace.lines.filter((line) =>
+      line.id.includes(":display:")
+    );
+
+    expect(displayLines).toHaveLength(3);
+    expect(displayLines.flatMap((line) => line.glyphs).map((item) => item.fontName))
+      .toContain("lmsans10-oblique");
+    expect(displayLines.flatMap((line) => line.glyphs).map((item) => item.fontName))
+      .toContain("cmss10");
+  });
+
   it("includes theme-owned list marker paint boxes in the native trace", () => {
     const trace = buildNativeBeamerPageTrace({
       layout: {

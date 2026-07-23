@@ -190,6 +190,28 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         lineIndex: line.lineIndex,
       })));
     }
+    const displayGlyphs = nativeDisplayMathGlyphs(
+      paragraph,
+      metricProvider
+    );
+    for (const [displayLineIndex, displayLine] of
+      groupOracleGlyphLines(displayGlyphs).entries()) {
+      const lineIndex = paragraph.report.lines.length + displayLineIndex;
+      lines.push({
+        id: `${paragraph.paragraphId}:display:${displayLineIndex}`,
+        paragraphId: paragraph.paragraphId,
+        role: paragraph.role,
+        lineIndex,
+        sourceSpan: paragraph.sourceSpan,
+        ...displayLine,
+      });
+      glyphs.push(...displayLine.glyphs.map((glyph) => ({
+        ...glyph,
+        paragraphId: paragraph.paragraphId,
+        role: paragraph.role,
+        lineIndex,
+      })));
+    }
   }
   return {
     coordinateSystem: render.layout.coordinateSystem,
@@ -203,6 +225,51 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     lines,
     glyphs,
   };
+}
+
+function nativeDisplayMathGlyphs(paragraph, metricProvider) {
+  const glyphs = [];
+  const visit = (items) => {
+    for (const positioned of items) {
+      if (positioned.item.kind === "display-math") {
+        glyphs.push(...glyphsFromNativeMathSvg({
+          svgBody: positioned.item.box.svgBody ?? "",
+          originX: paragraph.bounds.x + Number(positioned.x),
+          baselineY:
+            paragraph.bounds.y +
+            Number(positioned.y) +
+            Number(positioned.metrics.height),
+          metricProvider,
+        }));
+      } else if (
+        positioned.item.kind === "hbox" &&
+        positioned.item.role?.kind === "display-align-row"
+      ) {
+        for (const renderItem of positioned.item.box.renderItems) {
+          if (renderItem.kind !== "tex-math-svg") {
+            continue;
+          }
+          glyphs.push(...glyphsFromNativeMathSvg({
+            svgBody: renderItem.svgBody,
+            originX:
+              paragraph.bounds.x +
+              Number(positioned.x) +
+              Number(renderItem.x),
+            baselineY:
+              paragraph.bounds.y +
+              Number(positioned.y) +
+              Number(renderItem.baseline),
+            metricProvider,
+          }));
+        }
+      }
+      if (positioned.children?.length) {
+        visit(positioned.children);
+      }
+    }
+  };
+  visit(paragraph.vlistLayout.items);
+  return glyphs;
 }
 
 export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
