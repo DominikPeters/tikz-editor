@@ -1,0 +1,295 @@
+#!/usr/bin/env node
+
+import { execFileSync } from "node:child_process";
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, extname, join, relative, resolve } from "node:path";
+import { pathToFileURL, fileURLToPath } from "node:url";
+
+import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+
+const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const defaultOutDir = join(repoRoot, "artifacts", "beamer-frame-compare");
+const defaultRasterWidth = 1600;
+
+function usage() {
+  return `
+Usage:
+  npm run compare:beamer-frame -- --input deck.tex [--frame 1]
+
+Options:
+  --input <file>       Beamer source file.
+  --frame <n>          One-based source frame number. Default: 1.
+  --page <n>           One-based compiled overlay page. Default: last page.
+  --out-dir <dir>      Artifact root. Default: artifacts/beamer-frame-compare.
+  --name <name>        Stable artifact directory name.
+  --width <pixels>     Raster comparison width. Default: 1600.
+  --help               Show this help.
+`.trim();
+}
+
+function parseArgs(argv) {
+  const options = {
+    inputPath: null,
+    frameNumber: 1,
+    pageNumber: null,
+    outDir: defaultOutDir,
+    name: null,
+    width: defaultRasterWidth,
+    help: false,
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+    if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--input" && next) {
+      options.inputPath = resolve(next);
+      index += 1;
+    } else if (arg === "--frame" && next) {
+      options.frameNumber = Number(next);
+      index += 1;
+    } else if (arg === "--page" && next) {
+      options.pageNumber = Number(next);
+      index += 1;
+    } else if (arg === "--out-dir" && next) {
+      options.outDir = resolve(next);
+      index += 1;
+    } else if (arg === "--name" && next) {
+      options.name = next;
+      index += 1;
+    } else if (arg === "--width" && next) {
+      options.width = Number(next);
+      index += 1;
+    } else {
+      throw new Error(`Unknown or incomplete argument: ${arg}`);
+    }
+  }
+  if (
+    !options.help &&
+    (!Number.isInteger(options.frameNumber) || options.frameNumber < 1)
+  ) {
+    throw new Error("--frame must be a positive integer.");
+  }
+  if (
+    options.pageNumber != null &&
+    (!Number.isInteger(options.pageNumber) || options.pageNumber < 1)
+  ) {
+    throw new Error("--page must be a positive integer.");
+  }
+  if (!Number.isInteger(options.width) || options.width < 1) {
+    throw new Error("--width must be a positive integer.");
+  }
+  return options;
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 80) || "beamer-frame";
+}
+
+function runRequired(command, args, options = {}) {
+  try {
+    return execFileSync(command, args, {
+      cwd: options.cwd ?? repoRoot,
+      encoding: "utf8",
+      maxBuffer: 30 * 1024 * 1024,
+      ...options,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? `: ${error.message}` : "";
+    throw new Error(`Required command failed: ${command}${detail}`, {
+      cause: error,
+    });
+  }
+}
+
+async function loadBeamerRenderer() {
+  ensureDistBuildFresh(repoRoot);
+  const entry = join(
+    repoRoot,
+    "packages",
+    "core",
+    "dist",
+    "beamer",
+    "index.js"
+  );
+  return import(pathToFileURL(entry).href);
+}
+
+function runOracle(options, runDir) {
+  const oracleRoot = join(runDir, "oracle");
+  const args = [
+    join(repoRoot, "scripts", "probe-beamer-frame.mjs"),
+    "--input",
+    options.inputPath,
+    "--frame",
+    String(options.frameNumber),
+    "--out-dir",
+    oracleRoot,
+    "--name",
+    "frame",
+  ];
+  if (options.pageNumber != null) {
+    args.push("--page", String(options.pageNumber));
+  }
+  runRequired(process.execPath, args);
+  return join(oracleRoot, "frame");
+}
+
+function rasterizeSvg(inputPath, outputPath, width, height) {
+  runRequired("rsvg-convert", [
+    "--format",
+    "png",
+    "--width",
+    String(width),
+    "--height",
+    String(height),
+    "--page-width",
+    String(width),
+    "--page-height",
+    String(height),
+    "--keep-aspect-ratio",
+    "--background-color",
+    "white",
+    "--output",
+    outputPath,
+    inputPath,
+  ]);
+}
+
+function createVisualComparisons(runDir) {
+  const rendererPng = join(runDir, "renderer.png");
+  const oraclePng = join(runDir, "oracle.png");
+  runRequired("magick", [
+    rendererPng,
+    oraclePng,
+    "+append",
+    join(runDir, "side-by-side.png"),
+  ]);
+  runRequired("magick", [
+    rendererPng,
+    oraclePng,
+    "-compose",
+    "difference",
+    "-composite",
+    join(runDir, "difference.png"),
+  ]);
+  runRequired("magick", [
+    rendererPng,
+    oraclePng,
+    "-define",
+    "compose:args=50",
+    "-compose",
+    "blend",
+    "-composite",
+    join(runDir, "overlay.png"),
+  ]);
+}
+
+function relativeArtifact(runDir, path) {
+  return relative(runDir, path);
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
+    console.log(usage());
+    return;
+  }
+  if (!options.inputPath) {
+    throw new Error("Provide --input.");
+  }
+
+  const source = readFileSync(options.inputPath, "utf8");
+  const deckName = basename(options.inputPath, extname(options.inputPath));
+  const runName = slugify(
+    options.name ??
+      `${deckName}-frame-${String(options.frameNumber).padStart(3, "0")}`
+  );
+  const runDir = join(options.outDir, runName);
+  mkdirSync(runDir, { recursive: true });
+
+  const { renderBeamerFrame } = await loadBeamerRenderer();
+  const render = await renderBeamerFrame(source, {
+    frameIndex: options.frameNumber - 1,
+  });
+  const rendererSvg = join(runDir, "renderer.svg");
+  writeFileSync(rendererSvg, render.svg.svg, "utf8");
+
+  const oracleDir = runOracle(options, runDir);
+  const oracleSvg = join(oracleDir, "probe.svg");
+  const oracleReport = JSON.parse(
+    readFileSync(join(oracleDir, "report.json"), "utf8")
+  );
+  const rasterHeight = Math.round(
+    options.width * render.svg.viewBox.height / render.svg.viewBox.width
+  );
+  const rendererPng = join(runDir, "renderer.png");
+  const oraclePng = join(runDir, "oracle.png");
+  rasterizeSvg(rendererSvg, rendererPng, options.width, rasterHeight);
+  rasterizeSvg(oracleSvg, oraclePng, options.width, rasterHeight);
+  createVisualComparisons(runDir);
+
+  const report = {
+    formatVersion: 1,
+    input: {
+      path: options.inputPath,
+      frameNumber: options.frameNumber,
+      frameId: render.frame.id,
+      frameTitle: render.frame.title?.value ?? null,
+      compiledPage: oracleReport.input.compiledPage,
+    },
+    renderer: {
+      themeId: render.layout.page.themeId,
+      page: render.layout.page,
+      contentBounds: render.layout.contentBounds,
+      itemKinds: render.layout.items.map((item) => item.kind),
+      paragraphs: render.layout.paragraphs.map((paragraph) => ({
+        id: paragraph.paragraphId,
+        role: paragraph.role,
+        sourceSpan: paragraph.sourceSpan,
+        bounds: paragraph.bounds,
+        lineCount: paragraph.report.lines.length,
+      })),
+      diagnostics: render.diagnostics,
+    },
+    oracle: {
+      report: relativeArtifact(runDir, join(oracleDir, "report.json")),
+      page: oracleReport.pdf,
+      selectedTrace: oracleReport.tex.selectedPage,
+    },
+    raster: {
+      width: options.width,
+      height: rasterHeight,
+      background: "white",
+    },
+    artifacts: {
+      rendererSvg: "renderer.svg",
+      rendererPng: "renderer.png",
+      oracleSvg: relativeArtifact(runDir, oracleSvg),
+      oraclePng: "oracle.png",
+      sideBySidePng: "side-by-side.png",
+      differencePng: "difference.png",
+      overlayPng: "overlay.png",
+    },
+  };
+  const reportPath = join(runDir, "report.json");
+  writeFileSync(
+    reportPath,
+    `${JSON.stringify(report, null, 2)}\n`,
+    "utf8"
+  );
+  console.log(`[beamer-frame-compare] wrote ${reportPath}`);
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});

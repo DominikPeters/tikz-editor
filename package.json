@@ -94,6 +94,7 @@
     "harvest:beamer-corpus": "node scripts/harvest-beamer-corpus.mjs",
     "scan:beamer-corpus": "node scripts/scan-beamer-corpus.mjs",
     "probe:beamer-frame": "npm run -w @tikz-editor/core build && node scripts/probe-beamer-frame.mjs",
+    "compare:beamer-frame": "node scripts/compare-beamer-frame.mjs",
     "generate:shape-previews": "npx tsx apps/web/scripts/generate-node-shape-previews.ts",
     "debug:multiline": "npm run -w @tikz-editor/web debug:multiline --",
     "bench:incremental-drag": "node scripts/benchmark-incremental-drag.mjs",

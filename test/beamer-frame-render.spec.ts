@@ -8,6 +8,10 @@ const FIXTURE_PATH = new URL(
   "./fixtures/beamer/kkt_theorem_beamer.tex",
   import.meta.url
 );
+const HELLO_WORLD_FIXTURE_PATH = new URL(
+  "./fixtures/beamer/hello_world_beamer.tex",
+  import.meta.url
+);
 
 describe("headless Beamer frame renderer", () => {
   it("renders the representative KKT columns frame through the native engines", async () => {
@@ -74,6 +78,24 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([
       expect.objectContaining({ code: "beamer-render-unsupported-body" }),
     ]);
+  });
+
+  it("renders the minimal comparison fixture without diagnostics", async () => {
+    const source = readFileSync(HELLO_WORLD_FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source);
+
+    expect(result.frame.title?.value).toBe("Hello, world!");
+    expect(result.layout.page.themeId).toBe("Madrid");
+    expect(
+      result.layout.items.filter((item) => item.kind === "column")
+    ).toHaveLength(1);
+    expect(result.layout.paragraphs.map((paragraph) => paragraph.role)).toEqual([
+      "frame-title",
+      "footline",
+      "footline",
+      "body",
+    ]);
+    expect(result.diagnostics).toEqual([]);
   });
 
   it("rejects invalid frame and overlay selections", async () => {

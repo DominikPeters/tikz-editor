@@ -612,6 +612,16 @@ broader body nodes, overlay steps, and oracle-driven visual refinement remain.
 - Add a LuaLaTeX page-trace/oracle probe and record compiler/Beamer source
   versions in its artifacts.
 
+`npm run compare:beamer-frame -- --input <deck.tex> --frame <n>` now renders
+the same selected source frame through the native renderer and the LuaLaTeX
+oracle. It writes fixed-size renderer/oracle PNGs, a side-by-side image,
+pixel difference and 50% overlay images, both SVGs, and a structured report
+under `artifacts/beamer-frame-compare`. The minimal
+`test/fixtures/beamer/hello_world_beamer.tex` fixture is the first visual
+baseline; it isolates Madrid/seahorse chrome, Latin Modern text, and centered
+one-column body placement before the KKT fixture adds lists and embedded
+TikZ.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.
