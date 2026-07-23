@@ -1,4 +1,5 @@
 import { roundTexPt } from "../fonts/units.js";
+import type { TexListLayoutProfile } from "../layout-options.js";
 import {
   texLength,
   texVListX,
@@ -20,14 +21,15 @@ export interface TexListItemLabelScopeFrame {
 
 export function texListItemLayoutForParagraph(
   stack: readonly TexListItemLabelScopeFrame[],
-  paragraph: TexParagraphInput
+  paragraph: TexParagraphInput,
+  listProfile?: TexListLayoutProfile
 ): TexVBoxListItemLayout | undefined {
   if (paragraph.listContext?.showLabel !== true) {
     return undefined;
   }
   const labelKind = texListItemLabelKind(paragraph);
   const labelPlacement = texListItemLabelPlacement(paragraph);
-  const labelContent = texListItemLabelContent(paragraph);
+  const labelContent = texListItemLabelContent(paragraph, listProfile);
   const labelRightEdge = texListItemLabelRightEdge(stack);
   const descriptionIndent = texListItemDescriptionIndent(stack, paragraph);
   return {
@@ -94,7 +96,8 @@ function texListItemLabelPlacement(
 }
 
 function texListItemLabelContent(
-  paragraph: TexParagraphInput
+  paragraph: TexParagraphInput,
+  listProfile?: TexListLayoutProfile
 ): TexVBoxListItemLabelContent | undefined {
   const listContext = paragraph.listContext;
   if (!listContext?.showLabel) {
@@ -104,6 +107,13 @@ function texListItemLabelContent(
     return { kind: "source" };
   }
   if (listContext.kind === "itemize") {
+    const markers = listProfile?.itemizeMarkersByDepth;
+    const marker = markers?.[
+      Math.max(0, Math.min(listContext.labelDepth - 1, markers.length - 1))
+    ];
+    if (marker) {
+      return { kind: "marker", marker };
+    }
     return texDefaultItemizeLabelContent(listContext.labelDepth);
   }
   if (listContext.kind === "enumerate") {

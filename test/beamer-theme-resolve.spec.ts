@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
   scanBeamerDocument,
@@ -26,6 +27,12 @@ describe("Beamer theme resolution", () => {
       fg: "#000000",
       bg: "#cccced",
     });
+    const markers = resolveBeamerItemizeMarkers(theme);
+    expect(markers[0]).toEqual(expect.objectContaining({
+      widthEm: expect.closeTo(0.47064, 6),
+      depthEm: expect.closeTo(-0.2 / 10.95, 6),
+    }));
+    expect(markers[0]?.svgBody).toContain('data-beamer-list-marker="ball"');
     expect(theme.appliedComponents.map(({ kind, name }) => [kind, name])).toEqual([
       ["class-defaults", "beamer"],
       ["theme", "Madrid"],
@@ -63,6 +70,13 @@ describe("Beamer theme resolution", () => {
             ? { substitutedFor: "Fira Sans" }
             : {}),
         })
+      );
+      const markers = resolveBeamerItemizeMarkers(theme);
+      expect(markers[0]?.svgBody).toContain(
+        'data-beamer-list-marker="bullet"'
+      );
+      expect(markers[1]?.svgBody).toContain(
+        `data-beamer-list-marker="${name === "moloch" ? "circle" : "bullet"}"`
       );
       expect(theme.diagnostics).toEqual(
         name === "metropolis"

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildNativeBeamerPageTrace,
   compareBeamerPageTraces,
   type BeamerTraceGlyph,
   type NativeBeamerPageTrace,
   type OracleBeamerPageTrace,
 } from "../scripts/lib/beamer-frame-compare.mjs";
+import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 
 const COORDINATE_SYSTEM = {
   unit: "tex-pt",
@@ -28,6 +30,33 @@ function glyph(overrides: Partial<BeamerTraceGlyph> = {}): BeamerTraceGlyph {
 }
 
 describe("Beamer structural frame comparison", () => {
+  it("includes theme-owned list marker paint boxes in the native trace", () => {
+    const trace = buildNativeBeamerPageTrace({
+      layout: {
+        coordinateSystem: COORDINATE_SYSTEM,
+        page: {
+          page: { x: 0, y: 0, width: 160, height: 90 },
+        },
+        items: [{
+          id: "frame:0:list:0:marker:0",
+          kind: "list-marker",
+          bounds: { x: 12, y: 24, width: 5, height: 5 },
+        }],
+        paragraphs: [],
+        embeddedTikz: [],
+      },
+    } as never, computerModernTexMetricProvider);
+
+    expect(trace.rectangles).toEqual([{
+      id: "frame:0:list:0:marker:0",
+      role: "list-marker",
+      x: 12,
+      y: 24,
+      width: 5,
+      height: 5,
+    }]);
+  });
+
   it("reports rectangle edges and absolute page glyph deltas", () => {
     const native: NativeBeamerPageTrace = {
       coordinateSystem: COORDINATE_SYSTEM,

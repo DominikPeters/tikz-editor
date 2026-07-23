@@ -672,9 +672,20 @@ also consult their OT1 slots for Latin Modern lig/kern rules, preserving
 source-facing Unicode while matching LuaLaTeX's period–closing-quote kern.
 On the KKT frame all nine source-backed body baselines now agree within
 0.000028pt and body glyph x positions within 0.019792pt. The full-page
-maximum x delta is 0.315379pt in the frame title. The remaining four
-unmatched oracle rules are Beamer's theme-owned itemize label templates;
-embedded-TikZ glyphs remain explicitly excluded until their trace is merged.
+maximum x delta is 0.315379pt in the frame title.
+
+Theme-owned itemize markers use the same resolved-template boundary as frame
+chrome. The shared list profile accepts measured 1000-units-per-em vector
+markers, including negative depth for raised TeX boxes, so marker painting,
+VList geometry, comparison bounds, and future editor hit geometry cannot
+drift apart. The Madrid `rounded` inner theme resolves to the `ball` template;
+its first-level marker transcribes `bigsphere` as a `1.06ex` square raised by
+`0.2pt` from `beamerbaseauxtemplates.sty`. The KKT comparison now matches all
+four marker rules at 5.153508pt against the oracle's 5.153473pt, leaving zero
+unmatched native rectangles or oracle rules. Default triangle, circle,
+square, metropolis, and moloch marker families resolve through the same
+profile rather than renderer conditionals. Embedded-TikZ glyphs remain
+explicitly excluded until their trace is merged.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

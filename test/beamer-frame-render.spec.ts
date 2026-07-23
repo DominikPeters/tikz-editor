@@ -89,6 +89,22 @@ describe("headless Beamer frame renderer", () => {
     expect(list.report.lines.map((line) => line.xStart)).toEqual(
       list.report.lines.map(() => expect.closeTo(21.9, 6))
     );
+    const markers = result.layout.items.filter(
+      (item) => item.kind === "list-marker"
+    );
+    expect(markers).toHaveLength(4);
+    expect(markers.map((marker) => marker.bounds)).toEqual([
+      expect.objectContaining({
+        x: expect.closeTo(22.221492, 6),
+        y: expect.closeTo(104.331728, 6),
+        width: expect.closeTo(5.153508, 6),
+        height: expect.closeTo(5.153508, 6),
+      }),
+      expect.objectContaining({ y: expect.closeTo(120.931728, 6) }),
+      expect.objectContaining({ y: expect.closeTo(151.131728, 6) }),
+      expect.objectContaining({ y: expect.closeTo(181.331728, 6) }),
+    ]);
+    expect(result.svg.svg).toContain('data-beamer-list-marker="ball"');
 
     expect(result.svg.viewBox.width).toBeCloseTo(455.24408, 4);
     expect(result.svg.svg).toContain(

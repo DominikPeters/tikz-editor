@@ -4468,6 +4468,48 @@ describe("simple TeX paragraph layout", () => {
     );
   });
 
+  it("uses measured vector markers from a document list profile", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`\begin{itemize}\item Alpha\end{itemize}`,
+      {
+        paragraphId: "tex:profile-vector-list-marker",
+        width: 180,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+        listProfile: {
+          leftMarginEmByDepth: [2],
+          topsepPtByDepth: [3],
+          partopsepPtByDepth: [0],
+          itemsepPtByDepth: [3],
+          parsepPtByDepth: [0],
+          initialItemBaselineAdjustmentPt: 0,
+          itemizeMarkersByDepth: [{
+            svgBody: '<circle data-test-list-marker="true"/>',
+            widthEm: 0.5,
+            heightEm: 0.52,
+            depthEm: -0.02,
+          }],
+        },
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines[0]?.segments[0]).toMatchObject({
+      kind: "math",
+      role: "list-label",
+      mathSvgBody: '<circle data-test-list-marker="true"/>',
+      width: 5,
+    });
+    expect(result.vlistLayout?.boxReport.items.find(
+      (item) => item.hboxRole?.kind === "list-label"
+    )).toMatchObject({
+      width: 5,
+      height: 5.2,
+      depth: -0.2,
+      totalHeight: 5,
+    });
+  });
+
   it("positions natural LaTeX article list vertical spacing", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`Before \par \begin{itemize}\item Alpha \par More \item Beta \begin{itemize}\item Nested\end{itemize}\end{itemize} \par After`,

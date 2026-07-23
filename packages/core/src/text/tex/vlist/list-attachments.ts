@@ -235,6 +235,43 @@ function texLayoutLabelForListContext(
     };
   }
 
+  if (labelContent.kind === "marker") {
+    const marker = labelContent.marker;
+    const sourceStart = 0;
+    const width = texLength(marker.widthEm * font.atPt);
+    const height = texLength(marker.heightEm * font.atPt);
+    const depth = texLength(marker.depthEm * font.atPt);
+    return {
+      items: [{
+        kind: "math",
+        role: "list-label",
+        text: "",
+        content: "",
+        delimiter: "dollar",
+        sourceStart,
+        sourceEnd: sourceStart,
+        contentStart: sourceStart,
+        contentEnd: sourceStart,
+        box: {
+          source: "",
+          content: "",
+          sourceStart,
+          sourceEnd: sourceStart,
+          contentStart: sourceStart,
+          contentEnd: sourceStart,
+          width,
+          height,
+          depth,
+          caretStops: [texHBoxX(0), texHBoxX(width)],
+          svgBody: marker.svgBody,
+        },
+      }],
+      sourceStart: 0,
+      sourceEnd: 0,
+      rightEdge,
+    };
+  }
+
   return {
     items: [{
       kind: "text",
@@ -307,7 +344,7 @@ function texLayoutLabelHBoxContent(
 } {
   let width = texLength(0);
   let height = texLength(0);
-  let depth = texLength(0);
+  let depth = Number.NEGATIVE_INFINITY;
   const pendingItems: Array<
     | Omit<Extract<TexRenderItem, { kind: "tex-glyph-run" }>, "baseline">
     | Omit<Extract<TexRenderItem, { kind: "tex-glyph" }>, "baseline">
@@ -393,11 +430,12 @@ function texLayoutLabelHBoxContent(
     width = texLength(width + texLayoutSpaceItemWidth(item));
   }
   const baseline = texHBoxY(roundTexPt(height));
+  const resolvedDepth = Number.isFinite(depth) ? depth : texLength(0);
   return {
     metrics: {
       width: texLength(roundTexPt(width)),
       height: texLength(baseline),
-      depth: texLength(roundTexPt(depth)),
+      depth: texLength(roundTexPt(resolvedDepth)),
     },
     renderItems: pendingItems.map((item) => ({
       ...item,

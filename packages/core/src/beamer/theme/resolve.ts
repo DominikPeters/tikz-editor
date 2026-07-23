@@ -121,6 +121,8 @@ function createDefaultTheme(): MutableTheme {
     colors: {
       "normal text": { fg: "#000000", bg: "#ffffff" },
       structure: { fg: "#3333b3" },
+      "local structure": { parent: "structure" },
+      item: { parent: "local structure" },
       "palette primary": { fg: "#3333b3" },
       "palette secondary": { fg: "#262686" },
       "palette tertiary": { fg: "#1a1a59" },

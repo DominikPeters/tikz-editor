@@ -33,6 +33,7 @@ import { scanBeamerDocument } from "./scan.js";
 import {
   createBeamerTexTextFontProfile,
   planBeamerFrameChrome,
+  resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
 } from "./theme/index.js";
@@ -57,6 +58,10 @@ type LaidParagraph = {
   layout: BeamerParagraphLayout;
   svgBody: string;
   height: number;
+  listMarkers: readonly {
+    id: string;
+    bounds: BeamerRect;
+  }[];
 };
 
 type PreparedColumnFlowItem =
@@ -112,6 +117,15 @@ const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
   parsepPtByDepth: [0, 0, 0],
   initialItemBaselineAdjustmentPt: 0,
 };
+
+function beamerListLayoutProfile(
+  theme: ResolvedBeamerTheme
+): TexListLayoutProfile {
+  return {
+    ...BEAMER_LIST_LAYOUT_PROFILE,
+    itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
+  };
+}
 
 /**
  * Render one Beamer frame into a fixed-page SVG and a source-addressable
@@ -277,6 +291,20 @@ export async function renderBeamerFrame(
             parentId: columnId,
             paragraphId: laid.layout.paragraphId,
           });
+          for (const marker of laid.listMarkers) {
+            items.push({
+              id: marker.id,
+              kind: "list-marker",
+              sourceSpan: laid.layout.sourceSpan,
+              bounds: {
+                x: x + marker.bounds.x,
+                y: flowY + marker.bounds.y,
+                width: marker.bounds.width,
+                height: marker.bounds.height,
+              },
+              parentId: laid.layout.paragraphId,
+            });
+          }
           modelBuilder.addPart({
             basePartId: laid.layout.paragraphId,
             sourceId: laid.layout.paragraphId,
@@ -551,6 +579,7 @@ async function prepareColumnContent(params: {
   const width = resolveColumnWidth(column.width.value, textWidth);
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = theme.fonts["normal-text"];
+  const listProfile = beamerListLayoutProfile(theme);
   let previousDepth: number | undefined;
 
   for (const node of column.children) {
@@ -560,6 +589,7 @@ async function prepareColumnContent(params: {
       width,
       bodyFont,
       diagnostics,
+      listProfile,
       initialPreviousDepth:
         node.kind === "list" ? previousDepth : undefined,
     });
@@ -601,6 +631,7 @@ async function prepareColumnFlowNode(params: {
   width: number;
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
+  listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
@@ -609,6 +640,7 @@ async function prepareColumnFlowNode(params: {
     width,
     bodyFont,
     diagnostics,
+    listProfile,
     initialPreviousDepth,
   } = params;
   if (node.kind === "vertical-space") {
@@ -628,6 +660,7 @@ async function prepareColumnFlowNode(params: {
       font: bodyFont,
       alignment: "left",
       initialPreviousDepth,
+      listProfile,
     });
     if (!paragraph) {
       return null;
@@ -813,6 +846,7 @@ function layoutParagraph(params: {
   alignment: "left" | "center" | "right";
   interwordSpacePt?: number;
   initialPreviousDepth?: number;
+  listProfile?: TexListLayoutProfile;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -853,7 +887,7 @@ function layoutParagraph(params: {
     }),
     baselineSkip: params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,
-    listProfile: BEAMER_LIST_LAYOUT_PROFILE,
+    listProfile: params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE,
     sourceMap: params.mapped.sourceMap,
   });
   if (!result.supported || !result.report || !result.vlistLayout) {
@@ -882,6 +916,23 @@ function layoutParagraph(params: {
       baseFontSizePt: fontSize,
       alignment,
     }),
+    listMarkers: params.listProfile?.itemizeMarkersByDepth
+      ? result.vlistLayout.boxReport.items
+          .filter((item) =>
+            item.hboxRole?.kind === "list-label" &&
+            item.hboxRole.listKind === "itemize" &&
+            item.hboxRole.labelKind === "default"
+          )
+          .map((item) => ({
+            id: `${params.paragraphId}:marker:${item.path.join("-")}`,
+            bounds: {
+              x: Number(item.x),
+              y: Number(item.y),
+              width: Number(item.width),
+              height: Number(item.totalHeight),
+            },
+          }))
+      : [],
   };
 }
 

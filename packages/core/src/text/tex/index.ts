@@ -113,6 +113,7 @@ export {
 export {
   type TexLayoutIrOptions,
   type TexListLayoutProfile,
+  type TexListMarkerProfile,
 } from "./layout-options.js";
 export type {
   PositionedTexVListItem,

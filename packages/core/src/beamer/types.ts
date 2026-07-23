@@ -158,6 +158,7 @@ export type BeamerFrameLayoutItemKind =
   | "frame-title"
   | "frame-subtitle"
   | "text"
+  | "list-marker"
   | "columns"
   | "column"
   | "tikzpicture"

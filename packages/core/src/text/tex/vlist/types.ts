@@ -15,6 +15,7 @@ import type {
 } from "../ir.js";
 import type { TexMathBox } from "../layout-inline-items.js";
 import type { TexMathDisplayAlignment } from "../layout-inline-items.js";
+import type { TexListMarkerProfile } from "../layout-options.js";
 import type {
   TexHBoxX,
   TexHBoxY,
@@ -249,6 +250,7 @@ export type TexVBoxListItemLabelPlacement = "margin" | "inline";
 export type TexVBoxListItemLabelContent =
   | { readonly kind: "source" }
   | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "marker"; readonly marker: TexListMarkerProfile }
   | {
       readonly kind: "glyph";
       readonly text: string;

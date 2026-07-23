@@ -5,6 +5,20 @@ import type { NodeTextGraphicsResolver } from "../types.js";
 import type { TexLength } from "./coordinates.js";
 
 /**
+ * A generated list marker measured in ems of the surrounding paragraph font.
+ *
+ * SVG coordinates use the same 1000-units-per-em, baseline-at-zero convention
+ * as native math SVG bodies. A negative depth models TeX constructs such as a
+ * raised Beamer marker without losing the marker's painted box geometry.
+ */
+export interface TexListMarkerProfile {
+  readonly svgBody: string;
+  readonly widthEm: number;
+  readonly heightEm: number;
+  readonly depthEm: number;
+}
+
+/**
  * Resolved LaTeX list parameters for a document profile.
  *
  * Margins remain font-relative because the class definitions use `em`;
@@ -18,6 +32,7 @@ export interface TexListLayoutProfile {
   readonly itemsepPtByDepth: readonly number[];
   readonly parsepPtByDepth: readonly number[];
   readonly initialItemBaselineAdjustmentPt: number;
+  readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
 }
 
 export interface TexLayoutIrOptions {

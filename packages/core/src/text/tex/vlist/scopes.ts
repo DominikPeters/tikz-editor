@@ -1,4 +1,5 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
+import type { TexListLayoutProfile } from "../layout-options.js";
 import { texListItemLayoutForParagraph } from "./list-labels.js";
 import {
   texVBoxLayoutForScopeRole,
@@ -25,7 +26,8 @@ interface ScopeFrame {
 
 export function groupSimpleTexVListScopes(
   vlist: TexVListDocument,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  listProfile?: TexListLayoutProfile
 ): TexVListDocument {
   const rootItems: TexVListItem[] = [];
   const stack: ScopeFrame[] = [];
@@ -35,7 +37,7 @@ export function groupSimpleTexVListScopes(
     if (!rawItem) {
       continue;
     }
-    const item = normalizeExistingVBoxScopes(rawItem, font);
+    const item = normalizeExistingVBoxScopes(rawItem, font, listProfile);
     const path = scopePathForItem(item, vlist.items[index + 1]);
     const commonPrefixLength = commonScopePrefixLength(stack, path);
     stack.length = commonPrefixLength;
@@ -55,7 +57,7 @@ export function groupSimpleTexVListScopes(
       stack.push(frame);
     }
 
-    appendItem(stack, rootItems, item);
+    appendItem(stack, rootItems, item, listProfile);
   }
 
   return {
@@ -66,7 +68,8 @@ export function groupSimpleTexVListScopes(
 
 function normalizeExistingVBoxScopes(
   item: TexVListItem,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  listProfile?: TexListLayoutProfile
 ): TexVListItem {
   if (item.kind !== "vbox" || item.role) {
     return item;
@@ -77,7 +80,7 @@ function normalizeExistingVBoxScopes(
       kind: "vlist",
       sourceSpan: item.sourceSpan,
       items: item.items,
-    }, font).items,
+    }, font, listProfile).items,
   };
 }
 
@@ -125,7 +128,8 @@ function commonScopePrefixLength(
 function appendItem(
   stack: readonly ScopeFrame[],
   rootItems: TexVListItem[],
-  item: TexVListItem
+  item: TexVListItem,
+  listProfile?: TexListLayoutProfile
 ): void {
   const parent = stack.at(-1);
   if (parent) {
@@ -133,7 +137,7 @@ function appendItem(
     for (const frame of stack) {
       frame.sourceSpan = mergeSourceSpans(frame.sourceSpan, item.sourceSpan);
     }
-    enrichListItemFrameFromParagraph(stack, item);
+    enrichListItemFrameFromParagraph(stack, item, listProfile);
     return;
   }
   rootItems.push(item);
@@ -141,7 +145,8 @@ function appendItem(
 
 function enrichListItemFrameFromParagraph(
   stack: readonly ScopeFrame[],
-  item: TexVListItem
+  item: TexVListItem,
+  listProfile?: TexListLayoutProfile
 ): void {
   if (item.kind !== "paragraph" || item.paragraph.listContext?.showLabel !== true) {
     return;
@@ -150,7 +155,11 @@ function enrichListItemFrameFromParagraph(
   if (listItemFrame?.role.kind !== "list-item") {
     return;
   }
-  const listItem = texListItemLayoutForParagraph(stack, item.paragraph);
+  const listItem = texListItemLayoutForParagraph(
+    stack,
+    item.paragraph,
+    listProfile
+  );
   if (!listItem) {
     return;
   }

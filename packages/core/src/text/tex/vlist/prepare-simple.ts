@@ -33,6 +33,6 @@ export function prepareSimpleTexVList(
   const materialized = materializeDisplayMathVerticalGlueInVList(paragraphGlue);
   return {
     materialized,
-    normalized: groupSimpleTexVListScopes(materialized, font),
+    normalized: groupSimpleTexVListScopes(materialized, font, listProfile),
   };
 }

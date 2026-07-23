@@ -67,14 +67,19 @@ export function normalizeOracleBeamerPageTrace(pageTrace, pageGeometry) {
 export function buildNativeBeamerPageTrace(render, metricProvider) {
   const rectangles = render.layout.items
     .filter((item) =>
-      item.id.endsWith(":background") &&
+      (
+        item.id.endsWith(":background") ||
+        item.kind === "list-marker"
+      ) &&
       item.paragraphId == null &&
       item.bounds.width > 0 &&
       item.bounds.height > 0
     )
     .map((item) => ({
       id: item.id,
-      role: rectangleRole(item.id),
+      role: item.kind === "list-marker"
+        ? "list-marker"
+        : rectangleRole(item.id),
       ...roundedRect(item.bounds),
     }));
   const lines = [];
