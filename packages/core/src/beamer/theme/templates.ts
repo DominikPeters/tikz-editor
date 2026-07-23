@@ -13,6 +13,7 @@ const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
 const DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT = 27.684661865234375;
 const DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM = 0.25;
 const DEFAULT_FRAME_TITLE_TEXT_TOP_PT = 10.148712158203125;
+const DEFAULT_FRAME_TITLE_BASELINE_PT = 20.142303466796875;
 // beamerouterthemeinfolines.sty: ht=2.25ex,dp=1ex. The 4pt reserve added by
 // beamerbaseframecomponents.sty belongs to \footheight, not the painted boxes.
 const INFOLINES_FOOTLINE_PAINT_HEIGHT_PT = 8.658004760742188;
@@ -141,6 +142,9 @@ function planDefaultFrameTitle(
         colorRole: "frametitle",
         alignment: "left",
         verticalAlignment: "top",
+        // The template inserts a strut, so the baseline is independent of
+        // whether this particular title contains a tall or deep glyph.
+        baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT,
       },
     ],
   };
@@ -408,5 +412,8 @@ function offsetPrimitives(
       x: primitive.bounds.x + dx,
       y: primitive.bounds.y + dy,
     },
+    ...(primitive.kind === "text" && primitive.baselineY != null
+      ? { baselineY: primitive.baselineY + dy }
+      : {}),
   }));
 }

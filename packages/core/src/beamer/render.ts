@@ -504,7 +504,7 @@ async function prepareFrameFlow(params: {
           node,
           paragraph,
           naturalHeight: paragraph.height,
-          boxHeight: Number(paragraph.layout.vlistLayout.metrics.height),
+          boxHeight: paragraphStartingMaterialHeight(paragraph),
           endingDepth: paragraphEndingMaterialDepth(paragraph),
           endsWithVerticalSpace: paragraphEndsWithVerticalSpace(paragraph),
           trailingParagraphPreviousDepth:
@@ -639,6 +639,13 @@ function verticalInterlineGlue(
 function paragraphEndingMaterialDepth(paragraph: LaidParagraph): number {
   const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
   return Number(last?.depth ?? 0);
+}
+
+function paragraphStartingMaterialHeight(paragraph: LaidParagraph): number {
+  const first = paragraph.layout.vlistLayout.boxReport.items.find(
+    (item) => item.itemKind !== "glue" && item.itemKind !== "penalty"
+  );
+  return Number(first?.height ?? paragraph.layout.vlistLayout.metrics.height);
 }
 
 function paragraphEndsWithVerticalSpace(paragraph: LaidParagraph): boolean {
@@ -1192,9 +1199,10 @@ function layoutParagraph(params: {
     metricProvider,
     textFontProfile,
     tikzTextWidthNode: true,
-    ...(params.interwordSpacePt == null
-      ? {}
-      : { spaceGlueProfile: "font" as const }),
+    // Beamer's global `\raggedright` keeps the active font's interword glue.
+    // A template-specific fixed space is expressed by the metric-provider
+    // wrapper above, not by TikZ's 0.3333em node-text profile.
+    spaceGlueProfile: "font-fixed",
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,

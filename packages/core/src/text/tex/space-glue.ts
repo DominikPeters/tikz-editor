@@ -30,8 +30,16 @@ export function texInterwordGlueForSpaceFactor(
   const baseShrink = tfmToPt(font, font.data.fontdimen.shrink);
   return {
     width: texLength(roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0))),
-    stretch: texLength(roundTexPt(baseStretch * normalized / 1000)),
-    shrink: texLength(roundTexPt(baseShrink * 1000 / normalized)),
+    stretch: texLength(
+      spaceGlueProfile === "font-fixed"
+        ? 0
+        : roundTexPt(baseStretch * normalized / 1000)
+    ),
+    shrink: texLength(
+      spaceGlueProfile === "font-fixed"
+        ? 0
+        : roundTexPt(baseShrink * 1000 / normalized)
+    ),
     spaceFactor: normalized,
   };
 }

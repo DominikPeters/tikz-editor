@@ -160,7 +160,28 @@ describe("headless Beamer frame renderer", () => {
       (item) => item.hboxRole?.kind === "display-align-row"
     );
     const baselines = rows.map((row) => Number(row.y + row.height));
+    const title = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "frame-title"
+    )!;
+    const titleLine = title.report.lines[0]!;
+    const titlePlacement = title.vlistLayout.linePlacements.find(
+      (placement) => placement.lineIndex === titleLine.lineIndex
+    )!;
+    const titleBaseline =
+      title.bounds.y + Number(titlePlacement.y) + Number(titleLine.ascent);
+    const footlineTitle = result.layout.paragraphs.find(
+      (paragraph) => paragraph.paragraphId === "frame:3:footline:title"
+    )!;
 
+    expect(body.bounds.y).toBeCloseTo(64.501088, 6);
+    expect(titleBaseline).toBeCloseTo(20.142303, 6);
+    const footlineSpaces =
+      footlineTitle.report.lines[0]?.segments
+        .filter((segment) => segment.kind === "space")
+        .map((segment) => Number(segment.width)) ?? [];
+    expect(footlineSpaces).toHaveLength(2);
+    expect(footlineSpaces[0]).toBeCloseTo(2.124, 6);
+    expect(footlineSpaces[1]).toBeCloseTo(2.124, 6);
     expect(baselines).toHaveLength(4);
     expect(baselines[1] - baselines[0]).toBeCloseTo(29.510575, 6);
     expect(baselines[2] - baselines[1]).toBeCloseTo(16.6, 6);

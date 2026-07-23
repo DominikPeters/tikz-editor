@@ -753,7 +753,11 @@ math from being scaled twice even when its traced font metrics are correct. In
 vertical flow, relative `em`/`ex` glue resolves against the active font, and a
 post-display `\vspace` remains an explicit `\vadjust`-like attachment after
 the resumed paragraph line, including the source interword space that follows
-the command.
+the command. Frame-fill placement measures the first material box for TeX's
+initial `\topskip`, rather than the aggregate paragraph VList height.
+Ragged/centered Beamer text uses the active font's natural interword width with
+zero finite adjustment (the surrounding `fil` glue owns alignment), and
+template struts provide fixed baselines such as the default frame title.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

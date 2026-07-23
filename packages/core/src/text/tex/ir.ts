@@ -12,7 +12,7 @@ import {
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
-export type TexSpaceGlueProfile = "font" | "tikz-fixed";
+export type TexSpaceGlueProfile = "font" | "font-fixed" | "tikz-fixed";
 export type TexFontFamily = "roman" | "sans" | "typewriter" | "normal";
 export type TexFontSeries = "medium" | "bold";
 export type TexFontShape = "upright" | "italic" | "slanted" | "small-caps";
