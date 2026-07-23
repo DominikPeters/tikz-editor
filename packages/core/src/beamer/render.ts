@@ -28,6 +28,8 @@ import type {
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
   BeamerColumnsBodyNode,
+  BeamerFrameBodyNode,
+  BeamerParagraphBodyNode,
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { scanBeamerDocument } from "./scan.js";
@@ -91,6 +93,32 @@ type PreparedColumnContent = {
   flow: PreparedColumnFlowItem[];
   naturalHeight: number;
   box: ColumnVerticalBox;
+};
+
+type PreparedFrameFlowItem =
+  | {
+      kind: "paragraph";
+      node: BeamerParagraphBodyNode;
+      paragraph: LaidParagraph;
+      naturalHeight: number;
+      boxHeight: number;
+      endingDepth: number;
+      endsWithVerticalSpace: boolean;
+      trailingParagraphPreviousDepth: number;
+    }
+  | {
+      kind: "columns";
+      node: BeamerColumnsBodyNode;
+      columns: PreparedColumnContent[];
+      box: Pick<ColumnVerticalBox, "height" | "depth">;
+    };
+
+type PositionedFrameFlowItem = {
+  item: PreparedFrameFlowItem;
+  contentTop: number;
+  referenceY: number;
+  visualTop: number;
+  visualBottom: number;
 };
 
 /**
@@ -220,201 +248,57 @@ export async function renderBeamerFrame(
     ),
   };
   let contentBounds = availableContentBounds;
-  const columnsNode = bodyIr.children.find(
-    (node): node is BeamerColumnsBodyNode => node.kind === "columns"
-  );
-  const columns = columnsNode?.columns ?? [];
-
-  if (columns.length > 0) {
-    const prepared = await Promise.all(
-      columns.map((column) =>
-        prepareColumnContent({
-          source,
-          column,
-          textWidth: page.textArea.width,
-          diagnostics,
-          theme,
-        })
-      )
-    );
-    const columnsBox = {
-      height: Math.max(0, ...prepared.map((column) => column.box.height)),
-      depth: Math.max(0, ...prepared.map((column) => column.box.depth)),
-    };
-    const frameAppend = appendVerticalBoxToFrame(
-      columnsBox,
+  const preparedFrameFlow = await prepareFrameFlow({
+    source,
+    children: bodyIr.children,
+    textWidth: page.textArea.width,
+    diagnostics,
+    theme,
+  });
+  if (preparedFrameFlow.length > 0) {
+    const positioned = positionPreparedFrameFlow(
+      preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt
     );
     const frameBlockTop = positionFrameContentTop(
       availableContentBounds,
-      frameAppend.extent,
+      positioned.extent,
       frame.options?.alignment ?? "center"
     );
-    const columnsReferenceY = frameBlockTop + frameAppend.referenceOffset;
-    const columnTops = prepared.map(
-      (column) =>
-        columnsReferenceY - column.box.referenceFromContentTop
-    );
-    const visualTop = Math.min(...columnTops);
-    const visualBottom = Math.max(
-      ...prepared.map(
-        (column, index) => columnTops[index] + column.naturalHeight
-      )
-    );
-    const totalHeight = Math.max(0, visualBottom - visualTop);
-    const columnGap = prepared.length > 1
-      ? Math.max(
-        0,
-        (availableContentBounds.width -
-          prepared.reduce((sum, column) => sum + column.width, 0)) /
-          (prepared.length - 1)
-      )
-      : 0;
-    const columnsId = columnsNode?.id ?? `${frame.id}:columns`;
-    const columnChildIds: string[] = [];
-    let x = availableContentBounds.x;
-
-    for (let index = 0; index < prepared.length; index += 1) {
-      const preparedColumn = prepared[index];
-      const columnId = preparedColumn.column.id;
-      columnChildIds.push(columnId);
-      const childIds: string[] = [];
-      const columnTop = columnTops[index];
-      let flowY = columnTop;
-
-      for (const flowItem of preparedColumn.flow) {
-        if (flowItem.kind === "vertical-space") {
-          flowY += flowItem.height;
-          continue;
-        }
-        if (flowItem.kind === "paragraph") {
-          const laid = flowItem.paragraph;
-          laid.layout.bounds = {
-            ...laid.layout.bounds,
-            x,
-            y: flowY,
-            height: flowItem.advanceHeight,
-          };
-          paragraphs.push(laid.layout);
-          childIds.push(laid.layout.paragraphId);
-          items.push({
-            id: laid.layout.paragraphId,
-            kind: "text",
-            sourceSpan: laid.layout.sourceSpan,
-            bounds: laid.layout.bounds,
-            parentId: columnId,
-            paragraphId: laid.layout.paragraphId,
-          });
-          for (const marker of laid.listMarkers) {
-            items.push({
-              id: marker.id,
-              kind: "list-marker",
-              sourceSpan: laid.layout.sourceSpan,
-              bounds: {
-                x: x + marker.bounds.x,
-                y: flowY + marker.bounds.y,
-                width: marker.bounds.width,
-                height: marker.bounds.height,
-              },
-              parentId: laid.layout.paragraphId,
-            });
-          }
-          modelBuilder.addPart({
-            basePartId: laid.layout.paragraphId,
-            sourceId: laid.layout.paragraphId,
-            elementId: null,
-            markup: paragraphMarkup(
-              laid.svgBody,
-              x,
-              flowY,
-              textColor(theme, "normal text")
-            ),
-          });
-          flowY += flowItem.advanceHeight;
-          continue;
-        }
-
-        const tikz = flowItem;
-        const tikzId = tikz.id;
-        // A column begins with \raggedright; an unadorned tikzpicture is an
-        // ordinary hbox at the left edge of that paragraph.
-        const tikzX = x;
-        const tikzY = flowY;
-        const bounds = {
-          x: tikzX,
-          y: tikzY,
-          width: tikz.width,
-          height: tikz.height,
-        };
-        const scale = tikz.width / tikz.viewBox.width;
-        const translateX = tikzX - tikz.viewBox.x * scale;
-        const translateY = tikzY - tikz.viewBox.y * scale;
-        const innerDefs = tikz.model.defs.length > 0
-          ? `<defs>${tikz.model.defs.join("")}</defs>`
-          : "";
-        const innerBody = tikz.model.parts.map((part) => part.markup).join("");
-
-        childIds.push(tikzId);
-        embeddedTikz.push({
-          itemId: tikzId,
-          sourceSpan: tikz.sourceSpan,
-          bounds,
-          viewBox: tikz.viewBox,
-          model: tikz.model,
+    for (const placement of positioned.items) {
+      if (placement.item.kind === "paragraph") {
+        emitFrameParagraph({
+          prepared: placement.item,
+          x: availableContentBounds.x,
+          y: frameBlockTop + placement.contentTop,
+          items,
+          paragraphs,
+          modelBuilder,
+          theme,
         });
-        items.push({
-          id: tikzId,
-          kind: "tikzpicture",
-          sourceSpan: tikz.sourceSpan,
-          bounds,
-          parentId: columnId,
+      } else {
+        emitPreparedColumns({
+          prepared: placement.item,
+          referenceY: frameBlockTop + placement.referenceY,
+          bounds: availableContentBounds,
+          items,
+          paragraphs,
+          embeddedTikz,
+          modelBuilder,
+          theme,
         });
-        modelBuilder.addPart({
-          basePartId: tikzId,
-          sourceId: tikzId,
-          elementId: null,
-          markup:
-            `<g transform="translate(${fmt(translateX)} ${fmt(translateY)}) scale(${fmt(scale)})">` +
-            innerDefs +
-            innerBody +
-            `</g>`,
-        });
-        flowY += tikz.height;
       }
-
-      items.push({
-        id: columnId,
-        kind: "column",
-        sourceSpan: preparedColumn.column.span,
-        bounds: {
-          x,
-          y: columnTop,
-          width: preparedColumn.width,
-          height: preparedColumn.naturalHeight,
-        },
-        parentId: columnsId,
-        childIds,
-      });
-      x += preparedColumn.width + columnGap;
     }
-
-    items.push({
-      id: columnsId,
-      kind: "columns",
-      sourceSpan: columnsNode?.span ?? frame.bodySpan,
-      bounds: {
-        x: availableContentBounds.x,
-        y: visualTop,
-        width: availableContentBounds.width,
-        height: totalHeight,
-      },
-      parentId: null,
-      childIds: columnChildIds,
-    });
+    const visualTop = Math.min(
+      ...positioned.items.map((placement) => placement.visualTop)
+    );
+    const visualBottom = Math.max(
+      ...positioned.items.map((placement) => placement.visualBottom)
+    );
     contentBounds = {
       ...availableContentBounds,
-      y: visualTop,
-      height: totalHeight,
+      y: frameBlockTop + visualTop,
+      height: Math.max(0, visualBottom - visualTop),
     };
   } else {
     items.push({
@@ -423,14 +307,12 @@ export async function renderBeamerFrame(
       sourceSpan: frame.bodySpan,
       bounds: contentBounds,
       parentId: null,
-      message:
-        "Initial Beamer rendering currently supports column-based frame bodies.",
+      message: "This Beamer frame body has no supported flow content.",
     });
     diagnostics.push({
       severity: "warning",
       code: "beamer-render-unsupported-body",
-      message:
-        "Initial Beamer rendering currently supports column-based frame bodies.",
+      message: "This Beamer frame body has no supported flow content.",
       span: frame.bodySpan,
     });
   }
@@ -576,6 +458,407 @@ function firstLineBaselineOffset(paragraph: LaidParagraph): number {
     (candidate) => candidate.lineIndex === firstLine.lineIndex
   );
   return Number(placement?.y ?? 0) + Number(firstLine.ascent);
+}
+
+async function prepareFrameFlow(params: {
+  source: string;
+  children: readonly BeamerFrameBodyNode[];
+  textWidth: number;
+  diagnostics: Diagnostic[];
+  theme: ResolvedBeamerTheme;
+}): Promise<PreparedFrameFlowItem[]> {
+  const result: PreparedFrameFlowItem[] = [];
+  const bodyFont = params.theme.fonts["normal-text"];
+  for (const node of params.children) {
+    if (node.kind === "paragraph") {
+      const paragraph = layoutParagraph({
+        mapped: createIdentityMappedText(
+          params.source.slice(node.span.from, node.span.to),
+          node.span.from
+        ),
+        sourceSpan: node.span,
+        paragraphId: node.id,
+        role: "body",
+        bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
+        font: bodyFont,
+        alignment: "left",
+      });
+      if (paragraph) {
+        result.push({
+          kind: "paragraph",
+          node,
+          paragraph,
+          naturalHeight: paragraph.height,
+          boxHeight: Number(paragraph.layout.vlistLayout.metrics.height),
+          endingDepth: paragraphEndingMaterialDepth(paragraph),
+          endsWithVerticalSpace: paragraphEndsWithVerticalSpace(paragraph),
+          trailingParagraphPreviousDepth:
+            paragraphTrailingNonGlueDepth(paragraph),
+        });
+      }
+      continue;
+    }
+    if (node.kind === "columns") {
+      if (node.columns.length === 0) {
+        params.diagnostics.push({
+          severity: "warning",
+          code: "beamer-render-empty-columns",
+          message: "The columns environment has no renderable columns.",
+          span: node.span,
+        });
+        continue;
+      }
+      const columns = await Promise.all(
+        node.columns.map((column) =>
+          prepareColumnContent({
+            source: params.source,
+            column,
+            textWidth: params.textWidth,
+            diagnostics: params.diagnostics,
+            theme: params.theme,
+          })
+        )
+      );
+      result.push({
+        kind: "columns",
+        node,
+        columns,
+        box: {
+          height: Math.max(0, ...columns.map((column) => column.box.height)),
+          depth: Math.max(0, ...columns.map((column) => column.box.depth)),
+        },
+      });
+      continue;
+    }
+    params.diagnostics.push({
+      severity: "warning",
+      code: "beamer-render-unsupported-flow-node",
+      message: node.message,
+      span: node.span,
+    });
+  }
+  return result;
+}
+
+function positionPreparedFrameFlow(
+  flow: readonly PreparedFrameFlowItem[],
+  baselineSkip: number
+): { items: PositionedFrameFlowItem[]; extent: number } {
+  const items: PositionedFrameFlowItem[] = [];
+  let cursor = 0;
+  let previousDepth = 0;
+  for (let index = 0; index < flow.length; index += 1) {
+    const item = flow[index];
+    if (item.kind === "paragraph") {
+      const glue = verticalInterlineGlue(
+        previousDepth,
+        item.boxHeight,
+        baselineSkip
+      );
+      const referenceY = cursor + glue + item.boxHeight;
+      const contentTop = referenceY - item.boxHeight;
+      const visualBottom = contentTop + item.naturalHeight;
+      items.push({
+        item,
+        contentTop,
+        referenceY,
+        visualTop: contentTop,
+        visualBottom,
+      });
+      cursor = visualBottom;
+      previousDepth = item.endingDepth;
+      if (
+        item.endsWithVerticalSpace &&
+        flow[index + 1]?.kind === "columns"
+      ) {
+        // `\vspace` remains attached to the current paragraph. The `\par`
+        // at the start of Beamer's columns environment then contributes the
+        // empty line seen in the shipped vertical list before its hbox.
+        cursor += verticalInterlineGlue(
+          item.trailingParagraphPreviousDepth,
+          0,
+          baselineSkip
+        );
+        previousDepth = 0;
+      }
+      continue;
+    }
+    const glue = verticalInterlineGlue(
+      previousDepth,
+      item.box.height,
+      baselineSkip
+    );
+    const referenceY = cursor + glue + item.box.height;
+    const columnTops = item.columns.map(
+      (column) => referenceY - column.box.referenceFromContentTop
+    );
+    const visualTop = Math.min(...columnTops);
+    const visualBottom = Math.max(
+      ...item.columns.map(
+        (column, index) => columnTops[index] + column.naturalHeight
+      )
+    );
+    items.push({
+      item,
+      contentTop: visualTop,
+      referenceY,
+      visualTop,
+      visualBottom,
+    });
+    cursor = referenceY + item.box.depth;
+    previousDepth = item.box.depth;
+  }
+  return { items, extent: cursor };
+}
+
+function verticalInterlineGlue(
+  previousDepth: number,
+  height: number,
+  baselineSkip: number
+): number {
+  const candidate = baselineSkip - previousDepth - height;
+  return candidate >= 0 ? candidate : TEX_LINE_SKIP_PT;
+}
+
+function paragraphEndingMaterialDepth(paragraph: LaidParagraph): number {
+  const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
+  return Number(last?.depth ?? 0);
+}
+
+function paragraphEndsWithVerticalSpace(paragraph: LaidParagraph): boolean {
+  const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
+  return (
+    last?.itemKind === "glue" &&
+    last.glue?.origin?.kind === "explicit-command" &&
+    last.glue.origin.command === "vspace"
+  );
+}
+
+function paragraphTrailingNonGlueDepth(paragraph: LaidParagraph): number {
+  const items = paragraph.layout.vlistLayout.boxReport.items;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.itemKind !== "glue" && item?.itemKind !== "penalty") {
+      return Number(item?.depth ?? 0);
+    }
+  }
+  return 0;
+}
+
+function emitFrameParagraph(params: {
+  prepared: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>;
+  x: number;
+  y: number;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  theme: ResolvedBeamerTheme;
+}): void {
+  const laid = params.prepared.paragraph;
+  laid.layout.bounds = {
+    ...laid.layout.bounds,
+    x: params.x,
+    y: params.y,
+    height: params.prepared.naturalHeight,
+  };
+  params.paragraphs.push(laid.layout);
+  params.items.push({
+    id: laid.layout.paragraphId,
+    kind: "text",
+    sourceSpan: laid.layout.sourceSpan,
+    bounds: laid.layout.bounds,
+    parentId: null,
+    paragraphId: laid.layout.paragraphId,
+  });
+  params.modelBuilder.addPart({
+    basePartId: laid.layout.paragraphId,
+    sourceId: laid.layout.paragraphId,
+    elementId: null,
+    markup: paragraphMarkup(
+      laid.svgBody,
+      params.x,
+      params.y,
+      textColor(params.theme, "normal text")
+    ),
+  });
+}
+
+function emitPreparedColumns(params: {
+  prepared: Extract<PreparedFrameFlowItem, { kind: "columns" }>;
+  referenceY: number;
+  bounds: BeamerRect;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  embeddedTikz: BeamerEmbeddedTikzLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  theme: ResolvedBeamerTheme;
+}): void {
+  const prepared = params.prepared.columns;
+  const columnTops = prepared.map(
+    (column) => params.referenceY - column.box.referenceFromContentTop
+  );
+  const visualTop = Math.min(...columnTops);
+  const visualBottom = Math.max(
+    ...prepared.map(
+      (column, index) => columnTops[index] + column.naturalHeight
+    )
+  );
+  const columnGap = prepared.length > 1
+    ? Math.max(
+      0,
+      (params.bounds.width -
+        prepared.reduce((sum, column) => sum + column.width, 0)) /
+        (prepared.length - 1)
+    )
+    : 0;
+  const columnsId = params.prepared.node.id;
+  const columnChildIds: string[] = [];
+  let x = params.bounds.x;
+  for (let index = 0; index < prepared.length; index += 1) {
+    const preparedColumn = prepared[index];
+    const columnId = preparedColumn.column.id;
+    const childIds: string[] = [];
+    const columnTop = columnTops[index];
+    let flowY = columnTop;
+    columnChildIds.push(columnId);
+    for (const flowItem of preparedColumn.flow) {
+      if (flowItem.kind === "vertical-space") {
+        flowY += flowItem.height;
+      } else if (flowItem.kind === "paragraph") {
+        const laid = flowItem.paragraph;
+        laid.layout.bounds = {
+          ...laid.layout.bounds,
+          x,
+          y: flowY,
+          height: flowItem.advanceHeight,
+        };
+        params.paragraphs.push(laid.layout);
+        childIds.push(laid.layout.paragraphId);
+        params.items.push({
+          id: laid.layout.paragraphId,
+          kind: "text",
+          sourceSpan: laid.layout.sourceSpan,
+          bounds: laid.layout.bounds,
+          parentId: columnId,
+          paragraphId: laid.layout.paragraphId,
+        });
+        for (const marker of laid.listMarkers) {
+          params.items.push({
+            id: marker.id,
+            kind: "list-marker",
+            sourceSpan: laid.layout.sourceSpan,
+            bounds: {
+              x: x + marker.bounds.x,
+              y: flowY + marker.bounds.y,
+              width: marker.bounds.width,
+              height: marker.bounds.height,
+            },
+            parentId: laid.layout.paragraphId,
+          });
+        }
+        params.modelBuilder.addPart({
+          basePartId: laid.layout.paragraphId,
+          sourceId: laid.layout.paragraphId,
+          elementId: null,
+          markup: paragraphMarkup(
+            laid.svgBody,
+            x,
+            flowY,
+            textColor(params.theme, "normal text")
+          ),
+        });
+        flowY += flowItem.advanceHeight;
+      } else {
+        emitEmbeddedTikz({
+          tikz: flowItem,
+          x,
+          y: flowY,
+          parentId: columnId,
+          items: params.items,
+          embeddedTikz: params.embeddedTikz,
+          modelBuilder: params.modelBuilder,
+        });
+        childIds.push(flowItem.id);
+        flowY += flowItem.height;
+      }
+    }
+    params.items.push({
+      id: columnId,
+      kind: "column",
+      sourceSpan: preparedColumn.column.span,
+      bounds: {
+        x,
+        y: columnTop,
+        width: preparedColumn.width,
+        height: preparedColumn.naturalHeight,
+      },
+      parentId: columnsId,
+      childIds,
+    });
+    x += preparedColumn.width + columnGap;
+  }
+  params.items.push({
+    id: columnsId,
+    kind: "columns",
+    sourceSpan: params.prepared.node.span,
+    bounds: {
+      x: params.bounds.x,
+      y: visualTop,
+      width: params.bounds.width,
+      height: Math.max(0, visualBottom - visualTop),
+    },
+    parentId: null,
+    childIds: columnChildIds,
+  });
+}
+
+function emitEmbeddedTikz(params: {
+  tikz: Extract<PreparedColumnFlowItem, { kind: "tikzpicture" }>;
+  x: number;
+  y: number;
+  parentId: string;
+  items: BeamerFrameLayoutItem[];
+  embeddedTikz: BeamerEmbeddedTikzLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+}): void {
+  const { tikz } = params;
+  const bounds = {
+    x: params.x,
+    y: params.y,
+    width: tikz.width,
+    height: tikz.height,
+  };
+  const scale = tikz.width / tikz.viewBox.width;
+  const translateX = params.x - tikz.viewBox.x * scale;
+  const translateY = params.y - tikz.viewBox.y * scale;
+  const innerDefs = tikz.model.defs.length > 0
+    ? `<defs>${tikz.model.defs.join("")}</defs>`
+    : "";
+  const innerBody = tikz.model.parts.map((part) => part.markup).join("");
+  params.embeddedTikz.push({
+    itemId: tikz.id,
+    sourceSpan: tikz.sourceSpan,
+    bounds,
+    viewBox: tikz.viewBox,
+    model: tikz.model,
+  });
+  params.items.push({
+    id: tikz.id,
+    kind: "tikzpicture",
+    sourceSpan: tikz.sourceSpan,
+    bounds,
+    parentId: params.parentId,
+  });
+  params.modelBuilder.addPart({
+    basePartId: tikz.id,
+    sourceId: tikz.id,
+    elementId: null,
+    markup:
+      `<g transform="translate(${fmt(translateX)} ${fmt(translateY)}) scale(${fmt(scale)})">` +
+      innerDefs +
+      innerBody +
+      `</g>`,
+  });
 }
 
 async function prepareColumnContent(params: {
@@ -839,23 +1122,6 @@ function fontXHeightPt(font: BeamerThemeFont): number {
     profile.metricProvider
   );
   return Number(resolved.atPt) * resolved.data.fontdimen.xheight;
-}
-
-function appendVerticalBoxToFrame(
-  box: Pick<ColumnVerticalBox, "height" | "depth">,
-  baselineSkip: number
-): { extent: number; referenceOffset: number } {
-  // TeX's vertical-list append rule inserts \baselineskip minus the incoming
-  // box height. If that would cross \lineskiplimit (zero here), it uses the
-  // 1pt \lineskip instead. Keeping the reference offset makes later theme
-  // boxes composable without reducing them to top/height rectangles.
-  const candidateGlue = baselineSkip - box.height;
-  const glue = candidateGlue >= 0 ? candidateGlue : TEX_LINE_SKIP_PT;
-  const referenceOffset = glue + box.height;
-  return {
-    extent: referenceOffset + box.depth,
-    referenceOffset,
-  };
 }
 
 function layoutParagraph(params: {

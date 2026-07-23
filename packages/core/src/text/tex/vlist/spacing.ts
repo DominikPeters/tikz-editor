@@ -1305,6 +1305,11 @@ function displayMathSkipVariant(
   item: TexDisplayMathItem,
   previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined
 ): TexDisplayMathSkipVariant {
+  // A display that starts a vertical list has no finite preceding-line width;
+  // TeX consequently takes the normal display skips.
+  if (!previousParagraphMeasurement) {
+    return "normal";
+  }
   const preDisplaySize = previousParagraphMeasurement?.lastLinePreDisplaySize ??
     texLength(Number.NEGATIVE_INFINITY);
   // TeX.web chooses the normal skips when the centered display overlaps the

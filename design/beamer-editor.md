@@ -704,6 +704,18 @@ agree to 0.000004pt. The native diagram path geometry is visually aligned
 with the LuaLaTeX page. Embedded-TikZ glyph trace composition is the next
 measurement refinement for its node labels.
 
+Root frame flow and column flow now share one reference-box composer rather
+than selecting a `columns` node and dropping its siblings. The composer keeps
+paragraph VList metrics, ending material depth, column height/depth, and
+painted extents distinct. This makes the KKT bound-constrained example's
+three leading display/prose groups render before its final columns. The
+trailing `\vspace` boundary follows the shipped Beamer list: the display's
+depth determines the interline glue to the empty paragraph created by the
+columns environment, then the columns hbox is appended on its own reference
+line. Matched frame-13 prose and column baselines are now within 1.034pt,
+down from an 83.397pt column displacement; display-math rules and glyph-line
+grouping still need to be added to the structural comparator.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.

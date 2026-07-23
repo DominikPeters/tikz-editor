@@ -150,18 +150,47 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
-  it("keeps unsupported bodies explicit in the contract", async () => {
+  it("renders an ordinary root-flow body without a columns wrapper", async () => {
     const result = await renderBeamerFrame(String.raw`
 \documentclass{beamer}
 \begin{document}
 \begin{frame}{Plain}Body without columns.\end{frame}
 \end{document}`);
 
-    expect(result.layout.items.some((item) => item.kind === "unsupported")).toBe(true);
-    expect(result.diagnostics).toEqual([
-      expect.objectContaining({ code: "beamer-render-unsupported-body" }),
-    ]);
+    expect(
+      result.layout.paragraphs.some(
+        (paragraph) =>
+          paragraph.role === "body" &&
+          paragraph.report.lines[0]?.segments.some(
+            (segment) =>
+              segment.kind === "text" && segment.text === "Body"
+          )
+      )
+    ).toBe(true);
+    expect(result.layout.items.some((item) => item.kind === "unsupported")).toBe(false);
+    expect(result.diagnostics).toEqual([]);
   });
+
+  it("composes root flow and following columns in source order", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 12 });
+    const bodyParagraphs = result.layout.paragraphs.filter(
+      (paragraph) => paragraph.role === "body"
+    );
+    const columns = result.layout.items.find(
+      (item) => item.id === "frame:12:columns:0"
+    )!;
+
+    expect(bodyParagraphs).toHaveLength(3);
+    expect(
+      source.slice(
+        bodyParagraphs[0]!.sourceSpan.from,
+        bodyParagraphs[0]!.sourceSpan.to
+      )
+    ).toContain("Write the constraint");
+    expect(bodyParagraphs[0]!.bounds.y).toBeLessThan(columns.bounds.y);
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
 
   it("renders the minimal comparison fixture without diagnostics", async () => {
     const source = readFileSync(HELLO_WORLD_FIXTURE_PATH, "utf8");
