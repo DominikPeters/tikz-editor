@@ -1,5 +1,8 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
+import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
+import type { TexVListLayout } from "../text/tex/index.js";
 
 export type BeamerDelimitedSourceValue = {
   /** Span including the delimiters. */
@@ -121,5 +124,110 @@ export type BeamerDocumentModel = {
   sections: BeamerSectionModel[];
   frames: BeamerFrameModel[];
   roots: BeamerDocumentRoot[];
+  diagnostics: Diagnostic[];
+};
+
+/**
+ * Beamer page coordinates use TeX points and a top-left, y-down origin.
+ *
+ * This is deliberately distinct from both PDF points and TikZ's y-up scene
+ * coordinates. Keeping the unit and orientation explicit lets callers place
+ * native text reports, embedded TikZ renderings, and future editor hit maps in
+ * one stable document-space contract.
+ */
+export type BeamerRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type BeamerPageGeometry = {
+  /** The documentclass aspectratio option, or Beamer's default `43`. */
+  aspectRatio: string;
+  /** Physical page bounds in TeX points. */
+  page: BeamerRect;
+  /** Theme-defined body text box, before frame-local layout. */
+  textArea: BeamerRect;
+  /** Space occupied by the active headline template. */
+  headlineHeight: number;
+  /** Space occupied by the active footline template. */
+  footlineHeight: number;
+  /**
+   * The source-backed profile used to resolve dimensions which Beamer themes
+   * mutate at TeX execution time.
+   */
+  profile: "beamer-default" | "madrid";
+};
+
+export type BeamerFrameLayoutItemKind =
+  | "background"
+  | "frame-title"
+  | "frame-subtitle"
+  | "text"
+  | "columns"
+  | "column"
+  | "tikzpicture"
+  | "unsupported";
+
+export type BeamerFrameLayoutItem = {
+  id: string;
+  kind: BeamerFrameLayoutItemKind;
+  sourceSpan: Span;
+  bounds: BeamerRect;
+  parentId: string | null;
+  paragraphId?: string;
+  childIds?: string[];
+  message?: string;
+};
+
+export type BeamerParagraphLayout = {
+  paragraphId: string;
+  role: "frame-title" | "frame-subtitle" | "body" | "footline";
+  sourceSpan: Span;
+  bounds: BeamerRect;
+  report: ParagraphLayoutReport<"document">;
+  vlistLayout: TexVListLayout<"document">;
+};
+
+export type BeamerEmbeddedTikzLayout = {
+  itemId: string;
+  sourceSpan: Span;
+  bounds: BeamerRect;
+  viewBox: SvgViewBox;
+  model: SvgRenderModel;
+};
+
+export type BeamerFrameLayout = {
+  coordinateSystem: {
+    unit: "tex-pt";
+    origin: "top-left";
+    yAxis: "down";
+  };
+  frameId: string;
+  frameIndex: number;
+  step: number;
+  page: BeamerPageGeometry;
+  contentBounds: BeamerRect;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  embeddedTikz: BeamerEmbeddedTikzLayout[];
+};
+
+export type BeamerFrameSvgResult = {
+  svg: string;
+  viewBox: SvgViewBox;
+  model: SvgRenderModel;
+  diagnostics: Array<{
+    code: string;
+    message: string;
+  }>;
+};
+
+export type RenderBeamerFrameResult = {
+  document: BeamerDocumentModel;
+  frame: BeamerFrameModel;
+  layout: BeamerFrameLayout;
+  svg: BeamerFrameSvgResult;
   diagnostics: Diagnostic[];
 };
