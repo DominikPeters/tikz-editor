@@ -18,34 +18,17 @@ import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
   luaLatexDefaultTextFontProfile,
+  renderTexParagraphSvgBody,
+  renderTexVListSvgMetadata,
 } from "./tex/index.js";
 import type {
   ResolvedTexFont,
   SimpleTexFontState,
-  TexMetricProvider,
   TexTextFontProfile,
-  TexShapedItem,
 } from "./tex/index.js";
 import {
-  projectTexLineXToHBox,
-  projectTexLineXToVList,
-  texHBoxX,
-  texHBoxY,
   texLength,
-  texLineX,
-  texVListLocalX,
-  texVListLocalXFromOrigin,
-  texVListLocalYFromOrigin,
-  texVListX,
-  texVListY,
-  translateTexVListX,
-  type TexHBoxX,
-  type TexHBoxY,
   type TexLength,
-  type TexLineX,
-  type TexVListLocalX,
-  type TexVListLocalY,
-  type TexVListX,
   type TexVListY,
 } from "./tex/coordinates.js";
 import {
@@ -56,8 +39,6 @@ import {
   remapTexVListLayoutSourceMap,
 } from "./tex/source-map-report.js";
 import type {
-  PositionedTexVListItem,
-  TexRenderItem,
   TexVListLayout,
 } from "./tex/vlist/index.js";
 import type {
@@ -71,6 +52,8 @@ import type {
   NodeTextValidationIssue
 } from "./types.js";
 import type { TextSourceMap } from "./source-map.js";
+
+export { renderTexVListSvgMetadata };
 
 type MathJaxAdaptor = {
   firstChild(node: unknown): unknown;
@@ -1229,12 +1212,11 @@ function buildSimpleTexTextCacheEntry(params: {
         vlistLayout.metrics.height + vlistLayout.metrics.depth
       ));
   const widthPt = contentWidthPt;
-  const body = renderSimpleTexSvgBody(report, {
+  const body = renderTexParagraphSvgBody(report, {
     lineHeightPt,
-    firstLineAscent: measuredFirstLineAscent,
     vlistLayout,
     metricProvider,
-    requestedAlignment: params.requestedAlignment,
+    alignment: params.requestedAlignment,
   });
 
   return {
@@ -1350,326 +1332,6 @@ function shrinkTexVListLayoutToWidth(
   };
 }
 
-function renderSimpleTexSvgBody(
-  report: ParagraphLayoutReport,
-  options: {
-    lineHeightPt: TexLength;
-    firstLineAscent: TexLength;
-    vlistLayout?: TexVListLayout;
-    metricProvider: TexMetricProvider;
-    requestedAlignment: NodeTextParagraphAlignment | null;
-  }
-): string {
-  const alignAttr = options.requestedAlignment == null
-    ? ""
-    : ` data-align="${escapeXmlAttribute(mathJaxAlignAttributeValue(options.requestedAlignment))}"`;
-  const pieces: string[] = [
-    `<g data-paragraph-id="${escapeXmlAttribute(report.paragraphId)}"${alignAttr} fill="currentColor">`,
-  ];
-  if (options.vlistLayout) {
-    pieces.push(renderTexVListSvgContent(report, {
-      ...options,
-      vlistLayout: options.vlistLayout,
-    }));
-    pieces.push("</g>");
-    return pieces.join("");
-  }
-  const renderedLines = new Set<number>();
-  for (const line of report.lines) {
-    pieces.push(renderTexReportLineSvg(report, line, options, renderedLines));
-  }
-  pieces.push("</g>");
-  return pieces.join("");
-}
-
-function renderTexVListSvgContent(
-  report: ParagraphLayoutReport,
-  options: {
-    lineHeightPt: TexLength;
-    firstLineAscent: TexLength;
-    vlistLayout: TexVListLayout;
-    metricProvider: TexMetricProvider;
-  }
-): string {
-  const renderedLines = new Set<number>();
-  const lineByIndex = new Map(report.lines.map((line) => [line.lineIndex, line]));
-  const linePlacementByIndex = new Map(
-    options.vlistLayout.linePlacements.map((placement) => [placement.lineIndex, placement])
-  );
-  const paragraphLineIndicesByPath = new Map(
-    options.vlistLayout.paragraphPlacements.map((placement) => [
-      texVListPathKey(placement.vlistPath),
-      placement.lineIndices,
-    ])
-  );
-  const renderOptions = {
-    ...options,
-    lineByIndex,
-    linePlacementByIndex,
-    paragraphLineIndicesByPath,
-    originX: texVListX(0),
-    originY: texVListY(0),
-  };
-  const pieces = renderTexVListItemsSvgContent(
-    options.vlistLayout.items,
-    report,
-    renderOptions,
-    renderedLines
-  );
-  for (const line of report.lines) {
-    if (!renderedLines.has(line.lineIndex)) {
-      throw new Error(
-        `TeX vlist layout for paragraph '${report.paragraphId}' did not place line ${line.lineIndex}.`
-      );
-    }
-  }
-  return pieces.join("");
-}
-
-type TexVListRenderOptions = {
-  lineHeightPt: TexLength;
-  firstLineAscent: TexLength;
-  metricProvider: TexMetricProvider;
-  linePlacementByIndex: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
-  lineByIndex: ReadonlyMap<number, ParagraphLayoutReport["lines"][number]>;
-  paragraphLineIndicesByPath: ReadonlyMap<string, readonly number[]>;
-  originX: TexVListX;
-  originY: TexVListY;
-};
-
-function renderTexVListItemsSvgContent(
-  items: readonly PositionedTexVListItem[],
-  report: ParagraphLayoutReport,
-  options: TexVListRenderOptions,
-  renderedLines: Set<number>
-): string[] {
-  const pieces: string[] = [];
-  for (const item of items) {
-    if (item.item.kind === "paragraph") {
-      const pathKey = texVListPathKey(item.path);
-      const assignedLineIndices = options.paragraphLineIndicesByPath.get(pathKey);
-      if (!assignedLineIndices) {
-        throw new Error(
-          `TeX vlist layout for paragraph '${report.paragraphId}' is missing placement for path ${pathKey}.`
-        );
-      }
-      for (const lineIndex of assignedLineIndices) {
-        const line = options.lineByIndex.get(lineIndex);
-        if (!line) {
-          throw new Error(
-            `TeX vlist layout for paragraph '${report.paragraphId}' references missing line ${lineIndex}.`
-          );
-        }
-        if (!renderedLines.has(line.lineIndex)) {
-          pieces.push(renderTexReportLineSvg(report, line, {
-            ...options,
-            skipListLabelSegments: true,
-          }, renderedLines));
-        }
-      }
-      continue;
-    }
-    if (item.item.kind === "placeholder") {
-      pieces.push(renderTexPlaceholderSvgMetadata(
-        item,
-        texLength(report.width),
-        options,
-        options.metricProvider
-      ));
-      continue;
-    }
-    if (item.item.kind === "rule") {
-      pieces.push(renderTexRuleSvgContent(item, options));
-      continue;
-    }
-    if (item.item.kind === "display-math") {
-      pieces.push(renderTexDisplayMathSvgContent(item, options));
-      continue;
-    }
-    if (item.item.kind === "hbox" || item.item.kind === "penalty") {
-      pieces.push(renderTexVListLeafBoxSvgMetadata(item, options.metricProvider, options));
-      continue;
-    }
-    if (item.item.kind === "vbox") {
-      pieces.push(renderTexVBoxSvgMetadata(item, texLength(report.width), {
-        ...options,
-        close: false,
-      }));
-      if (item.children?.length) {
-        pieces.push(...renderTexVListItemsSvgContent(
-          item.children,
-          report,
-          {
-            ...options,
-            originX: item.x,
-            originY: item.y,
-          },
-          renderedLines
-        ));
-      }
-      pieces.push("</g>");
-    }
-  }
-  return pieces;
-}
-
-function texVListPathKey(path: readonly number[]): string {
-  return path.join(".");
-}
-
-function renderTexReportLineSvg(
-  report: ParagraphLayoutReport,
-  line: ParagraphLayoutReport["lines"][number],
-  options: {
-    lineHeightPt: TexLength;
-    firstLineAscent: TexLength;
-    linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
-    metricProvider: TexMetricProvider;
-    skipListLabelSegments?: boolean;
-    originX?: TexVListX;
-    originY?: TexVListY;
-  },
-  renderedLines: Set<number>
-): string {
-  renderedLines.add(line.lineIndex);
-  const font = options.metricProvider.resolveFont({ atPt: texLength(TEX_TEXT_BASE_FONT_SIZE) });
-  const lineTop = texReportLineTop(report.paragraphId, line.lineIndex, options);
-  const lineLeft = texLineX(Number.isFinite(line.xStart) ? line.xStart : 0);
-  const lineXOffset = texReportLineXOffset(line, lineLeft, options);
-  const baseline = texHBoxY(line.ascent);
-  const lineBoxHeight = texLength(
-    options.linePlacementByIndex?.get(line.lineIndex)?.height ?? options.lineHeightPt
-  );
-  const lineRootX = translateTexVListX(
-    projectTexLineXToVList(lineLeft, texLineX(0), texVListX(0)),
-    lineXOffset
-  );
-  const lineBoxLeft = texVListLocalXFromOrigin(texVListX(0), lineRootX);
-  const lineLeadingAttr = line.break?.lineLeading
-    ? ` data-lineleading="${escapeXmlAttribute(line.break.lineLeading)}"`
-    : "";
-  const pieces = [
-    `<g data-mjx-linebox="true" data-line-index="${line.lineIndex}"${lineLeadingAttr} transform="translate(${formatPt(texVListSvgTranslateX(lineRootX, options.originX))} ${formatPt(texVListSvgTranslateY(lineTop, options.originY))})">`,
-    `<rect x="${formatPt(lineBoxLeft)}" y="0" width="${formatPt(texLength(report.width))}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
-  ];
-  for (const segment of line.segments) {
-    if (options.skipListLabelSegments && segment.role === "list-label") {
-      continue;
-    }
-    if (segment.kind === "math") {
-      if (segment.mathSvgBody) {
-        pieces.push(renderTexInlineMathSvg(
-          segment.mathSvgBody,
-          projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
-          baseline
-        ));
-      }
-      continue;
-    }
-    if (segment.kind !== "text" && segment.kind !== "space") {
-      continue;
-    }
-    const text = segment.text ?? "";
-    if (!text) {
-      continue;
-    }
-    const segmentFont = segment.fontId
-      ? options.metricProvider.resolveFont({
-        fontId: segment.fontId,
-        atPt: texLength(segment.fontAtPt ?? TEX_TEXT_BASE_FONT_SIZE),
-      })
-      : font;
-    let segmentMarkup: string;
-    if (typeof segment.glyphCode === "number") {
-      segmentMarkup = renderTexGlyphCode(
-        segment.glyphCode,
-        segmentFont,
-        projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
-        baseline,
-        typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
-          ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
-          : undefined
-      );
-    } else {
-      segmentMarkup = renderTexGlyphRun(
-        text,
-        segmentFont,
-        projectTexLineXToHBox(segment.x, lineLeft, texHBoxX(0)),
-        baseline,
-        options.metricProvider,
-        typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
-          ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
-          : undefined
-      );
-    }
-    if (segment.literal) {
-      const literalSpanAttrs =
-        typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
-          ? ` data-source-start="${segment.sourceStartRaw}" data-source-end="${segment.sourceEndRaw}"`
-          : "";
-      segmentMarkup =
-        `<g data-tex-literal="${escapeXmlAttribute(segment.literal.reason)}"${literalSpanAttrs}>` +
-        segmentMarkup +
-        "</g>";
-    }
-    if (segment.color) {
-      segmentMarkup = `<g fill="${escapeXmlAttribute(segment.color)}">${segmentMarkup}</g>`;
-    }
-    pieces.push(segmentMarkup);
-  }
-  pieces.push("</g>");
-  return pieces.join("");
-}
-
-function texReportLineXOffset(
-  line: ParagraphLayoutReport["lines"][number],
-  lineLeft: TexLineX,
-  options: {
-    readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
-  }
-): TexVListLocalX {
-  if (line.segments.some((segment) => segment.role === "list-label")) {
-    return texVListLocalX(0);
-  }
-  const placement = options.linePlacementByIndex?.get(line.lineIndex);
-  if (!placement) {
-    return texVListLocalX(0);
-  }
-  const lineRootLeft = projectTexLineXToVList(
-    lineLeft,
-    texLineX(0),
-    texVListX(0)
-  );
-  return texVListLocalX(Math.max(
-    0,
-    texVListLocalXFromOrigin(placement.x, lineRootLeft)
-  ));
-}
-
-function renderTexInlineMathSvg(body: string, x: TexHBoxX, baseline: TexHBoxY): string {
-  return `<g data-tex-inline-math="true" transform="translate(${formatPt(x)} ${formatPt(baseline)}) scale(${formatPt(TEX_TEXT_BASE_FONT_SIZE / 1000)})">${body}</g>`;
-}
-
-function texReportLineTop(
-  paragraphId: string,
-  lineIndex: number,
-  options: {
-    readonly lineHeightPt?: TexLength;
-    readonly linePlacementByIndex?: ReadonlyMap<number, TexVListLayout["linePlacements"][number]>;
-  }
-): TexVListY {
-  if (options.linePlacementByIndex) {
-    const placement = options.linePlacementByIndex.get(lineIndex);
-    if (!placement) {
-      throw new Error(
-        `TeX vlist layout for paragraph '${paragraphId}' is missing line placement ${lineIndex}.`
-      );
-    }
-    return placement.y;
-  }
-  return texVListY(lineIndex * (options.lineHeightPt ?? 0));
-}
-
 function texVListPlacedLineTop(layout: TexVListLayout, lineIndex: number): TexVListY {
   const placement = layout.linePlacements.find((entry) => entry.lineIndex === lineIndex);
   if (!placement) {
@@ -1707,250 +1369,12 @@ export function renderSimpleTexParagraphDebugSvgBody(params: {
   }
 
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
-  const firstLineTop = texVListPlacedLineTop(
-    layout.vlistLayout,
-    layout.report.lines[0]?.lineIndex ?? 0
-  );
-  const firstLineAscent = texLength(layout.vlistLayout.baseline.kind === "explicit"
-    ? layout.vlistLayout.baseline.y - firstLineTop
-    : baselineMetrics.strutHeight);
-  return renderSimpleTexSvgBody(layout.report, {
+  return renderTexParagraphSvgBody(layout.report, {
     lineHeightPt: baselineMetrics.baselineskip,
-    firstLineAscent,
     vlistLayout: layout.vlistLayout,
     metricProvider,
-    requestedAlignment: params.alignment ?? null,
+    alignment: params.alignment ?? null,
   });
-}
-
-export function renderTexVListSvgMetadata(
-  items: readonly PositionedTexVListItem[],
-  width: number
-): string {
-  return renderTexVListSvgMetadataItems(items, texLength(width), {
-    originX: texVListX(0),
-    originY: texVListY(0),
-  });
-}
-
-type TexVListSvgOrigin = {
-  readonly originX?: TexVListX;
-  readonly originY?: TexVListY;
-};
-
-function texVListSvgTranslateX(
-  position: TexVListX,
-  origin?: TexVListX
-): TexVListLocalX {
-  return texVListLocalXFromOrigin(position, origin ?? texVListX(0));
-}
-
-function texVListSvgTranslateY(
-  position: TexVListY,
-  origin?: TexVListY
-): TexVListLocalY {
-  return texVListLocalYFromOrigin(position, origin ?? texVListY(0));
-}
-
-function renderTexVListSvgMetadataItems(
-  items: readonly PositionedTexVListItem[],
-  width: TexLength,
-  origin: TexVListSvgOrigin
-): string {
-  const pieces: string[] = [];
-  for (const item of items) {
-    if (item.item.kind === "placeholder") {
-      pieces.push(renderTexPlaceholderSvgMetadata(item, width, origin));
-      continue;
-    }
-    if (item.item.kind === "hbox" || item.item.kind === "penalty" || item.item.kind === "rule") {
-      pieces.push(renderTexVListLeafBoxSvgMetadata(item, undefined, origin));
-      continue;
-    }
-    if (item.item.kind === "display-math") {
-      pieces.push(renderTexDisplayMathSvgContent(item, origin));
-      continue;
-    }
-    if (item.item.kind !== "vbox") {
-      continue;
-    }
-    pieces.push(renderTexVBoxSvgMetadata(item, width, { ...origin, close: false }));
-    if (item.children?.length) {
-      pieces.push(renderTexVListSvgMetadataItems(
-        item.children,
-        width,
-        { originX: item.x, originY: texVListY(item.y) }
-      ));
-    }
-    pieces.push("</g>");
-  }
-  return pieces.join("");
-}
-
-function renderTexVBoxSvgMetadata(
-  item: PositionedTexVListItem,
-  width: TexLength,
-  options: TexVListSvgOrigin & { readonly close?: boolean } = {}
-): string {
-  if (item.item.kind !== "vbox") {
-    return "";
-  }
-  const boxWidth = texLength(Math.max(width, item.metrics.width));
-  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
-  const pieces = [
-    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, options.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), options.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
-  ];
-  if (options.close ?? true) {
-    pieces.push("</g>");
-  }
-  return pieces.join("");
-}
-
-function renderTexPlaceholderSvgMetadata(
-  item: PositionedTexVListItem,
-  width: TexLength,
-  origin: TexVListSvgOrigin = {},
-  metricProvider?: TexMetricProvider
-): string {
-  if (item.item.kind !== "placeholder") {
-    return "";
-  }
-  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
-  const boxWidth = texLength(Math.max(width, item.metrics.width));
-  const pieces = [
-    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(boxWidth)}" height="${formatPt(boxHeight)}" fill="none" />`,
-  ];
-  const literalText = item.item.literalText;
-  if (literalText && metricProvider) {
-    pieces.push(renderTexPlaceholderLiteralSvg(
-      literalText,
-      item.item.sourceSpan,
-      texHBoxY(item.metrics.height),
-      metricProvider
-    ));
-  }
-  pieces.push(`</g>`);
-  return pieces.join("");
-}
-
-function renderTexPlaceholderLiteralSvg(
-  literalText: string,
-  sourceSpan: { readonly start: number; readonly end: number },
-  baseline: TexHBoxY,
-  metricProvider: TexMetricProvider
-): string {
-  const font = luaLatexDefaultTextFontProfile.resolveTextFont(
-    { family: "typewriter", series: "medium", shape: "upright" },
-    texLength(TEX_TEXT_BASE_FONT_SIZE),
-    metricProvider
-  );
-  // The literal face is monospaced, so a single shaped character gives the
-  // advance used for word spacing.
-  const spaceAdvance = texLength(metricProvider.shapeText("x", font).width);
-  const pieces = [
-    `<g data-tex-literal="display-math-unsupported" data-source-start="${sourceSpan.start}" data-source-end="${sourceSpan.end}">`,
-  ];
-  let cursor = texHBoxX(0);
-  const pattern = /([ \n]+)|([^ \n]+)/g;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(literalText)) !== null) {
-    if (match[1] !== undefined) {
-      cursor = texHBoxX(cursor + spaceAdvance * match[1].length);
-      continue;
-    }
-    pieces.push(renderTexGlyphRun(match[0], font, cursor, baseline, metricProvider));
-    cursor = texHBoxX(cursor + metricProvider.shapeText(match[0], font).width);
-  }
-  pieces.push("</g>");
-  return pieces.join("");
-}
-
-function renderTexVListLeafBoxSvgMetadata(
-  item: PositionedTexVListItem,
-  metricProvider?: TexMetricProvider,
-  origin: TexVListSvgOrigin = {}
-): string {
-  if (item.item.kind !== "hbox" && item.item.kind !== "penalty" && item.item.kind !== "rule") {
-    return "";
-  }
-  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
-  const roleAttribute = item.item.kind === "hbox" && item.item.role
-    ? ` data-tex-hbox-role="${item.item.role.kind}"`
-    : "";
-  return [
-    `<g${roleAttribute} transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
-    ...(item.item.kind === "hbox" && metricProvider
-      ? item.item.box.renderItems.map((renderItem) =>
-          renderTexHBoxRenderItemSvg(renderItem, metricProvider)
-        )
-      : []),
-    `</g>`,
-  ].join("");
-}
-
-function renderTexDisplayMathSvgContent(
-  item: PositionedTexVListItem,
-  origin: TexVListSvgOrigin = {}
-): string {
-  if (item.item.kind !== "display-math") {
-    return "";
-  }
-  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
-  return [
-    `<g data-tex-display-math="true" data-source-start="${item.item.sourceSpan.start}" data-source-end="${item.item.sourceSpan.end}" transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="none" />`,
-    renderTexInlineMathSvg(
-      item.item.box.svgBody ?? "",
-      texHBoxX(0),
-      texHBoxY(item.metrics.height)
-    ),
-    `</g>`,
-  ].join("");
-}
-
-function renderTexHBoxRenderItemSvg(
-  item: TexRenderItem,
-  metricProvider: TexMetricProvider
-): string {
-  if (item.kind === "tex-math-svg") {
-    return renderTexInlineMathSvg(
-      item.svgBody,
-      texHBoxX(item.x),
-      texHBoxY(item.baseline)
-    );
-  }
-  const font = metricProvider.resolveFont({
-    fontId: item.fontId,
-    atPt: texLength(item.atPt),
-  });
-  const body = item.kind === "tex-glyph"
-    ? renderTexGlyphCode(item.code, font, texHBoxX(item.x), texHBoxY(item.baseline))
-    : renderTexGlyphRun(
-    item.text,
-    font,
-    texHBoxX(item.x),
-    texHBoxY(item.baseline),
-    metricProvider
-    );
-  return item.color ? `<g fill="${escapeXmlAttribute(item.color)}">${body}</g>` : body;
-}
-
-function renderTexRuleSvgContent(
-  item: PositionedTexVListItem,
-  origin: TexVListSvgOrigin = {}
-): string {
-  if (item.item.kind !== "rule") {
-    return "";
-  }
-  const boxHeight = texLength(item.metrics.height + item.metrics.depth);
-  return [
-    `<g transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,
-    `<rect x="0" y="0" width="${formatPt(texLength(item.metrics.width))}" height="${formatPt(boxHeight)}" fill="currentColor" />`,
-    `</g>`,
-  ].join("");
 }
 
 function texNormalBaselineMetrics(font: ResolvedTexFont): {
@@ -1961,98 +1385,6 @@ function texNormalBaselineMetrics(font: ResolvedTexFont): {
     baselineskip: texLength(font.atPt * LATEX_NORMAL_BASELINESKIP_EM),
     strutHeight: texLength(font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM),
   };
-}
-
-function renderTexGlyphRun(
-  text: string,
-  font: ResolvedTexFont,
-  x: TexHBoxX,
-  baseline: TexHBoxY,
-  metricProvider: TexMetricProvider,
-  sourceSpan?: { readonly start: number; readonly end: number }
-): string {
-  const shaped = metricProvider.shapeText(
-    text,
-    font,
-    sourceSpan ? { sourceStart: sourceSpan.start } : undefined
-  );
-  const pieces: string[] = [];
-  let cursor = texHBoxX(x);
-  for (const item of shaped.items) {
-    if (item.kind === "kern") {
-      cursor = texHBoxX(cursor + item.width);
-      continue;
-    }
-    const glyphItem = sourceSpan && text.length === 1
-      ? { ...item, sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end }
-      : item;
-    pieces.push(renderTexGlyphPath(
-      glyphItem,
-      font,
-      cursor,
-      baseline,
-      Boolean(sourceSpan)
-    ));
-    cursor = texHBoxX(cursor + item.width);
-  }
-  return pieces.join("");
-}
-
-function renderTexGlyphCode(
-  code: number,
-  font: ResolvedTexFont,
-  x: TexHBoxX,
-  baseline: TexHBoxY,
-  sourceSpan?: { readonly start: number; readonly end: number }
-): string {
-  return renderTexGlyphPath({
-    kind: "glyph",
-    fontId: font.id,
-    code,
-    sourceStart: sourceSpan?.start ?? 0,
-    sourceEnd: sourceSpan?.end ?? 0,
-    width: texLength(0),
-    height: texLength(0),
-    depth: texLength(0),
-    italicCorrection: texLength(0),
-    components: [code],
-  }, font, x, baseline, Boolean(sourceSpan));
-}
-
-function renderTexGlyphPath(
-  item: Extract<TexShapedItem, { kind: "glyph" }>,
-  font: ResolvedTexFont,
-  x: TexHBoxX,
-  baseline: TexHBoxY,
-  sourceBacked = false
-): string {
-  if (item.code === 32) {
-    return "";
-  }
-  const d = font.data.glyphs?.[String(item.code)] ?? "";
-  if (!d) {
-    return "";
-  }
-  const scale = font.atPt / 10;
-  const scaleSuffix = Math.abs(scale - 1) > 1e-6 ? ` scale(${formatPt(scale)})` : "";
-  const sourceAttrs = sourceBacked
-    ? ` data-source-start="${item.sourceStart}" data-source-end="${item.sourceEnd}"`
-    : "";
-  return `<path data-tex-font="${escapeXmlAttribute(font.id)}" data-tex-glyph="${item.code}"${sourceAttrs} d="${escapeXmlAttribute(d)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})${scaleSuffix}" />`;
-}
-
-function mathJaxAlignAttributeValue(alignment: NodeTextParagraphAlignment): string {
-  switch (alignment) {
-    case "ragged-left":
-      return "right";
-    case "center":
-      return "center";
-    case "justified":
-      return "justify";
-    case "ragged-right":
-    default:
-      return "left";
-  }
 }
 
 function getRuntimeOutputJax(runtime: MathJaxRuntime): unknown {
@@ -2066,17 +1398,6 @@ function stableHashString(value: string): string {
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(36);
-}
-
-function escapeXmlText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function escapeXmlAttribute(value: string): string {
-  return escapeXmlText(value).replaceAll('"', "&quot;");
 }
 
 function prepareMeasuredRender(params: MeasuredRenderRequest) {

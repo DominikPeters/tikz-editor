@@ -19,6 +19,10 @@ export {
   DEFAULT_COMPUTER_MODERN_TEXT_FONTS,
   computerModernTexMetricProvider
 } from "./text/tex/index.js";
+export {
+  renderTexParagraphSvgBody,
+  renderTexVListSvgMetadata
+} from "./text/tex/index.js";
 export type { MathJaxFont } from "./text/mathjax-engine.js";
 export { collectSymbols, resolveDocHoverTarget } from "./completion/index.js";
 export {
