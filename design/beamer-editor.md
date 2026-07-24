@@ -971,13 +971,18 @@ three conformance frames and all 20 KKT frames pass for each of the eight
 aggregates: 24/24 and 160/160 comparisons, with matching glyph codes/fonts
 and no unmatched text lines or template rectangles.
 
+The retained gallery is now complete for the built-in presentation themes:
+all 28 themes have three section-aware conformance comparisons and all 20
+KKT comparisons. The resulting 644/644 structural checks pass, with maximum
+observed deltas of 0.012371pt horizontally for matched glyphs, 0.002795pt
+vertically, and 0.007003pt for matched template-rectangle edges.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally
 sidebar/inmargin page geometry. Each component pass is applied to every
 aggregate theme that imports it and rerun through the gallery. Metropolis and
-moloch begin only after the retained built-in gallery has KKT results for the
-remaining earlier aggregate passes and the complete matrix is green.
+moloch can now begin from this green built-in matrix.
 
 Aggregate presets are exposed only when every nested component and local
 override needed for a faithful result is registered. In particular, the
