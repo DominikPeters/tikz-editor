@@ -609,6 +609,29 @@ describe("headless Beamer frame renderer", () => {
     );
   });
 
+  it("emits source-colored SVG gradients for smooth navigation themes", async () => {
+    const source = String.raw`
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Darmstadt}
+\begin{document}
+\section{Foundations}
+\subsection{Overview}
+\begin{frame}{Typography}Body\end{frame}
+\section{Geometry}
+\begin{frame}{Other}Body\end{frame}
+\end{document}`;
+    const result = await renderBeamerFrame(source);
+
+    expect(result.svg.svg).toContain("<linearGradient");
+    expect(result.svg.svg).toContain('gradientUnits="userSpaceOnUse"');
+    expect(result.svg.svg).toContain('stop-color="#000000"');
+    expect(result.svg.svg).toContain('stop-color="#262686"');
+    expect(result.svg.svg).toContain(
+      'data-beamer-vector-template="beamer/headline/smoothbars-shade"'
+    );
+    expect(result.diagnostics).toEqual([]);
+  });
+
   it("rejects invalid frame and overlay selections", async () => {
     const source = String.raw`
 \documentclass{beamer}

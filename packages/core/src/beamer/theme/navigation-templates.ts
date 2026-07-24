@@ -494,12 +494,17 @@ function appendTreeRow(params: {
   return y + NAVIGATION_ROW_HEIGHT_PT;
 }
 
-function appendMiniFrameSections(
+export function appendMiniFrameSections(
   context: BeamerFrameTemplateContext,
   primitives: BeamerTemplatePrimitive[],
   y: number,
   height: number,
-  sections: readonly BeamerNavigationSectionEntry[]
+  sections: readonly BeamerNavigationSectionEntry[],
+  options: {
+    titleBaselineY?: number;
+    miniFrameCenterY?: number;
+    miniFrameIndexing?: "subsection" | "global";
+  } = {}
 ): void {
   if (sections.length === 0) {
     return;
@@ -527,17 +532,24 @@ function appendMiniFrameSections(
         : "section in head/foot shaded",
       alignment,
       verticalAlignment: "top",
-      baselineY: y + NAVIGATION_BASELINE_PT,
+      baselineY: options.titleBaselineY ?? y + NAVIGATION_BASELINE_PT,
     });
   }
-  appendMiniFrameShapes(context, primitives, sections, y);
+  appendMiniFrameShapes(
+    context,
+    primitives,
+    sections,
+    options.miniFrameCenterY ?? y + 10.320587158203125,
+    options.miniFrameIndexing ?? "subsection"
+  );
 }
 
 function appendMiniFrameShapes(
   context: BeamerFrameTemplateContext,
   primitives: BeamerTemplatePrimitive[],
   sections: readonly BeamerNavigationSectionEntry[],
-  y: number
+  centerY: number,
+  indexing: "subsection" | "global"
 ): void {
   const frames = sections.flatMap((section) =>
     section.frames.map((frame) => ({ section, frame }))
@@ -554,9 +566,11 @@ function appendMiniFrameShapes(
     HORIZONTAL_MARGIN_PT -
     measureNavigationTitleWidth(context, lastSection.title) +
     1;
-  const centerY = y + 10.320587158203125;
   const slideIndices = new Map<string, number>();
-  const positioned = frames.map(({ section, frame }) => {
+  const positioned = frames.map(({ section, frame }, frameIndex) => {
+    if (indexing === "global") {
+      return { section, frame, slideIndex: frameIndex };
+    }
     const subsectionKey = frame.frame.subsectionId ??
       `${section.section.id}:direct`;
     const slideIndex = slideIndices.get(subsectionKey) ?? 0;

@@ -425,6 +425,90 @@ describe("Beamer theme resolution", () => {
     ).toEqual({ fg: "#ccccec" });
   });
 
+  it.each([
+    {
+      name: "Darmstadt",
+      components: ["smoothbars", "rounded", "orchid", "whale"],
+      headline: ["beamer/headline/smoothbars", { subsection: true }],
+      footline: ["beamer/footline/none", {}],
+      frameTitle: ["beamer/frame-title/smoothbars", { subsection: true }],
+    },
+    {
+      name: "Frankfurt",
+      components: ["smoothbars", "rounded", "orchid", "whale"],
+      headline: ["beamer/headline/smoothbars", { subsection: false }],
+      footline: ["beamer/footline/none", {}],
+      frameTitle: ["beamer/frame-title/smoothbars", { subsection: false }],
+    },
+    {
+      name: "JuanLesPins",
+      components: ["smoothtree", "whale", "orchid", "rounded"],
+      headline: ["beamer/headline/smoothtree", {}],
+      footline: ["beamer/footline/none", {}],
+      frameTitle: ["beamer/frame-title/smoothtree", {}],
+    },
+    {
+      name: "Warsaw",
+      components: ["rounded", "split", "shadow", "orchid", "whale"],
+      headline: ["beamer/headline/shadow", { compress: false }],
+      footline: ["beamer/footline/split", {}],
+      frameTitle: ["beamer/frame-title/shadow", {}],
+    },
+  ])(
+    "composes the source-defined $name smooth navigation aggregate",
+    ({ name, components, headline, footline, frameTitle }) => {
+      const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{${name}}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+      expect(theme.templates.headline).toEqual({
+        id: headline[0],
+        options: headline[1],
+      });
+      expect(theme.templates.footline).toEqual({
+        id: footline[0],
+        options: footline[1],
+      });
+      expect(theme.templates.frameTitle).toEqual({
+        id: frameTitle[0],
+        options: frameTitle[1],
+      });
+      expect(theme.templates.block.id).toBe(
+        "beamer/block/rounded-shadow"
+      );
+      expect(theme.fonts["block-title"].sizePt).toBe(10.95);
+      expect(
+        theme.appliedComponents.slice(2).map(({ name: component }) => component)
+      ).toEqual(components);
+      expect(theme.diagnostics).toEqual([]);
+    }
+  );
+
+  it("resolves shadow through split before applying its frame-title colors", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{Warsaw}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+    expect(resolveBeamerThemeColor(theme, "section in head/foot")).toEqual({
+      fg: "#ffffff",
+      bg: "#000000",
+    });
+    expect(resolveBeamerThemeColor(theme, "subsection in head/foot")).toEqual({
+      fg: "#ffffff",
+      bg: "#3333b3",
+    });
+    expect(resolveBeamerThemeColor(theme, "frametitle")).toEqual({
+      fg: "#ffffff",
+      bg: "#3333b3",
+    });
+    expect(resolveBeamerThemeColor(theme, "frametitle right")).toEqual({
+      fg: "#ffffff",
+      bg: "#000000",
+    });
+  });
+
   it("uses the rectangles inner theme for both itemize and enumerate markers", () => {
     const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
 \documentclass{beamer}

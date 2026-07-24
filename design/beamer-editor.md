@@ -926,6 +926,29 @@ so adding the KKT deck does not require rerunning rasterization or retaining
 PDF/compiler intermediates; themes without results for the selected deck are
 disabled in the gallery navigation.
 
+The smooth-navigation family follows
+`beamerouterthemesmoothbars.sty`, `beamerouterthemesmoothtree.sty`, and
+`beamerouterthemeshadow.sty` at the same component boundary. Shared planners
+emit smoothbar mini-frame navigation, smooth-tree section/subsection rows,
+gradient frame titles, and shadow layers; Darmstadt, Frankfurt, JuanLesPins,
+and Warsaw only assemble those planners with their shipped color, font, and
+inner-theme components. In particular, `shadow` composes the existing
+`split` planner just as Beamer loads `split`, rather than duplicating its
+headline. The generic vector primitive contract now carries source-role
+gradient stops, so the SVG backend owns gradient serialization while theme
+planners own geometry and color roles.
+
+Oracle measurements also preserve a non-obvious TeX layout fact from
+`smoothbars`: Frankfurt's subsection-free headline is an overfull two-row
+template whose declared height/depth does not cover all painted content.
+Frame-title and body placement therefore use the template's actual TeX box
+contract instead of deriving an inset from the visible gradient. All three
+conformance frames and all 20 KKT frames pass for each of the four aggregates:
+12/12 and 80/80 comparisons, with matching glyph codes/fonts and no unmatched
+text lines or template rectangles. The retained gallery now contains KKT
+comparisons for 14 built-in themes and passes 340 of 364 entries; the remaining
+24 entries identify the unimplemented sidebar/inmargin family.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally

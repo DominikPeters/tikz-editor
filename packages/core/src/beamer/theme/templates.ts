@@ -14,6 +14,14 @@ import {
   planSplitHeadline,
   planTreeHeadline,
 } from "./navigation-templates.js";
+import {
+  planShadowFrameTitle,
+  planShadowHeadline,
+  planSmoothBarsFrameTitle,
+  planSmoothBarsHeadline,
+  planSmoothTreeFrameTitle,
+  planSmoothTreeHeadline,
+} from "./smooth-navigation-templates.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
@@ -56,6 +64,9 @@ type EdgePlanner = (
 
 const frameTitlePlanners = new Map<string, FrameTitlePlanner>([
   ["beamer/frame-title/default", planDefaultFrameTitle],
+  ["beamer/frame-title/smoothbars", planSmoothBarsFrameTitle],
+  ["beamer/frame-title/smoothtree", planSmoothTreeFrameTitle],
+  ["beamer/frame-title/shadow", planShadowFrameTitle],
   ["beamer/frame-title/metropolis", planModernFrameTitle],
   ["beamer/frame-title/moloch", planModernFrameTitle],
 ]);
@@ -66,6 +77,9 @@ const headlinePlanners = new Map<string, EdgePlanner>([
   ["beamer/headline/tree", planTreeHeadline],
   ["beamer/headline/split", planSplitHeadline],
   ["beamer/headline/miniframes", planMiniFramesHeadline],
+  ["beamer/headline/smoothbars", planSmoothBarsHeadline],
+  ["beamer/headline/smoothtree", planSmoothTreeHeadline],
+  ["beamer/headline/shadow", planShadowHeadline],
   ["beamer/headline/metropolis-progress", planModernHeadline],
   ["beamer/headline/moloch-progress", planModernHeadline],
 ]);
@@ -515,6 +529,42 @@ function offsetPrimitives(
       x: primitive.bounds.x + dx,
       y: primitive.bounds.y + dy,
     },
+    ...(primitive.kind === "vector"
+      ? {
+          shapes: primitive.shapes.map((shape) => {
+            if (shape.kind === "rect") {
+              return { ...shape, x: shape.x + dx, y: shape.y + dy };
+            }
+            if (shape.kind === "circle") {
+              return { ...shape, cx: shape.cx + dx, cy: shape.cy + dy };
+            }
+            return {
+              ...shape,
+              commands: shape.commands.map((command) => {
+                if (command.kind === "close") {
+                  return command;
+                }
+                if (command.kind === "cubic") {
+                  return {
+                    ...command,
+                    control1X: command.control1X + dx,
+                    control1Y: command.control1Y + dy,
+                    control2X: command.control2X + dx,
+                    control2Y: command.control2Y + dy,
+                    x: command.x + dx,
+                    y: command.y + dy,
+                  };
+                }
+                return {
+                  ...command,
+                  x: command.x + dx,
+                  y: command.y + dy,
+                };
+              }),
+            };
+          }),
+        }
+      : {}),
     ...(primitive.kind === "text" && primitive.baselineY != null
       ? { baselineY: primitive.baselineY + dy }
       : {}),

@@ -189,6 +189,15 @@ export type BeamerTemplateVectorShape =
       height: number;
       fillColorRole?: string;
       fillOpacity?: number;
+      fillGradient?: {
+        direction: "horizontal" | "vertical";
+        stops: readonly {
+          offset: number;
+          colorRole: string;
+          paint: "foreground" | "background";
+          opacity?: number;
+        }[];
+      };
       strokeColorRole?: string;
       strokeWidthPt?: number;
     }
@@ -235,6 +244,8 @@ export type BeamerTemplatePrimitive =
       bounds: BeamerRect;
       templateId: string;
       layoutKind:
+        | "background"
+        | "frame-title"
         | "navigation-symbols"
         | "mini-frame-navigation"
         | "headline-decoration";

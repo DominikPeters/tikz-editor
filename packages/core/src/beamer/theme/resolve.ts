@@ -685,6 +685,54 @@ const themeAppliers = new Map<string, ComponentApplier>([
     }],
     applyOverrides: applyStructureSeparationLine,
   })],
+  ["darmstadt", defineAggregateTheme({
+    id: "Darmstadt",
+    // TeX Live 2025 beamerthemeDarmstadt.sty.
+    components: [
+      { kind: "outer-theme", name: "smoothbars" },
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "color-theme", name: "whale" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["frankfurt", defineAggregateTheme({
+    id: "Frankfurt",
+    // TeX Live 2025 beamerthemeFrankfurt.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "smoothbars",
+        options: { subsection: false },
+      },
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "color-theme", name: "whale" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["juanlespins", defineAggregateTheme({
+    id: "JuanLesPins",
+    // TeX Live 2025 beamerthemeJuanLesPins.sty.
+    components: [
+      { kind: "outer-theme", name: "smoothtree" },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["warsaw", defineAggregateTheme({
+    id: "Warsaw",
+    // TeX Live 2025 beamerthemeWarsaw.sty.
+    components: [
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "outer-theme", name: "shadow" },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "color-theme", name: "whale" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
   ["madrid", defineAggregateTheme({
     id: "Madrid",
     // TeX Live 2025 beamerthemeMadrid.sty applies these in this exact order.
@@ -993,6 +1041,29 @@ function applySpruceColors(state: MutableTheme, use: BeamerThemeUse): void {
   };
 }
 
+function applySplitOuterTheme(
+  state: MutableTheme,
+  use: BeamerThemeUse
+): void {
+  markApplied(state, "outer-theme", "split", use);
+  state.templates.headline = templateRef("beamer/headline/split", {
+    compress: optionBoolean(use.options.compress, false),
+  });
+  state.templates.footline = DEFAULT_REF("beamer/footline/split");
+  state.colors["section in head/foot"] = {
+    parent: "palette quaternary",
+  };
+  state.colors["subsection in head/foot"] = {
+    parent: "palette primary",
+  };
+  state.colors["author in head/foot"] = {
+    parent: "section in head/foot",
+  };
+  state.colors["title in head/foot"] = {
+    parent: "subsection in head/foot",
+  };
+}
+
 const outerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("outer-theme", "default")],
   ["tree", (state, use) => {
@@ -1001,25 +1072,7 @@ const outerThemeAppliers = new Map<string, ComponentApplier>([
       hooks: optionBoolean(use.options.hooks, true),
     });
   }],
-  ["split", (state, use) => {
-    markApplied(state, "outer-theme", "split", use);
-    state.templates.headline = templateRef("beamer/headline/split", {
-      compress: optionBoolean(use.options.compress, false),
-    });
-    state.templates.footline = DEFAULT_REF("beamer/footline/split");
-    state.colors["section in head/foot"] = {
-      parent: "palette quaternary",
-    };
-    state.colors["subsection in head/foot"] = {
-      parent: "palette primary",
-    };
-    state.colors["author in head/foot"] = {
-      parent: "section in head/foot",
-    };
-    state.colors["title in head/foot"] = {
-      parent: "subsection in head/foot",
-    };
-  }],
+  ["split", applySplitOuterTheme],
   ["miniframes", (state, use) => {
     markApplied(state, "outer-theme", "miniframes", use);
     state.templates.headline = templateRef("beamer/headline/miniframes", {
@@ -1040,6 +1093,48 @@ const outerThemeAppliers = new Map<string, ComponentApplier>([
       parent: "subsection in head/foot",
     };
     state.colors["title in head/foot"] = {
+      parent: "section in head/foot",
+    };
+  }],
+  ["smoothbars", (state, use) => {
+    markApplied(state, "outer-theme", "smoothbars", use);
+    const subsection = optionBoolean(use.options.subsection, true);
+    state.templates.headline = templateRef(
+      "beamer/headline/smoothbars",
+      { subsection }
+    );
+    state.templates.frameTitle = templateRef(
+      "beamer/frame-title/smoothbars",
+      { subsection }
+    );
+    state.colors.frametitle = { parent: "palette primary" };
+    state.colors["subsection in head/foot"] = {
+      parent: "palette secondary",
+    };
+    state.colors["section in head/foot"] = {
+      parent: "palette quaternary",
+    };
+  }],
+  ["smoothtree", (state, use) => {
+    markApplied(state, "outer-theme", "smoothtree", use);
+    state.templates.headline = DEFAULT_REF("beamer/headline/smoothtree");
+    state.templates.frameTitle = DEFAULT_REF(
+      "beamer/frame-title/smoothtree"
+    );
+    state.colors.frametitle = { parent: "palette primary" };
+  }],
+  ["shadow", (state, use) => {
+    // beamerouterthemeshadow.sty begins with \useoutertheme{split}; retain
+    // that nested component in provenance as well as reusing its data patch.
+    applySplitOuterTheme(state, use);
+    markApplied(state, "outer-theme", "shadow", use);
+    state.templates.headline = templateRef(
+      "beamer/headline/shadow",
+      { compress: optionBoolean(use.options.compress, false) }
+    );
+    state.templates.frameTitle = DEFAULT_REF("beamer/frame-title/shadow");
+    state.colors.frametitle = { parent: "subsection in head/foot" };
+    state.colors["frametitle right"] = {
       parent: "section in head/foot",
     };
   }],

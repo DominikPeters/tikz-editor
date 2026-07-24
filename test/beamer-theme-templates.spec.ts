@@ -238,6 +238,104 @@ describe("Beamer structural theme templates", () => {
     expect(chrome.topInset).toBeCloseTo(37.664975, 5);
   });
 
+  it.each([
+    {
+      name: "Darmstadt",
+      topInset: 50.760454,
+      bottomInset: 4,
+      shadeId: "frame:0:headline:smoothbars:shade",
+      titleBaseline: 39.959213,
+    },
+    {
+      name: "Frankfurt",
+      topInset: 42.76846,
+      bottomInset: 4,
+      shadeId: "frame:0:headline:smoothbars:shade",
+      titleBaseline: 31.967224,
+    },
+    {
+      name: "JuanLesPins",
+      topInset: 52.057985,
+      bottomInset: 4,
+      shadeId: "frame:0:headline:smoothtree:shade",
+      titleBaseline: 41.789536,
+    },
+    {
+      name: "Warsaw",
+      topInset: 39.190844,
+      bottomInset: 13.656998,
+      shadeId: "frame:0:headline:section:background",
+      titleBaseline: 33.053589,
+    },
+  ])(
+    "plans $name through shared smooth/shadow template primitives",
+    ({ name, topInset, bottomInset, shadeId, titleBaseline }) => {
+      const chrome = plan(String.raw`
+\documentclass[aspectratio=169]{beamer}
+\usetheme{${name}}
+\title{Theme Conformance}
+\begin{document}
+\section{Foundations}
+\subsection{Overview}
+\begin{frame}{Typography}Body\end{frame}
+\section{Geometry}
+\begin{frame}{Other}Body\end{frame}
+\end{document}`);
+
+      expect(chrome.topInset).toBeCloseTo(topInset, 5);
+      expect(chrome.bottomInset).toBeCloseTo(bottomInset, 5);
+      expect(chrome.primitives).toContainEqual(expect.objectContaining({
+        id: shadeId,
+      }));
+      expect(chrome.primitives).toContainEqual(expect.objectContaining({
+        id: "frame:0:frame-title:text",
+        kind: "text",
+        baselineY: expect.closeTo(titleBaseline, 5),
+      }));
+      expect(chrome.primitives.some(
+        (primitive) =>
+          primitive.kind === "vector" &&
+          primitive.shapes.some(
+            (shape) => shape.kind === "rect" && shape.fillGradient != null
+          )
+      )).toBe(true);
+    }
+  );
+
+  it("retains smoothbar subsection and mini-frame states as shared navigation", () => {
+    const chrome = plan(String.raw`
+\documentclass{beamer}
+\usetheme{Darmstadt}
+\begin{document}
+\section{Foundations}
+\subsection{Overview}
+\begin{frame}{First}Body\end{frame}
+\section{Geometry}
+\begin{frame}{Second}Body\end{frame}
+\end{document}`);
+
+    expect(chrome.primitives).toContainEqual(expect.objectContaining({
+      id: "frame:0:headline:subsection",
+      baselineY: expect.closeTo(21.51181, 6),
+    }));
+    expect(chrome.primitives).toContainEqual(expect.objectContaining({
+      id: "frame:0:headline:mini-frames",
+      kind: "vector",
+      layoutKind: "mini-frame-navigation",
+    }));
+    const miniFrames = chrome.primitives.find(
+      (primitive) => primitive.id === "frame:0:headline:mini-frames"
+    );
+    if (miniFrames?.kind !== "vector") {
+      throw new Error("Expected smoothbar mini-frame navigation.");
+    }
+    const miniFrameCenters = miniFrames.shapes.flatMap((shape) =>
+      shape.kind === "circle" ? [shape.cx] : []
+    );
+    expect(miniFrameCenters).toHaveLength(2);
+    expect(new Set(miniFrameCenters).size).toBe(2);
+  });
+
   it.each(["metropolis", "moloch"])(
     "plans %s progress chrome through registered templates",
     (name) => {

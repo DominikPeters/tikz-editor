@@ -44,7 +44,13 @@ export function vectorTemplateMarkup(
 ): string {
   return (
     `<g data-beamer-vector-template="${escapeAttribute(primitive.templateId)}">` +
-    primitive.shapes.map((shape) => vectorShapeMarkup(shape, theme)).join("") +
+    primitive.shapes.map((shape, index) =>
+      vectorShapeMarkup(
+        shape,
+        theme,
+        `${primitive.id}:gradient:${index}`
+      )
+    ).join("") +
     `</g>`
   );
 }
@@ -59,11 +65,20 @@ export function escapeAttribute(value: string): string {
 
 function vectorShapeMarkup(
   shape: BeamerTemplateVectorShape,
-  theme: ResolvedBeamerTheme
+  theme: ResolvedBeamerTheme,
+  gradientId: string
 ): string {
-  const paint = vectorShapePaintAttributes(shape, theme);
+  const gradient = shape.kind === "rect" && shape.fillGradient
+    ? vectorGradientMarkup(shape, theme, gradientId)
+    : "";
+  const paint = vectorShapePaintAttributes(
+    shape,
+    theme,
+    gradient ? gradientId : undefined
+  );
   if (shape.kind === "rect") {
     return (
+      gradient +
       `<rect x="${fmt(shape.x)}" y="${fmt(shape.y)}" ` +
       `width="${fmt(shape.width)}" height="${fmt(shape.height)}"${paint} />`
     );
@@ -105,11 +120,14 @@ function vectorShapeMarkup(
 
 function vectorShapePaintAttributes(
   shape: BeamerTemplateVectorShape,
-  theme: ResolvedBeamerTheme
+  theme: ResolvedBeamerTheme,
+  gradientId?: string
 ): string {
-  const fill = shape.fillColorRole
-    ? textColor(theme, shape.fillColorRole)
-    : "none";
+  const fill = gradientId
+    ? `url(#${escapeAttribute(gradientId)})`
+    : shape.fillColorRole
+      ? textColor(theme, shape.fillColorRole)
+      : "none";
   const fillOpacity = shape.fillOpacity == null
     ? ""
     : ` fill-opacity="${fmt(shape.fillOpacity)}"`;
@@ -120,4 +138,47 @@ function vectorShapePaintAttributes(
     ? ""
     : ` stroke-width="${fmt(shape.strokeWidthPt)}"`;
   return ` fill="${fill}"${fillOpacity} stroke="${stroke}"${strokeWidth}`;
+}
+
+function vectorGradientMarkup(
+  shape: Extract<BeamerTemplateVectorShape, { kind: "rect" }>,
+  theme: ResolvedBeamerTheme,
+  gradientId: string
+): string {
+  const gradient = shape.fillGradient;
+  if (!gradient) {
+    return "";
+  }
+  const coordinates = gradient.direction === "horizontal"
+    ? {
+        x1: shape.x,
+        y1: shape.y,
+        x2: shape.x + shape.width,
+        y2: shape.y,
+      }
+    : {
+        x1: shape.x,
+        y1: shape.y,
+        x2: shape.x,
+        y2: shape.y + shape.height,
+      };
+  const stops = gradient.stops.map((stop) => {
+    const color = resolveBeamerThemeColor(theme, stop.colorRole);
+    const value = stop.paint === "background"
+      ? color.bg ?? color.fg ?? "transparent"
+      : color.fg ?? color.bg ?? "transparent";
+    const opacity = stop.opacity == null
+      ? ""
+      : ` stop-opacity="${fmt(stop.opacity)}"`;
+    return (
+      `<stop offset="${fmt(Math.max(0, Math.min(1, stop.offset)))}" ` +
+      `stop-color="${value}"${opacity} />`
+    );
+  }).join("");
+  return (
+    `<defs><linearGradient id="${escapeAttribute(gradientId)}" ` +
+    `gradientUnits="userSpaceOnUse" x1="${fmt(coordinates.x1)}" ` +
+    `y1="${fmt(coordinates.y1)}" x2="${fmt(coordinates.x2)}" ` +
+    `y2="${fmt(coordinates.y2)}">${stops}</linearGradient></defs>`
+  );
 }
