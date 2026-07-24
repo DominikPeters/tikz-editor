@@ -61,6 +61,10 @@ export function planBeamerBlockTemplate(
           // natural 4bp glue (with 2bp shrink).
           boxTopSkipPt: bp(4),
           titleBodyGapPt: 4.5,
+          bodyFirstBaselineSkipPt: null,
+          bodyInitialVSkipEx: 0,
+          flowBoxHeight: "natural",
+          flowEndingDepth: "zero",
           bodyBottomRaisePt: 0.5,
           boxBottomSkipPt: context.theme.templates.block.id.endsWith(
               "rounded-shadow"
@@ -85,7 +89,17 @@ export function planBeamerBlockTemplate(
           bodyTopPaddingPt: 0,
           bodyExtraHeightPt: 0,
           boxTopSkipPt: 0,
-          titleBodyGapPt: 0,
+          // beamerinnerthemedefault.sty leaves normal inter-line handling
+          // between empty-background title and body colorboxes. Their box
+          // dimensions force TeX's 1pt \lineskip. Inside the vmode body,
+          // an empty vbox establishes a fresh 13.6pt baseline after
+          // \vskip-.25ex.
+          titleBodyGapPt: 1,
+          bodyFirstBaselineSkipPt:
+            context.theme.fonts["block-body"].lineHeightPt,
+          bodyInitialVSkipEx: -0.25,
+          flowBoxHeight: "title-ascent",
+          flowEndingDepth: "body-last-line",
           bodyBottomRaisePt: 0,
           boxBottomSkipPt: 0,
           cornerRadiusPt: 0,

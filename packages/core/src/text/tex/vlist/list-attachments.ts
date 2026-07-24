@@ -324,12 +324,25 @@ function texLayoutLabelHBoxContent(
     const width = texLength(roundTexPt(profile.widthEm * atPt));
     const height = texLength(roundTexPt(profile.heightEm * atPt));
     const depth = texLength(roundTexPt(profile.depthEm * atPt));
-    const renderItems: TexRenderItem[] = [{
-      kind: "tex-math-svg",
-      svgBody: profile.svgBody,
-      x: texHBoxX(0),
-      baseline: texHBoxY(height),
-    }];
+    const renderItems: TexRenderItem[] = profile.glyph
+      ? [{
+          kind: "tex-glyph",
+          text: profile.glyph.text,
+          code: profile.glyph.code,
+          fontId: profile.glyph.fontId,
+          atPt: texLength(profile.glyph.fontSizePt),
+          color: profile.glyph.color,
+          x: texHBoxX(0),
+          baseline: texHBoxY(roundTexPt(
+            height + profile.glyph.baselineOffsetEm * atPt
+          )),
+        }]
+      : [{
+          kind: "tex-math-svg",
+          svgBody: profile.svgBody,
+          x: texHBoxX(0),
+          baseline: texHBoxY(height),
+        }];
     if (profile.projectedText) {
       renderItems.push({
         kind: "tex-glyph-run",

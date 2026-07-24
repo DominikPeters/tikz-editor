@@ -48,7 +48,7 @@ Usage:
 Options:
   --decks <names>       Comma-separated: kkt,conformance. Default: both.
   --variants <names>    Comma-separated: madrid-seahorse,default.
-                        Default: madrid-seahorse.
+                        Default: both.
   --frames <selection>  "all" or comma-separated frame numbers. Default: all.
   --out-dir <dir>       Default: artifacts/beamer-theme-compare.
   --raster              Also create PNG comparison artifacts.
@@ -59,7 +59,7 @@ Options:
 function parseArgs(argv) {
   const options = {
     deckNames: ["kkt", "conformance"],
-    variantNames: ["madrid-seahorse"],
+    variantNames: ["madrid-seahorse", "default"],
     frames: null,
     outDir: defaultOutDir,
     raster: false,

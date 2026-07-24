@@ -69,7 +69,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     .filter((item) =>
       (
         item.id.endsWith(":background") ||
-        item.kind === "list-marker"
+        (item.kind === "list-marker" && item.traceAsGlyph !== true)
       ) &&
       item.paragraphId == null &&
       item.bounds.width > 0 &&
@@ -277,9 +277,38 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     page: roundedRect(render.layout.page.page),
     untracedRegions: [],
     rectangles,
-    lines,
+    lines: canonicalNativeGlyphLines(glyphs, lines),
     glyphs,
   };
+}
+
+function canonicalNativeGlyphLines(glyphs, lines) {
+  const sourceLines = new Map(lines.map((line) => [
+    `${line.paragraphId}:${line.lineIndex}`,
+    line,
+  ]));
+  return groupOracleGlyphLines(glyphs)
+    .map((line, index) => {
+      const firstGlyph = line.glyphs[0];
+      const sourceKeys = new Set(line.glyphs.map((glyph) =>
+        `${glyph.paragraphId}:${glyph.lineIndex}`
+      ));
+      const source = sourceKeys.size === 1
+        ? sourceLines.get([...sourceKeys][0])
+        : sourceLines.get(
+          `${firstGlyph?.paragraphId}:${firstGlyph?.lineIndex}`
+        );
+      return {
+        id: sourceKeys.size === 1 && source
+          ? source.id
+          : `native:page-line:${index}`,
+        paragraphId: source?.paragraphId ?? "native:page",
+        role: source?.role ?? "body",
+        lineIndex: index,
+        sourceSpan: source?.sourceSpan ?? { from: 0, to: 0 },
+        ...line,
+      };
+    });
 }
 
 function nativeEmbeddedTikzGlyphs(embedded, metricProvider) {

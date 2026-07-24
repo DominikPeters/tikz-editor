@@ -16,6 +16,16 @@ export interface TexListMarkerProfile {
   readonly widthEm: number;
   readonly heightEm: number;
   readonly depthEm: number;
+  /** Optional font glyph used instead of an authored SVG marker shape. */
+  readonly glyph?: Readonly<{
+    text: string;
+    code: number;
+    fontId: string;
+    fontSizePt: number;
+    color: string;
+    /** Baseline offset from the surrounding marker baseline. */
+    baselineOffsetEm: number;
+  }>;
   /** Painted sub-rectangle relative to the marker box's top-left corner. */
   readonly paintBoundsEm?: Readonly<{
     x: number;

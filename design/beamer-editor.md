@@ -808,6 +808,21 @@ matching glyph codes/fonts; frame 6 compares all 575 glyphs with maximum
 deltas of 0.003519pt horizontally and 0.014664pt vertically. Previously exact
 frames 2–4 retain their oracle agreement.
 
+The theme-fidelity pass then separated frame composition, embedded TikZ,
+theme-vector markup, rounded-shadow paint, title-page planning, and block
+planning into explicit renderer boundaries. The class-default templates are
+now measured independently from Madrid rather than inheriting rounded-theme
+constants: an empty-background frame title uses Beamer's smaller colorbox,
+the default title page uses its unwrapped colorbox dimensions, and itemize
+triangles are traced as the real raised `msam10` glyph. Default blocks follow
+`beamerinnerthemedefault.sty` at the vertical-list level: the title line owns
+the outer inter-line calculation, the body colorbox starts its first baseline
+at the active `\baselineskip-.25ex`, and glue preserves `\prevdepth`.
+`npm run compare:beamer-themes` runs both the Madrid/Seahorse and class-default
+variants through the same materialized input and LuaLaTeX oracle. All 20 KKT
+frames and the three dedicated conformance frames pass the structural
+contract for both variants.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.

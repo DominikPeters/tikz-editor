@@ -194,6 +194,12 @@ function createDefaultTheme(): MutableTheme {
       frametitle: { fg: "#3333b3" },
       "alerted text": { fg: "#ff0000" },
       "example text": { fg: "#008000" },
+      "block body": {},
+      "block body alerted": {},
+      "block body example": {},
+      "block title": { parent: "structure" },
+      "block title alerted": { parent: "alerted text" },
+      "block title example": { parent: "example text" },
       "navigation symbols": {
         fgMix: {
           foregroundRole: "structure",

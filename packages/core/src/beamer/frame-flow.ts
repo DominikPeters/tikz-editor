@@ -148,8 +148,19 @@ export function positionPreparedFrameFlow(
 export function paragraphEndingMaterialDepth(
   paragraph: LaidParagraph
 ): number {
-  const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
-  return Number(last?.depth ?? 0);
+  const items = paragraph.layout.vlistLayout.boxReport.items;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    // TeX glue and penalties do not reset \prevdepth. This matters when a
+    // list's trailing glue is followed by the default block template: the
+    // block title line still computes its inter-line glue from the final
+    // list hbox.
+    if (item.itemKind === "glue" || item.itemKind === "penalty") {
+      continue;
+    }
+    return Number(item.depth);
+  }
+  return 0;
 }
 
 export function paragraphStartingMaterialHeight(

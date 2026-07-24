@@ -12,9 +12,16 @@ const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
 // beamerbaseframe.sty adds a separate 0.25em skip to the frame-title box.
 // Keep those dimensions separate: only the former is colored.
 const DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT = 27.684661865234375;
+// With an empty frame-title background, beamercolorbox retains only its
+// natural strut/text box instead of the full colored box extent.
+const EMPTY_BACKGROUND_FRAME_TITLE_HEIGHT_PT = 1_254_933 / 65_536;
 const DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM = 0.25;
 const DEFAULT_FRAME_TITLE_TEXT_TOP_PT = 10.148712158203125;
 const DEFAULT_FRAME_TITLE_BASELINE_PT = 20.142303466796875;
+// When the frame-title color has no background, the default template omits
+// `\nointerlineskip`; TeX therefore inserts its 1pt `\lineskip` before the
+// color box.
+const EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT = 1;
 // beamerouterthemeinfolines.sty: ht=2.25ex,dp=1ex. The 4pt reserve added by
 // beamerbaseframecomponents.sty belongs to \footheight, not the painted boxes.
 const INFOLINES_FOOTLINE_PAINT_HEIGHT_PT = 8.658004760742188;
@@ -53,7 +60,7 @@ const headlinePlanners = new Map<string, EdgePlanner>([
 ]);
 
 const footlinePlanners = new Map<string, EdgePlanner>([
-  ["beamer/footline/none", emptyEdge],
+  ["beamer/footline/none", emptyFootline],
   ["beamer/footline/infolines", planInfolinesFootline],
   ["beamer/footline/metropolis", planModernFootline],
   ["beamer/footline/moloch", planModernFootline],
@@ -109,13 +116,18 @@ function planDefaultFrameTitle(
   // beamerouterthemedefault.sty: beamercolorbox sep=0.3cm and width
   // textwidth + both Beamer margins. The painted vertical extent is locked to
   // the LuaLaTeX oracle until TeX strut/glue execution is shared here.
-  const paintHeight = DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT;
-  const inset = paintHeight +
+  const background = context.theme.colors.frametitle?.bg;
+  const paintHeight = background
+    ? DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT
+    : EMPTY_BACKGROUND_FRAME_TITLE_HEIGHT_PT;
+  const leadingLineSkip = background
+    ? 0
+    : EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT;
+  const inset = leadingLineSkip + paintHeight +
     DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM *
       // `\beamer@frametitlebox` has ended when beamerbaseframe.sty emits
       // `\vskip0.25em`, so TeX evaluates this em in the restored body font.
       context.theme.fonts["normal-text"].sizePt;
-  const background = context.theme.colors.frametitle?.bg;
   return {
     inset,
     primitives: [
@@ -153,7 +165,7 @@ function planDefaultFrameTitle(
         verticalAlignment: "top",
         // The template inserts a strut, so the baseline is independent of
         // whether this particular title contains a tall or deep glyph.
-        baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT,
+        baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT + leadingLineSkip,
       },
     ],
   };
@@ -393,6 +405,12 @@ function infolinesFill(
 
 function emptyEdge(): ChromeTemplatePlan {
   return { inset: 0, primitives: [] };
+}
+
+function emptyFootline(): ChromeTemplatePlan {
+  // beamerbaseframecomponents.sty reserves 4pt even when the footline
+  // template's measured box is empty.
+  return { inset: BEAMER_FOOTLINE_RESERVE_PT, primitives: [] };
 }
 
 function getPlanner<T>(

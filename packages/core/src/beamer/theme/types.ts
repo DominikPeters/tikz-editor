@@ -229,6 +229,17 @@ export type BeamerFrameChromePlan = {
   primitives: BeamerTemplatePrimitive[];
 };
 
+export type BeamerTitlePageTemplatePlan = {
+  templateId: string;
+  style: "colorbox" | "rounded";
+  shadow: boolean;
+  outerBleedPt: number;
+  titleBoxTopPt: number;
+  titleBoxHeightPt: number;
+  titleBaselineFromBoxTopPt: number;
+  subtitleBaselineFromBoxTopPt: number;
+};
+
 export type BeamerFrameTemplateContext = {
   document: BeamerDocumentModel;
   frame: BeamerFrameModel;
@@ -268,6 +279,27 @@ export type BeamerBlockTemplatePlan = {
      */
     boxTopSkipPt: number;
     titleBodyGapPt: number;
+    /**
+     * When set, the body colorbox establishes its first paragraph baseline
+     * with this baseline skip after an empty vbox. `bodyInitialVSkipEx`
+     * models the preceding ex-relative correction. This is the default
+     * Beamer block template's `vmode` behavior; rounded blocks instead use
+     * the fixed `bodyTopPaddingPt`.
+     */
+    bodyFirstBaselineSkipPt: number | null;
+    bodyInitialVSkipEx: number;
+    /**
+     * Default blocks remain separate vertical-list material, so the outer
+     * frame computes inter-line glue against the title line's ascent.
+     * Rounded blocks are packaged as one box.
+     */
+    flowBoxHeight: "natural" | "title-ascent";
+    /**
+     * Explicit vertical glue after the default body colorbox preserves the
+     * box's depth as TeX's `\prevdepth`. Rounded boxes raise their body hbox
+     * and expose zero depth instead.
+     */
+    flowEndingDepth: "zero" | "body-last-line";
     bodyBottomRaisePt: number;
     boxBottomSkipPt: number;
     cornerRadiusPt: number;

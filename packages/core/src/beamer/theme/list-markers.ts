@@ -1,6 +1,7 @@
 import { formatSvgNumber as fmt } from "../../svg/format.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { TexListMarkerProfile } from "../../text/tex/layout-options.js";
+import type { ResolvedTexFont } from "../../text/tex/index.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
 import type {
   BeamerThemeTemplateRef,
@@ -28,6 +29,10 @@ export function resolveBeamerItemizeMarkers(
     fontProfile.metricProvider
   );
   const xHeightEm = resolvedFont.data.fontdimen.xheight;
+  const triangleFont = fontProfile.metricProvider.resolveFont({
+    fontId: "msam10",
+    atPt: texLength(font.sizePt),
+  });
   const structure =
     resolveBeamerThemeColor(theme, "item").fg ??
     resolveBeamerThemeColor(theme, "structure").fg ??
@@ -41,6 +46,7 @@ export function resolveBeamerItemizeMarkers(
       depth: index + 1,
       fontSizePt: font.sizePt,
       xHeightEm,
+      triangleFont,
       structure,
       canvas,
     })
@@ -158,6 +164,7 @@ function markerForTemplate(params: {
   depth: number;
   fontSizePt: number;
   xHeightEm: number;
+  triangleFont: ResolvedTexFont;
   structure: string;
   canvas: string;
 }): TexListMarkerProfile {
@@ -249,27 +256,32 @@ function sphereSvgBody(params: {
 function triangleMarker(params: {
   depth: number;
   fontSizePt: number;
-  xHeightEm: number;
+  triangleFont: ResolvedTexFont;
   structure: string;
 }): TexListMarkerProfile {
-  // beamerinnerthemedefault.sty uses a raised \blacktriangleright. Keep the
-  // vector template explicit; an oracle pass can refine the math-glyph box
-  // without changing list layout or the theme/template boundary.
-  const widthEm = 0.78 * params.xHeightEm;
-  const paintHeightEm = 0.9 * params.xHeightEm;
+  // beamerinnerthemedefault.sty:
+  // \raise1.25pt\hbox{$\blacktriangleright$}, with 1.5pt at deeper levels.
+  const metric = params.triangleFont.data.chars["73"];
+  const widthEm = metric?.width;
+  const heightEm = metric?.height;
+  if (widthEm == null || heightEm == null) {
+    throw new Error("The msam10 blacktriangleright metric is unavailable.");
+  }
+  const depthEm = metric?.depth ?? 0;
   const raiseEm = (params.depth === 1 ? 1.25 : 1.5) / params.fontSizePt;
-  const width = widthEm * params.fontSizePt * 100;
-  const bottom = -raiseEm * params.fontSizePt * 100;
-  const top =
-    bottom - paintHeightEm * params.fontSizePt * 100;
   return {
     widthEm,
-    heightEm: paintHeightEm + raiseEm,
-    depthEm: -raiseEm,
-    svgBody:
-      `<path data-beamer-list-marker="triangle" ` +
-      `d="M0 ${fmt(top)} L${fmt(width)} ${fmt((top + bottom) / 2)} ` +
-      `L0 ${fmt(bottom)} Z" fill="${params.structure}"/>`,
+    heightEm: heightEm + raiseEm,
+    depthEm: depthEm - raiseEm,
+    glyph: {
+      text: "I",
+      code: 73,
+      fontId: params.triangleFont.id,
+      fontSizePt: Number(params.triangleFont.atPt),
+      color: params.structure,
+      baselineOffsetEm: -raiseEm,
+    },
+    svgBody: "",
   };
 }
 

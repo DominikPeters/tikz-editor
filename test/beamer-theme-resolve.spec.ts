@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   planBeamerBlockTemplate,
+  planBeamerTitlePageTemplate,
   resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
@@ -10,6 +11,55 @@ import {
 } from "../packages/core/src/beamer/index.js";
 
 describe("Beamer theme resolution", () => {
+  it("plans the class-default title, block, and triangle templates", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass[11pt,aspectratio=169]{beamer}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+    expect(planBeamerTitlePageTemplate(theme, true)).toEqual({
+      templateId: "beamer/title-page/default",
+      style: "colorbox",
+      shadow: false,
+      outerBleedPt: 0,
+      titleBoxTopPt: 14.6,
+      titleBoxHeightPt: 45.438339,
+      titleBaselineFromBoxTopPt: 17.993591,
+      subtitleBaselineFromBoxTopPt: 35.193588,
+    });
+    expect(
+      planBeamerBlockTemplate({ environment: "block", theme })
+    ).toEqual(
+      expect.objectContaining({
+        templateId: "beamer/block/default",
+        style: "default",
+        shadow: false,
+        geometry: expect.objectContaining({
+          titleBodyGapPt: 1,
+          bodyFirstBaselineSkipPt: 13.6,
+          bodyInitialVSkipEx: -0.25,
+          flowBoxHeight: "title-ascent",
+          flowEndingDepth: "body-last-line",
+        }),
+      })
+    );
+    expect(resolveBeamerItemizeMarkers(theme)[0]?.glyph).toEqual(
+      expect.objectContaining({
+        code: 73,
+        fontId: "msam10",
+        fontSizePt: 10.95,
+      })
+    );
+    expect(resolveBeamerThemeColor(theme, "block title")).toEqual({
+      fg: "#3333b3",
+    });
+    expect(resolveBeamerThemeColor(theme, "block title alerted")).toEqual({
+      fg: "#ff0000",
+    });
+    expect(resolveBeamerThemeColor(theme, "block title example")).toEqual({
+      fg: "#008000",
+    });
+  });
+
   it("composes Madrid structure with a later seahorse color patch", () => {
     const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
 \documentclass{beamer}

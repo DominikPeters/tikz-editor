@@ -7,7 +7,10 @@ import type {
   BeamerTitlePageBodyNode,
   BeamerColumnsBodyNode,
 } from "./content-types.js";
-import type { BeamerBlockTemplatePlan } from "./theme/types.js";
+import type {
+  BeamerBlockTemplatePlan,
+  BeamerTitlePageTemplatePlan,
+} from "./theme/types.js";
 import type {
   BeamerEmbeddedTikzLayout,
   BeamerParagraphLayout,
@@ -21,6 +24,7 @@ export type LaidParagraph = {
   listMarkers: readonly {
     id: string;
     bounds: BeamerRect;
+    traceAsGlyph: boolean;
   }[];
 };
 
@@ -39,20 +43,19 @@ export type PreparedBlock = {
   backgroundTop: number;
   backgroundBottom: number;
   naturalHeight: number;
+  flowBoxHeight: number;
+  endingDepth: number;
 };
 
 export type PreparedTitlePage = {
   node: BeamerTitlePageBodyNode;
+  plan: BeamerTitlePageTemplatePlan;
   width: number;
   title: LaidParagraph | null;
   subtitle: LaidParagraph | null;
   naturalHeight: number;
   leadingFillWeight: number;
   trailingFillWeight: number;
-  titleBoxTop: number;
-  titleBoxHeight: number;
-  titleBaselineFromBoxTop: number;
-  subtitleBaselineFromBoxTop: number;
 };
 
 export type PreparedColumnFlowItem =

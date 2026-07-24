@@ -186,6 +186,8 @@ export type BeamerFrameLayoutItem = {
   paragraphId?: string;
   childIds?: string[];
   message?: string;
+  /** The marker is already represented by a glyph in its paragraph VList. */
+  traceAsGlyph?: boolean;
 };
 
 export type BeamerParagraphLayout = {

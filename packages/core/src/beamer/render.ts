@@ -57,6 +57,7 @@ import {
   createBeamerTexTextFontProfile,
   planBeamerBlockTemplate,
   planBeamerFrameChrome,
+  planBeamerTitlePageTemplate,
   resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
@@ -111,16 +112,10 @@ const BEAMER_CENTER_TOPSEP = {
 // beamerinnerthemedefault.sty's title-page template under the 11pt class
 // profile. The rounded inner theme wraps the title colorbox with the PGF
 // rounded/shadow option but retains these TeX box dimensions.
-const BEAMER_TITLE_PAGE_LEADING_MATERIAL_PT = 14.6;
-const BEAMER_TITLE_BOX_WITH_SUBTITLE_HEIGHT_PT = 56.468338;
-const BEAMER_TITLE_BOX_TITLE_ONLY_HEIGHT_PT = 37.1676;
-const BEAMER_TITLE_BASELINE_FROM_BOX_TOP_PT = 24.508591;
-const BEAMER_SUBTITLE_BASELINE_FROM_BOX_TOP_PT = 41.708588;
 const BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT = 10.95;
 const BEAMER_EMPTY_METADATA_COLORBOX_PT = 16;
 const BEAMER_TITLE_TEMPLATE_INTERBOX_PT = 1;
 const BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT = 5.475;
-const BEAMER_ROUNDED_TITLE_BLEED_PT = 4 * (72.27 / 72);
 // beamerbaselocalstructure.sty: \leftmargini..iii=2em,
 // \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
 // \itemsep=3pt. The deeper itemsep values alias their zero parsep.
@@ -663,8 +658,8 @@ async function prepareFrameFlow(params: {
           node,
           block,
           naturalHeight: block.naturalHeight,
-          boxHeight: block.naturalHeight,
-          endingDepth: 0,
+          boxHeight: block.flowBoxHeight,
+          endingDepth: block.endingDepth,
         });
       }
       continue;
@@ -727,30 +722,25 @@ function prepareTitlePage(params: {
         macroBindings: params.macroBindings,
       })
     : null;
-  const titleBoxHeight = subtitle
-    ? BEAMER_TITLE_BOX_WITH_SUBTITLE_HEIGHT_PT
-    : BEAMER_TITLE_BOX_TITLE_ONLY_HEIGHT_PT;
+  const plan = planBeamerTitlePageTemplate(params.theme, subtitle != null);
   const metadataBoxesHeight =
     3 * BEAMER_EMPTY_METADATA_COLORBOX_PT +
     3 * BEAMER_TITLE_TEMPLATE_INTERBOX_PT;
   const naturalHeight =
-    BEAMER_TITLE_PAGE_LEADING_MATERIAL_PT +
-    titleBoxHeight +
+    plan.titleBoxTopPt +
+    plan.titleBoxHeightPt +
     BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT +
     metadataBoxesHeight +
     BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT;
   return {
     node: params.node,
+    plan,
     width: params.width,
     title,
     subtitle,
     naturalHeight,
     leadingFillWeight: 1,
     trailingFillWeight: 1,
-    titleBoxTop: BEAMER_TITLE_PAGE_LEADING_MATERIAL_PT,
-    titleBoxHeight,
-    titleBaselineFromBoxTop: BEAMER_TITLE_BASELINE_FROM_BOX_TOP_PT,
-    subtitleBaselineFromBoxTop: BEAMER_SUBTITLE_BASELINE_FROM_BOX_TOP_PT,
   };
 }
 
@@ -1070,18 +1060,30 @@ function prepareBlock(params: {
     geometry.transitionHeightPt;
   const titleBoxExtent =
     titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
+  const bodyBaselineInset =
+    body && geometry.bodyFirstBaselineSkipPt != null
+      ? geometry.bodyFirstBaselineSkipPt +
+        geometry.bodyInitialVSkipEx *
+          fontXHeightPt(params.theme.fonts[plan.bodyFontRole]) -
+        firstLineBaselineOffset(body)
+      : geometry.bodyTopPaddingPt;
   const bodyParagraphTop =
     geometry.beforeSkipPt +
     geometry.boxTopSkipPt +
     titleBoxExtent +
     geometry.titleBodyGapPt +
-    geometry.bodyTopPaddingPt;
+    bodyBaselineInset;
   const bodyExtent = body ? paragraphLineExtent(body) : 0;
   const bodyBackgroundHeight =
-    geometry.bodyTopPaddingPt +
+    bodyBaselineInset +
     bodyExtent +
     geometry.bodyExtraHeightPt;
   const backgroundBottom = bodyBackgroundTop + bodyBackgroundHeight;
+  const naturalHeight =
+    bodyParagraphTop +
+    bodyExtent +
+    geometry.bodyBottomRaisePt +
+    geometry.boxBottomSkipPt;
   return {
     node: params.node,
     plan,
@@ -1096,11 +1098,15 @@ function prepareBlock(params: {
     bodyBackgroundHeight,
     backgroundTop,
     backgroundBottom,
-    naturalHeight:
-      bodyParagraphTop +
-      bodyExtent +
-      geometry.bodyBottomRaisePt +
-      geometry.boxBottomSkipPt,
+    naturalHeight,
+    flowBoxHeight:
+      geometry.flowBoxHeight === "title-ascent"
+        ? titleAscent
+        : naturalHeight,
+    endingDepth:
+      geometry.flowEndingDepth === "body-last-line" && body
+        ? paragraphLastLineDepth(body)
+        : 0,
   };
 }
 
@@ -1288,10 +1294,10 @@ function emitPreparedTitlePage(params: {
 }): void {
   const titlePage = params.prepared;
   const boxBounds: BeamerRect = {
-    x: params.x - BEAMER_ROUNDED_TITLE_BLEED_PT,
-    y: params.y + titlePage.titleBoxTop,
-    width: titlePage.width + 2 * BEAMER_ROUNDED_TITLE_BLEED_PT,
-    height: titlePage.titleBoxHeight,
+    x: params.x - titlePage.plan.outerBleedPt,
+    y: params.y + titlePage.plan.titleBoxTopPt,
+    width: titlePage.width + 2 * titlePage.plan.outerBleedPt,
+    height: titlePage.plan.titleBoxHeightPt,
   };
   const titleColor = resolveBeamerThemeColor(params.theme, "title");
   params.modelBuilder.addPart({
@@ -1301,14 +1307,13 @@ function emitPreparedTitlePage(params: {
     markup: titlePageChromeMarkup({
       id: titlePage.node.id,
       bounds: boxBounds,
-      templateId: params.theme.templates.titlePage.id,
+      templateId: titlePage.plan.templateId,
+      style: titlePage.plan.style,
       fill:
         titleColor.bg ??
         resolveBeamerThemeColor(params.theme, "titlelike").bg ??
         "transparent",
-      shadow:
-        params.theme.templates.titlePage.id ===
-        "beamer/title-page/rounded-shadow",
+      shadow: titlePage.plan.shadow,
     }),
   });
 
@@ -1355,12 +1360,12 @@ function emitPreparedTitlePage(params: {
   };
   emitText(
     titlePage.title,
-    titlePage.titleBaselineFromBoxTop,
+    titlePage.plan.titleBaselineFromBoxTopPt,
     "title"
   );
   emitText(
     titlePage.subtitle,
-    titlePage.subtitleBaselineFromBoxTop,
+    titlePage.plan.subtitleBaselineFromBoxTopPt,
     "subtitle"
   );
 
@@ -1383,10 +1388,18 @@ function titlePageChromeMarkup(params: {
   id: string;
   bounds: BeamerRect;
   templateId: string;
+  style: "colorbox" | "rounded";
   fill: string;
   shadow: boolean;
 }): string {
   const { bounds } = params;
+  if (params.style === "colorbox") {
+    return (
+      `<g data-beamer-title-page-template="${escapeAttribute(params.templateId)}">` +
+      rectMarkup(bounds, params.fill) +
+      `</g>`
+    );
+  }
   const radius = 4;
   const right = bounds.x + bounds.width;
   const bottom = bounds.y + bounds.height;
@@ -1458,6 +1471,7 @@ function emitFrameParagraph(params: {
         height: marker.bounds.height,
       },
       parentId: laid.layout.paragraphId,
+      traceAsGlyph: marker.traceAsGlyph,
     });
   }
   params.modelBuilder.addPart({
@@ -1549,6 +1563,7 @@ function emitPreparedColumns(params: {
               height: marker.bounds.height,
             },
             parentId: laid.layout.paragraphId,
+            traceAsGlyph: marker.traceAsGlyph,
           });
         }
         params.modelBuilder.addPart({
@@ -2012,9 +2027,10 @@ function layoutParagraph(params: {
       ? { rightskipStretch: Number.POSITIVE_INFINITY }
       : {}),
     spaceGlueProfile:
-      /\\(?:begin\s*\{\s*center\s*\}|centering)(?![A-Za-z@])/u.test(
-        mapped.text
-      )
+      params.alignment === "left" ||
+        /\\(?:begin\s*\{\s*center\s*\}|centering)(?![A-Za-z@])/u.test(
+          mapped.text
+        )
         ? "font"
         : params.role === "block-body"
           ? "font"
@@ -2093,6 +2109,7 @@ function layoutParagraph(params: {
         const atPt = Number(resolvedFont.atPt);
         return [{
           id: `${params.paragraphId}:marker:${item.path.join("-")}`,
+          traceAsGlyph: marker.glyph != null,
           bounds: {
             x: Number(item.x) + (paint?.x ?? 0) * atPt,
             y: Number(item.y) + (paint?.y ?? 0) * atPt,
