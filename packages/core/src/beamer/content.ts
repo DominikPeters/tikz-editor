@@ -68,9 +68,11 @@ export function parseBeamerFrameBody(
   const { source, frame } = params;
   const diagnostics: Diagnostic[] = [];
   const tokens = scanBeamerEnvironmentTokens(source, frame.bodySpan);
-  const theoremOccurrences = params.document
-    ? resolveBeamerTheoremOccurrences(params.document)
-    : new Map<number, BeamerTheoremOccurrence>();
+  const theoremOccurrences =
+    params.theoremOccurrences ??
+    (params.document
+      ? resolveBeamerTheoremOccurrences(params.document)
+      : new Map<number, BeamerTheoremOccurrence>());
   const theoremTemplate =
     params.document?.preamble.theoremTemplate ?? "default";
   const children: BeamerFrameBodyNode[] = [];

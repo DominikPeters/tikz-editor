@@ -10,6 +10,7 @@ import type {
   BeamerTikzPictureRoot,
 } from "./types.js";
 import type { BeamerOverlayModel } from "./overlay.js";
+import type { BeamerTheoremOccurrence } from "./theorems.js";
 import type { MappedText } from "../text/source-map.js";
 
 export type BeamerParagraphBodyNode = {
@@ -162,4 +163,10 @@ export type ParseBeamerFrameBodyParams = {
   source: string;
   frame: BeamerFrameModel;
   document?: BeamerDocumentModel;
+  /**
+   * Precomputed document-order theorem occurrences. Theorem counters are a
+   * document-wide pass; a prepared document computes them once instead of
+   * per frame.
+   */
+  theoremOccurrences?: ReadonlyMap<number, BeamerTheoremOccurrence>;
 };

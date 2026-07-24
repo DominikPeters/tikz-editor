@@ -59,14 +59,20 @@ import { resolveBeamerPageGeometry } from "./geometry.js";
 import {
   projectBeamerOverlayText,
   resolveBeamerOverlaySpanVisibility,
+  scanBeamerFrameOverlays,
   type BeamerOverlayModel,
   type BeamerOverlayVisibility,
 } from "./overlay.js";
 import { scanBeamerDocument } from "./scan.js";
 import {
+  resolveBeamerTheoremOccurrences,
+  type BeamerTheoremOccurrence,
+} from "./theorems.js";
+import {
   createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
   createBeamerFrameNavigationSnapshot,
+  createBeamerNavigationModel,
   planBeamerBlockTemplate,
   planBeamerFrameChrome,
   planBeamerTitlePageTemplate,
@@ -77,6 +83,7 @@ import {
 } from "./theme/index.js";
 import type {
   BeamerFrameChromePlan,
+  BeamerNavigationModel,
   BeamerTemplatePrimitive,
   BeamerThemeFont,
   BeamerThemeFontRole,
@@ -108,6 +115,7 @@ import type {
   BeamerGraphicsLayout,
   BeamerMetadataFieldModel,
   BeamerMetadataFieldName,
+  BeamerPageGeometry,
   BeamerParagraphLayout,
   BeamerRect,
   RenderBeamerFrameOptions,
@@ -183,6 +191,166 @@ function beamerListLayoutProfile(
 }
 
 /**
+ * The document-level state shared by every frame/step render of one source
+ * revision: scan, resolved theme, page geometry, macro bindings, navigation
+ * topology, and theorem counters.
+ */
+type BeamerRenderContext = {
+  readonly source: string;
+  readonly document: BeamerDocumentModel;
+  readonly theme: ResolvedBeamerTheme;
+  readonly macroBindings: ReadonlyMap<string, MacroBinding>;
+  readonly page: BeamerPageGeometry;
+  readonly navigationModel: BeamerNavigationModel;
+  readonly theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+};
+
+function createBeamerRenderContext(source: string): BeamerRenderContext {
+  const document = scanBeamerDocument(source);
+  const theme = resolveBeamerTheme(document);
+  return {
+    source,
+    document,
+    theme,
+    macroBindings: collectMacroBindings(document.preamble.macroDefinitions),
+    page: resolveBeamerPageGeometry(document, theme),
+    navigationModel: createBeamerNavigationModel(document),
+    theoremOccurrences: resolveBeamerTheoremOccurrences(document),
+  };
+}
+
+/**
+ * A prepared Beamer document: document-level passes run once, then any
+ * frame/step renders against the shared model. Frame body IRs are parsed
+ * lazily and cached per frame.
+ */
+export type PreparedBeamerDocument = {
+  readonly document: BeamerDocumentModel;
+  readonly theme: ResolvedBeamerTheme;
+  /** Overlay step count for one frame, without rendering it. */
+  frameStepCount(frameIndex: number): number;
+  renderFrame(
+    options?: RenderBeamerFrameOptions
+  ): Promise<RenderBeamerFrameResult>;
+  renderFramePages(
+    options?: RenderBeamerFramePagesOptions
+  ): Promise<RenderBeamerFramePagesResult>;
+};
+
+/**
+ * Run the document-level Beamer passes (scan, theme resolution, page
+ * geometry, macro collection, navigation topology, theorem counters) once
+ * and return a handle that renders frames and steps against the prepared
+ * model. `renderBeamerFrame`/`renderBeamerFramePages` are one-shot wrappers
+ * over this entry point.
+ */
+export function prepareBeamerDocument(source: string): PreparedBeamerDocument {
+  const context = createBeamerRenderContext(source);
+  const bodyIrByFrameIndex = new Map<number, BeamerFrameBodyIr>();
+  const overlaysByFrameIndex = new Map<number, BeamerOverlayModel>();
+
+  const requireFrame = (frameIndex: number): BeamerFrameModel => {
+    const frame = context.document.frames[frameIndex];
+    if (!frame) {
+      throw new RangeError(
+        `Beamer frame index ${frameIndex} is outside the document's ${context.document.frames.length} frames.`
+      );
+    }
+    return frame;
+  };
+
+  const frameBodyIr = (frameIndex: number): BeamerFrameBodyIr => {
+    const cached = bodyIrByFrameIndex.get(frameIndex);
+    if (cached) {
+      return cached;
+    }
+    const bodyIr = parseBeamerFrameBody({
+      source: context.source,
+      frame: requireFrame(frameIndex),
+      document: context.document,
+      theoremOccurrences: context.theoremOccurrences,
+    });
+    bodyIrByFrameIndex.set(frameIndex, bodyIr);
+    return bodyIr;
+  };
+
+  const requireStep = (bodyIr: BeamerFrameBodyIr, step: number): void => {
+    if (!Number.isInteger(step) || step < 1) {
+      throw new RangeError(
+        "A Beamer overlay step must be a positive integer."
+      );
+    }
+    if (step > bodyIr.overlays.stepCount) {
+      throw new RangeError(
+        `Beamer overlay step ${step} is outside the frame's ${bodyIr.overlays.stepCount} steps.`
+      );
+    }
+  };
+
+  return {
+    document: context.document,
+    theme: context.theme,
+    frameStepCount: (frameIndex) => {
+      const bodyIr = bodyIrByFrameIndex.get(frameIndex);
+      if (bodyIr) {
+        return bodyIr.overlays.stepCount;
+      }
+      const cached = overlaysByFrameIndex.get(frameIndex);
+      if (cached) {
+        return cached.stepCount;
+      }
+      const overlays = scanBeamerFrameOverlays(
+        context.source,
+        requireFrame(frameIndex)
+      );
+      overlaysByFrameIndex.set(frameIndex, overlays);
+      return overlays.stepCount;
+    },
+    async renderFrame(options = {}) {
+      const frameIndex = options.frameIndex ?? 0;
+      const frame = requireFrame(frameIndex);
+      const bodyIr = frameBodyIr(frameIndex);
+      const step = options.step ?? 1;
+      requireStep(bodyIr, step);
+      return renderBeamerFrameStep({
+        context,
+        frame,
+        frameIndex,
+        bodyIr,
+        step,
+        graphicsResolver: options.graphicsResolver,
+      });
+    },
+    async renderFramePages(options = {}) {
+      const frameIndex = options.frameIndex ?? 0;
+      const frame = requireFrame(frameIndex);
+      const bodyIr = frameBodyIr(frameIndex);
+      const stepCount = bodyIr.overlays.stepCount;
+      const pages: RenderBeamerFrameResult[] = [];
+      for (let step = 1; step <= stepCount; step += 1) {
+        pages.push(
+          await renderBeamerFrameStep({
+            context,
+            frame,
+            frameIndex,
+            bodyIr,
+            step,
+            graphicsResolver: options.graphicsResolver,
+          })
+        );
+      }
+      return {
+        document: context.document,
+        frame,
+        stepCount,
+        pages,
+        diagnostics: pages.flatMap((page) => page.diagnostics),
+      };
+    },
+  };
+}
+
+/**
  * Render one Beamer frame into a fixed-page SVG and a source-addressable
  * layout contract.
  *
@@ -193,62 +361,24 @@ export async function renderBeamerFrame(
   source: string,
   options: RenderBeamerFrameOptions = {}
 ): Promise<RenderBeamerFrameResult> {
-  const document = scanBeamerDocument(source);
-  const frameIndex = options.frameIndex ?? 0;
-  const frame = document.frames[frameIndex];
-  if (!frame) {
-    throw new RangeError(
-      `Beamer frame index ${frameIndex} is outside the document's ${document.frames.length} frames.`
-    );
-  }
-  const bodyIr = parseBeamerFrameBody({ source, frame, document });
-  const stepCount = bodyIr.overlays.stepCount;
-  const step = options.step ?? 1;
-  if (!Number.isInteger(step) || step < 1) {
-    throw new RangeError("A Beamer overlay step must be a positive integer.");
-  }
-  if (step > stepCount) {
-    throw new RangeError(
-      `Beamer overlay step ${step} is outside the frame's ${stepCount} steps.`
-    );
-  }
-  return renderBeamerFrameStep({
-    source,
-    document,
-    frame,
-    frameIndex,
-    bodyIr,
-    step,
-    graphicsResolver: options.graphicsResolver,
-  });
+  return prepareBeamerDocument(source).renderFrame(options);
 }
 
 async function renderBeamerFrameStep(params: {
-  source: string;
-  document: BeamerDocumentModel;
+  context: BeamerRenderContext;
   frame: BeamerFrameModel;
   frameIndex: number;
   bodyIr: BeamerFrameBodyIr;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<RenderBeamerFrameResult> {
-  const {
-    source,
-    document,
-    frame,
-    frameIndex,
-    bodyIr,
-    step,
-  } = params;
+  const { context, frame, frameIndex, bodyIr, step } = params;
+  const { source, document, theme, macroBindings, page } = context;
   const stepCount = bodyIr.overlays.stepCount;
-  const theme = resolveBeamerTheme(document);
-  const macroBindings = collectMacroBindings(
-    document.preamble.macroDefinitions
-  );
-  const page = resolveBeamerPageGeometry(document, theme);
   const navigation = createBeamerFrameNavigationSnapshot(
     document,
-    frameIndex
+    frameIndex,
+    context.navigationModel
   );
   const chrome = planBeamerFrameChrome({
     document,
@@ -562,35 +692,7 @@ export async function renderBeamerFramePages(
   source: string,
   options: RenderBeamerFramePagesOptions = {}
 ): Promise<RenderBeamerFramePagesResult> {
-  const document = scanBeamerDocument(source);
-  const frameIndex = options.frameIndex ?? 0;
-  const frame = document.frames[frameIndex];
-  if (!frame) {
-    throw new RangeError(
-      `Beamer frame index ${frameIndex} is outside the document's ${document.frames.length} frames.`
-    );
-  }
-  const bodyIr = parseBeamerFrameBody({ source, frame, document });
-  const stepCount = bodyIr.overlays.stepCount;
-  const pages: RenderBeamerFrameResult[] = [];
-  for (let step = 1; step <= stepCount; step += 1) {
-    pages.push(await renderBeamerFrameStep({
-      source,
-      document,
-      frame,
-      frameIndex,
-      bodyIr,
-      step,
-      graphicsResolver: options.graphicsResolver,
-    }));
-  }
-  return {
-    document,
-    frame,
-    stepCount,
-    pages,
-    diagnostics: pages.flatMap((page) => page.diagnostics),
-  };
+  return prepareBeamerDocument(source).renderFramePages(options);
 }
 
 function renderChrome(params: {

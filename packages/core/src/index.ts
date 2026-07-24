@@ -1,5 +1,5 @@
 export { FeatureFlags } from "./ast/features.js";
-export { scanBeamerDocument } from "./beamer/index.js";
+export { prepareBeamerDocument, scanBeamerDocument } from "./beamer/index.js";
 export * from "./coords/index.js";
 export type * from "./graphics/index.js";
 export { parseTikz, createIncrementalParseSession } from "./parser/index.js";

@@ -6,7 +6,12 @@ export {
   resolveBeamerOverlaySpanVisibility,
   scanBeamerFrameOverlays,
 } from "./overlay.js";
-export { renderBeamerFrame, renderBeamerFramePages } from "./render.js";
+export {
+  prepareBeamerDocument,
+  renderBeamerFrame,
+  renderBeamerFramePages,
+  type PreparedBeamerDocument,
+} from "./render.js";
 export { scanBeamerDocument } from "./scan.js";
 export {
   activeBeamerTheoremDeclarations,
