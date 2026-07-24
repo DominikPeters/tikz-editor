@@ -60,6 +60,31 @@ Display rows:
       .toContain("cmss10");
   });
 
+  it("traces native display math rules alongside theme rectangles", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\begin{document}
+\begin{frame}{Math}
+Fraction:
+\[
+  x = \frac{1}{2}
+\]
+\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+
+    expect(trace.rectangles).toContainEqual(
+      expect.objectContaining({
+        role: "fraction-rule",
+        width: expect.any(Number),
+        height: expect.any(Number),
+      })
+    );
+  });
+
   it("splits inline math scripts into the same baseline rows as LuaTeX", async () => {
     const render = await renderBeamerFrame(String.raw`
 \documentclass{beamer}

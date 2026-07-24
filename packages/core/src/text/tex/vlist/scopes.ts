@@ -86,7 +86,7 @@ function normalizeExistingVBoxScopes(
 
 function scopePathForItem(
   item: TexVListItem,
-  nextItem: TexVListItem | undefined
+  _nextItem: TexVListItem | undefined
 ): readonly TexVBoxScope[] {
   if (item.kind === "paragraph") {
     return texVBoxScopePathForParagraph(item.paragraph);
@@ -105,9 +105,6 @@ function scopePathForItem(
     item.scopePath
   ) {
     return item.scopePath.map(texVBoxScopeForRole);
-  }
-  if (item.kind === "glue" && nextItem?.kind === "paragraph") {
-    return texVBoxScopePathForParagraph(nextItem.paragraph);
   }
   return [];
 }

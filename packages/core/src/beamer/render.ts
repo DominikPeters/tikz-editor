@@ -194,6 +194,12 @@ const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
 // beamer.cls uses the 11pt LaTeX size profile by default. These are the
 // \normalsize display registers installed by size11.clo.
 const BEAMER_NORMAL_DISPLAY_MATH_PROFILE: TexDisplayMathLayoutProfile = {
+  // beamerbaseframe.sty opens the frame body in horizontal mode. A leading
+  // display therefore follows a shipped zero-sized line and selects the
+  // short display skips; the 11pt profile's normal baseline is 13.6pt.
+  leadingDisplay: {
+    emptyLineBaselineSkipPt: 13.6,
+  },
   above: {
     normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
     short: { sizePt: 0, stretchPt: 3, shrinkPt: 0 },
@@ -742,13 +748,20 @@ function paragraphEndingMaterialDepth(paragraph: LaidParagraph): number {
 }
 
 function paragraphStartingMaterialHeight(paragraph: LaidParagraph): number {
+  const first = paragraph.layout.vlistLayout.boxReport.items.find(
+    (item) => item.itemKind !== "glue" && item.itemKind !== "penalty"
+  );
+  if (first?.itemKind === "hbox") {
+    // A frame-leading display is preceded by Beamer's shipped empty line.
+    // Its zero-sized hbox sits after one baseline of explicit vertical
+    // material, so the outer frame vbox references the bottom of that prefix
+    // rather than the ascent of the later first prose line.
+    return Number(first.y + first.height);
+  }
   const firstLine = paragraph.layout.report.lines[0];
   if (firstLine) {
     return Number(firstLine.ascent);
   }
-  const first = paragraph.layout.vlistLayout.boxReport.items.find(
-    (item) => item.itemKind !== "glue" && item.itemKind !== "penalty"
-  );
   return Number(first?.height ?? paragraph.layout.vlistLayout.metrics.height);
 }
 

@@ -179,6 +179,31 @@ function planSimpleTexParagraphVerticalSkipsInto(
       state.previousEmittedContentKind = "display";
       continue;
     }
+    if (isDisplayEmptyLineHBox(item)) {
+      const quoteDepth = ancestors.filter((role) => role.kind === "quote").length;
+      const trivlistScopes = ancestors.filter(
+        (role): role is TexTrivlistScopeRole => role.kind === "trivlist"
+      );
+      const listRole = lastVListAncestorRole(ancestors, "list");
+      const listItemRole = lastVListAncestorRole(ancestors, "list-item");
+      state.previousEmittedQuoteDepth = quoteDepth;
+      state.previousEmittedQuotationDepth = 0;
+      state.previousEmittedTrivlistScopes = trivlistScopes;
+      state.previousEmittedListContext = listRole
+        ? {
+            kind: listRole.listKind,
+            depth: listRole.depth,
+            labelDepth: listRole.labelDepth,
+            itemIndex: listItemRole?.itemIndex ?? 0,
+            ownLeftMarginEm: listRole.ownLeftMarginEm,
+            totalLeftMarginEm: listRole.totalLeftMarginEm,
+            showLabel: false,
+          }
+        : undefined;
+      state.previousEmittedContentKind = "paragraph";
+      state.emittedParagraphCount += 1;
+      continue;
+    }
     if (item.kind !== "paragraph") {
       continue;
     }
@@ -460,7 +485,11 @@ function materializeDisplayMathVerticalGlueInItems(
   profile: TexDisplayMathLayoutProfile
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
-  for (const item of sourceItems) {
+  for (let index = 0; index < sourceItems.length; index += 1) {
+    const item = sourceItems[index];
+    if (!item) {
+      continue;
+    }
     if (item.kind === "vbox") {
       items.push({
         ...item,
@@ -469,13 +498,31 @@ function materializeDisplayMathVerticalGlueInItems(
       continue;
     }
     if (item.kind === "display-math") {
-      items.push(displayMathBoundaryGlueItem(item, "above", profile));
+      if (index === 0 && profile.leadingDisplay) {
+        items.push(leadingDisplayEmptyLineGlue(item, profile));
+        items.push(displayEmptyLineHBox(item, "before-display"));
+      }
+      items.push(displayMathBoundaryGlueItem(
+        item,
+        "above",
+        profile,
+        index === 0 && profile.leadingDisplay ? "short" : undefined
+      ));
       items.push(item);
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
       continue;
     }
     if (item.kind === "display-alignment") {
-      items.push(displayMathBoundaryGlueItem(item, "above", profile));
+      if (index === 0 && profile.leadingDisplay) {
+        items.push(leadingDisplayEmptyLineGlue(item, profile));
+        items.push(displayEmptyLineHBox(item, "before-display"));
+      }
+      items.push(displayMathBoundaryGlueItem(
+        item,
+        "above",
+        profile,
+        index === 0 && profile.leadingDisplay ? "short" : undefined
+      ));
       items.push(...displayAlignmentMaterialItems(item, profile));
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
       continue;
@@ -488,9 +535,16 @@ function materializeDisplayMathVerticalGlueInItems(
 function displayMathBoundaryGlueItem(
   item: TexDisplayMathItem | TexDisplayAlignmentItem,
   side: "above" | "below",
-  profile: TexDisplayMathLayoutProfile
+  profile: TexDisplayMathLayoutProfile,
+  variant?: TexDisplayMathSkipVariant
 ): TexGlueItem {
-  const skip = profile[side].normal;
+  const skip = profile[side][variant ?? "normal"];
+  const materialWidth = item.kind === "display-math"
+    ? item.box.width
+    : item.alignment.width;
+  const displayLeftEdge = texLength(roundTexPt(
+    Math.max(0, (item.targetWidth - materialWidth) / 2)
+  ));
   return {
     kind: "glue",
     sourceSpan: item.sourceSpan,
@@ -498,12 +552,55 @@ function displayMathBoundaryGlueItem(
     origin: {
       kind: "display-math-boundary",
       side,
+      ...(variant ? { variant } : {}),
+      ...(side === "above" ? { displayLeftEdge } : {}),
     },
     size: texLength(skip.sizePt),
     stretch: texLength(skip.stretchPt),
     shrink: texLength(skip.shrinkPt),
     stretchOrder: "normal",
     shrinkOrder: "normal",
+  };
+}
+
+function leadingDisplayEmptyLineGlue(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  profile: TexDisplayMathLayoutProfile
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-interline",
+      side: "above",
+    },
+    size: texLength(profile.leadingDisplay?.emptyLineBaselineSkipPt ?? 0),
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function displayEmptyLineHBox(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  position: "before-display" | "after-display-vspace"
+): TexHBoxItem {
+  return {
+    kind: "hbox",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    role: {
+      kind: "display-empty-line",
+      position,
+    },
+    box: {
+      metrics: {
+        width: texLength(0),
+        height: texLength(0),
+        depth: texLength(0),
+      },
+      renderItems: [],
+    },
   };
 }
 
@@ -672,9 +769,14 @@ function resolveDisplayMathVerticalGlueInItems(
       const displayItem = item.origin.side === "above"
         ? nextDisplayMathItem(sourceItems, index)
         : undefined;
-      const variant: TexDisplayMathSkipVariant = displayItem
-        ? displayMathSkipVariant(displayItem, previousParagraphMeasurement)
-        : previousDisplaySkipVariant;
+      const variant: TexDisplayMathSkipVariant =
+        item.origin.variant ??
+        (item.origin.displayLeftEdge !== undefined
+          ? displayMathSkipVariant(
+              item.origin.displayLeftEdge,
+              previousParagraphMeasurement
+            )
+          : previousDisplaySkipVariant);
       if (item.origin.side === "above") {
         previousDisplaySkipVariant = variant;
       }
@@ -684,12 +786,19 @@ function resolveDisplayMathVerticalGlueInItems(
         variant,
         options.displayMathProfile
       ));
-      if (item.origin.side === "above" && displayItem && previousParagraphMeasurement) {
+      if (
+        item.origin.side === "above" &&
+        displayItem &&
+        (previousParagraphMeasurement || previousDisplayMaterialMetrics)
+      ) {
+        const previousDepth = previousParagraphMeasurement
+          ? texParagraphLastLineDepth(previousParagraphMeasurement)
+          : previousDisplayMaterialMetrics?.depth ?? texLength(0);
         items.push(displayMathInterlineGlueItem(
           item,
           "above",
           texInterlineGlueSize(
-            texParagraphLastLineDepth(previousParagraphMeasurement),
+            previousDepth,
             displayItem.box.height,
             options.lineHeight
           )
@@ -701,13 +810,17 @@ function resolveDisplayMathVerticalGlueInItems(
           pathPrefix,
           paragraphMeasurements
         );
-        if (nextParagraph) {
+        const nextEmptyLine = nextPostDisplayEmptyLineHBox(sourceItems, index);
+        const nextHeight =
+          nextParagraph?.ruleLeadingMetrics.height ??
+          nextEmptyLine?.box.metrics.height;
+        if (nextHeight !== undefined) {
           items.push(displayMathInterlineGlueItem(
             item,
             "below",
             texInterlineGlueSize(
               previousDisplayMaterialMetrics.depth,
-              nextParagraph.ruleLeadingMetrics.height,
+              nextHeight,
               options.lineHeight
             )
           ));
@@ -843,6 +956,10 @@ function resolveDisplayMathVerticalGlueInItems(
     } else if (isDisplayAlignmentRowHBox(item)) {
       previousParagraphMeasurement = undefined;
       plainParagraphInterlinePending = false;
+      previousDisplayMaterialMetrics = item.box.metrics;
+    } else if (isDisplayEmptyLineHBox(item)) {
+      previousParagraphMeasurement = undefined;
+      plainParagraphInterlinePending = true;
       previousDisplayMaterialMetrics = item.box.metrics;
     } else if (item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) {
       plainParagraphInterlinePending = false;
@@ -1281,8 +1398,46 @@ function displayAlignmentRowHBox(
   };
 }
 
-function isDisplayAlignmentRowHBox(item: TexVListItem): item is TexHBoxItem {
+function isDisplayAlignmentRowHBox(
+  item: TexVListItem
+): item is TexHBoxItem & {
+  readonly role: Extract<
+    NonNullable<TexHBoxItem["role"]>,
+    { readonly kind: "display-align-row" }
+  >;
+} {
   return item.kind === "hbox" && item.role?.kind === "display-align-row";
+}
+
+function isDisplayEmptyLineHBox(
+  item: TexVListItem
+): item is TexHBoxItem & {
+  readonly role: Extract<
+    NonNullable<TexHBoxItem["role"]>,
+    { readonly kind: "display-empty-line" }
+  >;
+} {
+  return item.kind === "hbox" && item.role?.kind === "display-empty-line";
+}
+
+function nextPostDisplayEmptyLineHBox(
+  items: readonly TexVListItem[],
+  index: number
+): TexHBoxItem | undefined {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) {
+      continue;
+    }
+    if (item.kind === "glue" || item.kind === "penalty") {
+      continue;
+    }
+    return isDisplayEmptyLineHBox(item) &&
+        item.role.position === "after-display-vspace"
+      ? item
+      : undefined;
+  }
+  return undefined;
 }
 
 function nextDisplayAlignmentRowHBox(
@@ -1311,7 +1466,7 @@ function nextDisplayMathItem(
 }
 
 function displayMathSkipVariant(
-  item: TexDisplayMathItem,
+  displayLeftEdge: TexLength,
   previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined
 ): TexDisplayMathSkipVariant {
   // A display that starts a vertical list has no finite preceding-line width;
@@ -1323,9 +1478,6 @@ function displayMathSkipVariant(
     texLength(Number.NEGATIVE_INFINITY);
   // TeX.web chooses the normal skips when the centered display overlaps the
   // preceding line's pre-display size; otherwise it uses the short skips.
-  const displayLeftEdge = texLength(roundTexPt(
-    Math.max(0, (item.targetWidth - item.box.width) / 2)
-  ));
   return displayLeftEdge <= preDisplaySize ? "normal" : "short";
 }
 

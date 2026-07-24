@@ -19,6 +19,7 @@ import type {
   TexGlueItem,
   TexDisplayAlignmentItem,
   TexDisplayMathItem,
+  TexHBoxItem,
   TexParagraphInput,
   TexPenaltyItem,
   TexPlaceholderItem,
@@ -59,6 +60,10 @@ export function lowerSimpleTexBlockItemsToVList(
   const items: TexVListItem[] = [];
   let equationNumber = 0;
   for (const item of attachPostDisplayVSpace(blockItems)) {
+    if (item.kind === "hbox") {
+      items.push(item);
+      continue;
+    }
     if (item.kind === "vertical-glue") {
       items.push(glueItemFromSimpleTexVerticalGlue(item, options.font));
       continue;
@@ -418,11 +423,15 @@ function glueItemFromSimpleTexVerticalGlue(
  * one-line paragraph is represented by one paragraph item; placing the glue
  * after it reproduces that page-list order and keeps the adjustment explicit
  * for a future per-line attachment model.
+ *
+ * A following list is different: its `\begin{list}` machinery ends the
+ * resumed horizontal mode before the first `\item`. TeX ships the resulting
+ * zero-sized line, followed by the adjustment, before the list box.
  */
 function attachPostDisplayVSpace(
   blockItems: readonly SimpleTexBlockItem[]
-): readonly SimpleTexBlockItem[] {
-  const output: SimpleTexBlockItem[] = [];
+): readonly (SimpleTexBlockItem | TexHBoxItem)[] {
+  const output: Array<SimpleTexBlockItem | TexHBoxItem> = [];
   for (let index = 0; index < blockItems.length; index += 1) {
     const display = blockItems[index];
     const glue = blockItems[index + 1];
@@ -433,6 +442,16 @@ function attachPostDisplayVSpace(
       glue.command === "vspace" &&
       paragraph?.kind === "paragraph"
     ) {
+      if (paragraph.block.listContext !== undefined) {
+        output.push(
+          display,
+          postDisplayEmptyLineHBox(display, glue.sourceStart),
+          glue,
+          paragraph
+        );
+        index += 2;
+        continue;
+      }
       const leadingInterwordSpace =
         paragraph.block.sourceStart > glue.sourceEnd;
       output.push(
@@ -456,6 +475,32 @@ function attachPostDisplayVSpace(
     }
   }
   return output;
+}
+
+function postDisplayEmptyLineHBox(
+  display: SimpleTexDisplayMathBlockItem,
+  sourceEnd: number
+): TexHBoxItem {
+  return {
+    kind: "hbox",
+    sourceSpan: {
+      start: display.sourceEnd,
+      end: sourceEnd,
+    },
+    scopePath: scopePathForVerticalBlockItem(display),
+    role: {
+      kind: "display-empty-line",
+      position: "after-display-vspace",
+    },
+    box: {
+      metrics: {
+        width: texLength(0),
+        height: texLength(0),
+        depth: texLength(0),
+      },
+      renderItems: [],
+    },
+  };
 }
 
 function ruleItemFromSimpleTexVerticalRule(item: SimpleTexVerticalRuleBlockItem): TexRuleItem {

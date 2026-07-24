@@ -11,7 +11,10 @@ import type {
   ResolvedTexFont,
   TexMetricProvider,
 } from "../fonts/types.js";
-import type { TexMathStyle } from "./ir.js";
+import type {
+  TexMathAlphabetCommand,
+  TexMathStyle,
+} from "./ir.js";
 
 export type TexMathFontFamily =
   | "operators"
@@ -35,6 +38,13 @@ export interface TexMathFontRequest {
    * without assigning a fake global family to either set of glyphs.
    */
   readonly symbolText?: string;
+}
+
+export interface TexMathAlphabetFontRequest {
+  readonly alphabet: TexMathAlphabetCommand;
+  readonly style: TexMathStyle;
+  readonly baseAtPt: TexLength;
+  readonly text: string;
 }
 
 export interface TexMathFontManifestEntry {
@@ -118,6 +128,13 @@ export interface TexMathFontProfile {
     baseAtPt: TexLength
   ) => TexLength;
   readonly resolveMathFont: (request: TexMathFontRequest) => ResolvedTexFont;
+  /**
+   * Optional class/package override for math alphabets such as `\mathbf`.
+   * Returning null retains the profile-independent LaTeX alphabet mapping.
+   */
+  readonly resolveMathAlphabetFont?: (
+    request: TexMathAlphabetFontRequest
+  ) => ResolvedTexFont | null;
 }
 
 const defaultManifest = [

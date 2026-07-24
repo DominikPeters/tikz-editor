@@ -82,6 +82,8 @@ export type TexGlueOrigin =
       readonly kind: "display-math-boundary";
       readonly side: "above" | "below";
       readonly variant?: TexDisplayMathSkipVariant;
+      /** Centered material edge used for TeX's pre-display overlap test. */
+      readonly displayLeftEdge?: TexLength;
     }
   | {
       readonly kind: "display-math-interline";
@@ -202,6 +204,12 @@ export type TexHBoxRole = {
   readonly kind: "display-align-row";
   readonly delimiter: SimpleTexDisplayMathDelimiter;
   readonly rowIndex: number;
+} | {
+  /**
+   * A zero-sized line shipped by horizontal-mode display/list transitions.
+   */
+  readonly kind: "display-empty-line";
+  readonly position: "before-display" | "after-display-vspace";
 };
 
 export interface TexHBoxItem {

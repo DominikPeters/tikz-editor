@@ -103,7 +103,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
       const lineGlyphs = [];
       for (const segment of line.segments) {
         if (segment.kind === "math" && segment.mathSvgBody) {
-          lineGlyphs.push(...glyphsFromNativeMathSvg({
+          const math = featuresFromNativeMathSvg({
             svgBody: segment.mathSvgBody,
             originX:
               paragraph.bounds.x +
@@ -111,7 +111,14 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
               Number(segment.x),
             baselineY,
             metricProvider,
-          }));
+          });
+          lineGlyphs.push(...math.glyphs);
+          rectangles.push(...math.rules.map((rule, ruleIndex) => ({
+            id:
+              `${paragraph.paragraphId}:line:${line.lineIndex}` +
+              `:math-rule:${rectangles.length}:${ruleIndex}`,
+            ...rule,
+          })));
           continue;
         }
         if (
@@ -198,7 +205,8 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     }
     const displayGlyphs = nativeDisplayMathGlyphs(
       paragraph,
-      metricProvider
+      metricProvider,
+      rectangles
     );
     const displayLines = groupOracleGlyphLines(displayGlyphs);
     for (const [displayLineIndex, displayLine] of displayLines.entries()) {
@@ -255,12 +263,21 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   };
 }
 
-function nativeDisplayMathGlyphs(paragraph, metricProvider) {
+function nativeDisplayMathGlyphs(paragraph, metricProvider, rectangles) {
   const glyphs = [];
+  let ruleIndex = 0;
+  const appendMath = (params) => {
+    const math = featuresFromNativeMathSvg(params);
+    glyphs.push(...math.glyphs);
+    rectangles.push(...math.rules.map((rule) => ({
+      id: `${paragraph.paragraphId}:display-rule:${ruleIndex++}`,
+      ...rule,
+    })));
+  };
   const visit = (items) => {
     for (const positioned of items) {
       if (positioned.item.kind === "display-math") {
-        glyphs.push(...glyphsFromNativeMathSvg({
+        appendMath({
           svgBody: positioned.item.box.svgBody ?? "",
           originX: paragraph.bounds.x + Number(positioned.x),
           baselineY:
@@ -268,7 +285,7 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider) {
             Number(positioned.y) +
             Number(positioned.metrics.height),
           metricProvider,
-        }));
+        });
       } else if (
         positioned.item.kind === "hbox" &&
         positioned.item.role?.kind === "display-align-row"
@@ -277,7 +294,7 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider) {
           if (renderItem.kind !== "tex-math-svg") {
             continue;
           }
-          glyphs.push(...glyphsFromNativeMathSvg({
+          appendMath({
             svgBody: renderItem.svgBody,
             originX:
               paragraph.bounds.x +
@@ -288,7 +305,7 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider) {
               Number(positioned.y) +
               Number(renderItem.baseline),
             metricProvider,
-          }));
+          });
         }
       }
       if (positioned.children?.length) {
@@ -630,7 +647,7 @@ function oracleLine(glyphs, baselineY) {
   };
 }
 
-function glyphsFromNativeMathSvg(params) {
+function featuresFromNativeMathSvg(params) {
   const glyphs = [];
   for (const match of params.svgBody.matchAll(/<path\b[^>]*>/gu)) {
     const tag = match[0];
@@ -655,7 +672,32 @@ function glyphsFromNativeMathSvg(params) {
       fontSize: round(font.atPt),
     });
   }
-  return glyphs;
+  const rules = [];
+  for (const match of params.svgBody.matchAll(/<rect\b[^>]*>/gu)) {
+    const tag = match[0];
+    const role = readSvgAttribute(tag, "data-tex-rule");
+    const x = Number(readSvgAttribute(tag, "x"));
+    const y = Number(readSvgAttribute(tag, "y"));
+    const width = Number(readSvgAttribute(tag, "width"));
+    const height = Number(readSvgAttribute(tag, "height"));
+    if (
+      !role ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    ) {
+      continue;
+    }
+    rules.push({
+      role,
+      x: round(params.originX + x / 100),
+      y: round(params.baselineY + y / 100),
+      width: round(width / 100),
+      height: round(height / 100),
+    });
+  }
+  return { glyphs, rules };
 }
 
 function parseTranslateScale(transform) {

@@ -248,13 +248,15 @@ describe("headless Beamer frame renderer", () => {
     const result = await renderBeamerFrame(String.raw`
 \documentclass{beamer}
 \begin{document}
-\begin{frame}{Math fonts}$x_1=(\lambda)$ and \(\text{label}\).\end{frame}
+\begin{frame}{Math fonts}$x_1=(\lambda)$, $\mathbf{1}$, and \(\text{label}\).\end{frame}
 \end{document}`);
 
     expect(result.svg.svg).toContain('data-tex-font="lmsans10-oblique"');
     expect(result.svg.svg).toContain('data-tex-font="lmsans8-regular"');
     expect(result.svg.svg).toContain('data-tex-font="cmss10"');
     expect(result.svg.svg).toContain('data-tex-font="cmmi10"');
+    expect(result.svg.svg).toContain('data-tex-font="lmsans10-bold"');
+    expect(result.svg.svg).not.toContain('data-tex-font="cmbx10"');
     expect(result.diagnostics).toEqual([]);
   });
 

@@ -6502,18 +6502,28 @@ function resolveMathSymbolParts(
   const alphabetGlyph = alphabet && appliesAlphabet
     ? defaultLuaLatexMathAlphabetGlyph(nucleus.text, alphabet, style)
     : null;
-  if (alphabetGlyph) {
-    const font = fontProfile.metricProvider.resolveFont({
-      fontId: alphabetGlyph.fontId,
-      atPt: fontProfile.resolveMathStyleAtPt(style, baseAtPt),
-    });
-    const metric = requiredCharMetric(font, alphabetGlyph.code);
+  const profileAlphabetFont = alphabet && appliesAlphabet
+    ? fontProfile.resolveMathAlphabetFont?.({
+        alphabet,
+        style,
+        baseAtPt,
+        text: nucleus.text,
+      }) ?? null
+    : null;
+  if (alphabetGlyph || profileAlphabetFont) {
+    const font = profileAlphabetFont ??
+      fontProfile.metricProvider.resolveFont({
+        fontId: alphabetGlyph!.fontId,
+        atPt: fontProfile.resolveMathStyleAtPt(style, baseAtPt),
+      });
+    const code = alphabetGlyph?.code ?? nucleus.text.charCodeAt(0);
+    const metric = requiredCharMetric(font, code);
     const width = roundTexPt(tfmToPt(font, metric.width));
     return [resolvedMathGlyph({
       kind: "glyph",
       font,
       family: "alphabet",
-      code: alphabetGlyph.code,
+      code,
       text: nucleus.text,
       xOffset: 0,
       yOffset: 0,

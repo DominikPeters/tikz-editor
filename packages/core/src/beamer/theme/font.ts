@@ -121,5 +121,23 @@ export function createBeamerTexMathFontProfile(
       }
       return base.resolveMathFont(request);
     },
+    resolveMathAlphabetFont(request) {
+      if (
+        request.alphabet !== "mathbf" ||
+        !/^[A-Za-z0-9]$/.test(request.text)
+      ) {
+        return base.resolveMathAlphabetFont?.(request) ?? null;
+      }
+      return textFontProfile.resolveTextFont(
+        {
+          ...textFontProfile.defaultFontState,
+          family: "normal",
+          series: "bold",
+          shape: "upright",
+        },
+        base.resolveMathStyleAtPt(request.style, request.baseAtPt),
+        computerModernTexMetricProvider
+      );
+    },
   };
 }

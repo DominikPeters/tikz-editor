@@ -610,7 +610,11 @@ describe("TeX vlist lowering", () => {
         size: 10,
         stretch: 2,
         shrink: 5,
-        origin: { kind: "display-math-boundary", side: "above" },
+        origin: {
+          kind: "display-math-boundary",
+          side: "above",
+          displayLeftEdge: 52.77776,
+        },
         sourceSpan: {
           start: source.indexOf(String.raw`\[`),
           end: source.indexOf(String.raw`\]`) + 2,
@@ -663,6 +667,74 @@ describe("TeX vlist lowering", () => {
     )).toEqual([
       expect.objectContaining({ size: 11, stretch: 3, shrink: 6 }),
       expect.objectContaining({ size: 11, stretch: 3, shrink: 6 }),
+    ]);
+  });
+
+  it("materializes a short leading display after an environment-owned empty line", () => {
+    const source = String.raw`\[\sum_i^n\]`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+    const materialized = materializeDisplayMathVerticalGlueInVList(vlist, {
+      leadingDisplay: {
+        emptyLineBaselineSkipPt: 13.6,
+      },
+      above: {
+        normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
+        short: { sizePt: 0, stretchPt: 3, shrinkPt: 0 },
+      },
+      below: {
+        normal: { sizePt: 11, stretchPt: 3, shrinkPt: 6 },
+        short: { sizePt: 6.5, stretchPt: 3.5, shrinkPt: 3 },
+      },
+    });
+
+    expect(materialized.items.map((item) => ({
+      kind: item.kind,
+      size: item.kind === "glue" ? item.size : undefined,
+      origin: item.kind === "glue" ? item.origin : undefined,
+      role: item.kind === "hbox" ? item.role : undefined,
+    }))).toEqual([
+      {
+        kind: "glue",
+        size: 13.6,
+        origin: { kind: "display-math-interline", side: "above" },
+        role: undefined,
+      },
+      {
+        kind: "hbox",
+        size: undefined,
+        origin: undefined,
+        role: {
+          kind: "display-empty-line",
+          position: "before-display",
+        },
+      },
+      {
+        kind: "glue",
+        size: 0,
+        origin: {
+          kind: "display-math-boundary",
+          side: "above",
+          variant: "short",
+          displayLeftEdge: 52.77776,
+        },
+        role: undefined,
+      },
+      {
+        kind: "display-math",
+        size: undefined,
+        origin: undefined,
+        role: undefined,
+      },
+      {
+        kind: "glue",
+        size: 11,
+        origin: { kind: "display-math-boundary", side: "below" },
+        role: undefined,
+      },
     ]);
   });
 
@@ -723,7 +795,12 @@ describe("TeX vlist lowering", () => {
           shrink: 0,
           stretchOrder: "normal",
           shrinkOrder: "normal",
-          origin: { kind: "display-math-boundary", side: "above", variant: "short" },
+          origin: {
+            kind: "display-math-boundary",
+            side: "above",
+            variant: "short",
+            displayLeftEdge: 52.77776,
+          },
         },
       },
       {
@@ -779,6 +856,7 @@ describe("TeX vlist lowering", () => {
         glue: undefined,
       },
     ]);
+
   });
 
   it("uses TeX font-space glue for flush environments directly inside lists", () => {
@@ -929,7 +1007,12 @@ describe("TeX vlist lowering", () => {
         shrink: 5,
         stretchOrder: "normal",
         shrinkOrder: "normal",
-        origin: { kind: "display-math-boundary", side: "above", variant: "normal" },
+        origin: {
+          kind: "display-math-boundary",
+          side: "above",
+          variant: "normal",
+          displayLeftEdge: 52.77776,
+        },
       },
       {
         size: 10,
@@ -1074,6 +1157,66 @@ describe("TeX vlist lowering", () => {
         size: expect.closeTo(3.285, 10),
         origin: { kind: "explicit-command", command: "vspace" },
       },
+    ]);
+  });
+
+  it("ships post-display vspace before a following list box", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\[x\]\vspace{.3em}\begin{itemize}\item After\end{itemize}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont({
+      fontId: "lmsans10-regular",
+      atPt: texLength(10.95),
+    });
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      font,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+
+    expect(vlist.items.map((item) =>
+      item.kind === "paragraph"
+        ? {
+            kind: item.kind,
+            text: item.paragraph.text,
+            listKind: item.paragraph.listContext?.kind,
+          }
+        : item.kind === "glue"
+          ? {
+              kind: item.kind,
+              size: item.size,
+              origin: item.origin,
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "display-math" },
+      { kind: "hbox" },
+      {
+        kind: "glue",
+        size: expect.closeTo(3.285, 10),
+        origin: { kind: "explicit-command", command: "vspace" },
+      },
+      {
+        kind: "paragraph",
+        text: "After",
+        listKind: "itemize",
+      },
+    ]);
+
+    const grouped = groupSimpleTexVListScopes(vlist, font);
+    expect(grouped.items.map((item) => ({
+      kind: item.kind,
+      role: item.kind === "vbox" ? item.role?.kind : undefined,
+      origin: item.kind === "glue" ? item.origin : undefined,
+    }))).toEqual([
+      { kind: "display-math", role: undefined, origin: undefined },
+      { kind: "hbox", role: undefined, origin: undefined },
+      {
+        kind: "glue",
+        role: undefined,
+        origin: { kind: "explicit-command", command: "vspace" },
+      },
+      { kind: "vbox", role: "list", origin: undefined },
     ]);
   });
 

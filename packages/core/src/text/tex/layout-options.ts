@@ -70,6 +70,14 @@ export interface TexDisplayMathGlueProfile {
  * changing the generic VList algorithm.
  */
 export interface TexDisplayMathLayoutProfile {
+  /**
+   * Some outer environments enter horizontal mode before their first source
+   * token. If that token is display math, TeX ships a zero-sized line and
+   * consequently selects the short display skips.
+   */
+  readonly leadingDisplay?: Readonly<{
+    readonly emptyLineBaselineSkipPt: number;
+  }>;
   readonly above: Readonly<{
     normal: TexDisplayMathGlueProfile;
     short: TexDisplayMathGlueProfile;
