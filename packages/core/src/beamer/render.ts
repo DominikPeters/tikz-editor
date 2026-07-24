@@ -99,6 +99,7 @@ type PreparedColumnFlowItem =
       kind: "paragraph";
       paragraph: LaidParagraph;
       advanceHeight: number;
+      trailingSkipPt: number;
     }
   | {
       kind: "vertical-space";
@@ -530,6 +531,7 @@ async function prepareFrameFlow(params: {
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
+  const listProfile = beamerListLayoutProfile(params.theme);
   for (const node of params.children) {
     if (node.kind === "paragraph") {
       const paragraphSource = params.source.slice(node.span.from, node.span.to);
@@ -544,18 +546,21 @@ async function prepareFrameFlow(params: {
         bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
         font: bodyFont,
         alignment: "left",
+        listProfile,
         macroBindings: params.macroBindings,
       });
       if (paragraph) {
         const trailingTrivlistSkip = trailingBeamerTrivlistSkip(
           paragraphSource
         );
+        const trailingListSkip = trailingBeamerListSkip(paragraphSource);
         const namedSize = activeBeamerNamedSize(paragraphSource);
         result.push({
           kind: "paragraph",
           node,
           paragraph,
-          naturalHeight: paragraph.height + trailingTrivlistSkip,
+          naturalHeight:
+            paragraph.height + trailingTrivlistSkip + trailingListSkip,
           boxHeight: paragraphStartingMaterialHeight(paragraph),
           startingBaselineSkip:
             namedSize?.lineHeightPt ?? bodyFont.lineHeightPt,
@@ -687,7 +692,7 @@ function positionPreparedFrameFlow(
         visualTop: contentTop,
         visualBottom,
       });
-      cursor = visualBottom;
+      cursor = visualBottom + item.block.plan.geometry.afterSkipPt;
       previousDepth = item.endingDepth;
       continue;
     }
@@ -764,6 +769,23 @@ function trailingBeamerTrivlistSkip(source: string): number {
   }
   const suffix = source.slice(lastEnd);
   return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? 9 : 0;
+}
+
+function trailingBeamerListSkip(source: string): number {
+  const endPattern =
+    /\\end\s*\{\s*(?:itemize|enumerate|description)\s*\}/gu;
+  let lastEnd = -1;
+  for (const match of source.matchAll(endPattern)) {
+    lastEnd = (match.index ?? 0) + match[0].length;
+  }
+  if (lastEnd < 0) {
+    return 0;
+  }
+  const suffix = source.slice(lastEnd);
+  // The shared VList materializes list-exit topsep when another paragraph
+  // follows. A Beamer leaf can end at the environment (or in explicit
+  // vertical glue), so its class adapter must retain the same outer topsep.
+  return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? 3 : 0;
 }
 
 function leadingBeamerTrivlistAdjustment(
@@ -1078,6 +1100,20 @@ function emitFrameParagraph(params: {
     parentId: null,
     paragraphId: laid.layout.paragraphId,
   });
+  for (const marker of laid.listMarkers) {
+    params.items.push({
+      id: marker.id,
+      kind: "list-marker",
+      sourceSpan: laid.layout.sourceSpan,
+      bounds: {
+        x: params.x + marker.bounds.x,
+        y: params.y + marker.bounds.y,
+        width: marker.bounds.width,
+        height: marker.bounds.height,
+      },
+      parentId: laid.layout.paragraphId,
+    });
+  }
   params.modelBuilder.addPart({
     basePartId: laid.layout.paragraphId,
     sourceId: laid.layout.paragraphId,
@@ -1129,7 +1165,12 @@ function emitPreparedColumns(params: {
     const columnTop = columnTops[index];
     let flowY = columnTop;
     columnChildIds.push(columnId);
-    for (const flowItem of preparedColumn.flow) {
+    for (
+      let flowIndex = 0;
+      flowIndex < preparedColumn.flow.length;
+      flowIndex += 1
+    ) {
+      const flowItem = preparedColumn.flow[flowIndex];
       if (flowItem.kind === "vertical-space") {
         flowY += flowItem.height;
       } else if (flowItem.kind === "paragraph") {
@@ -1175,7 +1216,11 @@ function emitPreparedColumns(params: {
             textColor(params.theme, "normal text")
           ),
         });
-        flowY += flowItem.advanceHeight;
+        flowY +=
+          flowItem.advanceHeight +
+          (preparedColumn.flow[flowIndex + 1]
+            ? flowItem.trailingSkipPt
+            : 0);
       } else if (flowItem.kind === "block") {
         emitPreparedBlock({
           prepared: flowItem.block,
@@ -1188,7 +1233,11 @@ function emitPreparedColumns(params: {
           theme: params.theme,
         });
         childIds.push(flowItem.block.node.id);
-        flowY += flowItem.height;
+        flowY +=
+          flowItem.height +
+          (preparedColumn.flow[flowIndex + 1]
+            ? flowItem.block.plan.geometry.afterSkipPt
+            : 0);
       } else {
         emitEmbeddedTikz({
           tikz: flowItem,
@@ -1328,11 +1377,15 @@ async function prepareColumnContent(params: {
   }
 
   const naturalHeight = flow.reduce(
-    (height, item) =>
+    (height, item, index) =>
       height +
       (item.kind === "paragraph"
-        ? item.advanceHeight
-        : item.height),
+        ? item.advanceHeight +
+          (flow[index + 1] ? item.trailingSkipPt : 0)
+        : item.height) +
+      (item.kind === "block" && flow[index + 1]
+        ? item.block.plan.geometry.afterSkipPt
+        : 0),
     0
   );
   return {
@@ -1415,6 +1468,8 @@ async function prepareColumnFlowNode(params: {
       advanceHeight: node.kind === "paragraph"
         ? paragraphLineExtent(paragraph)
         : paragraph.height,
+      trailingSkipPt:
+        node.kind === "list" ? trailingBeamerListSkip(text) : 0,
     };
   }
   if (node.kind === "unsupported") {
@@ -1627,15 +1682,21 @@ function layoutParagraph(params: {
     metricProvider,
     textFontProfile,
     tikzTextWidthNode: true,
-    // Beamer's `\raggedright` changes the margin glue, not the active font's
-    // interword stretch and shrink. Centered text can therefore shrink spaces
-    // slightly to retain the same line break as TeX.
+    // beamer.cls installs `\raggedright`, and the rounded block templates issue
+    // it again. LaTeX implements that as `\rightskip 0pt plus 1fil`, so loose
+    // lines consume margin glue while near-full lines retain the font's finite
+    // interword stretch and shrink for line-breaking.
+    ...(params.alignment === "left"
+      ? { rightskipStretch: Number.POSITIVE_INFINITY }
+      : {}),
     spaceGlueProfile:
       /\\(?:begin\s*\{\s*center\s*\}|centering)(?![A-Za-z@])/u.test(
         mapped.text
       )
         ? "font"
-        : "font-fixed",
+        : params.role === "block-body"
+          ? "font"
+          : "font-fixed",
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,

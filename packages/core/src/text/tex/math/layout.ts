@@ -1705,6 +1705,11 @@ function layoutAlphabetNucleus(
     depth: child.depth,
     italicCorrection: 0,
     isCharacterNucleus: false,
+    // TeX's math-alphabet switch changes the math family of a single
+    // character; it does not turn that character into an inner subformula.
+    // Scripts therefore start from the character shift (zero) rather than
+    // applying \supdrop to the alphabet wrapper's height.
+    scriptShiftsAsCharacter: isSingleCharacterCleanBoxList(nucleus.list),
     sourceSpan: nucleus.sourceSpan,
   });
 }

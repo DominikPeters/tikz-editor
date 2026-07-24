@@ -171,24 +171,30 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
       if (lineGlyphs.length === 0) {
         continue;
       }
-      const tracedLine = {
-        id: `${paragraph.paragraphId}:line:${line.lineIndex}`,
-        paragraphId: paragraph.paragraphId,
-        role: paragraph.role,
-        lineIndex: line.lineIndex,
-        sourceSpan: paragraph.sourceSpan,
-        text: glyphText(lineGlyphs),
-        x: lineGlyphs[0].x,
-        baselineY: round(baselineY),
-        glyphs: lineGlyphs,
-      };
-      lines.push(tracedLine);
-      glyphs.push(...lineGlyphs.map((glyph) => ({
-        ...glyph,
-        paragraphId: paragraph.paragraphId,
-        role: paragraph.role,
-        lineIndex: line.lineIndex,
-      })));
+      const lineClusters = groupOracleGlyphLines(lineGlyphs);
+      for (
+        let clusterIndex = 0;
+        clusterIndex < lineClusters.length;
+        clusterIndex += 1
+      ) {
+        const cluster = lineClusters[clusterIndex];
+        lines.push({
+          id:
+            `${paragraph.paragraphId}:line:${line.lineIndex}` +
+            (lineClusters.length > 1 ? `:${clusterIndex}` : ""),
+          paragraphId: paragraph.paragraphId,
+          role: paragraph.role,
+          lineIndex: line.lineIndex,
+          sourceSpan: paragraph.sourceSpan,
+          ...cluster,
+        });
+        glyphs.push(...cluster.glyphs.map((glyph) => ({
+          ...glyph,
+          paragraphId: paragraph.paragraphId,
+          role: paragraph.role,
+          lineIndex: line.lineIndex,
+        })));
+      }
     }
     const displayGlyphs = nativeDisplayMathGlyphs(
       paragraph,

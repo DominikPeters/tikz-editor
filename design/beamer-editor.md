@@ -759,9 +759,11 @@ post-display `\vspace` remains an explicit `\vadjust`-like attachment after
 the resumed paragraph line, including the source interword space that follows
 the command. Frame-fill placement measures the first material box for TeX's
 initial `\topskip`, rather than the aggregate paragraph VList height.
-Ragged/centered Beamer text uses the active font's natural interword width with
-zero finite adjustment (the surrounding `fil` glue owns alignment), and
-template struts provide fixed baselines such as the default frame title.
+Ragged Beamer text retains the active font's finite interword stretch and
+shrink for line-break feasibility, while LaTeX's `0pt plus 1fil` right skip
+absorbs positive slack and therefore leaves ordinary underfull spaces at their
+natural widths. Centered material similarly delegates alignment to its margin
+glue. Template struts provide fixed baselines such as the default frame title.
 
 Rounded blocks now follow the same theme-template boundary as chrome and list
 markers. The frame frontend lowers `block`, `alertblock`, and `exampleblock`
@@ -783,6 +785,28 @@ the wrapper vbox depth. The Beamer adapter accounts for the class's natural
 `.8em`. On the Takeaways frame, all 16 text lines and 307 glyphs match the
 LuaLaTeX trace with matching font IDs/codes; maximum glyph deltas are
 0.003519pt horizontally and 0.014666pt vertically.
+
+The following block/list pass keeps the shared VList responsible for list
+internals while making the Beamer frame/column composer retain class-owned
+outer skips at source-fragment boundaries. A root block always contributes
+the rounded template's trailing `\smallskipamount`; column blocks and
+list-ending paragraph fragments contribute their trailing skip when another
+column item follows. Root list markers are emitted from the same resolved
+theme profile as column markers, so comparison rectangles and painted
+geometry share one source of truth.
+
+Frame 6 also exposes why Beamer's inherited `\raggedright` cannot be modeled
+as shrink-only word glue. Its infinite right skip makes loose lines free while
+the font's finite shrink still admits the final word on a nearly full line.
+The generic paragraph option now preserves an explicitly infinite right-skip
+stretch, reproducing that TeX model without a Beamer-specific breaker. The
+same comparison found a generic native-math discrepancy: a superscript on a
+single-character math alphabet such as `\mathbb{R}^m` must use character-noad
+script shifting, not apply `\supdrop` to an artificial alphabet wrapper.
+After those fixes, frames 6, 7, 19, and 20 have zero unmatched text rows and
+matching glyph codes/fonts; frame 6 compares all 575 glyphs with maximum
+deltas of 0.003519pt horizontally and 0.014664pt vertically. Previously exact
+frames 2–4 retain their oracle agreement.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

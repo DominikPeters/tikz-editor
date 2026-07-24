@@ -19,7 +19,13 @@ export interface BeamerTraceGlyph {
 export interface NativeBeamerTraceLine {
   readonly id: string;
   readonly paragraphId: string;
-  readonly role: "frame-title" | "frame-subtitle" | "body" | "footline";
+  readonly role:
+    | "frame-title"
+    | "frame-subtitle"
+    | "body"
+    | "block-title"
+    | "block-body"
+    | "footline";
   readonly lineIndex: number;
   readonly sourceSpan: { readonly from: number; readonly to: number };
   readonly text: string;

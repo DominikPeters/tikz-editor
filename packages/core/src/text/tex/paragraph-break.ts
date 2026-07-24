@@ -260,8 +260,8 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       ),
     leftskipShrink: texLength(0),
     rightskipWidth: scopePolicy.rightMarginWidth,
-    rightskipStretch: Number.isFinite(options.rightskipStretch)
-      ? texLength(Math.max(0, options.rightskipStretch ?? texLength(0)))
+    rightskipStretch: options.rightskipStretch !== undefined
+      ? texLength(Math.max(0, options.rightskipStretch))
       : texDeclarationRightskipStretch(
         alignment,
         latexDeclaration,

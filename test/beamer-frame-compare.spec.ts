@@ -60,6 +60,27 @@ Display rows:
       .toContain("cmss10");
   });
 
+  it("splits inline math scripts into the same baseline rows as LuaTeX", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\begin{document}
+\begin{frame}{Math}Inline $x_1$ script.\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+    const bodyLines = trace.lines.filter((line) => line.role === "body");
+
+    expect(bodyLines).toHaveLength(2);
+    expect(bodyLines.some((line) =>
+      line.glyphs.some((item) => item.fontSize === 8)
+    )).toBe(true);
+    for (const line of bodyLines) {
+      expect(line.glyphs.every((item) => item.y === line.baselineY)).toBe(true);
+    }
+  });
+
   it("includes theme-owned list marker paint boxes in the native trace", () => {
     const trace = buildNativeBeamerPageTrace({
       layout: {

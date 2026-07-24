@@ -1133,6 +1133,19 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("positions scripts on single-character math alphabets as character nuclei", () => {
+    const result = layout(String.raw`\lambda^\star+\mathbb{R}^m`);
+    const superscripts = flattenMathItems(result.hlist?.items ?? [])
+      .filter((item): item is TexMathChildHListLayoutItem =>
+        item.kind === "hlist" && item.role === "superscript"
+      );
+
+    expect(result.supported).toBe(true);
+    expect(superscripts).toHaveLength(2);
+    expect(superscripts[0]?.y).toBeCloseTo(-3.62892, 5);
+    expect(superscripts[1]?.y).toBeCloseTo(superscripts[0]?.y ?? 0, 5);
+  });
+
   it("lays out mathrsfs uppercase letters at optical script sizes", () => {
     const result = layout(String.raw`\mathscr{F}+x_{\mathscr{G}}+x_{y_{\mathscr{H}}}`);
     expect(result.supported).toBe(true);
