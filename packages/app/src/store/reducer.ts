@@ -23,7 +23,8 @@ import {
   workspaceStateFromEditorState,
   type WorkspaceSeed
 } from "./workspace-state";
-import { reconcileActiveRootSelection } from "../root-inventory";
+import { reconcileActiveRootSelection, snapshotRoots } from "../root-inventory";
+import { rootKey } from "../root-key";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
 const FREEHAND_SMOOTHING_MAX_PX = 32;
@@ -67,6 +68,7 @@ function initialUiState(): WorkspaceEphemeralState {
     selectedAddMatrixColumns: DEFAULT_ADD_MATRIX_COLUMNS,
     creationStrokeColor: DEFAULT_CREATION_STROKE_COLOR,
     creationFillColor: DEFAULT_CREATION_FILL_COLOR,
+    deckStepByRootKey: {},
     fitToContentRequestToken: 0,
     fitToContentModeActive: true,
     canvasFitToContentScale: null,
@@ -529,8 +531,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         const rootSelection = reconcileActiveRootSelection({
           activeRootId: doc.activeRootId,
           hasInitializedRootSelection: doc.hasInitializedRootSelection,
-          previousRootCount: doc.snapshot.figures.length,
-          roots: action.snapshot.figures
+          previousRootCount: snapshotRoots(doc.snapshot).length,
+          roots: snapshotRoots(action.snapshot)
         });
         return {
           ...doc,
@@ -1152,6 +1154,17 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (ui.activeSourceScrubSourceId === action.sourceId) return state;
       ui = { ...ui, activeSourceScrubSourceId: action.sourceId };
       break;
+
+    case "SET_DECK_STEP": {
+      const key = rootKey(workspace.activeDocumentId, action.rootId);
+      const step = Math.max(1, Math.round(action.step));
+      if (ui.deckStepByRootKey[key] === step) return state;
+      ui = {
+        ...ui,
+        deckStepByRootKey: { ...ui.deckStepByRootKey, [key]: step }
+      };
+      break;
+    }
 
     case "SET_ACTIVE_CANVAS_TEXT_EDIT":
       if (ui.activeCanvasTextEditSourceId === action.sourceId) return state;

@@ -31,6 +31,17 @@ export function hasMultipleRoots(rootCount: number): boolean {
 }
 
 /**
+ * The document's root inventory as seen by one snapshot: deck frames for
+ * Beamer documents, tikz figures otherwise.
+ */
+export function snapshotRoots(snapshot: {
+  figures: readonly { id: string }[];
+  deck?: { frames: readonly { id: string }[] } | null;
+}): readonly { id: string }[] {
+  return snapshot.deck ? snapshot.deck.frames : snapshot.figures;
+}
+
+/**
  * Reconcile the persisted active-root selection with a fresh inventory:
  * drop ids that no longer exist, and auto-select the first root when the
  * selection was never initialized, when roots first appear, or when a

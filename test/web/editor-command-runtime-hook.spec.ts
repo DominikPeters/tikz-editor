@@ -98,7 +98,8 @@ function makeSnapshot(source: string): SessionSnapshot {
     svgModel: rendered.svg.model,
     parseResult: rendered.parse,
     semanticResult: rendered.semantic,
-    incremental: null
+    incremental: null,
+    deck: null
   };
 }
 

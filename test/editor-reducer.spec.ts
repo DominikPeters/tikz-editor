@@ -260,6 +260,47 @@ describe("editorReducer – compute lifecycle", () => {
     expect(afterRemoval.activeRootId).toBeNull();
   });
 
+  it("reconciles the active root against deck frames for beamer snapshots", () => {
+    const deckSnapshot = {
+      ...makeEmptySnapshot("deck source"),
+      source: "deck source",
+      deck: {
+        frames: [
+          { id: "frame:0", frameIndex: 0, span: { from: 0, to: 10 }, title: "A", stepCount: 1 },
+          { id: "frame:1", frameIndex: 1, span: { from: 10, to: 20 }, title: "B", stepCount: 3 }
+        ],
+        activeFrame: null,
+        diagnostics: []
+      }
+    };
+    const afterFirst = applyActions([
+      { type: "COMPUTE_REQUESTED", requestId: "req-1" },
+      { type: "SNAPSHOT_READY", requestId: "req-1", snapshot: deckSnapshot }
+    ]);
+    // Frames are the root inventory: auto-select works despite empty figures.
+    expect(afterFirst.activeRootId).toBe("frame:0");
+
+    const switched = editorReducer(afterFirst, { type: "SET_ACTIVE_ROOT", rootId: "frame:1" });
+    expect(switched.activeRootId).toBe("frame:1");
+  });
+
+  it("SET_DECK_STEP stores the requested step per root", () => {
+    const initial = makeInitialState();
+    const documentId = initial.activeDocumentId;
+    const stepped = editorReducer(initial, { type: "SET_DECK_STEP", rootId: "frame:2", step: 3 });
+    expect(stepped.deckStepByRootKey[`${documentId}::frame:2`]).toBe(3);
+
+    const other = editorReducer(stepped, { type: "SET_DECK_STEP", rootId: "frame:4", step: 2 });
+    expect(other.deckStepByRootKey[`${documentId}::frame:2`]).toBe(3);
+    expect(other.deckStepByRootKey[`${documentId}::frame:4`]).toBe(2);
+
+    // Steps clamp to at least 1 and no-op updates keep the state reference.
+    const clamped = editorReducer(other, { type: "SET_DECK_STEP", rootId: "frame:4", step: 0 });
+    expect(clamped.deckStepByRootKey[`${documentId}::frame:4`]).toBe(1);
+    const same = editorReducer(clamped, { type: "SET_DECK_STEP", rootId: "frame:4", step: 1 });
+    expect(same).toBe(clamped);
+  });
+
   it("auto-selects the first figure when source changes from no figures to one figure", () => {
     const figure = {
       id: "figure:0",

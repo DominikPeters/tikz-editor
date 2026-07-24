@@ -188,6 +188,8 @@ export type WorkspaceEphemeralState = {
   selectedAddMatrixColumns: number;
   creationStrokeColor: string;
   creationFillColor: string;
+  /** Selected overlay step per deck frame, keyed by rootKey(documentId, rootId). */
+  deckStepByRootKey: Record<string, number>;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -278,6 +280,8 @@ export type EditorState = {
   selectedAddMatrixColumns: number;
   creationStrokeColor: string;
   creationFillColor: string;
+  /** Selected overlay step per deck frame, keyed by rootKey(documentId, rootId). */
+  deckStepByRootKey: Record<string, number>;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -406,6 +410,7 @@ export type EditorAction =
   | { type: "SET_CREATION_STROKE_COLOR"; value: string }
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
+  | { type: "SET_DECK_STEP"; rootId: string; step: number }
   | { type: "TOGGLE_CANVAS_AID"; aid: CanvasAid }
   | { type: "TOGGLE_SNAP_MODE"; mode: SnapMode }
   | { type: "REQUEST_FIT_TO_CONTENT" }

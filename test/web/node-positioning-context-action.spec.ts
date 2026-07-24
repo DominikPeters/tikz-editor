@@ -141,7 +141,8 @@ function renderSnapshot(source: string): CanvasSnapshot {
     svgModel: null,
     parseResult: rendered.parse,
     semanticResult: rendered.semantic,
-    incremental: null
+    incremental: null,
+    deck: null
   };
 }
 

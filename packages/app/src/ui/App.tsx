@@ -7,6 +7,7 @@ import {
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { useEditorStore } from "../store/store";
+import { rootKey } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
@@ -235,12 +236,17 @@ export function App() {
     lastEditPatchBaseRevision,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
+    activeDeckStep,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
     sourceRevision: s.sourceRevision,
     snapshot: s.snapshot,
     activeRootId: s.activeRootId,
+    activeDeckStep:
+      s.documentKind === "beamer"
+        ? s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? null
+        : null,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
     activeDocumentFileRef: s.documents[s.activeDocumentId]?.fileRef ?? null,
@@ -1001,13 +1007,14 @@ export function App() {
       sourceRevision,
       documentFileRef: activeDocumentFileRef,
       activeRootId,
+      deckStep: activeDeckStep,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger,
       renderViewBox
     });
-  }, [activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
@@ -1022,12 +1029,13 @@ export function App() {
       sourceRevision,
       documentFileRef: activeDocumentFileRef,
       activeRootId,
+      deckStep: activeDeckStep,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger
     });
-  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, trigger, typingComputeDelay]);
+  }, typingComputeDelay, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, trigger, typingComputeDelay]);
 
   useEffect(() => {
     let prewarmTimer: number | null = null;

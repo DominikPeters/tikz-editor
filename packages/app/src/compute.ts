@@ -21,6 +21,13 @@ import type { NodeTextEngine } from "@tikz-editor/core/text/types";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
+import {
+  detectDocumentKind,
+  parseDocumentRootId,
+  prepareBeamerDocument
+} from "@tikz-editor/core";
+import type { PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
+import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { prepareDocumentGraphicsResolver } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
@@ -41,6 +48,35 @@ export type SessionSnapshot = {
   parseResult: ParseTikzResult | null;
   semanticResult: EvaluateTikzResult | null;
   incremental: SessionSnapshotIncrementalInfo | null;
+  /** Present for Beamer decks; the tikz fields above stay empty. */
+  deck: DeckSnapshot | null;
+};
+
+/** One frame of a deck's root inventory, in render order. */
+export type DeckFrameSummary = {
+  id: string;
+  frameIndex: number;
+  span: { from: number; to: number };
+  title: string | null;
+  stepCount: number;
+};
+
+/** The rendered page for the active frame at one overlay step. */
+export type DeckActiveFrame = {
+  frameId: string;
+  frameIndex: number;
+  /** 1-based, clamped to the frame's step count. */
+  step: number;
+  stepCount: number;
+  svg: string;
+  svgModel: SvgRenderModel;
+  viewBox: SvgViewBox;
+};
+
+export type DeckSnapshot = {
+  frames: DeckFrameSummary[];
+  activeFrame: DeckActiveFrame | null;
+  diagnostics: Diagnostic[];
 };
 
 export type SessionSnapshotIncrementalInfo = {
@@ -69,6 +105,8 @@ export type ComputeRequest = {
   sourceRevision?: number | null;
   documentFileRef?: DocumentFileRef | null;
   activeRootId?: string | null;
+  /** Requested overlay step for deck mode; clamped to the frame's steps. */
+  deckStep?: number | null;
   changedSourceIds?: string[] | null;
   patches?: SourcePatch[] | null;
   patchBaseRevision?: number | null;
@@ -113,7 +151,8 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
     svgModel: null,
     parseResult: null,
     semanticResult: null,
-    incremental: null
+    incremental: null,
+    deck: null
   };
 }
 
@@ -128,6 +167,9 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
   const computeStartedAt = performance.now();
 
   try {
+    if (detectDocumentKind(request.source) === "beamer") {
+      return await computeDeckSnapshot(request, revision, requestKind, computeStartedAt);
+    }
     const trigger = request.trigger ?? "other";
     const changedSourceIds = normalizeChangedSourceIds(request.changedSourceIds ?? []);
     const patches = normalizePatches(request.patches ?? []);
@@ -169,6 +211,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         svgModel: result.svg.model,
         parseResult: result.parse,
         semanticResult: result.semantic,
+        deck: null,
         incremental: {
           trigger,
           changedSourceIds,
@@ -269,7 +312,8 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       svgModel: result.svg.model,
       parseResult: result.parse,
       semanticResult: result.semantic,
-      incremental: null
+      incremental: null,
+      deck: null
     };
     recordProfilingComputeTiming({
       requestId: request.id,
@@ -303,7 +347,8 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       svgModel: null,
       parseResult: null,
       semanticResult: null,
-      incremental: null
+      incremental: null,
+      deck: null
     };
 
     return {
@@ -319,6 +364,148 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       ]
     };
   }
+}
+
+/**
+ * Document-level deck state shared across frame/step renders of one source
+ * revision. Invalidated when the source or the graphics-resolver identity
+ * changes; rendered pages are memoized per (frame, step).
+ */
+type DeckComputeSession = {
+  source: string;
+  resolverCacheKey: string;
+  prepared: PreparedBeamerDocument;
+  frames: DeckFrameSummary[];
+  renderedPages: Map<string, DeckActiveFrame>;
+};
+
+let deckComputeSession: DeckComputeSession | null = null;
+
+function resolveDeckFrameIndex(
+  frames: readonly DeckFrameSummary[],
+  activeRootId: string | null | undefined
+): number | null {
+  if (frames.length === 0) {
+    return null;
+  }
+  const ref = activeRootId != null ? parseDocumentRootId(activeRootId) : null;
+  const requested =
+    ref?.kind === "beamer-frame" || ref?.kind === "beamer-frame-tikz"
+      ? ref.kind === "beamer-frame"
+        ? ref.index
+        : ref.frameIndex
+      : null;
+  // Unknown or absent selections fall back to the first frame, mirroring
+  // the tikz parse-window default.
+  return requested != null && requested >= 0 && requested < frames.length
+    ? requested
+    : 0;
+}
+
+async function computeDeckSnapshot(
+  request: ComputeRequest,
+  revision: number,
+  requestKind: "render" | "prewarm",
+  computeStartedAt: number
+): Promise<ComputeResponse> {
+  if (requestKind === "prewarm") {
+    // Deck mode has no drag-prewarm path; hover prewarming is a tikz
+    // incremental-session concern.
+    return {
+      id: request.id,
+      documentId: request.documentId,
+      snapshot: makeEmptySnapshot(request.source),
+      diagnostics: []
+    };
+  }
+  const graphicsResolver = await prepareDocumentGraphicsResolver({
+    source: request.source,
+    documentFileRef: request.documentFileRef ?? null
+  });
+  if (
+    deckComputeSession?.source !== request.source ||
+    deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey
+  ) {
+    const prepared = prepareBeamerDocument(request.source);
+    deckComputeSession = {
+      source: request.source,
+      resolverCacheKey: graphicsResolver.cacheKey,
+      prepared,
+      frames: prepared.document.frames.map((frame, frameIndex) => ({
+        id: frame.id,
+        frameIndex,
+        span: { from: frame.span.from, to: frame.span.to },
+        title: frame.title?.value ?? null,
+        stepCount: prepared.frameStepCount(frameIndex)
+      })),
+      renderedPages: new Map()
+    };
+  }
+  const session = deckComputeSession;
+  const frameIndex = resolveDeckFrameIndex(session.frames, request.activeRootId);
+  let activeFrame: DeckActiveFrame | null = null;
+  if (frameIndex != null) {
+    const stepCount = session.frames[frameIndex].stepCount;
+    const step = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, stepCount));
+    const pageKey = `${frameIndex}:${step}`;
+    const cached = session.renderedPages.get(pageKey);
+    if (cached) {
+      activeFrame = cached;
+    } else {
+      const result = await session.prepared.renderFrame({
+        frameIndex,
+        step,
+        graphicsResolver
+      });
+      activeFrame = {
+        frameId: result.frame.id,
+        frameIndex,
+        step,
+        stepCount: result.layout.stepCount,
+        svg: result.svg.svg,
+        svgModel: result.svg.model,
+        viewBox: result.svg.viewBox
+      };
+      session.renderedPages.set(pageKey, activeFrame);
+    }
+  }
+
+  const snapshot: SessionSnapshot = {
+    source: request.source,
+    revision,
+    figures: [],
+    activeRootId: activeFrame?.frameId ?? null,
+    editHandles: [],
+    scene: null,
+    svg: null,
+    svgModel: null,
+    parseResult: null,
+    semanticResult: null,
+    incremental: null,
+    deck: {
+      frames: session.frames,
+      activeFrame,
+      diagnostics: session.prepared.document.diagnostics
+    }
+  };
+  recordProfilingComputeTiming({
+    requestId: request.id,
+    kind: requestKind,
+    trigger: request.trigger ?? "other",
+    durationMs: performance.now() - computeStartedAt,
+    changedSourceCount: 0,
+    incremental: false
+  });
+  return {
+    id: request.id,
+    documentId: request.documentId,
+    snapshot,
+    diagnostics: snapshot.deck?.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code ?? "beamer",
+      message: diagnostic.message,
+      severity: diagnostic.severity
+    })) ?? []
+  };
 }
 
 async function computeSnapshotIncremental(
