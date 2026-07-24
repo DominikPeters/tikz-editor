@@ -742,7 +742,10 @@ export function SourcePanel() {
     assistantLockReason: s.documents[s.activeDocumentId]?.assistantLockReason ?? null,
     dispatch: s.dispatch
   })));
-  const figures = snapshot.figures;
+  const figures = useMemo(
+    () => (snapshot.deck ? snapshot.deck.frames : snapshot.figures),
+    [snapshot.deck, snapshot.figures]
+  );
   const {
     editorWordWrap,
     editorFontSize,

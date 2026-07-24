@@ -15,7 +15,7 @@ import type { AssistantComposerImageAttachment } from "./assistant-image-attachm
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
-import { hasMultipleRoots } from "../root-inventory";
+import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
@@ -548,7 +548,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
   }, [handle, model, dispatch]);
 
   // Auto-show/hide FigureNavigator based on figure count
-  const figureCount = useEditorStore((s) => s.snapshot.figures.length);
+  const figureCount = useEditorStore((s) => snapshotRoots(s.snapshot).length);
   const prevFigureCountRef = useRef(figureCount);
   useEffect(() => {
     const prev = prevFigureCountRef.current;

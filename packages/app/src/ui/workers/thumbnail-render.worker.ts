@@ -1,4 +1,5 @@
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
+import { prepareBeamerDocument, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
 import type {
   ThumbnailRenderRequest,
   ThumbnailWorkerRequestMessage,
@@ -54,16 +55,18 @@ async function pumpQueue(): Promise<void> {
 
   busy = true;
   try {
-    const rendered = await renderTikzToSvgAsync(next.source, {
-      parse: {
-        recover: next.parseOptions.recover ?? true,
-        activeFigureId: next.parseOptions.activeRootId,
-        includeContextDefinitions: next.parseOptions.includeContextDefinitions
-      },
-      svg: {
-        padding: next.svgOptions?.padding
-      }
-    });
+    const svg = next.deckFrameIndex != null
+      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex)
+      : (await renderTikzToSvgAsync(next.source, {
+          parse: {
+            recover: next.parseOptions.recover ?? true,
+            activeFigureId: next.parseOptions.activeRootId,
+            includeContextDefinitions: next.parseOptions.includeContextDefinitions
+          },
+          svg: {
+            padding: next.svgOptions?.padding
+          }
+        })).svg.svg;
 
     if (isCancelled(next)) {
       return;
@@ -76,7 +79,7 @@ async function pumpQueue(): Promise<void> {
       groupId: next.groupId,
       figureId: next.figureId,
       figureSignature: next.figureSignature,
-      svg: rendered.svg.svg
+      svg
     };
     workerContext.postMessage(response);
   } catch (error) {
@@ -145,4 +148,17 @@ function cleanupCancellationMarks(): void {
       cancelledGroupIds.delete(groupId);
     }
   }
+}
+
+// Document-level Beamer passes are shared across the whole thumbnail sweep.
+let deckPrepared: { source: string; prepared: PreparedBeamerDocument } | null = null;
+
+async function renderDeckFrameThumbnail(source: string, frameIndex: number): Promise<string> {
+  if (deckPrepared?.source !== source) {
+    deckPrepared = { source, prepared: prepareBeamerDocument(source) };
+  }
+  // Sorter thumbnails show the frame's final overlay step (handout view).
+  const step = Math.max(1, deckPrepared.prepared.frameStepCount(frameIndex));
+  const result = await deckPrepared.prepared.renderFrame({ frameIndex, step });
+  return result.svg.svg;
 }

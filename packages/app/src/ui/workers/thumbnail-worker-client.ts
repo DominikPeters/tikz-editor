@@ -111,17 +111,25 @@ function onWorkerMessage(event: MessageEvent<ThumbnailWorkerResponseMessage>): v
 
 async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
   try {
-    const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
-    const rendered = await renderTikzToSvgAsync(request.source, {
-      parse: {
-        recover: request.parseOptions.recover ?? true,
-        activeFigureId: request.parseOptions.activeRootId,
-        includeContextDefinitions: request.parseOptions.includeContextDefinitions
-      },
-      svg: {
-        padding: request.svgOptions?.padding
-      }
-    });
+    let svg: string;
+    if (request.deckFrameIndex != null) {
+      const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
+      const prepared = prepareBeamerDocument(request.source);
+      const step = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
+      svg = (await prepared.renderFrame({ frameIndex: request.deckFrameIndex, step })).svg.svg;
+    } else {
+      const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
+      svg = (await renderTikzToSvgAsync(request.source, {
+        parse: {
+          recover: request.parseOptions.recover ?? true,
+          activeFigureId: request.parseOptions.activeRootId,
+          includeContextDefinitions: request.parseOptions.includeContextDefinitions
+        },
+        svg: {
+          padding: request.svgOptions?.padding
+        }
+      })).svg.svg;
+    }
     return {
       type: "result",
       ok: true,
@@ -129,7 +137,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
       groupId: request.groupId,
       figureId: request.figureId,
       figureSignature: request.figureSignature,
-      svg: rendered.svg.svg
+      svg
     };
   } catch (error) {
     return {

@@ -11,7 +11,7 @@ import {
   subscribeUiNotifications
 } from "./ui-notifications";
 import css from "./StatusBar.module.css";
-import { hasMultipleRoots } from "../root-inventory";
+import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 
 const TEX_PT_PER_IN = 72.27;
 const CSS_SCREEN_DPI = 96;
@@ -69,7 +69,7 @@ export function StatusBar() {
 
   const elementCount = snapshot.scene?.elements.length ?? 0;
   const selectedCount = selectedIds.size;
-  const figures = snapshot.figures;
+  const figures = snapshotRoots(snapshot);
   const activeFigureIndex = activeRootId ? figures.findIndex((figure) => figure.id === activeRootId) : -1;
   const showFigureContext = hasMultipleRoots(figures.length) && activeFigureIndex >= 0;
   const zoomPercent = Math.round((canvasTransform.scale / ACTUAL_SIZE_SCALE) * 100);
@@ -160,7 +160,7 @@ export function StatusBar() {
 
         {showFigureContext && (
           <div className={css.cell}>
-            <span>Figure {activeFigureIndex + 1} of {figures.length}</span>
+            <span>{snapshot.deck ? "Slide" : "Figure"} {activeFigureIndex + 1} of {figures.length}</span>
           </div>
         )}
 

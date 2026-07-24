@@ -6,10 +6,41 @@ import { hasMultipleRoots } from "../root-inventory";
 
 const stripScrollByDocumentId = new Map<string, number>();
 
+type NavigatorRoot = {
+  id: string;
+  span: { from: number; to: number };
+  label: string;
+  tooltip: string;
+  stepCount?: number;
+  deckFrameIndex?: number;
+};
+
 export function FigureNavigator() {
   const snapshot = useEditorStore((s) => s.snapshot);
   const source = snapshot.source;
-  const figures = snapshot.figures;
+  const deck = snapshot.deck;
+  const tikzFigures = snapshot.figures;
+  const figures: readonly NavigatorRoot[] = useMemo(
+    () =>
+      deck
+        ? deck.frames.map((frame) => ({
+            id: frame.id,
+            span: frame.span,
+            label: frame.title
+              ? `${frame.frameIndex + 1}. ${frame.title}`
+              : `Slide ${frame.frameIndex + 1}`,
+            tooltip: frame.title ?? `Slide ${frame.frameIndex + 1}`,
+            stepCount: frame.stepCount,
+            deckFrameIndex: frame.frameIndex
+          }))
+        : tikzFigures.map((figure, index) => ({
+            id: figure.id,
+            span: figure.span,
+            label: `Figure ${index + 1} (L${figure.startLine})`,
+            tooltip: `Figure ${index + 1}`
+          })),
+    [deck, tikzFigures]
+  );
   const activeRootId = useEditorStore((s) => s.activeRootId);
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
   const dispatch = useEditorStore((s) => s.dispatch);
@@ -136,7 +167,7 @@ export function FigureNavigator() {
         {"<"}
       </button>
       <div className={css.strip} ref={stripRef} data-testid="figure-navigator-strip">
-        {figures.map((figure, index) => {
+        {figures.map((figure) => {
           const thumbnail = thumbnails.get(figure.id);
           const isActive = figure.id === activeRootId;
           return (
@@ -145,8 +176,8 @@ export function FigureNavigator() {
               key={figure.id}
               className={[css.thumb, isActive ? css.thumbActive : ""].filter(Boolean).join(" ")}
               onClick={() => { dispatch({ type: "SET_ACTIVE_ROOT", rootId: figure.id }); }}
-              title={`Figure ${index + 1}`}
-              aria-label={`Figure ${index + 1}`}
+              title={figure.tooltip}
+              aria-label={figure.tooltip}
               ref={(node) => {
                 if (!node) {
                   thumbRefByFigureId.current.delete(figure.id);
@@ -156,9 +187,14 @@ export function FigureNavigator() {
               }}
             >
               <div className={css.thumbPreview}>
-                {thumbnail ? <img src={thumbnail} alt={`Figure ${index + 1} preview`} /> : "Rendering…"}
+                {thumbnail ? <img src={thumbnail} alt={`${figure.tooltip} preview`} /> : "Rendering…"}
+                {figure.stepCount != null && figure.stepCount > 1 ? (
+                  <span className={css.thumbStepBadge} data-testid="navigator-step-badge">
+                    {figure.stepCount}
+                  </span>
+                ) : null}
               </div>
-              <div className={css.thumbLabel}>{`Figure ${index + 1} (L${figure.startLine})`}</div>
+              <div className={css.thumbLabel}>{figure.label}</div>
             </button>
           );
         })}

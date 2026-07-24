@@ -17,6 +17,7 @@ import {
   createUntitledDocumentSession,
   DEFAULT_CANVAS_TRANSFORM,
   DEFAULT_SOURCE,
+  documentKindForSource,
   hydrateWorkspaceStateFromSeed,
   projectState,
   uiStateFromEditorState,
@@ -738,6 +739,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
       if (activeDoc.assistantLockReason) {
         return state;
+      }
+      if (documentKindForSource(activeDoc.source) === "beamer") {
+        // Deck mode is read-only on the canvas until Beamer editing lands;
+        // tikz edit actions would corrupt the deck source.
+        workspace = updateDocument(workspace, documentId, (doc) =>
+          applyEditWarningToDocument(doc, "Slide editing is not available yet — edit the source panel instead."));
+        break;
       }
       let result: EditActionResult;
       if (

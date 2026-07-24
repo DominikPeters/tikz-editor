@@ -480,8 +480,24 @@ export const CanvasPanel = memo(function CanvasPanel({
   })));
   const gridMinorTargetPx = GRID_SIZE_MINOR_TARGET_PX[gridSize];
 
-  const baseSvgResult = snapshot.svg;
-  const baseSvgModel = snapshot.svgModel;
+  // Deck mode: the canvas shows the active frame's rendered page through the
+  // same SVG pipeline. Scene and edit handles are empty, so tikz
+  // interactions are inert; the reducer additionally rejects edit actions.
+  const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  const deckSvgResult = useMemo(
+    () =>
+      deckActiveFrame
+        ? {
+            svg: deckActiveFrame.svg,
+            viewBox: deckActiveFrame.viewBox,
+            model: deckActiveFrame.svgModel,
+            diagnostics: []
+          }
+        : null,
+    [deckActiveFrame]
+  );
+  const baseSvgResult = deckSvgResult ?? snapshot.svg;
+  const baseSvgModel = deckActiveFrame?.svgModel ?? snapshot.svgModel;
   const [warning, setWarning] = useState<string | null>(null);
   const [dragTooltip, setDragTooltip] = useState<DragTooltipState | null>(null);
   const [dragTooltipBoundary, setDragTooltipBoundary] = useState<{
@@ -2618,7 +2634,21 @@ export const CanvasPanel = memo(function CanvasPanel({
         LEFT_RULER_DRAG_SOURCE_WIDTH_PX={LEFT_RULER_DRAG_SOURCE_WIDTH_PX}
         toolMode={toolMode}
         viewportRef={viewportRef}
-        onViewportKeyDown={onViewportKeyDown}
+        onViewportKeyDown={(event) => {
+          if (deckActiveFrame && deckActiveFrame.stepCount > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+            event.preventDefault();
+            const delta = event.key === "ArrowRight" ? 1 : -1;
+            const nextStep = Math.min(
+              Math.max(1, deckActiveFrame.step + delta),
+              deckActiveFrame.stepCount
+            );
+            if (nextStep !== deckActiveFrame.step) {
+              dispatch({ type: "SET_DECK_STEP", rootId: deckActiveFrame.frameId, step: nextStep });
+            }
+            return;
+          }
+          onViewportKeyDown(event);
+        }}
         onViewportCopy={onViewportCopy}
         onViewportCut={onViewportCut}
         onViewportPaste={onViewportPaste}
@@ -2715,6 +2745,17 @@ export const CanvasPanel = memo(function CanvasPanel({
         canvasTextEdit={canvasTextEditView}
         selectionHint={canvasSelectionHint}
         magnifierState={magnifierState}
+        deckStepper={
+          deckActiveFrame && deckActiveFrame.stepCount > 1
+            ? {
+                step: deckActiveFrame.step,
+                stepCount: deckActiveFrame.stepCount,
+                onStepChange: (step: number) => {
+                  dispatch({ type: "SET_DECK_STEP", rootId: deckActiveFrame.frameId, step });
+                }
+              }
+            : null
+        }
         RULER_SIZE={RULER_SIZE}
       />
       {equationModalTarget ? (

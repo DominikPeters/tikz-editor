@@ -9,7 +9,7 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import { makeEmptySnapshot } from "../compute";
-import { detectDocumentKind, type DocumentKind } from "@tikz-editor/core";
+import { detectDocumentKind, type DocumentKind } from "@tikz-editor/core/document/kind";
 
 export const DEFAULT_SOURCE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;

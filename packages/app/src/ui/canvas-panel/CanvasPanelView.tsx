@@ -169,6 +169,12 @@ type CanvasPanelViewProps = {
   onWarningBarKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   canvasTextEdit: CanvasTextEditViewModel;
   selectionHint: string | null;
+  /** Overlay-step scrubber for deck mode; null hides it. */
+  deckStepper: {
+    step: number;
+    stepCount: number;
+    onStepChange: (step: number) => void;
+  } | null;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
 };
@@ -275,6 +281,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     onWarningBarKeyDown,
     canvasTextEdit,
     selectionHint,
+    deckStepper,
     RULER_SIZE,
     magnifierState
   } = props;
@@ -910,6 +917,33 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
           {selectionHint && !warning ? (
             <div className={css.selectionHint} data-testid="canvas-selection-hint" data-select="text">
               {selectionHint}
+            </div>
+          ) : null}
+          {deckStepper ? (
+            <div className={css.deckStepper} data-testid="deck-step-scrubber" data-select="chrome">
+              <button
+                type="button"
+                className={css.deckStepperButton}
+                disabled={deckStepper.step <= 1}
+                onClick={() => { deckStepper.onStepChange(deckStepper.step - 1); }}
+                aria-label="Previous overlay step"
+                data-testid="deck-step-prev"
+              >
+                ◀
+              </button>
+              <span className={css.deckStepperLabel} data-testid="deck-step-label">
+                {deckStepper.step} / {deckStepper.stepCount}
+              </span>
+              <button
+                type="button"
+                className={css.deckStepperButton}
+                disabled={deckStepper.step >= deckStepper.stepCount}
+                onClick={() => { deckStepper.onStepChange(deckStepper.step + 1); }}
+                aria-label="Next overlay step"
+                data-testid="deck-step-next"
+              >
+                ▶
+              </button>
             </div>
           ) : null}
         </div>

@@ -21,12 +21,12 @@ import type { NodeTextEngine } from "@tikz-editor/core/text/types";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
+import { detectDocumentKind } from "@tikz-editor/core/document/kind";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import {
-  detectDocumentKind,
-  parseDocumentRootId,
-  prepareBeamerDocument
-} from "@tikz-editor/core";
-import type { PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
+  prepareBeamerDocument,
+  type PreparedBeamerDocument
+} from "@tikz-editor/core/beamer/index";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { prepareDocumentGraphicsResolver } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";

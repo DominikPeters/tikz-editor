@@ -709,6 +709,52 @@
   user-select: text;
 }
 
+.deckStepper {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-pane) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.deckStepperButton {
+  appearance: none;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 9px);
+  line-height: 1;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.deckStepperButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.deckStepperButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.deckStepperLabel {
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  user-select: none;
+}
+
 .selectionHint {
   position: absolute;
   right: 12px;

@@ -55,6 +55,7 @@
 }
 
 .thumbPreview {
+  position: relative;
   width: 100%;
   height: 58px;
   background: var(--bg-pane);
@@ -63,6 +64,20 @@
   justify-content: center;
   color: var(--text-faint);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
+}
+
+.thumbStepBadge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 72%, transparent);
+  color: var(--bg-pane);
+  font-size: calc(var(--app-ui-scale, 1) * 9px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  pointer-events: none;
 }
 
 .thumbPreview img {

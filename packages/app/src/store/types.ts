@@ -8,7 +8,7 @@ import type {
   AssistantThreadState,
   AssistantTurnStatus
 } from "../platform/types";
-import type { DocumentKind } from "@tikz-editor/core";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 export type ToolMode =
   | "select"

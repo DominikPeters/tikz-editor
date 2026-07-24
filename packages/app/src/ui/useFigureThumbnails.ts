@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ParseTikzResult } from "@tikz-editor/core/parser/index";
 import { cancelGroup, requestThumbnail } from "./workers/thumbnail-worker-client";
 import type { ThumbnailRenderRequest } from "./workers/thumbnail-worker-types";
 
-type FigureEntry = ParseTikzResult["figures"][number];
+/**
+ * Any document root with a source span renders a thumbnail; deck frames
+ * carry their frame index and render through the Beamer path.
+ */
+export type ThumbnailRootEntry = {
+  id: string;
+  span: { from: number; to: number };
+  deckFrameIndex?: number;
+};
+
+type FigureEntry = ThumbnailRootEntry;
 
 type UseFigureThumbnailsOptions = {
   documentKey?: string;
@@ -175,6 +184,7 @@ export function useFigureThumbnails(
             source: stableSource,
             figureId: figure.id,
             figureSignature,
+            ...(figure.deckFrameIndex != null ? { deckFrameIndex: figure.deckFrameIndex } : {}),
             parseOptions: {
               recover: true,
               activeRootId: figure.id,

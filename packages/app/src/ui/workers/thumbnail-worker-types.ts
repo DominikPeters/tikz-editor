@@ -15,6 +15,8 @@ export type ThumbnailRenderRequest = {
   source: string;
   figureId: string;
   figureSignature: string;
+  /** Present for deck frames: render this Beamer frame's final overlay step. */
+  deckFrameIndex?: number;
   parseOptions: ThumbnailRenderParseOptions;
   svgOptions?: ThumbnailRenderSvgOptions;
 };
