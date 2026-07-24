@@ -882,6 +882,18 @@ navigation fixture pass the structural contract with no unmatched rules or
 text lines, matching glyph codes/fonts and a maximum position delta below
 0.007pt.
 
+The first palette/aggregate pass transcribes the shipped wolverine, rose,
+dolphin, beaver, and spruce color programs, including their xcolor mixes and
+source-order interaction. This unlocks AnnArbor, Boadilla, CambridgeUS, and
+EastLansing as ordered aggregate records rather than renderer branches.
+Their local font, headline-option, and item-marker overrides remain data on
+the resolved theme. The same pass distinguishes rounded templates with and
+without shadows and models Beamer's empty-background rule: a rounded title
+page whose title color has no background uses the ordinary colorbox geometry.
+Across the 20-frame KKT deck and three-frame conformance deck, all 92
+comparisons for these four aggregates pass with zero unmatched rectangles or
+text lines and matching glyph codes/fonts.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally

@@ -180,6 +180,87 @@ function parseHexColor(
     : null;
 }
 
+type RgbChannels = readonly [number, number, number];
+
+function xcolorMixRgb(
+  first: RgbChannels,
+  second: RgbChannels,
+  firstPercent: number
+): string {
+  return rgbChannelsToHex(mixRgbChannels(first, second, firstPercent));
+}
+
+function mixRgbChannels(
+  first: RgbChannels,
+  second: RgbChannels,
+  firstPercent: number
+): RgbChannels {
+  const ratio = Math.max(0, Math.min(100, firstPercent)) / 100;
+  return [
+    first[0] * ratio + second[0] * (1 - ratio),
+    first[1] * ratio + second[1] * (1 - ratio),
+    first[2] * ratio + second[2] * (1 - ratio),
+  ];
+}
+
+function rgbChannelsToHex(channels: RgbChannels): string {
+  return `#${channels
+    .map((value) => Math.round(value * 255))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function rgbChannelsFromHex(color: string): RgbChannels {
+  const channels = parseHexColor(color);
+  if (!channels) {
+    throw new Error(`Cannot resolve non-RGB theme color '${color}'.`);
+  }
+  return [
+    channels[0] / 255,
+    channels[1] / 255,
+    channels[2] / 255,
+  ];
+}
+
+function mutableThemeForegroundRgb(
+  state: MutableTheme,
+  role: string,
+  fallback: string
+): RgbChannels {
+  return (
+    state.colors[role]?.fgRgb ??
+    rgbChannelsFromHex(
+      resolveMutableThemeColor(state, role).fg ?? fallback
+    )
+  );
+}
+
+function resolveMutableThemeColor(
+  state: MutableTheme,
+  role: string
+): ResolvedBeamerThemeColor {
+  const resolve = (
+    name: string,
+    ancestors: ReadonlySet<string>
+  ): ResolvedBeamerThemeColor => {
+    if (ancestors.has(name)) {
+      return {};
+    }
+    const color = state.colors[name];
+    if (!color) {
+      return {};
+    }
+    const seen = new Set(ancestors);
+    seen.add(name);
+    return {
+      ...(color.parent ? resolve(color.parent, seen) : {}),
+      ...(color.fg ? { fg: color.fg } : {}),
+      ...(color.bg ? { bg: color.bg } : {}),
+    };
+  };
+  return resolve(role, new Set());
+}
+
 function createDefaultTheme(): MutableTheme {
   const normalFont: BeamerThemeFont = {
     family: "sans",
@@ -201,17 +282,17 @@ function createDefaultTheme(): MutableTheme {
       "palette secondary": { fg: "#262686" },
       "palette tertiary": { fg: "#1a1a59" },
       "palette quaternary": { fg: "#000000" },
-      titlelike: { fg: "#3333b3" },
+      titlelike: { parent: "structure" },
       title: { parent: "titlelike" },
       subtitle: { parent: "title" },
       author: {},
       institute: {},
       date: {},
-      frametitle: { fg: "#3333b3" },
+      frametitle: { parent: "titlelike" },
       "section in head/foot": { parent: "palette tertiary" },
       "subsection in head/foot": { parent: "palette secondary" },
       "alerted text": { fg: "#ff0000" },
-      "example text": { fg: "#008000" },
+      "example text": { fg: "#008000", fgRgb: [0, 0.5, 0] },
       "block body": {},
       "block body alerted": {},
       "block body example": {},
@@ -328,6 +409,80 @@ const themeAppliers = new Map<string, ComponentApplier>([
     id: "default",
     components: [],
   })],
+  ["annarbor", defineAggregateTheme({
+    id: "AnnArbor",
+    // TeX Live 2025 beamerthemeAnnArbor.sty.
+    components: [
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "outer-theme", name: "infolines" },
+      { kind: "color-theme", name: "wolverine" },
+    ],
+    applyOverrides: (state) => {
+      state.fonts["block-title"] = { ...state.fonts["block-body"] };
+      state.colors.titlelike = {
+        parent: "structure",
+        bg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 85),
+      };
+    },
+  })],
+  ["boadilla", defineAggregateTheme({
+    id: "Boadilla",
+    // TeX Live 2025 beamerthemeBoadilla.sty.
+    components: [
+      { kind: "color-theme", name: "rose" },
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "color-theme", name: "dolphin" },
+      { kind: "outer-theme", name: "infolines" },
+    ],
+    applyOverrides: (state, use) => {
+      state.templates.bullets = [
+        state.templates.bullets[0],
+        DEFAULT_REF("beamer/bullet/tiny-triangle"),
+        DEFAULT_REF("beamer/bullet/tiny-star"),
+      ];
+      if (use.options.secheader !== true) {
+        state.templates.headline = DEFAULT_REF("beamer/headline/none");
+      }
+    },
+  })],
+  ["cambridgeus", defineAggregateTheme({
+    id: "CambridgeUS",
+    // TeX Live 2025 beamerthemeCambridgeUS.sty.
+    components: [
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "outer-theme", name: "infolines" },
+      { kind: "color-theme", name: "beaver" },
+    ],
+    applyOverrides: (state) => {
+      state.fonts["block-title"] = { ...state.fonts["block-body"] };
+      state.colors.titlelike = { parent: "structure", bg: WHITE };
+    },
+  })],
+  ["eastlansing", defineAggregateTheme({
+    id: "EastLansing",
+    // TeX Live 2025 beamerthemeEastLansing.sty.
+    components: [
+      { kind: "inner-theme", name: "rounded" },
+      { kind: "outer-theme", name: "infolines" },
+      { kind: "color-theme", name: "spruce" },
+    ],
+    applyOverrides: (state) => {
+      state.fonts["block-title"] = {
+        ...state.fonts["block-body"],
+        sizePt: 12,
+        lineHeightPt: 14,
+      };
+      state.templates.bullets = [
+        state.templates.bullets[0],
+        DEFAULT_REF("beamer/bullet/triangle"),
+        state.templates.bullets[2],
+      ];
+      state.colors.titlelike = {
+        parent: "structure",
+        bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 85),
+      };
+    },
+  })],
   ["madrid", defineAggregateTheme({
     id: "Madrid",
     // TeX Live 2025 beamerthemeMadrid.sty applies these in this exact order.
@@ -355,6 +510,11 @@ const themeAppliers = new Map<string, ComponentApplier>([
 
 const colorThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("color-theme", "default")],
+  ["wolverine", applyWolverineColors],
+  ["rose", applyRoseColors],
+  ["dolphin", applyDolphinColors],
+  ["beaver", applyBeaverColors],
+  ["spruce", applySpruceColors],
   ["whale", (state, use) => {
     markApplied(state, "color-theme", "whale", use);
     state.colors["palette primary"] = { fg: "#ffffff", bg: "#3333b3" };
@@ -393,10 +553,17 @@ const innerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("inner-theme", "default")],
   ["rounded", (state, use) => {
     markApplied(state, "inner-theme", "rounded", use);
+    const shadow = optionBoolean(use.options.shadow, false);
     state.templates.titlePage = DEFAULT_REF(
-      "beamer/title-page/rounded-shadow"
+      shadow
+        ? "beamer/title-page/rounded-shadow"
+        : "beamer/title-page/rounded"
     );
-    state.templates.block = DEFAULT_REF("beamer/block/rounded-shadow");
+    state.templates.block = DEFAULT_REF(
+      shadow
+        ? "beamer/block/rounded-shadow"
+        : "beamer/block/rounded"
+    );
     state.templates.bullets = [
       DEFAULT_REF("beamer/bullet/ball"),
       DEFAULT_REF("beamer/bullet/ball"),
@@ -411,6 +578,193 @@ const innerThemeAppliers = new Map<string, ComponentApplier>([
   ["metropolis", applyModernInner("metropolis")],
   ["moloch", applyModernInner("moloch")],
 ]);
+
+const WHITE = "#ffffff";
+const BLACK = "#000000";
+const DARK_BLUE = "#0000cc";
+const DARK_RED = "#cc0000";
+const MSU_GREEN = "#006633";
+const WHITE_RGB = [1, 1, 1] as const;
+const BLACK_RGB = [0, 0, 0] as const;
+const YELLOW_RGB = [1, 1, 0] as const;
+const ORANGE_RGB = [1, 0.5, 0] as const;
+const GRAY_RGB = [0.5, 0.5, 0.5] as const;
+const DARK_BLUE_RGB = [0, 0, 0.8] as const;
+const DARK_RED_RGB = [0.8, 0, 0] as const;
+const MSU_GREEN_RGB = [0, 0.4, 0.2] as const;
+
+function applyWolverineColors(state: MutableTheme, use: BeamerThemeUse): void {
+  markApplied(state, "color-theme", "wolverine", use);
+  state.colors["alerted text"] = {
+    fg: xcolorMixRgb(DARK_BLUE_RGB, YELLOW_RGB, 80),
+  };
+  state.colors["palette primary"] = {
+    fg: xcolorMixRgb(DARK_BLUE_RGB, BLACK_RGB, 60),
+    bg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 85),
+  };
+  state.colors["palette secondary"] = {
+    fg: xcolorMixRgb(DARK_BLUE_RGB, BLACK_RGB, 70),
+    bg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 60),
+  };
+  state.colors["palette tertiary"] = {
+    fg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 50),
+    bg: xcolorMixRgb(DARK_BLUE_RGB, BLACK_RGB, 80),
+  };
+  state.colors["palette quaternary"] = {
+    fg: DARK_BLUE,
+    bg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 20),
+  };
+  state.colors.titlelike = { parent: "palette primary" };
+  state.colors.frametitle = {
+    parent: "titlelike",
+    bg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 90),
+  };
+  state.colors["frametitle right"] = {
+    parent: "frametitle",
+    bg: xcolorMixRgb(YELLOW_RGB, ORANGE_RGB, 60),
+  };
+}
+
+function applyRoseColors(state: MutableTheme, use: BeamerThemeUse): void {
+  markApplied(state, "color-theme", "rose", use);
+  const normal = resolveMutableThemeColor(state, "normal text");
+  const structure = resolveMutableThemeColor(state, "structure");
+  const alerted = resolveMutableThemeColor(state, "alerted text");
+  const example = resolveMutableThemeColor(state, "example text");
+  const canvas = normal.bg ?? WHITE;
+  const canvasRgb = rgbChannelsFromHex(canvas);
+  const applyBlockFamily = (
+    suffix: "" | " alerted" | " example",
+    foreground: string,
+    foregroundRgb: RgbChannels
+  ) => {
+    const titleBackgroundRgb = mixRgbChannels(
+      foregroundRgb,
+      canvasRgb,
+      20
+    );
+    const titleBackground = rgbChannelsToHex(titleBackgroundRgb);
+    state.colors[`block title${suffix}`] = {
+      fg: foreground,
+      bg: titleBackground,
+    };
+    state.colors[`block body${suffix}`] = {
+      parent: "normal text",
+      bg: xcolorMixRgb(titleBackgroundRgb, canvasRgb, 50),
+    };
+  };
+  applyBlockFamily(
+    "",
+    structure.fg ?? "#3333b3",
+    mutableThemeForegroundRgb(state, "structure", "#3333b3")
+  );
+  applyBlockFamily(
+    " alerted",
+    alerted.fg ?? "#ff0000",
+    mutableThemeForegroundRgb(state, "alerted text", "#ff0000")
+  );
+  applyBlockFamily(
+    " example",
+    example.fg ?? "#008000",
+    mutableThemeForegroundRgb(state, "example text", "#008000")
+  );
+}
+
+function applyDolphinColors(state: MutableTheme, use: BeamerThemeUse): void {
+  markApplied(state, "color-theme", "dolphin", use);
+  const structure = resolveMutableThemeColor(state, "structure").fg ??
+    "#3333b3";
+  const structureRgb = mutableThemeForegroundRgb(
+    state,
+    "structure",
+    structure
+  );
+  state.colors["palette primary"] = {
+    fg: BLACK,
+    bg: xcolorMixRgb(structureRgb, WHITE_RGB, 40),
+  };
+  state.colors["palette secondary"] = {
+    fg: WHITE,
+    bg: xcolorMixRgb(structureRgb, WHITE_RGB, 60),
+  };
+  state.colors["palette tertiary"] = {
+    fg: WHITE,
+    bg: xcolorMixRgb(structureRgb, WHITE_RGB, 90),
+  };
+  state.colors["palette quaternary"] = { fg: WHITE, bg: BLACK };
+  state.colors.titlelike = { fg: structure };
+}
+
+function applyBeaverColors(state: MutableTheme, use: BeamerThemeUse): void {
+  markApplied(state, "color-theme", "beaver", use);
+  state.colors["alerted text"] = {
+    fg: xcolorMixRgb(DARK_RED_RGB, GRAY_RGB, 80),
+  };
+  state.colors["palette primary"] = {
+    fg: xcolorMixRgb(DARK_RED_RGB, BLACK_RGB, 60),
+    bg: xcolorMixRgb(GRAY_RGB, WHITE_RGB, 30),
+  };
+  state.colors["palette secondary"] = {
+    fg: xcolorMixRgb(DARK_RED_RGB, BLACK_RGB, 70),
+    bg: xcolorMixRgb(GRAY_RGB, WHITE_RGB, 15),
+  };
+  state.colors["palette tertiary"] = {
+    fg: xcolorMixRgb(GRAY_RGB, WHITE_RGB, 10),
+    bg: xcolorMixRgb(DARK_RED_RGB, BLACK_RGB, 80),
+  };
+  state.colors["palette quaternary"] = {
+    fg: DARK_RED,
+    bg: xcolorMixRgb(GRAY_RGB, WHITE_RGB, 5),
+  };
+  state.colors.titlelike = {
+    parent: "palette primary",
+    fg: DARK_RED,
+  };
+  state.colors.frametitle = {
+    parent: "titlelike",
+    bg: xcolorMixRgb(GRAY_RGB, WHITE_RGB, 10),
+  };
+  state.colors["frametitle right"] = {
+    parent: "frametitle",
+    bg: xcolorMixRgb(GRAY_RGB, WHITE_RGB, 60),
+  };
+}
+
+function applySpruceColors(state: MutableTheme, use: BeamerThemeUse): void {
+  markApplied(state, "color-theme", "spruce", use);
+  state.colors["alerted text"] = {
+    fg: xcolorMixRgb(MSU_GREEN_RGB, WHITE_RGB, 80),
+  };
+  state.colors["palette primary"] = {
+    fg: xcolorMixRgb(MSU_GREEN_RGB, BLACK_RGB, 60),
+    bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 85),
+  };
+  state.colors["palette secondary"] = {
+    fg: xcolorMixRgb(MSU_GREEN_RGB, BLACK_RGB, 70),
+    bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 60),
+  };
+  state.colors["palette tertiary"] = {
+    fg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 50),
+    bg: xcolorMixRgb(MSU_GREEN_RGB, BLACK_RGB, 80),
+  };
+  state.colors["palette quaternary"] = {
+    fg: MSU_GREEN,
+    bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 20),
+  };
+  state.colors.titlelike = { parent: "palette primary" };
+  state.colors.frametitle = {
+    parent: "titlelike",
+    bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 90),
+  };
+  state.colors["frametitle right"] = {
+    parent: "frametitle",
+    bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 60),
+  };
+  state.colors["block body"] = {
+    parent: "normal text",
+    bg: WHITE,
+  };
+}
 
 const outerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("outer-theme", "default")],
@@ -671,6 +1025,19 @@ function optionString(
   fallback: string
 ): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function optionBoolean(
+  value: string | boolean | undefined,
+  fallback: boolean
+): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.toLocaleLowerCase() === "true";
+  }
+  return fallback;
 }
 
 function normalizeName(name: string): string {

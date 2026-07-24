@@ -163,6 +163,122 @@ describe("Beamer theme resolution", () => {
       ]);
   });
 
+  it.each([
+    {
+      name: "AnnArbor",
+      components: ["rounded", "infolines", "wolverine"],
+      headline: "beamer/headline/infolines",
+      titlePage: "beamer/title-page/rounded-shadow",
+      block: "beamer/block/rounded-shadow",
+      primary: { fg: "#00007a", bg: "#ffec00" },
+      frameTitle: { fg: "#3333b3", bg: "#fff200" },
+      blockTitleSizePt: 10.95,
+    },
+    {
+      name: "Boadilla",
+      components: ["rose", "rounded", "dolphin", "infolines"],
+      headline: "beamer/headline/none",
+      titlePage: "beamer/title-page/rounded-shadow",
+      block: "beamer/block/rounded-shadow",
+      primary: { fg: "#000000", bg: "#adade0" },
+      frameTitle: { fg: "#3333b3" },
+      blockTitleSizePt: 12,
+    },
+    {
+      name: "CambridgeUS",
+      components: ["rounded", "infolines", "beaver"],
+      headline: "beamer/headline/infolines",
+      titlePage: "beamer/title-page/rounded-shadow",
+      block: "beamer/block/rounded-shadow",
+      primary: { fg: "#7a0000", bg: "#d9d9d9" },
+      frameTitle: { fg: "#3333b3", bg: "#f2f2f2" },
+      blockTitleSizePt: 10.95,
+    },
+    {
+      name: "EastLansing",
+      components: ["rounded", "infolines", "spruce"],
+      headline: "beamer/headline/infolines",
+      titlePage: "beamer/title-page/rounded",
+      block: "beamer/block/rounded",
+      primary: { fg: "#003d1f", bg: "#d9e8e0" },
+      frameTitle: { fg: "#3333b3", bg: "#e6f0eb" },
+      blockTitleSizePt: 12,
+    },
+  ])(
+    "resolves the shipped $name aggregate through reusable components",
+    ({
+      name,
+      components,
+      headline,
+      titlePage,
+      block,
+      primary,
+      frameTitle,
+      blockTitleSizePt,
+    }) => {
+      const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{${name}}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+      expect(theme.id).toBe(name);
+      expect(theme.templates.headline.id).toBe(headline);
+      expect(theme.templates.titlePage.id).toBe(titlePage);
+      expect(theme.templates.block.id).toBe(block);
+      expect(resolveBeamerThemeColor(theme, "palette primary")).toEqual(
+        primary
+      );
+      expect(resolveBeamerThemeColor(theme, "frametitle")).toEqual(
+        frameTitle
+      );
+      expect(theme.fonts["block-title"].sizePt).toBe(blockTitleSizePt);
+      expect(
+        theme.appliedComponents.slice(2).map(({ name: component }) => component)
+      ).toEqual(components);
+      expect(theme.diagnostics).toEqual([]);
+    }
+  );
+
+  it("retains Boadilla's local marker and optional headline overrides", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme[secheader]{Boadilla}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+    const markers = resolveBeamerItemizeMarkers(theme);
+
+    expect(theme.templates.headline.id).toBe("beamer/headline/infolines");
+    expect(resolveBeamerThemeColor(theme, "block title")).toEqual({
+      fg: "#3333b3",
+      bg: "#d6d6f0",
+    });
+    expect(resolveBeamerThemeColor(theme, "block body")).toEqual({
+      fg: "#000000",
+      bg: "#ebebf7",
+    });
+    expect(planBeamerTitlePageTemplate(theme, true)).toEqual(
+      expect.objectContaining({
+        templateId: "beamer/title-page/rounded-shadow",
+        style: "colorbox",
+        shadow: false,
+        titleBoxHeightPt: 45.438339,
+      })
+    );
+    expect(markers[1]?.glyph).toEqual(
+      expect.objectContaining({
+        code: 0x49,
+        fontId: "msam7",
+        fontSizePt: 6,
+      })
+    );
+    expect(markers[2]?.glyph).toEqual(
+      expect.objectContaining({
+        code: 0x46,
+        fontId: "msam7",
+        fontSizePt: 6,
+      })
+    );
+  });
+
   it.each(["metropolis", "moloch"])(
     "resolves %s through the same component/template contract",
     (name) => {

@@ -2,6 +2,7 @@ import type {
   BeamerTitlePageTemplatePlan,
   ResolvedBeamerTheme,
 } from "./types.js";
+import { resolveBeamerThemeColor } from "./resolve.js";
 
 const TEX_POINTS_PER_BP = 72.27 / 72;
 const TITLE_PAGE_LEADING_MATERIAL_PT = 14.6;
@@ -18,14 +19,26 @@ export function planBeamerTitlePageTemplate(
   hasSubtitle: boolean
 ): BeamerTitlePageTemplatePlan {
   const templateId = theme.templates.titlePage.id;
-  if (templateId === "beamer/title-page/rounded-shadow") {
+  const titleBackground =
+    resolveBeamerThemeColor(theme, "title").bg ??
+    resolveBeamerThemeColor(theme, "titlelike").bg;
+  if (
+    titleBackground &&
+    (
+      templateId === "beamer/title-page/rounded-shadow" ||
+      templateId === "beamer/title-page/rounded"
+    )
+  ) {
+    const shadow = templateId.endsWith("-shadow");
+    const shadowReservePt = shadow ? 4 * TEX_POINTS_PER_BP : 2 * TEX_POINTS_PER_BP;
     return {
       templateId,
       style: "rounded",
-      shadow: true,
+      shadow,
       outerBleedPt: 4 * TEX_POINTS_PER_BP,
       titleBoxTopPt: TITLE_PAGE_LEADING_MATERIAL_PT,
-      titleBoxHeightPt: hasSubtitle ? 56.468338 : 37.1676,
+      titleBoxHeightPt:
+        (hasSubtitle ? 52.453338 : 33.1526) + shadowReservePt,
       titleBaselineFromBoxTopPt: 24.508591,
       subtitleBaselineFromBoxTopPt: 41.708588,
     };

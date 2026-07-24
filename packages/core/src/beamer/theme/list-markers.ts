@@ -33,6 +33,11 @@ export function resolveBeamerItemizeMarkers(
     fontId: "msam10",
     atPt: texLength(font.sizePt),
   });
+  const tinySymbolFont = fontProfile.metricProvider.resolveFont({
+    // umsa.fd selects msam7 for the 6pt `\tiny` size used by Boadilla.
+    fontId: "msam7",
+    atPt: texLength(6),
+  });
   const structure =
     resolveBeamerThemeColor(theme, "item").fg ??
     resolveBeamerThemeColor(theme, "structure").fg ??
@@ -47,6 +52,7 @@ export function resolveBeamerItemizeMarkers(
       fontSizePt: font.sizePt,
       xHeightEm,
       triangleFont,
+      tinySymbolFont,
       structure,
       canvas,
     })
@@ -165,6 +171,7 @@ function markerForTemplate(params: {
   fontSizePt: number;
   xHeightEm: number;
   triangleFont: ResolvedTexFont;
+  tinySymbolFont: ResolvedTexFont;
   structure: string;
   canvas: string;
 }): TexListMarkerProfile {
@@ -178,6 +185,12 @@ function markerForTemplate(params: {
   if (family === "circle") {
     return circleMarker(params, false);
   }
+  if (family === "tiny-triangle") {
+    return tinyAmsMarker(params, 0x49, "tiny-triangle");
+  }
+  if (family === "tiny-star") {
+    return tinyAmsMarker(params, 0x46, "tiny-star");
+  }
   if (family === "metropolis") {
     return circleMarker(params, false);
   }
@@ -185,6 +198,37 @@ function markerForTemplate(params: {
     return circleMarker(params, params.depth === 2);
   }
   return triangleMarker(params);
+}
+
+function tinyAmsMarker(
+  params: {
+    fontSizePt: number;
+    tinySymbolFont: ResolvedTexFont;
+    structure: string;
+  },
+  code: number,
+  markerKind: string
+): TexListMarkerProfile {
+  const metric = params.tinySymbolFont.data.chars[String(code)];
+  if (metric?.width == null || metric.height == null) {
+    throw new Error(`The msam7 marker metric ${code} is unavailable.`);
+  }
+  const scale = Number(params.tinySymbolFont.atPt) / params.fontSizePt;
+  const raiseEm = 1.5 / params.fontSizePt;
+  return {
+    widthEm: metric.width * scale,
+    heightEm: metric.height * scale + raiseEm,
+    depthEm: (metric.depth ?? 0) * scale - raiseEm,
+    glyph: {
+      text: String.fromCodePoint(code),
+      code,
+      fontId: params.tinySymbolFont.id,
+      fontSizePt: Number(params.tinySymbolFont.atPt),
+      color: params.structure,
+      baselineOffsetEm: -raiseEm,
+    },
+    svgBody: `<g data-beamer-list-marker="${markerKind}"/>`,
+  };
 }
 
 function ballMarker(params: {
