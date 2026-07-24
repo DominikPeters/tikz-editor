@@ -1162,7 +1162,19 @@ found two gaps in the headless surface that precede any app work:
 
 **Root generalization is a re-architecture pass, not a bolt-on.** The app
 encodes "a document is a list of tikzpictures" through ad-hoc mechanisms
-that must be replaced with explicit abstractions rather than extended:
+that must be replaced with explicit abstractions rather than extended.
+*Progress (2026-07-24):* the four bullets below are implemented — root id
+codec (`packages/core/src/document/root-id.ts`), `rootKey` for per-root
+ephemeral state (`packages/app/src/root-key.ts`; the thumbnail cache stays
+content-addressed and navigator scroll document-scoped by design), named
+policies (`packages/app/src/root-inventory.ts`: `parseWindowRootId`,
+`hasMultipleRoots`, `reconcileActiveRootSelection`), `documentKind`
+detection (`packages/core/src/document/kind.ts`, projected on
+`EditorState`), and `activeRootId` with workspace persistence v4. Core
+parse options keep `activeFigureId` (the TikZ parse window is genuinely
+figure-scoped); app call sites map explicitly at that boundary. The
+remaining item is the kind-tagged `SessionSnapshot` render result, which
+lands with the deck compute path:
 
 - Root ids are positional strings (`figure:N`) parsed with a regex in two
   modules (`parser/shared.ts`, `cst-to-ast.ts`). Replace with a
