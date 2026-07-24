@@ -1247,6 +1247,39 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("ships the resumed empty line before terminal post-display vspace", () => {
+    const source = String.raw`\[\sum_i^n\]\vspace{.3em}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+      width: 120,
+    });
+
+    expect(vlist.items.map((item) => ({
+      kind: item.kind,
+      role: item.kind === "hbox" ? item.role : undefined,
+      origin: item.kind === "glue" ? item.origin : undefined,
+    }))).toEqual([
+      { kind: "display-math", role: undefined, origin: undefined },
+      {
+        kind: "hbox",
+        role: {
+          kind: "display-empty-line",
+          position: "after-display-vspace",
+        },
+        origin: undefined,
+      },
+      {
+        kind: "glue",
+        role: undefined,
+        origin: {
+          kind: "explicit-command",
+          command: "vspace",
+        },
+      },
+    ]);
+  });
+
   it("lowers explicit TeX hrule commands into vlist rules", () => {
     const source = String.raw`Alpha \par \hrule width 24pt height 2pt depth 1pt Beta`;
     const parsed = parseSimpleTexParagraphIr(source);

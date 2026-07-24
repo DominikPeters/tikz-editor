@@ -439,9 +439,25 @@ function attachPostDisplayVSpace(
     if (
       display?.kind === "display-math" &&
       glue?.kind === "vertical-glue" &&
-      glue.command === "vspace" &&
-      paragraph?.kind === "paragraph"
+      glue.command === "vspace"
     ) {
+      if (!paragraph) {
+        // Ending the enclosing source fragment (\end{frame}, a following
+        // structural environment, and similar boundaries) eventually ends
+        // the horizontal mode resumed by display math. Its empty line is
+        // shipped before the pending \vspace adjustment.
+        output.push(
+          display,
+          postDisplayEmptyLineHBox(display, glue.sourceStart),
+          glue
+        );
+        index += 1;
+        continue;
+      }
+      if (paragraph.kind !== "paragraph") {
+        output.push(display);
+        continue;
+      }
       if (paragraph.block.listContext !== undefined) {
         output.push(
           display,
