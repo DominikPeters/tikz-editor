@@ -175,6 +175,11 @@ function createDefaultTheme(): MutableTheme {
         DEFAULT_REF("beamer/bullet/triangle"),
         DEFAULT_REF("beamer/bullet/triangle"),
       ],
+      enumerations: [
+        DEFAULT_REF("beamer/enumeration/default"),
+        DEFAULT_REF("beamer/enumeration/default"),
+        DEFAULT_REF("beamer/enumeration/default"),
+      ],
     },
     options: {},
     appliedComponents: [
@@ -252,6 +257,11 @@ const innerThemeAppliers = new Map<string, ComponentApplier>([
       DEFAULT_REF("beamer/bullet/ball"),
       DEFAULT_REF("beamer/bullet/ball"),
       DEFAULT_REF("beamer/bullet/ball"),
+    ];
+    state.templates.enumerations = [
+      DEFAULT_REF("beamer/enumeration/ball"),
+      DEFAULT_REF("beamer/enumeration/ball"),
+      DEFAULT_REF("beamer/enumeration/ball"),
     ];
   }],
   ["metropolis", applyModernInner("metropolis")],
@@ -521,5 +531,8 @@ function freezeTemplates(templates: BeamerThemeTemplates): BeamerThemeTemplates 
     block: freezeRef(templates.block),
     bullets: Object.freeze(templates.bullets.map(freezeRef)) as unknown as
       BeamerThemeTemplates["bullets"],
+    enumerations: Object.freeze(
+      templates.enumerations.map(freezeRef)
+    ) as unknown as BeamerThemeTemplates["enumerations"],
   });
 }

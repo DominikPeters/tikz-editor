@@ -66,6 +66,11 @@ export type BeamerThemeTemplates = {
     BeamerThemeTemplateRef,
     BeamerThemeTemplateRef,
   ];
+  enumerations: readonly [
+    BeamerThemeTemplateRef,
+    BeamerThemeTemplateRef,
+    BeamerThemeTemplateRef,
+  ];
 };
 
 export type BeamerThemeComponentProvenance = {

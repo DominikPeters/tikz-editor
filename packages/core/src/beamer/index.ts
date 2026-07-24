@@ -7,6 +7,7 @@ export {
   createBeamerTexTextFontProfile,
   planBeamerBlockTemplate,
   planBeamerFrameChrome,
+  resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,

@@ -238,6 +238,25 @@ function createVisualComparisons(runDir) {
   ]);
 }
 
+function createSameRasterizerComparisons(runDir) {
+  const rendererPng = join(runDir, "renderer.png");
+  const oracleVectorPng = join(runDir, "oracle-vector.png");
+  runRequired("magick", [
+    rendererPng,
+    oracleVectorPng,
+    "+append",
+    join(runDir, "side-by-side-vector.png"),
+  ]);
+  runRequired("magick", [
+    rendererPng,
+    oracleVectorPng,
+    "-compose",
+    "difference",
+    "-composite",
+    join(runDir, "difference-vector.png"),
+  ]);
+}
+
 function relativeArtifact(runDir, path) {
   return relative(runDir, path);
 }
@@ -308,7 +327,16 @@ async function main() {
   );
   const rendererPng = join(runDir, "renderer.png");
   const oraclePng = join(runDir, "oracle.png");
+  const oracleVectorPng = join(runDir, "oracle-vector.png");
   rasterizeSvg(rendererSvg, rendererPng, options.width, rasterHeight);
+  // This second oracle raster deliberately uses the same SVG rasterizer as
+  // the native output. It is the useful visual check for glyph outline and
+  // scale fidelity: comparing librsvg with Poppler can otherwise make
+  // identical outlines appear to have different weight at screen resolution.
+  //
+  // Keep the PDF raster below as the primary full-paint oracle because
+  // dvisvgm omits PGF radial shadings used by projected Beamer markers.
+  rasterizeSvg(oracleSvg, oracleVectorPng, options.width, rasterHeight);
   // dvisvgm preserves the selected oracle page as a useful vector artifact,
   // but it drops Beamer's PGF radial shadings. Raster the same selected PDF
   // page directly so theme markers and other PDF paint operators remain in
@@ -321,6 +349,7 @@ async function main() {
     rasterHeight
   );
   createVisualComparisons(runDir);
+  createSameRasterizerComparisons(runDir);
 
   const report = {
     formatVersion: 2,
@@ -361,8 +390,11 @@ async function main() {
       rendererPng: "renderer.png",
       oracleSvg: relativeArtifact(runDir, oracleSvg),
       oraclePng: "oracle.png",
+      oracleVectorPng: "oracle-vector.png",
       sideBySidePng: "side-by-side.png",
       differencePng: "difference.png",
+      sideBySideVectorPng: "side-by-side-vector.png",
+      differenceVectorPng: "difference-vector.png",
       overlayPng: "overlay.png",
       nativePageTrace: "native-page-trace.json",
       oraclePageTrace: "oracle-page-trace.json",

@@ -6,7 +6,10 @@ export {
   createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
 } from "./font.js";
-export { resolveBeamerItemizeMarkers } from "./list-markers.js";
+export {
+  resolveBeamerEnumerateMarker,
+  resolveBeamerItemizeMarkers,
+} from "./list-markers.js";
 export { planBeamerBlockTemplate } from "./blocks.js";
 export { planBeamerFrameChrome } from "./templates.js";
 export type * from "./types.js";

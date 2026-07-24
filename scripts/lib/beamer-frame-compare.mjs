@@ -200,8 +200,8 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
       paragraph,
       metricProvider
     );
-    for (const [displayLineIndex, displayLine] of
-      groupOracleGlyphLines(displayGlyphs).entries()) {
+    const displayLines = groupOracleGlyphLines(displayGlyphs);
+    for (const [displayLineIndex, displayLine] of displayLines.entries()) {
       const lineIndex = paragraph.report.lines.length + displayLineIndex;
       lines.push({
         id: `${paragraph.paragraphId}:display:${displayLineIndex}`,
@@ -212,6 +212,28 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         ...displayLine,
       });
       glyphs.push(...displayLine.glyphs.map((glyph) => ({
+        ...glyph,
+        paragraphId: paragraph.paragraphId,
+        role: paragraph.role,
+        lineIndex,
+      })));
+    }
+    const labelGlyphs = nativeVListLabelGlyphs(paragraph, metricProvider);
+    for (const [labelLineIndex, labelLine] of
+      groupOracleGlyphLines(labelGlyphs).entries()) {
+      const lineIndex =
+        paragraph.report.lines.length +
+        displayLines.length +
+        labelLineIndex;
+      lines.push({
+        id: `${paragraph.paragraphId}:label:${labelLineIndex}`,
+        paragraphId: paragraph.paragraphId,
+        role: paragraph.role,
+        lineIndex,
+        sourceSpan: paragraph.sourceSpan,
+        ...labelLine,
+      });
+      glyphs.push(...labelLine.glyphs.map((glyph) => ({
         ...glyph,
         paragraphId: paragraph.paragraphId,
         role: paragraph.role,
@@ -267,6 +289,76 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider) {
               Number(renderItem.baseline),
             metricProvider,
           }));
+        }
+      }
+      if (positioned.children?.length) {
+        visit(positioned.children);
+      }
+    }
+  };
+  visit(paragraph.vlistLayout.items);
+  return glyphs;
+}
+
+function nativeVListLabelGlyphs(paragraph, metricProvider) {
+  const glyphs = [];
+  const visit = (items) => {
+    for (const positioned of items) {
+      if (
+        positioned.item.kind === "hbox" &&
+        positioned.item.role?.kind === "list-label"
+      ) {
+        for (const renderItem of positioned.item.box.renderItems) {
+          if (
+            renderItem.kind !== "tex-glyph" &&
+            renderItem.kind !== "tex-glyph-run"
+          ) {
+            continue;
+          }
+          const font = metricProvider.resolveFont({
+            fontId: renderItem.fontId,
+            atPt: Number(renderItem.atPt),
+          });
+          const baselineY =
+            paragraph.bounds.y +
+            Number(positioned.y) +
+            Number(renderItem.baseline);
+          let cursor =
+            paragraph.bounds.x +
+            Number(positioned.x) +
+            Number(renderItem.x);
+          if (renderItem.kind === "tex-glyph") {
+            const metric = font.data.chars[String(renderItem.code)];
+            glyphs.push({
+              code: normalizeGlyphCode(renderItem.code),
+              x: round(cursor),
+              y: round(baselineY),
+              width: round((metric?.width ?? 0) * font.atPt),
+              height: round((metric?.height ?? 0) * font.atPt),
+              depth: round((metric?.depth ?? 0) * font.atPt),
+              fontName: normalizeFontName(font.id),
+              fontSize: round(font.atPt),
+            });
+            continue;
+          }
+          const shaped = metricProvider.shapeText(renderItem.text, font);
+          for (const item of shaped.items) {
+            if (item.kind === "kern") {
+              cursor += item.width;
+              continue;
+            }
+            glyphs.push({
+              code: normalizeGlyphCode(item.code),
+              x: round(cursor),
+              y: round(baselineY),
+              width: round(item.width),
+              height: round(item.height),
+              depth: round(item.depth),
+              fontName: normalizeFontName(font.id),
+              fontSize: round(font.atPt),
+            });
+            cursor += item.width;
+          }
         }
       }
       if (positioned.children?.length) {

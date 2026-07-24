@@ -25,6 +25,7 @@ import type {
   TexMathKernLayoutItem,
   TexMathRuleLayoutItem,
 } from "./math/layout.js";
+import type { TexListMarkerProfile } from "./layout-options.js";
 import {
   simpleTexInlineNodesToTokens,
   type SimpleTexDimensionBoxCommandName,
@@ -359,6 +360,10 @@ export interface TexLayoutLabel {
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly rightEdge: TexVListX;
+  readonly marker?: Readonly<{
+    profile: TexListMarkerProfile;
+    atPt: TexLength;
+  }>;
 }
 
 const TEX_LITERAL_FONT_STATE: SimpleTexFontState = {

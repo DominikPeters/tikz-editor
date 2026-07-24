@@ -117,6 +117,13 @@ function texListItemLabelContent(
     return texDefaultItemizeLabelContent(listContext.labelDepth);
   }
   if (listContext.kind === "enumerate") {
+    const marker = listProfile?.resolveEnumerateMarker?.(
+      listContext.itemIndex,
+      listContext.labelDepth
+    );
+    if (marker) {
+      return { kind: "marker", marker };
+    }
     return {
       kind: "text",
       text: texDefaultEnumerateLabelText(listContext.itemIndex, listContext.labelDepth),

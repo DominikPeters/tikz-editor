@@ -81,6 +81,32 @@ Display rows:
     }
   });
 
+  it("traces projected enumerate labels as independently sized glyphs", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\usetheme{Madrid}
+\begin{document}
+\begin{frame}{Steps}
+\begin{enumerate}
+\item Alpha
+\item Beta
+\end{enumerate}
+\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+    const projected = trace.lines
+      .filter((line) => line.id.includes(":label:"))
+      .flatMap((line) => line.glyphs)
+      .filter((item) =>
+        item.fontName === "lmsans8-regular" && item.fontSize === 6
+      );
+
+    expect(projected.map((item) => item.code)).toEqual([49, 50]);
+  });
+
   it("includes theme-owned list marker paint boxes in the native trace", () => {
     const trace = buildNativeBeamerPageTrace({
       layout: {

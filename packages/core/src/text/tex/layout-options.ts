@@ -7,15 +7,32 @@ import type { TexLength } from "./coordinates.js";
 /**
  * A generated list marker measured in ems of the surrounding paragraph font.
  *
- * SVG coordinates use the same 1000-units-per-em, baseline-at-zero convention
- * as native math SVG bodies. A negative depth models TeX constructs such as a
- * raised Beamer marker without losing the marker's painted box geometry.
+ * SVG coordinates use the native math renderer's 100-units-per-TeX-point,
+ * baseline-at-zero convention. A negative depth models TeX constructs such
+ * as a raised Beamer marker without losing the marker's painted box geometry.
  */
 export interface TexListMarkerProfile {
   readonly svgBody: string;
   readonly widthEm: number;
   readonly heightEm: number;
   readonly depthEm: number;
+  /** Painted sub-rectangle relative to the marker box's top-left corner. */
+  readonly paintBoundsEm?: Readonly<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
+  /** Optional text projected over a decorated enumerate marker. */
+  readonly projectedText?: Readonly<{
+    text: string;
+    fontId: string;
+    fontSizePt: number;
+    color: string;
+    xEm: number;
+    /** Baseline offset from the surrounding marker baseline. */
+    baselineOffsetEm: number;
+  }>;
 }
 
 /**
@@ -33,6 +50,10 @@ export interface TexListLayoutProfile {
   readonly parsepPtByDepth: readonly number[];
   readonly initialItemBaselineAdjustmentPt: number;
   readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
+  readonly resolveEnumerateMarker?: (
+    itemIndex: number,
+    labelDepth: number
+  ) => TexListMarkerProfile | undefined;
 }
 
 export interface TexDisplayMathGlueProfile {

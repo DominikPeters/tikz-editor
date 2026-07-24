@@ -116,6 +116,23 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("renders Madrid enumerate labels through the projected-ball template", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 17 });
+    const markers = result.layout.items.filter(
+      (item) => item.kind === "list-marker"
+    );
+
+    expect(result.frame.title?.value).toBe("How to solve with KKT in practice");
+    expect(markers).toHaveLength(6);
+    expect(markers.every((marker) =>
+      marker.bounds.width > 0 && marker.bounds.height > 0
+    )).toBe(true);
+    expect(result.svg.svg.match(
+      /data-beamer-list-marker="enumerate-ball"/g
+    )).toHaveLength(6);
+  });
+
   it("uses Beamer boxes and 11pt display skips for the KKT geometry frame", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 4 });

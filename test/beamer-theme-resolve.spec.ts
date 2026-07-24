@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   planBeamerBlockTemplate,
+  resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
@@ -52,6 +53,24 @@ describe("Beamer theme resolution", () => {
       depthEm: expect.closeTo(-0.2 / 10.95, 6),
     }));
     expect(markers[0]?.svgBody).toContain('data-beamer-list-marker="ball"');
+    const enumerateMarker = resolveBeamerEnumerateMarker(theme, 3, 1);
+    expect(enumerateMarker).toEqual(expect.objectContaining({
+      widthEm: expect.closeTo(0.888, 6),
+      heightEm: expect.closeTo(0.444, 6),
+      depthEm: expect.closeTo(0.2886, 6),
+      paintBoundsEm: expect.objectContaining({
+        width: expect.closeTo(0.47064, 6),
+        height: expect.closeTo(0.47064, 6),
+      }),
+      projectedText: expect.objectContaining({
+        text: "3",
+        fontId: "lmsans8-regular",
+        fontSizePt: 6,
+      }),
+    }));
+    expect(enumerateMarker?.svgBody).toContain(
+      'data-beamer-list-marker="enumerate-ball"'
+    );
     expect(theme.appliedComponents.map(({ kind, name }) => [kind, name])).toEqual([
       ["class-defaults", "beamer"],
       ["theme", "Madrid"],

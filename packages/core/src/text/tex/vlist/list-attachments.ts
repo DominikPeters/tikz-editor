@@ -237,38 +237,15 @@ function texLayoutLabelForListContext(
 
   if (labelContent.kind === "marker") {
     const marker = labelContent.marker;
-    const sourceStart = 0;
-    const width = texLength(marker.widthEm * font.atPt);
-    const height = texLength(marker.heightEm * font.atPt);
-    const depth = texLength(marker.depthEm * font.atPt);
     return {
-      items: [{
-        kind: "math",
-        role: "list-label",
-        text: "",
-        content: "",
-        delimiter: "dollar",
-        sourceStart,
-        sourceEnd: sourceStart,
-        contentStart: sourceStart,
-        contentEnd: sourceStart,
-        box: {
-          source: "",
-          content: "",
-          sourceStart,
-          sourceEnd: sourceStart,
-          contentStart: sourceStart,
-          contentEnd: sourceStart,
-          width,
-          height,
-          depth,
-          caretStops: [texHBoxX(0), texHBoxX(width)],
-          svgBody: marker.svgBody,
-        },
-      }],
+      items: [],
       sourceStart: 0,
       sourceEnd: 0,
       rightEdge,
+      marker: {
+        profile: marker,
+        atPt: font.atPt,
+      },
     };
   }
 
@@ -342,6 +319,35 @@ function texLayoutLabelHBoxContent(
   readonly metrics: TexBoxMetrics;
   readonly renderItems: readonly TexRenderItem[];
 } {
+  if (label.marker) {
+    const { profile, atPt } = label.marker;
+    const width = texLength(roundTexPt(profile.widthEm * atPt));
+    const height = texLength(roundTexPt(profile.heightEm * atPt));
+    const depth = texLength(roundTexPt(profile.depthEm * atPt));
+    const renderItems: TexRenderItem[] = [{
+      kind: "tex-math-svg",
+      svgBody: profile.svgBody,
+      x: texHBoxX(0),
+      baseline: texHBoxY(height),
+    }];
+    if (profile.projectedText) {
+      renderItems.push({
+        kind: "tex-glyph-run",
+        text: profile.projectedText.text,
+        fontId: profile.projectedText.fontId,
+        atPt: texLength(profile.projectedText.fontSizePt),
+        color: profile.projectedText.color,
+        x: texHBoxX(roundTexPt(profile.projectedText.xEm * atPt)),
+        baseline: texHBoxY(roundTexPt(
+          height + profile.projectedText.baselineOffsetEm * atPt
+        )),
+      });
+    }
+    return {
+      metrics: { width, height, depth },
+      renderItems,
+    };
+  }
   let width = texLength(0);
   let height = texLength(0);
   let depth = Number.NEGATIVE_INFINITY;

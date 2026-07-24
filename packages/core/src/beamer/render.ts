@@ -45,6 +45,7 @@ import {
   createBeamerTexTextFontProfile,
   planBeamerBlockTemplate,
   planBeamerFrameChrome,
+  resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
@@ -209,6 +210,8 @@ function beamerListLayoutProfile(
   return {
     ...BEAMER_LIST_LAYOUT_PROFILE,
     itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
+    resolveEnumerateMarker: (itemIndex, labelDepth) =>
+      resolveBeamerEnumerateMarker(theme, itemIndex, labelDepth),
   };
 }
 
@@ -1737,23 +1740,50 @@ function layoutParagraph(params: {
       baseFontSizePt: fontSize,
       alignment,
     }),
-    listMarkers: params.listProfile?.itemizeMarkersByDepth
-      ? result.vlistLayout.boxReport.items
-          .filter((item) =>
-            item.hboxRole?.kind === "list-label" &&
-            item.hboxRole.listKind === "itemize" &&
-            item.hboxRole.labelKind === "default"
-          )
-          .map((item) => ({
-            id: `${params.paragraphId}:marker:${item.path.join("-")}`,
-            bounds: {
-              x: Number(item.x),
-              y: Number(item.y),
-              width: Number(item.width),
-              height: Number(item.totalHeight),
-            },
-          }))
-      : [],
+    listMarkers: result.vlistLayout.boxReport.items
+      .filter((item) =>
+        item.hboxRole?.kind === "list-label" &&
+        item.hboxRole.labelKind === "default"
+      )
+      .flatMap((item) => {
+        const role = item.hboxRole;
+        if (role?.kind !== "list-label") {
+          return [];
+        }
+        const marker =
+          role.listKind === "itemize"
+            ? params.listProfile?.itemizeMarkersByDepth?.[
+                Math.max(
+                  0,
+                  Math.min(
+                    role.labelDepth - 1,
+                    (params.listProfile.itemizeMarkersByDepth?.length ?? 1) - 1
+                  )
+                )
+              ]
+            : role.listKind === "enumerate"
+              ? params.listProfile?.resolveEnumerateMarker?.(
+                  role.itemIndex,
+                  role.labelDepth
+                )
+              : undefined;
+        if (!marker) {
+          return [];
+        }
+        const paint = marker.paintBoundsEm;
+        const atPt = Number(resolvedFont.atPt);
+        return [{
+          id: `${params.paragraphId}:marker:${item.path.join("-")}`,
+          bounds: {
+            x: Number(item.x) + (paint?.x ?? 0) * atPt,
+            y: Number(item.y) + (paint?.y ?? 0) * atPt,
+            width: (paint?.width ?? marker.widthEm) * atPt,
+            height:
+              (paint?.height ??
+                marker.heightEm + marker.depthEm) * atPt,
+          },
+        }];
+      }),
   };
 }
 
