@@ -38,6 +38,7 @@ Options:
   --width <pixels>     Raster comparison width. Default: 1600.
   --theme <name>       Override \\usetheme for renderer and oracle.
   --color-theme <name> Override \\usecolortheme.
+  --without-color-theme Remove explicit \\usecolortheme declarations.
   --font-theme <name>  Override \\usefonttheme.
   --inner-theme <name> Override \\useinnertheme.
   --outer-theme <name> Override \\useoutertheme.
@@ -89,6 +90,8 @@ function parseArgs(argv) {
     } else if (arg === "--color-theme" && next) {
       options.themeVariant.colorTheme = next;
       index += 1;
+    } else if (arg === "--without-color-theme") {
+      options.themeVariant.colorTheme = false;
     } else if (arg === "--font-theme" && next) {
       options.themeVariant.fontTheme = next;
       index += 1;

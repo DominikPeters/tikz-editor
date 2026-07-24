@@ -26,9 +26,11 @@ These were settled in design discussion and are treated as fixed below:
   are frames instead of tikzpictures. Mode follows the file
   (`\documentclass{beamer}`), not the app. Separate branding, if ever wanted,
   is a thin extra entry in `apps/`.
-- **Theme targets: classic (default/Madrid) and metropolis/moloch, both from
-  the start**, so the theme interface is designed against two structurally
-  different chrome styles and does not overfit to either.
+- **Theme targets: all 28 presentation themes shipped by Beamer first, then
+  metropolis/moloch.** Theme fidelity proceeds through Beamer's reusable
+  outer/inner/color/font components rather than 28 renderer branches.
+  Metropolis and moloch remain architectural test cases, but do not precede
+  complete support for the built-in component families.
 - **Web/desktop parity from day one.** No feature may *require* a local TeX
   installation or unrestricted filesystem access; desktop may *enhance*
   (compiled fallback previews, file watching).
@@ -332,9 +334,9 @@ four-stage pipeline:
 
 1. The preamble scanner records theme/component uses and options in source
    order.
-2. A preset registry expands aggregate themes (`Madrid`, `metropolis`,
-   `moloch`) into the same outer/inner/color/font component patches that their
-   `.sty` files apply.
+2. A preset registry expands aggregate themes (the 28 shipped presentation
+   themes, followed later by `metropolis` and `moloch`) into the same
+   outer/inner/color/font component patches that their `.sty` files apply.
 3. A reducer applies those patches, followed by explicit
    `\usecolortheme`/`\usefonttheme` and supported preamble overrides, to
    produce one immutable `ResolvedBeamerTheme`.
@@ -385,20 +387,22 @@ The composition engine measures requested text and children, resolves
 alignment/stretch, and produces positioned items. This keeps measurement out
 of theme preset resolution and keeps SVG concerns out of templates.
 
-Presets are records: `default`, `Madrid` (infolines outer), `metropolis`,
-`moloch` (+ option handling). Because `\usecolortheme`/`\usefonttheme` and
-preamble `\setbeamercolor`/`\definecolor` are data-shaped, they compose as
-patches on the record — this is why the appearance dimension must stay data,
-not code. Only unrecognized `\usetheme` or structural `\setbeamertemplate`
-degrades chrome (see Fallback).
+Presets are records. The built-in aggregate themes expand into shared
+components such as `infolines`, `tree`, `split`, `miniframes`, `smoothbars`,
+`smoothtree`, `shadow`, `sidebar`, `rounded`, `rectangles`, and their color
+themes. Because `\usecolortheme`/`\usefonttheme` and preamble
+`\setbeamercolor`/`\definecolor` are data-shaped, they compose as patches on
+the record — this is why the appearance dimension must stay data, not code.
+Only unrecognized `\usetheme` or structural `\setbeamertemplate` degrades
+chrome (see Fallback).
 
-The initial implementation must exercise the resolver against both theme
-families before frame rendering grows: `Madrid` + a later color-theme patch,
-and `metropolis`/`moloch` + options such as
-`progressbar=frametitle`. Theme-specific source constants live only in their
-preset/template modules and cite the `.sty` definitions. Frame parsing,
-block composition, paragraph layout, embedded TikZ placement, and SVG
-emission are theme-independent.
+The implementation exercises source-order composition with `Madrid` plus a
+later color-theme patch. Metropolis/moloch options such as
+`progressbar=frametitle` remain represented by the same interface, but their
+fidelity pass follows the shipped themes. Theme-specific source constants
+live only in preset/template modules and cite the `.sty` definitions. Frame
+parsing, block composition, paragraph layout, embedded TikZ placement, and
+SVG emission are theme-independent.
 
 Each structural template is a small, source-addressed layout unit validated
 against real Beamer output with the structural and visual comparison
@@ -823,6 +827,23 @@ variants through the same materialized input and LuaLaTeX oracle. All 20 KKT
 frames and the three dedicated conformance frames pass the structural
 contract for both variants.
 
+The comparison matrix also emits a self-contained `index.html` gallery.
+`--variants built-in` expands to the 28 current presentation themes shipped
+as `beamertheme*.sty` files (excluding legacy compatibility aliases), while
+removing the fixtures' explicit Seahorse patch so each aggregate theme is
+measured as shipped. The gallery provides theme/deck/slide navigation plus
+split, wipe, overlay, and difference views, structural metrics, diagnostics,
+and report links. The initial three-slide baseline contains 84 raster
+comparisons: default and Madrid account for the six passing comparisons; the
+remaining entries intentionally document the unimplemented component gap.
+
+Implementation follows shared source components, not alphabetical theme
+names: first palette/inner-marker variants and frame-title alignment; then
+Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally
+sidebar/inmargin page geometry. Each component pass is applied to every
+aggregate theme that imports it and rerun through the gallery. Metropolis and
+moloch begin only after this built-in matrix is green.
+
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX
 Beamer page's structural geometry.
@@ -840,7 +861,7 @@ Exit: any corpus deck produces a document/frame inventory and diagnostics
 without app state or source mutation; no-op parsing preserves all source
 bytes.
 
-### Phase B2: Headless Frame Rendering, Both Theme Families, Step Model
+### Phase B2: Headless Frame Rendering, Built-in Themes, Step Model
 
 - Beamer Latin Modern Sans font-role and size profile over the existing
   LuaLaTeX text profile.
@@ -848,8 +869,9 @@ bytes.
   center, vspace/vfill, scalebox, native display-math boxes, embedded
   tikzpictures (existing renderer), `\includegraphics` (incl. PDF.js), and
   the core `tabular` subset.
-- Theme engine with `default`, `Madrid`, `metropolis`, `moloch`(+options);
-  titlepage and section pages; `\setbeamercolor`/`\definecolor` patches.
+- Theme engine covering all 28 shipped presentation themes through their
+  shared outer/inner/color/font components; titlepage and section pages;
+  `\setbeamercolor`/`\definecolor` patches.
 - Overlay specs parsed into the IR and per-step layout.
 - Block/inline fallback placeholders; chrome fallback.
 - Drive the Madrid/seahorse KKT fixture to faithful rendering one frame at a
@@ -858,8 +880,11 @@ bytes.
   block/theorem/proof composition (6–12); finish specialized example content
   and overlays (14–19); then finish the title page (1) and run a full-deck
   structural/raster regression.
-  Add small dedicated overlay and metropolis/moloch fixtures so the main deck
-  does not overdetermine the architecture.
+  Add a small dedicated overlay fixture so the main deck does not
+  overdetermine the architecture.
+- After every built-in aggregate passes its conformance/KKT matrix, add
+  dedicated metropolis/moloch fixtures and implement those theme families
+  through the same component/template boundary.
 
 Exit: ≥70% of corpus frames render without frame-level fallback; overlay
 oracle passes on frames using `\only`/`\uncover`/`item<>`; theme fixtures

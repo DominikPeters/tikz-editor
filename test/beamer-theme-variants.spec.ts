@@ -48,6 +48,25 @@ describe("Beamer comparison theme variants", () => {
     expect(transformed).toContain(String.raw`\usetheme{Boadilla}`);
   });
 
+  it("removes an explicitly disabled component without injecting a replacement", () => {
+    const source = String.raw`\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{seahorse}
+\begin{document}\end{document}`;
+
+    expect(applyBeamerThemeVariant(source, {
+      theme: "AnnArbor",
+      colorTheme: false,
+    })).toBe(String.raw`\documentclass{beamer}
+\usetheme{AnnArbor}
+
+\begin{document}\end{document}`);
+    expect(beamerThemeVariantSlug({
+      theme: "AnnArbor",
+      colorTheme: false,
+    })).toBe("theme-ann-arbor-without-color-theme");
+  });
+
   it("builds stable artifact slugs from explicit components", () => {
     expect(beamerThemeVariantSlug({
       theme: "Madrid",

@@ -11,15 +11,20 @@ export function applyBeamerThemeVariant(source, variant = {}) {
   const missingCommands = [];
 
   for (const [key, command] of THEME_COMPONENTS) {
-    const value = normalizeThemeName(variant[key], key);
-    if (value == null) {
+    const requested = variant[key];
+    if (requested == null) {
       continue;
     }
-    const replacement = `\\${command}{${value}}`;
     const pattern = new RegExp(
       String.raw`\\${command}(?:\s*\[[^\]]*\])?\s*\{[^{}]*\}`,
       "gu"
     );
+    if (requested === false) {
+      transformed = transformed.replace(pattern, "");
+      continue;
+    }
+    const value = normalizeThemeName(requested, key);
+    const replacement = `\\${command}{${value}}`;
     let replaced = false;
     transformed = transformed.replace(pattern, () => {
       if (replaced) {
@@ -51,7 +56,12 @@ export function applyBeamerThemeVariant(source, variant = {}) {
 export function beamerThemeVariantSlug(variant = {}) {
   const parts = [];
   for (const [key] of THEME_COMPONENTS) {
-    const value = normalizeThemeName(variant[key], key);
+    const requested = variant[key];
+    if (requested === false) {
+      parts.push(`without-${slugify(key)}`);
+      continue;
+    }
+    const value = normalizeThemeName(requested, key);
     if (value != null) {
       parts.push(`${slugify(key)}-${slugify(value)}`);
     }

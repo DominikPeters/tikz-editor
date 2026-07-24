@@ -2,8 +2,11 @@
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { BUILT_IN_BEAMER_THEMES } from "./lib/beamer-built-in-themes.mjs";
+import { renderBeamerThemeGallery } from "./lib/beamer-theme-gallery.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultOutDir = join(
@@ -29,16 +32,17 @@ const DECKS = {
   ),
 };
 
-const VARIANTS = {
-  "madrid-seahorse": {
+const VARIANTS = Object.fromEntries([
+  ...BUILT_IN_BEAMER_THEMES.map(({ id, label, variant }) => [
+    id,
+    { label, ...variant },
+  ]),
+  ["madrid-seahorse", {
+    label: "Madrid + Seahorse",
     theme: "Madrid",
     colorTheme: "seahorse",
-  },
-  default: {
-    theme: "default",
-    colorTheme: "default",
-  },
-};
+  }],
+]);
 
 function usage() {
   return `
@@ -47,11 +51,13 @@ Usage:
 
 Options:
   --decks <names>       Comma-separated: kkt,conformance. Default: both.
-  --variants <names>    Comma-separated: madrid-seahorse,default.
-                        Default: both.
+  --variants <names>    Comma-separated variant IDs, or "built-in" for all
+                        28 shipped presentation themes.
+                        Default: madrid-seahorse,default.
   --frames <selection>  "all" or comma-separated frame numbers. Default: all.
   --out-dir <dir>       Default: artifacts/beamer-theme-compare.
   --raster              Also create PNG comparison artifacts.
+                        The generated index.html uses these visual assets.
   --help                Show this help.
 `.trim();
 }
@@ -90,6 +96,7 @@ function parseArgs(argv) {
       throw new Error(`Unknown or incomplete argument: ${arg}`);
     }
   }
+  options.variantNames = expandVariantNames(options.variantNames);
   validateNames(options.deckNames, DECKS, "deck");
   validateNames(options.variantNames, VARIANTS, "variant");
   if (options.frames?.some(
@@ -98,6 +105,14 @@ function parseArgs(argv) {
     throw new Error("--frames must contain positive integers or 'all'.");
   }
   return options;
+}
+
+function expandVariantNames(names) {
+  return [...new Set(names.flatMap((name) =>
+    name === "built-in"
+      ? BUILT_IN_BEAMER_THEMES.map((theme) => theme.id)
+      : [name]
+  ))];
 }
 
 function commaList(value) {
@@ -124,7 +139,12 @@ function variantArgs(variant) {
     ["innerTheme", "--inner-theme"],
     ["outerTheme", "--outer-theme"],
   ]) {
-    if (variant[key]) {
+    if (variant[key] === false) {
+      if (key !== "colorTheme") {
+        throw new Error(`No removal flag registered for ${key}.`);
+      }
+      args.push("--without-color-theme");
+    } else if (variant[key]) {
       args.push(flag, variant[key]);
     }
   }
@@ -134,18 +154,35 @@ function variantArgs(variant) {
 function readResult(reportPath, reportRoot, metadata, status) {
   try {
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    const runDir = relative(reportRoot, dirname(reportPath));
+    const artifact = (name) =>
+      report.artifacts[name]
+        ? join(runDir, report.artifacts[name])
+        : null;
     return {
       ...metadata,
       status: status === 0 ? "passed" : "failed",
       report: relative(reportRoot, reportPath),
+      frameTitle: report.input.frameTitle,
+      diagnostics: report.renderer.diagnostics,
       summary: report.structural.summary,
+      visuals: {
+        renderer: artifact("rendererPng"),
+        oracle: artifact("oraclePng"),
+        overlay: artifact("overlayPng"),
+        difference: artifact("differencePng"),
+        sideBySide: artifact("sideBySidePng"),
+      },
     };
   } catch {
     return {
       ...metadata,
       status: "error",
       report: null,
+      frameTitle: null,
+      diagnostics: [],
       summary: null,
+      visuals: {},
     };
   }
 }
@@ -195,7 +232,12 @@ function main() {
         results.push(readResult(
           join(options.outDir, name, "report.json"),
           options.outDir,
-          { deck: deckName, variant: variantName, frame },
+          {
+            deck: deckName,
+            variant: variantName,
+            variantLabel: variant.label,
+            frame,
+          },
           child.status
         ));
       }
@@ -204,9 +246,13 @@ function main() {
 
   const reportPath = join(options.outDir, "matrix-report.json");
   const report = {
-    formatVersion: 1,
+    formatVersion: 2,
     decks: options.deckNames,
     variants: options.variantNames,
+    variantCatalog: options.variantNames.map((id) => ({
+      id,
+      label: VARIANTS[id].label,
+    })),
     raster: options.raster,
     passed: results.filter((result) => result.status === "passed").length,
     failed: results.filter((result) => result.status !== "passed").length,
@@ -214,6 +260,13 @@ function main() {
   };
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   console.log(`[beamer-theme-matrix] wrote ${reportPath}`);
+  const galleryPath = join(options.outDir, "index.html");
+  writeFileSync(
+    galleryPath,
+    renderBeamerThemeGallery(report),
+    "utf8"
+  );
+  console.log(`[beamer-theme-matrix] wrote ${galleryPath}`);
   if (report.failed > 0) {
     process.exitCode = 1;
   }
