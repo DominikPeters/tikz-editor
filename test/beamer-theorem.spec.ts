@@ -164,7 +164,8 @@ describe("Beamer theorem families", () => {
     );
     expect(visibleBody(0)).toBe(false);
     expect(
-      trace(0).coveredLines.some((line) => line.text.includes("Examplebody"))
+      trace(0).coveredLines?.some((line) => line.text.includes("Examplebody")) ??
+        false
     ).toBe(true);
     expect(visibleBody(1)).toBe(true);
   });
