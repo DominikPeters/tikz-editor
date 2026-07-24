@@ -55,6 +55,7 @@ import { scanBeamerDocument } from "./scan.js";
 import {
   createBeamerTexMathFontProfile,
   createBeamerTexTextFontProfile,
+  createBeamerFrameNavigationSnapshot,
   planBeamerBlockTemplate,
   planBeamerFrameChrome,
   planBeamerTitlePageTemplate,
@@ -187,11 +188,16 @@ export async function renderBeamerFrame(
     document.preamble.macroDefinitions
   );
   const page = resolveBeamerPageGeometry(document, theme);
+  const navigation = createBeamerFrameNavigationSnapshot(
+    document,
+    frameIndex
+  );
   const chrome = planBeamerFrameChrome({
     document,
     frame,
     frameIndex,
     totalFrames: document.frames.length,
+    navigation,
     step,
     page,
     theme,

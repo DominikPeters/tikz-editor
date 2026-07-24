@@ -30,6 +30,22 @@ type MutableTheme = {
 
 type ComponentApplier = (state: MutableTheme, use: BeamerThemeUse) => void;
 
+type AggregateComponentUse = {
+  kind: Exclude<BeamerThemeKind, "theme">;
+  name: string;
+  options?:
+    | Readonly<Record<string, string | boolean>>
+    | ((
+        aggregateOptions: Readonly<Record<string, string | boolean>>
+      ) => Readonly<Record<string, string | boolean>>);
+};
+
+type AggregateThemeDefinition = {
+  id: string;
+  components: readonly AggregateComponentUse[];
+  applyOverrides?: ComponentApplier;
+};
+
 const DEFAULT_REF = (id: string): BeamerThemeTemplateRef => ({
   id,
   options: {},
@@ -291,20 +307,31 @@ function createDefaultTheme(): MutableTheme {
 }
 
 const themeAppliers = new Map<string, ComponentApplier>([
-  ["default", markAggregateOnly("default")],
-  ["madrid", (state, use) => {
-    state.id = "Madrid";
-    markApplied(state, "theme", "Madrid", use);
-    applyNamedComponent(state, "color-theme", "whale", use);
-    applyNamedComponent(state, "color-theme", "orchid", use);
-    applyNamedComponent(state, "inner-theme", "rounded", use);
-    applyNamedComponent(state, "outer-theme", "infolines", use);
-    // beamerthemeMadrid.sty resets the infolines headline unless secheader is
-    // explicitly selected.
-    if (use.options.secheader !== true) {
-      state.templates.headline = DEFAULT_REF("beamer/headline/none");
-    }
-  }],
+  ["default", defineAggregateTheme({
+    id: "default",
+    components: [],
+  })],
+  ["madrid", defineAggregateTheme({
+    id: "Madrid",
+    // TeX Live 2025 beamerthemeMadrid.sty applies these in this exact order.
+    components: [
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+      {
+        kind: "inner-theme",
+        name: "rounded",
+        options: { shadow: true },
+      },
+      { kind: "outer-theme", name: "infolines" },
+    ],
+    applyOverrides: (state, use) => {
+      // Madrid resets the Infolines headline unless its own secheader option
+      // is explicitly selected.
+      if (use.options.secheader !== true) {
+        state.templates.headline = DEFAULT_REF("beamer/headline/none");
+      }
+    },
+  })],
   ["metropolis", (state, use) => { applyModernTheme(state, use, "metropolis"); }],
   ["moloch", (state, use) => { applyModernTheme(state, use, "moloch"); }],
 ]);
@@ -531,19 +558,45 @@ function applyNamedComponent(
   state: MutableTheme,
   kind: Exclude<BeamerThemeKind, "theme">,
   name: string,
-  aggregateUse: BeamerThemeUse
+  aggregateUse: BeamerThemeUse,
+  options: Readonly<Record<string, string | boolean>> = aggregateUse.options
 ): void {
-  componentRegistry[kind].get(name)?.(state, {
+  const applier = componentRegistry[kind].get(normalizeName(name));
+  if (!applier) {
+    state.diagnostics.push({
+      severity: "warning",
+      code: "beamer-unknown-theme-component",
+      message: `The Beamer theme '${aggregateUse.name}' requires the unregistered ${kind} component '${name}'.`,
+      span: aggregateUse.source.span,
+    });
+    return;
+  }
+  applier(state, {
     ...aggregateUse,
     kind,
     name,
+    options,
   });
 }
 
-function markAggregateOnly(name: string): ComponentApplier {
+function defineAggregateTheme(
+  definition: AggregateThemeDefinition
+): ComponentApplier {
   return (state, use) => {
-    state.id = name;
-    markApplied(state, "theme", name, use);
+    state.id = definition.id;
+    markApplied(state, "theme", definition.id, use);
+    for (const component of definition.components) {
+      applyNamedComponent(
+        state,
+        component.kind,
+        component.name,
+        use,
+        typeof component.options === "function"
+          ? component.options(use.options)
+          : component.options ?? {}
+      );
+    }
+    definition.applyOverrides?.(state, use);
   };
 }
 

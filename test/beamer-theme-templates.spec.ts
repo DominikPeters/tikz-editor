@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createBeamerFrameNavigationSnapshot,
   planBeamerFrameChrome,
   resolveBeamerPageGeometry,
   resolveBeamerTheme,
@@ -16,6 +17,7 @@ function plan(source: string) {
     frame: document.frames[0]!,
     frameIndex: 0,
     totalFrames: document.frames.length,
+    navigation: createBeamerFrameNavigationSnapshot(document, 0),
     step: 1,
     page,
     theme,

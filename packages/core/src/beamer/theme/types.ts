@@ -7,6 +7,7 @@ import type {
   BeamerDelimitedSourceValue,
   BeamerDocumentModel,
   BeamerFrameModel,
+  BeamerSectionModel,
   BeamerThemeKind,
   BeamerThemeUseModel,
 } from "../types.js";
@@ -229,6 +230,59 @@ export type BeamerFrameChromePlan = {
   primitives: BeamerTemplatePrimitive[];
 };
 
+/**
+ * One frame entry in Beamer's document-wide navigation model.
+ *
+ * Beamer writes the equivalent information to its `.nav` file independently
+ * from the outer theme which eventually consumes it.
+ */
+export type BeamerNavigationFrameEntry = {
+  frame: BeamerFrameModel;
+  frameIndex: number;
+};
+
+export type BeamerNavigationSubsectionEntry = {
+  subsection: BeamerSectionModel;
+  subsectionIndex: number;
+  /** The short title when supplied, otherwise the long source title. */
+  title: BeamerDelimitedSourceValue;
+  frames: readonly BeamerNavigationFrameEntry[];
+};
+
+export type BeamerNavigationSectionEntry = {
+  section: BeamerSectionModel;
+  sectionIndex: number;
+  /** The short title when supplied, otherwise the long source title. */
+  title: BeamerDelimitedSourceValue;
+  frames: readonly BeamerNavigationFrameEntry[];
+  directFrames: readonly BeamerNavigationFrameEntry[];
+  subsections: readonly BeamerNavigationSubsectionEntry[];
+};
+
+export type BeamerNavigationModel = {
+  frames: readonly BeamerNavigationFrameEntry[];
+  sections: readonly BeamerNavigationSectionEntry[];
+  /** Frames before the first section, matching Beamer's section number zero. */
+  unsectionedFrames: readonly BeamerNavigationFrameEntry[];
+  /** Subsections encountered before any top-level section. */
+  orphanSubsections: readonly BeamerNavigationSubsectionEntry[];
+};
+
+/**
+ * Frame-local view over the immutable navigation model.
+ *
+ * Template planners receive this snapshot instead of reconstructing section
+ * topology from source spans or frame arrays.
+ */
+export type BeamerFrameNavigationSnapshot = {
+  model: BeamerNavigationModel;
+  currentFrame: BeamerNavigationFrameEntry;
+  currentSection: BeamerNavigationSectionEntry | null;
+  currentSubsection: BeamerNavigationSubsectionEntry | null;
+  frameIndexInSection: number | null;
+  frameIndexInSubsection: number | null;
+};
+
 export type BeamerTitlePageTemplatePlan = {
   templateId: string;
   style: "colorbox" | "rounded";
@@ -245,6 +299,7 @@ export type BeamerFrameTemplateContext = {
   frame: BeamerFrameModel;
   frameIndex: number;
   totalFrames: number;
+  navigation: BeamerFrameNavigationSnapshot;
   step: number;
   page: BeamerPageGeometry;
   theme: ResolvedBeamerTheme;

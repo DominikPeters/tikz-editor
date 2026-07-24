@@ -387,6 +387,26 @@ The composition engine measures requested text and children, resolves
 alignment/stretch, and produces positioned items. This keeps measurement out
 of theme preset resolution and keeps SVG concerns out of templates.
 
+This split follows Beamer's implementation rather than merely its public
+theme naming convention. `beamerbasethemes.sty` implements
+`\usetheme`/`\useoutertheme`/`\useinnertheme`/`\usecolortheme`/
+`\usefonttheme` as ordered package loaders, and the shipped
+`beamertheme*.sty` files are mostly short programs that invoke those loaders
+and then apply a few local overrides. Native aggregate presets therefore use
+an ordered component list plus a narrow post-component override hook; they
+are not independent renderer classes.
+
+Navigation has a separate upstream boundary. `beamerbasesection.sty` writes
+section/subsection entries and page ranges, while
+`beamerbasenavigation.sty` replays that document-wide `.nav` entry stream
+through whichever outer-theme template is active. The native equivalent is
+one immutable `BeamerNavigationModel` containing frame, section, and
+subsection topology, plus a `BeamerFrameNavigationSnapshot` selecting the
+current entries and local frame ordinals. Template planners consume this
+snapshot. They must not rescan source spans or reconstruct hierarchy from
+`document.frames`, which would couple every navigation family to parsing and
+make active/shaded/miniframe state inconsistent.
+
 Presets are records. The built-in aggregate themes expand into shared
 components such as `infolines`, `tree`, `split`, `miniframes`, `smoothbars`,
 `smoothtree`, `shadow`, `sidebar`, `rounded`, `rectangles`, and their color

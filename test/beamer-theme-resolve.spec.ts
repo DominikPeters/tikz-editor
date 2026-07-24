@@ -143,6 +143,26 @@ describe("Beamer theme resolution", () => {
     ]);
   });
 
+  it("applies aggregate components in source order and honors theme options", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme[secheader]{Madrid}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+    expect(theme.templates.headline.id).toBe(
+      "beamer/headline/infolines"
+    );
+    expect(theme.appliedComponents.map(({ kind, name }) => [kind, name]))
+      .toEqual([
+        ["class-defaults", "beamer"],
+        ["theme", "Madrid"],
+        ["color-theme", "whale"],
+        ["color-theme", "orchid"],
+        ["inner-theme", "rounded"],
+        ["outer-theme", "infolines"],
+      ]);
+  });
+
   it.each(["metropolis", "moloch"])(
     "resolves %s through the same component/template contract",
     (name) => {
