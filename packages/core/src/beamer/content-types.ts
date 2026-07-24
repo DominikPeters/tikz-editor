@@ -2,10 +2,15 @@ import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type {
   BeamerDelimitedSourceValue,
+  BeamerDocumentModel,
   BeamerFrameModel,
+  BeamerTheoremDeclarationModel,
+  BeamerTheoremStyle,
+  BeamerTheoremTemplateVariant,
   BeamerTikzPictureRoot,
 } from "./types.js";
 import type { BeamerOverlayModel } from "./overlay.js";
+import type { MappedText } from "../text/source-map.js";
 
 export type BeamerParagraphBodyNode = {
   kind: "paragraph";
@@ -76,9 +81,32 @@ export type BeamerBlockBodyNode = {
   children: BeamerLeafFlowNode[];
 };
 
+export type BeamerTheoremBodyNode = {
+  kind: "theorem";
+  id: string;
+  environment: string;
+  blockEnvironment: "block" | "exampleblock";
+  theoremStyle: BeamerTheoremStyle;
+  theoremTemplate: BeamerTheoremTemplateVariant;
+  declaration: BeamerTheoremDeclarationModel | null;
+  number: string | null;
+  proof: boolean;
+  qed: boolean;
+  span: Span;
+  beginSpan: Span;
+  endSpan: Span;
+  overlay?: BeamerDelimitedSourceValue;
+  addition?: BeamerDelimitedSourceValue;
+  title: BeamerDelimitedSourceValue;
+  titleMapped: MappedText;
+  bodySpan: Span;
+  children: BeamerLeafFlowNode[];
+};
+
 export type BeamerColumnFlowNode =
   | BeamerLeafFlowNode
-  | BeamerBlockBodyNode;
+  | BeamerBlockBodyNode
+  | BeamerTheoremBodyNode;
 
 /**
  * Beamer's `T` mode is distinct from `t`: both use a top-aligned minipage,
@@ -114,6 +142,7 @@ export type BeamerColumnsBodyNode = {
 export type BeamerFrameBodyNode =
   | BeamerColumnsBodyNode
   | BeamerBlockBodyNode
+  | BeamerTheoremBodyNode
   | BeamerTitlePageBodyNode
   | BeamerVerticalSpaceBodyNode
   | BeamerParagraphBodyNode
@@ -132,4 +161,5 @@ export type BeamerFrameBodyIr = {
 export type ParseBeamerFrameBodyParams = {
   source: string;
   frame: BeamerFrameModel;
+  document?: BeamerDocumentModel;
 };

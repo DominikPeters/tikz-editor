@@ -996,6 +996,35 @@ deltas are 0.003514pt horizontally, 0.000012pt vertically, and 0.007003pt
 for template edges. Action-qualified overlays such as `\alert<...>` and
 arbitrary `\beamerdefaultoverlayspecification` changes remain later work.
 
+The theorem-family frontend follows `beamerbasetheorems.sty`,
+`beamerinnerthemedefault.sty`, and `beamerbaseauxtemplates.sty`. Built-in
+theorem, definition, example, proof, and compatibility environments are
+source-independent declarations in the preamble model; user `\newtheorem`
+and `\newtheorem*` statements add ordered, source-backed declarations with
+their active `\theoremstyle`, shared counter, and reset counter. As with the
+existing macro-definition pass, declaration syntax is collected separately
+from uses and command bodies are excluded from accidental rescanning. Frame
+lowering resolves the declaration visible at each environment begin and
+assigns counters once in document order, independently of overlay pages.
+
+The resulting theorem node is a semantic specialization of the shared block
+contract: it selects the ordinary/example block environment, supplies a
+generated but source-owned heading, and carries theorem style, template,
+counter, overlay, and proof/QED facts. Theme-owned block planners still own
+all chrome and geometry. The ordinary text engine owns the heading/body
+faces—including Latin Modern Sans 12pt oblique for AMS remark headings—and
+the QED symbol is emitted from the exact `amsthm` open-box dimensions. This
+keeps themes, source mapping/caret geometry, and overlay retention composable
+instead of introducing theorem-specific SVG layout.
+
+The default, numbered, AMS-style, and normal-font fixtures currently produce
+12 pages, all passing the LuaLaTeX structural oracle with matching glyph
+codes/fonts and no unmatched text lines or template rectangles. Supported
+counter behavior includes shared theorem counters, starred declarations, and
+Beamer's `envcountsect` section reset. Custom `\newtheoremstyle` definitions,
+counter-printing redefinitions beyond the section form, translated theorem
+names, and display-aware `\qedhere` placement remain later extensions.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally

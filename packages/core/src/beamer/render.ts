@@ -50,6 +50,7 @@ import type {
   BeamerFrameBodyIr,
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
+  BeamerTheoremBodyNode,
   BeamerTitlePageBodyNode,
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
@@ -197,7 +198,7 @@ export async function renderBeamerFrame(
       `Beamer frame index ${frameIndex} is outside the document's ${document.frames.length} frames.`
     );
   }
-  const bodyIr = parseBeamerFrameBody({ source, frame });
+  const bodyIr = parseBeamerFrameBody({ source, frame, document });
   const stepCount = bodyIr.overlays.stepCount;
   const step = options.step ?? 1;
   if (!Number.isInteger(step) || step < 1) {
@@ -330,7 +331,10 @@ async function renderBeamerFrameStep(params: {
     const frameBlockTop =
       availableContentBounds.y + verticalPacking.topOffset;
     for (const placement of positioned.items) {
-      if (placement.item.visibility === "hidden") {
+      if (
+        placement.item.visibility === "hidden" &&
+        placement.item.kind !== "block"
+      ) {
         continue;
       }
       if (placement.item.kind === "title-page") {
@@ -395,6 +399,8 @@ async function renderBeamerFrameStep(params: {
           paragraphs,
           modelBuilder,
           theme,
+          visibility:
+            placement.item.visibility === "hidden" ? "hidden" : "visible",
         });
       }
     }
@@ -481,7 +487,7 @@ export async function renderBeamerFramePages(
       `Beamer frame index ${frameIndex} is outside the document's ${document.frames.length} frames.`
     );
   }
-  const bodyIr = parseBeamerFrameBody({ source, frame });
+  const bodyIr = parseBeamerFrameBody({ source, frame, document });
   const stepCount = bodyIr.overlays.stepCount;
   const pages: RenderBeamerFrameResult[] = [];
   for (let step = 1; step <= stepCount; step += 1) {
@@ -770,7 +776,7 @@ async function prepareFrameFlow(params: {
       }
       continue;
     }
-    if (node.kind === "block") {
+    if (node.kind === "block" || node.kind === "theorem") {
       const block = prepareBlock({
         source: params.source,
         node,
@@ -1185,7 +1191,7 @@ function suppressCenteredTikzTopGlueAfterNormalDisplay(
 
 function prepareBlock(params: {
   source: string;
-  node: BeamerBlockBodyNode;
+  node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
   width: number;
   leftSidebarWidth: number;
   theme: ResolvedBeamerTheme;
@@ -1194,33 +1200,48 @@ function prepareBlock(params: {
   step: number;
 }): PreparedBlock | null {
   const plan = planBeamerBlockTemplate({
-    environment: params.node.environment,
+    environment: params.node.kind === "theorem"
+      ? params.node.blockEnvironment
+      : params.node.environment,
     theme: params.theme,
   });
   const titleFont = params.theme.fonts[plan.titleFontRole];
+  const theoremTitleFont =
+    params.node.kind === "theorem" &&
+    params.node.theoremTemplate === "ams-style"
+      ? params.node.theoremStyle === "remark"
+        ? { ...titleFont, shape: "italic" as const }
+        : { ...titleFont, series: "bold" as const }
+      : titleFont;
   const blockTitleLayoutFont = plan.style === "inmargin"
     ? {
-        ...titleFont,
+        ...theoremTitleFont,
         // The title vtop is opened in \normalsize; the starred Beamer font
         // switch changes the glyph face/size without replacing that vtop's
         // normal-text baseline grid.
         lineHeightPt: params.theme.fonts["normal-text"].lineHeightPt,
       }
-    : titleFont;
+    : theoremTitleFont;
   const normalXHeight = fontXHeightPt(params.theme.fonts["normal-text"]);
   const inMarginTitleWidth = Math.max(
     0,
     params.leftSidebarWidth - 3 * normalXHeight
   );
-  const titleProjection = projectBeamerOverlayText(
-    createIdentityMappedText(
-      params.node.title.value,
-      params.node.title.contentSpan.from
-    ),
-    params.node.title.contentSpan,
-    params.overlays,
-    params.step
-  );
+  const titleProjection = params.node.kind === "theorem"
+    ? {
+        mapped: params.node.titleMapped,
+        hiddenSourceSpans: [],
+        hiddenListItemIndices: [],
+      }
+    : projectBeamerOverlayText(
+        createIdentityMappedText(
+          params.node.title.value,
+          params.node.title.contentSpan.from
+        ),
+        params.node.title.contentSpan,
+        params.overlays,
+        params.step
+      );
   const title = layoutParagraph({
     mapped: titleProjection.mapped,
     sourceSpan: params.node.title.contentSpan,
@@ -1257,6 +1278,15 @@ function prepareBlock(params: {
         params.step
       )
     : null;
+  const theoremBodyFont =
+    params.node.kind === "theorem" &&
+    params.node.theoremStyle === "plain" &&
+    params.node.theoremTemplate !== "normal-font"
+      ? {
+          ...params.theme.fonts[plan.bodyFontRole],
+          shape: "italic" as const,
+        }
+      : params.theme.fonts[plan.bodyFontRole];
   const body = bodyNode && bodyProjection
     ? layoutParagraph({
         mapped: bodyProjection.mapped,
@@ -1264,7 +1294,8 @@ function prepareBlock(params: {
         paragraphId: `${params.node.id}:body`,
         role: "block-body",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
-        font: params.theme.fonts[plan.bodyFontRole],
+        font: theoremBodyFont,
+        mathFont: params.theme.fonts[plan.bodyFontRole],
         alignment: "left",
         disableAutomaticHyphenation: true,
         macroBindings: params.macroBindings,
@@ -1391,6 +1422,7 @@ function emitPreparedBlock(params: {
   paragraphs: BeamerParagraphLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   theme: ResolvedBeamerTheme;
+  visibility?: "visible" | "hidden";
 }): void {
   const block = params.prepared;
   const geometry = block.plan.geometry;
@@ -1423,6 +1455,7 @@ function emitPreparedBlock(params: {
         height: block.titleBackgroundHeight,
       },
       parentId: block.node.id,
+      visibility: params.visibility,
     });
   }
   if (block.plan.style === "default" && bodyColor.bg) {
@@ -1437,19 +1470,23 @@ function emitPreparedBlock(params: {
         height: block.bodyBackgroundHeight,
       },
       parentId: block.node.id,
+      visibility: params.visibility,
     });
   }
   params.modelBuilder.addPart({
     basePartId: `${block.node.id}:chrome`,
     sourceId: block.node.id,
     elementId: null,
-    markup: blockChromeMarkup({
-      block,
-      x: params.x,
-      y: params.y,
-      titleFill: titleColor.bg ?? "transparent",
-      bodyFill: bodyColor.bg ?? "transparent",
-    }),
+    markup: overlayVisibilityMarkup(
+      blockChromeMarkup({
+        block,
+        x: params.x,
+        y: params.y,
+        titleFill: titleColor.bg ?? "transparent",
+        bodyFill: bodyColor.bg ?? "transparent",
+      }),
+      params.visibility
+    ),
   });
 
   const titleX = params.x + block.titleXOffset;
@@ -1459,6 +1496,9 @@ function emitPreparedBlock(params: {
     x: titleX,
     y: titleY,
   };
+  if (params.visibility === "hidden") {
+    block.title.layout.hiddenSourceSpans = [block.node.span];
+  }
   params.paragraphs.push(block.title.layout);
   params.items.push({
     id: block.title.layout.paragraphId,
@@ -1467,16 +1507,20 @@ function emitPreparedBlock(params: {
     bounds: block.title.layout.bounds,
     parentId: block.node.id,
     paragraphId: block.title.layout.paragraphId,
+    visibility: params.visibility,
   });
   params.modelBuilder.addPart({
     basePartId: block.title.layout.paragraphId,
     sourceId: block.title.layout.paragraphId,
     elementId: null,
-    markup: paragraphMarkup(
-      block.title.svgBody,
-      titleX,
-      titleY,
-      titleColor.fg ?? textColor(params.theme, "normal text")
+    markup: overlayVisibilityMarkup(
+      paragraphMarkup(
+        block.title.svgBody,
+        titleX,
+        titleY,
+        titleColor.fg ?? textColor(params.theme, "normal text")
+      ),
+      params.visibility
     ),
   });
 
@@ -1489,6 +1533,9 @@ function emitPreparedBlock(params: {
       y: bodyY,
       height: paragraphLineExtent(block.body),
     };
+    if (params.visibility === "hidden") {
+      block.body.layout.hiddenSourceSpans = [block.node.span];
+    }
     params.paragraphs.push(block.body.layout);
     childIds.push(block.body.layout.paragraphId);
     params.items.push({
@@ -1498,18 +1545,54 @@ function emitPreparedBlock(params: {
       bounds: block.body.layout.bounds,
       parentId: block.node.id,
       paragraphId: block.body.layout.paragraphId,
+      visibility: params.visibility,
     });
     params.modelBuilder.addPart({
       basePartId: block.body.layout.paragraphId,
       sourceId: block.body.layout.paragraphId,
       elementId: null,
-      markup: paragraphMarkup(
-        block.body.svgBody,
-        params.x,
-        bodyY,
-        bodyColor.fg ?? textColor(params.theme, "normal text")
+      markup: overlayVisibilityMarkup(
+        paragraphMarkup(
+          block.body.svgBody,
+          params.x,
+          bodyY,
+          bodyColor.fg ?? textColor(params.theme, "normal text")
+        ),
+        params.visibility
       ),
     });
+    if (block.node.kind === "theorem" && block.node.qed) {
+      const qedRects = proofQedRectangles({
+        block,
+        bodyY,
+        x: params.x,
+        fontSizePt: params.theme.fonts[block.plan.bodyFontRole].sizePt,
+      });
+      const qedColor =
+        resolveBeamerThemeColor(params.theme, "qed symbol").fg ??
+        textColor(params.theme, "normal text");
+      for (const [index, bounds] of qedRects.entries()) {
+        const id = `${block.node.id}:qed:${index}:background`;
+        childIds.push(id);
+        params.items.push({
+          id,
+          kind: "background",
+          sourceSpan: block.node.endSpan,
+          bounds,
+          parentId: block.node.id,
+          visibility: params.visibility,
+        });
+      }
+      params.modelBuilder.addPart({
+        basePartId: `${block.node.id}:qed`,
+        sourceId: block.node.id,
+        elementId: null,
+        markup: overlayVisibilityMarkup(
+          qedRects.map((bounds) => rectMarkup(bounds, qedColor)).join(""),
+          params.visibility
+        ),
+      });
+    }
   }
 
   params.items.push({
@@ -1519,7 +1602,59 @@ function emitPreparedBlock(params: {
     bounds: outerBounds,
     parentId: params.parentId,
     childIds,
+    visibility: params.visibility,
   });
+}
+
+function overlayVisibilityMarkup(
+  markup: string,
+  visibility: "visible" | "hidden" | undefined
+): string {
+  return visibility === "hidden"
+    ? `<g visibility="hidden">${markup}</g>`
+    : markup;
+}
+
+function proofQedRectangles(params: {
+  block: PreparedBlock;
+  bodyY: number;
+  x: number;
+  fontSizePt: number;
+}): BeamerRect[] {
+  const body = params.block.body;
+  if (!body) {
+    return [];
+  }
+  const lastLine = body?.layout.report.lines.at(-1);
+  const placement = lastLine
+    ? body.layout.vlistLayout.linePlacements.find(
+        (candidate) => candidate.lineIndex === lastLine.lineIndex
+      )
+    : null;
+  const baselineY =
+    params.bodyY +
+    Number(placement?.y ?? 0) +
+    Number(lastLine?.ascent ?? 0);
+  const rulePt = 0.4;
+  const symbolHeight = 0.675 * params.fontSizePt;
+  const innerWidth = 0.6 * params.fontSizePt;
+  const symbolBoxWidth = 0.77778 * params.fontSizePt;
+  const left = params.x + params.block.width - symbolBoxWidth +
+    (symbolBoxWidth - innerWidth - 2 * rulePt) / 2;
+  const innerLeft = left + rulePt;
+  const right = innerLeft + innerWidth;
+  const top = baselineY - symbolHeight;
+  return [
+    { x: left, y: top, width: rulePt, height: symbolHeight },
+    { x: innerLeft, y: top, width: innerWidth, height: rulePt },
+    {
+      x: innerLeft,
+      y: baselineY - rulePt,
+      width: innerWidth,
+      height: rulePt,
+    },
+    { x: right, y: top, width: rulePt, height: symbolHeight },
+  ];
 }
 
 function blockChromeMarkup(params: {
@@ -1849,7 +1984,10 @@ function emitPreparedColumns(params: {
       flowIndex += 1
     ) {
       const flowItem = preparedColumn.flow[flowIndex];
-      if (flowItem.visibility === "hidden") {
+      if (
+        flowItem.visibility === "hidden" &&
+        flowItem.kind !== "block"
+      ) {
         flowY += columnFlowAdvance(
           flowItem,
           preparedColumn.flow[flowIndex + 1] != null
@@ -1918,6 +2056,8 @@ function emitPreparedColumns(params: {
           paragraphs: params.paragraphs,
           modelBuilder: params.modelBuilder,
           theme: params.theme,
+          visibility:
+            flowItem.visibility === "hidden" ? "hidden" : "visible",
         });
         childIds.push(flowItem.block.node.id);
         flowY +=
@@ -2108,7 +2248,7 @@ async function prepareColumnFlowNode(params: {
       height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
     };
   }
-  if (node.kind === "block") {
+  if (node.kind === "block" || node.kind === "theorem") {
     const block = prepareBlock({
       source,
       node,
@@ -2349,6 +2489,7 @@ function layoutParagraph(params: {
   role: BeamerParagraphLayout["role"];
   bounds: BeamerRect;
   font: BeamerThemeFont;
+  mathFont?: BeamerThemeFont;
   alignment: "left" | "center" | "right";
   interwordSpacePt?: number;
   initialPreviousDepth?: number;
@@ -2423,7 +2564,9 @@ function layoutParagraph(params: {
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,
-      fontProfile: createBeamerTexMathFontProfile(params.font),
+      fontProfile: createBeamerTexMathFontProfile(
+        params.mathFont ?? params.font
+      ),
     }),
     baselineSkip: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,

@@ -176,11 +176,16 @@ Always visible.
     const result = await renderBeamerFramePages(source);
     const blocks = (pageIndex: number) =>
       result.pages[pageIndex]!.layout.items.filter(
-        (item) => item.kind === "block"
+        (item) => item.kind === "block" && item.visibility !== "hidden"
       );
 
     expect(result.stepCount).toBe(3);
     expect(blocks(0)).toHaveLength(0);
+    expect(
+      result.pages[0]!.layout.items.filter(
+        (item) => item.kind === "block" && item.visibility === "hidden"
+      )
+    ).toHaveLength(1);
     expect(blocks(1).map((block) => block.id)).toEqual([
       expect.stringContaining(":block:"),
     ]);

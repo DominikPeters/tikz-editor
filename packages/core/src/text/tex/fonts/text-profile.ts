@@ -178,10 +178,18 @@ export function luaLatexDefaultFontIdForState(
       return "lmsans10-bold";
     }
     if (state.shape === "italic") {
-      return atPt <= 8 ? "lmsans8-oblique" : "lmsans10-oblique";
+      return atPt <= 8
+        ? "lmsans8-oblique"
+        : atPt >= 12
+          ? "lmsans12-oblique"
+          : "lmsans10-oblique";
     }
     if (state.shape === "slanted") {
-      return atPt <= 8 ? "lmsans8-oblique" : "lmsans10-oblique";
+      return atPt <= 8
+        ? "lmsans8-oblique"
+        : atPt >= 12
+          ? "lmsans12-oblique"
+          : "lmsans10-oblique";
     }
     if (atPt <= 8) {
       return "lmsans8-regular";

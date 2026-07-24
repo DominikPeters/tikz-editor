@@ -1,7 +1,13 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import {
+  concatMappedText,
+  createGeneratedMappedText,
+  createIdentityMappedText,
+} from "../text/source-map.js";
+import {
   readBeamerOptionalArgument,
+  readBeamerOverlayArgument,
   readBeamerRequiredArgument,
   scanBeamerControlSequences,
   scanBeamerEnvironmentTokens,
@@ -18,11 +24,17 @@ import type {
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
   BeamerTitlePageBodyNode,
+  BeamerTheoremBodyNode,
   BeamerTikzBodyNode,
   BeamerVerticalSpaceBodyNode,
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
 import { scanBeamerFrameOverlays } from "./overlay.js";
+import {
+  resolveBeamerTheoremOccurrences,
+  type BeamerTheoremOccurrence,
+} from "./theorems.js";
+import type { BeamerTheoremTemplateVariant } from "./types.js";
 
 const LIST_ENVIRONMENTS = new Set([
   "itemize",
@@ -34,6 +46,15 @@ const BLOCK_ENVIRONMENTS = new Set<BeamerBlockEnvironment>([
   "alertblock",
   "exampleblock",
 ]);
+const PROOF_ENVIRONMENTS = new Map<string, string>([
+  ["proof", "Proof"],
+  ["Proof", "Proof"],
+  ["Beweis", "Beweis"],
+]);
+
+function isProofEnvironment(name: string): boolean {
+  return PROOF_ENVIRONMENTS.has(name);
+}
 
 /**
  * Lower frame-level source structure into a source-backed composition IR.
@@ -47,6 +68,11 @@ export function parseBeamerFrameBody(
   const { source, frame } = params;
   const diagnostics: Diagnostic[] = [];
   const tokens = scanBeamerEnvironmentTokens(source, frame.bodySpan);
+  const theoremOccurrences = params.document
+    ? resolveBeamerTheoremOccurrences(params.document)
+    : new Map<number, BeamerTheoremOccurrence>();
+  const theoremTemplate =
+    params.document?.preamble.theoremTemplate ?? "default";
   const children: BeamerFrameBodyNode[] = [];
   let cursor = frame.bodySpan.from;
   let nodeIndex = 0;
@@ -58,6 +84,8 @@ export function parseBeamerFrameBody(
       (token.name !== "columns" &&
         token.name !== "tikzpicture" &&
         token.name !== "center" &&
+        !isProofEnvironment(token.name) &&
+        !theoremOccurrences.has(token.span.from) &&
         !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment))
     ) {
       continue;
@@ -103,8 +131,21 @@ export function parseBeamerFrameBody(
             tokens: tokens.slice(index + 1, endIndex),
             diagnostics,
             nodeIndex,
+            theoremOccurrences,
+            theoremTemplate,
           })
-        : parseBlock({
+        : isProofEnvironment(token.name) ||
+            theoremOccurrences.has(token.span.from)
+          ? parseTheorem({
+              source,
+              ownerId: frame.id,
+              begin: token,
+              end,
+              nodeIndex,
+              occurrence: theoremOccurrences.get(token.span.from) ?? null,
+              theoremTemplate,
+            })
+          : parseBlock({
             source,
             ownerId: frame.id,
             begin: token,
@@ -127,6 +168,124 @@ export function parseBeamerFrameBody(
     children: splitStandaloneFrameCommands(source, frame.id, children),
     overlays: scanBeamerFrameOverlays(source, frame),
     diagnostics,
+  };
+}
+
+function parseTheorem(params: {
+  source: string;
+  ownerId: string;
+  begin: BeamerEnvironmentToken;
+  end: BeamerEnvironmentToken;
+  nodeIndex: number;
+  occurrence: BeamerTheoremOccurrence | null;
+  theoremTemplate: BeamerTheoremTemplateVariant;
+}): BeamerTheoremBodyNode {
+  const {
+    source,
+    ownerId,
+    begin,
+    end,
+    nodeIndex,
+    occurrence,
+    theoremTemplate,
+  } = params;
+  let cursor = begin.span.to;
+  let overlay = readBeamerOverlayArgument(source, cursor, end.span.from) ??
+    undefined;
+  if (overlay) {
+    cursor = overlay.span.to;
+  }
+  const addition = readBeamerOptionalArgument(
+    source,
+    cursor,
+    end.span.from
+  ) ?? undefined;
+  if (addition) {
+    cursor = addition.span.to;
+  }
+  if (!overlay) {
+    overlay = readBeamerOverlayArgument(source, cursor, end.span.from) ??
+      undefined;
+    if (overlay) {
+      cursor = overlay.span.to;
+    }
+  }
+  const proofName = PROOF_ENVIRONMENTS.get(begin.name);
+  const proof = proofName != null;
+  const declaration = occurrence?.declaration ?? null;
+  const titleOwner = { from: begin.span.from, to: cursor };
+  const displayName = proof
+    ? addition?.value ?? proofName
+    : declaration?.displayName.value ?? begin.name;
+  const titleParts = [
+    createGeneratedMappedText(
+      displayName,
+      proof
+        ? "Beamer proof heading"
+        : "Beamer theorem declaration heading",
+      titleOwner
+    ),
+  ];
+  if (
+    !proof &&
+    occurrence?.number &&
+    (theoremTemplate === "numbered" || theoremTemplate === "ams-style")
+  ) {
+    titleParts.push(
+      createGeneratedMappedText(
+        ` ${occurrence.number}`,
+        "Beamer theorem counter",
+        titleOwner
+      )
+    );
+  }
+  if (!proof && addition) {
+    titleParts.push(
+      createGeneratedMappedText(" (", "Beamer theorem heading punctuation", titleOwner),
+      createIdentityMappedText(addition.value, addition.contentSpan.from),
+      createGeneratedMappedText(")", "Beamer theorem heading punctuation", titleOwner)
+    );
+  }
+  if (proof || theoremTemplate === "ams-style") {
+    titleParts.push(
+      createGeneratedMappedText(".", "Beamer theorem heading punctuation", titleOwner)
+    );
+  }
+  const titleMapped = concatMappedText(titleParts);
+  const title = {
+    span: titleOwner,
+    contentSpan: titleOwner,
+    value: titleMapped.text,
+  };
+  const bodySpan = { from: cursor, to: end.span.from };
+  const children: BeamerTheoremBodyNode["children"] = [];
+  pushTextNode(
+    source,
+    bodySpan,
+    `${ownerId}:theorem:${nodeIndex}`,
+    children
+  );
+  return {
+    kind: "theorem",
+    id: `${ownerId}:theorem:${nodeIndex}`,
+    environment: begin.name,
+    blockEnvironment:
+      declaration?.style === "example" ? "exampleblock" : "block",
+    theoremStyle: declaration?.style ?? "definition",
+    theoremTemplate,
+    declaration,
+    number: occurrence?.number ?? null,
+    proof,
+    qed: proof,
+    span: { from: begin.span.from, to: end.span.to },
+    beginSpan: begin.span,
+    endSpan: end.span,
+    overlay,
+    addition,
+    title,
+    titleMapped,
+    bodySpan,
+    children,
   };
 }
 
@@ -374,6 +533,8 @@ function parseColumns(params: {
   tokens: readonly BeamerEnvironmentToken[];
   diagnostics: Diagnostic[];
   nodeIndex: number;
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  theoremTemplate: BeamerTheoremTemplateVariant;
 }): BeamerColumnsBodyNode {
   const {
     source,
@@ -383,6 +544,8 @@ function parseColumns(params: {
     tokens,
     diagnostics,
     nodeIndex,
+    theoremOccurrences,
+    theoremTemplate,
   } = params;
   const options = readBeamerOptionalArgument(
     source,
@@ -449,7 +612,9 @@ function parseColumns(params: {
         columns.length,
         bodySpan,
         tokens.slice(index + 1, endIndex),
-        diagnostics
+        diagnostics,
+        theoremOccurrences,
+        theoremTemplate
       ),
     });
     index = endIndex;
@@ -527,7 +692,9 @@ function parseColumnFlow(
   columnIndex: number,
   bodySpan: Span,
   tokens: readonly BeamerEnvironmentToken[],
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>,
+  theoremTemplate: BeamerTheoremTemplateVariant
 ): BeamerColumnFlowNode[] {
   const structural: Array<{
     span: Span;
@@ -539,7 +706,11 @@ function parseColumnFlow(
     const token = tokens[index];
     if (
       token.kind !== "begin" ||
-      !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)
+      (
+        !isProofEnvironment(token.name) &&
+        !theoremOccurrences.has(token.span.from) &&
+        !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)
+      )
     ) {
       continue;
     }
@@ -548,14 +719,25 @@ function parseColumnFlow(
       continue;
     }
     const end = tokens[endIndex];
-    const node = parseBlock({
-      source,
-      ownerId: `${frameId}:column:${columnIndex}`,
-      begin: token,
-      end,
-      nodeIndex,
-      diagnostics,
-    });
+    const node = isProofEnvironment(token.name) ||
+        theoremOccurrences.has(token.span.from)
+      ? parseTheorem({
+          source,
+          ownerId: `${frameId}:column:${columnIndex}`,
+          begin: token,
+          end,
+          nodeIndex,
+          occurrence: theoremOccurrences.get(token.span.from) ?? null,
+          theoremTemplate,
+        })
+      : parseBlock({
+          source,
+          ownerId: `${frameId}:column:${columnIndex}`,
+          begin: token,
+          end,
+          nodeIndex,
+          diagnostics,
+        });
     structural.push({ span: node.span, node });
     nodeIndex += 1;
     index = endIndex;

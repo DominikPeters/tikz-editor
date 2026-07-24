@@ -1,0 +1,25 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\setbeamertemplate{theorems}[ams style]
+
+\title{AMS theorem conformance}
+\date{}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\begin{document}
+
+\begin{frame}{AMS theorem heading}
+  \begin{theorem}[Named result]
+    The theorem body uses the plain theorem style.
+  \end{theorem}
+\end{frame}
+
+\begin{frame}{AMS remark heading}
+  \begin{remark}
+    A remark has upright body text and an italic heading.
+  \end{remark}
+\end{frame}
+
+\end{document}

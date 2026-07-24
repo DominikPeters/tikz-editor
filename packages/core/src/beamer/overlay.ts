@@ -301,9 +301,17 @@ export function resolveBeamerOverlaySpanVisibility(
 ): BeamerOverlayVisibility {
   let visibility: BeamerOverlayVisibility = "visible";
   for (const command of model.commands) {
-    const branchIndex = command.branches.findIndex((branch) =>
+    let branchIndex = command.branches.findIndex((branch) =>
       containsSpan(branch.contentSpan, span)
     );
+    if (
+      branchIndex < 0 &&
+      command.branches.length === 1 &&
+      containsSpan(command.span, span) &&
+      command.span.from === span.from
+    ) {
+      branchIndex = 0;
+    }
     if (branchIndex < 0) {
       continue;
     }
@@ -656,10 +664,10 @@ function overlayEnvironmentSpecs(
   const result: PendingSpec[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const begin = tokens[index];
-    const kind = begin?.kind === "begin"
+    const explicitKind = begin?.kind === "begin"
       ? kindByName.get(begin.name)
       : undefined;
-    if (!begin || !kind) {
+    if (begin?.kind !== "begin") {
       continue;
     }
     let depth = 0;
@@ -681,7 +689,8 @@ function overlayEnvironmentSpecs(
       begin.span.to,
       end?.span.from ?? span.to
     );
-    if (!end || !spec) {
+    const kind = explicitKind ?? (spec ? "uncover" : undefined);
+    if (!end || !spec || !kind) {
       continue;
     }
     const body: BeamerDelimitedSourceValue = {

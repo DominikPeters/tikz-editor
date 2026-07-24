@@ -9,6 +9,11 @@ export {
 export { renderBeamerFrame, renderBeamerFramePages } from "./render.js";
 export { scanBeamerDocument } from "./scan.js";
 export {
+  activeBeamerTheoremDeclarations,
+  resolveBeamerTheoremCounterSeed,
+  resolveBeamerTheoremOccurrences,
+} from "./theorems.js";
+export {
   createBeamerFrameNavigationSnapshot,
   createBeamerNavigationModel,
   createBeamerTexMathFontProfile,
@@ -24,4 +29,5 @@ export {
 export type * from "./types.js";
 export type * from "./content-types.js";
 export type * from "./overlay.js";
+export type * from "./theorems.js";
 export type * from "./theme/index.js";

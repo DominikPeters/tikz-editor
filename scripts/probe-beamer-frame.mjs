@@ -213,10 +213,21 @@ async function main() {
   }
 
   const source = readFileSync(options.inputPath, "utf8");
-  const { scanBeamerDocument } = await loadBeamerScanner();
+  const {
+    resolveBeamerTheoremCounterSeed,
+    scanBeamerDocument,
+  } = await loadBeamerScanner();
   const document = scanBeamerDocument(source);
   const frameIndex = options.frameNumber - 1;
-  const probe = buildBeamerFrameProbeSource(source, document, frameIndex);
+  const selectedFrame = document.frames[frameIndex];
+  const probe = buildBeamerFrameProbeSource(
+    source,
+    document,
+    frameIndex,
+    selectedFrame
+      ? resolveBeamerTheoremCounterSeed(document, selectedFrame.span.from)
+      : []
+  );
   const deckName = basename(
     options.inputPath,
     extname(options.inputPath)

@@ -13,6 +13,9 @@ import type {
   BeamerMetadataFieldName,
   BeamerPreambleModel,
   BeamerSectionModel,
+  BeamerTheoremDeclarationModel,
+  BeamerTheoremStyle,
+  BeamerTheoremTemplateVariant,
   BeamerThemeKind,
   BeamerThemeUseModel,
   BeamerTikzPictureRoot,
@@ -629,14 +632,352 @@ function scanPreamble(source: string, span: Span): BeamerPreambleModel {
     }
   }
 
+  const theoremDeclarations = scanBeamerTheoremDeclarations({
+    source,
+    span,
+    controls,
+    documentClass,
+    excludedSpans: macroDefinitions.map((definition) => definition.span),
+  });
   return {
     span,
     documentClass,
     themes,
     metadata,
     atBeginSectionSpans,
+    theoremDeclarations,
+    theoremTemplate: scanBeamerTheoremTemplate(
+      source,
+      span,
+      controls,
+      macroDefinitions.map((definition) => definition.span)
+    ),
     macroDefinitions,
   };
+}
+
+function scanBeamerTheoremDeclarations(params: {
+  source: string;
+  span: Span;
+  controls: readonly BeamerControlSequence[];
+  documentClass: BeamerDocumentClassModel | null;
+  excludedSpans: readonly Span[];
+}): BeamerTheoremDeclarationModel[] {
+  const classOptions = new Set(
+    params.documentClass?.options?.value
+      .split(",")
+      .map((option) => option.trim())
+      .filter(Boolean) ?? []
+  );
+  const declarations = classOptions.has("notheorems") ||
+      classOptions.has("noamsthm")
+    ? []
+    : builtInBeamerTheoremDeclarations(
+        params.documentClass?.span ?? { from: 0, to: 0 },
+        classOptions.has("envcountsect")
+      );
+  let style: BeamerTheoremStyle = "plain";
+
+  for (const command of params.controls) {
+    if (params.excludedSpans.some((span) =>
+      command.from >= span.from && command.from < span.to
+    )) {
+      continue;
+    }
+    if (command.name === "theoremstyle") {
+      const value = readBeamerRequiredArgument(
+        params.source,
+        command.to,
+        params.span.to
+      );
+      if (value) {
+        style = normalizeBeamerTheoremStyle(value.value);
+      }
+      continue;
+    }
+    if (command.name !== "newtheorem") {
+      continue;
+    }
+    const declaration = readBeamerTheoremDeclaration(
+      params.source,
+      command,
+      params.span.to,
+      style
+    );
+    if (declaration) {
+      declarations.push(declaration);
+    }
+  }
+  return declarations;
+}
+
+function readBeamerTheoremDeclaration(
+  source: string,
+  command: BeamerControlSequence,
+  limit: number,
+  style: BeamerTheoremStyle
+): BeamerTheoremDeclarationModel | null {
+  const name = readBeamerRequiredArgument(source, command.to, limit);
+  if (!name || name.value.trim().length === 0) {
+    return null;
+  }
+  let cursor = name.span.to;
+  const shared = readBeamerOptionalArgument(source, cursor, limit);
+  if (shared) {
+    cursor = shared.span.to;
+  }
+  const displayName = readBeamerRequiredArgument(source, cursor, limit);
+  if (!displayName) {
+    return null;
+  }
+  cursor = displayName.span.to;
+  const within = shared
+    ? null
+    : readBeamerOptionalArgument(source, cursor, limit);
+  if (within) {
+    cursor = within.span.to;
+  }
+  const environmentName = name.value.trim();
+  return {
+    kind: "theorem-declaration",
+    name: environmentName,
+    span: { from: command.from, to: cursor },
+    commandSpan: { from: command.from, to: command.to },
+    nameSource: name,
+    displayName,
+    style,
+    counter: command.starred ? null : environmentName,
+    ...(shared ? { sharedCounter: shared.value.trim() } : {}),
+    ...(within ? { within: within.value.trim() } : {}),
+    starred: command.starred,
+    builtIn: false,
+  };
+}
+
+function builtInBeamerTheoremDeclarations(
+  owner: Span,
+  withinSection: boolean
+): BeamerTheoremDeclarationModel[] {
+  const definitions: Array<{
+    name: string;
+    displayName: string;
+    style: BeamerTheoremStyle;
+    sharedCounter?: string;
+  }> = [
+    { name: "theorem", displayName: "Theorem", style: "plain" },
+    {
+      name: "corollary",
+      displayName: "Corollary",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "fact",
+      displayName: "Fact",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "lemma",
+      displayName: "Lemma",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "problem",
+      displayName: "Problem",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "solution",
+      displayName: "Solution",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "definition",
+      displayName: "Definition",
+      style: "definition",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "definitions",
+      displayName: "Definitions",
+      style: "definition",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "example",
+      displayName: "Example",
+      style: "example",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "examples",
+      displayName: "Examples",
+      style: "example",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Beispiel",
+      displayName: "Beispiel",
+      style: "example",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Beispiele",
+      displayName: "Beispiele",
+      style: "example",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Loesung",
+      displayName: String.raw`L\"osung`,
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Satz",
+      displayName: "Satz",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Folgerung",
+      displayName: "Folgerung",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Fakt",
+      displayName: "Fakt",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Lemma",
+      displayName: "Lemma",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Theorem",
+      displayName: "Theorem",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Problem",
+      displayName: "Problem",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Corollary",
+      displayName: "Corollary",
+      style: "plain",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Example",
+      displayName: "Example",
+      style: "example",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Examples",
+      displayName: "Examples",
+      style: "example",
+      sharedCounter: "theorem",
+    },
+    {
+      name: "Definition",
+      displayName: "Definition",
+      style: "definition",
+      sharedCounter: "theorem",
+    },
+  ];
+  return definitions.map((definition) => {
+    const sourceValue: BeamerDelimitedSourceValue = {
+      span: owner,
+      contentSpan: owner,
+      value: definition.name,
+    };
+    return {
+      kind: "theorem-declaration",
+      name: definition.name,
+      span: owner,
+      commandSpan: owner,
+      nameSource: sourceValue,
+      displayName: {
+        span: owner,
+        contentSpan: owner,
+        value: definition.displayName,
+      },
+      style: definition.style,
+      counter: definition.name === "theorem"
+        ? "theorem"
+        : definition.sharedCounter ?? definition.name,
+      ...(definition.sharedCounter
+        ? { sharedCounter: definition.sharedCounter }
+        : {}),
+      ...(definition.name === "theorem" && withinSection
+        ? { within: "section" }
+        : {}),
+      starred: false,
+      builtIn: true,
+    };
+  });
+}
+
+function normalizeBeamerTheoremStyle(value: string): BeamerTheoremStyle {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "example"
+    ? "example"
+    : normalized === "definition"
+      ? "definition"
+      : normalized === "remark"
+        ? "remark"
+        : "plain";
+}
+
+function scanBeamerTheoremTemplate(
+  source: string,
+  span: Span,
+  controls: readonly BeamerControlSequence[],
+  excludedSpans: readonly Span[]
+): BeamerTheoremTemplateVariant {
+  let result: BeamerTheoremTemplateVariant = "default";
+  for (const command of controls) {
+    if (
+      command.name !== "setbeamertemplate" ||
+      excludedSpans.some((excluded) =>
+        command.from >= excluded.from && command.from < excluded.to
+      )
+    ) {
+      continue;
+    }
+    const template = readBeamerRequiredArgument(source, command.to, span.to);
+    if (template?.value.trim() !== "theorems") {
+      continue;
+    }
+    const variant = readBeamerOptionalArgument(
+      source,
+      template.span.to,
+      span.to
+    )?.value.trim().toLowerCase();
+    if (variant === "numbered") {
+      result = "numbered";
+    } else if (variant === "ams style") {
+      result = "ams-style";
+    } else if (variant === "normal font") {
+      result = "normal-font";
+    } else if (variant === "default") {
+      result = "default";
+    }
+  }
+  return result;
 }
 
 function readDocumentClass(

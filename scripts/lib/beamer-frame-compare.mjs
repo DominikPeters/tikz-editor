@@ -87,7 +87,10 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   const coveredRectangles = render.layout.items
     .filter((item) =>
       item.visibility === "hidden" &&
-      item.kind === "list-marker" &&
+      (
+        item.kind === "list-marker" ||
+        item.id.endsWith(":background")
+      ) &&
       item.bounds.width > 0 &&
       item.bounds.height > 0
     )
@@ -116,7 +119,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         Number(placement?.y ?? 0) +
         Number(line.ascent);
       const lineGlyphs = [];
-      for (const segment of line.segments) {
+      for (const segment of mergeGeneratedTraceSegments(line.segments)) {
         const segmentCovered = sourceRangeIsHidden(
           Number(segment.sourceStartRaw),
           Number(segment.sourceEndRaw),
@@ -317,6 +320,41 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     glyphs,
     coveredLines: groupOracleGlyphLines(coveredGlyphs),
   };
+}
+
+function mergeGeneratedTraceSegments(segments) {
+  const result = [];
+  for (const segment of segments) {
+    const previous = result.at(-1);
+    if (
+      previous?.kind === "text" &&
+      segment.kind === "text" &&
+      previous.sourceRangePolicy === "generated" &&
+      segment.sourceRangePolicy === "generated" &&
+      previous.runIndex === segment.runIndex &&
+      previous.fontId === segment.fontId &&
+      previous.fontAtPt === segment.fontAtPt &&
+      previous.sourceStartRaw === segment.sourceStartRaw &&
+      previous.sourceEndRaw === segment.sourceEndRaw &&
+      previous.endOffset === segment.startOffset
+    ) {
+      const previousStops = previous.caretStops ?? [];
+      const segmentStops = segment.caretStops ?? [];
+      result[result.length - 1] = {
+        ...previous,
+        text: `${previous.text ?? ""}${segment.text ?? ""}`,
+        endOffset: segment.endOffset,
+        width: Number(segment.x) + Number(segment.width) - Number(previous.x),
+        caretStops: [
+          ...previousStops,
+          ...segmentStops.slice(1),
+        ],
+      };
+      continue;
+    }
+    result.push({ ...segment });
+  }
+  return result;
 }
 
 function canonicalNativeGlyphLines(glyphs, lines) {

@@ -4,6 +4,7 @@ import type {
   BeamerColumnBodyNode,
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
+  BeamerTheoremBodyNode,
   BeamerTitlePageBodyNode,
   BeamerColumnsBodyNode,
 } from "./content-types.js";
@@ -32,7 +33,7 @@ export type LaidParagraph = {
 };
 
 export type PreparedBlock = {
-  node: BeamerBlockBodyNode;
+  node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
   plan: BeamerBlockTemplatePlan;
   width: number;
   title: LaidParagraph;
@@ -146,7 +147,7 @@ export type PreparedFrameFlowItem =
   | {
       kind: "block";
       visibility: BeamerOverlayVisibility;
-      node: BeamerBlockBodyNode;
+      node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
       block: PreparedBlock;
       naturalHeight: number;
       boxHeight: number;

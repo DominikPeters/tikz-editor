@@ -111,12 +111,45 @@ export type BeamerMetadataFieldModel = {
   value: BeamerDelimitedSourceValue;
 };
 
+export type BeamerTheoremStyle =
+  | "plain"
+  | "definition"
+  | "example"
+  | "remark";
+
+export type BeamerTheoremDeclarationModel = {
+  kind: "theorem-declaration";
+  /** Environment name without delimiters. */
+  name: string;
+  span: Span;
+  commandSpan: Span;
+  nameSource: BeamerDelimitedSourceValue;
+  displayName: BeamerDelimitedSourceValue;
+  style: BeamerTheoremStyle;
+  /** Null for `\newtheorem*` declarations. */
+  counter: string | null;
+  /** Counter whose value this declaration shares, when applicable. */
+  sharedCounter?: string;
+  /** Counter that resets this declaration, currently `section` when present. */
+  within?: string;
+  starred: boolean;
+  builtIn: boolean;
+};
+
+export type BeamerTheoremTemplateVariant =
+  | "default"
+  | "numbered"
+  | "ams-style"
+  | "normal-font";
+
 export type BeamerPreambleModel = {
   span: Span;
   documentClass: BeamerDocumentClassModel | null;
   themes: BeamerThemeUseModel[];
   metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>>;
   atBeginSectionSpans: Span[];
+  theoremDeclarations: BeamerTheoremDeclarationModel[];
+  theoremTemplate: BeamerTheoremTemplateVariant;
   macroDefinitions: Array<
     | MacroDefinitionStatement
     | MacroAliasStatement

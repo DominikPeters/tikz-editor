@@ -36,7 +36,11 @@ export function beamerPageTraceLuaSource(): string;
 export function buildBeamerFrameProbeSource(
   source: string,
   document: BeamerDocumentModel,
-  frameIndex: number
+  frameIndex: number,
+  theoremCounterSeed?: readonly {
+    readonly counter: string;
+    readonly value: number;
+  }[]
 ): {
   readonly frame: BeamerFrameModel;
   readonly source: string;

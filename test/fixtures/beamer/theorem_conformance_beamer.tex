@@ -1,0 +1,48 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+
+\title{Theorem conformance}
+\date{}
+
+\newtheorem{proposition}[theorem]{Proposition}
+
+\begin{document}
+
+\section{Foundations}
+
+\begin{frame}{Plain theorem}
+  \begin{theorem}[Pythagoras]
+    If \(a\) and \(b\) are the legs of a right triangle, then
+    \(a^2+b^2=c^2\).
+  \end{theorem}
+\end{frame}
+
+\begin{frame}{Definition and example}
+  \begin{definition}
+    A square is a rectangle with four equal sides.
+  \end{definition}
+
+  \begin{example}
+    The unit square has area one.
+  \end{example}
+\end{frame}
+
+\begin{frame}{Custom declaration}
+  \begin{proposition}
+    Every square is a rectangle.
+  \end{proposition}
+\end{frame}
+
+\begin{frame}{Proof template}
+  \begin{proof}[Proof sketch]
+    This follows immediately from the definition.
+  \end{proof}
+\end{frame}
+
+\begin{frame}{Theorem overlay}
+  \begin{lemma}<2->
+    Covered theorem material keeps its place.
+  \end{lemma}
+\end{frame}
+
+\end{document}

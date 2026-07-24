@@ -277,7 +277,12 @@ luatexbase.add_to_callback(
 `;
 }
 
-export function buildBeamerFrameProbeSource(source, document, frameIndex) {
+export function buildBeamerFrameProbeSource(
+  source,
+  document,
+  frameIndex,
+  theoremCounterSeed = []
+) {
   if (!Number.isInteger(frameIndex) || frameIndex < 0) {
     throw new RangeError("frameIndex must be a non-negative integer.");
   }
@@ -301,6 +306,11 @@ export function buildBeamerFrameProbeSource(source, document, frameIndex) {
     document,
     frameIndex
   );
+  const theoremCounterState = theoremCounterSeed
+    .map(({ counter, value }) =>
+      `\\setcounter{${counter}}{${value}}`
+    )
+    .join("\n");
   return {
     frame,
     navSource: buildBeamerNavigationSeed(source, document),
@@ -312,6 +322,7 @@ ${beamerProbeInstrumentation()}
 \\setcounter{framenumber}{${frameIndex}}
 \\def\\inserttotalframenumber{${document.frames.length}}
 ${navigationState}
+${theoremCounterState}
 ${frameSource}
 \\end{document}
 `,
