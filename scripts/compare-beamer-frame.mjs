@@ -15,6 +15,10 @@ import {
   compareBeamerPageTraces,
   normalizeOracleBeamerPageTrace,
 } from "./lib/beamer-frame-compare.mjs";
+import {
+  applyBeamerThemeVariant,
+  beamerThemeVariantSlug,
+} from "./lib/beamer-theme-variants.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultOutDir = join(repoRoot, "artifacts", "beamer-frame-compare");
@@ -32,6 +36,13 @@ Options:
   --out-dir <dir>      Artifact root. Default: artifacts/beamer-frame-compare.
   --name <name>        Stable artifact directory name.
   --width <pixels>     Raster comparison width. Default: 1600.
+  --theme <name>       Override \\usetheme for renderer and oracle.
+  --color-theme <name> Override \\usecolortheme.
+  --font-theme <name>  Override \\usefonttheme.
+  --inner-theme <name> Override \\useinnertheme.
+  --outer-theme <name> Override \\useoutertheme.
+  --structural-only    Skip raster comparison artifacts.
+  --assert-structural  Fail when the structural fidelity contract is exceeded.
   --help               Show this help.
 `.trim();
 }
@@ -44,6 +55,9 @@ function parseArgs(argv) {
     outDir: defaultOutDir,
     name: null,
     width: defaultRasterWidth,
+    themeVariant: {},
+    structuralOnly: false,
+    assertStructural: false,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -69,6 +83,25 @@ function parseArgs(argv) {
     } else if (arg === "--width" && next) {
       options.width = Number(next);
       index += 1;
+    } else if (arg === "--theme" && next) {
+      options.themeVariant.theme = next;
+      index += 1;
+    } else if (arg === "--color-theme" && next) {
+      options.themeVariant.colorTheme = next;
+      index += 1;
+    } else if (arg === "--font-theme" && next) {
+      options.themeVariant.fontTheme = next;
+      index += 1;
+    } else if (arg === "--inner-theme" && next) {
+      options.themeVariant.innerTheme = next;
+      index += 1;
+    } else if (arg === "--outer-theme" && next) {
+      options.themeVariant.outerTheme = next;
+      index += 1;
+    } else if (arg === "--structural-only") {
+      options.structuralOnly = true;
+    } else if (arg === "--assert-structural") {
+      options.assertStructural = true;
     } else {
       throw new Error(`Unknown or incomplete argument: ${arg}`);
     }
@@ -142,12 +175,12 @@ async function loadCoreRenderer() {
   };
 }
 
-function runOracle(options, runDir) {
+function runOracle(options, runDir, inputPath) {
   const oracleRoot = join(runDir, "oracle");
   const args = [
     join(repoRoot, "scripts", "probe-beamer-frame.mjs"),
     "--input",
-    options.inputPath,
+    inputPath,
     "--frame",
     String(options.frameNumber),
     "--out-dir",
@@ -261,6 +294,37 @@ function relativeArtifact(runDir, path) {
   return relative(runDir, path);
 }
 
+function structuralContractFailures(summary) {
+  const failures = [];
+  for (const key of [
+    "unmatchedNativeRectangles",
+    "unmatchedOracleRules",
+    "unmatchedNativeTextLines",
+    "unmatchedOracleTextLines",
+    "excludedOracleTextLines",
+  ]) {
+    if (summary[key] !== 0) {
+      failures.push(`${key}=${summary[key]} (expected 0)`);
+    }
+  }
+  if (!summary.glyphCodeMatch) {
+    failures.push("glyphCodeMatch=false");
+  }
+  if (!summary.fontMatch) {
+    failures.push("fontMatch=false");
+  }
+  for (const [key, tolerance] of [
+    ["maxRectangleEdgeDeltaPt", 0.01],
+    ["maxAbsoluteGlyphDxPt", 0.02],
+    ["maxAbsoluteGlyphDyPt", 0.01],
+  ]) {
+    if (summary[key] > tolerance) {
+      failures.push(`${key}=${summary[key]} (maximum ${tolerance})`);
+    }
+  }
+  return failures;
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -271,14 +335,21 @@ async function main() {
     throw new Error("Provide --input.");
   }
 
-  const source = readFileSync(options.inputPath, "utf8");
+  const originalSource = readFileSync(options.inputPath, "utf8");
+  const source = applyBeamerThemeVariant(
+    originalSource,
+    options.themeVariant
+  );
   const deckName = basename(options.inputPath, extname(options.inputPath));
+  const variantSlug = beamerThemeVariantSlug(options.themeVariant);
   const runName = slugify(
     options.name ??
-      `${deckName}-frame-${String(options.frameNumber).padStart(3, "0")}`
+      `${deckName}-${variantSlug}-frame-${String(options.frameNumber).padStart(3, "0")}`
   );
   const runDir = join(options.outDir, runName);
   mkdirSync(runDir, { recursive: true });
+  const materializedInput = join(runDir, "input.tex");
+  writeFileSync(materializedInput, source, "utf8");
 
   const {
     computerModernTexMetricProvider,
@@ -290,7 +361,7 @@ async function main() {
   const rendererSvg = join(runDir, "renderer.svg");
   writeFileSync(rendererSvg, render.svg.svg, "utf8");
 
-  const oracleDir = runOracle(options, runDir);
+  const oracleDir = runOracle(options, runDir, materializedInput);
   const oracleSvg = join(oracleDir, "probe.svg");
   const oracleReport = JSON.parse(
     readFileSync(join(oracleDir, "report.json"), "utf8")
@@ -325,36 +396,40 @@ async function main() {
   const rasterHeight = Math.round(
     options.width * render.svg.viewBox.height / render.svg.viewBox.width
   );
-  const rendererPng = join(runDir, "renderer.png");
-  const oraclePng = join(runDir, "oracle.png");
-  const oracleVectorPng = join(runDir, "oracle-vector.png");
-  rasterizeSvg(rendererSvg, rendererPng, options.width, rasterHeight);
-  // This second oracle raster deliberately uses the same SVG rasterizer as
-  // the native output. It is the useful visual check for glyph outline and
-  // scale fidelity: comparing librsvg with Poppler can otherwise make
-  // identical outlines appear to have different weight at screen resolution.
-  //
-  // Keep the PDF raster below as the primary full-paint oracle because
-  // dvisvgm omits PGF radial shadings used by projected Beamer markers.
-  rasterizeSvg(oracleSvg, oracleVectorPng, options.width, rasterHeight);
-  // dvisvgm preserves the selected oracle page as a useful vector artifact,
-  // but it drops Beamer's PGF radial shadings. Raster the same selected PDF
-  // page directly so theme markers and other PDF paint operators remain in
-  // the visual comparison.
-  rasterizePdfPage(
-    join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf"),
-    oraclePng,
-    oracleReport.input.compiledPage,
-    options.width,
-    rasterHeight
-  );
-  createVisualComparisons(runDir);
-  createSameRasterizerComparisons(runDir);
+  if (!options.structuralOnly) {
+    const rendererPng = join(runDir, "renderer.png");
+    const oraclePng = join(runDir, "oracle.png");
+    const oracleVectorPng = join(runDir, "oracle-vector.png");
+    rasterizeSvg(rendererSvg, rendererPng, options.width, rasterHeight);
+    // This second oracle raster deliberately uses the same SVG rasterizer as
+    // the native output. It is the useful visual check for glyph outline and
+    // scale fidelity: comparing librsvg with Poppler can otherwise make
+    // identical outlines appear to have different weight at screen resolution.
+    //
+    // Keep the PDF raster below as the primary full-paint oracle because
+    // dvisvgm omits PGF radial shadings used by projected Beamer markers.
+    rasterizeSvg(oracleSvg, oracleVectorPng, options.width, rasterHeight);
+    // dvisvgm preserves the selected oracle page as a useful vector artifact,
+    // but it drops Beamer's PGF radial shadings. Raster the same selected PDF
+    // page directly so theme markers and other PDF paint operators remain in
+    // the visual comparison.
+    rasterizePdfPage(
+      join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf"),
+      oraclePng,
+      oracleReport.input.compiledPage,
+      options.width,
+      rasterHeight
+    );
+    createVisualComparisons(runDir);
+    createSameRasterizerComparisons(runDir);
+  }
 
   const report = {
-    formatVersion: 2,
+    formatVersion: 3,
     input: {
       path: options.inputPath,
+      materializedPath: relativeArtifact(runDir, materializedInput),
+      themeVariant: options.themeVariant,
       frameNumber: options.frameNumber,
       frameId: render.frame.id,
       frameTitle: render.frame.title?.value ?? null,
@@ -380,22 +455,25 @@ async function main() {
       selectedTrace: oracleReport.tex.selectedPage,
     },
     structural: structuralComparison,
-    raster: {
+    raster: options.structuralOnly ? null : {
       width: options.width,
       height: rasterHeight,
       background: "white",
     },
     artifacts: {
+      input: "input.tex",
       rendererSvg: "renderer.svg",
-      rendererPng: "renderer.png",
       oracleSvg: relativeArtifact(runDir, oracleSvg),
-      oraclePng: "oracle.png",
-      oracleVectorPng: "oracle-vector.png",
-      sideBySidePng: "side-by-side.png",
-      differencePng: "difference.png",
-      sideBySideVectorPng: "side-by-side-vector.png",
-      differenceVectorPng: "difference-vector.png",
-      overlayPng: "overlay.png",
+      ...(options.structuralOnly ? {} : {
+        rendererPng: "renderer.png",
+        oraclePng: "oracle.png",
+        oracleVectorPng: "oracle-vector.png",
+        sideBySidePng: "side-by-side.png",
+        differencePng: "difference.png",
+        sideBySideVectorPng: "side-by-side-vector.png",
+        differenceVectorPng: "difference-vector.png",
+        overlayPng: "overlay.png",
+      }),
       nativePageTrace: "native-page-trace.json",
       oraclePageTrace: "oracle-page-trace.json",
       structuralComparison: "structural-comparison.json",
@@ -411,6 +489,14 @@ async function main() {
   console.log(
     `[beamer-frame-compare] structural ${JSON.stringify(structuralComparison.summary)}`
   );
+  if (options.assertStructural) {
+    const failures = structuralContractFailures(structuralComparison.summary);
+    if (failures.length > 0) {
+      throw new Error(
+        `Structural fidelity contract failed: ${failures.join(", ")}`
+      );
+    }
+  }
 }
 
 main().catch((error) => {
