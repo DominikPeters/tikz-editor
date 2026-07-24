@@ -11,6 +11,7 @@ import { px, viewportPoint } from "@tikz-editor/core/coords/index";
 
 import type { CanvasDragKind, CanvasTransform } from "../../store/types";
 import { clamp, viewportToSvgPoint } from "./geometry";
+import { documentIdFromRootKey, rootKey } from "../../root-key";
 import type { CanvasDispatch, CanvasSnapshot, ValueSetter } from "./types";
 
 type FigureViewportState = {
@@ -120,7 +121,7 @@ export function useCanvasViewportPersistence({
   }, [baseSvgResult, dispatchCanvasTransform, MAX_SCALE, MIN_SCALE, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
-    () => makeFigureViewportKey(activeDocumentId, activeRootId),
+    () => rootKey(activeDocumentId, activeRootId),
     [activeDocumentId, activeRootId]
   );
   const saveFigureViewportState = useCallback(
@@ -141,8 +142,7 @@ export function useCanvasViewportPersistence({
   useEffect(() => {
     const openDocuments = new Set(tabOrder);
     for (const key of viewportStateByFigureKeyRef.current.keys()) {
-      const delimiter = key.indexOf("::");
-      const documentId = delimiter >= 0 ? key.slice(0, delimiter) : key;
+      const documentId = documentIdFromRootKey(key);
       if (!openDocuments.has(documentId)) {
         viewportStateByFigureKeyRef.current.delete(key);
         visitedFigureKeysRef.current.delete(key);
@@ -385,8 +385,4 @@ function computeFitToContentScale(
     minScale,
     maxScale
   );
-}
-
-function makeFigureViewportKey(documentId: string, figureId: string | null): string {
-  return `${documentId}::${figureId ?? "__all__"}`;
 }

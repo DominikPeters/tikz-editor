@@ -48,6 +48,7 @@ import { useSettingsStore } from "../../settings/useSettingsStore";
 import { useEditorStore } from "../../store/store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { resolveBucketFillEdit } from "./bucket-fill";
+import { rootKey } from "../../root-key";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { CanvasPanelView } from "./CanvasPanelView";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
@@ -143,9 +144,6 @@ const EquationModal = lazy(async () => {
 
 const EMPTY_GUIDES: GuidesState = { vertical: [], horizontal: [] };
 
-function canvasFigureContextKey(documentId: string, figureId: string | null): string {
-  return `${documentId}::${figureId ?? "none"}`;
-}
 
 const RULER_SIZE = 24;
 const MIN_SCALE = 0.05;
@@ -498,7 +496,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   } | null>(null);
   const [dragCursorLock, setDragCursorLock] = useState<string | null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
-  const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeRootId);
+  const activeGuideFigureKey = rootKey(activeDocumentId, activeRootId);
   const [guidesByFigureKey, setGuidesByFigureKey] = useState(() => new Map<string, GuidesState>());
   const guides = guidesByFigureKey.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
   const setGuides = useCallback<StateSetter<GuidesState>>(
@@ -674,7 +672,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const suppressNextBackgroundClickRef = useRef(false);
   const pathDraftRef = useRef<PathToolDraft | null>(null);
   const freehandDraftRef = useRef<FreehandToolDraft | null>(null);
-  const previousCanvasContextKeyRef = useRef(canvasFigureContextKey(activeDocumentId, activeRootId));
+  const previousCanvasContextKeyRef = useRef(rootKey(activeDocumentId, activeRootId));
   const pendingAddedSelectionRef = useRef<PendingAddedSelection | null>(null);
   const canvasTransformRef = useRef(canvasTransform);
   const selectedElementIdsRef = useRef(selectedElementIds);
@@ -759,7 +757,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [pathDraft]);
 
   useLayoutEffect(() => {
-    const nextContextKey = canvasFigureContextKey(activeDocumentId, activeRootId);
+    const nextContextKey = rootKey(activeDocumentId, activeRootId);
     if (previousCanvasContextKeyRef.current === nextContextKey) {
       return;
     }
@@ -1734,7 +1732,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     closeTextEditingSession,
     requestAdornmentTextEdit
   } = useCanvasTextEditSession({
-    contextKey: canvasFigureContextKey(activeDocumentId, activeRootId),
+    contextKey: rootKey(activeDocumentId, activeRootId),
     source,
     sourceRevision,
     snapshot,

@@ -4,15 +4,10 @@ import {
   type EditAnalysisSession,
   type EditAnalysisView
 } from "@tikz-editor/core/edit/analysis";
-
-export type EditAnalysisKey = {
-  documentId: string;
-  sourceRevision: number;
-  activeRootId: string | null | undefined;
-};
+import { rootKey } from "./root-key";
 
 type CachedEntry = {
-  key: EditAnalysisKey;
+  rootKey: string;
   session: EditAnalysisSession;
   primedSnapshotRevision: number | null;
 };
@@ -29,23 +24,14 @@ export function getSharedEditAnalysisView(params: {
   const analysisSource = params.snapshot.source === params.source
     ? params.source
     : params.snapshot.source;
-  const key: EditAnalysisKey = {
-    documentId: params.documentId,
-    sourceRevision: params.sourceRevision,
-    activeRootId: params.activeRootId
-  };
+  const key = rootKey(params.documentId, params.activeRootId);
 
-  if (
-    cachedEntry?.key.documentId !== key.documentId ||
-    cachedEntry.key.activeRootId !== key.activeRootId
-  ) {
+  if (cachedEntry?.rootKey !== key) {
     cachedEntry = {
-      key,
+      rootKey: key,
       session: createEditAnalysisSession(),
       primedSnapshotRevision: null
     };
-  } else {
-    cachedEntry.key = key;
   }
 
   const session = cachedEntry.session;
