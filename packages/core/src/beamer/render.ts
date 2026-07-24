@@ -110,6 +110,7 @@ type PreparedColumnFlowItem =
       kind: "tikzpicture";
       id: string;
       sourceSpan: Span;
+      horizontalAlignment: "left" | "center";
       width: number;
       height: number;
       model: BeamerEmbeddedTikzLayout["model"];
@@ -155,6 +156,15 @@ type PreparedFrameFlowItem =
       naturalHeight: number;
       boxHeight: number;
       endingDepth: number;
+    }
+  | {
+      kind: "tikzpicture";
+      node: Extract<BeamerFrameBodyNode, { kind: "tikzpicture" }>;
+      tikz: Extract<PreparedColumnFlowItem, { kind: "tikzpicture" }>;
+      naturalHeight: number;
+      boxHeight: number;
+      contentInsetTop: number;
+      endingDepth: number;
     };
 
 type PositionedFrameFlowItem = {
@@ -179,6 +189,7 @@ type ColumnVerticalBox = {
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 const TEX_LINE_SKIP_PT = 1;
+const BEAMER_CENTER_TOPSEP_PT = 3;
 // beamerbaselocalstructure.sty: \leftmargini..iii=2em,
 // \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
 // \itemsep=3pt. The deeper itemsep values alias their zero parsep.
@@ -308,6 +319,7 @@ export async function renderBeamerFrame(
     source,
     children: bodyIr.children,
     textWidth: page.textArea.width,
+    availableHeight: availableContentBounds.height,
     diagnostics,
     theme,
     macroBindings,
@@ -343,6 +355,24 @@ export async function renderBeamerFrame(
           embeddedTikz,
           modelBuilder,
           theme,
+        });
+      } else if (placement.item.kind === "tikzpicture") {
+        const tikz = placement.item.tikz;
+        const x = tikz.horizontalAlignment === "center"
+          ? availableContentBounds.x +
+            (availableContentBounds.width - tikz.width) / 2
+          : availableContentBounds.x;
+        emitEmbeddedTikz({
+          tikz,
+          x,
+          y:
+            frameBlockTop +
+            placement.contentTop +
+            placement.item.contentInsetTop,
+          parentId: null,
+          items,
+          embeddedTikz,
+          modelBuilder,
         });
       } else {
         emitPreparedBlock({
@@ -534,6 +564,7 @@ async function prepareFrameFlow(params: {
   source: string;
   children: readonly BeamerFrameBodyNode[];
   textWidth: number;
+  availableHeight: number;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
@@ -543,44 +574,16 @@ async function prepareFrameFlow(params: {
   const listProfile = beamerListLayoutProfile(params.theme);
   for (const node of params.children) {
     if (node.kind === "paragraph") {
-      const paragraphSource = params.source.slice(node.span.from, node.span.to);
-      const paragraph = layoutParagraph({
-        mapped: createIdentityMappedText(
-          paragraphSource,
-          node.span.from
-        ),
-        sourceSpan: node.span,
-        paragraphId: node.id,
-        role: "body",
-        bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
-        font: bodyFont,
-        alignment: "left",
+      const paragraph = prepareFrameParagraph({
+        source: params.source,
+        node,
+        textWidth: params.textWidth,
+        bodyFont,
         listProfile,
         macroBindings: params.macroBindings,
       });
       if (paragraph) {
-        const trailingTrivlistSkip = trailingBeamerTrivlistSkip(
-          paragraphSource
-        );
-        const trailingListSkip = trailingBeamerListSkip(paragraphSource);
-        const namedSize = activeBeamerNamedSize(paragraphSource);
-        result.push({
-          kind: "paragraph",
-          node,
-          paragraph,
-          naturalHeight:
-            paragraph.height + trailingTrivlistSkip + trailingListSkip,
-          boxHeight: paragraphStartingMaterialHeight(paragraph),
-          startingBaselineSkip:
-            namedSize?.lineHeightPt ?? bodyFont.lineHeightPt,
-          leadingAdjustment: leadingBeamerTrivlistAdjustment(
-            paragraphSource,
-            paragraph
-          ),
-          endingDepth: paragraphEndingMaterialDepth(paragraph),
-          endsWithVerticalSpace: paragraphEndsWithVerticalSpace(paragraph),
-          trailingParagraphPreviousDepth: paragraphLastLineDepth(paragraph),
-        });
+        result.push(paragraph);
       }
       continue;
     }
@@ -617,6 +620,30 @@ async function prepareFrameFlow(params: {
       });
       continue;
     }
+    if (node.kind === "tikzpicture") {
+      const tikz = await prepareEmbeddedTikz({
+        source: params.source,
+        node,
+        width: params.textWidth,
+        bodyFont,
+        diagnostics: params.diagnostics,
+      });
+      if (tikz) {
+        const centerSkip = node.horizontalAlignment === "center"
+          ? BEAMER_CENTER_TOPSEP_PT
+          : 0;
+        result.push({
+          kind: "tikzpicture",
+          node,
+          tikz,
+          naturalHeight: tikz.height + centerSkip * 2,
+          boxHeight: tikz.height + centerSkip,
+          contentInsetTop: centerSkip,
+          endingDepth: 0,
+        });
+      }
+      continue;
+    }
     if (node.kind === "block") {
       const block = prepareBlock({
         source: params.source,
@@ -644,7 +671,146 @@ async function prepareFrameFlow(params: {
       span: node.span,
     });
   }
-  return result;
+  return shrinkFrameParagraphGlueToAvailableHeight(result, {
+    source: params.source,
+    textWidth: params.textWidth,
+    availableHeight: params.availableHeight,
+    bodyFont,
+    listProfile,
+    macroBindings: params.macroBindings,
+  });
+}
+
+function prepareFrameParagraph(params: {
+  source: string;
+  node: BeamerParagraphBodyNode;
+  textWidth: number;
+  bodyFont: BeamerThemeFont;
+  listProfile: TexListLayoutProfile;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
+  targetHeight?: number;
+}): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> | null {
+  const paragraphSource = params.source.slice(
+    params.node.span.from,
+    params.node.span.to
+  );
+  const paragraph = layoutParagraph({
+    mapped: createIdentityMappedText(
+      paragraphSource,
+      params.node.span.from
+    ),
+    sourceSpan: params.node.span,
+    paragraphId: params.node.id,
+    role: "body",
+    bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
+    font: params.bodyFont,
+    alignment: "left",
+    listProfile: params.listProfile,
+    macroBindings: params.macroBindings,
+    targetHeight: params.targetHeight,
+  });
+  if (!paragraph) {
+    return null;
+  }
+  const trailingTrivlistSkip = trailingBeamerTrivlistSkip(paragraphSource);
+  const trailingListSkip = trailingBeamerListSkip(paragraphSource);
+  const namedSize = activeBeamerNamedSize(paragraphSource);
+  return {
+    kind: "paragraph",
+    node: params.node,
+    paragraph,
+    naturalHeight:
+      paragraph.height + trailingTrivlistSkip + trailingListSkip,
+    boxHeight: paragraphStartingMaterialHeight(paragraph),
+    startingBaselineSkip:
+      namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt,
+    leadingAdjustment: leadingBeamerTrivlistAdjustment(
+      paragraphSource,
+      paragraph
+    ),
+    endingDepth: paragraphEndingMaterialDepth(paragraph),
+    endsWithVerticalSpace: paragraphEndsWithVerticalSpace(paragraph),
+    trailingParagraphPreviousDepth: paragraphLastLineDepth(paragraph),
+  };
+}
+
+function shrinkFrameParagraphGlueToAvailableHeight(
+  flow: readonly PreparedFrameFlowItem[],
+  params: {
+    source: string;
+    textWidth: number;
+    availableHeight: number;
+    bodyFont: BeamerThemeFont;
+    listProfile: TexListLayoutProfile;
+    macroBindings: ReadonlyMap<string, MacroBinding>;
+  }
+): PreparedFrameFlowItem[] {
+  const fitted = [...flow];
+  // beamerbaseframesize.sty packs the assembled frame into
+  // `\vbox to\textheight`. If the material is overfull, ordinary-order glue
+  // inside the frame body (notably display skips) receives the box's shrink
+  // setting. Our frame flow keeps source-contiguous prose in a reusable VList,
+  // so re-run those VLists against the remaining frame height.
+  const overflow = Math.max(
+    0,
+    positionPreparedFrameFlow(
+      fitted,
+      params.bodyFont.lineHeightPt
+    ).extent - params.availableHeight
+  );
+  if (overflow === 0) {
+    return fitted;
+  }
+  const shrinkable: Array<{
+    index: number;
+    item: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>;
+    maximumShrink: number;
+  }> = [];
+  for (let index = 0; index < fitted.length; index += 1) {
+    const item = fitted[index];
+    if (item?.kind !== "paragraph") {
+      continue;
+    }
+    const fullyShrunk = prepareFrameParagraph({
+      ...params,
+      node: item.node,
+      targetHeight: 0,
+    });
+    if (!fullyShrunk) {
+      continue;
+    }
+    shrinkable.push({
+      index,
+      item,
+      maximumShrink: Math.max(
+        0,
+        item.paragraph.height - fullyShrunk.paragraph.height
+      ),
+    });
+  }
+  const totalShrink = shrinkable.reduce(
+    (sum, candidate) => sum + candidate.maximumShrink,
+    0
+  );
+  const ratio = totalShrink > 0
+    ? Math.min(overflow / totalShrink, 1)
+    : 0;
+  for (const candidate of shrinkable) {
+    const targetHeight =
+      candidate.item.paragraph.height -
+      candidate.maximumShrink * ratio;
+    const relaid = prepareFrameParagraph({
+      ...params,
+      node: candidate.item.node,
+      targetHeight,
+    });
+    if (!relaid) {
+      continue;
+    }
+    const index = candidate.index;
+    fitted[index] = relaid;
+  }
+  return fitted;
 }
 
 function positionPreparedFrameFlow(
@@ -702,6 +868,26 @@ function positionPreparedFrameFlow(
         visualBottom,
       });
       cursor = visualBottom + item.block.plan.geometry.afterSkipPt;
+      previousDepth = item.endingDepth;
+      continue;
+    }
+    if (item.kind === "tikzpicture") {
+      const glue = verticalInterlineGlue(
+        previousDepth,
+        item.boxHeight,
+        baselineSkip
+      );
+      const referenceY = cursor + glue + item.boxHeight;
+      const contentTop = referenceY - item.boxHeight;
+      const visualBottom = contentTop + item.naturalHeight;
+      items.push({
+        item,
+        contentTop,
+        referenceY,
+        visualTop: contentTop,
+        visualBottom,
+      });
+      cursor = visualBottom;
       previousDepth = item.endingDepth;
       continue;
     }
@@ -1302,7 +1488,7 @@ function emitEmbeddedTikz(params: {
   tikz: Extract<PreparedColumnFlowItem, { kind: "tikzpicture" }>;
   x: number;
   y: number;
-  parentId: string;
+  parentId: string | null;
   items: BeamerFrameLayoutItem[];
   embeddedTikz: BeamerEmbeddedTikzLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
@@ -1497,10 +1683,32 @@ async function prepareColumnFlowNode(params: {
     });
     return null;
   }
+  return prepareEmbeddedTikz({
+    source,
+    node,
+    width,
+    bodyFont,
+    diagnostics,
+  });
+}
 
-  const snippet = source.slice(node.span.from, node.span.to);
+async function prepareEmbeddedTikz(params: {
+  source: string;
+  node: Extract<BeamerColumnFlowNode | BeamerFrameBodyNode, {
+    kind: "tikzpicture";
+  }>;
+  width: number;
+  bodyFont: BeamerThemeFont;
+  diagnostics: Diagnostic[];
+}): Promise<Extract<PreparedColumnFlowItem, {
+  kind: "tikzpicture";
+}> | null> {
+  const snippet = params.source.slice(
+    params.node.root.span.from,
+    params.node.root.span.to
+  );
   const rendered = await renderTikzToSvgAsync(
-    applyThemeFamilyToTikz(snippet, bodyFont),
+    applyThemeFamilyToTikz(snippet, params.bodyFont),
     {
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
@@ -1509,22 +1717,23 @@ async function prepareColumnFlowNode(params: {
     }
   );
   const viewBox = rendered.svg.viewBox;
-  const scale = Math.min(1, width / Math.max(viewBox.width, 1));
+  const scale = Math.min(1, params.width / Math.max(viewBox.width, 1));
   for (const diagnostic of [
     ...rendered.parse.diagnostics,
     ...rendered.semantic.diagnostics,
   ]) {
-    diagnostics.push({
+    params.diagnostics.push({
       severity: diagnostic.severity,
       code: diagnostic.code,
       message: diagnostic.message,
-      span: node.span,
+      span: params.node.root.span,
     });
   }
   return {
     kind: "tikzpicture",
-    id: node.id,
-    sourceSpan: node.span,
+    id: params.node.id,
+    sourceSpan: params.node.span,
+    horizontalAlignment: params.node.horizontalAlignment,
     width: viewBox.width * scale,
     height: viewBox.height * scale,
     model: rendered.svg.model,
@@ -1653,6 +1862,7 @@ function layoutParagraph(params: {
   listProfile?: TexListLayoutProfile;
   disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
+  targetHeight?: number;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -1693,6 +1903,7 @@ function layoutParagraph(params: {
   const result = layoutSimpleTexParagraph(mapped.text, {
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
+    height: params.targetHeight,
     alignment,
     font: resolvedFont,
     metricProvider,

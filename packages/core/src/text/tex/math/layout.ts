@@ -7243,6 +7243,7 @@ function defaultLuaLatexMathSymbols(
     case "rvert":
       return [{ family: "symbols", code: 106 }];
     case "parallel":
+    case "|":
     case "lVert":
     case "rVert":
       return [{ family: "symbols", code: 107 }];

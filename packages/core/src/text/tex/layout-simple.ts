@@ -38,6 +38,8 @@ import { texLength } from "./coordinates.js";
 export interface TexParagraphLayoutOptions {
   readonly paragraphId?: string;
   readonly width: number;
+  /** Optional enclosing vertical-box target used to set VList glue. */
+  readonly height?: number;
   readonly alignment?: TexParagraphAlignment;
   readonly font?: ResolvedTexFont;
   readonly metricProvider?: TexMetricProvider;
@@ -116,6 +118,7 @@ export function layoutSimpleTexParagraph(
   );
   const {
     width: inputWidth,
+    height: inputHeight,
     parindent: inputParindent,
     rightskipStretch: inputRightskipStretch,
     baselineSkip: inputBaselineSkip,
@@ -125,6 +128,9 @@ export function layoutSimpleTexParagraph(
   const layoutOptions = {
     ...otherOptions,
     width: texLength(inputWidth),
+    ...(inputHeight !== undefined
+      ? { height: texLength(inputHeight) }
+      : {}),
     ...(inputParindent !== undefined
       ? { parindent: texLength(inputParindent) }
       : {}),
@@ -226,6 +232,7 @@ export function layoutSimpleTexParagraph(
   const reportAssembly = layoutTexVListFromBrokenParagraphs(layoutIr.vlist, {
     paragraphId,
     width: texLength(options.width),
+    height: layoutOptions.height,
     alignment: layoutIr.reportAlignment,
     layoutMode: layoutIr.layoutMode,
     font,

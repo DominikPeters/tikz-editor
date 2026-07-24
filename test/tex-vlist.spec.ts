@@ -1025,6 +1025,33 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("sets root display glue against a public paragraph height target", () => {
+    const source = String.raw`Alpha Beta Gamma \[\sum_i^n\] Delta`;
+    const options = {
+      width: 120,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    };
+    const natural = layoutSimpleTexParagraph(source, options);
+    const naturalHeight =
+      Number(natural.vlistLayout?.metrics.height ?? 0) +
+      Number(natural.vlistLayout?.metrics.depth ?? 0);
+    const fitted = layoutSimpleTexParagraph(source, {
+      ...options,
+      height: naturalHeight - 4,
+    });
+    const boundarySizes = fitted.vlistLayout?.boxReport.items
+      .filter((item) =>
+        item.glue?.origin?.kind === "display-math-boundary"
+      )
+      .map((item) => Number(item.height));
+
+    expect(boundarySizes).toEqual([8, 8]);
+    expect(
+      Number(fitted.vlistLayout?.metrics.height ?? 0) +
+      Number(fitted.vlistLayout?.metrics.depth ?? 0)
+    ).toBeCloseTo(naturalHeight - 4, 6);
+  });
+
   it("uses explicit placeholders for unsupported display math formulas", () => {
     const source = String.raw`\[\unknown{x}\]`;
     const parsed = parseSimpleTexParagraphIr(source);

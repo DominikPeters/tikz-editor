@@ -6316,6 +6316,7 @@ function atomClassForToken(token: TexMathToken): TexMathAtomClass | null {
 }
 
 const ordinaryNamedSymbolCommands = new Set([
+  "|",
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
   "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",
   "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma",

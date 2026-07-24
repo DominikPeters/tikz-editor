@@ -133,6 +133,35 @@ describe("headless Beamer frame renderer", () => {
     )).toHaveLength(6);
   });
 
+  it("renders a centered frame-root TikZ picture as embedded vector content", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 15 });
+
+    expect(result.layout.embeddedTikz).toHaveLength(1);
+    expect(
+      result.layout.items.filter((item) => item.kind === "tikzpicture")
+    ).toHaveLength(1);
+    expect(result.svg.svg).not.toContain(String.raw`\begin{tikzpicture}`);
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
+  it("shrinks display glue when a composed frame overfills its TeX frame box", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 13 });
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "body"
+    )!;
+    const displayBoundaries = body.vlistLayout.boxReport.items.filter(
+      (item) => item.glue?.origin?.kind === "display-math-boundary"
+    );
+
+    expect(displayBoundaries).toHaveLength(6);
+    expect(displayBoundaries.every((item) => Number(item.height) < 11))
+      .toBe(true);
+    expect(result.layout.embeddedTikz).toHaveLength(1);
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
   it("uses Beamer boxes and 11pt display skips for the KKT geometry frame", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 4 });

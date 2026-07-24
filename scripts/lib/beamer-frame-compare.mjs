@@ -405,7 +405,7 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
         line.x,
         line.baselineY,
         region.bounds,
-        25
+        2
       )
     )
   );

@@ -13,6 +13,17 @@ function atomAt(result: ReturnType<typeof parseTexMath>, index: number): TexMath
 }
 
 describe("TeX math parser", () => {
+  it("parses the plain TeX double-vertical norm delimiter as an ordinary atom", () => {
+    const result = parseTexMath(String.raw`\|w\|`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toMatchObject([
+      { kind: "atom", atomClass: "ord", nucleus: { text: String.raw`\|` } },
+      { kind: "atom", atomClass: "ord", nucleus: { text: "w" } },
+      { kind: "atom", atomClass: "ord", nucleus: { text: String.raw`\|` } },
+    ]);
+  });
+
   it("tokenizes commands, groups, and scripts with source offsets", () => {
     const tokens = tokenizeTexMath(String.raw`\frac{x_1}{y^2}`, 20);
 

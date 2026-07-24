@@ -17,6 +17,7 @@ import type {
   BeamerFrameBodyIr,
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
+  BeamerTikzBodyNode,
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
 
@@ -52,6 +53,8 @@ export function parseBeamerFrameBody(
     if (
       token.kind !== "begin" ||
       (token.name !== "columns" &&
+        token.name !== "tikzpicture" &&
+        token.name !== "center" &&
         !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment))
     ) {
       continue;
@@ -69,9 +72,26 @@ export function parseBeamerFrameBody(
       break;
     }
     const end = tokens[endIndex];
+    const tikzNode = frameTikzFlowNode({
+      source,
+      frameId: frame.id,
+      begin: token,
+      end,
+      nodeIndex,
+    });
+    if (
+      (token.name === "tikzpicture" || token.name === "center") &&
+      !tikzNode
+    ) {
+      // An ordinary center environment remains owned by the generic TeX
+      // vlist frontend. Only extract a center whose sole material is one
+      // TikZ picture.
+      continue;
+    }
     pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
     children.push(
-      token.name === "columns"
+      tikzNode ??
+      (token.name === "columns"
         ? parseColumns({
             source,
             frameId: frame.id,
@@ -89,6 +109,7 @@ export function parseBeamerFrameBody(
             nodeIndex,
             diagnostics,
           })
+      )
     );
     nodeIndex += 1;
     cursor = end.span.to;
@@ -102,6 +123,54 @@ export function parseBeamerFrameBody(
     span: frame.bodySpan,
     children,
     diagnostics,
+  };
+}
+
+function frameTikzFlowNode(params: {
+  source: string;
+  frameId: string;
+  begin: BeamerEnvironmentToken;
+  end: BeamerEnvironmentToken;
+  nodeIndex: number;
+}): BeamerTikzBodyNode | null {
+  const { source, frameId, begin, end, nodeIndex } = params;
+  if (begin.name === "tikzpicture") {
+    const roots = scanTikzRootsInSpan(source, frameId, {
+      from: begin.span.from,
+      to: end.span.to,
+    });
+    const root = roots[0];
+    return root
+      ? {
+          kind: "tikzpicture",
+          id: `${frameId}:tikz:${nodeIndex}`,
+          span: root.span,
+          root,
+          horizontalAlignment: "left",
+        }
+      : null;
+  }
+  if (begin.name !== "center") {
+    return null;
+  }
+  const innerSpan = { from: begin.span.to, to: end.span.from };
+  const roots = scanTikzRootsInSpan(source, frameId, innerSpan);
+  if (roots.length !== 1) {
+    return null;
+  }
+  const root = roots[0];
+  const surroundingMaterial =
+    source.slice(innerSpan.from, root.span.from) +
+    source.slice(root.span.to, innerSpan.to);
+  if (surroundingMaterial.trim() !== "") {
+    return null;
+  }
+  return {
+    kind: "tikzpicture",
+    id: `${frameId}:tikz:${nodeIndex}`,
+    span: { from: begin.span.from, to: end.span.to },
+    root,
+    horizontalAlignment: "center",
   };
 }
 
@@ -387,6 +456,7 @@ function parseColumnFlow(
         id: `${frameId}:column:${columnIndex}:tikz:${nodeIndex}`,
         span: root.span,
         root,
+        horizontalAlignment: "left",
       },
     });
     nodeIndex += 1;

@@ -104,6 +104,32 @@ describe("Beamer frame content frontend", () => {
     ]);
   });
 
+  it("extracts a frame-root TikZ picture with its owning center alignment", () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const document = scanBeamerDocument(source);
+    const ir = parseBeamerFrameBody({
+      source,
+      frame: document.frames[15]!,
+    });
+
+    expect(ir.diagnostics).toEqual([]);
+    expect(ir.children).toHaveLength(1);
+    const tikz = ir.children[0]!;
+    expect(tikz).toMatchObject({
+      kind: "tikzpicture",
+      horizontalAlignment: "center",
+    });
+    if (tikz.kind !== "tikzpicture") {
+      throw new Error("Expected a centered TikZ picture.");
+    }
+    expect(source.slice(tikz.span.from, tikz.span.to)).toContain(
+      String.raw`\begin{center}`
+    );
+    expect(source.slice(tikz.root.span.from, tikz.root.span.to)).toMatch(
+      /^\\begin\{tikzpicture\}[\s\S]*\\end\{tikzpicture\}$/u
+    );
+  });
+
   it("lowers theme-decorated blocks at the frame root and inside columns", () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const document = scanBeamerDocument(source);

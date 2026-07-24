@@ -30,8 +30,10 @@ export type BeamerVerticalSpaceBodyNode = {
 export type BeamerTikzBodyNode = {
   kind: "tikzpicture";
   id: string;
+  /** Full flow span, including an owning center environment when present. */
   span: Span;
   root: BeamerTikzPictureRoot;
+  horizontalAlignment: "left" | "center";
 };
 
 export type BeamerUnsupportedBodyNode = {
@@ -105,6 +107,7 @@ export type BeamerFrameBodyNode =
   | BeamerColumnsBodyNode
   | BeamerBlockBodyNode
   | BeamerParagraphBodyNode
+  | BeamerTikzBodyNode
   | BeamerUnsupportedBodyNode;
 
 export type BeamerFrameBodyIr = {
