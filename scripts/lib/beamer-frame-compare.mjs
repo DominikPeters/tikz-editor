@@ -68,6 +68,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   const rectangles = render.layout.items
     .filter((item) =>
       (
+        item.kind === "background" ||
         item.id.endsWith(":background") ||
         (item.kind === "list-marker" && item.traceAsGlyph !== true)
       ) &&
@@ -1086,6 +1087,9 @@ function rectangleDelta(native, oracle) {
 function rectangleRole(id) {
   if (id.endsWith(":frame-title:background")) {
     return "frame-title";
+  }
+  if (id.includes(":headline:")) {
+    return "headline";
   }
   if (id.includes(":footline:")) {
     return "footline";

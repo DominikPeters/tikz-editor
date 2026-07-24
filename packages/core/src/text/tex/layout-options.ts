@@ -55,9 +55,15 @@ export interface TexListMarkerProfile {
 export interface TexListLayoutProfile {
   readonly leftMarginEmByDepth: readonly number[];
   readonly topsepPtByDepth: readonly number[];
+  readonly topsepStretchPtByDepth?: readonly number[];
+  readonly topsepShrinkPtByDepth?: readonly number[];
   readonly partopsepPtByDepth: readonly number[];
   readonly itemsepPtByDepth: readonly number[];
+  readonly itemsepStretchPtByDepth?: readonly number[];
+  readonly itemsepShrinkPtByDepth?: readonly number[];
   readonly parsepPtByDepth: readonly number[];
+  readonly parsepStretchPtByDepth?: readonly number[];
+  readonly parsepShrinkPtByDepth?: readonly number[];
   readonly initialItemBaselineAdjustmentPt: number;
   readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
   readonly resolveEnumerateMarker?: (

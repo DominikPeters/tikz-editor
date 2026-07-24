@@ -33,6 +33,12 @@ export function resolveBeamerItemizeMarkers(
     fontId: "msam10",
     atPt: texLength(font.sizePt),
   });
+  const circleFont = fontProfile.metricProvider.resolveFont({
+    // beamerbaseauxtemplates.sty paints the circle template as
+    // `\donotcoloroutermaths$\bullet$` in the normal math-symbol face.
+    fontId: "cmsy10",
+    atPt: texLength(font.sizePt),
+  });
   const tinySymbolFont = fontProfile.metricProvider.resolveFont({
     // umsa.fd selects msam7 for the 6pt `\tiny` size used by Boadilla.
     fontId: "msam7",
@@ -52,6 +58,7 @@ export function resolveBeamerItemizeMarkers(
       fontSizePt: font.sizePt,
       xHeightEm,
       triangleFont,
+      circleFont,
       tinySymbolFont,
       structure,
       canvas,
@@ -67,7 +74,8 @@ export function resolveBeamerEnumerateMarker(
   const template = theme.templates.enumerations[
     Math.max(0, Math.min(labelDepth - 1, theme.templates.enumerations.length - 1))
   ];
-  if (template?.id.split("/").at(-1) !== "ball") {
+  const family = template?.id.split("/").at(-1);
+  if (family !== "ball" && family !== "square") {
     return undefined;
   }
   const bodyFont = theme.fonts["normal-text"];
@@ -79,7 +87,7 @@ export function resolveBeamerEnumerateMarker(
   );
   const projectedFont = fontProfile.metricProvider.resolveFont({
     fontId: "lmsans8-regular",
-    atPt: texLength(6),
+    atPt: texLength(family === "square" ? 8 : 6),
   });
   const text = String(itemIndex);
   const projectedRun = fontProfile.metricProvider.shapeText(text, projectedFont);
@@ -103,6 +111,48 @@ export function resolveBeamerEnumerateMarker(
   const projectedCenterPt =
     (projectedHeight - projectedDepth) / 2;
   const xHeightEm = resolvedBodyFont.data.fontdimen.xheight;
+  if (family === "square") {
+    const projectedXHeightPt =
+      projectedFont.data.fontdimen.xheight * Number(projectedFont.atPt);
+    const boxWidthPt = 2.25 * projectedXHeightPt;
+    const boxHeightPt = 1.85 * projectedXHeightPt;
+    const boxDepthPt = 0.4 * projectedXHeightPt;
+    const background =
+      resolveBeamerThemeColor(theme, "item projected").bg ??
+      resolveBeamerThemeColor(theme, "item").fg ??
+      resolveBeamerThemeColor(theme, "structure").fg ??
+      "#3333b3";
+    const foreground =
+      resolveBeamerThemeColor(theme, "item projected").fg ?? WHITE;
+    const widthEm = boxWidthPt / bodyFont.sizePt;
+    const heightEm = boxHeightPt / bodyFont.sizePt;
+    const depthEm = boxDepthPt / bodyFont.sizePt;
+    return {
+      widthEm,
+      heightEm,
+      depthEm,
+      paintBoundsEm: {
+        x: 0,
+        y: 0,
+        width: widthEm,
+        height: heightEm + depthEm,
+      },
+      projectedText: {
+        text,
+        fontId: projectedFont.id,
+        fontSizePt: Number(projectedFont.atPt),
+        color: foreground,
+        xEm: (widthEm - textWidthEm) / 2,
+        baselineOffsetEm: 0,
+      },
+      svgBody:
+        `<rect data-beamer-list-marker="enumerate-square" x="0" ` +
+        `y="${fmt(-boxHeightPt * 100)}" ` +
+        `width="${fmt(boxWidthPt * 100)}" ` +
+        `height="${fmt((boxHeightPt + boxDepthPt) * 100)}" ` +
+        `fill="${background}"/>`,
+    };
+  }
   const boxWidthEm = 2 * xHeightEm;
   const sphereSizeEm = 1.06 * xHeightEm;
   // beamerbaseauxtemplates.sty's projected-ball pgfpicture spans
@@ -171,6 +221,7 @@ function markerForTemplate(params: {
   fontSizePt: number;
   xHeightEm: number;
   triangleFont: ResolvedTexFont;
+  circleFont: ResolvedTexFont;
   tinySymbolFont: ResolvedTexFont;
   structure: string;
   canvas: string;
@@ -183,7 +234,7 @@ function markerForTemplate(params: {
     return squareMarker(params);
   }
   if (family === "circle") {
-    return circleMarker(params, false);
+    return circleGlyphMarker(params);
   }
   if (family === "tiny-triangle") {
     return tinyAmsMarker(params, 0x49, "tiny-triangle");
@@ -345,6 +396,38 @@ function squareMarker(params: {
     svgBody:
       `<rect data-beamer-list-marker="square" x="0" y="${fmt(-size)}" ` +
       `width="${fmt(size)}" height="${fmt(size)}" fill="${params.structure}"/>`,
+  };
+}
+
+function circleGlyphMarker(params: {
+  depth: number;
+  fontSizePt: number;
+  circleFont: ResolvedTexFont;
+  structure: string;
+}): TexListMarkerProfile {
+  const code = 15;
+  const metric = params.circleFont.data.chars[String(code)];
+  if (
+    metric?.width == null ||
+    metric.height == null
+  ) {
+    throw new Error("The cmsy10 bullet metric is unavailable.");
+  }
+  const scale = Number(params.circleFont.atPt) / params.fontSizePt;
+  const raiseEm = (params.depth === 1 ? 1.25 : 1.5) / params.fontSizePt;
+  return {
+    widthEm: metric.width * scale,
+    heightEm: metric.height * scale + raiseEm,
+    depthEm: (metric.depth ?? 0) * scale - raiseEm,
+    glyph: {
+      text: String.fromCodePoint(code),
+      code,
+      fontId: params.circleFont.id,
+      fontSizePt: Number(params.circleFont.atPt),
+      color: params.structure,
+      baselineOffsetEm: -raiseEm,
+    },
+    svgBody: '<g data-beamer-list-marker="circle"/>',
   };
 }
 

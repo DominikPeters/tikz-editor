@@ -57,7 +57,7 @@ Options:
   --frames <selection>  "all" or comma-separated frame numbers. Default: all.
   --out-dir <dir>       Default: artifacts/beamer-theme-compare.
   --raster              Also create PNG comparison artifacts.
-                        The generated index.html uses these visual assets.
+                        The gallery otherwise uses existing renderer/oracle SVGs.
   --help                Show this help.
 `.trim();
 }
@@ -167,8 +167,8 @@ function readResult(reportPath, reportRoot, metadata, status) {
       diagnostics: report.renderer.diagnostics,
       summary: report.structural.summary,
       visuals: {
-        renderer: artifact("rendererPng"),
-        oracle: artifact("oraclePng"),
+        renderer: artifact("rendererPng") ?? artifact("rendererSvg"),
+        oracle: artifact("oraclePng") ?? artifact("oracleSvg"),
         overlay: artifact("overlayPng"),
         difference: artifact("differencePng"),
         sideBySide: artifact("sideBySidePng"),

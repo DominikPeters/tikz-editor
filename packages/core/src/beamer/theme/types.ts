@@ -61,6 +61,12 @@ export type BeamerThemeColor = {
     backgroundRole: string;
     foregroundPercent: number;
   };
+  /** Deferred background counterpart of `fgMix`. */
+  bgMix?: {
+    foregroundRole: string;
+    backgroundRole: string;
+    foregroundPercent: number;
+  };
 };
 
 export type ResolvedBeamerThemeColor = {
@@ -169,6 +175,7 @@ export type BeamerTemplateVectorShape =
       kind: "path";
       commands: readonly BeamerTemplatePathCommand[];
       fillColorRole?: string;
+      fillOpacity?: number;
       strokeColorRole?: string;
       strokeWidthPt?: number;
       lineCap?: "butt" | "round" | "square";
@@ -181,6 +188,7 @@ export type BeamerTemplateVectorShape =
       width: number;
       height: number;
       fillColorRole?: string;
+      fillOpacity?: number;
       strokeColorRole?: string;
       strokeWidthPt?: number;
     }
@@ -190,6 +198,7 @@ export type BeamerTemplateVectorShape =
       cy: number;
       radius: number;
       fillColorRole?: string;
+      fillOpacity?: number;
       strokeColorRole?: string;
       strokeWidthPt?: number;
     };
@@ -201,6 +210,8 @@ export type BeamerTemplatePrimitive =
       sourceSpan: Span;
       bounds: BeamerRect;
       colorRole: string;
+      /** Color-box fills use the background; rules/hooks use the foreground. */
+      paint?: "background" | "foreground";
     }
   | {
       kind: "text";
@@ -223,9 +234,17 @@ export type BeamerTemplatePrimitive =
       sourceSpan: Span;
       bounds: BeamerRect;
       templateId: string;
-      layoutKind: "navigation-symbols";
+      layoutKind:
+        | "navigation-symbols"
+        | "mini-frame-navigation"
+        | "headline-decoration";
       shapes: readonly BeamerTemplateVectorShape[];
     };
+
+export type BeamerChromeTemplatePlan = {
+  inset: number;
+  primitives: BeamerTemplatePrimitive[];
+};
 
 export type BeamerFrameChromePlan = {
   topInset: number;

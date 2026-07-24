@@ -93,6 +93,8 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly size: TexLength;
   readonly quoteSize: TexLength;
   readonly listSize: TexLength;
+  readonly listStretch?: TexLength;
+  readonly listShrink?: TexLength;
   readonly trivlistSize?: TexLength;
 }
 
@@ -229,6 +231,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
           font,
           listProfile
         );
+    const listFlex = followsDisplay
+      ? { stretch: texLength(0), shrink: texLength(0) }
+      : texProfileListVerticalGlueFlex(
+          state.previousEmittedListContext,
+          scope.listContext,
+          hasPreviousEmittedParagraph,
+          exitsTrivlistScope,
+          listProfile
+        );
     const quoteVerticalSkipBefore = followsDisplay
       ? texLength(0)
       : texArticleQuoteVerticalSkipBefore(
@@ -257,6 +268,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
       segmentIndex: 0,
       quoteSize: quoteVerticalSkipBefore,
       listSize: listVerticalSkipBefore,
+      ...(listFlex.stretch > 0
+        ? { listStretch: listFlex.stretch }
+        : {}),
+      ...(listFlex.shrink > 0
+        ? { listShrink: listFlex.shrink }
+        : {}),
       ...(trivlistVerticalSkipBefore > 0
         ? { trivlistSize: trivlistVerticalSkipBefore }
         : {}),
@@ -443,6 +460,8 @@ function paragraphBoundaryGlueItems(
         beforeBlockIndex: item.paragraph.blockIndex,
       },
       size: skip.listSize,
+      ...(skip.listStretch != null ? { stretch: skip.listStretch } : {}),
+      ...(skip.listShrink != null ? { shrink: skip.listShrink } : {}),
     });
   }
   if ((skip.trivlistSize ?? texLength(0)) > 0) {
@@ -1996,6 +2015,64 @@ function texArticleListParagraphSkip(
 
 function texProfileDepthValue(values: readonly number[], depth: number): number {
   return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
+}
+
+function texProfileListVerticalGlueFlex(
+  previous: SimpleTexListContext | undefined,
+  current: SimpleTexListContext | undefined,
+  hasPreviousEmittedParagraph: boolean,
+  exitsTrivlistScope: boolean,
+  profile?: TexListLayoutProfile
+): { stretch: TexLength; shrink: TexLength } {
+  if (!profile || (!previous && !current)) {
+    return { stretch: texLength(0), shrink: texLength(0) };
+  }
+  let depth = current?.depth ?? previous?.depth ?? 1;
+  let stretchValues = profile.topsepStretchPtByDepth;
+  let shrinkValues = profile.topsepShrinkPtByDepth;
+  if (current?.depth !== undefined && previous?.depth === current.depth) {
+    depth = current.depth;
+    const sameItem =
+      current.kind === previous.kind &&
+      current.labelDepth === previous.labelDepth &&
+      current.itemIndex === previous.itemIndex;
+    if (sameItem && !current.showLabel) {
+      stretchValues = profile.parsepStretchPtByDepth;
+      shrinkValues = profile.parsepShrinkPtByDepth;
+    } else if (exitsTrivlistScope) {
+      stretchValues = profile.itemsepStretchPtByDepth;
+      shrinkValues = profile.itemsepShrinkPtByDepth;
+    } else {
+      return {
+        stretch: texLength(
+          texProfileOptionalDepthValue(
+            profile.itemsepStretchPtByDepth,
+            depth
+          ) +
+          texProfileOptionalDepthValue(profile.parsepStretchPtByDepth, depth)
+        ),
+        shrink: texLength(
+          texProfileOptionalDepthValue(profile.itemsepShrinkPtByDepth, depth) +
+          texProfileOptionalDepthValue(profile.parsepShrinkPtByDepth, depth)
+        ),
+      };
+    }
+  } else if (!hasPreviousEmittedParagraph && current) {
+    depth = current.depth;
+  } else if (previous && current) {
+    depth = Math.max(previous.depth, current.depth);
+  }
+  return {
+    stretch: texLength(texProfileOptionalDepthValue(stretchValues, depth)),
+    shrink: texLength(texProfileOptionalDepthValue(shrinkValues, depth)),
+  };
+}
+
+function texProfileOptionalDepthValue(
+  values: readonly number[] | undefined,
+  depth: number
+): number {
+  return values ? texProfileDepthValue(values, depth) : 0;
 }
 
 function texDepthIndexedEm(values: readonly number[], depth: number): number {

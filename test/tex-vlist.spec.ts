@@ -3969,6 +3969,59 @@ describe("TeX vlist layout", () => {
     expect(findPositionedTexVListItemByPath(laidOut.positioned, [1, 9])).toBeNull();
   });
 
+  it("applies the parent glue setting through synthetic scope vboxes", () => {
+    const items = texFixture<readonly TexVListItem[]>([
+      {
+        kind: "vbox",
+        role: {
+          kind: "list",
+          listKind: "itemize",
+          depth: 1,
+          labelDepth: 1,
+          ownLeftMarginEm: 2,
+          totalLeftMarginEm: 2,
+        },
+        items: [
+          {
+            kind: "glue",
+            size: 3,
+            shrink: 2,
+            shrinkOrder: "normal",
+          },
+          {
+            kind: "rule",
+            width: 10,
+            height: 2,
+            depth: 1,
+          },
+        ],
+      },
+    ]);
+
+    const naturalHeight = computeTexVListNaturalTotalHeight(items, () => null);
+    const glueSet = texVListGlueSetForTargetHeight(items, naturalHeight, 5);
+    const laidOut = layoutTexVListItems(items, () => null, glueSet, 0);
+    const scope = laidOut.positioned[0];
+
+    expect(naturalHeight).toBe(6);
+    expect(glueSet).toEqual({
+      sign: "shrink",
+      order: "normal",
+      ratio: 0.5,
+    });
+    expect(laidOut.cursor).toBe(5);
+    expect(scope?.children?.map((item) => ({
+      kind: item.item.kind,
+      path: item.path,
+      y: item.y,
+      height: item.metrics.height,
+      depth: item.metrics.depth,
+    }))).toEqual([
+      { kind: "glue", path: [0, 0], y: 0, height: 2, depth: 0 },
+      { kind: "rule", path: [0, 1], y: 2, height: 2, depth: 1 },
+    ]);
+  });
+
   it("sets local glue inside explicit-height vboxes", () => {
     const items = texFixture<readonly TexVListItem[]>([
       {

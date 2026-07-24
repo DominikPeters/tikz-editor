@@ -125,7 +125,8 @@ export function layoutTexVListItems(
         top,
         path,
         texVListX(roundTexPt(translateTexVListX(xOffset, itemX))),
-        context
+        context,
+        glueSet
       );
       positioned.push({
         item,
@@ -148,7 +149,8 @@ function layoutTexVBoxItem(
   top: TexVListY,
   path: readonly number[],
   xOffset: TexVListX,
-  context: TexVListLayoutContext
+  context: TexVListLayoutContext,
+  inheritedGlueSet: TexVListGlueSet | null
 ): {
   readonly children: readonly PositionedTexVListItem[];
   readonly metrics: TexBoxMetrics;
@@ -182,11 +184,13 @@ function layoutTexVBoxItem(
   );
   const naturalHeight = texLength(roundTexPt(natural.cursor - top));
   const targetHeight = finiteTexDimen(item.height);
-  const glueSet = texVListGlueSetForTargetHeight(
-    item.items,
-    naturalHeight,
-    targetHeight
-  );
+  const glueSet = targetHeight === undefined && item.role
+    ? inheritedGlueSet
+    : texVListGlueSetForTargetHeight(
+        item.items,
+        naturalHeight,
+        targetHeight
+      );
   const laidOut = glueSet
     ? layoutTexVListItems(
         item.items,
@@ -411,6 +415,12 @@ function texVListGlueItems(items: readonly TexVListItem[]): TexGlueItem[] {
   for (const item of items) {
     if (item.kind === "glue") {
       glues.push(item);
+    } else if (item.kind === "vbox" && item.role) {
+      // Scope vboxes are a renderer-side grouping device for LaTeX list,
+      // quote, and trivlist margins. TeX leaves their vertical material in
+      // the enclosing list, so its glue participates in the outer box's
+      // single glue-set ratio.
+      glues.push(...texVListGlueItems(item.items));
     }
   }
   return glues;

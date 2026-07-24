@@ -894,6 +894,38 @@ Across the 20-frame KKT deck and three-frame conformance deck, all 92
 comparisons for these four aggregates pass with zero unmatched rectangles or
 text lines and matching glyph codes/fonts.
 
+The shared tree/split/miniframes pass follows
+`beamerouterthemetree.sty`, `beamerouterthemesplit.sty`, and
+`beamerouterthememiniframes.sty` rather than implementing aggregate themes
+one by one. Pure template planners consume the existing document navigation
+snapshot and emit section/subsection labels, active/shaded states, mini-frame
+markers, separation rules, and footline metadata as ordinary composition
+primitives. Aggregate records then unlock Antibes, Montpellier, Luebeck,
+Malmoe, Copenhagen, Berlin, Dresden, Ilmenau, Szeged, and Singapore by
+applying the ordered components and local overrides from their respective
+`beamertheme*.sty` sources. Singapore's centered frame title, circle marker,
+and 1.25cm head fade remain data/template choices; neither the page composer
+nor SVG emitter checks the aggregate theme name.
+
+The same oracle pass generalizes two non-navigation details exposed by those
+themes. Non-empty default block colors select
+`beamerinnerthemedefault.sty`'s `.75ex` colorbox geometry from resolved color
+roles, rather than from a theme list. Frames whose navigation chrome reduces
+the available body height use Beamer's flexible list glue from
+`beamerbaselocalstructure.sty`: list scopes participate in the enclosing
+vbox's single stretch/shrink ratio, while real nested TeX vboxes retain an
+independent ratio. This fixes the densely filled KKT frame 17 without a
+frame- or theme-specific adjustment.
+
+All three section-aware conformance frames and all 20 KKT frames now pass the
+structural oracle for each of these ten aggregate themes: 30/30 and 200/200
+comparisons respectively, with matching glyph codes/fonts and no unmatched
+text lines or template rectangles. The built-in-theme HTML gallery includes
+both decks. Structural-only runs reuse the retained native and LuaLaTeX SVGs,
+so adding the KKT deck does not require rerunning rasterization or retaining
+PDF/compiler intermediates; themes without results for the selected deck are
+disabled in the gallery navigation.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally

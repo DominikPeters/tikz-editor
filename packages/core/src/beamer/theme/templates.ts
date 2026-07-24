@@ -1,10 +1,19 @@
 import type {
+  BeamerChromeTemplatePlan,
   BeamerFrameChromePlan,
   BeamerFrameTemplateContext,
   BeamerTemplatePrimitive,
   BeamerThemeTemplateRef,
 } from "./types.js";
 import { planBeamerNavigationSymbols } from "./navigation-symbols.js";
+import { resolveBeamerThemeColor } from "./resolve.js";
+import {
+  planMiniFramesFootline,
+  planMiniFramesHeadline,
+  planSplitFootline,
+  planSplitHeadline,
+  planTreeHeadline,
+} from "./navigation-templates.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
@@ -35,20 +44,15 @@ const LATIN_MODERN_SANS_X_HEIGHT_EM = 0.444;
 // font. This is the LuaLaTeX/Latin Modern Sans 8 ex measured in TeX points.
 const INFOLINES_FOOTLINE_EX_PT = 2.6674957275390625;
 
-type ChromeTemplatePlan = {
-  inset: number;
-  primitives: BeamerTemplatePrimitive[];
-};
-
 type FrameTitlePlanner = (
   context: BeamerFrameTemplateContext,
   ref: BeamerThemeTemplateRef
-) => ChromeTemplatePlan;
+) => BeamerChromeTemplatePlan;
 
 type EdgePlanner = (
   context: BeamerFrameTemplateContext,
   ref: BeamerThemeTemplateRef
-) => ChromeTemplatePlan;
+) => BeamerChromeTemplatePlan;
 
 const frameTitlePlanners = new Map<string, FrameTitlePlanner>([
   ["beamer/frame-title/default", planDefaultFrameTitle],
@@ -59,6 +63,9 @@ const frameTitlePlanners = new Map<string, FrameTitlePlanner>([
 const headlinePlanners = new Map<string, EdgePlanner>([
   ["beamer/headline/none", emptyEdge],
   ["beamer/headline/infolines", planInfolinesHeadline],
+  ["beamer/headline/tree", planTreeHeadline],
+  ["beamer/headline/split", planSplitHeadline],
+  ["beamer/headline/miniframes", planMiniFramesHeadline],
   ["beamer/headline/metropolis-progress", planModernHeadline],
   ["beamer/headline/moloch-progress", planModernHeadline],
 ]);
@@ -66,6 +73,8 @@ const headlinePlanners = new Map<string, EdgePlanner>([
 const footlinePlanners = new Map<string, EdgePlanner>([
   ["beamer/footline/none", emptyFootline],
   ["beamer/footline/infolines", planInfolinesFootline],
+  ["beamer/footline/split", planSplitFootline],
+  ["beamer/footline/miniframes", planMiniFramesFootline],
   ["beamer/footline/metropolis", planModernFootline],
   ["beamer/footline/moloch", planModernFootline],
 ]);
@@ -112,15 +121,19 @@ export function planBeamerFrameChrome(
 }
 
 function planDefaultFrameTitle(
-  context: BeamerFrameTemplateContext
-): ChromeTemplatePlan {
+  context: BeamerFrameTemplateContext,
+  ref: BeamerThemeTemplateRef
+): BeamerChromeTemplatePlan {
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
   // beamerouterthemedefault.sty: beamercolorbox sep=0.3cm and width
   // textwidth + both Beamer margins. The painted vertical extent is locked to
   // the LuaLaTeX oracle until TeX strut/glue execution is shared here.
-  const background = context.theme.colors.frametitle?.bg;
+  const background = resolveBeamerThemeColor(
+    context.theme,
+    "frametitle"
+  ).bg;
   const paintHeight = background
     ? DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT
     : EMPTY_BACKGROUND_FRAME_TITLE_HEIGHT_PT;
@@ -165,7 +178,7 @@ function planDefaultFrameTitle(
         },
         fontRole: "frame-title",
         colorRole: "frametitle",
-        alignment: "left",
+        alignment: ref.options.alignment === "center" ? "center" : "left",
         verticalAlignment: "top",
         // The template inserts a strut, so the baseline is independent of
         // whether this particular title contains a tall or deep glyph.
@@ -178,7 +191,7 @@ function planDefaultFrameTitle(
 function planModernFrameTitle(
   context: BeamerFrameTemplateContext,
   ref: BeamerThemeTemplateRef
-): ChromeTemplatePlan {
+): BeamerChromeTemplatePlan {
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
@@ -255,7 +268,7 @@ function planModernFrameTitle(
 
 function planInfolinesFootline(
   context: BeamerFrameTemplateContext
-): ChromeTemplatePlan {
+): BeamerChromeTemplatePlan {
   // beamerouterthemeinfolines.sty: three .333333 paperwidth color boxes,
   // ht=2.25ex, dp=1ex.
   const paintHeight = INFOLINES_FOOTLINE_PAINT_HEIGHT_PT;
@@ -321,7 +334,7 @@ function planInfolinesFootline(
 
 function planInfolinesHeadline(
   context: BeamerFrameTemplateContext
-): ChromeTemplatePlan {
+): BeamerChromeTemplatePlan {
   const height = INFOLINES_HEADLINE_PAINT_HEIGHT_PT;
   const half = context.page.page.width / 2;
   const horizontalPadding = 2 * INFOLINES_FOOTLINE_EX_PT;
@@ -386,7 +399,7 @@ function planInfolinesHeadline(
 
 function planModernHeadline(
   context: BeamerFrameTemplateContext
-): ChromeTemplatePlan {
+): BeamerChromeTemplatePlan {
   const height = 0.4;
   const progress = (context.frameIndex + 1) / Math.max(context.totalFrames, 1);
   return {
@@ -418,7 +431,7 @@ function planModernHeadline(
 function planModernFootline(
   context: BeamerFrameTemplateContext,
   ref: BeamerThemeTemplateRef
-): ChromeTemplatePlan {
+): BeamerChromeTemplatePlan {
   if (ref.options.numbering === "none") {
     return { inset: 0, primitives: [] };
   }
@@ -466,11 +479,11 @@ function infolinesFill(
   };
 }
 
-function emptyEdge(): ChromeTemplatePlan {
+function emptyEdge(): BeamerChromeTemplatePlan {
   return { inset: 0, primitives: [] };
 }
 
-function emptyFootline(): ChromeTemplatePlan {
+function emptyFootline(): BeamerChromeTemplatePlan {
   // beamerbaseframecomponents.sty reserves 4pt even when the footline
   // template's measured box is empty.
   return { inset: BEAMER_FOOTLINE_RESERVE_PT, primitives: [] };

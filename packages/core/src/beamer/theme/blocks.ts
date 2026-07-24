@@ -1,7 +1,11 @@
 import type {
   BeamerBlockTemplateContext,
   BeamerBlockTemplatePlan,
+  BeamerThemeFontRole,
 } from "./types.js";
+import { texLength } from "../../text/tex/coordinates.js";
+import { createBeamerTexTextFontProfile } from "./font.js";
+import { resolveBeamerThemeColor } from "./resolve.js";
 
 const TEX_POINTS_PER_BP = 72.27 / 72;
 
@@ -32,13 +36,27 @@ export function planBeamerBlockTemplate(
       : context.environment === "exampleblock"
         ? " example"
         : "";
+  const titleColorRole = `block title${suffix}`;
+  const bodyColorRole = `block body${suffix}`;
+  const hasTitleBackground =
+    resolveBeamerThemeColor(context.theme, titleColorRole).bg != null;
+  const hasBodyBackground =
+    resolveBeamerThemeColor(context.theme, bodyColorRole).bg != null;
+  const defaultColored =
+    style === "default" && hasTitleBackground && hasBodyBackground;
+  const titleColorSepPt = defaultColored
+    ? 0.75 * fontXHeightPt(context, "block-title")
+    : 0;
+  const bodyColorSepPt = defaultColored
+    ? 0.75 * fontXHeightPt(context, "block-body")
+    : 0;
 
   return {
     templateId,
     style,
     shadow: templateId === "beamer/block/rounded-shadow",
-    titleColorRole: `block title${suffix}`,
-    bodyColorRole: `block body${suffix}`,
+    titleColorRole,
+    bodyColorRole,
     titleFontRole: "block-title",
     bodyFontRole: "block-body",
     geometry: style === "rounded"
@@ -81,29 +99,51 @@ export function planBeamerBlockTemplate(
       : {
           beforeSkipPt: 6,
           afterSkipPt: 3,
-          outerBleedPt: 0,
-          roundedTopInsetPt: 0,
+          // A non-empty default colorbox paints `colsep*=.75ex` outside the
+          // text width as well as above and below its contents.
+          outerBleedPt: titleColorSepPt,
+          roundedTopInsetPt: titleColorSepPt,
           titleDepthFloorPt: 0,
-          titleExtraHeightPt: 0,
-          transitionHeightPt: 0,
+          titleExtraHeightPt: 2 * titleColorSepPt,
+          // When both boxes have backgrounds, the source joins them using
+          // `\nointerlineskip\vskip-.5pt`.
+          transitionHeightPt: defaultColored ? -0.5 : 0,
           bodyTopPaddingPt: 0,
-          bodyExtraHeightPt: 0,
+          bodyExtraHeightPt: bodyColorSepPt,
           boxTopSkipPt: 0,
           // beamerinnerthemedefault.sty leaves normal inter-line handling
           // between empty-background title and body colorboxes. Their box
           // dimensions force TeX's 1pt \lineskip. Inside the vmode body,
           // an empty vbox establishes a fresh 13.6pt baseline after
           // \vskip-.25ex.
-          titleBodyGapPt: 1,
+          titleBodyGapPt: defaultColored
+            ? 2 * titleColorSepPt - 0.5
+            : 1,
           bodyFirstBaselineSkipPt:
             context.theme.fonts["block-body"].lineHeightPt,
-          bodyInitialVSkipEx: -0.25,
-          flowBoxHeight: "title-ascent",
-          flowEndingDepth: "body-last-line",
+          // For a colored body the `.75ex` opening color separation and
+          // template's `\vskip-.75ex` cancel before the empty vbox.
+          bodyInitialVSkipEx: defaultColored ? 0 : -0.25,
+          flowBoxHeight: defaultColored ? "natural" : "title-ascent",
+          flowEndingDepth: defaultColored ? "zero" : "body-last-line",
           bodyBottomRaisePt: 0,
-          boxBottomSkipPt: 0,
+          boxBottomSkipPt: bodyColorSepPt,
           cornerRadiusPt: 0,
           shadowExtentPt: 0,
         },
   };
+}
+
+function fontXHeightPt(
+  context: BeamerBlockTemplateContext,
+  role: BeamerThemeFontRole
+): number {
+  const font = context.theme.fonts[role];
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(
+    profile.defaultFontState,
+    texLength(font.sizePt),
+    profile.metricProvider
+  );
+  return resolved.data.fontdimen.xheight * Number(resolved.atPt);
 }

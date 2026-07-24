@@ -124,9 +124,15 @@ const BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT = 5.475;
 const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
   leftMarginEmByDepth: [2, 2, 2],
   topsepPtByDepth: [3, 2, 2],
+  topsepStretchPtByDepth: [2, 1, 1],
+  topsepShrinkPtByDepth: [2.5, 2, 2],
   partopsepPtByDepth: [0, 0, 0],
   itemsepPtByDepth: [3, 0, 0],
+  itemsepStretchPtByDepth: [2, 1, 1],
+  itemsepShrinkPtByDepth: [3, 0, 0],
   parsepPtByDepth: [0, 0, 0],
+  parsepStretchPtByDepth: [0, 1, 1],
+  parsepShrinkPtByDepth: [0, 0, 0],
   initialItemBaselineAdjustmentPt: 0,
 };
 
@@ -426,7 +432,9 @@ function renderChrome(params: {
         elementId: null,
         markup: rectMarkup(
           primitive.bounds,
-          color.bg ?? color.fg ?? "transparent",
+          primitive.paint === "foreground"
+            ? color.fg ?? color.bg ?? "transparent"
+            : color.bg ?? color.fg ?? "transparent",
           primitive.id
         ),
       });
@@ -784,6 +792,9 @@ function prepareFrameParagraph(params: {
   }
   const trailingTrivlistSkip = trailingBeamerTrivlistSkip(paragraphSource);
   const trailingListSkip = trailingBeamerListSkip(paragraphSource);
+  const trailingListShrink = trailingListSkip > 0
+    ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
+    : 0;
   const namedSize = activeBeamerNamedSize(paragraphSource);
   return {
     kind: "paragraph",
@@ -799,6 +810,10 @@ function prepareFrameParagraph(params: {
       paragraph
     ),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
+    trailingListGlue: {
+      naturalPt: trailingListSkip,
+      shrinkPt: trailingListShrink,
+    },
     trailingVerticalSpacePreviousDepth:
       previousDepthBeforeTrailingVerticalSpace(paragraph),
   };
@@ -875,7 +890,7 @@ function shrinkFrameParagraphGlueToAvailableHeight(
       maximumShrink: Math.max(
         0,
         item.naturalHeight - fullyShrunk.naturalHeight
-      ),
+      ) + item.trailingListGlue.shrinkPt,
       paragraphMaximumShrink: Math.max(
         0,
         item.paragraph.height - rawFullyShrunk.paragraph.height
@@ -914,7 +929,12 @@ function shrinkFrameParagraphGlueToAvailableHeight(
       fitted[candidate.index + 1]
     );
     const index = candidate.index;
-    fitted[index] = relaid;
+    fitted[index] = {
+      ...relaid,
+      naturalHeight:
+        relaid.naturalHeight -
+        relaid.trailingListGlue.shrinkPt * ratio,
+    };
   }
   for (let index = 0; index < fitted.length; index += 1) {
     const item = fitted[index];
@@ -1146,6 +1166,34 @@ function emitPreparedBlock(params: {
     params.theme,
     block.plan.bodyColorRole
   );
+  if (block.plan.style === "default" && titleColor.bg) {
+    params.items.push({
+      id: `${block.node.id}:title:background`,
+      kind: "background",
+      sourceSpan: block.node.title.span,
+      bounds: {
+        x: outerBounds.x,
+        y: params.y + block.backgroundTop,
+        width: outerBounds.width,
+        height: block.titleBackgroundHeight,
+      },
+      parentId: block.node.id,
+    });
+  }
+  if (block.plan.style === "default" && bodyColor.bg) {
+    params.items.push({
+      id: `${block.node.id}:body:background`,
+      kind: "background",
+      sourceSpan: block.node.span,
+      bounds: {
+        x: outerBounds.x,
+        y: params.y + block.bodyBackgroundTop,
+        width: outerBounds.width,
+        height: block.bodyBackgroundHeight,
+      },
+      parentId: block.node.id,
+    });
+  }
   params.modelBuilder.addPart({
     basePartId: `${block.node.id}:chrome`,
     sourceId: block.node.id,
@@ -1307,6 +1355,18 @@ function emitPreparedTitlePage(params: {
     height: titlePage.plan.titleBoxHeightPt,
   };
   const titleColor = resolveBeamerThemeColor(params.theme, "title");
+  const titleFill =
+    titleColor.bg ??
+    resolveBeamerThemeColor(params.theme, "titlelike").bg;
+  if (titlePage.plan.style === "colorbox" && titleFill) {
+    params.items.push({
+      id: `${titlePage.node.id}:title:background`,
+      kind: "background",
+      sourceSpan: titlePage.node.span,
+      bounds: boxBounds,
+      parentId: titlePage.node.id,
+    });
+  }
   params.modelBuilder.addPart({
     basePartId: `${titlePage.node.id}:chrome`,
     sourceId: titlePage.node.id,
@@ -1316,10 +1376,7 @@ function emitPreparedTitlePage(params: {
       bounds: boxBounds,
       templateId: titlePage.plan.templateId,
       style: titlePage.plan.style,
-      fill:
-        titleColor.bg ??
-        resolveBeamerThemeColor(params.theme, "titlelike").bg ??
-        "transparent",
+      fill: titleFill ?? "transparent",
       shadow: titlePage.plan.shadow,
     }),
   });

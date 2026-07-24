@@ -170,6 +170,8 @@ export type BeamerFrameLayoutItemKind =
   | "frame-subtitle"
   | "text"
   | "navigation-symbols"
+  | "mini-frame-navigation"
+  | "headline-decoration"
   | "list-marker"
   | "block"
   | "columns"

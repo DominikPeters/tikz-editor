@@ -191,6 +191,63 @@ Fraction:
     }]);
   });
 
+  it("includes all theme background items in the native rectangle contract", () => {
+    const trace = buildNativeBeamerPageTrace({
+      layout: {
+        coordinateSystem: COORDINATE_SYSTEM,
+        page: {
+          page: { x: 0, y: 0, width: 160, height: 90 },
+        },
+        items: [{
+          id: "frame:0:headline:section:hook-horizontal",
+          kind: "background",
+          bounds: { x: 8, y: 12, width: 5, height: 0.4 },
+        }],
+        paragraphs: [],
+        embeddedTikz: [],
+      },
+    } as never, computerModernTexMetricProvider);
+
+    expect(trace.rectangles).toEqual([{
+      id: "frame:0:headline:section:hook-horizontal",
+      role: "headline",
+      x: 8,
+      y: 12,
+      width: 5,
+      height: 0.4,
+    }]);
+  });
+
+  it("traces source colorboxes activated by an aggregate color theme", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\usetheme{Antibes}
+\title{Deck}
+\begin{document}
+\begin{frame}
+\titlepage
+\begin{block}{Theorem}Body\end{block}
+\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+
+    expect(trace.rectangles).toContainEqual(expect.objectContaining({
+      id: "frame:0:title-page:0:title:background",
+      role: "page",
+    }));
+    expect(trace.rectangles).toContainEqual(expect.objectContaining({
+      id: "frame:0:block:0:title:background",
+      role: "page",
+    }));
+    expect(trace.rectangles).toContainEqual(expect.objectContaining({
+      id: "frame:0:block:0:body:background",
+      role: "page",
+    }));
+  });
+
   it("clusters co-baseline theme paragraphs into the visual oracle line", async () => {
     const render = await renderBeamerFrame(String.raw`
 \documentclass{beamer}

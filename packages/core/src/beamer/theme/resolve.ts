@@ -129,9 +129,21 @@ export function resolveBeamerThemeColor(
           color.fgMix.foregroundPercent
         )
       : undefined;
+    const mixedBackground = color.bgMix
+      ? mixThemeForeground(
+          foregroundChannels(
+            theme,
+            color.bgMix.foregroundRole,
+            resolve(color.bgMix.foregroundRole, seen).fg
+          ),
+          parseHexColor(resolve(color.bgMix.backgroundRole, seen).bg),
+          color.bgMix.foregroundPercent
+        )
+      : undefined;
     return {
       ...parent,
       ...(mixedForeground ? { fg: mixedForeground } : {}),
+      ...(mixedBackground ? { bg: mixedBackground } : {}),
       ...(color.fg ? { fg: color.fg } : {}),
       ...(color.bg ? { bg: color.bg } : {}),
     };
@@ -290,7 +302,44 @@ function createDefaultTheme(): MutableTheme {
       date: {},
       frametitle: { parent: "titlelike" },
       "section in head/foot": { parent: "palette tertiary" },
+      "section in head/foot shaded": {
+        parent: "section in head/foot",
+        fgMix: {
+          foregroundRole: "section in head/foot",
+          backgroundRole: "section in head/foot",
+          foregroundPercent: 50,
+        },
+      },
       "subsection in head/foot": { parent: "palette secondary" },
+      "subsection in head/foot shaded": {
+        parent: "subsection in head/foot",
+        fgMix: {
+          foregroundRole: "subsection in head/foot",
+          backgroundRole: "subsection in head/foot",
+          foregroundPercent: 50,
+        },
+      },
+      "title in head/foot": { parent: "palette quaternary" },
+      "author in head/foot": { parent: "palette primary" },
+      "institute in head/foot": { parent: "palette tertiary" },
+      "date in head/foot": { parent: "palette secondary" },
+      "page number in head/foot": {},
+      "mini frame": { parent: "section in head/foot" },
+      "mini frame shaded": {
+        parent: "mini frame",
+        fgMix: {
+          foregroundRole: "mini frame",
+          backgroundRole: "mini frame",
+          foregroundPercent: 50,
+        },
+      },
+      "separation line": {},
+      "upper separation line head": { parent: "separation line" },
+      "middle separation line head": { parent: "separation line" },
+      "lower separation line head": { parent: "separation line" },
+      "upper separation line foot": { parent: "separation line" },
+      "middle separation line foot": { parent: "separation line" },
+      "lower separation line foot": { parent: "separation line" },
       "alerted text": { fg: "#ff0000" },
       "example text": { fg: "#008000", fgRgb: [0, 0.5, 0] },
       "block body": {},
@@ -483,6 +532,159 @@ const themeAppliers = new Map<string, ComponentApplier>([
       };
     },
   })],
+  ["antibes", defineAggregateTheme({
+    id: "Antibes",
+    // TeX Live 2025 beamerthemeAntibes.sty.
+    components: [
+      { kind: "outer-theme", name: "tree" },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "inner-theme", name: "rectangles" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["berlin", defineAggregateTheme({
+    id: "Berlin",
+    // TeX Live 2025 beamerthemeBerlin.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "miniframes",
+        options: (options) => ({
+          footline: "authorinstitutetitle",
+          compress: optionBoolean(options.compress, false),
+        }),
+      },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "inner-theme", name: "rectangles" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["copenhagen", defineAggregateTheme({
+    id: "Copenhagen",
+    // TeX Live 2025 beamerthemeCopenhagen.sty.
+    components: [
+      { kind: "outer-theme", name: "split" },
+      { kind: "inner-theme", name: "rounded" },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["dresden", defineAggregateTheme({
+    id: "Dresden",
+    // TeX Live 2025 beamerthemeDresden.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "miniframes",
+        options: (options) => ({
+          footline: "authorinstitutetitle",
+          compress: optionBoolean(options.compress, false),
+        }),
+      },
+      { kind: "color-theme", name: "whale" },
+    ],
+    applyOverrides: (state) => {
+      state.colors.titlelike = { parent: "structure" };
+    },
+  })],
+  ["ilmenau", defineAggregateTheme({
+    id: "Ilmenau",
+    // TeX Live 2025 beamerthemeIlmenau.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "miniframes",
+        options: (options) => ({
+          footline: "authorinstitutetitle",
+          compress: optionBoolean(options.compress, false),
+        }),
+      },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "inner-theme", name: "rounded" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["luebeck", defineAggregateTheme({
+    id: "Luebeck",
+    // TeX Live 2025 beamerthemeLuebeck.sty.
+    components: [
+      { kind: "outer-theme", name: "split" },
+      { kind: "inner-theme", name: "rectangles" },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+    ],
+    applyOverrides: resetBlockTitleSize,
+  })],
+  ["malmoe", defineAggregateTheme({
+    id: "Malmoe",
+    // TeX Live 2025 beamerthemeMalmoe.sty.
+    components: [
+      { kind: "outer-theme", name: "split" },
+      { kind: "color-theme", name: "whale" },
+    ],
+    applyOverrides: (state) => {
+      state.colors.titlelike = { parent: "structure" };
+    },
+  })],
+  ["montpellier", defineAggregateTheme({
+    id: "Montpellier",
+    // TeX Live 2025 beamerthemeMontpellier.sty.
+    components: [{ kind: "outer-theme", name: "tree" }],
+    applyOverrides: applyStructureSeparationLine,
+  })],
+  ["singapore", defineAggregateTheme({
+    id: "Singapore",
+    // TeX Live 2025 beamerthemeSingapore.sty.
+    components: [{
+      kind: "outer-theme",
+      name: "miniframes",
+      options: (options) => ({
+        subsection: false,
+        compress: optionBoolean(options.compress, false),
+        fade: true,
+      }),
+    }],
+    applyOverrides: (state) => {
+      // The source paints a fading above the strip, then clears the color-box
+      // background. The structural planner therefore sees a transparent band.
+      state.colors["section in head/foot"] = {
+        parent: "palette tertiary",
+      };
+      state.colors["section in head/foot fade"] = {
+        fgMix: {
+          foregroundRole: "structure",
+          backgroundRole: "normal text",
+          foregroundPercent: 25,
+        },
+      };
+      state.templates.frameTitle = templateRef(
+        "beamer/frame-title/default",
+        { alignment: "center" }
+      );
+      state.templates.bullets = [
+        DEFAULT_REF("beamer/bullet/circle"),
+        DEFAULT_REF("beamer/bullet/circle"),
+        DEFAULT_REF("beamer/bullet/circle"),
+      ];
+    },
+  })],
+  ["szeged", defineAggregateTheme({
+    id: "Szeged",
+    // TeX Live 2025 beamerthemeSzeged.sty.
+    components: [{
+      kind: "outer-theme",
+      name: "miniframes",
+      options: (options) => ({
+        footline: "institutetitle",
+        compress: optionBoolean(options.compress, false),
+      }),
+    }],
+    applyOverrides: applyStructureSeparationLine,
+  })],
   ["madrid", defineAggregateTheme({
     id: "Madrid",
     // TeX Live 2025 beamerthemeMadrid.sty applies these in this exact order.
@@ -521,8 +723,7 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
     state.colors["palette secondary"] = { fg: "#ffffff", bg: "#262686" };
     state.colors["palette tertiary"] = { fg: "#ffffff", bg: "#1a1a59" };
     state.colors["palette quaternary"] = { fg: "#ffffff", bg: "#000000" };
-    state.colors.titlelike = { ...state.colors["palette primary"] };
-    state.colors.frametitle = { ...state.colors.titlelike };
+    state.colors.titlelike = { parent: "palette primary" };
   }],
   ["orchid", (state, use) => {
     markApplied(state, "color-theme", "orchid", use);
@@ -536,8 +737,7 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
     state.colors["palette secondary"] = { fg: "#000000", bg: "#cccced" };
     state.colors["palette tertiary"] = { fg: "#000000", bg: "#c2c2e8" };
     state.colors["palette quaternary"] = { fg: "#000000", bg: "#b8b8e4" };
-    state.colors.titlelike = { ...state.colors["palette primary"] };
-    state.colors.frametitle = { ...state.colors.titlelike };
+    state.colors.titlelike = { parent: "palette primary" };
   }],
   ["metropolis", applyMetropolisColors],
   ["moloch", applyMolochColors],
@@ -551,6 +751,19 @@ const fontThemeAppliers = new Map<string, ComponentApplier>([
 
 const innerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("inner-theme", "default")],
+  ["rectangles", (state, use) => {
+    markApplied(state, "inner-theme", "rectangles", use);
+    state.templates.bullets = [
+      DEFAULT_REF("beamer/bullet/square"),
+      DEFAULT_REF("beamer/bullet/square"),
+      DEFAULT_REF("beamer/bullet/square"),
+    ];
+    state.templates.enumerations = [
+      DEFAULT_REF("beamer/enumeration/square"),
+      DEFAULT_REF("beamer/enumeration/square"),
+      DEFAULT_REF("beamer/enumeration/square"),
+    ];
+  }],
   ["rounded", (state, use) => {
     markApplied(state, "inner-theme", "rounded", use);
     const shadow = optionBoolean(use.options.shadow, false);
@@ -592,6 +805,20 @@ const GRAY_RGB = [0.5, 0.5, 0.5] as const;
 const DARK_BLUE_RGB = [0, 0, 0.8] as const;
 const DARK_RED_RGB = [0.8, 0, 0] as const;
 const MSU_GREEN_RGB = [0, 0.4, 0.2] as const;
+
+function resetBlockTitleSize(state: MutableTheme): void {
+  state.fonts["block-title"] = { ...state.fonts["block-body"] };
+}
+
+function applyStructureSeparationLine(state: MutableTheme): void {
+  state.colors["separation line"] = {
+    bgMix: {
+      foregroundRole: "structure",
+      backgroundRole: "normal text",
+      foregroundPercent: 50,
+    },
+  };
+}
 
 function applyWolverineColors(state: MutableTheme, use: BeamerThemeUse): void {
   markApplied(state, "color-theme", "wolverine", use);
@@ -768,6 +995,54 @@ function applySpruceColors(state: MutableTheme, use: BeamerThemeUse): void {
 
 const outerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("outer-theme", "default")],
+  ["tree", (state, use) => {
+    markApplied(state, "outer-theme", "tree", use);
+    state.templates.headline = templateRef("beamer/headline/tree", {
+      hooks: optionBoolean(use.options.hooks, true),
+    });
+  }],
+  ["split", (state, use) => {
+    markApplied(state, "outer-theme", "split", use);
+    state.templates.headline = templateRef("beamer/headline/split", {
+      compress: optionBoolean(use.options.compress, false),
+    });
+    state.templates.footline = DEFAULT_REF("beamer/footline/split");
+    state.colors["section in head/foot"] = {
+      parent: "palette quaternary",
+    };
+    state.colors["subsection in head/foot"] = {
+      parent: "palette primary",
+    };
+    state.colors["author in head/foot"] = {
+      parent: "section in head/foot",
+    };
+    state.colors["title in head/foot"] = {
+      parent: "subsection in head/foot",
+    };
+  }],
+  ["miniframes", (state, use) => {
+    markApplied(state, "outer-theme", "miniframes", use);
+    state.templates.headline = templateRef("beamer/headline/miniframes", {
+      subsection: optionBoolean(use.options.subsection, true),
+      compress: optionBoolean(use.options.compress, false),
+      fade: optionBoolean(use.options.fade, false),
+    });
+    state.templates.footline = templateRef("beamer/footline/miniframes", {
+      style: optionString(use.options.footline, "empty"),
+    });
+    state.colors["section in head/foot"] = {
+      parent: "palette tertiary",
+    };
+    state.colors["subsection in head/foot"] = {
+      parent: "palette secondary",
+    };
+    state.colors["author in head/foot"] = {
+      parent: "subsection in head/foot",
+    };
+    state.colors["title in head/foot"] = {
+      parent: "section in head/foot",
+    };
+  }],
   ["infolines", (state, use) => {
     markApplied(state, "outer-theme", "infolines", use);
     state.templates.footline = DEFAULT_REF("beamer/footline/infolines");
@@ -1060,6 +1335,9 @@ function freezeRecord<T extends Record<string, object>>(record: T): Readonly<T> 
             : {}),
           ...("fgMix" in value && value.fgMix
             ? { fgMix: Object.freeze({ ...value.fgMix }) }
+            : {}),
+          ...("bgMix" in value && value.bgMix
+            ? { bgMix: Object.freeze({ ...value.bgMix }) }
             : {}),
         }),
       ])

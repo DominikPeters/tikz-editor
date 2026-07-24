@@ -93,6 +93,9 @@ describe("Beamer theme resolution", () => {
     );
     expect(theme.dimensions.textMarginLeftPt).toBe(10.95);
     expect(theme.colors.frametitle).toEqual({
+      parent: "titlelike",
+    });
+    expect(resolveBeamerThemeColor(theme, "frametitle")).toEqual({
       fg: "#000000",
       bg: "#d6d6f0",
     });
@@ -277,6 +280,190 @@ describe("Beamer theme resolution", () => {
         fontSizePt: 6,
       })
     );
+  });
+
+  it.each([
+    {
+      name: "Antibes",
+      components: ["tree", "whale", "orchid", "rectangles"],
+      headline: ["beamer/headline/tree", { hooks: true }],
+      footline: ["beamer/footline/none", {}],
+    },
+    {
+      name: "Montpellier",
+      components: ["tree"],
+      headline: ["beamer/headline/tree", { hooks: true }],
+      footline: ["beamer/footline/none", {}],
+    },
+    {
+      name: "Luebeck",
+      components: ["split", "rectangles", "whale", "orchid"],
+      headline: ["beamer/headline/split", { compress: false }],
+      footline: ["beamer/footline/split", {}],
+    },
+    {
+      name: "Malmoe",
+      components: ["split", "whale"],
+      headline: ["beamer/headline/split", { compress: false }],
+      footline: ["beamer/footline/split", {}],
+    },
+    {
+      name: "Copenhagen",
+      components: ["split", "rounded", "whale", "orchid"],
+      headline: ["beamer/headline/split", { compress: false }],
+      footline: ["beamer/footline/split", {}],
+    },
+    {
+      name: "Berlin",
+      components: ["miniframes", "whale", "orchid", "rectangles"],
+      headline: [
+        "beamer/headline/miniframes",
+        { subsection: true, compress: false, fade: false },
+      ],
+      footline: [
+        "beamer/footline/miniframes",
+        { style: "authorinstitutetitle" },
+      ],
+    },
+    {
+      name: "Dresden",
+      components: ["miniframes", "whale"],
+      headline: [
+        "beamer/headline/miniframes",
+        { subsection: true, compress: false, fade: false },
+      ],
+      footline: [
+        "beamer/footline/miniframes",
+        { style: "authorinstitutetitle" },
+      ],
+    },
+    {
+      name: "Ilmenau",
+      components: ["miniframes", "whale", "orchid", "rounded"],
+      headline: [
+        "beamer/headline/miniframes",
+        { subsection: true, compress: false, fade: false },
+      ],
+      footline: [
+        "beamer/footline/miniframes",
+        { style: "authorinstitutetitle" },
+      ],
+    },
+    {
+      name: "Szeged",
+      components: ["miniframes"],
+      headline: [
+        "beamer/headline/miniframes",
+        { subsection: true, compress: false, fade: false },
+      ],
+      footline: [
+        "beamer/footline/miniframes",
+        { style: "institutetitle" },
+      ],
+    },
+    {
+      name: "Singapore",
+      components: ["miniframes"],
+      headline: [
+        "beamer/headline/miniframes",
+        { subsection: false, compress: false, fade: true },
+      ],
+      footline: ["beamer/footline/miniframes", { style: "empty" }],
+    },
+  ])(
+    "composes the source-defined $name navigation aggregate",
+    ({ name, components, headline, footline }) => {
+      const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{${name}}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+      expect(theme.templates.headline).toEqual({
+        id: headline[0],
+        options: headline[1],
+      });
+      expect(theme.templates.footline).toEqual({
+        id: footline[0],
+        options: footline[1],
+      });
+      expect(
+        theme.appliedComponents.slice(2).map(({ name: component }) => component)
+      ).toEqual(components);
+      expect(theme.diagnostics).toEqual([]);
+    }
+  );
+
+  it("preserves aggregate options and Singapore's local source overrides", () => {
+    const berlin = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme[compress]{Berlin}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+    const singapore = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{Singapore}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+    expect(berlin.templates.headline.options.compress).toBe(true);
+    expect(singapore.templates.frameTitle).toEqual({
+      id: "beamer/frame-title/default",
+      options: { alignment: "center" },
+    });
+    expect(singapore.templates.bullets.map(({ id }) => id)).toEqual([
+      "beamer/bullet/circle",
+      "beamer/bullet/circle",
+      "beamer/bullet/circle",
+    ]);
+    expect(resolveBeamerItemizeMarkers(singapore)[0]?.glyph).toEqual(
+      expect.objectContaining({
+        code: 15,
+        fontId: "cmsy10",
+        fontSizePt: 10.95,
+      })
+    );
+    expect(
+      resolveBeamerThemeColor(singapore, "section in head/foot fade")
+    ).toEqual({ fg: "#ccccec" });
+  });
+
+  it("uses the rectangles inner theme for both itemize and enumerate markers", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\useinnertheme{rectangles}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+    expect(resolveBeamerItemizeMarkers(theme)[0]?.svgBody).toContain(
+      'data-beamer-list-marker="square"'
+    );
+    const marker = resolveBeamerEnumerateMarker(theme, 12, 1);
+    expect(marker?.svgBody).toContain(
+      'data-beamer-list-marker="enumerate-square"'
+    );
+    expect(marker?.projectedText).toEqual(expect.objectContaining({
+      text: "12",
+      fontId: "lmsans8-regular",
+      fontSizePt: 8,
+    }));
+  });
+
+  it("models the colored default block as joined source colorboxes", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{Antibes}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+    const block = planBeamerBlockTemplate({ environment: "block", theme });
+
+    expect(block).toEqual(expect.objectContaining({
+      templateId: "beamer/block/default",
+      style: "default",
+      geometry: expect.objectContaining({
+        outerBleedPt: expect.closeTo(3.64635, 4),
+        roundedTopInsetPt: expect.closeTo(3.64635, 4),
+        transitionHeightPt: -0.5,
+        bodyInitialVSkipEx: 0,
+        flowBoxHeight: "natural",
+        flowEndingDepth: "zero",
+      }),
+    }));
   });
 
   it.each(["metropolis", "moloch"])(

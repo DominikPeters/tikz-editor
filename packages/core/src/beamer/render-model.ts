@@ -112,6 +112,10 @@ export type PreparedFrameFlowItem =
       startingBaselineSkip: number;
       leadingAdjustment: number;
       endingDepth: number;
+      trailingListGlue: {
+        naturalPt: number;
+        shrinkPt: number;
+      };
       /**
        * TeX vertical glue preserves `\prevdepth`. When a paragraph-owned
        * `\vspace` is followed by a columns hbox, retain the depth of the box

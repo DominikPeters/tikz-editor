@@ -110,11 +110,14 @@ function vectorShapePaintAttributes(
   const fill = shape.fillColorRole
     ? textColor(theme, shape.fillColorRole)
     : "none";
+  const fillOpacity = shape.fillOpacity == null
+    ? ""
+    : ` fill-opacity="${fmt(shape.fillOpacity)}"`;
   const stroke = shape.strokeColorRole
     ? textColor(theme, shape.strokeColorRole)
     : "none";
   const strokeWidth = shape.strokeWidthPt == null
     ? ""
     : ` stroke-width="${fmt(shape.strokeWidthPt)}"`;
-  return ` fill="${fill}" stroke="${stroke}"${strokeWidth}`;
+  return ` fill="${fill}"${fillOpacity} stroke="${stroke}"${strokeWidth}`;
 }

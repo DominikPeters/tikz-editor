@@ -84,6 +84,8 @@ export function renderBeamerThemeGallery(report) {
     cursor: pointer;
   }
   .theme-button:hover { background: #f0f3f6; }
+  .theme-button:disabled { opacity: .45; cursor: default; }
+  .theme-button:disabled:hover { background: transparent; }
   .theme-button.active {
     border-color: #c7d1f9;
     background: var(--accent-soft);
@@ -345,6 +347,9 @@ function resultsFor(theme, deck) {
 function currentResults() {
   return resultsFor(state.theme, state.deck);
 }
+function firstThemeForDeck(deck) {
+  return report.variants.find((theme) => resultsFor(theme, deck).length > 0);
+}
 function currentResult() {
   const frames = currentResults();
   return resultByKey.get(key(state.theme, state.deck, state.frame)) || frames[0];
@@ -365,13 +370,16 @@ function renderThemes() {
   const container = document.querySelector("#theme-list");
   container.replaceChildren();
   for (const theme of report.variants) {
-    const items = report.results.filter((item) => item.variant === theme);
+    const items = resultsFor(theme, state.deck);
     const passed = items.filter((item) => item.status === "passed").length;
     const button = document.createElement("button");
     button.className = "theme-button" + (theme === state.theme ? " active" : "");
     button.innerHTML =
       "<span>" + themeLabel(theme) + "</span>" +
-      '<span class="count">' + passed + "/" + items.length + "</span>";
+      '<span class="count">' +
+      (items.length > 0 ? passed + "/" + items.length : "—") +
+      "</span>";
+    button.disabled = items.length === 0;
     button.addEventListener("click", () => {
       state.theme = theme;
       state.frame = resultsFor(state.theme, state.deck)[0]?.frame || 1;
@@ -426,8 +434,8 @@ function renderStage(result) {
   const visuals = result.visuals || {};
   if (!visuals.renderer || !visuals.oracle) {
     stage.innerHTML =
-      '<div class="empty"><strong>No raster assets for this run</strong>' +
-      "<span>Regenerate the matrix with <code>--raster</code>.</span></div>";
+      '<div class="empty"><strong>No visual assets for this run</strong>' +
+      "<span>The structural report remains available below.</span></div>";
     return;
   }
   if (state.mode === "split") {
@@ -493,8 +501,17 @@ function syncHash() {
   history.replaceState(null, "", "#" + params);
 }
 function render() {
+  if (currentResults().length === 0) {
+    state.theme = firstThemeForDeck(state.deck) || state.theme;
+  }
   const result = currentResult();
   if (!result) return;
+  if (
+    (state.mode === "overlay" && !result.visuals?.overlay) ||
+    (state.mode === "difference" && !result.visuals?.difference)
+  ) {
+    state.mode = "split";
+  }
   state.frame = result.frame;
   renderThemes();
   renderDecks();
@@ -503,6 +520,9 @@ function render() {
   renderMetadata(result);
   document.querySelectorAll("#mode-select button").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === state.mode);
+    button.disabled =
+      (button.dataset.mode === "overlay" && !result.visuals?.overlay) ||
+      (button.dataset.mode === "difference" && !result.visuals?.difference);
   });
   syncHash();
 }
@@ -527,6 +547,9 @@ document.querySelector("#run-summary").textContent =
   report.passed + " of " + report.results.length + " comparisons pass";
 document.querySelector("#deck-select").addEventListener("change", (event) => {
   state.deck = event.target.value;
+  if (resultsFor(state.theme, state.deck).length === 0) {
+    state.theme = firstThemeForDeck(state.deck) || state.theme;
+  }
   state.frame = resultsFor(state.theme, state.deck)[0]?.frame || 1;
   render();
 });
