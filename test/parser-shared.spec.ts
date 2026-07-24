@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  parseFigureIndexFromId,
   resolveActiveFigureSpan,
   scanFigureSpans
 } from "../packages/core/src/parser/shared.js";
+import { tikzFigureIndexFromRootId } from "../packages/core/src/document/root-id.js";
 
 describe("parser shared helpers", () => {
   it("falls back to the first figure for malformed active figure ids", () => {
@@ -13,8 +13,8 @@ describe("parser shared helpers", () => {
       { from: 30, to: 40 }
     ];
 
-    expect(parseFigureIndexFromId("figure:not-a-number")).toBeNull();
-    expect(parseFigureIndexFromId(" not-a-figure:1 ")).toBeNull();
+    expect(tikzFigureIndexFromRootId("figure:not-a-number")).toBeNull();
+    expect(tikzFigureIndexFromRootId(" not-a-figure:1 ")).toBeNull();
     expect(resolveActiveFigureSpan(spans, "figure:not-a-number")).toEqual(spans[0]);
   });
 

@@ -1,5 +1,12 @@
 export { FeatureFlags } from "./ast/features.js";
 export { prepareBeamerDocument, scanBeamerDocument } from "./beamer/index.js";
+export {
+  formatDocumentRootId,
+  parseDocumentRootId,
+  tikzFigureIndexFromRootId,
+  type DocumentRootKind,
+  type DocumentRootRef,
+} from "./document/root-id.js";
 export * from "./coords/index.js";
 export type * from "./graphics/index.js";
 export { parseTikz, createIncrementalParseSession } from "./parser/index.js";

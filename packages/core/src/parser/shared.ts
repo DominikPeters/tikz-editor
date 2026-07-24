@@ -1,4 +1,5 @@
 import type { Statement } from "../ast/types.js";
+import { tikzFigureIndexFromRootId } from "../document/root-id.js";
 import { scanTikzFigures } from "./figure-scan.js";
 
 export type ContextDefinitionCacheEntry = {
@@ -45,7 +46,9 @@ export function resolveActiveFigureSpan(
   if (spans.length === 0) {
     return null;
   }
-  const requestedIndex = activeFigureId ? parseFigureIndexFromId(activeFigureId) : 0;
+  const requestedIndex = activeFigureId
+    ? tikzFigureIndexFromRootId(activeFigureId)
+    : 0;
   const index =
     requestedIndex != null && requestedIndex >= 0 && requestedIndex < spans.length
       ? requestedIndex
@@ -57,13 +60,4 @@ export function scanFigureSpans(source: string): Array<{ from: number; to: numbe
   return scanTikzFigures(source)
     .filter((figure) => !figure.isTemplate)
     .map((figure) => ({ from: figure.span.from, to: figure.span.to }));
-}
-
-export function parseFigureIndexFromId(figureId: string): number | null {
-  const match = /^figure:(\d+)(?::|$)/u.exec(figureId.trim());
-  if (!match?.[1]) {
-    return null;
-  }
-  const parsed = Number.parseInt(match[1], 10);
-  return Number.isFinite(parsed) ? parsed : null;
 }

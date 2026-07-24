@@ -1,5 +1,6 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import { formatDocumentRootId } from "../document/root-id.js";
 import { scanTikzFigures } from "../parser/figure-scan.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import type {
@@ -230,8 +231,8 @@ function buildFrameModel(
   const frameEnd = candidate.end?.span.from ?? source.length;
   const header = scanFrameHeader(source, candidate.begin.span.to, frameEnd);
   const bodySpan = { from: header.headerSpan.to, to: frameEnd };
-  const id = `frame:${index}`;
-  const children = scanFrameTikzPictures(source, bodySpan, id);
+  const id = formatDocumentRootId({ kind: "beamer-frame", index });
+  const children = scanFrameTikzPictures(source, bodySpan, index);
   const title =
     header.title ??
     scanFirstCommandValue(source, bodySpan, "frametitle", children);
@@ -441,14 +442,18 @@ function findTopLevelEquals(source: string, span: Span): number | null {
 function scanFrameTikzPictures(
   source: string,
   bodySpan: Span,
-  frameId: string
+  frameIndex: number
 ): BeamerTikzPictureRoot[] {
   const body = source.slice(bodySpan.from, bodySpan.to);
   return scanTikzFigures(body)
     .filter((figure) => !figure.isTemplate)
     .map((figure, index) => ({
       kind: "tikzpicture",
-      id: `${frameId}:tikzpicture:${index}`,
+      id: formatDocumentRootId({
+        kind: "beamer-frame-tikz",
+        frameIndex,
+        index,
+      }),
       span: shiftSpan(figure.span, bodySpan.from),
       beginSpan: shiftSpan(figure.beginSpan, bodySpan.from),
       endSpan: shiftSpan(figure.endSpan, bodySpan.from),

@@ -25,6 +25,10 @@ import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import { collectParseErrorDiagnostics, collectStructuralDiagnostics } from "../diagnostics/collect.js";
 import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 import { scanTikzFigures, type ScannedFigure } from "../parser/figure-scan.js";
+import {
+  formatDocumentRootId,
+  tikzFigureIndexFromRootId,
+} from "../document/root-id.js";
 
 export type CstToAstResult = {
   figure: TikzFigure;
@@ -195,7 +199,7 @@ function collectFigureNodes(
   const parsedNodesBySpan = collectParsedFigureNodesBySpan(tree);
   for (let index = 0; index < scanned.length; index += 1) {
     const inventory = scanned[index];
-    const id = `figure:${index}`;
+    const id = formatDocumentRootId({ kind: "tikz-figure", index });
     const parsedNode = parsedNodesBySpan.get(spanKey(inventory.span)) ?? null;
     nodes.push({
       id,
@@ -229,20 +233,11 @@ function resolveActiveFigureEntry(entries: FigureNodeEntry[], requestedId: strin
   if (directMatch) {
     return directMatch;
   }
-  const requestedIndex = parseFigureIndexFromId(requestedId);
+  const requestedIndex = tikzFigureIndexFromRootId(requestedId);
   if (requestedIndex == null || requestedIndex < 0 || requestedIndex >= entries.length) {
     return entries[0];
   }
   return entries[requestedIndex];
-}
-
-function parseFigureIndexFromId(figureId: string): number | null {
-  const match = /^figure:(\d+)(?::|$)/u.exec(figureId.trim());
-  if (!match?.[1]) {
-    return null;
-  }
-  const parsed = Number.parseInt(match[1], 10);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function collectPriorDefinitions(
