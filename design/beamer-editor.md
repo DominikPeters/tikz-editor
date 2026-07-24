@@ -949,12 +949,35 @@ text lines or template rectangles. The retained gallery now contains KKT
 comparisons for 14 built-in themes and passes 340 of 364 entries; the remaining
 24 entries identify the unimplemented sidebar/inmargin family.
 
+The sidebar/inmargin pass follows `beamerouterthemesidebar.sty` and
+`beamerinnerthemeinmargin.sty` as shared page and flow components. Responsive
+or absolute sidebars are part of resolved page geometry, producing a
+sidebar-independent frame area and text area; canvas, title, section, and
+subsection templates then consume those rectangles without aggregate-name
+checks. Berkeley, Goettingen, Hannover, Marburg, PaloAlto, Pittsburgh, and
+Rochester are ordered assemblies of that outer component and their shipped
+color/font/inner overrides. Bergen uses the same responsive geometry with
+the source's `.25\paperwidth` left sidebar, but its inmargin inner component
+owns the two-column block/title-page flow and its special list margins.
+
+The narrow sidebar layouts also exposed two generic horizontal-list facts.
+A source space after display math remains ordinary stretchable/shrinkable
+glue when horizontal mode resumes; it is not a fixed first-line indent.
+Likewise, whitespace immediately before horizontal-mode `\vspace` precedes
+the non-discardable `\vadjust` node and therefore remains in the final line's
+glue set. Both rules now live in the TeX paragraph model, including source
+spans for glyph/caret reporting, rather than in Beamer composition. All
+three conformance frames and all 20 KKT frames pass for each of the eight
+aggregates: 24/24 and 160/160 comparisons, with matching glyph codes/fonts
+and no unmatched text lines or template rectangles.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally
 sidebar/inmargin page geometry. Each component pass is applied to every
 aggregate theme that imports it and rerun through the gallery. Metropolis and
-moloch begin only after this built-in matrix is green.
+moloch begin only after the retained built-in gallery has KKT results for the
+remaining earlier aggregate passes and the complete matrix is green.
 
 Aggregate presets are exposed only when every nested component and local
 override needed for a faithful result is registered. In particular, the

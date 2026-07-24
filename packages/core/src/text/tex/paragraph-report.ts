@@ -390,10 +390,26 @@ function buildTexLineReport(
     break: breakReport,
     segments,
   };
+  const sourceStarts = segments.flatMap((segment) =>
+    segment.sourceStartRaw === undefined
+      ? []
+      : [Number(segment.sourceStartRaw)]
+  );
+  const sourceEnds = segments.flatMap((segment) =>
+    segment.sourceEndRaw === undefined ? [] : [Number(segment.sourceEndRaw)]
+  );
+  const sourceSpan =
+    sourceStarts.length > 0 && sourceEnds.length > 0
+      ? {
+          start: Math.min(...sourceStarts),
+          end: Math.max(...sourceEnds),
+        }
+      : undefined;
   return {
     report,
     lineBox: {
       lineIndex: report.lineIndex,
+      ...(sourceSpan ? { sourceSpan } : {}),
       y: texVListLocalY(0),
       targetWidth: texLength(report.targetWidth),
       metrics: {

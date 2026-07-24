@@ -336,6 +336,28 @@ describe("Beamer structural theme templates", () => {
     expect(new Set(miniFrameCenters).size).toBe(2);
   });
 
+  it("plans Bergen's responsive in-margin canvas as page decoration", () => {
+    const chrome = plan(String.raw`
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Bergen}
+\begin{document}\begin{frame}{Frame}Body\end{frame}\end{document}`);
+
+    expect(chrome.primitives).toContainEqual(expect.objectContaining({
+      id: "frame:0:sidebar:left:background",
+      kind: "fill",
+      colorRole: "sidebar left",
+      bounds: expect.objectContaining({
+        x: 0,
+        y: 0,
+        width: expect.closeTo(113.81102, 5),
+        height: expect.closeTo(256.0748, 5),
+      }),
+    }));
+    expect(chrome.primitives.some(
+      (primitive) => primitive.id.includes("sidebar:section")
+    )).toBe(false);
+  });
+
   it.each(["metropolis", "moloch"])(
     "plans %s progress chrome through registered templates",
     (name) => {

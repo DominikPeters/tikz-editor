@@ -178,7 +178,10 @@ function paragraphVerticalAdjustmentSizes(
     if (sourceOffset === undefined || lines.length === 0) {
       continue;
     }
-    const containing = lines.find((line) =>
+    // A wrapped paragraph's aggregate source span can be retained on more
+    // than one line. The adjustment whatsit follows the final line whose
+    // material reaches its source offset, so prefer the last such line.
+    const containing = [...lines].reverse().find((line) =>
       line.sourceSpan !== undefined &&
       line.sourceSpan.start <= sourceOffset &&
       sourceOffset <= line.sourceSpan.end

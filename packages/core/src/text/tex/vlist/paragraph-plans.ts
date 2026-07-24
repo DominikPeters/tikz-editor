@@ -15,7 +15,6 @@ import {
 import {
   TexParagraphLayoutState,
 } from "../layout-state.js";
-import { texInterwordGlueForSpaceFactor } from "../space-glue.js";
 import type {
   TexParagraphBreakScopePolicy,
   TexParagraphRightskipStretchMode,
@@ -64,6 +63,7 @@ export interface TexLayoutParagraphPlan {
   readonly inheritedAlignmentProfile?: TexAlignmentProfile;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
+  readonly preserveTrailingInterwordSpace?: boolean;
   readonly breakContext: TexLayoutParagraphBreakContext;
   readonly overfullSingleLineFallback?: boolean;
   readonly lineLabel?: TexLayoutParagraphLineLabel;
@@ -175,14 +175,29 @@ export function prepareTexLayoutParagraphsFromVList(
         segment,
         font: params.font,
       });
-      const leadingInterwordSpaceWidth =
+      const leadingInterwordSpace =
         segment.leadingInterwordSpace === true
-          ? texInterwordGlueForSpaceFactor(
-              params.font,
-              1000,
-              spaceGlueProfile
-            ).width
+          ? {
+              kind: "space" as const,
+              text: " " as const,
+              sourceStart: segment.sourceStart,
+              sourceEnd: segment.sourceStart,
+              font: params.font,
+              spaceFactor: 1000,
+              spaceGlueProfile,
+              // The resumed horizontal-mode space is real glue, but cannot
+              // become a line break before the first text token.
+              nonBreaking: true,
+              preserveAtLineStart: true,
+            }
           : undefined;
+      const trailingNode = segment.nodes.at(-1);
+      const firstAdjustment = paragraph.verticalAdjustments?.[0];
+      const preserveTrailingInterwordSpace =
+        segmentIndex === segments.length - 1 &&
+        trailingNode?.kind === "space" &&
+        firstAdjustment?.sourceSpan !== undefined &&
+        trailingNode.sourceEnd <= firstAdjustment.sourceSpan.start;
       paragraphPlans.push({
         blockIndex,
         vlistPath: entry.path,
@@ -196,7 +211,11 @@ export function prepareTexLayoutParagraphsFromVList(
         inlinePrefixItems: [
           ...listAttachments.inlineLabelItems,
           ...quotationPrefix.inlinePrefixItems,
+          ...(leadingInterwordSpace ? [leadingInterwordSpace] : []),
         ],
+        ...(preserveTrailingInterwordSpace
+          ? { preserveTrailingInterwordSpace: true }
+          : {}),
         ...(paragraph.overfullSingleLineFallback === true
           ? { overfullSingleLineFallback: true }
           : {}),
@@ -205,8 +224,7 @@ export function prepareTexLayoutParagraphsFromVList(
           segmentIndex,
           ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
           firstLineIndentWidth: listAttachments.firstLineIndentWidth ??
-            quotationPrefix.firstLineIndentWidth ??
-            leadingInterwordSpaceWidth,
+            quotationPrefix.firstLineIndentWidth,
           ...(quotationPrefix.forcedBreakIndentWidth !== undefined
             ? { forcedBreakIndentWidth: quotationPrefix.forcedBreakIndentWidth }
             : {}),

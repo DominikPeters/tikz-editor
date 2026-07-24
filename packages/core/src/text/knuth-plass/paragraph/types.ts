@@ -109,6 +109,8 @@ export interface SpaceRun extends BaseRun {
     shrink: number;
     spaceFactor?: number;
     breakPenalty?: number;
+    preserveAtLineStart?: boolean;
+    preserveAtLineEnd?: boolean;
   };
 }
 

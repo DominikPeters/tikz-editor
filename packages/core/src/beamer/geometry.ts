@@ -36,6 +36,15 @@ export function resolveBeamerPageGeometry(
   const pageHeight = cmToTexPt(heightCm);
   const marginLeft = theme.dimensions.textMarginLeftPt;
   const marginRight = theme.dimensions.textMarginRightPt;
+  const sidebarLeft = resolveHorizontalThemeDimension(
+    theme.dimensions.sidebarWidthLeft,
+    pageWidth
+  );
+  const sidebarRight = resolveHorizontalThemeDimension(
+    theme.dimensions.sidebarWidthRight,
+    pageWidth
+  );
+  const frameWidth = Math.max(0, pageWidth - sidebarLeft - sidebarRight);
 
   return {
     aspectRatio,
@@ -45,14 +54,29 @@ export function resolveBeamerPageGeometry(
       width: pageWidth,
       height: pageHeight,
     },
-    textArea: {
-      x: marginLeft,
+    frameArea: {
+      x: sidebarLeft,
       y: 0,
-      width: pageWidth - marginLeft - marginRight,
+      width: frameWidth,
+      height: pageHeight,
+    },
+    textArea: {
+      x: sidebarLeft + marginLeft,
+      y: 0,
+      width: Math.max(0, frameWidth - marginLeft - marginRight),
       height: pageHeight,
     },
     themeId: theme.id,
   };
+}
+
+function resolveHorizontalThemeDimension(
+  dimension: ResolvedBeamerTheme["dimensions"]["sidebarWidthLeft"],
+  pageWidth: number
+): number {
+  return dimension.kind === "page-width"
+    ? dimension.ratio * pageWidth
+    : dimension.valuePt;
 }
 
 function documentClassOption(

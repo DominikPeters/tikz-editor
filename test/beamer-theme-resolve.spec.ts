@@ -550,6 +550,69 @@ describe("Beamer theme resolution", () => {
     }));
   });
 
+  it("composes Bergen as the source-defined responsive in-margin theme", () => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{Bergen}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+    expect(
+      theme.appliedComponents.slice(2).map(({ name }) => name)
+    ).toEqual(["orchid", "rectangles", "inmargin"]);
+    expect(theme.dimensions.sidebarWidthLeft).toEqual({
+      kind: "page-width",
+      ratio: 0.25,
+    });
+    expect(theme.dimensions.listLeftMarginEmByDepth).toEqual([
+      0,
+      expect.closeTo(0.666, 3),
+      expect.closeTo(0.666, 3),
+    ]);
+    expect(theme.templates.sidebar.id).toBe("beamer/sidebar/canvas");
+    expect(theme.templates.titlePage.id).toBe(
+      "beamer/title-page/inmargin"
+    );
+    expect(theme.templates.block.id).toBe("beamer/block/inmargin");
+    expect(
+      planBeamerBlockTemplate({ environment: "block", theme })
+    ).toEqual(expect.objectContaining({
+      style: "inmargin",
+      geometry: expect.objectContaining({
+        beforeSkipPt: 6,
+        afterSkipPt: 0,
+        boxBottomSkipPt: 3,
+      }),
+    }));
+    expect(resolveBeamerItemizeMarkers(theme)[0]?.rightEdgeOffsetEm)
+      .toBeCloseTo(-0.666, 3);
+    expect(
+      resolveBeamerEnumerateMarker(theme, 1, 1)?.rightEdgeOffsetEm
+    ).toBeCloseTo(-0.666, 3);
+  });
+
+  it.each([
+    ["Berkeley", ["sidebar", "rectangles", "whale", "orchid"]],
+    ["Goettingen", ["sidebar"]],
+    ["Hannover", ["sidebar", "seahorse", "circles"]],
+    ["Marburg", ["whale", "sidebar"]],
+    ["PaloAlto", ["sidebar", "rounded", "orchid", "whale"]],
+    ["Pittsburgh", ["circles"]],
+    ["Rochester", ["sidebar", "rectangles", "whale", "orchid"]],
+  ])(
+    "composes the source-defined %s sidebar-family aggregate",
+    (name, components) => {
+      const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
+\documentclass{beamer}
+\usetheme{${name}}
+\begin{document}\begin{frame}A\end{frame}\end{document}`));
+
+      expect(
+        theme.appliedComponents.slice(2).map(({ name: component }) => component)
+      ).toEqual(components);
+      expect(theme.diagnostics).toEqual([]);
+    }
+  );
+
   it.each(["metropolis", "moloch"])(
     "resolves %s through the same component/template contract",
     (name) => {

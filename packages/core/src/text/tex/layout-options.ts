@@ -16,6 +16,13 @@ export interface TexListMarkerProfile {
   readonly widthEm: number;
   readonly heightEm: number;
   readonly depthEm: number;
+  /**
+   * Additional horizontal displacement of the marker's label box.
+   *
+   * This models template wrappers such as Beamer inmargin's zero-width
+   * `\llap`, independently from the list body's `\leftmargin`.
+   */
+  readonly rightEdgeOffsetEm?: number;
   /** Optional font glyph used instead of an authored SVG marker shape. */
   readonly glyph?: Readonly<{
     text: string;
@@ -43,6 +50,8 @@ export interface TexListMarkerProfile {
     /** Baseline offset from the surrounding marker baseline. */
     baselineOffsetEm: number;
   }>;
+  /** The marker paint is a path; structural traces compare its text only. */
+  readonly traceAsGlyph?: boolean;
 }
 
 /**

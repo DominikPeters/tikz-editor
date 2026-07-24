@@ -25,6 +25,10 @@ export type BeamerThemeFontRole =
   | "headline"
   | "section-in-head-foot"
   | "subsection-in-head-foot"
+  | "title-in-sidebar"
+  | "author-in-sidebar"
+  | "section-in-sidebar"
+  | "subsection-in-sidebar"
   | "footline"
   | "block-title"
   | "block-body";
@@ -77,14 +81,22 @@ export type ResolvedBeamerThemeColor = {
 export type BeamerThemeDimensions = {
   textMarginLeftPt: number;
   textMarginRightPt: number;
+  listLeftMarginEmByDepth: readonly [number, number, number];
+  sidebarWidthLeft:
+    | { kind: "absolute"; valuePt: number }
+    | { kind: "page-width"; ratio: number };
+  sidebarWidthRight:
+    | { kind: "absolute"; valuePt: number }
+    | { kind: "page-width"; ratio: number };
 };
 
 export type BeamerThemeTemplateRef = {
   id: string;
-  options: Readonly<Record<string, string | boolean>>;
+  options: Readonly<Record<string, string | boolean | number>>;
 };
 
 export type BeamerThemeTemplates = {
+  sidebar: BeamerThemeTemplateRef;
   headline: BeamerThemeTemplateRef;
   footline: BeamerThemeTemplateRef;
   navigationSymbols: BeamerThemeTemplateRef;
@@ -236,6 +248,8 @@ export type BeamerTemplatePrimitive =
       baselineY?: number;
       /** Fixed interword glue for template-generated spacing such as `\,`. */
       interwordSpacePt?: number;
+      /** Templates such as sidebar metadata preserve whole-word wrapping. */
+      disableAutomaticHyphenation?: boolean;
     }
   | {
       kind: "vector";
@@ -318,7 +332,7 @@ export type BeamerFrameNavigationSnapshot = {
 
 export type BeamerTitlePageTemplatePlan = {
   templateId: string;
-  style: "colorbox" | "rounded";
+  style: "colorbox" | "rounded" | "inmargin";
   shadow: boolean;
   outerBleedPt: number;
   titleBoxTopPt: number;
@@ -340,7 +354,7 @@ export type BeamerFrameTemplateContext = {
 
 export type BeamerBlockTemplatePlan = {
   templateId: string;
-  style: "default" | "rounded" | "modern";
+  style: "default" | "rounded" | "modern" | "inmargin";
   shadow: boolean;
   titleColorRole: string;
   bodyColorRole: string;

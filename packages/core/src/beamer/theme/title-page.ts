@@ -19,6 +19,20 @@ export function planBeamerTitlePageTemplate(
   hasSubtitle: boolean
 ): BeamerTitlePageTemplatePlan {
   const templateId = theme.templates.titlePage.id;
+  if (templateId === "beamer/title-page/inmargin") {
+    return {
+      templateId,
+      style: "inmargin",
+      shadow: false,
+      outerBleedPt: 0,
+      // beamerinnerthemeinmargin.sty implements the title as an in-margin
+      // block: \medskip, then a title/subtitle vtop, then \smallskip.
+      titleBoxTopPt: 6,
+      titleBoxHeightPt: hasSubtitle ? 32.45 : 18.85,
+      titleBaselineFromBoxTopPt: 13.6,
+      subtitleBaselineFromBoxTopPt: 27.2,
+    };
+  }
   const titleBackground =
     resolveBeamerThemeColor(theme, "title").bg ??
     resolveBeamerThemeColor(theme, "titlelike").bg;

@@ -22,6 +22,12 @@ import {
   planSmoothTreeFrameTitle,
   planSmoothTreeHeadline,
 } from "./smooth-navigation-templates.js";
+import {
+  planSidebarCanvas,
+  planSidebarFrameTitle,
+  planSidebarHeadline,
+  planSidebarPageDecoration,
+} from "./sidebar-templates.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
@@ -64,6 +70,7 @@ type EdgePlanner = (
 
 const frameTitlePlanners = new Map<string, FrameTitlePlanner>([
   ["beamer/frame-title/default", planDefaultFrameTitle],
+  ["beamer/frame-title/sidebar", planSidebarFrameTitle],
   ["beamer/frame-title/smoothbars", planSmoothBarsFrameTitle],
   ["beamer/frame-title/smoothtree", planSmoothTreeFrameTitle],
   ["beamer/frame-title/shadow", planShadowFrameTitle],
@@ -71,8 +78,15 @@ const frameTitlePlanners = new Map<string, FrameTitlePlanner>([
   ["beamer/frame-title/moloch", planModernFrameTitle],
 ]);
 
+const sidebarPlanners = new Map<string, EdgePlanner>([
+  ["beamer/sidebar/none", emptyEdge],
+  ["beamer/sidebar/canvas", planSidebarCanvas],
+  ["beamer/sidebar/navigation", planSidebarPageDecoration],
+]);
+
 const headlinePlanners = new Map<string, EdgePlanner>([
   ["beamer/headline/none", emptyEdge],
+  ["beamer/headline/sidebar", planSidebarHeadline],
   ["beamer/headline/infolines", planInfolinesHeadline],
   ["beamer/headline/tree", planTreeHeadline],
   ["beamer/headline/split", planSplitHeadline],
@@ -102,6 +116,10 @@ const footlinePlanners = new Map<string, EdgePlanner>([
 export function planBeamerFrameChrome(
   context: BeamerFrameTemplateContext
 ): BeamerFrameChromePlan {
+  const sidebar = getPlanner(
+    sidebarPlanners,
+    context.theme.templates.sidebar
+  )(context, context.theme.templates.sidebar);
   const headline = getPlanner(
     headlinePlanners,
     context.theme.templates.headline
@@ -126,6 +144,7 @@ export function planBeamerFrameChrome(
     topInset: headline.inset + frameTitle.inset,
     bottomInset: footline.inset,
     primitives: [
+      ...sidebar.primitives,
       ...navigationSymbols,
       ...headline.primitives,
       ...offsetPrimitives(frameTitle.primitives, 0, headline.inset),
@@ -168,9 +187,9 @@ function planDefaultFrameTitle(
             id: `${context.frame.id}:frame-title:background`,
             sourceSpan: context.frame.title.span,
             bounds: {
-              x: 0,
+              x: context.page.frameArea.x,
               y: 0,
-              width: context.page.page.width,
+              width: context.page.frameArea.width,
               height: paintHeight,
             },
             colorRole: "frametitle",
@@ -181,9 +200,11 @@ function planDefaultFrameTitle(
         id: `${context.frame.id}:frame-title:text`,
         sourceSpan: context.frame.title.contentSpan,
         bounds: {
-          x: DEFAULT_FRAME_TITLE_SEP_PT,
+          x: context.page.frameArea.x + DEFAULT_FRAME_TITLE_SEP_PT,
           y: DEFAULT_FRAME_TITLE_TEXT_TOP_PT,
-          width: context.page.page.width - 2 * DEFAULT_FRAME_TITLE_SEP_PT,
+          width:
+            context.page.frameArea.width -
+            2 * DEFAULT_FRAME_TITLE_SEP_PT,
           height: context.theme.fonts["frame-title"].lineHeightPt,
         },
         source: {
@@ -192,7 +213,12 @@ function planDefaultFrameTitle(
         },
         fontRole: "frame-title",
         colorRole: "frametitle",
-        alignment: ref.options.alignment === "center" ? "center" : "left",
+        alignment:
+          ref.options.alignment === "center"
+            ? "center"
+            : ref.options.alignment === "right"
+              ? "right"
+              : "left",
         verticalAlignment: "top",
         // The template inserts a strut, so the baseline is independent of
         // whether this particular title contains a tall or deep glyph.

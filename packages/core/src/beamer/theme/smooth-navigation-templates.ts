@@ -3,6 +3,11 @@ import {
   appendMiniFrameSections,
   planSplitHeadline,
 } from "./navigation-templates.js";
+import {
+  backgroundGradientStop as backgroundStop,
+  foregroundGradientStop as foregroundStop,
+  gradientRectPrimitive as gradientPrimitive,
+} from "./template-primitives.js";
 import type {
   BeamerChromeTemplatePlan,
   BeamerFrameTemplateContext,
@@ -535,67 +540,6 @@ function textPrimitive(params: {
     alignment: "left",
     verticalAlignment: "top",
     baselineY: params.baselineY,
-  };
-}
-
-function gradientPrimitive(params: {
-  context: BeamerFrameTemplateContext;
-  id: string;
-  bounds: { x: number; y: number; width: number; height: number };
-  templateId: string;
-  layoutKind: Extract<
-    BeamerTemplatePrimitive,
-    { kind: "vector" }
-  >["layoutKind"];
-  direction: "horizontal" | "vertical";
-  stops: readonly {
-    offset: number;
-    colorRole: string;
-    paint: "foreground" | "background";
-    opacity?: number;
-  }[];
-}): BeamerTemplatePrimitive {
-  return {
-    kind: "vector",
-    id: `${params.context.frame.id}:${params.id}`,
-    sourceSpan: params.context.frame.span,
-    bounds: params.bounds,
-    templateId: params.templateId,
-    layoutKind: params.layoutKind,
-    shapes: [{
-      kind: "rect",
-      ...params.bounds,
-      fillGradient: {
-        direction: params.direction,
-        stops: params.stops,
-      },
-    }],
-  };
-}
-
-function backgroundStop(
-  offset: number,
-  colorRole: string,
-  opacity?: number
-) {
-  return {
-    offset,
-    colorRole,
-    paint: "background" as const,
-    ...(opacity == null ? {} : { opacity }),
-  };
-}
-
-function foregroundStop(
-  offset: number,
-  colorRole: string,
-  opacity?: number
-) {
-  return {
-    offset,
-    colorRole,
-    paint: "foreground" as const,
-    ...(opacity == null ? {} : { opacity }),
   };
 }
 

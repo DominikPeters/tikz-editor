@@ -158,6 +158,12 @@ export function paragraphEndingMaterialDepth(
     if (item.itemKind === "glue" || item.itemKind === "penalty") {
       continue;
     }
+    if (item.itemKind === "paragraph" || item.itemKind === "vbox") {
+      // A multi-line list item is reported as a nested vbox whose aggregate
+      // depth includes every line below its reference baseline. TeX
+      // `\prevdepth` after the list tracks only the final line's depth.
+      return paragraphLastLineDepth(paragraph);
+    }
     return Number(item.depth);
   }
   return 0;

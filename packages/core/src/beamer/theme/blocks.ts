@@ -25,7 +25,9 @@ export function planBeamerBlockTemplate(
   context: BeamerBlockTemplateContext
 ): BeamerBlockTemplatePlan {
   const templateId = context.theme.templates.block.id;
-  const style = templateId.includes("/rounded")
+  const style = templateId.includes("/inmargin")
+    ? "inmargin"
+    : templateId.includes("/rounded")
     ? "rounded"
     : templateId.includes("/metropolis") || templateId.includes("/moloch")
       ? "modern"
@@ -59,7 +61,32 @@ export function planBeamerBlockTemplate(
     bodyColorRole,
     titleFontRole: "block-title",
     bodyFontRole: "block-body",
-    geometry: style === "rounded"
+    geometry: style === "inmargin"
+      ? {
+          beforeSkipPt: 6,
+          // The template's sole \smallskip belongs to the packaged block
+          // extent below; unlike the default template there is no second
+          // inter-block skip.
+          afterSkipPt: 0,
+          outerBleedPt: 0,
+          roundedTopInsetPt: 0,
+          titleDepthFloorPt: 0,
+          titleExtraHeightPt: 0,
+          transitionHeightPt: 0,
+          bodyTopPaddingPt: 0,
+          bodyExtraHeightPt: 0,
+          boxTopSkipPt: 0,
+          titleBodyGapPt: 0,
+          bodyFirstBaselineSkipPt: null,
+          bodyInitialVSkipEx: 0,
+          flowBoxHeight: "natural",
+          flowEndingDepth: "zero",
+          bodyBottomRaisePt: 0,
+          boxBottomSkipPt: 3,
+          cornerRadiusPt: 0,
+          shadowExtentPt: 0,
+        }
+      : style === "rounded"
       ? {
           beforeSkipPt: 6,
           afterSkipPt: 3,

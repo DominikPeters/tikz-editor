@@ -157,6 +157,8 @@ export type BeamerPageGeometry = {
   aspectRatio: string;
   /** Physical page bounds in TeX points. */
   page: BeamerRect;
+  /** Frame canvas after subtracting theme-owned left/right sidebars. */
+  frameArea: BeamerRect;
   /** Theme-defined body text box, before frame-local layout. */
   textArea: BeamerRect;
   /** Identifier of the fully resolved theme supplying the dimensions. */

@@ -93,6 +93,10 @@ export interface TexLayoutSpaceItem {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   /** Preserve interword stretch/shrink while prohibiting a break at TeX `~`. */
   readonly nonBreaking?: boolean;
+  /** The glue follows a non-discardable horizontal-mode node. */
+  readonly preserveAtLineStart?: boolean;
+  /** A following non-discardable horizontal-mode node keeps this glue. */
+  readonly preserveAtLineEnd?: boolean;
 }
 
 export interface TexLayoutForcedBreakItem {

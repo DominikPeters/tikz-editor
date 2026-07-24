@@ -34,6 +34,8 @@ export type PreparedBlock = {
   width: number;
   title: LaidParagraph;
   body: LaidParagraph | null;
+  titleXOffset: number;
+  titleTop: number;
   titleAscent: number;
   titleDepth: number;
   titleBackgroundHeight: number;

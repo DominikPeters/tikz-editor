@@ -51,8 +51,8 @@ export function resolveBeamerItemizeMarkers(
   const canvas =
     resolveBeamerThemeColor(theme, "normal text").bg ?? WHITE;
 
-  return theme.templates.bullets.map((template, index) =>
-    markerForTemplate({
+  return theme.templates.bullets.map((template, index) => {
+    const marker = markerForTemplate({
       template,
       depth: index + 1,
       fontSizePt: font.sizePt,
@@ -62,8 +62,16 @@ export function resolveBeamerItemizeMarkers(
       tinySymbolFont,
       structure,
       canvas,
-    })
-  );
+    });
+    return theme.templates.block.id === "beamer/block/inmargin"
+      ? {
+          ...marker,
+          rightEdgeOffsetEm:
+            -(index === 0 ? 1.5 : index === 1 ? 1.125 : 0.75) *
+            xHeightEm,
+        }
+      : marker;
+  });
 }
 
 export function resolveBeamerEnumerateMarker(
@@ -75,7 +83,7 @@ export function resolveBeamerEnumerateMarker(
     Math.max(0, Math.min(labelDepth - 1, theme.templates.enumerations.length - 1))
   ];
   const family = template?.id.split("/").at(-1);
-  if (family !== "ball" && family !== "square") {
+  if (family !== "ball" && family !== "square" && family !== "circle") {
     return undefined;
   }
   const bodyFont = theme.fonts["normal-text"];
@@ -87,7 +95,7 @@ export function resolveBeamerEnumerateMarker(
   );
   const projectedFont = fontProfile.metricProvider.resolveFont({
     fontId: "lmsans8-regular",
-    atPt: texLength(family === "square" ? 8 : 6),
+    atPt: texLength(family === "ball" ? 6 : 8),
   });
   const text = String(itemIndex);
   const projectedRun = fontProfile.metricProvider.shapeText(text, projectedFont);
@@ -111,6 +119,43 @@ export function resolveBeamerEnumerateMarker(
   const projectedCenterPt =
     (projectedHeight - projectedDepth) / 2;
   const xHeightEm = resolvedBodyFont.data.fontdimen.xheight;
+  if (family === "circle") {
+    const projectedXHeightPt =
+      projectedFont.data.fontdimen.xheight * Number(projectedFont.atPt);
+    const pictureWidthPt = 2 * projectedXHeightPt;
+    const pictureHeightPt = 2 * projectedXHeightPt;
+    const centerXPt = projectedXHeightPt;
+    const centerAboveBaselinePt = 0.75 * projectedXHeightPt;
+    const radiusPt = 1.2 * projectedXHeightPt;
+    const background =
+      resolveBeamerThemeColor(theme, "item projected").bg ??
+      resolveBeamerThemeColor(theme, "item").fg ??
+      resolveBeamerThemeColor(theme, "structure").fg ??
+      "#3333b3";
+    const foreground =
+      resolveBeamerThemeColor(theme, "item projected").fg ?? WHITE;
+    const widthEm = pictureWidthPt / bodyFont.sizePt;
+    const heightEm = pictureHeightPt / bodyFont.sizePt;
+    return withInMarginEnumerateOffset(theme, xHeightEm, {
+      widthEm,
+      heightEm,
+      depthEm: 0,
+      traceAsGlyph: true,
+      projectedText: {
+        text,
+        fontId: projectedFont.id,
+        fontSizePt: Number(projectedFont.atPt),
+        color: foreground,
+        xEm: (centerXPt - Number(projectedRun.width) / 2) / bodyFont.sizePt,
+        baselineOffsetEm: 0,
+      },
+      svgBody:
+        `<circle data-beamer-list-marker="enumerate-circle" ` +
+        `cx="${fmt(centerXPt * 100)}" ` +
+        `cy="${fmt(-centerAboveBaselinePt * 100)}" ` +
+        `r="${fmt(radiusPt * 100)}" fill="${background}"/>`,
+    });
+  }
   if (family === "square") {
     const projectedXHeightPt =
       projectedFont.data.fontdimen.xheight * Number(projectedFont.atPt);
@@ -127,7 +172,7 @@ export function resolveBeamerEnumerateMarker(
     const widthEm = boxWidthPt / bodyFont.sizePt;
     const heightEm = boxHeightPt / bodyFont.sizePt;
     const depthEm = boxDepthPt / bodyFont.sizePt;
-    return {
+    return withInMarginEnumerateOffset(theme, xHeightEm, {
       widthEm,
       heightEm,
       depthEm,
@@ -151,7 +196,7 @@ export function resolveBeamerEnumerateMarker(
         `width="${fmt(boxWidthPt * 100)}" ` +
         `height="${fmt((boxHeightPt + boxDepthPt) * 100)}" ` +
         `fill="${background}"/>`,
-    };
+    });
   }
   const boxWidthEm = 2 * xHeightEm;
   const sphereSizeEm = 1.06 * xHeightEm;
@@ -181,7 +226,7 @@ export function resolveBeamerEnumerateMarker(
   const visualTop =
     -1.5525 * xHeightEm * bodyFont.sizePt * 100;
 
-  return {
+  return withInMarginEnumerateOffset(theme, xHeightEm, {
     widthEm: boxWidthEm,
     heightEm: xHeightEm,
     depthEm: 0.65 * xHeightEm,
@@ -212,7 +257,17 @@ export function resolveBeamerEnumerateMarker(
       canvas,
       markerKind: "enumerate-ball",
     }),
-  };
+  });
+}
+
+function withInMarginEnumerateOffset(
+  theme: ResolvedBeamerTheme,
+  xHeightEm: number,
+  marker: TexListMarkerProfile
+): TexListMarkerProfile {
+  return theme.templates.block.id === "beamer/block/inmargin"
+    ? { ...marker, rightEdgeOffsetEm: -1.5 * xHeightEm }
+    : marker;
 }
 
 function markerForTemplate(params: {

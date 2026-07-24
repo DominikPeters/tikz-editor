@@ -1,8 +1,11 @@
 import type { Diagnostic } from "../../diagnostics/types.js";
+import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
+import { createBeamerTexTextFontProfile } from "./font.js";
 import type {
   BeamerThemeColor,
   BeamerThemeComponentProvenance,
+  BeamerThemeDimensions,
   BeamerThemeFont,
   BeamerThemeFontRole,
   BeamerThemeTemplateRef,
@@ -18,10 +21,7 @@ type MutableTheme = {
   id: string;
   colors: Record<string, BeamerThemeColor>;
   fonts: Record<BeamerThemeFontRole, BeamerThemeFont>;
-  dimensions: {
-    textMarginLeftPt: number;
-    textMarginRightPt: number;
-  };
+  dimensions: BeamerThemeDimensions;
   templates: BeamerThemeTemplates;
   options: Record<string, string | boolean>;
   appliedComponents: BeamerThemeComponentProvenance[];
@@ -91,7 +91,18 @@ export function resolveBeamerTheme(
     id: state.id,
     colors: freezeRecord(state.colors),
     fonts: freezeRecord(state.fonts),
-    dimensions: Object.freeze({ ...state.dimensions }),
+    dimensions: Object.freeze({
+      ...state.dimensions,
+      listLeftMarginEmByDepth: Object.freeze([
+        ...state.dimensions.listLeftMarginEmByDepth,
+      ]) as unknown as readonly [number, number, number],
+      sidebarWidthLeft: Object.freeze({
+        ...state.dimensions.sidebarWidthLeft,
+      }),
+      sidebarWidthRight: Object.freeze({
+        ...state.dimensions.sidebarWidthRight,
+      }),
+    }),
     templates: freezeTemplates(state.templates),
     options: Object.freeze({ ...state.options }),
     appliedComponents: Object.freeze([...state.appliedComponents]),
@@ -294,6 +305,10 @@ function createDefaultTheme(): MutableTheme {
       "palette secondary": { fg: "#262686" },
       "palette tertiary": { fg: "#1a1a59" },
       "palette quaternary": { fg: "#000000" },
+      "palette sidebar primary": { parent: "normal text" },
+      "palette sidebar secondary": { parent: "structure" },
+      "palette sidebar tertiary": { parent: "normal text" },
+      "palette sidebar quaternary": { parent: "structure" },
       titlelike: { parent: "structure" },
       title: { parent: "titlelike" },
       subtitle: { parent: "title" },
@@ -324,6 +339,30 @@ function createDefaultTheme(): MutableTheme {
       "institute in head/foot": { parent: "palette tertiary" },
       "date in head/foot": { parent: "palette secondary" },
       "page number in head/foot": {},
+      sidebar: {},
+      "sidebar left": { parent: "sidebar" },
+      "sidebar right": { parent: "sidebar" },
+      "title in sidebar": { parent: "palette sidebar quaternary" },
+      "author in sidebar": { parent: "palette sidebar tertiary" },
+      "section in sidebar": { parent: "palette sidebar secondary" },
+      "section in sidebar shaded": {
+        parent: "section in sidebar",
+        fgMix: {
+          foregroundRole: "section in sidebar",
+          backgroundRole: "sidebar",
+          foregroundPercent: 40,
+        },
+      },
+      "subsection in sidebar": { parent: "palette sidebar primary" },
+      "subsection in sidebar shaded": {
+        parent: "subsection in sidebar",
+        fgMix: {
+          foregroundRole: "subsection in sidebar",
+          backgroundRole: "sidebar",
+          foregroundPercent: 40,
+        },
+      },
+      logo: { parent: "palette secondary" },
       "mini frame": { parent: "section in head/foot" },
       "mini frame shaded": {
         parent: "mini frame",
@@ -403,6 +442,26 @@ function createDefaultTheme(): MutableTheme {
         sizePt: 6,
         lineHeightPt: 7,
       },
+      "title-in-sidebar": {
+        ...normalFont,
+        sizePt: 6,
+        lineHeightPt: 7,
+      },
+      "author-in-sidebar": {
+        ...normalFont,
+        sizePt: 6,
+        lineHeightPt: 7,
+      },
+      "section-in-sidebar": {
+        ...normalFont,
+        sizePt: 6,
+        lineHeightPt: 7,
+      },
+      "subsection-in-sidebar": {
+        ...normalFont,
+        sizePt: 4,
+        lineHeightPt: 5,
+      },
       footline: {
         ...normalFont,
         sizePt: 6,
@@ -421,8 +480,12 @@ function createDefaultTheme(): MutableTheme {
     dimensions: {
       textMarginLeftPt: cmToTexPt(1),
       textMarginRightPt: cmToTexPt(1),
+      listLeftMarginEmByDepth: [2, 2, 2],
+      sidebarWidthLeft: { kind: "absolute", valuePt: 0 },
+      sidebarWidthRight: { kind: "absolute", valuePt: 0 },
     },
     templates: {
+      sidebar: DEFAULT_REF("beamer/sidebar/none"),
       headline: DEFAULT_REF("beamer/headline/none"),
       footline: DEFAULT_REF("beamer/footline/none"),
       navigationSymbols: DEFAULT_REF("beamer/navigation-symbols/default"),
@@ -457,6 +520,15 @@ const themeAppliers = new Map<string, ComponentApplier>([
   ["default", defineAggregateTheme({
     id: "default",
     components: [],
+  })],
+  ["bergen", defineAggregateTheme({
+    id: "Bergen",
+    // TeX Live 2025 beamerthemeBergen.sty.
+    components: [
+      { kind: "color-theme", name: "orchid" },
+      { kind: "inner-theme", name: "rectangles" },
+      { kind: "inner-theme", name: "inmargin" },
+    ],
   })],
   ["annarbor", defineAggregateTheme({
     id: "AnnArbor",
@@ -530,6 +602,155 @@ const themeAppliers = new Map<string, ComponentApplier>([
         parent: "structure",
         bg: xcolorMixRgb(WHITE_RGB, MSU_GREEN_RGB, 85),
       };
+    },
+  })],
+  ["berkeley", defineAggregateTheme({
+    id: "Berkeley",
+    // TeX Live 2025 beamerthemeBerkeley.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "sidebar",
+        options: (options) => sidebarAggregateOptions(options),
+      },
+      { kind: "inner-theme", name: "rectangles" },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+    ],
+    applyOverrides: (state) => {
+      state.colors.frametitle = { parent: "palette primary" };
+      resetBlockTitleSize(state);
+    },
+  })],
+  ["goettingen", defineAggregateTheme({
+    id: "Goettingen",
+    // TeX Live 2025 beamerthemeGoettingen.sty.
+    components: [{
+      kind: "outer-theme",
+      name: "sidebar",
+      options: (options) => sidebarAggregateOptions(options, {
+        side: "right",
+        width: "2cm",
+        height: "0pt",
+      }),
+    }],
+    applyOverrides: (state) => {
+      state.colors["sidebar canvas top"] = {
+        bgMix: {
+          foregroundRole: "structure",
+          backgroundRole: "normal text",
+          foregroundPercent: 25,
+        },
+      };
+      state.colors["sidebar canvas bottom"] = {
+        bgMix: {
+          foregroundRole: "structure",
+          backgroundRole: "normal text",
+          foregroundPercent: 10,
+        },
+      };
+      setSidebarCanvas(state, {
+        style: "vertical-gradient",
+        topRole: "sidebar canvas top",
+        bottomRole: "sidebar canvas bottom",
+      });
+    },
+  })],
+  ["hannover", defineAggregateTheme({
+    id: "Hannover",
+    // TeX Live 2025 beamerthemeHannover.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "sidebar",
+        options: (options) => sidebarAggregateOptions(options, {
+          side: "left",
+          height: "0pt",
+        }),
+      },
+      { kind: "color-theme", name: "seahorse" },
+      { kind: "inner-theme", name: "circles" },
+    ],
+    applyOverrides: (state) => {
+      state.colors.titlelike = { parent: "structure" };
+      state.templates.frameTitle = templateRef(
+        "beamer/frame-title/default",
+        { alignment: "right" }
+      );
+    },
+  })],
+  ["marburg", defineAggregateTheme({
+    id: "Marburg",
+    // TeX Live 2025 beamerthemeMarburg.sty.
+    components: [
+      { kind: "color-theme", name: "whale" },
+      {
+        kind: "outer-theme",
+        name: "sidebar",
+        options: (options) => sidebarAggregateOptions(options, {
+          side: "right",
+          width: "2cm",
+          height: "0pt",
+        }),
+      },
+    ],
+    applyOverrides: (state) => {
+      state.colors.titlelike = { parent: "structure" };
+      state.colors.sidebar = { parent: "palette primary" };
+      setSidebarCanvas(state, {
+        style: "vertical-gradient",
+        topRole: "palette quaternary",
+        bottomRole: "palette primary",
+      });
+    },
+  })],
+  ["paloalto", defineAggregateTheme({
+    id: "PaloAlto",
+    // TeX Live 2025 beamerthemePaloAlto.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "sidebar",
+        options: (options) => sidebarAggregateOptions(options),
+      },
+      { kind: "inner-theme", name: "rounded", options: { shadow: true } },
+      { kind: "color-theme", name: "orchid" },
+      { kind: "color-theme", name: "whale" },
+    ],
+    applyOverrides: (state) => {
+      state.colors.frametitle = { parent: "palette primary" };
+      resetBlockTitleSize(state);
+    },
+  })],
+  ["pittsburgh", defineAggregateTheme({
+    id: "Pittsburgh",
+    // TeX Live 2025 beamerthemePittsburgh.sty.
+    components: [{ kind: "inner-theme", name: "circles" }],
+    applyOverrides: (state) => {
+      state.templates.frameTitle = templateRef(
+        "beamer/frame-title/default",
+        { alignment: "right" }
+      );
+    },
+  })],
+  ["rochester", defineAggregateTheme({
+    id: "Rochester",
+    // TeX Live 2025 beamerthemeRochester.sty.
+    components: [
+      {
+        kind: "outer-theme",
+        name: "sidebar",
+        options: (options) => sidebarAggregateOptions(options, {
+          width: "0pt",
+        }),
+      },
+      { kind: "inner-theme", name: "rectangles" },
+      { kind: "color-theme", name: "whale" },
+      { kind: "color-theme", name: "orchid" },
+    ],
+    applyOverrides: (state) => {
+      state.colors.frametitle = { parent: "palette primary" };
+      resetBlockTitleSize(state);
     },
   })],
   ["antibes", defineAggregateTheme({
@@ -771,6 +992,23 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
     state.colors["palette secondary"] = { fg: "#ffffff", bg: "#262686" };
     state.colors["palette tertiary"] = { fg: "#ffffff", bg: "#1a1a59" };
     state.colors["palette quaternary"] = { fg: "#ffffff", bg: "#000000" };
+    state.colors.sidebar = { bg: "#3333b3" };
+    state.colors["palette sidebar primary"] = {
+      fg: xcolorMixRgb(
+        mutableThemeForegroundRgb(state, "structure", "#3333b3"),
+        WHITE_RGB,
+        10
+      ),
+    };
+    state.colors["palette sidebar secondary"] = { fg: WHITE };
+    state.colors["palette sidebar tertiary"] = {
+      fg: xcolorMixRgb(
+        mutableThemeForegroundRgb(state, "structure", "#3333b3"),
+        WHITE_RGB,
+        50
+      ),
+    };
+    state.colors["palette sidebar quaternary"] = { fg: WHITE };
     state.colors.titlelike = { parent: "palette primary" };
   }],
   ["orchid", (state, use) => {
@@ -785,6 +1023,7 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
     state.colors["palette secondary"] = { fg: "#000000", bg: "#cccced" };
     state.colors["palette tertiary"] = { fg: "#000000", bg: "#c2c2e8" };
     state.colors["palette quaternary"] = { fg: "#000000", bg: "#b8b8e4" };
+    state.colors.sidebar = { bg: "#d6d6f0" };
     state.colors.titlelike = { parent: "palette primary" };
   }],
   ["metropolis", applyMetropolisColors],
@@ -811,6 +1050,47 @@ const innerThemeAppliers = new Map<string, ComponentApplier>([
       DEFAULT_REF("beamer/enumeration/square"),
       DEFAULT_REF("beamer/enumeration/square"),
     ];
+  }],
+  ["circles", (state, use) => {
+    markApplied(state, "inner-theme", "circles", use);
+    state.templates.bullets = [
+      DEFAULT_REF("beamer/bullet/circle"),
+      DEFAULT_REF("beamer/bullet/circle"),
+      DEFAULT_REF("beamer/bullet/circle"),
+    ];
+    state.templates.enumerations = [
+      DEFAULT_REF("beamer/enumeration/circle"),
+      DEFAULT_REF("beamer/enumeration/circle"),
+      DEFAULT_REF("beamer/enumeration/circle"),
+    ];
+  }],
+  ["inmargin", (state, use) => {
+    markApplied(state, "inner-theme", "inmargin", use);
+    const normalFont = state.fonts["normal-text"];
+    const xHeightEm = themeFontXHeightPt(normalFont) / normalFont.sizePt;
+    state.colors.sidebar = { parent: "block title" };
+    state.colors["sidebar left"] = { parent: "sidebar" };
+    state.colors["local structure"] = { parent: "sidebar" };
+    state.colors["section in toc"] = { parent: "sidebar" };
+    state.colors.title = { parent: "structure" };
+    state.dimensions.textMarginLeftPt =
+      1.5 * themeFontXHeightPt(normalFont);
+    state.dimensions.textMarginRightPt =
+      1.5 * themeFontXHeightPt(normalFont);
+    state.dimensions.sidebarWidthLeft = {
+      kind: "page-width",
+      ratio: 0.25,
+    };
+    state.dimensions.listLeftMarginEmByDepth = [
+      0,
+      1.5 * xHeightEm,
+      1.5 * xHeightEm,
+    ];
+    state.templates.sidebar = templateRef("beamer/sidebar/canvas", {
+      side: "left",
+    });
+    state.templates.titlePage = DEFAULT_REF("beamer/title-page/inmargin");
+    state.templates.block = DEFAULT_REF("beamer/block/inmargin");
   }],
   ["rounded", (state, use) => {
     markApplied(state, "inner-theme", "rounded", use);
@@ -1064,6 +1344,60 @@ function applySplitOuterTheme(
   };
 }
 
+function applySidebarOuterTheme(
+  state: MutableTheme,
+  use: BeamerThemeUse
+): void {
+  markApplied(state, "outer-theme", "sidebar", use);
+  const side = optionString(use.options.side, "left") === "right"
+    ? "right"
+    : "left";
+  const widthPt = optionLengthPt(
+    use.options.width,
+    45,
+    state.fonts["frame-title"].sizePt
+  );
+  const headHeightPt = optionLengthPt(
+    use.options.height,
+    45,
+    state.fonts["frame-title"].sizePt
+  );
+  state.dimensions.sidebarWidthLeft = {
+    kind: "absolute",
+    valuePt: side === "left" ? widthPt : 0,
+  };
+  state.dimensions.sidebarWidthRight = {
+    kind: "absolute",
+    valuePt: side === "right" ? widthPt : 0,
+  };
+  if (widthPt > 0) {
+    state.dimensions.textMarginLeftPt = cmToTexPt(0.5);
+    state.dimensions.textMarginRightPt = cmToTexPt(0.5);
+  }
+  state.templates.sidebar = templateRef("beamer/sidebar/navigation", {
+    side,
+    widthPt,
+    headHeightPt,
+    hideOtherSubsections: optionBoolean(
+      use.options.hideothersubsections,
+      false
+    ),
+    hideAllSubsections: optionBoolean(use.options.hideallsubsections, false),
+    canvas: "solid",
+  });
+  if (headHeightPt > 0) {
+    state.colors.frametitle = { parent: "sidebar" };
+    state.templates.headline = templateRef("beamer/headline/sidebar", {
+      side,
+      widthPt,
+      headHeightPt,
+    });
+    state.templates.frameTitle = templateRef("beamer/frame-title/sidebar", {
+      headHeightPt,
+    });
+  }
+}
+
 const outerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("outer-theme", "default")],
   ["tree", (state, use) => {
@@ -1138,6 +1472,7 @@ const outerThemeAppliers = new Map<string, ComponentApplier>([
       parent: "section in head/foot",
     };
   }],
+  ["sidebar", applySidebarOuterTheme],
   ["infolines", (state, use) => {
     markApplied(state, "outer-theme", "infolines", use);
     state.templates.footline = DEFAULT_REF("beamer/footline/infolines");
@@ -1385,20 +1720,70 @@ function parseThemeOptions(
 
 function templateRef(
   id: string,
-  options: Record<string, string | boolean>
+  options: Record<string, string | boolean | number>
 ): BeamerThemeTemplateRef {
   return { id, options };
 }
 
+function sidebarAggregateOptions(
+  options: Readonly<Record<string, string | boolean>>,
+  defaults: {
+    side?: "left" | "right";
+    width?: string;
+    height?: string;
+  } = {}
+): Readonly<Record<string, string | boolean>> {
+  const side = options.right === true
+    ? "right"
+    : options.left === true
+      ? "left"
+      : defaults.side ?? "left";
+  return {
+    side,
+    ...(typeof options.width === "string"
+      ? { width: options.width }
+      : defaults.width
+        ? { width: defaults.width }
+        : {}),
+    ...(typeof options.height === "string"
+      ? { height: options.height }
+      : defaults.height
+        ? { height: defaults.height }
+        : {}),
+    ...(options.hideothersubsections == null
+      ? {}
+      : { hideothersubsections: options.hideothersubsections }),
+    ...(options.hideallsubsections == null
+      ? {}
+      : { hideallsubsections: options.hideallsubsections }),
+  };
+}
+
+function setSidebarCanvas(
+  state: MutableTheme,
+  canvas: {
+    style: "vertical-gradient";
+    topRole: string;
+    bottomRole: string;
+  }
+): void {
+  state.templates.sidebar = templateRef(state.templates.sidebar.id, {
+    ...state.templates.sidebar.options,
+    canvas: canvas.style,
+    topRole: canvas.topRole,
+    bottomRole: canvas.bottomRole,
+  });
+}
+
 function optionString(
-  value: string | boolean | undefined,
+  value: string | boolean | number | undefined,
   fallback: string
 ): string {
   return typeof value === "string" ? value : fallback;
 }
 
 function optionBoolean(
-  value: string | boolean | undefined,
+  value: string | boolean | number | undefined,
   fallback: boolean
 ): boolean {
   if (typeof value === "boolean") {
@@ -1408,6 +1793,48 @@ function optionBoolean(
     return value.toLocaleLowerCase() === "true";
   }
   return fallback;
+}
+
+function optionLengthPt(
+  value: string | boolean | number | undefined,
+  fallbackPt: number,
+  emPt: number
+): number {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value !== "string") {
+    return fallbackPt;
+  }
+  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))(pt|cm|mm|em|ex)$/iu.exec(
+    value.trim()
+  );
+  if (!match) {
+    return fallbackPt;
+  }
+  const amount = Number(match[1]);
+  switch (match[2].toLocaleLowerCase()) {
+    case "cm":
+      return cmToTexPt(amount);
+    case "mm":
+      return cmToTexPt(amount / 10);
+    case "em":
+      return amount * emPt;
+    case "ex":
+      return amount * emPt * 0.444;
+    default:
+      return amount;
+  }
+}
+
+function themeFontXHeightPt(font: BeamerThemeFont): number {
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(
+    profile.defaultFontState,
+    texLength(font.sizePt),
+    profile.metricProvider
+  );
+  return resolved.data.fontdimen.xheight * Number(resolved.atPt);
 }
 
 function normalizeName(name: string): string {
@@ -1457,6 +1884,7 @@ function freezeTemplates(templates: BeamerThemeTemplates): BeamerThemeTemplates 
       options: Object.freeze({ ...ref.options }),
     });
   return Object.freeze({
+    sidebar: freezeRef(templates.sidebar),
     headline: freezeRef(templates.headline),
     footline: freezeRef(templates.footline),
     navigationSymbols: freezeRef(templates.navigationSymbols),

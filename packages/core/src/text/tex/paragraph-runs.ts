@@ -264,6 +264,12 @@ function layoutItemsToRuns(
       texGlue: {
         ...glue,
         ...(item.kind === "space" && item.nonBreaking ? { breakPenalty: 10_000 } : {}),
+        ...(item.kind === "space" && item.preserveAtLineStart
+          ? { preserveAtLineStart: true }
+          : {}),
+        ...(item.kind === "space" && item.preserveAtLineEnd
+          ? { preserveAtLineEnd: true }
+          : {}),
       },
     } satisfies SpaceRun);
   }

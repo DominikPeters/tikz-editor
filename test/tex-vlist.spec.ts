@@ -1182,6 +1182,63 @@ describe("TeX vlist lowering", () => {
     );
   });
 
+  it("keeps trailing horizontal-mode vspace after the final wrapped line", () => {
+    const text =
+      "Set multipliers to zero for inactive constraints. " +
+      "Then complementarity follows automatically.";
+    const withAdjustment = layoutSimpleTexParagraph(
+      `${text}\\vspace{5.475pt}`,
+      { width: 220 }
+    );
+    const withoutAdjustment = layoutSimpleTexParagraph(text, { width: 220 });
+
+    expect(withAdjustment.report?.lines).toHaveLength(2);
+    expect(withoutAdjustment.report?.lines).toHaveLength(2);
+    expect(
+      withAdjustment.vlistLayout?.linePlacements.map(({ y }) => Number(y))
+    ).toEqual(
+      withoutAdjustment.vlistLayout?.linePlacements.map(({ y }) => Number(y))
+    );
+    expect(
+      Number(withAdjustment.vlistLayout?.metrics.height ?? 0) +
+      Number(withAdjustment.vlistLayout?.metrics.depth ?? 0)
+    ).toBeCloseTo(
+      Number(withoutAdjustment.vlistLayout?.metrics.height ?? 0) +
+      Number(withoutAdjustment.vlistLayout?.metrics.depth ?? 0) +
+      5.475,
+      5
+    );
+  });
+
+  it("keeps pre-vspace interword glue in the owning paragraph line", () => {
+    const text = "Alpha beta gamma delta.";
+    const natural = layoutSimpleTexParagraph(text, {
+      width: 200,
+      alignment: "ragged-right",
+      rightskipStretch: Number.POSITIVE_INFINITY,
+      spaceGlueProfile: "font",
+    });
+    const naturalWidth = Number(natural.report?.lines[0]?.naturalWidth ?? 0);
+    const adjusted = layoutSimpleTexParagraph(
+      `${text}\n  \\vspace{3pt}`,
+      {
+        width: naturalWidth + 4,
+        alignment: "ragged-right",
+        rightskipStretch: Number.POSITIVE_INFINITY,
+        spaceGlueProfile: "font",
+      }
+    );
+    const line = adjusted.report?.lines[0];
+
+    expect(line?.glueSetRatio).toBeLessThan(0);
+    expect(line?.segments.at(-1)).toMatchObject({
+      kind: "space",
+      sourceStartRaw: text.length,
+      sourceEndRaw: text.length + 3,
+    });
+    expect(line?.naturalWidth).toBeGreaterThan(naturalWidth);
+  });
+
   it("attaches relative vspace after a post-display paragraph using the active font size", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Before \[x\]\vspace{.3em} After`
@@ -1251,6 +1308,23 @@ describe("TeX vlist lowering", () => {
     expect(paragraph.paragraph.verticalAdjustments).toEqual([
       expect.objectContaining({ size: 3 }),
     ]);
+
+    const laidOut = layoutSimpleTexParagraph(
+      String.raw`\[x\]  \vspace{3pt} Under a constraint qualification.`,
+      {
+        width: 180,
+        alignment: "ragged-right",
+        rightskipStretch: Number.POSITIVE_INFINITY,
+        spaceGlueProfile: "font",
+      }
+    );
+    const resumedLine = laidOut.report?.lines.find((line) =>
+      line.segments.some((segment) => segment.text?.includes("Under"))
+    );
+    expect(resumedLine?.segments[0]).toMatchObject({
+      kind: "space",
+      width: expect.closeTo(3.33, 2),
+    });
   });
 
   it("does not treat a later paragraph vspace as post-display leading glue", () => {

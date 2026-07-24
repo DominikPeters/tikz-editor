@@ -160,6 +160,7 @@ function beamerListLayoutProfile(
 ): TexListLayoutProfile {
   return {
     ...BEAMER_LIST_LAYOUT_PROFILE,
+    leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
     itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
     resolveEnumerateMarker: (itemIndex, labelDepth) =>
       resolveBeamerEnumerateMarker(theme, itemIndex, labelDepth),
@@ -258,6 +259,7 @@ export async function renderBeamerFrame(
     source,
     children: bodyIr.children,
     textWidth: page.textArea.width,
+    leftSidebarWidth: page.frameArea.x,
     availableHeight: availableContentBounds.height,
     diagnostics,
     theme,
@@ -478,6 +480,7 @@ function renderChrome(params: {
       font,
       alignment: primitive.alignment,
       interwordSpacePt: primitive.interwordSpacePt,
+      disableAutomaticHyphenation: primitive.disableAutomaticHyphenation,
       macroBindings: params.macroBindings,
     });
     if (!laid) {
@@ -544,6 +547,7 @@ async function prepareFrameFlow(params: {
   source: string;
   children: readonly BeamerFrameBodyNode[];
   textWidth: number;
+  leftSidebarWidth: number;
   availableHeight: number;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
@@ -610,6 +614,7 @@ async function prepareFrameFlow(params: {
             diagnostics: params.diagnostics,
             theme: params.theme,
             macroBindings: params.macroBindings,
+            leftSidebarWidth: params.leftSidebarWidth,
           })
         )
       );
@@ -664,6 +669,7 @@ async function prepareFrameFlow(params: {
         source: params.source,
         node,
         width: params.textWidth,
+        leftSidebarWidth: params.leftSidebarWidth,
         theme: params.theme,
         macroBindings: params.macroBindings,
       });
@@ -705,6 +711,9 @@ function prepareTitlePage(params: {
   >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
 }): PreparedTitlePage {
+  const hasSubtitle = params.metadata.subtitle?.value != null;
+  const plan = planBeamerTitlePageTemplate(params.theme, hasSubtitle);
+  const alignment = plan.style === "inmargin" ? "left" : "center";
   const titleSource = params.metadata.title?.value;
   const subtitleSource = params.metadata.subtitle?.value;
   const title = titleSource
@@ -718,7 +727,7 @@ function prepareTitlePage(params: {
         role: "title",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: params.theme.fonts.title,
-        alignment: "center",
+        alignment,
         macroBindings: params.macroBindings,
       })
     : null;
@@ -733,11 +742,32 @@ function prepareTitlePage(params: {
         role: "subtitle",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: params.theme.fonts.subtitle,
-        alignment: "center",
+        alignment,
         macroBindings: params.macroBindings,
       })
     : null;
-  const plan = planBeamerTitlePageTemplate(params.theme, subtitle != null);
+  if (plan.style === "inmargin") {
+    const finalParagraph = subtitle ?? title;
+    const naturalHeight =
+      plan.titleBoxTopPt +
+      (subtitle
+        ? plan.subtitleBaselineFromBoxTopPt
+        : plan.titleBaselineFromBoxTopPt) +
+      (finalParagraph ? paragraphLastLineDepth(finalParagraph) : 0) +
+      3;
+    return {
+      node: params.node,
+      plan,
+      width: params.width,
+      title,
+      subtitle,
+      naturalHeight,
+      // Unlike the default title-page template, inmargin has no leading
+      // \vfill and retains one fill after the title group.
+      leadingFillWeight: 0,
+      trailingFillWeight: 1,
+    };
+  }
   const metadataBoxesHeight =
     3 * BEAMER_EMPTY_METADATA_COLORBOX_PT +
     3 * BEAMER_TITLE_TEMPLATE_INTERBOX_PT;
@@ -1028,6 +1058,7 @@ function prepareBlock(params: {
   source: string;
   node: BeamerBlockBodyNode;
   width: number;
+  leftSidebarWidth: number;
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
 }): PreparedBlock | null {
@@ -1035,6 +1066,21 @@ function prepareBlock(params: {
     environment: params.node.environment,
     theme: params.theme,
   });
+  const titleFont = params.theme.fonts[plan.titleFontRole];
+  const blockTitleLayoutFont = plan.style === "inmargin"
+    ? {
+        ...titleFont,
+        // The title vtop is opened in \normalsize; the starred Beamer font
+        // switch changes the glyph face/size without replacing that vtop's
+        // normal-text baseline grid.
+        lineHeightPt: params.theme.fonts["normal-text"].lineHeightPt,
+      }
+    : titleFont;
+  const normalXHeight = fontXHeightPt(params.theme.fonts["normal-text"]);
+  const inMarginTitleWidth = Math.max(
+    0,
+    params.leftSidebarWidth - 3 * normalXHeight
+  );
   const title = layoutParagraph({
     mapped: createIdentityMappedText(
       params.node.title.value,
@@ -1043,9 +1089,17 @@ function prepareBlock(params: {
     sourceSpan: params.node.title.contentSpan,
     paragraphId: `${params.node.id}:title`,
     role: "block-title",
-    bounds: { x: 0, y: 0, width: params.width, height: 0 },
-    font: params.theme.fonts[plan.titleFontRole],
-    alignment: "left",
+    bounds: {
+      x: 0,
+      y: 0,
+      width: plan.style === "inmargin"
+        ? inMarginTitleWidth
+        : params.width,
+      height: 0,
+    },
+    font: blockTitleLayoutFont,
+    alignment: plan.style === "inmargin" ? "right" : "left",
+    disableAutomaticHyphenation: plan.style === "inmargin",
     macroBindings: params.macroBindings,
   });
   if (!title) {
@@ -1074,6 +1128,47 @@ function prepareBlock(params: {
   const titleAscent = Number(titleLine?.ascent ?? firstLineBaselineOffset(title));
   const titleDepth = Number(titleLine?.descent ?? 0);
   const geometry = plan.geometry;
+  if (plan.style === "inmargin") {
+    const titleFirstBaseline = firstLineBaselineOffset(title);
+    const bodyFirstBaseline = body ? firstLineBaselineOffset(body) : 0;
+    const hboxHeight = Math.max(titleFirstBaseline, bodyFirstBaseline);
+    const titleTop =
+      geometry.beforeSkipPt + hboxHeight - titleFirstBaseline;
+    const bodyParagraphTop =
+      geometry.beforeSkipPt + hboxHeight - bodyFirstBaseline;
+    const bodyExtent = body ? paragraphLineExtent(body) : 0;
+    const contentBottom = Math.max(
+      titleTop + paragraphLineExtent(title),
+      bodyParagraphTop + bodyExtent
+    );
+    const naturalHeight =
+      contentBottom +
+      geometry.boxBottomSkipPt;
+    const referenceY = geometry.beforeSkipPt + hboxHeight;
+    return {
+      node: params.node,
+      plan,
+      width: params.width,
+      title,
+      body,
+      titleXOffset:
+        -params.leftSidebarWidth + 0.5 * normalXHeight,
+      titleTop,
+      titleAscent,
+      titleDepth,
+      titleBackgroundHeight: 0,
+      bodyBackgroundTop: bodyParagraphTop,
+      bodyParagraphTop,
+      bodyBackgroundHeight: 0,
+      backgroundTop: bodyParagraphTop,
+      backgroundBottom: naturalHeight,
+      naturalHeight,
+      flowBoxHeight: hboxHeight,
+      // The closing \smallskip does not clear TeX's \prevdepth: it remains
+      // the depth of the hbox containing the two vtops.
+      endingDepth: Math.max(0, contentBottom - referenceY),
+    };
+  }
   const backgroundTop =
     geometry.beforeSkipPt +
     Math.max(0, geometry.outerBleedPt - geometry.roundedTopInsetPt);
@@ -1117,6 +1212,8 @@ function prepareBlock(params: {
     width: params.width,
     title,
     body,
+    titleXOffset: 0,
+    titleTop: backgroundTop + geometry.roundedTopInsetPt,
     titleAscent,
     titleDepth,
     titleBackgroundHeight,
@@ -1207,13 +1304,11 @@ function emitPreparedBlock(params: {
     }),
   });
 
-  const titleY =
-    params.y +
-    block.backgroundTop +
-    geometry.roundedTopInsetPt;
+  const titleX = params.x + block.titleXOffset;
+  const titleY = params.y + block.titleTop;
   block.title.layout.bounds = {
     ...block.title.layout.bounds,
-    x: params.x,
+    x: titleX,
     y: titleY,
   };
   params.paragraphs.push(block.title.layout);
@@ -1231,7 +1326,7 @@ function emitPreparedBlock(params: {
     elementId: null,
     markup: paragraphMarkup(
       block.title.svgBody,
-      params.x,
+      titleX,
       titleY,
       titleColor.fg ?? textColor(params.theme, "normal text")
     ),
@@ -1287,6 +1382,11 @@ function blockChromeMarkup(params: {
   bodyFill: string;
 }): string {
   const { block } = params;
+  if (block.plan.style === "inmargin") {
+    return (
+      `<g data-beamer-block-template="${escapeAttribute(block.plan.templateId)}" />`
+    );
+  }
   const geometry = block.plan.geometry;
   const left = params.x - geometry.outerBleedPt;
   const right = params.x + block.width + geometry.outerBleedPt;
@@ -1452,11 +1552,16 @@ function titlePageChromeMarkup(params: {
   id: string;
   bounds: BeamerRect;
   templateId: string;
-  style: "colorbox" | "rounded";
+  style: "colorbox" | "rounded" | "inmargin";
   fill: string;
   shadow: boolean;
 }): string {
   const { bounds } = params;
+  if (params.style === "inmargin") {
+    return (
+      `<g data-beamer-title-page-template="${escapeAttribute(params.templateId)}" />`
+    );
+  }
   if (params.style === "colorbox") {
     return (
       `<g data-beamer-title-page-template="${escapeAttribute(params.templateId)}">` +
@@ -1714,6 +1819,7 @@ async function prepareColumnContent(params: {
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  leftSidebarWidth: number;
 }): Promise<PreparedColumnContent> {
   const {
     source,
@@ -1741,6 +1847,7 @@ async function prepareColumnContent(params: {
       initialPreviousDepth:
         node.kind === "list" ? previousDepth : undefined,
       macroBindings,
+      leftSidebarWidth: params.leftSidebarWidth,
     });
     if (prepared) {
       flow.push(prepared);
@@ -1758,7 +1865,13 @@ async function prepareColumnContent(params: {
       (item.kind === "paragraph"
         ? item.advanceHeight +
           (flow[index + 1] ? item.trailingSkipPt : 0)
-        : item.height) +
+        : item.kind === "block" &&
+            item.block.plan.style === "inmargin" &&
+            !flow[index + 1]
+          // TeX drops the terminal \smallskip glue when the in-margin block's
+          // vtop becomes the final material in a column minipage.
+          ? item.height - item.block.plan.geometry.boxBottomSkipPt
+          : item.height) +
       (item.kind === "block" && flow[index + 1]
         ? item.block.plan.geometry.afterSkipPt
         : 0),
@@ -1788,6 +1901,7 @@ async function prepareColumnFlowNode(params: {
   listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  leftSidebarWidth: number;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -1799,6 +1913,7 @@ async function prepareColumnFlowNode(params: {
     listProfile,
     initialPreviousDepth,
     macroBindings,
+    leftSidebarWidth,
   } = params;
   if (node.kind === "vertical-space") {
     return {
@@ -1811,6 +1926,7 @@ async function prepareColumnFlowNode(params: {
       source,
       node,
       width,
+      leftSidebarWidth,
       theme,
       macroBindings,
     });
@@ -2250,7 +2366,7 @@ function layoutParagraph(params: {
         const atPt = Number(resolvedFont.atPt);
         return [{
           id: `${params.paragraphId}:marker:${item.path.join("-")}`,
-          traceAsGlyph: marker.glyph != null,
+          traceAsGlyph: marker.traceAsGlyph ?? marker.glyph != null,
           bounds: {
             x: Number(item.x) + (paint?.x ?? 0) * atPt,
             y: Number(item.y) + (paint?.y ?? 0) * atPt,
@@ -2456,7 +2572,11 @@ function paragraphRole(
   if (
     fontRole === "headline" ||
     fontRole === "section-in-head-foot" ||
-    fontRole === "subsection-in-head-foot"
+    fontRole === "subsection-in-head-foot" ||
+    fontRole === "title-in-sidebar" ||
+    fontRole === "author-in-sidebar" ||
+    fontRole === "section-in-sidebar" ||
+    fontRole === "subsection-in-sidebar"
   ) {
     return "headline";
   }

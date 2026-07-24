@@ -241,7 +241,12 @@ function texLayoutLabelForListContext(
       items: [],
       sourceStart: 0,
       sourceEnd: 0,
-      rightEdge,
+      rightEdge: texVListX(
+        roundTexPt(
+          rightEdge +
+          (marker.rightEdgeOffsetEm ?? 0) * Number(font.atPt)
+        )
+      ),
       marker: {
         profile: marker,
         atPt: font.atPt,

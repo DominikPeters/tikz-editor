@@ -222,6 +222,9 @@ function normalizeCursor(
       if (forcedPenalties.has(runIndex)) {
         return { runIndex, textOffset: 0 };
       }
+      if (run.texGlue?.preserveAtLineStart === true) {
+        return { runIndex, textOffset: 0, ...pending };
+      }
       runIndex += 1;
       textOffset = 0;
       continue;
@@ -530,6 +533,14 @@ function generateCandidates(
       const glue = glueMetrics.get(runIndex);
       stretch += glue?.stretch ?? 0;
       shrink += glue?.shrink ?? 0;
+      if (run.texGlue?.preserveAtLineEnd === true) {
+        naturalWidthWithoutTrailingSpaces = naturalWidth;
+        spaceCountWithoutTrailingSpaces = spaceCount;
+        spaceWidthWithoutTrailingSpaces = spaceWidth;
+        stretchWithoutTrailingSpaces = stretch;
+        shrinkWithoutTrailingSpaces = shrink;
+        lastNonSpaceRun = runIndex;
+      }
       continue;
     }
 

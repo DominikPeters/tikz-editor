@@ -46,4 +46,18 @@ describe("Beamer frame geometry contract", () => {
 
     expect(geometry.page.width / geometry.page.height).toBeCloseTo(1.9, 10);
   });
+
+  it("resolves Bergen's responsive quarter-page margin before text margins", () => {
+    const geometry = resolveBeamerPageGeometry(
+      scanBeamerDocument(String.raw`
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Bergen}
+\begin{document}\begin{frame}{A}B\end{frame}\end{document}`)
+    );
+
+    expect(geometry.frameArea.x).toBeCloseTo(113.811024, 5);
+    expect(geometry.frameArea.width).toBeCloseTo(341.433071, 5);
+    expect(geometry.textArea.x).toBeCloseTo(121.103724, 5);
+    expect(geometry.textArea.width).toBeCloseTo(326.847671, 5);
+  });
 });
