@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeSimpleTexParagraph,
+  analyzeSimpleTexResources,
   classicComputerModernTextFontProfile,
   computerModernTexMetricProvider,
   createSimpleTexLayoutDocumentIr,
@@ -224,6 +225,42 @@ describe("simple TeX paragraph IR", () => {
       ury: 65 * bp,
     });
     expect(graphics[1]?.options.raw).toBe("trim={10 5 20 15},clip=false,viewport=10 5 100 65");
+  });
+
+  it("discovers source-backed graphics resources and parses PDF pages once", () => {
+    const source = String.raw`% \includegraphics{ignored.pdf}
+\node {A \includegraphics[page={2}]{fig.pdf}};
+\node {\textbf{\includegraphics[page=zero]{bad.pdf}}};`;
+    const manifest = analyzeSimpleTexResources(source);
+    const ignoredStart = source.indexOf(String.raw`\includegraphics`);
+    const firstStart = source.indexOf(String.raw`\includegraphics`, ignoredStart + 1);
+    const secondStart = source.indexOf(String.raw`\includegraphics`, firstStart + 1);
+
+    expect(manifest.graphics).toEqual([
+      expect.objectContaining({
+        kind: "graphics",
+        filename: "fig.pdf",
+        sourceStart: firstStart,
+        sourceEnd: firstStart + String.raw`\includegraphics[page={2}]{fig.pdf}`.length,
+        options: expect.objectContaining({
+          raw: "page={2}",
+          page: { status: "valid", pageNumber: 2 },
+        }),
+      }),
+      expect.objectContaining({
+        kind: "graphics",
+        filename: "bad.pdf",
+        sourceStart: secondStart,
+        options: expect.objectContaining({
+          raw: "page=zero",
+          page: {
+            status: "invalid",
+            raw: "zero",
+            reason: "PDF page option must be a positive integer.",
+          },
+        }),
+      }),
+    ]);
   });
 
   it("parses phantom and smash commands as inline dimension boxes", () => {

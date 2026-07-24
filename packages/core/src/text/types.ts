@@ -1,4 +1,5 @@
 import type { TextSourceMap } from "./source-map.js";
+import type { SimpleTexGraphicsOptions } from "./tex/ir.js";
 
 export type NodeTextFontStyle = "normal" | "italic";
 export type NodeTextFontWeight = "normal" | "bold";
@@ -29,13 +30,9 @@ export type NodeTextColorResolver = {
   resolve(name: string): string | null;
 };
 
-export type NodeTextGraphicsOptionValue = string | boolean;
-
-export type NodeTextGraphicsOptions = Readonly<Record<string, NodeTextGraphicsOptionValue>>;
-
 export type NodeTextGraphicsResolveRequest = {
   filename: string;
-  options: NodeTextGraphicsOptions;
+  options: SimpleTexGraphicsOptions;
   source: string;
   sourceStart: number;
   sourceEnd: number;

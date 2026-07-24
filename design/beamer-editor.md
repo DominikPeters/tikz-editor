@@ -280,6 +280,17 @@ columns, blocks, theme constructs, and overlays. Textual leaves are
 by the existing simple-TeX/vlist pipeline. Beamer-specific concepts do not
 fork or specialize that generic text IR.
 
+TeX syntax has one authoritative interpretation: source-backed text IR.
+Rendering, capability reporting, resource discovery, and later editing
+consume that IR rather than recognizing commands independently in raw source.
+Raw-source scans may be used only as non-authoritative performance prefilters
+or UI hints. In particular, the shared text frontend produces a
+`SimpleTexResourceManifest`, retaining command, filename, and option spans.
+It can flatten an existing inline/block IR or run the same resource-node
+scanner over arbitrary document source before structural layout. The app
+resolves that manifest asynchronously before layout and passes the resulting
+document-local resolver back to core.
+
 The page layout is a Beamer composition IR, not a `SceneFigure`: theme chrome,
 horizontal columns, decorated blocks, text vlists, and atomic embedded
 figures are not TikZ scene elements. The emitter lowers the positioned page
@@ -542,6 +553,11 @@ tarballs already are). Opening a `.tex` roots the project at its directory.
 
 - Resolution: `\graphicspath` + relative paths; extensionless references try
   pdfTeX's order (`.pdf`, `.png`, `.jpg`, `.jpeg`, ...).
+- Discovery is a two-stage contract: the shared text frontend emits
+  source-backed graphics resources with parsed options (including PDF
+  `page`), then the platform asset layer performs filesystem lookup,
+  rasterization, caching, and watching. It does not rescan `\includegraphics`
+  or parse graphicx options from strings.
 - **PDF figures render via PDF.js** (Apache-2.0; poppler/pdftocairo WASM
   rejected on license and maintenance grounds). Raster preview is
   sufficient because the compiled deck embeds the original vector PDF — the

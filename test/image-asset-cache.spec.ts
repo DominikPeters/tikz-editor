@@ -6,6 +6,10 @@ import { setPdfAssetRasterizerForTests, type PdfAssetRasterizer } from "../packa
 import { setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
 import type { EditorPlatform } from "../packages/app/src/platform/types.js";
 import type { DocumentFileRef } from "../packages/app/src/store/types.js";
+import {
+  analyzeSimpleTexResources,
+  type SimpleTexGraphicsOptions,
+} from "../packages/core/src/text/tex/index.js";
 
 function setTestPlatform(platform: Partial<EditorPlatform>): void {
   setActiveEditorPlatform({
@@ -40,7 +44,7 @@ describe("image asset cache", () => {
     });
     const resolution = resolver.resolve({
       filename: "fig",
-      options: {},
+      options: graphicsOptions(""),
       source: String.raw`\includegraphics{fig}`,
       sourceStart: 0,
       sourceEnd: 21,
@@ -87,7 +91,7 @@ describe("image asset cache", () => {
     });
     const resolution = resolver.resolve({
       filename: "fig",
-      options: {},
+      options: graphicsOptions(""),
       source: String.raw`\includegraphics{fig}`,
       sourceStart: 0,
       sourceEnd: 21,
@@ -141,14 +145,14 @@ describe("image asset cache", () => {
     });
     const visible = resolver.resolve({
       filename: "fig.svg",
-      options: { raw: "trim=10 5 20 15" },
+      options: graphicsOptions("trim=10 5 20 15"),
       source: String.raw`\includegraphics[trim=10 5 20 15]{fig.svg}`,
       sourceStart: 0,
       sourceEnd: 45,
     });
     const clipped = resolver.resolve({
       filename: "fig.svg",
-      options: { raw: "trim=10 5 20 15,clip" },
+      options: graphicsOptions("trim=10 5 20 15,clip"),
       source: String.raw`\includegraphics[trim=10 5 20 15,clip]{fig.svg}`,
       sourceStart: 0,
       sourceEnd: 50,
@@ -197,7 +201,7 @@ describe("image asset cache", () => {
     });
     const resolution = resolver.resolve({
       filename: "fig.pdf",
-      options: { raw: "" },
+      options: graphicsOptions(""),
       source: String.raw`\includegraphics{fig.pdf}`,
       sourceStart: 0,
       sourceEnd: 25,
@@ -243,14 +247,14 @@ describe("image asset cache", () => {
     });
     const page1 = resolver.resolve({
       filename: "fig.pdf",
-      options: { raw: "page=1" },
+      options: graphicsOptions("page=1"),
       source: String.raw`\includegraphics[page=1]{fig.pdf}`,
       sourceStart: 0,
       sourceEnd: 34,
     });
     const page2 = resolver.resolve({
       filename: "fig.pdf",
-      options: { raw: "page=2" },
+      options: graphicsOptions("page=2"),
       source: String.raw`\includegraphics[page=2]{fig.pdf}`,
       sourceStart: 0,
       sourceEnd: 34,
@@ -332,14 +336,14 @@ describe("image asset cache", () => {
     });
     const invalid = resolver.resolve({
       filename: "fig.pdf",
-      options: { raw: "page=0" },
+      options: graphicsOptions("page=0"),
       source: String.raw`\includegraphics[page=0]{fig.pdf}`,
       sourceStart: 0,
       sourceEnd: 34,
     });
     const outOfRange = resolver.resolve({
       filename: "fig.pdf",
-      options: { raw: "page=9" },
+      options: graphicsOptions("page=9"),
       source: String.raw`\includegraphics[page=9]{fig.pdf}`,
       sourceStart: 0,
       sourceEnd: 34,
@@ -432,9 +436,19 @@ function rasterizedPdfPage(pageNumber: number): Awaited<ReturnType<PdfAssetRaste
 function pdfResolveRequest(raw: string) {
   return {
     filename: "fig.pdf",
-    options: { raw },
+    options: graphicsOptions(raw),
     source: String.raw`\includegraphics{fig.pdf}`,
     sourceStart: 0,
     sourceEnd: 25,
   };
+}
+
+function graphicsOptions(raw: string): SimpleTexGraphicsOptions {
+  const optionArgument = raw.length > 0 ? `[${raw}]` : "";
+  const source = String.raw`\includegraphics${optionArgument}{fig.pdf}`;
+  const resource = analyzeSimpleTexResources(source).graphics[0];
+  if (!resource) {
+    throw new Error("Expected includegraphics resource.");
+  }
+  return resource.options;
 }

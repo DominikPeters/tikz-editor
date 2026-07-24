@@ -5,6 +5,7 @@ import { worldTransform } from "../../coords/transforms.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindingsMapped } from "../../macros/index.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { mapTransformedTextWithFallback, type MappedText } from "../../text/source-map.js";
+import { analyzeSimpleTexResources } from "../../text/tex/index.js";
 import type { NodeTextColorResolver } from "../../text/types.js";
 import {
   currentFrame,
@@ -1659,7 +1660,7 @@ function collectSetNames(options: OptionListAst | undefined): string[] {
 }
 
 function containsIncludeGraphicsCommand(text: string): boolean {
-  return /\\includegraphics\b/.test(text);
+  return analyzeSimpleTexResources(text).graphics.length > 0;
 }
 
 function hasTextWidthOption(options: OptionListAst | undefined): boolean {

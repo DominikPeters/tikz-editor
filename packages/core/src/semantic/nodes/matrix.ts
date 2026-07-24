@@ -3,6 +3,7 @@ import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, expandMacroBind
 import { parseOptionListRaw, splitTopLevel } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
 import { mapTransformedTextWithFallback } from "../../text/source-map.js";
+import { analyzeSimpleTexResources } from "../../text/tex/index.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { SemanticContext } from "../context.js";
 import type { NodePositioningResolution } from "../path/node-positioning.js";
@@ -1807,7 +1808,7 @@ function trimLeadingWhitespace(input: string): { text: string; consumed: number 
 }
 
 function containsIncludeGraphicsCommand(text: string): boolean {
-  return /\\includegraphics\b/.test(text);
+  return analyzeSimpleTexResources(text).graphics.length > 0;
 }
 
 function trimLeftWhitespaceBoundary(input: string, from: number, to: number): number {

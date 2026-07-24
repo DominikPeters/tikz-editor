@@ -2,10 +2,7 @@ import {
   defaultTexTextFontProfile,
   type TexTextFontProfile,
 } from "./fonts/text-profile.js";
-import type {
-  NodeTextGraphicsOptions,
-  NodeTextGraphicsResolver,
-} from "../types.js";
+import type { NodeTextGraphicsResolver } from "../types.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import {
   defaultTexMathFontProfile,
@@ -32,7 +29,6 @@ import {
   type SimpleTexDisplayMathDelimiter,
   type SimpleTexFontState,
   type SimpleTexGraphicsOptions,
-  type SimpleTexGraphicsTrim,
   type SimpleTexGraphicsViewport,
   type SimpleTexInlineNode,
   type SimpleTexParagraphSegment,
@@ -1123,10 +1119,9 @@ function texIncludeGraphicsBox(params: {
   readonly options: SimpleTexGraphicsOptions;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
 }): TexMathBox {
-  const graphicsOptions = nodeTextGraphicsOptions(params.options);
   const resolution = params.graphicsResolver?.resolve({
     filename: params.filename,
-    options: graphicsOptions,
+    options: params.options,
     source: params.source,
     sourceStart: params.sourceStart,
     sourceEnd: params.sourceEnd,
@@ -1204,19 +1199,6 @@ function texIncludeGraphicsBox(params: {
       xEnd: texHBoxX(width),
     }],
     svgBody,
-  };
-}
-
-function nodeTextGraphicsOptions(options: SimpleTexGraphicsOptions): NodeTextGraphicsOptions {
-  return {
-    raw: options.raw,
-    ...(options.width !== undefined ? { width: `${formatTexSvgNumber(options.width)}pt` } : {}),
-    ...(options.height !== undefined ? { height: `${formatTexSvgNumber(options.height)}pt` } : {}),
-    ...(options.scale !== undefined ? { scale: formatTexSvgNumber(options.scale) } : {}),
-    ...(options.keepAspectRatio ? { keepaspectratio: true } : {}),
-    ...(options.trim ? { trim: formatTexGraphicsTrim(options.trim) } : {}),
-    ...(options.viewport ? { viewport: formatTexGraphicsViewport(options.viewport) } : {}),
-    ...(options.clip !== undefined ? { clip: options.clip } : {}),
   };
 }
 
@@ -1397,24 +1379,6 @@ function formatTexSvgNumber(value: number): string {
     return "0";
   }
   return Number(value.toFixed(6)).toString();
-}
-
-function formatTexGraphicsTrim(trim: SimpleTexGraphicsTrim): string {
-  return [
-    `${formatTexSvgNumber(trim.left)}pt`,
-    `${formatTexSvgNumber(trim.bottom)}pt`,
-    `${formatTexSvgNumber(trim.right)}pt`,
-    `${formatTexSvgNumber(trim.top)}pt`,
-  ].join(" ");
-}
-
-function formatTexGraphicsViewport(viewport: SimpleTexGraphicsViewport): string {
-  return [
-    `${formatTexSvgNumber(viewport.llx)}pt`,
-    `${formatTexSvgNumber(viewport.lly)}pt`,
-    `${formatTexSvgNumber(viewport.urx)}pt`,
-    `${formatTexSvgNumber(viewport.ury)}pt`,
-  ].join(" ");
 }
 
 function texRaiseBoxFromInlineNodes(params: {

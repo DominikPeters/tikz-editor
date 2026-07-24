@@ -3,6 +3,10 @@ import type {
   NodeTextGraphicsResolveRequest,
   NodeTextGraphicsResolver,
 } from "@tikz-editor/core/text/types";
+import {
+  analyzeSimpleTexResources,
+  type SimpleTexGraphicsOptions,
+} from "@tikz-editor/core/text/tex/index.js";
 import { rasterizePdfAsset } from "./pdf-asset-rasterizer";
 import { getActiveEditorPlatform } from "./platform/current";
 import type { LocalAssetReadResult } from "./platform/types";
@@ -13,12 +17,12 @@ type RawAssetMimeType = ResolvedImageMimeType | "application/pdf";
 
 type ImageIncludeCandidate = {
   readonly filename: string;
-  readonly rawOptions: string;
+  readonly options: SimpleTexGraphicsOptions;
 };
 
 type PreparedAssetEntry = {
   readonly filename: string;
-  readonly rawOptions: string;
+  readonly options: SimpleTexGraphicsOptions;
   readonly resolution: NodeTextGraphicsResolution;
 };
 
@@ -48,7 +52,7 @@ export async function prepareImageAssetResolver(params: {
   for (const include of includeCandidates) {
     const requestKey = includeGraphicsRequestKey({
       filename: include.filename,
-      rawOptions: include.rawOptions,
+      options: include.options,
       baseDirectory,
     });
     if (entries.has(requestKey)) {
@@ -56,7 +60,7 @@ export async function prepareImageAssetResolver(params: {
     }
     const resolution = await resolveIncludeGraphicsAsset({
       filename: include.filename,
-      rawOptions: include.rawOptions,
+      options: include.options,
       baseDirectory,
       readLocalAsset,
     });
@@ -65,7 +69,7 @@ export async function prepareImageAssetResolver(params: {
     }
     entries.set(requestKey, {
       filename: include.filename,
-      rawOptions: include.rawOptions,
+      options: include.options,
       resolution,
     });
   }
@@ -79,7 +83,7 @@ export async function prepareImageAssetResolver(params: {
     resolve(request: NodeTextGraphicsResolveRequest): NodeTextGraphicsResolution {
       const requestKey = includeGraphicsRequestKey({
         filename: request.filename,
-        rawOptions: rawGraphicsOptions(request.options.raw),
+        options: request.options,
         baseDirectory,
       });
       const prepared = entries.get(requestKey);
@@ -126,7 +130,7 @@ async function syncLocalAssetWatches(paths: readonly string[]): Promise<void> {
 
 async function resolveIncludeGraphicsAsset(params: {
   readonly filename: string;
-  readonly rawOptions: string;
+  readonly options: SimpleTexGraphicsOptions;
   readonly baseDirectory: string | null;
   readonly readLocalAsset: ((path: string) => Promise<LocalAssetReadResult>) | undefined;
 }): Promise<NodeTextGraphicsResolution> {
@@ -158,7 +162,7 @@ async function resolveIncludeGraphicsAsset(params: {
   }
 
   for (const candidate of descriptor.candidates) {
-    const cacheKey = assetCacheKeyForCandidate(candidate, params.rawOptions);
+    const cacheKey = assetCacheKeyForCandidate(candidate, params.options);
     const cached = pathCache.get(cacheKey);
     if (cached) {
       if (cached.resolution.status === "resolved") {
@@ -171,7 +175,7 @@ async function resolveIncludeGraphicsAsset(params: {
     }
 
     const read = await params.readLocalAsset(candidate);
-    const entry = await pathCacheEntryFromRead(candidate, descriptor.candidates, read, params.rawOptions);
+    const entry = await pathCacheEntryFromRead(candidate, descriptor.candidates, read, params.options);
     pathCache.set(cacheKey, entry);
     if (entry.resolution.status === "resolved") {
       return entry.resolution;
@@ -192,7 +196,7 @@ function pathCacheEntryFromRead(
   candidate: string,
   watchedPaths: readonly string[],
   read: LocalAssetReadResult,
-  rawOptions: string
+  options: SimpleTexGraphicsOptions
 ): Promise<PathCacheEntry> {
   if (read.status !== "ok") {
     const missingPath = read.path ?? candidate;
@@ -229,7 +233,7 @@ function pathCacheEntryFromRead(
   }
 
   if (rawMimeType === "application/pdf") {
-    return pdfPathCacheEntryFromRead(read, watchedPaths, rawOptions);
+    return pdfPathCacheEntryFromRead(read, watchedPaths, options);
   }
 
   const bytes = bytesFromBase64(read.bytesBase64);
@@ -270,9 +274,9 @@ function pathCacheEntryFromRead(
 async function pdfPathCacheEntryFromRead(
   read: Extract<LocalAssetReadResult, { status: "ok" }>,
   watchedPaths: readonly string[],
-  rawOptions: string
+  options: SimpleTexGraphicsOptions
 ): Promise<PathCacheEntry> {
-  const page = parsePdfPageOption(rawOptions);
+  const page = resolvePdfPageOption(options);
   if (page.status === "invalid") {
     const signature = `unsupported:${read.path}:${read.revision}:pdf:${page.reason}`;
     return {
@@ -358,7 +362,7 @@ function imageAssetResolverCacheKey(params: {
       const resolution = entry.resolution;
       return {
         filename: entry.filename,
-        rawOptions: entry.rawOptions,
+        rawOptions: entry.options.raw,
         status: resolution.status,
         revision: resolution.revision ?? null,
         path: resolution.resolvedPath ?? null,
@@ -379,21 +383,15 @@ function imageAssetResolverCacheKey(params: {
 }
 
 function collectIncludeGraphicsCandidates(source: string): ImageIncludeCandidate[] {
-  const candidates: ImageIncludeCandidate[] = [];
-  const pattern = /\\includegraphics\b\s*(?:\[([^\]]*)\]\s*)?\{([^{}]+)\}/g;
-  for (const match of source.matchAll(pattern)) {
-    const rawOptions = match[1] ?? "";
-    const filename = match[2]?.trim();
-    if (filename) {
-      candidates.push({ filename, rawOptions });
-    }
-  }
-  return candidates;
+  return analyzeSimpleTexResources(source).graphics.map((resource) => ({
+    filename: resource.filename,
+    options: resource.options,
+  }));
 }
 
 function includeGraphicsRequestKey(params: {
   readonly filename: string;
-  readonly rawOptions: string;
+  readonly options: SimpleTexGraphicsOptions;
   readonly baseDirectory: string | null;
 }): string {
   const normalizedFilename = params.filename.trim();
@@ -403,80 +401,31 @@ function includeGraphicsRequestKey(params: {
   return [
     params.baseDirectory ?? "",
     normalizedFilename,
-    needsOptions ? pdfPageCacheDiscriminator(params.rawOptions) : "",
+    needsOptions ? pdfPageCacheDiscriminator(params.options) : "",
   ].join("\n");
 }
 
-function rawGraphicsOptions(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function pdfPageCacheDiscriminator(rawOptions: string): string {
-  const page = parsePdfPageOption(rawOptions);
+function pdfPageCacheDiscriminator(options: SimpleTexGraphicsOptions): string {
+  const page = resolvePdfPageOption(options);
   return page.status === "ok"
     ? `page=${page.pageNumber}`
-    : `invalid-page=${rawOptions.trim()}`;
+    : `invalid-page=${page.raw.trim()}`;
 }
 
-function parsePdfPageOption(rawOptions: string):
+function resolvePdfPageOption(options: SimpleTexGraphicsOptions):
   | { readonly status: "ok"; readonly pageNumber: number }
-  | { readonly status: "invalid"; readonly reason: string } {
-  for (const part of splitGraphicsOptions(rawOptions)) {
-    const trimmed = part.trim();
-    if (!trimmed) {
-      continue;
-    }
-    const equals = trimmed.indexOf("=");
-    const key = (equals >= 0 ? trimmed.slice(0, equals) : trimmed).trim().toLowerCase();
-    if (key !== "page") {
-      continue;
-    }
-    if (equals < 0) {
-      return {
-        status: "invalid",
-        reason: "PDF page option must be a positive integer.",
-      };
-    }
-    const value = trimmed.slice(equals + 1).trim();
-    if (!/^\d+$/.test(value)) {
-      return {
-        status: "invalid",
-        reason: "PDF page option must be a positive integer.",
-      };
-    }
-    const pageNumber = Number(value);
-    if (!Number.isSafeInteger(pageNumber) || pageNumber < 1) {
-      return {
-        status: "invalid",
-        reason: "PDF page option must be a positive integer.",
-      };
-    }
-    return { status: "ok", pageNumber };
+  | { readonly status: "invalid"; readonly raw: string; readonly reason: string } {
+  if (options.page?.status === "invalid") {
+    return {
+      status: "invalid",
+      raw: options.page.raw,
+      reason: options.page.reason,
+    };
   }
-  return { status: "ok", pageNumber: 1 };
-}
-
-function splitGraphicsOptions(raw: string): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
-    if (char === "{") {
-      braceDepth += 1;
-      continue;
-    }
-    if (char === "}" && braceDepth > 0) {
-      braceDepth -= 1;
-      continue;
-    }
-    if (char === "," && braceDepth === 0) {
-      parts.push(raw.slice(start, index));
-      start = index + 1;
-    }
-  }
-  parts.push(raw.slice(start));
-  return parts;
+  return {
+    status: "ok",
+    pageNumber: options.page?.status === "valid" ? options.page.pageNumber : 1,
+  };
 }
 
 function includeGraphicsPathDescriptor(
@@ -578,10 +527,10 @@ function comparableLocalPath(path: string): string {
   return normalizeLocalPath(path).replaceAll("\\", "/");
 }
 
-function assetCacheKeyForCandidate(path: string, rawOptions: string): string {
+function assetCacheKeyForCandidate(path: string, options: SimpleTexGraphicsOptions): string {
   const comparablePath = comparableLocalPath(path);
   return extensionForPath(path) === ".pdf"
-    ? `${comparablePath}\npdf:${pdfPageCacheDiscriminator(rawOptions)}`
+    ? `${comparablePath}\npdf:${pdfPageCacheDiscriminator(options)}`
     : comparablePath;
 }
 

@@ -260,11 +260,23 @@ export interface SimpleTexGraphicsOptions {
   readonly height?: TexLength;
   readonly scale?: number;
   readonly keepAspectRatio?: boolean;
+  readonly page?: SimpleTexGraphicsPageOption;
   readonly trim?: SimpleTexGraphicsTrim;
   readonly viewport?: SimpleTexGraphicsViewport;
   readonly clip?: boolean;
   readonly raw: string;
 }
+
+export type SimpleTexGraphicsPageOption =
+  | {
+      readonly status: "valid";
+      readonly pageNumber: number;
+    }
+  | {
+      readonly status: "invalid";
+      readonly raw: string;
+      readonly reason: string;
+    };
 
 export interface SimpleTexGraphicsTrim {
   readonly left: TexLength;
@@ -711,6 +723,20 @@ export interface SimpleTexParagraphAnalysis {
   readonly fallbackReason: string | null;
 }
 
+export interface SimpleTexGraphicsResource {
+  readonly kind: "graphics";
+  readonly filename: string;
+  readonly filenameStart: number;
+  readonly filenameEnd: number;
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly options: SimpleTexGraphicsOptions;
+}
+
+export interface SimpleTexResourceManifest {
+  readonly graphics: readonly SimpleTexGraphicsResource[];
+}
+
 interface SimpleTexIrOptions {
   readonly parindent?: TexLength;
   readonly tikzTextWidthNode?: boolean;
@@ -794,6 +820,90 @@ export function parseSimpleTexParagraphIr(
   resolveColorAlias?: ColorAliasResolver
 ): SimpleTexParagraphIr {
   return buildSimpleTexParagraphIr(text, resolveColorAlias);
+}
+
+/**
+ * Scan arbitrary TeX/TikZ document source with the same command frontend that
+ * builds paragraph IR and expose its source-backed resource references.
+ * Consumers must use this manifest rather than recognizing resource commands
+ * independently from raw source.
+ */
+export function analyzeSimpleTexResources(
+  text: string
+): SimpleTexResourceManifest {
+  const graphics: SimpleTexGraphicsResource[] = [];
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] === "%" && !isEscapedSimpleTexChar(text, index)) {
+      const newline = text.indexOf("\n", index + 1);
+      index = newline < 0 ? text.length : newline + 1;
+      continue;
+    }
+    if (text[index] !== "\\") {
+      index += 1;
+      continue;
+    }
+    const scanned = scanSimpleTexIncludeGraphicsCommand(text, index, 0);
+    if (!scanned) {
+      index += 1;
+      continue;
+    }
+    graphics.push(simpleTexGraphicsResourceFromNode(scanned.node));
+    index = scanned.end;
+  }
+  return { graphics };
+}
+
+export function collectSimpleTexResourceManifest(
+  ir: SimpleTexParagraphIr
+): SimpleTexResourceManifest {
+  const graphics: SimpleTexGraphicsResource[] = [];
+  collectSimpleTexGraphicsResourcesFromNodes(ir.nodes, graphics);
+  return { graphics };
+}
+
+function collectSimpleTexGraphicsResourcesFromNodes(
+  nodes: readonly SimpleTexNode[],
+  graphics: SimpleTexGraphicsResource[]
+): void {
+  for (const node of nodes) {
+    if (node.kind === "includegraphics") {
+      graphics.push(simpleTexGraphicsResourceFromNode(node));
+      continue;
+    }
+    if (
+      node.kind === "font-command" ||
+      node.kind === "color-command" ||
+      node.kind === "group" ||
+      node.kind === "mbox" ||
+      node.kind === "raisebox" ||
+      node.kind === "dimension-box"
+    ) {
+      collectSimpleTexGraphicsResourcesFromNodes(node.children, graphics);
+      continue;
+    }
+    if (node.kind === "item" && node.labelNodes) {
+      collectSimpleTexGraphicsResourcesFromNodes(node.labelNodes, graphics);
+      continue;
+    }
+    if (node.kind === "box") {
+      collectSimpleTexGraphicsResourcesFromNodes(node.body.nodes, graphics);
+    }
+  }
+}
+
+function simpleTexGraphicsResourceFromNode(
+  node: SimpleTexIncludeGraphicsNode
+): SimpleTexGraphicsResource {
+  return {
+    kind: "graphics",
+    filename: node.filename,
+    filenameStart: node.filenameStart,
+    filenameEnd: node.filenameEnd,
+    sourceStart: node.sourceStart,
+    sourceEnd: node.sourceEnd,
+    options: node.options,
+  };
 }
 
 export function parseSimpleTexInlineNodes(
@@ -2582,6 +2692,7 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
   let height: TexLength | undefined;
   let scale: number | undefined;
   let keepAspectRatio = false;
+  let page: SimpleTexGraphicsPageOption | undefined;
   let trim: SimpleTexGraphicsTrim | undefined;
   let viewport: SimpleTexGraphicsViewport | undefined;
   let clip: boolean | undefined;
@@ -2618,6 +2729,18 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
       keepAspectRatio = equals < 0 || simpleTexBooleanOptionValue(value);
       continue;
     }
+    if (key === "page") {
+      const normalizedPage = stripSingleSimpleTexBraceLayer(value);
+      if (equals < 0 || !/^\d+$/u.test(normalizedPage)) {
+        page = invalidSimpleTexGraphicsPageOption(value);
+        continue;
+      }
+      const pageNumber = Number(normalizedPage);
+      page = Number.isSafeInteger(pageNumber) && pageNumber >= 1
+        ? { status: "valid", pageNumber }
+        : invalidSimpleTexGraphicsPageOption(value);
+      continue;
+    }
     if (key === "trim") {
       const parsed = parseSimpleTexGraphicsQuad(value);
       if (parsed) {
@@ -2651,10 +2774,19 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
     ...(height !== undefined ? { height } : {}),
     ...(scale !== undefined ? { scale } : {}),
     ...(keepAspectRatio ? { keepAspectRatio } : {}),
+    ...(page ? { page } : {}),
     ...(trim ? { trim } : {}),
     ...(viewport ? { viewport } : {}),
     ...(clip !== undefined ? { clip } : {}),
     raw,
+  };
+}
+
+function invalidSimpleTexGraphicsPageOption(raw: string): SimpleTexGraphicsPageOption {
+  return {
+    status: "invalid",
+    raw,
+    reason: "PDF page option must be a positive integer.",
   };
 }
 
