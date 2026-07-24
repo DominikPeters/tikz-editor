@@ -76,6 +76,7 @@ import {
 } from "../source-sync";
 import css from "./SourcePanel.module.css";
 import { formatTikzSource } from "@tikz-editor/core/edit/source-format";
+import { hasMultipleRoots } from "../../root-inventory";
 
 // ── Dynamic configuration compartments ──────────────────────────────────────
 
@@ -776,7 +777,7 @@ export function SourcePanel() {
   const projectNamedColorSwatches = useProjectNamedColorSwatches();
   const figureOverlaySignature = useMemo(
     () =>
-      figures.length < 2
+      !hasMultipleRoots(figures.length)
         ? `${activeRootId ?? ""}:single:${source.length}`
         : `${activeRootId ?? ""}:${source.length}:${figures.map((figure) => `${figure.id}:${figure.span.from}:${figure.span.to}`).join("|")}`,
     [activeRootId, figures, source.length]
@@ -1394,7 +1395,7 @@ function buildFigureOverlayDecorations(params: {
   activeRootId: string | null;
 }): DecorationSet {
   const { docLength, figures, activeRootId } = params;
-  if (figures.length < 2) {
+  if (!hasMultipleRoots(figures.length)) {
     return Decoration.none;
   }
   const normalizedFigures = figures

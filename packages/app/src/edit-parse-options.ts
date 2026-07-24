@@ -6,6 +6,7 @@ import {
   getSharedEditAnalysisView
 } from "./edit-analysis-manager";
 import { buildSnapshotEditSourceFingerprint } from "./source-identity";
+import { parseWindowRootId } from "./root-inventory";
 
 export type EditParseOptionsOverrides = Omit<
   EditParseOptions,
@@ -39,8 +40,10 @@ export function buildEditParseOptions(
  * the same figure/fingerprint recipe without mutating the analysis cache.
  */
 export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditParseOptions {
-  const activeRootId =
-    input.activeRootId ?? (input.snapshot.figures.length > 1 ? null : undefined);
+  const activeRootId = parseWindowRootId(
+    input.activeRootId,
+    input.snapshot.figures.length
+  );
   const sharedAnalysis = input.analysis === "shared"
     ? {
         analysisView: getSharedEditAnalysisView({

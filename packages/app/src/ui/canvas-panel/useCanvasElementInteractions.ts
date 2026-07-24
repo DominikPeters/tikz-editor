@@ -27,6 +27,7 @@ import type {
   ValueSetter
 } from "./types";
 import type { HitRegion } from "./hit-regions";
+import { parseWindowRootId } from "../../root-inventory";
 
 export type UseCanvasElementInteractionsArgs = {
   svgResult: CanvasSnapshot["svg"];
@@ -583,8 +584,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         source,
         sourceId,
         parseOptions ?? {
-          activeRootId:
-            activeRootId ?? (snapshot.figures.length > 1 ? null : undefined)
+          activeRootId: parseWindowRootId(activeRootId, snapshot.figures.length)
         }
       );
       if (resolved.kind !== "eligible") return false;

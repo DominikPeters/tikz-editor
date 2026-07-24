@@ -23,6 +23,7 @@ import {
   workspaceStateFromEditorState,
   type WorkspaceSeed
 } from "./workspace-state";
+import { reconcileActiveRootSelection } from "../root-inventory";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
 const FREEHAND_SMOOTHING_MAX_PX = 32;
@@ -525,29 +526,17 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         if (!isCurrentPendingRequest && !canApplyIntermediateDragSnapshot) {
           return doc;
         }
-        const previousFigureCount = doc.snapshot.figures.length;
-        const validFigureIds = new Set(action.snapshot.figures.map((figure) => figure.id));
-        let nextActiveFigureId = doc.activeRootId;
-        let hasInitializedRootSelection = doc.hasInitializedRootSelection;
-        if (nextActiveFigureId && !validFigureIds.has(nextActiveFigureId)) {
-          nextActiveFigureId = null;
-          hasInitializedRootSelection = true;
-        }
-        const shouldAutoSelectFirst =
-          (!hasInitializedRootSelection && !nextActiveFigureId && action.snapshot.figures.length > 0) ||
-          (!nextActiveFigureId && previousFigureCount === 0 && action.snapshot.figures.length > 0) ||
-          (!nextActiveFigureId &&
-            action.snapshot.figures.length >= 2 &&
-            action.snapshot.figures.length > previousFigureCount);
-        if (shouldAutoSelectFirst) {
-          nextActiveFigureId = action.snapshot.figures[0].id;
-          hasInitializedRootSelection = true;
-        }
+        const rootSelection = reconcileActiveRootSelection({
+          activeRootId: doc.activeRootId,
+          hasInitializedRootSelection: doc.hasInitializedRootSelection,
+          previousRootCount: doc.snapshot.figures.length,
+          roots: action.snapshot.figures
+        });
         return {
           ...doc,
           snapshot: action.snapshot,
-          activeRootId: nextActiveFigureId,
-          hasInitializedRootSelection,
+          activeRootId: rootSelection.activeRootId,
+          hasInitializedRootSelection: rootSelection.hasInitializedRootSelection,
           pendingRequestId: isCurrentPendingRequest ? null : doc.pendingRequestId,
           activeHandleId:
             doc.activeHandleId && action.snapshot.editHandles.some((handle) => handle.id === doc.activeHandleId)

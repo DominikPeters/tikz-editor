@@ -5,6 +5,7 @@ import {
   type InspectorSnapshot
 } from "@tikz-editor/core/edit/inspector";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { parseWindowRootId } from "../../root-inventory";
 
 export type BucketFillEditResolution =
   | {
@@ -48,8 +49,7 @@ export function resolveBucketFillEdit(args: {
     source,
     editHandles,
     parseOptions: {
-      activeFigureId:
-        activeRootId ?? (figureCount > 1 ? null : undefined)
+      activeFigureId: parseWindowRootId(activeRootId, figureCount)
     }
   });
   const fillProperty = findFillColorProperty(descriptor.sections.flatMap((section) => section.properties));
@@ -68,8 +68,7 @@ export function resolveBucketFillEdit(args: {
   };
   const result = applyEditAction(source, editHandles ?? [], action, {
     parseOptions: {
-      activeFigureId:
-        activeRootId ?? (figureCount > 1 ? null : undefined),
+      activeFigureId: parseWindowRootId(activeRootId, figureCount),
       propertyWriteMode
     }
   });

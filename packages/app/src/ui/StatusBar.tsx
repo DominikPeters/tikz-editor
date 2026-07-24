@@ -11,6 +11,7 @@ import {
   subscribeUiNotifications
 } from "./ui-notifications";
 import css from "./StatusBar.module.css";
+import { hasMultipleRoots } from "../root-inventory";
 
 const TEX_PT_PER_IN = 72.27;
 const CSS_SCREEN_DPI = 96;
@@ -70,7 +71,7 @@ export function StatusBar() {
   const selectedCount = selectedIds.size;
   const figures = snapshot.figures;
   const activeFigureIndex = activeRootId ? figures.findIndex((figure) => figure.id === activeRootId) : -1;
-  const showFigureContext = figures.length > 1 && activeFigureIndex >= 0;
+  const showFigureContext = hasMultipleRoots(figures.length) && activeFigureIndex >= 0;
   const zoomPercent = Math.round((canvasTransform.scale / ACTUAL_SIZE_SCALE) * 100);
   const fitToContentDoubleZoomPercent = canvasFitToContentScale == null
     ? MAX_ZOOM_PERCENT

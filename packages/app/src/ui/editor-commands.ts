@@ -39,6 +39,7 @@ import {
   writeClipboardPayload
 } from "./editor-clipboard";
 import { getActiveEditorPlatform } from "../platform/current";
+import { parseWindowRootId } from "../root-inventory";
 
 type Dispatch = (action: EditorAction) => void;
 
@@ -1655,13 +1656,7 @@ function resolveFlattenForeachTarget(context: SelectionCommandContext): ForeachO
 }
 
 function resolvedContextActiveFigureId(context: SelectionCommandContext): string | null | undefined {
-  if (context.activeRootId != null) {
-    return context.activeRootId;
-  }
-  if ((context.figureCount ?? 0) > 1) {
-    return null;
-  }
-  return undefined;
+  return parseWindowRootId(context.activeRootId, context.figureCount ?? 0);
 }
 
 function parseOptionsForContext(context: SelectionCommandContext): EditParseOptions {

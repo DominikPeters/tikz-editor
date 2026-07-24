@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore } from "../store/store";
 import { useFigureThumbnails } from "./useFigureThumbnails";
 import css from "./FigureNavigator.module.css";
+import { hasMultipleRoots } from "../root-inventory";
 
 const stripScrollByDocumentId = new Map<string, number>();
 
@@ -108,7 +109,7 @@ export function FigureNavigator() {
     refreshDelayMs: 350
   });
 
-  if (figures.length < 2) {
+  if (!hasMultipleRoots(figures.length)) {
     return null;
   }
 

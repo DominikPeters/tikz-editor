@@ -15,6 +15,7 @@ import type { AssistantComposerImageAttachment } from "./assistant-image-attachm
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
+import { hasMultipleRoots } from "../root-inventory";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
@@ -555,7 +556,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
     const m = modelRef.current;
     const figTabExists = m.getNodeById(PANEL_IDS.figureNavigator) != null;
 
-    if (figureCount > 1 && !figTabExists && prev <= 1) {
+    if (hasMultipleRoots(figureCount) && !figTabExists && !hasMultipleRoots(prev)) {
       // Multi-figure document — auto-open below canvas with small height
       const canvasTabset = m.getNodeById("canvas-tabset");
       const firstTabSetId = m.getFirstTabSet().getId();
@@ -581,7 +582,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
       }
       saveDockLayout(m.toJson());
       syncLayoutStateToStore(m, dispatchRef.current);
-    } else if (figureCount <= 1 && figTabExists) {
+    } else if (!hasMultipleRoots(figureCount) && figTabExists) {
       // Single-figure — auto-close, including startup with a persisted/open figures tab
       m.doAction(Actions.deleteTab(PANEL_IDS.figureNavigator));
       saveDockLayout(m.toJson());
