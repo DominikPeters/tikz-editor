@@ -133,6 +133,7 @@ export type {
   TexDimenExpr,
   TexDisplayMathItem,
   TexGlueItem,
+  TexGraphicsPlacement,
   TexGlueOrigin,
   TexGlueOrder,
   TexHBoxRole,

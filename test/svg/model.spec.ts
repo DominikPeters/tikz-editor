@@ -265,7 +265,8 @@ describe("svg render model", () => {
           renderFromCache: () => ({
             cacheKey: "tex:1",
             viewBox: { x: 0, y: 0, width: 20, height: 10 },
-            body: "<g><path d=\"M0 0\" /></g>"
+            body: "<g><path d=\"M0 0\" /></g>",
+            graphicsPlacements: []
           })
         }
       }

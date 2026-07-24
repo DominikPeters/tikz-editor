@@ -40,6 +40,33 @@ export type DocumentGraphicsResolution =
       watchedPaths?: readonly string[];
     };
 
+/**
+ * Resolution facts retained by layout without retaining the asset payload.
+ *
+ * The raster/SVG bytes belong to the paint cache. Layout consumers only need
+ * stable resource identity, intrinsic dimensions, and failure state.
+ */
+export type DocumentGraphicsAsset =
+  | {
+      readonly filename: string;
+      readonly status: "resolved";
+      readonly mimeType: "image/png" | "image/jpeg" | "image/svg+xml";
+      readonly naturalWidthPt: number;
+      readonly naturalHeightPt: number;
+      readonly revision: string;
+    }
+  | {
+      readonly filename: string;
+      readonly status: "missing";
+      readonly revision?: string;
+    }
+  | {
+      readonly filename: string;
+      readonly status: "unsupported";
+      readonly reason?: string;
+      readonly revision?: string;
+    };
+
 export type DocumentGraphicsResolver = {
   readonly cacheKey: string;
   resolve(request: DocumentGraphicsResolveRequest): DocumentGraphicsResolution;

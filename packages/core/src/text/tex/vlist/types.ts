@@ -1,10 +1,15 @@
 import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
-import type { SourceCoordinateSpace } from "../../source-coordinates.js";
+import type {
+  SourceCoordinateSpace,
+  SourceOffset,
+} from "../../source-coordinates.js";
+import type { DocumentGraphicsAsset } from "../../../graphics/types.js";
 import type {
   SimpleTexListKind,
   SimpleTexListContext,
   SimpleTexTrivlistEnvironmentName,
   SimpleTexFontState,
+  SimpleTexGraphicsOptions,
   SimpleTexBoxCommandName,
   SimpleTexDisplayMathDelimiter,
   SimpleTexSegmentInput,
@@ -482,8 +487,44 @@ export interface TexVListLayout<Space extends SourceCoordinateSpace = SourceCoor
   readonly boxReport: TexVListBoxLayoutReport;
   readonly paragraphPlacements: readonly TexVListParagraphPlacement[];
   readonly linePlacements: readonly TexVListLinePlacement[];
+  /** Atomic graphics in this VList's top-left coordinate system. */
+  readonly graphicsPlacements: readonly TexGraphicsPlacement<Space>[];
   readonly reports: readonly (TexLayoutReport | ParagraphLayoutReport<Space>)[];
   readonly errors: readonly string[];
+}
+
+export interface TexGraphicsPlacement<
+  Space extends SourceCoordinateSpace = SourceCoordinateSpace,
+> {
+  readonly id: string;
+  readonly sourceCoordinateSpace: Space;
+  readonly paragraphId: string;
+  readonly lineIndex: number;
+  readonly asset: DocumentGraphicsAsset;
+  readonly sourceSpan: {
+    readonly start: SourceOffset<Space>;
+    readonly end: SourceOffset<Space>;
+  };
+  readonly filenameSpan: {
+    readonly start: SourceOffset<Space>;
+    readonly end: SourceOffset<Space>;
+  };
+  readonly options: SimpleTexGraphicsOptions;
+  readonly caretPolicy: "filename-linear";
+  readonly bounds: {
+    readonly x: TexVListX;
+    readonly y: TexVListY;
+    readonly width: TexLength;
+    readonly height: TexLength;
+  };
+  readonly baselineY: TexVListY;
+  readonly crop?: {
+    readonly x: TexLength;
+    readonly y: TexLength;
+    readonly width: TexLength;
+    readonly height: TexLength;
+    readonly clip: boolean;
+  };
 }
 
 export interface TexVListLayoutOptions {

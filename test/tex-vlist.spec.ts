@@ -2007,12 +2007,94 @@ describe("TeX vlist lowering", () => {
       width: 40,
       height: 20,
       depth: 0,
+      graphics: [{
+        asset: {
+          filename: "fig",
+          status: "resolved",
+          mimeType: "image/png",
+          naturalWidthPt: 20,
+          naturalHeightPt: 10,
+          revision: "r1",
+        },
+        caretPolicy: "filename-linear",
+        filenameSpan: {
+          start: String.raw`A\includegraphics[width=40pt,height=30pt,keepaspectratio]{`.length,
+          end: String.raw`A\includegraphics[width=40pt,height=30pt,keepaspectratio]{fig`.length,
+        },
+        width: 40,
+        height: 20,
+        x: 0,
+        y: -20,
+      }],
     });
     expect(box?.hlist).toBeUndefined();
     expect(box?.svgBody).toContain('data-tex-includegraphics="true"');
     expect(box?.svgBody).toContain('<image x="0" y="-2000" width="4000" height="2000"');
     expect(box?.svgBody).toContain('href="data:image/png;base64,aW1hZ2U="');
     expect(box?.svgBody).not.toContain("/tmp/fig.png");
+    expect(box?.graphics?.[0]?.asset).not.toHaveProperty("dataBase64");
+    expect(box?.graphics?.[0]?.asset).not.toHaveProperty("resolvedPath");
+  });
+
+  it("retains includegraphics as a source-backed positioned VList object", () => {
+    const source = String.raw`Alpha \includegraphics[width=40pt]{fig} Omega`;
+    const commandStart = source.indexOf(String.raw`\includegraphics`);
+    const commandEnd = source.indexOf("}", commandStart) + 1;
+    const filenameStart = source.indexOf("fig", commandStart);
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "positioned-image-v1",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 20,
+        naturalHeightPt: 10,
+        revision: "r2",
+      }),
+    };
+
+    const result = layoutSimpleTexParagraph(source, {
+      width: 200,
+      parindent: 0,
+      graphicsResolver,
+    });
+    const graphic = result.vlistLayout?.graphicsPlacements[0];
+    const segmentGraphic = result.report?.lines
+      .flatMap((line) => line.segments)
+      .flatMap((segment) => segment.graphics ?? [])[0];
+
+    expect(result.supported).toBe(true);
+    expect(result.vlistLayout?.graphicsPlacements).toHaveLength(1);
+    expect(graphic).toMatchObject({
+      sourceCoordinateSpace: "layout",
+      paragraphId: "tex:paragraph",
+      asset: {
+        filename: "fig",
+        status: "resolved",
+        naturalWidthPt: 20,
+        naturalHeightPt: 10,
+        revision: "r2",
+      },
+      sourceSpan: { start: commandStart, end: commandEnd },
+      filenameSpan: { start: filenameStart, end: filenameStart + 3 },
+      caretPolicy: "filename-linear",
+      bounds: {
+        width: 40,
+        height: 20,
+      },
+    });
+    expect(Number(graphic?.bounds.x)).toBeGreaterThan(0);
+    expect(Number(graphic?.baselineY) - Number(graphic?.bounds.y)).toBe(20);
+    expect(segmentGraphic).toMatchObject({
+      sourceStartRaw: commandStart,
+      sourceEndRaw: commandEnd,
+      filenameStartRaw: filenameStart,
+      filenameEndRaw: filenameStart + 3,
+      x: graphic?.bounds.x,
+      y: -20,
+      width: 40,
+      height: 20,
+    });
   });
 
   it("lays out includegraphics trim, clip, and viewport crop boxes", () => {
@@ -2055,6 +2137,14 @@ describe("TeX vlist lowering", () => {
     expect(boxes[2]?.box).toMatchObject({ width: 45, height: 30, depth: 0 });
     expect(boxes[3]?.box).toMatchObject({ width: 90, height: 60, depth: 0 });
     expect(boxes[4]?.box).toMatchObject({ width: 90, height: 60, depth: 0 });
+    expect(boxes[0]?.box.graphics?.[0]?.crop).toEqual({
+      x: 10,
+      y: 15,
+      width: 90,
+      height: 60,
+      clip: false,
+    });
+    expect(boxes[3]?.box.graphics?.[0]?.crop?.clip).toBe(true);
     expect(boxes[0]?.box.svgBody).toContain(
       '<svg x="0" y="-6000" width="9000" height="6000" overflow="visible" viewBox="1000 1500 9000 6000" preserveAspectRatio="none">'
     );
@@ -4793,6 +4883,7 @@ describe("TeX vlist layout registry", () => {
       boxReport: texVListBoxLayoutReport(items, { width: 42, height: 7, depth: 3 }, baseline),
       paragraphPlacements: [],
       linePlacements: [],
+      graphicsPlacements: [],
       reports: [],
       errors: [],
     });

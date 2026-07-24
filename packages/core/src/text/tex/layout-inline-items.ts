@@ -2,7 +2,11 @@ import {
   defaultTexTextFontProfile,
   type TexTextFontProfile,
 } from "./fonts/text-profile.js";
-import type { DocumentGraphicsResolver } from "../../graphics/types.js";
+import type {
+  DocumentGraphicsAsset,
+  DocumentGraphicsResolution,
+  DocumentGraphicsResolver,
+} from "../../graphics/types.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import {
   defaultTexMathFontProfile,
@@ -107,6 +111,42 @@ export interface TexLayoutForcedBreakItem {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
 }
 
+/**
+ * Source and sizing facts for an atomic graphic inside a TeX box.
+ *
+ * Coordinates are local to the box baseline: `x` grows right and `y` grows
+ * down. Containers may later translate these facts into paragraph, node, or
+ * page coordinates without inspecting the SVG payload.
+ */
+export interface TexGraphicsBox {
+  readonly asset: DocumentGraphicsAsset;
+  readonly sourceSpan: {
+    readonly start: number;
+    readonly end: number;
+  };
+  readonly filenameSpan: {
+    readonly start: number;
+    readonly end: number;
+  };
+  readonly options: SimpleTexGraphicsOptions;
+  /**
+   * Command syntax maps to the box edges; offsets inside the filename map
+   * monotonically across the box for source caret placement.
+   */
+  readonly caretPolicy: "filename-linear";
+  readonly x: TexHBoxX;
+  readonly y: TexHBoxY;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly crop?: {
+    readonly x: TexHBoxX;
+    readonly y: TexHBoxY;
+    readonly width: TexLength;
+    readonly height: TexLength;
+    readonly clip: boolean;
+  };
+}
+
 export interface TexMathBox {
   readonly source: string;
   readonly content: string;
@@ -129,6 +169,8 @@ export interface TexMathBox {
   readonly fontProfile?: TexMathFontProfile;
   readonly color?: string;
   readonly rootBox?: TexMathBox;
+  /** Atomic graphics retained independently of the box's SVG paint. */
+  readonly graphics?: readonly TexGraphicsBox[];
 }
 
 export type TexMathCaretEntryKind =
@@ -1174,6 +1216,11 @@ function texIncludeGraphicsBox(params: {
       });
   const width = roundTexPt(size.width);
   const height = roundTexPt(size.height);
+  const asset = texIncludeGraphicsLayoutAsset(
+    params.filename,
+    resolution,
+    assetNatural !== null
+  );
   return {
     source: params.source,
     content: params.filename,
@@ -1199,6 +1246,66 @@ function texIncludeGraphicsBox(params: {
       xEnd: texHBoxX(width),
     }],
     svgBody,
+    graphics: [{
+      asset,
+      sourceSpan,
+      filenameSpan: {
+        start: params.filenameStart,
+        end: params.filenameEnd,
+      },
+      options: params.options,
+      caretPolicy: "filename-linear",
+      x: texHBoxX(0),
+      y: texHBoxY(0 - height),
+      width,
+      height,
+      ...(cropRect
+        ? {
+            crop: {
+              ...cropRect,
+              clip: params.options.clip === true,
+            },
+          }
+        : {}),
+    }],
+  };
+}
+
+function texIncludeGraphicsLayoutAsset(
+  filename: string,
+  resolution: DocumentGraphicsResolution,
+  hasNaturalSize: boolean
+): DocumentGraphicsAsset {
+  if (resolution.status === "resolved" && hasNaturalSize) {
+    return {
+      filename,
+      status: "resolved",
+      mimeType: resolution.mimeType,
+      naturalWidthPt: resolution.naturalWidthPt,
+      naturalHeightPt: resolution.naturalHeightPt,
+      revision: resolution.revision,
+    };
+  }
+  if (resolution.status === "resolved") {
+    return {
+      filename,
+      status: "unsupported",
+      reason: "Could not determine image dimensions.",
+      revision: resolution.revision,
+    };
+  }
+  if (resolution.status === "missing") {
+    return {
+      filename,
+      status: "missing",
+      ...(resolution.revision ? { revision: resolution.revision } : {}),
+    };
+  }
+  return {
+    filename,
+    status: "unsupported",
+    ...(resolution.reason ? { reason: resolution.reason } : {}),
+    ...(resolution.revision ? { revision: resolution.revision } : {}),
   };
 }
 

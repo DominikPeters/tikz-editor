@@ -342,14 +342,18 @@ function svgPathControlPoints(d: string): PathPoint[] {
   return points;
 }
 
-type TexVListLayoutWithoutBoxReport = Omit<TexVListLayout, "boxReport">;
+type TexVListLayoutWithoutDerivedReports = Omit<
+  TexVListLayout,
+  "boxReport" | "graphicsPlacements"
+>;
 
 function registeredLayoutWithBoxReport(
-  layout: RawTexFixture<TexVListLayoutWithoutBoxReport>
+  layout: RawTexFixture<TexVListLayoutWithoutDerivedReports>
 ): TexVListLayout {
-  const brandedLayout = texFixture<TexVListLayoutWithoutBoxReport>(layout);
+  const brandedLayout = texFixture<TexVListLayoutWithoutDerivedReports>(layout);
   return {
     ...brandedLayout,
+    graphicsPlacements: [],
     boxReport: texVListBoxLayoutReport(
       brandedLayout.items,
       brandedLayout.metrics,

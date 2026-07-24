@@ -9,7 +9,12 @@ import { getActiveTextLayoutContext } from "../packages/core/src/text/layout-con
 import { getTexVListLayout } from "../packages/core/src/text/tex/vlist/registry.js";
 import { projectInputRange } from "../packages/core/src/text/source-map.js";
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
-import type { NodeTextEngine, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
+import type {
+  NodeTextEngine,
+  NodeTextMeasureRequest,
+  NodeTextMetrics,
+  NodeTextRenderPayload,
+} from "../packages/core/src/text/types.js";
 
 function readLineboxTranslateXs(svg: string): number[] {
   const xs: number[] = [];
@@ -259,6 +264,33 @@ describe("render pipeline", () => {
     expect(result.svg.svg).toContain('data-tex-includegraphics="true"');
     expect(result.svg.svg).toContain('href="data:image/png;base64,cGRmLXBuZw=="');
     expect(result.svg.svg).not.toContain("/tmp/tikz/figure.pdf");
+    const sceneText = result.semantic.scene.elements.find(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    const graphic =
+      sceneText?.textRenderInfo?.mode === "tex"
+        ? sceneText.textRenderInfo.graphicsPlacements?.[0]
+        : undefined;
+    const commandStart = source.indexOf(String.raw`\includegraphics`);
+    const filenameStart = source.indexOf("figure.pdf", commandStart);
+    expect(graphic).toMatchObject({
+      sourceCoordinateSpace: "document",
+      asset: {
+        filename: "figure.pdf",
+        status: "resolved",
+        naturalWidthPt: 100,
+        naturalHeightPt: 50,
+        revision: "figure.pdf:r1:page=2",
+      },
+      sourceSpan: {
+        start: commandStart,
+        end: source.indexOf("}", filenameStart) + 1,
+      },
+      filenameSpan: {
+        start: filenameStart,
+        end: filenameStart + "figure.pdf".length,
+      },
+    });
   });
 
   it("renders cropped includegraphics assets as embedded SVG image viewports", async () => {
@@ -551,7 +583,7 @@ describe("render pipeline", () => {
   \node at (0,0) {$\ell^2$};
 \end{tikzpicture}`;
 
-    const cache = new Map<string, { cacheKey: string; viewBox: { x: number; y: number; width: number; height: number }; body: string }>();
+    const cache = new Map<string, NodeTextRenderPayload>();
     let ready = false;
     let flushCalls = 0;
 
@@ -565,7 +597,8 @@ describe("render pipeline", () => {
         cache.set(cacheKey, {
           cacheKey,
           viewBox: { x: 0, y: 0, width: 1000, height: 1000 },
-          body: "<g data-test='ready'></g>"
+          body: "<g data-test='ready'></g>",
+          graphicsPlacements: []
         });
         return {
           cacheKey,

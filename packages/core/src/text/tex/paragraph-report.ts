@@ -25,6 +25,7 @@ import type {
 import type { TexParagraphAlignment } from "./ir.js";
 import type {
   TexLayoutLabelItem,
+  TexGraphicsBox,
   TexMathBox,
 } from "./layout-inline-items.js";
 import {
@@ -249,6 +250,7 @@ function buildTexLineReport(
         mathConstructRanges: texMathBoxConstructRanges(box, x, width),
         mathCaretEntries: texMathBoxCaretEntries(box, x, width),
         mathBreakpoints: texMathBoxBreakpoints(box, x, width),
+        graphics: texMathBoxGraphics(box, x),
         mathSvgBody: texMathBoxSvgBody(box, width, {
           omitLineInitialOperator: continuationLineStart && box?.sourceStart === box?.contentStart,
         }),
@@ -510,6 +512,7 @@ function coalescedSameLineMathSegment(
       mathConstructRanges: texMathBoxConstructRanges(rootBox, x, width),
       mathCaretEntries: texMathBoxCaretEntries(rootBox, x, width),
       mathBreakpoints: texMathBoxBreakpoints(rootBox, x, width),
+      graphics: texMathBoxGraphics(rootBox, x),
       mathSvgBody: texMathBoxSvgBody(rootBox, width, { omitLineInitialOperator }),
     },
     ascent: rootBox.height,
@@ -632,6 +635,7 @@ function texMathBoxFromWrapper(
     readonly fontProfile?: unknown;
     readonly color?: unknown;
     readonly rootBox?: unknown;
+    readonly graphics?: unknown;
   };
   return {
     source: typeof typedBox.source === "string" ? typedBox.source : "",
@@ -666,6 +670,9 @@ function texMathBoxFromWrapper(
     color: typeof typedBox.color === "string" ? typedBox.color : undefined,
     rootBox: typeof typedBox.rootBox === "object" && typedBox.rootBox !== null
       ? typedBox.rootBox as TexMathBox
+      : undefined,
+    graphics: Array.isArray(typedBox.graphics)
+      ? typedBox.graphics as readonly TexGraphicsBox[]
       : undefined,
   };
 }
@@ -780,6 +787,7 @@ function buildTexLineLabelSegments(
         mathConstructRanges: texMathBoxConstructRanges(item.box, x, boxWidth),
         mathCaretEntries: texMathBoxCaretEntries(item.box, x, boxWidth),
         mathBreakpoints: texMathBoxBreakpoints(item.box, x, boxWidth),
+        graphics: texMathBoxGraphics(item.box, x),
         mathSvgBody: texMathBoxSvgBody(item.box, boxWidth),
       });
       x = texLineX(roundTexPt(x + boxWidth));
@@ -1061,6 +1069,39 @@ function texMathBoxBreakpoints(
       x
     ),
     penalty: breakpoint.penalty,
+  }));
+}
+
+function texMathBoxGraphics(
+  box: Pick<TexMathBox, "graphics"> | null | undefined,
+  segmentX: TexLineX
+): LineReport<"layout">["segments"][number]["graphics"] {
+  if (!box?.graphics?.length) {
+    return undefined;
+  }
+  return box.graphics.map((graphic) => ({
+    asset: graphic.asset,
+    sourceStartRaw: layoutSourceOffset(graphic.sourceSpan.start),
+    sourceEndRaw: layoutSourceOffset(graphic.sourceSpan.end),
+    filenameStartRaw: layoutSourceOffset(graphic.filenameSpan.start),
+    filenameEndRaw: layoutSourceOffset(graphic.filenameSpan.end),
+    options: graphic.options,
+    caretPolicy: graphic.caretPolicy,
+    x: projectRoundedTexHBoxXToLine(graphic.x, texHBoxX(0), segmentX),
+    y: projectRoundedTexMathHBoxYToLine(graphic.y),
+    width: graphic.width,
+    height: graphic.height,
+    ...(graphic.crop
+      ? {
+          crop: {
+            x: texLength(graphic.crop.x),
+            y: texLength(graphic.crop.y),
+            width: graphic.crop.width,
+            height: graphic.crop.height,
+            clip: graphic.crop.clip,
+          },
+        }
+      : {}),
   }));
 }
 

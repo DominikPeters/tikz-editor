@@ -25,6 +25,7 @@ import {
   type TexVListY,
 } from "./tex/coordinates.js";
 import { registerTexVListLayouts } from "./tex/vlist/index.js";
+import { collectTexGraphicsPlacements } from "./tex/vlist/graphics-placements.js";
 import {
   remapParagraphLayoutReportSourceMap,
   remapTexVListLayoutSourceMap,
@@ -222,6 +223,7 @@ async function initializeEngine(
         midLineY: entry.midLineYPt,
         paragraphId: entry.paragraphId,
         renderSourceText: entry.renderSourceText,
+        graphicsPlacements: entry.payload.graphicsPlacements,
       };
     },
 
@@ -418,6 +420,11 @@ function buildTexTextCacheEntry(params: {
         ? report
         : candidate
     ),
+    graphicsPlacements: remappedVList.graphicsPlacements.map((placement) => ({
+      ...placement,
+      id: placement.id.replace(shared.report.paragraphId, paragraphId),
+      paragraphId,
+    })),
   };
   registerParagraphLayoutReports(params.layoutContext, [report]);
   registerTexVListLayouts(params.layoutContext, [{
@@ -470,6 +477,7 @@ function buildTexTextCacheEntry(params: {
         height: heightPt,
       },
       body,
+      graphicsPlacements: vlistLayout.graphicsPlacements,
     },
     baseWidthPt: contentWidthPt,
     baseHeightPt: heightPt,
@@ -570,6 +578,10 @@ function shrinkTexVListLayoutToWidth(
   return {
     ...layout,
     metrics: { ...layout.metrics, width },
+    graphicsPlacements: collectTexGraphicsPlacements(
+      [report],
+      layout.linePlacements
+    ),
     reports: layout.reports.map((candidate) =>
       "paragraphId" in candidate &&
       candidate.paragraphId === report.paragraphId

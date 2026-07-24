@@ -216,7 +216,10 @@ export function resolveNodeLayout(
       paragraphId: measuredText.paragraphId,
       renderSourceText: measuredText.renderSourceText,
       layoutKind,
-      paragraphAlignment
+      paragraphAlignment,
+      ...(measuredText.graphicsPlacements?.length
+        ? { graphicsPlacements: measuredText.graphicsPlacements }
+        : {})
     };
   } else {
     const plainMetrics = measurePlainTextBlock(textLines, style, charWidth, lineHeight, baseLineY, midLineY);

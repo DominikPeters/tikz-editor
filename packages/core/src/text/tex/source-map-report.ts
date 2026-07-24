@@ -1,5 +1,6 @@
 import type {
   BreakReport,
+  LineGraphicsReport,
   LineMathBreakpointReport,
   LineMathCaretEntryReport,
   LineMathConstructRangeReport,
@@ -22,6 +23,7 @@ import type {
   PositionedTexVListItem,
   TexHitMap,
   TexHorizontalLayout,
+  TexGraphicsPlacement,
   TexLineBox,
   TexSourceSpan,
   TexVListBoxLayoutReport,
@@ -89,6 +91,9 @@ export function remapTexVListLayoutSourceMap(
     paragraphPlacements: layout.paragraphPlacements.map((placement) =>
       remapTexVListParagraphPlacement(placement, sourceMap)
     ),
+    graphicsPlacements: layout.graphicsPlacements.map((placement) =>
+      remapTexGraphicsPlacement(placement, sourceMap)
+    ),
     reports: layout.reports.map((report) => {
       if ("paragraphId" in report) {
         return remapParagraphLayoutReportSourceMap(report, sourceMap);
@@ -98,6 +103,34 @@ export function remapTexVListLayoutSourceMap(
       }
       return report;
     })
+  };
+}
+
+function remapTexGraphicsPlacement(
+  placement: TexGraphicsPlacement<"layout">,
+  sourceMap: TextSourceMap
+): TexGraphicsPlacement<"document"> {
+  const sourceSpan = mapInputSpan(
+    sourceMap,
+    placement.sourceSpan.start,
+    placement.sourceSpan.end
+  );
+  const filenameSpan = mapInputSpan(
+    sourceMap,
+    placement.filenameSpan.start,
+    placement.filenameSpan.end
+  );
+  return {
+    ...placement,
+    sourceCoordinateSpace: "document",
+    sourceSpan: {
+      start: documentSourceOffset(sourceSpan.start),
+      end: documentSourceOffset(sourceSpan.end),
+    },
+    filenameSpan: {
+      start: documentSourceOffset(filenameSpan.start),
+      end: documentSourceOffset(filenameSpan.end),
+    },
   };
 }
 
@@ -135,6 +168,7 @@ function remapLineSegmentReport<Space extends SourceCoordinateSpace>(
     mathConstructRanges: _mathConstructRanges,
     mathCaretEntries: _mathCaretEntries,
     mathBreakpoints: _mathBreakpoints,
+    graphics: _graphics,
     ...rest
   } = segment;
   return [{
@@ -153,10 +187,36 @@ function remapLineSegmentReport<Space extends SourceCoordinateSpace>(
     mathBreakpoints: segment.mathBreakpoints?.map((breakpoint) =>
       remapLineMathBreakpointReport(breakpoint, sourceMap)
     ),
+    graphics: segment.graphics?.map((graphic) =>
+      remapLineGraphicsReport(graphic, sourceMap)
+    ),
     mathSvgBody: segment.mathSvgBody
       ? remapSvgSourceDataAttributes(segment.mathSvgBody, sourceMap)
       : undefined
   }];
+}
+
+function remapLineGraphicsReport<Space extends SourceCoordinateSpace>(
+  graphic: LineGraphicsReport<Space>,
+  sourceMap: TextSourceMap
+): LineGraphicsReport<"document"> {
+  const sourceSpan = mapInputSpan(
+    sourceMap,
+    graphic.sourceStartRaw,
+    graphic.sourceEndRaw
+  );
+  const filenameSpan = mapInputSpan(
+    sourceMap,
+    graphic.filenameStartRaw,
+    graphic.filenameEndRaw
+  );
+  return {
+    ...graphic,
+    sourceStartRaw: documentSourceOffset(sourceSpan.start),
+    sourceEndRaw: documentSourceOffset(sourceSpan.end),
+    filenameStartRaw: documentSourceOffset(filenameSpan.start),
+    filenameEndRaw: documentSourceOffset(filenameSpan.end),
+  };
 }
 
 function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
@@ -198,6 +258,7 @@ function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
       mathConstructRanges: _mathConstructRanges,
       mathCaretEntries: _mathCaretEntries,
       mathBreakpoints: _mathBreakpoints,
+      graphics: _graphics,
       ...rest
     } = segment;
     return {
@@ -219,6 +280,9 @@ function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
       ),
       mathBreakpoints: segment.mathBreakpoints?.map((breakpoint) =>
         remapLineMathBreakpointReport(breakpoint, sourceMap)
+      ),
+      graphics: segment.graphics?.map((graphic) =>
+        remapLineGraphicsReport(graphic, sourceMap)
       ),
     };
   });
@@ -436,6 +500,23 @@ function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox 
       ...breakpoint,
       sourceOffset: mapInputOffset(sourceMap, breakpoint.sourceOffset)
     })),
+    graphics: box.graphics?.map((graphic) => {
+      const graphicSpan = mapInputSpan(
+        sourceMap,
+        graphic.sourceSpan.start,
+        graphic.sourceSpan.end
+      );
+      const filenameSpan = mapInputSpan(
+        sourceMap,
+        graphic.filenameSpan.start,
+        graphic.filenameSpan.end
+      );
+      return {
+        ...graphic,
+        sourceSpan: graphicSpan,
+        filenameSpan,
+      };
+    }),
     svgBody: box.svgBody ? remapSvgSourceDataAttributes(box.svgBody, sourceMap) : undefined,
     rootBox: box.rootBox ? remapTexMathBox(box.rootBox, sourceMap) : undefined
   };

@@ -25,6 +25,7 @@ import type {
   TexVListLayout,
   TexVListLayoutOptions,
 } from "./types.js";
+import { collectTexGraphicsPlacements } from "./graphics-placements.js";
 import {
   computeTexVListNaturalTotalHeight,
   layoutTexVListItems,
@@ -328,6 +329,10 @@ export function layoutTexVListFromMeasuredParagraphs(
     paragraphMeasurements,
     options.lineHeight
   );
+  const paragraphReports = (options.reports ?? []).filter(
+    (report): report is ParagraphLayoutReport<"layout"> =>
+      "paragraphId" in report
+  );
   const firstLineTop = options.firstLineIndex !== undefined
     ? linePlacements.find((placement) => placement.lineIndex === options.firstLineIndex)?.y ?? null
     : null;
@@ -347,6 +352,10 @@ export function layoutTexVListFromMeasuredParagraphs(
       paragraphMeasurements
     ),
     linePlacements,
+    graphicsPlacements: collectTexGraphicsPlacements(
+      paragraphReports,
+      linePlacements
+    ),
     reports: options.reports ?? [],
     errors: [...options.errors ?? []],
   };

@@ -1,4 +1,5 @@
 export type {
+  DocumentGraphicsAsset,
   DocumentGraphicsResolution,
   DocumentGraphicsResolveRequest,
   DocumentGraphicsResolver,

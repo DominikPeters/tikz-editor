@@ -124,8 +124,11 @@ export {
 } from "./layout-options.js";
 export type {
   PositionedTexVListItem,
+  TexGraphicsPlacement,
   TexVListLayout,
 } from "./vlist/types.js";
+export type { TexGraphicsBox } from "./layout-inline-items.js";
+export { collectTexGraphicsPlacements } from "./vlist/graphics-placements.js";
 export {
   projectTexHBoxXToLine,
   projectTexHBoxYToLine,

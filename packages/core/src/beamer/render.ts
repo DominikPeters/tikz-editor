@@ -21,6 +21,7 @@ import {
 import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
 import {
   computerModernTexMetricProvider,
+  collectTexGraphicsPlacements,
   createTexDerivedInlineMathBoxProvider,
   defaultTexMathFontProfile,
   layoutSimpleTexParagraph,
@@ -104,6 +105,7 @@ import type {
   BeamerFrameModel,
   BeamerFrameLayout,
   BeamerFrameLayoutItem,
+  BeamerGraphicsLayout,
   BeamerMetadataFieldModel,
   BeamerMetadataFieldName,
   BeamerParagraphLayout,
@@ -437,6 +439,7 @@ async function renderBeamerFrameStep(params: {
     });
   }
 
+  const graphics = collectBeamerGraphicsLayout(paragraphs, items);
   const model = modelBuilder.build({
     viewBox: page.page,
     defs: [],
@@ -459,6 +462,7 @@ async function renderBeamerFrameStep(params: {
     contentBounds,
     items,
     paragraphs,
+    graphics,
     embeddedTikz,
   };
 
@@ -474,6 +478,80 @@ async function renderBeamerFrameStep(params: {
     },
     diagnostics,
   };
+}
+
+function collectBeamerGraphicsLayout(
+  paragraphs: readonly BeamerParagraphLayout[],
+  items: BeamerFrameLayoutItem[]
+): BeamerGraphicsLayout[] {
+  const paragraphItemById = new Map(
+    items
+      .filter((item) => item.paragraphId)
+      .map((item) => [item.paragraphId!, item])
+  );
+  const graphics: BeamerGraphicsLayout[] = [];
+  for (const paragraph of paragraphs) {
+    const paragraphItem = paragraphItemById.get(paragraph.paragraphId);
+    for (const placement of paragraph.vlistLayout.graphicsPlacements) {
+      const sourceSpan = {
+        from: Number(placement.sourceSpan.start),
+        to: Number(placement.sourceSpan.end),
+      };
+      const hidden =
+        paragraphItem?.visibility === "hidden" ||
+        paragraph.hiddenSourceSpans?.some((span) =>
+          span.from <= sourceSpan.from && span.to >= sourceSpan.to
+        ) === true;
+      const graphic: BeamerGraphicsLayout = {
+        itemId: placement.id,
+        paragraphId: paragraph.paragraphId,
+        lineIndex: placement.lineIndex,
+        sourceSpan,
+        filenameSpan: {
+          from: Number(placement.filenameSpan.start),
+          to: Number(placement.filenameSpan.end),
+        },
+        bounds: {
+          x: paragraph.bounds.x + Number(placement.bounds.x),
+          y: paragraph.bounds.y + Number(placement.bounds.y),
+          width: Number(placement.bounds.width),
+          height: Number(placement.bounds.height),
+        },
+        baselineY: paragraph.bounds.y + Number(placement.baselineY),
+        asset: placement.asset,
+        options: placement.options,
+        caretPolicy: placement.caretPolicy,
+        visibility: hidden ? "hidden" : "visible",
+        ...(placement.crop
+          ? {
+              crop: {
+                x: Number(placement.crop.x),
+                y: Number(placement.crop.y),
+                width: Number(placement.crop.width),
+                height: Number(placement.crop.height),
+                clip: placement.crop.clip,
+              },
+            }
+          : {}),
+      };
+      graphics.push(graphic);
+      items.push({
+        id: graphic.itemId,
+        kind: "graphics",
+        sourceSpan: graphic.sourceSpan,
+        bounds: graphic.bounds,
+        parentId: paragraph.paragraphId,
+        visibility: graphic.visibility,
+      });
+      if (paragraphItem) {
+        paragraphItem.childIds = [
+          ...(paragraphItem.childIds ?? []),
+          graphic.itemId,
+        ];
+      }
+    }
+  }
+  return graphics;
 }
 
 /**
@@ -2679,6 +2757,10 @@ function layoutParagraph(params: {
         report,
         vlistLayout: {
           ...leftAligned.vlistLayout,
+          graphicsPlacements: collectTexGraphicsPlacements(
+            [report],
+            leftAligned.vlistLayout.linePlacements
+          ),
           reports: leftAligned.vlistLayout.reports.map((candidate) =>
             "paragraphId" in candidate &&
             candidate.paragraphId === report.paragraphId

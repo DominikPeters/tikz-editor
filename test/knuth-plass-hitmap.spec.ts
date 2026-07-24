@@ -764,6 +764,7 @@ describe("knuth-plass hitmap line ranges", () => {
           { lineIndex: 0, x: 0, y: 0, height: 10 },
           { lineIndex: 1, x: 5, y: 12, height: 10 }
         ]),
+        graphicsPlacements: [],
         reports: [report],
         errors: []
       }

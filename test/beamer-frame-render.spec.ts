@@ -312,10 +312,78 @@ describe("headless Beamer frame renderer", () => {
     expect(
       result.svg.svg.match(/data-tex-includegraphics="true"/gu)
     ).toHaveLength(3);
+    expect(result.layout.graphics).toHaveLength(2);
+    expect(
+      result.layout.paragraphs
+        .flatMap((paragraph) => paragraph.vlistLayout.graphicsPlacements)
+        .every((graphic) => graphic.sourceCoordinateSpace === "document")
+    ).toBe(true);
+    expect(result.layout.graphics.map((graphic) => graphic.asset.filename))
+      .toEqual(["frame.png", "column.png"]);
+    expect(
+      result.layout.items.filter((item) => item.kind === "graphics")
+    ).toHaveLength(2);
+    for (const graphic of result.layout.graphics) {
+      expect(source.slice(
+        graphic.sourceSpan.from,
+        graphic.sourceSpan.to
+      )).toContain(String.raw`\includegraphics`);
+      expect(source.slice(
+        graphic.filenameSpan.from,
+        graphic.filenameSpan.to
+      )).toBe(graphic.asset.filename);
+      expect(graphic.bounds.width).toBeGreaterThan(0);
+      expect(graphic.bounds.height).toBeGreaterThan(0);
+      expect(graphic.baselineY).toBeCloseTo(
+        graphic.bounds.y + graphic.bounds.height,
+        6
+      );
+      expect(graphic.visibility).toBe("visible");
+    }
     expect(result.svg.svg).toContain(
       'href="data:image/png;base64,YmVhbWVyLWdyYXBoaWM="'
     );
     expect(result.diagnostics).toEqual([]);
+  });
+
+  it("retains covered graphics geometry and exposes overlay visibility", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Overlay graphic}
+Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
+\end{frame}
+\end{document}`;
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "beamer-overlay-graphics",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 48,
+        naturalHeightPt: 24,
+        revision: "overlay-r1",
+      }),
+    };
+
+    const covered = await renderBeamerFrame(source, {
+      step: 1,
+      graphicsResolver,
+    });
+    const visible = await renderBeamerFrame(source, {
+      step: 2,
+      graphicsResolver,
+    });
+
+    expect(covered.layout.graphics).toHaveLength(1);
+    expect(visible.layout.graphics).toHaveLength(1);
+    expect(covered.layout.graphics[0]?.visibility).toBe("hidden");
+    expect(visible.layout.graphics[0]?.visibility).toBe("visible");
+    expect(covered.layout.graphics[0]?.bounds).toEqual(
+      visible.layout.graphics[0]?.bounds
+    );
+    expect(covered.layout.graphics[0]?.itemId).toBe(
+      visible.layout.graphics[0]?.itemId
+    );
   });
 
   it("shrinks display glue when a composed frame overfills its TeX frame box", async () => {

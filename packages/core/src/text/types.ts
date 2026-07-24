@@ -1,5 +1,6 @@
 import type { TextSourceMap } from "./source-map.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
+import type { TexGraphicsPlacement } from "./tex/vlist/types.js";
 
 export type NodeTextFontStyle = "normal" | "italic";
 export type NodeTextFontWeight = "normal" | "bold";
@@ -38,6 +39,8 @@ export type NodeTextMetrics = {
   midLineY: number;
   paragraphId: string | null;
   renderSourceText: string;
+  /** Native TeX graphics in the text payload's top-left coordinate system. */
+  graphicsPlacements?: readonly TexGraphicsPlacement[];
 };
 
 export type NodeTextRenderPayload = {
@@ -49,6 +52,8 @@ export type NodeTextRenderPayload = {
     height: number;
   };
   body: string;
+  /** Source-backed atomic graphics in payload view-box coordinates. */
+  graphicsPlacements: readonly TexGraphicsPlacement[];
 };
 
 export type NodeTextLayoutKind = "single-line" | "wrapped" | "explicit-multiline" | "matrix-cell";
@@ -64,6 +69,8 @@ export type NodeTextRenderInfo =
       renderSourceText: string;
       layoutKind: NodeTextLayoutKind;
       paragraphAlignment?: NodeTextParagraphAlignment;
+      /** Native TeX graphics retained on the semantic text element. */
+      graphicsPlacements?: readonly TexGraphicsPlacement[];
     };
 
 export type NodeTextEngine = {

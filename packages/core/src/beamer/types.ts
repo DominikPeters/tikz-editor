@@ -5,10 +5,14 @@ import type {
   Span,
 } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
-import type { DocumentGraphicsResolver } from "../graphics/types.js";
+import type {
+  DocumentGraphicsAsset,
+  DocumentGraphicsResolver,
+} from "../graphics/types.js";
 import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
 import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
 import type { TexVListLayout } from "../text/tex/index.js";
+import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
 
 export type BeamerDelimitedSourceValue = {
   /** Span including the delimiters. */
@@ -212,6 +216,7 @@ export type BeamerFrameLayoutItemKind =
   | "block"
   | "columns"
   | "column"
+  | "graphics"
   | "tikzpicture"
   | "unsupported";
 
@@ -263,6 +268,27 @@ export type BeamerEmbeddedTikzLayout = {
   model: SvgRenderModel;
 };
 
+export type BeamerGraphicsLayout = {
+  itemId: string;
+  paragraphId: string;
+  lineIndex: number;
+  sourceSpan: Span;
+  filenameSpan: Span;
+  bounds: BeamerRect;
+  baselineY: number;
+  asset: DocumentGraphicsAsset;
+  options: SimpleTexGraphicsOptions;
+  caretPolicy: "filename-linear";
+  visibility: "visible" | "hidden";
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    clip: boolean;
+  };
+};
+
 export type BeamerFrameLayout = {
   coordinateSystem: {
     unit: "tex-pt";
@@ -277,6 +303,7 @@ export type BeamerFrameLayout = {
   contentBounds: BeamerRect;
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
+  graphics: BeamerGraphicsLayout[];
   embeddedTikz: BeamerEmbeddedTikzLayout[];
 };
 

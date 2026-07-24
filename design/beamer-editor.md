@@ -316,7 +316,16 @@ This boundary deliberately preserves the facts required by later editing
 without implementing editing now: every structural node has an absolute
 document span and stable source ID, macro-expanded leaves retain their
 `TextSourceMap`, and the positioned layout retains block, line, glyph, caret,
-and selection geometry.
+selection, and atomic-graphics geometry. `TexVListLayout.graphicsPlacements`
+is the renderer-independent image contract: each entry has command and
+filename spans, resource identity/status, intrinsic and displayed dimensions,
+crop facts, baseline, and bounds in the VList coordinate system. Native TikZ
+node text also exposes these entries on its cached render payload and semantic
+`SceneText`, so TikZ rendering does not lose the interaction contract. Beamer
+lifts frame-text entries into absolute page coordinates and adds them to both
+`BeamerFrameLayout.graphics` and the shared item tree. Graphics inside an
+embedded TikZ picture remain owned by that nested figure while the picture is
+an atomic Beamer item.
 
 ### Beamer source fidelity
 
@@ -565,6 +574,19 @@ tarballs already are). Opening a `.tex` roots the project at its directory.
   `page`), then the platform asset layer performs filesystem lookup,
   rasterization, caching, and watching. It does not rescan `\includegraphics`
   or parse graphicx options from strings.
+- Layout is likewise staged rather than inferred from paint. The inline TeX
+  box retains a payload-free `DocumentGraphicsAsset`; paragraph reports carry
+  the image as an atomic source-backed segment; the VList then publishes its
+  final positioned object. SVG remains only the paint representation and is
+  never parsed to recover image bounds or identity.
+- Caret policy is explicit: control sequence/options/braces collapse to the
+  image's left or right edge, while offsets within the filename map
+  monotonically across its width (`filename-linear`). This preserves the
+  existing rigorous source-caret contract while allowing a later canvas
+  adapter to select the whole graphic or enter filename editing deliberately.
+- Layout metadata never retains asset bytes or local filesystem paths. It
+  carries the resolver revision and MIME/intrinsic-size facts needed for
+  identity and invalidation; the render cache owns the data URI.
 - **PDF figures render via PDF.js** (Apache-2.0; poppler/pdftocairo WASM
   rejected on license and maintenance grounds). Raster preview is
   sufficient because the compiled deck embeds the original vector PDF — the

@@ -4,6 +4,8 @@ import type { AnyWrapper, GreedyLine, ParagraphRun } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
 import type { KnuthPlassLayoutMode } from '../layout-options.js';
 import type { TextSourceRangePolicy } from '../../source-map.js';
+import type { DocumentGraphicsAsset } from '../../../graphics/types.js';
+import type { SimpleTexGraphicsOptions } from '../../tex/ir.js';
 import {
   texLength,
   texLineX,
@@ -56,9 +58,32 @@ export interface LineSegmentReport<Space extends SourceCoordinateSpace = SourceC
   mathConstructRanges?: LineMathConstructRangeReport<Space>[];
   mathCaretEntries?: LineMathCaretEntryReport<Space>[];
   mathBreakpoints?: LineMathBreakpointReport<Space>[];
+  /** Atomic graphics positioned relative to this segment's baseline. */
+  graphics?: LineGraphicsReport<Space>[];
   x: TexLineX;
   width: TexLength;
   caretStops?: TexLineX[];
+}
+
+export interface LineGraphicsReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
+  asset: DocumentGraphicsAsset;
+  sourceStartRaw: SourceOffset<Space>;
+  sourceEndRaw: SourceOffset<Space>;
+  filenameStartRaw: SourceOffset<Space>;
+  filenameEndRaw: SourceOffset<Space>;
+  options: SimpleTexGraphicsOptions;
+  caretPolicy: "filename-linear";
+  x: TexLineX;
+  y: TexLineY;
+  width: TexLength;
+  height: TexLength;
+  crop?: {
+    x: TexLength;
+    y: TexLength;
+    width: TexLength;
+    height: TexLength;
+    clip: boolean;
+  };
 }
 
 export type LineMathCaretEntryKind =
