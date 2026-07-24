@@ -72,6 +72,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         item.id.endsWith(":background") ||
         (item.kind === "list-marker" && item.traceAsGlyph !== true)
       ) &&
+      item.visibility !== "hidden" &&
       item.paragraphId == null &&
       item.bounds.width > 0 &&
       item.bounds.height > 0
@@ -83,8 +84,21 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         : rectangleRole(item.id),
       ...roundedRect(item.bounds),
     }));
+  const coveredRectangles = render.layout.items
+    .filter((item) =>
+      item.visibility === "hidden" &&
+      item.kind === "list-marker" &&
+      item.bounds.width > 0 &&
+      item.bounds.height > 0
+    )
+    .map((item) => ({
+      id: item.id,
+      role: "list-marker",
+      ...roundedRect(item.bounds),
+    }));
   const lines = [];
   const glyphs = [];
+  const coveredGlyphs = [];
   for (const paragraph of render.layout.paragraphs) {
     const placements = new Map(
       paragraph.vlistLayout.linePlacements.map(
@@ -103,6 +117,14 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         Number(line.ascent);
       const lineGlyphs = [];
       for (const segment of line.segments) {
+        const segmentCovered = sourceRangeIsHidden(
+          Number(segment.sourceStartRaw),
+          Number(segment.sourceEndRaw),
+          paragraph.hiddenSourceSpans
+        );
+        const segmentGlyphs = segmentCovered
+          ? coveredGlyphs
+          : lineGlyphs;
         if (segment.kind === "math" && segment.mathSvgBody) {
           const math = featuresFromNativeMathSvg({
             svgBody: segment.mathSvgBody,
@@ -113,8 +135,11 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
             baselineY,
             metricProvider,
           });
-          lineGlyphs.push(...math.glyphs);
-          rectangles.push(...math.rules.map((rule, ruleIndex) => ({
+          segmentGlyphs.push(...math.glyphs);
+          const segmentRectangles = segmentCovered
+            ? coveredRectangles
+            : rectangles;
+          segmentRectangles.push(...math.rules.map((rule, ruleIndex) => ({
             id:
               `${paragraph.paragraphId}:line:${line.lineIndex}` +
               `:math-rule:${rectangles.length}:${ruleIndex}`,
@@ -143,7 +168,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
           Number(segment.x);
         if (typeof segment.glyphCode === "number") {
           const metric = font.data.chars[String(segment.glyphCode)];
-          lineGlyphs.push({
+          segmentGlyphs.push({
             code: normalizeGlyphCode(segment.glyphCode),
             x: round(cursor),
             y: round(baselineY),
@@ -163,7 +188,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
             cursor += item.width;
             continue;
           }
-          lineGlyphs.push({
+          segmentGlyphs.push({
             code: normalizeGlyphCode(item.code),
             x: round(cursor),
             y: round(baselineY),
@@ -209,6 +234,12 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
       metricProvider,
       rectangles
     );
+    coveredGlyphs.push(...nativeDisplayMathGlyphs(
+      paragraph,
+      metricProvider,
+      coveredRectangles,
+      true
+    ));
     const displayLines = groupOracleGlyphLines(displayGlyphs);
     for (const [displayLineIndex, displayLine] of displayLines.entries()) {
       const lineIndex = paragraph.report.lines.length + displayLineIndex;
@@ -249,6 +280,9 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
         lineIndex,
       })));
     }
+    coveredGlyphs.push(
+      ...nativeVListLabelGlyphs(paragraph, metricProvider, true)
+    );
   }
   for (const embedded of render.layout.embeddedTikz) {
     const embeddedGlyphs = nativeEmbeddedTikzGlyphs(
@@ -278,8 +312,10 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     page: roundedRect(render.layout.page.page),
     untracedRegions: [],
     rectangles,
+    coveredRectangles,
     lines: canonicalNativeGlyphLines(glyphs, lines),
     glyphs,
+    coveredLines: groupOracleGlyphLines(coveredGlyphs),
   };
 }
 
@@ -611,7 +647,12 @@ function isVoidSvgElement(tagName) {
   ]).has(tagName);
 }
 
-function nativeDisplayMathGlyphs(paragraph, metricProvider, rectangles) {
+function nativeDisplayMathGlyphs(
+  paragraph,
+  metricProvider,
+  rectangles,
+  covered = false
+) {
   const glyphs = [];
   let ruleIndex = 0;
   const appendMath = (params) => {
@@ -624,7 +665,15 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider, rectangles) {
   };
   const visit = (items) => {
     for (const positioned of items) {
+      const isCovered = sourceRangeIsHidden(
+        positioned.item.sourceSpan?.start,
+        positioned.item.sourceSpan?.end,
+        paragraph.hiddenSourceSpans
+      );
       if (positioned.item.kind === "display-math") {
+        if (isCovered !== covered) {
+          continue;
+        }
         appendMath({
           svgBody: positioned.item.box.svgBody ?? "",
           originX: paragraph.bounds.x + Number(positioned.x),
@@ -638,6 +687,9 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider, rectangles) {
         positioned.item.kind === "hbox" &&
         positioned.item.role?.kind === "display-align-row"
       ) {
+        if (isCovered !== covered) {
+          continue;
+        }
         for (const renderItem of positioned.item.box.renderItems) {
           if (renderItem.kind !== "tex-math-svg") {
             continue;
@@ -665,7 +717,11 @@ function nativeDisplayMathGlyphs(paragraph, metricProvider, rectangles) {
   return glyphs;
 }
 
-function nativeVListLabelGlyphs(paragraph, metricProvider) {
+function nativeVListLabelGlyphs(
+  paragraph,
+  metricProvider,
+  covered = false
+) {
   const glyphs = [];
   const visit = (items) => {
     for (const positioned of items) {
@@ -673,6 +729,18 @@ function nativeVListLabelGlyphs(paragraph, metricProvider) {
         positioned.item.kind === "hbox" &&
         positioned.item.role?.kind === "list-label"
       ) {
+        const isCovered =
+          paragraph.hiddenListItemIndices?.includes(
+            positioned.item.role.itemIndex
+          ) === true ||
+          sourceRangeIsHidden(
+            positioned.item.sourceSpan?.start,
+            positioned.item.sourceSpan?.end,
+            paragraph.hiddenSourceSpans
+          );
+        if (isCovered !== covered) {
+          continue;
+        }
         for (const renderItem of positioned.item.box.renderItems) {
           if (
             renderItem.kind !== "tex-glyph" &&
@@ -735,19 +803,50 @@ function nativeVListLabelGlyphs(paragraph, metricProvider) {
   return glyphs;
 }
 
+function sourceRangeIsHidden(from, to, hiddenSpans) {
+  if (
+    !Number.isFinite(from) ||
+    !Number.isFinite(to) ||
+    !Array.isArray(hiddenSpans)
+  ) {
+    return false;
+  }
+  return hiddenSpans.some((hidden) =>
+    from < hidden.to && to > hidden.from
+  );
+}
+
 export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
-  const geometry = compareRectangles(
-    nativeTrace.rectangles,
-    oracleTrace.rules.filter((rule) =>
+  const pageRules = oracleTrace.rules.filter((rule) =>
       rule.width > 0 &&
       rule.totalHeight > 0 &&
       rule.x >= -0.01 &&
       rule.y >= -0.01 &&
       rule.x + rule.width <= oracleTrace.page.width + 0.01 &&
       rule.y + rule.totalHeight <= oracleTrace.page.height + 0.01
+  );
+  const coveredOracleRules = pageRules.filter((rule) =>
+    (nativeTrace.coveredRectangles ?? []).some((covered) =>
+      Math.max(
+        ...Object.values(rectangleDelta(covered, rule)).map(Math.abs)
+      ) <= 0.02
     )
   );
-  const excludedOracleLines = oracleTrace.lines.filter((line) =>
+  const coveredOracleRuleSet = new Set(coveredOracleRules);
+  const geometry = compareRectangles(
+    nativeTrace.rectangles,
+    pageRules.filter((rule) => !coveredOracleRuleSet.has(rule))
+  );
+  const coveredOracleLines = oracleTrace.lines.filter((line) =>
+    (nativeTrace.coveredLines ?? []).some((covered) =>
+      covered.text === line.text &&
+      Math.abs(covered.x - line.x) <= 0.02 &&
+      Math.abs(covered.baselineY - line.baselineY) <= 0.02
+    )
+  );
+  const coveredOracleLineSet = new Set(coveredOracleLines);
+  const untracedOracleLines = oracleTrace.lines.filter((line) =>
+    !coveredOracleLineSet.has(line) &&
     nativeTrace.untracedRegions.some((region) =>
       pointNearRect(
         line.x,
@@ -757,6 +856,10 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
       )
     )
   );
+  const excludedOracleLines = [
+    ...coveredOracleLines,
+    ...untracedOracleLines,
+  ];
   const excludedOracleLineSet = new Set(excludedOracleLines);
   const text = compareTextLines(
     nativeTrace.lines,
@@ -764,7 +867,9 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
   );
   text.excludedOracle = excludedOracleLines.map((line) => ({
     ...line,
-    reason: "native embedded-TikZ glyph tracing is not yet merged into the page trace",
+    reason: coveredOracleLineSet.has(line)
+      ? "covered Beamer overlay material remains in the Lua node trace but is not painted"
+      : "native embedded-TikZ glyph tracing is not yet merged into the page trace",
   }));
   return {
     coordinateSystem: nativeTrace.coordinateSystem,
@@ -772,11 +877,13 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
       matchedRectangles: geometry.matches.length,
       unmatchedNativeRectangles: geometry.unmatchedNative.length,
       unmatchedOracleRules: geometry.unmatchedOracle.length,
+      coveredOverlayRules: coveredOracleRules.length,
       maxRectangleEdgeDeltaPt: geometry.maxEdgeDeltaPt,
       matchedTextLines: text.matches.length,
       unmatchedNativeTextLines: text.unmatchedNative.length,
       unmatchedOracleTextLines: text.unmatchedOracle.length,
-      excludedOracleTextLines: text.excludedOracle.length,
+      excludedOracleTextLines: untracedOracleLines.length,
+      coveredOverlayTextLines: coveredOracleLines.length,
       comparedGlyphs: text.comparedGlyphs,
       maxAbsoluteGlyphDxPt: text.maxAbsoluteGlyphDxPt,
       maxAbsoluteGlyphDyPt: text.maxAbsoluteGlyphDyPt,

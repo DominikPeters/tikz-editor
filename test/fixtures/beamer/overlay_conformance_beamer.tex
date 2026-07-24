@@ -1,0 +1,46 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+
+\title{Overlay conformance}
+\date{}
+
+\begin{document}
+
+\begin{frame}{Remove and reflow}
+  Prefix geometry \only<2>{a deliberately long inserted phrase that changes the
+  paragraph's line breaking} suffix.
+\end{frame}
+
+\begin{frame}{Keep space}
+  Always visible.
+
+  \uncover<2->{Covered material \(\frac{x}{2}\) keeps its place on the first page.}
+\end{frame}
+
+\begin{frame}{Item projection}
+  \begin{itemize}[<+->]
+    \item First item
+    \item Second item
+    \item Third item
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Alternatives}
+  \alt<2>{During}{Otherwise}.
+
+  \temporal<2>{Before}{At}{After}.
+
+  \invisible<2>{Visible except on the second page.}
+\end{frame}
+
+\begin{frame}{Pause counter}
+  Before the pause.
+
+  \pause
+  After the first pause.
+
+  \pause
+  After the second pause.
+\end{frame}
+
+\end{document}

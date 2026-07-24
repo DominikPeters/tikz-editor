@@ -22,6 +22,7 @@ import type {
   BeamerVerticalSpaceBodyNode,
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
+import { scanBeamerFrameOverlays } from "./overlay.js";
 
 const LIST_ENVIRONMENTS = new Set([
   "itemize",
@@ -124,6 +125,7 @@ export function parseBeamerFrameBody(
     frameId: frame.id,
     span: frame.bodySpan,
     children: splitStandaloneFrameCommands(source, frame.id, children),
+    overlays: scanBeamerFrameOverlays(source, frame),
     diagnostics,
   };
 }

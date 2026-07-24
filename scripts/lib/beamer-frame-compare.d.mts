@@ -58,7 +58,12 @@ export interface NativeBeamerPageTrace {
     readonly id: string;
     readonly role: string;
   })[];
+  readonly coveredRectangles?: readonly (BeamerTraceRect & {
+    readonly id: string;
+    readonly role: string;
+  })[];
   readonly lines: readonly NativeBeamerTraceLine[];
+  readonly coveredLines?: readonly OracleBeamerTraceLine[];
   readonly glyphs: readonly (BeamerTraceGlyph & {
     readonly paragraphId: string;
     readonly role: string;
@@ -86,11 +91,13 @@ export interface BeamerStructuralComparison {
     readonly matchedRectangles: number;
     readonly unmatchedNativeRectangles: number;
     readonly unmatchedOracleRules: number;
+    readonly coveredOverlayRules: number;
     readonly maxRectangleEdgeDeltaPt: number;
     readonly matchedTextLines: number;
     readonly unmatchedNativeTextLines: number;
     readonly unmatchedOracleTextLines: number;
     readonly excludedOracleTextLines: number;
+    readonly coveredOverlayTextLines: number;
     readonly comparedGlyphs: number;
     readonly maxAbsoluteGlyphDxPt: number;
     readonly maxAbsoluteGlyphDyPt: number;

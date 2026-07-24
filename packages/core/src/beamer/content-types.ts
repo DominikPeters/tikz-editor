@@ -5,6 +5,7 @@ import type {
   BeamerFrameModel,
   BeamerTikzPictureRoot,
 } from "./types.js";
+import type { BeamerOverlayModel } from "./overlay.js";
 
 export type BeamerParagraphBodyNode = {
   kind: "paragraph";
@@ -124,6 +125,7 @@ export type BeamerFrameBodyIr = {
   frameId: string;
   span: Span;
   children: BeamerFrameBodyNode[];
+  overlays: BeamerOverlayModel;
   diagnostics: Diagnostic[];
 };
 

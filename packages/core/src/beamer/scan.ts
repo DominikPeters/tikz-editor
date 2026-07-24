@@ -776,6 +776,17 @@ export function readBeamerOptionalArgument(
     : null;
 }
 
+export function readBeamerOverlayArgument(
+  source: string,
+  from: number,
+  limit: number
+): BeamerDelimitedSourceValue | null {
+  const cursor = skipWhitespaceAndComments(source, from, limit);
+  return source.charAt(cursor) === "<"
+    ? readDelimitedValue(source, cursor, "<", ">", limit)
+    : null;
+}
+
 function readCommandMainArgument(
   source: string,
   from: number,

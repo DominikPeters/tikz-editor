@@ -16,6 +16,7 @@ import type {
   BeamerParagraphLayout,
   BeamerRect,
 } from "./types.js";
+import type { BeamerOverlayVisibility } from "./overlay.js";
 
 export type LaidParagraph = {
   layout: BeamerParagraphLayout;
@@ -23,8 +24,10 @@ export type LaidParagraph = {
   height: number;
   listMarkers: readonly {
     id: string;
+    sourceSpan?: Span;
     bounds: BeamerRect;
     traceAsGlyph: boolean;
+    visibility: "visible" | "hidden";
   }[];
 };
 
@@ -63,16 +66,19 @@ export type PreparedTitlePage = {
 export type PreparedColumnFlowItem =
   | {
       kind: "paragraph";
+      visibility: BeamerOverlayVisibility;
       paragraph: LaidParagraph;
       advanceHeight: number;
       trailingSkipPt: number;
     }
   | {
       kind: "vertical-space";
+      visibility: BeamerOverlayVisibility;
       height: number;
     }
   | {
       kind: "tikzpicture";
+      visibility: BeamerOverlayVisibility;
       id: string;
       sourceSpan: Span;
       horizontalAlignment: "left" | "center";
@@ -83,6 +89,7 @@ export type PreparedColumnFlowItem =
     }
   | {
       kind: "block";
+      visibility: BeamerOverlayVisibility;
       block: PreparedBlock;
       height: number;
     };
@@ -98,15 +105,18 @@ export type PreparedColumnContent = {
 export type PreparedFrameFlowItem =
   | {
       kind: "title-page";
+      visibility: BeamerOverlayVisibility;
       titlePage: PreparedTitlePage;
     }
   | {
       kind: "vertical-space";
+      visibility: BeamerOverlayVisibility;
       node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>;
       height: number;
     }
   | {
       kind: "paragraph";
+      visibility: BeamerOverlayVisibility;
       node: BeamerParagraphBodyNode;
       paragraph: LaidParagraph;
       naturalHeight: number;
@@ -128,12 +138,14 @@ export type PreparedFrameFlowItem =
     }
   | {
       kind: "columns";
+      visibility: BeamerOverlayVisibility;
       node: BeamerColumnsBodyNode;
       columns: PreparedColumnContent[];
       box: Pick<ColumnVerticalBox, "height" | "depth">;
     }
   | {
       kind: "block";
+      visibility: BeamerOverlayVisibility;
       node: BeamerBlockBodyNode;
       block: PreparedBlock;
       naturalHeight: number;
@@ -142,6 +154,7 @@ export type PreparedFrameFlowItem =
     }
   | {
       kind: "tikzpicture";
+      visibility: BeamerOverlayVisibility;
       node: Extract<BeamerFrameBodyNode, { kind: "tikzpicture" }>;
       tikz: Extract<PreparedColumnFlowItem, { kind: "tikzpicture" }>;
       naturalHeight: number;

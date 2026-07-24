@@ -599,7 +599,10 @@ function renderTexVListLeafBoxSvgMetadata(
   }
   const boxHeight = texLength(item.metrics.height + item.metrics.depth);
   const roleAttribute = item.item.kind === "hbox" && item.item.role
-    ? ` data-tex-hbox-role="${item.item.role.kind}"`
+    ? ` data-tex-hbox-role="${item.item.role.kind}"` +
+      (item.item.role.kind === "list-label"
+        ? ` data-tex-list-item-index="${item.item.role.itemIndex}"`
+        : "")
     : "";
   return [
     `<g${roleAttribute} transform="translate(${formatPt(texVListSvgTranslateX(item.x, origin.originX))} ${formatPt(texVListSvgTranslateY(texVListY(item.y), origin.originY))})" pointer-events="none">`,

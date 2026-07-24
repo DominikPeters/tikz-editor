@@ -173,7 +173,7 @@ async function loadCoreRenderer() {
     import(pathToFileURL(coreEntry).href),
   ]);
   return {
-    renderBeamerFrame: beamer.renderBeamerFrame,
+    renderBeamerFramePages: beamer.renderBeamerFramePages,
     computerModernTexMetricProvider: core.computerModernTexMetricProvider,
   };
 }
@@ -356,11 +356,18 @@ async function main() {
 
   const {
     computerModernTexMetricProvider,
-    renderBeamerFrame,
+    renderBeamerFramePages,
   } = await loadCoreRenderer();
-  const render = await renderBeamerFrame(source, {
+  const renderedPages = await renderBeamerFramePages(source, {
     frameIndex: options.frameNumber - 1,
   });
+  const selectedPage = options.pageNumber ?? renderedPages.stepCount;
+  const render = renderedPages.pages[selectedPage - 1];
+  if (!render) {
+    throw new RangeError(
+      `Overlay page ${selectedPage} does not exist; frame ${options.frameNumber} has ${renderedPages.stepCount} pages.`
+    );
+  }
   const rendererSvg = join(runDir, "renderer.svg");
   writeFileSync(rendererSvg, render.svg.svg, "utf8");
 
@@ -428,7 +435,7 @@ async function main() {
   }
 
   const report = {
-    formatVersion: 3,
+    formatVersion: 4,
     input: {
       path: options.inputPath,
       materializedPath: relativeArtifact(runDir, materializedInput),
@@ -436,6 +443,8 @@ async function main() {
       frameNumber: options.frameNumber,
       frameId: render.frame.id,
       frameTitle: render.frame.title?.value ?? null,
+      overlayStep: render.layout.step,
+      overlayStepCount: render.layout.stepCount,
       compiledPage: oracleReport.input.compiledPage,
     },
     renderer: {

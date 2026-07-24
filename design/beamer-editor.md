@@ -977,6 +977,25 @@ KKT comparisons. The resulting 644/644 structural checks pass, with maximum
 observed deltas of 0.012371pt horizontally for matched glyphs, 0.002795pt
 vertically, and 0.007003pt for matched template-rectangle edges.
 
+The first multi-page overlay contract is also implemented. A source-backed
+overlay program resolves explicit intervals, open ranges, relative `+`/`.`
+specifications, and `\pause` against one frame-local counter. It covers
+`\only`, `\uncover`, `\visible`, `\invisible`, braced `\onslide`, `\alt`,
+`\temporal`, the corresponding simple environments, explicit `\item<...>`,
+and list-level `[<+->]` defaults. Remove-mode branches are projected out
+before line breaking. Covered text and list branches retain source/caret
+geometry, covered structural nodes retain their layout footprint, and both
+suppress paint. `renderBeamerFramePages` returns every concrete step while
+`renderBeamerFrame` remains the single-page entry point.
+
+The dedicated five-frame overlay fixture emits 12 pages, all of which pass
+the LuaLaTeX structural oracle. The comparison trace records covered glyph
+lines and marker rules separately because LuaTeX retains those nodes even
+when Beamer's PDF paint state makes them invisible. Maximum visible-content
+deltas are 0.003514pt horizontally, 0.000012pt vertically, and 0.007003pt
+for template edges. Action-qualified overlays such as `\alert<...>` and
+arbitrary `\beamerdefaultoverlayspecification` changes remain later work.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally

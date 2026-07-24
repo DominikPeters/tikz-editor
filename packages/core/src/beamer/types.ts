@@ -187,6 +187,8 @@ export type BeamerFrameLayoutItem = {
   sourceSpan: Span;
   bounds: BeamerRect;
   parentId: string | null;
+  /** Hidden overlay material retains geometry but contributes no paint. */
+  visibility?: "visible" | "hidden";
   paragraphId?: string;
   childIds?: string[];
   message?: string;
@@ -213,6 +215,10 @@ export type BeamerParagraphLayout = {
   bounds: BeamerRect;
   report: ParagraphLayoutReport<"document">;
   vlistLayout: TexVListLayout<"document">;
+  /** Source ranges laid out for covered overlays but omitted from paint. */
+  hiddenSourceSpans?: readonly Span[];
+  /** One-based list item ordinals whose labels are covered on this step. */
+  hiddenListItemIndices?: readonly number[];
 };
 
 export type BeamerEmbeddedTikzLayout = {
@@ -232,6 +238,7 @@ export type BeamerFrameLayout = {
   frameId: string;
   frameIndex: number;
   step: number;
+  stepCount: number;
   page: BeamerPageGeometry;
   contentBounds: BeamerRect;
   items: BeamerFrameLayoutItem[];
@@ -260,6 +267,19 @@ export type RenderBeamerFrameResult = {
 export type RenderBeamerFrameOptions = {
   /** Zero-based frame index. */
   frameIndex?: number;
-  /** One-based overlay step. Overlay filtering is not yet implemented. */
+  /** One-based overlay step. */
   step?: number;
+};
+
+export type RenderBeamerFramePagesOptions = {
+  /** Zero-based frame index. */
+  frameIndex?: number;
+};
+
+export type RenderBeamerFramePagesResult = {
+  document: BeamerDocumentModel;
+  frame: BeamerFrameModel;
+  stepCount: number;
+  pages: RenderBeamerFrameResult[];
+  diagnostics: Diagnostic[];
 };

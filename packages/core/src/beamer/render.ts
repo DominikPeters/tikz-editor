@@ -47,11 +47,18 @@ import type {
   BeamerColumnAlignment,
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
+  BeamerFrameBodyIr,
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
   BeamerTitlePageBodyNode,
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
+import {
+  projectBeamerOverlayText,
+  resolveBeamerOverlaySpanVisibility,
+  type BeamerOverlayModel,
+  type BeamerOverlayVisibility,
+} from "./overlay.js";
 import { scanBeamerDocument } from "./scan.js";
 import {
   createBeamerTexMathFontProfile,
@@ -90,7 +97,9 @@ import type {
   PreparedTitlePage,
 } from "./render-model.js";
 import type {
+  BeamerDocumentModel,
   BeamerEmbeddedTikzLayout,
+  BeamerFrameModel,
   BeamerFrameLayout,
   BeamerFrameLayoutItem,
   BeamerMetadataFieldModel,
@@ -98,6 +107,8 @@ import type {
   BeamerParagraphLayout,
   BeamerRect,
   RenderBeamerFrameOptions,
+  RenderBeamerFramePagesOptions,
+  RenderBeamerFramePagesResult,
   RenderBeamerFrameResult,
 } from "./types.js";
 
@@ -186,11 +197,44 @@ export async function renderBeamerFrame(
       `Beamer frame index ${frameIndex} is outside the document's ${document.frames.length} frames.`
     );
   }
+  const bodyIr = parseBeamerFrameBody({ source, frame });
+  const stepCount = bodyIr.overlays.stepCount;
   const step = options.step ?? 1;
   if (!Number.isInteger(step) || step < 1) {
     throw new RangeError("A Beamer overlay step must be a positive integer.");
   }
+  if (step > stepCount) {
+    throw new RangeError(
+      `Beamer overlay step ${step} is outside the frame's ${stepCount} steps.`
+    );
+  }
+  return renderBeamerFrameStep({
+    source,
+    document,
+    frame,
+    frameIndex,
+    bodyIr,
+    step,
+  });
+}
 
+async function renderBeamerFrameStep(params: {
+  source: string;
+  document: BeamerDocumentModel;
+  frame: BeamerFrameModel;
+  frameIndex: number;
+  bodyIr: BeamerFrameBodyIr;
+  step: number;
+}): Promise<RenderBeamerFrameResult> {
+  const {
+    source,
+    document,
+    frame,
+    frameIndex,
+    bodyIr,
+    step,
+  } = params;
+  const stepCount = bodyIr.overlays.stepCount;
   const theme = resolveBeamerTheme(document);
   const macroBindings = collectMacroBindings(
     document.preamble.macroDefinitions
@@ -214,7 +258,6 @@ export async function renderBeamerFrame(
     ...document.diagnostics,
     ...theme.diagnostics,
   ];
-  const bodyIr = parseBeamerFrameBody({ source, frame });
   diagnostics.push(...bodyIr.diagnostics);
   const items: BeamerFrameLayoutItem[] = [];
   const paragraphs: BeamerParagraphLayout[] = [];
@@ -265,6 +308,8 @@ export async function renderBeamerFrame(
     theme,
     metadata: document.preamble.metadata,
     macroBindings,
+    overlays: bodyIr.overlays,
+    step,
   });
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
@@ -285,6 +330,9 @@ export async function renderBeamerFrame(
     const frameBlockTop =
       availableContentBounds.y + verticalPacking.topOffset;
     for (const placement of positioned.items) {
+      if (placement.item.visibility === "hidden") {
+        continue;
+      }
       if (placement.item.kind === "title-page") {
         emitPreparedTitlePage({
           prepared: placement.item.titlePage,
@@ -395,6 +443,7 @@ export async function renderBeamerFrame(
     frameId: frame.id,
     frameIndex,
     step,
+    stepCount,
     page,
     contentBounds,
     items,
@@ -413,6 +462,44 @@ export async function renderBeamerFrame(
       diagnostics: model.diagnostics,
     },
     diagnostics,
+  };
+}
+
+/**
+ * Render every overlay page emitted by one source frame, in Beamer page
+ * order. A frame without overlay material yields exactly one page.
+ */
+export async function renderBeamerFramePages(
+  source: string,
+  options: RenderBeamerFramePagesOptions = {}
+): Promise<RenderBeamerFramePagesResult> {
+  const document = scanBeamerDocument(source);
+  const frameIndex = options.frameIndex ?? 0;
+  const frame = document.frames[frameIndex];
+  if (!frame) {
+    throw new RangeError(
+      `Beamer frame index ${frameIndex} is outside the document's ${document.frames.length} frames.`
+    );
+  }
+  const bodyIr = parseBeamerFrameBody({ source, frame });
+  const stepCount = bodyIr.overlays.stepCount;
+  const pages: RenderBeamerFrameResult[] = [];
+  for (let step = 1; step <= stepCount; step += 1) {
+    pages.push(await renderBeamerFrameStep({
+      source,
+      document,
+      frame,
+      frameIndex,
+      bodyIr,
+      step,
+    }));
+  }
+  return {
+    document,
+    frame,
+    stepCount,
+    pages,
+    diagnostics: pages.flatMap((page) => page.diagnostics),
   };
 }
 
@@ -555,14 +642,25 @@ async function prepareFrameFlow(params: {
     Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
   >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  overlays: BeamerOverlayModel;
+  step: number;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(params.theme);
   for (const node of params.children) {
+    const visibility = resolveBeamerOverlaySpanVisibility(
+      params.overlays,
+      node.span,
+      params.step
+    );
+    if (visibility === "removed") {
+      continue;
+    }
     if (node.kind === "title-page") {
       result.push({
         kind: "title-page",
+        visibility,
         titlePage: prepareTitlePage({
           node,
           width: params.textWidth,
@@ -581,6 +679,8 @@ async function prepareFrameFlow(params: {
         bodyFont,
         listProfile,
         macroBindings: params.macroBindings,
+        overlays: params.overlays,
+        step: params.step,
       });
       if (paragraph) {
         result.push(paragraph);
@@ -590,6 +690,7 @@ async function prepareFrameFlow(params: {
     if (node.kind === "vertical-space") {
       result.push({
         kind: "vertical-space",
+        visibility,
         node,
         height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
       });
@@ -615,11 +716,14 @@ async function prepareFrameFlow(params: {
             theme: params.theme,
             macroBindings: params.macroBindings,
             leftSidebarWidth: params.leftSidebarWidth,
+            overlays: params.overlays,
+            step: params.step,
           })
         )
       );
       result.push({
         kind: "columns",
+        visibility,
         node,
         columns,
         box: {
@@ -636,6 +740,7 @@ async function prepareFrameFlow(params: {
         width: params.textWidth,
         bodyFont,
         diagnostics: params.diagnostics,
+        visibility,
       });
       if (tikz) {
         const surroundingGlue = node.horizontalAlignment === "center"
@@ -650,6 +755,7 @@ async function prepareFrameFlow(params: {
         const centerSkip = surroundingGlue.top.naturalPt;
         result.push({
           kind: "tikzpicture",
+          visibility,
           node,
           tikz,
           naturalHeight:
@@ -672,10 +778,13 @@ async function prepareFrameFlow(params: {
         leftSidebarWidth: params.leftSidebarWidth,
         theme: params.theme,
         macroBindings: params.macroBindings,
+        overlays: params.overlays,
+        step: params.step,
       });
       if (block) {
         result.push({
           kind: "block",
+          visibility,
           node,
           block,
           naturalHeight: block.naturalHeight,
@@ -699,6 +808,8 @@ async function prepareFrameFlow(params: {
     bodyFont,
     listProfile,
     macroBindings: params.macroBindings,
+    overlays: params.overlays,
+    step: params.step,
   });
 }
 
@@ -796,17 +907,25 @@ function prepareFrameParagraph(params: {
   bodyFont: BeamerThemeFont;
   listProfile: TexListLayoutProfile;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  overlays: BeamerOverlayModel;
+  step: number;
   targetHeight?: number;
 }): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> | null {
   const paragraphSource = params.source.slice(
     params.node.span.from,
     params.node.span.to
   );
-  const paragraph = layoutParagraph({
-    mapped: createIdentityMappedText(
+  const projection = projectBeamerOverlayText(
+    createIdentityMappedText(
       paragraphSource,
       params.node.span.from
     ),
+    params.node.span,
+    params.overlays,
+    params.step
+  );
+  const paragraph = layoutParagraph({
+    mapped: projection.mapped,
     sourceSpan: params.node.span,
     paragraphId: params.node.id,
     role: "body",
@@ -816,18 +935,26 @@ function prepareFrameParagraph(params: {
     listProfile: params.listProfile,
     macroBindings: params.macroBindings,
     targetHeight: params.targetHeight,
+    hiddenSourceSpans: projection.hiddenSourceSpans,
+    hiddenListItemIndices: projection.hiddenListItemIndices,
   });
   if (!paragraph) {
     return null;
   }
-  const trailingTrivlistSkip = trailingBeamerTrivlistSkip(paragraphSource);
-  const trailingListSkip = trailingBeamerListSkip(paragraphSource);
+  const projectedSource = projection.mapped.text;
+  const trailingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource);
+  const trailingListSkip = trailingBeamerListSkip(projectedSource);
   const trailingListShrink = trailingListSkip > 0
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
     : 0;
-  const namedSize = activeBeamerNamedSize(paragraphSource);
+  const namedSize = activeBeamerNamedSize(projectedSource);
   return {
     kind: "paragraph",
+    visibility: resolveBeamerOverlaySpanVisibility(
+      params.overlays,
+      params.node.span,
+      params.step
+    ),
     node: params.node,
     paragraph,
     naturalHeight:
@@ -858,6 +985,8 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     bodyFont: BeamerThemeFont;
     listProfile: TexListLayoutProfile;
     macroBindings: ReadonlyMap<string, MacroBinding>;
+    overlays: BeamerOverlayModel;
+    step: number;
   }
 ): PreparedFrameFlowItem[] {
   const fitted = [...flow];
@@ -1061,6 +1190,8 @@ function prepareBlock(params: {
   leftSidebarWidth: number;
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  overlays: BeamerOverlayModel;
+  step: number;
 }): PreparedBlock | null {
   const plan = planBeamerBlockTemplate({
     environment: params.node.environment,
@@ -1081,11 +1212,17 @@ function prepareBlock(params: {
     0,
     params.leftSidebarWidth - 3 * normalXHeight
   );
-  const title = layoutParagraph({
-    mapped: createIdentityMappedText(
+  const titleProjection = projectBeamerOverlayText(
+    createIdentityMappedText(
       params.node.title.value,
       params.node.title.contentSpan.from
     ),
+    params.node.title.contentSpan,
+    params.overlays,
+    params.step
+  );
+  const title = layoutParagraph({
+    mapped: titleProjection.mapped,
     sourceSpan: params.node.title.contentSpan,
     paragraphId: `${params.node.id}:title`,
     role: "block-title",
@@ -1101,6 +1238,7 @@ function prepareBlock(params: {
     alignment: plan.style === "inmargin" ? "right" : "left",
     disableAutomaticHyphenation: plan.style === "inmargin",
     macroBindings: params.macroBindings,
+    hiddenSourceSpans: titleProjection.hiddenSourceSpans,
   });
   if (!title) {
     return null;
@@ -1108,12 +1246,20 @@ function prepareBlock(params: {
   const bodyNode = params.node.children.find(
     (node): node is BeamerParagraphBodyNode => node.kind === "paragraph"
   );
-  const body = bodyNode
-    ? layoutParagraph({
-        mapped: createIdentityMappedText(
+  const bodyProjection = bodyNode
+    ? projectBeamerOverlayText(
+        createIdentityMappedText(
           params.source.slice(bodyNode.span.from, bodyNode.span.to),
           bodyNode.span.from
         ),
+        bodyNode.span,
+        params.overlays,
+        params.step
+      )
+    : null;
+  const body = bodyNode && bodyProjection
+    ? layoutParagraph({
+        mapped: bodyProjection.mapped,
         sourceSpan: bodyNode.span,
         paragraphId: `${params.node.id}:body`,
         role: "block-body",
@@ -1122,6 +1268,8 @@ function prepareBlock(params: {
         alignment: "left",
         disableAutomaticHyphenation: true,
         macroBindings: params.macroBindings,
+        hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
+        hiddenListItemIndices: bodyProjection.hiddenListItemIndices,
       })
     : null;
   const titleLine = title.layout.report.lines[0];
@@ -1632,7 +1780,7 @@ function emitFrameParagraph(params: {
     params.items.push({
       id: marker.id,
       kind: "list-marker",
-      sourceSpan: laid.layout.sourceSpan,
+      sourceSpan: marker.sourceSpan ?? laid.layout.sourceSpan,
       bounds: {
         x: params.x + marker.bounds.x,
         y: params.y + marker.bounds.y,
@@ -1641,6 +1789,7 @@ function emitFrameParagraph(params: {
       },
       parentId: laid.layout.paragraphId,
       traceAsGlyph: marker.traceAsGlyph,
+      visibility: marker.visibility,
     });
   }
   params.modelBuilder.addPart({
@@ -1700,6 +1849,13 @@ function emitPreparedColumns(params: {
       flowIndex += 1
     ) {
       const flowItem = preparedColumn.flow[flowIndex];
+      if (flowItem.visibility === "hidden") {
+        flowY += columnFlowAdvance(
+          flowItem,
+          preparedColumn.flow[flowIndex + 1] != null
+        );
+        continue;
+      }
       if (flowItem.kind === "vertical-space") {
         flowY += flowItem.height;
       } else if (flowItem.kind === "paragraph") {
@@ -1724,7 +1880,7 @@ function emitPreparedColumns(params: {
           params.items.push({
             id: marker.id,
             kind: "list-marker",
-            sourceSpan: laid.layout.sourceSpan,
+            sourceSpan: marker.sourceSpan ?? laid.layout.sourceSpan,
             bounds: {
               x: x + marker.bounds.x,
               y: flowY + marker.bounds.y,
@@ -1733,6 +1889,7 @@ function emitPreparedColumns(params: {
             },
             parentId: laid.layout.paragraphId,
             traceAsGlyph: marker.traceAsGlyph,
+            visibility: marker.visibility,
           });
         }
         params.modelBuilder.addPart({
@@ -1812,6 +1969,19 @@ function emitPreparedColumns(params: {
   });
 }
 
+function columnFlowAdvance(
+  item: PreparedColumnFlowItem,
+  hasNext: boolean
+): number {
+  if (item.kind === "paragraph") {
+    return item.advanceHeight + (hasNext ? item.trailingSkipPt : 0);
+  }
+  if (item.kind === "block") {
+    return item.height + (hasNext ? item.block.plan.geometry.afterSkipPt : 0);
+  }
+  return item.height;
+}
+
 async function prepareColumnContent(params: {
   source: string;
   column: BeamerColumnBodyNode;
@@ -1820,6 +1990,8 @@ async function prepareColumnContent(params: {
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   leftSidebarWidth: number;
+  overlays: BeamerOverlayModel;
+  step: number;
 }): Promise<PreparedColumnContent> {
   const {
     source,
@@ -1848,6 +2020,8 @@ async function prepareColumnContent(params: {
         node.kind === "list" ? previousDepth : undefined,
       macroBindings,
       leftSidebarWidth: params.leftSidebarWidth,
+      overlays: params.overlays,
+      step: params.step,
     });
     if (prepared) {
       flow.push(prepared);
@@ -1902,6 +2076,8 @@ async function prepareColumnFlowNode(params: {
   initialPreviousDepth?: number;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   leftSidebarWidth: number;
+  overlays: BeamerOverlayModel;
+  step: number;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -1914,10 +2090,21 @@ async function prepareColumnFlowNode(params: {
     initialPreviousDepth,
     macroBindings,
     leftSidebarWidth,
+    overlays,
+    step,
   } = params;
+  const visibility = resolveBeamerOverlaySpanVisibility(
+    overlays,
+    node.span,
+    step
+  );
+  if (visibility === "removed") {
+    return null;
+  }
   if (node.kind === "vertical-space") {
     return {
       kind: "vertical-space",
+      visibility,
       height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
     };
   }
@@ -1929,15 +2116,23 @@ async function prepareColumnFlowNode(params: {
       leftSidebarWidth,
       theme,
       macroBindings,
+      overlays,
+      step,
     });
     return block
-      ? { kind: "block", block, height: block.naturalHeight }
+      ? { kind: "block", visibility, block, height: block.naturalHeight }
       : null;
   }
   if (node.kind === "paragraph" || node.kind === "list") {
     const text = source.slice(node.span.from, node.span.to);
+    const projection = projectBeamerOverlayText(
+      createIdentityMappedText(text, node.span.from),
+      node.span,
+      overlays,
+      step
+    );
     const paragraph = layoutParagraph({
-      mapped: createIdentityMappedText(text, node.span.from),
+      mapped: projection.mapped,
       sourceSpan: node.span,
       paragraphId: node.id,
       role: "body",
@@ -1947,12 +2142,15 @@ async function prepareColumnFlowNode(params: {
       initialPreviousDepth,
       listProfile,
       macroBindings,
+      hiddenSourceSpans: projection.hiddenSourceSpans,
+      hiddenListItemIndices: projection.hiddenListItemIndices,
     });
     if (!paragraph) {
       return null;
     }
     return {
       kind: "paragraph",
+      visibility,
       paragraph,
       // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
       // strut carried by the shared text frontend's enclosing vlist. Lists,
@@ -1961,7 +2159,9 @@ async function prepareColumnFlowNode(params: {
         ? paragraphLineExtent(paragraph)
         : paragraph.height,
       trailingSkipPt:
-        node.kind === "list" ? trailingBeamerListSkip(text) : 0,
+        node.kind === "list"
+          ? trailingBeamerListSkip(projection.mapped.text)
+          : 0,
     };
   }
   if (node.kind === "unsupported") {
@@ -1979,6 +2179,7 @@ async function prepareColumnFlowNode(params: {
     width,
     bodyFont,
     diagnostics,
+    visibility,
   });
 }
 
@@ -1990,6 +2191,7 @@ async function prepareEmbeddedTikz(params: {
   width: number;
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
+  visibility: BeamerOverlayVisibility;
 }): Promise<Extract<PreparedColumnFlowItem, {
   kind: "tikzpicture";
 }> | null> {
@@ -2025,6 +2227,7 @@ async function prepareEmbeddedTikz(params: {
   }
   return {
     kind: "tikzpicture",
+    visibility: params.visibility,
     id: params.node.id,
     sourceSpan: params.node.span,
     horizontalAlignment: params.node.horizontalAlignment,
@@ -2153,6 +2356,8 @@ function layoutParagraph(params: {
   disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
   targetHeight?: number;
+  hiddenSourceSpans?: readonly Span[];
+  hiddenListItemIndices?: readonly number[];
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -2323,15 +2528,25 @@ function layoutParagraph(params: {
       },
       report: result.report,
       vlistLayout: result.vlistLayout,
+      ...(params.hiddenSourceSpans?.length
+        ? { hiddenSourceSpans: params.hiddenSourceSpans }
+        : {}),
+      ...(params.hiddenListItemIndices?.length
+        ? { hiddenListItemIndices: params.hiddenListItemIndices }
+        : {}),
     },
-    svgBody: renderTexParagraphSvgBody(result.report, {
-      lineHeightPt: texLength(params.font.lineHeightPt),
-      vlistLayout: result.vlistLayout,
-      metricProvider,
-      textFontProfile,
-      baseFontSizePt: fontSize,
-      alignment,
-    }),
+    svgBody: hideOverlayPaintInSvg(
+      renderTexParagraphSvgBody(result.report, {
+        lineHeightPt: texLength(params.font.lineHeightPt),
+        vlistLayout: result.vlistLayout,
+        metricProvider,
+        textFontProfile,
+        baseFontSizePt: fontSize,
+        alignment,
+      }),
+      params.hiddenSourceSpans ?? [],
+      params.hiddenListItemIndices ?? []
+    ),
     listMarkers: result.vlistLayout.boxReport.items
       .filter((item) =>
         item.hboxRole?.kind === "list-label" &&
@@ -2366,7 +2581,18 @@ function layoutParagraph(params: {
         const atPt = Number(resolvedFont.atPt);
         return [{
           id: `${params.paragraphId}:marker:${item.path.join("-")}`,
+          ...(item.sourceSpan
+            ? {
+                sourceSpan: {
+                  from: item.sourceSpan.start,
+                  to: item.sourceSpan.end,
+                },
+              }
+            : {}),
           traceAsGlyph: marker.traceAsGlyph ?? marker.glyph != null,
+          visibility: params.hiddenListItemIndices?.includes(role.itemIndex)
+            ? "hidden"
+            : "visible",
           bounds: {
             x: Number(item.x) + (paint?.x ?? 0) * atPt,
             y: Number(item.y) + (paint?.y ?? 0) * atPt,
@@ -2557,6 +2783,48 @@ function applyThemeFamilyToTikz(
     /\\begin\s*\{tikzpicture\}(?:\s*\[([^\]]*)\])?/,
     (_whole, options: string | undefined) =>
       `\\begin{tikzpicture}[${options ? `${options},` : ""}font=${command}]`
+  );
+}
+
+function hideOverlayPaintInSvg(
+  markup: string,
+  hiddenSpans: readonly Span[],
+  hiddenListItemIndices: readonly number[]
+): string {
+  if (hiddenSpans.length === 0 && hiddenListItemIndices.length === 0) {
+    return markup;
+  }
+  const hiddenSources = markup.replace(
+    /<(path|g)\b([^>]*\bdata-source-start="(\d+)"[^>]*\bdata-source-end="(\d+)"[^>]*)>/gu,
+    (whole, tag: string, attributes: string, fromRaw: string, toRaw: string) => {
+      if (!sourceSpanIsHidden(
+        { from: Number(fromRaw), to: Number(toRaw) },
+        hiddenSpans
+      )) {
+        return whole;
+      }
+      const selfClosing = attributes.trimEnd().endsWith("/");
+      const visibleAttributes = selfClosing
+        ? attributes.replace(/\/\s*$/u, "")
+        : attributes;
+      return `<${tag}${visibleAttributes} visibility="hidden"${selfClosing ? " /" : ""}>`;
+    }
+  );
+  return hiddenSources.replace(
+    /<g\b([^>]*\bdata-tex-list-item-index="(\d+)"[^>]*)>/gu,
+    (whole, attributes: string, indexRaw: string) =>
+      hiddenListItemIndices.includes(Number(indexRaw))
+        ? `<g${attributes} visibility="hidden">`
+        : whole
+  );
+}
+
+function sourceSpanIsHidden(
+  span: Span,
+  hiddenSpans: readonly Span[]
+): boolean {
+  return hiddenSpans.some((hidden) =>
+    span.from < hidden.to && span.to > hidden.from
   );
 }
 
