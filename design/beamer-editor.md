@@ -1133,11 +1133,79 @@ match real Beamer within tolerance.
 
 ### Phase B2.5: App and Root Integration
 
-- Generalize figure inventory → document-root inventory and refactor
-  per-root session state (`activeFigureId`, compute snapshots, thumbnails,
-  source synchronization, viewport persistence, undo grouping) onto it.
-- Add deck-mode source cards, slide sorter, selected-step state, and the
-  read-only step scrubber using the established headless renderer result.
+**Core prerequisites (Milestone 0).** Mapping the app boundary (2026-07-24)
+found two gaps in the headless surface that precede any app work:
+
+1. **No scan-once-render-many entry point.** Every `renderBeamerFrame` call
+   re-runs `scanBeamerDocument`, theme resolution, macro collection, and
+   navigation modeling from raw source; only `renderBeamerFramePages` shares
+   work, and only across the steps of one frame. Add a prepared-document
+   session (`prepareBeamerDocument(source)`) that performs the
+   document-level passes once and renders any frame/step against the
+   prepared model, plus cheap per-frame step counts from the overlay scanner
+   so a sorter can badge steps without rendering.
+   *Done (2026-07-24):* `prepareBeamerDocument(source): PreparedBeamerDocument`
+   in `packages/core/src/beamer/render.ts` hoists scan, theme resolution,
+   page geometry, macro bindings, navigation topology, and the document-wide
+   theorem-occurrence pass (previously re-run inside every
+   `parseBeamerFrameBody`) into one shared context, caches frame body IRs
+   lazily, and exposes `frameStepCount` from the overlay scanner without
+   rendering. `renderBeamerFrame`/`renderBeamerFramePages` are now one-shot
+   wrappers over it; equivalence and error-behavior are covered by
+   `test/beamer-prepared-document.spec.ts`.
+2. **Block/inline fallback is not yet a placeholder.** Unsupported flow
+   nodes are currently dropped with `beamer-render-unsupported-flow-node`
+   warnings rather than rendered as the estimated-size source-snippet box
+   defined under Fallback Layers; only whole-body failure produces an
+   `unsupported` layout item. Sorter fallback cards and per-frame coverage
+   reporting depend on unsupported content being an item, not an omission.
+
+**Root generalization is a re-architecture pass, not a bolt-on.** The app
+encodes "a document is a list of tikzpictures" through ad-hoc mechanisms
+that must be replaced with explicit abstractions rather than extended:
+
+- Root ids are positional strings (`figure:N`) parsed with a regex in two
+  modules (`parser/shared.ts`, `cst-to-ast.ts`). Replace with a
+  discriminated root reference (kind + index/id) and one shared codec; no
+  string-shape parsing at call sites. Beamer frames (`frame:N`, nested
+  `frame:N:tikzpicture:M`) join the same namespace.
+- Per-root ephemeral state lives in five module-level maps with three
+  different key formats (viewport persistence, canvas context key, thumbnail
+  cache, carousel scroll, edit-analysis cache). Replace with one
+  `rootKey(documentId, rootRef)` helper and a per-root record.
+- `figures.length` acts as a UI-policy proxy in six call sites
+  (auto-selection, carousel visibility, dock auto-open, source dimming,
+  status bar, the repeated `activeFigureId ?? (figures.length > 1 ? null :
+  undefined)` idiom). Replace with explicit named policies on the root
+  inventory.
+- `EditorState` gains `documentKind` (`tikz` | `beamer`), detected from
+  `\documentclass{beamer}` — mode follows the file. `SessionSnapshot`'s
+  singular `scene`/`svg`/`editHandles` become a kind-tagged active-root
+  render result; `activeFigureId` becomes `activeRootId` with a workspace
+  persistence migration. TikZ behavior must be bit-identical after this
+  pass.
+
+**Decisions (2026-07-24):**
+
+- **CanvasPanel becomes root-kind-aware now**, rather than adding a
+  parallel read-only deck canvas: B3 canvas editing follows immediately, and
+  a temporary fork risks becoming permanent. Shared infrastructure
+  (viewport/zoom, SVG layer + DOM patcher, hit-testing, canvas text
+  editing) is factored so TikZ-specific interaction controllers are
+  isolated; the deck controller starts as read-only + step scrubber, and
+  the deck canvas is page-bounded with fit-to-view zoom.
+- **FigureNavigator is rewritten**, not extended. The replacement is a
+  root navigator over the document-root inventory with flexible layout
+  (horizontal strip / vertical strip / grid) used by both modes; section
+  headers, step badges, fallback/source cards, and drag-sorting are
+  deck-mode features of the same component. The thumbnail worker gains a
+  root-kind discriminant instead of unconditionally rendering tikz.
+
+Remaining scope: deck-mode compute path (active frame at selected step,
+prepared-document reuse, per-frame memoization), selected-step state,
+source panel caret↔frame sync and dimming over roots, diagnostics
+surfacing (unknown-theme chrome badge, font substitution), corpus decks as
+fixtures, and an open→no-op→byte-identical round-trip test.
 
 Exit: any corpus deck opens in the app; the sorter shows render order and
 fallback cards; existing TikZ editing remains unaffected.
@@ -1206,5 +1274,7 @@ overlay]`; double-click-to-edit works in place.
 - File watching / external-change reload semantics when Overleaf or a
   coauthor edits the deck concurrently (desktop: fs watch; web: FS Access
   API polling).
-- Where does deck-mode UI live in `packages/app` — a parallel `DeckPanel`
-  set, or document-kind switches inside existing panels?
+- ~~Where does deck-mode UI live in `packages/app` — a parallel `DeckPanel`
+  set, or document-kind switches inside existing panels?~~ Resolved
+  2026-07-24: root-kind-aware existing panels (see Phase B2.5 decisions);
+  no parallel panel set.
