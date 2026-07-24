@@ -7,6 +7,7 @@ export {
   type DocumentRootKind,
   type DocumentRootRef,
 } from "./document/root-id.js";
+export { detectDocumentKind, type DocumentKind } from "./document/kind.js";
 export * from "./coords/index.js";
 export type * from "./graphics/index.js";
 export { parseTikz, createIncrementalParseSession } from "./parser/index.js";

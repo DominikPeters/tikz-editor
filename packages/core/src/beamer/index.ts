@@ -12,7 +12,7 @@ export {
   renderBeamerFramePages,
   type PreparedBeamerDocument,
 } from "./render.js";
-export { scanBeamerDocument } from "./scan.js";
+export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
 export {
   activeBeamerTheoremDeclarations,
   resolveBeamerTheoremCounterSeed,

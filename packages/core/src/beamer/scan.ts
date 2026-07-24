@@ -985,6 +985,25 @@ function scanBeamerTheoremTemplate(
   return result;
 }
 
+/**
+ * Read the first \documentclass declaration without scanning document
+ * structure. Document-kind detection consumes this directly.
+ */
+export function scanBeamerDocumentClass(
+  source: string
+): BeamerDocumentClassModel | null {
+  const controls = scanBeamerControlSequences(source, {
+    from: 0,
+    to: source.length,
+  });
+  for (const command of controls) {
+    if (command.name === "documentclass") {
+      return readDocumentClass(source, command, source.length);
+    }
+  }
+  return null;
+}
+
 function readDocumentClass(
   source: string,
   command: BeamerControlSequence,
