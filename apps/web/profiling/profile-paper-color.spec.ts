@@ -37,7 +37,7 @@ type ProbeSnapshot = {
 };
 
 type DebugState = {
-  activeFigureId: string | null;
+  activeRootId: string | null;
   figureCount: number;
   sourcePanelVisible: boolean;
   matchingTargetPathCount: number;
@@ -252,7 +252,7 @@ async function readDebugState(
   page: import("@playwright/test").Page,
   target: PaperTarget
 ): Promise<DebugState> {
-  const activeFigureId = await readActiveFigureId(page);
+  const activeRootId = await readActiveFigureId(page);
   const figureCount = await readFigureCount(page);
   return await page.evaluate((params) => {
     const element = document.querySelector(
@@ -264,7 +264,7 @@ async function readDebugState(
       .filter(Boolean);
     const computingTextCount = allText.filter((text) => text.includes("Computing…")).length;
     return {
-      activeFigureId: params.activeFigureId,
+      activeRootId: params.activeRootId,
       figureCount: params.figureCount,
       sourcePanelVisible: document.querySelector(".cm-editor") != null,
       matchingTargetPathCount: document.querySelectorAll(
@@ -275,7 +275,7 @@ async function readDebugState(
       computingTextCount,
       statusBarText: document.querySelector("[data-testid='status-bar'], [class*='statusBar']")?.textContent?.trim() ?? null
     } satisfies DebugState;
-  }, { targetSourceId: target.targetSourceId, activeFigureId, figureCount });
+  }, { targetSourceId: target.targetSourceId, activeRootId, figureCount });
 }
 
 function printDebug(label: string, state: DebugState): void {
@@ -388,7 +388,7 @@ test("profile paper inspector color change for the magenta axis", async ({ page 
       `[paper-color] target=${JSON.stringify({
         paperPath: PAPER_PATH,
         targetLine: target.targetLine,
-        activeFigureId: target.activeFigureId,
+        activeRootId: target.activeRootId,
         activeFigureNumber: target.activeFigureNumber,
         targetSourceId: target.targetSourceId,
         nextColor: TARGET_NEXT_COLOR

@@ -187,11 +187,11 @@ export function useInspectorModel(args: {
     const s = useEditorStore.getState();
     return { source: s.source, snapshot: s.snapshot };
   });
-  const [{ activeDocumentId, activeFigureId, sourceRevision }, setAnalysisInputs] = useState(() => {
+  const [{ activeDocumentId, activeRootId, sourceRevision }, setAnalysisInputs] = useState(() => {
     const s = useEditorStore.getState();
     return {
       activeDocumentId: s.activeDocumentId,
-      activeFigureId: s.activeFigureId,
+      activeRootId: s.activeRootId,
       sourceRevision: s.sourceRevision
     };
   });
@@ -226,14 +226,14 @@ export function useInspectorModel(args: {
       setAnalysisInputs((current) => {
         if (
           current.activeDocumentId === s.activeDocumentId &&
-          current.activeFigureId === s.activeFigureId &&
+          current.activeRootId === s.activeRootId &&
           current.sourceRevision === s.sourceRevision
         ) {
           return current;
         }
         return {
           activeDocumentId: s.activeDocumentId,
-          activeFigureId: s.activeFigureId,
+          activeRootId: s.activeRootId,
           sourceRevision: s.sourceRevision
         };
       });
@@ -257,14 +257,14 @@ export function useInspectorModel(args: {
         documentId: activeDocumentId,
         sourceRevision,
         source,
-        activeFigureId,
+        activeRootId,
         snapshot,
         analysis: "shared",
         overrides: {
           colorAliases: snapshot.semanticResult?.colorAliases ?? null
         }
       }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
   const globalTransformValues = useMemo(
     () => resolveTransformInspectorValues(source, TIKZPICTURE_GLOBAL_TARGET_ID, parseOptions),
@@ -455,7 +455,7 @@ export function useInspectorModel(args: {
   const commandContext = useMemo(
     () => ({
       source,
-      activeFigureId,
+      activeRootId,
       parseOptions,
       snapshotSource: snapshot.source,
       scene: snapshot.scene,
@@ -463,7 +463,7 @@ export function useInspectorModel(args: {
       selectedElementIds: selectedSourceIdSet,
       dispatch
     }),
-    [activeFigureId, dispatch, parseOptions, selectedSourceIdSet, snapshot.editHandles, snapshot.scene, snapshot.source, source]
+    [activeRootId, dispatch, parseOptions, selectedSourceIdSet, snapshot.editHandles, snapshot.scene, snapshot.source, source]
   );
   const arrangeAvailability = useMemo(
     () => actionAvailability(commandContext),

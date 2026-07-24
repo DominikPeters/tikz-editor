@@ -16,7 +16,7 @@ type BuildEditParseOptionsBase = {
   documentId?: string | null;
   sourceRevision?: number | null;
   source: string;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   snapshot: SessionSnapshot;
   overrides?: EditParseOptionsOverrides;
 };
@@ -39,15 +39,15 @@ export function buildEditParseOptions(
  * the same figure/fingerprint recipe without mutating the analysis cache.
  */
 export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditParseOptions {
-  const activeFigureId =
-    input.activeFigureId ?? (input.snapshot.figures.length > 1 ? null : undefined);
+  const activeRootId =
+    input.activeRootId ?? (input.snapshot.figures.length > 1 ? null : undefined);
   const sharedAnalysis = input.analysis === "shared"
     ? {
         analysisView: getSharedEditAnalysisView({
           documentId: input.documentId ?? "",
           sourceRevision: input.sourceRevision ?? 0,
           source: input.source,
-          activeFigureId,
+          activeRootId,
           snapshot: input.snapshot
         }),
         analysisSession: getSharedEditAnalysisSession()
@@ -55,7 +55,7 @@ export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditPa
     : {};
 
   return {
-    activeFigureId,
+    activeFigureId: activeRootId,
     ...sharedAnalysis,
     ...input.overrides,
     sourceFingerprint: buildSnapshotEditSourceFingerprint({

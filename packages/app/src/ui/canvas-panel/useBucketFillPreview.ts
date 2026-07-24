@@ -20,7 +20,7 @@ export type UseBucketFillPreviewArgs = {
   source: string;
   snapshot: CanvasSnapshot;
   activeDocumentId: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   dispatch: CanvasDispatch;
   bucketPreviewSessionRef: MutableRefObject<BucketPreviewSession | null>;
 };
@@ -32,7 +32,7 @@ export function useBucketFillPreview({
   source,
   snapshot,
   activeDocumentId,
-  activeFigureId,
+  activeRootId,
   dispatch,
   bucketPreviewSessionRef
 }: UseBucketFillPreviewArgs): void {
@@ -40,7 +40,7 @@ export function useBucketFillPreview({
     const current = bucketPreviewSessionRef.current;
     if (
       current &&
-      (current.documentId !== activeDocumentId || current.figureId !== activeFigureId)
+      (current.documentId !== activeDocumentId || current.figureId !== activeRootId)
     ) {
       dispatch({
         type: "SET_SOURCE_TRANSIENT",
@@ -71,7 +71,7 @@ export function useBucketFillPreview({
       source: baseSource,
       elements: snapshot.scene?.elements ?? [],
       editHandles: snapshot.editHandles,
-      activeFigureId,
+      activeRootId,
       figureCount: snapshot.figures.length,
       propertyWriteMode: "preview"
     });
@@ -106,7 +106,7 @@ export function useBucketFillPreview({
     });
     bucketPreviewSessionRef.current = {
       documentId: activeDocumentId,
-      figureId: activeFigureId,
+      figureId: activeRootId,
       sourceId: hoveredElementId,
       colorToken: bucketFillColor,
       baseSource,
@@ -114,7 +114,7 @@ export function useBucketFillPreview({
     };
   }, [
     activeDocumentId,
-    activeFigureId,
+    activeRootId,
     bucketFillColor,
     bucketPreviewSessionRef,
     dispatch,

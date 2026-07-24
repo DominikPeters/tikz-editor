@@ -5,7 +5,7 @@ type MockRenderResult = {
     source: string;
     figure: { body: unknown[] };
     figures: Array<{ id: string }>;
-    activeFigureId: string | null;
+    activeRootId: string | null;
   };
   semantic: {
     editHandles: unknown[];
@@ -41,7 +41,7 @@ function makeRenderResult(source: string, label = "full"): MockRenderResult {
       source,
       figure: { body: [] },
       figures: [{ id: "figure:0" }],
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     },
     semantic: {
       editHandles: [],
@@ -205,7 +205,7 @@ describe("computeSnapshot edge orchestration", () => {
     const parseResult = {
       source: "next",
       figures: [{ id: "figure:0" }],
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       figure: {
         body: [
           {
@@ -301,11 +301,11 @@ describe("computeSnapshot edge orchestration", () => {
     vi.doMock("@tikz-editor/core/svg/index", () => ({ emitSvg }));
 
     const { computeSnapshot } = await import("../packages/app/src/compute.js");
-    await computeSnapshot({ id: "seed", source: "seed", activeFigureId: "figure:0" });
+    await computeSnapshot({ id: "seed", source: "seed", activeRootId: "figure:0" });
     const incremental = await computeSnapshot({
       id: "incremental",
       source: "next",
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       sourceRevision: 2,
       changedSourceIds: [" matrix:0 ", "scope:0", ""],
       patches: [
@@ -366,7 +366,7 @@ describe("computeSnapshot edge orchestration", () => {
     const parseResult = {
       source: "next",
       figures: [{ id: "figure:0" }],
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       figure: { body: [] }
     };
     const semanticResult = {

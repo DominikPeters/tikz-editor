@@ -44,7 +44,7 @@ export function buildFigureContext(
   if (figures.length <= 1) {
     return null;
   }
-  const activeId = snap.activeFigureId;
+  const activeId = snap.activeRootId;
   const activeIndex = figures.findIndex((f) => f.id === activeId);
   if (activeIndex < 0) {
     return null;

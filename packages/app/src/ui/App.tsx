@@ -189,7 +189,7 @@ function selectAllInEditableTarget(target: HTMLElement): boolean {
 type RepeatModalState = {
   documentId: string;
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   selectedSourceIds: string[];
   selectionWidthPt: number;
   selectionHeightPt: number;
@@ -224,7 +224,7 @@ export function App() {
     source,
     sourceRevision,
     snapshot,
-    activeFigureId,
+    activeRootId,
     selectedElementIds,
     activeDocumentId,
     activeDocumentFileRef,
@@ -240,7 +240,7 @@ export function App() {
     source: s.source,
     sourceRevision: s.sourceRevision,
     snapshot: s.snapshot,
-    activeFigureId: s.activeFigureId,
+    activeRootId: s.activeRootId,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
     activeDocumentFileRef: s.documents[s.activeDocumentId]?.fileRef ?? null,
@@ -294,7 +294,7 @@ export function App() {
   const [insertEquationDraft, setInsertEquationDraft] = useState("");
   const [compiledPictureSource, setCompiledPictureSource] = useState<{
     source: string;
-    activeFigureId: string | null;
+    activeRootId: string | null;
     fileRef: DocumentFileRef | null;
   } | null>(null);
   const [svgExportSvgResult, setSvgExportSvgResult] = useState<EmitSvgResult | null>(null);
@@ -598,10 +598,10 @@ export function App() {
   const handleShowCompiledPictureCommand = useCallback(() => {
     setCompiledPictureSource({
       source,
-      activeFigureId,
+      activeRootId,
       fileRef: activeDocumentFileRef
     });
-  }, [activeDocumentFileRef, activeFigureId, source]);
+  }, [activeDocumentFileRef, activeRootId, source]);
   const handleOpenSettingsCommand = useCallback(() => {
     setShowSettingsModal(true);
   }, []);
@@ -617,7 +617,7 @@ export function App() {
   const handleOpenRepeatCommand = useCallback(() => {
     const nextState = resolveRepeatModalState({
       source,
-      activeFigureId,
+      activeRootId,
       selectedElementIds,
       scene: snapshot.scene,
       documentId: activeDocumentId
@@ -625,7 +625,7 @@ export function App() {
     if (nextState) {
       setRepeatModalState(nextState);
     }
-  }, [activeDocumentId, activeFigureId, selectedElementIds, snapshot.scene, source]);
+  }, [activeDocumentId, activeRootId, selectedElementIds, snapshot.scene, source]);
   const handleFocusAssistantCommand = useCallback(() => {
     dispatch({ type: "SET_RIGHT_SIDEBAR_TAB", tab: "assistant" });
   }, [dispatch]);
@@ -885,7 +885,7 @@ export function App() {
       verticalStep: repeatModalState.verticalStepPt
     };
     const result = applyEditAction(repeatModalState.source, [], action, {
-      parseOptions: repeatModalState.activeFigureId == null ? {} : { activeFigureId: repeatModalState.activeFigureId }
+      parseOptions: repeatModalState.activeRootId == null ? {} : { activeFigureId: repeatModalState.activeRootId }
     });
     if (result.kind !== "success" && result.kind !== "partial") {
       setRepeatPreviewModel(null);
@@ -902,7 +902,7 @@ export function App() {
       id: crypto.randomUUID(),
       source: result.newSource,
       documentFileRef: activeDocumentFileRef,
-      activeFigureId: repeatModalState.activeFigureId
+      activeRootId: repeatModalState.activeRootId
     }).then((response) => {
       if (cancelled) {
         return;
@@ -1000,14 +1000,14 @@ export function App() {
       source,
       sourceRevision,
       documentFileRef: activeDocumentFileRef,
-      activeFigureId,
+      activeRootId,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger,
       renderViewBox
     });
-  }, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
@@ -1021,13 +1021,13 @@ export function App() {
       source,
       sourceRevision,
       documentFileRef: activeDocumentFileRef,
-      activeFigureId,
+      activeRootId,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger
     });
-  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeFigureId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, trigger, typingComputeDelay]);
+  }, typingComputeDelay, [activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, trigger, typingComputeDelay]);
 
   useEffect(() => {
     let prewarmTimer: number | null = null;
@@ -1070,7 +1070,7 @@ export function App() {
           kind: "prewarm",
           source: latest.source,
           documentFileRef: latest.documents[latest.activeDocumentId]?.fileRef ?? null,
-          activeFigureId: latest.activeFigureId,
+          activeRootId: latest.activeRootId,
           changedSourceIds: [hoveredElementId],
           trigger: "drag-element"
         });
@@ -1115,7 +1115,7 @@ export function App() {
       // figure_index is 1-indexed; omit or 0 to use the active figure.
       const figureIndexArg = typeof args.figure_index === "number" ? args.figure_index : 0;
       let targetSnapshot = snapshotForDoc;
-      let targetFigureId = snapshotForDoc.activeFigureId;
+      let targetFigureId = snapshotForDoc.activeRootId;
       if (figureIndexArg > 0 && snapshotForDoc.figures.length > 1) {
         const idx = figureIndexArg - 1;
         if (idx < 0 || idx >= snapshotForDoc.figures.length) {
@@ -1123,7 +1123,7 @@ export function App() {
           return;
         }
         const requestedFigId = snapshotForDoc.figures[idx].id;
-        if (requestedFigId !== snapshotForDoc.activeFigureId) {
+        if (requestedFigId !== snapshotForDoc.activeRootId) {
           try {
             const result = await computeSnapshot({
               id: crypto.randomUUID(),
@@ -1131,7 +1131,7 @@ export function App() {
               kind: "render",
               source: sourceForDoc,
               documentFileRef: doc.fileRef,
-              activeFigureId: requestedFigId,
+              activeRootId: requestedFigId,
               changedSourceIds: null,
               patches: null,
               trigger: "other"
@@ -1195,7 +1195,7 @@ export function App() {
             kind: "render",
             source: modifiedSource,
             documentFileRef: doc.fileRef,
-            activeFigureId: targetFigureId,
+            activeRootId: targetFigureId,
             changedSourceIds: null,
             patches: null,
             trigger: "other"
@@ -1523,7 +1523,7 @@ export function App() {
       },
       selectFirstFigure: () => {
         const firstFigureId = snapshotRef.current.figures[0]?.id ?? null;
-        dispatch({ type: "SET_ACTIVE_FIGURE", figureId: firstFigureId });
+        dispatch({ type: "SET_ACTIVE_ROOT", rootId: firstFigureId });
       },
       selectAllElements: () => {
         const ids = Array.from(
@@ -1559,7 +1559,7 @@ export function App() {
         return [...sourceIds];
       },
       getActiveFigureId: () => {
-        return useEditorStore.getState().activeFigureId;
+        return useEditorStore.getState().activeRootId;
       },
       getFigureCount: () => {
         return useEditorStore.getState().snapshot.figures.length;
@@ -2131,7 +2131,7 @@ export function App() {
         <Suspense fallback={null}>
           <TikzJaxModal
             source={compiledPictureSource.source}
-            activeFigureId={compiledPictureSource.activeFigureId}
+            activeRootId={compiledPictureSource.activeRootId}
             documentFileRef={compiledPictureSource.fileRef}
             onClose={() => { setCompiledPictureSource(null); }}
             latex={platform.latex}
@@ -2237,7 +2237,7 @@ export function App() {
                 verticalStep: repeatModalState.verticalStepPt
               };
               const precomputedResult = applyEditAction(repeatModalState.source, [], action, {
-                parseOptions: repeatModalState.activeFigureId == null ? {} : { activeFigureId: repeatModalState.activeFigureId }
+                parseOptions: repeatModalState.activeRootId == null ? {} : { activeFigureId: repeatModalState.activeRootId }
               });
               if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
                 return;
@@ -2327,7 +2327,7 @@ export function App() {
 
 function resolveRepeatModalState(input: {
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   selectedElementIds: ReadonlySet<string>;
   scene: SceneFigure | null;
   documentId: string;
@@ -2339,7 +2339,7 @@ function resolveRepeatModalState(input: {
   const eligibility = getRepeatSelectionEligibility(
     input.source,
     selectedSourceIds,
-    input.activeFigureId == null ? {} : { activeFigureId: input.activeFigureId }
+    input.activeRootId == null ? {} : { activeFigureId: input.activeRootId }
   );
   if (eligibility.kind !== "eligible") {
     return null;
@@ -2370,7 +2370,7 @@ function resolveRepeatModalState(input: {
   return {
     documentId: input.documentId,
     source: input.source,
-    activeFigureId: input.activeFigureId,
+    activeRootId: input.activeRootId,
     selectedSourceIds: eligibility.refs.map((ref) => ref.id),
     selectionWidthPt,
     selectionHeightPt,

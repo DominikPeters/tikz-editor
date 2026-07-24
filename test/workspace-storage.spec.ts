@@ -88,7 +88,7 @@ describe("workspace storage migration", () => {
 
     const seed = loadWorkspaceSeed();
     expect(seed).not.toBeNull();
-    expect(seed?.workspaceVersion).toBe(3);
+    expect(seed?.workspaceVersion).toBe(4);
     expect(seed?.documents[0]?.fileRef?.kind).toBe("file");
     expect(seed?.documents[0]?.fileRef?.name).toBe("old.tex");
     expect(seed?.documents[0]?.assistantThreadId).toBe("thr_123");
@@ -134,7 +134,7 @@ describe("workspace storage migration", () => {
     expect(seed?.documents[0]).toMatchObject({
       id: "doc-1",
       title: "Untitled",
-      activeFigureId: null,
+      activeRootId: null,
       savedSource: "\\draw (0,0)--(1,1);",
       diskRevision: null,
       lastKnownDiskSource: null,
@@ -182,13 +182,13 @@ describe("workspace storage migration", () => {
 
     const seed = loadWorkspaceSeed();
     expect(seed).toMatchObject({
-      workspaceVersion: 3,
+      workspaceVersion: 4,
       tabOrder: ["doc-1"],
       activeDocumentId: "doc-1",
       recentDocumentIds: []
     });
     expect(seed?.documents[0]).toMatchObject({
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       fileRef: {
         kind: "file",
         name: "legacy.tex",
@@ -199,6 +199,27 @@ describe("workspace storage migration", () => {
       lastKnownDiskSource: "\\draw (0,0)--(1,1);",
       externalChangeStatus: "changed"
     });
+  });
+
+  it("migrates v3 activeFigureId payloads to activeRootId", () => {
+    setupMemoryPersistence(JSON.stringify({
+      workspaceVersion: 3,
+      documents: [
+        {
+          id: "doc-1",
+          title: "Doc",
+          source: "\\begin{tikzpicture}\\end{tikzpicture}",
+          activeFigureId: "figure:1"
+        }
+      ],
+      tabOrder: ["doc-1"],
+      activeDocumentId: "doc-1",
+      recentDocumentIds: ["doc-1"]
+    }));
+
+    const seed = loadWorkspaceSeed();
+    expect(seed?.workspaceVersion).toBe(4);
+    expect(seed?.documents[0]?.activeRootId).toBe("figure:1");
   });
 
   it("returns null without logging when console info is unavailable", () => {
@@ -225,7 +246,7 @@ describe("workspace storage migration", () => {
           id: "doc-1",
           title: "Doc",
           source: "\\draw (0,0)--(1,1);",
-          activeFigureId: null,
+          activeRootId: null,
           savedSource: "\\draw (0,0)--(1,1);",
           fileRef: {
             kind: "browser-file",
@@ -264,7 +285,7 @@ describe("workspace storage migration", () => {
           id: "doc-1",
           title: "Doc",
           source: "\\draw (0,0)--(1,1);",
-          activeFigureId: "figure:0",
+          activeRootId: "figure:0",
           savedSource: "\\draw (0,0)--(1,1);",
           fileRef: null,
           diskRevision: undefined,
@@ -285,7 +306,7 @@ describe("workspace storage migration", () => {
     expect(saved.documents).toHaveLength(1);
     expect(saved.documents[0]).toMatchObject({
       id: "doc-1",
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       diskRevision: null,
       lastKnownDiskSource: null,
       externalChangeStatus: "none"

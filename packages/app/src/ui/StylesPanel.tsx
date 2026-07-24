@@ -59,7 +59,7 @@ const ALL_KEY_SUGGESTIONS: CustomDropdownItem<string>[] = (() => {
 export function StylesPanel() {
   const selectedIds = useEditorStore((s) => s.selectedElementIds);
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const snapshot = useEditorStore((s) => s.snapshot);
   const source = useEditorStore((s) => s.source);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
@@ -87,11 +87,11 @@ export function StylesPanel() {
         documentId: activeDocumentId,
         sourceRevision,
         source,
-        activeFigureId,
+        activeRootId,
         snapshot,
         analysis: "shared"
       }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
 
   const models = useMemo(

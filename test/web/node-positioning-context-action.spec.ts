@@ -134,7 +134,7 @@ function renderSnapshot(source: string): CanvasSnapshot {
     source,
     revision: 0,
     figures: rendered.parse.figures,
-    activeFigureId: null,
+    activeRootId: null,
     editHandles: rendered.semantic.editHandles,
     scene: rendered.semantic.scene,
     svg: rendered.svg,

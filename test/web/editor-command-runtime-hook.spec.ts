@@ -11,7 +11,7 @@ import type { CanvasDragKind, EditorAction } from "../../packages/app/src/store/
 
 type MockEditorStoreState = {
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   sourceRevision: number;
   snapshot: SessionSnapshot;
   toolMode: "select";
@@ -91,7 +91,7 @@ function makeSnapshot(source: string): SessionSnapshot {
     source,
     revision: 1,
     figures: rendered.parse.figures,
-    activeFigureId: rendered.parse.activeFigureId,
+    activeRootId: rendered.parse.activeFigureId,
     editHandles: rendered.semantic.editHandles,
     scene: rendered.semantic.scene,
     svg: rendered.svg,
@@ -119,7 +119,7 @@ describe("useEditorCommandRuntime", () => {
     const snapshot = makeSnapshot(SOURCE);
     Object.assign(mocks.editorState, {
       source: SOURCE,
-      activeFigureId: snapshot.activeFigureId,
+      activeRootId: snapshot.activeRootId,
       sourceRevision: 1,
       snapshot,
       toolMode: "select",

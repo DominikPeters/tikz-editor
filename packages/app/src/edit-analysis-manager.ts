@@ -8,7 +8,7 @@ import {
 export type EditAnalysisKey = {
   documentId: string;
   sourceRevision: number;
-  activeFigureId: string | null | undefined;
+  activeRootId: string | null | undefined;
 };
 
 type CachedEntry = {
@@ -23,7 +23,7 @@ export function getSharedEditAnalysisView(params: {
   documentId: string;
   sourceRevision: number;
   source: string;
-  activeFigureId: string | null | undefined;
+  activeRootId: string | null | undefined;
   snapshot: SessionSnapshot;
 }): EditAnalysisView {
   const analysisSource = params.snapshot.source === params.source
@@ -32,12 +32,12 @@ export function getSharedEditAnalysisView(params: {
   const key: EditAnalysisKey = {
     documentId: params.documentId,
     sourceRevision: params.sourceRevision,
-    activeFigureId: params.activeFigureId
+    activeRootId: params.activeRootId
   };
 
   if (
     cachedEntry?.key.documentId !== key.documentId ||
-    cachedEntry.key.activeFigureId !== key.activeFigureId
+    cachedEntry.key.activeRootId !== key.activeRootId
   ) {
     cachedEntry = {
       key,
@@ -52,17 +52,17 @@ export function getSharedEditAnalysisView(params: {
   const snapshotParseResult = params.snapshot.parseResult;
   if (
     snapshotParseResult != null &&
-    snapshotParseResult.activeFigureId === params.activeFigureId &&
+    snapshotParseResult.activeFigureId === params.activeRootId &&
     cachedEntry.primedSnapshotRevision !== params.snapshot.revision
   ) {
     session.primeFromParse(snapshotParseResult, params.snapshot.source, {
-      activeFigureId: params.activeFigureId ?? snapshotParseResult.activeFigureId
+      activeFigureId: params.activeRootId ?? snapshotParseResult.activeFigureId
     });
     cachedEntry.primedSnapshotRevision = params.snapshot.revision;
   }
 
   return session.ensure(analysisSource, {
-    activeFigureId: params.activeFigureId
+    activeFigureId: params.activeRootId
   });
 }
 

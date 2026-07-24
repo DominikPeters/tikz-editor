@@ -58,7 +58,7 @@ export type UseCanvasElementInteractionsArgs = {
   scopeOverlay: ScopeOverlayIndex;
   focusedScopeId: string | null;
   applyActionWithFeedback: ApplyActionWithFeedbackFn;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   parseOptions: CanvasEditParseOptions;
   onNodePositionTargetPick?: (targetId: string) => boolean;
 };
@@ -98,7 +98,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     scopeOverlay,
     focusedScopeId,
     applyActionWithFeedback,
-    activeFigureId,
+    activeRootId,
     parseOptions,
     onNodePositionTargetPick
   } = args;
@@ -583,8 +583,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         source,
         sourceId,
         parseOptions ?? {
-          activeFigureId:
-            activeFigureId ?? (snapshot.figures.length > 1 ? null : undefined)
+          activeRootId:
+            activeRootId ?? (snapshot.figures.length > 1 ? null : undefined)
         }
       );
       if (resolved.kind !== "eligible") return false;
@@ -608,7 +608,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       });
       return true;
     },
-    [svgResult, snapshot, source, parseOptions, activeFigureId, interactionSvgRef, canvasTransform.scale, applyActionWithFeedback]
+    [svgResult, snapshot, source, parseOptions, activeRootId, interactionSvgRef, canvasTransform.scale, applyActionWithFeedback]
   );
 
   const onElementDoubleClick = useCallback(

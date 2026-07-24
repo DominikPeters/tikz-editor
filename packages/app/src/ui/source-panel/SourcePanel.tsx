@@ -719,7 +719,7 @@ export function SourcePanel() {
     sourceRevision,
     lastEditPatches,
     lastEditPatchBaseRevision,
-    activeFigureId,
+    activeRootId,
     snapshot,
     activeCanvasDragKind,
     activeCanvasTextEditSourceId,
@@ -732,7 +732,7 @@ export function SourcePanel() {
     sourceRevision: s.sourceRevision,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
-    activeFigureId: s.activeFigureId,
+    activeRootId: s.activeRootId,
     snapshot: s.snapshot,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeCanvasTextEditSourceId: s.activeCanvasTextEditSourceId,
@@ -771,15 +771,15 @@ export function SourcePanel() {
   const symbolsRef = useRef<DocumentSymbols>(EMPTY_SYMBOLS);
   const selectedElementIdsRef = useRef(selectedElementIds);
   const figuresRef = useRef(figures);
-  const activeFigureIdRef = useRef(activeFigureId);
+  const activeRootIdRef = useRef(activeRootId);
   const [activeColorPicker, setActiveColorPicker] = useState<ActiveColorPickerSession | null>(null);
   const projectNamedColorSwatches = useProjectNamedColorSwatches();
   const figureOverlaySignature = useMemo(
     () =>
       figures.length < 2
-        ? `${activeFigureId ?? ""}:single:${source.length}`
-        : `${activeFigureId ?? ""}:${source.length}:${figures.map((figure) => `${figure.id}:${figure.span.from}:${figure.span.to}`).join("|")}`,
-    [activeFigureId, figures, source.length]
+        ? `${activeRootId ?? ""}:single:${source.length}`
+        : `${activeRootId ?? ""}:${source.length}:${figures.map((figure) => `${figure.id}:${figure.span.from}:${figure.span.to}`).join("|")}`,
+    [activeRootId, figures, source.length]
   );
 
   useEffect(() => {
@@ -788,8 +788,8 @@ export function SourcePanel() {
 
   useEffect(() => {
     figuresRef.current = figures;
-    activeFigureIdRef.current = activeFigureId;
-  }, [activeFigureId, figures]);
+    activeRootIdRef.current = activeRootId;
+  }, [activeRootId, figures]);
 
   useEffect(() => {
     spanIndexRef.current = buildSourceSpanIndex(snapshot.scene?.elements ?? [], snapshot.parseResult?.figure.body);
@@ -858,8 +858,8 @@ export function SourcePanel() {
       if (update.view.hasFocus) {
         const head = clamp(update.state.selection.main.head, 0, update.state.doc.length);
         const targetFigure = figuresRef.current.find((figure) => head >= figure.span.from && head <= figure.span.to) ?? null;
-        if (targetFigure && targetFigure.id !== activeFigureIdRef.current) {
-          dispatch({ type: "SET_ACTIVE_FIGURE", figureId: targetFigure.id });
+        if (targetFigure && targetFigure.id !== activeRootIdRef.current) {
+          dispatch({ type: "SET_ACTIVE_ROOT", rootId: targetFigure.id });
         }
       }
 
@@ -1106,25 +1106,25 @@ export function SourcePanel() {
     const decorations = buildFigureOverlayDecorations({
       docLength: view.state.doc.length,
       figures,
-      activeFigureId
+      activeRootId
     });
     view.dispatch({ effects: setFigureOverlay.of(decorations) });
-  }, [activeFigureId, figureOverlaySignature, figures]);
+  }, [activeRootId, figureOverlaySignature, figures]);
 
-  const prevActiveFigureIdRef = useRef(activeFigureId);
+  const prevActiveFigureIdRef = useRef(activeRootId);
   useEffect(() => {
     const view = viewRef.current;
     if (!view) {
       return;
     }
-    const activeFigure = figures.find((figure) => figure.id === activeFigureId);
+    const activeFigure = figures.find((figure) => figure.id === activeRootId);
     if (!activeFigure) {
       return;
     }
     // Only scroll to figure top when the active figure actually changes,
     // not on every reparse (which updates the `figures` array reference).
-    const figureChanged = prevActiveFigureIdRef.current !== activeFigureId;
-    prevActiveFigureIdRef.current = activeFigureId;
+    const figureChanged = prevActiveFigureIdRef.current !== activeRootId;
+    prevActiveFigureIdRef.current = activeRootId;
     if (!figureChanged) {
       return;
     }
@@ -1148,7 +1148,7 @@ export function SourcePanel() {
     view.dispatch({
       effects: EditorView.scrollIntoView(anchor, { y: "start", yMargin: 8 })
     });
-  }, [activeFigureId, figures]);
+  }, [activeRootId, figures]);
 
   useEffect(() => {
     if (!activeColorPicker) {
@@ -1391,9 +1391,9 @@ type FigureOverlayFigure = {
 function buildFigureOverlayDecorations(params: {
   docLength: number;
   figures: readonly FigureOverlayFigure[];
-  activeFigureId: string | null;
+  activeRootId: string | null;
 }): DecorationSet {
-  const { docLength, figures, activeFigureId } = params;
+  const { docLength, figures, activeRootId } = params;
   if (figures.length < 2) {
     return Decoration.none;
   }
@@ -1414,7 +1414,7 @@ function buildFigureOverlayDecorations(params: {
     return Decoration.none;
   }
   const decorations: Range<Decoration>[] = [];
-  const activeFigure = activeFigureId ? normalizedFigures.find((figure) => figure.id === activeFigureId) : null;
+  const activeFigure = activeRootId ? normalizedFigures.find((figure) => figure.id === activeRootId) : null;
   if (activeFigure) {
     if (activeFigure.span.from > 0) {
       decorations.push(Decoration.mark({ class: "cm-figure-dimmed" }).range(0, activeFigure.span.from));

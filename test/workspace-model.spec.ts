@@ -20,7 +20,7 @@ describe("workspace model", () => {
     expect(state.documents[state.activeDocumentId]).toBeDefined();
     expect(state.source).toBe(state.documents[state.activeDocumentId]?.source);
     expect(state.source).toBe(DEFAULT_SOURCE);
-    expect(state.workspaceVersion).toBe(3);
+    expect(state.workspaceVersion).toBe(4);
     expect(state.recentDocumentIds).toEqual([state.activeDocumentId]);
   });
 

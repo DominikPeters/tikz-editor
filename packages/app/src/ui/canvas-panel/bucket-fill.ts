@@ -24,7 +24,7 @@ export function resolveBucketFillEdit(args: {
   source: string;
   elements: readonly SceneElement[];
   editHandles: InspectorSnapshot["editHandles"];
-  activeFigureId: string | null;
+  activeRootId: string | null;
   figureCount: number;
   propertyWriteMode?: "commit" | "preview";
 }): BucketFillEditResolution {
@@ -34,7 +34,7 @@ export function resolveBucketFillEdit(args: {
     source,
     elements,
     editHandles,
-    activeFigureId,
+    activeRootId,
     figureCount,
     propertyWriteMode = "commit"
   } = args;
@@ -49,7 +49,7 @@ export function resolveBucketFillEdit(args: {
     editHandles,
     parseOptions: {
       activeFigureId:
-        activeFigureId ?? (figureCount > 1 ? null : undefined)
+        activeRootId ?? (figureCount > 1 ? null : undefined)
     }
   });
   const fillProperty = findFillColorProperty(descriptor.sections.flatMap((section) => section.properties));
@@ -69,7 +69,7 @@ export function resolveBucketFillEdit(args: {
   const result = applyEditAction(source, editHandles ?? [], action, {
     parseOptions: {
       activeFigureId:
-        activeFigureId ?? (figureCount > 1 ? null : undefined),
+        activeRootId ?? (figureCount > 1 ? null : undefined),
       propertyWriteMode
     }
   });

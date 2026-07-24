@@ -9,11 +9,17 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import { makeEmptySnapshot } from "../compute";
+import { detectDocumentKind, type DocumentKind } from "@tikz-editor/core";
 
 export const DEFAULT_SOURCE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;
 
-export const WORKSPACE_VERSION = 3;
+/**
+ * Version 4 renames the per-document `activeFigureId` to `activeRootId`
+ * (document roots: tikz figures and beamer frames share one namespace).
+ * The stored id values are unchanged.
+ */
+export const WORKSPACE_VERSION = 4;
 
 export const DEFAULT_CANVAS_TRANSFORM: CanvasTransform = {
   translateX: 0,
@@ -25,7 +31,7 @@ export type WorkspaceSeedDocument = {
   id: string;
   title: string;
   source: string;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   savedSource?: string;
   fileRef?: DocumentFileRef | null;
   diskRevision?: FileRevision | null;
@@ -66,7 +72,7 @@ function hasDocument(documents: Record<string, DocumentSession>, documentId: str
 export function createDocumentSession(params: {
   source: string;
   title?: string;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   fileRef?: DocumentFileRef | null;
   diskRevision?: FileRevision | null;
   lastKnownDiskSource?: string | null;
@@ -83,8 +89,8 @@ export function createDocumentSession(params: {
     title,
     source: params.source,
     sourceRevision: 0,
-    activeFigureId: params.activeFigureId ?? null,
-    hasInitializedFigureSelection: false,
+    activeRootId: params.activeRootId ?? null,
+    hasInitializedRootSelection: false,
     snapshot: makeEmptySnapshot(params.source),
     pendingRequestId: null,
     lastEditChangedSourceIds: null,
@@ -139,7 +145,7 @@ export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePer
     const doc = createDocumentSession({
       source: raw.source,
       title: raw.title,
-      activeFigureId: raw.activeFigureId ?? null,
+      activeRootId: raw.activeRootId ?? null,
       fileRef: raw.fileRef ?? null,
       diskRevision: raw.diskRevision ?? null,
       lastKnownDiskSource: raw.lastKnownDiskSource ?? null,
@@ -194,13 +200,28 @@ function normalizeWorkspaceActiveDocument(workspace: WorkspacePersistedState): W
   };
 }
 
+/**
+ * Mode follows the file: the document kind is derived from the source on
+ * every projection, memoized on the source string so repeated projections
+ * of an unchanged document are free.
+ */
+let documentKindCache: { source: string; kind: DocumentKind } | null = null;
+
+export function documentKindForSource(source: string): DocumentKind {
+  if (documentKindCache?.source !== source) {
+    documentKindCache = { source, kind: detectDocumentKind(source) };
+  }
+  return documentKindCache.kind;
+}
+
 export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEphemeralState): EditorState {
   const normalizedWorkspace = normalizeWorkspaceActiveDocument(workspace);
   const active = normalizedWorkspace.documents[normalizedWorkspace.activeDocumentId];
   return {
     source: active.source,
     sourceRevision: active.sourceRevision,
-    activeFigureId: active.activeFigureId,
+    documentKind: documentKindForSource(active.source),
+    activeRootId: active.activeRootId,
     snapshot: active.snapshot,
     pendingRequestId: active.pendingRequestId,
     lastEditChangedSourceIds: active.lastEditChangedSourceIds,

@@ -66,7 +66,7 @@ type Phase =
 
 type TikzJaxModalProps = {
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   documentFileRef?: DocumentFileRef | null;
   onClose: () => void;
   latex?: PlatformLatex;
@@ -76,7 +76,7 @@ type TikzJaxModalProps = {
 
 export function TikzJaxModal({
   source,
-  activeFigureId,
+  activeRootId,
   documentFileRef = null,
   onClose,
   latex,
@@ -130,7 +130,7 @@ export function TikzJaxModal({
       setPhase("compiling-native");
       const latexDocument = createStandaloneLatexExportArtifact({
         source,
-        activeFigureId,
+        activeFigureId: activeRootId,
         documentClassOptions: ["dvisvgm", "border=2pt"]
       }).text;
       const readLastCompileLog = latex.readLastCompileLog;
@@ -183,7 +183,7 @@ export function TikzJaxModal({
         window.clearInterval(pollId);
       }
     };
-  }, [activeFigureId, documentFileRef, latex, source]);
+  }, [activeRootId, documentFileRef, latex, source]);
 
   // TikZJax fallback path
   useEffect(() => {

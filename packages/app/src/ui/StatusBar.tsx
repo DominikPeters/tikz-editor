@@ -22,7 +22,7 @@ const MAX_ZOOM_PERCENT = 400;
 
 export function StatusBar() {
   const snapshot = useEditorStore((s) => s.snapshot);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const currentDocument = useEditorStore((s) => s.documents[s.activeDocumentId] ?? null);
   const canvasTransform = useEditorStore((s) => s.canvasTransform);
   const canvasFitToContentScale = useEditorStore((s) => s.canvasFitToContentScale);
@@ -69,7 +69,7 @@ export function StatusBar() {
   const elementCount = snapshot.scene?.elements.length ?? 0;
   const selectedCount = selectedIds.size;
   const figures = snapshot.figures;
-  const activeFigureIndex = activeFigureId ? figures.findIndex((figure) => figure.id === activeFigureId) : -1;
+  const activeFigureIndex = activeRootId ? figures.findIndex((figure) => figure.id === activeRootId) : -1;
   const showFigureContext = figures.length > 1 && activeFigureIndex >= 0;
   const zoomPercent = Math.round((canvasTransform.scale / ACTUAL_SIZE_SCALE) * 100);
   const fitToContentDoubleZoomPercent = canvasFitToContentScale == null

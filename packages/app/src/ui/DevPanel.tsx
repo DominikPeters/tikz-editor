@@ -111,7 +111,7 @@ export function DevPanel() {
           <div className={css.content}>
             {tab === "overview" ? (
               <OverviewTab
-                activeFigureId={snapshot.activeFigureId}
+                activeRootId={snapshot.activeRootId}
                 diagnostics={diagnostics}
                 dependencySummary={dependencySummary}
                 featureSummary={featureSummary}
@@ -176,7 +176,7 @@ export function DevPanel() {
 }
 
 function OverviewTab({
-  activeFigureId,
+  activeRootId,
   diagnostics,
   dependencySummary,
   featureSummary,
@@ -188,7 +188,7 @@ function OverviewTab({
   snapshot,
   toolMode
 }: {
-  activeFigureId: string | null;
+  activeRootId: string | null;
   diagnostics: readonly DiagnosticRow[];
   dependencySummary: DependencySummary;
   featureSummary: FeatureSummary;
@@ -206,7 +206,7 @@ function OverviewTab({
     <div className={css.stack}>
       <section className={css.summaryGrid} aria-label="Developer panel summary">
         <Metric label="Diagnostics" value={`${errorCount} errors / ${warningCount} warnings`} tone={errorCount > 0 ? "bad" : warningCount > 0 ? "warn" : "good"} />
-        <Metric label="Figures" value={String(figureCount)} detail={activeFigureId ?? "No active figure"} />
+        <Metric label="Figures" value={String(figureCount)} detail={activeRootId ?? "No active figure"} />
         <Metric label="Scene" value={`${sceneElementCount} elements`} detail={`${snapshot.editHandles.length} edit handles`} />
         <Metric label="Selection" value={`${selectedCount} selected`} detail={`Tool: ${toolMode}`} />
         <Metric label="Features" value={`${featureSummary.supported.length} supported`} detail={`${featureSummary.unsupported.length} unsupported`} tone={featureSummary.unsupported.length > 0 ? "warn" : "neutral"} />
@@ -598,7 +598,7 @@ function PipelineTab({
           <pre className={css.json}>{stringifyDebug({
             revision: snapshot.revision,
             source: snapshot.source.slice(0, 500) + (snapshot.source.length > 500 ? "..." : ""),
-            activeFigureId: snapshot.activeFigureId,
+            activeRootId: snapshot.activeRootId,
             figures: snapshot.figures,
             editHandles: snapshot.editHandles.length,
             sceneElements: snapshot.scene?.elements.length ?? 0,

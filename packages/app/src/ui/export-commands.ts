@@ -44,12 +44,12 @@ function reportExportFailure(message: string, error?: unknown): false {
 
 export async function exportStandaloneLatexDownload(
   source: string,
-  activeFigureId: string | null,
+  activeRootId: string | null,
   options: { fileName?: string } = {}
 ): Promise<boolean> {
   const artifact = createStandaloneLatexExportArtifact({
     source,
-    activeFigureId,
+    activeFigureId: activeRootId,
     fileName: options.fileName
   });
   if (!artifact.complete) {

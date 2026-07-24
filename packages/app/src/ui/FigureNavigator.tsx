@@ -9,7 +9,7 @@ export function FigureNavigator() {
   const snapshot = useEditorStore((s) => s.snapshot);
   const source = snapshot.source;
   const figures = snapshot.figures;
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
   const dispatch = useEditorStore((s) => s.dispatch);
   const stripRef = useRef<HTMLDivElement | null>(null);
@@ -17,8 +17,8 @@ export function FigureNavigator() {
   const [visibleFigureIds, setVisibleFigureIds] = useState<string[]>([]);
 
   const activeIndex = useMemo(
-    () => (activeFigureId ? figures.findIndex((figure) => figure.id === activeFigureId) : -1),
-    [activeFigureId, figures]
+    () => (activeRootId ? figures.findIndex((figure) => figure.id === activeRootId) : -1),
+    [activeRootId, figures]
   );
   useEffect(() => {
     const strip = stripRef.current;
@@ -120,7 +120,7 @@ export function FigureNavigator() {
     if (!figure) {
       return;
     }
-    dispatch({ type: "SET_ACTIVE_FIGURE", figureId: figure.id });
+    dispatch({ type: "SET_ACTIVE_ROOT", rootId: figure.id });
   };
 
   return (
@@ -137,13 +137,13 @@ export function FigureNavigator() {
       <div className={css.strip} ref={stripRef} data-testid="figure-navigator-strip">
         {figures.map((figure, index) => {
           const thumbnail = thumbnails.get(figure.id);
-          const isActive = figure.id === activeFigureId;
+          const isActive = figure.id === activeRootId;
           return (
             <button
               type="button"
               key={figure.id}
               className={[css.thumb, isActive ? css.thumbActive : ""].filter(Boolean).join(" ")}
-              onClick={() => { dispatch({ type: "SET_ACTIVE_FIGURE", figureId: figure.id }); }}
+              onClick={() => { dispatch({ type: "SET_ACTIVE_ROOT", rootId: figure.id }); }}
               title={`Figure ${index + 1}`}
               aria-label={`Figure ${index + 1}`}
               ref={(node) => {

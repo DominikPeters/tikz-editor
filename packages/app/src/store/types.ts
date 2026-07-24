@@ -8,6 +8,7 @@ import type {
   AssistantThreadState,
   AssistantTurnStatus
 } from "../platform/types";
+import type { DocumentKind } from "@tikz-editor/core";
 
 export type ToolMode =
   | "select"
@@ -118,8 +119,8 @@ export type DocumentSession = {
   title: string;
   source: string;
   sourceRevision: number;
-  activeFigureId: string | null;
-  hasInitializedFigureSelection: boolean;
+  activeRootId: string | null;
+  hasInitializedRootSelection: boolean;
   snapshot: SessionSnapshot;
   pendingRequestId: string | null;
   lastEditChangedSourceIds: string[] | null;
@@ -220,7 +221,9 @@ export type EditorState = {
   // ── document slice ──────────────────────────────────────────────────────────
   source: string;
   sourceRevision: number;
-  activeFigureId: string | null;
+  /** Derived from the source (`\documentclass{beamer}` selects deck mode). */
+  documentKind: DocumentKind;
+  activeRootId: string | null;
   snapshot: SessionSnapshot;
   /** Request ID of the most recently triggered compute; null if up-to-date. */
   pendingRequestId: string | null;
@@ -307,7 +310,7 @@ export type EditorState = {
 export type EditorAction =
   // Document
   | { type: "CODE_EDITED"; source: string }
-  | { type: "SET_ACTIVE_FIGURE"; figureId: string | null; documentId?: string }
+  | { type: "SET_ACTIVE_ROOT"; rootId: string | null; documentId?: string }
   | { type: "NEW_DOCUMENT"; source?: string; title?: string }
   | { type: "SWITCH_DOCUMENT"; documentId: string }
   | { type: "CLOSE_DOCUMENT"; documentId?: string }

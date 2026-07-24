@@ -133,6 +133,18 @@ describe("editorReducer – CODE_EDITED", () => {
     expect(next).toBe(initial); // same reference = no change
   });
 
+  it("derives the document kind from the source", () => {
+    const initial = makeInitialState();
+    expect(initial.documentKind).toBe("tikz");
+    const deck = editorReducer(initial, {
+      type: "CODE_EDITED",
+      source: "\\documentclass{beamer}\n\\begin{document}\n\\begin{frame}{A}\n\\end{frame}\n\\end{document}"
+    });
+    expect(deck.documentKind).toBe("beamer");
+    const back = editorReducer(deck, { type: "CODE_EDITED", source: DEFAULT_SOURCE });
+    expect(back.documentKind).toBe("tikz");
+  });
+
   it("records changed source ids and patches while source scrubbing is active", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1.5, -0.5);
@@ -225,27 +237,27 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot("source"),
       source: "source",
       figures: [figureA, figureB],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterFirst = applyActions([
       { type: "COMPUTE_REQUESTED", requestId: "req-1" },
       { type: "SNAPSHOT_READY", requestId: "req-1", snapshot: firstSnapshot }
     ]);
-    expect(afterFirst.activeFigureId).toBe("figure:a");
+    expect(afterFirst.activeRootId).toBe("figure:a");
 
-    const switched = editorReducer(afterFirst, { type: "SET_ACTIVE_FIGURE", figureId: "figure:b" });
-    expect(switched.activeFigureId).toBe("figure:b");
+    const switched = editorReducer(afterFirst, { type: "SET_ACTIVE_ROOT", rootId: "figure:b" });
+    expect(switched.activeRootId).toBe("figure:b");
 
     const secondSnapshot = {
       ...firstSnapshot,
       figures: [figureA],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterRemoval = applyActions([
       { type: "COMPUTE_REQUESTED", requestId: "req-2" },
       { type: "SNAPSHOT_READY", requestId: "req-2", snapshot: secondSnapshot }
     ], switched);
-    expect(afterRemoval.activeFigureId).toBeNull();
+    expect(afterRemoval.activeRootId).toBeNull();
   });
 
   it("auto-selects the first figure when source changes from no figures to one figure", () => {
@@ -261,20 +273,20 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot(""),
       source: "",
       figures: [],
-      activeFigureId: null
+      activeRootId: null
     };
     const emptyState = applyActions([
       { type: "CODE_EDITED", source: "" },
       { type: "COMPUTE_REQUESTED", requestId: "req-empty" },
       { type: "SNAPSHOT_READY", requestId: "req-empty", snapshot: emptySnapshot }
     ]);
-    expect(emptyState.activeFigureId).toBeNull();
+    expect(emptyState.activeRootId).toBeNull();
 
     const lineSnapshot = {
       ...makeEmptySnapshot("source"),
       source: "source",
       figures: [figure],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterLine = applyActions([
       { type: "CODE_EDITED", source: "source" },
@@ -282,7 +294,7 @@ describe("editorReducer – compute lifecycle", () => {
       { type: "SNAPSHOT_READY", requestId: "req-line", snapshot: lineSnapshot }
     ], emptyState);
 
-    expect(afterLine.activeFigureId).toBe("figure:0");
+    expect(afterLine.activeRootId).toBe("figure:0");
   });
 
   it("auto-selects first figure when figure count grows and the previous active figure became invalid", () => {
@@ -315,19 +327,19 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot("source-1"),
       source: "source-1",
       figures: [figure0],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterFirst = applyActions([
       { type: "COMPUTE_REQUESTED", requestId: "req-1" },
       { type: "SNAPSHOT_READY", requestId: "req-1", snapshot: firstSnapshot }
     ]);
-    expect(afterFirst.activeFigureId).toBe("figure:0");
+    expect(afterFirst.activeRootId).toBe("figure:0");
 
     const secondSnapshot = {
       ...makeEmptySnapshot("source-2"),
       source: "source-2",
       figures: [figureA, figureB],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterSecond = applyActions([
       { type: "CODE_EDITED", source: "source-2" },
@@ -335,7 +347,7 @@ describe("editorReducer – compute lifecycle", () => {
       { type: "SNAPSHOT_READY", requestId: "req-2", snapshot: secondSnapshot }
     ], afterFirst);
 
-    expect(afterSecond.activeFigureId).toBe("figure:a");
+    expect(afterSecond.activeRootId).toBe("figure:a");
   });
 });
 
@@ -1140,7 +1152,7 @@ describe("editorReducer – branch edge cases", () => {
     expect(editorReducer(initial, { type: "SWITCH_DOCUMENT", documentId: "missing" })).toBe(initial);
     expect(editorReducer(initial, { type: "CLOSE_DOCUMENT", documentId: "missing" })).toBe(initial);
     expect(editorReducer(initial, { type: "REORDER_TABS", fromId: initial.activeDocumentId, toId: initial.activeDocumentId })).toBe(initial);
-    expect(editorReducer(initial, { type: "SET_ACTIVE_FIGURE", figureId: null })).toBe(initial);
+    expect(editorReducer(initial, { type: "SET_ACTIVE_ROOT", rootId: null })).toBe(initial);
     expect(editorReducer(initial, { type: "COMPUTE_REQUESTED", requestId: "req-missing", documentId: "missing" })).toBe(initial);
   });
 
@@ -1150,8 +1162,8 @@ describe("editorReducer – branch edge cases", () => {
     const firstId = initial.activeDocumentId;
     const secondId = withSecond.activeDocumentId;
 
-    const figureChanged = editorReducer(withSecond, { type: "SET_ACTIVE_FIGURE", figureId: "figure:1", documentId: secondId });
-    expect(figureChanged.activeFigureId).toBe("figure:1");
+    const figureChanged = editorReducer(withSecond, { type: "SET_ACTIVE_ROOT", rootId: "figure:1", documentId: secondId });
+    expect(figureChanged.activeRootId).toBe("figure:1");
 
     const reordered = editorReducer(figureChanged, { type: "REORDER_TABS", fromId: secondId, toId: firstId });
     expect(reordered.tabOrder[0]).toBe(secondId);
@@ -1203,7 +1215,7 @@ describe("editorReducer – branch edge cases", () => {
       snapshot: currentSnapshot
     });
     expect(ready.pendingRequestId).toBeNull();
-    expect(ready.activeFigureId).toBe("figure:0");
+    expect(ready.activeRootId).toBe("figure:0");
     expect(ready.activeHandleId).toBe(activeHandleId);
 
     const staleIgnored = editorReducer(ready, {

@@ -25,7 +25,7 @@ export type UseCanvasViewportPersistenceArgs = {
   dispatch: CanvasDispatch;
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   activeDocumentId: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   tabOrder: readonly string[];
   canvasTransform: CanvasTransform;
   fitToContentModeActive: boolean;
@@ -54,7 +54,7 @@ export function useCanvasViewportPersistence({
   dispatch,
   dispatchCanvasTransform,
   activeDocumentId,
-  activeFigureId,
+  activeRootId,
   tabOrder,
   canvasTransform,
   fitToContentModeActive,
@@ -120,8 +120,8 @@ export function useCanvasViewportPersistence({
   }, [baseSvgResult, dispatchCanvasTransform, MAX_SCALE, MIN_SCALE, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
-    () => makeFigureViewportKey(activeDocumentId, activeFigureId),
-    [activeDocumentId, activeFigureId]
+    () => makeFigureViewportKey(activeDocumentId, activeRootId),
+    [activeDocumentId, activeRootId]
   );
   const saveFigureViewportState = useCallback(
     (key: string, transform: CanvasTransform, fitToContentActive: boolean) => {

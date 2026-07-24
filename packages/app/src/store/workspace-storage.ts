@@ -24,6 +24,8 @@ type PersistedWorkspace = {
     id: string;
     title: string;
     source: string;
+    activeRootId?: string | null;
+    /** Pre-v4 name of `activeRootId`; read for migration, never written. */
     activeFigureId?: string | null;
     savedSource?: string;
     fileRef?: DocumentFileRef | null;
@@ -109,7 +111,9 @@ function normalizeExternalChangeStatus(raw: unknown): ExternalChangeStatus {
 
 function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | null {
   const version = typeof parsed.workspaceVersion === "number" ? parsed.workspaceVersion : 1;
-  if (version !== 1 && version !== WORKSPACE_VERSION) {
+  // Version 4 renamed the per-document activeFigureId to activeRootId; the
+  // stored values are unchanged, so version 3 payloads migrate by field read.
+  if (version !== 1 && version !== 3 && version !== WORKSPACE_VERSION) {
     return null;
   }
   const rawDocuments = Array.isArray(parsed.documents) ? parsed.documents as unknown[] : [];
@@ -120,7 +124,12 @@ function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | 
           id: doc.id,
           title: typeof doc.title === "string" && doc.title.trim().length > 0 ? doc.title : "Untitled",
           source: doc.source,
-          activeFigureId: typeof doc.activeFigureId === "string" ? doc.activeFigureId : null,
+          activeRootId:
+            typeof doc.activeRootId === "string"
+              ? doc.activeRootId
+              : typeof doc.activeFigureId === "string"
+                ? doc.activeFigureId
+                : null,
           savedSource: typeof doc.savedSource === "string" ? doc.savedSource : doc.source,
           fileRef: normalizeFileRef(doc.fileRef),
           diskRevision: normalizeFileRevision(doc.diskRevision),
@@ -161,7 +170,7 @@ export function saveWorkspace(state: {
     id: string;
     title: string;
     source: string;
-    activeFigureId: string | null;
+    activeRootId: string | null;
     savedSource: string;
     fileRef: DocumentFileRef | null;
     diskRevision?: FileRevision | null;
@@ -185,7 +194,7 @@ export function saveWorkspace(state: {
         id: doc.id,
         title: doc.title,
         source: doc.source,
-        activeFigureId: doc.activeFigureId,
+        activeRootId: doc.activeRootId,
         savedSource: doc.savedSource,
         fileRef: doc.fileRef,
         diskRevision: doc.diskRevision ?? null,

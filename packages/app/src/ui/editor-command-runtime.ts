@@ -84,7 +84,7 @@ type Dispatch = (action: EditorAction) => void;
 
 type RuntimeInput = {
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   sourceRevision?: number;
   snapshot: SessionSnapshot;
   toolMode: ToolMode;
@@ -152,7 +152,7 @@ const GITHUB_ISSUES_URL = "https://github.com/DominikPeters/tikz-editor/issues";
 export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRuntime {
   const {
     source,
-    activeFigureId,
+    activeRootId,
     sourceRevision,
     snapshot,
     toolMode,
@@ -211,7 +211,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     documentId: activeDocumentId,
     sourceRevision,
     source,
-    activeFigureId,
+    activeRootId,
     snapshot,
     analysis: "shared",
     overrides: {
@@ -221,7 +221,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
 
   const commandContext = {
     source,
-    activeFigureId,
+    activeRootId,
     parseOptions,
     figureCount: snapshot.figures?.length ?? 0,
     snapshotSource: snapshot.source,
@@ -296,7 +296,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     if (!snapshot.semanticResult) {
       return;
     }
-    void import("./export-commands").then((mod) => mod.exportStandaloneLatexDownload(source, activeFigureId, {
+    void import("./export-commands").then((mod) => mod.exportStandaloneLatexDownload(source, activeRootId, {
       fileName: "tikz-export.tex"
     }));
   };
@@ -1109,7 +1109,7 @@ export function useEditorCommandRuntime(
   } = {}
 ): EditorCommandRuntime {
   const source = useEditorStore((s) => s.source);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const snapshot = useEditorStore((s) => s.snapshot);
   const toolMode = useEditorStore((s) => s.toolMode);
@@ -1148,13 +1148,13 @@ export function useEditorCommandRuntime(
   const liveCommandInputs = useMemo(
     () => ({
       source,
-      activeFigureId,
+      activeRootId,
       sourceRevision,
       snapshot,
       selectedElementIds,
       activeHandleId: effectiveActiveHandleId
     }),
-    [activeFigureId, effectiveActiveHandleId, selectedElementIds, snapshot, source, sourceRevision]
+    [activeRootId, effectiveActiveHandleId, selectedElementIds, snapshot, source, sourceRevision]
   );
   const frozenCommandInputsRef = useRef(liveCommandInputs);
   const snapshotMatchesSource = snapshot.source === source;
@@ -1170,7 +1170,7 @@ export function useEditorCommandRuntime(
     () =>
       createEditorCommandRuntime({
         source: effectiveCommandInputs.source,
-        activeFigureId: effectiveCommandInputs.activeFigureId,
+        activeRootId: effectiveCommandInputs.activeRootId,
         sourceRevision: effectiveCommandInputs.sourceRevision,
         snapshot: effectiveCommandInputs.snapshot,
         toolMode,

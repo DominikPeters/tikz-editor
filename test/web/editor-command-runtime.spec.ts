@@ -1308,7 +1308,7 @@ function makeSnapshot(rendered: ReturnType<typeof renderTikzToSvg>, source = SOU
     source,
     revision: 1,
     figures: rendered.parse.figures,
-    activeFigureId: rendered.parse.activeFigureId,
+    activeRootId: rendered.parse.activeFigureId,
     editHandles: rendered.semantic.editHandles,
     scene: rendered.semantic.scene,
     svg: rendered.svg,
@@ -1397,11 +1397,11 @@ function makeInput({
   onRequestQuitApp?: () => void;
   updateCheckBusy?: boolean;
 }) {
-  const activeFigureId = snapshot.parseResult?.activeFigureId ?? null;
+  const activeRootId = snapshot.parseResult?.activeFigureId ?? null;
 
   return {
     source,
-    activeFigureId,
+    activeRootId,
     snapshot,
     toolMode: "select" as const,
     selectedElementIds,

@@ -77,7 +77,7 @@ function persistedDocumentChanged(previous: DocumentSession, next: DocumentSessi
     previous.id !== next.id ||
     previous.title !== next.title ||
     previous.source !== next.source ||
-    previous.activeFigureId !== next.activeFigureId ||
+    previous.activeRootId !== next.activeRootId ||
     previous.savedSource !== next.savedSource ||
     fileRefChanged(previous.fileRef, next.fileRef) ||
     fileRevisionChanged(previous.diskRevision, next.diskRevision) ||

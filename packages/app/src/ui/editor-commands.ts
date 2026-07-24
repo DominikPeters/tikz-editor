@@ -44,7 +44,7 @@ type Dispatch = (action: EditorAction) => void;
 
 type SelectionCommandContext = {
   source: string;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   parseOptions?: EditParseOptions;
   figureCount?: number;
   snapshotSource: string | null;
@@ -1655,8 +1655,8 @@ function resolveFlattenForeachTarget(context: SelectionCommandContext): ForeachO
 }
 
 function resolvedContextActiveFigureId(context: SelectionCommandContext): string | null | undefined {
-  if (context.activeFigureId != null) {
-    return context.activeFigureId;
+  if (context.activeRootId != null) {
+    return context.activeRootId;
   }
   if ((context.figureCount ?? 0) > 1) {
     return null;

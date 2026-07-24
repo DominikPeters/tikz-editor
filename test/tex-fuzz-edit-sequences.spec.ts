@@ -89,7 +89,7 @@ function appComputeAdapter(): TexFuzzEditAdapter<string> {
         documentId: context.nodeId,
         source: context.source,
         sourceRevision: context.revision,
-        activeFigureId: previousParse.activeFigureId,
+        activeRootId: previousParse.activeFigureId,
         changedSourceIds: [changedStatement.id],
         patches: [patch],
         patchBaseRevision: context.previous.revision,

@@ -21,7 +21,7 @@ function makeSnapshot(): { snapshot: SessionSnapshot; sourceFingerprint: string 
       source: SOURCE,
       revision: 11,
       figures: rendered.parse.figures,
-      activeFigureId: rendered.parse.activeFigureId,
+      activeRootId: rendered.parse.activeFigureId,
       editHandles: rendered.semantic.editHandles.map((handle) => ({
         ...handle,
         sourceRef: {
@@ -52,7 +52,7 @@ describe("buildEditParseOptions", () => {
       documentId: DOCUMENT_ID,
       sourceRevision: SOURCE_REVISION,
       source: SOURCE,
-      activeFigureId: null,
+      activeRootId: null,
       snapshot,
       analysis: "none",
       overrides: {
@@ -62,7 +62,7 @@ describe("buildEditParseOptions", () => {
     });
 
     expect(options).toEqual({
-      activeFigureId: undefined,
+      activeRootId: undefined,
       indentSize: 4,
       propertyWriteMode: "preview",
       sourceFingerprint
@@ -86,7 +86,7 @@ describe("buildEditParseOptions", () => {
       documentId: DOCUMENT_ID,
       sourceRevision: SOURCE_REVISION,
       source: SOURCE,
-      activeFigureId: null,
+      activeRootId: null,
       snapshot: conflictingSnapshot,
       analysis: "none"
     }).sourceFingerprint).toBeUndefined();
@@ -99,7 +99,7 @@ describe("buildEditParseOptions", () => {
       documentId: DOCUMENT_ID,
       sourceRevision: SOURCE_REVISION,
       source: SOURCE,
-      activeFigureId: null,
+      activeRootId: null,
       snapshot: multiFigureSnapshot,
       analysis: "none"
     }).activeFigureId).toBeNull();
@@ -111,7 +111,7 @@ describe("buildEditParseOptions", () => {
       documentId: DOCUMENT_ID,
       sourceRevision: SOURCE_REVISION,
       source: SOURCE,
-      activeFigureId: null,
+      activeRootId: null,
       snapshot,
       analysis: "shared"
     });

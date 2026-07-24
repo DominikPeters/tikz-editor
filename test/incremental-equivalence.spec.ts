@@ -115,7 +115,7 @@ async function expectIncrementalFramesEquivalent(
     kind: "render",
     source: initialSource,
     sourceRevision: 0,
-    activeFigureId: initialParse.activeFigureId
+    activeRootId: initialParse.activeFigureId
   });
 
   for (const frame of frames) {
@@ -155,7 +155,7 @@ async function expectIncrementalFramesEquivalent(
       kind: "render",
       source: frame.source,
       sourceRevision: frame.sourceRevision,
-      activeFigureId: fullParse.activeFigureId,
+      activeRootId: fullParse.activeFigureId,
       changedSourceIds: frame.changedSourceIds,
       patches: frame.patches,
       patchBaseRevision: frame.patchBaseRevision,
@@ -166,7 +166,7 @@ async function expectIncrementalFramesEquivalent(
       kind: "render",
       source: frame.source,
       sourceRevision: frame.sourceRevision,
-      activeFigureId: fullParse.activeFigureId
+      activeRootId: fullParse.activeFigureId
     });
     expect(normalizeForComparison(incrementalCompute.snapshot.scene)).toEqual(normalizeForComparison(fullCompute.snapshot.scene));
     if (options.expectedPatchApplication) {

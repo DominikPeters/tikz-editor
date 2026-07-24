@@ -283,7 +283,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     (
       projectedActive.source !== state.source ||
       projectedActive.sourceRevision !== state.sourceRevision ||
-      projectedActive.activeFigureId !== state.activeFigureId ||
+      projectedActive.activeRootId !== state.activeRootId ||
       projectedActive.snapshot !== state.snapshot ||
       projectedActive.pendingRequestId !== state.pendingRequestId ||
       projectedActive.lastEditChangedSourceIds !== state.lastEditChangedSourceIds ||
@@ -303,7 +303,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ...doc,
       source: state.source,
       sourceRevision: state.sourceRevision,
-      activeFigureId: state.activeFigureId,
+      activeRootId: state.activeRootId,
       snapshot: state.snapshot,
       pendingRequestId: state.pendingRequestId,
       lastEditChangedSourceIds: state.lastEditChangedSourceIds,
@@ -349,15 +349,15 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
-    case "SET_ACTIVE_FIGURE": {
+    case "SET_ACTIVE_ROOT": {
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       workspace = updateDocument(workspace, documentId, (doc) =>
-        doc.activeFigureId === action.figureId
+        doc.activeRootId === action.rootId
           ? doc
           : {
               ...doc,
-              activeFigureId: action.figureId,
-              hasInitializedFigureSelection: true
+              activeRootId: action.rootId,
+              hasInitializedRootSelection: true
             }
       );
       break;
@@ -488,7 +488,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           ...doc,
           source: action.source,
           sourceRevision: doc.sourceRevision + 1,
-          activeFigureId: doc.activeFigureId,
+          activeRootId: doc.activeRootId,
           lastEditChangedSourceIds: scrubChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: scrubPatches,
@@ -527,27 +527,27 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         }
         const previousFigureCount = doc.snapshot.figures.length;
         const validFigureIds = new Set(action.snapshot.figures.map((figure) => figure.id));
-        let nextActiveFigureId = doc.activeFigureId;
-        let hasInitializedFigureSelection = doc.hasInitializedFigureSelection;
+        let nextActiveFigureId = doc.activeRootId;
+        let hasInitializedRootSelection = doc.hasInitializedRootSelection;
         if (nextActiveFigureId && !validFigureIds.has(nextActiveFigureId)) {
           nextActiveFigureId = null;
-          hasInitializedFigureSelection = true;
+          hasInitializedRootSelection = true;
         }
         const shouldAutoSelectFirst =
-          (!hasInitializedFigureSelection && !nextActiveFigureId && action.snapshot.figures.length > 0) ||
+          (!hasInitializedRootSelection && !nextActiveFigureId && action.snapshot.figures.length > 0) ||
           (!nextActiveFigureId && previousFigureCount === 0 && action.snapshot.figures.length > 0) ||
           (!nextActiveFigureId &&
             action.snapshot.figures.length >= 2 &&
             action.snapshot.figures.length > previousFigureCount);
         if (shouldAutoSelectFirst) {
           nextActiveFigureId = action.snapshot.figures[0].id;
-          hasInitializedFigureSelection = true;
+          hasInitializedRootSelection = true;
         }
         return {
           ...doc,
           snapshot: action.snapshot,
-          activeFigureId: nextActiveFigureId,
-          hasInitializedFigureSelection,
+          activeRootId: nextActiveFigureId,
+          hasInitializedRootSelection,
           pendingRequestId: isCurrentPendingRequest ? null : doc.pendingRequestId,
           activeHandleId:
             doc.activeHandleId && action.snapshot.editHandles.some((handle) => handle.id === doc.activeHandleId)
@@ -759,7 +759,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           documentId,
           sourceRevision: activeDoc.sourceRevision,
           source: activeDoc.source,
-          activeFigureId: activeDoc.activeFigureId,
+          activeRootId: activeDoc.activeRootId,
           snapshot: activeDoc.snapshot,
           analysis: "none",
           overrides: {

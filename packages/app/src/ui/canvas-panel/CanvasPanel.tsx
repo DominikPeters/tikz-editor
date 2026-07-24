@@ -396,7 +396,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const {
     assistantLockReason,
     source,
-    activeFigureId,
+    activeRootId,
     activeDocumentId,
     tabOrder,
     sourceRevision,
@@ -436,7 +436,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   } = useEditorStore(useShallow((s) => ({
     assistantLockReason: s.documents[s.activeDocumentId]?.assistantLockReason ?? null,
     source: s.source,
-    activeFigureId: s.activeFigureId,
+    activeRootId: s.activeRootId,
     activeDocumentId: s.activeDocumentId,
     tabOrder: s.tabOrder,
     sourceRevision: s.sourceRevision,
@@ -498,7 +498,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   } | null>(null);
   const [dragCursorLock, setDragCursorLock] = useState<string | null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
-  const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
+  const activeGuideFigureKey = canvasFigureContextKey(activeDocumentId, activeRootId);
   const [guidesByFigureKey, setGuidesByFigureKey] = useState(() => new Map<string, GuidesState>());
   const guides = guidesByFigureKey.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
   const setGuides = useCallback<StateSetter<GuidesState>>(
@@ -629,11 +629,11 @@ export const CanvasPanel = memo(function CanvasPanel({
         documentId: activeDocumentId,
         sourceRevision,
         source,
-        activeFigureId,
+        activeRootId,
         snapshot,
         analysis: "shared"
       }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
 
   const canvasCommandStateRef = useRef<{
@@ -674,7 +674,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const suppressNextBackgroundClickRef = useRef(false);
   const pathDraftRef = useRef<PathToolDraft | null>(null);
   const freehandDraftRef = useRef<FreehandToolDraft | null>(null);
-  const previousCanvasContextKeyRef = useRef(canvasFigureContextKey(activeDocumentId, activeFigureId));
+  const previousCanvasContextKeyRef = useRef(canvasFigureContextKey(activeDocumentId, activeRootId));
   const pendingAddedSelectionRef = useRef<PendingAddedSelection | null>(null);
   const canvasTransformRef = useRef(canvasTransform);
   const selectedElementIdsRef = useRef(selectedElementIds);
@@ -759,7 +759,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [pathDraft]);
 
   useLayoutEffect(() => {
-    const nextContextKey = canvasFigureContextKey(activeDocumentId, activeFigureId);
+    const nextContextKey = canvasFigureContextKey(activeDocumentId, activeRootId);
     if (previousCanvasContextKeyRef.current === nextContextKey) {
       return;
     }
@@ -799,7 +799,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     }
   }, [
     activeDocumentId,
-    activeFigureId,
+    activeRootId,
     clearPendingNodePositionTargetPick,
     dispatch,
     setContextMenuState,
@@ -1280,7 +1280,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch,
     dispatchCanvasTransform,
     activeDocumentId,
-    activeFigureId,
+    activeRootId,
     tabOrder,
     canvasTransform,
     fitToContentModeActive,
@@ -1332,7 +1332,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             documentId: activeDocumentId,
             sourceRevision,
             source: sourceForEdit,
-            activeFigureId,
+            activeRootId,
             snapshot,
             analysis: "none"
           }).sourceFingerprint;
@@ -1380,7 +1380,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
       return { sourceChanged: false };
     },
-    [activeDocumentId, activeFigureId, dispatch, editParseOptions, source, sourceRevision, snapshot]
+    [activeDocumentId, activeRootId, dispatch, editParseOptions, source, sourceRevision, snapshot]
   );
   useLayoutEffect(() => {
     applyActionWithFeedbackRef.current = applyActionWithFeedback;
@@ -1734,7 +1734,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     closeTextEditingSession,
     requestAdornmentTextEdit
   } = useCanvasTextEditSession({
-    contextKey: canvasFigureContextKey(activeDocumentId, activeFigureId),
+    contextKey: canvasFigureContextKey(activeDocumentId, activeRootId),
     source,
     sourceRevision,
     snapshot,
@@ -1921,7 +1921,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         source: bucketPreviewSessionRef.current?.baseSource ?? source,
         elements: snapshot.scene?.elements ?? [],
         editHandles: snapshot.editHandles,
-        activeFigureId,
+        activeRootId,
         figureCount: snapshot.figures.length,
         propertyWriteMode: "commit"
       });
@@ -1959,7 +1959,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     scopeOverlay,
     focusedScopeId,
     applyActionWithFeedback,
-    activeFigureId,
+    activeRootId,
     parseOptions: editParseOptions,
     onNodePositionTargetPick: handleNodePositionTargetPick
   });
@@ -2245,7 +2245,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     source,
     snapshot,
     activeDocumentId,
-    activeFigureId,
+    activeRootId,
     dispatch,
     bucketPreviewSessionRef
   });
@@ -2630,7 +2630,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         onViewportPointerDown={onViewportPointerDown}
         onViewportPointerUp={onViewportPointerUp}
         svgResult={svgResult}
-        noActiveFigure={snapshot.figures.length > 0 && snapshot.activeFigureId == null}
+        noActiveFigure={snapshot.figures.length > 0 && snapshot.activeRootId == null}
         assistantLockReason={assistantLockReason}
         snapshot={snapshot}
         svgModel={svgModel}

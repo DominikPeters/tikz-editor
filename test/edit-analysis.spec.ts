@@ -171,7 +171,7 @@ describe("shared edit analysis manager", () => {
       ...makeEmptySnapshot(SOURCE),
       source: SOURCE,
       revision: 42,
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       parseResult
     };
 
@@ -181,7 +181,7 @@ describe("shared edit analysis manager", () => {
       documentId: "doc-1",
       sourceRevision: 7,
       source: SOURCE,
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       snapshot
     });
     resolvePropertyTarget(SOURCE, "path:0", {
@@ -192,7 +192,7 @@ describe("shared edit analysis manager", () => {
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
-  it("invalidates the shared session when sourceRevision or activeFigureId changes", () => {
+  it("invalidates the shared session when sourceRevision or activeRootId changes", () => {
     const multiFigureSource = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
 \end{tikzpicture}
@@ -211,14 +211,14 @@ describe("shared edit analysis manager", () => {
       ...makeEmptySnapshot(multiFigureSource),
       source: multiFigureSource,
       revision: 43,
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       parseResult: parseResult0
     };
     const snapshot1 = {
       ...makeEmptySnapshot(multiFigureSource),
       source: multiFigureSource,
       revision: 44,
-      activeFigureId: "figure:1",
+      activeRootId: "figure:1",
       parseResult: parseResult1
     };
 
@@ -226,27 +226,27 @@ describe("shared edit analysis manager", () => {
       documentId: "doc-1",
       sourceRevision: 1,
       source: multiFigureSource,
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       snapshot: snapshot0
     });
     const second = getSharedEditAnalysisView({
       documentId: "doc-1",
       sourceRevision: 2,
       source: multiFigureSource,
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       snapshot: snapshot0
     });
     const third = getSharedEditAnalysisView({
       documentId: "doc-1",
       sourceRevision: 2,
       source: multiFigureSource,
-      activeFigureId: "figure:1",
+      activeRootId: "figure:1",
       snapshot: snapshot1
     });
 
-    // Same source + activeFigureId → session reuses cached view (optimization).
+    // Same source + activeRootId → session reuses cached view (optimization).
     expect(second).toBe(first);
-    // Different activeFigureId → different view.
+    // Different activeRootId → different view.
     expect(third).not.toBe(second);
   });
 });

@@ -54,7 +54,7 @@ type ObjectsAction = {
 
 export function ObjectsPanel() {
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const activeHandleId = useEditorStore((s) => s.activeHandleId);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const source = useEditorStore((s) => s.source);
@@ -68,11 +68,11 @@ export function ObjectsPanel() {
         documentId: activeDocumentId,
         sourceRevision,
         source,
-        activeFigureId,
+        activeRootId,
         snapshot,
         analysis: "shared"
       }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
   const { analysisView } = parseOptions;
   const model = useMemo(
@@ -107,7 +107,7 @@ export function ObjectsPanel() {
   const commandContext = useMemo<Parameters<typeof actionAvailability>[0]>(
     () => ({
       source,
-      activeFigureId,
+      activeRootId,
       parseOptions,
       figureCount: snapshot.figures.length,
       snapshotSource: snapshot.source,
@@ -118,7 +118,7 @@ export function ObjectsPanel() {
       dispatch
     }),
     [
-      activeFigureId,
+      activeRootId,
       activeHandleId,
       dispatch,
       parseOptions,

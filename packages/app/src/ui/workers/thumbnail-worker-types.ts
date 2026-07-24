@@ -1,5 +1,5 @@
 export type ThumbnailRenderParseOptions = {
-  activeFigureId: string;
+  activeRootId: string;
   includeContextDefinitions: boolean;
   recover?: boolean;
 };

@@ -177,7 +177,7 @@ export function useFigureThumbnails(
             figureSignature,
             parseOptions: {
               recover: true,
-              activeFigureId: figure.id,
+              activeRootId: figure.id,
               includeContextDefinitions: true
             },
             svgOptions: { padding: 8 }

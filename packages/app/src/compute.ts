@@ -33,7 +33,7 @@ export type SessionSnapshot = {
   source: string;
   revision: number;
   figures: ParseTikzResult["figures"];
-  activeFigureId: string | null;
+  activeRootId: string | null;
   editHandles: EditHandle[];
   scene: SceneFigure | null;
   svg: EmitSvgResult | null;
@@ -68,7 +68,7 @@ export type ComputeRequest = {
   source: string;
   sourceRevision?: number | null;
   documentFileRef?: DocumentFileRef | null;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   changedSourceIds?: string[] | null;
   patches?: SourcePatch[] | null;
   patchBaseRevision?: number | null;
@@ -91,9 +91,9 @@ let incrementalParseSession: IncrementalParseSession | null = null;
 let textEnginePromise: Promise<NodeTextEngine> | null = null;
 let resolvedTextEngine: NodeTextEngine | null = null;
 
-function resolveSvgPadding(source: string, activeFigureId: string | null | undefined): number {
+function resolveSvgPadding(source: string, activeRootId: string | null | undefined): number {
   try {
-    return resolveFigureBoundsState(source, { activeFigureId }).mode === "fixed" ? 0 : 18;
+    return resolveFigureBoundsState(source, { activeFigureId: activeRootId }).mode === "fixed" ? 0 : 18;
   } catch {
     return 18;
   }
@@ -106,7 +106,7 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
     source,
     revision: 0,
     figures: [],
-    activeFigureId: null,
+    activeRootId: null,
     editHandles: [],
     scene: null,
     svg: null,
@@ -149,7 +149,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       const result = await computeSnapshotIncremental(
         request.source,
         request.sourceRevision ?? null,
-        request.activeFigureId,
+        request.activeRootId,
         changedSourceIds,
         patches,
         request.patchBaseRevision ?? null,
@@ -162,7 +162,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         source: request.source,
         revision,
         figures: result.parse.figures,
-        activeFigureId: result.parse.activeFigureId,
+        activeRootId: result.parse.activeFigureId,
         editHandles: result.semantic.editHandles,
         scene: result.semantic.scene,
         svg: result.svg,
@@ -232,7 +232,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     const result = await renderTikzToSvgAsync(request.source, {
       parse: {
         recover: true,
-        activeFigureId: request.activeFigureId,
+        activeFigureId: request.activeRootId,
         includeContextDefinitions: true
       },
       evaluate: { sourceFingerprint, graphicsResolver },
@@ -243,7 +243,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
           options,
           hints: { trigger: "other" }
         }).semantic,
-      svg: { padding: resolveSvgPadding(request.source, request.activeFigureId) },
+      svg: { padding: resolveSvgPadding(request.source, request.activeRootId) },
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
@@ -251,7 +251,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     phaseStartedAt = performance.now();
     const parseSession = getIncrementalParseSession();
     parseSession.prime(result.parse, {
-      activeFigureId: request.activeFigureId ?? result.parse.activeFigureId,
+      activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
       includeContextDefinitions: true,
       sourceRevision: request.sourceRevision ?? null
     });
@@ -262,7 +262,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       source: request.source,
       revision,
       figures: result.parse.figures,
-      activeFigureId: result.parse.activeFigureId,
+      activeRootId: result.parse.activeFigureId,
       editHandles: result.semantic.editHandles,
       scene: result.semantic.scene,
       svg: result.svg,
@@ -296,7 +296,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       source: request.source,
       revision,
       figures: [],
-      activeFigureId: null,
+      activeRootId: null,
       editHandles: [],
       scene: null,
       svg: null,
@@ -324,7 +324,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
 async function computeSnapshotIncremental(
   source: string,
   sourceRevision: number | null,
-  activeFigureId: string | null | undefined,
+  activeRootId: string | null | undefined,
   changedSourceIds: string[],
   patches: SourcePatch[],
   patchBaseRevision: number | null,
@@ -357,7 +357,7 @@ async function computeSnapshotIncremental(
   const parseIncremental = parseSession.evaluate({
     source,
     sourceRevision,
-    activeFigureId,
+    activeFigureId: activeRootId,
     includeContextDefinitions: true,
     patches,
     patchBaseRevision,

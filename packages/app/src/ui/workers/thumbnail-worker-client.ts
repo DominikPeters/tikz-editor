@@ -115,7 +115,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
     const rendered = await renderTikzToSvgAsync(request.source, {
       parse: {
         recover: request.parseOptions.recover ?? true,
-        activeFigureId: request.parseOptions.activeFigureId,
+        activeFigureId: request.parseOptions.activeRootId,
         includeContextDefinitions: request.parseOptions.includeContextDefinitions
       },
       svg: {

@@ -56,7 +56,7 @@ describe("thumbnail-worker-client", () => {
       figureId: "figure:0",
       figureSignature: "sig-1",
       parseOptions: {
-        activeFigureId: "figure:0",
+        activeRootId: "figure:0",
         includeContextDefinitions: true,
         recover: true
       },
@@ -101,7 +101,7 @@ describe("thumbnail-worker-client", () => {
       figureId: "figure:0",
       figureSignature: "sig-a",
       parseOptions: {
-        activeFigureId: "figure:0",
+        activeRootId: "figure:0",
         includeContextDefinitions: true,
         recover: true
       },

@@ -102,7 +102,7 @@ function resetEditorStore(source: string): void {
     ...base,
     source,
     sourceRevision: 1,
-    activeFigureId: rendered.parse.activeFigureId,
+    activeRootId: rendered.parse.activeFigureId,
     snapshot,
     documents: {
       ...base.documents,
@@ -110,7 +110,7 @@ function resetEditorStore(source: string): void {
         ...doc,
         source,
         sourceRevision: 1,
-        activeFigureId: rendered.parse.activeFigureId,
+        activeRootId: rendered.parse.activeFigureId,
         snapshot
       }
     },
@@ -126,7 +126,7 @@ function makeSnapshot(
     source,
     revision: 1,
     figures: rendered.parse.figures,
-    activeFigureId: rendered.parse.activeFigureId,
+    activeRootId: rendered.parse.activeFigureId,
     editHandles: rendered.semantic.editHandles,
     scene: rendered.semantic.scene,
     svg: rendered.svg,

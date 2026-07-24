@@ -57,7 +57,7 @@ async function pumpQueue(): Promise<void> {
     const rendered = await renderTikzToSvgAsync(next.source, {
       parse: {
         recover: next.parseOptions.recover ?? true,
-        activeFigureId: next.parseOptions.activeFigureId,
+        activeFigureId: next.parseOptions.activeRootId,
         includeContextDefinitions: next.parseOptions.includeContextDefinitions
       },
       svg: {
