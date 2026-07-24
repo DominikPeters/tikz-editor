@@ -5,6 +5,7 @@ import type {
   Span,
 } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
 import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
 import type { TexVListLayout } from "../text/tex/index.js";
@@ -302,11 +303,15 @@ export type RenderBeamerFrameOptions = {
   frameIndex?: number;
   /** One-based overlay step. */
   step?: number;
+  /** Resolves document-local graphics for frame text and embedded TikZ. */
+  graphicsResolver?: DocumentGraphicsResolver;
 };
 
 export type RenderBeamerFramePagesOptions = {
   /** Zero-based frame index. */
   frameIndex?: number;
+  /** Resolves document-local graphics for every overlay page. */
+  graphicsResolver?: DocumentGraphicsResolver;
 };
 
 export type RenderBeamerFramePagesResult = {

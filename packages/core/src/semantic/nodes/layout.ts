@@ -1,8 +1,8 @@
 import type { PathOptionItem } from "../../ast/types.js";
+import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type {
   NodeTextEngine,
   NodeTextColorResolver,
-  NodeTextGraphicsResolver,
   NodeTextLayoutKind,
   NodeTextParagraphAlignment,
   NodeTextRenderInfo
@@ -44,7 +44,7 @@ export function resolveNodeLayout(
   textEngine: NodeTextEngine | null = null,
   textMode: "text" | "math" = "text",
   textSourceMap?: TextSourceMap,
-  graphicsResolver?: NodeTextGraphicsResolver,
+  graphicsResolver?: DocumentGraphicsResolver,
   colorResolver?: NodeTextColorResolver
 ): NodeLayout {
   void _transformScale;

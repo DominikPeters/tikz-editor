@@ -21,7 +21,7 @@ import type { NodeTextEngine } from "@tikz-editor/core/text/types";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
-import { prepareImageAssetResolver } from "./image-asset-cache";
+import { prepareDocumentGraphicsResolver } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
 
@@ -223,7 +223,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     incrementalSemanticSession?.reset();
     const semanticSession = getIncrementalSemanticSession();
     phaseStartedAt = performance.now();
-    const graphicsResolver = await prepareImageAssetResolver({
+    const graphicsResolver = await prepareDocumentGraphicsResolver({
       source: request.source,
       documentFileRef: request.documentFileRef ?? null
     });
@@ -347,7 +347,7 @@ async function computeSnapshotIncremental(
   const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
   phases.textEngine = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
-  const graphicsResolver = await prepareImageAssetResolver({
+  const graphicsResolver = await prepareDocumentGraphicsResolver({
     source,
     documentFileRef
   });

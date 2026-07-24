@@ -8,7 +8,8 @@ import { getParagraphLayoutReports } from "../packages/core/src/text/knuth-plass
 import { getActiveTextLayoutContext } from "../packages/core/src/text/layout-context.js";
 import { getTexVListLayout } from "../packages/core/src/text/tex/vlist/registry.js";
 import { projectInputRange } from "../packages/core/src/text/source-map.js";
-import type { NodeTextEngine, NodeTextGraphicsResolver, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
+import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
+import type { NodeTextEngine, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
 
 function readLineboxTranslateXs(svg: string): number[] {
   const xs: number[] = [];
@@ -239,7 +240,7 @@ describe("render pipeline", () => {
     const source = String.raw`\begin{tikzpicture}
   \node at (0,0) {\includegraphics[width=1cm,page=2]{figure.pdf}};
 \end{tikzpicture}`;
-    const graphicsResolver: NodeTextGraphicsResolver = {
+    const graphicsResolver: DocumentGraphicsResolver = {
       cacheKey: "pdf-page-2",
       resolve: () => ({
         status: "resolved",
@@ -252,7 +253,7 @@ describe("render pipeline", () => {
       }),
     };
     const result = await renderTikzToSvgAsync(source, {
-      evaluate: { graphicsResolver },
+      graphicsResolver,
     });
 
     expect(result.svg.svg).toContain('data-tex-includegraphics="true"');
@@ -264,7 +265,7 @@ describe("render pipeline", () => {
     const source = String.raw`\begin{tikzpicture}
   \node at (0,0) {\includegraphics[trim=10pt 5pt 20pt 15pt,clip]{figure.png}};
 \end{tikzpicture}`;
-    const graphicsResolver: NodeTextGraphicsResolver = {
+    const graphicsResolver: DocumentGraphicsResolver = {
       cacheKey: "cropped-png",
       resolve: () => ({
         status: "resolved",
@@ -277,7 +278,7 @@ describe("render pipeline", () => {
       }),
     };
     const result = await renderTikzToSvgAsync(source, {
-      evaluate: { graphicsResolver },
+      graphicsResolver,
     });
 
     expect(result.svg.svg).toContain('data-tex-includegraphics="true"');

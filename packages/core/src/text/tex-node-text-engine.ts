@@ -30,10 +30,10 @@ import {
   remapTexVListLayoutSourceMap,
 } from "./tex/source-map-report.js";
 import type { TexVListLayout } from "./tex/vlist/index.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type {
   NodeTextColorResolver,
   NodeTextEngine,
-  NodeTextGraphicsResolver,
   NodeTextMeasureRequest,
   NodeTextParagraphAlignment,
   NodeTextRenderPayload,
@@ -239,7 +239,7 @@ function buildTexSharedLayout(params: {
   readonly font: TextFontOptions;
   readonly fontSizePt: number;
   readonly alignment: NodeTextParagraphAlignment | null;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
   readonly mathFontProfile?: TexMathFontProfile;
 }): TexSharedLayout | null {
@@ -391,7 +391,7 @@ function buildTexTextCacheEntry(params: {
   readonly alignment: NodeTextParagraphAlignment | null;
   readonly requestedAlignment: NodeTextParagraphAlignment | null;
   readonly sourceMap?: TextSourceMap;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
   readonly mathFontProfile?: TexMathFontProfile;
 }): CachedRenderEntry | null {

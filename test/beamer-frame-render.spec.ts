@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 
 const FIXTURE_PATH = new URL(
   "./fixtures/beamer/kkt_theorem_beamer.tex",
@@ -267,6 +268,55 @@ describe("headless Beamer frame renderer", () => {
     expect(tikz.bounds.height).toBeCloseTo(84.222295, 6);
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
+
+  it("uses one document graphics resolver across frame flow, columns, and embedded TikZ", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Graphics}
+\includegraphics[width=20pt]{frame.png}
+\begin{columns}
+  \begin{column}{0.45\textwidth}
+    \includegraphics[width=18pt]{column.png}
+  \end{column}
+  \begin{column}{0.45\textwidth}
+    \begin{tikzpicture}
+      \node {\includegraphics[width=16pt]{tikz.png}};
+    \end{tikzpicture}
+  \end{column}
+\end{columns}
+\end{frame}
+\end{document}`;
+    const resolvedFilenames: string[] = [];
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "beamer-document-graphics",
+      resolve(request) {
+        resolvedFilenames.push(request.filename);
+        return {
+          status: "resolved",
+          mimeType: "image/png",
+          dataBase64: "YmVhbWVyLWdyYXBoaWM=",
+          naturalWidthPt: 40,
+          naturalHeightPt: 20,
+          revision: `${request.filename}:r1`,
+        };
+      },
+    };
+
+    const result = await renderBeamerFrame(source, { graphicsResolver });
+
+    expect(resolvedFilenames).toEqual([
+      "frame.png",
+      "column.png",
+      "tikz.png",
+    ]);
+    expect(
+      result.svg.svg.match(/data-tex-includegraphics="true"/gu)
+    ).toHaveLength(3);
+    expect(result.svg.svg).toContain(
+      'href="data:image/png;base64,YmVhbWVyLWdyYXBoaWM="'
+    );
+    expect(result.diagnostics).toEqual([]);
+  });
 
   it("shrinks display glue when a composed frame overfills its TeX frame box", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");

@@ -2,7 +2,7 @@ import {
   defaultTexTextFontProfile,
   type TexTextFontProfile,
 } from "./fonts/text-profile.js";
-import type { NodeTextGraphicsResolver } from "../types.js";
+import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type { ResolvedTexFont, TexMetricProvider } from "./fonts/types.js";
 import {
   defaultTexMathFontProfile,
@@ -432,7 +432,7 @@ export function simpleTexInlineNodesToLayoutItems(
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
   textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver
 ): TexLayoutInlineItem[] {
   return simpleTexSegmentToLayoutItems(
     {
@@ -460,7 +460,7 @@ export function simpleTexSegmentToLayoutItems(
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
   textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
@@ -798,7 +798,7 @@ function texMBoxFromInlineNodes(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -1117,7 +1117,7 @@ function texIncludeGraphicsBox(params: {
   readonly filenameStart: number;
   readonly filenameEnd: number;
   readonly options: SimpleTexGraphicsOptions;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
 }): TexMathBox {
   const resolution = params.graphicsResolver?.resolve({
     filename: params.filename,
@@ -1399,7 +1399,7 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
 }): TexMathBox | null {
   const childFontState = params.childFontScale === undefined
     ? params.fontState
@@ -1502,7 +1502,7 @@ function texDimensionBoxFromInlineNodes(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -1636,7 +1636,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly trimEdges: boolean;
 }): TexLayoutInlineItem[] {
   const items: TexLayoutInlineItem[] = [];

@@ -1,6 +1,7 @@
 import type { AdornmentOwnerGeometry, CoordinateForm, Span } from "../ast/types.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
-import type { NodeTextEngine, NodeTextGraphicsResolver, NodeTextRenderInfo } from "../text/types.js";
+import type { NodeTextEngine, NodeTextRenderInfo } from "../text/types.js";
 import type { MacroOriginFrame } from "../macros/index.js";
 import type {
   AnchorLocalPoint,
@@ -503,7 +504,7 @@ export type EvaluateOptions = {
   maxForeachExpansions?: number;
   sourceFingerprint?: string;
   textEngine?: NodeTextEngine | null;
-  graphicsResolver?: NodeTextGraphicsResolver;
+  graphicsResolver?: DocumentGraphicsResolver;
 };
 
 export type { CoordinateForm };

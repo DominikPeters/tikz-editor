@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { invalidateImageAssetPath, prepareImageAssetResolver } from "../packages/app/src/image-asset-cache.js";
+import { invalidateImageAssetPath, prepareDocumentGraphicsResolver } from "../packages/app/src/image-asset-cache.js";
 import { setPdfAssetRasterizerForTests, type PdfAssetRasterizer } from "../packages/app/src/pdf-asset-rasterizer.js";
 import { setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
 import type { EditorPlatform } from "../packages/app/src/platform/types.js";
@@ -38,7 +38,7 @@ describe("image asset cache", () => {
   it("returns placeholders when the active platform has no local asset reader", async () => {
     setTestPlatform({});
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics{fig}};`,
       documentFileRef: null,
     });
@@ -85,7 +85,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.svg");
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics{fig}};`,
       documentFileRef,
     });
@@ -139,7 +139,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.svg");
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics[trim=10 5 20 15]{fig.svg}\includegraphics[trim=10 5 20 15,clip]{fig.svg}};`,
       documentFileRef,
     });
@@ -195,7 +195,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.pdf");
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics{fig.pdf}};`,
       documentFileRef,
     });
@@ -241,7 +241,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.pdf");
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics[page=1]{fig.pdf}\includegraphics[page=2]{fig.pdf}};`,
       documentFileRef,
     });
@@ -295,7 +295,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.pdf");
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics[page=2,trim=10 5 20 15]{fig.pdf}\includegraphics[page=2,trim=10 5 20 15,clip]{fig.pdf}};`,
       documentFileRef,
     });
@@ -330,7 +330,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.pdf");
 
-    const resolver = await prepareImageAssetResolver({
+    const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics[page=0]{fig.pdf}\includegraphics[page=9]{fig.pdf}};`,
       documentFileRef,
     });
@@ -385,7 +385,7 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.pdf");
 
-    const first = await prepareImageAssetResolver({
+    const first = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics[page=1]{fig.pdf}\includegraphics[page=2]{fig.pdf}};`,
       documentFileRef,
     });
@@ -396,7 +396,7 @@ describe("image asset cache", () => {
     renderVersion = 2;
     invalidateImageAssetPath("/tmp/tikz/fig.pdf");
 
-    const second = await prepareImageAssetResolver({
+    const second = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics[page=1]{fig.pdf}};`,
       documentFileRef,
     });

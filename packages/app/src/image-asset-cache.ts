@@ -1,8 +1,8 @@
 import type {
-  NodeTextGraphicsResolution,
-  NodeTextGraphicsResolveRequest,
-  NodeTextGraphicsResolver,
-} from "@tikz-editor/core/text/types";
+  DocumentGraphicsResolution,
+  DocumentGraphicsResolveRequest,
+  DocumentGraphicsResolver,
+} from "@tikz-editor/core/graphics";
 import {
   analyzeSimpleTexResources,
   type SimpleTexGraphicsOptions,
@@ -23,12 +23,12 @@ type ImageIncludeCandidate = {
 type PreparedAssetEntry = {
   readonly filename: string;
   readonly options: SimpleTexGraphicsOptions;
-  readonly resolution: NodeTextGraphicsResolution;
+  readonly resolution: DocumentGraphicsResolution;
 };
 
 type PathCacheEntry = {
   readonly path: string;
-  readonly resolution: NodeTextGraphicsResolution;
+  readonly resolution: DocumentGraphicsResolution;
   readonly signature: string;
   readonly watchedPaths: readonly string[];
 };
@@ -38,10 +38,10 @@ const TEX_PT_PER_BP = 72.27 / 72;
 const pathCache = new Map<string, PathCacheEntry>();
 let cacheGeneration = 0;
 
-export async function prepareImageAssetResolver(params: {
+export async function prepareDocumentGraphicsResolver(params: {
   readonly source: string;
   readonly documentFileRef?: DocumentFileRef | null;
-}): Promise<NodeTextGraphicsResolver> {
+}): Promise<DocumentGraphicsResolver> {
   const platform = getActiveEditorPlatform();
   const readLocalAsset = platform.files?.readLocalAsset;
   const baseDirectory = documentDirectory(params.documentFileRef);
@@ -78,9 +78,9 @@ export async function prepareImageAssetResolver(params: {
     baseDirectory,
     entries: [...entries.values()],
   });
-  const resolver: NodeTextGraphicsResolver = {
+  const resolver: DocumentGraphicsResolver = {
     cacheKey,
-    resolve(request: NodeTextGraphicsResolveRequest): NodeTextGraphicsResolution {
+    resolve(request: DocumentGraphicsResolveRequest): DocumentGraphicsResolution {
       const requestKey = includeGraphicsRequestKey({
         filename: request.filename,
         options: request.options,
@@ -133,7 +133,7 @@ async function resolveIncludeGraphicsAsset(params: {
   readonly options: SimpleTexGraphicsOptions;
   readonly baseDirectory: string | null;
   readonly readLocalAsset: ((path: string) => Promise<LocalAssetReadResult>) | undefined;
-}): Promise<NodeTextGraphicsResolution> {
+}): Promise<DocumentGraphicsResolution> {
   const descriptor = includeGraphicsPathDescriptor(params.filename, params.baseDirectory);
   if (!descriptor) {
     return {
@@ -335,7 +335,7 @@ async function pdfPathCacheEntryFromRead(
 function placeholderResolutionForUnpreparedRequest(
   filename: string,
   baseDirectory: string | null
-): NodeTextGraphicsResolution {
+): DocumentGraphicsResolution {
   const descriptor = includeGraphicsPathDescriptor(filename, baseDirectory);
   if (descriptor?.kind === "unsupported") {
     return {

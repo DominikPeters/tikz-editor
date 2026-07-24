@@ -1,8 +1,9 @@
 import type { WorldTransform } from "../coords/transforms.js";
 import type { WorldPoint, WorldBounds } from "../coords/points.js";
 import { PT_PER_CM } from "../coords/source.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
-import type { NodeTextEngine, NodeTextGraphicsResolver } from "../text/types.js";
+import type { NodeTextEngine } from "../text/types.js";
 import type { MacroBinding, MacroExpansionTraceEvent } from "../macros/index.js";
 import { parseLength } from "./coords/parse-length.js";
 import type { EditHandle, ResolvedStyle, SceneClipPath, SceneElement, SceneLayer } from "./types.js";
@@ -181,7 +182,7 @@ export type SemanticContext = {
   currentPoint: WorldPoint | null;
   pathStartPoint: WorldPoint | null;
   textEngine: NodeTextEngine | null;
-  graphicsResolver?: NodeTextGraphicsResolver;
+  graphicsResolver?: DocumentGraphicsResolver;
   macroTraceCollector: MacroExpansionTraceEvent[] | null;
   picEvaluationStack: string[];
   editHandles: EditHandle[];
@@ -278,7 +279,7 @@ export function createSemanticContext(
   textEngine: NodeTextEngine | null = null,
   source = "",
   sourceFingerprint = computeSourceFingerprint(source),
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver
 ): SemanticContext {
   const defaultNodeDistance = PT_PER_CM;
   const defaultTreeDistance = 15 * 2.84527559055;

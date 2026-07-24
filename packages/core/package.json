@@ -22,6 +22,10 @@
       "types": "./dist/coords/index.d.ts",
       "import": "./dist/coords/index.js"
     },
+    "./graphics": {
+      "types": "./dist/graphics/index.d.ts",
+      "import": "./dist/graphics/index.js"
+    },
     "./edit/snapping": {
       "types": "./dist/edit/snapping/index.d.ts",
       "import": "./dist/edit/snapping/index.js"

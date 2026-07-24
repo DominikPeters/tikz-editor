@@ -1,5 +1,5 @@
 import type { TextSourceMap } from "./source-map.js";
-import type { SimpleTexGraphicsOptions } from "./tex/ir.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 
 export type NodeTextFontStyle = "normal" | "italic";
 export type NodeTextFontWeight = "normal" | "bold";
@@ -20,7 +20,7 @@ export type NodeTextMeasureRequest = {
   fontFamily: NodeTextFontFamily;
   fontSizePt: number;
   sourceMap?: TextSourceMap;
-  graphicsResolver?: NodeTextGraphicsResolver;
+  graphicsResolver?: DocumentGraphicsResolver;
   colorResolver?: NodeTextColorResolver;
 };
 
@@ -28,44 +28,6 @@ export type NodeTextMeasureRequest = {
 export type NodeTextColorResolver = {
   readonly cacheKey: string;
   resolve(name: string): string | null;
-};
-
-export type NodeTextGraphicsResolveRequest = {
-  filename: string;
-  options: SimpleTexGraphicsOptions;
-  source: string;
-  sourceStart: number;
-  sourceEnd: number;
-};
-
-export type NodeTextGraphicsResolution =
-  | {
-      status: "resolved";
-      mimeType: "image/png" | "image/jpeg" | "image/svg+xml";
-      dataBase64: string;
-      naturalWidthPt: number;
-      naturalHeightPt: number;
-      revision: string;
-      resolvedPath?: string;
-      watchedPaths?: readonly string[];
-    }
-  | {
-      status: "missing";
-      revision?: string;
-      resolvedPath?: string;
-      watchedPaths?: readonly string[];
-    }
-  | {
-      status: "unsupported";
-      reason?: string;
-      revision?: string;
-      resolvedPath?: string;
-      watchedPaths?: readonly string[];
-    };
-
-export type NodeTextGraphicsResolver = {
-  readonly cacheKey: string;
-  resolve(request: NodeTextGraphicsResolveRequest): NodeTextGraphicsResolution;
 };
 
 export type NodeTextMetrics = {

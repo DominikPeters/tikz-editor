@@ -1,5 +1,6 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import {
   collectMacroBindings,
   expandMacroBindingsMapped,
@@ -216,6 +217,7 @@ export async function renderBeamerFrame(
     frameIndex,
     bodyIr,
     step,
+    graphicsResolver: options.graphicsResolver,
   });
 }
 
@@ -226,6 +228,7 @@ async function renderBeamerFrameStep(params: {
   frameIndex: number;
   bodyIr: BeamerFrameBodyIr;
   step: number;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<RenderBeamerFrameResult> {
   const {
     source,
@@ -287,6 +290,7 @@ async function renderBeamerFrameStep(params: {
     paragraphs,
     modelBuilder,
     macroBindings,
+    graphicsResolver: params.graphicsResolver,
   });
 
   const availableContentBounds: BeamerRect = {
@@ -311,6 +315,7 @@ async function renderBeamerFrameStep(params: {
     macroBindings,
     overlays: bodyIr.overlays,
     step,
+    graphicsResolver: params.graphicsResolver,
   });
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
@@ -498,6 +503,7 @@ export async function renderBeamerFramePages(
       frameIndex,
       bodyIr,
       step,
+      graphicsResolver: options.graphicsResolver,
     }));
   }
   return {
@@ -516,6 +522,7 @@ function renderChrome(params: {
   paragraphs: BeamerParagraphLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): void {
   const { chrome, theme, items, paragraphs, modelBuilder } = params;
   for (const primitive of chrome.primitives) {
@@ -575,6 +582,7 @@ function renderChrome(params: {
       interwordSpacePt: primitive.interwordSpacePt,
       disableAutomaticHyphenation: primitive.disableAutomaticHyphenation,
       macroBindings: params.macroBindings,
+      graphicsResolver: params.graphicsResolver,
     });
     if (!laid) {
       continue;
@@ -650,6 +658,7 @@ async function prepareFrameFlow(params: {
   macroBindings: ReadonlyMap<string, MacroBinding>;
   overlays: BeamerOverlayModel;
   step: number;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
@@ -673,6 +682,7 @@ async function prepareFrameFlow(params: {
           theme: params.theme,
           metadata: params.metadata,
           macroBindings: params.macroBindings,
+          graphicsResolver: params.graphicsResolver,
         }),
       });
       continue;
@@ -687,6 +697,7 @@ async function prepareFrameFlow(params: {
         macroBindings: params.macroBindings,
         overlays: params.overlays,
         step: params.step,
+        graphicsResolver: params.graphicsResolver,
       });
       if (paragraph) {
         result.push(paragraph);
@@ -724,6 +735,7 @@ async function prepareFrameFlow(params: {
             leftSidebarWidth: params.leftSidebarWidth,
             overlays: params.overlays,
             step: params.step,
+            graphicsResolver: params.graphicsResolver,
           })
         )
       );
@@ -747,6 +759,7 @@ async function prepareFrameFlow(params: {
         bodyFont,
         diagnostics: params.diagnostics,
         visibility,
+        graphicsResolver: params.graphicsResolver,
       });
       if (tikz) {
         const surroundingGlue = node.horizontalAlignment === "center"
@@ -786,6 +799,7 @@ async function prepareFrameFlow(params: {
         macroBindings: params.macroBindings,
         overlays: params.overlays,
         step: params.step,
+        graphicsResolver: params.graphicsResolver,
       });
       if (block) {
         result.push({
@@ -816,6 +830,7 @@ async function prepareFrameFlow(params: {
     macroBindings: params.macroBindings,
     overlays: params.overlays,
     step: params.step,
+    graphicsResolver: params.graphicsResolver,
   });
 }
 
@@ -827,6 +842,7 @@ function prepareTitlePage(params: {
     Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
   >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): PreparedTitlePage {
   const hasSubtitle = params.metadata.subtitle?.value != null;
   const plan = planBeamerTitlePageTemplate(params.theme, hasSubtitle);
@@ -846,6 +862,7 @@ function prepareTitlePage(params: {
         font: params.theme.fonts.title,
         alignment,
         macroBindings: params.macroBindings,
+        graphicsResolver: params.graphicsResolver,
       })
     : null;
   const subtitle = subtitleSource
@@ -861,6 +878,7 @@ function prepareTitlePage(params: {
         font: params.theme.fonts.subtitle,
         alignment,
         macroBindings: params.macroBindings,
+        graphicsResolver: params.graphicsResolver,
       })
     : null;
   if (plan.style === "inmargin") {
@@ -916,6 +934,7 @@ function prepareFrameParagraph(params: {
   overlays: BeamerOverlayModel;
   step: number;
   targetHeight?: number;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> | null {
   const paragraphSource = params.source.slice(
     params.node.span.from,
@@ -943,6 +962,7 @@ function prepareFrameParagraph(params: {
     targetHeight: params.targetHeight,
     hiddenSourceSpans: projection.hiddenSourceSpans,
     hiddenListItemIndices: projection.hiddenListItemIndices,
+    graphicsResolver: params.graphicsResolver,
   });
   if (!paragraph) {
     return null;
@@ -993,6 +1013,7 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     macroBindings: ReadonlyMap<string, MacroBinding>;
     overlays: BeamerOverlayModel;
     step: number;
+    graphicsResolver?: DocumentGraphicsResolver;
   }
 ): PreparedFrameFlowItem[] {
   const fitted = [...flow];
@@ -1198,6 +1219,7 @@ function prepareBlock(params: {
   macroBindings: ReadonlyMap<string, MacroBinding>;
   overlays: BeamerOverlayModel;
   step: number;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): PreparedBlock | null {
   const plan = planBeamerBlockTemplate({
     environment: params.node.kind === "theorem"
@@ -1260,6 +1282,7 @@ function prepareBlock(params: {
     disableAutomaticHyphenation: plan.style === "inmargin",
     macroBindings: params.macroBindings,
     hiddenSourceSpans: titleProjection.hiddenSourceSpans,
+    graphicsResolver: params.graphicsResolver,
   });
   if (!title) {
     return null;
@@ -1301,6 +1324,7 @@ function prepareBlock(params: {
         macroBindings: params.macroBindings,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
         hiddenListItemIndices: bodyProjection.hiddenListItemIndices,
+        graphicsResolver: params.graphicsResolver,
       })
     : null;
   const titleLine = title.layout.report.lines[0];
@@ -2132,6 +2156,7 @@ async function prepareColumnContent(params: {
   leftSidebarWidth: number;
   overlays: BeamerOverlayModel;
   step: number;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<PreparedColumnContent> {
   const {
     source,
@@ -2162,6 +2187,7 @@ async function prepareColumnContent(params: {
       leftSidebarWidth: params.leftSidebarWidth,
       overlays: params.overlays,
       step: params.step,
+      graphicsResolver: params.graphicsResolver,
     });
     if (prepared) {
       flow.push(prepared);
@@ -2218,6 +2244,7 @@ async function prepareColumnFlowNode(params: {
   leftSidebarWidth: number;
   overlays: BeamerOverlayModel;
   step: number;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -2232,6 +2259,7 @@ async function prepareColumnFlowNode(params: {
     leftSidebarWidth,
     overlays,
     step,
+    graphicsResolver,
   } = params;
   const visibility = resolveBeamerOverlaySpanVisibility(
     overlays,
@@ -2258,6 +2286,7 @@ async function prepareColumnFlowNode(params: {
       macroBindings,
       overlays,
       step,
+      graphicsResolver,
     });
     return block
       ? { kind: "block", visibility, block, height: block.naturalHeight }
@@ -2284,6 +2313,7 @@ async function prepareColumnFlowNode(params: {
       macroBindings,
       hiddenSourceSpans: projection.hiddenSourceSpans,
       hiddenListItemIndices: projection.hiddenListItemIndices,
+      graphicsResolver,
     });
     if (!paragraph) {
       return null;
@@ -2320,6 +2350,7 @@ async function prepareColumnFlowNode(params: {
     bodyFont,
     diagnostics,
     visibility,
+    graphicsResolver,
   });
 }
 
@@ -2332,6 +2363,7 @@ async function prepareEmbeddedTikz(params: {
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
   visibility: BeamerOverlayVisibility;
+  graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<Extract<PreparedColumnFlowItem, {
   kind: "tikzpicture";
 }> | null> {
@@ -2346,6 +2378,7 @@ async function prepareEmbeddedTikz(params: {
     applyThemeFamilyToTikz(snippet, params.bodyFont),
     {
       textEngine,
+      graphicsResolver: params.graphicsResolver,
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
       // is useful for an isolated SVG, but it is not part of that box.
@@ -2499,6 +2532,7 @@ function layoutParagraph(params: {
   targetHeight?: number;
   hiddenSourceSpans?: readonly Span[];
   hiddenListItemIndices?: readonly number[];
+  graphicsResolver?: DocumentGraphicsResolver;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -2576,6 +2610,7 @@ function layoutParagraph(params: {
       ? { hyphenate: () => [] }
       : undefined,
     sourceMap: mapped.sourceMap,
+    graphicsResolver: params.graphicsResolver,
   } as const;
   let result = layoutSimpleTexParagraph(mapped.text, layoutOptions);
   if (

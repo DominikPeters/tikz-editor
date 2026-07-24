@@ -1,6 +1,6 @@
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
 import type { TexTextFontProfile } from "../fonts/text-profile.js";
-import type { NodeTextGraphicsResolver } from "../../types.js";
+import type { DocumentGraphicsResolver } from "../../../graphics/types.js";
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import type {
   SimpleTexFontState,
@@ -46,7 +46,7 @@ export type TexInlineNodesToLayoutItems = (
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
   textFontProfile?: TexTextFontProfile,
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver
 ) => TexLayoutInlineItem[];
 
 export interface TexListItemParagraphAttachments {
@@ -65,7 +65,7 @@ export function texListItemParagraphAttachments(params: {
   readonly metricProvider: TexMetricProvider;
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly inlineNodesToItems: TexInlineNodesToLayoutItems;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
   /** Absolute origin of the paragraph's containing VList. */
   readonly paragraphOriginX: TexVListX;
@@ -155,7 +155,7 @@ function texInlineLabelItemsForListContext(
   spaceGlueProfile: TexSpaceGlueProfile,
   inlineNodesToItems: TexInlineNodesToLayoutItems,
   textFontProfile?: TexTextFontProfile,
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver
 ): TexLayoutInlineItem[] {
   if (labelBox.content.kind !== "source" || !listContext.label) {
     return [];
@@ -191,7 +191,7 @@ function texLayoutLabelForListContext(
   labelBox: TexVBoxListItemLabelBox,
   inlineNodesToItems: TexInlineNodesToLayoutItems,
   textFontProfile?: TexTextFontProfile,
-  graphicsResolver?: NodeTextGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver
 ): TexLayoutLabel {
   const rightEdge = requiredTexListItemLabelRightEdge(labelBox);
   const labelContent = labelBox.content;

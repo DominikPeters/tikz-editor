@@ -27,7 +27,7 @@ import type {
 import {
   simpleTexInlineNodesToLayoutItems as simpleTexInlineNodesToLayoutItemsCore,
 } from "../packages/core/src/text/tex/layout-inline-items.js";
-import type { NodeTextGraphicsResolver } from "../packages/core/src/text/types.js";
+import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 import { texInterwordGlueForSpaceFactor } from "../packages/core/src/text/tex/space-glue.js";
 import {
   addParagraphVerticalGlueToVList,
@@ -1970,7 +1970,7 @@ describe("TeX vlist lowering", () => {
       String.raw`A\includegraphics[width=40pt,height=30pt,keepaspectratio]{fig}Z`
     );
     const block = parsed.blocks[0];
-    const graphicsResolver: NodeTextGraphicsResolver = {
+    const graphicsResolver: DocumentGraphicsResolver = {
       cacheKey: "test-image-v1",
       resolve: () => ({
         status: "resolved",
@@ -2020,7 +2020,7 @@ describe("TeX vlist lowering", () => {
       String.raw`\includegraphics[trim=10pt 5pt 20pt 15pt]{fig}\includegraphics[trim=10pt 5pt 20pt 15pt,width=45pt]{fig}\includegraphics[trim=10pt 5pt 20pt 15pt,width=45pt,height=60pt,keepaspectratio]{fig}\includegraphics[trim=10pt 5pt 20pt 15pt,clip]{fig}\includegraphics[viewport=10pt 5pt 100pt 65pt,clip]{fig}`
     );
     const block = parsed.blocks[0];
-    const graphicsResolver: NodeTextGraphicsResolver = {
+    const graphicsResolver: DocumentGraphicsResolver = {
       cacheKey: "test-cropped-image-v1",
       resolve: () => ({
         status: "resolved",

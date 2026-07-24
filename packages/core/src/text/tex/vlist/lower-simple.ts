@@ -10,7 +10,7 @@ import type {
   SimpleTexVerticalRuleBlockItem,
 } from "../ir.js";
 import type { ResolvedTexFont } from "../fonts/types.js";
-import type { NodeTextGraphicsResolver } from "../../types.js";
+import type { DocumentGraphicsResolver } from "../../../graphics/types.js";
 import {
   texVBoxLayoutForScopeRole,
   texVBoxRolePathForScope,
@@ -37,7 +37,7 @@ import { texLength, type TexLength } from "../coordinates.js";
 export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly font?: ResolvedTexFont;
   readonly mathBoxProvider?: TexMathBoxProvider;
-  readonly graphicsResolver?: NodeTextGraphicsResolver;
+  readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly width?: TexLength;
   readonly tikzTextWidthNode?: boolean;
 }

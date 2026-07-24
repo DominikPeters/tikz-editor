@@ -291,6 +291,13 @@ scanner over arbitrary document source before structural layout. The app
 resolves that manifest asynchronously before layout and passes the resulting
 document-local resolver back to core.
 
+The resolver contract is `DocumentGraphicsResolver` in
+`packages/core/src/graphics`, not a node-text service. The top-level TikZ and
+Beamer render options accept it directly. Beamer composition threads the same
+instance through chrome/text paragraphs, blocks, columns, and nested TikZ
+evaluation so resource identity, cache revisions, and file watching cannot
+diverge between rendering layers.
+
 The page layout is a Beamer composition IR, not a `SceneFigure`: theme chrome,
 horizontal columns, decorated blocks, text vlists, and atomic embedded
 figures are not TikZ scene elements. The emitter lowers the positioned page

@@ -5,6 +5,7 @@ import type { EvaluateOptions, EvaluateTikzResult } from "../semantic/index.js";
 import { emitSvg } from "../svg/emit.js";
 import type { EmitSvgOptions, EmitSvgResult } from "../svg/index.js";
 import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { NodeItem, TikzFigure } from "../ast/types.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
@@ -19,6 +20,8 @@ export type RenderTikzOptions = {
   ) => EvaluateTikzResult;
   svg?: EmitSvgOptions;
   textEngine?: NodeTextEngine | null;
+  /** Shared document-local graphics resolver for every rendering layer. */
+  graphicsResolver?: DocumentGraphicsResolver;
 };
 
 export type RenderDiagnostic = {
@@ -39,7 +42,11 @@ export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): R
   const semanticResult = (opts.semanticEvaluator ?? evaluateTikzFigure)(
     parseResult.figure,
     parseResult.source,
-    opts.evaluate ?? {}
+    {
+      ...opts.evaluate,
+      graphicsResolver:
+        opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
+    }
   );
   const svgResult = emitSvg(semanticResult.scene, opts.svg);
 
@@ -81,7 +88,9 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
 
   const evaluateOpts: EvaluateOptions = {
     ...opts.evaluate,
-    textEngine: opts.evaluate?.textEngine ?? textEngine
+    textEngine: opts.evaluate?.textEngine ?? textEngine,
+    graphicsResolver:
+      opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
   };
 
   const svgOpts: EmitSvgOptions = {
