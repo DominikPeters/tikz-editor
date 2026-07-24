@@ -88,24 +88,80 @@ export function resolveBeamerThemeColor(
   theme: ResolvedBeamerTheme,
   role: string
 ): ResolvedBeamerThemeColor {
-  const seen = new Set<string>();
-  const resolve = (name: string): ResolvedBeamerThemeColor => {
-    if (seen.has(name)) {
+  const resolve = (
+    name: string,
+    ancestors: ReadonlySet<string>
+  ): ResolvedBeamerThemeColor => {
+    if (ancestors.has(name)) {
       return {};
     }
+    const seen = new Set(ancestors);
     seen.add(name);
     const color = theme.colors[name];
     if (!color) {
       return {};
     }
-    const parent = color.parent ? resolve(color.parent) : {};
+    const parent = color.parent ? resolve(color.parent, seen) : {};
+    const mixedForeground = color.fgMix
+      ? mixThemeForeground(
+          foregroundChannels(
+            theme,
+            color.fgMix.foregroundRole,
+            resolve(color.fgMix.foregroundRole, seen).fg
+          ),
+          parseHexColor(resolve(color.fgMix.backgroundRole, seen).bg),
+          color.fgMix.foregroundPercent
+        )
+      : undefined;
     return {
       ...parent,
+      ...(mixedForeground ? { fg: mixedForeground } : {}),
       ...(color.fg ? { fg: color.fg } : {}),
       ...(color.bg ? { bg: color.bg } : {}),
     };
   };
-  return resolve(role);
+  return resolve(role, new Set());
+}
+
+function mixThemeForeground(
+  foreground: readonly [number, number, number] | null,
+  background: readonly [number, number, number] | null,
+  foregroundPercent: number
+): string | undefined {
+  if (!foreground || !background) {
+    return undefined;
+  }
+  const ratio = Math.max(0, Math.min(100, foregroundPercent)) / 100;
+  const channels = foreground.map((value, index) =>
+    Math.round(value * ratio + background[index] * (1 - ratio))
+  );
+  return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function foregroundChannels(
+  theme: ResolvedBeamerTheme,
+  role: string,
+  resolvedForeground: string | undefined
+): [number, number, number] | null {
+  const precise = theme.colors[role]?.fgRgb;
+  return precise
+    ? [precise[0] * 255, precise[1] * 255, precise[2] * 255]
+    : parseHexColor(resolvedForeground);
+}
+
+function parseHexColor(
+  color: string | undefined
+): [number, number, number] | null {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/iu.exec(
+    color ?? ""
+  );
+  return match
+    ? [
+        Number.parseInt(match[1], 16),
+        Number.parseInt(match[2], 16),
+        Number.parseInt(match[3], 16),
+      ]
+    : null;
 }
 
 function createDefaultTheme(): MutableTheme {
@@ -120,7 +176,9 @@ function createDefaultTheme(): MutableTheme {
     id: "default",
     colors: {
       "normal text": { fg: "#000000", bg: "#ffffff" },
-      structure: { fg: "#3333b3" },
+      // beamercolorthemedefault.sty's blended blue is rgb(.2,.2,.7).
+      // Retain those unquantized channels for xcolor percentage mixes.
+      structure: { fg: "#3333b3", fgRgb: [0.2, 0.2, 0.7] },
       "local structure": { parent: "structure" },
       item: { parent: "local structure" },
       "palette primary": { fg: "#3333b3" },
@@ -128,12 +186,44 @@ function createDefaultTheme(): MutableTheme {
       "palette tertiary": { fg: "#1a1a59" },
       "palette quaternary": { fg: "#000000" },
       titlelike: { fg: "#3333b3" },
+      title: { parent: "titlelike" },
+      subtitle: { parent: "title" },
+      author: {},
+      institute: {},
+      date: {},
       frametitle: { fg: "#3333b3" },
       "alerted text": { fg: "#ff0000" },
       "example text": { fg: "#008000" },
+      "navigation symbols": {
+        fgMix: {
+          foregroundRole: "structure",
+          backgroundRole: "normal text",
+          foregroundPercent: 40,
+        },
+      },
+      "navigation symbols dimmed": {
+        fgMix: {
+          foregroundRole: "structure",
+          backgroundRole: "normal text",
+          foregroundPercent: 20,
+        },
+      },
     },
     fonts: {
       "normal-text": normalFont,
+      title: {
+        ...normalFont,
+        sizePt: 14.4,
+        lineHeightPt: 18,
+      },
+      subtitle: normalFont,
+      author: normalFont,
+      institute: {
+        ...normalFont,
+        sizePt: 8,
+        lineHeightPt: 9.5,
+      },
+      date: normalFont,
       "frame-title": {
         ...normalFont,
         sizePt: 14.4,
@@ -166,6 +256,7 @@ function createDefaultTheme(): MutableTheme {
     templates: {
       headline: DEFAULT_REF("beamer/headline/none"),
       footline: DEFAULT_REF("beamer/footline/none"),
+      navigationSymbols: DEFAULT_REF("beamer/navigation-symbols/default"),
       frameTitle: DEFAULT_REF("beamer/frame-title/default"),
       titlePage: DEFAULT_REF("beamer/title-page/default"),
       sectionPage: DEFAULT_REF("beamer/section-page/default"),
@@ -252,6 +343,9 @@ const innerThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("inner-theme", "default")],
   ["rounded", (state, use) => {
     markApplied(state, "inner-theme", "rounded", use);
+    state.templates.titlePage = DEFAULT_REF(
+      "beamer/title-page/rounded-shadow"
+    );
     state.templates.block = DEFAULT_REF("beamer/block/rounded-shadow");
     state.templates.bullets = [
       DEFAULT_REF("beamer/bullet/ball"),
@@ -315,6 +409,10 @@ function applyModernOuter(
 ): ComponentApplier {
   return (state, use) => {
     markApplied(state, "outer-theme", family, use);
+    // Both upstream outer themes explicitly clear Beamer's navigation strip.
+    state.templates.navigationSymbols = DEFAULT_REF(
+      "beamer/navigation-symbols/none"
+    );
     const progressbar = optionString(use.options.progressbar, "none");
     state.templates.headline = DEFAULT_REF(
       progressbar === "head"
@@ -510,10 +608,28 @@ function freezeRecord<T extends Record<string, object>>(record: T): Readonly<T> 
     Object.fromEntries(
       Object.entries(record).map(([key, value]) => [
         key,
-        Object.freeze({ ...value }),
+        Object.freeze({
+          ...value,
+          ...(hasRgbChannels(value)
+            ? { fgRgb: Object.freeze([...value.fgRgb]) }
+            : {}),
+          ...("fgMix" in value && value.fgMix
+            ? { fgMix: Object.freeze({ ...value.fgMix }) }
+            : {}),
+        }),
       ])
     )
   ) as Readonly<T>;
+}
+
+function hasRgbChannels(
+  value: object
+): value is { fgRgb: readonly number[] } {
+  return (
+    "fgRgb" in value &&
+    Array.isArray(value.fgRgb) &&
+    value.fgRgb.every((channel: unknown) => typeof channel === "number")
+  );
 }
 
 function freezeTemplates(templates: BeamerThemeTemplates): BeamerThemeTemplates {
@@ -525,6 +641,7 @@ function freezeTemplates(templates: BeamerThemeTemplates): BeamerThemeTemplates 
   return Object.freeze({
     headline: freezeRef(templates.headline),
     footline: freezeRef(templates.footline),
+    navigationSymbols: freezeRef(templates.navigationSymbols),
     frameTitle: freezeRef(templates.frameTitle),
     titlePage: freezeRef(templates.titlePage),
     sectionPage: freezeRef(templates.sectionPage),

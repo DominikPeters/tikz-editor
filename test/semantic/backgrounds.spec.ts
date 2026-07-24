@@ -86,7 +86,7 @@ describe("semantic evaluator / backgrounds library", () => {
     expect(paths.at(-1)?.layer).toBe("main");
   });
 
-  it("uses inner and outer frame sep for side-line hook coordinates without changing content bounds first", () => {
+  it("uses stroked content bounds plus inner and outer frame sep for side-line hooks", () => {
     const source = String.raw`\begin{tikzpicture}[inner frame sep=1pt,outer frame sep=2pt,show background top]
   \draw (0pt,0pt) -- (10pt,0pt);
 \end{tikzpicture}`;
@@ -98,13 +98,13 @@ describe("semantic evaluator / backgrounds library", () => {
     expect(top?.commands[0]).toMatchObject({ kind: "M" });
     expect(top?.commands[1]).toMatchObject({ kind: "L" });
     if (top?.commands[0]?.kind === "M" && top.commands[1]?.kind === "L") {
-      expect(top.commands[0].to.x).toBeCloseTo(-3);
-      expect(top.commands[0].to.y).toBeCloseTo(1);
-      expect(top.commands[1].to.x).toBeCloseTo(13);
-      expect(top.commands[1].to.y).toBeCloseTo(1);
+      expect(top.commands[0].to.x).toBeCloseTo(-3.2);
+      expect(top.commands[0].to.y).toBeCloseTo(1.2);
+      expect(top.commands[1].to.x).toBeCloseTo(13.2);
+      expect(top.commands[1].to.y).toBeCloseTo(1.2);
     }
-    expect(result.scene.bounds?.minX).toBeCloseTo(-3);
-    expect(result.scene.bounds?.maxX).toBeCloseTo(13);
+    expect(result.scene.bounds?.minX).toBeCloseTo(-3.4);
+    expect(result.scene.bounds?.maxX).toBeCloseTo(13.4);
   });
 
   it("collects standalone tikzset background hooks", () => {

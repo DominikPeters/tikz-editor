@@ -12,6 +12,13 @@ export type BeamerParagraphBodyNode = {
   span: Span;
 };
 
+export type BeamerTitlePageBodyNode = {
+  kind: "title-page";
+  id: string;
+  span: Span;
+  commandSpan: Span;
+};
+
 export type BeamerListBodyNode = {
   kind: "list";
   id: string;
@@ -106,6 +113,8 @@ export type BeamerColumnsBodyNode = {
 export type BeamerFrameBodyNode =
   | BeamerColumnsBodyNode
   | BeamerBlockBodyNode
+  | BeamerTitlePageBodyNode
+  | BeamerVerticalSpaceBodyNode
   | BeamerParagraphBodyNode
   | BeamerTikzBodyNode
   | BeamerUnsupportedBodyNode;

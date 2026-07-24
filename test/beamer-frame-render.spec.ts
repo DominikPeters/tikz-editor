@@ -14,6 +14,60 @@ const HELLO_WORLD_FIXTURE_PATH = new URL(
 );
 
 describe("headless Beamer frame renderer", () => {
+  it("renders the KKT title page through theme-owned frame flow", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 0 });
+    const title = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "title"
+    )!;
+    const subtitle = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "subtitle"
+    )!;
+    const baseline = (paragraph: typeof title) => {
+      const line = paragraph.report.lines[0]!;
+      const placement = paragraph.vlistLayout.linePlacements.find(
+        (candidate) => candidate.lineIndex === line.lineIndex
+      )!;
+      return paragraph.bounds.y + Number(placement.y) + Number(line.ascent);
+    };
+    const titlePage = result.layout.items.find(
+      (item) => item.kind === "title-page"
+    )!;
+
+    expect(titlePage.bounds).toEqual(
+      expect.objectContaining({
+        x: expect.closeTo(6.935, 6),
+        y: expect.closeTo(20.944441, 6),
+        width: expect.closeTo(441.374094, 6),
+        height: expect.closeTo(60.468338, 6),
+      })
+    );
+    expect(baseline(title)).toBeCloseTo(45.453032, 6);
+    expect(baseline(subtitle)).toBeCloseTo(62.653029, 6);
+    expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
+      147.059999,
+      6
+    );
+    expect(result.svg.svg).toContain(
+      'data-beamer-title-page-template="beamer/title-page/rounded-shadow"'
+    );
+    const navigation = result.layout.items.find(
+      (item) => item.kind === "navigation-symbols"
+    )!;
+    expect(navigation.bounds).toEqual({
+      x: expect.closeTo(325.318819, 6),
+      y: expect.closeTo(238.416798, 6),
+      width: expect.closeTo(127.08, 6),
+      height: 7,
+    });
+    expect(result.svg.svg).toContain(
+      'data-beamer-vector-template="beamer/navigation-symbols/default"'
+    );
+    expect(result.svg.svg).toContain('stroke="#adade0"');
+    expect(result.svg.svg).toContain('fill="#d6d6f0"');
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
   it("renders the representative KKT columns frame through the native engines", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 1 });
@@ -145,6 +199,19 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("applies Beamer math substitutions and PGF picture bounds inside embedded TikZ", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 7 });
+    const tikz = result.layout.embeddedTikz[0]!;
+
+    expect(tikz.model.parts.some((part) =>
+      part.markup.includes('data-tex-font="lmsans10-oblique"')
+    )).toBe(true);
+    expect(tikz.bounds.width).toBeCloseTo(263.119339, 6);
+    expect(tikz.bounds.height).toBeCloseTo(84.222295, 6);
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
   it("shrinks display glue when a composed frame overfills its TeX frame box", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 13 });
@@ -156,9 +223,39 @@ describe("headless Beamer frame renderer", () => {
     );
 
     expect(displayBoundaries).toHaveLength(6);
-    expect(displayBoundaries.every((item) => Number(item.height) < 11))
-      .toBe(true);
+    expect(displayBoundaries.map((item) => Number(item.height))).toEqual(
+      displayBoundaries.map(() => expect.closeTo(5.021192, 6))
+    );
     expect(result.layout.embeddedTikz).toHaveLength(1);
+    expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
+      186.190826,
+      6
+    );
+    expect(result.diagnostics).toEqual([]);
+  }, 20_000);
+
+  it("cancels trailing display glue at a centered trivlist boundary", async () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 11 });
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "body"
+    )!;
+    const displayBoundaries = body.vlistLayout.boxReport.items.filter(
+      (item) => item.glue?.origin?.kind === "display-math-boundary"
+    );
+
+    expect(displayBoundaries.map((item) => Number(item.height))).toEqual([
+      expect.closeTo(7.120875, 6),
+      expect.closeTo(7.120875, 6),
+      0,
+      expect.closeTo(4.560438, 6),
+      0,
+      expect.closeTo(4.560438, 6),
+    ]);
+    expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
+      160.025921,
+      6
+    );
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
@@ -191,8 +288,8 @@ describe("headless Beamer frame renderer", () => {
       expect.closeTo(170.432506, 6),
     ]);
     expect(tikz.bounds.x).toBeCloseTo(secondColumn.bounds.x, 6);
-    expect(tikz.bounds.width).toBeCloseTo(145.109055, 6);
-    expect(tikz.bounds.height).toBeCloseTo(82.712161, 6);
+    expect(tikz.bounds.width).toBeCloseTo(149.060830, 6);
+    expect(tikz.bounds.height).toBeCloseTo(83.912161, 6);
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
@@ -307,6 +404,16 @@ describe("headless Beamer frame renderer", () => {
       )
     ).toContain("Write the constraint");
     expect(bodyParagraphs[0]!.bounds.y).toBeLessThan(columns.bounds.y);
+    const baseline = (paragraph: (typeof bodyParagraphs)[number], index: number) => {
+      const line = paragraph.report.lines[index]!;
+      const placement = paragraph.vlistLayout.linePlacements.find(
+        (candidate) => candidate.lineIndex === line.lineIndex
+      )!;
+      return paragraph.bounds.y + Number(placement.y) + Number(line.ascent);
+    };
+    expect(baseline(bodyParagraphs[0]!, 0)).toBeCloseTo(99.958734, 6);
+    expect(columns.bounds.y).toBeCloseTo(194.881934, 6);
+    expect(baseline(bodyParagraphs[1]!, 0)).toBeCloseTo(202.601684, 6);
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
@@ -339,11 +446,11 @@ describe("headless Beamer frame renderer", () => {
     };
 
     expect(blocks).toHaveLength(3);
-    expect(columns.bounds.y).toBeCloseTo(130.367846, 6);
-    expect(baseline(body, 0)).toBeCloseTo(86.964646, 6);
-    expect(baseline(body, 1)).toBeCloseTo(104.964646, 6);
-    expect(baseline(necessaryTitle, 0)).toBeCloseTo(148.710846, 6);
-    expect(baseline(necessaryBody, 0)).toBeCloseTo(165.275021, 6);
+    expect(columns.bounds.y).toBeCloseTo(130.370096, 6);
+    expect(baseline(body, 0)).toBeCloseTo(86.966896, 6);
+    expect(baseline(body, 1)).toBeCloseTo(104.966896, 6);
+    expect(baseline(necessaryTitle, 0)).toBeCloseTo(148.713096, 6);
+    expect(baseline(necessaryBody, 0)).toBeCloseTo(165.260396, 6);
     expect(
       necessaryTitle.report.lines[0]?.segments.find(
         (segment) => segment.kind === "text"

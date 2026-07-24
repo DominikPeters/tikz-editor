@@ -45,6 +45,7 @@ describe("Beamer structural theme templates", () => {
       )?.bounds.height
     ).toBeCloseTo(8.658005, 6);
     expect(chrome.primitives.map((primitive) => primitive.kind)).toEqual([
+      "vector",
       "fill",
       "text",
       "fill",

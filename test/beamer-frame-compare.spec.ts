@@ -132,6 +132,38 @@ Fraction:
     expect(projected.map((item) => item.code)).toEqual([49, 50]);
   });
 
+  it("traces transformed TikZ labels with Beamer's actual script face", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\begin{document}
+\begin{frame}{Diagram}
+\begin{tikzpicture}
+  \draw (0,0) -- (2,1) node[pos=.5,above,sloped] {$g(x)\le 0$};
+  \node at (1,0) {$x^\star$};
+\end{tikzpicture}
+\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+    const embeddedGlyphs = trace.glyphs.filter(
+      (item) => item.role === "embedded-tikz"
+    );
+
+    expect(trace.untracedRegions).toEqual([]);
+    expect(trace.lines.some(
+      (line) =>
+        line.role === "embedded-tikz" &&
+        line.text === "g(x)\u00140"
+    )).toBe(true);
+    expect(embeddedGlyphs).toContainEqual(expect.objectContaining({
+      code: 63,
+      fontName: "cmmi8",
+      fontSize: 8,
+    }));
+  });
+
   it("includes theme-owned list marker paint boxes in the native trace", () => {
     const trace = buildNativeBeamerPageTrace({
       layout: {

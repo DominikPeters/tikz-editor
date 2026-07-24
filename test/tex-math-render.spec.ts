@@ -2168,7 +2168,12 @@ describe("TeX math SVG rendering", () => {
         shrink: 0,
         stretchOrder: "normal",
         shrinkOrder: "normal",
-        origin: { kind: "display-math-boundary", side: "above", variant: "short" },
+        origin: {
+          kind: "display-math-boundary",
+          side: "above",
+          variant: "short",
+          displayLeftEdge: 72.77776,
+        },
       },
       {
         size: 6,

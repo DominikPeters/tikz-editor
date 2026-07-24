@@ -4494,11 +4494,17 @@ describe("simple TeX paragraph layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.report?.lines[0]?.segments[0]).toMatchObject({
-      kind: "math",
-      role: "list-label",
-      mathSvgBody: '<circle data-test-list-marker="true"/>',
-      width: 5,
+    expect(
+      result.vlistLayout?.items[0]?.children?.[0]?.children?.[1]?.item
+    ).toMatchObject({
+      kind: "hbox",
+      role: { kind: "list-label" },
+      box: {
+        renderItems: [{
+          kind: "tex-math-svg",
+          svgBody: '<circle data-test-list-marker="true"/>',
+        }],
+      },
     });
     expect(result.vlistLayout?.boxReport.items.find(
       (item) => item.hboxRole?.kind === "list-label"

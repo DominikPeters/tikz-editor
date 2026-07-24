@@ -43,6 +43,12 @@ const UNIT_FACTORS: Record<string, number> = {
 
 export type EvaluatePgfMathOptions = {
   rng?: PgfRandom;
+  /**
+   * Context-dependent TeX units, expressed in pt. In TeX, `em` and `ex`
+   * depend on the current font, so callers that know that font should
+   * override the process-wide fallback values here.
+   */
+  unitFactors?: Readonly<Partial<Record<"em" | "ex", number>>>;
 };
 
 export function evaluatePgfMathExpression(input: string, options: EvaluatePgfMathOptions = {}): PgfMathEvalResult {
@@ -65,7 +71,11 @@ export function evaluatePgfMathExpression(input: string, options: EvaluatePgfMat
   }
 
   const runtime = options.rng ? { rng: options.rng } : getCurrentPgfMathRuntime();
-  const parser = new Parser(tokenized.tokens, runtime ? runtime.rng : undefined);
+  const parser = new Parser(
+    tokenized.tokens,
+    runtime ? runtime.rng : undefined,
+    options.unitFactors
+  );
   return parser.parse();
 }
 
@@ -101,7 +111,8 @@ class Parser {
 
   constructor(
     private readonly tokens: Token[],
-    private readonly rng?: PgfRandom
+    private readonly rng?: PgfRandom,
+    private readonly unitFactors?: EvaluatePgfMathOptions["unitFactors"]
   ) {}
 
   parse(): PgfMathEvalResult {
@@ -386,7 +397,11 @@ class Parser {
       if (unit === "r") {
         return this.scalar((token.value * 180) / Math.PI);
       }
-      const factor = UNIT_FACTORS[unit];
+      const factor =
+        (unit === "em" || unit === "ex"
+          ? this.unitFactors?.[unit]
+          : undefined) ??
+        UNIT_FACTORS[unit];
       if (factor == null) {
         return this.error("invalid-domain", `Unsupported unit '${token.unit}'.`);
       }

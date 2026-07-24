@@ -2334,15 +2334,22 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
   const points: WorldPoint[] = [];
 
   for (const element of elements) {
+    const elementPoints: WorldPoint[] = [];
     if (element.kind === "Path") {
-      points.push(...pathBoundsPoints(element.commands).map((point) => applyOptionalTransform(point, element.transform)));
+      elementPoints.push(
+        ...pathBoundsPoints(element.commands).map((point) =>
+          applyOptionalTransform(point, element.transform)
+        )
+      );
+      pushElementPointsWithStrokeBounds(points, elementPoints, element);
       continue;
     }
 
     if (element.kind === "Circle") {
       const min = worldPoint(pt(element.center.x - element.radius), pt(element.center.y - element.radius));
       const max = worldPoint(pt(element.center.x + element.radius), pt(element.center.y + element.radius));
-      pushRectCorners(points, min, max, element.transform);
+      pushRectCorners(elementPoints, min, max, element.transform);
+      pushElementPointsWithStrokeBounds(points, elementPoints, element);
       continue;
     }
 
@@ -2354,30 +2361,36 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
       const extentY = Math.sqrt(element.rx * element.rx * sin * sin + element.ry * element.ry * cos * cos);
       const min = worldPoint(pt(element.center.x - extentX), pt(element.center.y - extentY));
       const max = worldPoint(pt(element.center.x + extentX), pt(element.center.y + extentY));
-      pushRectCorners(points, min, max, element.transform);
+      pushRectCorners(elementPoints, min, max, element.transform);
+      pushElementPointsWithStrokeBounds(points, elementPoints, element);
       continue;
     }
 
     const lineCount = Math.max(1, element.text.split("\n").length);
     const textHeight = element.textBlockHeight ?? lineCount * element.style.fontSize * 1.15;
     const textWidth = element.textBlockWidth ?? estimateTextWidth(element.text, element.style.fontSize);
-    const halfWidth = textWidth / 2;
-    const halfHeight = textHeight / 2;
-    const rotation = (element.rotation ?? 0) * (Math.PI / 180);
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
-    const corners = [
-      worldPoint(pt(-halfWidth), pt(-halfHeight)),
-      worldPoint(pt(halfWidth), pt(-halfHeight)),
-      worldPoint(pt(halfWidth), pt(halfHeight)),
-      worldPoint(pt(-halfWidth), pt(halfHeight))
-    ];
-    for (const corner of corners) {
-      const rotatedCorner = worldPoint(
-        pt(element.position.x + corner.x * cos - corner.y * sin),
-        pt(element.position.y + corner.x * sin + corner.y * cos)
+    pushRotatedRectCorners(
+      points,
+      element.position,
+      textWidth,
+      textHeight,
+      element.rotation ?? 0,
+      element.transform
+    );
+
+    // PGF protocols the node shape's background path into the picture
+    // bounding box even when that path is neither drawn nor filled. Text ink
+    // alone is therefore insufficient: the node's inner separation and
+    // minimum size must also contribute.
+    if (element.nodeVisualWidth != null && element.nodeVisualHeight != null) {
+      pushRotatedRectCorners(
+        points,
+        element.nodeVisualCenter ?? element.position,
+        element.nodeVisualWidth,
+        element.nodeVisualHeight,
+        element.rotation ?? 0,
+        element.transform
       );
-      points.push(applyOptionalTransform(rotatedCorner, element.transform));
     }
   }
 
@@ -2397,6 +2410,66 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
   }
 
   return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
+}
+
+function pushElementPointsWithStrokeBounds(
+  target: WorldPoint[],
+  elementPoints: readonly WorldPoint[],
+  element: Extract<SceneElement, { kind: "Path" | "Circle" | "Ellipse" }>
+): void {
+  target.push(...elementPoints);
+  if (
+    elementPoints.length === 0 ||
+    element.style.stroke == null ||
+    element.style.stroke === "none" ||
+    element.style.lineWidth <= 0
+  ) {
+    return;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of elementPoints) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  const halfLineWidth = element.style.lineWidth / 2;
+  target.push(
+    worldPoint(pt(minX - halfLineWidth), pt(minY - halfLineWidth)),
+    worldPoint(pt(maxX + halfLineWidth), pt(maxY + halfLineWidth))
+  );
+}
+
+function pushRotatedRectCorners(
+  target: WorldPoint[],
+  center: WorldPoint,
+  width: number,
+  height: number,
+  rotationDegrees: number,
+  transform: SceneElement["transform"]
+): void {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const rotation = rotationDegrees * (Math.PI / 180);
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const corners = [
+    worldPoint(pt(-halfWidth), pt(-halfHeight)),
+    worldPoint(pt(halfWidth), pt(-halfHeight)),
+    worldPoint(pt(halfWidth), pt(halfHeight)),
+    worldPoint(pt(-halfWidth), pt(halfHeight))
+  ];
+  for (const corner of corners) {
+    const rotatedCorner = worldPoint(
+      pt(center.x + corner.x * cos - corner.y * sin),
+      pt(center.y + corner.x * sin + corner.y * cos)
+    );
+    target.push(applyOptionalTransform(rotatedCorner, transform));
+  }
 }
 
 function applyOptionalTransform(

@@ -56,6 +56,8 @@ import {
   texVListLinePlacements,
   texVListParagraphPlacements,
 } from "./placements.js";
+import { texVListPathKey } from "./paths.js";
+import { texVListParagraphEntries } from "./traversal.js";
 
 export interface TexVListMeasuredParagraphLayoutOptions extends TexVListLayoutOptions {
   readonly lineHeight: TexLength;
@@ -252,10 +254,21 @@ export function layoutTexVListFromHorizontalParagraphs(
   document: TexVListDocument,
   options: TexVListHorizontalParagraphLayoutOptions
 ): TexVListLayout<"layout"> {
+  const paragraphsByPath = new Map(
+    texVListParagraphEntries(document.items).map((entry) => [
+      texVListPathKey(entry.path),
+      entry.item.paragraph,
+    ])
+  );
   return layoutTexVListFromMeasuredParagraphs(document, {
     ...options,
-    paragraphMeasurements: options.paragraphLayouts.map(
-      texVListParagraphMeasurementFromHorizontalLayout
+    paragraphMeasurements: options.paragraphLayouts.map((paragraph) =>
+      texVListParagraphMeasurementFromHorizontalLayout(
+        paragraph,
+        paragraphsByPath.get(
+          texVListPathKey(paragraph.vlistPath)
+        )?.verticalAdjustments
+      )
     ),
   });
 }

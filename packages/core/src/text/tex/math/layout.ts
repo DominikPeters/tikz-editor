@@ -38,6 +38,7 @@ import type {
 import {
   defaultTexMathFontProfile,
   luaLatexAmsMathFontProfile,
+  resolveComputerModernMathOpticalFont,
   type TexMathFontFamily,
   type TexMathFontProfile,
 } from "./font-profile.js";
@@ -90,6 +91,7 @@ import {
   spaceTexMathList,
   texMathSpacingBetween,
   type TexMathResolvedGlue,
+  type TexMathSpacedItem,
 } from "./spacing.js";
 import { parseTexMath } from "./parser.js";
 import { texMathSymbolDeclaration } from "./symbol-definitions.js";
@@ -534,7 +536,11 @@ export function layoutTexMathList(
   let height = 0;
   let depth = 0;
 
-  for (const item of spaced.items) {
+  for (let itemIndex = 0; itemIndex < spaced.items.length; itemIndex += 1) {
+    const item = spaced.items[itemIndex];
+    if (!item) {
+      continue;
+    }
     if (item.kind === "resolved-glue") {
       const textSpace = item.fixedTextSpace === true
         ? texMathTextSpaceWidth(fontProfile, baseAtPt)
@@ -638,7 +644,15 @@ export function layoutTexMathList(
       currentCramped,
       baseAtPt,
       currentAlphabet,
-      suppressAmsNestedAccentAdjustment
+      suppressAmsNestedAccentAdjustment,
+      shouldSuppressOrdNoadItalicCorrection(
+        item,
+        spaced.items[itemIndex + 1],
+        fontProfile,
+        currentStyle,
+        baseAtPt,
+        currentAlphabet
+      )
     );
     if (!atomLayout) {
       errors.push({
@@ -940,7 +954,8 @@ function layoutAtom(
   cramped: boolean,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
-  suppressAmsNestedAccentAdjustment = false
+  suppressAmsNestedAccentAdjustment = false,
+  suppressTrailingItalicCorrection = false
 ): TexMathAtomLayout | null {
   const nucleus = layoutNucleus(
     atom.nucleus,
@@ -960,7 +975,7 @@ function layoutAtom(
   }
 
   if (!atom.subscript && !atom.superscript) {
-    return nucleus.isCharacterNucleus
+    return nucleus.isCharacterNucleus && !suppressTrailingItalicCorrection
       ? appendTrailingItalicCorrection(nucleus, nucleus.italicCorrection, nucleus.sourceSpan)
       : nucleus;
   }
@@ -1045,6 +1060,55 @@ function layoutAtom(
     isCharacterNucleus: nucleus.isCharacterNucleus,
     sourceSpan: nucleus.sourceSpan,
   });
+}
+
+/**
+ * TeX's `make_ord` pass marks an ordinary character noad as a math text
+ * character when the next noad is another ordinary character in the same
+ * math family. The first character consequently does not contribute its
+ * italic correction; only the end of the run does. This is observable for
+ * sans math runs such as `Cx`, where the Latin Modern Sans oblique `C` has a
+ * non-zero italic correction.
+ */
+function shouldSuppressOrdNoadItalicCorrection(
+  atom: TexMathAtom,
+  nextItem: TexMathSpacedItem | undefined,
+  fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
+  baseAtPt: TexLength,
+  alphabet?: TexMathAlphabetCommand
+): boolean {
+  if (
+    atom.atomClass !== "ord" ||
+    atom.subscript ||
+    atom.superscript ||
+    atom.nucleus.kind !== "glyph" ||
+    nextItem?.kind !== "atom" ||
+    nextItem.atomClass !== "ord" ||
+    nextItem.nucleus.kind !== "glyph" ||
+    atom.sourceSpan.end > nextItem.sourceSpan.start
+  ) {
+    return false;
+  }
+  const currentGlyph = resolveMathGlyph(
+    atom.nucleus,
+    fontProfile,
+    style,
+    baseAtPt,
+    alphabet
+  );
+  const nextGlyph = resolveMathGlyph(
+    nextItem.nucleus,
+    fontProfile,
+    style,
+    baseAtPt,
+    alphabet
+  );
+  return currentGlyph !== null &&
+    nextGlyph !== null &&
+    currentGlyph.family === nextGlyph.family &&
+    currentGlyph.font.id === nextGlyph.font.id &&
+    currentGlyph.font.atPt === nextGlyph.font.atPt;
 }
 
 function shouldUseOperatorLimits(
@@ -6511,10 +6575,19 @@ function resolveMathSymbolParts(
       }) ?? null
     : null;
   if (alphabetGlyph || profileAlphabetFont) {
+    const alphabetAtPt = fontProfile.resolveMathStyleAtPt(style, baseAtPt);
+    const opticalAlphabetFontId =
+      alphabet === "mathcal" && alphabetGlyph
+        ? resolveComputerModernMathOpticalFont(
+            "symbols",
+            alphabetAtPt,
+            false
+          )
+        : alphabetGlyph?.fontId;
     const font = profileAlphabetFont ??
       fontProfile.metricProvider.resolveFont({
-        fontId: alphabetGlyph!.fontId,
-        atPt: fontProfile.resolveMathStyleAtPt(style, baseAtPt),
+        fontId: opticalAlphabetFontId!,
+        atPt: alphabetAtPt,
       });
     const code = alphabetGlyph?.code ?? nucleus.text.charCodeAt(0);
     const metric = requiredCharMetric(font, code);

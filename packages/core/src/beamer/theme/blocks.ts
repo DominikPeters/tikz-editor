@@ -52,10 +52,21 @@ export function planBeamerBlockTemplate(
           transitionHeightPt: bp(2.5),
           bodyTopPaddingPt: 2,
           // The lower PGF path protrudes below the natural vbox. The colored
-          // body ends 3.5pt below the final paragraph box, while the vbox
-          // reference advances only another 1bp.
+          // body ends 3.5pt below the final paragraph box; the independent
+          // TeX flow advance is described by the fields below.
           bodyExtraHeightPt: 3.5,
-          boxBottomAdvancePt: bp(1),
+          // beamerbaseboxes.sty: \vskip4bp, then after the title hbox
+          // \vskip-1pt + a 6pt transition hbox + \vskip-.5pt. The body hbox
+          // is raised by its depth plus .5pt and shadowed boxes finish with
+          // natural 4bp glue (with 2bp shrink).
+          boxTopSkipPt: bp(4),
+          titleBodyGapPt: 4.5,
+          bodyBottomRaisePt: 0.5,
+          boxBottomSkipPt: context.theme.templates.block.id.endsWith(
+              "rounded-shadow"
+            )
+            ? bp(4)
+            : bp(2),
           cornerRadiusPt: bp(4),
           shadowExtentPt: context.theme.templates.block.id.endsWith(
               "rounded-shadow"
@@ -73,7 +84,10 @@ export function planBeamerBlockTemplate(
           transitionHeightPt: 0,
           bodyTopPaddingPt: 0,
           bodyExtraHeightPt: 0,
-          boxBottomAdvancePt: 0,
+          boxTopSkipPt: 0,
+          titleBodyGapPt: 0,
+          bodyBottomRaisePt: 0,
+          boxBottomSkipPt: 0,
           cornerRadiusPt: 0,
           shadowExtentPt: 0,
         },

@@ -523,6 +523,12 @@ export interface SimpleTexParagraphBlock {
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly nodes: readonly SimpleTexInlineNode[];
+  /**
+   * LaTeX lowers `\vspace` encountered in horizontal mode to `\vadjust`.
+   * Keep those adjustments attached to the unbroken paragraph so line
+   * breaking remains independent from vertical-list placement.
+   */
+  readonly verticalAdjustments?: readonly SimpleTexVerticalGlueBlockItem[];
   readonly noIndent: boolean;
   readonly startsAfterExplicitPar?: boolean;
   readonly firstLineIndentEm?: number;
@@ -3577,6 +3583,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const listStack: ActiveSimpleTexList[] = [];
   const environmentStack: ActiveSimpleTexEnvironment[] = [];
   const scopeStack: Exclude<SimpleTexScopePathRole, { readonly kind: "list-item" }>[] = [];
+  let pendingParagraphVerticalAdjustments: SimpleTexVerticalGlueBlockItem[] = [];
+  let horizontalModeResumedAfterDisplay = false;
   let pendingListLabel: SimpleTexListLabel | undefined;
   let pendingListShowLabel = false;
 
@@ -3716,13 +3724,23 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
       const scopePath = currentSimpleTexScopePath();
-      const nodes = simpleTexInlineNodesForRange(sourceNodes, start, end);
+      const nodes = simpleTexInlineNodesAfterHorizontalVSpace(
+        simpleTexInlineNodesForRange(sourceNodes, start, end),
+        pendingParagraphVerticalAdjustments
+      );
       unsupportedCommand ||= simpleTexBlockStartsWithVerticalModeLapBox(nodes);
       const block: SimpleTexParagraphBlock = {
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
         sourceEnd: end,
         nodes,
+        ...(pendingParagraphVerticalAdjustments.length > 0
+          ? {
+              verticalAdjustments: [
+                ...pendingParagraphVerticalAdjustments,
+              ],
+            }
+          : {}),
         noIndent,
         ...(startsAfterExplicitPar ? { startsAfterExplicitPar: true } : {}),
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
@@ -3746,6 +3764,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         quotationItemLabelPendingStack[quotationItemLabelPendingStack.length - 1] = false;
       }
       previousParagraphBlockEnd = end;
+      pendingParagraphVerticalAdjustments = [];
       pendingListLabel = undefined;
       pendingListShowLabel = false;
     }
@@ -3756,6 +3775,26 @@ function buildSimpleTexParagraphBlocksFromNodes(
   ): boolean => {
     const first = nodes.find((node) => node.kind !== "space");
     return first?.kind === "mbox" && (first.command === "llap" || first.command === "rlap");
+  };
+
+  const simpleTexInlineNodesAfterHorizontalVSpace = (
+    nodes: readonly SimpleTexInlineNode[],
+    adjustments: readonly SimpleTexVerticalGlueBlockItem[]
+  ): SimpleTexInlineNode[] => {
+    const ignoredSpaceIndices = new Set<number>();
+    for (const adjustment of adjustments) {
+      const followingIndex = nodes.findIndex(
+        (node) => node.sourceStart >= adjustment.sourceEnd
+      );
+      if (nodes[followingIndex]?.kind === "space") {
+        // latex.ltx's `\@esphack` restores the saved space factor and, when
+        // horizontal space preceded the command, issues `\ignorespaces`.
+        // The pre-command interword glue remains; source whitespace after
+        // `\vspace` does not create a second one.
+        ignoredSpaceIndices.add(followingIndex);
+      }
+    }
+    return nodes.filter((_, index) => !ignoredSpaceIndices.has(index));
   };
 
   const currentSimpleTexListContext = (): SimpleTexListContext | undefined => {
@@ -3882,6 +3921,43 @@ function buildSimpleTexParagraphBlocksFromNodes(
     };
   };
 
+  const verticalGlueBlockItem = (
+    node: SimpleTexVerticalGlueNode
+  ): SimpleTexVerticalGlueBlockItem => ({
+    kind: "vertical-glue",
+    text: node.text,
+    command: node.command,
+    sourceStart: node.sourceStart,
+    sourceEnd: node.sourceEnd,
+    size: node.size,
+    ...(node.relativeSize ? { relativeSize: node.relativeSize } : {}),
+    stretch: node.stretch,
+    shrink: node.shrink,
+    stretchOrder: node.stretchOrder,
+    shrinkOrder: node.shrinkOrder,
+    ...currentSimpleTexBlockItemScope(),
+  });
+
+  const hasFollowingInlineMaterial = (start: number): boolean => {
+    let lookahead = start;
+    while (lookahead < sourceNodes.length) {
+      const candidate = sourceNodes[lookahead];
+      if (candidate?.kind === "space") {
+        lookahead += 1;
+        continue;
+      }
+      if (
+        candidate?.kind === "vertical-glue" &&
+        candidate.command === "vspace"
+      ) {
+        lookahead += 1;
+        continue;
+      }
+      return candidate !== undefined && isSimpleTexInlineNode(candidate);
+    }
+    return false;
+  };
+
   while (index < sourceNodes.length) {
     const node = sourceNodes[index];
     if (!node) {
@@ -3940,6 +4016,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = true;
+      horizontalModeResumedAfterDisplay = true;
       index = prefix.start;
       continue;
     }
@@ -3958,6 +4035,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
+      horizontalModeResumedAfterDisplay = false;
       index = prefix.start;
       continue;
     }
@@ -4024,6 +4102,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
+      horizontalModeResumedAfterDisplay = false;
       index = prefix.start;
       continue;
     }
@@ -4060,33 +4139,46 @@ function buildSimpleTexParagraphBlocksFromNodes(
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = true;
+      horizontalModeResumedAfterDisplay = false;
       index = prefix.start;
       continue;
     }
 
     if (node.kind === "vertical-glue") {
-      if (hasNonSpaceSourceText(text, blockStart, node.sourceStart, sourceOffset)) {
-        unsupportedCommand = true;
-        abortScan = true;
-        break;
+      if (
+        hasNonSpaceSourceText(
+          text,
+          blockStart,
+          node.sourceStart,
+          sourceOffset
+        ) ||
+        (
+          node.command === "vspace" &&
+          horizontalModeResumedAfterDisplay &&
+          hasFollowingInlineMaterial(index + 1)
+        )
+      ) {
+        if (node.command !== "vspace") {
+          unsupportedCommand = true;
+          abortScan = true;
+          break;
+        }
+        // `\vspace` is special in LaTeX: in horizontal mode it emits a
+        // `\vadjust` without ending the paragraph. Retain the command in the
+        // paragraph's source range, omit it from inline shaping, and lower
+        // its vertical effect only after line breaking has located the
+        // containing line.
+        pendingParagraphVerticalAdjustments.push(
+          verticalGlueBlockItem(node)
+        );
+        index += 1;
+        continue;
       }
-      items.push({
-        kind: "vertical-glue",
-        text: node.text,
-        command: node.command,
-        sourceStart: node.sourceStart,
-        sourceEnd: node.sourceEnd,
-        size: node.size,
-        ...(node.relativeSize ? { relativeSize: node.relativeSize } : {}),
-        stretch: node.stretch,
-        shrink: node.shrink,
-        stretchOrder: node.stretchOrder,
-        shrinkOrder: node.shrinkOrder,
-        ...currentSimpleTexBlockItemScope(),
-      });
+      items.push(verticalGlueBlockItem(node));
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
+      horizontalModeResumedAfterDisplay = false;
       index = prefix.start;
       continue;
     }

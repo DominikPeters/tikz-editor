@@ -1139,6 +1139,49 @@ describe("TeX vlist lowering", () => {
     ]);
   });
 
+  it("places horizontal-mode vspace after its owning paragraph line", () => {
+    const source = String.raw`Alpha \vspace{7pt} Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const lowered = lowerSimpleTexBlockItemsToVList(parsed.items);
+    const paragraph = lowered.items[0];
+
+    expect(paragraph?.kind).toBe("paragraph");
+    if (paragraph?.kind !== "paragraph") {
+      throw new Error("expected paragraph item");
+    }
+    expect(paragraph.paragraph.verticalAdjustments).toEqual([
+      expect.objectContaining({
+        kind: "glue",
+        sourceSpan: {
+          start: source.indexOf(String.raw`\vspace`),
+          end: source.indexOf(" Beta"),
+        },
+        size: 7,
+        origin: { kind: "explicit-command", command: "vspace" },
+      }),
+    ]);
+
+    const withAdjustment = layoutSimpleTexParagraph(source, {
+      width: 120,
+    });
+    const withoutAdjustment = layoutSimpleTexParagraph("Alpha Beta", {
+      width: 120,
+    });
+    expect(withAdjustment.supported).toBe(true);
+    expect(withAdjustment.report?.lines).toHaveLength(1);
+    expect(withAdjustment.vlistLayout).toBeDefined();
+    expect(withoutAdjustment.vlistLayout).toBeDefined();
+    expect(
+      Number(withAdjustment.vlistLayout?.metrics.height ?? 0) +
+      Number(withAdjustment.vlistLayout?.metrics.depth ?? 0)
+    ).toBeCloseTo(
+      Number(withoutAdjustment.vlistLayout?.metrics.height ?? 0) +
+      Number(withoutAdjustment.vlistLayout?.metrics.depth ?? 0) +
+      7,
+      5
+    );
+  });
+
   it("attaches relative vspace after a post-display paragraph using the active font size", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Before \[x\]\vspace{.3em} After`
@@ -1176,14 +1219,54 @@ describe("TeX vlist lowering", () => {
       { kind: "display-math" },
       {
         kind: "paragraph",
-        text: "After",
-        leadingInterwordSpace: true,
+        text: String.raw`\vspace{.3em} After`,
+        leadingInterwordSpace: undefined,
       },
-      {
-        kind: "glue",
+    ]);
+    const after = vlist.items.at(-1);
+    expect(after?.kind).toBe("paragraph");
+    if (after?.kind !== "paragraph") {
+      throw new Error("expected post-display paragraph");
+    }
+    expect(after.paragraph.verticalAdjustments).toEqual([
+      expect.objectContaining({
         size: expect.closeTo(3.285, 10),
         origin: { kind: "explicit-command", command: "vspace" },
-      },
+      }),
+    ]);
+  });
+
+  it("retains whitespace before post-display vspace as leading interword glue", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\[x\]  \vspace{3pt} After`
+    );
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
+    const paragraph = vlist.items.at(-1);
+
+    expect(paragraph?.kind).toBe("paragraph");
+    if (paragraph?.kind !== "paragraph") {
+      throw new Error("expected post-display paragraph");
+    }
+    expect(paragraph.paragraph.leadingInterwordSpace).toBe(true);
+    expect(paragraph.paragraph.verticalAdjustments).toEqual([
+      expect.objectContaining({ size: 3 }),
+    ]);
+  });
+
+  it("does not treat a later paragraph vspace as post-display leading glue", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\[x\] First \vspace{3pt} Second`
+    );
+    const vlist = lowerSimpleTexBlockItemsToVList(parsed.items);
+    const paragraph = vlist.items.at(-1);
+
+    expect(paragraph?.kind).toBe("paragraph");
+    if (paragraph?.kind !== "paragraph") {
+      throw new Error("expected post-display paragraph");
+    }
+    expect(paragraph.paragraph.leadingInterwordSpace).toBeUndefined();
+    expect(paragraph.paragraph.verticalAdjustments).toEqual([
+      expect.objectContaining({ size: 3 }),
     ]);
   });
 

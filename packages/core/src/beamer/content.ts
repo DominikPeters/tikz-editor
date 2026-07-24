@@ -17,7 +17,9 @@ import type {
   BeamerFrameBodyIr,
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
+  BeamerTitlePageBodyNode,
   BeamerTikzBodyNode,
+  BeamerVerticalSpaceBodyNode,
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
 
@@ -121,9 +123,145 @@ export function parseBeamerFrameBody(
     kind: "frame-body",
     frameId: frame.id,
     span: frame.bodySpan,
-    children,
+    children: splitStandaloneFrameCommands(source, frame.id, children),
     diagnostics,
   };
+}
+
+function splitStandaloneFrameCommands(
+  source: string,
+  frameId: string,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  return splitStandaloneVerticalSpaces(
+    source,
+    frameId,
+    splitTitlePageCommands(source, frameId, children)
+  );
+}
+
+function splitTitlePageCommands(
+  source: string,
+  frameId: string,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const result: BeamerFrameBodyNode[] = [];
+  let titlePageIndex = 0;
+  let paragraphIndex = 0;
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const commands = scanBeamerControlSequences(source, child.span).filter(
+      (command) => command.name === "titlepage"
+    );
+    if (commands.length === 0) {
+      result.push(child);
+      continue;
+    }
+    let cursor = child.span.from;
+    for (const command of commands) {
+      const before = trimSpan(source, { from: cursor, to: command.from });
+      if (before.to > before.from) {
+        result.push({
+          kind: "paragraph",
+          id: `${frameId}:paragraph:${paragraphIndex}`,
+          span: before,
+        });
+        paragraphIndex += 1;
+      }
+      const titlePage: BeamerTitlePageBodyNode = {
+        kind: "title-page",
+        id: `${frameId}:title-page:${titlePageIndex}`,
+        span: { from: command.from, to: command.to },
+        commandSpan: { from: command.from, to: command.to },
+      };
+      result.push(titlePage);
+      titlePageIndex += 1;
+      cursor = command.to;
+    }
+    const after = trimSpan(source, { from: cursor, to: child.span.to });
+    if (after.to > after.from) {
+      result.push({
+        kind: "paragraph",
+        id: `${frameId}:paragraph:${paragraphIndex}`,
+        span: after,
+      });
+      paragraphIndex += 1;
+    }
+  }
+  return result;
+}
+
+function splitStandaloneVerticalSpaces(
+  source: string,
+  frameId: string,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const result: BeamerFrameBodyNode[] = [];
+  let verticalSpaceIndex = 0;
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const nodes = standaloneVerticalSpaceNodes(
+      source,
+      frameId,
+      child.span,
+      verticalSpaceIndex
+    );
+    if (!nodes) {
+      result.push(child);
+      continue;
+    }
+    result.push(...nodes);
+    verticalSpaceIndex += nodes.length;
+  }
+  return result;
+}
+
+function standaloneVerticalSpaceNodes(
+  source: string,
+  frameId: string,
+  span: Span,
+  firstIndex: number
+): BeamerVerticalSpaceBodyNode[] | null {
+  const result: BeamerVerticalSpaceBodyNode[] = [];
+  let cursor = span.from;
+  for (const command of scanBeamerControlSequences(source, span)) {
+    if (
+      command.name !== "vspace" ||
+      !isIgnorableFrameSource(source, { from: cursor, to: command.from })
+    ) {
+      return null;
+    }
+    const value = readBeamerRequiredArgument(source, command.to, span.to);
+    if (!value) {
+      return null;
+    }
+    const nodeSpan = { from: command.from, to: value.span.to };
+    result.push({
+      kind: "vertical-space",
+      id: `${frameId}:vspace:${firstIndex + result.length}`,
+      span: nodeSpan,
+      starred: command.starred,
+      value,
+    });
+    cursor = nodeSpan.to;
+  }
+  return result.length > 0 &&
+      isIgnorableFrameSource(source, { from: cursor, to: span.to })
+    ? result
+    : null;
+}
+
+function isIgnorableFrameSource(source: string, span: Span): boolean {
+  return source
+    .slice(span.from, span.to)
+    .replace(/%[^\r\n]*(?:\r?\n|$)/gu, "")
+    .trim() === "";
 }
 
 function frameTikzFlowNode(params: {

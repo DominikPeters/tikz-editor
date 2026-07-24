@@ -444,7 +444,50 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
-  it("rejects vertical glue in the middle of a paragraph instead of approximating vadjust", () => {
+  it("keeps horizontal-mode vspace attached to its unbroken paragraph", () => {
+    const source = String.raw`Alpha \vspace{7pt} Beta`;
+    const analysis = analyzeSimpleTexParagraph(source, 120);
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+    expect(analysis.ir?.items).toHaveLength(1);
+    expect(analysis.ir?.blocks).toEqual([
+      expect.objectContaining({
+        text: source,
+        verticalAdjustments: [
+          expect.objectContaining({
+            kind: "vertical-glue",
+            command: "vspace",
+            size: 7,
+            sourceStart: source.indexOf(String.raw`\vspace`),
+            sourceEnd: source.indexOf(" Beta"),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("keeps post-display vspace on the resumed horizontal paragraph", () => {
+    const source = String.raw`\[x\]\vspace{4pt} Alpha Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.items.map((item) => item.kind)).toEqual([
+      "display-math",
+      "paragraph",
+    ]);
+    expect(parsed.blocks[0]).toEqual(expect.objectContaining({
+      text: String.raw`\vspace{4pt} Alpha Beta`,
+      verticalAdjustments: [
+        expect.objectContaining({
+          command: "vspace",
+          size: 4,
+        }),
+      ],
+    }));
+  });
+
+  it("rejects primitive vertical glue in the middle of a paragraph", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \smallskip Beta`, 120);
 
     expect(analysis.ir?.unsupportedCommand).toBe(true);

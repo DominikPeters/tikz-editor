@@ -165,9 +165,11 @@ export type BeamerPageGeometry = {
 
 export type BeamerFrameLayoutItemKind =
   | "background"
+  | "title-page"
   | "frame-title"
   | "frame-subtitle"
   | "text"
+  | "navigation-symbols"
   | "list-marker"
   | "block"
   | "columns"
@@ -189,6 +191,11 @@ export type BeamerFrameLayoutItem = {
 export type BeamerParagraphLayout = {
   paragraphId: string;
   role:
+    | "title"
+    | "subtitle"
+    | "author"
+    | "institute"
+    | "date"
     | "frame-title"
     | "frame-subtitle"
     | "body"

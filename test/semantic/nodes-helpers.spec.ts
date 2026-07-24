@@ -338,6 +338,13 @@ describe("semantic node helper coverage", () => {
 
     const empty = resolveNodeLayout("", parseOptionListRaw("[text height=5pt]"), style);
     expect(empty.textBlockHeight).toBeGreaterThan(0);
+    const largeFont = resolveNodeLayout(
+      "X",
+      undefined,
+      { ...style, fontSize: 20 }
+    );
+    expect(largeFont.naturalWidth - largeFont.textBlockWidth)
+      .toBeCloseTo(2 * 0.3333 * 20, 6);
     const circle = adjustNodeLayoutForShape(wrapped, "circle");
     const ellipse = adjustNodeLayoutForShape(wrapped, "ellipse");
     expect(circle.visualWidth).toBeCloseTo(circle.visualHeight);

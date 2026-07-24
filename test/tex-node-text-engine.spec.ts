@@ -42,12 +42,30 @@ describe("native TeX node text engine", () => {
     expect(engine.measure(request("   "))).toBeNull();
   });
 
-  it("scales cached native metrics with the requested font size", async () => {
+  it("lays out each requested font size with its TeX-selected face", async () => {
     const engine = await createTexNodeTextEngine();
     const tenPoint = engine.measure(request("native", 10));
     const twentyPoint = engine.measure(request("native", 20));
+    const twentyPointPayload = engine.renderFromCache(
+      twentyPoint?.cacheKey ?? ""
+    );
 
-    expect(twentyPoint?.width).toBeCloseTo((tenPoint?.width ?? 0) * 2, 6);
-    expect(twentyPoint?.height).toBeCloseTo((tenPoint?.height ?? 0) * 2, 6);
+    expect(twentyPoint?.cacheKey).not.toBe(tenPoint?.cacheKey);
+    expect(twentyPointPayload?.body).toContain(
+      'data-tex-font="lmroman10-regular"'
+    );
+    expect(twentyPointPayload?.body).toContain("scale(2)");
+  });
+
+  it("treats par as a no-op in natural-width TikZ hbox text", async () => {
+    const engine = await createTexNodeTextEngine();
+    const restricted = engine.measure(
+      request(String.raw`separated\par from`)
+    );
+    const joined = engine.measure(request("separatedfrom"));
+
+    expect(restricted).not.toBeNull();
+    expect(restricted?.width).toBeCloseTo(joined?.width ?? 0, 6);
+    expect(restricted?.height).toBeCloseTo(joined?.height ?? 0, 6);
   });
 });

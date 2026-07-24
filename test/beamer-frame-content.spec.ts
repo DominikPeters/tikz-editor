@@ -13,6 +13,32 @@ const FIXTURE_PATH = new URL(
 );
 
 describe("Beamer frame content frontend", () => {
+  it("lowers title-page and standalone vertical-space commands into frame flow", () => {
+    const source = readFileSync(FIXTURE_PATH, "utf8");
+    const document = scanBeamerDocument(source);
+    const ir = parseBeamerFrameBody({
+      source,
+      frame: document.frames[0]!,
+    });
+
+    expect(ir.diagnostics).toEqual([]);
+    expect(ir.children.map((node) => node.kind)).toEqual([
+      "title-page",
+      "vertical-space",
+      "tikzpicture",
+    ]);
+    expect(ir.children[0]).toMatchObject({
+      kind: "title-page",
+      id: "frame:0:title-page:0",
+    });
+    expect(ir.children[1]).toMatchObject({
+      kind: "vertical-space",
+      id: "frame:0:vspace:0",
+      starred: false,
+      value: expect.objectContaining({ value: "-1em" }),
+    });
+  });
+
   it("lowers columns into ordered, source-backed flow nodes", () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const document = scanBeamerDocument(source);

@@ -436,6 +436,42 @@ function attachPostDisplayVSpace(
     const display = blockItems[index];
     const glue = blockItems[index + 1];
     const paragraph = blockItems[index + 2];
+    const resumedParagraph = blockItems[index + 1];
+    const resumedAdjustment =
+      resumedParagraph?.kind === "paragraph"
+        ? resumedParagraph.block.verticalAdjustments?.[0]
+        : undefined;
+    const resumedFirstInlineSourceStart =
+      resumedParagraph?.kind === "paragraph"
+        ? resumedParagraph.block.nodes.find((node) => node.kind !== "space")
+          ?.sourceStart
+        : undefined;
+    if (
+      display?.kind === "display-math" &&
+      resumedParagraph?.kind === "paragraph" &&
+      resumedAdjustment?.command === "vspace" &&
+      (
+        resumedFirstInlineSourceStart === undefined ||
+        resumedAdjustment.sourceStart <= resumedFirstInlineSourceStart
+      )
+    ) {
+      const leadingInterwordSpace =
+        resumedAdjustment.sourceStart > display.sourceEnd;
+      output.push(
+        display,
+        leadingInterwordSpace
+          ? {
+              ...resumedParagraph,
+              block: {
+                ...resumedParagraph.block,
+                leadingInterwordSpace: true,
+              },
+            }
+          : resumedParagraph
+      );
+      index += 1;
+      continue;
+    }
     if (
       display?.kind === "display-math" &&
       glue?.kind === "vertical-glue" &&
@@ -593,6 +629,13 @@ function paragraphInputFromSimpleTexBlock(
     text: block.text,
     sourceSpan: sourceSpanFromBlock(block),
     nodes: block.nodes,
+    ...(block.verticalAdjustments && block.verticalAdjustments.length > 0
+      ? {
+          verticalAdjustments: block.verticalAdjustments.map((adjustment) =>
+            glueItemFromSimpleTexVerticalGlue(adjustment, options.font)
+          ),
+        }
+      : {}),
     noIndent: block.noIndent,
     ...(block.startsAfterExplicitPar === true
       ? { startsAfterExplicitPar: true }

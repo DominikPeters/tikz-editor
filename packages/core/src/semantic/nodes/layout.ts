@@ -51,13 +51,15 @@ export function resolveNodeLayout(
   const fontSize = style.fontSize;
   const charWidth = fontSize * 0.7;
   const lineHeight = fontSize * 1.05;
+  const parseNodeLength = (raw: string): number | null =>
+    parseLength(raw, "pt", { unitFactors: { em: fontSize } });
 
-  const defaultInner = parseLength(".3333em", "pt")!;
+  const defaultInner = parseNodeLength(".3333em")!;
   let innerXSep = defaultInner;
   let innerYSep = defaultInner;
   let textWidth: number | null = null;
-  let minWidth = parseLength("1pt", "pt")!;
-  let minHeight = parseLength("1pt", "pt")!;
+  let minWidth = parseNodeLength("1pt")!;
+  let minHeight = parseNodeLength("1pt")!;
   let minSize: number | null = null;
   let textHeightOverride: number | null = null;
   let textDepthOverride: number | null = null;
@@ -75,23 +77,23 @@ export function resolveNodeLayout(
       }
 
       if (entry.key === "inner sep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           innerXSep = parsed;
           innerYSep = parsed;
         }
       } else if (entry.key === "inner xsep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           innerXSep = parsed;
         }
       } else if (entry.key === "inner ysep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           innerYSep = parsed;
         }
       } else if (entry.key === "text width") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           textWidth = Math.max(0, parsed);
         }
@@ -103,27 +105,27 @@ export function resolveNodeLayout(
       } else if (entry.key === "node halign header") {
         hasNoWidthHalignHeader = normalizeOptionValue(entry.valueRaw).trim().length > 0;
       } else if (entry.key === "minimum width") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           minWidth = Math.max(0, parsed);
         }
       } else if (entry.key === "minimum height") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           minHeight = Math.max(0, parsed);
         }
       } else if (entry.key === "minimum size") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           minSize = Math.max(0, parsed);
         }
       } else if (entry.key === "text height") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           textHeightOverride = Math.max(0, parsed);
         }
       } else if (entry.key === "text depth") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           textDepthOverride = Math.max(0, parsed);
         }
@@ -132,18 +134,18 @@ export function resolveNodeLayout(
         if (normalized === "auto") {
           outerSep = style.stroke && style.stroke !== "none" ? style.lineWidth / 2 : 0;
         } else {
-          const parsed = parseLength(entry.valueRaw, "pt");
+          const parsed = parseNodeLength(entry.valueRaw);
           if (parsed != null) {
             outerSep = parsed;
           }
         }
       } else if (entry.key === "outer xsep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           outerXSep = parsed;
         }
       } else if (entry.key === "outer ysep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           outerYSep = parsed;
         }

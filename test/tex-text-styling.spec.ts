@@ -72,7 +72,7 @@ describe("native TeX text styling", () => {
       text: String.raw`\textcolor{blue}{$x$}`,
       width: 100,
     });
-    expect(mathSvg).toContain('<g fill="#0000ff" stroke="#0000ff">');
+    expect(mathSvg).toContain('<g fill="#0000ff" stroke="none">');
   });
 
   it("renders colorbox paints independently while preserving nested foreground styles", () => {
@@ -88,7 +88,7 @@ describe("native TeX text styling", () => {
     expect(body).toContain('fill="#ffffff" stroke="none"');
     expect(body.match(/data-tex-rule="boxed-rule"/g)).toHaveLength(4);
     expect(body).toContain('fill="#ff0000" stroke="none"');
-    expect(body).toContain('fill="#0000ff" stroke="#0000ff"');
+    expect(body).toContain('fill="#0000ff" stroke="none"');
   });
 
   it("resolves named colors without shifting source spans or following carets", () => {

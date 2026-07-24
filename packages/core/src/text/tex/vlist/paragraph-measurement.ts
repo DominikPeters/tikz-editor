@@ -11,6 +11,7 @@ import type { TexVListItemMeasurer } from "./layout.js";
 import { texVListPathKey } from "./paths.js";
 import type {
   TexBoxMetrics,
+  TexGlueItem,
   TexHorizontalLayout,
   TexLineBox,
   TexParagraphItem,
@@ -98,32 +99,58 @@ export function validateTexVListParagraphMeasurements(
 }
 
 export function texVListParagraphMeasurementFromHorizontalLayout(
-  paragraph: TexVListParagraphHorizontalLayout
+  paragraph: TexVListParagraphHorizontalLayout,
+  verticalAdjustments: readonly TexGlueItem[] = []
 ): TexVListParagraphBoxMeasurement {
   const lines = paragraph.horizontal.lines ?? [];
   const lineIndices = lines.map((line) => line.lineIndex);
   if (!sameLineIndices(paragraph.lineIndices, lineIndices)) {
     throw new Error(`Measured horizontal paragraph block ${paragraph.blockIndex} line ownership changed.`);
   }
+  const adjustmentSizeAfterLine = paragraphVerticalAdjustmentSizes(
+    lines,
+    verticalAdjustments
+  );
+  const totalAdjustmentSize = texLength(Array.from(
+    adjustmentSizeAfterLine.values()
+  ).reduce((total, size) => total + Number(size), 0));
   const standardBottom = texLength(roundTexPt(
     paragraph.horizontal.metrics.height + paragraph.horizontal.metrics.depth
+      + totalAdjustmentSize
   ));
   const lastLine = lines.at(-1);
   const ruleLeadingBottom = lastLine
-    ? texLength(roundTexPt(lastLine.y + lastLine.metrics.height + lastLine.metrics.depth))
+    ? texLength(roundTexPt(
+        lastLine.y +
+        lastLine.metrics.height +
+        lastLine.metrics.depth +
+        totalAdjustmentSize
+      ))
     : texLength(0);
+  let precedingAdjustmentSize = texLength(0);
   return {
     blockIndex: paragraph.blockIndex,
     vlistPath: paragraph.vlistPath,
     lineIndices,
-    lineOffsets: lines.map((line) => ({
-      lineIndex: line.lineIndex,
-      y: line.y,
-      metrics: line.metrics,
-    })),
+    lineOffsets: lines.map((line) => {
+      const offset = {
+        lineIndex: line.lineIndex,
+        y: texVListLocalY(roundTexPt(line.y + precedingAdjustmentSize)),
+        metrics: line.metrics,
+      };
+      precedingAdjustmentSize = texLength(
+        precedingAdjustmentSize +
+        (adjustmentSizeAfterLine.get(line.lineIndex) ?? texLength(0))
+      );
+      return offset;
+    }),
     lastLinePreDisplaySize: lastLine?.preDisplaySize,
     ...(lastLine ? { lastLineMetrics: lastLine.metrics } : {}),
-    standardMetrics: paragraph.horizontal.metrics,
+    standardMetrics: paragraphBoxMetrics(
+      paragraph.horizontal.metrics.width,
+      paragraph.horizontal.metrics.height,
+      standardBottom
+    ),
     ruleLeadingMetrics: paragraphBoxMetrics(
       paragraph.horizontal.metrics.width,
       paragraph.horizontal.metrics.height,
@@ -132,6 +159,47 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
     standardAdvance: standardBottom,
     ruleLeadingAdvance: ruleLeadingBottom,
   };
+}
+
+/**
+ * Locate LaTeX horizontal-mode `\vspace` adjustments after line breaking.
+ *
+ * The command itself has no horizontal glyph/run. A line whose source span
+ * surrounds the command owns it; otherwise the nearest preceding line does,
+ * matching the position of TeX's `\vadjust` whatsit in the paragraph list.
+ */
+function paragraphVerticalAdjustmentSizes(
+  lines: readonly TexLineBox[],
+  adjustments: readonly TexGlueItem[]
+): ReadonlyMap<number, TexLength> {
+  const sizes = new Map<number, TexLength>();
+  for (const adjustment of adjustments) {
+    const sourceOffset = adjustment.sourceSpan?.start;
+    if (sourceOffset === undefined || lines.length === 0) {
+      continue;
+    }
+    const containing = lines.find((line) =>
+      line.sourceSpan !== undefined &&
+      line.sourceSpan.start <= sourceOffset &&
+      sourceOffset <= line.sourceSpan.end
+    );
+    const preceding = [...lines].reverse().find((line) =>
+      line.sourceSpan !== undefined &&
+      line.sourceSpan.end <= sourceOffset
+    );
+    const owner = containing ?? preceding ?? lines[0];
+    if (!owner) {
+      continue;
+    }
+    sizes.set(
+      owner.lineIndex,
+      texLength(
+        (sizes.get(owner.lineIndex) ?? texLength(0)) +
+        adjustment.size
+      )
+    );
+  }
+  return sizes;
 }
 
 export function texVListParagraphMeasurementMap(

@@ -249,18 +249,336 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
       })));
     }
   }
+  for (const embedded of render.layout.embeddedTikz) {
+    const embeddedGlyphs = nativeEmbeddedTikzGlyphs(
+      embedded,
+      metricProvider
+    );
+    for (const [embeddedLineIndex, embeddedLine] of
+      groupOracleGlyphLines(embeddedGlyphs).entries()) {
+      lines.push({
+        id: `${embedded.itemId}:text:${embeddedLineIndex}`,
+        paragraphId: embedded.itemId,
+        role: "embedded-tikz",
+        lineIndex: embeddedLineIndex,
+        sourceSpan: embedded.sourceSpan,
+        ...embeddedLine,
+      });
+      glyphs.push(...embeddedLine.glyphs.map((glyph) => ({
+        ...glyph,
+        paragraphId: embedded.itemId,
+        role: "embedded-tikz",
+        lineIndex: embeddedLineIndex,
+      })));
+    }
+  }
   return {
     coordinateSystem: render.layout.coordinateSystem,
     page: roundedRect(render.layout.page.page),
-    untracedRegions: render.layout.embeddedTikz.map((embedded) => ({
-      kind: "embedded-tikz",
-      itemId: embedded.itemId,
-      bounds: roundedRect(embedded.bounds),
-    })),
+    untracedRegions: [],
     rectangles,
     lines,
     glyphs,
   };
+}
+
+function nativeEmbeddedTikzGlyphs(embedded, metricProvider) {
+  const scale = embedded.bounds.width / embedded.viewBox.width;
+  const pageTransform = [
+    scale,
+    0,
+    0,
+    scale,
+    embedded.bounds.x - embedded.viewBox.x * scale,
+    embedded.bounds.y - embedded.viewBox.y * scale,
+  ];
+  const glyphs = [];
+  for (const part of embedded.model.parts) {
+    const textContexts = [];
+    const stack = [{
+      transform: pageTransform,
+      relativeTransform: null,
+      textContext: null,
+    }];
+    for (const match of part.markup.matchAll(/<\/?[^>]+>/gu)) {
+      const tag = match[0];
+      if (tag.startsWith("</")) {
+        if (stack.length > 1) {
+          stack.pop();
+        }
+        continue;
+      }
+      const tagName = /^<([A-Za-z][\w:-]*)/u.exec(tag)?.[1]?.toLowerCase();
+      if (!tagName) {
+        continue;
+      }
+      let localTransform = identityMatrix();
+      if (tagName === "svg") {
+        localTransform = svgViewportTransform(tag);
+      }
+      const explicitTransform = parseSvgTransform(
+        readSvgAttribute(tag, "transform") ?? ""
+      );
+      localTransform = multiplyMatrices(localTransform, explicitTransform);
+      const parent = stack.at(-1);
+      const transform = multiplyMatrices(parent.transform, localTransform);
+      const startsTextContext =
+        tagName === "svg" &&
+        readSvgAttribute(tag, "data-text-renderer") === "tex";
+      const textContext = startsTextContext
+        ? {
+            glyphs: [],
+            rotated:
+              Math.abs(parent.transform[1]) > 1e-6 ||
+              Math.abs(parent.transform[2]) > 1e-6,
+          }
+        : parent.textContext;
+      if (startsTextContext) {
+        textContexts.push(textContext);
+      }
+      const relativeTransform = startsTextContext
+        ? localTransform
+        : parent.relativeTransform
+          ? multiplyMatrices(parent.relativeTransform, localTransform)
+          : null;
+      if (tagName === "path") {
+        const fontId = readSvgAttribute(tag, "data-tex-font");
+        const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
+        if (fontId && Number.isFinite(code)) {
+          const atPt = 10 * Math.hypot(transform[0], transform[1]);
+          const font = metricProvider.resolveFont({ fontId, atPt });
+          const metric = font.data.chars[String(code)];
+          const baseline = transformPoint(transform, 0, 0);
+          const candidate = {
+            code: normalizeGlyphCode(code),
+            baseline,
+            relativeBaseline: relativeTransform
+              ? transformPoint(relativeTransform, 0, 0)
+              : null,
+            effectiveScale: atPt / 10,
+            width: round((metric?.width ?? 0) * font.atPt),
+            height: round((metric?.height ?? 0) * font.atPt),
+            depth: round((metric?.depth ?? 0) * font.atPt),
+            fontName: normalizeFontName(font.id),
+            fontSize: round(font.atPt),
+          };
+          if (textContext) {
+            textContext.glyphs.push(candidate);
+          } else {
+            glyphs.push(finalizeEmbeddedGlyph(candidate, baseline));
+          }
+        }
+      }
+      if (!tag.endsWith("/>") && !isVoidSvgElement(tagName)) {
+        stack.push({
+          transform,
+          relativeTransform,
+          textContext,
+        });
+      }
+    }
+    for (const textContext of textContexts) {
+      const anchor = textContext.glyphs[0];
+      for (const candidate of textContext.glyphs) {
+        let baseline = candidate.baseline;
+        if (
+          textContext.rotated &&
+          anchor?.relativeBaseline &&
+          candidate.relativeBaseline
+        ) {
+          // Lua's pre-shipout node trace sees PGF's text box before the PDF
+          // literal rotates its ink: the box origin is transformed, while
+          // glyph advances remain on TeX's horizontal baselines. Preserve
+          // that oracle coordinate system here instead of comparing it to
+          // the post-transform visual path positions.
+          const parentScale =
+            anchor.effectiveScale /
+            relativePointScale(anchor, textContext.glyphs);
+          baseline = {
+            x:
+              anchor.baseline.x +
+              (
+                candidate.relativeBaseline.x -
+                anchor.relativeBaseline.x
+              ) *
+              parentScale,
+            y:
+              anchor.baseline.y +
+              (
+                candidate.relativeBaseline.y -
+                anchor.relativeBaseline.y
+              ) *
+              parentScale,
+          };
+        }
+        glyphs.push(finalizeEmbeddedGlyph(candidate, baseline));
+      }
+    }
+  }
+  return glyphs;
+}
+
+function relativePointScale(anchor, glyphs) {
+  const peer = glyphs.find((candidate) => {
+    if (!anchor.relativeBaseline || !candidate.relativeBaseline) {
+      return false;
+    }
+    return (
+      Math.abs(candidate.relativeBaseline.x - anchor.relativeBaseline.x) >
+        1e-6 ||
+      Math.abs(candidate.relativeBaseline.y - anchor.relativeBaseline.y) >
+        1e-6
+    );
+  });
+  if (!peer || !anchor.relativeBaseline || !peer.relativeBaseline) {
+    return anchor.effectiveScale;
+  }
+  const relativeDistance = Math.hypot(
+    peer.relativeBaseline.x - anchor.relativeBaseline.x,
+    peer.relativeBaseline.y - anchor.relativeBaseline.y
+  );
+  const pageDistance = Math.hypot(
+    peer.baseline.x - anchor.baseline.x,
+    peer.baseline.y - anchor.baseline.y
+  );
+  return relativeDistance > 0
+    ? anchor.effectiveScale * relativeDistance / pageDistance
+    : anchor.effectiveScale;
+}
+
+function finalizeEmbeddedGlyph(candidate, baseline) {
+  return {
+    code: candidate.code,
+    x: round(baseline.x),
+    y: round(baseline.y),
+    width: candidate.width,
+    height: candidate.height,
+    depth: candidate.depth,
+    fontName: candidate.fontName,
+    fontSize: candidate.fontSize,
+  };
+}
+
+function svgViewportTransform(tag) {
+  const x = numericSvgAttribute(tag, "x", 0);
+  const y = numericSvgAttribute(tag, "y", 0);
+  const width = numericSvgAttribute(tag, "width", 0);
+  const height = numericSvgAttribute(tag, "height", 0);
+  const viewBox = (readSvgAttribute(tag, "viewBox") ?? "")
+    .trim()
+    .split(/[\s,]+/u)
+    .map(Number);
+  if (
+    viewBox.length !== 4 ||
+    viewBox.some((value) => !Number.isFinite(value)) ||
+    width <= 0 ||
+    height <= 0 ||
+    viewBox[2] <= 0 ||
+    viewBox[3] <= 0
+  ) {
+    return translationMatrix(x, y);
+  }
+  const scale = Math.min(width / viewBox[2], height / viewBox[3]);
+  const extraX = width - viewBox[2] * scale;
+  const extraY = height - viewBox[3] * scale;
+  return [
+    scale,
+    0,
+    0,
+    scale,
+    x + extraX / 2 - viewBox[0] * scale,
+    y + extraY / 2 - viewBox[1] * scale,
+  ];
+}
+
+function numericSvgAttribute(tag, name, fallback) {
+  const value = Number(readSvgAttribute(tag, name));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function parseSvgTransform(value) {
+  let result = identityMatrix();
+  for (const match of value.matchAll(/([A-Za-z]+)\(([^)]*)\)/gu)) {
+    const name = match[1]?.toLowerCase();
+    const values = (match[2] ?? "")
+      .trim()
+      .split(/[\s,]+/u)
+      .filter(Boolean)
+      .map(Number);
+    let transform = identityMatrix();
+    if (name === "matrix" && values.length === 6) {
+      transform = values;
+    } else if (name === "translate" && values.length >= 1) {
+      transform = translationMatrix(values[0], values[1] ?? 0);
+    } else if (name === "scale" && values.length >= 1) {
+      transform = [
+        values[0],
+        0,
+        0,
+        values[1] ?? values[0],
+        0,
+        0,
+      ];
+    } else if (name === "rotate" && values.length >= 1) {
+      const radians = values[0] * Math.PI / 180;
+      const cosine = Math.cos(radians);
+      const sine = Math.sin(radians);
+      const rotation = [cosine, sine, -sine, cosine, 0, 0];
+      if (values.length >= 3) {
+        transform = multiplyMatrices(
+          translationMatrix(values[1], values[2]),
+          multiplyMatrices(
+            rotation,
+            translationMatrix(-values[1], -values[2])
+          )
+        );
+      } else {
+        transform = rotation;
+      }
+    }
+    result = multiplyMatrices(result, transform);
+  }
+  return result;
+}
+
+function identityMatrix() {
+  return [1, 0, 0, 1, 0, 0];
+}
+
+function translationMatrix(x, y) {
+  return [1, 0, 0, 1, x, y];
+}
+
+function multiplyMatrices(left, right) {
+  return [
+    left[0] * right[0] + left[2] * right[1],
+    left[1] * right[0] + left[3] * right[1],
+    left[0] * right[2] + left[2] * right[3],
+    left[1] * right[2] + left[3] * right[3],
+    left[0] * right[4] + left[2] * right[5] + left[4],
+    left[1] * right[4] + left[3] * right[5] + left[5],
+  ];
+}
+
+function transformPoint(transform, x, y) {
+  return {
+    x: transform[0] * x + transform[2] * y + transform[4],
+    y: transform[1] * x + transform[3] * y + transform[5],
+  };
+}
+
+function isVoidSvgElement(tagName) {
+  return new Set([
+    "circle",
+    "ellipse",
+    "line",
+    "path",
+    "polygon",
+    "polyline",
+    "rect",
+    "stop",
+    "use",
+  ]).has(tagName);
 }
 
 function nativeDisplayMathGlyphs(paragraph, metricProvider, rectangles) {

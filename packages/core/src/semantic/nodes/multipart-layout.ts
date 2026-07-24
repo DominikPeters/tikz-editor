@@ -237,8 +237,8 @@ export function resolveRectangleSplitLayoutGeometry(params: {
   const ignoreEmpty = resolveRectangleSplitIgnoreEmptyParts(params.options);
   const partTextsBase = resolveRectangleSplitPartTexts(params.rawNodeParts, partCount);
   const partTexts = ignoreEmpty ? partTextsBase.filter((partText) => partText.length > 0) : partTextsBase;
-  const innerSeps = resolveRectangleSplitInnerSeps(params.options);
-  const emptyPart = resolveRectangleSplitEmptyPartMetrics(params.options);
+  const innerSeps = resolveRectangleSplitInnerSeps(params.options, params.style.fontSize);
+  const emptyPart = resolveRectangleSplitEmptyPartMetrics(params.options, params.style.fontSize);
   const parts = partTexts.map((text) => {
     const layout = resolveNodeLayout(text, params.options, textStyle, 1, params.context.textEngine, params.textMode, undefined, params.context.graphicsResolver);
     const isEmpty = text.trim().length === 0;
@@ -428,8 +428,13 @@ function resolveEveryTextNodePartAlign(options: OptionListAst | undefined): Reso
   return align;
 }
 
-function resolveRectangleSplitInnerSeps(options: OptionListAst | undefined): RectangleSplitInnerSep {
-  const defaultInner = parseLength(".3333em", "pt") ?? 3.333;
+function resolveRectangleSplitInnerSeps(
+  options: OptionListAst | undefined,
+  fontSizePt: number
+): RectangleSplitInnerSep {
+  const parseNodeLength = (raw: string): number | null =>
+    parseLength(raw, "pt", { unitFactors: { em: fontSizePt } });
+  const defaultInner = parseNodeLength(".3333em") ?? fontSizePt * 0.3333;
   let x = defaultInner;
   let y = defaultInner;
   if (!options) {
@@ -440,7 +445,7 @@ function resolveRectangleSplitInnerSeps(options: OptionListAst | undefined): Rec
       continue;
     }
     if (entry.key === "inner sep") {
-      const parsed = parseLength(entry.valueRaw, "pt");
+      const parsed = parseNodeLength(entry.valueRaw);
       if (parsed != null) {
         x = parsed;
         y = parsed;
@@ -448,14 +453,14 @@ function resolveRectangleSplitInnerSeps(options: OptionListAst | undefined): Rec
       continue;
     }
     if (entry.key === "inner xsep") {
-      const parsed = parseLength(entry.valueRaw, "pt");
+      const parsed = parseNodeLength(entry.valueRaw);
       if (parsed != null) {
         x = parsed;
       }
       continue;
     }
     if (entry.key === "inner ysep") {
-      const parsed = parseLength(entry.valueRaw, "pt");
+      const parsed = parseNodeLength(entry.valueRaw);
       if (parsed != null) {
         y = parsed;
       }
@@ -464,14 +469,19 @@ function resolveRectangleSplitInnerSeps(options: OptionListAst | undefined): Rec
   return rectangleSplitInnerSep(x, y);
 }
 
-function resolveRectangleSplitEmptyPartMetrics(options: OptionListAst | undefined): {
+function resolveRectangleSplitEmptyPartMetrics(
+  options: OptionListAst | undefined,
+  fontSizePt: number
+): {
   width: number;
   height: number;
   depth: number;
 } {
-  let width = parseLength("1ex", "pt") ?? 4.3;
-  let height = parseLength("1ex", "pt") ?? 4.3;
-  let depth = parseLength("0ex", "pt") ?? 0;
+  const parseNodeLength = (raw: string): number | null =>
+    parseLength(raw, "pt", { unitFactors: { em: fontSizePt } });
+  let width = parseNodeLength("1ex") ?? 4.3;
+  let height = parseNodeLength("1ex") ?? 4.3;
+  let depth = parseNodeLength("0ex") ?? 0;
   if (!options) {
     return { width, height, depth };
   }
@@ -480,21 +490,21 @@ function resolveRectangleSplitEmptyPartMetrics(options: OptionListAst | undefine
       continue;
     }
     if (entry.key === "rectangle split empty part width") {
-      const parsed = parseLength(entry.valueRaw, "pt");
+      const parsed = parseNodeLength(entry.valueRaw);
       if (parsed != null) {
         width = Math.max(0, parsed);
       }
       continue;
     }
     if (entry.key === "rectangle split empty part height") {
-      const parsed = parseLength(entry.valueRaw, "pt");
+      const parsed = parseNodeLength(entry.valueRaw);
       if (parsed != null) {
         height = Math.max(0, parsed);
       }
       continue;
     }
     if (entry.key === "rectangle split empty part depth") {
-      const parsed = parseLength(entry.valueRaw, "pt");
+      const parsed = parseNodeLength(entry.valueRaw);
       if (parsed != null) {
         depth = Math.max(0, parsed);
       }

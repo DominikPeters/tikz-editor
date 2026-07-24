@@ -15,6 +15,7 @@ import {
 import type {
   ResolvedTexFont,
   SimpleTexFontState,
+  TexMathFontProfile,
   TexTextFontProfile,
 } from "./tex/index.js";
 import {
@@ -39,6 +40,7 @@ import type {
   NodeTextValidationIssue,
 } from "./types.js";
 import {
+  createIdentityMappedText,
   mapTransformedTextWithFallback,
   type TextSourceMap,
 } from "./source-map.js";
@@ -85,13 +87,36 @@ const EXPLICIT_LINE_BREAK_CANONICAL_PATTERN =
   /[ \t\r\n]*(\\\\(?:\[[^\]]*\])?)[ \t\r\n]*/g;
 
 let sharedEnginePromise: Promise<NodeTextEngine> | null = null;
+const profiledEnginePromises = new Map<string, Promise<NodeTextEngine>>();
 
-export async function createTexNodeTextEngine(): Promise<NodeTextEngine> {
-  sharedEnginePromise ??= initializeEngine();
-  return sharedEnginePromise;
+export type TexNodeTextEngineOptions = {
+  /**
+   * Document-class math substitutions used inside node text. For example,
+   * Beamer keeps Computer Modern symbols but maps literal Latin math letters
+   * to the sans text family.
+   */
+  readonly mathFontProfile?: TexMathFontProfile;
+};
+
+export async function createTexNodeTextEngine(
+  options: TexNodeTextEngineOptions = {}
+): Promise<NodeTextEngine> {
+  if (!options.mathFontProfile) {
+    sharedEnginePromise ??= initializeEngine(options);
+    return sharedEnginePromise;
+  }
+  const key = options.mathFontProfile.id;
+  let promise = profiledEnginePromises.get(key);
+  if (!promise) {
+    promise = initializeEngine(options);
+    profiledEnginePromises.set(key, promise);
+  }
+  return promise;
 }
 
-async function initializeEngine(): Promise<NodeTextEngine> {
+async function initializeEngine(
+  options: TexNodeTextEngineOptions
+): Promise<NodeTextEngine> {
   await preloadEnglishHyphenator();
 
   const layoutContext = createTextLayoutContext();
@@ -134,9 +159,13 @@ async function initializeEngine(): Promise<NodeTextEngine> {
         return null;
       }
 
-      const scale = computeFontScale(request.fontSizePt);
-      const normalizedWidth =
-        request.textWidthPt == null ? null : request.textWidthPt / scale;
+      const fontSizePt =
+        Number.isFinite(request.fontSizePt) && request.fontSizePt > 0
+          ? request.fontSizePt
+          : TEX_TEXT_BASE_FONT_SIZE;
+      const layoutInput = request.textWidthPt == null
+        ? normalizeRestrictedHorizontalModeInput(prepared)
+        : prepared;
       const alignment = resolveParagraphAlignment(
         request.textWidthPt,
         request.alignment
@@ -147,14 +176,15 @@ async function initializeEngine(): Promise<NodeTextEngine> {
         request.colorResolver?.cacheKey ?? null,
       ].filter((value): value is string => value !== null).join("|") || null;
       const layoutCacheKey = measurementKey(
-        prepared.text,
-        normalizedWidth,
-        prepared.font,
+        layoutInput.text,
+        request.textWidthPt,
+        layoutInput.font,
+        fontSizePt,
         alignment,
         resolverCacheKey
       );
-      const sourceMapAnchor = prepared.sourceMap
-        ? texSourceMapAnchor(prepared.sourceMap)
+      const sourceMapAnchor = layoutInput.sourceMap
+        ? texSourceMapAnchor(layoutInput.sourceMap)
         : null;
       const cacheKey = sourceMapAnchor == null
         ? layoutCacheKey
@@ -167,14 +197,16 @@ async function initializeEngine(): Promise<NodeTextEngine> {
           cacheKey,
           layoutCacheKey,
           layoutCache,
-          sourceText: prepared.text,
-          textWidthPt: normalizedWidth,
-          font: prepared.font,
+          sourceText: layoutInput.text,
+          textWidthPt: request.textWidthPt,
+          font: layoutInput.font,
+          fontSizePt,
           alignment,
           requestedAlignment: request.alignment ?? null,
-          sourceMap: prepared.sourceMap,
+          sourceMap: layoutInput.sourceMap,
           graphicsResolver: request.graphicsResolver,
           colorResolver: request.colorResolver,
+          mathFontProfile: options.mathFontProfile,
         });
         if (!entry) {
           return null;
@@ -184,10 +216,10 @@ async function initializeEngine(): Promise<NodeTextEngine> {
 
       return {
         cacheKey: entry.payload.cacheKey,
-        width: entry.baseWidthPt * scale,
-        height: entry.baseHeightPt * scale,
-        baselineY: entry.baseLineYPt * scale,
-        midLineY: entry.midLineYPt * scale,
+        width: entry.baseWidthPt,
+        height: entry.baseHeightPt,
+        baselineY: entry.baseLineYPt,
+        midLineY: entry.midLineYPt,
         paragraphId: entry.paragraphId,
         renderSourceText: entry.renderSourceText,
       };
@@ -205,9 +237,11 @@ function buildTexSharedLayout(params: {
   readonly sourceText: string;
   readonly textWidthPt: number | null;
   readonly font: TextFontOptions;
+  readonly fontSizePt: number;
   readonly alignment: NodeTextParagraphAlignment | null;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
+  readonly mathFontProfile?: TexMathFontProfile;
 }): TexSharedLayout | null {
   const cached = getCappedMapValue(params.layoutCache, params.layoutCacheKey);
   if (cached) {
@@ -222,7 +256,7 @@ function buildTexSharedLayout(params: {
   const textFontProfile = texTextFontProfileForNodeFont(params.font);
   const renderFont = textFontProfile.resolveTextFont(
     textFontProfile.defaultFontState,
-    texLength(TEX_TEXT_BASE_FONT_SIZE),
+    texLength(params.fontSizePt),
     metricProvider
   );
   const paragraphId = `tex:${stableHashString(params.layoutCacheKey)}`;
@@ -240,7 +274,10 @@ function buildTexSharedLayout(params: {
     tikzTextWidthNode: true,
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
-      baseAtPt: TEX_TEXT_BASE_FONT_SIZE,
+      baseAtPt: params.fontSizePt,
+      ...(params.mathFontProfile
+        ? { fontProfile: params.mathFontProfile }
+        : {}),
     }),
     ...(params.graphicsResolver
       ? { graphicsResolver: params.graphicsResolver }
@@ -350,11 +387,13 @@ function buildTexTextCacheEntry(params: {
   readonly sourceText: string;
   readonly textWidthPt: number | null;
   readonly font: TextFontOptions;
+  readonly fontSizePt: number;
   readonly alignment: NodeTextParagraphAlignment | null;
   readonly requestedAlignment: NodeTextParagraphAlignment | null;
   readonly sourceMap?: TextSourceMap;
   readonly graphicsResolver?: NodeTextGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
+  readonly mathFontProfile?: TexMathFontProfile;
 }): CachedRenderEntry | null {
   const shared = buildTexSharedLayout(params);
   if (!shared) {
@@ -604,21 +643,45 @@ function normalizeTexTextInput(
   };
 }
 
-function hasExplicitMultilineBreaks(text: string): boolean {
-  return EXPLICIT_LINE_BREAK_TOKEN_PATTERN.test(text);
+/**
+ * A TikZ node without `text width` is collected in the hbox opened by
+ * `\tikz@do@fig` (tikz.code.tex). That is restricted horizontal mode:
+ * `\par` has no vertical effect, and the whitespace following its control
+ * word is already consumed by TeX's scanner.
+ */
+function normalizeRestrictedHorizontalModeInput(
+  input: ReturnType<typeof normalizeTexTextInput>
+): ReturnType<typeof normalizeTexTextInput> {
+  const normalized = input.text.replace(
+    /\\par(?![A-Za-z@])[ \t\r\n]*/g,
+    ""
+  );
+  if (normalized === input.text) {
+    return input;
+  }
+  const sourceMap = mapTransformedTextWithFallback(
+    input.sourceMap
+      ? { text: input.text, sourceMap: input.sourceMap }
+      : createIdentityMappedText(input.text),
+    normalized,
+    "TikZ restricted horizontal mode"
+  ).sourceMap;
+  return {
+    ...input,
+    text: normalized,
+    sourceMap,
+  };
 }
 
-function computeFontScale(fontSizePt: number): number {
-  if (!Number.isFinite(fontSizePt) || fontSizePt <= 0) {
-    return 1;
-  }
-  return fontSizePt / TEX_TEXT_BASE_FONT_SIZE;
+function hasExplicitMultilineBreaks(text: string): boolean {
+  return EXPLICIT_LINE_BREAK_TOKEN_PATTERN.test(text);
 }
 
 function measurementKey(
   text: string,
   textWidthPt: number | null,
   font: TextFontOptions,
+  fontSizePt: number,
   alignment: NodeTextParagraphAlignment | null,
   resolverCacheKey: string | null
 ): string {
@@ -626,6 +689,7 @@ function measurementKey(
     text,
     textWidthPt:
       textWidthPt == null ? null : Number(textWidthPt.toFixed(6)),
+    fontSizePt: Number(fontSizePt.toFixed(6)),
     alignment,
     resolverCacheKey,
     fontStyle: font.fontStyle,

@@ -12,14 +12,27 @@ export type ParsedLength = {
   hasExplicitUnit: boolean;
 };
 
-export function parseLength(input: string, defaultUnit: "cm" | "pt"): number | null {
-  const parsed = parseLengthWithInfo(input, defaultUnit);
+export type ParseLengthOptions = {
+  /** Context-dependent TeX unit sizes, expressed in pt. */
+  unitFactors?: Readonly<Partial<Record<"em" | "ex", number>>>;
+};
+
+export function parseLength(
+  input: string,
+  defaultUnit: "cm" | "pt",
+  options: ParseLengthOptions = {}
+): number | null {
+  const parsed = parseLengthWithInfo(input, defaultUnit, options);
   return parsed?.value ?? null;
 }
 
-export function parseLengthWithInfo(input: string, defaultUnit: "cm" | "pt"): ParsedLength | null {
+export function parseLengthWithInfo(
+  input: string,
+  defaultUnit: "cm" | "pt",
+  options: ParseLengthOptions = {}
+): ParsedLength | null {
   const normalizedInput = normalizeLengthInput(input);
-  const quantity = parseQuantityExpression(normalizedInput);
+  const quantity = parseQuantityExpression(normalizedInput, options);
   if (quantity == null) {
     return null;
   }
@@ -35,8 +48,13 @@ export function parseLengthWithInfo(input: string, defaultUnit: "cm" | "pt"): Pa
   };
 }
 
-export function parseQuantityExpression(input: string): ParsedQuantity | null {
-  const result = evaluatePgfMathExpression(input);
+export function parseQuantityExpression(
+  input: string,
+  options: ParseLengthOptions = {}
+): ParsedQuantity | null {
+  const result = evaluatePgfMathExpression(input, {
+    unitFactors: options.unitFactors
+  });
   if (result.ok === false) {
     return null;
   }

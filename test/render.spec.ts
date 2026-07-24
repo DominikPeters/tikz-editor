@@ -449,6 +449,34 @@ describe("render pipeline", () => {
     expect(circle.radius).toBeLessThan(2.5);
   });
 
+  it("includes invisible node boxes and stroked path extents in picture bounds", () => {
+    const stroked = renderTikzToSvg(String.raw`\begin{tikzpicture}
+  \draw[line width=2pt] (0pt,0pt) -- (10pt,0pt);
+\end{tikzpicture}`);
+    expect(stroked.semantic.scene.bounds).toEqual({
+      minX: -1,
+      minY: -1,
+      maxX: 11,
+      maxY: 1,
+    });
+
+    const node = renderTikzToSvg(String.raw`\begin{tikzpicture}
+  \node[inner sep=10pt] at (0,0) {X};
+\end{tikzpicture}`);
+    const text = node.semantic.scene.elements.find(
+      (element): element is SceneText => element.kind === "Text"
+    )!;
+    const bounds = node.semantic.scene.bounds!;
+    expect(bounds.maxX - bounds.minX).toBeCloseTo(
+      text.nodeVisualWidth ?? 0,
+      6
+    );
+    expect(bounds.maxY - bounds.minY).toBeCloseTo(
+      text.nodeVisualHeight ?? 0,
+      6
+    );
+  });
+
   it("mirrors rotated ellipse arc angles when emitting SVG path data", () => {
     const source = String.raw`\begin{tikzpicture}
   \fill (0,0) ellipse[x radius=1, y radius=2, rotate=45];
@@ -843,7 +871,7 @@ describe("render pipeline", () => {
         expect(renderInfo.paragraphId).toBeTruthy();
         expect(renderInfo.renderSourceText).toBe("C");
       }
-      const defaultInset = (parseLength(".3333em", "pt") ?? 3.333) * 2;
+      const defaultInset = text.style.fontSize * 0.3333 * 2;
       expect((text.nodeVisualWidth ?? 0) - (text.textBlockWidth ?? 0)).toBeCloseTo(defaultInset, 3);
     }
 
@@ -1046,7 +1074,7 @@ World};
     expect(result.svg.svg).toContain('data-lineleading="7pt"');
     expect(readLineboxTranslateYs(result.svg.svg)).toEqual([
       expect.closeTo(0, 6),
-      expect.closeTo(19.33, 6),
+      expect.closeTo(19.283935, 6),
     ]);
   });
 

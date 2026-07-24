@@ -17,6 +17,7 @@ import {
   mapTransformedTextWithFallback,
   type MappedText,
 } from "../text/source-map.js";
+import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
 import {
   computerModernTexMetricProvider,
   createTexDerivedInlineMathBoxProvider,
@@ -37,6 +38,7 @@ import type {
   BeamerColumnsBodyNode,
   BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
+  BeamerTitlePageBodyNode,
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { scanBeamerDocument } from "./scan.js";
@@ -54,6 +56,7 @@ import type {
   BeamerBlockTemplatePlan,
   BeamerFrameChromePlan,
   BeamerTemplatePrimitive,
+  BeamerTemplateVectorShape,
   BeamerThemeFont,
   BeamerThemeFontRole,
   ResolvedBeamerTheme,
@@ -62,6 +65,8 @@ import type {
   BeamerEmbeddedTikzLayout,
   BeamerFrameLayout,
   BeamerFrameLayoutItem,
+  BeamerMetadataFieldModel,
+  BeamerMetadataFieldName,
   BeamerParagraphLayout,
   BeamerRect,
   RenderBeamerFrameOptions,
@@ -93,6 +98,20 @@ type PreparedBlock = {
   backgroundTop: number;
   backgroundBottom: number;
   naturalHeight: number;
+};
+
+type PreparedTitlePage = {
+  node: BeamerTitlePageBodyNode;
+  width: number;
+  title: LaidParagraph | null;
+  subtitle: LaidParagraph | null;
+  naturalHeight: number;
+  leadingFillWeight: number;
+  trailingFillWeight: number;
+  titleBoxTop: number;
+  titleBoxHeight: number;
+  titleBaselineFromBoxTop: number;
+  subtitleBaselineFromBoxTop: number;
 };
 
 type PreparedColumnFlowItem =
@@ -132,6 +151,15 @@ type PreparedColumnContent = {
 
 type PreparedFrameFlowItem =
   | {
+      kind: "title-page";
+      titlePage: PreparedTitlePage;
+    }
+  | {
+      kind: "vertical-space";
+      node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>;
+      height: number;
+    }
+  | {
       kind: "paragraph";
       node: BeamerParagraphBodyNode;
       paragraph: LaidParagraph;
@@ -140,8 +168,13 @@ type PreparedFrameFlowItem =
       startingBaselineSkip: number;
       leadingAdjustment: number;
       endingDepth: number;
-      endsWithVerticalSpace: boolean;
-      trailingParagraphPreviousDepth: number;
+      /**
+       * TeX vertical glue preserves `\prevdepth`. When a paragraph-owned
+       * `\vspace` is followed by a columns hbox, retain the depth of the box
+       * immediately preceding that glue rather than the enclosing vlist's
+       * zero depth.
+       */
+      trailingVerticalSpacePreviousDepth: number | null;
     }
   | {
       kind: "columns";
@@ -165,6 +198,16 @@ type PreparedFrameFlowItem =
       boxHeight: number;
       contentInsetTop: number;
       endingDepth: number;
+      surroundingGlue: {
+        top: {
+          naturalPt: number;
+          shrinkPt: number;
+        };
+        bottom: {
+          naturalPt: number;
+          shrinkPt: number;
+        };
+      };
     };
 
 type PositionedFrameFlowItem = {
@@ -189,7 +232,27 @@ type ColumnVerticalBox = {
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 const TEX_LINE_SKIP_PT = 1;
-const BEAMER_CENTER_TOPSEP_PT = 3;
+// A root-level `center` is LaTeX's trivlist-based center environment.
+// size11.clo supplies \topsep 9pt plus 3pt minus 5pt. Beamer's frame vbox
+// applies one ordinary-order shrink ratio to these two skips and to display
+// skips in the surrounding body.
+const BEAMER_CENTER_TOPSEP = {
+  naturalPt: 9,
+  shrinkPt: 5,
+} as const;
+// beamerinnerthemedefault.sty's title-page template under the 11pt class
+// profile. The rounded inner theme wraps the title colorbox with the PGF
+// rounded/shadow option but retains these TeX box dimensions.
+const BEAMER_TITLE_PAGE_LEADING_MATERIAL_PT = 14.6;
+const BEAMER_TITLE_BOX_WITH_SUBTITLE_HEIGHT_PT = 56.468338;
+const BEAMER_TITLE_BOX_TITLE_ONLY_HEIGHT_PT = 37.1676;
+const BEAMER_TITLE_BASELINE_FROM_BOX_TOP_PT = 24.508591;
+const BEAMER_SUBTITLE_BASELINE_FROM_BOX_TOP_PT = 41.708588;
+const BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT = 10.95;
+const BEAMER_EMPTY_METADATA_COLORBOX_PT = 16;
+const BEAMER_TITLE_TEMPLATE_INTERBOX_PT = 1;
+const BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT = 5.475;
+const BEAMER_ROUNDED_TITLE_BLEED_PT = 4 * (72.27 / 72);
 // beamerbaselocalstructure.sty: \leftmargini..iii=2em,
 // \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
 // \itemsep=3pt. The deeper itemsep values alias their zero parsep.
@@ -322,20 +385,39 @@ export async function renderBeamerFrame(
     availableHeight: availableContentBounds.height,
     diagnostics,
     theme,
+    metadata: document.preamble.metadata,
     macroBindings,
   });
   if (preparedFrameFlow.length > 0) {
-    const positioned = positionPreparedFrameFlow(
+    const rigidPositioned = positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt
     );
-    const frameBlockTop = positionFrameContentTop(
+    const verticalPacking = resolveFrameVerticalPacking(
       availableContentBounds,
-      positioned.extent,
+      rigidPositioned.extent,
+      preparedFrameFlow,
       frame.options?.alignment ?? "center"
     );
+    const positioned = positionPreparedFrameFlow(
+      preparedFrameFlow,
+      theme.fonts["normal-text"].lineHeightPt,
+      verticalPacking.fillUnit
+    );
+    const frameBlockTop =
+      availableContentBounds.y + verticalPacking.topOffset;
     for (const placement of positioned.items) {
-      if (placement.item.kind === "paragraph") {
+      if (placement.item.kind === "title-page") {
+        emitPreparedTitlePage({
+          prepared: placement.item.titlePage,
+          x: availableContentBounds.x,
+          y: frameBlockTop + placement.contentTop,
+          items,
+          paragraphs,
+          modelBuilder,
+          theme,
+        });
+      } else if (placement.item.kind === "paragraph") {
         emitFrameParagraph({
           prepared: placement.item,
           x: availableContentBounds.x,
@@ -374,6 +456,9 @@ export async function renderBeamerFrame(
           embeddedTikz,
           modelBuilder,
         });
+      } else if (placement.item.kind === "vertical-space") {
+        // Explicit vertical material participates in TeX's frame packing but
+        // has no painted representation of its own.
       } else {
         emitPreparedBlock({
           prepared: placement.item.block,
@@ -487,6 +572,23 @@ function renderChrome(params: {
       continue;
     }
 
+    if (primitive.kind === "vector") {
+      modelBuilder.addPart({
+        basePartId: primitive.id,
+        sourceId: primitive.id,
+        elementId: null,
+        markup: vectorTemplateMarkup(primitive, theme),
+      });
+      items.push({
+        id: primitive.id,
+        kind: primitive.layoutKind,
+        sourceSpan: primitive.sourceSpan,
+        bounds: primitive.bounds,
+        parentId: null,
+      });
+      continue;
+    }
+
     const mapped = mappedTemplateText(primitive);
     const font = theme.fonts[primitive.fontRole];
     const laid = layoutParagraph({
@@ -567,12 +669,28 @@ async function prepareFrameFlow(params: {
   availableHeight: number;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
+  metadata: Partial<
+    Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
+  >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(params.theme);
   for (const node of params.children) {
+    if (node.kind === "title-page") {
+      result.push({
+        kind: "title-page",
+        titlePage: prepareTitlePage({
+          node,
+          width: params.textWidth,
+          theme: params.theme,
+          metadata: params.metadata,
+          macroBindings: params.macroBindings,
+        }),
+      });
+      continue;
+    }
     if (node.kind === "paragraph") {
       const paragraph = prepareFrameParagraph({
         source: params.source,
@@ -585,6 +703,14 @@ async function prepareFrameFlow(params: {
       if (paragraph) {
         result.push(paragraph);
       }
+      continue;
+    }
+    if (node.kind === "vertical-space") {
+      result.push({
+        kind: "vertical-space",
+        node,
+        height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
+      });
       continue;
     }
     if (node.kind === "columns") {
@@ -629,17 +755,28 @@ async function prepareFrameFlow(params: {
         diagnostics: params.diagnostics,
       });
       if (tikz) {
-        const centerSkip = node.horizontalAlignment === "center"
-          ? BEAMER_CENTER_TOPSEP_PT
-          : 0;
+        const surroundingGlue = node.horizontalAlignment === "center"
+          ? {
+              top: BEAMER_CENTER_TOPSEP,
+              bottom: BEAMER_CENTER_TOPSEP,
+            }
+          : {
+              top: { naturalPt: 0, shrinkPt: 0 },
+              bottom: { naturalPt: 0, shrinkPt: 0 },
+            };
+        const centerSkip = surroundingGlue.top.naturalPt;
         result.push({
           kind: "tikzpicture",
           node,
           tikz,
-          naturalHeight: tikz.height + centerSkip * 2,
+          naturalHeight:
+            tikz.height +
+            surroundingGlue.top.naturalPt +
+            surroundingGlue.bottom.naturalPt,
           boxHeight: tikz.height + centerSkip,
           contentInsetTop: centerSkip,
           endingDepth: 0,
+          surroundingGlue,
         });
       }
       continue;
@@ -679,6 +816,74 @@ async function prepareFrameFlow(params: {
     listProfile,
     macroBindings: params.macroBindings,
   });
+}
+
+function prepareTitlePage(params: {
+  node: BeamerTitlePageBodyNode;
+  width: number;
+  theme: ResolvedBeamerTheme;
+  metadata: Partial<
+    Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
+  >;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
+}): PreparedTitlePage {
+  const titleSource = params.metadata.title?.value;
+  const subtitleSource = params.metadata.subtitle?.value;
+  const title = titleSource
+    ? layoutParagraph({
+        mapped: createIdentityMappedText(
+          titleSource.value,
+          titleSource.contentSpan.from
+        ),
+        sourceSpan: titleSource.contentSpan,
+        paragraphId: `${params.node.id}:title`,
+        role: "title",
+        bounds: { x: 0, y: 0, width: params.width, height: 0 },
+        font: params.theme.fonts.title,
+        alignment: "center",
+        macroBindings: params.macroBindings,
+      })
+    : null;
+  const subtitle = subtitleSource
+    ? layoutParagraph({
+        mapped: createIdentityMappedText(
+          subtitleSource.value,
+          subtitleSource.contentSpan.from
+        ),
+        sourceSpan: subtitleSource.contentSpan,
+        paragraphId: `${params.node.id}:subtitle`,
+        role: "subtitle",
+        bounds: { x: 0, y: 0, width: params.width, height: 0 },
+        font: params.theme.fonts.subtitle,
+        alignment: "center",
+        macroBindings: params.macroBindings,
+      })
+    : null;
+  const titleBoxHeight = subtitle
+    ? BEAMER_TITLE_BOX_WITH_SUBTITLE_HEIGHT_PT
+    : BEAMER_TITLE_BOX_TITLE_ONLY_HEIGHT_PT;
+  const metadataBoxesHeight =
+    3 * BEAMER_EMPTY_METADATA_COLORBOX_PT +
+    3 * BEAMER_TITLE_TEMPLATE_INTERBOX_PT;
+  const naturalHeight =
+    BEAMER_TITLE_PAGE_LEADING_MATERIAL_PT +
+    titleBoxHeight +
+    BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT +
+    metadataBoxesHeight +
+    BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT;
+  return {
+    node: params.node,
+    width: params.width,
+    title,
+    subtitle,
+    naturalHeight,
+    leadingFillWeight: 1,
+    trailingFillWeight: 1,
+    titleBoxTop: BEAMER_TITLE_PAGE_LEADING_MATERIAL_PT,
+    titleBoxHeight,
+    titleBaselineFromBoxTop: BEAMER_TITLE_BASELINE_FROM_BOX_TOP_PT,
+    subtitleBaselineFromBoxTop: BEAMER_SUBTITLE_BASELINE_FROM_BOX_TOP_PT,
+  };
 }
 
 function prepareFrameParagraph(params: {
@@ -729,8 +934,8 @@ function prepareFrameParagraph(params: {
       paragraph
     ),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
-    endsWithVerticalSpace: paragraphEndsWithVerticalSpace(paragraph),
-    trailingParagraphPreviousDepth: paragraphLastLineDepth(paragraph),
+    trailingVerticalSpacePreviousDepth:
+      previousDepthBeforeTrailingVerticalSpace(paragraph),
   };
 }
 
@@ -746,6 +951,21 @@ function shrinkFrameParagraphGlueToAvailableHeight(
   }
 ): PreparedFrameFlowItem[] {
   const fitted = [...flow];
+  for (let index = 0; index < fitted.length; index += 1) {
+    const item = fitted[index];
+    const next = fitted[index + 1];
+    if (item?.kind !== "paragraph" || next?.kind !== "tikzpicture") {
+      continue;
+    }
+    fitted[index] = cancelTrailingDisplayGlueBeforeCenteredTikz(
+      item,
+      next
+    );
+    fitted[index + 1] = suppressCenteredTikzTopGlueAfterNormalDisplay(
+      item,
+      next
+    );
+  }
   // beamerbaseframesize.sty packs the assembled frame into
   // `\vbox to\textheight`. If the material is overfull, ordinary-order glue
   // inside the frame body (notably display skips) receives the box's shrink
@@ -765,31 +985,48 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     index: number;
     item: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>;
     maximumShrink: number;
+    paragraphMaximumShrink: number;
   }> = [];
   for (let index = 0; index < fitted.length; index += 1) {
     const item = fitted[index];
     if (item?.kind !== "paragraph") {
       continue;
     }
-    const fullyShrunk = prepareFrameParagraph({
+    const rawFullyShrunk = prepareFrameParagraph({
       ...params,
       node: item.node,
       targetHeight: 0,
     });
-    if (!fullyShrunk) {
+    if (!rawFullyShrunk) {
       continue;
     }
+    const fullyShrunk = cancelTrailingDisplayGlueBeforeCenteredTikz(
+      rawFullyShrunk,
+      fitted[index + 1]
+    );
     shrinkable.push({
       index,
       item,
       maximumShrink: Math.max(
         0,
-        item.paragraph.height - fullyShrunk.paragraph.height
+        item.naturalHeight - fullyShrunk.naturalHeight
+      ),
+      paragraphMaximumShrink: Math.max(
+        0,
+        item.paragraph.height - rawFullyShrunk.paragraph.height
       ),
     });
   }
   const totalShrink = shrinkable.reduce(
     (sum, candidate) => sum + candidate.maximumShrink,
+    0
+  ) + fitted.reduce(
+    (sum, item) =>
+      sum +
+      (item.kind === "tikzpicture"
+        ? item.surroundingGlue.top.shrinkPt +
+          item.surroundingGlue.bottom.shrinkPt
+        : 0),
     0
   );
   const ratio = totalShrink > 0
@@ -798,30 +1035,149 @@ function shrinkFrameParagraphGlueToAvailableHeight(
   for (const candidate of shrinkable) {
     const targetHeight =
       candidate.item.paragraph.height -
-      candidate.maximumShrink * ratio;
-    const relaid = prepareFrameParagraph({
+      candidate.paragraphMaximumShrink * ratio;
+    const rawRelaid = prepareFrameParagraph({
       ...params,
       node: candidate.item.node,
       targetHeight,
     });
-    if (!relaid) {
+    if (!rawRelaid) {
       continue;
     }
+    const relaid = cancelTrailingDisplayGlueBeforeCenteredTikz(
+      rawRelaid,
+      fitted[candidate.index + 1]
+    );
     const index = candidate.index;
     fitted[index] = relaid;
+  }
+  for (let index = 0; index < fitted.length; index += 1) {
+    const item = fitted[index];
+    if (item?.kind !== "tikzpicture") {
+      continue;
+    }
+    const topSkip = Math.max(
+      0,
+      item.surroundingGlue.top.naturalPt -
+        item.surroundingGlue.top.shrinkPt * ratio
+    );
+    const bottomSkip = Math.max(
+      0,
+      item.surroundingGlue.bottom.naturalPt -
+        item.surroundingGlue.bottom.shrinkPt * ratio
+    );
+    fitted[index] = {
+      ...item,
+      naturalHeight: item.tikz.height + topSkip + bottomSkip,
+      boxHeight: item.tikz.height + topSkip,
+      contentInsetTop: topSkip,
+    };
   }
   return fitted;
 }
 
+function cancelTrailingDisplayGlueBeforeCenteredTikz(
+  paragraph: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>,
+  next: PreparedFrameFlowItem | undefined
+): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> {
+  if (
+    next?.kind !== "tikzpicture" ||
+    next.surroundingGlue.bottom.naturalPt === 0
+  ) {
+    return paragraph;
+  }
+  const trailing = paragraph.paragraph.layout.vlistLayout.boxReport.items.at(-1);
+  if (
+    trailing?.itemKind !== "glue" ||
+    trailing.glue?.origin?.kind !== "display-math-boundary" ||
+    trailing.glue.origin.side !== "below" ||
+    trailing.glue.origin.variant !== "short"
+  ) {
+    return paragraph;
+  }
+  // LaTeX's center environment is a trivlist. Its opening \addvspace and
+  // negative list glues cancel an immediately preceding \belowdisplayskip;
+  // the center \topsep remains. Keep the display VList intact for source and
+  // box reporting, but omit that canceled terminal glue from the assembled
+  // frame extent. Applying this at every trial height also removes the
+  // canceled glue's shrink capacity from the enclosing frame vbox.
+  return {
+    ...paragraph,
+    naturalHeight: Math.max(0, paragraph.naturalHeight - trailing.height),
+  };
+}
+
+function suppressCenteredTikzTopGlueAfterNormalDisplay(
+  paragraph: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>,
+  tikz: Extract<PreparedFrameFlowItem, { kind: "tikzpicture" }>
+): Extract<PreparedFrameFlowItem, { kind: "tikzpicture" }> {
+  if (tikz.surroundingGlue.top.naturalPt === 0) {
+    return tikz;
+  }
+  const trailing = paragraph.paragraph.layout.vlistLayout.boxReport.items.at(-1);
+  if (
+    trailing?.itemKind !== "glue" ||
+    trailing.glue?.origin?.kind !== "display-math-boundary" ||
+    trailing.glue.origin.side !== "below" ||
+    trailing.glue.origin.variant === "short"
+  ) {
+    return tikz;
+  }
+  // When the normal \belowdisplayskip is larger than center's \topsep,
+  // LaTeX's opening \addvspace keeps the display skip and contributes no
+  // separate top glue. The closing topsep remains below the environment.
+  return {
+    ...tikz,
+    naturalHeight:
+      tikz.naturalHeight - tikz.surroundingGlue.top.naturalPt,
+    boxHeight: tikz.boxHeight - tikz.surroundingGlue.top.naturalPt,
+    contentInsetTop: 0,
+    surroundingGlue: {
+      ...tikz.surroundingGlue,
+      top: { naturalPt: 0, shrinkPt: 0 },
+    },
+  };
+}
+
 function positionPreparedFrameFlow(
   flow: readonly PreparedFrameFlowItem[],
-  baselineSkip: number
+  baselineSkip: number,
+  fillUnit = 0
 ): { items: PositionedFrameFlowItem[]; extent: number } {
   const items: PositionedFrameFlowItem[] = [];
   let cursor = 0;
   let previousDepth = 0;
   for (let index = 0; index < flow.length; index += 1) {
     const item = flow[index];
+    if (item.kind === "title-page") {
+      const contentTop =
+        cursor + item.titlePage.leadingFillWeight * fillUnit;
+      const visualBottom =
+        contentTop + item.titlePage.naturalHeight;
+      items.push({
+        item,
+        contentTop,
+        referenceY: contentTop,
+        visualTop: contentTop,
+        visualBottom,
+      });
+      cursor =
+        visualBottom + item.titlePage.trailingFillWeight * fillUnit;
+      previousDepth = 0;
+      continue;
+    }
+    if (item.kind === "vertical-space") {
+      items.push({
+        item,
+        contentTop: cursor,
+        referenceY: cursor,
+        visualTop: cursor,
+        visualBottom: cursor,
+      });
+      cursor += item.height;
+      previousDepth = 0;
+      continue;
+    }
     if (item.kind === "paragraph") {
       const glue = verticalInterlineGlue(
         previousDepth,
@@ -841,13 +1197,10 @@ function positionPreparedFrameFlow(
       cursor = visualBottom;
       previousDepth = item.endingDepth;
       if (
-        item.endsWithVerticalSpace &&
+        item.trailingVerticalSpacePreviousDepth != null &&
         flow[index + 1]?.kind === "columns"
       ) {
-        // The explicit `\vspace` ends the shared text vlist in glue, but TeX's
-        // following columns hbox still computes `\baselineskip` from the
-        // preceding line's real depth. Do not carry the enclosing vbox depth.
-        previousDepth = item.trailingParagraphPreviousDepth;
+        previousDepth = item.trailingVerticalSpacePreviousDepth;
       }
       continue;
     }
@@ -951,13 +1304,40 @@ function paragraphStartingMaterialHeight(paragraph: LaidParagraph): number {
   return Number(first?.height ?? paragraph.layout.vlistLayout.metrics.height);
 }
 
-function paragraphEndsWithVerticalSpace(paragraph: LaidParagraph): boolean {
-  const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
-  return (
-    last?.itemKind === "glue" &&
-    last.glue?.origin?.kind === "explicit-command" &&
-    last.glue.origin.command === "vspace"
-  );
+function previousDepthBeforeTrailingVerticalSpace(
+  paragraph: LaidParagraph
+): number | null {
+  const items = paragraph.layout.vlistLayout.boxReport.items;
+  const trailing = items.at(-1);
+  if (
+    trailing?.itemKind !== "glue" ||
+    trailing.glue?.origin?.kind !== "explicit-command" ||
+    trailing.glue.origin.command !== "vspace"
+  ) {
+    return null;
+  }
+  for (let index = items.length - 2; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.itemKind === "glue" || item.itemKind === "penalty") {
+      continue;
+    }
+    // The shared VList emits a zero-sized shipped hbox after display math
+    // before a following \vspace. That hbox really resets \prevdepth to zero;
+    // carrying the last prose line would be incorrect (KKT frame 13).
+    if (
+      item.itemKind === "hbox" &&
+      item.hboxRole?.kind === "display-empty-line"
+    ) {
+      return Number(item.depth);
+    }
+    // Paragraph/vbox report depths include all subsequent lines. TeX's
+    // \prevdepth is only the final line's descent (KKT frame 20).
+    if (item.itemKind === "paragraph" || item.itemKind === "vbox") {
+      return paragraphLastLineDepth(paragraph);
+    }
+    return Number(item.depth);
+  }
+  return 0;
 }
 
 function trailingBeamerTrivlistSkip(source: string): number {
@@ -1071,8 +1451,14 @@ function prepareBlock(params: {
     backgroundTop +
     titleBackgroundHeight +
     geometry.transitionHeightPt;
+  const titleBoxExtent =
+    titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
   const bodyParagraphTop =
-    bodyBackgroundTop + geometry.bodyTopPaddingPt;
+    geometry.beforeSkipPt +
+    geometry.boxTopSkipPt +
+    titleBoxExtent +
+    geometry.titleBodyGapPt +
+    geometry.bodyTopPaddingPt;
   const bodyExtent = body ? paragraphLineExtent(body) : 0;
   const bodyBackgroundHeight =
     geometry.bodyTopPaddingPt +
@@ -1093,7 +1479,11 @@ function prepareBlock(params: {
     bodyBackgroundHeight,
     backgroundTop,
     backgroundBottom,
-    naturalHeight: backgroundBottom + geometry.boxBottomAdvancePt,
+    naturalHeight:
+      bodyParagraphTop +
+      bodyExtent +
+      geometry.bodyBottomRaisePt +
+      geometry.boxBottomSkipPt,
   };
 }
 
@@ -1235,16 +1625,6 @@ function blockChromeMarkup(params: {
     /[^A-Za-z0-9_-]/gu,
     "-"
   );
-  const roundedOutline =
-    `M${fmt(left + radius)} ${fmt(top)}` +
-    `H${fmt(right - radius)}` +
-    `Q${fmt(right)} ${fmt(top)} ${fmt(right)} ${fmt(top + radius)}` +
-    `V${fmt(bottom - radius)}` +
-    `Q${fmt(right)} ${fmt(bottom)} ${fmt(right - radius)} ${fmt(bottom)}` +
-    `H${fmt(left + radius)}` +
-    `Q${fmt(left)} ${fmt(bottom)} ${fmt(left)} ${fmt(bottom - radius)}` +
-    `V${fmt(top + radius)}` +
-    `Q${fmt(left)} ${fmt(top)} ${fmt(left + radius)} ${fmt(top)}Z`;
   const titlePath =
     `M${fmt(left)} ${fmt(titleBottom)}V${fmt(top + radius)}` +
     `Q${fmt(left)} ${fmt(top)} ${fmt(left + radius)} ${fmt(top)}` +
@@ -1257,24 +1637,232 @@ function blockChromeMarkup(params: {
     `H${fmt(right - radius)}` +
     `Q${fmt(right)} ${fmt(bottom)} ${fmt(right)} ${fmt(bottom - radius)}` +
     `V${fmt(bodyTop)}Z`;
-  const shadowFilter = block.plan.shadow
-    ? `<filter id="${filterId}" x="-10%" y="-10%" width="130%" height="140%"><feGaussianBlur stdDeviation="${fmt(1.25)}" /></filter>`
-    : "";
-  const shadowPath = block.plan.shadow
-    ? `<path d="${roundedOutline}" transform="translate(${fmt(2)} ${fmt(2)})" fill="#000000" opacity="0.22" filter="url(#${filterId})" />`
+  const shadow = block.plan.shadow
+    ? beamerRoundedShadowMarkup({
+        id: filterId,
+        left,
+        top,
+        right,
+        bottom,
+      })
     : "";
   return (
     `<g data-beamer-block-template="${block.plan.templateId}">` +
     `<defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">` +
     `<stop offset="0" stop-color="${params.titleFill}" />` +
     `<stop offset="1" stop-color="${params.bodyFill}" />` +
-    `</linearGradient>${shadowFilter}</defs>` +
-    shadowPath +
+    `</linearGradient></defs>` +
+    shadow +
     `<path d="${titlePath}" fill="${params.titleFill}" />` +
     `<path d="M${fmt(left)} ${fmt(titleBottom)}H${fmt(right)}V${fmt(bodyTop)}H${fmt(left)}Z" fill="url(#${gradientId})" />` +
     `<path d="${bodyPath}" fill="${params.bodyFill}" />` +
     `</g>`
   );
+}
+
+function emitPreparedTitlePage(params: {
+  prepared: PreparedTitlePage;
+  x: number;
+  y: number;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  theme: ResolvedBeamerTheme;
+}): void {
+  const titlePage = params.prepared;
+  const boxBounds: BeamerRect = {
+    x: params.x - BEAMER_ROUNDED_TITLE_BLEED_PT,
+    y: params.y + titlePage.titleBoxTop,
+    width: titlePage.width + 2 * BEAMER_ROUNDED_TITLE_BLEED_PT,
+    height: titlePage.titleBoxHeight,
+  };
+  const titleColor = resolveBeamerThemeColor(params.theme, "title");
+  params.modelBuilder.addPart({
+    basePartId: `${titlePage.node.id}:chrome`,
+    sourceId: titlePage.node.id,
+    elementId: null,
+    markup: titlePageChromeMarkup({
+      id: titlePage.node.id,
+      bounds: boxBounds,
+      templateId: params.theme.templates.titlePage.id,
+      fill:
+        titleColor.bg ??
+        resolveBeamerThemeColor(params.theme, "titlelike").bg ??
+        "transparent",
+      shadow:
+        params.theme.templates.titlePage.id ===
+        "beamer/title-page/rounded-shadow",
+    }),
+  });
+
+  const childIds: string[] = [];
+  const emitText = (
+    paragraph: LaidParagraph | null,
+    baselineFromBoxTop: number,
+    colorRole: "title" | "subtitle"
+  ) => {
+    if (!paragraph) {
+      return;
+    }
+    const y =
+      boxBounds.y +
+      baselineFromBoxTop -
+      firstLineBaselineOffset(paragraph);
+    paragraph.layout.bounds = {
+      ...paragraph.layout.bounds,
+      x: params.x,
+      y,
+      height: paragraphLineExtent(paragraph),
+    };
+    params.paragraphs.push(paragraph.layout);
+    childIds.push(paragraph.layout.paragraphId);
+    params.items.push({
+      id: paragraph.layout.paragraphId,
+      kind: "text",
+      sourceSpan: paragraph.layout.sourceSpan,
+      bounds: paragraph.layout.bounds,
+      parentId: titlePage.node.id,
+      paragraphId: paragraph.layout.paragraphId,
+    });
+    params.modelBuilder.addPart({
+      basePartId: paragraph.layout.paragraphId,
+      sourceId: paragraph.layout.paragraphId,
+      elementId: null,
+      markup: paragraphMarkup(
+        paragraph.svgBody,
+        params.x,
+        y,
+        textColor(params.theme, colorRole)
+      ),
+    });
+  };
+  emitText(
+    titlePage.title,
+    titlePage.titleBaselineFromBoxTop,
+    "title"
+  );
+  emitText(
+    titlePage.subtitle,
+    titlePage.subtitleBaselineFromBoxTop,
+    "subtitle"
+  );
+
+  params.items.push({
+    id: titlePage.node.id,
+    kind: "title-page",
+    sourceSpan: titlePage.node.span,
+    bounds: {
+      x: boxBounds.x,
+      y: boxBounds.y,
+      width: boxBounds.width,
+      height: boxBounds.height + (childIds.length > 0 ? 4 : 0),
+    },
+    parentId: null,
+    childIds,
+  });
+}
+
+function titlePageChromeMarkup(params: {
+  id: string;
+  bounds: BeamerRect;
+  templateId: string;
+  fill: string;
+  shadow: boolean;
+}): string {
+  const { bounds } = params;
+  const radius = 4;
+  const right = bounds.x + bounds.width;
+  const bottom = bounds.y + bounds.height;
+  const outline =
+    `M${fmt(bounds.x + radius)} ${fmt(bounds.y)}` +
+    `H${fmt(right - radius)}` +
+    `Q${fmt(right)} ${fmt(bounds.y)} ${fmt(right)} ${fmt(bounds.y + radius)}` +
+    `V${fmt(bottom - radius)}` +
+    `Q${fmt(right)} ${fmt(bottom)} ${fmt(right - radius)} ${fmt(bottom)}` +
+    `H${fmt(bounds.x + radius)}` +
+    `Q${fmt(bounds.x)} ${fmt(bottom)} ${fmt(bounds.x)} ${fmt(bottom - radius)}` +
+    `V${fmt(bounds.y + radius)}` +
+    `Q${fmt(bounds.x)} ${fmt(bounds.y)} ${fmt(bounds.x + radius)} ${fmt(bounds.y)}Z`;
+  const shadowId = `${params.id}:shadow`.replace(
+    /[^A-Za-z0-9_-]/gu,
+    "-"
+  );
+  const shadow = params.shadow
+    ? beamerRoundedShadowMarkup({
+        id: shadowId,
+        left: bounds.x,
+        top: bounds.y,
+        right,
+        bottom,
+      })
+    : "";
+  return (
+    `<g data-beamer-title-page-template="${escapeAttribute(params.templateId)}">` +
+    shadow +
+    `<path d="${outline}" fill="${params.fill}" />` +
+    `</g>`
+  );
+}
+
+function beamerRoundedShadowMarkup(params: {
+  id: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}): string {
+  // beamerbaseboxes.sty builds its fading from two 4bp radial "shadow
+  // balls", one 8bp bottom-right ball, and horizontal/vertical edge
+  // shadings. The box paint that follows clips the inward halves, so the
+  // native SVG can express the same mask as gradients behind the box.
+  const extent = 4 * (72.27 / 72);
+  const largeExtent = 8 * (72.27 / 72);
+  const bottomId = `${params.id}-bottom`;
+  const rightId = `${params.id}-right`;
+  const cornerId = `${params.id}-corner`;
+  const largeCornerId = `${params.id}-corner-large`;
+  const width = Math.max(0, params.right - params.left);
+  const height = Math.max(0, params.bottom - params.top);
+  return (
+    `<defs>` +
+    `<linearGradient id="${bottomId}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="#000000" stop-opacity="0.525" />` +
+    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
+    `</linearGradient>` +
+    `<linearGradient id="${rightId}" x1="0" y1="0" x2="1" y2="0">` +
+    `<stop offset="0" stop-color="#000000" stop-opacity="0.52" />` +
+    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
+    `</linearGradient>` +
+    `<radialGradient id="${cornerId}">` +
+    `<stop offset="0" stop-color="#000000" stop-opacity="0.5" />` +
+    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
+    `</radialGradient>` +
+    `<radialGradient id="${largeCornerId}">` +
+    `<stop offset="0" stop-color="#000000" stop-opacity="1" />` +
+    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
+    `</radialGradient>` +
+    `</defs>` +
+    `<rect x="${fmt(params.left + 2 * extent)}" y="${fmt(params.bottom)}" ` +
+    `width="${fmt(Math.max(0, width - 2 * extent))}" height="${fmt(extent)}" ` +
+    `fill="url(#${bottomId})" />` +
+    `<rect x="${fmt(params.right)}" y="${fmt(params.top + extent)}" ` +
+    `width="${fmt(extent)}" height="${fmt(Math.max(0, height - extent))}" ` +
+    `fill="url(#${rightId})" />` +
+    `<circle cx="${fmt(params.left + 2 * extent)}" cy="${fmt(params.bottom)}" ` +
+    `r="${fmt(extent)}" fill="url(#${cornerId})" />` +
+    `<circle cx="${fmt(params.right)}" cy="${fmt(params.top + extent)}" ` +
+    `r="${fmt(extent)}" fill="url(#${cornerId})" />` +
+    `<circle cx="${fmt(params.right)}" cy="${fmt(params.bottom)}" ` +
+    `r="${fmt(largeExtent)}" fill="url(#${largeCornerId})" />`
+  );
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/gu, "&amp;")
+    .replace(/"/gu, "&quot;")
+    .replace(/</gu, "&lt;")
+    .replace(/>/gu, "&gt;");
 }
 
 function emitFrameParagraph(params: {
@@ -1707,9 +2295,13 @@ async function prepareEmbeddedTikz(params: {
     params.node.root.span.from,
     params.node.root.span.to
   );
+  const textEngine = await createTexNodeTextEngine({
+    mathFontProfile: createBeamerTexMathFontProfile(params.bodyFont),
+  });
   const rendered = await renderTikzToSvgAsync(
     applyThemeFamilyToTikz(snippet, params.bodyFont),
     {
+      textEngine,
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
       // is useful for an isolated SVG, but it is not part of that box.
@@ -2111,23 +2703,49 @@ function resolveEmDimension(value: string): number {
   return match ? Number(match[1]) : 0;
 }
 
-function positionFrameContentTop(
+function resolveFrameVerticalPacking(
   available: BeamerRect,
-  contentHeight: number,
+  rigidContentHeight: number,
+  flow: readonly PreparedFrameFlowItem[],
   alignment: "top" | "center" | "bottom"
-): number {
-  const freeHeight = Math.max(0, available.height - contentHeight);
+): { topOffset: number; fillUnit: number } {
+  const freeHeight = Math.max(
+    0,
+    available.height - rigidContentHeight
+  );
+  const internalFillWeight = flow.reduce(
+    (sum, item) =>
+      sum +
+      (item.kind === "title-page"
+        ? item.titlePage.leadingFillWeight +
+          item.titlePage.trailingFillWeight
+        : 0),
+    0
+  );
   if (alignment === "top") {
     // beamerbaseframe.sty gives top-aligned frames a natural .2cm top skip;
-    // their stretch is dominated by the bottom `1fill`.
-    return available.y + Math.min(TOP_ALIGNED_FRAME_SKIP_PT, freeHeight);
+    // their finite stretch is dominated by the bottom `1fill`.
+    const topOffset = Math.min(TOP_ALIGNED_FRAME_SKIP_PT, freeHeight);
+    return {
+      topOffset,
+      fillUnit:
+        internalFillWeight > 0
+          ? Math.max(0, freeHeight - topOffset) /
+            (1 + internalFillWeight)
+          : 0,
+    };
   }
   if (alignment === "bottom") {
-    return available.y + freeHeight;
+    const totalWeight = 1 + internalFillWeight;
+    const fillUnit = totalWeight > 0 ? freeHeight / totalWeight : 0;
+    return { topOffset: fillUnit, fillUnit };
   }
   // Beamer's default `c` frame uses 1fill above and 1.5fill below, so the
-  // remaining vertical space is divided 2:3 rather than geometrically halved.
-  return available.y + freeHeight * (1 / 2.5);
+  // title page's own leading/trailing `\vfill` glues compete at the same
+  // infinite order with the frame glues.
+  const totalWeight = 2.5 + internalFillWeight;
+  const fillUnit = totalWeight > 0 ? freeHeight / totalWeight : 0;
+  return { topOffset: fillUnit, fillUnit };
 }
 
 function applyThemeFamilyToTikz(
@@ -2140,10 +2758,28 @@ function applyThemeFamilyToTikz(
       : font.family === "monospace"
         ? String.raw`\ttfamily`
         : String.raw`\rmfamily`;
+  const series =
+    font.series === "bold" ? String.raw`\bfseries` : String.raw`\mdseries`;
+  const shape =
+    font.shape === "italic"
+      ? String.raw`\itshape`
+      : font.shape === "slanted"
+        ? String.raw`\slshape`
+        : String.raw`\upshape`;
+  // A TikZ picture inherits the surrounding frame font before its root
+  // options execute. The embedded renderer starts from a standalone 10pt
+  // context, so project the complete resolved Beamer role—not just its
+  // family—onto the picture's root font option.
+  const command =
+    `\\fontsize{${fmt(font.sizePt)}pt}{${fmt(font.lineHeightPt)}pt}` +
+    String.raw`\selectfont` +
+    family +
+    series +
+    shape;
   return source.replace(
     /\\begin\s*\{tikzpicture\}(?:\s*\[([^\]]*)\])?/,
     (_whole, options: string | undefined) =>
-      `\\begin{tikzpicture}[${options ? `${options},` : ""}font=${family}]`
+      `\\begin{tikzpicture}[${options ? `${options},` : ""}font=${command}]`
   );
 }
 
@@ -2183,4 +2819,77 @@ function rectMarkup(
     ? ` data-beamer-template-part="${templatePart}"`
     : "";
   return `<rect${data} x="${fmt(bounds.x)}" y="${fmt(bounds.y)}" width="${fmt(bounds.width)}" height="${fmt(bounds.height)}" fill="${fill}" />`;
+}
+
+function vectorTemplateMarkup(
+  primitive: Extract<BeamerTemplatePrimitive, { kind: "vector" }>,
+  theme: ResolvedBeamerTheme
+): string {
+  return (
+    `<g data-beamer-vector-template="${escapeAttribute(primitive.templateId)}">` +
+    primitive.shapes.map((shape) => vectorShapeMarkup(shape, theme)).join("") +
+    `</g>`
+  );
+}
+
+function vectorShapeMarkup(
+  shape: BeamerTemplateVectorShape,
+  theme: ResolvedBeamerTheme
+): string {
+  const paint = vectorShapePaintAttributes(shape, theme);
+  if (shape.kind === "rect") {
+    return (
+      `<rect x="${fmt(shape.x)}" y="${fmt(shape.y)}" ` +
+      `width="${fmt(shape.width)}" height="${fmt(shape.height)}"${paint} />`
+    );
+  }
+  if (shape.kind === "circle") {
+    return (
+      `<circle cx="${fmt(shape.cx)}" cy="${fmt(shape.cy)}" ` +
+      `r="${fmt(shape.radius)}"${paint} />`
+    );
+  }
+  const path = shape.commands.map((command) => {
+    if (command.kind === "move") {
+      return `M${fmt(command.x)} ${fmt(command.y)}`;
+    }
+    if (command.kind === "line") {
+      return `L${fmt(command.x)} ${fmt(command.y)}`;
+    }
+    if (command.kind === "cubic") {
+      return (
+        `C${fmt(command.control1X)} ${fmt(command.control1Y)} ` +
+        `${fmt(command.control2X)} ${fmt(command.control2Y)} ` +
+        `${fmt(command.x)} ${fmt(command.y)}`
+      );
+    }
+    return "Z";
+  }).join("");
+  const lineCap = shape.lineCap
+    ? ` stroke-linecap="${shape.lineCap}"`
+    : "";
+  const lineJoin = shape.lineJoin
+    ? ` stroke-linejoin="${shape.lineJoin}"`
+    : "";
+  const miterLimit = shape.strokeColorRole &&
+      (shape.lineJoin == null || shape.lineJoin === "miter")
+    ? ` stroke-miterlimit="10"`
+    : "";
+  return `<path d="${path}"${paint}${lineCap}${lineJoin}${miterLimit} />`;
+}
+
+function vectorShapePaintAttributes(
+  shape: BeamerTemplateVectorShape,
+  theme: ResolvedBeamerTheme
+): string {
+  const fill = shape.fillColorRole
+    ? textColor(theme, shape.fillColorRole)
+    : "none";
+  const stroke = shape.strokeColorRole
+    ? textColor(theme, shape.strokeColorRole)
+    : "none";
+  const strokeWidth = shape.strokeWidthPt == null
+    ? ""
+    : ` stroke-width="${fmt(shape.strokeWidthPt)}"`;
+  return ` fill="${fill}" stroke="${stroke}"${strokeWidth}`;
 }

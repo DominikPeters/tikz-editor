@@ -19,6 +19,9 @@ describe("Beamer theme resolution", () => {
 
     expect(theme.id).toBe("Madrid");
     expect(theme.templates.footline.id).toBe("beamer/footline/infolines");
+    expect(theme.templates.navigationSymbols.id).toBe(
+      "beamer/navigation-symbols/default"
+    );
     expect(theme.templates.frameTitle.id).toBe("beamer/frame-title/default");
     expect(
       planBeamerBlockTemplate({ environment: "block", theme })
@@ -46,6 +49,14 @@ describe("Beamer theme resolution", () => {
     expect(resolveBeamerThemeColor(theme, "title in head/foot")).toEqual({
       fg: "#000000",
       bg: "#cccced",
+    });
+    expect(resolveBeamerThemeColor(theme, "navigation symbols")).toEqual({
+      fg: "#adade0",
+    });
+    expect(
+      resolveBeamerThemeColor(theme, "navigation symbols dimmed")
+    ).toEqual({
+      fg: "#d6d6f0",
     });
     const markers = resolveBeamerItemizeMarkers(theme);
     expect(markers[0]).toEqual(expect.objectContaining({
@@ -99,6 +110,9 @@ describe("Beamer theme resolution", () => {
         id: `beamer/block/${name}`,
         options: { style: "fill" },
       });
+      expect(theme.templates.navigationSymbols.id).toBe(
+        "beamer/navigation-symbols/none"
+      );
       expect(theme.fonts["frame-title"]).toEqual(
         expect.objectContaining({
           family: "sans",

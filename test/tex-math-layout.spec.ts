@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createBeamerTexMathFontProfile } from "../packages/core/src/beamer/theme/index.js";
 import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 import {
   computerModernTexMetricProvider,
@@ -584,6 +585,45 @@ describe("TeX math hlist layout", () => {
       width: 0.35879,
     });
     expect(result.hlist?.width).toBe(10.97689);
+  });
+
+  it("suppresses internal italic correction in same-family ordinary character runs", () => {
+    const parsed = parseTexMath("Cx");
+    const result = layoutTexMathList(parsed.list, {
+      baseAtPt: 10.95,
+      fontProfile: createBeamerTexMathFontProfile({
+        family: "sans",
+        series: "medium",
+        shape: "upright",
+        sizePt: 10.95,
+        lineHeightPt: 13.6,
+      }),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items).toMatchObject([
+      {
+        kind: "glyph",
+        fontId: "lmsans10-oblique",
+        code: 67,
+        width: 6.99705,
+        italicCorrection: 1.08405,
+      },
+      {
+        kind: "glyph",
+        fontId: "lmsans10-oblique",
+        code: 120,
+        x: 6.99705,
+        width: 5.04795,
+      },
+      {
+        kind: "kern",
+        reason: "italic-correction",
+        x: 12.045,
+        width: 1.0512,
+      },
+    ]);
+    expect(result.hlist?.width).toBe(13.0962);
   });
 
   it("uses script-style fonts and script mu units when requested", () => {
@@ -1294,6 +1334,23 @@ describe("TeX math hlist layout", () => {
       { fontId: "cmmi10", atPt: 10, code: 120 },
       { fontId: "cmmi7", atPt: 7, code: 121 },
       { fontId: "cmsy5", atPt: 5, code: 65 },
+    ]);
+  });
+
+  it("selects the 8pt calligraphic design for the 10.95pt LaTeX profile", () => {
+    const parsed = parseTexMath(String.raw`x_{\mathcal A}`);
+    const result = layoutTexMathList(parsed.list, {
+      baseAtPt: texLength(10.95),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => ({
+      fontId: glyph.fontId,
+      atPt: glyph.atPt,
+      code: glyph.code,
+    }))).toEqual([
+      { fontId: "cmmi10", atPt: 10.95, code: 120 },
+      { fontId: "cmsy8", atPt: 8, code: 65 },
     ]);
   });
 

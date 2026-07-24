@@ -283,6 +283,8 @@ export type SceneText = {
   textBlockHeight?: number;
   nodeVisualWidth?: number;
   nodeVisualHeight?: number;
+  /** Center of the node shape whose box contributes to the PGF picture bounds. */
+  nodeVisualCenter?: WorldPoint;
   textRenderInfo?: NodeTextRenderInfo;
   rotation?: number;
   transform?: WorldTransform;

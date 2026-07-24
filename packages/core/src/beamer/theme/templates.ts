@@ -4,6 +4,7 @@ import type {
   BeamerTemplatePrimitive,
   BeamerThemeTemplateRef,
 } from "./types.js";
+import { planBeamerNavigationSymbols } from "./navigation-symbols.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
@@ -79,11 +80,19 @@ export function planBeamerFrameChrome(
     footlinePlanners,
     context.theme.templates.footline
   )(context, context.theme.templates.footline);
+  const footlinePaintTopY = footline.primitives.length > 0
+    ? Math.min(...footline.primitives.map((primitive) => primitive.bounds.y))
+    : context.page.page.height;
+  const navigationSymbols = planBeamerNavigationSymbols(
+    context,
+    footlinePaintTopY
+  );
 
   return {
     topInset: headline.inset + frameTitle.inset,
     bottomInset: footline.inset,
     primitives: [
+      ...navigationSymbols,
       ...headline.primitives,
       ...offsetPrimitives(frameTitle.primitives, 0, headline.inset),
       ...footline.primitives,

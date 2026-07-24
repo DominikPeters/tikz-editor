@@ -25,7 +25,8 @@ export interface NativeBeamerTraceLine {
     | "body"
     | "block-title"
     | "block-body"
-    | "footline";
+    | "footline"
+    | "embedded-tikz";
   readonly lineIndex: number;
   readonly sourceSpan: { readonly from: number; readonly to: number };
   readonly text: string;

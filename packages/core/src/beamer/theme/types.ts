@@ -14,6 +14,11 @@ import type { BeamerPageGeometry, BeamerRect } from "../types.js";
 
 export type BeamerThemeFontRole =
   | "normal-text"
+  | "title"
+  | "subtitle"
+  | "author"
+  | "institute"
+  | "date"
   | "frame-title"
   | "frame-subtitle"
   | "footline"
@@ -37,6 +42,21 @@ export type BeamerThemeColor = {
   parent?: string;
   fg?: string;
   bg?: string;
+  /** Optional unquantized RGB channels used when downstream xcolor mixes. */
+  fgRgb?: readonly [number, number, number];
+  /**
+   * Deferred `foreground.fg!percentage!background.bg` mix.
+   *
+   * Beamer color declarations such as `navigation symbols` retain references
+   * to other color roles. Keeping that relationship in the resolved theme
+   * lets a later color theme update `structure` without requiring every
+   * dependent role to be patched by hand.
+   */
+  fgMix?: {
+    foregroundRole: string;
+    backgroundRole: string;
+    foregroundPercent: number;
+  };
 };
 
 export type ResolvedBeamerThemeColor = {
@@ -57,6 +77,7 @@ export type BeamerThemeTemplateRef = {
 export type BeamerThemeTemplates = {
   headline: BeamerThemeTemplateRef;
   footline: BeamerThemeTemplateRef;
+  navigationSymbols: BeamerThemeTemplateRef;
   frameTitle: BeamerThemeTemplateRef;
   titlePage: BeamerThemeTemplateRef;
   sectionPage: BeamerThemeTemplateRef;
@@ -115,6 +136,60 @@ export type BeamerTemplateTextSource =
       sourceSpan: Span;
     };
 
+export type BeamerTemplatePathCommand =
+  | {
+      kind: "move";
+      x: number;
+      y: number;
+    }
+  | {
+      kind: "line";
+      x: number;
+      y: number;
+    }
+  | {
+      kind: "cubic";
+      control1X: number;
+      control1Y: number;
+      control2X: number;
+      control2Y: number;
+      x: number;
+      y: number;
+    }
+  | {
+      kind: "close";
+    };
+
+export type BeamerTemplateVectorShape =
+  | {
+      kind: "path";
+      commands: readonly BeamerTemplatePathCommand[];
+      fillColorRole?: string;
+      strokeColorRole?: string;
+      strokeWidthPt?: number;
+      lineCap?: "butt" | "round" | "square";
+      lineJoin?: "miter" | "round" | "bevel";
+    }
+  | {
+      kind: "rect";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fillColorRole?: string;
+      strokeColorRole?: string;
+      strokeWidthPt?: number;
+    }
+  | {
+      kind: "circle";
+      cx: number;
+      cy: number;
+      radius: number;
+      fillColorRole?: string;
+      strokeColorRole?: string;
+      strokeWidthPt?: number;
+    };
+
 export type BeamerTemplatePrimitive =
   | {
       kind: "fill";
@@ -137,6 +212,15 @@ export type BeamerTemplatePrimitive =
       baselineY?: number;
       /** Fixed interword glue for template-generated spacing such as `\,`. */
       interwordSpacePt?: number;
+    }
+  | {
+      kind: "vector";
+      id: string;
+      sourceSpan: Span;
+      bounds: BeamerRect;
+      templateId: string;
+      layoutKind: "navigation-symbols";
+      shapes: readonly BeamerTemplateVectorShape[];
     };
 
 export type BeamerFrameChromePlan = {
@@ -177,7 +261,15 @@ export type BeamerBlockTemplatePlan = {
     transitionHeightPt: number;
     bodyTopPaddingPt: number;
     bodyExtraHeightPt: number;
-    boxBottomAdvancePt: number;
+    /**
+     * Natural TeX vbox material. This is deliberately separate from the PGF
+     * paint geometry above: beamerbaseboxes.sty mixes pt layout skips with bp
+     * path coordinates.
+     */
+    boxTopSkipPt: number;
+    titleBodyGapPt: number;
+    bodyBottomRaisePt: number;
+    boxBottomSkipPt: number;
     cornerRadiusPt: number;
     shadowExtentPt: number;
   };

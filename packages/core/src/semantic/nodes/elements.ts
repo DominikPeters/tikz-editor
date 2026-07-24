@@ -91,7 +91,8 @@ export function makeTextElement(
   styleChain: StyleChainEntry[] = [],
   textSourceSpan?: { from: number; to: number },
   textHasFixedWidth?: boolean,
-  adornment?: SceneAdornment
+  adornment?: SceneAdornment,
+  nodeVisualCenter?: WorldPoint
 ): SceneText {
   return {
     kind: "Text",
@@ -111,6 +112,7 @@ export function makeTextElement(
     textBlockHeight,
     nodeVisualWidth,
     nodeVisualHeight,
+    ...(nodeVisualCenter ? { nodeVisualCenter } : {}),
     textRenderInfo,
     rotation
   };

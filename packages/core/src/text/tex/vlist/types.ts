@@ -172,6 +172,11 @@ export interface TexVListParagraphHorizontalLayout {
 
 export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly blockIndex: number;
+  /**
+   * Horizontal-mode `\vspace` adjustments, retained until line breaking can
+   * identify the line after which TeX ships each adjustment.
+   */
+  readonly verticalAdjustments?: readonly TexGlueItem[];
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;

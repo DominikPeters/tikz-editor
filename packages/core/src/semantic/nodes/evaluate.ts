@@ -799,7 +799,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -840,7 +842,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -877,7 +881,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -913,7 +919,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -956,7 +964,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }

@@ -304,7 +304,7 @@ function mathFontAtPt(
  * at a 10.95 pt text size, for example, script math is 8 pt and uses `cmmi8`,
  * not `cmmi7` enlarged to 8 pt.
  */
-function resolveComputerModernMathOpticalFont(
+export function resolveComputerModernMathOpticalFont(
   family: TexMathFontFamily,
   atPt: TexLength,
   amsFontSelection: boolean
