@@ -65,6 +65,47 @@ describe("Beamer structural theme templates", () => {
     );
   });
 
+  it("plans the Infolines headline from the current navigation snapshot", () => {
+    const chrome = plan(String.raw`
+\documentclass{beamer}
+\useoutertheme{infolines}
+\begin{document}
+\section[Foundations]{Long foundations title}
+\subsection[Overview]{Long overview title}
+\begin{frame}{Frame}Body\end{frame}\end{document}`);
+
+    expect(
+      chrome.primitives.find(
+        (primitive) =>
+          primitive.id === "frame:0:headline:section:background"
+      )?.bounds.height
+    ).toBeCloseTo(11.055588, 6);
+    expect(chrome.primitives).toContainEqual(
+      expect.objectContaining({
+        id: "frame:0:headline:section",
+        kind: "text",
+        fontRole: "section-in-head-foot",
+        alignment: "right",
+        source: expect.objectContaining({
+          kind: "mapped",
+          value: expect.objectContaining({ value: "Foundations" }),
+        }),
+      })
+    );
+    expect(chrome.primitives).toContainEqual(
+      expect.objectContaining({
+        id: "frame:0:headline:subsection",
+        kind: "text",
+        fontRole: "subsection-in-head-foot",
+        alignment: "left",
+        source: expect.objectContaining({
+          kind: "mapped",
+          value: expect.objectContaining({ value: "Overview" }),
+        }),
+      })
+    );
+  });
+
   it.each(["metropolis", "moloch"])(
     "plans %s progress chrome through registered templates",
     (name) => {

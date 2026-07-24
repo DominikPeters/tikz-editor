@@ -203,6 +203,7 @@ export type BeamerParagraphLayout = {
     | "body"
     | "block-title"
     | "block-body"
+    | "headline"
     | "footline";
   sourceSpan: Span;
   bounds: BeamerRect;

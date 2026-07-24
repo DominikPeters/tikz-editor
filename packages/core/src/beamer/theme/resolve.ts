@@ -208,6 +208,8 @@ function createDefaultTheme(): MutableTheme {
       institute: {},
       date: {},
       frametitle: { fg: "#3333b3" },
+      "section in head/foot": { parent: "palette tertiary" },
+      "subsection in head/foot": { parent: "palette secondary" },
       "alerted text": { fg: "#ff0000" },
       "example text": { fg: "#008000" },
       "block body": {},
@@ -255,6 +257,21 @@ function createDefaultTheme(): MutableTheme {
         ...normalFont,
         sizePt: 8,
         lineHeightPt: 9.5,
+      },
+      headline: {
+        ...normalFont,
+        sizePt: 6,
+        lineHeightPt: 7,
+      },
+      "section-in-head-foot": {
+        ...normalFont,
+        sizePt: 6,
+        lineHeightPt: 7,
+      },
+      "subsection-in-head-foot": {
+        ...normalFont,
+        sizePt: 6,
+        lineHeightPt: 7,
       },
       footline: {
         ...normalFont,
@@ -404,6 +421,8 @@ const outerThemeAppliers = new Map<string, ComponentApplier>([
     state.colors["author in head/foot"] = { parent: "palette tertiary" };
     state.colors["title in head/foot"] = { parent: "palette secondary" };
     state.colors["date in head/foot"] = { parent: "palette primary" };
+    state.colors["section in head/foot"] = { parent: "palette tertiary" };
+    state.colors["subsection in head/foot"] = { parent: "palette primary" };
     // beamerouterthemeinfolines.sty: text margin left/right=1em.
     state.dimensions.textMarginLeftPt = state.fonts["normal-text"].sizePt;
     state.dimensions.textMarginRightPt = state.fonts["normal-text"].sizePt;

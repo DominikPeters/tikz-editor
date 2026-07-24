@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 3;
+export const BEAMER_FRAME_ORACLE_VERSION = 4;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -296,8 +296,14 @@ export function buildBeamerFrameProbeSource(source, document, frameIndex) {
     document.preamble.span.to
   );
   const frameSource = source.slice(frame.span.from, frame.span.to);
+  const navigationState = buildBeamerFrameNavigationState(
+    source,
+    document,
+    frameIndex
+  );
   return {
     frame,
+    navSource: buildBeamerNavigationSeed(source, document),
     source: `${preamble.trimEnd()}
 
 ${beamerProbeInstrumentation()}
@@ -305,10 +311,176 @@ ${beamerProbeInstrumentation()}
 \\begin{document}
 \\setcounter{framenumber}{${frameIndex}}
 \\def\\inserttotalframenumber{${document.frames.length}}
+${navigationState}
 ${frameSource}
 \\end{document}
 `,
   };
+}
+
+/**
+ * Seed the document-wide `.nav` entry stream which Beamer normally obtains
+ * from an earlier full-deck compilation.
+ *
+ * Page links are irrelevant to the visual oracle, so a frame's one-based
+ * source index is a stable synthetic page number. Section/subsection/frame
+ * topology and short navigation titles remain faithful to the source model.
+ */
+export function buildBeamerNavigationSeed(source, document) {
+  const topLevelSections = document.sections.filter(
+    (section) => section.level === 1
+  );
+  const sectionNumberById = new Map(
+    topLevelSections.map((section, index) => [section.id, index + 1])
+  );
+  const subsectionNumberById = new Map();
+  for (const section of topLevelSections) {
+    let subsectionNumber = 0;
+    for (const subsection of document.sections) {
+      if (
+        subsection.level === 2 &&
+        subsection.parentSectionId === section.id
+      ) {
+        subsectionNumber += 1;
+        subsectionNumberById.set(subsection.id, subsectionNumber);
+      }
+    }
+  }
+
+  const lines = [];
+  for (const section of topLevelSections) {
+    const sectionNumber = sectionNumberById.get(section.id);
+    const title = sourceValue(source, section.shortTitle ?? section.title);
+    const firstFrameIndex = document.frames.findIndex(
+      (frame) => frame.sectionId === section.id
+    );
+    const page = firstFrameIndex >= 0
+      ? firstFrameIndex + 1
+      : document.frames.length + 1;
+    lines.push(
+      `\\headcommand {\\sectionentry {${sectionNumber}}{${title}}{${page}}{${title}}{0}}`
+    );
+    for (const subsection of document.sections) {
+      if (
+        subsection.level !== 2 ||
+        subsection.parentSectionId !== section.id
+      ) {
+        continue;
+      }
+      const subsectionNumber = subsectionNumberById.get(subsection.id);
+      const subsectionTitle = sourceValue(
+        source,
+        subsection.shortTitle ?? subsection.title
+      );
+      const firstSubsectionFrameIndex = document.frames.findIndex(
+        (frame) => frame.subsectionId === subsection.id
+      );
+      const subsectionPage = firstSubsectionFrameIndex >= 0
+        ? firstSubsectionFrameIndex + 1
+        : page;
+      lines.push(
+        `\\headcommand {\\beamer@subsectionentry {0}{${sectionNumber}}{${subsectionNumber}}{${subsectionPage}}{${subsectionTitle}}}`
+      );
+    }
+  }
+
+  const localFrameCounts = new Map();
+  for (const [frameIndex, frame] of document.frames.entries()) {
+    const sectionNumber = frame.sectionId === null
+      ? 0
+      : sectionNumberById.get(frame.sectionId) ?? 0;
+    const subsectionNumber = frame.subsectionId === null
+      ? 0
+      : subsectionNumberById.get(frame.subsectionId) ?? 0;
+    const localKey = `${sectionNumber}:${subsectionNumber}`;
+    const localFrameNumber = (localFrameCounts.get(localKey) ?? 0) + 1;
+    localFrameCounts.set(localKey, localFrameNumber);
+    const subsection = frame.subsectionId === null
+      ? null
+      : document.sections.find(
+          (section) => section.id === frame.subsectionId
+        ) ?? null;
+    const subsectionTitle = subsection
+      ? sourceValue(source, subsection.shortTitle ?? subsection.title)
+      : "";
+    const page = frameIndex + 1;
+    lines.push(
+      `\\headcommand {\\slideentry {${sectionNumber}}{${subsectionNumber}}{${localFrameNumber}}{${page}/${page}}{${subsectionTitle}}{0}}`,
+      `\\headcommand {\\beamer@framepages {${page}}{${page}}}`
+    );
+  }
+  lines.push(
+    `\\headcommand {\\beamer@documentpages {${document.frames.length}}}`,
+    `\\headcommand {\\gdef \\inserttotalframenumber {${document.frames.length}}}`
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+function buildBeamerFrameNavigationState(
+  source,
+  document,
+  frameIndex
+) {
+  const frame = document.frames[frameIndex];
+  const section = frame.sectionId === null
+    ? null
+    : document.sections.find((entry) => entry.id === frame.sectionId) ?? null;
+  const subsection = frame.subsectionId === null
+    ? null
+    : document.sections.find(
+        (entry) => entry.id === frame.subsectionId
+      ) ?? null;
+  const topLevelSections = document.sections.filter(
+    (entry) => entry.level === 1
+  );
+  const sectionNumber = section
+    ? topLevelSections.findIndex((entry) => entry.id === section.id) + 1
+    : 0;
+  const subsections = section
+    ? document.sections.filter(
+        (entry) =>
+          entry.level === 2 &&
+          entry.parentSectionId === section.id
+      )
+    : [];
+  const subsectionNumber = subsection
+    ? subsections.findIndex((entry) => entry.id === subsection.id) + 1
+    : 0;
+  const groupFrames = document.frames.filter(
+    (entry) =>
+      entry.sectionId === frame.sectionId &&
+      entry.subsectionId === frame.subsectionId
+  );
+  const subsectionSlide = groupFrames.findIndex(
+    (entry) => entry.id === frame.id
+  );
+  const sectionShortTitle = section
+    ? sourceValue(source, section.shortTitle ?? section.title)
+    : "";
+  const sectionLongTitle = section
+    ? sourceValue(source, section.title)
+    : "";
+  const subsectionShortTitle = subsection
+    ? sourceValue(source, subsection.shortTitle ?? subsection.title)
+    : "";
+  const subsectionLongTitle = subsection
+    ? sourceValue(source, subsection.title)
+    : "";
+
+  return String.raw`\makeatletter
+\setcounter{section}{${sectionNumber}}
+\setcounter{subsection}{${subsectionNumber}}
+\setcounter{subsectionslide}{${Math.max(0, subsectionSlide)}}
+\def\insertsectionhead{${sectionShortTitle}}
+\def\insertsection{${sectionLongTitle}}
+\def\insertsubsectionhead{${subsectionShortTitle}}
+\def\insertsubsection{${subsectionLongTitle}}
+\def\lastsubsection{${subsectionShortTitle}}
+\makeatother`;
+}
+
+function sourceValue(source, value) {
+  return source.slice(value.contentSpan.from, value.contentSpan.to);
 }
 
 export function parseBeamerProbeLog(log) {

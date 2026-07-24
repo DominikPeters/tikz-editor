@@ -25,6 +25,7 @@ import {
   layoutSimpleTexParagraph,
   renderTexParagraphSvgBody,
   texLength,
+  texLineX,
   type TexDisplayMathLayoutProfile,
   type TexListLayoutProfile,
   type TexMetricProvider,
@@ -2016,7 +2017,7 @@ function layoutParagraph(params: {
       `Beamer 11pt class ${namedSize.command} size`
     );
   }
-  const result = layoutSimpleTexParagraph(mapped.text, {
+  const layoutOptions = {
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
     height: params.targetHeight,
@@ -2054,7 +2055,84 @@ function layoutParagraph(params: {
       ? { hyphenate: () => [] }
       : undefined,
     sourceMap: mapped.sourceMap,
-  });
+  } as const;
+  let result = layoutSimpleTexParagraph(mapped.text, layoutOptions);
+  if (
+    !result.supported &&
+    alignment === "ragged-left"
+  ) {
+    // A short right-aligned template label in a wide Beamer color box can
+    // exhaust the finite ragged-left skip used by the generic breaker. A
+    // ragged-right retry finds the symmetric feasible line breaks; place
+    // those lines against the right edge, matching TeX's template-level
+    // \hfill.
+    const leftAligned = layoutSimpleTexParagraph(mapped.text, {
+      ...layoutOptions,
+      alignment: "ragged-right",
+    });
+    if (
+      leftAligned.supported &&
+      leftAligned.report &&
+      leftAligned.vlistLayout
+    ) {
+      const width = texLength(params.bounds.width);
+      const report = {
+        ...leftAligned.report,
+        alignment: "ragged-left" as const,
+        lines: leftAligned.report.lines.map((line) => {
+          const xStart = texLineX(width - line.width);
+          const delta = xStart - line.xStart;
+          return {
+            ...line,
+            xStart,
+            xEnd: texLineX(xStart + line.width),
+            segments: line.segments.map((segment) => ({
+              ...segment,
+              x: texLineX(segment.x + delta),
+              caretStops: segment.caretStops?.map((stop) =>
+                texLineX(stop + delta)
+              ),
+              mathConstructRanges: segment.mathConstructRanges?.map(
+                (range) => ({
+                  ...range,
+                  xStart: texLineX(range.xStart + delta),
+                  xEnd: texLineX(range.xEnd + delta),
+                })
+              ),
+              mathCaretEntries: segment.mathCaretEntries?.map((entry) => ({
+                ...entry,
+                x: texLineX(entry.x + delta),
+                hitBounds: {
+                  ...entry.hitBounds,
+                  xStart: texLineX(entry.hitBounds.xStart + delta),
+                  xEnd: texLineX(entry.hitBounds.xEnd + delta),
+                },
+              })),
+              mathBreakpoints: segment.mathBreakpoints?.map(
+                (breakpoint) => ({
+                  ...breakpoint,
+                  x: texLineX(breakpoint.x + delta),
+                })
+              ),
+            })),
+          };
+        }),
+      };
+      result = {
+        ...leftAligned,
+        report,
+        vlistLayout: {
+          ...leftAligned.vlistLayout,
+          reports: leftAligned.vlistLayout.reports.map((candidate) =>
+            "paragraphId" in candidate &&
+            candidate.paragraphId === report.paragraphId
+              ? report
+              : candidate
+          ),
+        },
+      };
+    }
+  }
   if (!result.supported || !result.report || !result.vlistLayout) {
     return null;
   }
@@ -2317,6 +2395,13 @@ function paragraphRole(
   }
   if (fontRole === "frame-subtitle") {
     return "frame-subtitle";
+  }
+  if (
+    fontRole === "headline" ||
+    fontRole === "section-in-head-foot" ||
+    fontRole === "subsection-in-head-foot"
+  ) {
+    return "headline";
   }
   return fontRole === "footline" ? "footline" : "body";
 }

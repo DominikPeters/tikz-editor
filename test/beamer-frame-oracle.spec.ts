@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { scanBeamerDocument } from "../packages/core/src/index.js";
 import {
   buildBeamerFrameProbeSource,
+  buildBeamerNavigationSeed,
   parseBeamerPageTraceTsv,
   parseBeamerClassVersion,
   parseBeamerProbeLog,
@@ -34,9 +35,47 @@ describe("Beamer frame oracle", () => {
     expect(probe.source).toContain(String.raw`\begin{frame}[t]{Selected}`);
     expect(probe.source).toContain(String.raw`\setcounter{framenumber}{1}`);
     expect(probe.source).toContain(String.raw`\def\inserttotalframenumber{2}`);
+    expect(probe.navSource).toContain(
+      String.raw`\gdef \inserttotalframenumber {2}`
+    );
     expect(probe.source).not.toContain("not selected");
     expect(probe.source.match(/\\begin\{document\}/gu)).toHaveLength(1);
     expect(probe.source).toContain("TIKZ_BEAMER_DIM paperWidth");
+  });
+
+  it("seeds section navigation and restores current short-title state", () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\section[Foundations]{Long Foundations}
+\subsection[Overview]{Long Overview}
+\begin{frame}{First}A\end{frame}
+\begin{frame}{Second}B\end{frame}
+\section{Geometry}
+\subsection{Diagram}
+\begin{frame}{Third}C\end{frame}
+\end{document}`;
+    const document = scanBeamerDocument(source);
+    const probe = buildBeamerFrameProbeSource(source, document, 1);
+    const nav = buildBeamerNavigationSeed(source, document);
+
+    expect(probe.source).toContain(String.raw`\setcounter{section}{1}`);
+    expect(probe.source).toContain(String.raw`\setcounter{subsection}{1}`);
+    expect(probe.source).toContain(String.raw`\setcounter{subsectionslide}{1}`);
+    expect(probe.source).toContain(
+      String.raw`\def\insertsectionhead{Foundations}`
+    );
+    expect(probe.source).toContain(
+      String.raw`\def\insertsubsectionhead{Overview}`
+    );
+    expect(nav).toContain(
+      String.raw`\sectionentry {1}{Foundations}{1}{Foundations}{0}`
+    );
+    expect(nav).toContain(
+      String.raw`\slideentry {1}{1}{2}{2/2}{Overview}{0}`
+    );
+    expect(nav).toContain(
+      String.raw`\sectionentry {2}{Geometry}{3}{Geometry}{0}`
+    );
   });
 
   it("rejects missing and incomplete frames", () => {

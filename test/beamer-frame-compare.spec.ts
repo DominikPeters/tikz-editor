@@ -191,6 +191,30 @@ Fraction:
     }]);
   });
 
+  it("clusters co-baseline theme paragraphs into the visual oracle line", async () => {
+    const render = await renderBeamerFrame(String.raw`
+\documentclass{beamer}
+\useoutertheme{infolines}
+\begin{document}
+\section{Foundations}
+\subsection{Overview}
+\begin{frame}{Frame}Body\end{frame}
+\end{document}`);
+    const trace = buildNativeBeamerPageTrace(
+      render,
+      computerModernTexMetricProvider
+    );
+
+    expect(trace.lines).toContainEqual(
+      expect.objectContaining({
+        id: expect.stringMatching(/^native:page-line:/),
+        role: "headline",
+        text: "FoundationsOverview",
+        baselineY: expect.closeTo(7.059586, 6),
+      })
+    );
+  });
+
   it("reports rectangle edges and absolute page glyph deltas", () => {
     const native: NativeBeamerPageTrace = {
       coordinateSystem: COORDINATE_SYSTEM,

@@ -37,7 +37,15 @@ export function buildBeamerFrameProbeSource(
   source: string,
   document: BeamerDocumentModel,
   frameIndex: number
-): { readonly frame: BeamerFrameModel; readonly source: string };
+): {
+  readonly frame: BeamerFrameModel;
+  readonly source: string;
+  readonly navSource: string;
+};
+export function buildBeamerNavigationSeed(
+  source: string,
+  document: BeamerDocumentModel
+): string;
 export function parseBeamerProbeLog(log: string): {
   readonly pages: readonly BeamerProbePageTrace[];
 };

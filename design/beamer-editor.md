@@ -319,6 +319,11 @@ At minimum the initial profiles are derived from:
 - `beamerbaseoverlay.sty` plus the overlay decoder: pause counters,
   default overlay specifications, action environments, and keep-space versus
   remove-space behavior.
+- `beamerbasesection.sty` and `beamerbasenavigation.sty`: the document-wide
+  section/subsection/frame entry stream, current navigation state, and page
+  ranges consumed by outer themes. Isolated-frame oracle probes must seed the
+  corresponding `.nav` topology; compiling only the selected frame with a
+  total-frame counter is not a valid navigation oracle.
 - The selected outer, inner, color, and font theme `.sty` files. For example,
   Madrid is the composition of its declared color, inner, and outer themes;
   `seahorse` is then applied as a color-theme patch.
@@ -857,12 +862,40 @@ and report links. The initial three-slide baseline contains 84 raster
 comparisons: default and Madrid account for the six passing comparisons; the
 remaining entries intentionally document the unimplemented component gap.
 
+The navigation infrastructure now mirrors Beamer's auxiliary-file boundary.
+Scanning produces one immutable topology model and a frame-local snapshot;
+the oracle materializer writes the equivalent `\sectionentry`,
+`\beamer@subsectionentry`, `\slideentry`, frame-page, document-page, and total
+frame records to the isolated probe's `.nav` file, then restores the selected
+frame's current section and subsection state. This prevents a theme comparison
+from silently using an empty headline merely because the probe omitted the
+original compilation's auxiliary state.
+
+The direct `infolines` outer-theme pass is the first consumer of that
+contract. Its two half-page headline color boxes, `2.65ex` height plus
+`1.5ex` depth, 6pt Latin Modern Sans labels, `2ex` horizontal padding, and
+shared baseline are transcribed from `beamerouterthemeinfolines.sty`.
+Section and subsection text remain separate source-backed paragraphs in the
+native layout, while the comparison trace clusters co-baseline fragments into
+the same visual glyph line exposed by LuaTeX. All three frames of the
+navigation fixture pass the structural contract with no unmatched rules or
+text lines, matching glyph codes/fonts and a maximum position delta below
+0.007pt.
+
 Implementation follows shared source components, not alphabetical theme
 names: first palette/inner-marker variants and frame-title alignment; then
 Infolines; tree/split/miniframes; smoothbars/smoothtree/shadow; and finally
 sidebar/inmargin page geometry. Each component pass is applied to every
 aggregate theme that imports it and rerun through the gallery. Metropolis and
 moloch begin only after this built-in matrix is green.
+
+Aggregate presets are exposed only when every nested component and local
+override needed for a faithful result is registered. In particular, the
+Infolines headline alone does not make AnnArbor, Boadilla, CambridgeUS, or
+EastLansing complete: their shipped definitions also require the wolverine,
+rose/dolphin, beaver, or spruce color themes and theme-local font, marker, or
+headline overrides. Registering those names early would turn a known
+component gap into a misleading partial implementation.
 
 Exit: the renderer contract is covered by type/tests; scanner reports
 trustworthy per-frame construct profiles; a probe can compare a LuaLaTeX

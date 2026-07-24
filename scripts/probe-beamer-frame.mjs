@@ -238,7 +238,7 @@ async function main() {
   // the selected frame still increments from the preceding source index.
   writeFileSync(
     join(runDir, "probe.nav"),
-    `\\headcommand {\\gdef \\inserttotalframenumber {${document.frames.length}}}\n`,
+    probe.navSource,
     "utf8"
   );
 

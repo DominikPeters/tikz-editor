@@ -22,6 +22,9 @@ export type BeamerThemeFontRole =
   | "date"
   | "frame-title"
   | "frame-subtitle"
+  | "headline"
+  | "section-in-head-foot"
+  | "subsection-in-head-foot"
   | "footline"
   | "block-title"
   | "block-body";

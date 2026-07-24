@@ -12,8 +12,64 @@ const HELLO_WORLD_FIXTURE_PATH = new URL(
   "./fixtures/beamer/hello_world_beamer.tex",
   import.meta.url
 );
+const INFOLINES_NAVIGATION_FIXTURE_PATH = new URL(
+  "./fixtures/beamer/infolines_navigation_beamer.tex",
+  import.meta.url
+);
 
 describe("headless Beamer frame renderer", () => {
+  it("renders Infolines section navigation at the measured TeX positions", async () => {
+    const source = readFileSync(INFOLINES_NAVIGATION_FIXTURE_PATH, "utf8");
+    const result = await renderBeamerFrame(source, { frameIndex: 0 });
+    const headline = result.layout.paragraphs.filter(
+      (paragraph) => paragraph.role === "headline"
+    );
+    const firstLinePosition = (paragraph: (typeof headline)[number]) => {
+      const line = paragraph.report.lines[0]!;
+      const placement = paragraph.vlistLayout.linePlacements.find(
+        (candidate) => candidate.lineIndex === line.lineIndex
+      )!;
+      return {
+        x: paragraph.bounds.x + Number(line.xStart),
+        baselineY:
+          paragraph.bounds.y +
+          Number(placement.y) +
+          Number(line.ascent),
+      };
+    };
+
+    expect(headline.map((paragraph) => paragraph.paragraphId)).toEqual([
+      "frame:0:headline:section",
+      "frame:0:headline:subsection",
+    ]);
+    expect(firstLinePosition(headline[0]!)).toEqual({
+      x: expect.closeTo(189.947056, 6),
+      baselineY: expect.closeTo(7.059586, 6),
+    });
+    expect(firstLinePosition(headline[1]!)).toEqual({
+      x: expect.closeTo(232.957039, 6),
+      baselineY: expect.closeTo(7.059586, 6),
+    });
+    const sectionVListReport = headline[0]!.vlistLayout.reports.find(
+      (report) =>
+        "paragraphId" in report &&
+        report.paragraphId === "frame:0:headline:section"
+    );
+    expect(
+      sectionVListReport &&
+      "lines" in sectionVListReport
+        ? Number(sectionVListReport.lines[0]?.segments[0]?.caretStops?.[0])
+        : undefined
+    ).toBeCloseTo(189.947056, 6);
+    expect(result.svg.svg).toContain(
+      'data-paragraph-id="frame:0:headline:section"'
+    );
+    expect(result.svg.svg).toContain(
+      'data-paragraph-id="frame:0:headline:subsection"'
+    );
+    expect(result.diagnostics).toEqual([]);
+  });
+
   it("renders the KKT title page through theme-owned frame flow", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 0 });

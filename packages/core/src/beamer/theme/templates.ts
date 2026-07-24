@@ -25,6 +25,10 @@ const EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT = 1;
 // beamerouterthemeinfolines.sty: ht=2.25ex,dp=1ex. The 4pt reserve added by
 // beamerbaseframecomponents.sty belongs to \footheight, not the painted boxes.
 const INFOLINES_FOOTLINE_PAINT_HEIGHT_PT = 8.658004760742188;
+// beamerouterthemeinfolines.sty: ht=2.65ex,dp=1.5ex at the 6pt
+// `tiny structure` headline font.
+const INFOLINES_HEADLINE_PAINT_HEIGHT_PT = 11.055587768554688;
+const INFOLINES_HEADLINE_BASELINE_PT = 7.0595855712890625;
 const BEAMER_FOOTLINE_RESERVE_PT = 4;
 const LATIN_MODERN_SANS_X_HEIGHT_EM = 0.444;
 // The Infolines template uses leftskip=2ex,rightskip=2ex at its 6pt footline
@@ -315,10 +319,69 @@ function planInfolinesFootline(
   return { inset, primitives };
 }
 
-function planInfolinesHeadline(): ChromeTemplatePlan {
-  // Kept registered because infolines itself selects this template. Aggregate
-  // Madrid immediately resets headline to Beamer's default (empty) template.
-  return { inset: 0, primitives: [] };
+function planInfolinesHeadline(
+  context: BeamerFrameTemplateContext
+): ChromeTemplatePlan {
+  const height = INFOLINES_HEADLINE_PAINT_HEIGHT_PT;
+  const half = context.page.page.width / 2;
+  const horizontalPadding = 2 * INFOLINES_FOOTLINE_EX_PT;
+  const section = context.navigation.currentSection;
+  const subsection = context.navigation.currentSubsection;
+  const primitives: BeamerTemplatePrimitive[] = [
+    {
+      kind: "fill",
+      id: `${context.frame.id}:headline:section:background`,
+      sourceSpan: section?.title.span ?? context.frame.span,
+      bounds: { x: 0, y: 0, width: half, height },
+      colorRole: "section in head/foot",
+    },
+    {
+      kind: "fill",
+      id: `${context.frame.id}:headline:subsection:background`,
+      sourceSpan: subsection?.title.span ?? context.frame.span,
+      bounds: { x: half, y: 0, width: half, height },
+      colorRole: "subsection in head/foot",
+    },
+  ];
+  if (section) {
+    primitives.push({
+      kind: "text",
+      id: `${context.frame.id}:headline:section`,
+      sourceSpan: section.title.contentSpan,
+      bounds: {
+        x: 0,
+        y: 0,
+        width: half - horizontalPadding,
+        height,
+      },
+      source: { kind: "mapped", value: section.title },
+      fontRole: "section-in-head-foot",
+      colorRole: "section in head/foot",
+      alignment: "right",
+      verticalAlignment: "center",
+      baselineY: INFOLINES_HEADLINE_BASELINE_PT,
+    });
+  }
+  if (subsection) {
+    primitives.push({
+      kind: "text",
+      id: `${context.frame.id}:headline:subsection`,
+      sourceSpan: subsection.title.contentSpan,
+      bounds: {
+        x: half + horizontalPadding,
+        y: 0,
+        width: half - horizontalPadding,
+        height,
+      },
+      source: { kind: "mapped", value: subsection.title },
+      fontRole: "subsection-in-head-foot",
+      colorRole: "subsection in head/foot",
+      alignment: "left",
+      verticalAlignment: "center",
+      baselineY: INFOLINES_HEADLINE_BASELINE_PT,
+    });
+  }
+  return { inset: height, primitives };
 }
 
 function planModernHeadline(
