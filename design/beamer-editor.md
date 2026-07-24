@@ -1219,6 +1219,24 @@ source panel caret↔frame sync and dimming over roots, diagnostics
 surfacing (unknown-theme chrome badge, font substitution), corpus decks as
 fixtures, and an open→no-op→byte-identical round-trip test.
 
+*Progress (2026-07-24):* the first deck view works end-to-end in the web
+app. `SessionSnapshot` carries a kind-tagged `deck` section (frame
+inventory with titles/step counts plus the active frame's rendered page);
+a module-level compute session reuses `prepareBeamerDocument` and memoizes
+pages per frame/step. The canvas shows the frame through the existing SVG
+layer with a step scrubber (buttons + arrow keys); tikz interactions are
+inert on the empty deck scene and the reducer rejects edit actions in
+deck mode. The figure navigator, thumbnail worker (final-step renders,
+step badges), dock auto-open, source dimming/caret sync, and status bar
+consume deck frames as roots. Verified live: Madrid chrome, `\only`
+reflow across steps, `[<+->]` item projection, frame switching, and
+source-panel editing with live rerender. Two follow-ups measured, not
+guessed: typing invalidates the whole prepared session per keystroke
+(needs frame-level IR reuse across revisions), and the app must not
+import the core package root in browser code (it pulls `node:fs` via the
+corpus helpers). Inspector still shows the tikz panes in deck mode;
+navigator rewrite, fallback cards, and diagnostics badges remain.
+
 Exit: any corpus deck opens in the app; the sorter shows render order and
 fallback cards; existing TikZ editing remains unaffected.
 
