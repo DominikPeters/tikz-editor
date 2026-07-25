@@ -777,6 +777,15 @@ export const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1] as con
 const SIMPLE_TEX_SYNTAX_INDEX_CACHE_LIMIT = 128;
 
 interface SimpleTexSyntaxIndex {
+  readonly commandByStart: ReadonlyMap<
+    number,
+    {
+      readonly name: string;
+      readonly end: number;
+      readonly kind: "word" | "symbol";
+    }
+  >;
+  readonly triviaEndByStart: ReadonlyMap<number, number>;
   readonly mathByStart: ReadonlyMap<
     number,
     SimpleTexMathNode | SimpleTexDisplayMathNode
@@ -1365,12 +1374,19 @@ function scanSimpleTexIrNodes(
 function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
   const cached = simpleTexSyntaxIndexCache.get(text);
   if (cached) {
-    simpleTexSyntaxIndexCache.delete(text);
-    simpleTexSyntaxIndexCache.set(text, cached);
     return cached;
   }
 
   const byStart = new Map<number, SimpleTexMathNode | SimpleTexDisplayMathNode>();
+  const commandByStart = new Map<
+    number,
+    {
+      readonly name: string;
+      readonly end: number;
+      readonly kind: "word" | "symbol";
+    }
+  >();
+  const triviaEndByStart = new Map<number, number>();
   const groupEndByStart = new Map<number, number>();
   const optionalArgumentEndByStart = new Map<number, number>();
   const environmentByStart = new Map<
@@ -1393,7 +1409,28 @@ function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
   const tree = texFragmentParser.parse(text);
   tree.iterate({
     enter(node) {
-      if (
+      if (node.name === "GenericCommand" || node.name === "IncludeGraphicsCmd") {
+        const source = text.slice(node.from, node.to);
+        const word = /^\\([A-Za-z@]+)$/u.exec(source);
+        const symbol = /^\\([^\n\rA-Za-z@])$/u.exec(source);
+        const name = word?.[1] ?? symbol?.[1];
+        if (name) {
+          commandByStart.set(node.from, {
+            name,
+            end: node.to,
+            kind: word ? "word" : "symbol",
+          });
+        }
+      } else if (node.name === "BeginCommand" || node.name === "EndCommand") {
+        const name = node.name === "BeginCommand" ? "begin" : "end";
+        commandByStart.set(node.from, {
+          name,
+          end: node.from + name.length + 1,
+          kind: "word",
+        });
+      } else if (node.name === "Comment" || node.name === "Whitespace") {
+        triviaEndByStart.set(node.from, node.to);
+      } else if (
         node.name === "Group" &&
         text[node.from] === "{" &&
         text[node.to - 1] === "}"
@@ -1443,6 +1480,8 @@ function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
     },
   });
   const index: SimpleTexSyntaxIndex = {
+    commandByStart,
+    triviaEndByStart,
     mathByStart: byStart,
     groupEndByStart,
     optionalArgumentEndByStart,
@@ -1878,9 +1917,7 @@ function scanSimpleTexVerticalGlueCommand(
     if (text[argumentStart] === "*") {
       argumentStart += 1;
     }
-    while (text[argumentStart] === " " || text[argumentStart] === "\n") {
-      argumentStart += 1;
-    }
+    argumentStart = skipSimpleTexControlWordSpaces(text, argumentStart);
     if (text[argumentStart] !== "{") {
       return null;
     }
@@ -2372,10 +2409,7 @@ function scanSimpleTexFontCommand(
     return null;
   }
 
-  let groupStart = command.end;
-  while (text[groupStart] === " " || text[groupStart] === "\n") {
-    groupStart += 1;
-  }
+  const groupStart = skipSimpleTexControlWordSpaces(text, command.end);
   if (text[groupStart] !== "{") {
     return null;
   }
@@ -3301,8 +3335,7 @@ function scanSimpleTexAccentCommand(
   if (!mark || (/[A-Za-z]/.test(command) && /[A-Za-z]/.test(text[start + 2] ?? ""))) {
     return null;
   }
-  let cursor = start + 2;
-  while (text[cursor] === " " || text[cursor] === "\n") cursor += 1;
+  let cursor = skipSimpleTexControlWordSpaces(text, start + 2);
   let base: string;
   if (text[cursor] === "{") {
     const groupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
@@ -3387,8 +3420,13 @@ function findBalancedSimpleTexOptionalArgumentEnd(
 
 function skipSimpleTexControlWordSpaces(text: string, start: number): number {
   let index = start;
-  while (text[index] === " " || text[index] === "\n") {
-    index += 1;
+  const triviaEndByStart = simpleTexSyntaxIndex(text).triviaEndByStart;
+  for (
+    let triviaEnd = triviaEndByStart.get(index);
+    triviaEnd !== undefined;
+    triviaEnd = triviaEndByStart.get(index)
+  ) {
+    index = triviaEnd;
   }
   return index;
 }
@@ -3475,35 +3513,27 @@ function scanSimpleTexAlignmentCommand(
 }
 
 function scanSimpleTexControlWord(text: string, start: number, word: string): number | null {
-  if (text[start] !== "\\") {
-    return null;
-  }
-  const end = start + 1 + word.length;
-  if (text.slice(start + 1, end) !== word) {
-    return null;
-  }
-  const next = text[end] ?? "";
-  return next && /[A-Za-z]/.test(next) ? null : end;
+  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  return command?.kind === "word" && command.name === word
+    ? command.end
+    : null;
 }
 
 function scanUnsupportedControlSequenceEnd(text: string, start: number): number {
-  let index = start + 1;
-  while (index < text.length && /[A-Za-z]/.test(text[index] ?? "")) {
-    index += 1;
-  }
-  if (index === start + 1) {
+  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  if (!command) {
     return Math.min(text.length, start + 2);
   }
-  return scanUnsupportedControlSequenceArgumentsEnd(text, index);
+  return command.kind === "word"
+    ? scanUnsupportedControlSequenceArgumentsEnd(text, command.end)
+    : command.end;
 }
 
 function scanUnsupportedControlSequenceArgumentsEnd(text: string, start: number): number {
   let end = start;
   let index = start;
   while (index < text.length) {
-    while (text[index] === " " || text[index] === "\n") {
-      index += 1;
-    }
+    index = skipSimpleTexControlWordSpaces(text, index);
     if (text[index] === "{") {
       const groupEnd = findBalancedSimpleTexGroupEnd(text, index);
       if (groupEnd === null) {

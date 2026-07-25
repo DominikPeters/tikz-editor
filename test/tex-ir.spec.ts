@@ -1063,6 +1063,25 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
+  it("associates command arguments across CST trivia", () => {
+    const source = String.raw`\textbf	% keep the argument on the next line
+{Alpha}`;
+    const ir = parseSimpleTexParagraphIr(source);
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes).toHaveLength(1);
+    expect(ir.nodes[0]).toMatchObject({
+      kind: "font-command",
+      command: "textbf",
+      text: source,
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("Alpha"),
+      contentEnd: source.indexOf("Alpha") + "Alpha".length,
+      children: [expect.objectContaining({ kind: "text", text: "Alpha" })],
+    });
+  });
+
   it("records inline math delimiters and source spans in source IR", () => {
     const source = String.raw`Alpha $x^2_y$ and \(z+1\).`;
     const ir = parseSimpleTexParagraphIr(source);
