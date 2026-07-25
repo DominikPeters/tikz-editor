@@ -30,12 +30,19 @@ async function runCli() {
 
     const distEntry = ensureDistBuildFresh(repoRoot);
 
-    const distModule = await import(pathToFileURL(distEntry).href);
-    if (typeof distModule.extractTikzSnippetsFromSource !== "function") {
-      throw new Error("extractTikzSnippetsFromSource export not found in packages/core/dist/index.js.");
+    const corpusEntry = join(
+      dirname(distEntry),
+      "corpus",
+      "index.js"
+    );
+    const corpusModule = await import(pathToFileURL(corpusEntry).href);
+    if (typeof corpusModule.extractTikzSnippetsFromSource !== "function") {
+      throw new Error(
+        "extractTikzSnippetsFromSource export not found in packages/core/dist/corpus/index.js."
+      );
     }
 
-    const source = loadSnippetsForMode(args, distModule);
+    const source = loadSnippetsForMode(args, corpusModule);
     let snippets = source.snippets;
     if (args.kind !== "all") {
       snippets = snippets.filter((snippet) => snippet.kind === args.kind);

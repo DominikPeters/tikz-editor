@@ -3,8 +3,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { collectTikzSnippetsFromDocs } from "../packages/core/src/corpus/extract.js";
-import type { TikzSnippet } from "../packages/core/src/corpus/extract.js";
+import {
+  collectTikzSnippetsFromDocs,
+  type TikzSnippet,
+} from "../packages/core/src/corpus/index.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { emitSvg } from "../packages/core/src/svg/emit.js";

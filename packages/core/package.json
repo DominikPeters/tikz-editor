@@ -18,6 +18,10 @@
       "types": "./dist/beamer/index.d.ts",
       "import": "./dist/beamer/index.js"
     },
+    "./corpus": {
+      "types": "./dist/corpus/index.d.ts",
+      "import": "./dist/corpus/index.js"
+    },
     "./coords": {
       "types": "./dist/coords/index.d.ts",
       "import": "./dist/coords/index.js"
