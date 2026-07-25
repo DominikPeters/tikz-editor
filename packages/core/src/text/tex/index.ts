@@ -45,6 +45,7 @@ export {
   type SimpleTexBoxCommandName,
   type SimpleTexBoxNode,
   type SimpleTexBlockItem,
+  type SimpleTexCommentNode,
   type SimpleTexControlNode,
   type SimpleTexDimensionBoxCommandName,
   type SimpleTexDimensionBoxNode,

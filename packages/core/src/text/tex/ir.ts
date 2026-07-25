@@ -144,6 +144,11 @@ export interface SimpleTexSpaceNode extends SimpleTexSourceRange {
   readonly nonBreaking?: boolean;
 }
 
+export interface SimpleTexCommentNode extends SimpleTexSourceRange {
+  readonly kind: "comment";
+  readonly text: string;
+}
+
 export interface SimpleTexLineBreakNode extends SimpleTexSourceRange {
   readonly kind: "line-break";
   readonly text: string;
@@ -416,6 +421,7 @@ export interface SimpleTexBoxNode extends SimpleTexSourceRange {
 export type SimpleTexInlineNode =
   | SimpleTexTextNode
   | SimpleTexSpaceNode
+  | SimpleTexCommentNode
   | SimpleTexLineBreakNode
   | SimpleTexMathNode
   | SimpleTexFontCommandNode
@@ -448,6 +454,7 @@ export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 export const SIMPLE_TEX_INLINE_NODE_KINDS = [
   "text",
   "space",
+  "comment",
   "line-break",
   "math",
   "font-command",
@@ -745,8 +752,6 @@ interface SimpleTexIrOptions {
 }
 
 const unsupportedDirectTextCharPattern = /[&_^~#%]/;
-const whitespacePattern = /[ \n]+/;
-const paragraphBreakPattern = /^\n(?: *\n)+/;
 const lineLeadingOptionPattern =
   /^\[\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)\s*\]/i;
 const texLengthPattern =
@@ -786,6 +791,9 @@ interface SimpleTexSyntaxIndex {
     }
   >;
   readonly triviaEndByStart: ReadonlyMap<number, number>;
+  readonly commentEndByStart: ReadonlyMap<number, number>;
+  readonly whitespaceEndByStart: ReadonlyMap<number, number>;
+  readonly textEndByStart: ReadonlyMap<number, number>;
   readonly mathByStart: ReadonlyMap<
     number,
     SimpleTexMathNode | SimpleTexDisplayMathNode
@@ -1039,13 +1047,56 @@ function scanSimpleTexIrNodes(
   resolveColorAlias?: ColorAliasResolver
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
-  const mathSyntaxByStart = simpleTexSyntaxIndex(text).mathByStart;
+  const syntax = simpleTexSyntaxIndex(text);
+  const mathSyntaxByStart = syntax.mathByStart;
   let unsupportedCommand = false;
   let index = 0;
 
   while (index < text.length) {
     const sourceStart = sourceOffset + index;
     const char = text[index];
+
+    const commentEnd = syntax.commentEndByStart.get(index);
+    if (commentEnd !== undefined) {
+      let sourceEnd = commentEnd;
+      const whitespaceEnd = syntax.whitespaceEndByStart.get(commentEnd);
+      if (whitespaceEnd !== undefined) {
+        if (text.startsWith("\r\n", sourceEnd)) {
+          sourceEnd += 2;
+        } else if (text[sourceEnd] === "\n" || text[sourceEnd] === "\r") {
+          sourceEnd += 1;
+        }
+        while (text[sourceEnd] === " " || text[sourceEnd] === "\t") {
+          sourceEnd += 1;
+        }
+      }
+      nodes.push({
+        kind: "comment",
+        text: text.slice(index, sourceEnd),
+        sourceStart,
+        sourceEnd: sourceOffset + sourceEnd,
+      });
+      if (whitespaceEnd !== undefined && sourceEnd < whitespaceEnd) {
+        nodes.push({
+          kind: "paragraph-break",
+          text: text.slice(sourceEnd, whitespaceEnd),
+          breakKind: "blank-line",
+          sourceStart: sourceOffset + sourceEnd,
+          sourceEnd: sourceOffset + whitespaceEnd,
+        });
+        index = whitespaceEnd;
+      } else {
+        index = sourceEnd;
+      }
+      continue;
+    }
+
+    const whitespaceEnd = syntax.whitespaceEndByStart.get(index);
+    if (whitespaceEnd !== undefined) {
+      appendSimpleTexWhitespaceNode(nodes, text, index, whitespaceEnd, sourceOffset);
+      index = whitespaceEnd;
+      continue;
+    }
 
     const mathSyntax = mathSyntaxByStart.get(index);
     if (mathSyntax) {
@@ -1242,12 +1293,14 @@ function scanSimpleTexIrNodes(
       }
 
       const end = scanUnsupportedControlSequenceEnd(text, index);
-      const commandNameMatch = /^\\[A-Za-z]+/.exec(text.slice(index));
+      const command = syntax.commandByStart.get(index);
       nodes.push({
         kind: "literal",
         text: text.slice(index, end),
         reason: "unsupported-command",
-        detail: commandNameMatch?.[0] ?? text.slice(index, Math.min(end, index + 2)),
+        detail: command
+          ? text.slice(index, command.end)
+          : text.slice(index, Math.min(end, index + 2)),
         sourceStart,
         sourceEnd: sourceOffset + end,
       });
@@ -1298,40 +1351,10 @@ function scanSimpleTexIrNodes(
       continue;
     }
 
-    const proseConvention = scanSimpleTexProseConvention(text, index, sourceOffset);
-    if (proseConvention) {
-      nodes.push(proseConvention.node);
-      index = proseConvention.end;
-      continue;
-    }
-
-    if (char === "\n") {
-      const match = paragraphBreakPattern.exec(text.slice(index));
-      if (match) {
-        const full = match[0] ?? "";
-        nodes.push({
-          kind: "paragraph-break",
-          text: full,
-          breakKind: "blank-line",
-          sourceStart,
-          sourceEnd: sourceOffset + index + full.length,
-        });
-        index += full.length;
-        continue;
-      }
-    }
-
-    if (char === " " || char === "\n") {
-      const start = index;
-      while (index < text.length && (text[index] === " " || text[index] === "\n")) {
-        index += 1;
-      }
-      nodes.push({
-        kind: "space",
-        text: text.slice(start, index),
-        sourceStart: sourceOffset + start,
-        sourceEnd: sourceOffset + index,
-      });
+    const textEnd = syntax.textEndByStart.get(index);
+    if (textEnd !== undefined) {
+      appendSimpleTexTextNodes(nodes, text, index, textEnd, sourceOffset);
+      index = textEnd;
       continue;
     }
 
@@ -1347,28 +1370,121 @@ function scanSimpleTexIrNodes(
       continue;
     }
 
-    const start = index;
+    nodes.push({
+      kind: "literal",
+      text: char ?? "",
+      reason: "malformed-input",
+      sourceStart,
+      sourceEnd: sourceStart + 1,
+    });
+    index += 1;
+  }
+
+  return {
+    nodes: mergeAdjacentSimpleTexTextNodes(nodes),
+    unsupportedCommand,
+  };
+}
+
+function mergeAdjacentSimpleTexTextNodes(
+  nodes: readonly SimpleTexNode[]
+): readonly SimpleTexNode[] {
+  const merged: SimpleTexNode[] = [];
+  for (const node of nodes) {
+    const previous = merged.at(-1);
+    if (
+      node.kind === "text" &&
+      previous?.kind === "text" &&
+      previous.sourceEnd === node.sourceStart &&
+      previous.text.length === previous.sourceEnd - previous.sourceStart &&
+      node.text.length === node.sourceEnd - node.sourceStart
+    ) {
+      merged[merged.length - 1] = {
+        kind: "text",
+        text: previous.text + node.text,
+        sourceStart: previous.sourceStart,
+        sourceEnd: node.sourceEnd,
+      };
+    } else {
+      merged.push(node);
+    }
+  }
+  return merged;
+}
+
+function appendSimpleTexWhitespaceNode(
+  nodes: SimpleTexNode[],
+  text: string,
+  start: number,
+  end: number,
+  sourceOffset: number
+): void {
+  const raw = text.slice(start, end);
+  const hasBlankLine = /(?:\r\n|\r|\n)[ \t]*(?:\r\n|\r|\n)/u.test(raw);
+  if (hasBlankLine) {
+    nodes.push({
+      kind: "paragraph-break",
+      text: raw,
+      breakKind: "blank-line",
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + end,
+    });
+  } else {
+    nodes.push({
+      kind: "space",
+      text: raw,
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + end,
+    });
+  }
+}
+
+function appendSimpleTexTextNodes(
+  nodes: SimpleTexNode[],
+  text: string,
+  start: number,
+  end: number,
+  sourceOffset: number
+): void {
+  let index = start;
+  while (index < end) {
+    const convention = scanSimpleTexProseConvention(
+      text,
+      index,
+      sourceOffset
+    );
+    if (convention && convention.end <= end) {
+      nodes.push(convention.node);
+      index = convention.end;
+      continue;
+    }
+    if (unsupportedDirectTextCharPattern.test(text[index] ?? "")) {
+      nodes.push({
+        kind: "literal",
+        text: text[index] ?? "",
+        reason: "unsupported-character",
+        sourceStart: sourceOffset + index,
+        sourceEnd: sourceOffset + index + 1,
+      });
+      index += 1;
+      continue;
+    }
+    const textStart = index;
+    index += 1;
     while (
-      index < text.length &&
-      text[index] !== "\\" &&
-      text[index] !== "{" &&
-      text[index] !== "}" &&
-      text[index] !== "$" &&
+      index < end &&
       scanSimpleTexProseConvention(text, index, sourceOffset) === null &&
-      !unsupportedDirectTextCharPattern.test(text[index] ?? "") &&
-      !whitespacePattern.test(text[index] ?? "")
+      !unsupportedDirectTextCharPattern.test(text[index] ?? "")
     ) {
       index += 1;
     }
     nodes.push({
       kind: "text",
-      text: text.slice(start, index),
-      sourceStart: sourceOffset + start,
+      text: text.slice(textStart, index),
+      sourceStart: sourceOffset + textStart,
       sourceEnd: sourceOffset + index,
     });
   }
-
-  return { nodes, unsupportedCommand };
 }
 
 function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
@@ -1387,6 +1503,9 @@ function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
     }
   >();
   const triviaEndByStart = new Map<number, number>();
+  const commentEndByStart = new Map<number, number>();
+  const whitespaceEndByStart = new Map<number, number>();
+  const textEndByStart = new Map<number, number>();
   const groupEndByStart = new Map<number, number>();
   const optionalArgumentEndByStart = new Map<number, number>();
   const environmentByStart = new Map<
@@ -1428,8 +1547,14 @@ function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
           end: node.from + name.length + 1,
           kind: "word",
         });
-      } else if (node.name === "Comment" || node.name === "Whitespace") {
+      } else if (node.name === "Comment") {
         triviaEndByStart.set(node.from, node.to);
+        commentEndByStart.set(node.from, node.to);
+      } else if (node.name === "Whitespace") {
+        triviaEndByStart.set(node.from, node.to);
+        whitespaceEndByStart.set(node.from, node.to);
+      } else if (node.name === "Text") {
+        textEndByStart.set(node.from, node.to);
       } else if (
         node.name === "Group" &&
         text[node.from] === "{" &&
@@ -1482,6 +1607,9 @@ function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
   const index: SimpleTexSyntaxIndex = {
     commandByStart,
     triviaEndByStart,
+    commentEndByStart,
+    whitespaceEndByStart,
+    textEndByStart,
     mathByStart: byStart,
     groupEndByStart,
     optionalArgumentEndByStart,
@@ -1732,7 +1860,8 @@ function scanSimpleTexProseControl(
   readonly unsupportedCommand: boolean;
 } | null {
   const sourceStart = sourceOffset + start;
-  const escaped = text[start + 1];
+  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  const escaped = command?.kind === "symbol" ? command.name : undefined;
   const escapedReplacements: Readonly<Record<string, string>> = {
     "%": "%",
     "&": "&",
@@ -1749,9 +1878,9 @@ function scanSimpleTexProseControl(
         kind: "text",
         text: escapedReplacement,
         sourceStart,
-        sourceEnd: sourceStart + 2,
+        sourceEnd: sourceOffset + (command?.end ?? start),
       },
-      end: start + 2,
+      end: command?.end ?? start,
       unsupportedCommand: false,
     };
   }
@@ -1759,11 +1888,11 @@ function scanSimpleTexProseControl(
     return {
       node: {
         kind: "space",
-        text: text.slice(start, start + 2),
+        text: text.slice(start, command?.end ?? start),
         sourceStart,
-        sourceEnd: sourceStart + 2,
+        sourceEnd: sourceOffset + (command?.end ?? start),
       },
-      end: start + 2,
+      end: command?.end ?? start,
       unsupportedCommand: false,
     };
   }
@@ -3310,32 +3439,30 @@ function scanSimpleTexAccentCommand(
   start: number,
   sourceOffset: number
 ): { readonly node: SimpleTexTextNode; readonly end: number } | null {
-  if (text[start] !== "\\") {
+  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  if (!command) {
     return null;
   }
-  const letterMatch = /^\\([A-Za-z]+)/.exec(text.slice(start));
-  if (letterMatch) {
-    const replacement = SIMPLE_TEX_LETTER_COMMANDS[letterMatch[1] ?? ""];
+  if (command.kind === "word") {
+    const replacement = SIMPLE_TEX_LETTER_COMMANDS[command.name];
     if (replacement) {
-      const end = start + (letterMatch[0]?.length ?? 0);
       return {
         node: {
           kind: "text",
           text: replacement,
           sourceStart: sourceOffset + start,
-          sourceEnd: sourceOffset + end,
+          sourceEnd: sourceOffset + command.end,
         },
-        end,
+        end: command.end,
       };
     }
   }
 
-  const command = text[start + 1] ?? "";
-  const mark = SIMPLE_TEX_ACCENT_MARKS[command];
-  if (!mark || (/[A-Za-z]/.test(command) && /[A-Za-z]/.test(text[start + 2] ?? ""))) {
+  const mark = SIMPLE_TEX_ACCENT_MARKS[command.name];
+  if (!mark) {
     return null;
   }
-  let cursor = skipSimpleTexControlWordSpaces(text, start + 2);
+  let cursor = skipSimpleTexControlWordSpaces(text, command.end);
   let base: string;
   if (text[cursor] === "{") {
     const groupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
@@ -3435,44 +3562,48 @@ export function scanSimpleTexLineBreak(
   text: string,
   start: number
 ): { end: number; lineLeading?: string; priority?: 0 | 1 | 2 | 3 | 4 } | null {
-  if (text[start] !== "\\") {
+  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  if (!command) {
     return null;
   }
 
-  const newlineEnd = scanSimpleTexControlWord(text, start, "newline");
-  if (newlineEnd !== null) {
-    return { end: newlineEnd };
+  if (command.kind === "word" && command.name === "newline") {
+    return { end: command.end };
   }
-  const linebreakEnd = scanSimpleTexControlWord(text, start, "linebreak");
-  if (linebreakEnd !== null) {
-    const option = /^\[\s*([0-4])\s*\]/.exec(text.slice(linebreakEnd));
+  if (command.kind === "word" && command.name === "linebreak") {
+    const option = scanSimpleTexOptionalBracketArgument(text, command.end);
+    const priority = option && /^[0-4]$/u.test(option.content.trim())
+      ? Number.parseInt(option.content.trim(), 10) as 0 | 1 | 2 | 3 | 4
+      : 4;
     return {
-      end: linebreakEnd + (option?.[0].length ?? 0),
-      priority: Number.parseInt(option?.[1] ?? "4", 10) as 0 | 1 | 2 | 3 | 4,
+      end: priority !== 4 || option?.content.trim() === "4"
+        ? option?.end ?? command.end
+        : command.end,
+      priority,
     };
   }
-  if (text[start + 1] !== "\\") {
+  if (command.kind !== "symbol" || command.name !== "\\") {
     return null;
   }
 
-  let end = start + 2;
+  let end = command.end;
   // LaTeX's starred form suppresses a page break after this forced line. The
   // distinction is irrelevant inside a single node paragraph, but the star
   // is still command syntax and must not leak into painted prose.
   if (text[end] === "*") {
     end += 1;
   }
-  const rest = text.slice(end);
-  if (rest.startsWith("[")) {
-    const match = rest.match(lineLeadingOptionPattern);
-    if (!match) {
+  if (text[end] === "[") {
+    const option = scanSimpleTexOptionalBracketArgument(text, end);
+    if (
+      !option ||
+      !lineLeadingOptionPattern.test(text.slice(end, option.end))
+    ) {
       return null;
     }
-    const full = match[0] ?? "";
-    end += full.length;
     return {
-      end,
-      lineLeading: full.slice(1, -1).trim(),
+      end: option.end,
+      lineLeading: option.content.trim(),
     };
   }
   return { end };
@@ -3561,6 +3692,7 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
   return (
     node.kind === "text" ||
     node.kind === "space" ||
+    node.kind === "comment" ||
     node.kind === "line-break" ||
     node.kind === "math" ||
     node.kind === "font-command" ||
@@ -4537,6 +4669,9 @@ export function simpleTexInlineNodesToTokens(
 
   for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
     const node = nodes[nodeIndex];
+    if (node.kind === "comment") {
+      continue;
+    }
     if (node.kind === "line-break") {
       while (tokens.at(-1)?.kind === "space") {
         tokens.pop();

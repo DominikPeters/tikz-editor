@@ -1082,6 +1082,44 @@ describe("simple TeX paragraph IR", () => {
     });
   });
 
+  it("lowers CST comments and whitespace with TeX line semantics", () => {
+    const joined = String.raw`Alpha% discard this line
+  Beta`;
+    const joinedIr = parseSimpleTexParagraphIr(joined);
+
+    expect(joinedIr.unsupportedCommand).toBe(false);
+    expect(joinedIr.nodes).toEqual([
+      expect.objectContaining({ kind: "text", text: "Alpha" }),
+      expect.objectContaining({
+        kind: "comment",
+        text: String.raw`% discard this line
+  `,
+        sourceStart: joined.indexOf("%"),
+        sourceEnd: joined.indexOf("Beta"),
+      }),
+      expect.objectContaining({ kind: "text", text: "Beta" }),
+    ]);
+
+    const separated = String.raw`Alpha% discard this line
+
+Beta`;
+    const separatedIr = parseSimpleTexParagraphIr(separated);
+    expect(separatedIr.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "comment",
+      "paragraph-break",
+      "text",
+    ]);
+    expect(separatedIr.blocks).toHaveLength(2);
+
+    const tabbed = parseSimpleTexParagraphIr("Alpha\tBeta");
+    expect(tabbed.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "text",
+    ]);
+  });
+
   it("records inline math delimiters and source spans in source IR", () => {
     const source = String.raw`Alpha $x^2_y$ and \(z+1\).`;
     const ir = parseSimpleTexParagraphIr(source);
