@@ -23,6 +23,7 @@ export default tseslint.config(
       "apps/ipad/**",
       "apps/*/src-tauri/target/**",
       "packages/app/public/docs/**",
+      "packages/lezer-tex/src/grammar/tex-parser*.ts",
       "packages/lezer-tikz/src/grammar/tikz-parser*.ts",
       "test/papers/**",
       "test-results/**",

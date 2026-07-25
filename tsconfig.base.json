@@ -20,6 +20,9 @@
       "@tikz-editor/tex-fuzz": ["./packages/tex-fuzz/src/index.ts"],
       "@tikz-editor/tex-fuzz/*": ["./packages/tex-fuzz/src/*"],
       "@tikz-editor/lang-tikz": ["./packages/lang-tikz/src/index.ts"],
+      "@tikz-editor/lezer-tex": ["./packages/lezer-tex/src/index.ts"],
+      "@tikz-editor/lezer-tex/grammar/tex-parser": ["./packages/lezer-tex/src/grammar/tex-parser.ts"],
+      "@tikz-editor/lezer-tex/grammar/tex-parser.terms": ["./packages/lezer-tex/src/grammar/tex-parser.terms.ts"],
       "@tikz-editor/lezer-tikz": ["./packages/lezer-tikz/src/index.ts"],
       "@tikz-editor/lezer-tikz/grammar/tikz-parser": ["./packages/lezer-tikz/src/grammar/tikz-parser.ts"],
       "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": ["./packages/lezer-tikz/src/grammar/tikz-parser.terms.ts"]

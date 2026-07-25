@@ -25,6 +25,7 @@ export default defineConfig({
         "**/vite-env.d.ts",
         "**/generated/**",
         "**/generated-*.ts",
+        "packages/lezer-tex/src/grammar/**",
         "packages/lezer-tikz/src/grammar/**"
       ]
     }
@@ -34,6 +35,15 @@ export default defineConfig({
       "@tikz-editor/core": path.resolve(rootDir, "./packages/core/src"),
       "@tikz-editor/tex-fuzz": path.resolve(rootDir, "./packages/tex-fuzz/src/index.ts"),
       "@tikz-editor/lang-tikz": path.resolve(rootDir, "./packages/lang-tikz/src/index.ts"),
+      "@tikz-editor/lezer-tex/grammar/tex-parser.terms": path.resolve(
+        rootDir,
+        "./packages/lezer-tex/src/grammar/tex-parser.terms.ts"
+      ),
+      "@tikz-editor/lezer-tex/grammar/tex-parser": path.resolve(
+        rootDir,
+        "./packages/lezer-tex/src/grammar/tex-parser.ts"
+      ),
+      "@tikz-editor/lezer-tex": path.resolve(rootDir, "./packages/lezer-tex/src/index.ts"),
       "@tikz-editor/lezer-tikz/grammar/tikz-parser.terms": path.resolve(
         rootDir,
         "./packages/lezer-tikz/src/grammar/tikz-parser.terms.ts"

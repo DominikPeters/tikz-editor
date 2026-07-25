@@ -1,0 +1,44 @@
+{
+  "name": "@tikz-editor/lezer-tex",
+  "version": "0.5.2",
+  "description": "Reusable Lezer parser for TeX document, fragment, and math syntax",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./grammar/tex-parser": {
+      "types": "./dist/grammar/tex-parser.d.ts",
+      "import": "./dist/grammar/tex-parser.js"
+    },
+    "./grammar/tex-parser.terms": {
+      "types": "./dist/grammar/tex-parser.terms.d.ts",
+      "import": "./dist/grammar/tex-parser.terms.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/grammar/tex.grammar",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate:grammar": "lezer-generator --typeScript src/grammar/tex.grammar -o src/grammar/tex-parser.ts",
+    "build": "npm run generate:grammar && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lezer/common": "^1.5.1",
+    "@lezer/lr": "^1.4.8"
+  },
+  "devDependencies": {
+    "@lezer/generator": "^1.8.0",
+    "typescript": "^5.7.3"
+  }
+}

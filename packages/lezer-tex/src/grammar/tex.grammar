@@ -1,0 +1,320 @@
+@top TexDocument { DocumentItem* }
+@top TexFragment { FragmentItem* }
+@top TexMathFragment { MathItem* }
+
+@dialects { beamer }
+
+@precedence {
+  knownCommand,
+  genericCommand
+}
+
+DocumentItem { TexItem }
+FragmentItem { TexItem }
+
+TexItem {
+  Comment |
+  MathEnvironment |
+  Environment |
+  DisplayMath |
+  InlineMath |
+  IncludeGraphicsCommand |
+  GenericCommand |
+  Group |
+  OptionalArgument |
+  OverlaySpecification |
+  Whitespace |
+  Text
+}
+
+Environment {
+  BeginEnvironment TexItem* EndEnvironment
+}
+
+BeginEnvironment {
+  BeginCommand EnvironmentNameLike "}"
+}
+
+EndEnvironment {
+  EndCommand EnvironmentNameLike "}"
+}
+
+EnvironmentNameLike {
+  EnvironmentName
+}
+
+EnvironmentName {
+  WordToken Star?
+}
+
+MathEnvironment {
+  BeginMathEnvironment MathItem* EndMathEnvironment
+}
+
+BeginMathEnvironment {
+  BeginCommand MathEnvironmentName Star? "}"
+}
+
+EndMathEnvironment {
+  EndCommand MathEnvironmentName Star? "}"
+}
+
+IncludeGraphicsCommand {
+  IncludeGraphicsCmd Star? OverlaySpecification? OptionalArgument* Group
+}
+
+GenericCommand {
+  ControlSequence
+}
+
+Group {
+  "{" TexItem* "}"
+}
+
+OptionalArgument {
+  "[" OptionalItem* "]"
+}
+
+OptionalItem {
+  Comment |
+  DisplayMath |
+  InlineMath |
+  GenericCommand |
+  Group |
+  OptionalArgument |
+  Whitespace |
+  Text |
+  AngleText
+}
+
+OverlaySpecification {
+  "<" OverlayItem* ">"
+}
+
+OverlayItem {
+  GenericCommand |
+  Group |
+  Whitespace |
+  Text
+}
+
+InlineMath {
+  Dollar MathItem* Dollar |
+  InlineMathOpen MathItem* InlineMathClose
+}
+
+DisplayMath {
+  DoubleDollar MathItem* DoubleDollar |
+  DisplayMathOpen MathItem* DisplayMathClose
+}
+
+MathItem {
+  Comment |
+  MathTextCommand |
+  MathCommand |
+  MathGroup |
+  MathScript |
+  AlignmentTab |
+  MathSpace |
+  MathNumber |
+  MathIdentifier |
+  MathOperator |
+  MathPunctuation
+}
+
+MathTextCommand {
+  MathTextCmd !knownCommand Star? OptionalArgument* Group
+}
+
+MathCommand {
+  ControlSequence !genericCommand
+}
+
+MathGroup {
+  "{" MathItem* "}"
+}
+
+MathScript {
+  (Superscript | Subscript) MathScriptArgument
+}
+
+MathScriptArgument {
+  MathGroup |
+  MathCommand |
+  MathNumber |
+  MathIdentifier |
+  MathOperator
+}
+
+MathSpace { Whitespace }
+MathNumber { NumberToken }
+MathIdentifier { WordToken | OtherTextToken }
+MathOperator { OperatorToken | Star | AngleText }
+MathPunctuation { PunctuationToken }
+
+Text {
+  WordToken |
+  NumberToken |
+  OperatorToken |
+  PunctuationToken |
+  OtherTextToken |
+  Star |
+  Superscript |
+  Subscript |
+  AlignmentTab
+}
+
+ControlSequence {
+  ControlWord |
+  ControlSymbol |
+  MathTextCmd |
+  BeamerSectionCmd |
+  BeamerFrameCmd |
+  BeamerOverlayCmd
+}
+
+IncludeGraphicsCmd {
+  @specialize<ControlWord, "\\includegraphics">
+}
+
+MathTextCmd {
+  @specialize<ControlWord, "\\text"> |
+  @specialize<ControlWord, "\\textrm"> |
+  @specialize<ControlWord, "\\textsf"> |
+  @specialize<ControlWord, "\\texttt"> |
+  @specialize<ControlWord, "\\textnormal"> |
+  @specialize<ControlWord, "\\textbf"> |
+  @specialize<ControlWord, "\\textmd"> |
+  @specialize<ControlWord, "\\textit"> |
+  @specialize<ControlWord, "\\textsl"> |
+  @specialize<ControlWord, "\\textsc"> |
+  @specialize<ControlWord, "\\mbox"> |
+  @specialize<ControlWord, "\\hbox">
+}
+
+BeamerSectionCmd {
+  BeamerPartCmd |
+  BeamerSectionLevelCmd |
+  BeamerSubsectionCmd |
+  BeamerSubsubsectionCmd
+}
+
+BeamerFrameCmd {
+  BeamerFrameStartCmd |
+  BeamerFrameTitleCmd |
+  BeamerFrameSubtitleCmd
+}
+
+BeamerOverlayCmd {
+  BeamerOnlyCmd |
+  BeamerUncoverCmd |
+  BeamerVisibleCmd |
+  BeamerInvisibleCmd |
+  BeamerAltCmd |
+  BeamerTemporalCmd |
+  BeamerOnslideCmd |
+  BeamerPauseCmd
+}
+
+MathEnvironmentName {
+  @specialize<WordToken, "math"> |
+  @specialize<WordToken, "displaymath"> |
+  @specialize<WordToken, "equation"> |
+  @specialize<WordToken, "align"> |
+  @specialize<WordToken, "alignat"> |
+  @specialize<WordToken, "aligned"> |
+  @specialize<WordToken, "alignedat"> |
+  @specialize<WordToken, "gather"> |
+  @specialize<WordToken, "gathered"> |
+  @specialize<WordToken, "multline"> |
+  @specialize<WordToken, "split"> |
+  @specialize<WordToken, "cases"> |
+  @specialize<WordToken, "matrix"> |
+  @specialize<WordToken, "pmatrix"> |
+  @specialize<WordToken, "bmatrix"> |
+  @specialize<WordToken, "Bmatrix"> |
+  @specialize<WordToken, "vmatrix"> |
+  @specialize<WordToken, "Vmatrix"> |
+  @specialize<WordToken, "smallmatrix"> |
+  @specialize<WordToken, "array">
+}
+
+@tokens {
+  @precedence {
+    BeginCommand,
+    EndCommand,
+    BeamerPartCmd,
+    BeamerSubsubsectionCmd,
+    BeamerSubsectionCmd,
+    BeamerSectionLevelCmd,
+    BeamerFrameSubtitleCmd,
+    BeamerFrameTitleCmd,
+    BeamerFrameStartCmd,
+    BeamerOnlyCmd,
+    BeamerUncoverCmd,
+    BeamerVisibleCmd,
+    BeamerInvisibleCmd,
+    BeamerAltCmd,
+    BeamerTemporalCmd,
+    BeamerOnslideCmd,
+    BeamerPauseCmd,
+    InlineMathOpen,
+    InlineMathClose,
+    DisplayMathOpen,
+    DisplayMathClose,
+    DoubleDollar,
+    ControlWord,
+    ControlSymbol,
+    Comment,
+    Whitespace,
+    NumberToken,
+    WordToken,
+    OperatorToken,
+    PunctuationToken,
+    OtherTextToken
+  }
+
+  Comment { "%" ![\n\r]* }
+  Whitespace { $[ \t\n\r]+ }
+
+  BeginCommand { "\\begin{" }
+  EndCommand { "\\end{" }
+
+  BeamerPartCmd[@dialect=beamer] { "\\part" }
+  BeamerSectionLevelCmd[@dialect=beamer] { "\\section" }
+  BeamerSubsectionCmd[@dialect=beamer] { "\\subsection" }
+  BeamerSubsubsectionCmd[@dialect=beamer] { "\\subsubsection" }
+  BeamerFrameStartCmd[@dialect=beamer] { "\\frame" }
+  BeamerFrameTitleCmd[@dialect=beamer] { "\\frametitle" }
+  BeamerFrameSubtitleCmd[@dialect=beamer] { "\\framesubtitle" }
+  BeamerOnlyCmd[@dialect=beamer] { "\\only" }
+  BeamerUncoverCmd[@dialect=beamer] { "\\uncover" }
+  BeamerVisibleCmd[@dialect=beamer] { "\\visible" }
+  BeamerInvisibleCmd[@dialect=beamer] { "\\invisible" }
+  BeamerAltCmd[@dialect=beamer] { "\\alt" }
+  BeamerTemporalCmd[@dialect=beamer] { "\\temporal" }
+  BeamerOnslideCmd[@dialect=beamer] { "\\onslide" }
+  BeamerPauseCmd[@dialect=beamer] { "\\pause" }
+
+  ControlWord { "\\" $[A-Za-z@]+ }
+  ControlSymbol { "\\" ![A-Za-z@\n\r] }
+
+  InlineMathOpen { "\\(" }
+  InlineMathClose { "\\)" }
+  DisplayMathOpen { "\\[" }
+  DisplayMathClose { "\\]" }
+  DoubleDollar { "$$" }
+  Dollar { "$" }
+
+  Star { "*" }
+  Superscript { "^" }
+  Subscript { "_" }
+  AlignmentTab { "&" }
+
+  NumberToken { $[0-9]+ ("." $[0-9]+)? }
+  WordToken { $[A-Za-z]+ }
+  OperatorToken { $[+\-/=|:!.;?]+ }
+  PunctuationToken { $[()'"`,]+ }
+  AngleText { "<" | ">" }
+  OtherTextToken { ![-A-Za-z0-9\\{}$%[\]<> \t\n\r*^_&+/=|:!,.;?()'"`]+ }
+}

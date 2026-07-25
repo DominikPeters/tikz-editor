@@ -62,7 +62,7 @@ import { recordProfilingSourcePanelSyncTiming } from "@tikz-editor/core/profilin
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import { NAMED_COLORS } from "@tikz-editor/core/semantic/style/constants";
 import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
-import { tikz } from "@tikz-editor/lang-tikz";
+import { beamer, tex, tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
 import { getActiveEditorPlatform } from "../../platform/current";
@@ -86,6 +86,16 @@ const fontSizeCompartment = new Compartment();
 const tabSizeCompartment = new Compartment();
 const editableCompartment = new Compartment();
 const highlightCompartment = new Compartment();
+const languageCompartment = new Compartment();
+
+type SourceLanguageMode = "tikz" | "tex" | "beamer";
+
+function sourceLanguage(mode: SourceLanguageMode) {
+  if (mode === "beamer") {
+    return beamer();
+  }
+  return mode === "tex" ? tex() : tikz();
+}
 
 // ── Theme-aware highlight styles ─────────────────────────────────────────────
 
@@ -758,6 +768,7 @@ export function SourcePanel() {
   const {
     source,
     sourceRevision,
+    documentKind,
     lastEditPatches,
     lastEditPatchBaseRevision,
     activeRootId,
@@ -771,6 +782,7 @@ export function SourcePanel() {
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
     sourceRevision: s.sourceRevision,
+    documentKind: s.documentKind,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeRootId: s.activeRootId,
@@ -782,6 +794,12 @@ export function SourcePanel() {
     assistantLockReason: s.documents[s.activeDocumentId]?.assistantLockReason ?? null,
     dispatch: s.dispatch
   })));
+  const sourceLanguageMode: SourceLanguageMode =
+    documentKind === "beamer"
+      ? "beamer"
+      : /\\begin\{tikzpicture\*?\}/u.test(source)
+        ? "tex"
+        : "tikz";
   const figures = useMemo(
     () => (snapshot.deck ? snapshot.deck.frames : snapshot.figures),
     [snapshot.deck, snapshot.figures]
@@ -971,7 +989,7 @@ export function SourcePanel() {
           ...lintKeymap,
         ]),
         editorKeymap,
-        tikz(),
+        languageCompartment.of(sourceLanguage(sourceLanguageMode)),
         wordWrapCompartment.of(editorWordWrap ? EditorView.lineWrapping : []),
         fontSizeCompartment.of(EditorView.theme({ "& .cm-scroller": { fontSize: `${editorFontSize}px` } })),
         tabSizeCompartment.of(CMState.tabSize.of(editorIndentSize)),
@@ -1055,6 +1073,14 @@ export function SourcePanel() {
     if (!view) return;
     view.dispatch({ effects: editableCompartment.reconfigure(EditorView.editable.of(!assistantLockReason)) });
   }, [assistantLockReason]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: languageCompartment.reconfigure(sourceLanguage(sourceLanguageMode))
+    });
+  }, [sourceLanguageMode]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
