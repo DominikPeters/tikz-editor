@@ -77,6 +77,7 @@ import {
 import css from "./SourcePanel.module.css";
 import { formatTikzSource } from "@tikz-editor/core/edit/source-format";
 import { hasMultipleRoots } from "../../root-inventory";
+import type { SessionSnapshot } from "../../compute";
 
 // ── Dynamic configuration compartments ──────────────────────────────────────
 
@@ -139,7 +140,7 @@ export type DiagnosticInput = {
   severity: DiagnosticSeverity;
   message: string;
   code?: string;
-  source: "parse" | "semantic";
+  source: "parse" | "semantic" | "beamer";
 };
 
 type Diagnostic = DiagnosticInput;
@@ -578,6 +579,45 @@ export function prioritizeDiagnosticsForDisplay(diagnostics: readonly Diagnostic
     result.push(diagnostic);
   }
   return result;
+}
+
+export function sourcePanelDiagnostics(
+  snapshot: SessionSnapshot,
+  source: string
+): DiagnosticInput[] {
+  if (snapshot.source !== source) {
+    return [];
+  }
+  if (snapshot.deck) {
+    return prioritizeDiagnosticsForDisplay(
+      snapshot.deck.diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        code: diagnostic.code ?? "beamer",
+        from: diagnostic.span.from,
+        to: diagnostic.span.to,
+        source: "beamer" as const
+      }))
+    );
+  }
+
+  const result: DiagnosticInput[] = [];
+  for (const diagnostic of snapshot.parseResult?.diagnostics ?? []) {
+    result.push({
+      ...diagnostic,
+      from: diagnostic.span.from,
+      to: diagnostic.span.to,
+      source: "parse"
+    });
+  }
+  for (const diagnostic of snapshot.semanticResult?.diagnostics ?? []) {
+    result.push({
+      ...diagnostic,
+      from: diagnostic.span.from,
+      to: diagnostic.span.to,
+      source: "semantic"
+    });
+  }
+  return prioritizeDiagnosticsForDisplay(result);
 }
 
 function isRecoveryNoiseDiagnostic(
@@ -1214,23 +1254,7 @@ export function SourcePanel() {
       if (!view) return;
 
       const docSource = view.state.doc.toString();
-      const parse = snapshot.parseResult;
-      const semantic = snapshot.semanticResult;
-
-      if (parse?.source !== docSource) {
-        view.dispatch({ effects: setDiagnostics.of([]) });
-        return;
-      }
-
-      const list = prioritizeDiagnosticsForDisplay([
-        ...parse.diagnostics.map((d) => ({ ...d, from: d.span.from, to: d.span.to, source: "parse" as const })),
-        ...(semantic?.diagnostics ?? []).map((d) => ({
-          ...d,
-          from: d.span.from,
-          to: d.span.to,
-          source: "semantic" as const
-        }))
-      ]);
+      const list = sourcePanelDiagnostics(snapshot, docSource);
       view.dispatch({ effects: setDiagnostics.of(list) });
     }, DIAGNOSTIC_DEBOUNCE_MS);
 
@@ -1301,21 +1325,8 @@ export function SourcePanel() {
     : null;
 
   const diagnostics = useMemo(() => {
-    const parse = snapshot.parseResult;
-    const semantic = snapshot.semanticResult;
-    const result: DiagnosticInput[] = [];
-    if (parse) {
-      for (const d of parse.diagnostics) {
-        result.push({ ...d, from: d.span.from, to: d.span.to, source: "parse" });
-      }
-    }
-    if (semantic) {
-      for (const d of semantic.diagnostics) {
-        result.push({ ...d, from: d.span.from, to: d.span.to, source: "semantic" });
-      }
-    }
-    return prioritizeDiagnosticsForDisplay(result);
-  }, [snapshot.parseResult, snapshot.semanticResult]);
+    return sourcePanelDiagnostics(snapshot, source);
+  }, [snapshot, source]);
 
   return (
     <div className={css.panel}>
@@ -1325,9 +1336,7 @@ export function SourcePanel() {
       {diagnostics.length > 0 && (
         <div className={css.diagnostics}>
           {diagnostics.slice(0, 5).map((d, i) => {
-            const line = snapshot.parseResult
-              ? snapshot.parseResult.source.slice(0, d.from).split("\n").length
-              : null;
+            const line = source.slice(0, d.from).split("\n").length;
             return (
               <div
                 key={i}

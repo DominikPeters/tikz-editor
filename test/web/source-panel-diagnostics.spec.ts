@@ -7,9 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
 import { makeInitialState } from "../../packages/app/src/store/reducer.js";
 import { useEditorStore } from "../../packages/app/src/store/store.js";
-import type { SessionSnapshot } from "../../packages/app/src/compute.js";
+import {
+  makeEmptySnapshot,
+  type SessionSnapshot
+} from "../../packages/app/src/compute.js";
 import {
   prioritizeDiagnosticsForDisplay,
+  sourcePanelDiagnostics,
   SourcePanel,
   type DiagnosticInput
 } from "../../packages/app/src/ui/source-panel/SourcePanel.js";
@@ -84,6 +88,41 @@ describe("SourcePanel diagnostics", () => {
     expect(container.textContent).toContain("Unclosed node text; add a closing `}` before the end of the node statement.");
     expect(container.textContent).toContain("Ln 2");
     expect(container.textContent).not.toContain("Statement is missing a trailing semicolon");
+  });
+
+  it("adapts source-backed Beamer diagnostics for the source panel", () => {
+    const source = "\\documentclass{beamer}\n\\begin{frame}\nBroken\n";
+    const diagnosticStart = source.indexOf("\\begin{frame}");
+    const snapshot: SessionSnapshot = {
+      ...makeEmptySnapshot(source),
+      revision: 1,
+      deck: {
+        frames: [],
+        activeFrame: null,
+        diagnostics: [
+          {
+            severity: "error",
+            code: "beamer-unclosed-frame",
+            message: "Frame is not closed.",
+            span: {
+              from: diagnosticStart,
+              to: diagnosticStart + "\\begin{frame}".length
+            }
+          }
+        ]
+      }
+    };
+
+    expect(sourcePanelDiagnostics(snapshot, source)).toEqual([
+      expect.objectContaining({
+        source: "beamer",
+        code: "beamer-unclosed-frame",
+        message: "Frame is not closed.",
+        from: diagnosticStart,
+        to: diagnosticStart + "\\begin{frame}".length
+      })
+    ]);
+    expect(sourcePanelDiagnostics(snapshot, `${source}% stale`)).toEqual([]);
   });
 });
 

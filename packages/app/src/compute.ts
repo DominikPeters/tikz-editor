@@ -388,18 +388,22 @@ function resolveDeckFrameIndex(
   if (frames.length === 0) {
     return null;
   }
-  const ref = activeRootId != null ? parseDocumentRootId(activeRootId) : null;
+  if (activeRootId === null) {
+    return null;
+  }
+  if (activeRootId === undefined) {
+    return 0;
+  }
+  const ref = parseDocumentRootId(activeRootId);
   const requested =
     ref?.kind === "beamer-frame" || ref?.kind === "beamer-frame-tikz"
       ? ref.kind === "beamer-frame"
         ? ref.index
         : ref.frameIndex
       : null;
-  // Unknown or absent selections fall back to the first frame, mirroring
-  // the tikz parse-window default.
   return requested != null && requested >= 0 && requested < frames.length
     ? requested
-    : 0;
+    : null;
 }
 
 async function computeDeckSnapshot(

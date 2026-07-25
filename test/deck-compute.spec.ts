@@ -24,7 +24,9 @@ function deckRequest(overrides: {
     id: `deck-req-${requestCounter}`,
     documentId: "deck-doc",
     source: overrides.source,
-    activeRootId: overrides.activeRootId ?? null,
+    ...(Object.prototype.hasOwnProperty.call(overrides, "activeRootId")
+      ? { activeRootId: overrides.activeRootId }
+      : {}),
     deckStep: overrides.deckStep ?? null
   };
 }
@@ -108,11 +110,18 @@ describe("deck compute path", () => {
     expect(clampedLow.snapshot.deck!.activeFrame!.step).toBe(1);
   });
 
-  it("falls back to the first frame for unknown selections", async () => {
-    const response = await computeSnapshot(
+  it("preserves explicit or invalid no-root selections", async () => {
+    const explicitNone = await computeSnapshot(
+      deckRequest({ source: KKT_SOURCE, activeRootId: null })
+    );
+    expect(explicitNone.snapshot.deck!.activeFrame).toBeNull();
+    expect(explicitNone.snapshot.activeRootId).toBeNull();
+
+    const unknown = await computeSnapshot(
       deckRequest({ source: KKT_SOURCE, activeRootId: "frame:99" })
     );
-    expect(response.snapshot.deck!.activeFrame!.frameIndex).toBe(0);
+    expect(unknown.snapshot.deck!.activeFrame).toBeNull();
+    expect(unknown.snapshot.activeRootId).toBeNull();
   });
 
   it("keeps the tikz path for tikz documents", async () => {

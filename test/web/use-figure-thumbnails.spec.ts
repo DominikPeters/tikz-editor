@@ -21,6 +21,7 @@ type Deferred<T> = {
 type FigureEntry = {
   id: string;
   span: { from: number; to: number };
+  deckFrameIndex?: number;
 };
 
 function createDeferred<T>(): Deferred<T> {
@@ -34,11 +35,13 @@ function createDeferred<T>(): Deferred<T> {
 function Harness(props: {
   source: string;
   figures: readonly FigureEntry[];
+  documentKey?: string;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   onUpdate: (value: ReadonlyMap<string, string>) => void;
 }) {
   const thumbnails = useFigureThumbnails(props.source, props.figures as any, {
+    documentKey: props.documentKey,
     priorityFigureIds: props.priorityFigureIds,
     maxToRender: props.maxToRender ?? 4,
     refreshDelayMs: 0
@@ -300,6 +303,102 @@ describe("useFigureThumbnails", () => {
     });
 
     expect(latest.get("figure:3")).toContain("%3Csvg%3Ethree%3C%2Fsvg%3E");
+  });
+
+  it("invalidates deck thumbnails when document-level source changes", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result",
+      ok: true,
+      requestId: request.requestId,
+      groupId: request.groupId,
+      figureId: request.figureId,
+      figureSignature: request.figureSignature,
+      svg: `<svg>${request.figureSignature}</svg>`
+    }));
+
+    const frame = "\\begin{frame}Hello\\end{frame}";
+    const sourceA = `\\documentclass{beamer}\\usetheme{Madrid}${frame}`;
+    const sourceB = `\\documentclass{beamer}\\usetheme{Bergen}${frame}`;
+    const spanFrom = sourceA.indexOf(frame);
+    const figures = [
+      {
+        id: "frame:0",
+        span: { from: spanFrom, to: spanFrom + frame.length },
+        deckFrameIndex: 0
+      }
+    ] as const;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source: sourceA,
+        figures,
+        documentKey: "deck-document",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
+    const firstSignature =
+      vi.mocked(requestThumbnail).mock.calls[0]?.[0].figureSignature;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source: sourceB,
+        figures,
+        documentKey: "deck-document",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
+
+    expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(requestThumbnail).mock.calls[1]?.[0].figureSignature)
+      .not.toBe(firstSignature);
+  });
+
+  it("isolates thumbnail cache entries by document", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result",
+      ok: true,
+      requestId: request.requestId,
+      groupId: request.groupId,
+      figureId: request.figureId,
+      figureSignature: request.figureSignature,
+      svg: "<svg />"
+    }));
+    const source = "\\begin{tikzpicture}\\end{tikzpicture}";
+    const figures = [
+      { id: "figure:0", span: { from: 0, to: source.length } }
+    ] as const;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-a",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-b",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
+
+    expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
   });
 });
 

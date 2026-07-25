@@ -13,7 +13,14 @@ export function rootKey(
 ): string {
   // null (explicitly no active root) and undefined (fall back to the first
   // root) select different parse windows and must not share a key.
-  const suffix = rootId === null ? "none" : rootId === undefined ? "default" : rootId;
+  let suffix: string;
+  if (rootId === null) {
+    suffix = "none";
+  } else if (rootId === undefined) {
+    suffix = "default";
+  } else {
+    suffix = rootId;
+  }
   return `${documentId}::${suffix}`;
 }
 

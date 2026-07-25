@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { cancelGroup, requestThumbnail } from "./workers/thumbnail-worker-client";
 import type { ThumbnailRenderRequest } from "./workers/thumbnail-worker-types";
 
@@ -34,17 +35,26 @@ export function resetFigureThumbnailStateForTests(): void {
   thumbnailRequestCounter = 0;
 }
 
-function makeFigureSignature(source: string, figure: FigureEntry): string {
+function makeFigureSignature(
+  source: string,
+  figure: FigureEntry,
+  documentFingerprint: string | null
+): string {
   const from = Math.max(0, Math.min(source.length, figure.span.from));
   const to = Math.max(from, Math.min(source.length, figure.span.to));
   const slice = source.slice(from, to);
-  const head = slice.slice(0, 48);
-  const tail = slice.slice(-48);
-  return `${slice.length}:${head}:${tail}`;
+  const sliceFingerprint = computeSourceFingerprint(slice);
+  return figure.deckFrameIndex == null
+    ? `tikz:${sliceFingerprint}`
+    : `deck:${documentFingerprint ?? computeSourceFingerprint(source)}:${sliceFingerprint}`;
 }
 
-function makeCacheKey(figureId: string, figureSignature: string): string {
-  return `${figureId}|${figureSignature}`;
+function makeCacheKey(
+  documentKey: string,
+  figureId: string,
+  figureSignature: string
+): string {
+  return `${documentKey}|${figureId}|${figureSignature}`;
 }
 
 export function useFigureThumbnails(
@@ -89,8 +99,16 @@ export function useFigureThumbnails(
 
   const figureSignatures = useMemo(() => {
     const map = new Map<string, string>();
+    const documentFingerprint = stableFigures.some(
+      (figure) => figure.deckFrameIndex != null
+    )
+      ? computeSourceFingerprint(stableSource)
+      : null;
     for (const figure of stableFigures) {
-      map.set(figure.id, makeFigureSignature(stableSource, figure));
+      map.set(
+        figure.id,
+        makeFigureSignature(stableSource, figure, documentFingerprint)
+      );
     }
     return map;
   }, [stableFigures, stableSource]);
@@ -114,7 +132,9 @@ export function useFigureThumbnails(
     for (const figure of figures) {
       const signature = figureSignatures.get(figure.id);
       if (signature) {
-        const cached = thumbnailCache.get(makeCacheKey(figure.id, signature));
+        const cached = thumbnailCache.get(
+          makeCacheKey(documentKey, figure.id, signature)
+        );
         if (cached) {
           lastThumbnailByFigureId.set(figure.id, cached);
           next.set(figure.id, cached);
@@ -127,7 +147,7 @@ export function useFigureThumbnails(
       }
     }
     return next;
-  }, [figureSignatures, figures, lastThumbnailByFigureId, tick]);
+  }, [documentKey, figureSignatures, figures, lastThumbnailByFigureId, tick]);
 
   useEffect(() => {
     if (stableFigures.length === 0 || maxToRender <= 0) {
@@ -139,7 +159,10 @@ export function useFigureThumbnails(
       .map((figure) => figure.id)
       .filter((figureId) => {
         const signature = figureSignatures.get(figureId);
-        return !signature || !thumbnailCache.has(makeCacheKey(figureId, signature));
+        return (
+          !signature ||
+          !thumbnailCache.has(makeCacheKey(documentKey, figureId, signature))
+        );
       });
     if (missingIds.length === 0) {
       return;
@@ -163,7 +186,7 @@ export function useFigureThumbnails(
         if (!figureSignature) {
           continue;
         }
-        const key = makeCacheKey(figureId, figureSignature);
+        const key = makeCacheKey(documentKey, figureId, figureSignature);
         if (thumbnailCache.has(key)) {
           continue;
         }

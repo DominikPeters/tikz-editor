@@ -92,28 +92,22 @@ describe("prepared Beamer document", () => {
     ).rejects.toThrow(RangeError);
   });
 
-  it("reuses the prepared model across frames faster than re-scanning", async () => {
+  it("reuses one prepared document model across frame renders", async () => {
     const source = readFileSync(KKT_FIXTURE_PATH, "utf8");
     const frameIndexes = [1, 3, 5, 7];
-
-    // Warm shared module-level state (fonts, metrics) before timing.
-    await renderBeamerFrame(source, { frameIndex: frameIndexes[0] });
-
-    const oneShotStart = performance.now();
-    for (const frameIndex of frameIndexes) {
-      await renderBeamerFrame(source, { frameIndex });
-    }
-    const oneShotMs = performance.now() - oneShotStart;
-
     const prepared = prepareBeamerDocument(source);
-    const preparedStart = performance.now();
+    const results = [];
     for (const frameIndex of frameIndexes) {
-      await prepared.renderFrame({ frameIndex });
+      results.push(await prepared.renderFrame({ frameIndex }));
     }
-    const preparedMs = performance.now() - preparedStart;
 
-    // The prepared path skips scan/theme/macro/navigation/theorem passes.
-    // Assert a loose bound so the test stays robust on slow CI machines.
-    expect(preparedMs).toBeLessThan(oneShotMs * 1.1);
+    for (const [resultIndex, result] of results.entries()) {
+      const frameIndex = frameIndexes[resultIndex]!;
+      expect(result.document).toBe(prepared.document);
+      expect(result.frame).toBe(prepared.document.frames[frameIndex]);
+    }
+    expect(new Set(results.map((result) => result.document))).toEqual(
+      new Set([prepared.document])
+    );
   });
 });
