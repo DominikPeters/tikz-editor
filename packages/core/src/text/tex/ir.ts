@@ -1,5 +1,5 @@
 import type { SyntaxNodeRef } from "@lezer/common";
-import { texDocumentParser } from "@tikz-editor/lezer-tex";
+import { texDocumentParser, texFragmentParser } from "@tikz-editor/lezer-tex";
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { parseTexDimensionText } from "./dimensions.js";
@@ -1001,6 +1001,7 @@ function scanSimpleTexIrNodes(
   resolveColorAlias?: ColorAliasResolver
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
+  const mathSyntaxByStart = collectSimpleTexMathSyntax(text);
   let unsupportedCommand = false;
   let index = 0;
 
@@ -1008,35 +1009,10 @@ function scanSimpleTexIrNodes(
     const sourceStart = sourceOffset + index;
     const char = text[index];
 
-    const displayMath = scanSimpleTexDisplayMath(text, index);
-    if (displayMath) {
-      nodes.push({
-        kind: "display-math",
-        text: text.slice(index, displayMath.end),
-        delimiter: displayMath.delimiter,
-        content: text.slice(displayMath.contentStart, displayMath.contentEnd),
-        contentStart: sourceOffset + displayMath.contentStart,
-        contentEnd: sourceOffset + displayMath.contentEnd,
-        sourceStart,
-        sourceEnd: sourceOffset + displayMath.end,
-      });
-      index = displayMath.end;
-      continue;
-    }
-
-    const math = scanSimpleTexMath(text, index);
-    if (math) {
-      nodes.push({
-        kind: "math",
-        text: text.slice(index, math.end),
-        delimiter: math.delimiter,
-        content: text.slice(math.contentStart, math.contentEnd),
-        contentStart: sourceOffset + math.contentStart,
-        contentEnd: sourceOffset + math.contentEnd,
-        sourceStart,
-        sourceEnd: sourceOffset + math.end,
-      });
-      index = math.end;
+    const mathSyntax = mathSyntaxByStart.get(index);
+    if (mathSyntax) {
+      nodes.push(offsetSimpleTexMathSyntax(mathSyntax, sourceOffset));
+      index = mathSyntax.sourceEnd;
       continue;
     }
 
@@ -1357,6 +1333,137 @@ function scanSimpleTexIrNodes(
   return { nodes, unsupportedCommand };
 }
 
+function collectSimpleTexMathSyntax(
+  text: string
+): ReadonlyMap<number, SimpleTexMathNode | SimpleTexDisplayMathNode> {
+  const byStart = new Map<number, SimpleTexMathNode | SimpleTexDisplayMathNode>();
+  const tree = texFragmentParser.parse(text);
+  tree.iterate({
+    enter(node) {
+      const math = simpleTexMathNodeFromSyntax(text, node);
+      if (math) {
+        byStart.set(math.sourceStart, math);
+        return false;
+      }
+      return;
+    },
+  });
+  return byStart;
+}
+
+function simpleTexMathNodeFromSyntax(
+  text: string,
+  syntax: SyntaxNodeRef
+): SimpleTexMathNode | SimpleTexDisplayMathNode | null {
+  if (syntax.name === "InlineMath") {
+    const delimiter = text.startsWith(String.raw`\(`, syntax.from)
+      ? "paren"
+      : text[syntax.from] === "$"
+        ? "dollar"
+        : null;
+    const delimiterLength = delimiter === "paren" ? 2 : 1;
+    const closingDelimiter = delimiter === "paren" ? String.raw`\)` : "$";
+    if (
+      !delimiter ||
+      !text.startsWith(closingDelimiter, syntax.to - delimiterLength)
+    ) {
+      return null;
+    }
+    const contentStart = syntax.from + delimiterLength;
+    const contentEnd = syntax.to - delimiterLength;
+    return {
+      kind: "math",
+      text: text.slice(syntax.from, syntax.to),
+      delimiter,
+      content: text.slice(contentStart, contentEnd),
+      contentStart,
+      contentEnd,
+      sourceStart: syntax.from,
+      sourceEnd: syntax.to,
+    };
+  }
+
+  if (syntax.name === "DisplayMath") {
+    const delimiter = text.startsWith(String.raw`\[`, syntax.from)
+      ? "bracket"
+      : text.startsWith("$$", syntax.from)
+        ? "double-dollar"
+        : null;
+    const delimiterLength = 2;
+    const closingDelimiter = delimiter === "bracket" ? String.raw`\]` : "$$";
+    if (
+      !delimiter ||
+      !text.startsWith(closingDelimiter, syntax.to - delimiterLength)
+    ) {
+      return null;
+    }
+    const contentStart = syntax.from + delimiterLength;
+    const contentEnd = syntax.to - delimiterLength;
+    return {
+      kind: "display-math",
+      text: text.slice(syntax.from, syntax.to),
+      delimiter,
+      content: text.slice(contentStart, contentEnd),
+      contentStart,
+      contentEnd,
+      sourceStart: syntax.from,
+      sourceEnd: syntax.to,
+    };
+  }
+
+  if (syntax.name !== "MathEnvironment") {
+    return null;
+  }
+  const begin = syntax.node.getChild("BeginMathEnvironment");
+  const end = syntax.node.getChild("EndMathEnvironment");
+  if (!begin || !end) {
+    return null;
+  }
+  const beginText = text.slice(begin.from, begin.to);
+  const nameMatch = /^\\begin\{(equation|align|flalign|gather|multline)(\*)?\}$/u.exec(
+    beginText
+  );
+  if (!nameMatch) {
+    return null;
+  }
+  const name = nameMatch[1];
+  if (!name) {
+    return null;
+  }
+  const delimiter = `${name}${nameMatch[2] ? "-star" : ""}` as
+    SimpleTexDisplayMathDelimiter;
+  const expectedEnd = `\\end{${name}${nameMatch[2] ?? ""}}`;
+  if (text.slice(end.from, end.to) !== expectedEnd) {
+    return null;
+  }
+  return {
+    kind: "display-math",
+    text: text.slice(syntax.from, syntax.to),
+    delimiter,
+    content: text.slice(begin.to, end.from),
+    contentStart: begin.to,
+    contentEnd: end.from,
+    sourceStart: syntax.from,
+    sourceEnd: syntax.to,
+  };
+}
+
+function offsetSimpleTexMathSyntax(
+  node: SimpleTexMathNode | SimpleTexDisplayMathNode,
+  sourceOffset: number
+): SimpleTexMathNode | SimpleTexDisplayMathNode {
+  if (sourceOffset === 0) {
+    return node;
+  }
+  return {
+    ...node,
+    contentStart: node.contentStart + sourceOffset,
+    contentEnd: node.contentEnd + sourceOffset,
+    sourceStart: node.sourceStart + sourceOffset,
+    sourceEnd: node.sourceEnd + sourceOffset,
+  };
+}
+
 function scanSimpleTexColorBoxCommand(
   text: string,
   start: number,
@@ -1601,278 +1708,6 @@ function scanSimpleTexProseControl(
     };
   }
   return null;
-}
-
-function scanSimpleTexDisplayMath(
-  text: string,
-  start: number
-): {
-  readonly delimiter: SimpleTexDisplayMathDelimiter;
-  readonly contentStart: number;
-  readonly contentEnd: number;
-  readonly end: number;
-} | null {
-  if (
-    text[start] === "\\" &&
-    text[start + 1] === "[" &&
-    !isEscapedSimpleTexChar(text, start)
-  ) {
-    let index = start + 2;
-    while (index < text.length) {
-      if (
-        text[index] === "\\" &&
-        text[index + 1] === "]" &&
-        !isEscapedSimpleTexChar(text, index)
-      ) {
-        return {
-          delimiter: "bracket",
-          contentStart: start + 2,
-          contentEnd: index,
-          end: index + 2,
-        };
-      }
-      index += 1;
-    }
-    return null;
-  }
-
-  if (
-    text[start] === "$" &&
-    text[start + 1] === "$" &&
-    !isEscapedSimpleTexChar(text, start)
-  ) {
-    let index = start + 2;
-    while (index < text.length - 1) {
-      if (
-        text[index] === "$" &&
-        text[index + 1] === "$" &&
-        !isEscapedSimpleTexChar(text, index)
-      ) {
-        return {
-          delimiter: "double-dollar",
-          contentStart: start + 2,
-          contentEnd: index,
-          end: index + 2,
-        };
-      }
-      index += 1;
-    }
-  }
-
-  const equationStarBegin = String.raw`\begin{equation*}`;
-  if (text.startsWith(equationStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const equationStarEnd = String.raw`\end{equation*}`;
-    const contentStart = start + equationStarBegin.length;
-    const contentEnd = text.indexOf(equationStarEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "equation-star",
-        contentStart,
-        contentEnd,
-        end: contentEnd + equationStarEnd.length,
-      };
-    }
-  }
-
-  const equationBegin = String.raw`\begin{equation}`;
-  if (text.startsWith(equationBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const equationEnd = String.raw`\end{equation}`;
-    const contentStart = start + equationBegin.length;
-    const contentEnd = text.indexOf(equationEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "equation",
-        contentStart,
-        contentEnd,
-        end: contentEnd + equationEnd.length,
-      };
-    }
-  }
-
-  const alignStarBegin = String.raw`\begin{align*}`;
-  if (text.startsWith(alignStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const alignStarEnd = String.raw`\end{align*}`;
-    const contentStart = start + alignStarBegin.length;
-    const contentEnd = text.indexOf(alignStarEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "align-star",
-        contentStart,
-        contentEnd,
-        end: contentEnd + alignStarEnd.length,
-      };
-    }
-  }
-
-  const alignBegin = String.raw`\begin{align}`;
-  if (text.startsWith(alignBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const alignEnd = String.raw`\end{align}`;
-    const contentStart = start + alignBegin.length;
-    const contentEnd = text.indexOf(alignEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "align",
-        contentStart,
-        contentEnd,
-        end: contentEnd + alignEnd.length,
-      };
-    }
-  }
-
-  const flalignStarBegin = String.raw`\begin{flalign*}`;
-  if (text.startsWith(flalignStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const flalignStarEnd = String.raw`\end{flalign*}`;
-    const contentStart = start + flalignStarBegin.length;
-    const contentEnd = text.indexOf(flalignStarEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "flalign-star",
-        contentStart,
-        contentEnd,
-        end: contentEnd + flalignStarEnd.length,
-      };
-    }
-  }
-
-  const flalignBegin = String.raw`\begin{flalign}`;
-  if (text.startsWith(flalignBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const flalignEnd = String.raw`\end{flalign}`;
-    const contentStart = start + flalignBegin.length;
-    const contentEnd = text.indexOf(flalignEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "flalign",
-        contentStart,
-        contentEnd,
-        end: contentEnd + flalignEnd.length,
-      };
-    }
-  }
-
-  const gatherStarBegin = String.raw`\begin{gather*}`;
-  if (text.startsWith(gatherStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const gatherStarEnd = String.raw`\end{gather*}`;
-    const contentStart = start + gatherStarBegin.length;
-    const contentEnd = text.indexOf(gatherStarEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "gather-star",
-        contentStart,
-        contentEnd,
-        end: contentEnd + gatherStarEnd.length,
-      };
-    }
-  }
-
-  const gatherBegin = String.raw`\begin{gather}`;
-  if (text.startsWith(gatherBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const gatherEnd = String.raw`\end{gather}`;
-    const contentStart = start + gatherBegin.length;
-    const contentEnd = text.indexOf(gatherEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "gather",
-        contentStart,
-        contentEnd,
-        end: contentEnd + gatherEnd.length,
-      };
-    }
-  }
-
-  const multlineStarBegin = String.raw`\begin{multline*}`;
-  if (text.startsWith(multlineStarBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const multlineStarEnd = String.raw`\end{multline*}`;
-    const contentStart = start + multlineStarBegin.length;
-    const contentEnd = text.indexOf(multlineStarEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "multline-star",
-        contentStart,
-        contentEnd,
-        end: contentEnd + multlineStarEnd.length,
-      };
-    }
-  }
-
-  const multlineBegin = String.raw`\begin{multline}`;
-  if (text.startsWith(multlineBegin, start) && !isEscapedSimpleTexChar(text, start)) {
-    const multlineEnd = String.raw`\end{multline}`;
-    const contentStart = start + multlineBegin.length;
-    const contentEnd = text.indexOf(multlineEnd, contentStart);
-    if (contentEnd >= 0) {
-      return {
-        delimiter: "multline",
-        contentStart,
-        contentEnd,
-        end: contentEnd + multlineEnd.length,
-      };
-    }
-  }
-
-  return null;
-}
-
-function scanSimpleTexMath(
-  text: string,
-  start: number
-): {
-  readonly delimiter: "dollar" | "paren";
-  readonly contentStart: number;
-  readonly contentEnd: number;
-  readonly end: number;
-} | null {
-  if (text[start] === "$" && text[start + 1] !== "$" && !isEscapedSimpleTexChar(text, start)) {
-    let index = start + 1;
-    while (index < text.length) {
-      if (
-        text[index] === "$" &&
-        text[index + 1] !== "$" &&
-        !isEscapedSimpleTexChar(text, index)
-      ) {
-        return {
-          delimiter: "dollar",
-          contentStart: start + 1,
-          contentEnd: index,
-          end: index + 1,
-        };
-      }
-      index += 1;
-    }
-    return null;
-  }
-
-  if (
-    text[start] === "\\" &&
-    text[start + 1] === "(" &&
-    !isEscapedSimpleTexChar(text, start)
-  ) {
-    let index = start + 2;
-    while (index < text.length) {
-      if (
-        text[index] === "\\" &&
-        text[index + 1] === ")" &&
-        !isEscapedSimpleTexChar(text, index)
-      ) {
-        return {
-          delimiter: "paren",
-          contentStart: start + 2,
-          contentEnd: index,
-          end: index + 2,
-        };
-      }
-      index += 1;
-    }
-  }
-
-  return null;
-}
-
-function isEscapedSimpleTexChar(text: string, index: number): boolean {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
 }
 
 function scanSimpleTexVerticalGlueCommand(

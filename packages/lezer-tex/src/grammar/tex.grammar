@@ -150,13 +150,15 @@ MathSpace { Whitespace }
 MathNumber { NumberToken }
 MathIdentifier { WordToken | OtherTextToken }
 MathOperator { OperatorToken | Star | AngleText }
-MathPunctuation { PunctuationToken }
+MathPunctuation { "(" | ")" | "[" | "]" | PunctuationToken }
 
 Text {
   WordToken |
   NumberToken |
   OperatorToken |
   PunctuationToken |
+  "(" |
+  ")" |
   OtherTextToken |
   Star |
   Superscript |
@@ -226,6 +228,7 @@ MathEnvironmentName {
   @specialize<WordToken, "alignedat"> |
   @specialize<WordToken, "gather"> |
   @specialize<WordToken, "gathered"> |
+  @specialize<WordToken, "flalign"> |
   @specialize<WordToken, "multline"> |
   @specialize<WordToken, "split"> |
   @specialize<WordToken, "cases"> |
@@ -314,7 +317,7 @@ MathEnvironmentName {
   NumberToken { $[0-9]+ ("." $[0-9]+)? }
   WordToken { $[A-Za-z]+ }
   OperatorToken { $[+\-/=|:!.;?]+ }
-  PunctuationToken { $[()'"`,]+ }
+  PunctuationToken { $['"`,]+ }
   AngleText { "<" | ">" }
   OtherTextToken { ![-A-Za-z0-9\\{}$%[\]<> \t\n\r*^_&+/=|:!,.;?()'"`]+ }
 }
