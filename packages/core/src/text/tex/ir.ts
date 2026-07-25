@@ -1,3 +1,5 @@
+import type { SyntaxNodeRef } from "@lezer/common";
+import { texDocumentParser } from "@tikz-editor/lezer-tex";
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { parseTexDimensionText } from "./dimensions.js";
@@ -832,26 +834,55 @@ export function analyzeSimpleTexResources(
   text: string
 ): SimpleTexResourceManifest {
   const graphics: SimpleTexGraphicsResource[] = [];
-  let index = 0;
-  while (index < text.length) {
-    if (text[index] === "%" && !isEscapedSimpleTexChar(text, index)) {
-      const newline = text.indexOf("\n", index + 1);
-      index = newline < 0 ? text.length : newline + 1;
-      continue;
-    }
-    if (text[index] !== "\\") {
-      index += 1;
-      continue;
-    }
-    const scanned = scanSimpleTexIncludeGraphicsCommand(text, index, 0);
-    if (!scanned) {
-      index += 1;
-      continue;
-    }
-    graphics.push(simpleTexGraphicsResourceFromNode(scanned.node));
-    index = scanned.end;
-  }
+  const tree = texDocumentParser.parse(text);
+  tree.iterate({
+    enter(node) {
+      if (node.name !== "IncludeGraphicsCommand") {
+        return;
+      }
+      const graphicsNode = simpleTexGraphicsNodeFromSyntax(text, node);
+      if (graphicsNode) {
+        graphics.push(simpleTexGraphicsResourceFromNode(graphicsNode));
+      }
+      return false;
+    },
+  });
   return { graphics };
+}
+
+function simpleTexGraphicsNodeFromSyntax(
+  text: string,
+  syntax: SyntaxNodeRef
+): SimpleTexIncludeGraphicsNode | null {
+  const option = syntax.node.getChild("OptionalArgument");
+  const filenameGroup = syntax.node.getChild("Group");
+  if (
+    !filenameGroup ||
+    text[filenameGroup.from] !== "{" ||
+    text[filenameGroup.to - 1] !== "}"
+  ) {
+    return null;
+  }
+
+  const filenameStart = filenameGroup.from + 1;
+  const filenameEnd = filenameGroup.to - 1;
+  const rawOptions =
+    option &&
+    text[option.from] === "[" &&
+    text[option.to - 1] === "]"
+      ? text.slice(option.from + 1, option.to - 1)
+      : "";
+
+  return {
+    kind: "includegraphics",
+    text: text.slice(syntax.from, syntax.to),
+    filename: text.slice(filenameStart, filenameEnd).trim(),
+    filenameStart,
+    filenameEnd,
+    options: parseSimpleTexGraphicsOptions(rawOptions),
+    sourceStart: syntax.from,
+    sourceEnd: syntax.to,
+  };
 }
 
 export function collectSimpleTexResourceManifest(

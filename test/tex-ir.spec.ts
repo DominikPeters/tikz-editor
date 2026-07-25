@@ -263,6 +263,26 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("discovers overlay-qualified graphics through the shared TeX CST", () => {
+    const source = String.raw`% \includegraphics{ignored.pdf}
+\only<2->{\includegraphics<3->[width=24pt,page=2]{shown.pdf}}`;
+    const commandStart = source.indexOf(String.raw`\includegraphics`, source.indexOf("\n"));
+    const manifest = analyzeSimpleTexResources(source);
+
+    expect(manifest.graphics).toEqual([
+      expect.objectContaining({
+        filename: "shown.pdf",
+        sourceStart: commandStart,
+        sourceEnd: source.length - 1,
+        options: expect.objectContaining({
+          raw: "width=24pt,page=2",
+          width: 24,
+          page: { status: "valid", pageNumber: 2 },
+        }),
+      }),
+    ]);
+  });
+
   it("parses phantom and smash commands as inline dimension boxes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`A\phantom{b}B\hphantom{c}C\vphantom{g}D\smash{\textit{x}}E`
