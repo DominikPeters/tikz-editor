@@ -151,7 +151,7 @@ function runRequired(command, args, options = {}) {
   }
 }
 
-async function loadCoreRenderer() {
+export async function loadCoreRenderer() {
   ensureDistBuildFresh(repoRoot);
   const beamerEntry = join(
     repoRoot,
@@ -173,7 +173,7 @@ async function loadCoreRenderer() {
     import(pathToFileURL(coreEntry).href),
   ]);
   return {
-    renderBeamerFramePages: beamer.renderBeamerFramePages,
+    prepareBeamerDocument: beamer.prepareBeamerDocument,
     computerModernTexMetricProvider: core.computerModernTexMetricProvider,
   };
 }
@@ -337,10 +337,20 @@ async function main() {
   if (!options.inputPath) {
     throw new Error("Provide --input.");
   }
+  await compareBeamerFrame(options);
+}
 
-  const originalSource = readFileSync(options.inputPath, "utf8");
-  const source = applyBeamerThemeVariant(
-    originalSource,
+/**
+ * Compare one frame while optionally reusing a caller-prepared document.
+ * Theme matrix runs provide one prepared document for every deck/variant
+ * pair; the standalone CLI leaves preparation to this function.
+ */
+export async function compareBeamerFrame(options, runtime = {}) {
+  if (!options.inputPath) {
+    throw new Error("Provide inputPath.");
+  }
+  const source = runtime.source ?? applyBeamerThemeVariant(
+    readFileSync(options.inputPath, "utf8"),
     options.themeVariant
   );
   const deckName = basename(options.inputPath, extname(options.inputPath));
@@ -354,11 +364,11 @@ async function main() {
   const materializedInput = join(runDir, "input.tex");
   writeFileSync(materializedInput, source, "utf8");
 
-  const {
-    computerModernTexMetricProvider,
-    renderBeamerFramePages,
-  } = await loadCoreRenderer();
-  const renderedPages = await renderBeamerFramePages(source, {
+  const coreRenderer = runtime.coreRenderer ?? await loadCoreRenderer();
+  const { computerModernTexMetricProvider } = coreRenderer;
+  const preparedDocument = runtime.preparedDocument ??
+    coreRenderer.prepareBeamerDocument(source);
+  const renderedPages = await preparedDocument.renderFramePages({
     frameIndex: options.frameNumber - 1,
   });
   const selectedPage = options.pageNumber ?? renderedPages.stepCount;
@@ -509,9 +519,19 @@ async function main() {
       );
     }
   }
+  return { report, reportPath, runDir };
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+function isMain(metaUrl) {
+  if (!process.argv[1]) {
+    return false;
+  }
+  return pathToFileURL(resolve(process.argv[1])).href === metaUrl;
+}
+
+if (isMain(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
+import {
+  compareBeamerFrame,
+  loadCoreRenderer,
+} from "./compare-beamer-frame.mjs";
 import { BUILT_IN_BEAMER_THEMES } from "./lib/beamer-built-in-themes.mjs";
 import { renderBeamerThemeGallery } from "./lib/beamer-theme-gallery.mjs";
+import { applyBeamerThemeVariant } from "./lib/beamer-theme-variants.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultOutDir = join(
@@ -130,27 +134,6 @@ function countFrames(source) {
   return [...source.matchAll(/\\begin\s*\{\s*frame\s*\}/gu)].length;
 }
 
-function variantArgs(variant) {
-  const args = [];
-  for (const [key, flag] of [
-    ["theme", "--theme"],
-    ["colorTheme", "--color-theme"],
-    ["fontTheme", "--font-theme"],
-    ["innerTheme", "--inner-theme"],
-    ["outerTheme", "--outer-theme"],
-  ]) {
-    if (variant[key] === false) {
-      if (key !== "colorTheme") {
-        throw new Error(`No removal flag registered for ${key}.`);
-      }
-      args.push("--without-color-theme");
-    } else if (variant[key]) {
-      args.push(flag, variant[key]);
-    }
-  }
-  return args;
-}
-
 function readResult(reportPath, reportRoot, metadata, status) {
   try {
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
@@ -187,7 +170,7 @@ function readResult(reportPath, reportRoot, metadata, status) {
   }
 }
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
     console.log(usage());
@@ -195,14 +178,20 @@ function main() {
   }
   mkdirSync(options.outDir, { recursive: true });
   const results = [];
+  const coreRenderer = await loadCoreRenderer();
 
   for (const deckName of options.deckNames) {
     const inputPath = DECKS[deckName];
-    const frameCount = countFrames(readFileSync(inputPath, "utf8"));
+    const originalSource = readFileSync(inputPath, "utf8");
+    const frameCount = countFrames(originalSource);
     const frames = options.frames ??
       Array.from({ length: frameCount }, (_, index) => index + 1);
     for (const variantName of options.variantNames) {
       const variant = VARIANTS[variantName];
+      const themeVariant = { ...variant };
+      delete themeVariant.label;
+      const source = applyBeamerThemeVariant(originalSource, themeVariant);
+      const preparedDocument = coreRenderer.prepareBeamerDocument(source);
       for (const frame of frames) {
         if (frame > frameCount) {
           throw new Error(
@@ -210,25 +199,29 @@ function main() {
           );
         }
         const name = `${deckName}-${variantName}-frame-${String(frame).padStart(3, "0")}`;
-        const args = [
-          join(repoRoot, "scripts", "compare-beamer-frame.mjs"),
-          "--input",
-          inputPath,
-          "--frame",
-          String(frame),
-          "--out-dir",
-          options.outDir,
-          "--name",
-          name,
-          "--assert-structural",
-          ...(options.raster ? [] : ["--structural-only"]),
-          ...variantArgs(variant),
-        ];
-        const child = spawnSync(process.execPath, args, {
-          cwd: repoRoot,
-          encoding: "utf8",
-          stdio: "inherit",
-        });
+        let status = 0;
+        try {
+          await compareBeamerFrame({
+            inputPath,
+            frameNumber: frame,
+            pageNumber: null,
+            outDir: options.outDir,
+            name,
+            width: 1600,
+            themeVariant,
+            structuralOnly: !options.raster,
+            assertStructural: true,
+          }, {
+            source,
+            preparedDocument,
+            coreRenderer,
+          });
+        } catch (error) {
+          status = 1;
+          console.error(
+            error instanceof Error ? error.message : String(error)
+          );
+        }
         results.push(readResult(
           join(options.outDir, name, "report.json"),
           options.outDir,
@@ -238,7 +231,7 @@ function main() {
             variantLabel: variant.label,
             frame,
           },
-          child.status
+          status
         ));
       }
     }
@@ -272,4 +265,16 @@ function main() {
   }
 }
 
-main();
+function isMain(metaUrl) {
+  if (!process.argv[1]) {
+    return false;
+  }
+  return pathToFileURL(resolve(process.argv[1])).href === metaUrl;
+}
+
+if (isMain(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}
